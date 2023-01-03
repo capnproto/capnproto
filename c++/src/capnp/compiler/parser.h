@@ -64,7 +64,7 @@ public:
 
   ~CapnpParser() noexcept(false);
 
-  KJ_DISALLOW_COPY(CapnpParser);
+  KJ_DISALLOW_COPY_AND_MOVE(CapnpParser);
 
   using ParserInput = kj::parse::IteratorInput<Token::Reader, List<Token>::Reader::Iterator>;
   struct DeclParserResult;

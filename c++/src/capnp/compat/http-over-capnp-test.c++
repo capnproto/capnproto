@@ -22,6 +22,10 @@
 #include "http-over-capnp.h"
 #include <kj/test.h>
 
+#ifndef TEST_PEER_OPTIMIZATION_LEVEL
+#define TEST_PEER_OPTIMIZATION_LEVEL HttpOverCapnpFactory::LEVEL_2
+#endif
+
 namespace capnp {
 namespace {
 
@@ -402,8 +406,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, no path shortening") {
   ByteStreamFactory streamFactory1;
   ByteStreamFactory streamFactory2;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder);
-  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder);
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runEndToEndTests(timer, *headerTable, factory1, factory2, waitScope);
@@ -416,7 +420,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, with path shortening") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runEndToEndTests(timer, *headerTable, factory, factory, waitScope);
@@ -438,7 +442,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   auto pipe = kj::newTwoWayPipe();
@@ -572,8 +576,8 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, no path shortening") {
   ByteStreamFactory streamFactory1;
   ByteStreamFactory streamFactory2;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder);
-  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder);
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory1, factory2, waitScope);
@@ -585,7 +589,7 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory, factory, waitScope);
@@ -620,7 +624,7 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   bool called = false;

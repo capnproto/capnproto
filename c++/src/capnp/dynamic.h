@@ -524,7 +524,16 @@ class DynamicCapability::Server: public Capability::Server {
 public:
   typedef DynamicCapability Serves;
 
+  struct Options {
+    bool allowCancellation = false;
+    // See the `allowCancellation` annotation defined in `c++.capnp`.
+    //
+    // This option applies to all calls made to this server object. The annotation in the schema
+    // is NOT used for dynamic servers.
+  };
+
   Server(InterfaceSchema schema): schema(schema) {}
+  Server(InterfaceSchema schema, Options options): schema(schema), options(options) {}
 
   virtual kj::Promise<void> call(InterfaceSchema::Method method,
                                  CallContext<DynamicStruct, DynamicStruct> context) = 0;
@@ -536,6 +545,7 @@ public:
 
 private:
   InterfaceSchema schema;
+  Options options;
 };
 
 template <>
@@ -584,7 +594,6 @@ public:
   Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = nullptr);
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
-  void allowCancellation();
 
   StructSchema getParamsType() const { return paramType; }
   StructSchema getResultsType() const { return resultType; }
@@ -1657,9 +1666,6 @@ template <typename SubParams>
 inline kj::Promise<void> CallContext<DynamicStruct, DynamicStruct>::tailCall(
     Request<SubParams, DynamicStruct>&& tailRequest) {
   return hook->tailCall(kj::mv(tailRequest.hook));
-}
-inline void CallContext<DynamicStruct, DynamicStruct>::allowCancellation() {
-  hook->allowCancellation();
 }
 
 template <>

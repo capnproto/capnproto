@@ -823,7 +823,7 @@ interface TestCallOrder {
   # The input `expected` is ignored but useful for disambiguating debug logs.
 }
 
-interface TestTailCallee {
+interface TestTailCallee $Cxx.allowCancellation {
   struct TailResult {
     i @0 :UInt32;
     t @1 :Text;
@@ -837,7 +837,7 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
-interface TestStreaming {
+interface TestStreaming $Cxx.allowCancellation {
   doStreamI @0 (i :UInt32) -> stream;
   doStreamJ @1 (j :UInt32) -> stream;
   finishStream @2 () -> (totalI :UInt32, totalJ :UInt32);
@@ -855,7 +855,7 @@ interface TestMoreStuff extends(TestCallOrder) {
   callFooWhenResolved @1 (cap :TestInterface) -> (s: Text);
   # Like callFoo but waits for `cap` to resolve first.
 
-  neverReturn @2 (cap :TestInterface) -> (capCopy :TestInterface);
+  neverReturn @2 (cap :TestInterface) -> (capCopy :TestInterface) $Cxx.allowCancellation;
   # Doesn't return.  You should cancel it.
 
   hold @3 (cap :TestInterface) -> ();
@@ -870,7 +870,7 @@ interface TestMoreStuff extends(TestCallOrder) {
   echo @6 (cap :TestCallOrder) -> (cap :TestCallOrder);
   # Just returns the input cap.
 
-  expectCancel @7 (cap :TestInterface) -> ();
+  expectCancel @7 (cap :TestInterface) -> () $Cxx.allowCancellation;
   # evalLater()-loops forever, holding `cap`.  Must be canceled.
 
   methodWithDefaults @8 (a :Text, b :UInt32 = 123, c :Text = "foo") -> (d :Text, e :Text = "bar");
@@ -902,7 +902,7 @@ interface TestMembrane {
   callIntercept @2 (thing :Thing, tailCall :Bool) -> Result;
   loopback @3 (thing :Thing) -> (thing :Thing);
 
-  waitForever @4 ();
+  waitForever @4 () $Cxx.allowCancellation;
 
   interface Thing {
     passThrough @0 () -> Result;
@@ -1022,3 +1022,21 @@ const testImpliedFirstField :TestImpliedFirstField = (
   textStructList = ["baz", (text = "qux", i = 123)],
   intGroup = 123
 );
+
+struct TestCycleANoCaps {
+  foo @0 :TestCycleBNoCaps;
+}
+
+struct TestCycleBNoCaps {
+  foo @0 :List(TestCycleANoCaps);
+  bar @1 :TestAllTypes;
+}
+
+struct TestCycleAWithCaps {
+  foo @0 :TestCycleBWithCaps;
+}
+
+struct TestCycleBWithCaps {
+  foo @0 :List(TestCycleAWithCaps);
+  bar @1 :TestInterface;
+}

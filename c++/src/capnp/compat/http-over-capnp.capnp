@@ -24,16 +24,40 @@
 
 using import "byte-stream.capnp".ByteStream;
 
-$import "/capnp/c++.capnp".namespace("capnp");
+using Cxx = import "/capnp/c++.capnp";
+$Cxx.namespace("capnp");
+$Cxx.allowCancellation;
 
 interface HttpService {
-  startRequest @0 (request :HttpRequest, context :ClientRequestContext)
-               -> (requestBody :ByteStream, context :ServerRequestContext);
-  # Begin an HTTP request.
+  request @1 (request :HttpRequest, context :ClientRequestContext)
+          -> (requestBody :ByteStream);
+  # Perform an HTTP request.
   #
   # The client sends the request method/url/headers. The server responds with a `ByteStream` where
   # the client can make calls to stream up the request body. `requestBody` will be null in the case
   # that request.bodySize.fixed == 0.
+  #
+  # The server will send a response by invoking a method on `callback`.
+  #
+  # `request()` does not return until the server is completely done processing the request,
+  # including sending the response. The client therefore must use promise pipelining to send the
+  # request body. The client may request cancellation of the HTTP request by canceling the
+  # `request()` call itself.
+
+  startRequest @0 (request :HttpRequest, context :ClientRequestContext)
+               -> (requestBody :ByteStream, context :ServerRequestContext);
+  # DEPRECATED: Older form of `request()`. In this version, the server immediately returns a
+  #   `ServerRequestContext` before it begins processing the request. This version was designed
+  #   before `CallContext::setPipeline()` was introduced. At that time, it was impossible for the
+  #   server to receive data sent to the `requestBody` stream until `startRequest()` had returned
+  #   a stream capability to use, hence the ongoing call on the server side had to be represented
+  #   using a separate capability. Now that we have `CallContext::setPipeline()`, the server can
+  #   begin receiving the request body without returning from the top-level RPC, so we can now use
+  #   `request()` instead of `startRequest()`. The new approach is more intuitive and avoids some
+  #   unnecessary bookkeeping.
+  #
+  #   `HttpOverCapnpFactory` will continue to support both methods. Use the `peerOptimizationLevel`
+  #   constructor parameter to specify which method to use, for backwards-compatibiltiy purposes.
 
   interface ClientRequestContext {
     # Provides callbacks for the server to send the response.
@@ -53,6 +77,8 @@ interface HttpService {
   }
 
   interface ServerRequestContext {
+    # DEPRECATED: Used only with startRequest(); see comments there.
+    #
     # Represents execution of a particular request on the server side.
     #
     # Dropping this object before the request completes will cancel the request.

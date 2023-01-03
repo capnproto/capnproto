@@ -209,7 +209,7 @@ template <typename T>
 class ConstStruct {
 public:
   ConstStruct() = delete;
-  KJ_DISALLOW_COPY(ConstStruct);
+  KJ_DISALLOW_COPY_AND_MOVE(ConstStruct);
   inline explicit constexpr ConstStruct(const word* ptr): ptr(ptr) {}
 
   inline typename T::Reader get() const {
@@ -228,7 +228,7 @@ template <typename T>
 class ConstList {
 public:
   ConstList() = delete;
-  KJ_DISALLOW_COPY(ConstList);
+  KJ_DISALLOW_COPY_AND_MOVE(ConstList);
   inline explicit constexpr ConstList(const word* ptr): ptr(ptr) {}
 
   inline typename List<T>::Reader get() const {
@@ -247,7 +247,7 @@ template <size_t size>
 class ConstText {
 public:
   ConstText() = delete;
-  KJ_DISALLOW_COPY(ConstText);
+  KJ_DISALLOW_COPY_AND_MOVE(ConstText);
   inline explicit constexpr ConstText(const word* ptr): ptr(ptr) {}
 
   inline Text::Reader get() const {
@@ -275,7 +275,7 @@ template <size_t size>
 class ConstData {
 public:
   ConstData() = delete;
-  KJ_DISALLOW_COPY(ConstData);
+  KJ_DISALLOW_COPY_AND_MOVE(ConstData);
   inline explicit constexpr ConstData(const word* ptr): ptr(ptr) {}
 
   inline Data::Reader get() const {

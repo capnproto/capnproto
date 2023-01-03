@@ -147,7 +147,7 @@ public:
   Event(SourceLocation location);
   Event(kj::EventLoop& loop, SourceLocation location);
   ~Event() noexcept(false);
-  KJ_DISALLOW_COPY(Event);
+  KJ_DISALLOW_COPY_AND_MOVE(Event);
 
   void armDepthFirst();
   // Enqueue this event so that `fire()` will be called from the event loop soon.
@@ -422,6 +422,10 @@ static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&
 
 // -------------------------------------------------------------------
 
+inline ReadyNow::operator Promise<void>() const {
+  return PromiseNode::to<Promise<void>>(readyNow());
+}
+
 template <typename T>
 inline NeverDone::operator Promise<T>() const {
   return PromiseNode::to<Promise<T>>(neverDone());
@@ -463,6 +467,15 @@ public:
 
 private:
   Exception exception;
+};
+
+template <typename T, T value>
+class ConstPromiseNode: public ImmediatePromiseNodeBase {
+public:
+  void destroy() override {}
+  void get(ExceptionOrValue& output) noexcept override {
+    output.as<T>() = value;
+  }
 };
 
 // -------------------------------------------------------------------
@@ -1362,6 +1375,12 @@ kj::String Promise<T>::trace() {
   return PromiseBase::trace();
 }
 
+template <typename T, T value>
+inline Promise<T> constPromise() {
+  static _::ConstPromiseNode<T, value> NODE;
+  return _::PromiseNode::to<Promise<T>>(_::OwnPromiseNode(&NODE));
+}
+
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
   return _::yield().then(kj::fwd<Func>(func), _::PropagateException());
@@ -1504,7 +1523,7 @@ class WeakFulfiller final: public PromiseFulfiller<T>, public WeakFulfillerBase 
   //   fulfiller and detach() is called when the promise is destroyed.
 
 public:
-  KJ_DISALLOW_COPY(WeakFulfiller);
+  KJ_DISALLOW_COPY_AND_MOVE(WeakFulfiller);
 
   static kj::Own<WeakFulfiller> make() {
     WeakFulfiller* ptr = new WeakFulfiller;
@@ -1890,7 +1909,7 @@ public:
 
   ~FulfillScope() noexcept(false);
 
-  KJ_DISALLOW_COPY(FulfillScope);
+  KJ_DISALLOW_COPY_AND_MOVE(FulfillScope);
 
   bool shouldFulfill() { return obj != nullptr; }
 
@@ -2020,7 +2039,7 @@ public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                 SourceLocation location);
   ~CoroutineBase() noexcept(false);
-  KJ_DISALLOW_COPY(CoroutineBase);
+  KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
 
   auto initial_suspend() { return stdcoro::suspend_never(); }

@@ -344,7 +344,7 @@ private:
 
   template <typename Func>
   kj::Promise<size_t> sslCall(Func&& func) {
-    if (disconnected) return size_t(0);
+    if (disconnected) return constPromise<size_t, 0>();
 
     auto result = func();
 
@@ -355,7 +355,7 @@ private:
       switch (error) {
         case SSL_ERROR_ZERO_RETURN:
           disconnected = true;
-          return size_t(0);
+          return constPromise<size_t, 0>();
         case SSL_ERROR_WANT_READ:
           return readBuffer.whenReady().then(
               [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
@@ -367,7 +367,7 @@ private:
         case SSL_ERROR_SYSCALL:
           if (result == 0) {
             disconnected = true;
-            return size_t(0);
+            return constPromise<size_t, 0>();
           } else {
             // According to documentation we shouldn't get here, because our BIO never returns an
             // "error". But in practice we do get here sometimes when the peer disconnects

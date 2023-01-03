@@ -114,6 +114,8 @@ public:
 
   kj::Array<Schema> getAllLoaded() const;
 
+  void computeOptimizationHints();
+
   void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount);
   // Require any struct nodes loaded with this ID -- in the past and in the future -- to have at
   // least the given sizes.  Struct nodes that don't comply will simply be rewritten to comply.
@@ -1827,6 +1829,175 @@ kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
   return result;
 }
 
+void SchemaLoader::Impl::computeOptimizationHints() {
+  kj::HashMap<_::RawSchema*, kj::Vector<_::RawSchema*>> undecided;
+  // This map contains schemas for which we haven't yet decided if they might have capabilities.
+  // They at least do not directly contain capabilities, but they can't be fully decided until
+  // the dependents are decided.
+  //
+  // Each entry maps to a list of other schemas whose decisions depend on this schema. When a
+  // schema in the map is discovered to contain capabilities, then all these dependents must also
+  // be presumed to contain capabilities.
+
+  // First pass: Decide on the easy cases and populate the `undecided` map with hard cases.
+  for (auto& entry: schemas) {
+    _::RawSchema* schema = entry.value;
+
+    // Default to assuming everything could contain caps.
+    schema->mayContainCapabilities = true;
+
+    if (schema->lazyInitializer != nullptr) {
+      // Not initialized yet, so we have to be conservative and assume there could be capabilities.
+      continue;
+    }
+
+    auto node = readMessageUnchecked<schema::Node>(schema->encodedNode);
+
+    if (!node.isStruct()) {
+      // Non-structs are irrelevant.
+      continue;
+    }
+
+    auto structSchema = node.getStruct();
+
+    bool foundAnyCaps = false;
+    bool foundAnyStructs = false;
+    for (auto field: structSchema.getFields()) {
+      switch (field.which()) {
+        case schema::Field::GROUP:
+          foundAnyStructs = true;
+          break;
+        case schema::Field::SLOT: {
+          auto type = field.getSlot().getType();
+          while (type.isList()) {
+            type = type.getList().getElementType();
+          }
+
+          switch (type.which()) {
+            case schema::Type::VOID:
+            case schema::Type::BOOL:
+            case schema::Type::INT8:
+            case schema::Type::INT16:
+            case schema::Type::INT32:
+            case schema::Type::INT64:
+            case schema::Type::UINT8:
+            case schema::Type::UINT16:
+            case schema::Type::UINT32:
+            case schema::Type::UINT64:
+            case schema::Type::FLOAT32:
+            case schema::Type::FLOAT64:
+            case schema::Type::TEXT:
+            case schema::Type::DATA:
+            case schema::Type::ENUM:
+              // Not a capability.
+              break;
+
+            case schema::Type::STRUCT:
+              foundAnyStructs = true;
+              break;
+
+            case schema::Type::ANY_POINTER:  // could be a capability, or transitively contain one
+            case schema::Type::INTERFACE:    // definitely a capability
+              foundAnyCaps = true;
+              break;
+
+            case schema::Type::LIST:
+              KJ_UNREACHABLE;  // handled above
+          }
+          break;
+        }
+      }
+
+      if (foundAnyCaps) break;  // no point continuing
+    }
+
+    if (foundAnyCaps) {
+      // Definitely has capabilities, don't add to `undecided`.
+    } else if (!foundAnyStructs) {
+      // Definitely does NOT have capabilities. Go ahead and set the hint and don't add to
+      // `undecided`.
+      schema->mayContainCapabilities = false;
+    } else {
+      // Don't know yet. Mark as no-capabilities for now, but place in `undecided` set to review
+      // later.
+      schema->mayContainCapabilities = false;
+      undecided.insert(schema, {});
+    }
+  }
+
+  // Second pass: For all undecided schemas, check dependencies and register as dependents where
+  // needed.
+  kj::Vector<_::RawSchema*> decisions;  // Schemas that have become decided.
+  for (auto& entry: undecided) {
+    auto schema = entry.key;
+
+    auto node = readMessageUnchecked<schema::Node>(schema->encodedNode).getStruct();
+
+    for (auto field: node.getFields()) {
+      kj::Maybe<uint64_t> depId;
+
+      switch (field.which()) {
+        case schema::Field::GROUP:
+          depId = field.getGroup().getTypeId();
+          break;
+        case schema::Field::SLOT: {
+          auto type = field.getSlot().getType();
+          while (type.isList()) {
+            type = type.getList().getElementType();
+          }
+          if (type.isStruct()) {
+            depId = type.getStruct().getTypeId();
+          }
+          break;
+        }
+      }
+
+      KJ_IF_MAYBE(d, depId) {
+        _::RawSchema* dep = KJ_ASSERT_NONNULL(schemas.find(*d));
+
+        if (dep->mayContainCapabilities) {
+          // Oops, this dependency is already known to have capabilities. So that means the current
+          // schema also has capabilities, transitively. Mark it as such.
+          schema->mayContainCapabilities = true;
+
+          // Schedule this schema for removal later.
+          decisions.add(schema);
+
+          // Might as well end the loop early.
+          break;
+        } else KJ_IF_MAYBE(undecidedEntry, undecided.find(dep)) {
+          // This dependency is in the undecided set. Register interest in it.
+          undecidedEntry->add(schema);
+        } else {
+          // This dependency is decided, and the decision is that it has no capabilities. So it
+          // has no impact on the dependent.
+        }
+      }
+    }
+  }
+
+  // Third pass: For each decision we made, remove it and propagate to its dependents.
+  while (!decisions.empty()) {
+    _::RawSchema* decision = decisions.back();
+    decisions.removeLast();
+
+    auto& entry = KJ_ASSERT_NONNULL(undecided.findEntry(decision));
+    for (auto& dependent: entry.value) {
+      if (!dependent->mayContainCapabilities) {
+        // The dependent was not previously decided. But, we now know it has a dependency which has
+        // capabilities, therefore we can decide the dependent.
+        dependent->mayContainCapabilities = true;
+        decisions.add(dependent);
+      }
+    }
+    undecided.erase(entry);
+  }
+
+  // Everything that is left in `undecided` must only be waiting on other undecided schemas. We
+  // can therefore decide that none of them have any capabilities. We marked them as such
+  // earlier so now we're all done.
+}
+
 void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount) {
   structSizeRequirements.upsert(id, { uint16_t(dataWordCount), uint16_t(pointerCount) },
       [&](RequiredSize& existingValue, RequiredSize&& newValue) {
@@ -2084,6 +2255,10 @@ Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
 
 kj::Array<Schema> SchemaLoader::getAllLoaded() const {
   return impl.lockShared()->get()->getAllLoaded();
+}
+
+void SchemaLoader::computeOptimizationHints() {
+  impl.lockExclusive()->get()->computeOptimizationHints();
 }
 
 void SchemaLoader::loadNative(const _::RawSchema* nativeSchema) {

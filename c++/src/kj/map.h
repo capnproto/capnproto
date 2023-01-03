@@ -105,6 +105,9 @@ public:
   void erase(Entry& entry);
   // Erase an entry by reference.
 
+  Entry release(Entry& row);
+  // Erase an entry and return its content by move.
+
   template <typename Predicate,
       typename = decltype(instance<Predicate>()(instance<Key&>(), instance<Value&>()))>
   size_t eraseAll(Predicate&& predicate);
@@ -209,6 +212,9 @@ public:
 
   void erase(Entry& entry);
   // Erase an entry by reference.
+
+  Entry release(Entry& row);
+  // Erase an entry and return its content by move.
 
   template <typename Predicate,
       typename = decltype(instance<Predicate>()(instance<Key&>(), instance<Value&>()))>
@@ -411,6 +417,11 @@ void HashMap<Key, Value>::erase(Entry& entry) {
 }
 
 template <typename Key, typename Value>
+typename HashMap<Key, Value>::Entry HashMap<Key, Value>::release(Entry& entry) {
+  return table.release(entry);
+}
+
+template <typename Key, typename Value>
 template <typename Predicate, typename>
 size_t HashMap<Key, Value>::eraseAll(Predicate&& predicate) {
   return table.eraseAll([&](Entry& entry) {
@@ -541,6 +552,11 @@ bool TreeMap<Key, Value>::erase(KeyLike&& key) {
 template <typename Key, typename Value>
 void TreeMap<Key, Value>::erase(Entry& entry) {
   table.erase(entry);
+}
+
+template <typename Key, typename Value>
+typename TreeMap<Key, Value>::Entry TreeMap<Key, Value>::release(Entry& entry) {
+  return table.release(entry);
 }
 
 template <typename Key, typename Value>

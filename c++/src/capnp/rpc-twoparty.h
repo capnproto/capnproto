@@ -80,7 +80,7 @@ public:
   // detecting queue overload
 
   ~TwoPartyVatNetwork() noexcept(false);
-  KJ_DISALLOW_COPY(TwoPartyVatNetwork);
+  KJ_DISALLOW_COPY_AND_MOVE(TwoPartyVatNetwork);
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.

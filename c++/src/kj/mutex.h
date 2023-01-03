@@ -129,7 +129,7 @@ class Mutex {
 public:
   Mutex();
   ~Mutex();
-  KJ_DISALLOW_COPY(Mutex);
+  KJ_DISALLOW_COPY_AND_MOVE(Mutex);
 
   enum Exclusivity {
     EXCLUSIVE,
@@ -268,7 +268,7 @@ public:
   Once(bool startInitialized = false);
   ~Once();
 #endif
-  KJ_DISALLOW_COPY(Once);
+  KJ_DISALLOW_COPY_AND_MOVE(Once);
 
   class Initializer {
   public:

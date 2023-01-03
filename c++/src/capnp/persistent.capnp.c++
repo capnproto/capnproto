@@ -74,7 +74,7 @@ KJ_CONSTEXPR(const) ::capnp::_::RawBrandedSchema::Dependency bd_c8cb212fcd9f5691
 };
 const ::capnp::_::RawSchema s_c8cb212fcd9f5691 = {
   0xc8cb212fcd9f5691, b_c8cb212fcd9f5691.words, 54, d_c8cb212fcd9f5691, m_c8cb212fcd9f5691,
-  2, 1, nullptr, nullptr, nullptr, { &s_c8cb212fcd9f5691, nullptr, bd_c8cb212fcd9f5691, 0, sizeof(bd_c8cb212fcd9f5691) / sizeof(bd_c8cb212fcd9f5691[0]), nullptr }
+  2, 1, nullptr, nullptr, nullptr, { &s_c8cb212fcd9f5691, nullptr, bd_c8cb212fcd9f5691, 0, sizeof(bd_c8cb212fcd9f5691) / sizeof(bd_c8cb212fcd9f5691[0]), nullptr }, false
 };
 #endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<35> b_f76fba59183073a5 = {
@@ -120,7 +120,7 @@ static const uint16_t m_f76fba59183073a5[] = {0};
 static const uint16_t i_f76fba59183073a5[] = {0};
 const ::capnp::_::RawSchema s_f76fba59183073a5 = {
   0xf76fba59183073a5, b_f76fba59183073a5.words, 35, nullptr, m_f76fba59183073a5,
-  0, 1, i_f76fba59183073a5, nullptr, nullptr, { &s_f76fba59183073a5, nullptr, nullptr, 0, 0, nullptr }
+  0, 1, i_f76fba59183073a5, nullptr, nullptr, { &s_f76fba59183073a5, nullptr, nullptr, 0, 0, nullptr }, true
 };
 #endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<36> b_b76848c18c40efbf = {
@@ -167,7 +167,7 @@ static const uint16_t m_b76848c18c40efbf[] = {0};
 static const uint16_t i_b76848c18c40efbf[] = {0};
 const ::capnp::_::RawSchema s_b76848c18c40efbf = {
   0xb76848c18c40efbf, b_b76848c18c40efbf.words, 36, nullptr, m_b76848c18c40efbf,
-  0, 1, i_b76848c18c40efbf, nullptr, nullptr, { &s_b76848c18c40efbf, nullptr, nullptr, 0, 0, nullptr }
+  0, 1, i_b76848c18c40efbf, nullptr, nullptr, { &s_b76848c18c40efbf, nullptr, nullptr, 0, 0, nullptr }, true
 };
 #endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<22> b_f622595091cafb67 = {
@@ -198,7 +198,7 @@ static const ::capnp::_::AlignedData<22> b_f622595091cafb67 = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_f622595091cafb67 = {
   0xf622595091cafb67, b_f622595091cafb67.words, 22, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_f622595091cafb67, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_f622595091cafb67, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 }  // namespace schemas

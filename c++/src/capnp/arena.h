@@ -99,7 +99,7 @@ private:
   // alignas(8) is the default on 64-bit systems, but needed on 32-bit to avoid an expensive
   // unaligned atomic operation.
 
-  KJ_DISALLOW_COPY(ReadLimiter);
+  KJ_DISALLOW_COPY_AND_MOVE(ReadLimiter);
 
   KJ_ALWAYS_INLINE(void setLimit(uint64_t newLimit)) {
 #if defined(__GNUC__) || defined(__clang__)
@@ -174,7 +174,7 @@ private:
   kj::ArrayPtr<const word> ptr;  // size guaranteed to fit in SEGMENT_WORD_COUNT_BITS bits
   ReadLimiter* readLimiter;
 
-  KJ_DISALLOW_COPY(SegmentReader);
+  KJ_DISALLOW_COPY_AND_MOVE(SegmentReader);
 
   friend class SegmentBuilder;
 
@@ -226,7 +226,7 @@ private:
 
   [[noreturn]] void throwNotWritable();
 
-  KJ_DISALLOW_COPY(SegmentBuilder);
+  KJ_DISALLOW_COPY_AND_MOVE(SegmentBuilder);
 };
 
 class Arena {
@@ -246,7 +246,7 @@ class ReaderArena final: public Arena {
 public:
   explicit ReaderArena(MessageReader* message);
   ~ReaderArena() noexcept(false);
-  KJ_DISALLOW_COPY(ReaderArena);
+  KJ_DISALLOW_COPY_AND_MOVE(ReaderArena);
 
   size_t sizeInWords();
 
@@ -282,7 +282,7 @@ public:
   explicit BuilderArena(MessageBuilder* message);
   BuilderArena(MessageBuilder* message, kj::ArrayPtr<MessageBuilder::SegmentInit> segments);
   ~BuilderArena() noexcept(false);
-  KJ_DISALLOW_COPY(BuilderArena);
+  KJ_DISALLOW_COPY_AND_MOVE(BuilderArena);
 
   size_t sizeInWords();
 

@@ -44,7 +44,7 @@ public:
   class ContentLengthTransport;
 
   JsonRpc(Transport& transport, DynamicCapability::Client interface = {});
-  KJ_DISALLOW_COPY(JsonRpc);
+  KJ_DISALLOW_COPY_AND_MOVE(JsonRpc);
 
   DynamicCapability::Client getPeer(InterfaceSchema schema);
 
@@ -100,7 +100,7 @@ class JsonRpc::ContentLengthTransport: public Transport {
 public:
   explicit ContentLengthTransport(kj::AsyncIoStream& stream);
   ~ContentLengthTransport() noexcept(false);
-  KJ_DISALLOW_COPY(ContentLengthTransport);
+  KJ_DISALLOW_COPY_AND_MOVE(ContentLengthTransport);
 
   kj::Promise<void> send(kj::StringPtr text) override;
   kj::Promise<kj::String> receive() override;

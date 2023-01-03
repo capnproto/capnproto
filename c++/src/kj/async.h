@@ -93,7 +93,7 @@ class DisallowAsyncDestructorsScope {
 public:
   explicit DisallowAsyncDestructorsScope(kj::StringPtr reason);
   ~DisallowAsyncDestructorsScope();
-  KJ_DISALLOW_COPY(DisallowAsyncDestructorsScope);
+  KJ_DISALLOW_COPY_AND_MOVE(DisallowAsyncDestructorsScope);
 
 private:
   kj::StringPtr reason;
@@ -108,7 +108,7 @@ class AllowAsyncDestructorsScope {
 public:
   AllowAsyncDestructorsScope();
   ~AllowAsyncDestructorsScope();
-  KJ_DISALLOW_COPY(AllowAsyncDestructorsScope);
+  KJ_DISALLOW_COPY_AND_MOVE(AllowAsyncDestructorsScope);
 
 private:
   DisallowAsyncDestructorsScope* previousValue;
@@ -409,7 +409,7 @@ private:
   friend class EventLoop;
 };
 
-constexpr _::Void READY_NOW = _::Void();
+constexpr _::ReadyNow READY_NOW = _::ReadyNow();
 // Use this when you need a Promise<void> that is already fulfilled -- this value can be implicitly
 // cast to `Promise<void>`.
 
@@ -417,6 +417,11 @@ constexpr _::NeverDone NEVER_DONE = _::NeverDone();
 // The opposite of `READY_NOW`, return this when the promise should never resolve.  This can be
 // implicitly converted to any promise type.  You may also call `NEVER_DONE.wait()` to wait
 // forever (useful for servers).
+
+template <typename T, T value>
+Promise<T> constPromise();
+// Construct a Promise which resolves to the given constant value. This function is equivalent to
+// `Promise<T>(value)` except that it avoids an allocation.
 
 template <typename Func>
 PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
@@ -503,7 +508,7 @@ class FiberPool final {
 public:
   explicit FiberPool(size_t stackSize);
   ~FiberPool() noexcept(false);
-  KJ_DISALLOW_COPY(FiberPool);
+  KJ_DISALLOW_COPY_AND_MOVE(FiberPool);
 
   void setMaxFreelist(size_t count);
   // Set the maximum number of stacks to add to the freelist. If the freelist is full, stacks will
@@ -873,7 +878,7 @@ class Canceler: private AsyncObject {
 public:
   inline Canceler() {}
   ~Canceler() noexcept(false);
-  KJ_DISALLOW_COPY(Canceler);
+  KJ_DISALLOW_COPY_AND_MOVE(Canceler);
 
   template <typename T>
   Promise<T> wrap(Promise<T> promise) {
@@ -1281,7 +1286,7 @@ class WaitScope {
 public:
   inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
   inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
-  KJ_DISALLOW_COPY(WaitScope);
+  KJ_DISALLOW_COPY_AND_MOVE(WaitScope);
 
   uint poll(uint maxTurnCount = maxValue);
   // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking) or

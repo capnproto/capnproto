@@ -35,6 +35,7 @@
 #include <kj/miniposix.h>
 #include "test-util.h"
 #include <kj/compat/gtest.h>
+#include <kj/io.h>
 
 #if _WIN32
 #include <winsock2.h>
@@ -381,6 +382,183 @@ TEST(SerializeAsyncTest, WriteMultipleMessagesAsync) {
   }
   writeMessages(*output, msgs).wait(ioContext.waitScope);
 }
+
+void writeSmallMessage(kj::OutputStream& output, kj::StringPtr text) {
+  capnp::MallocMessageBuilder message;
+  message.getRoot<test::TestAnyPointer>().getAnyPointerField().setAs<Text>(text);
+  writeMessage(output, message);
+}
+
+void expectSmallMessage(MessageStream& stream, kj::StringPtr text, kj::WaitScope& waitScope) {
+  auto msg = stream.readMessage().wait(waitScope);
+  KJ_EXPECT(msg->getRoot<test::TestAnyPointer>().getAnyPointerField().getAs<Text>() == text);
+}
+
+void writeBigMessage(kj::OutputStream& output) {
+  capnp::MallocMessageBuilder message(4);  // first segment is small
+  initTestMessage(message.getRoot<test::TestAllTypes>());
+  writeMessage(output, message);
+}
+
+void expectBigMessage(MessageStream& stream, kj::WaitScope& waitScope) {
+  auto msg = stream.readMessage().wait(waitScope);
+  checkTestMessage(msg->getRoot<test::TestAllTypes>());
+}
+
+KJ_TEST("BufferedMessageStream basics") {
+  // Encode input data.
+  kj::VectorOutputStream data;
+
+  writeSmallMessage(data, "foo");
+
+  KJ_EXPECT(data.getArray().size() / sizeof(word) == 4);
+
+  // A big message (more than half a buffer)
+  writeBigMessage(data);
+
+  KJ_EXPECT(data.getArray().size() / sizeof(word) > 16);
+
+  writeSmallMessage(data, "bar");
+  writeSmallMessage(data, "baz");
+  writeSmallMessage(data, "qux");
+
+  // Run the test.
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+  auto writePromise = pipe.ends[1]->write(data.getArray().begin(), data.getArray().size());
+
+  uint callbackCallCount = 0;
+  auto callback = [&](MessageReader& reader) {
+    ++callbackCallCount;
+    return false;
+  };
+
+  BufferedMessageStream stream(*pipe.ends[0], callback, 16);
+  expectSmallMessage(stream, "foo", waitScope);
+  KJ_EXPECT(callbackCallCount == 1);
+
+  KJ_EXPECT(!writePromise.poll(waitScope));
+
+  expectBigMessage(stream, waitScope);
+  KJ_EXPECT(callbackCallCount == 1);  // no callback on big message
+
+  KJ_EXPECT(!writePromise.poll(waitScope));
+
+  expectSmallMessage(stream, "bar", waitScope);
+  KJ_EXPECT(callbackCallCount == 2);
+
+  // All data is now in the buffer, so this part is done.
+  KJ_EXPECT(writePromise.poll(waitScope));
+
+  expectSmallMessage(stream, "baz", waitScope);
+  expectSmallMessage(stream, "qux", waitScope);
+  KJ_EXPECT(callbackCallCount == 4);
+
+  auto eofPromise = stream.MessageStream::tryReadMessage();
+  KJ_EXPECT(!eofPromise.poll(waitScope));
+
+  pipe.ends[1]->shutdownWrite();
+  KJ_EXPECT(eofPromise.wait(waitScope) == nullptr);
+}
+
+KJ_TEST("BufferedMessageStream fragmented reads") {
+  // Encode input data.
+  kj::VectorOutputStream data;
+  writeBigMessage(data);
+
+  // Run the test.
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+  auto callback = [&](MessageReader& reader) {
+    return false;
+  };
+  BufferedMessageStream stream(*pipe.ends[0], callback, 16);
+
+  // Arrange to read a big message.
+  auto readPromise = stream.MessageStream::tryReadMessage();
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  auto remainingData = data.getArray();
+
+  // Write 5 bytes. This won't even fulfill the first read's minBytes.
+  pipe.ends[1]->write(remainingData.begin(), 5).wait(waitScope);
+  remainingData = remainingData.slice(5, remainingData.size());
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  // Write 4 more. Now the MessageStream will only see the first word which contains the first
+  // segment size. This size is small so the MessageStream won't yet fall back to
+  // readEntireMessage().
+  pipe.ends[1]->write(remainingData.begin(), 4).wait(waitScope);
+  remainingData = remainingData.slice(4, remainingData.size());
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  // Drip 10 more bytes. Now the MessageStream will realize that it needs to try
+  // readEntireMessage().
+  pipe.ends[1]->write(remainingData.begin(), 10).wait(waitScope);
+  remainingData = remainingData.slice(10, remainingData.size());
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  // Give it all except the last byte.
+  pipe.ends[1]->write(remainingData.begin(), remainingData.size() - 1).wait(waitScope);
+  remainingData = remainingData.slice(remainingData.size() - 1, remainingData.size());
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  // Finish it off.
+  pipe.ends[1]->write(remainingData.begin(), 1).wait(waitScope);
+  KJ_ASSERT(readPromise.poll(waitScope));
+
+  auto msg = readPromise.wait(waitScope);
+  checkTestMessage(KJ_ASSERT_NONNULL(msg)->getRoot<test::TestAllTypes>());
+}
+
+KJ_TEST("BufferedMessageStream many small messages") {
+  // Encode input data.
+  kj::VectorOutputStream data;
+
+  for (auto i: kj::zeroTo(16)) {
+    // Intentionally make these 5 words each so they cross buffer boundaries.
+    writeSmallMessage(data, kj::str("12345678-", i));
+    KJ_EXPECT(data.getArray().size() / sizeof(word) == (i+1) * 5);
+  }
+
+  // Run the test.
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+  auto writePromise = pipe.ends[1]->write(data.getArray().begin(), data.getArray().size())
+      .then([&]() {
+    // Write some garbage at the end.
+    return pipe.ends[1]->write("bogus", 5);
+  }).then([&]() {
+    // EOF.
+    return pipe.ends[1]->shutdownWrite();
+  }).eagerlyEvaluate(nullptr);
+
+  uint callbackCallCount = 0;
+  auto callback = [&](MessageReader& reader) {
+    ++callbackCallCount;
+    return false;
+  };
+
+  BufferedMessageStream stream(*pipe.ends[0], callback, 16);
+
+  for (auto i: kj::zeroTo(16)) {
+    // Intentionally make these 5 words each so they cross buffer boundaries.
+    expectSmallMessage(stream, kj::str("12345678-", i), waitScope);
+    KJ_EXPECT(callbackCallCount == i + 1);
+  }
+
+  KJ_EXPECT_THROW(DISCONNECTED, stream.MessageStream::tryReadMessage().wait(waitScope));
+  KJ_EXPECT(callbackCallCount == 16);
+}
+
+// TODO(test): We should probably test BufferedMessageStream's FD handling here... but really it
+//   gets tested well enough by rpc-twoparty-test.
 
 }  // namespace
 }  // namespace _ (private)

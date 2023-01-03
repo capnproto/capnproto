@@ -32,7 +32,7 @@ static const ::capnp::_::AlignedData<21> b_b9c6f99ebf805f2c = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_b9c6f99ebf805f2c = {
   0xb9c6f99ebf805f2c, b_b9c6f99ebf805f2c.words, 21, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_b9c6f99ebf805f2c, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_b9c6f99ebf805f2c, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 static const ::capnp::_::AlignedData<20> b_f264a779fef191ce = {
@@ -61,7 +61,38 @@ static const ::capnp::_::AlignedData<20> b_f264a779fef191ce = {
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_f264a779fef191ce = {
   0xf264a779fef191ce, b_f264a779fef191ce.words, 20, nullptr, nullptr,
-  0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, nullptr, 0, 0, nullptr }
+  0, 0, nullptr, nullptr, nullptr, { &s_f264a779fef191ce, nullptr, nullptr, 0, 0, nullptr }, false
+};
+#endif  // !CAPNP_LITE
+static const ::capnp::_::AlignedData<22> b_ac7096ff8cfc9dce = {
+  {   0,   0,   0,   0,   5,   0,   6,   0,
+    206, 157, 252, 140, 255, 150, 112, 172,
+     16,   0,   0,   0,   5,   0,   1,   3,
+    129,  78,  48, 184, 123, 125, 248, 189,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     21,   0,   0,   0,  18,   1,   0,   0,
+     37,   0,   0,   0,   7,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     32,   0,   0,   0,   3,   0,   1,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     99,  97, 112, 110, 112,  47,  99,  43,
+     43,  46,  99,  97, 112, 110, 112,  58,
+     97, 108, 108, 111, 119,  67,  97, 110,
+     99, 101, 108, 108,  97, 116, 105, 111,
+    110,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   1,   0,   1,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0, }
+};
+::capnp::word const* const bp_ac7096ff8cfc9dce = b_ac7096ff8cfc9dce.words;
+#if !CAPNP_LITE
+const ::capnp::_::RawSchema s_ac7096ff8cfc9dce = {
+  0xac7096ff8cfc9dce, b_ac7096ff8cfc9dce.words, 22, nullptr, nullptr,
+  0, 0, nullptr, nullptr, nullptr, { &s_ac7096ff8cfc9dce, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
 }  // namespace schemas

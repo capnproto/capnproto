@@ -74,7 +74,7 @@ public:
       : pos(reinterpret_cast<byte*>(ptr) + elementSize * constructedElementCount),
         elementSize(elementSize), constructedElementCount(constructedElementCount),
         destroyElement(destroyElement) {}
-  KJ_DISALLOW_COPY(ExceptionSafeArrayUtil);
+  KJ_DISALLOW_COPY_AND_MOVE(ExceptionSafeArrayUtil);
 
   inline ~ExceptionSafeArrayUtil() noexcept(false) {
     if (constructedElementCount > 0) destroyAll();

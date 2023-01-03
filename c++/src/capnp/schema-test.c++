@@ -371,6 +371,30 @@ TEST(Schema, Generics) {
   }
 }
 
+KJ_TEST("StructSchema::hasNoCapabilites()") {
+  // At present, TestAllTypes doesn't actually cover interfaces or AnyPointer.
+  KJ_EXPECT(!Schema::from<test::TestAllTypes>().mayContainCapabilities());
+
+  KJ_EXPECT(!Schema::from<test::TestLists>().mayContainCapabilities());
+
+  KJ_EXPECT(Schema::from<test::TestAnyPointer>().mayContainCapabilities());
+  KJ_EXPECT(Schema::from<test::TestAnyOthers>().mayContainCapabilities());
+
+  KJ_EXPECT(!Schema::from<test::TestUnion>().mayContainCapabilities());
+  KJ_EXPECT(!Schema::from<test::TestGroups>().mayContainCapabilities());
+
+  KJ_EXPECT(!Schema::from<test::TestNestedTypes>().mayContainCapabilities());
+
+  // Generic arguments could be capabilities.
+  KJ_EXPECT(Schema::from<test::TestGenerics<>::Inner>().mayContainCapabilities());
+
+  KJ_EXPECT(!Schema::from<test::TestCycleANoCaps>().mayContainCapabilities());
+  KJ_EXPECT(!Schema::from<test::TestCycleBNoCaps>().mayContainCapabilities());
+
+  KJ_EXPECT(Schema::from<test::TestCycleAWithCaps>().mayContainCapabilities());
+  KJ_EXPECT(Schema::from<test::TestCycleBWithCaps>().mayContainCapabilities());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

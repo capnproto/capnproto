@@ -76,7 +76,7 @@ public:
 
   explicit Compiler(AnnotationFlag annotationFlag = COMPILE_ANNOTATIONS);
   ~Compiler() noexcept(false);
-  KJ_DISALLOW_COPY(Compiler);
+  KJ_DISALLOW_COPY_AND_MOVE(Compiler);
 
   class CompiledType {
     // Represents a compiled type expression, from which you can traverse to nested types, apply
