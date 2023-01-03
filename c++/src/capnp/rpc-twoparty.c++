@@ -26,12 +26,6 @@
 
 namespace capnp {
 
-static BufferedMessageStream::IsShortLivedCallback getShortLivedCallback() {
-  return [](MessageReader& reader) {
-    return IncomingRpcMessage::isShortLivedRpcMessage(reader.getRoot<AnyPointer>());
-  };
-}
-
 TwoPartyVatNetwork::TwoPartyVatNetwork(
     kj::OneOf<MessageStream*, kj::Own<MessageStream>>&& stream,
     uint maxFdsPerMessage,
@@ -73,14 +67,16 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty:
                                        ReaderOptions receiveOptions,
                                        const kj::MonotonicClock& clock)
     : TwoPartyVatNetwork(
-          kj::Own<MessageStream>(kj::heap<BufferedMessageStream>(stream, getShortLivedCallback())),
+          kj::Own<MessageStream>(kj::heap<BufferedMessageStream>(
+              stream, IncomingRpcMessage::getShortLivedCallback())),
           0, side, receiveOptions, clock) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                                        rpc::twoparty::Side side, ReaderOptions receiveOptions,
                                        const kj::MonotonicClock& clock)
     : TwoPartyVatNetwork(
-          kj::Own<MessageStream>(kj::heap<BufferedMessageStream>(stream, getShortLivedCallback())),
+          kj::Own<MessageStream>(kj::heap<BufferedMessageStream>(
+              stream, IncomingRpcMessage::getShortLivedCallback())),
           maxFdsPerMessage, side, receiveOptions, clock) {}
 
 TwoPartyVatNetwork::~TwoPartyVatNetwork() noexcept(false) {};

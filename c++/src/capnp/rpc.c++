@@ -3662,4 +3662,10 @@ bool IncomingRpcMessage::isShortLivedRpcMessage(AnyPointer::Reader body) {
   }
 }
 
+kj::Function<bool(MessageReader&)> IncomingRpcMessage::getShortLivedCallback() {
+  return [](MessageReader& reader) {
+    return IncomingRpcMessage::isShortLivedRpcMessage(reader.getRoot<AnyPointer>());
+  };
+}
+
 }  // namespace capnp
