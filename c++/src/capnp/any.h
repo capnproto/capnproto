@@ -451,6 +451,25 @@ struct List<AnyPointer, Kind::OTHER> {
     template <typename, Kind>
     friend struct ToDynamic_;
   };
+
+  class Pipeline {};
+
+private:
+  inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
+    return builder.initList(ElementSize::POINTER, bounded(size) * ELEMENTS);
+  }
+  inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
+    return builder.getList(ElementSize::POINTER, defaultValue);
+  }
+  inline static _::ListReader getFromPointer(
+    const _::PointerReader& reader, const word* defaultValue) {
+    return reader.getList(ElementSize::POINTER, defaultValue);
+  }
+
+  template <typename U, Kind k>
+  friend struct List;
+  template <typename U, Kind K>
+  friend struct _::PointerHelpers;
 };
 
 class AnyStruct::Reader {

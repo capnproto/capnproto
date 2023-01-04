@@ -1040,3 +1040,8 @@ struct TestCycleBWithCaps {
   foo @0 :List(TestCycleAWithCaps);
   bar @1 :TestInterface;
 }
+
+interface TestGenericParameterPassThroughInterface(T) {
+  getGenericList @0 () -> (listResult :List(T));
+  setGenericList @1 (listResult :List(T)) -> ();
+}

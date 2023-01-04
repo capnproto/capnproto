@@ -1977,6 +1977,82 @@ TEST(Encoding, UnionInGenerics) {
   reader.getUg();
   builder.getUg();
   builder.initUg();
+
+  reader.getListFoo();
+  builder.getListFoo();
+  reader.hasListFoo();
+  builder.hasListFoo();
+
+  auto list = builder.initListFoo(3);
+}
+
+KJ_TEST("Test generic passthrough doesn't corrupt list contents") {
+  MallocMessageBuilder message;
+  auto builder = message.initRoot<test::TestGenerics<TestAllTypes, TestAllTypes>>();
+  auto reader = builder.asReader();
+
+  //just call the methods to verify that generated code compiles
+  reader.getListFoo();
+  builder.getListFoo();
+  reader.hasListFoo();
+  builder.hasListFoo();
+
+  // Ensure the encoding of List<T> doesn't break
+  auto list = builder.initListFoo(2);
+  initTestMessage(list[0]);
+  list.setWithCaveats(0, list[0]);
+  checkTestMessage(list[0]);
+  checkTestMessageAllZero(list[1]);
+  list.setWithCaveats(1, list[0]);
+  checkTestMessage(list[0]);
+  checkTestMessage(list[1]);
+}
+
+KJ_TEST("Test generic passthrough anypointer representation") {
+  MallocMessageBuilder message;
+  auto builder = message.initRoot<test::TestGenerics<test::TestAnyPointer, test::TestAnyPointer>>();
+  auto reader = builder.asReader();
+
+  auto list = builder.initListFoo(3);
+
+  for (int i = 0; i < 3; ++i) {
+    initTestMessage(list[i].getAnyPointerField().initAs<TestAllTypes>());
+    checkTestMessage(list[i].getAnyPointerField().getAs<TestAllTypes>());
+    checkTestMessage(list[i].asReader().getAnyPointerField().getAs<TestAllTypes>());
+
+    list[i].getAnyPointerField().setAs<Text>("foo");
+    EXPECT_EQ("foo", list[i].getAnyPointerField().getAs<Text>());
+    EXPECT_EQ("foo", list[i].asReader().getAnyPointerField().getAs<Text>());
+
+    list[i].getAnyPointerField().setAs<Data>(data("foo"));
+    EXPECT_EQ(data("foo"), list[i].getAnyPointerField().getAs<Data>());
+    EXPECT_EQ(data("foo"), list[i].asReader().getAnyPointerField().getAs<Data>());
+  }
+}
+
+KJ_TEST("Test generic passthrough interface") {
+  MallocMessageBuilder message;
+  auto builder = message.initRoot<test::TestGenerics<TestAllTypes, TestAllTypes>>();
+  const int COUNT = 3;
+  auto list = builder.initListFoo(COUNT);
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  test::TestGenericParameterPassThroughInterface<TestAllTypes>::Client client(kj::heap<TestGenericParameterPassThroughInterfaceImpl<TestAllTypes>>());
+
+  auto request1 = client.setGenericListRequest();
+  request1.setListResult(list.asReader());
+  auto promise1 = request1.send();
+
+  auto request2 = client.getGenericListRequest();
+  auto promise2 = request2.send();
+
+  auto response1 = promise1.wait(waitScope);
+
+  auto response2 = promise2.wait(waitScope);
+
+  EXPECT_EQ(COUNT, response2.getListResult().size());
 }
 
 TEST(Encoding, DefaultListBuilder) {
