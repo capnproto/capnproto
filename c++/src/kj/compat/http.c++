@@ -6563,12 +6563,14 @@ class HttpServer::Connection final: private HttpService::Response,
                                     private HttpServerErrorHandler {
 public:
   Connection(HttpServer& server, kj::AsyncIoStream& stream,
-             SuspendableHttpServiceFactory factory, kj::Maybe<SuspendedRequest> suspendedRequest)
+             SuspendableHttpServiceFactory factory, kj::Maybe<SuspendedRequest> suspendedRequest,
+             bool wantCleanDrain)
       : server(server),
         stream(stream),
         factory(kj::mv(factory)),
         httpInput(makeHttpInput(stream, server.requestHeaderTable, kj::mv(suspendedRequest))),
-        httpOutput(stream) {
+        httpOutput(stream),
+        wantCleanDrain(wantCleanDrain) {
     ++server.connectionCount;
   }
   ~Connection() noexcept(false) {
@@ -6633,6 +6635,7 @@ private:
   bool upgraded = false;
   bool webSocketOrConnectClosed = false;
   bool closeAfterSend = false;  // True if send() should set Connection: close.
+  bool wantCleanDrain = false;
   bool suspended = false;
   kj::Maybe<kj::Promise<bool>> webSocketError;
   kj::Maybe<kj::Promise<bool>> tunnelRejected;
@@ -6739,8 +6742,10 @@ private:
 
     if (firstRequest) {
       // On the first request, the header timeout starts ticking immediately upon request opening.
+      // NOTE: Since we assume that the client wouldn't have formed a connection if they did not
+      //   intend to send a request, we immediately treat this connection as having an active
+      //   request, i.e. we do NOT cancel it if drain() is called.
       auto timeoutPromise = server.timer.afterDelay(server.settings.headerTimeout)
-          .exclusiveJoin(server.onDrain.addBranch())
           .then([this]() -> HttpHeaders::RequestConnectOrProtocolError {
         timedOut = true;
         return HttpHeaders::ProtocolError {
@@ -6995,16 +7000,21 @@ private:
 
     if (!closeAfterSend) {
       // Check if application wants us to close connections.
-      KJ_IF_MAYBE(c, server.settings.callbacks) {
+      //
+      // If the application used listenHttpClientDrain() to listen, then it expects that after a
+      // clean drain, the connection is still open and can receive more requests. Otherwise, after
+      // receiving drain(), we will close the connection, so we should send a `Connection: close`
+      // header.
+      if (server.draining && !wantCleanDrain) {
+        closeAfterSend = true;
+      } else KJ_IF_MAYBE(c, server.settings.callbacks) {
+        // The application has registered its own callback to decide whether to send
+        // `Connection: close`.
         if (c->shouldClose()) {
           closeAfterSend = true;
         }
       }
     }
-
-    // TODO(0.10): If `server.draining`, we should probably set `closeAfterSend` -- UNLESS the
-    //   connection was created using listenHttpCleanDrain(), in which case the application may
-    //   intend to continue using the connection.
 
     if (closeAfterSend) {
       connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
@@ -7325,18 +7335,13 @@ kj::Promise<void> HttpServer::listenHttp(kj::ConnectionReceiver& port) {
 kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
   return port.accept()
       .then([this,&port](kj::Own<kj::AsyncIoStream>&& connection) -> kj::Promise<void> {
-    if (draining) {
-      // Can get here if we *just* started draining.
-      return kj::READY_NOW;
-    }
-
     tasks.add(kj::evalNow([&]() { return listenHttp(kj::mv(connection)); }));
     return listenLoop(port);
   });
 }
 
 kj::Promise<void> HttpServer::listenHttp(kj::Own<kj::AsyncIoStream> connection) {
-  auto promise = listenHttpCleanDrain(*connection).ignoreResult();
+  auto promise = listenHttpImpl(*connection, false /* wantCleanDrain */).ignoreResult();
 
   // eagerlyEvaluate() to maintain historical guarantee that this method eagerly closes the
   // connection when done.
@@ -7344,6 +7349,10 @@ kj::Promise<void> HttpServer::listenHttp(kj::Own<kj::AsyncIoStream> connection) 
 }
 
 kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection) {
+  return listenHttpImpl(connection, true /* wantCleanDrain */);
+}
+
+kj::Promise<bool> HttpServer::listenHttpImpl(kj::AsyncIoStream& connection, bool wantCleanDrain) {
   kj::Own<HttpService> srv;
 
   KJ_SWITCH_ONEOF(service) {
@@ -7360,7 +7369,7 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
 
   KJ_ASSERT(srv.get() != nullptr);
 
-  return listenHttpCleanDrain(connection, [srv = kj::mv(srv)](SuspendableRequest&) mutable {
+  return listenHttpImpl(connection, [srv = kj::mv(srv)](SuspendableRequest&) mutable {
     // This factory function will be owned by the Connection object, meaning the Connection object
     // will own the HttpService. We also know that the Connection object outlives all
     // service.request() promises (service.request() is called from a Connection member function).
@@ -7368,13 +7377,25 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
     // meaning this factory function will outlive all Owns we return. So, it's safe to return a fake
     // Own.
     return kj::Own<HttpService>(srv.get(), kj::NullDisposer::instance);
-  });
+  }, nullptr /* suspendedRequest */, wantCleanDrain);
 }
 
 kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection,
     SuspendableHttpServiceFactory factory,
     kj::Maybe<SuspendedRequest> suspendedRequest) {
-  auto obj = heap<Connection>(*this, connection, kj::mv(factory), kj::mv(suspendedRequest));
+  // Don't close on drain, because a "clean drain" means we return the connection to the
+  // application still-open between requests so that it can continue serving future HTTP requests
+  // on it.
+  return listenHttpImpl(connection, kj::mv(factory), kj::mv(suspendedRequest),
+                        true /* wantCleanDrain */);
+}
+
+kj::Promise<bool> HttpServer::listenHttpImpl(kj::AsyncIoStream& connection,
+    SuspendableHttpServiceFactory factory,
+    kj::Maybe<SuspendedRequest> suspendedRequest,
+    bool wantCleanDrain) {
+  auto obj = heap<Connection>(*this, connection, kj::mv(factory), kj::mv(suspendedRequest),
+                              wantCleanDrain);
 
   // Start reading requests and responding to them, but immediately cancel processing if the client
   // disconnects.

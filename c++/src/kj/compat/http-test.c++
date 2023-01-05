@@ -5573,6 +5573,84 @@ KJ_TEST("drain() doesn't lose bytes when called at the wrong moment") {
 #endif
 }
 
+KJ_TEST("drain() does not cancel the first request on a new connection") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  DummyService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttpCleanDrain(*pipe.ends[0]);
+
+  // Request a drain(). It won't complete, because the newly-connected socket is considered to have
+  // an in-flight request.
+  auto drainPromise = server.drain();
+  KJ_EXPECT(!drainPromise.poll(waitScope));
+
+  // Deliver the request.
+  static constexpr kj::StringPtr REQUEST2 =
+      "GET /foo HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n"_kj;
+  pipe.ends[1]->write(REQUEST2.begin(), REQUEST2.size()).wait(waitScope);
+
+  // It should get a response.
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 16\r\n"
+      "\r\n"
+      "example.com:/foo"_kj).wait(waitScope);
+
+  // Now the drain completes.
+  drainPromise.wait(waitScope);
+
+  // The HTTP server should indicate the connection was released but still valid.
+  KJ_ASSERT(listenTask.wait(waitScope));
+}
+
+KJ_TEST("drain() when NOT using listenHttpCleanDrain() sends Connection: close header") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  DummyService service(table);
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Request a drain(). It won't complete, because the newly-connected socket is considered to have
+  // an in-flight request.
+  auto drainPromise = server.drain();
+  KJ_EXPECT(!drainPromise.poll(waitScope));
+
+  // Deliver the request.
+  static constexpr kj::StringPtr REQUEST2 =
+      "GET /foo HTTP/1.1\r\n"
+      "Host: example.com\r\n"
+      "\r\n"_kj;
+  pipe.ends[1]->write(REQUEST2.begin(), REQUEST2.size()).wait(waitScope);
+
+  // It should get a response.
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 200 OK\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 16\r\n"
+      "\r\n"
+      "example.com:/foo"_kj).wait(waitScope);
+
+  // And then EOF.
+  auto rest = pipe.ends[1]->readAllText();
+  KJ_ASSERT(rest.poll(waitScope));
+  KJ_EXPECT(rest.wait(waitScope) == nullptr);
+
+  // The drain task and listen task are done.
+  drainPromise.wait(waitScope);
+  listenTask.wait(waitScope);
+}
+
 class BrokenConnectionListener final: public kj::ConnectionReceiver {
 public:
   void fulfillOne(kj::Own<kj::AsyncIoStream> stream) {

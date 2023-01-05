@@ -1198,6 +1198,12 @@ private:
   kj::Promise<void> listenLoop(kj::ConnectionReceiver& port);
 
   void taskFailed(kj::Exception&& exception) override;
+
+  kj::Promise<bool> listenHttpImpl(kj::AsyncIoStream& connection, bool wantCleanDrain);
+  kj::Promise<bool> listenHttpImpl(kj::AsyncIoStream& connection,
+      SuspendableHttpServiceFactory factory,
+      kj::Maybe<SuspendedRequest> suspendedRequest,
+      bool wantCleanDrain);
 };
 
 class HttpServer::SuspendableRequest {
