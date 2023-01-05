@@ -58,6 +58,14 @@ void throwOpensslError() {
 
   kj::Vector<kj::String> lines;
   while (unsigned long long error = ERR_get_error()) {
+#ifdef SSL_R_UNEXPECTED_EOF_WHILE_READING
+    // OpenSSL 3.0+ reports unexpected disconnects this way.
+    if (ERR_GET_REASON(error) == SSL_R_UNEXPECTED_EOF_WHILE_READING) {
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED,
+          "peer disconnected without gracefully ending TLS session"));
+    }
+#endif
+
     char message[1024];
     ERR_error_string_n(error, message, sizeof(message));
     lines.add(kj::heapString(message));
@@ -366,8 +374,12 @@ private:
           throwOpensslError();
         case SSL_ERROR_SYSCALL:
           if (result == 0) {
+            // OpenSSL pre-3.0 reports unexpected disconnects this way. Note that 3.0+ report it
+            // as SSL_ERROR_SSL with the reason SSL_R_UNEXPECTED_EOF_WHILE_READING, which is
+            // handled in throwOpensslError().
             disconnected = true;
-            return constPromise<size_t, 0>();
+            return KJ_EXCEPTION(DISCONNECTED,
+                "peer disconnected without gracefully ending TLS session");
           } else {
             // According to documentation we shouldn't get here, because our BIO never returns an
             // "error". But in practice we do get here sometimes when the peer disconnects
@@ -404,12 +416,20 @@ private:
 
   static long bioCtrl(BIO* b, int cmd, long num, void* ptr) {
     switch (cmd) {
+      case BIO_CTRL_EOF:
+        return reinterpret_cast<TlsConnection*>(BIO_get_data(b))->readBuffer.isAtEnd();
       case BIO_CTRL_FLUSH:
         return 1;
       case BIO_CTRL_PUSH:
       case BIO_CTRL_POP:
         // Informational?
         return 0;
+#ifdef BIO_CTRL_GET_KTLS_SEND
+      case BIO_CTRL_GET_KTLS_SEND:
+      case BIO_CTRL_GET_KTLS_RECV:
+        // TODO(someday): Support kTLS if the underlying stream is a raw socket.
+        return 0;
+#endif
       default:
         KJ_LOG(WARNING, "unimplemented bio_ctrl", cmd);
         return 0;
