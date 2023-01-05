@@ -1890,7 +1890,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       return kj::heap<HttpConnectionCloseEntityReader>(*this);
     }
 
-    KJ_FAIL_REQUIRE("unknown transfer encoding", te) { break; };
+    KJ_FAIL_REQUIRE("unknown transfer encoding", *te) { break; };
   }
 
   // #4 and #5
