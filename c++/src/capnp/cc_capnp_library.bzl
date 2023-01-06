@@ -35,6 +35,17 @@ def _capnp_gen_impl(ctx):
     args.add_all(["compile", "--verbose", cc_out])
     args.add_all(["-I" + inc for inc in includes])
     args.add_all(["-I", system_include])
+
+    if src_prefix == "":
+        # guess src_prefix for generated files
+        for src in ctx.files.srcs:
+            if src.path != src.short_path:
+                # this is generated file
+                if not src.path.endswith(src.short_path):
+                    fail("assertion failed: full path should end on short path: " + src.path + " " + src.short_path)
+                src_prefix = src.path.removesuffix(src.short_path)
+                break
+
     if src_prefix != "":
         args.add_all(["--src-prefix", src_prefix])
 
