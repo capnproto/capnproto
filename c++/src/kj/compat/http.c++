@@ -3135,10 +3135,16 @@ private:
           compressor.reset();
         }
         auto& innerMessage = compressedMessage.emplace(compressor.processMessage(message));
-        KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
-        message = innerMessage.slice(0, innerMessage.size() - 4);
-        // Strip 0x00 0x00 0xFF 0xFF off the tail.
-        // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.1
+        if (message.size() > 0) {
+          KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
+          message = innerMessage.slice(0, innerMessage.size() - 4);
+          // Strip 0x00 0x00 0xFF 0xFF off the tail.
+          // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.1
+        } else {
+          // RFC 7692 (7.2.3.6) specifies that an empty uncompressed DEFLATE block (0x00) should be
+          // built if the compression library doesn't generate data when the input is empty.
+          message = compressedMessage.emplace(kj::heapArray<byte>({0x00}));
+        }
       }
 #endif // KJ_HAS_ZLIB
     }
