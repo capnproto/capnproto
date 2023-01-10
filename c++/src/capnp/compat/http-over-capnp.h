@@ -86,9 +86,11 @@ private:
   class KjToCapnpWebSocketAdapter;
 
   class ClientRequestContextImpl;
+  class ConnectClientRequestContextImpl;
   class KjToCapnpHttpServiceAdapter;
 
   class HttpServiceResponseImpl;
+  class HttpOverCapnpConnectResponseImpl;
   class ServerRequestContextImpl;
   class CapnpToKjHttpServiceAdapter;
 

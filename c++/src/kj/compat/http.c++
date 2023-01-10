@@ -6506,6 +6506,7 @@ public:
         // Release the read guard!
         fulfiller->fulfill(kj::Maybe<HttpInputStreamImpl::ReleasedBuffer>(nullptr));
         response.accept(status.statusCode, status.statusText, *status.headers);
+        return kj::READY_NOW;
       } else {
         // If the connect request is rejected, we want to shutdown the tunnel
         // and pipeline the status.errorBody to the AsyncOutputStream returned by
@@ -6513,7 +6514,8 @@ public:
         connection.shutdownWrite();
         fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "the connect request was rejected"));
         KJ_IF_MAYBE(errorBody, status.errorBody) {
-          auto out = response.reject(status.statusCode, status.statusText, *status.headers);
+          auto out = response.reject(status.statusCode, status.statusText, *status.headers,
+              errorBody->get()->tryGetLength());
           return (*errorBody)->pumpTo(*out).then([](uint64_t) -> kj::Promise<void> {
             return kj::READY_NOW;
           }).attach(kj::mv(out), kj::mv(*errorBody));
@@ -6522,7 +6524,6 @@ public:
           return kj::READY_NOW;
         }
       }
-      KJ_UNREACHABLE;
     }).eagerlyEvaluate(nullptr));
 
     // TODO(bug): Using kj::joinPromises here is a bit problematic. If the pump in one
