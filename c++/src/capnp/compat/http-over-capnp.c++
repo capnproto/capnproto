@@ -873,14 +873,9 @@ public:
 
     // We want to keep the stream alive even after EofDetector is destroyed, so we need to create
     // a refcounted AsyncIoStream.
-    struct RefcountedWrapper: public kj::Refcounted {
-      kj::Own<kj::AsyncIoStream> stream;
-      RefcountedWrapper(kj::Own<kj::AsyncIoStream> stream) : stream(kj::mv(stream)) {};
-    };
-    auto& pipeRef = *pipe.ends[1];
-    auto refcounted = kj::refcounted<RefcountedWrapper>(kj::mv(pipe.ends[1]));;
-    kj::Own<kj::AsyncIoStream> ref1 = kj::attachRef(pipeRef, kj::addRef(*refcounted));
-    kj::Own<kj::AsyncIoStream> ref2 = kj::attachRef(pipeRef, kj::mv(refcounted));
+    auto refcounted = kj::refcountedWrapper(kj::mv(pipe.ends[1]));
+    kj::Own<kj::AsyncIoStream> ref1 = refcounted->addWrappedRef();
+    kj::Own<kj::AsyncIoStream> ref2 = refcounted->addWrappedRef();
 
     // We write to the `down` pipe.
     auto pumpTask = ref1->pumpTo(*stream)
