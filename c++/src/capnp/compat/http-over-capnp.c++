@@ -869,7 +869,6 @@ public:
 
     kj::Own<kj::AsyncOutputStream> stream = factory.streamFactory.capnpToKj(
         context.getParams().getDown());
-    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
 
     // We want to keep the stream alive even after EofDetector is destroyed, so we need to create
     // a refcounted AsyncIoStream.
