@@ -39,6 +39,7 @@ def _capnp_gen_impl(ctx):
     if src_prefix == "":
         # guess src_prefix for generated files
         for src in ctx.files.srcs:
+            print("=====> src: ", src.path, src.short_path, src)
             if src.path != src.short_path:
                 # this is generated file
                 if not src.path.endswith(src.short_path):
