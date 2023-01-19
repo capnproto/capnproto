@@ -188,7 +188,7 @@ static void rmrfChildrenAndClose(int fd) {
       if (entry->d_type == DT_DIR) {
         int subdirFd;
         KJ_SYSCALL(subdirFd = openat(
-            fd, entry->d_name, O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC));
+            fd, entry->d_name, O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW));
         rmrfChildrenAndClose(subdirFd);
         KJ_SYSCALL(unlinkat(fd, entry->d_name, AT_REMOVEDIR));
       } else if (entry->d_type != DT_UNKNOWN) {
@@ -217,7 +217,9 @@ static bool rmrf(int fd, StringPtr path) {
   if (S_ISDIR(stats.st_mode)) {
     int subdirFd;
     KJ_SYSCALL(subdirFd = openat(
-        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC)) { return false; }
+        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW)) {
+      return false;
+    }
     rmrfChildrenAndClose(subdirFd);
     KJ_SYSCALL(unlinkat(fd, path.cStr(), AT_REMOVEDIR)) { return false; }
   } else {
