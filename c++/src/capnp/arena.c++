@@ -104,7 +104,7 @@ ReaderArena::~ReaderArena() noexcept(false) {}
 size_t ReaderArena::sizeInWords() {
   size_t total = segment0.getArray().size();
 
-  for (uint i = 0; ; i++) {
+  for (uint i = 1; ; i++) {
     SegmentReader* segment = tryGetSegment(SegmentId(i));
     if (segment == nullptr) return total;
     total += unboundAs<size_t>(segment->getSize() / WORDS);

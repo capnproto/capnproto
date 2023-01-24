@@ -192,6 +192,27 @@ KJ_TEST("disallow unaligned") {
 }
 #endif
 
+KJ_TEST("MessageBuilder::sizeInWords()") {
+  capnp::MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+  initTestMessage(root);
+
+  size_t expected = root.totalSize().wordCount + 1;
+
+  KJ_EXPECT(builder.sizeInWords() == expected);
+
+  auto segments = builder.getSegmentsForOutput();
+  size_t total = 0;
+  for (auto& segment: segments) {
+    total += segment.size();
+  }
+  KJ_EXPECT(total == expected);
+
+  capnp::SegmentArrayMessageReader reader(segments);
+  checkTestMessage(reader.getRoot<TestAllTypes>());
+  KJ_EXPECT(reader.sizeInWords() == expected);
+}
+
 // TODO(test):  More tests.
 
 }  // namespace
