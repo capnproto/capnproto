@@ -24,7 +24,7 @@
 #include <string>
 #include "vector.h"
 #include <locale.h>
-#include <cstdint>
+#include <stdint.h>
 
 namespace kj {
 namespace _ {  // private
