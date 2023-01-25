@@ -223,6 +223,37 @@ public:
         interfaceId(interfaceId), methodId(methodId), hints(hints), client(kj::mv(client)) {}
 
   RemotePromise<AnyPointer> send() override {
+    return sendImpl();
+  }
+
+  kj::Promise<void> sendStreaming() override {
+    // We don't do any special handling of streaming in RequestHook for local requests, because
+    // there is no latency to compensate for between the client and server in this case.
+    return sendImpl().ignoreResult();
+  }
+
+  AnyPointer::Pipeline sendForPipeline() override {
+    KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
+
+    hints.onlyPromisePipeline = true;
+    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef(), hints);
+    auto vpap = client->call(interfaceId, methodId, kj::addRef(*context), hints);
+    return AnyPointer::Pipeline(kj::mv(vpap.pipeline));
+  }
+
+  const void* getBrand() override {
+    return nullptr;
+  }
+
+  kj::Own<MallocMessageBuilder> message;
+
+private:
+  uint64_t interfaceId;
+  uint16_t methodId;
+  ClientHook::CallHints hints;
+  kj::Own<ClientHook> client;
+
+  RemotePromise<AnyPointer> sendImpl() {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
     auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef(), hints);
@@ -253,33 +284,6 @@ public:
     return RemotePromise<AnyPointer>(
         kj::mv(promise), AnyPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
   }
-
-  kj::Promise<void> sendStreaming() override {
-    // We don't do any special handling of streaming in RequestHook for local requests, because
-    // there is no latency to compensate for between the client and server in this case.
-    return send().ignoreResult();
-  }
-
-  AnyPointer::Pipeline sendForPipeline() override {
-    KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
-
-    hints.onlyPromisePipeline = true;
-    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef(), hints);
-    auto vpap = client->call(interfaceId, methodId, kj::addRef(*context), hints);
-    return AnyPointer::Pipeline(kj::mv(vpap.pipeline));
-  }
-
-  const void* getBrand() override {
-    return nullptr;
-  }
-
-  kj::Own<MallocMessageBuilder> message;
-
-private:
-  uint64_t interfaceId;
-  uint16_t methodId;
-  ClientHook::CallHints hints;
-  kj::Own<ClientHook> client;
 };
 
 // =======================================================================================
