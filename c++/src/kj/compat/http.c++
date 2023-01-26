@@ -2092,7 +2092,31 @@ private:
   }
 };
 
+class HttpEntityBodyWriter: public kj::AsyncOutputStream {
+public:
+  HttpEntityBodyWriter(HttpOutputStream& inner): inner(inner) {}
+  ~HttpEntityBodyWriter() noexcept(false) {
+    if (!finished) {
+      inner.abortBody();
+    }
+  }
+
+protected:
+  HttpOutputStream& inner;
+
+  void doneWriting() {
+    finished = true;
+    inner.finishBody();
+  }
+
+  inline bool alreadyDone() { return finished; }
+
+private:
+  bool finished = false;
+};
+
 class HttpNullEntityWriter final: public kj::AsyncOutputStream {
+  // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
 public:
   Promise<void> write(const void* buffer, size_t size) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
@@ -2106,6 +2130,7 @@ public:
 };
 
 class HttpDiscardingEntityWriter final: public kj::AsyncOutputStream {
+  // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
 public:
   Promise<void> write(const void* buffer, size_t size) override {
     return kj::READY_NOW;
@@ -2118,16 +2143,11 @@ public:
   }
 };
 
-class HttpFixedLengthEntityWriter final: public kj::AsyncOutputStream {
+class HttpFixedLengthEntityWriter final: public HttpEntityBodyWriter {
 public:
   HttpFixedLengthEntityWriter(HttpOutputStream& inner, uint64_t length)
-      : inner(inner), length(length) {
-    if (length == 0) inner.finishBody();
-  }
-  ~HttpFixedLengthEntityWriter() noexcept(false) {
-    if (length > 0 || inner.isWriteInProgress()) {
-      inner.abortBody();
-    }
+      : HttpEntityBodyWriter(inner), length(length) {
+    if (length == 0) doneWriting();
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
@@ -2173,7 +2193,7 @@ public:
         : inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
       // Adjust for bytes not written.
       length += amount - actual;
-      if (length == 0) inner.finishBody();
+      if (length == 0) doneWriting();
       return actual;
     });
 
@@ -2203,28 +2223,27 @@ public:
   }
 
 private:
-  HttpOutputStream& inner;
   uint64_t length;
 
   kj::Promise<void> maybeFinishAfter(kj::Promise<void> promise) {
     if (length == 0) {
-      return promise.then([this]() { inner.finishBody(); });
+      return promise.then([this]() { doneWriting(); });
     } else {
       return kj::mv(promise);
     }
   }
 };
 
-class HttpChunkedEntityWriter final: public kj::AsyncOutputStream {
+class HttpChunkedEntityWriter final: public HttpEntityBodyWriter {
 public:
   HttpChunkedEntityWriter(HttpOutputStream& inner)
-      : inner(inner) {}
+      : HttpEntityBodyWriter(inner) {}
   ~HttpChunkedEntityWriter() noexcept(false) {
-    if (inner.canWriteBodyData()) {
-      inner.writeBodyData(kj::str("0\r\n\r\n"));
-      inner.finishBody();
-    } else {
-      inner.abortBody();
+    if (!alreadyDone()) {
+      if (inner.canWriteBodyData()) {
+        inner.writeBodyData(kj::str("0\r\n\r\n"));
+        doneWriting();
+      }
     }
   }
 
@@ -2288,9 +2307,6 @@ public:
   Promise<void> whenWriteDisconnected() override {
     return inner.whenWriteDisconnected();
   }
-
-private:
-  HttpOutputStream& inner;
 };
 
 // =======================================================================================
