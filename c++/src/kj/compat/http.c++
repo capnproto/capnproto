@@ -1642,7 +1642,7 @@ public:
   }
 
 protected:
-  HttpInputStreamImpl& inner;
+  HttpInputStreamImpl& getInner() { return inner; }
 
   void doneReading() {
     KJ_REQUIRE(!finished);
@@ -1653,6 +1653,7 @@ protected:
   inline bool alreadyDone() { return finished; }
 
 private:
+  HttpInputStreamImpl& inner;
   bool finished = false;
 };
 
@@ -1690,7 +1691,7 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     if (alreadyDone()) return constPromise<size_t, 0>();
 
-    return inner.tryRead(buffer, minBytes, maxBytes)
+    return getInner().tryRead(buffer, minBytes, maxBytes)
         .then([=](size_t amount) {
       if (amount < minBytes) {
         doneReading();
@@ -1726,7 +1727,7 @@ private:
 
     // We have to set minBytes to 1 here so that if we read any data at all, we update our
     // counter immediately, so that we still know where we are in case of cancellation.
-    return inner.tryRead(buffer, 1, kj::min(maxBytes, length))
+    return getInner().tryRead(buffer, 1, kj::min(maxBytes, length))
         .then([=](size_t amount) -> kj::Promise<size_t> {
       length -= amount;
       if (length > 0) {
@@ -1768,7 +1769,7 @@ private:
       return alreadyRead;
     } else if (chunkSize == 0) {
       // Read next chunk header.
-      return inner.readChunkHeader().then([=](uint64_t nextChunkSize) {
+      return getInner().readChunkHeader().then([=](uint64_t nextChunkSize) {
         if (nextChunkSize == 0) {
           doneReading();
         }
@@ -1780,7 +1781,7 @@ private:
       // Read current chunk.
       // We have to set minBytes to 1 here so that if we read any data at all, we update our
       // counter immediately, so that we still know where we are in case of cancellation.
-      return inner.tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
+      return getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
           .then([=](size_t amount) -> kj::Promise<size_t> {
         chunkSize -= amount;
         if (amount == 0) {
@@ -2102,7 +2103,7 @@ public:
   }
 
 protected:
-  HttpOutputStream& inner;
+  HttpOutputStream& getInner() { return inner; }
 
   void doneWriting() {
     finished = true;
@@ -2112,6 +2113,7 @@ protected:
   inline bool alreadyDone() { return finished; }
 
 private:
+  HttpOutputStream& inner;
   bool finished = false;
 };
 
@@ -2155,7 +2157,7 @@ public:
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
-    return maybeFinishAfter(inner.writeBodyData(buffer, size));
+    return maybeFinishAfter(getInner().writeBodyData(buffer, size));
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     uint64_t size = 0;
@@ -2165,7 +2167,7 @@ public:
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
-    return maybeFinishAfter(inner.writeBodyData(pieces));
+    return maybeFinishAfter(getInner().writeBodyData(pieces));
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -2190,7 +2192,7 @@ public:
 
     auto promise = amount == 0
         ? kj::Promise<uint64_t>(amount)
-        : inner.pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
+        : getInner().pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
       // Adjust for bytes not written.
       length += amount - actual;
       if (length == 0) doneWriting();
@@ -2219,7 +2221,7 @@ public:
   }
 
   Promise<void> whenWriteDisconnected() override {
-    return inner.whenWriteDisconnected();
+    return getInner().whenWriteDisconnected();
   }
 
 private:
@@ -2240,6 +2242,7 @@ public:
       : HttpEntityBodyWriter(inner) {}
   ~HttpChunkedEntityWriter() noexcept(false) {
     if (!alreadyDone()) {
+      auto& inner = getInner();
       if (inner.canWriteBodyData()) {
         inner.writeBodyData(kj::str("0\r\n\r\n"));
         doneWriting();
@@ -2256,7 +2259,7 @@ public:
     parts[1] = kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size);
     parts[2] = kj::StringPtr("\r\n").asBytes();
 
-    auto promise = inner.writeBodyData(parts.asPtr());
+    auto promise = getInner().writeBodyData(parts.asPtr());
     return promise.attach(kj::mv(header), kj::mv(parts));
   }
 
@@ -2275,7 +2278,7 @@ public:
     partsBuilder.add(kj::StringPtr("\r\n").asBytes());
 
     auto parts = partsBuilder.finish();
-    auto promise = inner.writeBodyData(parts.asPtr());
+    auto promise = getInner().writeBodyData(parts.asPtr());
     return promise.attach(kj::mv(header), kj::mv(parts));
   }
 
@@ -2284,9 +2287,11 @@ public:
       // Hey, we know exactly how large the input is, so we can write just one chunk.
 
       uint64_t length = kj::min(amount, *l);
+      auto& inner = getInner();
       inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
       return inner.pumpBodyFrom(input, length)
           .then([this,length](uint64_t actual) {
+        auto& inner = getInner();
         if (actual < length) {
           inner.abortBody();
           KJ_FAIL_REQUIRE(
@@ -2305,7 +2310,7 @@ public:
   }
 
   Promise<void> whenWriteDisconnected() override {
-    return inner.whenWriteDisconnected();
+    return getInner().whenWriteDisconnected();
   }
 };
 
