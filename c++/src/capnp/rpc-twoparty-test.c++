@@ -738,6 +738,85 @@ KJ_TEST("Streaming over RPC") {
   }
 }
 
+KJ_TEST("Streaming over a chain of local and remote RPC calls") {
+  // This test verifies that a local RPC call that eventually resolves to a remote RPC call will
+  // still support streaming calls over the remote connection.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  // Set up a local server that will eventually delegate requests to a remote server.
+  auto localPaf = kj::newPromiseAndFulfiller<test::TestStreaming::Client>();
+  test::TestStreaming::Client promisedClient(kj::mv(localPaf.promise));
+
+  uint count = 0;
+  auto req = promisedClient.doStreamIRequest();
+  req.setI(++count);
+  auto promise = req.send();
+
+  // Expect streaming request to be blocked on promised client.
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Set up a remote server with a flow control window for streaming.
+  auto pipe = kj::newTwoWayPipe();
+
+  size_t window = 1024;
+  size_t clientWritten = 0;
+  size_t serverWritten = 0;
+
+  pipe.ends[0] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[0]), window, clientWritten);
+  pipe.ends[1] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[1]), window, serverWritten);
+
+  auto remotePaf = kj::newPromiseAndFulfiller<test::TestStreaming::Client>();
+  test::TestStreaming::Client serverCap(kj::mv(remotePaf.promise));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], kj::mv(serverCap), rpc::twoparty::Side::SERVER);
+
+  auto clientCap = tpClient.bootstrap().castAs<test::TestStreaming>();
+
+  // Expect streaming request to be unblocked by fulfilling promised client with remote server.
+  localPaf.fulfiller->fulfill(kj::mv(clientCap));
+  KJ_EXPECT(promise.poll(waitScope));
+
+  // Send stream requests until we can't anymore.
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = promisedClient.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+    KJ_ASSERT(count < 1000);
+  }
+
+  // Expect several stream requests to have fit in the flow control window.
+  KJ_EXPECT(count > 5);
+
+  auto finishReq = promisedClient.finishStreamRequest();
+  auto finishPromise = finishReq.send();
+  KJ_EXPECT(!finishPromise.poll(waitScope));
+
+  // Finish calls on server
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  remotePaf.fulfiller->fulfill(kj::mv(ownServer));
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  uint countReceived = 0;
+  for (uint i = 0; i < count; i++) {
+    KJ_EXPECT(server.iSum == ++countReceived);
+    server.iSum = 0;
+    KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+    if (i < count - 1) {
+      KJ_EXPECT(!finishPromise.poll(waitScope));
+    }
+  }
+
+  KJ_EXPECT(finishPromise.poll(waitScope));
+  finishPromise.wait(waitScope);
+}
+
 KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
