@@ -29,11 +29,6 @@
 
 namespace kj {
 
-#if _MSC_VER && !defined(__clang__)
-#pragma warning(disable: 4996)
-// Warns that sprintf() is buffer-overrunny. We know that, it's cool.
-#endif
-
 namespace {
 bool isHex(const char *s) {
   if (*s == '-') s++;
@@ -525,7 +520,7 @@ kj::String LocalizeRadix(const char* input, const char* radix_pos) {
   // to divuldge the locale's radix character.  No, localeconv() is NOT
   // thread-safe.
   char temp[16];
-  int size = sprintf(temp, "%.1f", 1.5);
+  int size = snprintf(temp, sizeof(temp), "%.1f", 1.5);
   KJ_ASSERT(temp[0] == '1');
   KJ_ASSERT(temp[size-1] == '5');
   KJ_ASSERT(size <= 6);

@@ -40,11 +40,6 @@
 #include <sys/wait.h>
 #endif
 
-#if _MSC_VER && !defined(__clang__)
-#pragma warning(disable: 4996)
-// Warns that sprintf() is buffer-overrunny. Yeah, I know, it's cool.
-#endif
-
 namespace kj {
 namespace _ {  // private
 namespace {
@@ -203,7 +198,7 @@ std::string fileLine(std::string file, int line) {
 
   file += ':';
   char buffer[32];
-  sprintf(buffer, "%d", line);
+  snprintf(buffer, sizeof(buffer), "%d", line);
   file += buffer;
   return file;
 }
