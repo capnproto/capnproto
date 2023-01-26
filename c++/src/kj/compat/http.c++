@@ -1113,11 +1113,63 @@ kj::String HttpHeaders::toString() const {
 
 namespace {
 
+template <typename Subclass>
+class WrappableStreamMixin {
+  // Both HttpInputStreamImpl and HttpOutputStream are commonly wrapped by a class that implements
+  // a particular type of body stream, such as a chunked body or a fixed-length body. That wrapper
+  // stream is passed back to the application to represent the specific request/response body, but
+  // the inner stream is associated with the connection and can be reused several times.
+  //
+  // It's easy for applications to screw up and hold on to a body stream beyond the lifetime of the
+  // underlying connection stream. This used to lead to UAF. This mixin class implements behavior
+  // that detached the wrapper if it outlives the wrapped stream, so that we log errors and
+
+public:
+  ~WrappableStreamMixin() noexcept(false) {
+    KJ_IF_MAYBE(w, currentWrapper) {
+      KJ_LOG(ERROR, "HTTP connection destroyed while HTTP body streams still exist",
+          kj::getStackTrace());
+      *w = nullptr;
+    }
+  }
+
+  void setCurrentWrapper(kj::Maybe<Subclass&>& weakRef) {
+    // Tracks the current `HttpEntityBodyReader` instance which is wrapping this stream. There can
+    // be only one wrapper at a time, and the wrapper must be destroyed before the underlying HTTP
+    // connection is torn down. The purpose of tracking the wrapper here is to detect when these
+    // rules are violated by apps, and log an error instead of going UB.
+    //
+    // `weakRef` is the wrapper's pointer to this object. If the underlying stream is destroyed
+    // before the wrapper, then `weakRef` will be nulled out.
+
+    // The API should prevent an app from obtaining multiple wrappers with the same backing stream.
+    KJ_ASSERT(currentWrapper == nullptr,
+        "bug in KJ HTTP: only one HTTP stream wrapper can exist at a time");
+
+    currentWrapper = weakRef;
+    weakRef = static_cast<Subclass&>(*this);
+  }
+
+  void unsetCurrentWrapper(kj::Maybe<Subclass&>& weakRef) {
+    auto& current = KJ_ASSERT_NONNULL(currentWrapper);
+    KJ_ASSERT(&current == &weakRef,
+        "bug in KJ HTTP: unsetCurrentWrapper() passed the wrong wrapper");
+    weakRef = nullptr;
+    currentWrapper = nullptr;
+  }
+
+private:
+  kj::Maybe<kj::Maybe<Subclass&>&> currentWrapper;
+};
+
+// =======================================================================================
+
 static constexpr size_t MIN_BUFFER = 4096;
 static constexpr size_t MAX_BUFFER = 128 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
-class HttpInputStreamImpl final: public HttpInputStream {
+class HttpInputStreamImpl final: public HttpInputStream,
+                                 public WrappableStreamMixin<HttpInputStreamImpl> {
 private:
   static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
       kj::OneOf<HttpMethod, HttpConnectMethod> method,
@@ -1634,26 +1686,44 @@ private:
 
 class HttpEntityBodyReader: public kj::AsyncInputStream {
 public:
-  HttpEntityBodyReader(HttpInputStreamImpl& inner): inner(inner) {}
+  HttpEntityBodyReader(HttpInputStreamImpl& inner) {
+    inner.setCurrentWrapper(weakInner);
+  }
   ~HttpEntityBodyReader() noexcept(false) {
     if (!finished) {
-      inner.abortRead();
+      KJ_IF_MAYBE(inner, weakInner) {
+        inner->unsetCurrentWrapper(weakInner);
+        inner->abortRead();
+      } else {
+        // Since we're in a destructor, log an error instead of throwing.
+        KJ_LOG(ERROR, "HTTP body input stream outlived underlying connection", kj::getStackTrace());
+      }
     }
   }
 
 protected:
-  HttpInputStreamImpl& getInner() { return inner; }
+  HttpInputStreamImpl& getInner() {
+    KJ_IF_MAYBE(i, weakInner) {
+      return *i;
+    } else if (finished) {
+      // This is a bug in the implementations in this file, not the app.
+      KJ_FAIL_ASSERT("bug in KJ HTTP: tried to access inner stream after it had been released");
+    } else {
+      KJ_FAIL_REQUIRE("HTTP body input stream outlived underlying connection");
+    }
+  }
 
   void doneReading() {
-    KJ_REQUIRE(!finished);
+    auto& inner = getInner();
+    inner.unsetCurrentWrapper(weakInner);
     finished = true;
     inner.finishRead();
   }
 
-  inline bool alreadyDone() { return finished; }
+  inline bool alreadyDone() { return weakInner == nullptr; }
 
 private:
-  HttpInputStreamImpl& inner;
+  kj::Maybe<HttpInputStreamImpl&> weakInner;
   bool finished = false;
 };
 
@@ -1944,7 +2014,7 @@ kj::Own<HttpInputStream> newHttpInputStream(
 
 namespace {
 
-class HttpOutputStream {
+class HttpOutputStream: public WrappableStreamMixin<HttpOutputStream> {
 public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
@@ -2095,25 +2165,45 @@ private:
 
 class HttpEntityBodyWriter: public kj::AsyncOutputStream {
 public:
-  HttpEntityBodyWriter(HttpOutputStream& inner): inner(inner) {}
+  HttpEntityBodyWriter(HttpOutputStream& inner) {
+    inner.setCurrentWrapper(weakInner);
+  }
   ~HttpEntityBodyWriter() noexcept(false) {
     if (!finished) {
-      inner.abortBody();
+      KJ_IF_MAYBE(inner, weakInner) {
+        inner->unsetCurrentWrapper(weakInner);
+        inner->abortBody();
+      } else {
+        // Since we're in a destructor, log an error instead of throwing.
+        KJ_LOG(ERROR, "HTTP body output stream outlived underlying connection",
+            kj::getStackTrace());
+      }
     }
   }
 
 protected:
-  HttpOutputStream& getInner() { return inner; }
+  HttpOutputStream& getInner() {
+    KJ_IF_MAYBE(i, weakInner) {
+      return *i;
+    } else if (finished) {
+      // This is a bug in the implementations in this file, not the app.
+      KJ_FAIL_ASSERT("bug in KJ HTTP: tried to access inner stream after it had been released");
+    } else {
+      KJ_FAIL_REQUIRE("HTTP body output stream outlived underlying connection");
+    }
+  }
 
   void doneWriting() {
+    auto& inner = getInner();
+    inner.unsetCurrentWrapper(weakInner);
     finished = true;
     inner.finishBody();
   }
 
-  inline bool alreadyDone() { return finished; }
+  inline bool alreadyDone() { return weakInner == nullptr; }
 
 private:
-  HttpOutputStream& inner;
+  kj::Maybe<HttpOutputStream&> weakInner;
   bool finished = false;
 };
 
