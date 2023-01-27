@@ -1125,6 +1125,14 @@ class WrappableStreamMixin {
   // that detached the wrapper if it outlives the wrapped stream, so that we log errors and
 
 public:
+  WrappableStreamMixin() = default;
+  WrappableStreamMixin(WrappableStreamMixin&& other) {
+    // This constructor is only needed by HttpServer::Connection::makeHttpInput() which constructs
+    // a new stream and returns it. Technically the constructor will always be elided anyway.
+    KJ_REQUIRE(other.currentWrapper == nullptr, "can't move a wrappable object that has wrappers!");
+  }
+  KJ_DISALLOW_COPY(WrappableStreamMixin);
+
   ~WrappableStreamMixin() noexcept(false) {
     KJ_IF_MAYBE(w, currentWrapper) {
       KJ_LOG(ERROR, "HTTP connection destroyed while HTTP body streams still exist",
