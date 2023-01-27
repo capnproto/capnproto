@@ -1113,11 +1113,71 @@ kj::String HttpHeaders::toString() const {
 
 namespace {
 
+template <typename Subclass>
+class WrappableStreamMixin {
+  // Both HttpInputStreamImpl and HttpOutputStream are commonly wrapped by a class that implements
+  // a particular type of body stream, such as a chunked body or a fixed-length body. That wrapper
+  // stream is passed back to the application to represent the specific request/response body, but
+  // the inner stream is associated with the connection and can be reused several times.
+  //
+  // It's easy for applications to screw up and hold on to a body stream beyond the lifetime of the
+  // underlying connection stream. This used to lead to UAF. This mixin class implements behavior
+  // that detached the wrapper if it outlives the wrapped stream, so that we log errors and
+
+public:
+  WrappableStreamMixin() = default;
+  WrappableStreamMixin(WrappableStreamMixin&& other) {
+    // This constructor is only needed by HttpServer::Connection::makeHttpInput() which constructs
+    // a new stream and returns it. Technically the constructor will always be elided anyway.
+    KJ_REQUIRE(other.currentWrapper == nullptr, "can't move a wrappable object that has wrappers!");
+  }
+  KJ_DISALLOW_COPY(WrappableStreamMixin);
+
+  ~WrappableStreamMixin() noexcept(false) {
+    KJ_IF_MAYBE(w, currentWrapper) {
+      KJ_LOG(ERROR, "HTTP connection destroyed while HTTP body streams still exist",
+          kj::getStackTrace());
+      *w = nullptr;
+    }
+  }
+
+  void setCurrentWrapper(kj::Maybe<Subclass&>& weakRef) {
+    // Tracks the current `HttpEntityBodyReader` instance which is wrapping this stream. There can
+    // be only one wrapper at a time, and the wrapper must be destroyed before the underlying HTTP
+    // connection is torn down. The purpose of tracking the wrapper here is to detect when these
+    // rules are violated by apps, and log an error instead of going UB.
+    //
+    // `weakRef` is the wrapper's pointer to this object. If the underlying stream is destroyed
+    // before the wrapper, then `weakRef` will be nulled out.
+
+    // The API should prevent an app from obtaining multiple wrappers with the same backing stream.
+    KJ_ASSERT(currentWrapper == nullptr,
+        "bug in KJ HTTP: only one HTTP stream wrapper can exist at a time");
+
+    currentWrapper = weakRef;
+    weakRef = static_cast<Subclass&>(*this);
+  }
+
+  void unsetCurrentWrapper(kj::Maybe<Subclass&>& weakRef) {
+    auto& current = KJ_ASSERT_NONNULL(currentWrapper);
+    KJ_ASSERT(&current == &weakRef,
+        "bug in KJ HTTP: unsetCurrentWrapper() passed the wrong wrapper");
+    weakRef = nullptr;
+    currentWrapper = nullptr;
+  }
+
+private:
+  kj::Maybe<kj::Maybe<Subclass&>&> currentWrapper;
+};
+
+// =======================================================================================
+
 static constexpr size_t MIN_BUFFER = 4096;
 static constexpr size_t MAX_BUFFER = 128 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
-class HttpInputStreamImpl final: public HttpInputStream {
+class HttpInputStreamImpl final: public HttpInputStream,
+                                 public WrappableStreamMixin<HttpInputStreamImpl> {
 private:
   static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
       kj::OneOf<HttpMethod, HttpConnectMethod> method,
@@ -1634,25 +1694,44 @@ private:
 
 class HttpEntityBodyReader: public kj::AsyncInputStream {
 public:
-  HttpEntityBodyReader(HttpInputStreamImpl& inner): inner(inner) {}
+  HttpEntityBodyReader(HttpInputStreamImpl& inner) {
+    inner.setCurrentWrapper(weakInner);
+  }
   ~HttpEntityBodyReader() noexcept(false) {
     if (!finished) {
-      inner.abortRead();
+      KJ_IF_MAYBE(inner, weakInner) {
+        inner->unsetCurrentWrapper(weakInner);
+        inner->abortRead();
+      } else {
+        // Since we're in a destructor, log an error instead of throwing.
+        KJ_LOG(ERROR, "HTTP body input stream outlived underlying connection", kj::getStackTrace());
+      }
     }
   }
 
 protected:
-  HttpInputStreamImpl& inner;
+  HttpInputStreamImpl& getInner() {
+    KJ_IF_MAYBE(i, weakInner) {
+      return *i;
+    } else if (finished) {
+      // This is a bug in the implementations in this file, not the app.
+      KJ_FAIL_ASSERT("bug in KJ HTTP: tried to access inner stream after it had been released");
+    } else {
+      KJ_FAIL_REQUIRE("HTTP body input stream outlived underlying connection");
+    }
+  }
 
   void doneReading() {
-    KJ_REQUIRE(!finished);
+    auto& inner = getInner();
+    inner.unsetCurrentWrapper(weakInner);
     finished = true;
     inner.finishRead();
   }
 
-  inline bool alreadyDone() { return finished; }
+  inline bool alreadyDone() { return weakInner == nullptr; }
 
 private:
+  kj::Maybe<HttpInputStreamImpl&> weakInner;
   bool finished = false;
 };
 
@@ -1690,7 +1769,7 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     if (alreadyDone()) return constPromise<size_t, 0>();
 
-    return inner.tryRead(buffer, minBytes, maxBytes)
+    return getInner().tryRead(buffer, minBytes, maxBytes)
         .then([=](size_t amount) {
       if (amount < minBytes) {
         doneReading();
@@ -1726,7 +1805,7 @@ private:
 
     // We have to set minBytes to 1 here so that if we read any data at all, we update our
     // counter immediately, so that we still know where we are in case of cancellation.
-    return inner.tryRead(buffer, 1, kj::min(maxBytes, length))
+    return getInner().tryRead(buffer, 1, kj::min(maxBytes, length))
         .then([=](size_t amount) -> kj::Promise<size_t> {
       length -= amount;
       if (length > 0) {
@@ -1768,7 +1847,7 @@ private:
       return alreadyRead;
     } else if (chunkSize == 0) {
       // Read next chunk header.
-      return inner.readChunkHeader().then([=](uint64_t nextChunkSize) {
+      return getInner().readChunkHeader().then([=](uint64_t nextChunkSize) {
         if (nextChunkSize == 0) {
           doneReading();
         }
@@ -1780,7 +1859,7 @@ private:
       // Read current chunk.
       // We have to set minBytes to 1 here so that if we read any data at all, we update our
       // counter immediately, so that we still know where we are in case of cancellation.
-      return inner.tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
+      return getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
           .then([=](size_t amount) -> kj::Promise<size_t> {
         chunkSize -= amount;
         if (amount == 0) {
@@ -1943,55 +2022,7 @@ kj::Own<HttpInputStream> newHttpInputStream(
 
 namespace {
 
-template <typename T>
-class ResetableRef {
-  // Utility that holds a refcounted ref to an instance of T.
-  // When multiple ResetableRefs point to the same T, and
-  // reset() is called, the reference is cleared for all instances.
-  // Only the owner (whoever holds the original ResetableRef that
-  // set the reference) is allowed to reset it.
-public:
-  ResetableRef(T& t) : inner(refcounted<Impl>(t)), owner(true) {}
-  ResetableRef(ResetableRef& other)
-      : inner(kj::addRef(*other.inner)) {}
-  ResetableRef(ResetableRef&& other)
-      : inner(mv(other.inner)), owner(owner) {
-    other.movedAway = true;
-    other.owner = false;
-  }
-  ResetableRef& operator=(ResetableRef& other) {
-    inner = kj::addRef(other.inner);
-  }
-  ResetableRef& operator=(ResetableRef&& other) {
-    inner = mv(other.inner);
-    owner = other.owner;
-    other.movedAway = true;
-    other.owner = false;
-  }
-
-  Maybe<T&> tryGet() {
-    if (!movedAway) {
-      KJ_IF_MAYBE(i, inner->ref) { return *i; }
-    }
-    return nullptr;
-  }
-
-  void reset() {
-    KJ_REQUIRE(owner, "only the owner of a ResetableRef may reset it");
-    if (!movedAway) { inner->ref = nullptr; }
-  }
-
-private:
-  struct Impl : Refcounted {
-    Maybe<T&> ref;
-    Impl(T& t) : ref(t) {}
-  };
-  kj::Own<Impl> inner;
-  bool owner = false;
-  bool movedAway = false;
-};
-
-class HttpOutputStream {
+class HttpOutputStream: public WrappableStreamMixin<HttpOutputStream> {
 public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
@@ -2140,7 +2171,52 @@ private:
   }
 };
 
+class HttpEntityBodyWriter: public kj::AsyncOutputStream {
+public:
+  HttpEntityBodyWriter(HttpOutputStream& inner) {
+    inner.setCurrentWrapper(weakInner);
+  }
+  ~HttpEntityBodyWriter() noexcept(false) {
+    if (!finished) {
+      KJ_IF_MAYBE(inner, weakInner) {
+        inner->unsetCurrentWrapper(weakInner);
+        inner->abortBody();
+      } else {
+        // Since we're in a destructor, log an error instead of throwing.
+        KJ_LOG(ERROR, "HTTP body output stream outlived underlying connection",
+            kj::getStackTrace());
+      }
+    }
+  }
+
+protected:
+  HttpOutputStream& getInner() {
+    KJ_IF_MAYBE(i, weakInner) {
+      return *i;
+    } else if (finished) {
+      // This is a bug in the implementations in this file, not the app.
+      KJ_FAIL_ASSERT("bug in KJ HTTP: tried to access inner stream after it had been released");
+    } else {
+      KJ_FAIL_REQUIRE("HTTP body output stream outlived underlying connection");
+    }
+  }
+
+  void doneWriting() {
+    auto& inner = getInner();
+    inner.unsetCurrentWrapper(weakInner);
+    finished = true;
+    inner.finishBody();
+  }
+
+  inline bool alreadyDone() { return weakInner == nullptr; }
+
+private:
+  kj::Maybe<HttpOutputStream&> weakInner;
+  bool finished = false;
+};
+
 class HttpNullEntityWriter final: public kj::AsyncOutputStream {
+  // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
 public:
   Promise<void> write(const void* buffer, size_t size) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
@@ -2154,6 +2230,7 @@ public:
 };
 
 class HttpDiscardingEntityWriter final: public kj::AsyncOutputStream {
+  // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
 public:
   Promise<void> write(const void* buffer, size_t size) override {
     return kj::READY_NOW;
@@ -2166,20 +2243,11 @@ public:
   }
 };
 
-class HttpFixedLengthEntityWriter final: public kj::AsyncOutputStream {
+class HttpFixedLengthEntityWriter final: public HttpEntityBodyWriter {
 public:
-  HttpFixedLengthEntityWriter(ResetableRef<HttpOutputStream>& inner, uint64_t length)
-      : inner(inner), length(length) {
-    if (length == 0) KJ_ASSERT_NONNULL(inner.tryGet()).finishBody();
-  }
-  ~HttpFixedLengthEntityWriter() noexcept(false) {
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      if (length > 0 || i->isWriteInProgress()) {
-        i->abortBody();
-      }
-    } else {
-      logInnerClearedWarningOnce();
-    }
+  HttpFixedLengthEntityWriter(HttpOutputStream& inner, uint64_t length)
+      : HttpEntityBodyWriter(inner), length(length) {
+    if (length == 0) doneWriting();
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
@@ -2187,28 +2255,17 @@ public:
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      return maybeFinishAfter(i->writeBodyData(buffer, size));
-    } else {
-      logInnerClearedWarningOnce();
-      return kj::READY_NOW;
-    };
+    return maybeFinishAfter(getInner().writeBodyData(buffer, size));
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     uint64_t size = 0;
-
     for (auto& piece: pieces) size += piece.size();
 
     if (size == 0) return kj::READY_NOW;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      return maybeFinishAfter(i->writeBodyData(pieces));
-    } else {
-      logInnerClearedWarningOnce();
-      return kj::READY_NOW;
-    };
+    return maybeFinishAfter(getInner().writeBodyData(pieces));
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -2231,116 +2288,77 @@ public:
     amount = kj::min(amount, length);
     length -= amount;
 
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      auto promise = amount == 0
-          ? kj::Promise<uint64_t>(amount)
-          : i->pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
-        length += amount - actual;
-        KJ_IF_MAYBE(i, inner.tryGet()) {
-          // Adjust for bytes not written.
-          if (length == 0) i->finishBody();
-        } else {
-          logInnerClearedWarningOnce();
-        };
-        return actual;
-      });
+    auto promise = amount == 0
+        ? kj::Promise<uint64_t>(amount)
+        : getInner().pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
+      // Adjust for bytes not written.
+      length += amount - actual;
+      if (length == 0) doneWriting();
+      return actual;
+    });
 
-      if (overshot) {
-        promise = promise.then([amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
-          if (actual == amount) {
-            // We read exactly the amount expected. In order to detect an overshoot, we have to
-            // try reading one more byte. Ugh.
-            static byte junk;
-            return input.tryRead(&junk, 1, 1).then([actual](size_t extra) {
-              KJ_REQUIRE(extra == 0, "overwrote Content-Length");
-              return actual;
-            });
-          } else {
-            // We actually read less data than requested so we couldn't have overshot. In fact, we
-            // undershot.
+    if (overshot) {
+      promise = promise.then([amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
+        if (actual == amount) {
+          // We read exactly the amount expected. In order to detect an overshoot, we have to
+          // try reading one more byte. Ugh.
+          static byte junk;
+          return input.tryRead(&junk, 1, 1).then([actual](size_t extra) {
+            KJ_REQUIRE(extra == 0, "overwrote Content-Length");
             return actual;
-          }
-        });
-      }
-
-      return kj::mv(promise);
-    } else {
-      logInnerClearedWarningOnce();
-      return constPromise<uint64_t, 0>();
+          });
+        } else {
+          // We actually read less data than requested so we couldn't have overshot. In fact, we
+          // undershot.
+          return actual;
+        }
+      });
     }
+
+    return kj::mv(promise);
   }
 
   Promise<void> whenWriteDisconnected() override {
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      return i->whenWriteDisconnected();
-    } else {
-      logInnerClearedWarningOnce();
-      return kj::READY_NOW;
-    };
+    return getInner().whenWriteDisconnected();
   }
 
 private:
-  ResetableRef<HttpOutputStream> inner;
   uint64_t length;
 
   kj::Promise<void> maybeFinishAfter(kj::Promise<void> promise) {
     if (length == 0) {
-      return promise.then([this]() {
-        KJ_IF_MAYBE(i, inner.tryGet()) {
-          i->finishBody();
-        } else {
-          logInnerClearedWarningOnce();
-        };
-      });
+      return promise.then([this]() { doneWriting(); });
+    } else {
+      return kj::mv(promise);
     }
-    return kj::mv(promise);
-  }
-
-  void logInnerClearedWarningOnce() {
-    // This can happen, for instance, if the Own<HttpFixedLengthEntitytWriter> outlives
-    // whatever owns the HttpOutputStream that is being referenced. The mechanism here
-    // allows that case to be more gracefully handled rather than crashing.
-    static bool warnedOnce KJ_UNUSED = [&]() {
-      KJ_LOG(WARNING,
-          "HttpFixedLengthEntityWriter used after underlying HttpOutputStream destroyed.");
-      return true;
-    }();
   }
 };
 
-class HttpChunkedEntityWriter final: public kj::AsyncOutputStream {
+class HttpChunkedEntityWriter final: public HttpEntityBodyWriter {
 public:
-  HttpChunkedEntityWriter(ResetableRef<HttpOutputStream>& inner)
-      : inner(inner) {}
+  HttpChunkedEntityWriter(HttpOutputStream& inner)
+      : HttpEntityBodyWriter(inner) {}
   ~HttpChunkedEntityWriter() noexcept(false) {
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      if (i->canWriteBodyData()) {
-        i->writeBodyData(kj::str("0\r\n\r\n"));
-        i->finishBody();
-      } else {
-        i->abortBody();
+    if (!alreadyDone()) {
+      auto& inner = getInner();
+      if (inner.canWriteBodyData()) {
+        inner.writeBodyData(kj::str("0\r\n\r\n"));
+        doneWriting();
       }
-    } else {
-      logInnerClearedWarningOnce();
-    };
+    }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
     if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
 
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      auto header = kj::str(kj::hex(size), "\r\n");
-      auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
-      parts[0] = header.asBytes();
-      parts[1] = kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size);
-      parts[2] = kj::StringPtr("\r\n").asBytes();
+    auto header = kj::str(kj::hex(size), "\r\n");
+    auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
+    parts[0] = header.asBytes();
+    parts[1] = kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size);
+    parts[2] = kj::StringPtr("\r\n").asBytes();
 
-      auto promise = i->writeBodyData(parts.asPtr());
-      return promise.attach(kj::mv(header), kj::mv(parts));
-    } else {
-      logInnerClearedWarningOnce();
-      return kj::READY_NOW;
-    };
+    auto promise = getInner().writeBodyData(parts.asPtr());
+    return promise.attach(kj::mv(header), kj::mv(parts));
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -2349,82 +2367,48 @@ public:
 
     if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
 
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      auto header = kj::str(kj::hex(size), "\r\n");
-      auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size() + 2);
-      partsBuilder.add(header.asBytes());
-      for (auto& piece: pieces) {
-        partsBuilder.add(piece);
-      }
-      partsBuilder.add(kj::StringPtr("\r\n").asBytes());
+    auto header = kj::str(kj::hex(size), "\r\n");
+    auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size() + 2);
+    partsBuilder.add(header.asBytes());
+    for (auto& piece: pieces) {
+      partsBuilder.add(piece);
+    }
+    partsBuilder.add(kj::StringPtr("\r\n").asBytes());
 
-      auto parts = partsBuilder.finish();
-      auto promise = i->writeBodyData(parts.asPtr());
-      return promise.attach(kj::mv(header), kj::mv(parts));
-    } else {
-      logInnerClearedWarningOnce();
-      return kj::READY_NOW;
-    };
+    auto parts = partsBuilder.finish();
+    auto promise = getInner().writeBodyData(parts.asPtr());
+    return promise.attach(kj::mv(header), kj::mv(parts));
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      KJ_IF_MAYBE(l, input.tryGetLength()) {
-        // Hey, we know exactly how large the input is, so we can write just one chunk.
+    KJ_IF_MAYBE(l, input.tryGetLength()) {
+      // Hey, we know exactly how large the input is, so we can write just one chunk.
 
-        uint64_t length = kj::min(amount, *l);
-        i->writeBodyData(kj::str(kj::hex(length), "\r\n"));
-        return i->pumpBodyFrom(input, length)
-            .then([this,length](uint64_t actual) {
-          KJ_IF_MAYBE(i, inner.tryGet()) {
-            if (actual < length) {
-              i->abortBody();
-              KJ_FAIL_REQUIRE(
-                  "value returned by input.tryGetLength() was greater than actual bytes transferred") {
-                break;
-              }
-            }
+      uint64_t length = kj::min(amount, *l);
+      auto& inner = getInner();
+      inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
+      return inner.pumpBodyFrom(input, length)
+          .then([this,length](uint64_t actual) {
+        auto& inner = getInner();
+        if (actual < length) {
+          inner.abortBody();
+          KJ_FAIL_REQUIRE(
+              "value returned by input.tryGetLength() was greater than actual bytes transferred") {
+            break;
+          }
+        }
 
-            i->writeBodyData(kj::str("\r\n"));
-          } else {
-            logInnerClearedWarningOnce();
-            KJ_REQUIRE(actual >= length,
-                "value returned by input.tryGetLength() was greater than actual bytes transferred") {
-              break;
-            }
-          };
-          return actual;
-        });
-      } else {
-        // Need to use naive read/write loop.
-        return nullptr;
-      }
+        inner.writeBodyData(kj::str("\r\n"));
+        return actual;
+      });
     } else {
-      logInnerClearedWarningOnce();
-      return constPromise<uint64_t, 0>();
+      // Need to use naive read/write loop.
+      return nullptr;
     }
   }
 
   Promise<void> whenWriteDisconnected() override {
-    KJ_IF_MAYBE(i, inner.tryGet()) {
-      return i->whenWriteDisconnected();
-    } else {
-      logInnerClearedWarningOnce();
-      return kj::READY_NOW;
-    }
-  }
-
-private:
-  ResetableRef<HttpOutputStream> inner;
-
-  void logInnerClearedWarningOnce() {
-    // This can happen, for instance, if the Own<HttpChunkedEntityWriter> outlives
-    // whatever owns the HttpOutputStream that is being referenced. The mechanism here
-    // allows that case to be more gracefully handled rather than crashing.
-    static bool warnedOnce KJ_UNUSED = [&]() {
-      KJ_LOG(WARNING, "HttpChunkedEntityWriter used after underlying HttpOutputStream destroyed.");
-      return true;
-    }();
+    return getInner().whenWriteDisconnected();
   }
 };
 
@@ -4953,12 +4937,7 @@ public:
       : httpInput(*rawStream, responseHeaderTable),
         httpOutput(*rawStream),
         ownStream(kj::mv(rawStream)),
-        settings(kj::mv(settings)),
-        sharedHttpOutputRef(httpOutput) {}
-
-  ~HttpClientImpl() noexcept(false) {
-    sharedHttpOutputRef.reset();
-  }
+        settings(kj::mv(settings)) {}
 
   bool canReuse() {
     // Returns true if we can immediately reuse this HttpClient for another message (so all
@@ -5016,9 +4995,9 @@ public:
       httpOutput.finishBody();
       bodyStream = heap<HttpNullEntityWriter>();
     } else KJ_IF_MAYBE(s, expectedBodySize) {
-      bodyStream = heap<HttpFixedLengthEntityWriter>(sharedHttpOutputRef, *s);
+      bodyStream = heap<HttpFixedLengthEntityWriter>(httpOutput, *s);
     } else {
-      bodyStream = heap<HttpChunkedEntityWriter>(sharedHttpOutputRef);
+      bodyStream = heap<HttpChunkedEntityWriter>(httpOutput);
     }
 
     auto id = ++counter;
@@ -5301,8 +5280,6 @@ private:
   kj::Maybe<kj::Promise<void>> closeWatcherTask;
   bool upgraded = false;
   bool closed = false;
-
-  ResetableRef<HttpOutputStream> sharedHttpOutputRef;
 
   uint counter = 0;
   // Counts requests for the sole purpose of detecting if more requests have been made after some
@@ -6719,12 +6696,10 @@ public:
         factory(kj::mv(factory)),
         httpInput(makeHttpInput(stream, server.requestHeaderTable, kj::mv(suspendedRequest))),
         httpOutput(stream),
-        wantCleanDrain(wantCleanDrain),
-        sharedHttpOutputRef(httpOutput) {
+        wantCleanDrain(wantCleanDrain) {
     ++server.connectionCount;
   }
   ~Connection() noexcept(false) {
-    sharedHttpOutputRef.reset();
     if (--server.connectionCount == 0) {
       KJ_IF_MAYBE(f, server.zeroConnectionsFulfiller) {
         f->get()->fulfill();
@@ -6791,8 +6766,6 @@ private:
   kj::Maybe<kj::Promise<bool>> webSocketError;
   kj::Maybe<kj::Promise<bool>> tunnelRejected;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> tunnelWriteGuard;
-
-  ResetableRef<HttpOutputStream> sharedHttpOutputRef;
 
   static HttpInputStreamImpl makeHttpInput(
       kj::AsyncIoStream& stream,
@@ -7224,9 +7197,9 @@ private:
       httpOutput.finishBody();
       return heap<HttpNullEntityWriter>();
     } else KJ_IF_MAYBE(s, expectedBodySize) {
-      return heap<HttpFixedLengthEntityWriter>(sharedHttpOutputRef, *s);
+      return heap<HttpFixedLengthEntityWriter>(httpOutput, *s);
     } else {
-      return heap<HttpChunkedEntityWriter>(sharedHttpOutputRef);
+      return heap<HttpChunkedEntityWriter>(httpOutput);
     }
   }
 
