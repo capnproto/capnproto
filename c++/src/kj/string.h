@@ -127,10 +127,14 @@ public:
   inline constexpr const char* end() const { return content.end() - 1; }
 
   inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+#if !__cpp_impl_three_way_comparison
   inline constexpr bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
+#endif
 
   inline bool operator==(const StringPtr& other) const;
+#if !__cpp_impl_three_way_comparison
   inline bool operator!=(const StringPtr& other) const { return !(*this == other); }
+#endif
   inline bool operator< (const StringPtr& other) const;
   inline bool operator> (const StringPtr& other) const { return other < *this; }
   inline bool operator<=(const StringPtr& other) const { return !(other < *this); }
