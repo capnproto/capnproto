@@ -1714,15 +1714,21 @@ public:
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
+    clean = false;
     return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
 
 private:
   size_t length;
+  bool clean = true;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                   size_t alreadyRead) {
-    if (length == 0) return constPromise<size_t, 0>();
+    if (length == 0) {
+      clean = true;
+      return constPromise<size_t, 0>();
+    }
 
     // We have to set minBytes to 1 here so that if we read any data at all, we update our
     // counter immediately, so that we still know where we are in case of cancellation.
@@ -1743,6 +1749,7 @@ private:
       } else if (length == 0) {
         doneReading();
       }
+      clean = true;
       return amount + alreadyRead;
     });
   }
@@ -1756,15 +1763,19 @@ public:
       : HttpEntityBodyReader(inner) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
+    clean = false;
     return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
 
 private:
   size_t chunkSize = 0;
+  bool clean = true;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                   size_t alreadyRead) {
     if (alreadyDone()) {
+      clean = true;
       return alreadyRead;
     } else if (chunkSize == 0) {
       // Read next chunk header.
@@ -1791,6 +1802,7 @@ private:
           return tryReadInternal(reinterpret_cast<byte*>(buffer) + amount,
                                  minBytes - amount, maxBytes - amount, alreadyRead + amount);
         }
+        clean = true;
         return alreadyRead + amount;
       });
     }

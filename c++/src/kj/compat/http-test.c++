@@ -5475,7 +5475,13 @@ public:
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
     if (method == HttpMethod::POST) {
       // Try to read all content, but cancel after 1ms.
-      return requestBody.readAllBytes().ignoreResult()
+
+      // Actually, we can't literally cancel mid-read, because this leaves the stream in an
+      // unknown state which requires closing the connection. Instead, we know that the sender
+      // will send 5 bytes, so we read that, then pause.
+      static char junk[5];
+      return requestBody.read(junk, 5)
+          .then([]() -> kj::Promise<void> { return kj::NEVER_DONE; })
           .exclusiveJoin(timer.afterDelay(1 * kj::MILLISECONDS))
           .then([this, &responseSender]() {
         responseSender.send(408, "Request Timeout", kj::HttpHeaders(headerTable), uint64_t(0));
