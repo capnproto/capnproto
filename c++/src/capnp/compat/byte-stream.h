@@ -29,6 +29,25 @@ CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
+class ExplicitEndOutputStream: public kj::AsyncOutputStream {
+  // HACK: KJ's AsyncOutputStream has a known serious design flaw in that EOF is signaled by
+  //   destroying the stream object rather than by calling an explicit `end()` method. This causes
+  //   some serious problems when signaling EOF requires doing additional I/O, such as when
+  //   wrapping a capnp ByteStream where `end()` is an RPC call.
+  //
+  //   When it really must, the ByteStream implementation will honor the KJ convention by starting
+  //   the RPC in its destructor and detach()ing the promise. But, this has lots of negative side
+  //   effects, especially in the case where the stream is really meant to be aborted abruptly.
+  //
+  //   In lieu of an actual deep refactoring of KJ, ByteStreamFactory allows its caller to
+  //   explicily specify when it is able to promise that it will make an explicit `end()` call.
+  //   capnpToKjExplicitEnd() returns an ExplicitEndOutputStream, which expect to receive an
+  //   `end()` call on clean EOF, and treats destruction without `end()` as an abort. This is used
+  //   in particular within http-over-capnp to improve behavior somewhat.
+public:
+  virtual kj::Promise<void> end() = 0;
+};
+
 class ByteStreamFactory {
   // In order to allow path-shortening through KJ, a common factory must be used for converting
   // between RPC ByteStreams and KJ streams.
@@ -36,6 +55,8 @@ class ByteStreamFactory {
 public:
   capnp::ByteStream::Client kjToCapnp(kj::Own<kj::AsyncOutputStream> kjStream);
   kj::Own<kj::AsyncOutputStream> capnpToKj(capnp::ByteStream::Client capnpStream);
+
+  kj::Own<ExplicitEndOutputStream> capnpToKjExplicitEnd(capnp::ByteStream::Client capnpStream);
 
 private:
   CapabilityServerSet<capnp::ByteStream> streamSet;
