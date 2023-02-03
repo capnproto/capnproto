@@ -7110,8 +7110,14 @@ private:
                 // period and then abort the connection.
 
                 auto dummy = kj::heap<HttpDiscardingEntityWriter>();
-                auto lengthGrace = body->pumpTo(*dummy, server.settings.canceledUploadGraceBytes)
-                    .then([this](size_t amount) {
+                auto lengthGrace = kj::evalNow([&]() {
+                  return body->pumpTo(*dummy, server.settings.canceledUploadGraceBytes);
+                }).catch_([](kj::Exception&& e) -> uint64_t {
+                  // Reading from the input failed in some way. This may actually be the whole
+                  // reason we got here in the first place so don't propagate this error, just
+                  // give up on discarding the input.
+                  return 0;  // This zero is ignored but `canReuse()` will return false below.
+                }).then([this](uint64_t amount) {
                   if (httpInput.canReuse()) {
                     // Success, we can continue.
                     return true;
