@@ -639,7 +639,8 @@ public:
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         });
 
-    auto tailPipelinePromise = context->onTailCall().then([](AnyPointer::Pipeline&& pipeline) {
+    auto tailPipelinePromise = context->onTailCall()
+        .then([context = context->addRef()](AnyPointer::Pipeline&& pipeline) {
       return kj::mv(pipeline.hook);
     });
 
