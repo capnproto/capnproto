@@ -3064,7 +3064,9 @@ private:
             "#endif  // !CAPNP_LITE\n"
           ) : kj::strTree(),
           "\n"
-          "#if CAPNP_VERSION != ", CAPNP_VERSION, "\n"
+          "#ifndef CAPNP_VERSION\n"
+          "#error \"CAPNP_VERSION is not defined, is capnp/generated-header-support.h missing?\"\n"
+          "#elif CAPNP_VERSION != ", CAPNP_VERSION, "\n"
           "#error \"Version mismatch between generated code and library headers.  You must "
               "use the same version of the Cap'n Proto compiler and library.\"\n"
           "#endif\n"
