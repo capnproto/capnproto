@@ -882,6 +882,13 @@ public:
   // tryRemove() returns false in the specific case that the path doesn't exist. remove() would
   // throw in this case. In all other error cases (like "access denied"), tryRemove() still throws;
   // it is only "does not exist" that produces a false return.
+  //
+  // WARNING: The Windows implementation of recursive deletion is currently not safe to call from a
+  //   privileged process to delete directories writable by unprivileged users, due to a race
+  //   condition in which the user could trick the algorithm into following a symlink and deleting
+  //   everything at the destination. This race condition is not present in the Unix
+  //   implementation. Fixing it for Windows would require rewriting a lot of code to use different
+  //   APIs. If you're interested, see the TODO(security) in filesystem-disk-win32.c++.
 
   // TODO(someday):
   // - Support sockets? There's no openat()-like interface for sockets, so it's hard to support
