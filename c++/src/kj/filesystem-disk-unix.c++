@@ -306,6 +306,11 @@ public:
     return fd.get();
   }
 
+  void setFd(AutoCloseFd newFd) {
+    // Used for one hack in DiskFilesystem's constructor...
+    fd = kj::mv(newFd);
+  }
+
   // FsNode --------------------------------------------------------------------
 
   FsNode::Metadata stat() const {
@@ -1658,7 +1663,25 @@ public:
   DiskFilesystem()
       : root(openDir("/")),
         current(openDir(".")),
-        currentPath(computeCurrentPath()) {}
+        currentPath(computeCurrentPath()) {
+    // We sometimes like to use qemu-user to test arm64 binaries cross-compiled from an x64 host
+    // machine. But, because it intercepts and rewrites system calls from userspace rather than
+    // emulating a whole kernel, it has a lot of quirks. One quirk that hits kj::Filesystem pretty
+    // badly is that open("/") actually returns a file descriptor for "/usr/aarch64-linux-gnu".
+    // Attempts to openat() any files within there then don't work. We can detect this problem and
+    // correct for it here.
+    struct stat realRoot, fsRoot;
+    KJ_SYSCALL_HANDLE_ERRORS(stat("/dev/..", &realRoot)) {
+      default:
+        // stat("/dev/..") failed? Give up.
+        return;
+    }
+    KJ_SYSCALL(fstat(root.DiskHandle::getFd(), &fsRoot));
+    if (realRoot.st_ino != fsRoot.st_ino) {
+      KJ_LOG(WARNING, "root dir file descriptor is broken, probably because of qemu; compensating");
+      root.setFd(openDir("/dev/.."));
+    }
+  }
 
   const Directory& getRoot() const override {
     return root;
