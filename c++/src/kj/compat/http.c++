@@ -5809,12 +5809,23 @@ namespace {
 
 class ConcurrencyLimitingHttpClient final: public HttpClient {
 public:
+  KJ_DISALLOW_COPY_AND_MOVE(ConcurrencyLimitingHttpClient);
   ConcurrencyLimitingHttpClient(
       kj::HttpClient& inner, uint maxConcurrentRequests,
       kj::Function<void(uint runningCount, uint pendingCount)> countChangedCallback)
       : inner(inner),
         maxConcurrentRequests(maxConcurrentRequests),
         countChangedCallback(kj::mv(countChangedCallback)) {}
+
+  ~ConcurrencyLimitingHttpClient() noexcept(false) {
+    if (concurrentRequests > 0) {
+      static bool logOnce KJ_UNUSED = ([&] {
+        KJ_LOG(ERROR, "ConcurrencyLimitingHttpClient getting destroyed when concurrent requests "
+            "are still active", concurrentRequests);
+        return true;
+      })();
+    }
+  }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
                   kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
