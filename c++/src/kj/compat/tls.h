@@ -29,6 +29,7 @@
 // and cannot be bypassed.
 
 #include <kj/async-io.h>
+#include <openssl/x509.h>
 
 KJ_BEGIN_HEADER
 
@@ -212,6 +213,8 @@ public:
   // Parse a PEM-encode X509 certificate or certificate chain. A chain can be constructed by
   // concatenating multiple PEM-encoded certificates, starting with the leaf certificate.
 
+  TlsCertificate(X509* cert);
+
   ~TlsCertificate() noexcept(false);
 
   TlsCertificate(const TlsCertificate& other);
@@ -242,6 +245,9 @@ private:
 
   friend class TlsContext;
 };
+
+Array<TlsCertificate> parseCertificatesList(kj::StringPtr certs);
+Maybe<String> readTlsSystemCerts();
 
 struct TlsKeypair {
   // A pair of a private key and a certificate, for use by a server.

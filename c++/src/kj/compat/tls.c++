@@ -37,6 +37,7 @@
 #include <kj/async-queue.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
+#include <kj/filesystem.h>
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define BIO_set_init(x,v)          (x->init=v)
@@ -1032,6 +1033,10 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const kj::ArrayPtr<const byte>> asn1
 TlsCertificate::TlsCertificate(kj::ArrayPtr<const byte> asn1)
     : TlsCertificate(kj::arrayPtr(&asn1, 1)) {}
 
+TlsCertificate::TlsCertificate(X509* cert) {
+  chain[0] = cert;
+}
+
 TlsCertificate::TlsCertificate(kj::StringPtr pem) {
   ensureOpenSslInitialized();
 
@@ -1102,6 +1107,51 @@ TlsCertificate::~TlsCertificate() noexcept(false) {
     if (p == nullptr) break;  // end of chain; quit early
     X509_free(reinterpret_cast<X509*>(p));
   }
+}
+
+Array<TlsCertificate> parseCertificatesList(kj::StringPtr certs) {
+  ensureOpenSslInitialized();
+
+  // const_cast apparently needed for older versions of OpenSSL.
+  BIO* bio = BIO_new_mem_buf(const_cast<char*>(certs.begin()), certs.size());
+  KJ_REQUIRE(bio != nullptr, "failed to allocate bio buffer");
+  KJ_DEFER(BIO_free(bio));
+  auto info = PEM_X509_INFO_read_bio(bio, NULL, NULL, NULL);
+  KJ_REQUIRE(info != nullptr, "failed to parse PEM");
+
+  auto count = sk_X509_INFO_num(info);
+  auto result = kj::heapArrayBuilder<TlsCertificate>(count);
+  for (int i = 0; i < count; i++) {
+    X509_INFO* infoValue = sk_X509_INFO_value(info, i);
+    KJ_REQUIRE(infoValue->x509 != nullptr, "expected x509 cert");
+    result.add(TlsCertificate(infoValue->x509));
+  }
+
+  return result.finish();
+}
+
+Maybe<String> readTlsSystemCerts() {
+  // Hard-coding this in a similar way to https://go.dev/src/crypto/x509/root_linux.go.
+  kj::StringPtr certFiles[] = {
+    X509_get_default_cert_file(),                           // Check path OpenSSL gives us first.
+    "/etc/ssl/certs/ca-certificates.crt"_kj,                // Debian/Ubuntu/Gentoo etc.
+    "/etc/pki/tls/certs/ca-bundle.crt"_kj,                  // Fedora/RHEL 6
+    "/etc/ssl/ca-bundle.pem"_kj,                            // OpenSUSE
+    "/etc/pki/tls/cacert.pem"_kj,                           // OpenELEC
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"_kj, // CentOS/RHEL 7
+    "/etc/ssl/cert.pem"_kj,                                 // Alpine Linux
+  };
+
+  auto fs = kj::newDiskFilesystem();
+  for (int i = 0; i < certFiles->size(); i++) {
+    // Attempt to read all of the paths defined above. Return the first one which exists.
+    auto parsedPath = fs->getCurrentPath().eval(certFiles[i]);
+    KJ_IF_MAYBE(file, fs->getRoot().tryOpenFile(parsedPath)) {
+      return file->get()->readAllText();
+    }
+  }
+
+  return nullptr;
 }
 
 // =======================================================================================
