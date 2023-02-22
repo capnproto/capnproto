@@ -327,19 +327,22 @@ protected:
       result.addException(kj::mv(*exception));
     }
 
-    // Call the error handler if there was an exception.
-    KJ_IF_MAYBE(e, result.exception) {
-      taskSet.errorHandler.taskFailed(kj::mv(*e));
-    }
-
-    // Remove from the task list.
+    // Remove from the task list. Do this before calling taskFailed(), so that taskFailed() can
+    // safely call clear().
     auto self = pop();
 
+    // We'll also process onEmpty() now, just in case `taskFailed()` actually destroys the whole
+    // `TaskSet`.
     KJ_IF_MAYBE(f, taskSet.emptyFulfiller) {
       if (taskSet.tasks == nullptr) {
         f->get()->fulfill();
         taskSet.emptyFulfiller = nullptr;
       }
+    }
+
+    // Call the error handler if there was an exception.
+    KJ_IF_MAYBE(e, result.exception) {
+      taskSet.errorHandler.taskFailed(kj::mv(*e));
     }
 
     return Own<Event>(mv(self));
@@ -405,6 +408,14 @@ Promise<void> TaskSet::onEmpty() {
     auto paf = newPromiseAndFulfiller<void>();
     emptyFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
+  }
+}
+
+void TaskSet::clear() {
+  tasks = nullptr;
+
+  KJ_IF_MAYBE(fulfiller, emptyFulfiller) {
+    fulfiller->get()->fulfill();
   }
 }
 
