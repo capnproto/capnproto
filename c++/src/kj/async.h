@@ -992,6 +992,15 @@ public:
   // Returns a promise that fulfills the next time the TaskSet is empty. Only one such promise can
   // exist at a time.
 
+  void clear();
+  // Cancel all tasks.
+  //
+  // As always, it is not safe to cancel the task that is currently running, so you could not call
+  // this from inside a task in the TaskSet. However, it IS safe to call this from the
+  // `taskFailed()` callback.
+  //
+  // Calling this will always trigger onEmpty(), if anyone is listening.
+
 private:
   class Task;
   using OwnTask = Own<Task, _::PromiseDisposer>;

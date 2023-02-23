@@ -873,6 +873,52 @@ TEST(Async, TaskSetOnEmpty) {
   promise.wait(waitScope);
 }
 
+KJ_TEST("TaskSet::clear()") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  class ClearOnError: public TaskSet::ErrorHandler {
+  public:
+    TaskSet* tasks;
+    void taskFailed(kj::Exception&& exception) override {
+      KJ_EXPECT(exception.getDescription().endsWith("example TaskSet failure"));
+      tasks->clear();
+    }
+  };
+
+  ClearOnError errorHandler;
+  TaskSet tasks(errorHandler);
+  errorHandler.tasks = &tasks;
+
+  auto doTest = [&](auto&& causeClear) {
+    KJ_EXPECT(tasks.isEmpty());
+
+    uint count = 0;
+    tasks.add(kj::Promise<void>(kj::READY_NOW).attach(kj::defer([&]() { ++count; })));
+    tasks.add(kj::Promise<void>(kj::NEVER_DONE).attach(kj::defer([&]() { ++count; })));
+    tasks.add(kj::Promise<void>(kj::NEVER_DONE).attach(kj::defer([&]() { ++count; })));
+
+    auto onEmpty = tasks.onEmpty();
+    KJ_EXPECT(!onEmpty.poll(waitScope));
+    KJ_EXPECT(count == 1);
+    KJ_EXPECT(!tasks.isEmpty());
+
+    causeClear();
+    KJ_EXPECT(tasks.isEmpty());
+    onEmpty.wait(waitScope);
+    KJ_EXPECT(count == 3);
+  };
+
+  // Try it where we just call clear() directly.
+  doTest([&]() { tasks.clear(); });
+
+  // Try causing clear() inside taskFailed(), ensuring that this is permitted.
+  doTest([&]() {
+    tasks.add(KJ_EXCEPTION(FAILED, "example TaskSet failure"));
+    waitScope.poll();
+  });
+}
+
 class DestructorDetector {
 public:
   DestructorDetector(bool& setTrue): setTrue(setTrue) {}
