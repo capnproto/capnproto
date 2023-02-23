@@ -158,13 +158,21 @@ Own<Win32EventPort::SignalObserver> Win32IocpEventPort::observeSignalState(HANDL
 }
 
 bool Win32IocpEventPort::wait() {
-  waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
-      .map([](uint64_t t) -> DWORD { return t; })
-      .orDefault(INFINITE));
+  const bool woke = receivedWake();
+  if(woke) {
+    waitIocp(0);
+    return true;
+  }
+  try{
+    waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
+        .map([](uint64_t t) -> DWORD { return t; })
+        .orDefault(INFINITE));
 
-  timerImpl.advanceTo(clock.now());
-
-  return receivedWake();
+    timerImpl.advanceTo(clock.now());
+  }catch(...) {
+    
+  }
+  return woke;
 }
 
 bool Win32IocpEventPort::poll() {
