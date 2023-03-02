@@ -5307,7 +5307,7 @@ KJ_TEST("NetworkHttpClient connect impl") {
   auto client = newHttpClient(clientTimer, headerTable,
       io.provider->getNetwork(), nullptr, clientSettings);
   auto request = client->connect(
-      kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable));
+      kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable), {});
 
   auto buf = kj::heapArray<char>(4);
   return request.connection->tryRead(buf.begin(), 1, buf.size())
@@ -5974,7 +5974,8 @@ public:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            kj::HttpConnectSettings settings) override {
     connectCount++;
     response.accept(statusCodeToSend, "OK", HttpHeaders(headerTable));
     return connection.pumpTo(connection).ignoreResult();
@@ -6005,7 +6006,8 @@ public:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            kj::HttpConnectSettings settings) override {
     connectCount++;
     auto out = response.reject(statusCodeToSend, "Failed"_kj, HttpHeaders(headerTable), 4);
     return out->write("boom", 4).attach(kj::mv(out));
@@ -6032,7 +6034,8 @@ public:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", HttpHeaders(headerTable));
     // Return an immediately resolved promise and drop the connection
     return kj::READY_NOW;
@@ -6058,7 +6061,8 @@ public:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", HttpHeaders(headerTable));
 
     auto msg = "hello"_kj;
@@ -6091,7 +6095,8 @@ private:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", HttpHeaders(tunneledService.table));
     return server.listenHttp(kj::Own<kj::AsyncIoStream>(&connection, kj::NullDisposer::instance));
   }
@@ -6131,7 +6136,8 @@ public:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", HttpHeaders(headerTable));
     connection.shutdownWrite();
     return kj::READY_NOW;
@@ -6191,7 +6197,8 @@ KJ_TEST("Simple CONNECT Client/Server works") {
   HttpHeaderTable clientHeaders;
   // Initiates a CONNECT with the echo server. Once established, sends a bit of data
   // and waits for it to be echoed back.
-  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
+  auto request = client->connect(
+      "https://example.org"_kj, HttpHeaders(clientHeaders), {});
 
   request.status.then([io=kj::mv(request.connection)](auto status) mutable {
     KJ_ASSERT(status.statusCode == 200);
@@ -6268,7 +6275,8 @@ KJ_TEST("CONNECT Client (204 status)") {
   HttpHeaderTable clientHeaders;
   // Initiates a CONNECT with the echo server. Once established, sends a bit of data
   // and waits for it to be echoed back.
-  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
+  auto request = client->connect(
+      "https://example.org"_kj, HttpHeaders(clientHeaders), {});
 
   request.status.then([io=kj::mv(request.connection)](auto status) mutable {
     KJ_ASSERT(status.statusCode == 204);
@@ -6341,7 +6349,8 @@ KJ_TEST("CONNECT Client rejected") {
   auto client = newHttpClient(table, *pipe.ends[1]);
 
   HttpHeaderTable clientHeaders;
-  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
+  auto request = client->connect(
+      "https://example.org"_kj, HttpHeaders(clientHeaders), {});
 
   request.status.then([](auto status) mutable {
     KJ_ASSERT(status.statusCode == 400);
@@ -6407,7 +6416,8 @@ KJ_TEST("CONNECT Server cancels read w/client") {
   bool failed = false;
 
   HttpHeaderTable clientHeaders;
-  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
+  auto request = client->connect(
+      "https://example.org"_kj, HttpHeaders(clientHeaders), {});
 
   request.status.then([&failed, io=kj::mv(request.connection)](auto status) mutable {
     KJ_ASSERT(status.statusCode == 200);
@@ -6472,7 +6482,8 @@ KJ_TEST("CONNECT Server cancels write w/client") {
 
   HttpHeaderTable clientHeaders;
   bool failed = false;
-  auto request = client->connect("https://example.org"_kj, HttpHeaders(clientHeaders));
+  auto request = client->connect(
+      "https://example.org"_kj, HttpHeaders(clientHeaders), {});
 
   request.status.then([&failed, io=kj::mv(request.connection)](auto status) mutable {
     KJ_ASSERT(status.statusCode == 200);
@@ -6578,7 +6589,8 @@ KJ_TEST("CONNECT HTTP-tunneled-over-CONNECT") {
   HttpHeaderTable tunneledHeaderTable;
   HttpClientSettings settings;
 
-  auto request = client->connect("https://example.org"_kj, HttpHeaders(connectHeaderTable));
+  auto request = client->connect(
+      "https://example.org"_kj, HttpHeaders(connectHeaderTable), {});
 
   auto text = request.status.then([
       &tunneledHeaderTable,
@@ -6617,7 +6629,8 @@ KJ_TEST("CONNECT HTTP-tunneled-over-pipelined-CONNECT") {
   HttpHeaderTable tunneledHeaderTable;
   HttpClientSettings settings;
 
-  auto request = client->connect("https://exmaple.org"_kj, HttpHeaders(connectHeaderTable));
+  auto request = client->connect(
+      "https://exmaple.org"_kj, HttpHeaders(connectHeaderTable), {});
   auto conn = kj::mv(request.connection);
   auto proxyClient = newHttpClient(tunneledHeaderTable, *conn, settings).attach(kj::mv(conn));
 
@@ -6678,7 +6691,8 @@ KJ_TEST("CONNECT pipelined via an adapter") {
   auto promise = adaptedService->connect("https://example.org"_kj,
                                          HttpHeaders(connectHeaderTable),
                                          *clientPipe.ends[0],
-                                         response).attach(kj::mv(clientPipe.ends[0]));
+                                         response,
+                                         {}).attach(kj::mv(clientPipe.ends[0]));
 
   auto proxyClient = newHttpClient(tunneledHeaderTable, *clientPipe.ends[1], settings)
       .attach(kj::mv(clientPipe.ends[1]));
@@ -6750,7 +6764,8 @@ KJ_TEST("CONNECT pipelined via an adapter (reject)") {
   auto promise = adaptedService->connect("https://example.org"_kj,
                                          HttpHeaders(connectHeaderTable),
                                          *clientPipe.ends[0],
-                                         response).attach(kj::mv(clientPipe.ends[0]));
+                                         response,
+                                         {}).attach(kj::mv(clientPipe.ends[0]));
 
   auto proxyClient = newHttpClient(tunneledHeaderTable, *clientPipe.ends[1], settings)
       .attach(kj::mv(clientPipe.ends[1]));

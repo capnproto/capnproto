@@ -60,7 +60,7 @@ interface HttpService {
   #   constructor parameter to specify which method to use, for backwards-compatibiltiy purposes.
 
   connect @2 (host :Text, headers :List(HttpHeader), down :ByteStream,
-              context :ConnectClientRequestContext) -> (up :ByteStream);
+              context :ConnectClientRequestContext, settings :ConnectSettings) -> (up :ByteStream);
   # Setup an HTTP CONNECT proxy tunnel.
   #
   # The client sends the request host/headers together with a `down` ByteStream that will be used
@@ -109,6 +109,10 @@ interface HttpService {
     # could not be captured in the HTTP response. Note that it's possible for such an exception to
     # be thrown even after the response body has been completely transmitted.
   }
+}
+
+struct ConnectSettings {
+  useTls @0 :Bool;
 }
 
 interface WebSocket {

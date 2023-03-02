@@ -664,7 +664,8 @@ public:
 
   kj::Promise<void> connect(
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response) override {
+      kj::HttpService::ConnectResponse& response,
+      kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
     return io.write("test", 4).then([&io]() mutable {
       io.shutdownWrite();
@@ -689,7 +690,8 @@ public:
 
   kj::Promise<void> connect(
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response) override {
+      kj::HttpService::ConnectResponse& response,
+      kj::HttpConnectSettings settings) override {
     auto body = response.reject(500, "Internal Server Error", kj::HttpHeaders(headerTable), 5);
     return body->write("Error", 5).attach(kj::mv(body));
   }
@@ -751,7 +753,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
 
   auto promise = frontCapnpHttpService->connect(
       "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
-      response).attach(kj::mv(clientPipe.ends[0]));
+      response, {}).attach(kj::mv(clientPipe.ends[0]));
 
   paf.promise.then(
       [io = kj::mv(clientPipe.ends[1])](auto status) mutable {
@@ -823,7 +825,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 
   auto promise = frontCapnpHttpService->connect(
       "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
-      response).attach(kj::mv(clientPipe.ends[0]));
+      response, {}).attach(kj::mv(clientPipe.ends[0]));
 
   paf.promise.then(
       [](auto body) mutable {
