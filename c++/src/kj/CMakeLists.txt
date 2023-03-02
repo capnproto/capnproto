@@ -43,6 +43,7 @@ set(kj_headers
   refcount.h
   array.h
   list.h
+  linked-list.h
   vector.h
   string.h
   string-tree.h
@@ -240,6 +241,7 @@ if(BUILD_TESTING)
     memory-test.c++
     array-test.c++
     list-test.c++
+    linked-list-test.c++
     string-test.c++
     table-test.c++
     map-test.c++
