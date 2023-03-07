@@ -660,6 +660,12 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
+struct HttpConnectSettings {
+  bool useTls = false;
+  // Requests to automatically establish a TLS session over the connection. The remote party
+  // will be expected to present a valid certificate matching the requested hostname.
+};
+
 class HttpClient {
   // Interface to the client end of an HTTP connection.
   //
@@ -748,7 +754,8 @@ public:
     kj::Own<kj::AsyncIoStream> connection;
   };
 
-  virtual ConnectRequest connect(kj::StringPtr host, const HttpHeaders& headers);
+  virtual ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings);
   // Handles CONNECT requests.
   //
   // `host` must specify both the host and port (e.g. "example.org:1234").
@@ -831,7 +838,8 @@ public:
   virtual kj::Promise<void> connect(kj::StringPtr host,
                                     const HttpHeaders& headers,
                                     kj::AsyncIoStream& connection,
-                                    ConnectResponse& response);
+                                    ConnectResponse& response,
+                                    HttpConnectSettings settings);
   // Handles CONNECT requests.
   //
   // The `host` must include host and port.

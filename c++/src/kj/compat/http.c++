@@ -5210,7 +5210,8 @@ public:
     });
   }
 
-  ConnectRequest connect(kj::StringPtr host, const HttpHeaders& headers) override {
+  ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
     KJ_REQUIRE(!upgraded,
         "can't make further requests on this HttpClient because it has been or is in the process "
         "of being upgraded");
@@ -5218,6 +5219,10 @@ public:
         "this HttpClient's connection has been closed by the server or due to an error");
     KJ_REQUIRE(httpOutput.canReuse(),
         "can't start new request until previous request body has been fully written");
+
+    if (settings.useTls) {
+      KJ_UNIMPLEMENTED("This HttpClient does not support TLS.");
+    }
 
     closeWatcherTask = nullptr;
 
@@ -5351,7 +5356,8 @@ kj::Promise<HttpClient::WebSocketResponse> HttpClient::openWebSocket(
   });
 }
 
-HttpClient::ConnectRequest HttpClient::connect(kj::StringPtr host, const HttpHeaders& headers) {
+HttpClient::ConnectRequest HttpClient::connect(
+    kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpClient");
 }
 
@@ -5438,9 +5444,10 @@ public:
     });
   }
 
-  ConnectRequest connect(kj::StringPtr host, const HttpHeaders& headers) override {
+  ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
     auto refcounted = getClient();
-    auto request = refcounted->client->connect(host, headers);
+    auto request = refcounted->client->connect(host, headers, settings);
     return ConnectRequest {
       request.status.attach(kj::addRef(*refcounted)),
       request.connection.attach(kj::mv(refcounted))
@@ -5608,14 +5615,16 @@ public:
     }
   }
 
-  ConnectRequest connect(kj::StringPtr host, const HttpHeaders& headers) override {
+  ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
     KJ_IF_MAYBE(c, client) {
-      return c->get()->connect(host, headers);
+      return c->get()->connect(host, headers, settings);
     } else {
-      auto split = promise.addBranch().then([this,host=kj::str(host),headers=headers.clone()]()
+      auto split = promise.addBranch().then(
+          [this, host=kj::str(host), headers=headers.clone(), settings]()
           -> kj::Tuple<kj::Promise<ConnectRequest::Status>,
                        kj::Promise<kj::Own<kj::AsyncIoStream>>> {
-        auto request = KJ_ASSERT_NONNULL(client)->connect(host, headers);
+        auto request = KJ_ASSERT_NONNULL(client)->connect(host, headers, settings);
         return kj::tuple(kj::mv(request.status), kj::mv(request.connection));
       }).split();
 
@@ -5674,11 +5683,19 @@ public:
     return getClient(parsed).openWebSocket(path, headersCopy);
   }
 
-  ConnectRequest connect(kj::StringPtr host, const HttpHeaders& headers) override {
+  ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
     // We want to connect directly instead of going through a proxy here.
     // https://github.com/capnproto/capnproto/pull/1454#discussion_r900414879
+    kj::Maybe<kj::Promise<kj::Own<kj::NetworkAddress>>> addr;
+    if (settings.useTls) {
+      addr = KJ_REQUIRE_NONNULL(tlsNetwork, "this HttpClient doesn't support TLS")
+          .parseAddress(host);
+    } else {
+      addr = network.parseAddress(host);
+    }
 
-    auto split = network.parseAddress(host).then([this](auto address) {
+    auto split = KJ_ASSERT_NONNULL(addr).then([this](auto address) {
       return address->connect().then([this](auto connection)
           -> kj::Tuple<kj::Promise<ConnectRequest::Status>,
                        kj::Promise<kj::Own<kj::AsyncIoStream>>> {
@@ -5881,10 +5898,11 @@ public:
     return kj::mv(promise);
   }
 
-  ConnectRequest connect(kj::StringPtr host, const kj::HttpHeaders& headers) override {
+  ConnectRequest connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, HttpConnectSettings settings) override {
     if (concurrentRequests < maxConcurrentRequests) {
       auto counter = ConnectionCounter(*this);
-      auto response = inner.connect(host, headers);
+      auto response = inner.connect(host, headers, settings);
       fireCountChanged();
       return attachCounter(kj::mv(response), kj::mv(counter));
     }
@@ -5892,11 +5910,11 @@ public:
     auto paf = kj::newPromiseAndFulfiller<ConnectionCounter>();
 
     auto split = paf.promise
-        .then([this,host=kj::str(host),headers=headers.clone()]
+        .then([this, host=kj::str(host), headers=headers.clone(), settings]
               (ConnectionCounter&& counter) mutable
                   -> kj::Tuple<kj::Promise<ConnectRequest::Status>,
                                kj::Promise<kj::Own<kj::AsyncIoStream>>> {
-      auto request = attachCounter(inner.connect(host, headers), kj::mv(counter));
+      auto request = attachCounter(inner.connect(host, headers, settings), kj::mv(counter));
       return kj::tuple(kj::mv(request.status), kj::mv(request.connection));
     }).split();
 
@@ -6086,7 +6104,8 @@ public:
     return paf.promise.attach(kj::mv(responder));
   }
 
-  ConnectRequest connect(kj::StringPtr host, const HttpHeaders& headers) override {
+  ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
     // We have to clone the host and the headers because HttpServer implementation are allowed to
     // assusme that they remain valid until the service handler completes whereas HttpClient callers
     // are allowed to destroy them immediately after the call.
@@ -6110,7 +6129,7 @@ public:
     //    The call to tunnel->getConnectStream() returns a guarded stream that will buffer
     //    writes until the status is indicated by calling accept/reject.
     auto connectStream = response->getConnectStream();
-    auto promise = service.connect(hostCopy, *headersCopy, *connectStream, *response)
+    auto promise = service.connect(hostCopy, *headersCopy, *connectStream, *response, settings)
         .eagerlyEvaluate([response=kj::mv(response),
                           host=kj::mv(hostCopy),
                           headers=kj::mv(headersCopy),
@@ -6612,10 +6631,11 @@ public:
   kj::Promise<void> connect(kj::StringPtr host,
                             const HttpHeaders& headers,
                             kj::AsyncIoStream& connection,
-                            ConnectResponse& response) override {
+                            ConnectResponse& response,
+                            HttpConnectSettings settings) override {
     KJ_REQUIRE(!headers.isWebSocket(), "WebSocket upgrade headers are not permitted in a connect.");
 
-    auto request = client.connect(host, headers);
+    auto request = client.connect(host, headers, settings);
 
     // This operates optimistically. In order to support pipelining, we connect the
     // input and outputs streams immediately, even if we're not yet certain that the
@@ -6703,7 +6723,8 @@ kj::Promise<void> HttpService::connect(
     kj::StringPtr host,
     const HttpHeaders& headers,
     kj::AsyncIoStream& connection,
-    ConnectResponse& response) {
+    ConnectResponse& response,
+    kj::HttpConnectSettings settings) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
 
@@ -6976,7 +6997,8 @@ private:
           auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
               "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
           auto connectStream = getConnectStream();
-          auto promise = service->connect(request.authority, headers, *connectStream, *this)
+          auto promise = service->connect(
+              request.authority, headers, *connectStream, *this, {})
               .attach(kj::mv(service), kj::mv(connectStream));
           return promise.then([this]() mutable -> kj::Promise<bool> {
             KJ_IF_MAYBE(p, tunnelRejected) {

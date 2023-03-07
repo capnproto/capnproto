@@ -471,11 +471,12 @@ public:
 
   kj::Promise<void> connect(
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
-      ConnectResponse& tunnel) override {
+      ConnectResponse& tunnel, kj::HttpConnectSettings settings) override {
     auto rpcRequest = inner.connectRequest();
     auto downPipe = kj::newOneWayPipe();
     rpcRequest.setHost(host);
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
+    rpcRequest.initSettings().setUseTls(settings.useTls);
 
     auto builder = capnp::Request<
         capnp::HttpService::ConnectParams,
@@ -844,6 +845,9 @@ public:
   kj::Promise<void> connect(ConnectContext context) override {
     auto params = context.getParams();
     auto host = params.getHost();
+    kj::HttpConnectSettings settings = {
+      .useTls = params.getSettings().getUseTls()
+    };
     auto headers = factory.headersToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 
@@ -902,7 +906,7 @@ public:
     auto response = kj::heap<HttpOverCapnpConnectResponseImpl>(
         factory, context.getParams().getContext());
 
-    return inner->connect(host, headers, *pipe.ends[0], *response).attach(
+    return inner->connect(host, headers, *pipe.ends[0], *response, settings).attach(
         kj::mv(host), kj::mv(headers), kj::mv(response), kj::mv(pipe))
         .exclusiveJoin(kj::mv(pumpTask));
   }
