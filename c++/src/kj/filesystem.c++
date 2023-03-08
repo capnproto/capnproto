@@ -539,7 +539,7 @@ FsNode::Metadata ReadableDirectory::lstat(PathPtr path) const {
   KJ_IF_MAYBE(meta, tryLstat(path)) {
     return *meta;
   } else {
-    KJ_FAIL_REQUIRE("no such file", path) { break; }
+    KJ_FAIL_REQUIRE("no such file or directory", path) { break; }
     return FsNode::Metadata();
   }
 }
@@ -548,7 +548,7 @@ Own<const ReadableFile> ReadableDirectory::openFile(PathPtr path) const {
   KJ_IF_MAYBE(file, tryOpenFile(path)) {
     return kj::mv(*file);
   } else {
-    KJ_FAIL_REQUIRE("no such directory", path) { break; }
+    KJ_FAIL_REQUIRE("no such file", path) { break; }
     return newInMemoryFile(nullClock());
   }
 }
@@ -557,7 +557,7 @@ Own<const ReadableDirectory> ReadableDirectory::openSubdir(PathPtr path) const {
   KJ_IF_MAYBE(dir, tryOpenSubdir(path)) {
     return kj::mv(*dir);
   } else {
-    KJ_FAIL_REQUIRE("no such file or directory", path) { break; }
+    KJ_FAIL_REQUIRE("no such directory", path) { break; }
     return newInMemoryDirectory(nullClock());
   }
 }
