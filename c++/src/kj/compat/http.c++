@@ -5621,10 +5621,10 @@ public:
       return c->get()->connect(host, headers, settings);
     } else {
       auto split = promise.addBranch().then(
-          [this, host=kj::str(host), headers=headers.clone(), settings]()
+          [this, host=kj::str(host), headers=headers.clone(), settings]() mutable
           -> kj::Tuple<kj::Promise<ConnectRequest::Status>,
                        kj::Promise<kj::Own<kj::AsyncIoStream>>> {
-        auto request = KJ_ASSERT_NONNULL(client)->connect(host, headers, settings);
+        auto request = KJ_ASSERT_NONNULL(client)->connect(host, headers, kj::mv(settings));
         return kj::tuple(kj::mv(request.status), kj::mv(request.connection));
       }).split();
 
@@ -5644,7 +5644,7 @@ private:
 class NetworkHttpClient final: public HttpClient, private kj::TaskSet::ErrorHandler {
 public:
   NetworkHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
-                    kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
+                    kj::Network& network, kj::Maybe<kj::SecureNetworkWrapper&> tlsNetwork,
                     HttpClientSettings settings)
       : timer(timer),
         responseHeaderTable(responseHeaderTable),
@@ -5689,8 +5689,8 @@ public:
     // https://github.com/capnproto/capnproto/pull/1454#discussion_r900414879
     kj::Maybe<kj::Promise<kj::Own<kj::NetworkAddress>>> addr;
     if (settings.useTls) {
-      addr = KJ_REQUIRE_NONNULL(tlsNetwork, "this HttpClient doesn't support TLS")
-          .parseAddress(host);
+      kj::Network& tlsNet = KJ_REQUIRE_NONNULL(tlsNetwork, "this HttpClient doesn't support TLS");
+      addr = tlsNet.parseAddress(host);
     } else {
       addr = network.parseAddress(host);
     }
@@ -5709,9 +5709,30 @@ public:
       }).attach(kj::mv(address));
     }).split();
 
+    auto connection = kj::newPromisedStream(kj::mv(kj::get<1>(split)));
+
+    #if KJ_HAS_OPENSSL
+    if (!settings.useTls) {
+      KJ_IF_MAYBE(tlsNet, tlsNetwork) {
+        KJ_IF_MAYBE(tlsStarter, settings.tlsStarter) {
+          auto refConnection = kj::refcountedWrapper(kj::mv(connection));
+          connection = refConnection->addWrappedRef();
+          kj::Own<kj::AsyncIoStream> ref1 = refConnection->addWrappedRef();
+          Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)> cb =
+              [tlsNet, ref1 = kj::mv(ref1)](kj::StringPtr expectedServerHostname) mutable {
+            kj::Promise<kj::Own<kj::AsyncIoStream>> secureStream =
+                tlsNet->wrapClient(kj::mv(ref1), expectedServerHostname);
+            return kj::newPromisedStream(kj::mv(secureStream));
+          };
+          *tlsStarter = kj::mv(cb);
+        }
+      }
+    }
+    #endif
+
     return ConnectRequest {
       kj::mv(kj::get<0>(split)),
-      kj::newPromisedStream(kj::mv(kj::get<1>(split)))
+      kj::mv(connection)
     };
   }
 
@@ -5719,7 +5740,7 @@ private:
   kj::Timer& timer;
   const HttpHeaderTable& responseHeaderTable;
   kj::Network& network;
-  kj::Maybe<kj::Network&> tlsNetwork;
+  kj::Maybe<kj::SecureNetworkWrapper&> tlsNetwork;
   HttpClientSettings settings;
 
   struct Host {
@@ -5814,7 +5835,7 @@ kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& respo
 }
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
-                                  kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
+                                  kj::Network& network, kj::Maybe<kj::SecureNetworkWrapper&> tlsNetwork,
                                   HttpClientSettings settings) {
   return kj::heap<NetworkHttpClient>(
       timer, responseHeaderTable, network, tlsNetwork, kj::mv(settings));

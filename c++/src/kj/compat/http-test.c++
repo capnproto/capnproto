@@ -4873,7 +4873,7 @@ private:
   uint& cumulative;
 };
 
-class ConnectionCountingNetwork final: public kj::Network {
+class ConnectionCountingNetwork final: public kj::SecureNetworkWrapper {
 public:
   ConnectionCountingNetwork(kj::Network& inner, uint& count, uint& addrCount)
       : inner(inner), count(count), addrCount(addrCount) {}
@@ -4892,6 +4892,10 @@ public:
       kj::ArrayPtr<const kj::StringPtr> allow,
       kj::ArrayPtr<const kj::StringPtr> deny = nullptr) override {
     KJ_UNIMPLEMENTED("test");
+  }
+  kj::Promise<kj::Own<kj::AsyncIoStream>> wrapClient(
+      kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) override {
+    KJ_UNIMPLEMENTED("not tested");
   }
 
 private:
