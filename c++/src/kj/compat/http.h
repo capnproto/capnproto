@@ -660,10 +660,24 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
+using TlsStarterCallback = kj::Maybe<kj::Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)>>;
 struct HttpConnectSettings {
   bool useTls = false;
   // Requests to automatically establish a TLS session over the connection. The remote party
   // will be expected to present a valid certificate matching the requested hostname.
+  kj::Maybe<TlsStarterCallback&> tlsStarter;
+  // This is an output parameter. It doesn't need to be set. But if it is set, then it may get
+  // filled with a callback function. It will get filled with `nullptr` if any of the following
+  // are true:
+  //
+  // * kj is not built with TLS support
+  // * the underlying HttpClient does not support the startTls mechanism
+  // * `useTls` has been set to `true` and so TLS has already been started
+  //
+  // The callback function itself can be used to initiate a TLS handshake on the
+  // connection at any arbitrary point. The function returns an AsyncIoStream that is a secure
+  // TLS stream. This mechanism is required for certain protocols, more info can be found on
+  // https://en.wikipedia.org/wiki/Opportunistic_TLS.
 };
 
 class HttpClient {
@@ -901,6 +915,9 @@ struct HttpClientSettings {
     AUTOMATIC_COMPRESSION, // Automatically includes the compression header in the WebSocket request.
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
+
+  kj::Maybe<SecureNetworkWrapper&> tlsContext;
+  // A reference to a TLS context that will be used when tlsStarter is invoked.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,

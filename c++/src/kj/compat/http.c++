@@ -5621,10 +5621,10 @@ public:
       return c->get()->connect(host, headers, settings);
     } else {
       auto split = promise.addBranch().then(
-          [this, host=kj::str(host), headers=headers.clone(), settings]()
+          [this, host=kj::str(host), headers=headers.clone(), settings]() mutable
           -> kj::Tuple<kj::Promise<ConnectRequest::Status>,
                        kj::Promise<kj::Own<kj::AsyncIoStream>>> {
-        auto request = KJ_ASSERT_NONNULL(client)->connect(host, headers, settings);
+        auto request = KJ_ASSERT_NONNULL(client)->connect(host, headers, kj::mv(settings));
         return kj::tuple(kj::mv(request.status), kj::mv(request.connection));
       }).split();
 
@@ -5684,13 +5684,14 @@ public:
   }
 
   ConnectRequest connect(
-      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
+      kj::StringPtr host, const HttpHeaders& headers,
+      HttpConnectSettings connectSettings) override {
     // We want to connect directly instead of going through a proxy here.
     // https://github.com/capnproto/capnproto/pull/1454#discussion_r900414879
     kj::Maybe<kj::Promise<kj::Own<kj::NetworkAddress>>> addr;
-    if (settings.useTls) {
-      addr = KJ_REQUIRE_NONNULL(tlsNetwork, "this HttpClient doesn't support TLS")
-          .parseAddress(host);
+    if (connectSettings.useTls) {
+      kj::Network& tlsNet = KJ_REQUIRE_NONNULL(tlsNetwork, "this HttpClient doesn't support TLS");
+      addr = tlsNet.parseAddress(host);
     } else {
       addr = network.parseAddress(host);
     }
@@ -5709,9 +5710,30 @@ public:
       }).attach(kj::mv(address));
     }).split();
 
+    auto connection = kj::newPromisedStream(kj::mv(kj::get<1>(split)));
+
+    #if KJ_HAS_OPENSSL
+    if (!connectSettings.useTls) {
+      KJ_IF_MAYBE(wrapper, settings.tlsContext) {
+        KJ_IF_MAYBE(tlsStarter, connectSettings.tlsStarter) {
+          auto refConnection = kj::refcountedWrapper(kj::mv(connection));
+          connection = refConnection->addWrappedRef();
+          kj::Own<kj::AsyncIoStream> ref1 = refConnection->addWrappedRef();
+          Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)> cb =
+              [wrapper, ref1 = kj::mv(ref1)](kj::StringPtr expectedServerHostname) mutable {
+            kj::Promise<kj::Own<kj::AsyncIoStream>> secureStream =
+                wrapper->wrapClient(kj::mv(ref1), expectedServerHostname);
+            return kj::newPromisedStream(kj::mv(secureStream));
+          };
+          *tlsStarter = kj::mv(cb);
+        }
+      }
+    }
+    #endif
+
     return ConnectRequest {
       kj::mv(kj::get<0>(split)),
-      kj::newPromisedStream(kj::mv(kj::get<1>(split)))
+      kj::mv(connection)
     };
   }
 
