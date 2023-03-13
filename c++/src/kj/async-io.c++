@@ -217,6 +217,10 @@ public:
       // Don't std::terminate().
       break;
     }
+
+    KJ_IF_MAYBE(raf, readAbortFulfiller) {
+      raf->get()->fulfill();
+    }
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
