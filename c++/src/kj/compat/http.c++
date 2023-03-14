@@ -1043,28 +1043,38 @@ bool HttpHeaders::parseHeaders(char* ptr, char* end) {
 
 kj::String HttpHeaders::serializeRequest(
     HttpMethod method, kj::StringPtr url,
-    kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
-  return serialize(kj::toCharSequence(method), url, kj::StringPtr("HTTP/1.1"), connectionHeaders);
+    kj::ArrayPtr<const kj::StringPtr> connectionHeaders,
+    bool enableConnectionHeaderOverrides) const {
+  return serialize(
+      kj::toCharSequence(method), url, kj::StringPtr("HTTP/1.1"), connectionHeaders,
+      enableConnectionHeaderOverrides);
 }
 
 kj::String HttpHeaders::serializeConnectRequest(
     kj::StringPtr authority,
-    kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
-  return serialize("CONNECT"_kj, authority, kj::StringPtr("HTTP/1.1"), connectionHeaders);
+    kj::ArrayPtr<const kj::StringPtr> connectionHeaders,
+    bool enableConnectionHeaderOverrides) const {
+  return serialize(
+      "CONNECT"_kj, authority, kj::StringPtr("HTTP/1.1"), connectionHeaders,
+      enableConnectionHeaderOverrides);
 }
 
 kj::String HttpHeaders::serializeResponse(
     uint statusCode, kj::StringPtr statusText,
-    kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+    kj::ArrayPtr<const kj::StringPtr> connectionHeaders,
+    bool enableConnectionHeaderOverrides) const {
   auto statusCodeStr = kj::toCharSequence(statusCode);
 
-  return serialize(kj::StringPtr("HTTP/1.1"), statusCodeStr, statusText, connectionHeaders);
+  return serialize(
+      kj::StringPtr("HTTP/1.1"), statusCodeStr, statusText, connectionHeaders,
+      enableConnectionHeaderOverrides);
 }
 
 kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
                                   kj::ArrayPtr<const char> word2,
                                   kj::ArrayPtr<const char> word3,
-                                  kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+                                  kj::ArrayPtr<const kj::StringPtr> connectionHeaders,
+                                  bool enableConnectionHeaderOverrides) const {
   const kj::StringPtr space = " ";
   const kj::StringPtr newline = "\r\n";
   const kj::StringPtr colon = ": ";
@@ -1076,6 +1086,9 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
   for (auto i: kj::indices(indexedHeaders)) {
     kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
+    if (value == nullptr && enableConnectionHeaderOverrides && i < indexedHeaders.size()) {
+      value = indexedHeaders[i];
+    }
     if (value != nullptr) {
       size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
     }
@@ -1092,6 +1105,9 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   }
   for (auto i: kj::indices(indexedHeaders)) {
     kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
+    if (value == nullptr && enableConnectionHeaderOverrides && i < indexedHeaders.size()) {
+      value = indexedHeaders[i];
+    }
     if (value != nullptr) {
       ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
     }
@@ -1106,7 +1122,7 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
 }
 
 kj::String HttpHeaders::toString() const {
-  return serialize(nullptr, nullptr, nullptr, nullptr);
+  return serialize(nullptr, nullptr, nullptr, nullptr, false);
 }
 
 // =======================================================================================
@@ -4999,7 +5015,8 @@ public:
       }
     }
 
-    httpOutput.writeHeaders(headers.serializeRequest(method, url, connectionHeaders));
+    httpOutput.writeHeaders(headers.serializeRequest(
+        method, url, connectionHeaders, settings.enableConnectionHeaderOverrides));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
     if (!hasBody) {
@@ -5107,7 +5124,8 @@ public:
           offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
     }
 
-    httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
+    httpOutput.writeHeaders(headers.serializeRequest(
+        HttpMethod::GET, url, connectionHeaders, settings.enableConnectionHeaderOverrides));
 
     // No entity-body.
     httpOutput.finishBody();
@@ -5211,7 +5229,7 @@ public:
   }
 
   ConnectRequest connect(
-      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings) override {
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings connectSettings) override {
     KJ_REQUIRE(!upgraded,
         "can't make further requests on this HttpClient because it has been or is in the process "
         "of being upgraded");
@@ -5220,7 +5238,7 @@ public:
     KJ_REQUIRE(httpOutput.canReuse(),
         "can't start new request until previous request body has been fully written");
 
-    if (settings.useTls) {
+    if (connectSettings.useTls) {
       KJ_UNIMPLEMENTED("This HttpClient does not support TLS.");
     }
 
@@ -5232,7 +5250,8 @@ public:
 
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
-    httpOutput.writeHeaders(headers.serializeConnectRequest(host, connectionHeaders));
+    httpOutput.writeHeaders(headers.serializeConnectRequest(
+        host, connectionHeaders, settings.enableConnectionHeaderOverrides));
 
     auto id = ++counter;
 

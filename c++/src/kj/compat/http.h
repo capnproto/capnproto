@@ -426,11 +426,14 @@ public:
   // Like tryParseRequest()/tryParseResponse(), but don't expect any request/response line.
 
   kj::String serializeRequest(HttpMethod method, kj::StringPtr url,
-                              kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
+                              kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr,
+                              bool enableConnectionHeaderOverrides = false) const;
   kj::String serializeConnectRequest(kj::StringPtr authority,
-                              kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
+                              kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr,
+                              bool enableConnectionHeaderOverrides = false) const;
   kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
-                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
+                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr,
+                               bool enableConnectionHeaderOverrides = false) const;
   // **Most applications will not use these methods; they are called by the HTTP client and server
   // implementations.**
   //
@@ -482,7 +485,8 @@ private:
   kj::String serialize(kj::ArrayPtr<const char> word1,
                        kj::ArrayPtr<const char> word2,
                        kj::ArrayPtr<const char> word3,
-                       kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const;
+                       kj::ArrayPtr<const kj::StringPtr> connectionHeaders,
+                       bool enableConnectionHeaderOverrides) const;
 
   bool parseHeaders(char* ptr, char* end);
 
@@ -901,6 +905,11 @@ struct HttpClientSettings {
     AUTOMATIC_COMPRESSION, // Automatically includes the compression header in the WebSocket request.
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
+
+  bool enableConnectionHeaderOverrides = false;
+  // Whether headers like `Connection`, `Upgrade`, etc., which are typically set internally by
+  // the HttpClient, can be overriden via the HttpHeaders supplied to the likes of `request`
+  // or `connect`.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
