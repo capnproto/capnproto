@@ -461,8 +461,14 @@ public:
     return ptr;
   }
 
-  inline operator Maybe<T&>() { return ptr.get(); }
-  inline operator Maybe<const T&>() const { return ptr.get(); }
+  template <typename U = T>
+  inline operator NoInfer<Maybe<U&>>() { return ptr.get(); }
+  template <typename U = T>
+  inline operator NoInfer<Maybe<const U&>>() const { return ptr.get(); }
+  // Implicit conversion to `Maybe<U&>`. The weird templating is to make sure that
+  // `Maybe<Own<void>>` can be instantiated with the compiler complaining about forming references
+  // to void -- the use of templates here will cause SFINAE to kick in and hide these, whereas if
+  // they are not templates then SFINAE isn't applied and so they are considered errors.
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
 
