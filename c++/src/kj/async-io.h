@@ -1088,6 +1088,12 @@ inline ArrayPtr<const T> AncillaryMessage::asArray() const {
   return arrayPtr(reinterpret_cast<const T*>(data.begin()), data.size() / sizeof(T));
 }
 
+class SecureNetworkWrapper: public kj::Network {
+public:
+  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> wrapClient(
+      kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) = 0;
+};
+
 }  // namespace kj
 
 KJ_END_HEADER
