@@ -134,6 +134,14 @@ public:
   //   better design here. Maybe we should more carefully distinguish between MembranePolicies
   //   which are reversible vs. those which are one-way?
 
+  virtual bool allowFdPassthrough() { return false; }
+  // Should file descriptors be allowed to pass through this membrane?
+  //
+  // A MembranePolicy obviously cannot mediate nor revoke access to a file descriptor once it has
+  // passed through, so this must be used with caution. If you only want to allow file descriptors
+  // on certain methods, you could do so by implementing inboundCall()/outboundCall() to
+  // special-case those methods.
+
   // ---------------------------------------------------------------------------
   // Control over importing and exporting.
   //

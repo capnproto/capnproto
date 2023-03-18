@@ -501,9 +501,11 @@ public:
   }
 
   kj::Maybe<int> getFd() override {
-    // We can't let FDs pass over membranes because we have no way to enforce the membrane policy
-    // on them. If the MembranePolicy wishes to explicitly permit certain FDs to pass, it can
-    // always do so by overriding the appropriate policy methods.
+    KJ_IF_MAYBE(f, inner->getFd()) {
+      if (policy->allowFdPassthrough()) {
+        return *f;
+      }
+    }
     return nullptr;
   }
 
