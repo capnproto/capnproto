@@ -660,24 +660,10 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
-using TlsStarterCallback = kj::Maybe<kj::Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)>>;
 struct HttpConnectSettings {
   bool useTls = false;
   // Requests to automatically establish a TLS session over the connection. The remote party
   // will be expected to present a valid certificate matching the requested hostname.
-  kj::Maybe<TlsStarterCallback&> tlsStarter;
-  // This is an output parameter. It doesn't need to be set. But if it is set, then it may get
-  // filled with a callback function. It will get filled with `nullptr` if any of the following
-  // are true:
-  //
-  // * kj is not built with TLS support
-  // * the underlying HttpClient does not support the startTls mechanism
-  // * `useTls` has been set to `true` and so TLS has already been started
-  //
-  // The callback function itself can be used to initiate a TLS handshake on the
-  // connection at any arbitrary point. The function returns an AsyncIoStream that is a secure
-  // TLS stream. This mechanism is required for certain protocols, more info can be found on
-  // https://en.wikipedia.org/wiki/Opportunistic_TLS.
 };
 
 class HttpClient {
@@ -918,7 +904,7 @@ struct HttpClientSettings {
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
-                                  kj::Network& network, kj::Maybe<kj::SecureNetworkWrapper&> tlsNetwork,
+                                  kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
                                   HttpClientSettings settings = HttpClientSettings());
 // Creates a proxy HttpClient that connects to hosts over the given network. The URL must always
 // be an absolute URL; the host is parsed from the URL. This implementation will automatically

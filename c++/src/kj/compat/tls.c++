@@ -624,10 +624,7 @@ private:
   kj::Own<kj::NetworkAddress> inner;
 };
 
-// =======================================================================================
-// class TlsNetwork
-
-class TlsNetwork final: public kj::SecureNetworkWrapper {
+class TlsNetwork final: public kj::Network {
 public:
   TlsNetwork(TlsContext& tls, kj::Network& inner): tls(tls), inner(inner) {}
   TlsNetwork(TlsContext& tls, kj::Own<kj::Network> inner)
@@ -699,11 +696,6 @@ public:
     //   Or is it better to let people do that via the TlsContext? A neat thing about
     //   restrictPeers() is that it's easy to make user-configurable.
     return kj::heap<TlsNetwork>(tls, inner.restrictPeers(allow, deny));
-  }
-
-  kj::Promise<kj::Own<kj::AsyncIoStream>> wrapClient(
-      kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) override {
-    return tls.wrapClient(kj::mv(stream), expectedServerHostname);
   }
 
 private:
@@ -947,7 +939,7 @@ kj::Own<kj::NetworkAddress> TlsContext::wrapAddress(
   return kj::heap<TlsNetworkAddress>(*this, kj::str(expectedServerHostname), kj::mv(address));
 }
 
-kj::Own<kj::SecureNetworkWrapper> TlsContext::wrapNetwork(kj::Network& network) {
+kj::Own<kj::Network> TlsContext::wrapNetwork(kj::Network& network) {
   return kj::heap<TlsNetwork>(*this, network);
 }
 

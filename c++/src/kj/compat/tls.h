@@ -150,7 +150,7 @@ public:
   // as the client when `connect()` is called or the server if `listen()` is called.
   // `connect()` will athenticate the server as `expectedServerHostname`.
 
-  kj::Own<kj::SecureNetworkWrapper> wrapNetwork(kj::Network& network);
+  kj::Own<kj::Network> wrapNetwork(kj::Network& network);
   // Upgrade a Network to one that automatically upgrades all connections to TLS. The network will
   // only accept addresses of the form "hostname" and "hostname:port" (it does not accept raw IP
   // addresses). It will automatically use SNI and verify certificates based on these hostnames.
