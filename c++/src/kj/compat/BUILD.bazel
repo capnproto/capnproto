@@ -106,7 +106,6 @@ kj_tls_tests = [
     }),
     deps = [
         ":kj-tls",
-        ":kj-http",
         "//src/kj:kj-test",
     ],
 ) for f in kj_tls_tests]
