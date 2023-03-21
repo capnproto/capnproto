@@ -158,21 +158,18 @@ Own<Win32EventPort::SignalObserver> Win32IocpEventPort::observeSignalState(HANDL
 }
 
 bool Win32IocpEventPort::wait() {
-  const bool woke = receivedWake();
-  if(woke) {
-    waitIocp(0);
+  // It's possible that a wake event was received and discarded during ~IoPromiseAdapter. We
+  // need to check for that now. Otherwise, calling waitIocp may cause it to hang forever.
+  if (receivedWake()) {
     return true;
   }
-  try{
-    waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
-        .map([](uint64_t t) -> DWORD { return t; })
-        .orDefault(INFINITE));
+  waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
+      .map([](uint64_t t) -> DWORD { return t; })
+      .orDefault(INFINITE));
 
-    timerImpl.advanceTo(clock.now());
-  }catch(...) {
-    
-  }
-  return woke;
+  timerImpl.advanceTo(clock.now());
+
+  return receivedWake();
 }
 
 bool Win32IocpEventPort::poll() {
