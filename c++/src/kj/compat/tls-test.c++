@@ -27,6 +27,8 @@
 
 #include "tls.h"
 
+#include "http.h"
+
 #include <openssl/opensslv.h>
 
 #include <stdlib.h>
@@ -1148,6 +1150,44 @@ KJ_TEST("TLS receiver does not stall on hung client") {
   auto extraAcceptPromise = test.receiver->accept().then(readFromClient);
   KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
 }
+
+#if !_WIN32 // TODO: Investigate and fix issue on Windows.
+KJ_TEST("NetworkHttpClient connect with tlsStarter") {
+  auto io = kj::setupAsyncIo();
+  auto& waitScope KJ_UNUSED = io.waitScope;
+  auto listener1 = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+
+  auto ignored KJ_UNUSED = listener1->accept().then([](Own<kj::AsyncIoStream> stream) {
+    auto buffer = kj::str("test");
+    return stream->write(buffer.cStr(), buffer.size()).attach(kj::mv(stream), kj::mv(buffer));
+  }).eagerlyEvaluate(nullptr);
+
+  HttpClientSettings clientSettings;
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+  TlsContext tls;
+
+  auto tlsNetwork = tls.wrapNetwork(io.provider->getNetwork());
+  clientSettings.tlsContext = tls;
+  auto client = newHttpClient(clientTimer, headerTable,
+      io.provider->getNetwork(), *tlsNetwork, clientSettings);
+  kj::HttpConnectSettings httpConnectSettings = { false, nullptr };
+  kj::TlsStarterCallback tlsStarter;
+  httpConnectSettings.tlsStarter = tlsStarter;
+  auto request = client->connect(
+      kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable), httpConnectSettings);
+
+  KJ_ASSERT(tlsStarter != nullptr);
+
+  auto buf = kj::heapArray<char>(4);
+  return request.connection->tryRead(buf.begin(), 1, buf.size())
+      .then([buf = kj::mv(buf)](size_t count) {
+    KJ_ASSERT(count == 4);
+    KJ_ASSERT(kj::str(buf.asChars()) == "test");
+  }).attach(kj::mv(request.connection)).wait(io.waitScope);
+}
+#endif
 
 #ifdef KJ_EXTERNAL_TESTS
 KJ_TEST("TLS to capnproto.org") {
