@@ -75,7 +75,8 @@ public:
 
 private:
   mutable uint refcount = 0;
-  // "mutable" because disposeImpl() is const.  Bleh.
+  // "mutable" because disposeImpl() is const and addRefInternal must support const T* arguments.
+  // Bleh.
 
   void disposeImpl(void* pointer) const override;
   template <typename T>
@@ -110,8 +111,8 @@ Own<T> addRef(T& object) {
 
 template <typename T>
 Own<T> Refcounted::addRefInternal(T* object) {
-  Refcounted* refcounted = object;
-  ++refcounted->refcount;
+  const Refcounted* refcounted = object;
+  ++refcounted->refcount; // `refcount` is mutable
   return Own<T>(object, *refcounted);
 }
 

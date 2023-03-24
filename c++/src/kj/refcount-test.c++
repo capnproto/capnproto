@@ -57,6 +57,24 @@ TEST(Refcount, Basic) {
 #endif
 }
 
+TEST(Refcount, Const) {
+  // Ensure `kj::addRef` supports argument of type `Own<const T>` and in that
+  // case returns `Own<const T>`
+  static_assert(isSameType<
+      Own<const SetTrueInDestructor>,
+      decltype(kj::addRef(kj::instance<const SetTrueInDestructor&>()))
+  >());
+
+  bool b = false;
+
+  {
+    Own<const SetTrueInDestructor> refConst1 = kj::refcounted<SetTrueInDestructor>(&b);
+    Own<const SetTrueInDestructor> refConst2 = kj::addRef(*refConst1);
+  }
+
+  EXPECT_TRUE(b);
+}
+
 struct SetTrueInDestructor2 {
   // Like above but doesn't inherit Refcounted.
 
