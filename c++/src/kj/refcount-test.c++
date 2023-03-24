@@ -58,8 +58,8 @@ TEST(Refcount, Basic) {
 }
 
 TEST(Refcount, Const) {
-  // Ensure `kj::addRef` supports argument of type `Own<const T>` and in that
-  // case returns `Own<const T>`
+  // Ensure `kj::addRef` supports argument of type `const T&` and in that case
+  // returns `Own<const T>`
   static_assert(isSameType<
       Own<const SetTrueInDestructor>,
       decltype(kj::addRef(kj::instance<const SetTrueInDestructor&>()))
