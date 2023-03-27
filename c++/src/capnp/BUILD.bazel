@@ -229,7 +229,6 @@ cc_library(
     "compiler/type-id-test.c++",
     "dynamic-test.c++",
     "encoding-test.c++",
-    "endian-reverse-test.c++",
     "endian-test.c++",
     "ez-rpc-test.c++",
     "layout-test.c++",
@@ -248,6 +247,16 @@ cc_library(
     "serialize-text-test.c++",
     "stringify-test.c++",
 ]]
+
+cc_test(
+    name = "endian-reverse-test",
+    srcs = ["endian-reverse-test.c++"],
+    deps = [":capnp-test"],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
 
 cc_library(
     name = "endian-test-base",

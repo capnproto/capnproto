@@ -26,7 +26,7 @@
 // so this check isn't appropriate for us.
 
 #if _WIN32 || __CYGWIN__
-#include "win32-api-version.h"
+#include <kj/win32-api-version.h>
 #elif __APPLE__
 // getcontext() and friends are marked deprecated on MacOS but seemingly no replacement is
 // provided. It appears as if they deprecated it solely because the standards bodies deprecated it,
@@ -52,7 +52,7 @@
 
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
-#include "windows-sanity.h"
+#include <kj/windows-sanity.h>
 #else
 
 #if KJ_USE_FIBERS

@@ -254,7 +254,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 #endif
 }
 
-#if __GNUC__ && !_WIN32
+#if (__GNUC__ && !_WIN32) || __clang__
 // Allow dependents to override the implementation of stack symbolication by making it a weak
 // symbol. We prefer weak symbols over some sort of callback registration mechanism becasue this
 // allows an alternate symbolication library to be easily linked into tests without changing the
