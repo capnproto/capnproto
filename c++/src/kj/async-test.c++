@@ -1653,5 +1653,20 @@ KJ_TEST("constPromise") {
   KJ_EXPECT(i == 123);
 }
 
+kj::Promise<uint> asyncAccumulate(uint z, uint ttl) {
+  if (ttl == 0) return z;
+  z += ttl;
+  return evalLater([z, ttl]() {
+    return asyncAccumulate(z, ttl - 1);
+  });
+}
+
+KJ_TEST("benchmark: Pre-environment evalLater()") {
+  EventLoop eventLoop;
+  WaitScope waitScope(eventLoop);
+
+  asyncAccumulate(0, 10'000'000).wait(waitScope);
+}
+
 }  // namespace
 }  // namespace kj
