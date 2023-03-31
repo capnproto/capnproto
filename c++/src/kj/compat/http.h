@@ -39,6 +39,7 @@
 #include <kj/memory.h>
 #include <kj/one-of.h>
 #include <kj/async-io.h>
+#include <kj/debug.h>
 
 KJ_BEGIN_HEADER
 
@@ -660,7 +661,7 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
-using TlsStarterCallback = kj::Maybe<kj::Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)>>;
+using TlsStarterCallback = kj::Maybe<kj::Function<kj::Promise<void>(kj::StringPtr)>>;
 struct HttpConnectSettings {
   bool useTls = false;
   // Requests to automatically establish a TLS session over the connection. The remote party
@@ -674,10 +675,177 @@ struct HttpConnectSettings {
   // * the underlying HttpClient does not support the startTls mechanism
   // * `useTls` has been set to `true` and so TLS has already been started
   //
-  // The callback function itself can be used to initiate a TLS handshake on the
-  // connection at any arbitrary point. The function returns an AsyncIoStream that is a secure
-  // TLS stream. This mechanism is required for certain protocols, more info can be found on
+  // The callback function itself can be called to initiate a TLS handshake on the connection in
+  // between write() operations. It is not allowed to initiate a TLS handshake while a write
+  // operation or a pump operation to the connection exists. Read operations are not subject to
+  // the same constraint, however: implementations are required to be able to handle TLS
+  // initiation while a read operation or pump operation from the connection exists. Once the
+  // promise returned from the callback is fulfilled, the connection has become a secure stream,
+  // and write operations are once again permitted. The StringPtr parameter to the callback,
+  // expectedServerHostname may be dropped after the function synchronously returns.
+  //
+  // The PausableReadAsyncIoStream class defined below can be used to ensure that read operations
+  // are not pending when the tlsStarter is invoked.
+  //
+  // This mechanism is required for certain protocols, more info can be found on
   // https://en.wikipedia.org/wiki/Opportunistic_TLS.
+};
+
+class PausableReadAsyncIoStream final: public kj::AsyncIoStream {
+  // A custom AsyncIoStream which can pause pending reads. This is used by startTls to pause a
+  // a read before TLS is initiated.
+  //
+  // TODO(cleanup): this class should be rewritten to use a CRTP mixin approach so that pumps
+  // can be optimised once startTls is invoked.
+  class PausableRead {
+  public:
+    PausableRead(
+        kj::PromiseFulfiller<size_t>& fulfiller, PausableReadAsyncIoStream& parent,
+        void* buffer, size_t minBytes, size_t maxBytes)
+        : fulfiller(fulfiller), parent(parent),
+          operationBuffer(buffer), operationMinBytes(minBytes), operationMaxBytes(maxBytes),
+          innerRead(parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
+              [&fulfiller](size_t size) mutable -> kj::Promise<void> {
+            fulfiller.fulfill(kj::mv(size));
+            return kj::READY_NOW;
+          }, [&fulfiller](kj::Exception&& err) {
+            fulfiller.reject(kj::mv(err));
+          })) {
+      KJ_ASSERT(parent.maybePausableRead == nullptr);
+      parent.maybePausableRead = *this;
+    }
+
+    ~PausableRead() noexcept(false) {
+      parent.maybePausableRead = nullptr;
+    }
+
+    void pause() {
+      innerRead = nullptr;
+    }
+
+    void unpause() {
+      innerRead = parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
+          [this](size_t size) -> kj::Promise<void> {
+        fulfiller.fulfill(kj::mv(size));
+        return kj::READY_NOW;
+      }, [this](kj::Exception&& err) {
+        fulfiller.reject(kj::mv(err));
+      });
+    }
+
+    void reject(kj::Exception&& exc) {
+      fulfiller.reject(kj::mv(exc));
+    }
+  private:
+    kj::PromiseFulfiller<size_t>& fulfiller;
+    PausableReadAsyncIoStream& parent;
+
+    void* operationBuffer;
+    size_t operationMinBytes;
+    size_t operationMaxBytes;
+    // The parameters of the current tryRead call. Used to unpause a paused read.
+
+    kj::Promise<void> innerRead;
+    // The current pending read.
+  };
+
+public:
+  PausableReadAsyncIoStream(kj::Own<kj::AsyncIoStream> stream)
+      : inner(kj::mv(stream)), currentlyWriting(false), currentlyReading(false) {}
+
+  _::Deferred<kj::Function<void()>> trackRead();
+
+  _::Deferred<kj::Function<void()>> trackWrite();
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return kj::newAdaptedPromise<size_t, PausableRead>(*this, buffer, minBytes, maxBytes);
+  }
+
+  kj::Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) {
+    return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
+  }
+
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return inner->tryGetLength();
+  }
+
+  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
+    return kj::unoptimizedPumpTo(*this, output, amount);
+  }
+
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    return inner->write(buffer, size).attach(trackWrite());
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    return inner->write(pieces).attach(trackWrite());
+  }
+
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+      kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+    auto result = inner->tryPumpFrom(input, amount);
+    KJ_IF_MAYBE(r, result) {
+      return r->attach(trackWrite());
+    } else {
+      return nullptr;
+    }
+  }
+
+  kj::Promise<void> whenWriteDisconnected() override {
+    return inner->whenWriteDisconnected();
+  }
+
+  void shutdownWrite() override {
+    inner->shutdownWrite();
+  }
+
+  void abortRead() override {
+    inner->abortRead();
+  }
+
+  kj::Maybe<int> getFd() const override {
+    return inner->getFd();
+  }
+
+  void pause() {
+    KJ_IF_MAYBE(pausable, maybePausableRead) {
+      pausable->pause();
+    }
+  }
+
+  void unpause() {
+    KJ_IF_MAYBE(pausable, maybePausableRead) {
+      pausable->unpause();
+    }
+  }
+
+  bool getCurrentlyReading() {
+    return currentlyReading;
+  }
+
+  bool getCurrentlyWriting() {
+    return currentlyWriting;
+  }
+
+  kj::Own<kj::AsyncIoStream> takeStream() {
+    return kj::mv(inner);
+  }
+
+  void replaceStream(kj::Own<kj::AsyncIoStream> stream) {
+    inner = kj::mv(stream);
+  }
+
+  void reject(kj::Exception&& exc) {
+    KJ_IF_MAYBE(pausable, maybePausableRead) {
+      pausable->reject(kj::mv(exc));
+    }
+  }
+
+private:
+  kj::Own<kj::AsyncIoStream> inner;
+  kj::Maybe<PausableRead&> maybePausableRead;
+  bool currentlyWriting;
+  bool currentlyReading;
 };
 
 class HttpClient {
