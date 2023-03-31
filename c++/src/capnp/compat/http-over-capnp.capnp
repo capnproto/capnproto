@@ -60,7 +60,8 @@ interface HttpService {
   #   constructor parameter to specify which method to use, for backwards-compatibiltiy purposes.
 
   connect @2 (host :Text, headers :List(HttpHeader), down :ByteStream,
-              context :ConnectClientRequestContext, settings :ConnectSettings) -> (up :ByteStream);
+              context :ConnectClientRequestContext, settings :ConnectSettings)
+          -> (up :ByteStream);
   # Setup an HTTP CONNECT proxy tunnel.
   #
   # The client sends the request host/headers together with a `down` ByteStream that will be used

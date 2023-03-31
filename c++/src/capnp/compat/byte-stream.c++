@@ -72,8 +72,10 @@ public:
                 kj::AsyncOutputStream& stream,
                 capnp::ByteStream::SubstreamCallback::Client callback,
                 uint64_t limit,
+                kj::Maybe<kj::TlsStarterCallback&> tlsStarter,
                 kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>())
       : factory(factory),
+        tlsStarter(tlsStarter),
         state(Streaming {parent, kj::mv(ownParent), stream, kj::mv(callback)}),
         limit(limit),
         resolveFulfiller(kj::mv(paf.fulfiller)),
@@ -240,6 +242,30 @@ public:
     KJ_UNREACHABLE;
   }
 
+  kj::Promise<void> startTls(StartTlsContext context) override {
+    auto params = context.getParams();
+    KJ_DBG("In starttls");
+    KJ_IF_MAYBE(s, tlsStarter) {
+      KJ_SWITCH_ONEOF(state) {
+        KJ_CASE_ONEOF(redirected, Redirected) {
+          auto req = redirected.replacement.startTlsRequest(params.totalSize());
+          req.setExpectedServerHostname(params.getExpectedServerHostname());
+          return req.send();
+        }
+        KJ_CASE_ONEOF(e, Ended) {
+          KJ_FAIL_REQUIRE("cannot call startTls on a bytestream that was ended");
+        }
+        KJ_CASE_ONEOF(b, Borrowed) {
+          KJ_FAIL_REQUIRE("can't call startTls while stream is borrowed");
+        }
+        KJ_CASE_ONEOF(streaming, Streaming) {
+          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+        }
+      }
+    }
+    KJ_UNREACHABLE;
+  }
+
   kj::Promise<void> getSubstream(GetSubstreamContext context) override {
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(redirected, Redirected) {
@@ -262,7 +288,8 @@ public:
         context.releaseParams();
         auto results = context.getResults(MessageSize { 2, 1 });
         results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
-            factory, *this, thisCap(), streaming.stream, kj::mv(callback), kj::mv(limit))));
+            factory, *this, thisCap(), streaming.stream, kj::mv(callback), kj::mv(limit),
+            tlsStarter)));
         state = Borrowed { kj::mv(streaming) };
         return kj::READY_NOW;
       }
@@ -272,6 +299,7 @@ public:
 
 private:
   ByteStreamFactory& factory;
+  kj::Maybe<kj::TlsStarterCallback&> tlsStarter;
 
   struct Streaming {
     StreamServerBase& parent;
@@ -320,6 +348,15 @@ public:
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
                          kj::Own<kj::AsyncOutputStream> inner)
       : factory(factory),
+        state(kj::heap<PathProber>(*this, kj::mv(inner))) {
+    state.get<kj::Own<PathProber>>()->startProbing();
+  }
+
+  CapnpToKjStreamAdapter(ByteStreamFactory& factory,
+                         kj::Own<kj::AsyncOutputStream> inner,
+                         kj::TlsStarterCallback& starter)
+      : factory(factory),
+        tlsStarter(starter),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
     state.get<kj::Own<PathProber>>()->startProbing();
   }
@@ -637,6 +674,31 @@ protected:
     KJ_UNREACHABLE;
   }
 
+  kj::Promise<void> startTls(StartTlsContext context) override {
+    auto params = context.getParams();
+    KJ_DBG("Start tls here");
+    KJ_IF_MAYBE(s, tlsStarter) {
+      KJ_SWITCH_ONEOF(state) {
+        KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
+          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+        }
+        KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
+          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+        }
+        KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
+          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+        }
+        KJ_CASE_ONEOF(e, Ended) {
+          KJ_FAIL_REQUIRE("cannot call startTls on a bytestream that was ended");
+        }
+        KJ_CASE_ONEOF(b, Borrowed) {
+          KJ_FAIL_REQUIRE("can't call startTls while stream is borrowed");
+        }
+      }
+    }
+    KJ_UNREACHABLE;
+  }
+
   kj::Promise<void> getSubstream(GetSubstreamContext context) override {
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
@@ -653,7 +715,8 @@ protected:
 
         auto results = context.initResults(MessageSize {2, 1});
         results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
-            factory, *this, thisCap(), *kjStream, kj::mv(callback), kj::mv(limit))));
+            factory, *this, thisCap(), *kjStream, kj::mv(callback), kj::mv(limit),
+            tlsStarter)));
         state = Borrowed { kj::mv(kjStream) };
         return kj::READY_NOW;
       }
@@ -678,6 +741,7 @@ protected:
 
 private:
   ByteStreamFactory& factory;
+  kj::Maybe<kj::TlsStarterCallback&> tlsStarter;
 
   struct Borrowed { kj::Own<kj::AsyncOutputStream> stream; };
   struct Ended {};
@@ -1092,6 +1156,17 @@ private:
 
 capnp::ByteStream::Client ByteStreamFactory::kjToCapnp(kj::Own<kj::AsyncOutputStream> kjStream) {
   return streamSet.add(kj::heap<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream)));
+}
+
+capnp::ByteStream::Client ByteStreamFactory::kjToCapnp(
+    kj::Own<kj::AsyncOutputStream> kjStream, kj::Maybe<kj::TlsStarterCallback&> tlsStarter) {
+  KJ_IF_MAYBE(s, tlsStarter) {
+    return streamSet.add(
+        kj::heap<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream), *s));
+  } else {
+    return streamSet.add(
+        kj::heap<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream)));
+  }
 }
 
 kj::Own<kj::AsyncOutputStream> ByteStreamFactory::capnpToKj(capnp::ByteStream::Client capnpStream) {

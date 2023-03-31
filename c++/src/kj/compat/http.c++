@@ -5712,24 +5712,84 @@ public:
 
     auto connection = kj::newPromisedStream(kj::mv(kj::get<1>(split)));
 
-    #if KJ_HAS_OPENSSL
     if (!connectSettings.useTls) {
       KJ_IF_MAYBE(wrapper, settings.tlsContext) {
         KJ_IF_MAYBE(tlsStarter, connectSettings.tlsStarter) {
-          auto refConnection = kj::refcountedWrapper(kj::mv(connection));
-          connection = refConnection->addWrappedRef();
-          kj::Own<kj::AsyncIoStream> ref1 = refConnection->addWrappedRef();
-          Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)> cb =
-              [wrapper, ref1 = kj::mv(ref1)](kj::StringPtr expectedServerHostname) mutable {
-            kj::Promise<kj::Own<kj::AsyncIoStream>> secureStream =
-                wrapper->wrapClient(kj::mv(ref1), expectedServerHostname);
-            return kj::newPromisedStream(kj::mv(secureStream));
+          class TransitionaryAsyncIoStream final: public kj::AsyncIoStream {
+          public:
+            TransitionaryAsyncIoStream(kj::Own<kj::AsyncIoStream> unencryptedStream)
+                : inner(kj::mv(unencryptedStream)), currentlyReading(false) {}
+
+            auto trackRead() {
+              KJ_ASSERT(!currentlyReading, "only one read is allowed at a time");
+              currentlyReading = true;
+              return kj::defer([this]() { currentlyReading = false; });
+            }
+
+            kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+              return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
+            }
+
+            kj::Maybe<uint64_t> tryGetLength() override {
+              return inner->tryGetLength();
+            }
+
+            kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
+              return inner->pumpTo(output, amount).attach(trackRead());
+            }
+
+            kj::Promise<void> write(const void* buffer, size_t size) override {
+              return inner->write(buffer, size);
+            }
+
+            kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+              return inner->write(pieces);
+            }
+
+            kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+                kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+              return inner->tryPumpFrom(input, amount);
+            }
+
+            kj::Promise<void> whenWriteDisconnected() override {
+              return inner->whenWriteDisconnected();
+            }
+
+            void shutdownWrite() override {
+              inner->shutdownWrite();
+            }
+
+            void abortRead() override {
+              inner->abortRead();
+            }
+
+            kj::Maybe<int> getFd() const override {
+              return inner->getFd();
+            }
+
+            void startTls(
+                kj::SecureNetworkWrapper* wrapper, kj::StringPtr expectedServerHostname) {
+              kj::Promise<kj::Own<kj::AsyncIoStream>> secureStream =
+                  wrapper->wrapClient(kj::mv(inner), expectedServerHostname);
+              inner = kj::newPromisedStream(kj::mv(secureStream));
+            }
+
+          private:
+            kj::Own<kj::AsyncIoStream> inner;
+            bool currentlyReading;
           };
+
+          auto transitConnection = kj::heap<TransitionaryAsyncIoStream>(kj::mv(connection));
+          Function<kj::Promise<void>(kj::StringPtr)> cb =
+              [wrapper, ref1 = &transitConnection](kj::StringPtr expectedServerHostname) mutable {
+            ref1->get()->startTls(wrapper, expectedServerHostname);
+            return kj::READY_NOW;
+          };
+          connection = kj::mv(transitConnection);
           *tlsStarter = kj::mv(cb);
         }
       }
     }
-    #endif
 
     return ConnectRequest {
       kj::mv(kj::get<0>(split)),

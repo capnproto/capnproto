@@ -660,7 +660,7 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
-using TlsStarterCallback = kj::Maybe<kj::Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)>>;
+using TlsStarterCallback = kj::Maybe<kj::Function<kj::Promise<void>(kj::StringPtr)>>;
 struct HttpConnectSettings {
   bool useTls = false;
   // Requests to automatically establish a TLS session over the connection. The remote party
@@ -675,8 +675,9 @@ struct HttpConnectSettings {
   // * `useTls` has been set to `true` and so TLS has already been started
   //
   // The callback function itself can be used to initiate a TLS handshake on the
-  // connection at any arbitrary point. The function returns an AsyncIoStream that is a secure
-  // TLS stream. This mechanism is required for certain protocols, more info can be found on
+  // connection at any arbitrary point. It should be assumed that the
+  // prexisting stream becomes a secure stream after this function returns.
+  // This mechanism is required for certain protocols, more info can be found on
   // https://en.wikipedia.org/wiki/Opportunistic_TLS.
 };
 

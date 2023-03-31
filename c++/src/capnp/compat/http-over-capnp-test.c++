@@ -676,6 +676,31 @@ private:
   kj::HttpHeaderTable& headerTable;
 };
 
+class ConnectEchoService final: public kj::HttpService {
+  // A simple CONNECT server that will accept a connection, read data from the connection and
+  // back with the same data.
+public:
+  ConnectEchoService(kj::HttpHeaderTable& headerTable)
+      : headerTable(headerTable) {}
+
+  kj::Promise<void> request(
+      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
+    KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
+  }
+
+  kj::Promise<void> connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
+      kj::HttpService::ConnectResponse& response,
+      kj::HttpConnectSettings settings) override {
+    response.accept(200, "OK", kj::HttpHeaders(headerTable));
+    return io.pumpTo(io).ignoreResult();
+  }
+
+private:
+  kj::HttpHeaderTable& headerTable;
+};
+
 class ConnectRejectService final: public kj::HttpService {
   // A simple CONNECT server that will reject a connection.
 public:
@@ -839,6 +864,68 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
   listenTask.wait(waitScope);
 }
 
+kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
+  static char buffer;
+
+  auto promise = in.tryRead(&buffer, 1, 1);
+  return promise.then([](size_t amount) {
+    KJ_ASSERT(amount == 0, "expected EOF");
+  });
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
+  ConnectEchoService service(*table);
+  kj::HttpServer server(timer, *table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto client = newHttpClient(*table, *pipe.ends[1]);
+
+  capnp::HttpService::Client httpService = factory.kjToCapnp(newHttpService(*client));
+  auto frontCapnpHttpService = factory.capnpToKj(httpService);
+
+  auto frontCapnpHttpClient = kj::newHttpClient(*frontCapnpHttpService);
+
+  kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
+  kj::HttpConnectSettings settings = { .useTls = false };
+  settings.tlsStarter = tlsStarter;
+
+  auto request = frontCapnpHttpClient->connect(
+      "https://example.org"_kj, kj::HttpHeaders(*table), settings);
+
+  // KJ_ASSERT_NONNULL(*tlsStarter);
+
+  request.status.then(
+      [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {
+    KJ_ASSERT(status.statusCode == 200);
+    KJ_ASSERT(status.statusText == "OK"_kj);
+
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(3);
+    promises.add(KJ_ASSERT_NONNULL(*tlsStarter)("example.com"));
+    // promises.add(io->write("hello", 5));
+    // promises.add(expectRead(*io, "hello"_kj));
+    promises.add(io->write("hello", 5));
+    promises.add(expectRead(*io, "hello"_kj));
+    return kj::joinPromises(promises.finish())
+        .then([io=kj::mv(io)]() mutable {
+      io->shutdownWrite();
+      return expectEnd(*io).attach(kj::mv(io));
+    });
+  }).wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
 
 }  // namespace
 }  // namespace capnp

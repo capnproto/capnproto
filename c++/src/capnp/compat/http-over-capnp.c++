@@ -475,7 +475,9 @@ public:
     auto rpcRequest = inner.connectRequest();
     auto downPipe = kj::newOneWayPipe();
     rpcRequest.setHost(host);
-    rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
+    capnp::ByteStream::Client downByteStream = factory.streamFactory.kjToCapnp(
+        kj::mv(downPipe.out), settings.tlsStarter);
+    rpcRequest.setDown(downByteStream);
     rpcRequest.initSettings().setUseTls(settings.useTls);
 
     auto builder = capnp::Request<
@@ -495,6 +497,23 @@ public:
     });
     // We write to `up` (the other side reads from it).
     auto up = pipeline.getUp();
+
+    // We need to create a tlsStarter callback which sends a startTls request to the capnp server.
+    KJ_IF_MAYBE(tlsStarter, settings.tlsStarter) {
+      kj::Function<kj::Promise<void>(kj::StringPtr)> cb =
+          [upForStartTls = kj::cp(up)]
+          (kj::StringPtr expectedServerHostname)
+          mutable -> kj::Promise<void> {
+        auto startTlsRpcRequest = upForStartTls.startTlsRequest();
+        startTlsRpcRequest.setExpectedServerHostname("RPC");
+
+        KJ_DBG("Before ", expectedServerHostname);
+        KJ_DBG(kj::getStackTrace());
+        return startTlsRpcRequest.send();
+      };
+      *tlsStarter = kj::mv(cb);
+    }
+
     auto upStream = factory.streamFactory.capnpToKjExplicitEnd(up);
     auto upPumpTask = connection.pumpTo(*upStream)
         .then([&upStream = *upStream](uint64_t) mutable {
@@ -507,6 +526,7 @@ public:
     return pipeline.ignoreResult()
         .attach(kj::mv(downPumpTask))
         .attach(kj::mv(upPumpTask));
+
   }
 
 
@@ -845,17 +865,19 @@ public:
   kj::Promise<void> connect(ConnectContext context) override {
     auto params = context.getParams();
     auto host = params.getHost();
-    kj::HttpConnectSettings settings = {
-      .useTls = params.getSettings().getUseTls()
-    };
+    kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
+    kj::HttpConnectSettings settings = { .useTls = params.getSettings().getUseTls()};
+    settings.tlsStarter = tlsStarter;
     auto headers = factory.headersToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 
     class EofDetector final: public kj::AsyncOutputStream {
     public:
-      EofDetector(kj::Own<kj::AsyncIoStream> inner) : inner(kj::mv(inner)) {}
+      EofDetector(kj::Own<kj::AsyncIoStream> inner)
+          : inner(kj::mv(inner)) {}
       ~EofDetector() {
         inner->shutdownWrite();
+        // XXX Revoke the TLS starter when stream is destroyed?
       }
 
       kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
@@ -879,36 +901,89 @@ public:
     };
 
     auto stream = factory.streamFactory.capnpToKjExplicitEnd(context.getParams().getDown());
+    auto streamRef = kj::refcountedWrapper(kj::mv(stream));
 
     // We want to keep the stream alive even after EofDetector is destroyed, so we need to create
     // a refcounted AsyncIoStream.
     auto refcounted = kj::refcountedWrapper(kj::mv(pipe.ends[1]));
     kj::Own<kj::AsyncIoStream> ref1 = refcounted->addWrappedRef();
     kj::Own<kj::AsyncIoStream> ref2 = refcounted->addWrappedRef();
+    kj::Own<kj::AsyncIoStream> ref3 = refcounted->addWrappedRef();
+
+    class PumpManager final : public kj::Refcounted {
+    public:
+      PumpManager() {}
+
+      void capture(kj::Promise<void> task) {
+        pumpTask = kj::mv(task);
+      }
+
+      void cancel() {
+        auto drop = kj::mv(pumpTask);
+      }
+
+    private:
+      kj::Maybe<kj::Promise<void>> pumpTask;
+    };
 
     // We write to the `down` pipe.
-    auto pumpTask = ref1->pumpTo(*stream)
-          .then([&stream = *stream](uint64_t) mutable {
-      return stream.end();
-    }).then([httpProxyStream = kj::mv(ref1), stream = kj::mv(stream)]() mutable
+    auto pumpOwnedStream = streamRef->addWrappedRef();
+    auto pumpTask = ref1->pumpTo(*pumpOwnedStream)
+          .then([&pumpOwnedStream = *pumpOwnedStream](uint64_t) mutable {
+      return pumpOwnedStream.end();
+    }).then([httpProxyStream = kj::mv(ref1), pumpOwnedStream = kj::mv(pumpOwnedStream)]() mutable
         -> kj::Promise<void> {
       return kj::NEVER_DONE;
     });
 
-    PipelineBuilder<ConnectResults> pb;
-    auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
-    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper));
-    pb.setUp(kj::cp(up));
+    auto pumpManager = kj::refcounted<PumpManager>();
+    auto pumpManagerRef = kj::addRef(*pumpManager);
+    pumpManagerRef->capture(kj::mv(pumpTask));
 
-    context.setPipeline(pb.build());
-    context.initResults(capnp::MessageSize { 4, 1 }).setUp(kj::mv(up));
+    PipelineBuilder<ConnectResults> pb;
 
     auto response = kj::heap<HttpOverCapnpConnectResponseImpl>(
         factory, context.getParams().getContext());
 
-    return inner->connect(host, headers, *pipe.ends[0], *response, settings).attach(
-        kj::mv(host), kj::mv(headers), kj::mv(response), kj::mv(pipe))
-        .exclusiveJoin(kj::mv(pumpTask));
+    auto tlsStarterOwnedStream = streamRef->addWrappedRef();
+    auto tlsStarterWrapper = [pumpManagerRef = kj::mv(pumpManagerRef),
+        ref3 = kj::mv(ref3), tlsStarterOwnedStream = kj::mv(tlsStarterOwnedStream)]
+        (kj::StringPtr expectedServerHostname,
+        kj::Own<kj::TlsStarterCallback> origCallback) mutable -> kj::Promise<void> {
+      pumpManagerRef->cancel();
+
+      return KJ_ASSERT_NONNULL(*origCallback)(expectedServerHostname).then(
+        [pumpManagerRef = kj::mv(pumpManagerRef),
+        ref3 = kj::mv(ref3), tlsStarterOwnedStream = kj::mv(tlsStarterOwnedStream)]() mutable {
+        auto newPumpTask = ref3->pumpTo(*tlsStarterOwnedStream)
+              .then([&stream = *tlsStarterOwnedStream](uint64_t) mutable {
+          return stream.end();
+        }).then([httpProxyStream = kj::mv(ref3),
+            tlsStarterOwnedStream = kj::mv(tlsStarterOwnedStream)]() mutable
+            -> kj::Promise<void> {
+          return kj::NEVER_DONE;
+        });
+        pumpManagerRef->capture(kj::mv(newPumpTask));
+      });
+    };
+
+    auto result = inner->connect(host, headers, *pipe.ends[0], *response, settings).attach(
+        kj::mv(host), kj::mv(headers), kj::mv(response), kj::mv(pipe), kj::addRef(*pumpManager));
+
+    auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
+
+    auto byteStreamTlsStarter = kj::heap<kj::TlsStarterCallback>();
+    *byteStreamTlsStarter = [tlsStarterWrapper = kj::mv(tlsStarterWrapper),
+        tlsStarter = kj::mv(tlsStarter)](kj::StringPtr expectedServerHostname) mutable {
+      return tlsStarterWrapper(expectedServerHostname, kj::mv(tlsStarter));
+    };
+    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), *byteStreamTlsStarter);
+    pb.setUp(kj::cp(up));
+
+    context.setPipeline(pb.build());
+    auto results = context.initResults(capnp::MessageSize { 4, 2 });
+    results.setUp(kj::mv(up));
+    return result.attach(kj::mv(results), kj::mv(byteStreamTlsStarter));
   }
 
 private:
