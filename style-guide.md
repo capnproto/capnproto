@@ -458,7 +458,9 @@ There has also never been any agreement on C++ file extensions, for some reason.
 * Indents are two spaces.
 * Never use tabs.
 * Maximum line length is 100 characters.
-* Indent a continuation line by four spaces, *or* line them up nicely with the previous line if it makes it easier to read.
+* Indent continuation lines for braced init lists by two spaces.
+* Indent all other continuation lines by four spaces.
+* Alternatively, line up continuation lines with previous lines if it makes them easier to read.
 * Place a space between a keyword and an open parenthesis, e.g.: `if (foo)`
 * Do not place a space between a function name and an open parenthesis, e.g.: `foo(bar)`
 * Place an opening brace at the end of the statement which initiates the block, not on its own line.
