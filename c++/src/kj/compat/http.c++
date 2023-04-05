@@ -7318,7 +7318,7 @@ private:
       // try to find a configuration that respects both the server's preferred configuration,
       // as well as the client's requested configuration.
       //
-      // TODO(now): Manual Mode and terminating in worker
+      // TODO(soon): Manual Mode and terminating in worker
       //    - `headers` would be empty.
       //    - This means client would offer x, and the server would always reject.
       //    - We want a way to explicitly tell `acceptWebSocket()` to use the `requestHeaders` in
