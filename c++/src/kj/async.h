@@ -1296,8 +1296,8 @@ private:
   _::Event* currentlyFiring = nullptr;
 
   Maybe<_::EnvironmentSet&> currentEnvironmentSet;
-  // Non-null during the scope of an _::Environment::Scope. Accessed only by our friend, the
-  // _::Environment::Scope class.
+  // Non-null during the scope of an _::EnvironmentSet::Scope. Accessed only by our friend, the
+  // _::EnvironmentSet::Scope class.
 
   bool turn();
   void setRunnable(bool runnable);

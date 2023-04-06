@@ -148,9 +148,6 @@ struct alignas(void*) PromiseArena {
 //   your dependency's EnvironmentSet (with `getEnvironmentSet()`) to your own PromiseNode base
 //   constructor.
 //
-//   TODO(now): Perform a debug check that the current event loop's EnvironmentSet is the one that
-//   we're inheriting from our dependency.
-//
 // - When implementing an independent promise, accept a `Maybe<EnvironmentSet&>` constructor
 //   parameter and clone it. Constructor call sites should pass whatever `Maybe<EnvironmentSet&` is
 //   appropriate, defaulting to `EnvironmentSet::tryGetCurrent()`, if there is none other handy.
@@ -387,10 +384,21 @@ public:
 
   KJ_DISALLOW_COPY_AND_MOVE(PromiseArenaMember);
 
-  explicit PromiseArenaMember(Maybe<EnvironmentSet&> environmentSetParam)
-      : environmentSet(environmentSetParam.map([](EnvironmentSet& set) { return set.clone(); })) {}
+  explicit PromiseArenaMember(Maybe<EnvironmentSet&> environmentSetParam, bool debugCheck = true);
+  // The derived class constructor must provide PromiseArenaMember a Maybe<EnvironmentSet&>. By
+  // default, PromiseArenaMember's constructor will assert that this EnvironmentSet is the same as
+  // the one which is currently active in the current event loop. This debug check may be suppressed
+  // with the `debugCheck` parameter if it would be inappropriate to perform, such as in the
+  // implementation of `executeSync()`, which does not require a "sending" event loop.
 
   Maybe<EnvironmentSet&> getEnvironmentSet() { return environmentSet; }
+
+protected:
+#ifdef KJ_DEBUG
+  void requireEnvironmentSetIsSameAs(Maybe<EnvironmentSet&> other);
+  // Debug check used by the PromiseArenaMember constructor, and select PromiseNodes which may join
+  // multiple other PromiseNodes.
+#endif
 
 private:
   Maybe<EnvironmentSet> environmentSet;
@@ -600,8 +608,6 @@ static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&
 class AdoptEnvironmentPromiseNode: public PromiseNode {
   // A wrapper around another PromiseNode which overrides the EnvironmentSet associated with the
   // promise chain. Implements `.adoptEnvironment()`.
-  //
-  // TODO(now): Move implementation into async.c++.
 
 public:
   explicit AdoptEnvironmentPromiseNode(
@@ -1911,7 +1917,8 @@ class XThreadEvent: public PromiseNode,    // it's a PromiseNode in the requesti
                     private Event {        // it's an event in the target thread
 public:
   XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, EventLoop& loop,
-               void* funcTracePtr, SourceLocation location, Maybe<EnvironmentSet&> environmentSet);
+               void* funcTracePtr, SourceLocation location, Maybe<EnvironmentSet&> environmentSet,
+               bool debugCheck);
 
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
@@ -2013,9 +2020,9 @@ class XThreadEventImpl final: public XThreadEvent {
   // Implementation for a function that does not return a Promise.
 public:
   XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location,
-      Maybe<EnvironmentSet&> environmentSet)
+      Maybe<EnvironmentSet&> environmentSet, bool debugCheck = true)
       : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location,
-            environmentSet),
+            environmentSet, debugCheck),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
   void destroy() override { dtor(*this); }
@@ -2043,9 +2050,9 @@ class XThreadEventImpl<Func, Promise<T>> final: public XThreadEvent {
   // Implementation for a function that DOES return a Promise.
 public:
   XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location,
-      Maybe<EnvironmentSet&> environmentSet)
+      Maybe<EnvironmentSet&> environmentSet, bool debugCheck = true)
       : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location,
-            environmentSet),
+            environmentSet, debugCheck),
         func(kj::fwd<Func>(func)) {}
   ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
   void destroy() override { dtor(*this); }
@@ -2079,7 +2086,7 @@ _::UnwrapPromise<PromiseForResult<Func, void>> Executor::executeSync(
   // so any on-stack EnvironmentSet::Scope will still be on-stack. Since `func` executes on the
   // target Executor's EventLoop (`getLoop()`) and we decree that KJ async environments do not cross
   // threads, we don't need to propagate any active EnvironmentSet to the target Executor, either.
-  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this, getLoop(), location, nullptr);
+  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this, getLoop(), location, nullptr, false);
   send(event, true);
   return convertToReturn(kj::mv(event.result));
 }

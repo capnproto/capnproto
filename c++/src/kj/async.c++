@@ -318,8 +318,8 @@ public:
 
 protected:
   Maybe<Own<Event>> fire() override {
-    // Get the result.
-    // TODO(now): Should this have an environment scope?
+    // Get the result. There's no need to make an environment scope here, because _::Void is not a
+    // user type, so we can't be about to invoke user code.
     _::ExceptionOr<_::Void> result;
     node->get(result);
 
@@ -962,8 +962,9 @@ namespace _ {  // (private)
 
 XThreadEvent::XThreadEvent(
     ExceptionOrValue& result, const Executor& targetExecutor, EventLoop& loop,
-    void* funcTracePtr, SourceLocation location, Maybe<EnvironmentSet&> environmentSet)
-    : PromiseNode(environmentSet),
+    void* funcTracePtr, SourceLocation location, Maybe<EnvironmentSet&> environmentSet,
+    bool debugCheck)
+    : PromiseNode(environmentSet, debugCheck),
       Event(loop, location), result(result), funcTracePtr(funcTracePtr),
       targetExecutor(targetExecutor.addRef()) {}
 
@@ -1236,6 +1237,7 @@ void XThreadEvent::onReady(Event* event) noexcept {
 }
 
 XThreadPaf::XThreadPaf()
+    // TODO(now): Can't call tryGetCurrent() here...
     : PromiseNode(EnvironmentSet::tryGetCurrent()),
       state(WAITING), executor(getCurrentThreadExecutor()) {
 }
@@ -1652,6 +1654,7 @@ void FiberStack::initialize(SynchronousFunc& func) {
 }
 
 FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result, SourceLocation location)
+    // TODO(now): Can't call tryGetCurrent() here...
     : PromiseNode(EnvironmentSet::tryGetCurrent()),  // TODO(perf): Initialize from Event's `loop`.
       Event(location),
       state(WAITING),
@@ -2400,6 +2403,44 @@ kj::String getAsyncTrace() {
 
 namespace _ {  // private
 
+PromiseArenaMember::PromiseArenaMember(Maybe<EnvironmentSet&> environmentSetParam, bool debugCheck)
+    : environmentSet(environmentSetParam.map([](EnvironmentSet& set) { return set.clone(); })) {
+#ifdef KJ_DEBUG
+  // In debug mode, we may check that the environment set that we were given is the same as the
+  // current event loop's current environment set. This will alert the code author to mistakes such
+  // as:
+  //
+  //   Promise<void> promise1(READY_NOW);
+  //   Promise<void> promise2 = nullptr;
+  //   runInEnvironment([&]() {
+  //     promise1.then([]() {});  // ERROR: should have called `.adoptEnvironment()`
+  //     promise2 = READY_NOW;
+  //   });
+  //   promise2.then([]() {});  // ERROR: our lambda should have `return promise2` instead, or add
+  //                                      it to a TaskSet, or at least call `.adoptEnvironment()`.
+  //
+  // Unfortunately, we alert the code author to these mistakes by crashing, because `allocPromise()`
+  // is noexcept. Oh well.
+  if (debugCheck) {
+    requireEnvironmentSetIsSameAs(EnvironmentSet::tryGetCurrent());
+  }
+#endif  // KJ_DEBUG
+}
+
+#ifdef KJ_DEBUG
+void PromiseArenaMember::requireEnvironmentSetIsSameAs(Maybe<EnvironmentSet&> other) {
+  // Helper function to make sure we don't join two different environments, e.g. by failing to call
+  // `.adoptEnvironment()` when exporting/importing Promises across `runInEnvironment()` scopes.
+  auto message = "Attempt to join two different environments."_kj;
+  KJ_IF_MAYBE(thisEnv, environmentSet) {
+    auto& otherEnv = KJ_REQUIRE_NONNULL(other, message);
+    KJ_REQUIRE(*thisEnv == otherEnv, message);
+  } else {
+    KJ_REQUIRE(other == nullptr, message);
+  }
+}
+#endif  // KJ_DEBUG
+
 kj::String PromiseBase::trace() {
   void* space[32];
   TraceBuilder builder(space);
@@ -2724,8 +2765,6 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
 
   KJ_IF_MAYBE(exception, intermediate.exception) {
     // There is an exception.  If there is also a value, delete it.
-    // TODO(now): Write test for deleting value and creating the broken promise node under
-    //   environment.
     auto environmentSet = getEnvironmentSet();
     EnvironmentSet::Scope scope(environmentSet);
     kj::runCatchingExceptions([&]() { intermediate.value = nullptr; });
@@ -2784,28 +2823,12 @@ void ChainPromiseNode::traceEvent(TraceBuilder& builder) {
 
 // -------------------------------------------------------------------
 
-#ifdef KJ_DEBUG
-namespace {
-void debugRequireEqual(Maybe<EnvironmentSet&> left, Maybe<EnvironmentSet&> right) {
-  // We must not join two different environments.
-  KJ_IF_MAYBE(leftEnv, left) {
-    auto& rightEnv = KJ_REQUIRE_NONNULL(right,
-        "Attempt to join non-null left environment with null right environment.");
-    KJ_REQUIRE(*leftEnv == rightEnv, "Attempt to join two different environments.");
-  } else {
-    KJ_REQUIRE(right == nullptr,
-        "Attempt to join null left environment with non-null right environment.");
-  }
-}
-}  // namespace
-#endif  // KJ_DEBUG
-
 ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
     OwnPromiseNode left, OwnPromiseNode right, SourceLocation location)
     : PromiseNode(left->getEnvironmentSet()),
       left(*this, kj::mv(left), location), right(*this, kj::mv(right), location) {
 #ifdef KJ_DEBUG
-  debugRequireEqual(this->left.dependency->environmentSet, this->right.dependency->environmentSet);
+  requireEnvironmentSetIsSameAs(this->right.dependency->getEnvironmentSet());
 #endif
 }
 
@@ -2886,7 +2909,7 @@ ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
 #ifdef KJ_DEBUG
   // We must not join multiple different environments.
   for (auto i = 1; i < promises.size(); ++i) {
-    debugRequireEqual(environmentSet, promises[i]->environmentSet);
+    requireEnvironmentSetIsSameAs(promises[i]->getEnvironmentSet());
   }
 #endif  // KJ_DEBUG
 
@@ -3206,8 +3229,9 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != nullptr` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
-    // TODO(now): Now this is redundant with PromiseDisposer::destroy()...
-    EnvironmentSet::Scope scope(getEnvironmentSet());
+    //
+    // We do not need to create an environment scope here, because the caller of
+    // PromiseArenaMember::destroy() already did.
     coroutine.destroy();
   } while (!disposalResults.destructorRan);
 

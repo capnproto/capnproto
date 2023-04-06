@@ -1659,6 +1659,8 @@ KJ_TEST("constPromise") {
   KJ_EXPECT(i == 123);
 }
 
+#ifndef KJ_DEBUG
+
 kj::Promise<uint> asyncAccumulate(uint z, uint ttl) {
   if (ttl == 0) return z;
   z += ttl;
@@ -1673,6 +1675,19 @@ KJ_TEST("benchmark: Pre-environment evalLater()") {
 
   asyncAccumulate(0, 10'000'000).wait(waitScope);
 }
+
+KJ_TEST("benchmark: Environment-ful evalLater()") {
+  EventLoop eventLoop;
+  WaitScope waitScope(eventLoop);
+
+  runInEnvironment(uint(1), []() {
+    return asyncAccumulate(0, 10'000'000);
+  }).wait(waitScope);
+}
+
+#endif  // !KJ_DEBUG
+
+// TODO(now): Compare against asyncAccumulate() before PR.
 
 }  // namespace
 }  // namespace kj
