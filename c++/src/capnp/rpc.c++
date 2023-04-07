@@ -3277,25 +3277,40 @@ private:
           return;
         }
 
-        for (;;) {
-          KJ_IF_MAYBE(r, target->getResolved()) {
-            target = r->addRef();
-          } else {
-            break;
-          }
-        }
-
-        KJ_REQUIRE(target->getBrand() == this,
-                   "'Disembargo' of type 'senderLoopback' sent to an object that does not point "
-                   "back to the sender.") {
-          return;
-        }
-
         EmbargoId embargoId = context.getSenderLoopback();
 
-        // We need to insert an evalLast() here to make sure that any pending calls towards this
-        // cap have had time to find their way through the event loop.
-        tasks.add(canceler.wrap(kj::evalLast([this,embargoId,target=kj::mv(target)]() mutable {
+        // It's possible that `target` is a promise capability that hasn't resolved yet, in which
+        // case we must wait for the resolution. In particular this can happen in the case where
+        // we have Alice -> Bob -> Carol, Alice makes a call that proxies from Bob to Carol, and
+        // Carol returns a capability from this call that points all the way back though Bob to
+        // Alice. When this return capability passes through Bob, Bob will resolve the previous
+        // promise-pipeline capability to it. However, Bob has to send a Disembargo to Carol before
+        // completing this resolution. In the meantime, though, Bob returns the final repsonse to
+        // Alice. Alice then *also* sends a Disembargo to Bob. The Alice -> Bob Disembargo might
+        // arrive at Bob before the Bob -> Carol Disembargo has resolved, in which case the
+        // Disembargo is delivered to a promise capability.
+        auto promise = target->whenResolved()
+            .then([]() {
+          // We also need to insert an evalLast() here to make sure that any pending calls towards
+          // this cap have had time to find their way through the event loop.
+          return kj::evalLast([]() {});
+        });
+
+        tasks.add(promise.then([this, embargoId, target = kj::mv(target)]() mutable {
+          for (;;) {
+            KJ_IF_MAYBE(r, target->getResolved()) {
+              target = r->addRef();
+            } else {
+              break;
+            }
+          }
+
+          KJ_REQUIRE(target->getBrand() == this,
+                    "'Disembargo' of type 'senderLoopback' sent to an object that does not point "
+                    "back to the sender.") {
+            return;
+          }
+
           if (!connection.is<Connected>()) {
             return;
           }
@@ -3315,8 +3330,8 @@ private:
             // any promise with a direct node in order to solve the Tribble 4-way race condition.
             // See the documentation of Disembargo in rpc.capnp for more.
             KJ_REQUIRE(redirect == nullptr,
-                       "'Disembargo' of type 'senderLoopback' sent to an object that does not "
-                       "appear to have been the subject of a previous 'Resolve' message.") {
+                      "'Disembargo' of type 'senderLoopback' sent to an object that does not "
+                      "appear to have been the subject of a previous 'Resolve' message.") {
               return;
             }
           }
@@ -3324,7 +3339,7 @@ private:
           builder.getContext().setReceiverLoopback(embargoId);
 
           message->send();
-        })));
+        }));
 
         break;
       }
