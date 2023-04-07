@@ -415,6 +415,11 @@ public:
     // all future calls on this connection.
     networkException.addTraceHere();
 
+    // Set our connection state to Disconnected now so that no one tries to write any messages to
+    // it in their destructors.
+    auto dyingConnection = kj::mv(connection.get<Connected>());
+    connection.init<Disconnected>(kj::cp(networkException));
+
     KJ_IF_MAYBE(newException, kj::runCatchingExceptions([&]() {
       // Carefully pull all the objects out of the tables prior to releasing them because their
       // destructors could come back and mess with the tables.
@@ -481,15 +486,15 @@ public:
 
     // Send an abort message, but ignore failure.
     kj::runCatchingExceptions([&]() {
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = dyingConnection->newOutgoingMessage(
           messageSizeHint<void>() + exceptionSizeHint(exception));
       fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
       message->send();
     });
 
     // Indicate disconnect.
-    auto shutdownPromise = connection.get<Connected>()->shutdown()
-        .attach(kj::mv(connection.get<Connected>()))
+    auto shutdownPromise = dyingConnection->shutdown()
+        .attach(kj::mv(dyingConnection))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
               [origException = kj::mv(exception)](kj::Exception&& e) -> kj::Promise<void> {
           // Don't report disconnects as an error.
@@ -505,7 +510,6 @@ public:
           return kj::mv(e);
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
-    connection.init<Disconnected>(kj::mv(networkException));
     canceler.cancel(networkException);
   }
 
