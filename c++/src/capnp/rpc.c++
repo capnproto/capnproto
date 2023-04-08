@@ -390,6 +390,12 @@ public:
   }
 
   void disconnect(kj::Exception&& exception) {
+    // Shut down the connection with the given error.
+    //
+    // This will cancel `tasks`, so cannot be called from inside a task in `tasks`. Instead, use
+    // `tasks.add(exception)` to schedule a shutdown, since any error thrown by a task will be
+    // passed to `disconnect()` later.
+
     // After disconnect(), the RpcSystem could be destroyed, making `traceEncoder` a dangling
     // reference, so null it out before we return from here. We don't need it anymore once
     // disconnected anyway.
@@ -427,6 +433,7 @@ public:
       kj::Vector<kj::Own<ClientHook>> clientsToRelease;
       kj::Vector<decltype(Answer::task)> tasksToRelease;
       kj::Vector<kj::Promise<void>> resolveOpsToRelease;
+      KJ_DEFER(tasks.clear());
 
       // All current questions complete with exceptions.
       questions.forEach([&](QuestionId id, Question& question) {
@@ -1666,7 +1673,7 @@ private:
             builder.setReleaseResultCaps(question.isAwaitingReturn);
             message->send();
           })) {
-            connectionState->disconnect(kj::mv(*e));
+            connectionState->tasks.add(kj::mv(*e));
           }
         }
 
@@ -2645,7 +2652,7 @@ private:
         handleMessage(kj::mv(*m));
         return true;
       } else {
-        disconnect(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
+        tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
         return false;
       }
     }).then([this](bool keepGoing) {
