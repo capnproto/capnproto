@@ -400,6 +400,11 @@ public:
   // Note: This method has an overload that takes an lvalue reference for convenience. This
   //   overload increments the refcount on the underlying PipelineHook -- it does not keep the
   //   reference.
+  //
+  // Note: Capabilities returned by the replacement pipeline MUST either be exactly the same
+  //   capabilities as in the final response, or eventually resolve to exactly the same
+  //   capabilities, where "exactly the same" means the underlying `ClientHook` object is exactly
+  //   the same object by identity. Resolving to some "equivalent" capability is not good enough.
 
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, Results>&& tailRequest);
@@ -752,12 +757,22 @@ public:
   // of the capability.  The caller may permanently replace this client with the resolved one if
   // desired.  Returns null if the client isn't a promise or hasn't resolved yet -- use
   // `whenMoreResolved()` to distinguish between them.
+  //
+  // Once a particular ClientHook's `getResolved()` returns non-null, it must permanently return
+  // exactly the same resolution. This is why `getResolved()` returns a reference -- it is assumed
+  // this object must have a strong reference to the resolution which it intends to keep
+  // permanently, therefore the returned reference will live at least as long as this `ClientHook`.
+  // This "only one resolution" policy is necessary for the RPC system to implement embargoes
+  // properly.
 
   virtual kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() = 0;
   // If this client is a settled reference (not a promise), return nullptr.  Otherwise, return a
   // promise that eventually resolves to a new client that is closer to being the final, settled
   // client (i.e. the value eventually returned by `getResolved()`).  Calling this repeatedly
   // should eventually produce a settled client.
+  //
+  // Once the promise resolves, `getResolved()` must return exactly the same `ClientHook` as the
+  // one this Promise resolved to.
 
   kj::Promise<void> whenResolved();
   // Repeatedly calls whenMoreResolved() until it returns nullptr.

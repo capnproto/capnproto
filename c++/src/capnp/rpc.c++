@@ -2216,14 +2216,16 @@ private:
       auto exports = connectionState.writeDescriptors(capTable, payload, fds);
       message->setFds(fds.releaseAsArray());
 
-      // Capabilities that we are returning are subject to embargos. See `Disembargo` in rpc.capnp.
-      // As explained there, in order to deal with the Tribble 4-way race condition, we need to
-      // make sure that if we're returning any remote promises, that we ignore any subsequent
-      // resolution of those promises for the purpose of pipelined requests on this answer. Luckily,
-      // we can modify the cap table in-place.
+      // Populate `resolutionsAtReturnTime`.
       for (auto& slot: capTable) {
         KJ_IF_MAYBE(cap, slot) {
-          slot = connectionState.getInnermostClient(**cap);
+          auto inner = connectionState.getInnermostClient(**cap);
+          if (inner.get() != cap->get()) {
+            resolutionsAtReturnTime.upsert(cap->get(), kj::mv(inner),
+                [&](kj::Own<ClientHook>& existing, kj::Own<ClientHook>&& replacement) {
+              KJ_ASSERT(existing.get() == replacement.get());
+            });
+          }
         }
       }
 
@@ -2235,11 +2237,40 @@ private:
       }
     }
 
+    struct Resolution {
+      kj::Own<ClientHook> returnedCap;
+      // The capabiilty that appeared in the response message in this slot.
+
+      kj::Own<ClientHook> unwrapped;
+      // Exactly what `getInnermostClient(returnedCap)` produced at the time that the return
+      // message was encoded.
+    };
+
+    Resolution getResolutionAtReturnTime(kj::ArrayPtr<const PipelineOp> ops) {
+      auto returnedCap = getResultsBuilder().asReader().getPipelinedCap(ops);
+      kj::Own<ClientHook> unwrapped;
+      KJ_IF_MAYBE(u, resolutionsAtReturnTime.find(returnedCap.get())) {
+        unwrapped = u->get()->addRef();
+      } else {
+        unwrapped = returnedCap->addRef();
+      }
+      return { kj::mv(returnedCap), kj::mv(unwrapped) };
+    }
+
   private:
     RpcConnectionState& connectionState;
     kj::Own<OutgoingRpcMessage> message;
     BuilderCapabilityTable capTable;
     rpc::Payload::Builder payload;
+
+    kj::HashMap<ClientHook*, kj::Own<ClientHook>> resolutionsAtReturnTime;
+    // For each capability in `capTable` as of the time when the call returned, this map stores
+    // the result of calling `getInnermostClient()` on that capability. This is needed in order
+    // to solve the Tribble 4-way race condition described in the documentation for `Disembargo`
+    // in `rpc.capnp`. `PostReturnRpcPipeline`, below, uses this.
+    //
+    // As an optimization, if the innermost client is exactly the same object then nothing is
+    // stored in the map.
   };
 
   class LocallyRedirectedRpcResponse final
@@ -2263,6 +2294,76 @@ private:
 
   private:
     MallocMessageBuilder message;
+  };
+
+  class PostReturnRpcPipeline final: public PipelineHook, public kj::Refcounted {
+    // Once an incoming call has returned, we may need to replace the `PipelineHook` with one that
+    // correctly handles the Tribble 4-way race condition. Namely, we must ensure that if the
+    // response contained any capabilities pointing back out to the network, then any further
+    // pipelined calls received targetting those capabilities (as well as any Disembargo messages)
+    // will resolve to the same network capability forever, *even if* that network capability is
+    // itself a promise which later resolves to somewhere else.
+  public:
+    PostReturnRpcPipeline(kj::Own<PipelineHook> inner,
+                          RpcServerResponseImpl& response,
+                          kj::Own<RpcCallContext> context)
+        : inner(kj::mv(inner)), response(response), context(kj::mv(context)) {}
+
+    kj::Own<PipelineHook> addRef() override {
+      return kj::addRef(*this);
+    }
+
+    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+      auto resolved = response.getResolutionAtReturnTime(ops);
+      auto original = inner->getPipelinedCap(ops);
+      return getResolutionAtReturnTime(kj::mv(original), kj::mv(resolved));
+    }
+
+    kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
+      auto resolved = response.getResolutionAtReturnTime(ops);
+      auto original = inner->getPipelinedCap(kj::mv(ops));
+      return getResolutionAtReturnTime(kj::mv(original), kj::mv(resolved));
+    }
+
+  private:
+    kj::Own<PipelineHook> inner;
+    RpcServerResponseImpl& response;
+    kj::Own<RpcCallContext> context;  // owns `response`
+
+    kj::Own<ClientHook> getResolutionAtReturnTime(
+        kj::Own<ClientHook> original, RpcServerResponseImpl::Resolution resolution) {
+      // Wait for `original` to resolve to `resolution.returnedCap`, then return
+      // `resolution.unwrapped`.
+
+      ClientHook* ptr = original.get();
+      for (;;) {
+        if (ptr == resolution.returnedCap.get()) {
+          return kj::mv(resolution.unwrapped);
+        } else KJ_IF_MAYBE(r, ptr->getResolved()) {
+          ptr = r;
+        } else {
+          break;
+        }
+      }
+
+      KJ_IF_MAYBE(p, ptr->whenMoreResolved()) {
+        return newLocalPromiseClient(p->then(
+            [this, original = kj::mv(original), resolution = kj::mv(resolution)]
+            (kj::Own<ClientHook> r) mutable {
+          return getResolutionAtReturnTime(kj::mv(r), kj::mv(resolution));
+        }));
+      } else if (ptr->isError() || ptr->isNull()) {
+        // This is already a broken capability, the error probably explains what went wrong. In
+        // any case, message ordering is irrelevant here since all calls will throw anyway.
+        return ptr->addRef();
+      } else {
+        return newBrokenCap(
+            "An RPC call's capnp::PipelineHook object resolved a pipelined capability to a "
+            "different final object than what was returned in the actual response. This could "
+            "be a bug in Cap'n Proto, or could be due to a use of context.setPipeline() that "
+            "was inconsistent with the later results.");
+      }
+    }
   };
 
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
@@ -2373,6 +2474,16 @@ private:
           responseSent = false;
           sendErrorReturn(kj::mv(*exception));
           return;
+        }
+
+        if (responseImpl.hasCapabilities()) {
+          auto& answer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
+          // Swap out the `pipeline` in the answer table for one that will return capabilities
+          // consistent with whatever the result caps resolved to as of the time the return was sent.
+          answer.pipeline = answer.pipeline.map([&](kj::Own<PipelineHook>& inner) {
+            return kj::refcounted<PostReturnRpcPipeline>(
+                kj::mv(inner), responseImpl, kj::addRef(*this));
+          });
         }
 
         KJ_IF_MAYBE(e, exports) {
@@ -2840,7 +2951,14 @@ private:
       kj::Vector<int> fds;
       resultExports = writeDescriptors(capTableArray, payload, fds);
       response->setFds(fds.releaseAsArray());
-      capHook = KJ_ASSERT_NONNULL(capTableArray[0])->addRef();
+
+      // If we're returning a capability that turns out to be an PromiseClient pointing back on
+      // this same network, it's important we remove the `PromiseClient` layer and use the inner
+      // capability instead. This achieves the same effect that `PostReturnRpcPipeline` does for
+      // regular call returns.
+      //
+      // This single line of code represents two hours of my life.
+      capHook = getInnermostClient(*KJ_ASSERT_NONNULL(capTableArray[0]));
     })) {
       fromException(*exception, ret.initException());
       capHook = newBrokenCap(kj::mv(*exception));
