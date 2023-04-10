@@ -148,7 +148,7 @@ private:
 namespace {
 
 struct SchemaFileHash {
-  inline bool operator()(const SchemaFile* f) const {
+  inline size_t operator()(const SchemaFile* f) const {
     return f->hashCode();
   }
 };
