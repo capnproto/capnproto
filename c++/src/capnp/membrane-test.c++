@@ -51,14 +51,38 @@ private:
   kj::StringPtr text;
 };
 
-class TestMembraneImpl final: public test::TestMembrane::Server {
+class TestMembraneImpl final: public test::TestMembrane::Server, public kj::Refcounted {
+public:
+  TestMembraneImpl(kj::Maybe<kj::Promise<void>> chainablePromise = nullptr) : chainablePromise(kj::mv(chainablePromise)) {}
+  kj::Own<TestMembraneImpl> addRef() {
+    return kj::addRef(*this);
+  }
+
+  kj::uint getMakeThingCount() const {
+    return makeThingCount;
+  }
+
+  kj::uint getCallPassThroughCount() const {
+    return callPassThroughCount;
+  }
+
+  kj::uint getWaitForeverCount() const {
+    return waitForeverCount;
+  }
+
+  kj::uint getCallChainedCount() const {
+    return callChainedCount;
+  }
+
 protected:
   kj::Promise<void> makeThing(MakeThingContext context) override {
+    ++makeThingCount;
     context.getResults().setThing(kj::heap<ThingImpl>("inside"));
     return kj::READY_NOW;
   }
 
   kj::Promise<void> callPassThrough(CallPassThroughContext context) override {
+    ++callPassThroughCount;
     auto params = context.getParams();
     auto req = params.getThing().passThroughRequest();
     if (params.getTailCall()) {
@@ -90,15 +114,34 @@ protected:
   }
 
   kj::Promise<void> waitForever(WaitForeverContext context) override {
+    ++waitForeverCount;
     return kj::NEVER_DONE;
   }
+
+  kj::Promise<void> callChained(CallChainedContext context) override {
+    KJ_IF_MAYBE(p, chainablePromise) {
+      return p->then([this]() {
+        ++callChainedCount;
+      });
+    } else {
+      KJ_FAIL_REQUIRE("Expected promise to chain.");
+    }
+  }
+
+
+private:
+  kj::uint makeThingCount{0};
+  kj::uint callPassThroughCount{0};
+  kj::uint waitForeverCount{0};
+  kj::uint callChainedCount{0};
+  kj::Maybe<kj::Promise<void>> chainablePromise;
 };
 
 class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
 public:
   MembranePolicyImpl() = default;
-  MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise)
-      : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })) {}
+  MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise, kj::Maybe<kj::Canceler&> canceler = nullptr)
+      : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })), canceler(kj::mv(canceler)) {}
 
   kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId,
                                             Capability::Client target) override {
@@ -130,8 +173,40 @@ public:
 
   bool shouldResolveBeforeRedirecting() override { return true; }
 
+  kj::Maybe<kj::Canceler&> getCanceler() override {
+    if (revoked) {
+      throw KJ_EXCEPTION(DISCONNECTED, "foobar");
+    }
+    return canceler;
+  }
+
+  void revoke() {
+    if (revoked) {
+      return;
+    }
+    revoked = true;
+    KJ_IF_MAYBE(c, canceler) {
+      c->cancel(KJ_EXCEPTION(DISCONNECTED, "foobar"));
+    }
+  }
+
+  void reset() {
+    if (!revoked) {
+      return;
+    }
+    revoked = false;
+  }
+
+  void setRevoked(kj::Maybe<kj::Promise<void>> promise) {
+    revokePromise = promise.map([](kj::Promise<void>& promise) -> kj::ForkedPromise<void> {
+      return promise.fork();
+    });
+  }
+
 private:
   kj::Maybe<kj::ForkedPromise<void>> revokePromise;
+  bool revoked = false;
+  kj::Maybe<kj::Canceler&> canceler;
 };
 
 void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membraned,
@@ -309,16 +384,20 @@ struct TestRpcEnv {
   kj::WaitScope waitScope;
   kj::TwoWayPipe pipe;
   TwoPartyClient client;
+  kj::Own<MembranePolicyImpl> policy;
+  kj::Own<TestMembraneImpl> capability;
   TwoPartyClient server;
   test::TestMembrane::Client membraned;
 
-  TestRpcEnv(kj::Maybe<kj::Promise<void>> revokePromise = nullptr)
+  TestRpcEnv(kj::Maybe<kj::Promise<void>> revokePromise = nullptr, kj::Maybe<kj::Canceler &> canceler = nullptr,
+             kj::Maybe<kj::Promise<void>> chainablePromise = nullptr)
       : waitScope(loop),
         pipe(kj::newTwoWayPipe()),
         client(*pipe.ends[0]),
+        policy(kj::refcounted<MembranePolicyImpl>(kj::mv(revokePromise), kj::mv(canceler))),
+        capability(kj::refcounted<TestMembraneImpl>(kj::mv(chainablePromise))),
         server(*pipe.ends[1],
-               membrane(kj::heap<TestMembraneImpl>(),
-                        kj::refcounted<MembranePolicyImpl>(kj::mv(revokePromise))),
+               membrane(capability->addRef(), policy->addRef()),
                rpc::twoparty::Side::SERVER),
         membraned(client.bootstrap().castAs<test::TestMembrane>()) {}
 
@@ -378,16 +457,27 @@ KJ_TEST("call remote promise pointing into membrane that eventually resolves to 
   }, "outside", "outside", "outside", "outbound");
 }
 
-KJ_TEST("revoke membrane") {
+KJ_TEST("asynchronously revoke membrane") {
   auto paf = kj::newPromiseAndFulfiller<void>();
+  auto paf2 = kj::newPromiseAndFulfiller<void>();
 
-  TestRpcEnv env(kj::mv(paf.promise));
+  TestRpcEnv env(kj::mv(paf.promise), nullptr, kj::mv(paf2.promise));
 
   auto thing = env.membraned.makeThingRequest().send().wait(env.waitScope).getThing();
 
   auto callPromise = env.membraned.waitForeverRequest().send();
 
   KJ_EXPECT(!callPromise.poll(env.waitScope));
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 1);
+
+  auto callPromise2 = env.membraned.callChainedRequest().send();
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
+
+  KJ_EXPECT(!callPromise2.poll(env.waitScope));
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
+
+  paf2.fulfiller->fulfill();
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
 
   paf.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "foobar"));
 
@@ -399,12 +489,73 @@ KJ_TEST("revoke membrane") {
 
   KJ_ASSERT(callPromise.poll(env.waitScope));
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", callPromise.ignoreResult().wait(env.waitScope));
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 1);
+
+  KJ_ASSERT(callPromise2.poll(env.waitScope));
+  callPromise2.wait(env.waitScope); // does not throw; async limitation
+  KJ_ASSERT(env.capability->getCallChainedCount() == 1); // async limitation
 
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
       env.membraned.makeThingRequest().send().ignoreResult().wait(env.waitScope));
 
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
       thing.passThroughRequest().send().ignoreResult().wait(env.waitScope));
+}
+
+KJ_TEST("synchronously revoke membrane") {
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  auto paf2 = kj::newPromiseAndFulfiller<void>();
+  kj::Canceler canceler;
+
+  TestRpcEnv env(kj::mv(paf.promise), canceler, kj::mv(paf2.promise));
+
+  auto thing = env.membraned.makeThingRequest().send().wait(env.waitScope).getThing();
+  KJ_ASSERT(env.capability->getMakeThingCount() == 1);
+
+  auto callPromise = env.membraned.waitForeverRequest().send();
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 0);
+
+  KJ_EXPECT(!callPromise.poll(env.waitScope));
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 1);
+
+  auto callPromise2 = env.membraned.callChainedRequest().send();
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
+
+  KJ_EXPECT(!callPromise2.poll(env.waitScope));
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
+
+  paf2.fulfiller->fulfill();
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
+
+//  canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "foobar"));
+  env.policy->revoke();
+
+  // TRICKY: We need to use .ignoreResult().wait() below because when compiling with
+  //   -fno-exceptions, void waits throw recoverable exceptions while non-void waits necessarily
+  //   throw fatal exceptions... but testing for fatal exceptions when exceptions are disabled
+  //   involves fork()ing the process to run the code so if it has side effects on file descriptors
+  //   then we'll get in a bad state...
+
+  KJ_ASSERT(callPromise.poll(env.waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", callPromise.ignoreResult().wait(env.waitScope));
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 1); // count unchanged after revocation
+
+  callPromise = env.membraned.waitForeverRequest().send();
+  KJ_ASSERT(callPromise.poll(env.waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", callPromise.ignoreResult().wait(env.waitScope));
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 1); // count unchanged after revocation
+
+  KJ_ASSERT(callPromise2.poll(env.waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", callPromise2.ignoreResult().wait(env.waitScope));
+  KJ_ASSERT(env.capability->getCallChainedCount() == 0);
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
+      env.membraned.makeThingRequest().send().ignoreResult().wait(env.waitScope));
+  KJ_ASSERT(env.capability->getWaitForeverCount() == 1); // count unchanged after revocation
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
+      thing.passThroughRequest().send().ignoreResult().wait(env.waitScope));
+  KJ_ASSERT(env.capability->getCallPassThroughCount() == 0); // count unchanged after revocation
 }
 
 }  // namespace

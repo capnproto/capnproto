@@ -193,6 +193,12 @@ public:
   }
 
   RemotePromise<AnyPointer> send() override {
+    kj::Maybe<kj::Canceler&> canceler;
+    try {
+      policy->getCanceler();
+    } catch (const kj::Exception& e) {
+      return newBrokenRequest(kj::cp(e), nullptr).send();
+    }
     auto promise = inner->send();
 
     auto newPipeline = AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
@@ -215,17 +221,29 @@ public:
         KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
       }));
     }
+    KJ_IF_MAYBE(c, canceler) {
+      newPromise = c->wrap(kj::mv(newPromise));
+    }
 
     return RemotePromise<AnyPointer>(kj::mv(newPromise), kj::mv(newPipeline));
   }
 
   kj::Promise<void> sendStreaming() override {
+    kj::Maybe<kj::Canceler&> canceler;
+    try {
+      policy->getCanceler();
+    } catch (const kj::Exception& e) {
+      return kj::cp(e);
+    }
     auto promise = inner->sendStreaming();
 
     KJ_IF_MAYBE(r, policy->onRevoked()) {
       promise = promise.exclusiveJoin(r->then([]() {
         KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
       }));
+    }
+    KJ_IF_MAYBE(c, canceler) {
+      promise = c->wrap(kj::mv(promise));
     }
 
     return promise;
@@ -334,6 +352,18 @@ public:
     KJ_IF_MAYBE(r, policy->onRevoked()) {
       revocationTask = r->eagerlyEvaluate([this](kj::Exception&& exception) {
         this->inner = newBrokenCap(kj::mv(exception));
+      });
+    }
+    kj::Maybe<kj::Canceler&> canceler;
+    try {
+      canceler = policy->getCanceler();
+    } catch (const kj::Exception& e) {
+      this->inner = newBrokenCap(kj::cp(e));
+    }
+    KJ_IF_MAYBE(c, canceler) {
+      cancellationSubscription = c->onCanceled([this](const kj::Exception& e) {
+        this->inner = newBrokenCap(kj::cp(e));
+        cancellationSubscription = nullptr; // unsubscribe
       });
     }
   }
@@ -458,6 +488,12 @@ public:
 
       return ClientHook::from(kj::mv(*r))->call(interfaceId, methodId, kj::mv(context), hints);
     } else {
+      kj::Maybe<kj::Canceler&> canceler;
+      try {
+        canceler = policy->getCanceler();
+      } catch (const kj::Exception& e) {
+        return {kj::cp(e), newBrokenPipeline(kj::cp(e))};
+      }
       // !reverse because calls to the CallContext go in the opposite direction.
       auto result = inner->call(interfaceId, methodId,
           kj::refcounted<MembraneCallContextHook>(kj::mv(context), policy->addRef(), !reverse),
@@ -468,6 +504,9 @@ public:
         result.promise = kj::NEVER_DONE;
       } else KJ_IF_MAYBE(r, policy->onRevoked()) {
         result.promise = result.promise.exclusiveJoin(kj::mv(*r));
+      }
+      KJ_IF_MAYBE(c, canceler) {
+        result.promise = c->wrap(kj::mv(result.promise));
       }
 
       return {
@@ -498,10 +537,19 @@ public:
     }
 
     KJ_IF_MAYBE(promise, inner->whenMoreResolved()) {
+      kj::Maybe<kj::Canceler&> canceler;
+      try {
+        canceler = policy->getCanceler();
+      } catch (const kj::Exception& e) {
+        return {kj::cp(e)};
+      }
       KJ_IF_MAYBE(r, policy->onRevoked()) {
         *promise = promise->exclusiveJoin(r->then([]() -> kj::Own<ClientHook> {
           KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
         }));
+      }
+      KJ_IF_MAYBE(c, canceler) {
+        *promise = c->wrap(kj::mv(*promise));
       }
 
       return promise->then([this](kj::Own<ClientHook>&& newInner) {
@@ -542,6 +590,7 @@ private:
   bool reverse;
   kj::Maybe<kj::Own<ClientHook>> resolved;
   kj::Promise<void> revocationTask = nullptr;
+  kj::Maybe<kj::Subscription> cancellationSubscription;
 };
 
 namespace {

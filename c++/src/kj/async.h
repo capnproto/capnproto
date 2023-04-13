@@ -23,6 +23,7 @@
 
 #include "async-prelude.h"
 #include <kj/exception.h>
+#include <kj/observer.h>
 #include <kj/refcount.h>
 
 KJ_BEGIN_HEADER
@@ -899,6 +900,11 @@ public:
   // Indicates if any previously-wrapped promises are still executing. (If this returns true, then
   // cancel() would be a no-op.)
 
+  template <typename Func>
+  Subscription onCanceled(Func&& observer) {
+    return cancellationSubject.subscribe(fwd<Func>(observer));
+  }
+
 private:
   class AdapterBase {
   public:
@@ -938,6 +944,7 @@ private:
   };
 
   Maybe<AdapterBase&> list;
+  kj::Subject<kj::Exception> cancellationSubject;
 };
 
 template <>

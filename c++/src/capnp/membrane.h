@@ -49,6 +49,7 @@
 
 #include "capability.h"
 #include <kj/map.h>
+#include "kj/async.h"
 
 CAPNP_BEGIN_HEADER
 
@@ -192,6 +193,8 @@ public:
   // capability passed into the membrane and then back out.
   //
   // The default implementation simply returns `external`.
+
+  virtual kj::Maybe<kj::Canceler&> getCanceler() { return nullptr; }
 
 private:
   kj::HashMap<ClientHook*, ClientHook*> wrappers;

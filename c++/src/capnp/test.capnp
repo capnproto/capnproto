@@ -902,6 +902,8 @@ interface TestMembrane {
 
   waitForever @4 () $Cxx.allowCancellation;
 
+  callChained @5 ();
+
   interface Thing {
     passThrough @0 () -> Result;
     intercept @1 () -> Result;

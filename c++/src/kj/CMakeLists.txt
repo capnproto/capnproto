@@ -1,6 +1,8 @@
 
 # kj ===========================================================================
 
+find_package(Boost REQUIRED)
+
 set(kj_sources_lite
   array.c++
   list.c++
@@ -20,6 +22,7 @@ set(kj_sources_lite
   test-helpers.c++
   units.c++
   encoding.c++
+  observer.c++
 )
 set(kj_sources_heavy
   refcount.c++
@@ -66,6 +69,7 @@ set(kj_headers
   main.h
   win32-api-version.h
   windows-sanity.h
+  observer.h
 )
 set(kj-parse_headers
   parse/common.h
@@ -78,6 +82,8 @@ add_library(kj ${kj_sources})
 add_library(CapnProto::kj ALIAS kj)
 # TODO(cleanup): Use cxx_std_14 once it's safe to require cmake 3.8.
 target_compile_features(kj PUBLIC cxx_generic_lambdas)
+
+target_include_directories(kj PRIVATE ${Boost_INCLUDE_DIRS})
 
 if(UNIX AND NOT ANDROID)
   target_link_libraries(kj PUBLIC pthread)
