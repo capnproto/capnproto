@@ -527,8 +527,7 @@ bool StructSchema::isStreamResult() const {
   return raw->generic == &streamRaw || raw->generic->canCastTo == &streamRaw;
 }
 
-Type StructSchema::Field::getType() const {
-  auto proto = getProto();
+Type StructSchema::Field::resolveType() {
   uint location = _::RawBrandedSchema::makeDepLocation(_::RawBrandedSchema::DepKind::FIELD, index);
 
   switch (proto.which()) {
