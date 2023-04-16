@@ -541,7 +541,7 @@ Type StructSchema::Field::resolveType() {
 }
 
 uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
-  return parent.getSchemaOffset(proto.getSlot().getDefaultValue());
+  return parent.getSchemaOffset(getDefaultValueProto());
 }
 
 kj::StringPtr KJ_STRINGIFY(const StructSchema::Field& field) {

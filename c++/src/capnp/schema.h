@@ -454,6 +454,12 @@ public:
   //
   // If the above does not make sense, you probably don't need this method.
 
+  schema::Value::Reader getDefaultValueProto() const {
+    KJ_IREQUIRE((getProto().which() == schema::Field::SLOT),
+              "getDefaultValueProto() cannot be called on groups");
+    return defaultValue;
+  }
+
   inline bool operator==(const Field& other) const;
   inline bool operator!=(const Field& other) const { return !(*this == other); }
   inline uint hashCode() const;
@@ -463,12 +469,16 @@ private:
   uint index;
   schema::Field::Reader proto;
   Type type;
+  schema::Value::Reader defaultValue;
 
   Type resolveType();
 
   inline Field(StructSchema parent, uint index, schema::Field::Reader proto)
       : parent(parent), index(index), proto(proto) {
     type = resolveType();
+    if (proto.which() == schema::Field::SLOT) {
+      defaultValue = proto.getSlot().getDefaultValue();
+    }
   }
 
   friend class StructSchema;
