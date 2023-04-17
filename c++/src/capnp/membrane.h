@@ -48,6 +48,7 @@
 // Mark Miller on membranes: http://www.eros-os.org/pipermail/e-lang/2003-January/008434.html
 
 #include "capability.h"
+#include <kj/map.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -191,6 +192,15 @@ public:
   // capability passed into the membrane and then back out.
   //
   // The default implementation simply returns `external`.
+
+private:
+  kj::HashMap<ClientHook*, ClientHook*> wrappers;
+  kj::HashMap<ClientHook*, ClientHook*> reverseWrappers;
+  // Tracks capabilities that already have wrappers instantiated. The maps map from pointer to
+  // inner capability to pointer to wrapper. When a wrapper is destroyed it removes itself from
+  // the map.
+
+  friend class MembraneHook;
 };
 
 Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy);
