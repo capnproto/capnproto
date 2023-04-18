@@ -2046,11 +2046,15 @@ private:
 
     kj::StringTree defineText = kj::strTree(
         "// ", fullName, "\n",
+        "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
         templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
-        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
+        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n",
+        "#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
         "#if !CAPNP_LITE\n",
+        "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
-        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n");
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
+        "#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n");
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
@@ -2392,8 +2396,10 @@ private:
     kj::StringTree defineText = kj::strTree(
         "// ", fullName, "\n",
         "#if !CAPNP_LITE\n",
+        "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
         templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
-        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n");
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n"
+        "#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n");
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
@@ -2603,9 +2609,7 @@ private:
           kj::strTree("static constexpr ", typeName_, ' ', upperCase, " = ",
               literalValue(schema.getType(), constProto.getValue()), ";\n"),
           scope.size() == 0 ? kj::strTree() : kj::strTree(
-              // TODO(msvc): MSVC doesn't like definitions of constexprs, but other compilers and
-              //   the standard require them.
-              "#if !defined(_MSC_VER) || defined(__clang__)\n"
+              "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n"
               "constexpr ", typeName_, ' ', scope, upperCase, ";\n"
               "#endif\n")
         };
