@@ -285,7 +285,8 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
     IMAGEHLP_LINE64 lineInfo;
     memset(&lineInfo, 0, sizeof(lineInfo));
     lineInfo.SizeOfStruct = sizeof(lineInfo);
-    if (dbghelp.symGetLineFromAddr64(process, reinterpret_cast<DWORD64>(trace[i]), NULL, &lineInfo)) {
+    DWORD displacement;
+    if (dbghelp.symGetLineFromAddr64(process, reinterpret_cast<DWORD64>(trace[i]), &displacement, &lineInfo)) {
       lines[i] = kj::str('\n', lineInfo.FileName, ':', lineInfo.LineNumber);
     }
   }
