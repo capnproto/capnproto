@@ -184,7 +184,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang_version: [10, 14, 16]
+        clang_version: [16]
     steps:
       - uses: actions/checkout@v3
       - uses: bazelbuild/setup-bazelisk@v2
@@ -192,6 +192,7 @@ jobs:
         run: |
             export DEBIAN_FRONTEND=noninteractive
             sudo apt-get install -y build-essential git
+      # todo: replace with apt-get when clang-16 is part of ubuntu lts
       - name: install clang
         uses: egor-tensin/setup-clang@v1
         with:
