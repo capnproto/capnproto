@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-12, clang-14]
+        compiler: [g++-12, clang-14, clang-16]
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
