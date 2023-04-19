@@ -273,6 +273,47 @@ KJ_TEST("gzip compression") {
   }
 }
 
+KJ_TEST("unbuffered gzip compression") {
+  MockOutputStream rawOutput;
+  BufferedOutputStreamWrapper bufferedOutput(rawOutput);
+  {
+    GzipOutputStream gzip(bufferedOutput);
+    gzip.write("foobar", 6);
+  }
+
+  bufferedOutput.flush();
+  KJ_EXPECT(rawOutput.decompress() == "foobar");
+}
+
+KJ_TEST("gzip compression into insufficient buffer") {
+  // Failure at construction: not enough space for call to `deflateInit2`
+  {
+    auto array = kj::heapArray<byte>(1);
+    ArrayOutputStream output{array};
+    KJ_EXPECT_THROW_MESSAGE("no space left in buffer",
+        GzipOutputStream gzip(output));
+  }
+
+  // Failure when flushing and at destruction
+  {
+    auto array = kj::heapArray<byte>(20);
+    ArrayOutputStream output{array};
+    auto gzip = kj::heap<GzipOutputStream>(output);
+    gzip->write("foobar", 6);
+    KJ_EXPECT_THROW_MESSAGE("no space left in buffer", gzip->flush());
+    KJ_EXPECT_THROW_MESSAGE("no space left in buffer", gzip = nullptr);
+  }
+
+  // No failure: there is enough space
+  {
+    auto array = kj::heapArray<byte>(100);
+    ArrayOutputStream output{array};
+    GzipOutputStream gzip(output);
+    gzip.write("foobar", 6);
+    gzip.flush();
+  }
+}
+
 KJ_TEST("gzip huge round trip") {
   auto bytes = heapArray<byte>(65536);
   for (auto& b: bytes) {

@@ -205,6 +205,10 @@ void BufferedOutputStreamWrapper::flush() {
 }
 
 ArrayPtr<byte> BufferedOutputStreamWrapper::getWriteBuffer() {
+  if (bufferPos == buffer.end()) {
+    inner.write(buffer.begin(), buffer.size());
+    bufferPos = buffer.begin();
+  }
   return arrayPtr(bufferPos, buffer.end());
 }
 

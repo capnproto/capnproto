@@ -57,9 +57,12 @@ void GzipOutputContext::setInput(const void* in, size_t size) {
   ctx.avail_in = size;
 }
 
-kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(int flush) {
-  ctx.next_out = buffer;
-  ctx.avail_out = sizeof(buffer);
+kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(
+    int flush,
+    ArrayPtr<byte> buffer) {
+
+  ctx.next_out = buffer.begin();
+  ctx.avail_out = buffer.size();
 
   auto result = compressing ? deflate(&ctx, flush) : inflate(&ctx, flush);
   if (result != Z_OK && result != Z_BUF_ERROR && result != Z_STREAM_END) {
@@ -67,9 +70,9 @@ kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(int flush)
   }
 
   // - Z_STREAM_END means we have finished the stream successfully.
-  // - Z_BUF_ERROR means we didn't have any more input to process
+  // - Z_BUF_ERROR means we ran out of input to process or space for output
   //   (but still have to make a call to write to potentially flush data).
-  return kj::tuple(result == Z_OK, kj::arrayPtr(buffer, sizeof(buffer) - ctx.avail_out));
+  return kj::tuple(result == Z_OK, buffer.slice(0, buffer.size() - ctx.avail_out));
 }
 
 void GzipOutputContext::fail(int result) {
@@ -143,14 +146,30 @@ size_t GzipInputStream::readImpl(
 // =======================================================================================
 
 GzipOutputStream::GzipOutputStream(OutputStream& inner, int compressionLevel)
-    : inner(inner), ctx(compressionLevel) {}
+    : GzipOutputStream(heap<BufferedOutputStreamWrapper>(inner), compressionLevel) {}
 
 GzipOutputStream::GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS))
+    : GzipOutputStream(heap<BufferedOutputStreamWrapper>(inner), DECOMPRESS) {}
+
+GzipOutputStream::GzipOutputStream(BufferedOutputStream& inner, int compressionLevel)
+    : inner(inner), ctx(compressionLevel) {}
+
+GzipOutputStream::GzipOutputStream(BufferedOutputStream& inner, decltype(DECOMPRESS))
     : inner(inner), ctx(nullptr) {}
 
 GzipOutputStream::~GzipOutputStream() noexcept(false) {
   pump(Z_FINISH);
 }
+
+GzipOutputStream::GzipOutputStream(Own<BufferedOutputStream>&& wrapper, int compressionLevel)
+    : inner(*wrapper)
+    , wrapper(mv(wrapper))
+    , ctx(compressionLevel) {}
+
+GzipOutputStream::GzipOutputStream(Own<BufferedOutputStream>&& wrapper, decltype(DECOMPRESS))
+    : inner(*wrapper)
+    , wrapper(mv(wrapper))
+    , ctx(nullptr) {}
 
 void GzipOutputStream::write(const void* in, size_t size) {
   ctx.setInput(in, size);
@@ -160,7 +179,9 @@ void GzipOutputStream::write(const void* in, size_t size) {
 void GzipOutputStream::pump(int flush) {
   bool ok;
   do {
-    auto result = ctx.pumpOnce(flush);
+    auto writeBuffer = inner.getWriteBuffer();
+    KJ_REQUIRE(writeBuffer.size() > 0, "no space left in buffer");
+    auto result = ctx.pumpOnce(flush, writeBuffer);
     ok = get<0>(result);
     auto chunk = get<1>(result);
     if (chunk.size() > 0) {
@@ -253,7 +274,7 @@ Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> 
 }
 
 kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
-  auto result = ctx.pumpOnce(flush);
+  auto result = ctx.pumpOnce(flush, { buffer, sizeof(buffer) });
   auto ok = get<0>(result);
   auto chunk = get<1>(result);
 
