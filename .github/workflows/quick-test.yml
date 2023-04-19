@@ -196,19 +196,23 @@ jobs:
         run: |
             cd c++
             bazel test --verbose_failures --test_output=errors //...
-  Linux-bazel-clang-16:
+  Linux-bazel-clang:
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
-        compiler: [clang-14]
+        clang_version: [10, 14, 16]
     steps:
       - uses: actions/checkout@v3
       - uses: bazelbuild/setup-bazelisk@v2
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git ${{ matrix.compiler }}
+            sudo apt-get install -y build-essential git
+      - name: install clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: ${{ matrix.clang_version }}
       - name: super-test
         run: |
             cd c++
