@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-12, clang-14, clang-16]
+        compiler: [g++-12, clang-14]
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
@@ -185,6 +185,23 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [clang-10]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: bazelbuild/setup-bazelisk@v2
+      - name: install dependencies
+        run: |
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get install -y build-essential git ${{ matrix.compiler }}
+      - name: super-test
+        run: |
+            cd c++
+            bazel test --verbose_failures --test_output=errors //...
+  Linux-bazel-clang-16:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang-14]
     steps:
       - uses: actions/checkout@v3
       - uses: bazelbuild/setup-bazelisk@v2
