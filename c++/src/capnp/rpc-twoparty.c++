@@ -341,31 +341,46 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
 
 // =======================================================================================
 
-TwoPartyServer::TwoPartyServer(Capability::Client bootstrapInterface)
-    : bootstrapInterface(kj::mv(bootstrapInterface)), tasks(*this) {}
+TwoPartyServer::TwoPartyServer(Capability::Client bootstrapInterface,
+    kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder)
+    : bootstrapInterface(kj::mv(bootstrapInterface)),
+      traceEncoder(kj::mv(traceEncoder)),
+      tasks(*this) {}
 
 struct TwoPartyServer::AcceptedConnection {
   kj::Own<kj::AsyncIoStream> connection;
   TwoPartyVatNetwork network;
   RpcSystem<rpc::twoparty::VatId> rpcSystem;
 
-  explicit AcceptedConnection(Capability::Client bootstrapInterface,
+  explicit AcceptedConnection(TwoPartyServer& parent,
                               kj::Own<kj::AsyncIoStream>&& connectionParam)
       : connection(kj::mv(connectionParam)),
         network(*connection, rpc::twoparty::Side::SERVER),
-        rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
+        rpcSystem(makeRpcServer(network, kj::cp(parent.bootstrapInterface))) {
+    init(parent);
+  }
 
-  explicit AcceptedConnection(Capability::Client bootstrapInterface,
+  explicit AcceptedConnection(TwoPartyServer& parent,
                               kj::Own<kj::AsyncCapabilityStream>&& connectionParam,
                               uint maxFdsPerMessage)
       : connection(kj::mv(connectionParam)),
         network(kj::downcast<kj::AsyncCapabilityStream>(*connection),
                 maxFdsPerMessage, rpc::twoparty::Side::SERVER),
-        rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
+        rpcSystem(makeRpcServer(network, kj::cp(parent.bootstrapInterface))) {
+    init(parent);
+  }
+
+  void init(TwoPartyServer& parent) {
+    KJ_IF_MAYBE(t, parent.traceEncoder) {
+      rpcSystem.setTraceEncoder([&func = *t](const kj::Exception& e) {
+        return func(e);
+      });
+    }
+  }
 };
 
 void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
-  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
+  auto connectionState = kj::heap<AcceptedConnection>(*this, kj::mv(connection));
 
   // Run the connection until disconnect.
   auto promise = connectionState->network.onDisconnect();
@@ -375,7 +390,7 @@ void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
 void TwoPartyServer::accept(
     kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMessage) {
   auto connectionState = kj::heap<AcceptedConnection>(
-      bootstrapInterface, kj::mv(connection), maxFdsPerMessage);
+      *this, kj::mv(connection), maxFdsPerMessage);
 
   // Run the connection until disconnect.
   auto promise = connectionState->network.onDisconnect();
@@ -383,7 +398,7 @@ void TwoPartyServer::accept(
 }
 
 kj::Promise<void> TwoPartyServer::accept(kj::AsyncIoStream& connection) {
-  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface,
+  auto connectionState = kj::heap<AcceptedConnection>(*this,
       kj::Own<kj::AsyncIoStream>(&connection, kj::NullDisposer::instance));
 
   // Run the connection until disconnect.
@@ -393,7 +408,7 @@ kj::Promise<void> TwoPartyServer::accept(kj::AsyncIoStream& connection) {
 
 kj::Promise<void> TwoPartyServer::accept(
     kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage) {
-  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface,
+  auto connectionState = kj::heap<AcceptedConnection>(*this,
       kj::Own<kj::AsyncCapabilityStream>(&connection, kj::NullDisposer::instance),
       maxFdsPerMessage);
 
