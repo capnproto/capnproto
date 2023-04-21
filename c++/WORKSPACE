@@ -30,10 +30,14 @@ cc_library(
     name = "zlib",
     srcs = glob(["*.c"]),
     hdrs = glob(["*.h"]),
+    # Temporary workaround for zlib warnings and mac compilation, should no longer be needed with next release https://github.com/madler/zlib/issues/633
     copts = [
         "-w",
         "-Dverbose=-1",
-    ],
+    ] + select({
+        "@platforms//os:macos": [ "-std=c90" ],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
 )
 """
