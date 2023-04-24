@@ -103,6 +103,12 @@ size_t GzipInputStream::readImpl(
     byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
     size_t amount = inner.tryRead(buffer, 1, sizeof(buffer));
+    // Note: This check would reject valid streams with a high compression ratio if zlib were to
+    // read in the entire input data, getting more decompressed data than fits in the out buffer
+    // and subsequently fill the output buffer and internally store some pending data. It turns
+    // out that zlib does not maintain pending output during decompression and this is not
+    // possible, but this may be a concern when implementing support for other algorithms as e.g.
+    // brotli's reference implementation maintains a decompression output buffer.
     if (amount == 0) {
       if (!atValidEndpoint) {
         KJ_FAIL_REQUIRE("gzip compressed stream ended prematurely");
@@ -114,7 +120,7 @@ size_t GzipInputStream::readImpl(
     }
   }
 
-  ctx.next_out = reinterpret_cast<byte*>(out);
+  ctx.next_out = out;
   ctx.avail_out = maxBytes;
 
   auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
@@ -138,35 +144,6 @@ size_t GzipInputStream::readImpl(
       KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
     }
   }
-}
-
-// =======================================================================================
-
-GzipOutputStream::GzipOutputStream(OutputStream& inner, int compressionLevel)
-    : inner(inner), ctx(compressionLevel) {}
-
-GzipOutputStream::GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS))
-    : inner(inner), ctx(nullptr) {}
-
-GzipOutputStream::~GzipOutputStream() noexcept(false) {
-  pump(Z_FINISH);
-}
-
-void GzipOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
-  pump(Z_NO_FLUSH);
-}
-
-void GzipOutputStream::pump(int flush) {
-  bool ok;
-  do {
-    auto result = ctx.pumpOnce(flush);
-    ok = get<0>(result);
-    auto chunk = get<1>(result);
-    if (chunk.size() > 0) {
-      inner.write(chunk.begin(), chunk.size());
-    }
-  } while (ok);
 }
 
 // =======================================================================================
@@ -205,7 +182,7 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
     });
   }
 
-  ctx.next_out = reinterpret_cast<byte*>(out);
+  ctx.next_out = out;
   ctx.avail_out = maxBytes;
 
   auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
@@ -228,47 +205,6 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
     } else {
       KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
     }
-  }
-}
-
-// =======================================================================================
-
-GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
-    : inner(inner), ctx(compressionLevel) {}
-
-GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
-    : inner(inner), ctx(nullptr) {}
-
-Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
-  return pump(Z_NO_FLUSH);
-}
-
-Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
-      .then([this,pieces]() {
-    return write(pieces.slice(1, pieces.size()));
-  });
-}
-
-kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
-  auto result = ctx.pumpOnce(flush);
-  auto ok = get<0>(result);
-  auto chunk = get<1>(result);
-
-  if (chunk.size() == 0) {
-    if (ok) {
-      return pump(flush);
-    } else {
-      return kj::READY_NOW;
-    }
-  } else {
-    auto promise = inner.write(chunk.begin(), chunk.size());
-    if (ok) {
-      promise = promise.then([this, flush]() { return pump(flush); });
-    }
-    return promise;
   }
 }
 

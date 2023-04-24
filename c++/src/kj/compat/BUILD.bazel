@@ -43,12 +43,29 @@ cc_library(
 cc_library(
     name = "kj-gzip",
     srcs = ["gzip.c++"],
-    hdrs = ["gzip.h"],
+    hdrs = ["gzip.h", "comp-stream-tpl.h"],
     include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
         "@zlib",
+    ],
+)
+
+cc_library(
+    name = "kj-brotli",
+    srcs = ["brotli.c++", "comp-stream-tpl.h"],
+    hdrs = ["brotli.h"],
+    include_prefix = "kj/compat",
+    visibility = ["//visibility:public"],
+    target_compatible_with = select({
+        "//src/kj:use_brotli": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "//src/kj:kj-async",
+        "@brotli//:brotlienc",
+        "@brotli//:brotlidec",
     ],
 )
 
@@ -120,6 +137,19 @@ cc_test(
     }),
     deps = [
         ":kj-gzip",
+        "//src/kj:kj-test",
+    ],
+)
+
+cc_test(
+    name = "brotli-test",
+    srcs = ["brotli-test.c++"],
+    target_compatible_with = select({
+        "//src/kj:use_brotli": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":kj-brotli",
         "//src/kj:kj-test",
     ],
 )
