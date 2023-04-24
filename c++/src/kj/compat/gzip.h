@@ -31,6 +31,8 @@ namespace kj {
 
 namespace _ {  // private
 
+constexpr size_t KJ_GZ_BUF_SIZE = 4096;
+
 class GzipOutputContext final {
 public:
   GzipOutputContext(kj::Maybe<int> compressionLevel);
@@ -43,7 +45,7 @@ public:
 private:
   bool compressing;
   z_stream ctx = {};
-  byte buffer[4096];
+  byte buffer[_::KJ_GZ_BUF_SIZE];
 
   [[noreturn]] void fail(int result);
 };
@@ -63,7 +65,7 @@ private:
   z_stream ctx = {};
   bool atValidEndpoint = false;
 
-  byte buffer[4096];
+  byte buffer[_::KJ_GZ_BUF_SIZE];
 
   size_t readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };
@@ -104,7 +106,7 @@ private:
   z_stream ctx = {};
   bool atValidEndpoint = false;
 
-  byte buffer[4096];
+  byte buffer[_::KJ_GZ_BUF_SIZE];
 
   Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };

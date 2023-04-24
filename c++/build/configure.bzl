@@ -18,6 +18,11 @@ def kj_configure():
     )
 
     bool_flag(
+        name = "brotli",
+        build_setting_default = False,
+    )
+
+    bool_flag(
         name = "libdl",
         build_setting_default = False,
     )
@@ -50,6 +55,11 @@ def kj_configure():
     )
 
     native.config_setting(
+        name = "use_brotli",
+        flag_values = {"brotli": "True"},
+    )
+
+    native.config_setting(
         name = "use_libdl",
         flag_values = {"libdl": "True"},
     )
@@ -76,6 +86,9 @@ def kj_configure():
             "//conditions:default": [],
         }) + select({
             "//src/kj:use_zlib": ["KJ_HAS_ZLIB"],
+            "//conditions:default": [],
+        }) + select({
+            "//src/kj:use_brotli": ["KJ_HAS_BROTLI"],
             "//conditions:default": [],
         }) + select({
             "//src/kj:use_libdl": ["KJ_HAS_LIBDL"],
