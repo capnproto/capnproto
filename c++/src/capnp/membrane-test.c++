@@ -95,10 +95,12 @@ protected:
 };
 
 class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
+  using RevokePromiseOneOf = kj::OneOf<kj::Function<kj::Promise<void>()>, kj::ForkedPromise<void>>;
 public:
   MembranePolicyImpl() = default;
-  MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise)
-      : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })) {}
+  MembranePolicyImpl(kj::Maybe<kj::Function<kj::Promise<void>()>> revokePromise)
+      : revokePromise(
+            revokePromise.map([](kj::Function<kj::Promise<void>()>& f) { return kj::mv(f); })) {}
 
   kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId,
                                             Capability::Client target) override {
@@ -123,15 +125,24 @@ public:
   }
 
   kj::Maybe<kj::Promise<void>> onRevoked() override {
-    return revokePromise.map([](kj::ForkedPromise<void>& fork) {
-      return fork.addBranch();
+    return revokePromise.map([](RevokePromiseOneOf& oneOf) {
+      KJ_SWITCH_ONEOF(oneOf) {
+        KJ_CASE_ONEOF(f, kj::Function<kj::Promise<void>()>) {
+          oneOf = f().fork();
+          return oneOf.get<kj::ForkedPromise<void>>().addBranch();
+        }
+        KJ_CASE_ONEOF(fork, kj::ForkedPromise<void>) {
+          return fork.addBranch();
+        }
+      }
+      KJ_UNREACHABLE;
     });
   }
 
   bool shouldResolveBeforeRedirecting() override { return true; }
 
 private:
-  kj::Maybe<kj::ForkedPromise<void>> revokePromise;
+  kj::Maybe<RevokePromiseOneOf> revokePromise;
 };
 
 void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membraned,
@@ -312,7 +323,7 @@ struct TestRpcEnv {
   TwoPartyClient server;
   test::TestMembrane::Client membraned;
 
-  TestRpcEnv(kj::Maybe<kj::Promise<void>> revokePromise = nullptr)
+  TestRpcEnv(kj::Maybe<kj::Function<kj::Promise<void>()>> revokePromise = nullptr)
       : waitScope(loop),
         pipe(kj::newTwoWayPipe()),
         client(*pipe.ends[0]),
@@ -379,9 +390,13 @@ KJ_TEST("call remote promise pointing into membrane that eventually resolves to 
 }
 
 KJ_TEST("revoke membrane") {
-  auto paf = kj::newPromiseAndFulfiller<void>();
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> revokeFulfiller;
 
-  TestRpcEnv env(kj::mv(paf.promise));
+  TestRpcEnv env(kj::Function<kj::Promise<void>()>([&revokeFulfiller]() {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    revokeFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }));
 
   auto thing = env.membraned.makeThingRequest().send().wait(env.waitScope).getThing();
 
@@ -389,7 +404,7 @@ KJ_TEST("revoke membrane") {
 
   KJ_EXPECT(!callPromise.poll(env.waitScope));
 
-  paf.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "foobar"));
+  KJ_ASSERT_NONNULL(revokeFulfiller)->reject(KJ_EXCEPTION(DISCONNECTED, "foobar"));
 
   // TRICKY: We need to use .ignoreResult().wait() below because when compiling with
   //   -fno-exceptions, void waits throw recoverable exceptions while non-void waits necessarily
