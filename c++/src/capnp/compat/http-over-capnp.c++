@@ -519,7 +519,7 @@ public:
     auto upStream = factory.streamFactory.capnpToKjExplicitEnd(up);
     auto upPumpTask = connection.pumpTo(*upStream)
         .then([up=kj::mv(up),upStream=kj::mv(upStream)](uint64_t) mutable {
-      KJ_DBG("up pump task down");
+      KJ_DBG("up pump task done");
       return upStream->end().attach(kj::mv(upStream));
     });
 

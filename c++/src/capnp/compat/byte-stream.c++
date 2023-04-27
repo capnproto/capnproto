@@ -109,6 +109,7 @@ public:
       KJ_CASE_ONEOF(streaming, Streaming) {
         auto& stream = streaming.stream;
         auto oldState = kj::mv(streaming);
+        KJ_DBG("SubStreamImpl::getShortestPath(): streaming, setting state to borrowed");
         state = Borrowed { kj::mv(oldState) };
         return BorrowedStream { *this, stream, limit - completed };
       }
@@ -244,7 +245,7 @@ public:
 
   kj::Promise<void> startTls(StartTlsContext context) override {
     auto params = context.getParams();
-    KJ_DBG("In starttls");
+    KJ_DBG("SubStreamImpl::startTls()");
     KJ_IF_MAYBE(s, tlsStarter) {
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(redirected, Redirected) {
@@ -268,6 +269,7 @@ public:
   }
 
   kj::Promise<void> getSubstream(GetSubstreamContext context) override {
+    KJ_DBG("SubStreamImpl::getSubstream()");
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(redirected, Redirected) {
         auto params = context.getParams();
@@ -291,6 +293,7 @@ public:
         results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
             factory, *this, thisCap(), streaming.stream, kj::mv(callback), kj::mv(limit),
             tlsStarter)));
+        KJ_DBG("SubStreamImpl::getSubstream(): streaming, setting state to borrowed");
         state = Borrowed { kj::mv(streaming) };
         return kj::READY_NOW;
       }
@@ -351,7 +354,7 @@ public:
       : factory(factory),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
     state.get<kj::Own<PathProber>>()->startProbing();
-    KJ_DBG(this);
+    KJ_DBG(this, "CapnpToKjStreamAdapter");
   }
 
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
@@ -361,7 +364,7 @@ public:
         tlsStarter(starter),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
     state.get<kj::Own<PathProber>>()->startProbing();
-    KJ_DBG(this);
+    KJ_DBG(this, "CapnpToKjStreamAdapter");
   }
 
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
@@ -369,13 +372,14 @@ public:
       : factory(factory),
         state(kj::mv(pathProber)) {
     state.get<kj::Own<PathProber>>()->setNewParent(*this);
-    KJ_DBG(this);
+    KJ_DBG(this, "CapnpToKjStreamAdapter");
   }
 
   // ---------------------------------------------------------------------------
   // implements StreamServerBase
 
   void returnStream(uint64_t written) override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::returnStream()", kj::getAsyncTrace());
     auto stream = kj::mv(state.get<Borrowed>().stream);
     state = kj::mv(stream);
   }
@@ -384,6 +388,7 @@ public:
     // Called by KjToCapnpStreamAdapter when it has determined that its inner ByteStream::Client
     // actually points back to a CapnpToKjStreamAdapter in the same process. Returns the best
     // shortened path to use, or a promise that resolves when the shortest path is known.
+    KJ_DBG(this, "CapnpToKjStreamAdapter::getShortestPath()");
 
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
@@ -391,6 +396,7 @@ public:
       }
       KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
         auto& streamRef = *kjStream;
+        KJ_DBG(this, "CapnpToKjStreamAdapter::getShortestPath(): backed by native stream, setting state to borrowed", kj::getStackTrace());
         state = Borrowed { kj::mv(kjStream) };
         return StreamServerBase::BorrowedStream { *this, streamRef, kj::maxValue };
       }
@@ -410,6 +416,7 @@ public:
   }
 
   void directEnd() override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::directEnd()");
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
         state = Ended();
@@ -431,6 +438,7 @@ public:
   }
 
   kj::Promise<void> directExplicitEnd() override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::directExplicitEnd()");
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
         state = Ended();
@@ -497,6 +505,7 @@ public:
         KJ_ASSERT(self.get() == this);
 
         // Open a substream on the target stream.
+        KJ_DBG("getting substream");
         auto req = target.getSubstreamRequest();
         req.setLimit(limit);
         auto paf = kj::newPromiseAndFulfiller<uint64_t>();
@@ -586,6 +595,7 @@ protected:
   // implements ByteStream::Server RPC interface
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::shortenPath()");
     return shortenPathImpl();
   }
   kj::Promise<Capability::Client> shortenPathImpl() {
@@ -619,6 +629,7 @@ protected:
   }
 
   kj::Promise<void> write(WriteContext context) override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::write()");
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
         return prober->whenReady().then([this, context]() mutable {
@@ -649,6 +660,7 @@ protected:
   }
 
   kj::Promise<void> end(EndContext context) override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::end()");
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
         return prober->whenReady().then([this, context]() mutable {
@@ -680,8 +692,8 @@ protected:
   }
 
   kj::Promise<void> startTls(StartTlsContext context) override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::startTls()");
     auto params = context.getParams();
-    KJ_DBG("Start tls here", this);
     KJ_IF_MAYBE(s, tlsStarter) {
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
@@ -710,6 +722,7 @@ protected:
   }
 
   kj::Promise<void> getSubstream(GetSubstreamContext context) override {
+    KJ_DBG(this, "CapnpToKjStreamAdapter::getSubstream()");
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
         return prober->whenReady().then([this, context]() mutable {
@@ -727,6 +740,7 @@ protected:
         results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
             factory, *this, thisCap(), *kjStream, kj::mv(callback), kj::mv(limit),
             tlsStarter)));
+        KJ_DBG("CapnpToKjStreamAdapter::getSubstream(): backed by native stream, setting state to borrowed");
         state = Borrowed { kj::mv(kjStream) };
         return kj::READY_NOW;
       }
@@ -853,6 +867,7 @@ public:
   }
 
   kj::Promise<void> write(const void* buffer, size_t size) override {
+    KJ_DBG(this, "KjToCapnpStreamAdapter::write()");
     KJ_SWITCH_ONEOF(getShortestPath()) {
       KJ_CASE_ONEOF(promise, kj::Promise<void>) {
         return promise.then([this,buffer,size]() {
@@ -860,6 +875,7 @@ public:
         });
       }
       KJ_CASE_ONEOF(kjStream, StreamServerBase::BorrowedStream) {
+        KJ_DBG(this, "KjToCapnpStreamAdapter::write(): borrowed!");
         auto limit = kj::min(kjStream.limit, MAX_BYTES_PER_WRITE);
         if (size <= limit) {
           auto promise = kjStream.stream.write(buffer, size);
@@ -895,6 +911,7 @@ public:
   }
 
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    KJ_DBG(this, "KjToCapnpStreamAdapter::write(pieces)");
     KJ_SWITCH_ONEOF(getShortestPath()) {
       KJ_CASE_ONEOF(promise, kj::Promise<void>) {
         return promise.then([this,pieces]() {
@@ -950,6 +967,7 @@ public:
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+    KJ_DBG(this, "KjToCapnpStreamAdapter::tryPumpFrom()");
     KJ_IF_MAYBE(rpc, kj::dynamicDowncastIfAvailable<CapnpToKjStreamAdapter::PathProber>(input)) {
       // Oh interesting, it turns we're hosting an incoming ByteStream which is pumping to this
       // outgoing ByteStream. We can let the Cap'n Proto RPC layer know that it can shorten the
@@ -1006,6 +1024,7 @@ private:
   }
 
   kj::Promise<void> findShorterPath(StreamServerBase& capnpServer) {
+    KJ_DBG(this, "KjToCapnpStreamAdapter::findShorterPath(server)");
     // We found a shorter path back to this process. Record it.
     optimized = capnpServer;
 
@@ -1016,6 +1035,7 @@ private:
         });
       }
       KJ_CASE_ONEOF(kjStream, StreamServerBase::BorrowedStream) {
+        KJ_DBG(this, "KjToCapnpStreamAdapter::findShorterPath(server): got borrowed stream");
         // The ByteStream::Server wraps a regular KJ stream that does not wrap another capnp
         // stream.
         if (kjStream.limit < (uint64_t)kj::maxValue / 2) {

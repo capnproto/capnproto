@@ -912,23 +912,22 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
   // KJ_ASSERT_NONNULL(*tlsStarter);
 
   request.status.then(
-      [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {
+      kj::coCapture([io=kj::mv(request.connection), &tlsStarter](auto status) mutable -> kj::Promise<void> {
     KJ_ASSERT(status.statusCode == 200);
     KJ_ASSERT(status.statusText == "OK"_kj);
     KJ_DBG("status.then()");
 
-    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(3);
-    promises.add(KJ_ASSERT_NONNULL(*tlsStarter)("example.com"));
-    // promises.add(io->write("hello", 5));
-    // promises.add(expectRead(*io, "hello"_kj));
+    kj::Vector<kj::Promise<void>> promises;
+    co_await KJ_ASSERT_NONNULL(*tlsStarter)("example.com");
+    KJ_DBG("tlsStarter called");
     promises.add(io->write("hello", 5));
     promises.add(expectRead(*io, "hello"_kj));
-    return kj::joinPromises(promises.finish())
+    co_await kj::joinPromises(promises.releaseAsArray())
         .then([io=kj::mv(io)]() mutable {
       io->shutdownWrite();
       return expectEnd(*io).attach(kj::mv(io));
     });
-  }).wait(waitScope);
+  })).wait(waitScope);
 
   listenTask.wait(waitScope);
 }
