@@ -694,7 +694,12 @@ public:
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
-    return io.pumpTo(io).ignoreResult();
+    // TODO(now): Also account for and test the pumpTo() case.
+    byte buffer[4096];
+    while (auto amount = co_await io.tryRead(buffer, 1, sizeof(buffer))) {
+      co_await io.write(buffer, amount);
+    }
+    // return io.pumpTo(io).ignoreResult();
   }
 
 private:

@@ -476,7 +476,7 @@ public:
     auto downPipe = kj::newOneWayPipe();
     rpcRequest.setHost(host);
     capnp::ByteStream::Client downByteStream = factory.streamFactory.kjToCapnp(
-        kj::mv(downPipe.out), settings.tlsStarter);
+        kj::mv(downPipe.out));
     rpcRequest.setDown(downByteStream);
     rpcRequest.initSettings().setUseTls(settings.useTls);
 
