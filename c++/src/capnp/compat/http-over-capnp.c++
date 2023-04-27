@@ -475,6 +475,7 @@ public:
     auto rpcRequest = inner.connectRequest();
     auto downPipe = kj::newOneWayPipe();
     rpcRequest.setHost(host);
+    KJ_DBG("KjToCapnpHttpServiceAdapter::connect(): creating down argument");
     capnp::ByteStream::Client downByteStream = factory.streamFactory.kjToCapnp(
         kj::mv(downPipe.out));
     rpcRequest.setDown(downByteStream);
@@ -492,6 +493,7 @@ public:
     // We read from `downPipe` (the other side writes into it.)
     auto downPumpTask = downPipe.in->pumpTo(connection)
         .then([&connection, down = kj::mv(downPipe.in)](uint64_t) -> kj::Promise<void> {
+      KJ_DBG("down pump task done");
       connection.shutdownWrite();
       return kj::NEVER_DONE;
     });
@@ -516,17 +518,20 @@ public:
 
     auto upStream = factory.streamFactory.capnpToKjExplicitEnd(up);
     auto upPumpTask = connection.pumpTo(*upStream)
-        .then([&upStream = *upStream](uint64_t) mutable {
-      return upStream.end();
-    }).then([up = kj::mv(up), upStream = kj::mv(upStream)]() mutable
-        -> kj::Promise<void> {
-      return kj::NEVER_DONE;
+        .then([up=kj::mv(up),upStream=kj::mv(upStream)](uint64_t) mutable {
+      KJ_DBG("up pump task down");
+      return upStream->end().attach(kj::mv(upStream));
     });
 
-    return pipeline.ignoreResult()
-        .attach(kj::mv(downPumpTask))
-        .attach(kj::mv(upPumpTask));
-
+    return pipeline.ignoreResult().then([a=kj::defer([]() { KJ_DBG("KjToCapnpHttpServiceAdapter::connect(): connect() RPC request dropped"); }),task=kj::mv(downPumpTask)]() mutable {
+      KJ_DBG("KjToCapnpHttpServiceAdapter::connect(): connect() RPC request fulfilled");
+      return kj::mv(task);
+    }, [](kj::Exception&& exception) {
+      KJ_DBG("KjToCapnpHttpServiceAdapter::connect(): connect() RPC request rejected", exception);
+      kj::throwFatalException(kj::mv(exception));
+    }).then([task=kj::mv(upPumpTask)]() mutable {
+      return kj::mv(task);
+    });
   }
 
 
@@ -876,6 +881,7 @@ public:
       EofDetector(kj::Own<kj::AsyncIoStream> inner)
           : inner(kj::mv(inner)) {}
       ~EofDetector() {
+        KJ_DBG("~EofDetector()");
         inner->shutdownWrite();
         // XXX Revoke the TLS starter when stream is destroyed?
       }
@@ -919,6 +925,7 @@ public:
       }
 
       void cancel() {
+        KJ_DBG("dropping pumpTask");
         auto drop = kj::mv(pumpTask);
       }
 
@@ -929,10 +936,12 @@ public:
     // We write to the `down` pipe.
     auto pumpOwnedStream = streamRef->addWrappedRef();
     auto pumpTask = ref1->pumpTo(*pumpOwnedStream)
-          .then([&pumpOwnedStream = *pumpOwnedStream](uint64_t) mutable {
+          .then([&pumpOwnedStream = *pumpOwnedStream](uint64_t amount) mutable {
+      KJ_DBG("pumpTo down done", amount);
       return pumpOwnedStream.end();
     }).then([httpProxyStream = kj::mv(ref1), pumpOwnedStream = kj::mv(pumpOwnedStream)]() mutable
         -> kj::Promise<void> {
+      KJ_DBG("pumpTask");
       return kj::NEVER_DONE;
     });
 
@@ -961,6 +970,7 @@ public:
         }).then([httpProxyStream = kj::mv(ref3),
             tlsStarterOwnedStream = kj::mv(tlsStarterOwnedStream)]() mutable
             -> kj::Promise<void> {
+          KJ_DBG("origCallback()");
           return kj::NEVER_DONE;
         });
         pumpManagerRef->capture(kj::mv(newPumpTask));
@@ -979,13 +989,19 @@ public:
       return tlsStarterWrapper(expectedServerHostname, kj::mv(tlsStarter));
     };
     eofWrapper = eofWrapper.attach(kj::mv(byteStreamTlsStarter));
+    KJ_DBG("CapnpToKjHttpServiceAdapter::connect(): creating up argument");
     auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), byteStreamTlsStarterRef);
     pb.setUp(kj::cp(up));
 
     context.setPipeline(pb.build());
     auto results = context.initResults(capnp::MessageSize { 4, 2 });
     results.setUp(kj::mv(up));
-    return result;
+    return result.then([a=kj::defer([]() { KJ_DBG("CapnpToKjHttpServiceAdapter::connect(): inner->connect() promise destroyed"); })]() {
+      KJ_DBG("CapnpToKjHttpServiceAdapter::connect(): inner->connect() promise fulfilled");
+    }, [](kj::Exception&& exception) {
+      KJ_DBG("CapnpToKjHttpServiceAdapter::connect(): inner->connect() promise rejected", exception);
+      kj::throwFatalException(kj::mv(exception));
+    });
   }
 
 private:

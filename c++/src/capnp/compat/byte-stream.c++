@@ -259,6 +259,7 @@ public:
           KJ_FAIL_REQUIRE("can't call startTls while stream is borrowed");
         }
         KJ_CASE_ONEOF(streaming, Streaming) {
+          KJ_DBG("streaming");
           return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
         }
       }
@@ -350,6 +351,7 @@ public:
       : factory(factory),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
     state.get<kj::Own<PathProber>>()->startProbing();
+    KJ_DBG(this);
   }
 
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
@@ -359,6 +361,7 @@ public:
         tlsStarter(starter),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
     state.get<kj::Own<PathProber>>()->startProbing();
+    KJ_DBG(this);
   }
 
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
@@ -366,6 +369,7 @@ public:
       : factory(factory),
         state(kj::mv(pathProber)) {
     state.get<kj::Own<PathProber>>()->setNewParent(*this);
+    KJ_DBG(this);
   }
 
   // ---------------------------------------------------------------------------
@@ -481,6 +485,7 @@ public:
     }
 
     kj::Promise<uint64_t> pumpToShorterPath(capnp::ByteStream::Client target, uint64_t limit) {
+      KJ_DBG("pumpToShorterPath()", kj::getAsyncTrace());
       // If our probe succeeds in finding a KjToCapnpStreamAdapter somewhere down the stack, that
       // will call this method to provide the shortened path.
 
@@ -676,22 +681,27 @@ protected:
 
   kj::Promise<void> startTls(StartTlsContext context) override {
     auto params = context.getParams();
-    KJ_DBG("Start tls here");
+    KJ_DBG("Start tls here", this);
     KJ_IF_MAYBE(s, tlsStarter) {
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
+          KJ_DBG("startTls() on path prober");
           return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
         }
         KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
+          KJ_DBG("startTls() on kj stream");
           return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
         }
         KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
+          KJ_DBG("startTls() on capnp stream");
           return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
         }
         KJ_CASE_ONEOF(e, Ended) {
+          KJ_DBG("can't call startTls on a bytestream that was ended");
           KJ_FAIL_REQUIRE("cannot call startTls on a bytestream that was ended");
         }
         KJ_CASE_ONEOF(b, Borrowed) {
+          KJ_DBG("can't call startTls while stream is borrowed");
           KJ_FAIL_REQUIRE("can't call startTls while stream is borrowed");
         }
       }

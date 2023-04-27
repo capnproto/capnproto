@@ -915,6 +915,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
       [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {
     KJ_ASSERT(status.statusCode == 200);
     KJ_ASSERT(status.statusText == "OK"_kj);
+    KJ_DBG("status.then()");
 
     auto promises = kj::heapArrayBuilder<kj::Promise<void>>(3);
     promises.add(KJ_ASSERT_NONNULL(*tlsStarter)("example.com"));

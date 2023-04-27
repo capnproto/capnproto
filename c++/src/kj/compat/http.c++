@@ -5782,6 +5782,7 @@ public:
           auto transitConnection = kj::heap<TransitionaryAsyncIoStream>(kj::mv(connection));
           Function<kj::Promise<void>(kj::StringPtr)> cb =
               [wrapper, ref1 = &transitConnection](kj::StringPtr expectedServerHostname) mutable {
+            KJ_DBG("tlsStarter()");
             ref1->get()->startTls(wrapper, expectedServerHostname);
             return kj::READY_NOW;
           };
@@ -6212,6 +6213,13 @@ public:
     //    writes until the status is indicated by calling accept/reject.
     auto connectStream = response->getConnectStream();
     auto promise = service.connect(hostCopy, *headersCopy, *connectStream, *response, settings)
+        .attach(kj::defer([]() { KJ_DBG("HttpClientAdapter::connect(): service.connect() promise dropped"); }))
+        .then([]() {
+      KJ_DBG("HttpClientAdapter::connect(): service.connect() promise fulfilled");
+    }, [](kj::Exception&& exception) {
+      KJ_DBG("HttpClientAdapter::connect(): service.connect() promise rejected", exception);
+      kj::throwFatalException(kj::mv(exception));
+    })
         .eagerlyEvaluate([response=kj::mv(response),
                           host=kj::mv(hostCopy),
                           headers=kj::mv(headersCopy),
@@ -6238,7 +6246,7 @@ public:
     // live with the current limitation.
     return ConnectRequest {
       kj::mv(paf.promise),
-      pipe.ends[1].attach(kj::mv(promise)),
+      pipe.ends[1].attach(kj::mv(promise), kj::defer([]() { KJ_DBG("HttpClientAdapter::connect(): returned connection dropped"); })),
     };
   }
 
@@ -6735,17 +6743,22 @@ public:
         kj::READY_NOW /* write guard */);
 
     // Writing from connection to io is unguarded and allowed immediately.
+    KJ_DBG("HttpServiceAdapter::connect(): pumping calling client stream to upstream client");
     promises.add(connection.pumpTo(*io).then([&io=*io](uint64_t size) {
+      KJ_DBG("HttpServiceAdapter::connect(): calling client stream read pump complete", size);
       io.shutdownWrite();
-    }).eagerlyEvaluate(nullptr));
+    }).attach(kj::defer([]() { KJ_DBG("connection.pumpTo(*io) promise destroyed"); })).eagerlyEvaluate(nullptr));
 
+    KJ_DBG("HttpServiceAdapter::connect(): pumping upstream client stream to calling client");
     promises.add(io->pumpTo(connection).then([&connection](uint64_t size) {
+      KJ_DBG("HttpServiceAdapter::connect(): upstream client stream read pump complete", size);
       connection.shutdownWrite();
-    }).eagerlyEvaluate(nullptr));
+    }).attach(kj::defer([]() { KJ_DBG("io->pumpTo(connection) promise destroyed"); })).eagerlyEvaluate(nullptr));
 
     promises.add(request.status.then(
         [&response,&io=*io,&connection,fulfiller=kj::mv(paf.fulfiller)]
         (HttpClient::ConnectRequest::Status status) mutable -> kj::Promise<void> {
+      KJ_DBG("HttpServiceAdapter::connect(): status promise resolved", status.statusCode);
       if (status.statusCode >= 200 && status.statusCode < 300) {
         // Release the read guard!
         fulfiller->fulfill(kj::Maybe<HttpInputStreamImpl::ReleasedBuffer>(nullptr));
@@ -6768,13 +6781,13 @@ public:
           return kj::READY_NOW;
         }
       }
-    }).eagerlyEvaluate(nullptr));
+    }).attach(kj::defer([]() { KJ_DBG("HttpServiceAdapter::connect(): status promise destroyed"); })).eagerlyEvaluate(nullptr));
 
     // TODO(bug): Using kj::joinPromises here is a bit problematic. If the pump in one
     // direction throws an error, it will be hung in limbo waiting for the other direction
     // to resolve. This issue is not specific to connect, the WebSockets impl has the
     // same potential problem. We should fix but for now this should be acceptable.
-    return kj::joinPromises(promises.finish()).attach(kj::mv(io));
+    return kj::joinPromises(promises.finish()).attach(kj::mv(io), kj::defer([]() { KJ_DBG("HttpServiceAdapter::connect(): joined promise destroyed"); }));
   }
 
 private:
