@@ -973,17 +973,19 @@ public:
     auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
 
     auto byteStreamTlsStarter = kj::heap<kj::TlsStarterCallback>();
-    *byteStreamTlsStarter = [tlsStarterWrapper = kj::mv(tlsStarterWrapper),
+    auto& byteStreamTlsStarterRef = *byteStreamTlsStarter;
+    byteStreamTlsStarterRef = [tlsStarterWrapper = kj::mv(tlsStarterWrapper),
         tlsStarter = kj::mv(tlsStarter)](kj::StringPtr expectedServerHostname) mutable {
       return tlsStarterWrapper(expectedServerHostname, kj::mv(tlsStarter));
     };
-    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), *byteStreamTlsStarter);
+    eofWrapper = eofWrapper.attach(kj::mv(byteStreamTlsStarter));
+    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), byteStreamTlsStarterRef);
     pb.setUp(kj::cp(up));
 
     context.setPipeline(pb.build());
     auto results = context.initResults(capnp::MessageSize { 4, 2 });
     results.setUp(kj::mv(up));
-    return result.attach(kj::mv(results), kj::mv(byteStreamTlsStarter));
+    return result;
   }
 
 private:
