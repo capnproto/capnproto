@@ -39,11 +39,15 @@ const ::capnp::_::RawSchema s_995f9a3377c0b16e = {
 namespace capnp {
 
 // StreamResult
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 constexpr uint16_t StreamResult::_capnpPrivate::dataWordSize;
 constexpr uint16_t StreamResult::_capnpPrivate::pointerCount;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 #if !CAPNP_LITE
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 constexpr ::capnp::Kind StreamResult::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* StreamResult::_capnpPrivate::schema;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 #endif  // !CAPNP_LITE
 
 
