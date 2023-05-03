@@ -24,6 +24,7 @@
 
 #include <capnp/compat/byte-stream.capnp.h>
 #include <kj/async-io.h>
+#include <kj/compat/http.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -54,6 +55,8 @@ class ByteStreamFactory {
 
 public:
   capnp::ByteStream::Client kjToCapnp(kj::Own<kj::AsyncOutputStream> kjStream);
+  capnp::ByteStream::Client kjToCapnp(
+      kj::Own<kj::AsyncOutputStream> kjStream, kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter);
   kj::Own<kj::AsyncOutputStream> capnpToKj(capnp::ByteStream::Client capnpStream);
 
   kj::Own<ExplicitEndOutputStream> capnpToKjExplicitEnd(capnp::ByteStream::Client capnpStream);

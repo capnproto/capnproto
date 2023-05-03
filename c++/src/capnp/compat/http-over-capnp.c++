@@ -495,6 +495,20 @@ public:
     });
     // We write to `up` (the other side reads from it).
     auto up = pipeline.getUp();
+
+    // We need to create a tlsStarter callback which sends a startTls request to the capnp server.
+    KJ_IF_MAYBE(tlsStarter, settings.tlsStarter) {
+      kj::Function<kj::Promise<void>(kj::StringPtr)> cb =
+          [upForStartTls = kj::cp(up)]
+          (kj::StringPtr expectedServerHostname)
+          mutable -> kj::Promise<void> {
+        auto startTlsRpcRequest = upForStartTls.startTlsRequest();
+        startTlsRpcRequest.setExpectedServerHostname(expectedServerHostname);
+        return startTlsRpcRequest.send();
+      };
+      *tlsStarter = kj::mv(cb);
+    }
+
     auto upStream = factory.streamFactory.capnpToKjExplicitEnd(up);
     auto upPumpTask = connection.pumpTo(*upStream)
         .then([&upStream = *upStream](uint64_t) mutable {
@@ -507,6 +521,7 @@ public:
     return pipeline.ignoreResult()
         .attach(kj::mv(downPumpTask))
         .attach(kj::mv(upPumpTask));
+
   }
 
 
@@ -845,15 +860,16 @@ public:
   kj::Promise<void> connect(ConnectContext context) override {
     auto params = context.getParams();
     auto host = params.getHost();
-    kj::HttpConnectSettings settings = {
-      .useTls = params.getSettings().getUseTls()
-    };
+    kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
+    kj::HttpConnectSettings settings = { .useTls = params.getSettings().getUseTls()};
+    settings.tlsStarter = tlsStarter;
     auto headers = factory.headersToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 
     class EofDetector final: public kj::AsyncOutputStream {
     public:
-      EofDetector(kj::Own<kj::AsyncIoStream> inner) : inner(kj::mv(inner)) {}
+      EofDetector(kj::Own<kj::AsyncIoStream> inner)
+          : inner(kj::mv(inner)) {}
       ~EofDetector() {
         inner->shutdownWrite();
       }
@@ -897,7 +913,7 @@ public:
 
     PipelineBuilder<ConnectResults> pb;
     auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
-    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper));
+    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
     pb.setUp(kj::cp(up));
 
     context.setPipeline(pb.build());

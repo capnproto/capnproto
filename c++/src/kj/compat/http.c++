@@ -5383,6 +5383,18 @@ HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolErr
   };
 }
 
+_::Deferred<kj::Function<void()>> PausableReadAsyncIoStream::trackRead() {
+  KJ_REQUIRE(!currentlyReading, "only one read is allowed at any one time");
+  currentlyReading = true;
+  return kj::defer<kj::Function<void()>>([this]() { currentlyReading = false; });
+}
+
+_::Deferred<kj::Function<void()>> PausableReadAsyncIoStream::trackWrite() {
+  KJ_REQUIRE(!currentlyWriting, "only one write is allowed at any one time");
+  currentlyWriting = true;
+  return kj::defer<kj::Function<void()>>([this]() { currentlyWriting = false; });
+}
+
 // =======================================================================================
 
 namespace {
@@ -5544,6 +5556,75 @@ private:
       });
     }
   }
+};
+
+class TransitionaryAsyncIoStream final: public kj::AsyncIoStream {
+  // This specialised AsyncIoStream is used by NetworkHttpClient to support startTls.
+public:
+  TransitionaryAsyncIoStream(kj::Own<kj::AsyncIoStream> unencryptedStream)
+      : inner(kj::heap<kj::PausableReadAsyncIoStream>(kj::mv(unencryptedStream))) {}
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->tryRead(buffer, minBytes, maxBytes);
+  }
+
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return inner->tryGetLength();
+  }
+
+  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
+    return inner->pumpTo(output, amount);
+  }
+
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    return inner->write(buffer, size);
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    return inner->write(pieces);
+  }
+
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+      kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
+    return inner->tryPumpFrom(input, amount);
+  }
+
+  kj::Promise<void> whenWriteDisconnected() override {
+    return inner->whenWriteDisconnected();
+  }
+
+  void shutdownWrite() override {
+    inner->shutdownWrite();
+  }
+
+  void abortRead() override {
+    inner->abortRead();
+  }
+
+  kj::Maybe<int> getFd() const override {
+    return inner->getFd();
+  }
+
+  void startTls(
+      kj::SecureNetworkWrapper* wrapper, kj::StringPtr expectedServerHostname) {
+    // Pause any potential pending reads.
+    inner->pause();
+
+    KJ_ON_SCOPE_FAILURE({
+      inner->reject(KJ_EXCEPTION(FAILED, "StartTls failed."));
+    });
+
+    KJ_ASSERT(!inner->getCurrentlyReading() && !inner->getCurrentlyWriting(),
+        "Cannot call startTls while reads/writes are outstanding");
+    kj::Promise<kj::Own<kj::AsyncIoStream>> secureStream =
+        wrapper->wrapClient(inner->takeStream(), expectedServerHostname);
+    inner->replaceStream(kj::newPromisedStream(kj::mv(secureStream)));
+    // Resume any previous pending reads.
+    inner->unpause();
+  }
+
+private:
+  kj::Own<kj::PausableReadAsyncIoStream> inner;
 };
 
 class PromiseNetworkAddressHttpClient final: public HttpClient {
@@ -5712,24 +5793,22 @@ public:
 
     auto connection = kj::newPromisedStream(kj::mv(kj::get<1>(split)));
 
-    #if KJ_HAS_OPENSSL
     if (!connectSettings.useTls) {
       KJ_IF_MAYBE(wrapper, settings.tlsContext) {
         KJ_IF_MAYBE(tlsStarter, connectSettings.tlsStarter) {
-          auto refConnection = kj::refcountedWrapper(kj::mv(connection));
-          connection = refConnection->addWrappedRef();
-          kj::Own<kj::AsyncIoStream> ref1 = refConnection->addWrappedRef();
-          Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)> cb =
-              [wrapper, ref1 = kj::mv(ref1)](kj::StringPtr expectedServerHostname) mutable {
-            kj::Promise<kj::Own<kj::AsyncIoStream>> secureStream =
-                wrapper->wrapClient(kj::mv(ref1), expectedServerHostname);
-            return kj::newPromisedStream(kj::mv(secureStream));
+          auto transitConnectionRef = kj::refcountedWrapper(
+              kj::heap<TransitionaryAsyncIoStream>(kj::mv(connection)));
+          Function<kj::Promise<void>(kj::StringPtr)> cb =
+              [wrapper, ref1 = transitConnectionRef->addWrappedRef()](
+              kj::StringPtr expectedServerHostname) mutable {
+            ref1->startTls(wrapper, expectedServerHostname);
+            return kj::READY_NOW;
           };
+          connection = transitConnectionRef->addWrappedRef();
           *tlsStarter = kj::mv(cb);
         }
       }
     }
-    #endif
 
     return ConnectRequest {
       kj::mv(kj::get<0>(split)),
