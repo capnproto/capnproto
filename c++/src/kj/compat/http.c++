@@ -6704,7 +6704,7 @@ public:
         return promise.ignoreResult().attach(kj::mv(out), kj::mv(innerResponse.body));
       }));
 
-      return kj::joinPromises(promises.finish());
+      return kj::joinPromisesFailFast(promises.finish());
     } else {
       return client.openWebSocket(url, headers)
           .then([&response](HttpClient::WebSocketResponse&& innerResponse) -> kj::Promise<void> {
@@ -6714,7 +6714,7 @@ public:
             auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
             promises.add(ws->pumpTo(*ws2));
             promises.add(ws2->pumpTo(*ws));
-            return kj::joinPromises(promises.finish()).attach(kj::mv(ws), kj::mv(ws2));
+            return kj::joinPromisesFailFast(promises.finish()).attach(kj::mv(ws), kj::mv(ws2));
           }
           KJ_CASE_ONEOF(body, kj::Own<kj::AsyncInputStream>) {
             auto out = response.send(
@@ -6741,7 +6741,7 @@ public:
     // This operates optimistically. In order to support pipelining, we connect the
     // input and outputs streams immediately, even if we're not yet certain that the
     // tunnel can actually be established.
-    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(3);
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
 
     // For the inbound pipe (from the clients stream to the passed in stream)
     // We want to guard reads pending the acceptance of the tunnel. If the
@@ -6756,24 +6756,28 @@ public:
     // Writing from connection to io is unguarded and allowed immediately.
     promises.add(connection.pumpTo(*io).then([&io=*io](uint64_t size) {
       io.shutdownWrite();
-    }).eagerlyEvaluate(nullptr));
+    }));
 
     promises.add(io->pumpTo(connection).then([&connection](uint64_t size) {
       connection.shutdownWrite();
-    }).eagerlyEvaluate(nullptr));
+    }));
 
-    promises.add(request.status.then(
-        [&response,&io=*io,&connection,fulfiller=kj::mv(paf.fulfiller)]
+    auto pumpPromise = kj::joinPromisesFailFast(promises.finish());
+
+    return request.status.then(
+        [&response,&connection,fulfiller=kj::mv(paf.fulfiller),
+         pumpPromise=kj::mv(pumpPromise)]
         (HttpClient::ConnectRequest::Status status) mutable -> kj::Promise<void> {
       if (status.statusCode >= 200 && status.statusCode < 300) {
         // Release the read guard!
         fulfiller->fulfill(kj::Maybe<HttpInputStreamImpl::ReleasedBuffer>(nullptr));
         response.accept(status.statusCode, status.statusText, *status.headers);
-        return kj::READY_NOW;
+        return kj::mv(pumpPromise);
       } else {
         // If the connect request is rejected, we want to shutdown the tunnel
         // and pipeline the status.errorBody to the AsyncOutputStream returned by
         // reject if it exists.
+        pumpPromise = nullptr;
         connection.shutdownWrite();
         fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "the connect request was rejected"));
         KJ_IF_MAYBE(errorBody, status.errorBody) {
@@ -6787,13 +6791,7 @@ public:
           return kj::READY_NOW;
         }
       }
-    }).eagerlyEvaluate(nullptr));
-
-    // TODO(bug): Using kj::joinPromises here is a bit problematic. If the pump in one
-    // direction throws an error, it will be hung in limbo waiting for the other direction
-    // to resolve. This issue is not specific to connect, the WebSockets impl has the
-    // same potential problem. We should fix but for now this should be acceptable.
-    return kj::joinPromises(promises.finish()).attach(kj::mv(io));
+    }).attach(kj::mv(io));
   }
 
 private:
