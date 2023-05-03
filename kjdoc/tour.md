@@ -910,9 +910,11 @@ The opposite of forking promises is joining promises. There are two types of joi
 
 For an exclusive join, use `promise.exclusiveJoin(kj::mv(otherPromise))`. The two promises must return the same type. The result is a promise that returns whichever result is produced first, and cancels the other promise at that time. (To exclusively join more than two promises, call `.exclusiveJoin()` multiple times in a chain.)
 
-To perform an inclusive join, use `kj::joinPromises()`. This turns a `kj::Array<kj::Promise<T>>` into a `kj::Promise<kj::Array<T>>`. However, note that `kj::joinPromises()` has a couple common gotchas:
+To perform an inclusive join, use `kj::joinPromises()` or `kj::joinPromisesFailFast()`. These turn a `kj::Array<kj::Promise<T>>` into a `kj::Promise<kj::Array<T>>`. However, note that `kj::joinPromises()` has a couple common gotchas:
 * Trailing continuations on the promises passed to `kj::joinPromises()` are evaluated lazily after all the promises become ready. Use `.eagerlyEvaluate()` on each one to force trailing continuations to happen eagerly. (See earlier discussion under "Background Tasks".)
-* If any promise in the array rejects, the exception will be held until all other promises have completed (or rejected), and only then will the exception propagate. In practice we've found that most uses of `kj::joinPromises()` would prefer "exclusive" or "fail-fast" behavior in the case of an exception, but as of this writing we have not yet introduced a function that does this.
+* If any promise in the array rejects, the exception will be held until all other promises have completed (or rejected), and only then will the exception propagate. In practice we've found that most uses of `kj::joinPromises()` would prefer "exclusive" or "fail-fast" behavior in the case of an exception.
+
+`kj::joinPromisesFailFast()` addresses the gotchas described above: promise continuations are evaluated eagerly, and if any promise results in an exception, the join promise is immediately rejected with that exception.
 
 ### Threads
 

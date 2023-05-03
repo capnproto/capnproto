@@ -975,11 +975,17 @@ private:
 
 // -------------------------------------------------------------------
 
+enum class ArrayJoinBehavior {
+  LAZY,
+  EAGER,
+};
+
 class ArrayJoinPromiseNodeBase: public PromiseNode {
 public:
   ArrayJoinPromiseNodeBase(Array<OwnPromiseNode> promises,
                            ExceptionOrValue* resultParts, size_t partSize,
-                           SourceLocation location);
+                           SourceLocation location,
+                           ArrayJoinBehavior joinBehavior);
   ~ArrayJoinPromiseNodeBase() noexcept(false);
 
   void onReady(Event* event) noexcept override final;
@@ -991,8 +997,11 @@ protected:
   // Called to compile the result only in the case where there were no errors.
 
 private:
+  const ArrayJoinBehavior joinBehavior;
+
   uint countLeft;
   OnReadyEvent onReadyEvent;
+  bool armed = false;
 
   class Branch final: public Event {
   public:
@@ -1002,9 +1011,6 @@ private:
 
     Maybe<Own<Event>> fire() override;
     void traceEvent(TraceBuilder& builder) override;
-
-    Maybe<Exception> getPart();
-    // Calls dependency->get(output).  If there was an exception, return it.
 
   private:
     ArrayJoinPromiseNodeBase& joinNode;
@@ -1022,9 +1028,10 @@ class ArrayJoinPromiseNode final: public ArrayJoinPromiseNodeBase {
 public:
   ArrayJoinPromiseNode(Array<OwnPromiseNode> promises,
                        Array<ExceptionOr<T>> resultParts,
-                       SourceLocation location)
+                       SourceLocation location,
+                       ArrayJoinBehavior joinBehavior)
       : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<T>),
-                                 location),
+                                 location, joinBehavior),
         resultParts(kj::mv(resultParts)) {}
   void destroy() override { dtor(*this); }
 
@@ -1048,7 +1055,8 @@ class ArrayJoinPromiseNode<void> final: public ArrayJoinPromiseNodeBase {
 public:
   ArrayJoinPromiseNode(Array<OwnPromiseNode> promises,
                        Array<ExceptionOr<_::Void>> resultParts,
-                       SourceLocation location);
+                       SourceLocation location,
+                       ArrayJoinBehavior joinBehavior);
   ~ArrayJoinPromiseNode();
   void destroy() override { dtor(*this); }
 
@@ -1480,7 +1488,16 @@ template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises, SourceLocation location) {
   return _::PromiseNode::to<Promise<Array<T>>>(_::allocPromise<_::ArrayJoinPromiseNode<T>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
-      heapArray<_::ExceptionOr<T>>(promises.size()), location));
+      heapArray<_::ExceptionOr<T>>(promises.size()), location,
+      _::ArrayJoinBehavior::LAZY));
+}
+
+template <typename T>
+Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocation location) {
+  return _::PromiseNode::to<Promise<Array<T>>>(_::allocPromise<_::ArrayJoinPromiseNode<T>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
+      heapArray<_::ExceptionOr<T>>(promises.size()), location,
+      _::ArrayJoinBehavior::EAGER));
 }
 
 // =======================================================================================
