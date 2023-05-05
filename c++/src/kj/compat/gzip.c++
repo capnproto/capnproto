@@ -28,7 +28,8 @@ namespace kj {
 
 namespace _ {  // private
 
-GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel) {
+GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel,
+    kj::Maybe<int> KJ_UNUSED windowBits) {
   int initResult;
 
   KJ_IF_MAYBE(level, compressionLevel) {

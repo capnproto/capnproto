@@ -36,7 +36,9 @@ constexpr size_t KJ_GZ_BUF_SIZE = 4096;
 
 class GzipOutputContext final {
 public:
-  GzipOutputContext(kj::Maybe<int> compressionLevel);
+  // We always use the maximum window size of 32KB for gzip, the parameter is only provided here
+  // for compatibility purposes.
+  GzipOutputContext(kj::Maybe<int> compressionLevel, kj::Maybe<int> KJ_UNUSED windowBits = nullptr);
   ~GzipOutputContext() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipOutputContext);
 

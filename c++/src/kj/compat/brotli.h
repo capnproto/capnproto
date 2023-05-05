@@ -78,7 +78,7 @@ private:
 
 class BrotliInputStream final: public InputStream {
 public:
-  BrotliInputStream(InputStream& inner);
+  BrotliInputStream(InputStream& inner, kj::Maybe<int> windowBits = nullptr);
   ~BrotliInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliInputStream);
 
@@ -87,6 +87,7 @@ public:
 private:
   InputStream& inner;
   BrotliDecoderState* ctx;
+  int windowBits;
   bool atValidEndpoint = false;
 
   byte buffer[_::KJ_BROTLI_BUF_SIZE];
@@ -100,7 +101,7 @@ private:
 
 class BrotliAsyncInputStream final: public AsyncInputStream {
 public:
-  BrotliAsyncInputStream(AsyncInputStream& inner);
+  BrotliAsyncInputStream(AsyncInputStream& inner, kj::Maybe<int> windowBits = nullptr);
   ~BrotliAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncInputStream);
 
@@ -109,6 +110,7 @@ public:
 private:
   AsyncInputStream& inner;
   BrotliDecoderState* ctx;
+  int windowBits;
   bool atValidEndpoint = false;
 
   byte buffer[_::KJ_BROTLI_BUF_SIZE];

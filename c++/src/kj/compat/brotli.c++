@@ -139,8 +139,11 @@ kj::Tuple<bool, kj::ArrayPtr<const byte>> BrotliOutputContext::pumpOnce(BrotliEn
 
 // =======================================================================================
 
-BrotliInputStream::BrotliInputStream(InputStream& inner)
+BrotliInputStream::BrotliInputStream(InputStream& inner, kj::Maybe<int> _windowBits)
     : inner(inner), next_in(nullptr), available_in(0) {
+  windowBits = _windowBits.orDefault(_::KJ_BROTLI_MAX_DEC_WBITS);
+  KJ_REQUIRE(windowBits >= BROTLI_MIN_WINDOW_BITS && windowBits <= BROTLI_MAX_WINDOW_BITS,
+      "invalid brotli window size (window bits", windowBits, ")");
   ctx = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
   KJ_REQUIRE(ctx, "brotli state allocation failed");
 }
@@ -175,7 +178,7 @@ size_t BrotliInputStream::readImpl(
   if (firstInput) {
     firstInput = false;
     int streamWbits = _::get_brotli_window_bits(next_in[0]);
-    KJ_REQUIRE(streamWbits <= _::KJ_BROTLI_MAX_DEC_WBITS,
+    KJ_REQUIRE(streamWbits <= windowBits,
         "brotli window size too big", (1 << streamWbits));
   }
   BrotliDecoderResult result = BrotliDecoderDecompressStream(
@@ -205,8 +208,11 @@ size_t BrotliInputStream::readImpl(
 
 // =======================================================================================
 
-BrotliAsyncInputStream::BrotliAsyncInputStream(AsyncInputStream& inner)
+BrotliAsyncInputStream::BrotliAsyncInputStream(AsyncInputStream& inner, kj::Maybe<int> _windowBits)
     : inner(inner), next_in(nullptr), available_in(0) {
+  windowBits = _windowBits.orDefault(_::KJ_BROTLI_MAX_DEC_WBITS);
+  KJ_REQUIRE(windowBits >= BROTLI_MIN_WINDOW_BITS && windowBits <= BROTLI_MAX_WINDOW_BITS,
+      "invalid brotli window size (window bits", windowBits, ")");
   ctx = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
   KJ_REQUIRE(ctx, "brotli state allocation failed");
 }
@@ -246,7 +252,7 @@ Promise<size_t> BrotliAsyncInputStream::readImpl(
   if (firstInput) {
     firstInput = false;
     int streamWbits = _::get_brotli_window_bits(next_in[0]);
-    KJ_REQUIRE(streamWbits <= _::KJ_BROTLI_MAX_DEC_WBITS,
+    KJ_REQUIRE(streamWbits <= windowBits,
         "brotli window size too big", (1 << streamWbits));
   }
   BrotliDecoderResult result = BrotliDecoderDecompressStream(

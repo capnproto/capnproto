@@ -37,7 +37,10 @@ public:
 
   CompOutputStream(OutputStream& inner, int compressionLevel = -1)
                   : inner(inner), ctx(compressionLevel) {}
-  CompOutputStream(OutputStream& inner, decltype(DECOMPRESS)) : inner(inner), ctx(nullptr) {}
+  // Order of arguments is not ideal, but allows us to specify the window size if needed while
+  // remaining compatible with the existing API.
+  CompOutputStream(OutputStream& inner, decltype(DECOMPRESS), kj::Maybe<int> windowSize = nullptr)
+    : inner(inner), ctx(nullptr, windowSize) {}
   ~CompOutputStream() noexcept(false) {
     pump(FINISH);
   }
@@ -79,8 +82,9 @@ public:
 
   CompAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = -1)
                         : inner(inner), ctx(compressionLevel) {}
-  CompAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
-                        : inner(inner), ctx(nullptr) {}
+  CompAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS),
+      kj::Maybe<int> windowSize = nullptr)
+                        : inner(inner), ctx(nullptr, windowSize) {}
   KJ_DISALLOW_COPY_AND_MOVE(CompAsyncOutputStream);
 
   Promise<void> write(const void* buffer, size_t size) override {

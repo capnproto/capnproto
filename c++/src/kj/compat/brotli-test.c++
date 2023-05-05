@@ -29,12 +29,14 @@
 namespace kj {
 namespace {
 
-// Note that this may reject files created by run of the mill brotli util based on window size
 static const byte FOOBAR_BR[] = {
   0x83, 0x02, 0x80, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72, 0x03,
 };
 
-// brotli stream with 24 window bits, expected to be rejected
+// brotli stream with 24 window bits, i.e. the max window size. If KJ_BROTLI_MAX_DEC_WBITS is less
+// than 24, the stream will be rejected by default. This approach should be acceptable in a web
+// context, where few files benefit from larger windows and memory usage matters for
+// concurrent transfers.
 static const byte FOOBAR_BR_LARGE_WIN[] = {
   0x8f, 0x02, 0x80, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72, 0x03,
 };
@@ -162,11 +164,18 @@ KJ_TEST("brotli decompression") {
         brotli.tryRead(text, 1, sizeof(text)));
   }
 
-  // Check that stream with high window size is rejected.
+  // Check that stream with high window size is rejected. Conversely, check that it is accepted if
+  // configured to accept the full window size.
   {
     MockInputStream rawInput(FOOBAR_BR_LARGE_WIN, kj::maxValue);
     BrotliInputStream brotli(rawInput);
     KJ_EXPECT_THROW_MESSAGE("brotli window size too big", brotli.readAllText());
+  }
+
+  {
+    MockInputStream rawInput(FOOBAR_BR_LARGE_WIN, kj::maxValue);
+    BrotliInputStream brotli(rawInput, BROTLI_MAX_WINDOW_BITS);
+    KJ_EXPECT(brotli.readAllText() == "foobar");
   }
 
   // Check that invalid stream is rejected.
@@ -219,13 +228,19 @@ KJ_TEST("async brotli decompression") {
         brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope));
   }
 
-    // Check that stream with high window size is rejected. This will have to be adjusted if window
-    // size limit is lifted.
+  // Check that stream with high window size is rejected. Conversely, check that it is accepted if
+  // configured to accept the full window size.
   {
     MockAsyncInputStream rawInput(FOOBAR_BR_LARGE_WIN, kj::maxValue);
     BrotliAsyncInputStream brotli(rawInput);
     KJ_EXPECT_THROW_MESSAGE("brotli window size too big",
       brotli.readAllText().wait(io.waitScope));
+  }
+
+  {
+    MockAsyncInputStream rawInput(FOOBAR_BR_LARGE_WIN, kj::maxValue);
+    BrotliAsyncInputStream brotli(rawInput, BROTLI_MAX_WINDOW_BITS);
+    KJ_EXPECT(brotli.readAllText().wait(io.waitScope) == "foobar");
   }
 
   // Read concatenated input.
