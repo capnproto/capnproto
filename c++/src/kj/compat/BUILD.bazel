@@ -43,7 +43,7 @@ cc_library(
 cc_library(
     name = "kj-gzip",
     srcs = ["gzip.c++"],
-    hdrs = ["gzip.h", "comp-stream-tpl.h"],
+    hdrs = ["gzip.h"],
     include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = [
@@ -55,7 +55,7 @@ cc_library(
 cc_library(
     name = "kj-brotli",
     srcs = ["brotli.c++"],
-    hdrs = ["brotli.h", "comp-stream-tpl.h"],
+    hdrs = ["brotli.h"],
     include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     target_compatible_with = select({

@@ -28,8 +28,7 @@ namespace kj {
 
 namespace _ {  // private
 
-GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel,
-    kj::Maybe<int> KJ_UNUSED windowBits) {
+GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel) {
   int initResult;
 
   KJ_IF_MAYBE(level, compressionLevel) {
@@ -149,6 +148,35 @@ size_t GzipInputStream::readImpl(
 
 // =======================================================================================
 
+GzipOutputStream::GzipOutputStream(OutputStream& inner, int compressionLevel)
+    : inner(inner), ctx(compressionLevel) {}
+
+GzipOutputStream::GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS))
+    : inner(inner), ctx(nullptr) {}
+
+GzipOutputStream::~GzipOutputStream() noexcept(false) {
+  pump(Z_FINISH);
+}
+
+void GzipOutputStream::write(const void* in, size_t size) {
+  ctx.setInput(in, size);
+  pump(Z_NO_FLUSH);
+}
+
+void GzipOutputStream::pump(int flush) {
+  bool ok;
+  do {
+    auto result = ctx.pumpOnce(flush);
+    ok = get<0>(result);
+    auto chunk = get<1>(result);
+    if (chunk.size() > 0) {
+      inner.write(chunk.begin(), chunk.size());
+    }
+  } while (ok);
+}
+
+// =======================================================================================
+
 GzipAsyncInputStream::GzipAsyncInputStream(AsyncInputStream& inner)
     : inner(inner) {
   // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
@@ -206,6 +234,47 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
     } else {
       KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
     }
+  }
+}
+
+// =======================================================================================
+
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
+    : inner(inner), ctx(compressionLevel) {}
+
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
+    : inner(inner), ctx(nullptr) {}
+
+Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
+  ctx.setInput(in, size);
+  return pump(Z_NO_FLUSH);
+}
+
+Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  if (pieces.size() == 0) return kj::READY_NOW;
+  return write(pieces[0].begin(), pieces[0].size())
+      .then([this,pieces]() {
+    return write(pieces.slice(1, pieces.size()));
+  });
+}
+
+kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
+  auto result = ctx.pumpOnce(flush);
+  auto ok = get<0>(result);
+  auto chunk = get<1>(result);
+
+  if (chunk.size() == 0) {
+    if (ok) {
+      return pump(flush);
+    } else {
+      return kj::READY_NOW;
+    }
+  } else {
+    auto promise = inner.write(chunk.begin(), chunk.size());
+    if (ok) {
+      promise = promise.then([this, flush]() { return pump(flush); });
+    }
+    return promise;
   }
 }
 

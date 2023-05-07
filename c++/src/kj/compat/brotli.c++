@@ -206,6 +206,33 @@ size_t BrotliInputStream::readImpl(
   }
 }
 
+BrotliOutputStream::BrotliOutputStream(OutputStream& inner, int compressionLevel, int windowBits)
+    : inner(inner), ctx(compressionLevel, windowBits) {}
+
+BrotliOutputStream::BrotliOutputStream(OutputStream& inner, decltype(DECOMPRESS), int windowBits)
+    : inner(inner), ctx(nullptr, windowBits) {}
+
+BrotliOutputStream::~BrotliOutputStream() noexcept(false) {
+  pump(BROTLI_OPERATION_FINISH);
+}
+
+void BrotliOutputStream::write(const void* in, size_t size) {
+  ctx.setInput(in, size);
+  pump(BROTLI_OPERATION_PROCESS);
+}
+
+void BrotliOutputStream::pump(BrotliEncoderOperation flush) {
+  bool ok;
+  do {
+    auto result = ctx.pumpOnce(flush);
+    ok = get<0>(result);
+    auto chunk = get<1>(result);
+    if (chunk.size() > 0) {
+      inner.write(chunk.begin(), chunk.size());
+    }
+  } while (ok);
+}
+
 // =======================================================================================
 
 BrotliAsyncInputStream::BrotliAsyncInputStream(AsyncInputStream& inner, kj::Maybe<int> _windowBits)
@@ -277,6 +304,49 @@ Promise<size_t> BrotliAsyncInputStream::readImpl(
     return n + alreadyRead;
   } else {
     return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+  }
+}
+
+// =======================================================================================
+
+BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel,
+                                                 int windowBits)
+    : inner(inner), ctx(compressionLevel, windowBits) {}
+
+BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS),
+                                                 int windowBits)
+    : inner(inner), ctx(nullptr, windowBits) {}
+
+Promise<void> BrotliAsyncOutputStream::write(const void* in, size_t size) {
+  ctx.setInput(in, size);
+  return pump(BROTLI_OPERATION_PROCESS);
+}
+
+Promise<void> BrotliAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  if (pieces.size() == 0) return kj::READY_NOW;
+  return write(pieces[0].begin(), pieces[0].size())
+      .then([this,pieces]() {
+    return write(pieces.slice(1, pieces.size()));
+  });
+}
+
+kj::Promise<void> BrotliAsyncOutputStream::pump(BrotliEncoderOperation flush) {
+  auto result = ctx.pumpOnce(flush);
+  auto ok = get<0>(result);
+  auto chunk = get<1>(result);
+
+  if (chunk.size() == 0) {
+    if (ok) {
+      return pump(flush);
+    } else {
+      return kj::READY_NOW;
+    }
+  } else {
+    auto promise = inner.write(chunk.begin(), chunk.size());
+    if (ok) {
+      promise = promise.then([this, flush]() { return pump(flush); });
+    }
+    return promise;
   }
 }
 

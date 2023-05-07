@@ -21,7 +21,6 @@
 
 #pragma once
 
-#include "comp-stream-tpl.h"
 #include <kj/io.h>
 #include <kj/async-io.h>
 #include <brotli/decode.h>
@@ -99,6 +98,34 @@ private:
   size_t readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };
 
+class BrotliOutputStream final: public OutputStream {
+public:
+  enum { DECOMPRESS };
+
+  // Order of arguments is not ideal, but allows us to specify the window size if needed while
+  // remaining compatible with the gzip API.
+  BrotliOutputStream(OutputStream& inner, int compressionLevel = KJ_BROTLI_DEFAULT_QTY,
+                     int windowBits = _::KJ_BROTLI_DEFAULT_WBITS);
+  BrotliOutputStream(OutputStream& inner, decltype(DECOMPRESS),
+                     int windowBits = _::KJ_BROTLI_MAX_DEC_WBITS);
+  ~BrotliOutputStream() noexcept(false);
+  KJ_DISALLOW_COPY_AND_MOVE(BrotliOutputStream);
+
+  void write(const void* buffer, size_t size) override;
+  using OutputStream::write;
+
+  inline void flush() {
+    // brotli decoder does not use this parameter, but automatically flushes as much as it can.
+    pump(BROTLI_OPERATION_FLUSH);
+  }
+
+private:
+  OutputStream& inner;
+  _::BrotliOutputContext ctx;
+
+  void pump(BrotliEncoderOperation flush);
+};
+
 class BrotliAsyncInputStream final: public AsyncInputStream {
 public:
   BrotliAsyncInputStream(AsyncInputStream& inner, kj::Maybe<int> windowBits = nullptr);
@@ -121,14 +148,40 @@ private:
   Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };
 
-// Declare BrotliOutputStream and BrotliAsyncOutputStream based on the compressed output stream
-// templates. The template parameters allow us to specify the right flush operation for brotli,
-// which is different than in the zlib API.
-typedef CompOutputStream<_::BrotliOutputContext, BrotliEncoderOperation, BROTLI_OPERATION_FLUSH,
-                         BROTLI_OPERATION_PROCESS, BROTLI_OPERATION_FINISH> BrotliOutputStream;
-typedef CompAsyncOutputStream<_::BrotliOutputContext, BrotliEncoderOperation,
-                              BROTLI_OPERATION_FLUSH, BROTLI_OPERATION_PROCESS,
-                              BROTLI_OPERATION_FINISH> BrotliAsyncOutputStream;
+class BrotliAsyncOutputStream final: public AsyncOutputStream {
+public:
+  enum { DECOMPRESS };
+
+  BrotliAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = KJ_BROTLI_DEFAULT_QTY,
+                          int windowBits = _::KJ_BROTLI_DEFAULT_WBITS);
+  BrotliAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS),
+                          int windowBits = _::KJ_BROTLI_MAX_DEC_WBITS);
+  KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncOutputStream);
+
+  Promise<void> write(const void* buffer, size_t size) override;
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+
+  Promise<void> whenWriteDisconnected() override { return inner.whenWriteDisconnected(); }
+
+  inline Promise<void> flush() {
+    // brotli decoder does not use this parameter, but automatically flushes as much as it can.
+    return pump(BROTLI_OPERATION_FLUSH);
+  }
+  // Call if you need to flush a stream at an arbitrary data point.
+
+  Promise<void> end() {
+    return pump(BROTLI_OPERATION_FINISH);
+  }
+  // Must call to flush and finish the stream, since some data may be buffered.
+  //
+  // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
+
+private:
+  AsyncOutputStream& inner;
+  _::BrotliOutputContext ctx;
+
+  kj::Promise<void> pump(BrotliEncoderOperation flush);
+};
 
 }  // namespace kj
 
