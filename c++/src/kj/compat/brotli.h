@@ -43,9 +43,11 @@ namespace _ {  // private
 constexpr size_t KJ_BROTLI_DEFAULT_WBITS = 19;
 
 // Maximum window size for streams to be decompressed, streams with larger windows are rejected.
-// The default of (1 << BROTLI_DEFAULT_WINDOW) = 4MB should be useful to limit memory usage, but
-// also means that some valid streams will be rejected.
-constexpr size_t KJ_BROTLI_MAX_DEC_WBITS = BROTLI_DEFAULT_WINDOW;
+// This is currently set to the maximum window size of 16MB, so all RFC 7932-compliant brotli
+// streams will be accepted. For applications where memory usage is a concern, using
+// BROTLI_DEFAULT_WINDOW (equivalent to 4MB window) is recommended instead as larger window sizes
+// are rarely useful in a web context.
+constexpr size_t KJ_BROTLI_MAX_DEC_WBITS = BROTLI_MAX_WINDOW_BITS;
 
 // Use an output buffer size of 8K, larger sizes did not seem to significantly improve performance,
 // perhaps due to brotli's internal output buffer.

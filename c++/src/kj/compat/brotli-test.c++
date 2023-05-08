@@ -168,7 +168,7 @@ KJ_TEST("brotli decompression") {
   // configured to accept the full window size.
   {
     MockInputStream rawInput(FOOBAR_BR_LARGE_WIN, kj::maxValue);
-    BrotliInputStream brotli(rawInput);
+    BrotliInputStream brotli(rawInput, BROTLI_DEFAULT_WINDOW);
     KJ_EXPECT_THROW_MESSAGE("brotli window size too big", brotli.readAllText());
   }
 
@@ -232,7 +232,7 @@ KJ_TEST("async brotli decompression") {
   // configured to accept the full window size.
   {
     MockAsyncInputStream rawInput(FOOBAR_BR_LARGE_WIN, kj::maxValue);
-    BrotliAsyncInputStream brotli(rawInput);
+    BrotliAsyncInputStream brotli(rawInput, BROTLI_DEFAULT_WINDOW);
     KJ_EXPECT_THROW_MESSAGE("brotli window size too big",
       brotli.readAllText().wait(io.waitScope));
   }
