@@ -378,6 +378,9 @@ TEST(Async, SeparateFulfillerVoid) {
 }
 
 TEST(Async, SeparateFulfillerCanceled) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
   auto pair = newPromiseAndFulfiller<void>();
 
   EXPECT_TRUE(pair.fulfiller->isWaiting());
@@ -430,6 +433,9 @@ TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
 #endif
 
 TEST(Async, SeparateFulfillerMemoryLeak) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
   auto paf = kj::newPromiseAndFulfiller<void>();
   paf.fulfiller->fulfill();
 }
@@ -993,6 +999,18 @@ TEST(Async, Detach) {
   EXPECT_FALSE(ran1);
   EXPECT_TRUE(ran2);
   EXPECT_TRUE(ran3);
+}
+
+TEST(Async, DetachInDetachedDestructor) {
+  // At one time, this crashed due to a bug in EventLoop's destructor.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto d = defer([]() {
+    evalLater([] {}).detach([](auto&&) {});
+  });
+  evalLater([d=kj::mv(d)] {}).detach([](auto&&) {});
 }
 
 class DummyEventPort: public EventPort {
@@ -1640,6 +1658,34 @@ KJ_TEST("constPromise") {
   int i = p.wait(waitScope);
   KJ_EXPECT(i == 123);
 }
+
+#ifndef KJ_DEBUG
+
+kj::Promise<uint> asyncAccumulate(uint z, uint ttl) {
+  if (ttl == 0) return z;
+  z += ttl;
+  return evalLater([z, ttl]() {
+    return asyncAccumulate(z, ttl - 1);
+  });
+}
+
+KJ_TEST("benchmark: Pre-environment evalLater()") {
+  EventLoop eventLoop;
+  WaitScope waitScope(eventLoop);
+
+  asyncAccumulate(0, 10'000'000).wait(waitScope);
+}
+
+KJ_TEST("benchmark: Environment-ful evalLater()") {
+  EventLoop eventLoop;
+  WaitScope waitScope(eventLoop);
+
+  runInEnvironment(uint(1), []() {
+    return asyncAccumulate(0, 10'000'000);
+  }).wait(waitScope);
+}
+
+#endif  // !KJ_DEBUG
 
 }  // namespace
 }  // namespace kj

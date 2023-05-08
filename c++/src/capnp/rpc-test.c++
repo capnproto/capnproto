@@ -751,17 +751,17 @@ private:
 
 class TestRacingTailCaller final: public test::TestTailCaller::Server {
 public:
-  TestRacingTailCaller(kj::Promise<void> unblock): unblock(kj::mv(unblock)) {}
+  TestRacingTailCaller(kj::Function<kj::Promise<void>()> unblock): unblock(kj::mv(unblock)) {}
 
   kj::Promise<void> foo(FooContext context) override {
-    return unblock.then([context]() mutable {
+    return unblock().then([context]() mutable {
       auto tailRequest = context.getParams().getCallee().fooRequest();
       return context.tailCall(kj::mv(tailRequest));
     });
   }
 
 private:
-  kj::Promise<void> unblock;
+  kj::Function<kj::Promise<void>()> unblock;
 };
 
 TEST(Rpc, TailCallCancel) {
@@ -796,8 +796,13 @@ TEST(Rpc, TailCallCancel) {
 }
 
 TEST(Rpc, TailCallCancelRace) {
-  auto paf = kj::newPromiseAndFulfiller<void>();
-  TestContext context(kj::heap<TestRacingTailCaller>(kj::mv(paf.promise)));
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
+
+  TestContext context(kj::heap<TestRacingTailCaller>([&fulfiller]() {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }));
 
   MallocMessageBuilder serverHostIdBuilder;
   auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
@@ -824,7 +829,7 @@ TEST(Rpc, TailCallCancelRace) {
     KJ_ASSERT(cancelCount == 0);
 
     // Unblock the server and at the same time cancel the client.
-    paf.fulfiller->fulfill();
+    KJ_ASSERT_NONNULL(fulfiller)->fulfill();
   }
 
   kj::Promise<void>(kj::NEVER_DONE).poll(context.waitScope);

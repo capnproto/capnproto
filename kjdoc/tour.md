@@ -975,6 +975,114 @@ As of this writing, KJ supports C++20 coroutines and Coroutines TS coroutines, t
 
 KJ prefers C++20 coroutines when both implementations are available.
 
+### Asynchronous environments
+
+Environments are ambiently available storage, of a type specified by the user, which "follow" user callbacks scheduled via functions/syntax like evalLater(), promise.then(), startFiber(), co_await, and more.
+
+Environments do not cross threads. Type safety is as safe as kj::downcast<T>() makes it -- in debug mode, you'll probably get an assertion if you set an environment of type T and try to get it later as type U -- but in release mode you're on your own.
+
+Environments can be entered using the function `runInEnvironment()`. `runInEnvironment()` has the exact same return value and semantics as `evalNow()`, but it accepts two arguments instead of just one. The first argument is a user-specified environment argument, and the second is the user's function object to execute.
+
+The `runInEnvironment()` function executes the user's function object synchronously, and in such a way that a decay-copied instance of the user's environment argument is ambiently available through `getEnvironment<T>()`. For example:
+
+```cpp
+Promise<void> foo() {
+  int i = 123;
+  auto promise = runInEnvironment(i, [&i]() {
+    KJ_ASSERT(getEnvironment<int>() == i);
+    KJ_ASSERT(getEnvironment<int>() != &i);
+  });
+  return runInEnvironment(heap<int>(456), []() {
+    KJ_ASSERT(*getEnvironment<Own<int>>() == 456);
+  });
+```
+
+Furthermore, the environment argument follows the asynchronous call graph: any user code which the function object schedules to run asynchronously will also be called in such a way that the same decay-copied instance of the user's environment argument is ambiently available. In plain terms, this means that your `.then()` continuations, `.attach()` value destructors, and so on, are all executed with this environment argument available.
+
+Environments do not propagate outside of the `runInEnvironment()` scope. For example:
+
+```cpp
+Promise<void> foo() {
+  return runInEnvironment(123, []() {
+    KJ_ASSERT(getEnvironment<int>() == 123);
+  }).then([])() {
+    KJ_ASSERT(tryGetEnvironment<int>() == nullptr);
+  });
+}
+```
+
+Promises which are created in different `runInEnvironment()` scopes cannot be joined. Attempting to do so will result in a crash in debug mode, and a thrilling bug in release mode (one of the promises' environments will win, and be used for the rest of the promise chain).
+
+Similarly, promises created under one `runInEnvironment()` call cannot have `.then()` -- or any other promise-creating function -- called on them. Attempting to do so will result in a crash in debug mode, and the promise's environment overriding the call site's environment for the rest of the promise chain in release mode.
+
+```cpp
+Promise<void> foo() {
+  Promise<void> promise(READY_NOW);
+
+  auto promise2 = runInEnvironment(123, [&promise]() {
+    // ERROR: attempt to use promise from outside environment
+    // return promise.then([]() {});
+
+    promise = evalLater([]() {});  // BAD: promise escapes the scope
+  });
+
+  // ERROR: attempt to join two environments
+  // return joinPromises(kj::mv(promise), kj::mv(promise2));
+}
+```
+
+The best way to "escape" a promise from an environment scope is to return it from the `runInEnvironment()` call. If for some reason this is not possible, there are two escape hatches:
+
+- Add the promise to a TaskSet. TaskSets can accept promises from any environment. Promises added to TaskSets do not propagate their environments anywhere, but release them once complete.
+- Call `promise.adoptEnvironment()`. This function induces a change in environment in the promise chain in the same way that `runInEnvironment()` uses for its own returned promise. It can be used both to import promises into or export them out of `runInEnvironment()` scopes.
+
+```cpp
+Promise<void> foo(TaskSet& tasks) {
+  Promise<void> promiseIn(READY_NOW);
+  Promise<void> promiseOut = nullptr;
+
+  auto promise = runInEnvironment([&]() {
+    tasks.add(evalLater([]() {}));  // OK
+
+    promiseOut = evalLater([]() {});  // BAD, but it'll be ok
+
+    // OK, because of .adoptEnvironment()
+    return promiseIn.adoptEnvironment().then(...);
+  });
+
+  // OK, because of .adoptEnvironment()
+  return promiseOut.adoptEnvironment().then(...);
+}
+```
+
+`runInEnvironment()` scopes can be nested arbitrarily deep. In this case, each subsequent layer in the stack will have all parent scopes' environment types available via `getEnvironment()`. For example:
+
+```cpp
+Promise<void> foo() {
+  return runInEnvironment(123, []() {
+    KJ_ASSERT(getEnvironment<int>() == 123);
+    KJ_ASSERT(tryGetEnvironment<double>() == nullptr);
+    return runInEnvironment(4.56, []() {
+      KJ_ASSERT(getEnvironment<int>() == 123);  // Parent's is still available
+      KJ_ASSERT(getEnvironment<double>() == 4.56);
+    });
+  });
+}
+```
+
+If a nested `runInEnvironment()` call is passed an argument whose type decays to the same as a type which was already populated by a parent call to `runInEnvironment()`, then the set of ambiently available environments is not augmented; instead, the new argument overrides the parent call's argument. For example:
+
+```cpp
+Promise<void> foo() {
+  return runInEnvironment(123, []() {
+    KJ_ASSERT(getEnvironment<int>() == 123);
+    return runInEnvironment(456, []() {
+      KJ_ASSERT(getEnvironment<int>() == 456);  // int overrode int
+    });
+  });
+}
+```
+
 ### Unit testing tips
 
 When unit-testing promise APIs, two tricky challenges frequently arise:
