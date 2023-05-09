@@ -58,6 +58,7 @@ class WaitScope;
 class TaskSet;
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location = {});
+Promise<void> joinPromisesFailFast(Array<Promise<void>>&& promises, SourceLocation location = {});
 // Out-of-line <void> specialization of template function defined in async.h.
 
 namespace _ {  // private

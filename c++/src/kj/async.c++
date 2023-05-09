@@ -2727,8 +2727,8 @@ void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
 
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
     Array<OwnPromiseNode> promises, ExceptionOrValue* resultParts, size_t partSize,
-    SourceLocation location)
-    : countLeft(promises.size()) {
+    SourceLocation location, ArrayJoinBehavior joinBehavior)
+    : joinBehavior(joinBehavior), countLeft(promises.size()) {
   // Make the branches.
   auto builder = heapArrayBuilder<Branch>(promises.size());
   for (uint i: indices(promises)) {
@@ -2749,12 +2749,20 @@ void ArrayJoinPromiseNodeBase::onReady(Event* event) noexcept {
 }
 
 void ArrayJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
-  // If any of the elements threw exceptions, propagate them.
   for (auto& branch: branches) {
-    KJ_IF_MAYBE(exception, branch.getPart()) {
+    if (joinBehavior == ArrayJoinBehavior::LAZY) {
+      // This implements `joinPromises()`'s lazy evaluation semantics.
+      branch.dependency->get(branch.output);
+    }
+
+    // If any of the elements threw exceptions, propagate them.
+    KJ_IF_MAYBE(exception, branch.output.exception) {
       output.addException(kj::mv(*exception));
     }
   }
+
+  // We either failed fast, or waited for all promises.
+  KJ_DASSERT(countLeft == 0 || output.exception != nullptr);
 
   if (output.exception == nullptr) {
     // No errors.  The template subclass will need to fill in the result.
@@ -2785,9 +2793,20 @@ ArrayJoinPromiseNodeBase::Branch::Branch(
 ArrayJoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
 
 Maybe<Own<Event>> ArrayJoinPromiseNodeBase::Branch::fire() {
-  if (--joinNode.countLeft == 0) {
+  if (--joinNode.countLeft == 0 && !joinNode.armed) {
     joinNode.onReadyEvent.arm();
+    joinNode.armed = true;
   }
+
+  if (joinNode.joinBehavior == ArrayJoinBehavior::EAGER) {
+    // This implements `joinPromisesFailFast()`'s eager-evaluation semantics.
+    dependency->get(output);
+    if (output.exception != nullptr && !joinNode.armed) {
+      joinNode.onReadyEvent.arm();
+      joinNode.armed = true;
+    }
+  }
+
   return nullptr;
 }
 
@@ -2796,16 +2815,11 @@ void ArrayJoinPromiseNodeBase::Branch::traceEvent(TraceBuilder& builder) {
   joinNode.onReadyEvent.traceEvent(builder);
 }
 
-Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
-  dependency->get(output);
-  return kj::mv(output.exception);
-}
-
 ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
     Array<OwnPromiseNode> promises, Array<ExceptionOr<_::Void>> resultParts,
-    SourceLocation location)
+    SourceLocation location, ArrayJoinBehavior joinBehavior)
     : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>),
-                               location),
+                               location, joinBehavior),
       resultParts(kj::mv(resultParts)) {}
 
 ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
@@ -2819,7 +2833,15 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location) {
   return _::PromiseNode::to<Promise<void>>(_::allocPromise<_::ArrayJoinPromiseNode<void>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
-      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location));
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location,
+      _::ArrayJoinBehavior::LAZY));
+}
+
+Promise<void> joinPromisesFailFast(Array<Promise<void>>&& promises, SourceLocation location) {
+  return _::PromiseNode::to<Promise<void>>(_::allocPromise<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location,
+      _::ArrayJoinBehavior::EAGER));
 }
 
 namespace _ {  // (private)
