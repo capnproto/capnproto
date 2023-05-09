@@ -272,11 +272,6 @@ public:
   }
 };
 
-#ifdef KJ_DEBUG
-void requireEnvironmentSetEqual(Maybe<EnvironmentSet&> left, Maybe<EnvironmentSet&> right);
-// Used in `PromiseDisposer::append()` to catch failure to call `.adoptEnvironment()`.
-#endif
-
 // -------------------------------------------------------------------
 
 // We want our PromiseArenas to:
@@ -430,6 +425,15 @@ public:
   // Notably, PromiseArenaMembers which are allocated by a method other than the `allocPromise()`
   // function (e.g., statically-allocated, stack-allocated, coroutine-frame-allocated PromiseNodes,
   // etc.) will not have an arena, and thus have no environment set available.
+
+  Maybe<EnvironmentSet> tryReleaseEnvironmentSetForDestroy();
+
+#ifdef KJ_DEBUG
+  void requireCompatibleEnvironmentSet(PromiseArenaMember& other);
+  void requireCompatibleEnvironmentSet(Maybe<EnvironmentSet&> set);
+  // Helper function to make sure we don't join two different environments, e.g. by failing to call
+  // `.adoptEnvironment()` when exporting/importing Promises across `runInEnvironment()` scopes.
+#endif
 
 protected:
   PromiseArenaMember(Maybe<EnvironmentSet> environmentSet)
@@ -637,7 +641,7 @@ public:
       //
       // Unfortunately, we alert the code author to these mistakes by crashing, because
       // `appendPromise()` is noexcept. Oh well.
-      requireEnvironmentSetEqual(next->getEnvironmentSet(), EnvironmentSet::tryGetCurrent());
+      next->requireCompatibleEnvironmentSet(EnvironmentSet::tryGetCurrent());
 #endif  // KJ_DEBUG
 
       // NOTE: When we call ctor(), it takes ownership of `next`, so we shouldn't assume `next`
@@ -1830,6 +1834,7 @@ void Promise<void>::detach(ErrorFunc&& errorHandler) {
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises, SourceLocation location) {
+  // TODO(perf): Use _::appendPromise() on promises[0].
   return _::PromiseNode::to<Promise<Array<T>>>(_::allocPromise<_::ArrayJoinPromiseNode<T>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size()), location,

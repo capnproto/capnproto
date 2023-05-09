@@ -2402,18 +2402,72 @@ Maybe<EnvironmentSet&> PromiseArenaMember::getEnvironmentSet() {
   KJ_UNREACHABLE;
 }
 
-#ifdef KJ_DEBUG
-void requireEnvironmentSetEqual(Maybe<EnvironmentSet&> left, Maybe<EnvironmentSet&> right) {
-  // Helper function to make sure we don't join two different environments, e.g. by failing to call
-  // `.adoptEnvironment()` when exporting/importing Promises across `runInEnvironment()` scopes.
-  auto message = "Attempt to join two different environments."_kj;
-  KJ_IF_MAYBE(leftEnv, left) {
-    auto& rightEnv = KJ_REQUIRE_NONNULL(right, message);
-    KJ_REQUIRE(*leftEnv == rightEnv, message);
+Maybe<EnvironmentSet> PromiseArenaMember::tryReleaseEnvironmentSetForDestroy() {
+  if (environmentSet.is<Maybe<EnvironmentSet>>()) {
+    return kj::mv(environmentSet).get<Maybe<EnvironmentSet>>();
   } else {
-    KJ_REQUIRE(right == nullptr, message);
+    return nullptr;
   }
 }
+
+#ifdef KJ_DEBUG
+
+void PromiseArenaMember::requireCompatibleEnvironmentSet(PromiseArenaMember& other) {
+  KJ_SWITCH_ONEOF(environmentSet) {
+    KJ_CASE_ONEOF(none, NoEnv) {
+      // We don't have an environment. This happens if our derived class implementation decides it
+      // doesn't need to run any user code itself, and it furthermore does not live in an arena. An
+      // example is any of our statically-allocated PromiseNodes, such as READY_NOW.
+      //
+      // Since we don't have an arena, any dependent promise will have to capture the environment
+      // by checking the event loop, so we can be considered compatible with any other promise.
+      KJ_DASSERT(arena == nullptr);
+      return;
+    }
+    KJ_CASE_ONEOF(set, Maybe<EnvironmentSet>) {
+      // We don't live in an arena, and our derived class implementation has decided it needs to run
+      // user code, so we own an EnvironmentSet directly. Defer to the other overload of this
+      // function.
+      KJ_DASSERT(arena == nullptr);
+      return other.requireCompatibleEnvironmentSet(set);
+    }
+    KJ_CASE_ONEOF(set, Maybe<EnvironmentSet&>) {
+      // We're a standard arena-allocated promise. Defer to the other overload of this function.
+      // We don't assert that we have an arena, because if we aren't the arena owner, then we won't
+      // have one.
+      return other.requireCompatibleEnvironmentSet(set);
+    }
+  }
+  KJ_UNREACHABLE;
+}
+
+void PromiseArenaMember::requireCompatibleEnvironmentSet(Maybe<EnvironmentSet&> other) {
+  auto compareEnvironmentSets = [](Maybe<EnvironmentSet&> left, Maybe<EnvironmentSet&> right) {
+    auto message = "Attempt to join two different environments."_kj;
+    KJ_IF_MAYBE(leftEnv, left) {
+      auto& rightEnv = KJ_REQUIRE_NONNULL(right, message);
+      KJ_REQUIRE(*leftEnv == rightEnv, message);
+    } else {
+      KJ_REQUIRE(right == nullptr, message);
+    }
+  };
+
+  KJ_SWITCH_ONEOF(environmentSet) {
+    KJ_CASE_ONEOF(none, NoEnv) {
+      // We don't have an environment, so we can be considered comaptible with any other promise.
+      // See the other overload's comments for why.
+      return;
+    }
+    KJ_CASE_ONEOF(set, Maybe<EnvironmentSet>) {
+      return compareEnvironmentSets(other, set);
+    }
+    KJ_CASE_ONEOF(set, Maybe<EnvironmentSet&>) {
+      return compareEnvironmentSets(other, set);
+    }
+  }
+  KJ_UNREACHABLE;
+}
+
 #endif  // KJ_DEBUG
 
 kj::String PromiseBase::trace() {
@@ -2795,7 +2849,7 @@ ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
     OwnPromiseNode left, OwnPromiseNode right, SourceLocation location)
     : left(*this, kj::mv(left), location), right(*this, kj::mv(right), location) {
 #ifdef KJ_DEBUG
-  requireEnvironmentSetEqual(getEnvironmentSet(), this->right.dependency->getEnvironmentSet());
+  this->left.dependency->requireCompatibleEnvironmentSet(*this->right.dependency);
 #endif
 }
 
@@ -2873,8 +2927,8 @@ ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
     : joinBehavior(joinBehavior), countLeft(promises.size()) {
 #ifdef KJ_DEBUG
   // We must not join multiple different environments.
-  for (auto& promise: promises) {
-    requireEnvironmentSetEqual(getEnvironmentSet(), promise->getEnvironmentSet());
+  for (auto i = 1; i < promises.size(); ++i) {
+    promises[i-1]->requireCompatibleEnvironmentSet(*promises[i]);
   }
 #endif  // KJ_DEBUG
 
@@ -3219,6 +3273,8 @@ void CoroutineBase::destroy() {
     //
     // We do not need to create an environment scope here, because the caller of
     // PromiseArenaMember::destroy() already did.
+    auto set = tryReleaseEnvironmentSetForDestroy();
+    EnvironmentSet::Scope scope(set);
     coroutine.destroy();
   } while (!disposalResults.destructorRan);
 

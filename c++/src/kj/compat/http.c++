@@ -1384,7 +1384,7 @@ public:
     ++pendingMessageCount;
     auto paf = kj::newPromiseAndFulfiller<void>();
 
-    auto promise = messageReadQueue
+    auto promise = messageReadQueue.adoptEnvironment()
         .then([this,fulfiller=kj::mv(paf.fulfiller)]() mutable {
       onMessageDone = kj::mv(fulfiller);
       return readHeader(HeaderType::MESSAGE, 0, 0);
@@ -2176,7 +2176,7 @@ private:
     // is empty, then they make the write directly, using `writeInProgress` to detect and block
     // concurrent writes.
 
-    writeQueue = writeQueue.then([this,content=kj::mv(content)]() mutable {
+    writeQueue = writeQueue.adoptEnvironment().then([this,content=kj::mv(content)]() mutable {
       auto promise = inner.write(content.begin(), content.size());
       return promise.attach(kj::mv(content));
     });
@@ -3237,7 +3237,7 @@ private:
 
     KJ_IF_MAYBE(p, sendingPong) {
       // We recently sent a pong, make sure it's finished before proceeding.
-      auto promise = p->then([this, opcode, message]() {
+      auto promise = p->adoptEnvironment().then([this, opcode, message]() {
         currentlySending = false;
         return sendImpl(opcode, message);
       });
@@ -6295,7 +6295,7 @@ private:
           // Must have reached EOF.
           KJ_IF_MAYBE(t, completionTask) {
             // Delay until completion.
-            auto result = t->then([actual]() { return actual; });
+            auto result = t->adoptEnvironment().then([actual]() { return actual; });
             completionTask = nullptr;
             return result;
           } else {
@@ -6311,7 +6311,7 @@ private:
         // request() call itself will throw a much more interesting error -- we'd rather propagate
         // that one, if so.
         KJ_IF_MAYBE(t, completionTask) {
-          auto result = t->then([e = kj::mv(e)]() mutable -> kj::Promise<T> {
+          auto result = t->adoptEnvironment().then([e = kj::mv(e)]() mutable -> kj::Promise<T> {
             // Looks like the service didn't throw. I guess we should propagate the stream error
             // after all.
             return kj::mv(e);
@@ -6357,7 +6357,7 @@ private:
         // the server side has actually returned from the service method, otherwise we may
         // prematurely cancel it.
 
-        task = task.then([this,statusCode,statusTextCopy=kj::mv(statusTextCopy),
+        task = task.adoptEnvironment().then([this,statusCode,statusTextCopy=kj::mv(statusTextCopy),
                           headersCopy=kj::mv(headersCopy),expectedBodySize]() mutable {
           fulfiller->fulfill({
             statusCode, statusTextCopy, headersCopy.get(),
@@ -6372,7 +6372,7 @@ private:
         // Wrap the stream in a wrapper that delays the last read (the one that signals EOF) until
         // the service's request promise has finished.
         auto wrapper = kj::heap<DelayedEofInputStream>(
-            kj::mv(pipe.in), task.attach(kj::addRef(*this)));
+            kj::mv(pipe.in), task.adoptEnvironment().attach(kj::addRef(*this)));
 
         fulfiller->fulfill({
           statusCode, statusTextCopy, headersCopy.get(),
@@ -6544,7 +6544,7 @@ private:
       // Wrap the client-side WebSocket in a wrapper that delays clean close of the WebSocket until
       // the service's request promise has finished.
       kj::Own<WebSocket> wrapper =
-          kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
+          kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), task.adoptEnvironment().attach(kj::addRef(*this)));
       fulfiller->fulfill({
         101, "Switching Protocols", headersCopy.get(),
         wrapper.attach(kj::mv(headersCopy))

@@ -179,7 +179,9 @@ public:
     }
 
     // On the other hand, if pendingMessages was empty, then we should set up the delayed write.
-    network.previousWrite = previousWrite.then([this, sendTime]() {
+    network.previousWrite = previousWrite
+        .adoptEnvironment()
+        .then([this, sendTime]() {
       return kj::evalLast([this, sendTime]() -> kj::Promise<void> {
         network.currentOutgoingMessageSendTime = sendTime;
         // Swap out the connection's pending messages and write all of them together.
@@ -332,7 +334,9 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
 }
 
 kj::Promise<void> TwoPartyVatNetwork::shutdown() {
-  kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
+  kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down")
+      .adoptEnvironment()
+      .then([this]() {
     return getStream().end();
   });
   previousWrite = nullptr;

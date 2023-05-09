@@ -633,13 +633,13 @@ public:
       completionPromise = forked.addBranch().attach(context->addRef());
     }
 
-    auto pipelinePromise = pipelineBranch
+    auto pipelinePromise = pipelineBranch.adoptEnvironment()
         .then([=,context=context->addRef()]() mutable -> kj::Own<PipelineHook> {
           context->releaseParams();
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         });
 
-    auto tailPipelinePromise = context->onTailCall()
+    auto tailPipelinePromise = context->onTailCall().adoptEnvironment()
         .then([context = context->addRef()](AnyPointer::Pipeline&& pipeline) {
       return kj::mv(pipeline.hook);
     });

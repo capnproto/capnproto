@@ -3584,7 +3584,7 @@ private:
       tasks.add(onDisconnect.promise
           .then([this,connectionPtr](RpcConnectionState::DisconnectInfo info) {
         connections.erase(connectionPtr);
-        tasks.add(kj::mv(info.shutdownPromise));
+        tasks.add(info.shutdownPromise.adoptEnvironment());
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
           bootstrapFactory, restorer, kj::mv(connection),

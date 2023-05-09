@@ -764,7 +764,7 @@ private:
       originalPumpfulfiller->fulfill(context.getParams().getByteCount());
 
       // Give the original pump task a chance to finish up.
-      return pathProber->task.attach(kj::mv(pathProber));
+      return pathProber->task.adoptEnvironment().attach(kj::mv(pathProber));
     }
 
     kj::Promise<void> reachedLimit(ReachedLimitContext context) override {
