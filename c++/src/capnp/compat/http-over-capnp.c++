@@ -616,19 +616,16 @@ public:
       hasBody = *s > 0;
     }
 
+    auto logError = [hasBody](kj::Exception&& e) {
+      KJ_LOG(INFO, "HTTP-over-RPC startResponse() failed", hasBody, e);
+    };
     if (hasBody) {
       auto pipeline = req.send();
       auto result = factory.streamFactory.capnpToKj(pipeline.getBody());
-      replyTask = pipeline.ignoreResult()
-          .eagerlyEvaluate([](kj::Exception&& e) {
-        KJ_LOG(ERROR, "HTTP-over-RPC startResponse() failed", e);
-      });
+      replyTask = pipeline.ignoreResult().eagerlyEvaluate(kj::mv(logError));
       return result;
     } else {
-      replyTask = req.send().ignoreResult()
-          .eagerlyEvaluate([](kj::Exception&& e) {
-        KJ_LOG(ERROR, "HTTP-over-RPC startResponse() failed", e);
-      });
+      replyTask = req.send().ignoreResult().eagerlyEvaluate(kj::mv(logError));
       return kj::heap<NullOutputStream>();
     }
 
@@ -668,7 +665,7 @@ public:
     // since it holds a reference to `downSocket`.
     replyTask = pipeline.ignoreResult()
         .eagerlyEvaluate([](kj::Exception&& e) {
-      KJ_LOG(ERROR, "HTTP-over-RPC startWebSocketRequest() failed", e);
+      KJ_LOG(INFO, "HTTP-over-RPC startWebSocketRequest() failed", e);
     });
 
     return result;
