@@ -22,5 +22,5 @@ build:windows --cxxopt='/wo4503' --host_cxxopt='/wo4503'
 # want a warning when compiling each file.
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'
 
-# build with ssl and zlib by default
-build --//src/kj:openssl=True --//src/kj:zlib=True
+# build with ssl, zlib and bazel by default
+build --//src/kj:openssl=True --//src/kj:zlib=True --//src/kj:brotli=True
