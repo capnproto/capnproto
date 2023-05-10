@@ -1154,16 +1154,42 @@ KJ_TEST("TLS receiver does not stall on hung client") {
   KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
 }
 
-#if !_WIN32 // TODO: Investigate and fix issue on Windows.
+kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
+  if (expected.size() == 0) return kj::READY_NOW;
+
+  auto buffer = kj::heapArray<char>(expected.size());
+
+  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
+    if (amount == 0) {
+      KJ_FAIL_ASSERT("expected data never sent", expected);
+    }
+
+    auto actual = buffer.slice(0, amount);
+    if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
+      KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
+    }
+
+    return expectRead(in, expected.slice(amount));
+  });
+}
+
+kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
+  static char buffer;
+
+  auto promise = in.tryRead(&buffer, 1, 1);
+  return promise.then([](size_t amount) {
+    KJ_ASSERT(amount == 0, "expected EOF");
+  });
+}
+
 KJ_TEST("NetworkHttpClient connect with tlsStarter") {
   auto io = kj::setupAsyncIo();
-  auto& waitScope KJ_UNUSED = io.waitScope;
-  auto listener1 = io.provider->getNetwork().parseAddress("localhost", 0)
+  auto listener1 = io.provider->getNetwork().parseAddress("127.0.0.1", 0)
       .wait(io.waitScope)->listen();
 
-  auto ignored KJ_UNUSED = listener1->accept().then([](Own<kj::AsyncIoStream> stream) {
-    auto buffer = kj::str("test");
-    return stream->write(buffer.cStr(), buffer.size()).attach(kj::mv(stream), kj::mv(buffer));
+  auto acceptLoop KJ_UNUSED = listener1->accept().then([](Own<kj::AsyncIoStream> stream) {
+    return stream->pumpTo(*stream).attach(kj::mv(stream)).ignoreResult();
   }).eagerlyEvaluate(nullptr);
 
   HttpClientSettings clientSettings;
@@ -1179,18 +1205,21 @@ KJ_TEST("NetworkHttpClient connect with tlsStarter") {
   kj::TlsStarterCallback tlsStarter;
   httpConnectSettings.tlsStarter = tlsStarter;
   auto request = client->connect(
-      kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable), httpConnectSettings);
+      kj::str("127.0.0.1:", listener1->getPort()), HttpHeaders(headerTable), httpConnectSettings);
 
   KJ_ASSERT(tlsStarter != nullptr);
 
   auto buf = kj::heapArray<char>(4);
-  return request.connection->tryRead(buf.begin(), 1, buf.size())
-      .then([buf = kj::mv(buf)](size_t count) {
-    KJ_ASSERT(count == 4);
-    KJ_ASSERT(kj::str(buf.asChars()) == "test");
-  }).attach(kj::mv(request.connection)).wait(io.waitScope);
+
+  auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+  promises.add(request.connection->write("hello", 5));
+  promises.add(expectRead(*request.connection, "hello"_kj));
+  kj::joinPromisesFailFast(promises.finish())
+      .then([io=kj::mv(request.connection)]() mutable {
+    io->shutdownWrite();
+    return expectEnd(*io).attach(kj::mv(io));
+  }).attach(kj::mv(listener1)).wait(io.waitScope);
 }
-#endif
 
 #ifdef KJ_EXTERNAL_TESTS
 KJ_TEST("TLS to capnproto.org") {
