@@ -3132,7 +3132,7 @@ private:
         case Mode::DECOMPRESS:
           result = inflate(&ctx, Z_SYNC_FLUSH);
           KJ_REQUIRE(result == Z_OK || result == Z_BUF_ERROR || result == Z_STREAM_END,
-                      "Decompression failed", result);
+                      "Decompression failed", result, " with reason", ctx.msg);
           break;
       }
 
