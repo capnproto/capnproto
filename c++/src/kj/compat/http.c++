@@ -4124,8 +4124,13 @@ public:
                                    leftoverBackingBuffer(kj::mv(leftoverBackingBuffer)),
                                    leftover(leftover) {}
 
+  // AsyncIoStream
   void shutdownWrite() override {
     stream->shutdownWrite();
+  }
+
+  kj::Maybe<int> getFd() const override {
+    return stream->getFd();
   }
 
   // AsyncInputStream
@@ -4254,6 +4259,20 @@ public:
         writeGuard(handleWriteGuard(kj::mv(writeGuard))),
         tasks(*this) {}
 
+
+  // AsyncIoStream
+  void shutdownWrite() override {
+    if (writeGuardReleased) {
+      inner->shutdownWrite();
+    } else {
+      tasks.add(writeGuard.addBranch().then([this]() { inner->shutdownWrite(); }));
+    }
+  }
+
+  Maybe<int> getFd() const override {
+    return inner->getFd();
+  }
+
   // AsyncInputStream
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     if (readGuardReleased) {
@@ -4278,15 +4297,6 @@ public:
   }
 
   // AsyncOutputStream
-
-  void shutdownWrite() override {
-    if (writeGuardReleased) {
-      inner->shutdownWrite();
-    } else {
-      tasks.add(writeGuard.addBranch().then([this]() { inner->shutdownWrite(); }));
-    }
-  }
-
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input,
                                                uint64_t amount = kj::maxValue) override {
     if (writeGuardReleased) {
