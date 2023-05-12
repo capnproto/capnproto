@@ -64,6 +64,8 @@ TEST(Common, Maybe) {
     Maybe<int> m = 123;
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
+    EXPECT_FALSE(nullptr == m);
+    EXPECT_TRUE(nullptr != m);
     KJ_IF_MAYBE(v, m) {
       EXPECT_EQ(123, *v);
     } else {

@@ -1581,6 +1581,9 @@ private:
   friend U* _::readMaybe(Maybe<U>& maybe);
   template <typename U>
   friend const U* _::readMaybe(const Maybe<U>& maybe);
+
+  friend bool operator==(decltype(nullptr), const Maybe<T>& maybe);
+  friend bool operator!=(decltype(nullptr), const Maybe<T>& maybe);
 };
 
 template <typename T>
@@ -1676,7 +1679,20 @@ private:
   friend U* _::readMaybe(Maybe<U&>&& maybe);
   template <typename U>
   friend U* _::readMaybe(const Maybe<U&>& maybe);
+
+  friend bool operator==(decltype(nullptr), const Maybe<T&>& maybe);
+  friend bool operator!=(decltype(nullptr), const Maybe<T&>& maybe);
 };
+
+template<typename T>
+inline bool operator==(decltype(nullptr), const Maybe<T>& maybe) {
+  return maybe.ptr == nullptr;
+}
+
+template<typename T>
+inline bool operator!=(decltype(nullptr), const Maybe<T>& maybe) {
+  return maybe.ptr != nullptr;
+}
 
 // =======================================================================================
 // ArrayPtr
