@@ -770,6 +770,8 @@ public:
 
   inline bool getOnlyPromisePipeline() const;
 
+  inline bool getIsRealtime() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -832,6 +834,9 @@ public:
 
   inline bool getOnlyPromisePipeline();
   inline void setOnlyPromisePipeline(bool value);
+
+  inline bool getIsRealtime();
+  inline void setIsRealtime(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3447,6 +3452,20 @@ inline bool Call::Builder::getOnlyPromisePipeline() {
 inline void Call::Builder::setOnlyPromisePipeline(bool value) {
   _builder.setDataField<bool>(
       ::capnp::bounded<130>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool Call::Reader::getIsRealtime() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<131>() * ::capnp::ELEMENTS);
+}
+
+inline bool Call::Builder::getIsRealtime() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<131>() * ::capnp::ELEMENTS);
+}
+inline void Call::Builder::setIsRealtime(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<131>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::capnp::rpc::Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {

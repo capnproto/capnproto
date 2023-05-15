@@ -257,6 +257,10 @@ public:
     // `sendForPipeline()` method. The effect of setting `onlyPromisePipeline = true` when invoking
     // `ClientHook::newCall()` is unspecified; it might cause the returned `Request` to support
     // only pipelining even when `send()` is called, or it might not.
+
+    bool isRealtime = false;
+    // Hints that the call is a "realtime" call, meaning that it does not expect a response (i.e.
+    // a `Return` message). As far as the caller is concerned, the message may be dropped.
   };
 
   Request<AnyPointer, AnyPointer> typelessRequest(

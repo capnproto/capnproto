@@ -26,6 +26,7 @@
 #include <kj/async.h>
 #include <kj/one-of.h>
 #include <kj/function.h>
+#include <limits>
 #include <functional>  // std::greater
 #include <unordered_map>
 #include <map>
@@ -169,6 +170,7 @@ ClientHook::CallHints callHintsFromReader(rpc::Call::Reader reader) {
   ClientHook::CallHints hints;
   hints.noPromisePipelining = reader.getNoPromisePipelining();
   hints.onlyPromisePipeline = reader.getOnlyPromisePipeline();
+  hints.isRealtime = reader.getIsRealtime();
   return hints;
 }
 
@@ -179,6 +181,11 @@ static constexpr Id highBit() {
   return 1u << (sizeof(Id) * 8 - 1);
 }
 
+template <typename Id>
+static constexpr Id lowBit() {
+  return 1;
+}
+
 template <typename Id, typename T>
 class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
@@ -186,6 +193,10 @@ class ExportTable {
 public:
   bool isHigh(Id& id) {
     return (id & highBit<Id>()) != 0;
+  }
+
+  bool isLow(Id& id) {
+    return (id & lowBit<Id>()) != 0;
   }
 
   kj::Maybe<T&> find(Id id) {
@@ -229,7 +240,7 @@ public:
     }
   }
 
-  T& nextHigh(Id& id) {
+  T& nextHigh(Id& id, bool setLowBit) {
     // Choose an ID with the top bit set in round-robin fashion, but don't choose an ID that
     // is still in use.
 
@@ -238,7 +249,13 @@ public:
     bool created = false;
     T* slot;
     while (!created) {
-      id = highCounter++ | highBit<Id>();
+      highCounter += 2; // the high ID space is split in two, based on the low bit
+      id = highCounter | highBit<Id>();
+
+      if (setLowBit) {
+        id = id | lowBit<Id>();
+      }
+
       slot = &highSlots.findOrCreate(id, [&]() {
         created = true;
         return typename kj::HashMap<Id, T>::Entry { id, T() };
@@ -716,7 +733,7 @@ private:
   bool gotReturnForHighQuestionId = false;
   // Becomes true if we ever get a `Return` message for a high question ID (with top bit set),
   // which we use in cases where we've hinted to the peer that we don't want a `Return`. If the
-  // peer sends us one anyway then it seemingly doesn't not implement our hints. We need to stop
+  // peer sends us one anyway then it seemingly does not implement our hints. We need to stop
   // using the hints in this case before the high question ID space wraps around since otherwise
   // we might reuse an ID that the peer thinks is still in use.
 
@@ -808,6 +825,7 @@ private:
       callBuilder.setMethodId(methodId);
       callBuilder.setNoPromisePipelining(hints.noPromisePipelining);
       callBuilder.setOnlyPromisePipeline(hints.onlyPromisePipeline);
+      callBuilder.setIsRealtime(hints.isRealtime);
 
       auto root = request->getRoot();
       return Request<AnyPointer, AnyPointer>(root, kj::mv(request));
@@ -1813,7 +1831,11 @@ private:
         replacement.set(paramsBuilder);
         return RequestHook::from(kj::mv(replacement))->sendStreaming();
       } else {
-        return sendStreamingInternal(false);
+        if (callBuilder.getIsRealtime()) {
+          return sendRealtimeInternal(false);
+        } else {
+          return sendStreamingInternal(false);
+        }
       }
     }
 
@@ -1931,7 +1953,7 @@ private:
       question.paramExports = kj::mv(exports);
       question.isTailCall = isTailCall;
 
-      // Make the QuentionRef and result promise.
+      // Make the QuestionRef and result promise.
       SendInternalResult result;
       auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
       result.questionRef = kj::refcounted<QuestionRef>(
@@ -2002,6 +2024,33 @@ private:
       return kj::mv(flowPromise);
     }
 
+    kj::Promise<void> sendRealtimeInternal(bool isTailCall) {
+      // Build the cap table.
+      kj::Vector<int> fds;
+      auto exports = connectionState->writeDescriptors(
+          capTable.getTable(), callBuilder.getParams(), fds);
+      message->setFds(fds.releaseAsArray());
+
+      // Finish and send.
+      QuestionId questionId;
+      connectionState->questions.nextHigh(questionId, true);
+      callBuilder.setQuestionId(questionId);
+      callBuilder.setIsRealtime(true);
+      if (isTailCall) {
+        callBuilder.getSendResultsTo().setYourself();
+      }
+      KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+        KJ_CONTEXT("sending RPC call", callBuilder.getInterfaceId(),
+                   callBuilder.getMethodId());
+        message->sendRealtime();
+      })) {
+        connectionState->releaseExports(exports);
+        return kj::mv(*exception);
+      }
+
+      return kj::READY_NOW;
+    }
+
     kj::Own<QuestionRef> sendForPipelineInternal() {
       // Since must of setupSend() is subtly different for this case, we don't reuse it.
 
@@ -2017,12 +2066,12 @@ private:
 
       // Init the question table.  Do this after writing descriptors to avoid interference.
       QuestionId questionId;
-      auto& question = connectionState->questions.nextHigh(questionId);
+      auto& question = connectionState->questions.nextHigh(questionId, false);
       question.isAwaitingReturn = false;  // No Return needed
       question.paramExports = kj::mv(exports);
       question.isTailCall = false;
 
-      // Make the QuentionRef and result promise.
+      // Make the QuestionRef and result promise.
       auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, nullptr);
       question.selfRef = *questionRef;
 
@@ -2400,10 +2449,11 @@ private:
       if (isFirstResponder()) {
         // We haven't sent a return yet, so we must have been canceled.  Send a cancellation return.
         unwindDetector.catchExceptionsIfUnwinding([&]() {
-          // Don't send anything if the connection is broken, or if the onlyPromisePipeline hint
-          // was used (in which case the caller doesn't care to receive a `Return`).
+          // Don't send anything if the connection is broken, if the onlyPromisePipeline hint
+          // was used or if it is a realtime call (in which case the caller doesn't care to
+          // receive a `Return`).
           bool shouldFreePipeline = true;
-          if (connectionState->connection.is<Connected>() && !hints.onlyPromisePipeline) {
+          if (connectionState->connection.is<Connected>() && !hints.onlyPromisePipeline && !hints.isRealtime) {
             auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
                 messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
             auto builder = message->getBody().initAs<rpc::Message>().initReturn();
@@ -2412,8 +2462,7 @@ private:
             builder.setReleaseParamCaps(false);
 
             if (redirectResults) {
-              // The reason we haven't sent a return is because the results were sent somewhere
-              // else.
+              // The reason we haven't sent a return is that the results were sent somewhere else.
               builder.setResultsSentElsewhere();
 
               // The pipeline could still be valid and in-use in this case.
@@ -3030,6 +3079,16 @@ private:
 
     // No more using `call` after this point, as it now belongs to the context.
 
+    if (call.getIsRealtime()) {
+      auto cancelPaf = kj::newPromiseAndFulfiller<void>();
+      auto promiseAndPipeline = startCall(
+          call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(), hints);
+      promiseAndPipeline.promise
+          .exclusiveJoin(kj::mv(cancelPaf.promise))
+          .detach([](kj::Exception&&) {});
+      return;
+    }
+
     {
       auto& answer = answers[answerId];
 
@@ -3147,6 +3206,19 @@ private:
       // that we already removed it and re-allocated the ID to something else. So, we should ignore
       // the `Return`. But we might want to make note to stop using these hints, to protect against
       // the (again, remote) possibility of our ID space wrapping around and leading to confusion.
+      if (questions.isLow(questionId)) {
+        // The low bit of the questionId is set, meaning that it is a realtime message. In this case,
+        // we must send a Finish message.
+        KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+                      auto message = connection.get<Connected>()->newOutgoingMessage(
+                          messageSizeHint<rpc::Finish>());
+                      auto builder = message->getBody().getAs<rpc::Message>().initFinish();
+                      builder.setQuestionId(questionId);
+                      message->send();
+                    })) {
+          disconnect(kj::mv(*e));
+        }
+      }
       if (ret.getReleaseParamCaps() && sentCapabilitiesInPipelineOnlyCall) {
         // Oh no, it appears the peer wants us to release any capabilities in the params, something
         // which only a level 0 peer would request (no version of the C++ RPC system has ever done
@@ -3275,7 +3347,6 @@ private:
         // ahead and delete it from the table.
         questions.erase(ret.getAnswerId(), *question);
       }
-
     } else {
       KJ_FAIL_REQUIRE("Invalid question ID in Return message.") { return; }
     }
