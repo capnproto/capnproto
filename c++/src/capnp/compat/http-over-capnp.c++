@@ -330,8 +330,10 @@ public:
       kj::HttpService::ConnectResponse& connResponse)
       : factory(factory), connResponse(connResponse) {}
 
+  void cancel() { sent = true; }
+
   kj::Promise<void> startConnect(StartConnectContext context) override {
-    KJ_REQUIRE(!sent, "already called startConnect() or startError()");
+    KJ_REQUIRE(!sent, "already called startConnect() or startError(), or request was canceled");
     sent = true;
 
     auto params = context.getParams();
@@ -344,7 +346,7 @@ public:
   }
 
   kj::Promise<void> startError(StartErrorContext context) override {
-    KJ_REQUIRE(!sent, "already called startConnect() or startError()");
+    KJ_REQUIRE(!sent, "already called startConnect() or startError(), or request was canceled");
     sent = true;
 
     auto params = context.getParams();
@@ -478,13 +480,19 @@ public:
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
     rpcRequest.initSettings().setUseTls(settings.useTls);
 
+    auto context = kj::heap<ConnectClientRequestContextImpl>(factory, tunnel);
+    auto& contextRef = *context;
+    capnp::HttpService::ConnectClientRequestContext::Client contextCap = kj::mv(context);
+    auto deferredCancel = kj::defer([&contextRef, cap = kj::cp(contextCap)]() {
+      contextRef.cancel();
+    });
+
     auto builder = capnp::Request<
         capnp::HttpService::ConnectParams,
         capnp::HttpService::ConnectResults>::Builder(rpcRequest);
     rpcRequest.adoptHeaders(factory.headersToCapnp(headers,
         Orphanage::getForMessageContaining(builder)));
-    rpcRequest.setContext(
-        kj::heap<ConnectClientRequestContextImpl>(factory, tunnel));
+    rpcRequest.setContext(kj::mv(contextCap));
     RemotePromise<capnp::HttpService::ConnectResults> pipeline = rpcRequest.send();
 
     // We read from `downPipe` (the other side writes into it.)
@@ -519,8 +527,7 @@ public:
     });
 
     return pipeline.ignoreResult()
-        .attach(kj::mv(downPumpTask))
-        .attach(kj::mv(upPumpTask));
+        .attach(kj::mv(downPumpTask), kj::mv(upPumpTask), kj::mv(deferredCancel));
 
   }
 
