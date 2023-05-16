@@ -50,6 +50,11 @@
 #include <deque>
 #include <atomic>
 
+#if KJ_ENABLE_READINESS_TRACKING
+#include <random>
+#include "entropy.h"
+#endif
+
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
 #include <kj/windows-sanity.h>
@@ -169,6 +174,15 @@ EventLoop& currentEventLoop() {
   EventLoop* loop = threadLocalEventLoop;
   KJ_REQUIRE(loop != nullptr, "No event loop is running on this thread.");
   return *loop;
+}
+
+Maybe<EventLoop&> tryGetCurrentEventLoop() {
+  EventLoop* loop = threadLocalEventLoop;
+  if (loop == nullptr) {
+    return nullptr;
+  } else {
+    return *loop;
+  }
 }
 
 class RootEvent: public _::Event {
@@ -763,7 +777,7 @@ struct Executor::Impl {
         start.remove(event);
         executing.add(event);
         event.state = _::XThreadEvent::EXECUTING;
-        event.armBreadthFirst();
+        event.armBreadthFirst(KJ_IF_READINESS_TRACKED(event.fireIdForTargetThread));
       }
 
       dispatchCancels(eventsToCancelOutsideLock);
@@ -808,6 +822,8 @@ struct Executor::Impl {
 
     for (auto& event: eventsToCancelOutsideLock) {
       event->promiseNode = nullptr;
+      // If readiness tracking is compiled in, we intentionally discard any returned FireId, because
+      // we're canceling the event.
       event->disarm();
     }
 
@@ -1797,12 +1813,21 @@ bool EventLoop::turn() {
     event->next = nullptr;
     event->prev = nullptr;
 
+#if KJ_ENABLE_READINESS_TRACKING
+    // Make sure the event's FireId is current through destruction.
+    KJ_DEFER(enteredFireId = nullptr);
+#endif
+
     Maybe<Own<_::Event>> eventToDestroy;
     {
       event->firing = true;
       KJ_DEFER(event->firing = false);
       currentlyFiring = event;
       KJ_DEFER(currentlyFiring = nullptr);
+#if KJ_ENABLE_READINESS_TRACKING
+      // TODO(now): Pass event->traceEvent(), but not all implementations work.
+      KJ_ASSERT_NONNULL(kj::mv(event->fireId)).enter("imagine an async trace here"_kj);
+#endif
       eventToDestroy = event->fire();
     }
 
@@ -2038,11 +2063,12 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation locatio
 
 Promise<void> yield() {
   class YieldPromiseNode final: public _::PromiseNode {
+    KJ_IF_READINESS_TRACKED(FireId fireId { "yield"_kj };)
   public:
-    void destroy() override {}
+    void destroy() override { KJ_IF_READINESS_TRACKED(dtor(*this);) }
 
     void onReady(_::Event* event) noexcept override {
-      if (event) event->armBreadthFirst();
+      if (event) event->armBreadthFirst(KJ_IF_READINESS_TRACKED(fireId));
     }
     void get(_::ExceptionOrValue& output) noexcept override {
       output.as<_::Void>() = _::Void();
@@ -2052,17 +2078,22 @@ Promise<void> yield() {
     }
   };
 
+#if KJ_ENABLE_READINESS_TRACKING
+  return _::PromiseNode::to<Promise<void>>(allocPromise<YieldPromiseNode>());
+#else
   static YieldPromiseNode NODE;
   return _::PromiseNode::to<Promise<void>>(OwnPromiseNode(&NODE));
+#endif
 }
 
 Promise<void> yieldHarder() {
   class YieldHarderPromiseNode final: public _::PromiseNode {
+    KJ_IF_READINESS_TRACKED(FireId fireId { "yield harder"_kj };)
   public:
-    void destroy() override {}
+    void destroy() override { KJ_IF_READINESS_TRACKED(dtor(*this);) }
 
     void onReady(_::Event* event) noexcept override {
-      if (event) event->armLast();
+      if (event) event->armLast(KJ_IF_READINESS_TRACKED(fireId));
     }
     void get(_::ExceptionOrValue& output) noexcept override {
       output.as<_::Void>() = _::Void();
@@ -2072,30 +2103,39 @@ Promise<void> yieldHarder() {
     }
   };
 
+#if KJ_ENABLE_READINESS_TRACKING
+  return  _::PromiseNode::to<Promise<void>>(allocPromise<YieldHarderPromiseNode>());
+#else
   static YieldHarderPromiseNode NODE;
   return _::PromiseNode::to<Promise<void>>(OwnPromiseNode(&NODE));
+#endif
 }
 
 OwnPromiseNode readyNow() {
-  class ReadyNowPromiseNode: public ImmediatePromiseNodeBase {
+  class ReadyNowPromiseNode final: public ImmediatePromiseNodeBase {
     // This is like `ConstPromiseNode<Void, Void{}>`, but the compiler won't let me pass a literal
     // value of type `Void` as a template parameter. (Might require C++20?)
 
   public:
-    void destroy() override {}
+    void destroy() override { KJ_IF_READINESS_TRACKED(dtor(*this);) }
     void get(ExceptionOrValue& output) noexcept override {
       output.as<Void>() = Void();
     }
   };
 
+#if KJ_ENABLE_READINESS_TRACKING
+  return allocPromise<ReadyNowPromiseNode>();
+#else
   static ReadyNowPromiseNode NODE;
   return OwnPromiseNode(&NODE);
+#endif
 }
 
 OwnPromiseNode neverDone() {
   class NeverDonePromiseNode final: public _::PromiseNode {
+    KJ_IF_READINESS_TRACKED(FireId fireId { "never-done"_kj });
   public:
-    void destroy() override {}
+    void destroy() override { KJ_IF_READINESS_TRACKED(dtor(*this);) }
 
     void onReady(_::Event* event) noexcept override {
       // ignore
@@ -2108,8 +2148,12 @@ OwnPromiseNode neverDone() {
     }
   };
 
+#if KJ_ENABLE_READINESS_TRACKING
+  return allocPromise<NeverDonePromiseNode>();
+#else
   static NeverDonePromiseNode NODE;
   return OwnPromiseNode(&NODE);
+#endif
 }
 
 void NeverDone::wait(WaitScope& waitScope, SourceLocation location) const {
@@ -2123,6 +2167,80 @@ void detach(kj::Promise<void>&& promise) {
   KJ_REQUIRE(loop.daemons.get() != nullptr, "EventLoop is shutting down.") { return; }
   loop.daemons->add(kj::mv(promise));
 }
+
+#if KJ_ENABLE_READINESS_TRACKING
+
+namespace {
+
+uint64_t nextFireId() {
+  static thread_local std::mt19937 engine([]() {
+    uint64_t seed;
+    kj::systemCsprng().generate(kj::ArrayPtr<byte>(reinterpret_cast<byte*>(&seed), sizeof(seed)));
+    return seed;
+  }());
+  std::uniform_int_distribution<uint64_t> distribution(0);
+  auto result = distribution(engine);
+  KJ_ASSERT(result != 0);
+  return result;
+}
+
+struct FireTimestamp {
+  uint64_t seconds;
+  uint64_t microseconds;
+};
+
+FireTimestamp fireNow() {
+  // Return the number of seconds since the Unix epoch with microsecond resolution.
+  auto microseconds = (systemPreciseCalendarClock().now() - UNIX_EPOCH) / MICROSECONDS;
+  static constexpr uint64_t A_MILLION = 1'000'000;
+  return FireTimestamp { microseconds / A_MILLION, microseconds % A_MILLION };
+}
+
+String KJ_STRINGIFY(const FireTimestamp& timestamp) {
+  return kj::str(timestamp.seconds, ".", timestamp.microseconds);
+}
+
+}  // namespace
+
+FireId::FireId(kj::StringPtr description): id(nextFireId()) {
+  uint64_t enteredId = 0;
+  KJ_IF_MAYBE(loop, tryGetCurrentEventLoop()) {
+    KJ_IF_MAYBE(entered, loop->enteredFireId) {
+      enteredId = entered->id;
+    }
+  }
+  KJ_LOG(INFO, kj::str("@asio|", fireNow(), "|", enteredId, "*", id, "|", description));
+}
+FireId::FireId(FireId&& other): id(other.id) {
+  KJ_ASSERT(other.entered == false, "Moved an entered FireId");
+  KJ_ASSERT(id != 0, "Moved a moved-from FireId");
+  other.id = 0;
+}
+FireId::~FireId() noexcept(false) {
+  if (id != 0 && !armed) {
+    if (entered) {
+      KJ_LOG(INFO, kj::str("@asio|", fireNow(), "|<", id, "|"));
+    } else {
+      KJ_LOG(INFO, kj::str("@asio|", fireNow(), "|~", id, "|"));
+    }
+  }
+}
+FireId FireId::arm() {
+  KJ_ASSERT(!entered);
+  armed = true;
+  return FireId(id);
+}
+void FireId::enter(StringPtr description) && {
+  KJ_ASSERT(id != 0, "Entered a moved-from FireId");
+  KJ_LOG(INFO, kj::str("@asio|", fireNow(), "|>", id, "|", description));
+
+  // This moves `*this` away! Further member accesses must use `self`.
+  auto& self = currentEventLoop().enteredFireId.emplace(kj::mv(*this));
+  self.entered = true;
+}
+FireId::FireId(uint64_t id): id(id) {}
+
+#endif  // KJ_ENABLE_READINESS_TRACKING
 
 Event::Event(SourceLocation location)
     : loop(currentEventLoop()), next(nullptr), prev(nullptr), location(location) {}
@@ -2141,12 +2259,14 @@ Event::~Event() noexcept(false) {
   // any instructions, it just blocks compiler optimizations.
   std::atomic_signal_fence(std::memory_order_acq_rel);
 
+  // If readiness tracking is compiled in, we intentionally discard any returned FireId, because
+  // we're canceling the event.
   disarm();
 
   KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
 }
 
-void Event::armDepthFirst() {
+void Event::armDepthFirst(KJ_IF_READINESS_TRACKED(FireId& fireIdParam)) {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
@@ -2157,6 +2277,9 @@ void Event::armDepthFirst() {
   }
 
   if (prev == nullptr) {
+    // TODO(someday): Annotate readiness tracking data with "arm depth-first" note.
+    KJ_IF_READINESS_TRACKED(fireId.emplace(fireIdParam.arm());)
+
     next = *loop.depthFirstInsertPoint;
     prev = loop.depthFirstInsertPoint;
     *prev = this;
@@ -2177,7 +2300,7 @@ void Event::armDepthFirst() {
   }
 }
 
-void Event::armBreadthFirst() {
+void Event::armBreadthFirst(KJ_IF_READINESS_TRACKED(FireId& fireIdParam)) {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
@@ -2188,6 +2311,9 @@ void Event::armBreadthFirst() {
   }
 
   if (prev == nullptr) {
+    // TODO(someday): Annotate readiness tracking data with "arm breadth-first" note.
+    KJ_IF_READINESS_TRACKED(fireId.emplace(fireIdParam.arm());)
+
     next = *loop.breadthFirstInsertPoint;
     prev = loop.breadthFirstInsertPoint;
     *prev = this;
@@ -2205,7 +2331,7 @@ void Event::armBreadthFirst() {
   }
 }
 
-void Event::armLast() {
+void Event::armLast(KJ_IF_READINESS_TRACKED(FireId& fireIdParam)) {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "Executor to queue events cross-thread.");
@@ -2216,6 +2342,9 @@ void Event::armLast() {
   }
 
   if (prev == nullptr) {
+    // TODO(someday): Annotate readiness tracking data with "arm last" note.
+    KJ_IF_READINESS_TRACKED(fireId.emplace(fireIdParam.arm());)
+
     next = *loop.breadthFirstInsertPoint;
     prev = loop.breadthFirstInsertPoint;
     *prev = this;
@@ -2238,7 +2367,7 @@ bool Event::isNext() {
   return loop.running && loop.head == this;
 }
 
-void Event::disarm() {
+Event::DisarmResult Event::disarm() {
   if (prev != nullptr) {
     if (threadLocalEventLoop != &loop && threadLocalEventLoop != nullptr) {
       KJ_LOG(FATAL, "Promise destroyed from a different thread than it was created in.");
@@ -2263,6 +2392,12 @@ void Event::disarm() {
 
     prev = nullptr;
     next = nullptr;
+
+#if KJ_ENABLE_READINESS_TRACKING
+    return kj::mv(fireId);
+  } else {
+    return nullptr;
+#endif
   }
 }
 
@@ -2315,7 +2450,7 @@ void PromiseNode::OnReadyEvent::init(Event* newEvent) {
     // A new continuation was added to a promise that was already ready.  In this case, we schedule
     // breadth-first, to make it difficult for applications to accidentally starve the event loop
     // by repeatedly waiting on immediate promises.
-    if (newEvent) newEvent->armBreadthFirst();
+    if (newEvent) newEvent->armBreadthFirst(KJ_IF_READINESS_TRACKED(fireId));
   } else {
     event = newEvent;
   }
@@ -2328,7 +2463,7 @@ void PromiseNode::OnReadyEvent::arm() {
     // A promise resolved and an event is already waiting on it.  In this case, arm in depth-first
     // order so that the event runs immediately after the current one.  This way, chained promises
     // execute together for better cache locality and lower latency.
-    event->armDepthFirst();
+    event->armDepthFirst(KJ_IF_READINESS_TRACKED(fireId));
   }
 
   event = _kJ_ALREADY_READY;
@@ -2339,7 +2474,7 @@ void PromiseNode::OnReadyEvent::armBreadthFirst() {
 
   if (event != nullptr) {
     // A promise resolved and an event is already waiting on it.
-    event->armBreadthFirst();
+    event->armBreadthFirst(KJ_IF_READINESS_TRACKED(fireId));
   }
 
   event = _kJ_ALREADY_READY;
@@ -2351,7 +2486,8 @@ ImmediatePromiseNodeBase::ImmediatePromiseNodeBase() {}
 ImmediatePromiseNodeBase::~ImmediatePromiseNodeBase() noexcept(false) {}
 
 void ImmediatePromiseNodeBase::onReady(Event* event) noexcept {
-  if (event) event->armBreadthFirst();
+  // KJ_DBG(this, "ImmediatePromiseNodeBase::onReady()", getStackTrace());
+  if (event) event->armBreadthFirst(KJ_IF_READINESS_TRACKED(fireId));
 }
 
 void ImmediatePromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
@@ -2570,14 +2706,22 @@ void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
 }
 
 void ChainPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
-  if (stopAtNextEvent && state == STEP1) {
-    // In STEP1, we are an Event -- when the inner node resolves, it will arm *this* object.
-    // In STEP2, we are not an Event -- when the inner node resolves, it directly arms our parent
-    // event.
-    return;
+  switch (state) {
+    case STEP1:
+      if (stopAtNextEvent) {
+        // In STEP1, we are an Event -- when the inner node resolves, it will arm *this* object.
+        return;
+      }
+      inner->tracePromise(builder, stopAtNextEvent);
+      break;
+    case STEP2:
+      // In STEP2, we are not an Event -- when the inner node resolves, it directly arms our
+      // parent event.
+      // Maybe returning the address of get() will give us a function name with meaningful type
+      // information.
+      builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
+      break;
   }
-
-  inner->tracePromise(builder, stopAtNextEvent);
 }
 
 Maybe<Own<Event>> ChainPromiseNode::fire() {
@@ -3107,7 +3251,17 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
     // a user code stack. Let's cancel our event and immediately resume. It's important that we
     // don't perform this optimization if this is the first suspension, because our caller may
     // depend on running code before this promise's continuations fire.
+#if KJ_ENABLE_READINESS_TRACKING
+    // TODO(someday): Find a way to represent this optimization in readiness tracking output. For
+    //   now, we hackily exit the currently-firing fire()'s fire ID, replace it, and enter the new
+    //   one.
+    void* space[32];
+    TraceBuilder builder(space);
+    node->tracePromise(builder, false);
+    KJ_ASSERT_NONNULL(coroutineEvent.disarm()).enter(kj::str(builder));
+#else
     coroutineEvent.disarm();
+#endif
 
     // We can resume ourselves by returning false. This accomplishes the same thing as if we had
     // returned true from await_ready().

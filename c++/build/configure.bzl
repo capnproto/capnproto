@@ -42,6 +42,11 @@ def kj_configure():
         build_setting_default = False,
     )
 
+    bool_flag(
+        name = "readiness_tracking",
+        build_setting_default = False,
+    )
+
     # Settings to use in select() expressions
     native.config_setting(
         name = "use_openssl",
@@ -79,6 +84,11 @@ def kj_configure():
         flag_values = {"track_lock_blocking": "True"},
     )
 
+    native.config_setting(
+        name = "use_readiness_tracking",
+        flag_values = {"readiness_tracking": "True"},
+    )
+
     native.cc_library(
         name = "kj-defines",
         defines = select({
@@ -99,5 +109,8 @@ def kj_configure():
         }) + select({
             "//src/kj:use_track_lock_blocking": ["KJ_TRACK_LOCK_BLOCKING=1"],
             "//conditions:default": ["KJ_TRACK_LOCK_BLOCKING=0"],
+        }) + select({
+            "//src/kj:use_readiness_tracking": ["KJ_ENABLE_READINESS_TRACKING=1"],
+            "//conditions:default": ["KJ_ENABLE_READINESS_TRACKING=0"],
         }),
     )

@@ -47,6 +47,12 @@
 #endif
 #endif
 
+#if KJ_ENABLE_READINESS_TRACKING
+#define KJ_IF_READINESS_TRACKED(code) code
+#else
+#define KJ_IF_READINESS_TRACKED(code)
+#endif
+
 KJ_BEGIN_HEADER
 
 namespace kj {
@@ -256,6 +262,28 @@ public:
 
   KJ_NORETURN(void wait(WaitScope& waitScope, SourceLocation location = {}) const);
 };
+
+#if KJ_ENABLE_READINESS_TRACKING
+
+class FireId {
+public:
+  explicit FireId(kj::StringPtr description);
+  KJ_DISALLOW_COPY(FireId);
+  FireId(FireId&&);
+  ~FireId() noexcept(false);
+
+  FireId arm();
+  void enter(StringPtr description) &&;
+
+private:
+  explicit FireId(uint64_t id);
+
+  uint64_t id;
+  bool armed = false;
+  bool entered = false;
+};
+
+#endif
 
 }  // namespace _ (private)
 }  // namespace kj

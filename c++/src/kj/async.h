@@ -1272,6 +1272,8 @@ private:
 
   _::Event* currentlyFiring = nullptr;
 
+  KJ_IF_READINESS_TRACKED(Maybe<_::FireId> enteredFireId;)
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -1292,6 +1294,7 @@ private:
   friend class _::FiberBase;
   friend class _::FiberStack;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+  KJ_IF_READINESS_TRACKED(friend class _::FireId;)  // TODO(now)
 };
 
 class WaitScope {

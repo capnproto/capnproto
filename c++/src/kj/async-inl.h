@@ -149,7 +149,7 @@ public:
   ~Event() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(Event);
 
-  void armDepthFirst();
+  void armDepthFirst(KJ_IF_READINESS_TRACKED(FireId& fireId));
   // Enqueue this event so that `fire()` will be called from the event loop soon.
   //
   // Events scheduled in this way are executed in depth-first order:  if an event callback arms
@@ -164,10 +164,10 @@ public:
   //
   // To use breadth-first scheduling instead, use `armBreadthFirst()`.
 
-  void armBreadthFirst();
+  void armBreadthFirst(KJ_IF_READINESS_TRACKED(FireId& fireId));
   // Like `armDepthFirst()` except that the event is placed at the end of the queue.
 
-  void armLast();
+  void armLast(KJ_IF_READINESS_TRACKED(FireId& fireId));
   // Enqueues this event to happen after all other events have run to completion and there is
   // really nothing left to do except wait for I/O.
 
@@ -183,7 +183,13 @@ public:
   // Returns false if the event loop is not currently running. This ensures that promise
   // continuations don't execute except under a call to .wait().
 
-  void disarm();
+#if KJ_ENABLE_READINESS_TRACKING
+  using DisarmResult = Maybe<FireId>;
+#else
+  using DisarmResult = void;
+#endif
+
+  DisarmResult disarm();
   // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
   // implicitly.)
 
@@ -215,6 +221,8 @@ private:
   static constexpr uint MAGIC_LIVE_VALUE = 0x1e366381u;
   uint live = MAGIC_LIVE_VALUE;
   SourceLocation location;
+
+  KJ_IF_READINESS_TRACKED(kj::Maybe<FireId> fireId;)
 };
 
 class PromiseArenaMember {
@@ -321,6 +329,7 @@ protected:
     // Helper class for implementing onReady().
 
   public:
+    KJ_IF_READINESS_TRACKED(OnReadyEvent(FireId fireId): fireId(kj::mv(fireId)) {})
     void init(Event* newEvent);
 
     void arm();
@@ -334,6 +343,7 @@ protected:
 
   private:
     Event* event = nullptr;
+    KJ_IF_READINESS_TRACKED(FireId fireId;)
   };
 };
 
@@ -434,6 +444,7 @@ inline NeverDone::operator Promise<T>() const {
 // -------------------------------------------------------------------
 
 class ImmediatePromiseNodeBase: public PromiseNode {
+  KJ_IF_READINESS_TRACKED(FireId fireId { "immediate"_kj };)
 public:
   ImmediatePromiseNodeBase();
   ~ImmediatePromiseNodeBase() noexcept(false);
@@ -470,9 +481,9 @@ private:
 };
 
 template <typename T, T value>
-class ConstPromiseNode: public ImmediatePromiseNodeBase {
+class ConstPromiseNode final: public ImmediatePromiseNodeBase {
 public:
-  void destroy() override {}
+  void destroy() override { KJ_IF_READINESS_TRACKED(dtor(*this);) }
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = value;
   }
@@ -738,7 +749,8 @@ protected:
   // Release the hub.  If an exception is thrown, add it to `output`.
 
 private:
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("fork branch"_kj) });
+  // TODO(now): Communicate type from derived class?
 
   OwnForkHubBase hub;
   ForkBranchBase* next = nullptr;
@@ -970,7 +982,7 @@ private:
 
   Branch left;
   Branch right;
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("exclusive-join"_kj) });
 };
 
 // -------------------------------------------------------------------
@@ -1000,7 +1012,7 @@ private:
   const ArrayJoinBehavior joinBehavior;
 
   uint countLeft;
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("array-join"_kj) });
   bool armed = false;
 
   class Branch final: public Event {
@@ -1082,7 +1094,7 @@ public:
 
 private:
   OwnPromiseNode dependency;
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("eager"_kj) });
 
   ExceptionOrValue& resultRef;
 
@@ -1125,7 +1137,8 @@ protected:
   }
 
 private:
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("adapter"_kj) });
+  // TODO(now): Communicate type Adapter in description string.
 };
 
 template <typename T, typename Adapter>
@@ -1180,7 +1193,10 @@ public:
   explicit FiberBase(const FiberPool& pool, _::ExceptionOrValue& result, SourceLocation location);
   ~FiberBase() noexcept(false);
 
-  void start() { armDepthFirst(); }
+  void start() {
+    KJ_IF_READINESS_TRACKED(FireId fireId("fiber start"_kj);)
+    armDepthFirst(KJ_IF_READINESS_TRACKED(fireId));
+  }
   // Call immediately after construction to begin executing the fiber.
 
   class WaitDoneEvent;
@@ -1196,7 +1212,7 @@ private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
   _::PromiseNode* currentInner = nullptr;
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("fiber end"_kj) });
   Own<FiberStack> stack;
   _::ExceptionOrValue& result;
 
@@ -1385,8 +1401,12 @@ kj::String Promise<T>::trace() {
 
 template <typename T, T value>
 inline Promise<T> constPromise() {
+#if KJ_ENABLE_READINESS_TRACKING
+  return _::PromiseNode::to<Promise<T>>(_::allocPromise<_::ConstPromiseNode<T, value>>());
+#else
   static _::ConstPromiseNode<T, value> NODE;
   return _::PromiseNode::to<Promise<T>>(_::OwnPromiseNode(&NODE));
+#endif
 }
 
 template <typename Func>
@@ -1681,6 +1701,8 @@ private:
   kj::Maybe<OwnPromiseNode> promiseNode;
   // Accessed only in target thread.
 
+  KJ_IF_READINESS_TRACKED(FireId fireIdForTargetThread { FireId("cross-thread execution"_kj) };)
+
   ListLink<XThreadEvent> targetLink;
   // Membership in one of the linked lists in the target Executor's work list or cancel list. These
   // fields are protected by the target Executor's mutex.
@@ -1717,7 +1739,9 @@ private:
   // will receive the reply while the event is still listed in the EXECUTING state, but it can
   // ignore the state and proceed with the result.
 
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({
+    FireId("cross-thread execution response"_kj)
+  });
   // Accessed only in requesting thread.
 
   friend class kj::Executor;
@@ -1888,7 +1912,7 @@ private:
   // In the FULFILLING/FULFILLED states, the object is placed in a linked list within the waiting
   // thread's executor. In those states, these pointers are guarded by said executor's mutex.
 
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("cross-thread fulfillment"_kj) });
 
   class FulfillScope;
 
@@ -2097,7 +2121,7 @@ private:
   stdcoro::coroutine_handle<> coroutine;
   ExceptionOrValue& resultRef;
 
-  OnReadyEvent onReadyEvent;
+  OnReadyEvent onReadyEvent KJ_IF_READINESS_TRACKED({ FireId("coroutine end"_kj) });
   bool waiting = true;
 
   bool hasSuspendedAtLeastOnce = false;
