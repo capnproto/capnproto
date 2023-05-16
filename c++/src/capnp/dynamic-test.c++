@@ -473,6 +473,40 @@ TEST(DynamicApi, SetDataFromText) {
   EXPECT_EQ(data("foo"), root.get("dataField").as<Data>());
 }
 
+void wrappedEnumListTest(std::string field)
+{
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
+  auto wrapper = root.init(field).as<DynamicStruct>();
+  wrapper.set("value", {TestEnum::BAR, TestEnum::FOO});
+  checkList<TestEnum>(wrapper.get("value"), {TestEnum::BAR, TestEnum::FOO});
+}
+
+TEST(DynamicApi, SetWrappedEnumListFromNative) {
+  wrappedEnumListTest("wrappedEnumList");
+}
+
+TEST(DynamicApi, SetGenericWrappedEnumListFromNative) {
+  wrappedEnumListTest("genericWrappedEnumList");
+}
+
+void wrappedStructTest(std::string field)
+{
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
+  auto wrapper = root.init(field).as<DynamicStruct>();
+  auto structValue = wrapper.get("value").as<DynamicStruct>();
+  structValue.set("int32Field", 123);
+}
+
+TEST(DynamicApi, SetWrappedStruct) {
+  wrappedStructTest("wrappedStructField");
+}
+
+TEST(DynamicApi, SetGenericWrappedStruct) {
+  wrappedStructTest("genericWrappedStructField");
+}
+
 TEST(DynamicApi, BuilderAssign) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
