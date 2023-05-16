@@ -154,6 +154,7 @@ includekj_HEADERS =                                            \
   src/kj/table.h                                               \
   src/kj/map.h                                                 \
   src/kj/encoding.h                                            \
+  src/kj/entropy.h                                             \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/arena.h                                               \

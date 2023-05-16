@@ -6,6 +6,7 @@ set(kj_sources_lite
   list.c++
   common.c++
   debug.c++
+  entropy.c++
   exception.c++
   io.c++
   memory.c++
@@ -51,6 +52,7 @@ set(kj_headers
   table.h
   map.h
   encoding.h
+  entropy.h
   exception.h
   debug.h
   arena.h

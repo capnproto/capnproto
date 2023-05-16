@@ -39,6 +39,7 @@
 #include <kj/memory.h>
 #include <kj/one-of.h>
 #include <kj/async-io.h>
+#include <kj/entropy.h>
 #include <kj/debug.h>
 
 KJ_BEGIN_HEADER
@@ -553,16 +554,6 @@ public:
 
   virtual kj::Promise<bool> awaitNextMessage() = 0;
   // Waits until more data is available, but doesn't consume it. Returns false on EOF.
-};
-
-class EntropySource {
-  // Interface for an object that generates entropy. Typically, cryptographically-random entropy
-  // is expected.
-  //
-  // TODO(cleanup): Put this somewhere more general.
-
-public:
-  virtual void generate(kj::ArrayPtr<byte> buffer) = 0;
 };
 
 struct CompressionParameters {
