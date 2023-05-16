@@ -38,6 +38,18 @@ enum TestEnum {
   garply @7;
 }
 
+struct GenericWrapper(Type) {
+    value      @0 : Type;
+}
+
+struct WrappedEnumList {
+    value      @0 : List(TestEnum);
+}
+
+struct WrappedStruct {
+    value      @0 : TestAllTypes;
+}
+
 struct TestAllTypes {
   voidField      @0  : Void;
   boolField      @1  : Bool;
@@ -74,6 +86,10 @@ struct TestAllTypes {
   structList    @31 : List(TestAllTypes);
   enumList      @32 : List(TestEnum);
   interfaceList @33 : List(Void);  # TODO
+  wrappedStructField    @34 : WrappedStruct;
+  wrappedEnumList    @35 : WrappedEnumList;
+  genericWrappedStructField    @36 : GenericWrapper(TestAllTypes);
+  genericWrappedEnumList    @37 : GenericWrapper(List(TestEnum));
 }
 
 struct TestDefaults {
