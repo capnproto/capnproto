@@ -1814,7 +1814,8 @@ bool EventLoop::turn() {
     event->prev = nullptr;
 
 #if KJ_ENABLE_READINESS_TRACKING
-    // Make sure the event's FireId is current through destruction.
+    // Make sure the event's tracked duration includes the time it takes to destroy any returned
+    // Event, and no more.
     KJ_DEFER(enteredFireId = nullptr);
 #endif
 

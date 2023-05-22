@@ -163,6 +163,8 @@ public:
   // breadth-first.)
   //
   // To use breadth-first scheduling instead, use `armBreadthFirst()`.
+  //
+  // TODO(now): Save reference to `fireId` and `enter()` it only in waitImpl().
 
   void armBreadthFirst(KJ_IF_READINESS_TRACKED(FireId& fireId));
   // Like `armDepthFirst()` except that the event is placed at the end of the queue.
