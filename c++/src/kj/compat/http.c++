@@ -4341,9 +4341,15 @@ private:
   bool readGuardReleased = false;
   bool writeGuardReleased = false;
   kj::TaskSet tasks;
+  // Set of tasks used to call `shutdownWrite` after write guard is released.
 
   void taskFailed(kj::Exception&& exception) override {
-    KJ_LOG(ERROR, exception);
+    // This `taskFailed` callback is only used when `shutdownWrite` is being called. Because we
+    // don't care about DISCONNECTED exceptions when `shutdownWrite` is called we ignore this
+    // class of exceptions here.
+    if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
+      KJ_LOG(ERROR, exception);
+    }
   }
 
   kj::ForkedPromise<void> handleWriteGuard(kj::Promise<void> guard) {
