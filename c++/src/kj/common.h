@@ -1835,6 +1835,7 @@ public:
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
     if (isIntegral<RemoveConst<T>>()) {
+      if (size_ == 0) return true;
       return memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
     }
     for (size_t i = 0; i < size_; i++) {
