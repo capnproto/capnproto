@@ -264,6 +264,7 @@ endif
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_la_SOURCES=                                              \
+  src/kj/cidr.c++                                              \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
   src/kj/memory.c++                                            \

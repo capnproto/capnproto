@@ -3,6 +3,7 @@
 
 set(kj_sources_lite
   array.c++
+  cidr.c++
   list.c++
   common.c++
   debug.c++
@@ -37,6 +38,7 @@ else()
 endif()
 
 set(kj_headers
+  cidr.h
   common.h
   units.h
   memory.h
