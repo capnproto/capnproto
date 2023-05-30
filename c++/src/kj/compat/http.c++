@@ -5460,7 +5460,12 @@ kj::Promise<size_t> PausableReadAsyncIoStream::tryRead(
 
 kj::Promise<size_t> PausableReadAsyncIoStream::tryReadImpl(
     void* buffer, size_t minBytes, size_t maxBytes) {
-  return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
+  // Hack: evalNow used here because `newAdaptedPromise` has a bug. We may need to change
+  // `PromiseDisposer::alloc` to not be `noexcept` but in order to do so we'll need to benchmark
+  // its performance.
+  return kj::evalNow([&]() -> kj::Promise<size_t> {
+    return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
+  });
 }
 
 kj::Maybe<uint64_t> PausableReadAsyncIoStream::tryGetLength() {
