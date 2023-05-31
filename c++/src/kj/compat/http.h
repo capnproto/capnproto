@@ -691,64 +691,14 @@ struct HttpConnectSettings {
   // https://en.wikipedia.org/wiki/Opportunistic_TLS.
 };
 
+
 class PausableReadAsyncIoStream final: public kj::AsyncIoStream {
   // A custom AsyncIoStream which can pause pending reads. This is used by startTls to pause a
   // a read before TLS is initiated.
   //
   // TODO(cleanup): this class should be rewritten to use a CRTP mixin approach so that pumps
   // can be optimised once startTls is invoked.
-  class PausableRead {
-  public:
-    PausableRead(
-        kj::PromiseFulfiller<size_t>& fulfiller, PausableReadAsyncIoStream& parent,
-        void* buffer, size_t minBytes, size_t maxBytes)
-        : fulfiller(fulfiller), parent(parent),
-          operationBuffer(buffer), operationMinBytes(minBytes), operationMaxBytes(maxBytes),
-          innerRead(parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
-              [&fulfiller](size_t size) mutable -> kj::Promise<void> {
-            fulfiller.fulfill(kj::mv(size));
-            return kj::READY_NOW;
-          }, [&fulfiller](kj::Exception&& err) {
-            fulfiller.reject(kj::mv(err));
-          })) {
-      KJ_ASSERT(parent.maybePausableRead == nullptr);
-      parent.maybePausableRead = *this;
-    }
-
-    ~PausableRead() noexcept(false) {
-      parent.maybePausableRead = nullptr;
-    }
-
-    void pause() {
-      innerRead = nullptr;
-    }
-
-    void unpause() {
-      innerRead = parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
-          [this](size_t size) -> kj::Promise<void> {
-        fulfiller.fulfill(kj::mv(size));
-        return kj::READY_NOW;
-      }, [this](kj::Exception&& err) {
-        fulfiller.reject(kj::mv(err));
-      });
-    }
-
-    void reject(kj::Exception&& exc) {
-      fulfiller.reject(kj::mv(exc));
-    }
-  private:
-    kj::PromiseFulfiller<size_t>& fulfiller;
-    PausableReadAsyncIoStream& parent;
-
-    void* operationBuffer;
-    size_t operationMinBytes;
-    size_t operationMaxBytes;
-    // The parameters of the current tryRead call. Used to unpause a paused read.
-
-    kj::Promise<void> innerRead;
-    // The current pending read.
-  };
-
+  class PausableRead;
 public:
   PausableReadAsyncIoStream(kj::Own<kj::AsyncIoStream> stream)
       : inner(kj::mv(stream)), currentlyWriting(false), currentlyReading(false) {}
@@ -757,89 +707,42 @@ public:
 
   _::Deferred<kj::Function<void()>> trackWrite();
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return kj::newAdaptedPromise<size_t, PausableRead>(*this, buffer, minBytes, maxBytes);
-  }
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
-  kj::Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) {
-    return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
-  }
+  kj::Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes);
 
-  kj::Maybe<uint64_t> tryGetLength() override {
-    return inner->tryGetLength();
-  }
+  kj::Maybe<uint64_t> tryGetLength() override;
 
-  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
-    return kj::unoptimizedPumpTo(*this, output, amount);
-  }
+  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    return inner->write(buffer, size).attach(trackWrite());
-  }
+  kj::Promise<void> write(const void* buffer, size_t size) override;
 
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
-    return inner->write(pieces).attach(trackWrite());
-  }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
-      kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
-    auto result = inner->tryPumpFrom(input, amount);
-    KJ_IF_MAYBE(r, result) {
-      return r->attach(trackWrite());
-    } else {
-      return nullptr;
-    }
-  }
+      kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override;
 
-  kj::Promise<void> whenWriteDisconnected() override {
-    return inner->whenWriteDisconnected();
-  }
+  kj::Promise<void> whenWriteDisconnected() override;
 
-  void shutdownWrite() override {
-    inner->shutdownWrite();
-  }
+  void shutdownWrite() override;
 
-  void abortRead() override {
-    inner->abortRead();
-  }
+  void abortRead() override;
 
-  kj::Maybe<int> getFd() const override {
-    return inner->getFd();
-  }
+  kj::Maybe<int> getFd() const override;
 
-  void pause() {
-    KJ_IF_MAYBE(pausable, maybePausableRead) {
-      pausable->pause();
-    }
-  }
+  void pause();
 
-  void unpause() {
-    KJ_IF_MAYBE(pausable, maybePausableRead) {
-      pausable->unpause();
-    }
-  }
+  void unpause();
 
-  bool getCurrentlyReading() {
-    return currentlyReading;
-  }
+  bool getCurrentlyReading();
 
-  bool getCurrentlyWriting() {
-    return currentlyWriting;
-  }
+  bool getCurrentlyWriting();
 
-  kj::Own<kj::AsyncIoStream> takeStream() {
-    return kj::mv(inner);
-  }
+  kj::Own<kj::AsyncIoStream> takeStream();
 
-  void replaceStream(kj::Own<kj::AsyncIoStream> stream) {
-    inner = kj::mv(stream);
-  }
+  void replaceStream(kj::Own<kj::AsyncIoStream> stream);
 
-  void reject(kj::Exception&& exc) {
-    KJ_IF_MAYBE(pausable, maybePausableRead) {
-      pausable->reject(kj::mv(exc));
-    }
-  }
+  void reject(kj::Exception&& exc);
 
 private:
   kj::Own<kj::AsyncIoStream> inner;

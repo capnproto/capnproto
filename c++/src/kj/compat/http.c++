@@ -5389,6 +5389,58 @@ HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolErr
   };
 }
 
+class PausableReadAsyncIoStream::PausableRead {
+public:
+  PausableRead(
+      kj::PromiseFulfiller<size_t>& fulfiller, PausableReadAsyncIoStream& parent,
+      void* buffer, size_t minBytes, size_t maxBytes)
+      : fulfiller(fulfiller), parent(parent),
+        operationBuffer(buffer), operationMinBytes(minBytes), operationMaxBytes(maxBytes),
+        innerRead(parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
+            [&fulfiller](size_t size) mutable -> kj::Promise<void> {
+          fulfiller.fulfill(kj::mv(size));
+          return kj::READY_NOW;
+        }, [&fulfiller](kj::Exception&& err) {
+          fulfiller.reject(kj::mv(err));
+        })) {
+    KJ_ASSERT(parent.maybePausableRead == nullptr);
+    parent.maybePausableRead = *this;
+  }
+
+  ~PausableRead() noexcept(false) {
+    parent.maybePausableRead = nullptr;
+  }
+
+  void pause() {
+    innerRead = nullptr;
+  }
+
+  void unpause() {
+    innerRead = parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
+        [this](size_t size) -> kj::Promise<void> {
+      fulfiller.fulfill(kj::mv(size));
+      return kj::READY_NOW;
+    }, [this](kj::Exception&& err) {
+      fulfiller.reject(kj::mv(err));
+    });
+  }
+
+  void reject(kj::Exception&& exc) {
+    fulfiller.reject(kj::mv(exc));
+  }
+private:
+  kj::PromiseFulfiller<size_t>& fulfiller;
+  PausableReadAsyncIoStream& parent;
+
+  void* operationBuffer;
+  size_t operationMinBytes;
+  size_t operationMaxBytes;
+  // The parameters of the current tryRead call. Used to unpause a paused read.
+
+  kj::Promise<void> innerRead;
+  // The current pending read.
+};
+
 _::Deferred<kj::Function<void()>> PausableReadAsyncIoStream::trackRead() {
   KJ_REQUIRE(!currentlyReading, "only one read is allowed at any one time");
   currentlyReading = true;
@@ -5399,6 +5451,99 @@ _::Deferred<kj::Function<void()>> PausableReadAsyncIoStream::trackWrite() {
   KJ_REQUIRE(!currentlyWriting, "only one write is allowed at any one time");
   currentlyWriting = true;
   return kj::defer<kj::Function<void()>>([this]() { currentlyWriting = false; });
+}
+
+kj::Promise<size_t> PausableReadAsyncIoStream::tryRead(
+    void* buffer, size_t minBytes, size_t maxBytes) {
+  return kj::newAdaptedPromise<size_t, PausableRead>(*this, buffer, minBytes, maxBytes);
+}
+
+kj::Promise<size_t> PausableReadAsyncIoStream::tryReadImpl(
+    void* buffer, size_t minBytes, size_t maxBytes) {
+  // Hack: evalNow used here because `newAdaptedPromise` has a bug. We may need to change
+  // `PromiseDisposer::alloc` to not be `noexcept` but in order to do so we'll need to benchmark
+  // its performance.
+  return kj::evalNow([&]() -> kj::Promise<size_t> {
+    return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
+  });
+}
+
+kj::Maybe<uint64_t> PausableReadAsyncIoStream::tryGetLength() {
+  return inner->tryGetLength();
+}
+
+kj::Promise<uint64_t> PausableReadAsyncIoStream::pumpTo(
+    kj::AsyncOutputStream& output, uint64_t amount) {
+  return kj::unoptimizedPumpTo(*this, output, amount);
+}
+
+kj::Promise<void> PausableReadAsyncIoStream::write(const void* buffer, size_t size) {
+  return inner->write(buffer, size).attach(trackWrite());
+}
+
+kj::Promise<void> PausableReadAsyncIoStream::write(
+    kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+  return inner->write(pieces).attach(trackWrite());
+}
+
+kj::Maybe<kj::Promise<uint64_t>> PausableReadAsyncIoStream::tryPumpFrom(
+    kj::AsyncInputStream& input, uint64_t amount) {
+  auto result = inner->tryPumpFrom(input, amount);
+  KJ_IF_MAYBE(r, result) {
+    return r->attach(trackWrite());
+  } else {
+    return nullptr;
+  }
+}
+
+kj::Promise<void> PausableReadAsyncIoStream::whenWriteDisconnected() {
+  return inner->whenWriteDisconnected();
+}
+
+void PausableReadAsyncIoStream::shutdownWrite() {
+  inner->shutdownWrite();
+}
+
+void PausableReadAsyncIoStream::abortRead() {
+  inner->abortRead();
+}
+
+kj::Maybe<int> PausableReadAsyncIoStream::getFd() const {
+  return inner->getFd();
+}
+
+void PausableReadAsyncIoStream::pause() {
+  KJ_IF_MAYBE(pausable, maybePausableRead) {
+    pausable->pause();
+  }
+}
+
+void PausableReadAsyncIoStream::unpause() {
+  KJ_IF_MAYBE(pausable, maybePausableRead) {
+    pausable->unpause();
+  }
+}
+
+bool PausableReadAsyncIoStream::getCurrentlyReading() {
+  return currentlyReading;
+}
+
+bool PausableReadAsyncIoStream::getCurrentlyWriting() {
+  return currentlyWriting;
+}
+
+kj::Own<kj::AsyncIoStream> PausableReadAsyncIoStream::takeStream() {
+  return kj::mv(inner);
+}
+
+void PausableReadAsyncIoStream::replaceStream(kj::Own<kj::AsyncIoStream> stream) {
+  inner = kj::mv(stream);
+}
+
+void PausableReadAsyncIoStream::reject(kj::Exception&& exc) {
+  KJ_IF_MAYBE(pausable, maybePausableRead) {
+    pausable->reject(kj::mv(exc));
+  }
 }
 
 // =======================================================================================
