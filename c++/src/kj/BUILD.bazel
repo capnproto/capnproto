@@ -7,6 +7,7 @@ cc_library(
     srcs = [
         "arena.c++",
         "array.c++",
+        "cidr.c++",
         "common.c++",
         "debug.c++",
         "encoding.c++",
@@ -34,6 +35,7 @@ cc_library(
     hdrs = [
         "arena.h",
         "array.h",
+        "cidr.h",
         "common.h",
         "debug.h",
         "encoding.h",
