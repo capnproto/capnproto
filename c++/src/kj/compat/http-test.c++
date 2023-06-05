@@ -2163,6 +2163,33 @@ KJ_TEST("WebSocket pump disconnect on receive") {
   KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
 }
 
+KJ_TEST("WebSocket maximum message size") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe =KJ_HTTP_TEST_CREATE_2PIPE;
+
+  FakeEntropySource maskGenerator;
+  auto client = newWebSocket(kj::mv(pipe.ends[0]), maskGenerator);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
+
+  size_t maxSize = 100;
+  auto biggestAllowedString = kj::strArray(kj::repeat(kj::StringPtr("A"), maxSize), "");
+  auto tooBigString = kj::strArray(kj::repeat(kj::StringPtr("B"), maxSize + 1), "");
+
+  auto clientTask = client->send(biggestAllowedString)
+      .then([&]() { return client->send(tooBigString); })
+      .then([&]() { return client->close(1234, "done"); });
+
+  {
+    auto message = server->receive(maxSize).wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>().size() == maxSize);
+  }
+
+  {
+    KJ_EXPECT_THROW_MESSAGE("too large", server->receive(maxSize).wait(waitScope));
+  }
+}
+
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {
 public:
   TestWebSocketService(HttpHeaderTable& headerTable, HttpHeaderId hMyHeader)
