@@ -2544,7 +2544,7 @@ public:
 
     size_t payloadLen = recvHeader.getPayloadLen();
 
-    KJ_REQUIRE(payloadLen < maxSize, "WebSocket message is too large");
+    KJ_REQUIRE(payloadLen <= maxSize, "WebSocket message is too large");
 
     auto opcode = recvHeader.getOpcode();
     bool isData = opcode < OPCODE_FIRST_CONTROL;
