@@ -991,6 +991,19 @@ struct HttpClientSettings {
   // A reference to a TLS context that will be used when tlsStarter is invoked.
 };
 
+class WebSocketErrorHandler {
+public:
+  virtual kj::Exception handleWebSocketProtocolError(HttpHeaders::ProtocolError protocolError);
+  // Handles low-level protocol errors in received WebSocket data.
+  //
+  // This is called when the WebSocket peer sends us bad data *after* a successful WebSocket
+  // upgrade, e.g. a continuation frame without a preceding start frame, a frame with an unknown
+  // opcode, or similar.
+  //
+  // You would override this method in order to customize the exception. You cannot prevent the
+  // exception from being thrown.
+};
+
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                                   kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
                                   HttpClientSettings settings = HttpClientSettings());
@@ -1058,7 +1071,8 @@ kj::Own<HttpInputStream> newHttpInputStream(
 
 kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
                                 kj::Maybe<EntropySource&> maskEntropySource,
-                                kj::Maybe<CompressionParameters> compressionConfig = nullptr);
+                                kj::Maybe<CompressionParameters> compressionConfig = nullptr,
+                                kj::Maybe<WebSocketErrorHandler&> errorHandler = nullptr);
 // Create a new WebSocket on top of the given stream. It is assumed that the HTTP -> WebSocket
 // upgrade handshake has already occurred (or is not needed), and messages can immediately be
 // sent and received on the stream. Normally applications would not call this directly.
@@ -1075,6 +1089,8 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // compress and decompress messages. The configuration is determined by the
 // `Sec-WebSocket-Extensions` header during WebSocket negotiation.
 //
+// `errorHandler` is an optional argument that lets callers throw custom exceptions for WebSocket
+// protocol errors.
 
 struct WebSocketPipe {
   kj::Own<WebSocket> ends[2];
@@ -1111,6 +1127,9 @@ struct HttpServerSettings {
 
   kj::Maybe<HttpServerCallbacks&> callbacks = nullptr;
   // Additional optional callbacks used to control some server behavior.
+
+  kj::Maybe<WebSocketErrorHandler&> webSocketErrorHandler = nullptr;
+  // Customize exceptions thrown on WebSocket protocol errors.
 
   enum WebSocketCompressionMode {
     NO_COMPRESSION,

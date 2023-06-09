@@ -24,6 +24,7 @@
 #include "url.h"
 #include <kj/debug.h>
 #include <kj/parse/char.h>
+#include <kj/string.h>
 #include <unordered_map>
 #include <stdlib.h>
 #include <kj/encoding.h>
@@ -2426,16 +2427,18 @@ public:
 
 // =======================================================================================
 
-class WebSocketImpl final: public WebSocket {
+class WebSocketImpl final: public WebSocket, private WebSocketErrorHandler {
 public:
   WebSocketImpl(kj::Own<kj::AsyncIoStream> stream,
                 kj::Maybe<EntropySource&> maskKeyGenerator,
                 kj::Maybe<CompressionParameters> compressionConfigParam = nullptr,
+                kj::Maybe<WebSocketErrorHandler&> errorHandler = nullptr,
                 kj::Array<byte> buffer = kj::heapArray<byte>(4096),
                 kj::ArrayPtr<byte> leftover = nullptr,
                 kj::Maybe<kj::Promise<void>> waitBeforeSend = nullptr)
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
         compressionConfig(kj::mv(compressionConfigParam)),
+        errorHandler(errorHandler),
         sendingPong(kj::mv(waitBeforeSend)),
         recvBuffer(kj::mv(buffer)), recvData(leftover) {
 #if KJ_HAS_ZLIB
@@ -2537,23 +2540,38 @@ public:
     }
 
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
-    KJ_REQUIRE(!recvHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
-        "support an extension that would set these bits");
+    if (recvHeader.hasRsv2or3()) {
+      throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+        1002, "Protocol error", "Received frame had RSV bits 2 or 3 set", nullptr,
+      });
+    }
 
     recvData = recvData.slice(headerSize, recvData.size());
 
     size_t payloadLen = recvHeader.getPayloadLen();
-
-    KJ_REQUIRE(payloadLen <= maxSize, "WebSocket message is too large");
+    if (payloadLen > maxSize) {
+      throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+        1009, "WebSocket message is too large",
+        kj::str("Message is too large: ", payloadLen, " > ", maxSize), nullptr
+      });
+    }
 
     auto opcode = recvHeader.getOpcode();
     bool isData = opcode < OPCODE_FIRST_CONTROL;
     if (opcode == OPCODE_CONTINUATION) {
-      KJ_REQUIRE(!fragments.empty(), "unexpected continuation frame in WebSocket");
+      if (fragments.empty()) {
+        throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+          1002, "Protocol error", "Unexpected continuation frame", nullptr
+        });
+      }
 
       opcode = fragmentOpcode;
     } else if (isData) {
-      KJ_REQUIRE(fragments.empty(), "expected continuation frame in WebSocket");
+      if (!fragments.empty()) {
+        throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+          1002, "Protocol error", "Missing continuation frame", nullptr
+        });
+      }
     }
 
     bool isFin = recvHeader.isFin();
@@ -2597,7 +2615,11 @@ public:
       }
     } else {
       // Fragmented message, and this isn't the final fragment.
-      KJ_REQUIRE(isData, "WebSocket control frame cannot be fragmented");
+      if (!isData) {
+        throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+          1002, "Protocol error", "Received fragmented control frame", nullptr
+        });
+      }
 
       message = kj::heapArray<byte>(payloadLen);
       payloadTarget = message.begin();
@@ -2690,7 +2712,9 @@ public:
           // Unsolicited pong. Ignore.
           return receive(maxSize);
         default:
-          KJ_FAIL_REQUIRE("unknown WebSocket opcode", opcode);
+          throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+            1002, "Protocol error", kj::str("Unknown opcode ", opcode), nullptr
+          });
       }
     };
 
@@ -3196,6 +3220,7 @@ private:
   kj::Own<kj::AsyncIoStream> stream;
   kj::Maybe<EntropySource&> maskKeyGenerator;
   kj::Maybe<CompressionParameters> compressionConfig;
+  kj::Maybe<WebSocketErrorHandler&> errorHandler;
 #if KJ_HAS_ZLIB
   kj::Maybe<ZlibContext> compressionContext;
   kj::Maybe<ZlibContext> decompressionContext;
@@ -3394,11 +3419,13 @@ private:
 kj::Own<WebSocket> upgradeToWebSocket(
     kj::Own<kj::AsyncIoStream> stream, HttpInputStreamImpl& httpInput, HttpOutputStream& httpOutput,
     kj::Maybe<EntropySource&> maskKeyGenerator,
-    kj::Maybe<CompressionParameters> compressionConfig = nullptr) {
+    kj::Maybe<CompressionParameters> compressionConfig = nullptr,
+    kj::Maybe<WebSocketErrorHandler&> errorHandler = nullptr) {
   // Create a WebSocket upgraded from an HTTP stream.
   auto releasedBuffer = httpInput.releaseBuffer();
   return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator,
-                                 kj::mv(compressionConfig), kj::mv(releasedBuffer.buffer),
+                                 kj::mv(compressionConfig), errorHandler,
+                                 kj::mv(releasedBuffer.buffer),
                                  releasedBuffer.leftover, httpOutput.flush());
 }
 
@@ -3406,8 +3433,9 @@ kj::Own<WebSocket> upgradeToWebSocket(
 
 kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
                                 kj::Maybe<EntropySource&> maskKeyGenerator,
-                                kj::Maybe<CompressionParameters> compressionConfig) {
-  return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator, kj::mv(compressionConfig));
+                                kj::Maybe<CompressionParameters> compressionConfig,
+                                kj::Maybe<WebSocketErrorHandler&> errorHandler) {
+  return kj::heap<WebSocketImpl>(kj::mv(stream), maskKeyGenerator, kj::mv(compressionConfig), errorHandler);
 }
 
 static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
@@ -5392,6 +5420,12 @@ HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolErr
   return HttpClient::WebSocketResponse {
     response.statusCode, response.statusText, response.headers, kj::mv(response.body)
   };
+}
+
+kj::Exception WebSocketErrorHandler::handleWebSocketProtocolError(
+      HttpHeaders::ProtocolError protocolError) {
+  return KJ_EXCEPTION(FAILED, kj::str("code=", protocolError.statusCode,
+                                        ": ", protocolError.description));
 }
 
 class PausableReadAsyncIoStream::PausableRead {
@@ -7589,7 +7623,8 @@ private:
     auto deferNoteClosed = kj::defer([this]() { webSocketOrConnectClosed = true; });
     kj::Own<kj::AsyncIoStream> ownStream(&stream, kj::NullDisposer::instance);
     return upgradeToWebSocket(ownStream.attach(kj::mv(deferNoteClosed)),
-                              httpInput, httpOutput, nullptr, kj::mv(acceptedParameters));
+                              httpInput, httpOutput, nullptr, kj::mv(acceptedParameters),
+                             server.settings.webSocketErrorHandler);
   }
 
   kj::Promise<bool> sendError(HttpHeaders::ProtocolError protocolError) {
