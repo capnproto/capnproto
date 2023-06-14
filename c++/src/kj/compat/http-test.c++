@@ -1815,6 +1815,39 @@ KJ_TEST("WebSocket fragmented") {
   clientTask.wait(waitScope);
 }
 
+#if KJ_HAS_ZLIB
+KJ_TEST("WebSocket compressed fragment") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, CompressionParameters{
+      .outboundNoContextTakeover = false,
+      .inboundNoContextTakeover = false,
+      .outboundMaxWindowBits=15,
+      .inboundMaxWindowBits=15,
+  });
+
+  // The message is "Hello", sent in two fragments, see the fragmented example at the bottom of:
+  // https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.3.1
+  byte COMPRESSED_DATA[] = {
+    0x41, 0x03, 0xf2, 0x48, 0xcd,
+
+    0x80, 0x04, 0xc9, 0xc9, 0x07, 0x00
+  };
+
+  auto clientTask = client->write(COMPRESSED_DATA, sizeof(COMPRESSED_DATA));
+
+  {
+    auto message = server->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "Hello");
+  }
+
+  clientTask.wait(waitScope);
+}
+#endif // KJ_HAS_ZLIB
+
 class FakeEntropySource final: public EntropySource {
 public:
   void generate(kj::ArrayPtr<byte> buffer) override {

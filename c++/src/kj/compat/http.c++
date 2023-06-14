@@ -2563,7 +2563,7 @@ public:
     kj::Maybe<size_t> originalMaxSize; // maxSize from first `receive()` call
     if (isFin) {
       size_t amountToAllocate;
-      if (recvHeader.isCompressed()) {
+      if (recvHeader.isCompressed() || fragmentCompressed) {
         // Add 4 since we append 0x00 0x00 0xFF 0xFF to the tail of the payload.
         // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
         amountToAllocate = payloadLen + 4;
@@ -2588,6 +2588,7 @@ public:
 
         fragments.clear();
         fragmentOpcode = 0;
+        fragmentCompressed = false;
       } else {
         // Single-frame message.
         message = kj::heapArray<byte>(amountToAllocate);
@@ -2603,6 +2604,7 @@ public:
       if (fragments.empty()) {
         // This is the first fragment, so set the opcode.
         fragmentOpcode = opcode;
+        fragmentCompressed = recvHeader.isCompressed();
       }
     }
 
@@ -3219,6 +3221,9 @@ private:
   // Perhaps it should be renamed to `blockSend` or `writeQueue`.
 
   uint fragmentOpcode = 0;
+  bool fragmentCompressed = false;
+  // For fragmented messages, was the first frame compressed?
+  // Note that subsequent frames of a compressed message will not set the RSV1 bit.
   kj::Vector<kj::Array<byte>> fragments;
   // If `fragments` is non-empty, we've already received some fragments of a message.
   // `fragmentOpcode` is the original opcode.
