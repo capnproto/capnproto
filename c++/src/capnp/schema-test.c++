@@ -395,6 +395,15 @@ KJ_TEST("StructSchema::hasNoCapabilites()") {
   KJ_EXPECT(Schema::from<test::TestCycleBWithCaps>().mayContainCapabilities());
 }
 
+KJ_TEST("StructSchema::Field::getType() benchmark") {
+  auto schema = Schema::from<test::TestAllTypes>();
+  auto field = schema.getFieldByName("structField");
+
+  doBenchmark([&]() {
+    KJ_ASSERT(field.getType() == schema);
+  });
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
