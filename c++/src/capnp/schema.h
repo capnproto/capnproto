@@ -181,9 +181,9 @@ private:
   //
   // TODO(someday): Public interface for iterating over all bindings?
 
-  Schema getDependency(uint64_t id, uint location) const;
-  // Look up schema for a particular dependency of this schema. `location` is the dependency
-  // location number as defined in _::RawBrandedSchema.
+  Schema getIndexedDependency(uint location) const;
+  // Get a dependency based on RawBrandedSchema::dependencies. `location` is the index into that
+  // array.
 
   Type interpretType(schema::Type::Reader proto, uint location) const;
   // Interpret a schema::Type in the given location within the schema, compiling it into a
@@ -815,10 +815,6 @@ template <> inline schema::Type::Which Schema::from<float>() { return schema::Ty
 template <> inline schema::Type::Which Schema::from<double>() { return schema::Type::FLOAT64; }
 template <> inline schema::Type::Which Schema::from<Text>() { return schema::Type::TEXT; }
 template <> inline schema::Type::Which Schema::from<Data>() { return schema::Type::DATA; }
-
-inline Schema Schema::getDependency(uint64_t id) const {
-  return getDependency(id, 0);
-}
 
 inline bool Schema::isBranded() const {
   return raw != &raw->generic->defaultBrand;

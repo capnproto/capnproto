@@ -90,14 +90,18 @@ struct RawBrandedSchema {
   const Scope* scopes;
   // Array of enclosing scopes for which generic variables have been bound, sorted by type ID.
 
-  struct Dependency {
-    uint location;
-    const RawBrandedSchema* schema;
-  };
+  typedef const RawBrandedSchema* Dependency;
 
-  const Dependency* dependencies;
-  // Map of branded schemas for dependencies of this type, given our brand. Only dependencies that
-  // are branded are included in this map; if a dependency is missing, use its `defaultBrand`.
+  const RawBrandedSchema* const* dependencies;
+  // Array of dependencies arranged by member index. More specifically:
+  // - For structs, dependenciesByIndex[fieldIndex] is the dependency type used by the given
+  //   field, or null if the field is a built-in type. Note that this uses the field index, NOT
+  //   the ordinal (in order to handle groups well).
+  // - For interfaces, dependenciesByIndex[methodOrdinal*2] is the parameters type, and
+  //   [methodOrdinal*2+1] is the results type. dependenciesByIndex[methodOrdinal*2] and up
+  //   correspond to superclasses (the `extends` list).
+  // - For constants, this points to a single-element array which contains a pointer to the
+  //   constant's type, or null if it's a built-in type.
 
   uint32_t scopeCount;
   uint32_t dependencyCount;

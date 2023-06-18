@@ -166,7 +166,7 @@ private:
   const _::RawBrandedSchema* makeBranded(const _::RawSchema* schema,
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> scopes);
 
-  kj::ArrayPtr<const _::RawBrandedSchema::Dependency> makeBrandedDependencies(
+  kj::ArrayPtr<const _::RawBrandedSchema* const> makeBrandedDependencies(
       const _::RawSchema* schema,
       kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings);
 
@@ -1531,25 +1531,21 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   }
 }
 
-kj::ArrayPtr<const _::RawBrandedSchema::Dependency>
+kj::ArrayPtr<const _::RawBrandedSchema* const>
 SchemaLoader::Impl::makeBrandedDependencies(
     const _::RawSchema* schema,
     kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings) {
   kj::StringPtr scopeName =
       readMessageUnchecked<schema::Node>(schema->encodedNode).getDisplayName();
 
-  kj::Vector<_::RawBrandedSchema::Dependency> deps;
+  kj::Vector<const _::RawBrandedSchema*> deps;
 
   schema::Node::Reader node = readMessageUnchecked<schema::Node>(schema->encodedNode);
 
+  // NOTE: We used to build a table indexed by `kind` and `index` bet now we ignore those and just
+  //   build a flat array.
 #define ADD_ENTRY(kind, index, make) \
-    if (const _::RawBrandedSchema* dep = make) { \
-      auto& slot = deps.add(); \
-      memset(&slot, 0, sizeof(slot)); \
-      slot.location = _::RawBrandedSchema::makeDepLocation( \
-        _::RawBrandedSchema::DepKind::kind, index); \
-      slot.schema = dep; \
-    }
+    deps.add(make);
 
   switch (node.which()) {
     case schema::Node::FILE:
@@ -1590,15 +1586,6 @@ SchemaLoader::Impl::makeBrandedDependencies(
     case schema::Node::INTERFACE: {
       auto interface = node.getInterface();
       {
-        auto superclasses = interface.getSuperclasses();
-        for (auto i: kj::indices(superclasses)) {
-          auto superclass = superclasses[i];
-          ADD_ENTRY(SUPERCLASS, i, makeDepSchema(
-              superclass.getId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
-              superclass.getBrand(), scopeName, bindings))
-        }
-      }
-      {
         auto methods = interface.getMethods();
         for (auto i: kj::indices(methods)) {
           auto method = methods[i];
@@ -1610,16 +1597,20 @@ SchemaLoader::Impl::makeBrandedDependencies(
               method.getResultBrand(), scopeName, bindings))
         }
       }
+      {
+        auto superclasses = interface.getSuperclasses();
+        for (auto i: kj::indices(superclasses)) {
+          auto superclass = superclasses[i];
+          ADD_ENTRY(SUPERCLASS, i, makeDepSchema(
+              superclass.getId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
+              superclass.getBrand(), scopeName, bindings))
+        }
+      }
       break;
     }
   }
 
 #undef ADD_ENTRY
-
-  std::sort(deps.begin(), deps.end(),
-      [](const _::RawBrandedSchema::Dependency& a, const _::RawBrandedSchema::Dependency& b) {
-    return a.location < b.location;
-  });
 
   return copyDeduped(deps.asPtr());
 }

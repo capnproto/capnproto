@@ -200,27 +200,7 @@ kj::ArrayPtr<const word> Schema::asUncheckedMessage() const {
   return kj::arrayPtr(raw->generic->encodedNode, raw->generic->encodedSize);
 }
 
-Schema Schema::getDependency(uint64_t id, uint location) const {
-  {
-    // Binary search dependency list.
-    uint lower = 0;
-    uint upper = raw->dependencyCount;
-
-    while (lower < upper) {
-      uint mid = (lower + upper) / 2;
-
-      auto candidate = raw->dependencies[mid];
-      if (candidate.location == location) {
-        candidate.schema->ensureInitialized();
-        return Schema(candidate.schema);
-      } else if (candidate.location < location) {
-        lower = mid + 1;
-      } else {
-        upper = mid;
-      }
-    }
-  }
-
+Schema Schema::getDependency(uint64_t id) const {
   {
     uint lower = 0;
     uint upper = raw->generic->dependencyCount;
@@ -245,6 +225,12 @@ Schema Schema::getDependency(uint64_t id, uint location) const {
   KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", kj::hex(id)) {
     return Schema();
   }
+}
+
+Schema Schema::getIndexedDependency(uint location) const {
+  const _::RawBrandedSchema* result = raw->dependencies[location];
+  result->ensureInitialized();
+  return Schema(result);
 }
 
 Schema::BrandArgumentList Schema::getBrandArgumentsAtScope(uint64_t scopeId) const {
@@ -375,20 +361,14 @@ Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
     case schema::Type::DATA:
       return proto.which();
 
-    case schema::Type::STRUCT: {
-      auto structType = proto.getStruct();
-      return getDependency(structType.getTypeId(), location).asStruct();
-    }
+    case schema::Type::STRUCT:
+      return getIndexedDependency(location).asStruct();
 
-    case schema::Type::ENUM: {
-      auto enumType = proto.getEnum();
-      return getDependency(enumType.getTypeId(), location).asEnum();
-    }
+    case schema::Type::ENUM:
+      return getIndexedDependency(location).asEnum();
 
-    case schema::Type::INTERFACE: {
-      auto interfaceType = proto.getInterface();
-      return getDependency(interfaceType.getTypeId(), location).asInterface();
-    }
+    case schema::Type::INTERFACE:
+      return getIndexedDependency(location).asInterface();
 
     case schema::Type::LIST:
       return ListSchema::of(interpretType(proto.getList().getElementType(), location));
@@ -528,14 +508,12 @@ bool StructSchema::isStreamResult() const {
 }
 
 Type StructSchema::Field::getType() const {
-  uint location = _::RawBrandedSchema::makeDepLocation(_::RawBrandedSchema::DepKind::FIELD, index);
-
   switch (proto.which()) {
     case schema::Field::SLOT:
-      return parent.interpretType(proto.getSlot().getType(), location);
+      return parent.interpretType(proto.getSlot().getType(), index);
 
     case schema::Field::GROUP:
-      return parent.getDependency(proto.getGroup().getTypeId(), location).asStruct();
+      return parent.getIndexedDependency(index).asStruct();
   }
   KJ_UNREACHABLE;
 }
@@ -586,7 +564,8 @@ kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(
     return nullptr;
   }
 
-  auto result = findSchemaMemberByName(raw->generic, name, getMethods());
+  auto methods = getMethods();
+  auto result = findSchemaMemberByName(raw->generic, name, methods);
 
   if (result == nullptr) {
     // Search superclasses.
@@ -596,12 +575,11 @@ kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(
     //   this means that a dynamically-loaded RawSchema cannot be correctly constructed until all
     //   superclasses have been loaded, which imposes an ordering requirement on SchemaLoader or
     //   requires updating subclasses whenever a new superclass is loaded.
-    auto superclasses = getProto().getInterface().getSuperclasses();
-    for (auto i: kj::indices(superclasses)) {
-      auto superclass = superclasses[i];
-      uint location = _::RawBrandedSchema::makeDepLocation(
-          _::RawBrandedSchema::DepKind::SUPERCLASS, i);
-      result = getDependency(superclass.getId(), location)
+
+    // The dependency list contains two slots for each method, and then the remaining items are
+    // superclasses.
+    for (uint i = methods.size() * 2; i < raw->dependencyCount; i++) {
+      result = getIndexedDependency(i)
           .asInterface().findMethodByName(name, counter);
       if (result != nullptr) {
         break;
@@ -644,12 +622,8 @@ bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
   }
 
   // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
-  auto superclasses = getProto().getInterface().getSuperclasses();
-  for (auto i: kj::indices(superclasses)) {
-    auto superclass = superclasses[i];
-    uint location = _::RawBrandedSchema::makeDepLocation(
-        _::RawBrandedSchema::DepKind::SUPERCLASS, i);
-    if (getDependency(superclass.getId(), location).asInterface().extends(other, counter)) {
+  for (uint i = getMethods().size() * 2; i < raw->dependencyCount; i++) {
+    if (getIndexedDependency(i).asInterface().extends(other, counter)) {
       return true;
     }
   }
@@ -677,12 +651,8 @@ kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId, uint
   }
 
   // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
-  auto superclasses = getProto().getInterface().getSuperclasses();
-  for (auto i: kj::indices(superclasses)) {
-    auto superclass = superclasses[i];
-    uint location = _::RawBrandedSchema::makeDepLocation(
-        _::RawBrandedSchema::DepKind::SUPERCLASS, i);
-    KJ_IF_MAYBE(result, getDependency(superclass.getId(), location).asInterface()
+  for (uint i = getMethods().size() * 2; i < raw->dependencyCount; i++) {
+    KJ_IF_MAYBE(result, getIndexedDependency(i).asInterface()
                             .findSuperclass(typeId, counter)) {
       return *result;
     }
@@ -692,24 +662,16 @@ kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId, uint
 }
 
 StructSchema InterfaceSchema::Method::getParamType() const {
-  auto proto = getProto();
-  uint location = _::RawBrandedSchema::makeDepLocation(
-      _::RawBrandedSchema::DepKind::METHOD_PARAMS, ordinal);
-  return parent.getDependency(proto.getParamStructType(), location).asStruct();
+  return parent.getIndexedDependency(ordinal * 2).asStruct();
 }
 
 StructSchema InterfaceSchema::Method::getResultType() const {
-  auto proto = getProto();
-  uint location = _::RawBrandedSchema::makeDepLocation(
-      _::RawBrandedSchema::DepKind::METHOD_RESULTS, ordinal);
-  return parent.getDependency(proto.getResultStructType(), location).asStruct();
+  return parent.getIndexedDependency(ordinal * 2 + 1).asStruct();
 }
 
 InterfaceSchema InterfaceSchema::SuperclassList::operator[](uint index) const {
-  auto superclass = list[index];
-  uint location = _::RawBrandedSchema::makeDepLocation(
-      _::RawBrandedSchema::DepKind::SUPERCLASS, index);
-  return parent.getDependency(superclass.getId(), location).asInterface();
+  uint location = parent.getMethods().size() * 2 + index;
+  return parent.getIndexedDependency(location).asInterface();
 }
 
 // -------------------------------------------------------------------
@@ -719,8 +681,7 @@ uint32_t ConstSchema::getValueSchemaOffset() const {
 }
 
 Type ConstSchema::getType() const {
-  return interpretType(getProto().getConst().getType(),
-      _::RawBrandedSchema::makeDepLocation(_::RawBrandedSchema::DepKind::CONST_TYPE, 0));
+  return interpretType(getProto().getConst().getType(), 0);
 }
 
 // =======================================================================================
