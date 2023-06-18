@@ -90,8 +90,6 @@ struct RawBrandedSchema {
   const Scope* scopes;
   // Array of enclosing scopes for which generic variables have been bound, sorted by type ID.
 
-  typedef const RawBrandedSchema* Dependency;
-
   const RawBrandedSchema* const* dependencies;
   // Array of dependencies arranged by member index. More specifically:
   // - For structs, dependenciesByIndex[fieldIndex] is the dependency type used by the given
@@ -105,36 +103,6 @@ struct RawBrandedSchema {
 
   uint32_t scopeCount;
   uint32_t dependencyCount;
-
-  enum class DepKind {
-    // Component of a Dependency::location. Specifies what sort of dependency this is.
-
-    INVALID,
-    // Mostly defined to ensure that zero is not a valid location.
-
-    FIELD,
-    // Binding needed for a field's type. The index is the field index (NOT ordinal!).
-
-    METHOD_PARAMS,
-    // Bindings needed for a method's params type. The index is the method number.
-
-    METHOD_RESULTS,
-    // Bindings needed for a method's results type. The index is the method ordinal.
-
-    SUPERCLASS,
-    // Bindings needed for a superclass type. The index is the superclass's index in the
-    // "extends" list.
-
-    CONST_TYPE
-    // Bindings needed for the type of a constant. The index is zero.
-  };
-
-  static inline uint makeDepLocation(DepKind kind, uint index) {
-    // Make a number representing the location of a particular dependency within its parent
-    // schema.
-
-    return (static_cast<uint>(kind) << 24) | index;
-  }
 
   class Initializer {
   public:

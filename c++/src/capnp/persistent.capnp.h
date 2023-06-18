@@ -48,7 +48,7 @@ struct Persistent {
     CAPNP_DECLARE_INTERFACE_HEADER(c8cb212fcd9f5691)
     static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
-    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];
+    static const ::capnp::_::RawBrandedSchema* const brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand(); }
   };
@@ -68,6 +68,7 @@ struct Persistent<SturdyRef, Owner>::SaveParams {
     #if !CAPNP_LITE
     static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema* const brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand(); }
     #endif  // !CAPNP_LITE
@@ -87,6 +88,7 @@ struct Persistent<SturdyRef, Owner>::SaveResults {
     #if !CAPNP_LITE
     static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];
     static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];
+    static const ::capnp::_::RawBrandedSchema* const brandDependencies[];
     static const ::capnp::_::RawBrandedSchema specificBrand;
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return ::capnp::_::ChooseBrand<_capnpPrivate, SturdyRef, Owner>::brand(); }
     #endif  // !CAPNP_LITE
@@ -455,9 +457,13 @@ const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef, Owner>::SavePa
   ::capnp::_::brandBindingFor<Owner>(),
 };
 template <typename SturdyRef, typename Owner>
+const ::capnp::_::RawBrandedSchema* const Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brandDependencies[] = {
+  nullptr,
+};
+template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::specificBrand = {
-  &::capnp::schemas::s_f76fba59183073a5, brandScopes, nullptr,
-  1, 0, nullptr
+  &::capnp::schemas::s_f76fba59183073a5, brandScopes, brandDependencies,
+  1, 1, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -538,9 +544,13 @@ const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef, Owner>::SaveRe
   ::capnp::_::brandBindingFor<Owner>(),
 };
 template <typename SturdyRef, typename Owner>
+const ::capnp::_::RawBrandedSchema* const Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brandDependencies[] = {
+  nullptr,
+};
+template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::specificBrand = {
-  &::capnp::schemas::s_b76848c18c40efbf, brandScopes, nullptr,
-  1, 0, nullptr
+  &::capnp::schemas::s_b76848c18c40efbf, brandScopes, brandDependencies,
+  1, 1, nullptr
 };
 #endif  // !CAPNP_LITE
 
@@ -607,9 +617,9 @@ const ::capnp::_::RawBrandedSchema::Binding Persistent<SturdyRef, Owner>::_capnp
   ::capnp::_::brandBindingFor<Owner>(),
 };
 template <typename SturdyRef, typename Owner>
-const ::capnp::_::RawBrandedSchema::Dependency Persistent<SturdyRef, Owner>::_capnpPrivate::brandDependencies[] = {
-  { 33554432,  ::capnp::Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brand() },
-  { 50331648,  ::capnp::Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brand() },
+const ::capnp::_::RawBrandedSchema* const Persistent<SturdyRef, Owner>::_capnpPrivate::brandDependencies[] = {
+   ::capnp::Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brand(),
+   ::capnp::Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brand(),
 };
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema Persistent<SturdyRef, Owner>::_capnpPrivate::specificBrand = {
