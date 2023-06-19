@@ -101,6 +101,8 @@ class RequestHook;
 class ResponseHook;
 class PipelineHook;
 class ClientHook;
+template <typename T>
+class RevocableServer;
 
 template <typename Params, typename Results>
 class Request: public Params::Builder {
@@ -294,6 +296,9 @@ private:
   kj::Own<ClientHook> hook;
 
   static kj::Own<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
+  static kj::Own<ClientHook> makeRevocableLocalClient(Capability::Server& server);
+  static void revokeLocalClient(ClientHook& hook);
+  static void revokeLocalClient(ClientHook& hook, kj::Exception&& reason);
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
@@ -305,6 +310,8 @@ private:
   friend struct List;
   friend class _::CapabilityServerSetBase;
   friend class ClientHook;
+  template <typename T>
+  friend class RevocableServer;
 };
 
 // =======================================================================================
@@ -531,6 +538,7 @@ protected:
   //   the server's constructor.)
   // - The capability client pointing at this object has been destroyed. (This is always the case
   //   in the server's destructor.)
+  // - The capability client pointing at this object has been revoked using RevocableServer.
   // - Multiple capability clients have been created around the same server (possible if the server
   //   is refcounted, which is not recommended since the client itself provides refcounting).
 
@@ -550,6 +558,39 @@ protected:
 private:
   ClientHook* thisHook = nullptr;
   friend class LocalClient;
+};
+
+template <typename T>
+class RevocableServer {
+  // Allows you to create a capability client pointing to a capability server without taking
+  // ownership of the server. When `RevocableServer` is destroyed, all clients created through it
+  // will become broken. All outstanding RPCs via those clients will be canceled and all future
+  // RPCs will immediately throw. Hence, once the `RevocableServer` is destroyed, it is safe
+  // to destroy the server object it referenced.
+  //
+  // This is particularly useful when you want to create a capability server that points to an
+  // object that you do not own, and thus cannot keep alive beyond some defined lifetime. Since
+  // you cannot force the client to respect lifetime rules, you should use a RevocableServer to
+  // revoke access before the lifetime ends.
+  //
+  // The RevocableServer object can be moved (as long as the server outlives it).
+
+public:
+  RevocableServer(typename T::Server& server);
+  RevocableServer(RevocableServer&&) = default;
+  RevocableServer& operator=(RevocableServer&&) = default;
+  ~RevocableServer() noexcept(false);
+  KJ_DISALLOW_COPY(RevocableServer);
+
+  typename T::Client getClient();
+
+  void revoke();
+  void revoke(kj::Exception&& reason);
+  // Revokes the capability immediately, rather than waiting for the destructor. This can also
+  // be used to specify a custom exception to use when revoking.
+
+private:
+  kj::Own<ClientHook> hook;
 };
 
 // =======================================================================================
@@ -801,6 +842,12 @@ public:
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
   static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
+};
+
+class RevocableClientHook: public ClientHook {
+public:
+  virtual void revoke() = 0;
+  virtual void revoke(kj::Exception&& reason) = 0;
 };
 
 class CallContextHook {
@@ -1147,6 +1194,31 @@ StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContex
 
 Capability::Client Capability::Server::thisCap() {
   return Client(thisHook->addRef());
+}
+
+template <typename T>
+RevocableServer<T>::RevocableServer(typename T::Server& server)
+    : hook(Capability::Client::makeRevocableLocalClient(server)) {}
+template <typename T>
+RevocableServer<T>::~RevocableServer() noexcept(false) {
+  // Check if moved away.
+  if (hook.get() != nullptr) {
+    Capability::Client::revokeLocalClient(*hook);
+  }
+}
+
+template <typename T>
+typename T::Client RevocableServer<T>::getClient() {
+  return typename T::Client(hook->addRef());
+}
+
+template <typename T>
+void RevocableServer<T>::revoke() {
+  Capability::Client::revokeLocalClient(*hook);
+}
+template <typename T>
+void RevocableServer<T>::revoke(kj::Exception&& exception) {
+  Capability::Client::revokeLocalClient(*hook, kj::mv(exception));
 }
 
 namespace _ { // private

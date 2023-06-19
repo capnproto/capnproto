@@ -1390,6 +1390,35 @@ KJ_TEST("Streaming call throwing cascades to following calls") {
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise4.ignoreResult().wait(waitScope));
 }
 
+KJ_TEST("RevocableServer") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class ServerImpl: public test::TestMembrane::Server {
+  public:
+    kj::Promise<void> waitForever(WaitForeverContext context) override {
+      return kj::NEVER_DONE;
+    }
+  };
+
+  ServerImpl server;
+
+  RevocableServer<test::TestMembrane> revocable(server);
+
+  auto promise = revocable.getClient().waitForeverRequest().send();
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  revocable.revoke();
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "capability was revoked",
+      promise.ignoreResult().wait(waitScope));
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "capability was revoked",
+      revocable.getClient().waitForeverRequest().send().ignoreResult().wait(waitScope));
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp
