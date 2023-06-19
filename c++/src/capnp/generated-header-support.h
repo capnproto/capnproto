@@ -137,7 +137,7 @@ struct BrandBindingFor_<List<T>, Kind::LIST> {
 template <typename T>
 struct BrandBindingFor_<T, Kind::ENUM> {
   static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
-    return { 15, listDepth, nullptr };
+    return { 15, listDepth, &rawSchema<T>().defaultBrand };
   }
 };
 
