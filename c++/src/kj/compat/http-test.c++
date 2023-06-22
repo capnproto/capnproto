@@ -1889,9 +1889,9 @@ KJ_TEST("WebSocket masked") {
 
 class WebSocketErrorCatcher : public WebSocketErrorHandler {
 public:
-  kj::Vector<kj::HttpHeaders::ProtocolError> errors;
+  kj::Vector<kj::WebSocket::ProtocolError> errors;
 
-  kj::Exception handleWebSocketProtocolError(kj::HttpHeaders::ProtocolError protocolError) {
+  kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) {
     errors.add(kj::mv(protocolError));
     return KJ_EXCEPTION(FAILED, protocolError.description);
   }

@@ -2542,7 +2542,7 @@ public:
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
     if (recvHeader.hasRsv2or3()) {
       throw errorHandler.handleWebSocketProtocolError({
-        1002, "Protocol error", "Received frame had RSV bits 2 or 3 set", nullptr,
+        1002, "Received frame had RSV bits 2 or 3 set",
       });
     }
 
@@ -2551,8 +2551,7 @@ public:
     size_t payloadLen = recvHeader.getPayloadLen();
     if (payloadLen > maxSize) {
       throw errorHandler.handleWebSocketProtocolError({
-        1009, "WebSocket message is too large",
-        kj::str("Message is too large: ", payloadLen, " > ", maxSize), nullptr
+        1009, kj::str("Message is too large: ", payloadLen, " > ", maxSize)
       });
     }
 
@@ -2561,7 +2560,7 @@ public:
     if (opcode == OPCODE_CONTINUATION) {
       if (fragments.empty()) {
         throw errorHandler.handleWebSocketProtocolError({
-          1002, "Protocol error", "Unexpected continuation frame", nullptr
+          1002, "Unexpected continuation frame"
         });
       }
 
@@ -2569,7 +2568,7 @@ public:
     } else if (isData) {
       if (!fragments.empty()) {
         throw errorHandler.handleWebSocketProtocolError({
-          1002, "Protocol error", "Missing continuation frame", nullptr
+          1002, "Missing continuation frame"
         });
       }
     }
@@ -2617,7 +2616,7 @@ public:
       // Fragmented message, and this isn't the final fragment.
       if (!isData) {
         throw errorHandler.handleWebSocketProtocolError({
-          1002, "Protocol error", "Received fragmented control frame", nullptr
+          1002, "Received fragmented control frame"
         });
       }
 
@@ -2713,7 +2712,7 @@ public:
           return receive(maxSize);
         default:
           throw errorHandler.handleWebSocketProtocolError({
-            1002, "Protocol error", kj::str("Unknown opcode ", opcode), nullptr
+            1002, kj::str("Unknown opcode ", opcode)
           });
       }
     };
@@ -5423,7 +5422,7 @@ HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolErr
 }
 
 kj::Exception WebSocketErrorHandler::handleWebSocketProtocolError(
-      HttpHeaders::ProtocolError protocolError) {
+      WebSocket::ProtocolError protocolError) {
   return KJ_EXCEPTION(FAILED, kj::str("code=", protocolError.statusCode,
                                         ": ", protocolError.description));
 }

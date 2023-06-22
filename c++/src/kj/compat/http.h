@@ -614,6 +614,19 @@ public:
   // resolves, but send() or receive() will throw DISCONNECTED when appropriate. See also
   // kj::AsyncOutputStream::whenWriteDisconnected().)
 
+  struct ProtocolError {
+    // Represents a protocol error, such as a bad opcode or oversize message.
+
+    uint statusCode;
+    // Suggested WebSocket status code that should be used when returning an error to the client.
+    //
+    // Most errors are 1002; an oversize message will be 1009.
+
+    kj::StringPtr description;
+    // An error description safe for all the world to see. This should be at most 123 bytes so that
+    // it can be used as the body of a Close frame (RFC 6455 sections 5.5 and 5.5.1).
+  };
+
   struct Close {
     uint16_t code;
     kj::String reason;
@@ -993,7 +1006,7 @@ struct HttpClientSettings {
 
 class WebSocketErrorHandler {
 public:
-  virtual kj::Exception handleWebSocketProtocolError(HttpHeaders::ProtocolError protocolError);
+  virtual kj::Exception handleWebSocketProtocolError(WebSocket::ProtocolError protocolError);
   // Handles low-level protocol errors in received WebSocket data.
   //
   // This is called when the WebSocket peer sends us bad data *after* a successful WebSocket
