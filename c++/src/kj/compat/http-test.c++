@@ -25,6 +25,7 @@
 #include <kj/debug.h>
 #include <kj/test.h>
 #include <kj/encoding.h>
+#include <kj/vector.h>
 #include <map>
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
@@ -1886,6 +1887,148 @@ KJ_TEST("WebSocket masked") {
   serverTask.wait(waitScope);
 }
 
+class WebSocketErrorCatcher : public WebSocketErrorHandler {
+public:
+  kj::Vector<kj::WebSocket::ProtocolError> errors;
+
+  kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) {
+    errors.add(kj::mv(protocolError));
+    return KJ_EXCEPTION(FAILED, protocolError.description);
+  }
+};
+
+KJ_TEST("WebSocket unexpected RSV bits") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, nullptr, errorCatcher);
+
+  byte DATA[] = {
+    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
+
+    0xF0, 0x05, 'w', 'o', 'r', 'l', 'd'  // all RSV bits set, plus FIN
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    bool gotException = false;
+    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
+    serverTask.wait(waitScope);
+    KJ_ASSERT(gotException);
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
+  }
+
+  clientTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket unexpected continuation frame") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, nullptr, errorCatcher);
+
+  byte DATA[] = {
+    0x80, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',  // Continuation frame with no start frame, plus FIN
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    bool gotException = false;
+    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
+    serverTask.wait(waitScope);
+    KJ_ASSERT(gotException);
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
+  }
+
+  clientTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket missing continuation frame") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, nullptr, errorCatcher);
+
+  byte DATA[] = {
+    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',  // Start frame
+    0x01, 0x06, 'w', 'o', 'r', 'l', 'd', '!',  // Another start frame
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    bool gotException = false;
+    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
+    serverTask.wait(waitScope);
+    KJ_ASSERT(gotException);
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+  }
+
+  clientTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket fragmented control frame") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, nullptr, errorCatcher);
+
+  byte DATA[] = {
+    0x09, 0x04, 'd', 'a', 't', 'a'  // Fragmented ping frame
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    bool gotException = false;
+    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
+    serverTask.wait(waitScope);
+    KJ_ASSERT(gotException);
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
+  }
+
+  clientTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket unknown opcode") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, nullptr, errorCatcher);
+
+  byte DATA[] = {
+    0x85, 0x04, 'd', 'a', 't', 'a'  // 5 is a reserved opcode
+  };
+
+  auto clientTask = client->write(DATA, sizeof(DATA));
+
+  {
+    bool gotException = false;
+    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
+    serverTask.wait(waitScope);
+    KJ_ASSERT(gotException);
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
+  }
+
+  clientTask.wait(waitScope);
+}
+
 KJ_TEST("WebSocket unsolicited pong") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
@@ -2200,9 +2343,10 @@ KJ_TEST("WebSocket maximum message size") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe =KJ_HTTP_TEST_CREATE_2PIPE;
 
+  WebSocketErrorCatcher errorCatcher;
   FakeEntropySource maskGenerator;
   auto client = newWebSocket(kj::mv(pipe.ends[0]), maskGenerator);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), nullptr, nullptr, errorCatcher);
 
   size_t maxSize = 100;
   auto biggestAllowedString = kj::strArray(kj::repeat(kj::StringPtr("A"), maxSize), "");
@@ -2220,6 +2364,8 @@ KJ_TEST("WebSocket maximum message size") {
 
   {
     KJ_EXPECT_THROW_MESSAGE("too large", server->receive(maxSize).wait(waitScope));
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1009);
   }
 }
 
