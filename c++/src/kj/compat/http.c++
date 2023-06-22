@@ -2438,7 +2438,7 @@ public:
                 kj::Maybe<kj::Promise<void>> waitBeforeSend = nullptr)
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
         compressionConfig(kj::mv(compressionConfigParam)),
-        errorHandler(errorHandler),
+        errorHandler(errorHandler.orDefault(*this)),
         sendingPong(kj::mv(waitBeforeSend)),
         recvBuffer(kj::mv(buffer)), recvData(leftover) {
 #if KJ_HAS_ZLIB
@@ -2541,7 +2541,7 @@ public:
 
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
     if (recvHeader.hasRsv2or3()) {
-      throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+      throw errorHandler.handleWebSocketProtocolError({
         1002, "Protocol error", "Received frame had RSV bits 2 or 3 set", nullptr,
       });
     }
@@ -2550,7 +2550,7 @@ public:
 
     size_t payloadLen = recvHeader.getPayloadLen();
     if (payloadLen > maxSize) {
-      throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+      throw errorHandler.handleWebSocketProtocolError({
         1009, "WebSocket message is too large",
         kj::str("Message is too large: ", payloadLen, " > ", maxSize), nullptr
       });
@@ -2560,7 +2560,7 @@ public:
     bool isData = opcode < OPCODE_FIRST_CONTROL;
     if (opcode == OPCODE_CONTINUATION) {
       if (fragments.empty()) {
-        throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+        throw errorHandler.handleWebSocketProtocolError({
           1002, "Protocol error", "Unexpected continuation frame", nullptr
         });
       }
@@ -2568,7 +2568,7 @@ public:
       opcode = fragmentOpcode;
     } else if (isData) {
       if (!fragments.empty()) {
-        throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+        throw errorHandler.handleWebSocketProtocolError({
           1002, "Protocol error", "Missing continuation frame", nullptr
         });
       }
@@ -2616,7 +2616,7 @@ public:
     } else {
       // Fragmented message, and this isn't the final fragment.
       if (!isData) {
-        throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+        throw errorHandler.handleWebSocketProtocolError({
           1002, "Protocol error", "Received fragmented control frame", nullptr
         });
       }
@@ -2712,7 +2712,7 @@ public:
           // Unsolicited pong. Ignore.
           return receive(maxSize);
         default:
-          throw errorHandler.orDefault(*this).handleWebSocketProtocolError({
+          throw errorHandler.handleWebSocketProtocolError({
             1002, "Protocol error", kj::str("Unknown opcode ", opcode), nullptr
           });
       }
@@ -3220,7 +3220,7 @@ private:
   kj::Own<kj::AsyncIoStream> stream;
   kj::Maybe<EntropySource&> maskKeyGenerator;
   kj::Maybe<CompressionParameters> compressionConfig;
-  kj::Maybe<WebSocketErrorHandler&> errorHandler;
+  WebSocketErrorHandler& errorHandler;
 #if KJ_HAS_ZLIB
   kj::Maybe<ZlibContext> compressionContext;
   kj::Maybe<ZlibContext> decompressionContext;
