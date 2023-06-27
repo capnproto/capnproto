@@ -96,7 +96,7 @@ public:
   //   will enter and then exit the membrane, but calls on the eventual resolution will not cross
   //   the membrane at all, so it is important that these two cases behave the same.
 
-  virtual kj::Own<MembranePolicy> addRef() = 0;
+  virtual kj::Shared<MembranePolicy> addRef() = 0;
   // Return a new owned pointer to the same policy.
   //
   // Typically an implementation of MembranePolicy should also inherit kj::Refcounted and implement
@@ -203,11 +203,11 @@ private:
   friend class MembraneHook;
 };
 
-Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy);
+Capability::Client membrane(Capability::Client inner, kj::Shared<MembranePolicy> policy);
 // Wrap `inner` in a membrane specified by `policy`. `inner` is considered "inside" the membrane,
 // while the returned capability should only be called from outside the membrane.
 
-Capability::Client reverseMembrane(Capability::Client outer, kj::Own<MembranePolicy> policy);
+Capability::Client reverseMembrane(Capability::Client outer, kj::Shared<MembranePolicy> policy);
 // Like `membrane` but treat the input capability as "outside" the membrane, and return a
 // capability appropriate for use inside.
 //
@@ -215,54 +215,54 @@ Capability::Client reverseMembrane(Capability::Client outer, kj::Own<MembranePol
 // reverse membranes where needed.
 
 template <typename ClientType>
-ClientType membrane(ClientType inner, kj::Own<MembranePolicy> policy);
+ClientType membrane(ClientType inner, kj::Shared<MembranePolicy> policy);
 template <typename ClientType>
-ClientType reverseMembrane(ClientType inner, kj::Own<MembranePolicy> policy);
+ClientType reverseMembrane(ClientType inner, kj::Shared<MembranePolicy> policy);
 // Convenience templates which return the same interface type as the input.
 
 template <typename ServerType>
 typename ServerType::Serves::Client membrane(
-    kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy);
+    kj::Own<ServerType> inner, kj::Shared<MembranePolicy> policy);
 template <typename ServerType>
 typename ServerType::Serves::Client reverseMembrane(
-    kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy);
+    kj::Own<ServerType> inner, kj::Shared<MembranePolicy> policy);
 // Convenience templates which input a capability server type and return the appropriate client
 // type.
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
-    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy);
+    Reader&& from, Orphanage to, kj::Shared<MembranePolicy> policy);
 // Copy a Cap'n Proto object (e.g. struct or list), adding the given membrane to any capabilities
 // found within it. `from` is interpreted as "outside" the membrane while `to` is "inside".
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
-    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy);
+    Reader&& from, Orphanage to, kj::Shared<MembranePolicy> policy);
 // Like copyIntoMembrane() except that `from` is "inside" the membrane and `to` is "outside".
 
 // =======================================================================================
 // inline implementation details
 
 template <typename ClientType>
-ClientType membrane(ClientType inner, kj::Own<MembranePolicy> policy) {
+ClientType membrane(ClientType inner, kj::Shared<MembranePolicy> policy) {
   return membrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
       .castAs<typename ClientType::Calls>();
 }
 template <typename ClientType>
-ClientType reverseMembrane(ClientType inner, kj::Own<MembranePolicy> policy) {
+ClientType reverseMembrane(ClientType inner, kj::Shared<MembranePolicy> policy) {
   return reverseMembrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
       .castAs<typename ClientType::Calls>();
 }
 
 template <typename ServerType>
 typename ServerType::Serves::Client membrane(
-    kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy) {
+    kj::Own<ServerType> inner, kj::Shared<MembranePolicy> policy) {
   return membrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
       .castAs<typename ServerType::Serves>();
 }
 template <typename ServerType>
 typename ServerType::Serves::Client reverseMembrane(
-    kj::Own<ServerType> inner, kj::Own<MembranePolicy> policy) {
+    kj::Own<ServerType> inner, kj::Shared<MembranePolicy> policy) {
   return reverseMembrane(Capability::Client(kj::mv(inner)), kj::mv(policy))
       .castAs<typename ServerType::Serves>();
 }
@@ -270,17 +270,17 @@ typename ServerType::Serves::Client reverseMembrane(
 namespace _ {  // private
 
 OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
-                                kj::Own<MembranePolicy> policy, bool reverse);
+                                kj::Shared<MembranePolicy> policy, bool reverse);
 OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
-                                kj::Own<MembranePolicy> policy, bool reverse);
+                                kj::Shared<MembranePolicy> policy, bool reverse);
 OrphanBuilder copyOutOfMembrane(ListReader from, Orphanage to,
-                                kj::Own<MembranePolicy> policy, bool reverse);
+                                kj::Shared<MembranePolicy> policy, bool reverse);
 
 }  // namespace _ (private)
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
-    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy) {
+    Reader&& from, Orphanage to, kj::Shared<MembranePolicy> policy) {
   return _::copyOutOfMembrane(
       _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
       to, kj::mv(policy), true);
@@ -288,7 +288,7 @@ Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
-    Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy) {
+    Reader&& from, Orphanage to, kj::Shared<MembranePolicy> policy) {
   return _::copyOutOfMembrane(
       _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
       to, kj::mv(policy), false);

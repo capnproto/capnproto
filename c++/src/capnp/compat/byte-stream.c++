@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "byte-stream.h"
+#include "kj/refcount.h"
 #include <kj/one-of.h>
 #include <kj/debug.h>
 
@@ -270,7 +271,7 @@ public:
         auto limit = params.getLimit();
         context.releaseParams();
         auto results = context.getResults(MessageSize { 2, 1 });
-        results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
+        results.setSubstream(factory.streamSet.add(kj::refcounted<SubstreamImpl>(
             factory, *this, thisCap(), streaming.stream, kj::mv(callback), kj::mv(limit),
             kj::mv(streaming.tlsStarter))));
         state = Borrowed { kj::mv(streaming) };
@@ -478,7 +479,7 @@ public:
         auto req = target.getSubstreamRequest();
         req.setLimit(limit);
         auto paf = kj::newPromiseAndFulfiller<uint64_t>();
-        req.setCallback(kj::heap<SubstreamCallbackImpl>(currentParent->factory,
+        req.setCallback(kj::refcounted<SubstreamCallbackImpl>(currentParent->factory,
             kj::mv(self), kj::mv(paf.fulfiller), limit));
 
         // Now we hook up the incoming stream adapter to point directly to this substream, yay.
@@ -700,7 +701,7 @@ protected:
         context.releaseParams();
 
         auto results = context.initResults(MessageSize {2, 1});
-        results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
+        results.setSubstream(factory.streamSet.add(kj::refcounted<SubstreamImpl>(
             factory, *this, thisCap(), *kjStream, kj::mv(callback), kj::mv(limit),
             kj::mv(tlsStarter))));
         state = Borrowed { kj::mv(kjStream) };
@@ -774,7 +775,7 @@ private:
       // Allow the shortened stream to redirect back to our original underlying stream.
       auto results = context.getResults(capnp::MessageSize { 4, 1 });
       results.setNext(factory.streamSet.add(
-          kj::heap<CapnpToKjStreamAdapter>(factory, kj::mv(pathProber))));
+          kj::refcounted<CapnpToKjStreamAdapter>(factory, kj::mv(pathProber))));
 
       // The full pump completed. Note that it's important that we fulfill this after the
       // PathProber has been attached to the new CapnpToKjStreamAdapter, which will have happened
@@ -1141,13 +1142,13 @@ private:
 // =======================================================================================
 
 capnp::ByteStream::Client ByteStreamFactory::kjToCapnp(kj::Own<kj::AsyncOutputStream> kjStream) {
-  return streamSet.add(kj::heap<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream)));
+  return streamSet.add(kj::refcounted<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream)));
 }
 
 capnp::ByteStream::Client ByteStreamFactory::kjToCapnp(
     kj::Own<kj::AsyncOutputStream> kjStream, kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter) {
   return streamSet.add(
-      kj::heap<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream), kj::mv(tlsStarter)));
+      kj::refcounted<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream), kj::mv(tlsStarter)));
 }
 
 kj::Own<kj::AsyncOutputStream> ByteStreamFactory::capnpToKj(capnp::ByteStream::Client capnpStream) {

@@ -4085,7 +4085,7 @@ private:
 
 class WebSocketPipeEnd final: public WebSocket {
 public:
-  WebSocketPipeEnd(kj::Own<WebSocketPipeImpl> in, kj::Own<WebSocketPipeImpl> out)
+  WebSocketPipeEnd(kj::Shared<WebSocketPipeImpl> in, kj::Shared<WebSocketPipeImpl> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
   ~WebSocketPipeEnd() noexcept(false) {
     in->abort();
@@ -4126,8 +4126,8 @@ public:
   uint64_t receivedByteCount() override { return in->sentByteCount(); }
 
 private:
-  kj::Own<WebSocketPipeImpl> in;
-  kj::Own<WebSocketPipeImpl> out;
+  kj::Shared<WebSocketPipeImpl> in;
+  kj::Shared<WebSocketPipeImpl> out;
 };
 
 }  // namespace
@@ -5696,7 +5696,7 @@ private:
     kj::Own<HttpClientImpl> client;
   };
 
-  kj::Own<RefcountedClient> getClient() {
+  kj::Shared<RefcountedClient> getClient() {
     for (;;) {
       if (availableClients.empty()) {
         auto stream = newPromisedStream(address->connect());

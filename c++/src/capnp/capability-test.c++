@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/refcount.h"
 #include "schema.capnp.h"
 
 #ifdef CAPNP_CAPABILITY_H_INCLUDED
@@ -148,11 +149,11 @@ TEST(Capability, Pipelining) {
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client(kj::refcounted<TestPipelineImpl>(callCount));
 
   auto request = client.getCapRequest();
   request.setN(234);
-  request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+  request.setInCap(test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -184,11 +185,11 @@ KJ_TEST("use pipeline after dropping response") {
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client(kj::refcounted<TestPipelineImpl>(callCount));
 
   auto request = client.getCapRequest();
   request.setN(234);
-  request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+  request.setInCap(test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
   test::TestPipeline::GetCapResults::Pipeline pipeline = kj::mv(promise);
@@ -220,7 +221,7 @@ KJ_TEST("context.setPipeline") {
   kj::WaitScope waitScope(loop);
 
   int callCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client(kj::refcounted<TestPipelineImpl>(callCount));
 
   auto promise = client.getCapPipelineOnlyRequest().send();
 
@@ -292,14 +293,14 @@ TEST(Capability, AsyncCancelation) {
   int callCount = 0;
   int handleCount = 0;
 
-  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
+  test::TestMoreStuff::Client client(kj::refcounted<TestMoreStuffImpl>(callCount, handleCount));
 
   kj::Promise<void> promise = nullptr;
 
   bool returned = false;
   {
     auto request = client.expectCancelRequest();
-    request.setCap(test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller))));
+    request.setCap(test::TestInterface::Client(kj::refcounted<TestCapDestructor>(kj::mv(paf.fulfiller))));
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectCancelResults>&& response) {
       returned = true;
@@ -327,7 +328,7 @@ TEST(Capability, DynamicClient) {
 
   int callCount = 0;
   DynamicCapability::Client client =
-      test::TestInterface::Client(kj::heap<TestInterfaceImpl>(callCount));
+      test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(callCount));
 
   auto request1 = client.newRequest("foo");
   request1.set("i", 123);
@@ -369,7 +370,7 @@ TEST(Capability, DynamicClientInheritance) {
   int callCount = 0;
 
   DynamicCapability::Client client1 =
-      test::TestExtends::Client(kj::heap<TestExtendsImpl>(callCount));
+      test::TestExtends::Client(kj::refcounted<TestExtendsImpl>(callCount));
   EXPECT_EQ(Schema::from<test::TestExtends>(), client1.getSchema());
   EXPECT_NE(Schema::from<test::TestInterface>(), client1.getSchema());
 
@@ -406,11 +407,11 @@ TEST(Capability, DynamicClientPipelining) {
   int callCount = 0;
   int chainedCallCount = 0;
   DynamicCapability::Client client =
-      test::TestPipeline::Client(kj::heap<TestPipelineImpl>(callCount));
+      test::TestPipeline::Client(kj::refcounted<TestPipelineImpl>(callCount));
 
   auto request = client.newRequest("getCap");
   request.set("n", 234);
-  request.set("inCap", test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+  request.set("inCap", test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -445,11 +446,11 @@ TEST(Capability, DynamicClientPipelineAnyCap) {
   int callCount = 0;
   int chainedCallCount = 0;
   DynamicCapability::Client client =
-      test::TestPipeline::Client(kj::heap<TestPipelineImpl>(callCount));
+      test::TestPipeline::Client(kj::refcounted<TestPipelineImpl>(callCount));
 
   auto request = client.newRequest("getAnyCap");
   request.set("n", 234);
-  request.set("inCap", test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+  request.set("inCap", test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -521,7 +522,7 @@ TEST(Capability, DynamicServer) {
 
   int callCount = 0;
   test::TestInterface::Client client =
-      DynamicCapability::Client(kj::heap<TestInterfaceDynamicImpl>(callCount))
+      DynamicCapability::Client(kj::refcounted<TestInterfaceDynamicImpl>(callCount))
           .castAs<test::TestInterface>();
 
   auto request1 = client.fooRequest();
@@ -592,7 +593,7 @@ TEST(Capability, DynamicServerInheritance) {
 
   int callCount = 0;
   test::TestExtends::Client client1 =
-      DynamicCapability::Client(kj::heap<TestExtendsDynamicImpl>(callCount))
+      DynamicCapability::Client(kj::refcounted<TestExtendsDynamicImpl>(callCount))
           .castAs<test::TestExtends>();
   test::TestInterface::Client client2 = client1;
   auto client = client2.castAs<test::TestExtends>();
@@ -679,12 +680,12 @@ TEST(Capability, DynamicServerPipelining) {
   int callCount = 0;
   int chainedCallCount = 0;
   test::TestPipeline::Client client =
-      DynamicCapability::Client(kj::heap<TestPipelineDynamicImpl>(callCount))
+      DynamicCapability::Client(kj::refcounted<TestPipelineDynamicImpl>(callCount))
           .castAs<test::TestPipeline>();
 
   auto request = client.getCapRequest();
   request.setN(234);
-  request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+  request.setInCap(test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -744,7 +745,7 @@ TEST(Capability, DynamicServerTailCall) {
 
   test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount));
   test::TestTailCaller::Client caller =
-      DynamicCapability::Client(kj::heap<TestTailCallerDynamicImpl>(callerCallCount))
+      DynamicCapability::Client(kj::refcounted<TestTailCallerDynamicImpl>(callerCallCount))
           .castAs<test::TestTailCaller>();
 
   auto request = caller.fooRequest();
@@ -866,7 +867,7 @@ TEST(Capability, Lists) {
   int callCount1 = 0;
   int callCount2 = 0;
   int callCount3 = 0;
-  test::TestPipeline::Client baseClient(kj::heap<TestPipelineImpl>(callCount1));
+  test::TestPipeline::Client baseClient(kj::refcounted<TestPipelineImpl>(callCount1));
   test::TestInterface::Client client1(kj::heap<TestInterfaceImpl>(callCount1));
   test::TestInterface::Client client2(kj::heap<TestInterfaceImpl>(callCount2));
   test::TestInterface::Client client3(kj::heap<TestInterfaceImpl>(callCount3));
@@ -1136,7 +1137,7 @@ KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T>") {
   kj::WaitScope waitScope(loop);
 
   int callCount = 0;
-  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
+  test::TestInterface::Client client(kj::refcounted<TestInterfaceImpl>(callCount));
 
   RemotePromise<test::TestInterface::FooResults> promise = kj::evalLater([&]() {
     auto request = client.fooRequest();
@@ -1157,12 +1158,12 @@ KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T> wit
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client(kj::refcounted<TestPipelineImpl>(callCount));
 
   auto promise = kj::evalLater([&]() {
     auto request = client.getCapRequest();
     request.setN(234);
-    request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+    request.setInCap(test::TestInterface::Client(kj::refcounted<TestInterfaceImpl>(chainedCallCount)));
     return request.send();
   });
 

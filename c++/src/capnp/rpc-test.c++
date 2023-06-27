@@ -317,7 +317,7 @@ public:
       return test::TestSturdyRefHostId::Reader();
     }
 
-    kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override {
+    kj::Shared<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override {
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {

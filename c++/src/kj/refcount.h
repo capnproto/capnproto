@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "kj/debug.h"
 #include "memory.h"
 
 #if _MSC_VER
@@ -34,6 +35,14 @@
 KJ_BEGIN_HEADER
 
 namespace kj {
+
+#ifndef KJ_USE_SHARED_PTR
+
+template<typename T>
+using Shared = Own<T>;
+
+#endif
+
 
 // =======================================================================================
 // Non-atomic (thread-unsafe) refcounting
@@ -78,20 +87,96 @@ private:
   // "mutable" because disposeImpl() is const.  Bleh.
 
   void disposeImpl(void* pointer) const override;
-  template <typename T>
-  static Own<T> addRefInternal(T* object);
+
+  static void doDispose(const void* pointer);
 
   template <typename T>
-  friend Own<T> addRef(T& object);
+  static Shared<T> addRefInternal(T* object);
+
+  template <typename T>
+  friend Shared<T> addRef(T& object);
   template <typename T, typename... Params>
-  friend Own<T> refcounted(Params&&... params);
+  friend Shared<T> refcounted(Params&&... params);
 
   template <typename T>
   friend class RefcountedWrapper;
+
+  template <typename, typename>
+  friend class Shared;
 };
 
+
+#ifdef KJ_USE_SHARED_PTR
+
+// todo:
+// template <class T>
+// class Shared<T, std::enable_if_t<std::is_base_of<Refcounted, T>::value> >;
+
+template <class T>
+class Shared<T, std::enable_if_t<true> > {
+public:
+  KJ_DISALLOW_COPY(Shared);
+  
+  inline Shared(): ptr(nullptr) {}
+  
+  inline Shared(Shared&& other) noexcept
+      : ptr(other.ptr) { other.ptr = nullptr; }
+  
+  inline Shared(T* ptr) noexcept: ptr(ptr) {}
+  
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Shared(Shared<U>&& other) noexcept
+      : ptr(cast(other.ptr)) {
+    other.ptr = nullptr;
+  }
+
+  ~Shared() {
+    if (ptr) Refcounted::doDispose(ptr);
+  }
+
+  inline Shared& operator=(Shared&& other) {
+    this->ptr = other.ptr;
+    other.ptr = nullptr;
+    return *this;
+  }
+
+  inline Shared& operator=(decltype(nullptr) other) {
+    if (ptr) Refcounted::doDispose(ptr);
+    ptr = nullptr;
+    return *this;
+  }
+
+  inline bool operator==(decltype(nullptr) other) const {
+    return ptr == nullptr;
+  }
+
+#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Shared<> dereference")
+  inline T* operator->() { NULLCHECK; return ptr; }
+  inline const T* operator->() const { NULLCHECK; return ptr; }
+  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *ptr; }
+  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *ptr; }
+#undef NULLCHECK
+  inline T* get() { return ptr; }
+  inline const T* get() const { return ptr; }
+  inline operator T*() { return ptr; }
+  inline operator const T*() const { return ptr; }
+
+private:
+  T* ptr;
+
+  template <typename U>
+  static inline T* cast(U* ptr) {
+    return ptr;
+  }
+
+  template <typename, typename>
+  friend class Shared;
+};
+
+#endif
+
 template <typename T, typename... Params>
-inline Own<T> refcounted(Params&&... params) {
+inline Shared<T> refcounted(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.  Returns an
   // initial reference to the object.  More references can be created with `kj::addRef()`.
 
@@ -99,7 +184,7 @@ inline Own<T> refcounted(Params&&... params) {
 }
 
 template <typename T>
-Own<T> addRef(T& object) {
+Shared<T> addRef(T& object) {
   // Return a new reference to `object`, which must subclass Refcounted and have been allocated
   // using `kj::refcounted<>()`.  It is suggested that subclasses implement a non-static addRef()
   // method which wraps this and returns the appropriate type.
@@ -109,10 +194,10 @@ Own<T> addRef(T& object) {
 }
 
 template <typename T>
-Own<T> Refcounted::addRefInternal(T* object) {
+Shared<T> Refcounted::addRefInternal(T* object) {
   Refcounted* refcounted = object;
   ++refcounted->refcount;
-  return Own<T>(object, *refcounted);
+  return Shared<T>(object);
 }
 
 template <typename T>
@@ -159,12 +244,12 @@ private:
 };
 
 template <typename T, typename... Params>
-Own<RefcountedWrapper<T>> refcountedWrapper(Params&&... params) {
+Shared<RefcountedWrapper<T>> refcountedWrapper(Params&&... params) {
   return refcounted<RefcountedWrapper<T>>(kj::fwd<Params>(params)...);
 }
 
 template <typename T>
-Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
+Shared<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
   return refcounted<RefcountedWrapper<Own<T>>>(kj::mv(wrapped));
 }
 

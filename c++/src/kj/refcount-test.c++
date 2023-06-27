@@ -33,21 +33,37 @@ struct SetTrueInDestructor: public Refcounted {
 
 TEST(Refcount, Basic) {
   bool b = false;
-  Own<SetTrueInDestructor> ref1 = kj::refcounted<SetTrueInDestructor>(&b);
+  Shared<SetTrueInDestructor> ref1 = kj::refcounted<SetTrueInDestructor>(&b);
+  EXPECT_NE(ref1, nullptr);
   EXPECT_FALSE(ref1->isShared());
-  Own<SetTrueInDestructor> ref2 = kj::addRef(*ref1);
+  Shared<SetTrueInDestructor> ref2 = kj::addRef(*ref1);
   EXPECT_TRUE(ref1->isShared());
-  Own<SetTrueInDestructor> ref3 = kj::addRef(*ref2);
+  Shared<SetTrueInDestructor> ref3 = kj::addRef(*ref2);
   EXPECT_TRUE(ref1->isShared());
 
+KJ_DBG("1");
   EXPECT_FALSE(b);
-  ref1 = Own<SetTrueInDestructor>();
+  ref1 = nullptr;
+KJ_DBG("1.1");
+  EXPECT_EQ(ref1, nullptr);
+KJ_DBG("1.2");
   EXPECT_TRUE(ref2->isShared());
   EXPECT_FALSE(b);
-  ref3 = Own<SetTrueInDestructor>();
+KJ_DBG("2");
+  ref3 = nullptr;
   EXPECT_FALSE(ref2->isShared());
   EXPECT_FALSE(b);
-  ref2 = Own<SetTrueInDestructor>();
+
+KJ_DBG("3");
+  // test move assignment
+  Shared<SetTrueInDestructor> ref4;
+  EXPECT_NE(ref2, nullptr);
+  EXPECT_EQ(ref4, nullptr);
+  ref4 = kj::mv(ref2);
+  EXPECT_EQ(ref2, nullptr);
+  EXPECT_NE(ref4, nullptr);
+
+  ref4 = nullptr;
   EXPECT_TRUE(b);
 
 #if defined(KJ_DEBUG) && !KJ_NO_EXCEPTIONS
@@ -69,7 +85,7 @@ struct SetTrueInDestructor2 {
 KJ_TEST("RefcountedWrapper") {
   {
     bool b = false;
-    Own<RefcountedWrapper<SetTrueInDestructor2>> w = refcountedWrapper<SetTrueInDestructor2>(&b);
+    Shared<RefcountedWrapper<SetTrueInDestructor2>> w = refcountedWrapper<SetTrueInDestructor2>(&b);
     KJ_EXPECT(!b);
 
     Own<SetTrueInDestructor2> ref1 = w->addWrappedRef();
@@ -93,7 +109,7 @@ KJ_TEST("RefcountedWrapper") {
   // Wrap Own<T>.
   {
     bool b = false;
-    Own<RefcountedWrapper<Own<SetTrueInDestructor2>>> w =
+    Shared<RefcountedWrapper<Own<SetTrueInDestructor2>>> w =
         refcountedWrapper<SetTrueInDestructor2>(kj::heap<SetTrueInDestructor2>(&b));
     KJ_EXPECT(!b);
 
@@ -117,7 +133,7 @@ KJ_TEST("RefcountedWrapper") {
 
   // Try wrapping an `int` to really demonstrate the wrapped type can be anything.
   {
-    Own<RefcountedWrapper<int>> w = refcountedWrapper<int>(123);
+    Shared<RefcountedWrapper<int>> w = refcountedWrapper<int>(123);
     int* ptr = &w->getWrapped();
     KJ_EXPECT(*ptr == 123);
 

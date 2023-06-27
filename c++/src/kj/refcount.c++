@@ -38,10 +38,16 @@ Refcounted::~Refcounted() noexcept(false) {
   KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
 }
 
-void Refcounted::disposeImpl(void* pointer) const {
-  if (--refcount == 0) {
-    delete this;
+void Refcounted::doDispose(const void* pointer) {
+  auto refcounted = static_cast<const Refcounted*>(pointer);
+  if (--refcounted->refcount == 0) {
+    delete refcounted;
+    return;
   }
+}
+
+void Refcounted::disposeImpl(void* pointer) const {
+  doDispose(this);
 }
 
 // =======================================================================================

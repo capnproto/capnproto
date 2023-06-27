@@ -57,7 +57,7 @@ public:
     return *ioContext.lowLevelProvider;
   }
 
-  static kj::Own<EzRpcContext> getThreadLocal() {
+  static kj::Shared<EzRpcContext> getThreadLocal() {
     EzRpcContext* existing = threadEzContext;
     if (existing != nullptr) {
       return kj::addRef(*existing);
@@ -77,7 +77,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> connectAttach(kj::Own<kj::NetworkAddress
 }
 
 struct EzRpcClient::Impl {
-  kj::Own<EzRpcContext> context;
+  kj::Shared<EzRpcContext> context;
 
   struct ClientContext {
     kj::Own<kj::AsyncIoStream> stream;
@@ -214,7 +214,7 @@ static DummyFilter DUMMY_FILTER;
 struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
                                 public kj::TaskSet::ErrorHandler {
   Capability::Client mainInterface;
-  kj::Own<EzRpcContext> context;
+  kj::Shared<EzRpcContext> context;
 
   struct ExportedCap {
     kj::String name;

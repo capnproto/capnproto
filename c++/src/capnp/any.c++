@@ -31,11 +31,11 @@ namespace capnp {
 
 #if !CAPNP_LITE
 
-kj::Own<ClientHook> PipelineHook::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
+kj::Shared<ClientHook> PipelineHook::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
   return getPipelinedCap(ops.asPtr());
 }
 
-kj::Own<ClientHook> AnyPointer::Reader::getPipelinedCap(
+kj::Shared<ClientHook> AnyPointer::Reader::getPipelinedCap(
     kj::ArrayPtr<const PipelineOp> ops) const {
   _::PointerReader pointer = reader;
 
@@ -73,7 +73,7 @@ AnyPointer::Pipeline AnyPointer::Pipeline::getPointerField(uint16_t pointerIndex
   return Pipeline(hook->addRef(), kj::mv(newOps));
 }
 
-kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
+kj::Shared<ClientHook> AnyPointer::Pipeline::asCap() {
   return hook->getPipelinedCap(ops);
 }
 

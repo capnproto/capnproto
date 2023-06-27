@@ -22,6 +22,7 @@
 #pragma once
 
 #include "common.h"
+#include <type_traits>
 
 KJ_BEGIN_HEADER
 
@@ -308,6 +309,11 @@ template <typename U>
 inline const void* Own<const void>::cast(U* ptr) {
   return _::castToConstVoid(ptr);
 }
+
+#ifdef KJ_USE_SHARED_PTR
+template <typename T, typename = void>
+class Shared;
+#endif
 
 template <typename T, typename StaticDisposer>
 class Own {

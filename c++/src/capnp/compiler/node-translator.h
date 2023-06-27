@@ -99,7 +99,7 @@ private:
   ErrorReporter& errorReporter;
   Orphanage orphanage;
   bool compileAnnotations;
-  kj::Own<BrandScope> localBrand;
+  kj::Shared<BrandScope> localBrand;
 
   Orphan<schema::Node> wipNode;
   // The work-in-progress schema node.

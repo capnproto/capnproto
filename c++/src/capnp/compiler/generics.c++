@@ -48,7 +48,7 @@ kj::Maybe<BrandedDecl> BrandedDecl::applyParams(
     return nullptr;
   } else {
     return brand->setParams(kj::mv(params), body.get<Resolver::ResolvedDecl>().kind, subSource)
-        .map([&](kj::Own<BrandScope>&& scope) {
+        .map([&](kj::Shared<BrandScope>&& scope) {
       BrandedDecl result = *this;
       result.brand = kj::mv(scope);
       result.source = subSource;
@@ -266,11 +266,11 @@ bool BrandScope::isGeneric() {
   }
 }
 
-kj::Own<BrandScope> BrandScope::push(uint64_t typeId, uint paramCount) {
+kj::Shared<BrandScope> BrandScope::push(uint64_t typeId, uint paramCount) {
   return kj::refcounted<BrandScope>(kj::addRef(*this), typeId, paramCount);
 }
 
-kj::Maybe<kj::Own<BrandScope>> BrandScope::setParams(
+kj::Maybe<kj::Shared<BrandScope>> BrandScope::setParams(
     kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source) {
   if (this->params.size() != 0) {
     errorReporter.addErrorOn(source, "Double-application of generic parameters.");
@@ -311,7 +311,7 @@ kj::Maybe<kj::Own<BrandScope>> BrandScope::setParams(
   }
 }
 
-kj::Own<BrandScope> BrandScope::pop(uint64_t newLeafId) {
+kj::Shared<BrandScope> BrandScope::pop(uint64_t newLeafId) {
   if (leafId == newLeafId) {
     return kj::addRef(*this);
   }
@@ -385,7 +385,7 @@ BrandedDecl BrandScope::interpretResolve(
   }
 }
 
-kj::Own<BrandScope> BrandScope::evaluateBrand(
+kj::Shared<BrandScope> BrandScope::evaluateBrand(
     Resolver& resolver, Resolver::ResolvedDecl decl,
     List<schema::Brand::Scope>::Reader brand, uint index) {
   auto result = kj::refcounted<BrandScope>(errorReporter, decl.id);

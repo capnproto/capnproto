@@ -118,7 +118,7 @@ public:
     }
   }
 
-  kj::Own<MembranePolicy> addRef() override {
+  kj::Shared<MembranePolicy> addRef() override {
     return kj::addRef(*this);
   }
 
@@ -170,7 +170,7 @@ void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membrane
 struct TestEnv {
   kj::EventLoop loop;
   kj::WaitScope waitScope;
-  kj::Own<MembranePolicyImpl> policy;
+  kj::Shared<MembranePolicyImpl> policy;
   test::TestMembrane::Client membraned;
 
   TestEnv()
@@ -288,12 +288,12 @@ KJ_TEST("MembraneHook::whenMoreResolved returns same value even when called conc
     auto membraned = membrane(kj::mv(promCap), env.policy->addRef());
     auto hook = ClientHook::from(membraned);
 
-    auto arr = kj::heapArrayBuilder<kj::Promise<kj::Own<ClientHook>>>(2);
+    auto arr = kj::heapArrayBuilder<kj::Promise<kj::Shared<ClientHook>>>(2);
     arr.add(KJ_ASSERT_NONNULL(hook->whenMoreResolved()));
     arr.add(KJ_ASSERT_NONNULL(hook->whenMoreResolved()));
 
     return kj::joinPromises(arr.finish()).attach(kj::mv(hook));
-  }).then([](kj::Vector<kj::Own<ClientHook>> hooks) {
+  }).then([](kj::Vector<kj::Shared<ClientHook>> hooks) {
     auto first = hooks[0].get();
     auto second = hooks[1].get();
     KJ_ASSERT(first == second);

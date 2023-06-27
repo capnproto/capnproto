@@ -551,24 +551,24 @@ TEST(Async, Fork) {
 struct RefcountedInt: public Refcounted {
   RefcountedInt(int i): i(i) {}
   int i;
-  Own<RefcountedInt> addRef() { return kj::addRef(*this); }
+  Shared<RefcountedInt> addRef() { return kj::addRef(*this); }
 };
 
 TEST(Async, ForkRef) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  Promise<Own<RefcountedInt>> promise = evalLater([&]() {
+  Promise<Shared<RefcountedInt>> promise = evalLater([&]() {
     return refcounted<RefcountedInt>(123);
   });
 
   auto fork = promise.fork();
 
-  auto branch1 = fork.addBranch().then([](Own<RefcountedInt>&& i) {
+  auto branch1 = fork.addBranch().then([](Shared<RefcountedInt>&& i) {
     EXPECT_EQ(123, i->i);
     return 456;
   });
-  auto branch2 = fork.addBranch().then([](Own<RefcountedInt>&& i) {
+  auto branch2 = fork.addBranch().then([](Shared<RefcountedInt>&& i) {
     EXPECT_EQ(123, i->i);
     return 789;
   });
@@ -585,17 +585,17 @@ TEST(Async, ForkMaybeRef) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  Promise<Maybe<Own<RefcountedInt>>> promise = evalLater([&]() {
-    return Maybe<Own<RefcountedInt>>(refcounted<RefcountedInt>(123));
+  Promise<Maybe<Shared<RefcountedInt>>> promise = evalLater([&]() {
+    return Maybe<Shared<RefcountedInt>>(refcounted<RefcountedInt>(123));
   });
 
   auto fork = promise.fork();
 
-  auto branch1 = fork.addBranch().then([](Maybe<Own<RefcountedInt>>&& i) {
+  auto branch1 = fork.addBranch().then([](Maybe<Shared<RefcountedInt>>&& i) {
     EXPECT_EQ(123, KJ_REQUIRE_NONNULL(i)->i);
     return 456;
   });
-  auto branch2 = fork.addBranch().then([](Maybe<Own<RefcountedInt>>&& i) {
+  auto branch2 = fork.addBranch().then([](Maybe<Shared<RefcountedInt>>&& i) {
     EXPECT_EQ(123, KJ_REQUIRE_NONNULL(i)->i);
     return 789;
   });

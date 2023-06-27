@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/refcount.h"
 #define CAPNP_PRIVATE
 #include "layout.h"
 #include <kj/debug.h>
@@ -1825,7 +1826,7 @@ struct WireHelpers {
 #if !CAPNP_LITE
   static void setCapabilityPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref,
-      kj::Own<ClientHook>&& cap) {
+      kj::Shared<ClientHook>&& cap) {
     if (!ref->isNull()) {
       zeroObject(segment, capTable, ref);
     }
@@ -2216,10 +2217,10 @@ struct WireHelpers {
   }
 
 #if !CAPNP_LITE
-  static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
+  static KJ_ALWAYS_INLINE(kj::Shared<ClientHook> readCapabilityPointer(
       SegmentReader* segment, CapTableReader* capTable,
       const WirePointer* ref, int nestingLimit)) {
-    kj::Maybe<kj::Own<ClientHook>> maybeCap;
+    kj::Maybe<kj::Shared<ClientHook>> maybeCap;
 
     auto brokenCapFactory = readGlobalBrokenCapFactoryForLayoutCpp();
 
@@ -2613,12 +2614,12 @@ void PointerBuilder::setList(const ListReader& value, bool canonical) {
 }
 
 #if !CAPNP_LITE
-kj::Own<ClientHook> PointerBuilder::getCapability() {
+kj::Shared<ClientHook> PointerBuilder::getCapability() {
   return WireHelpers::readCapabilityPointer(
       segment, capTable, pointer, kj::maxValue);
 }
 
-void PointerBuilder::setCapability(kj::Own<ClientHook>&& cap) {
+void PointerBuilder::setCapability(kj::Shared<ClientHook>&& cap) {
   WireHelpers::setCapabilityPointer(segment, capTable, pointer, kj::mv(cap));
 }
 #endif  // !CAPNP_LITE
@@ -2744,7 +2745,7 @@ Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount de
 }
 
 #if !CAPNP_LITE
-kj::Own<ClientHook> PointerReader::getCapability() const {
+kj::Shared<ClientHook> PointerReader::getCapability() const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readCapabilityPointer(segment, capTable, ref, nestingLimit);
 }
@@ -3452,7 +3453,7 @@ OrphanBuilder OrphanBuilder::copy(
 
 #if !CAPNP_LITE
 OrphanBuilder OrphanBuilder::copy(
-    BuilderArena* arena, CapTableBuilder* capTable, kj::Own<ClientHook> copyFrom) {
+    BuilderArena* arena, CapTableBuilder* capTable, kj::Shared<ClientHook> copyFrom) {
   OrphanBuilder result;
   WireHelpers::setCapabilityPointer(nullptr, capTable, result.tagAsPtr(), kj::mv(copyFrom));
   result.segment = arena->getSegment(SegmentId(0));
@@ -3661,7 +3662,7 @@ ListReader OrphanBuilder::asListReaderAnySize() const {
 }
 
 #if !CAPNP_LITE
-kj::Own<ClientHook> OrphanBuilder::asCapability() const {
+kj::Shared<ClientHook> OrphanBuilder::asCapability() const {
   return WireHelpers::readCapabilityPointer(segment, capTable, tagAsPtr(), kj::maxValue);
 }
 #endif  // !CAPNP_LITE

@@ -782,9 +782,9 @@ private:
 };
 
 template <typename T> T copyOrAddRef(T& t) { return t; }
-template <typename T> Own<T> copyOrAddRef(Own<T>& t) { return t->addRef(); }
-template <typename T> Maybe<Own<T>> copyOrAddRef(Maybe<Own<T>>& t) {
-  return t.map([](Own<T>& ptr) {
+template <typename T> Shared<T> copyOrAddRef(Shared<T>& t) { return t->addRef(); }
+template <typename T> Maybe<Shared<T>> copyOrAddRef(Maybe<Shared<T>>& t) {
+  return t.map([](Shared<T>& ptr) {
     return ptr->addRef();
   });
 }

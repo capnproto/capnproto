@@ -48,13 +48,13 @@ public:
 
   struct ConnectionAndProvisionId {
     kj::Own<Connection> connection;
-    kj::Own<OutgoingRpcMessage> firstMessage;
+    kj::Shared<OutgoingRpcMessage> firstMessage;
     Orphan<AnyPointer> provisionId;
   };
 
   class Connection {
   public:
-    virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
+    virtual kj::Shared<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual kj::Promise<void> shutdown() = 0;
     virtual AnyStruct::Reader baseGetPeerVatId() = 0;

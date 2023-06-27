@@ -110,7 +110,7 @@ private:
 
 class HttpOverCapnpFactory::CapnpToKjWebSocketAdapter final: public capnp::WebSocket::Server {
 public:
-  CapnpToKjWebSocketAdapter(kj::Own<RequestState> state, kj::WebSocket& webSocket,
+  CapnpToKjWebSocketAdapter(kj::Shared<RequestState> state, kj::WebSocket& webSocket,
                             kj::Promise<Capability::Client> shorteningPromise)
       : state(kj::mv(state)), webSocket(webSocket),
         shorteningPromise(kj::mv(shorteningPromise)) {}
@@ -139,7 +139,7 @@ public:
   }
 
 private:
-  kj::Own<RequestState> state;
+  kj::Shared<RequestState> state;
   kj::WebSocket& webSocket;
   kj::Promise<Capability::Client> shorteningPromise;
 };
@@ -247,7 +247,7 @@ class HttpOverCapnpFactory::ClientRequestContextImpl final
     : public capnp::HttpService::ClientRequestContext::Server {
 public:
   ClientRequestContextImpl(HttpOverCapnpFactory& factory,
-                           kj::Own<RequestState> state,
+                           kj::Shared<RequestState> state,
                            kj::HttpService::Response& kjResponse)
       : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
 
@@ -320,7 +320,7 @@ public:
 
 private:
   HttpOverCapnpFactory& factory;
-  kj::Own<RequestState> state;
+  kj::Shared<RequestState> state;
   bool sent = false;
 
   kj::HttpService::Response& kjResponse;

@@ -298,7 +298,7 @@ rpc::twoparty::VatId::Reader TwoPartyVatNetwork::getPeerVatId() {
   return peerVatId.getRoot<rpc::twoparty::VatId>();
 }
 
-kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSegmentWordSize) {
+kj::Shared<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSegmentWordSize) {
   return kj::refcounted<OutgoingMessageImpl>(*this, firstSegmentWordSize);
 }
 

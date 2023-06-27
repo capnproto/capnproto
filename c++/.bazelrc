@@ -23,4 +23,18 @@ build:windows --cxxopt='/wo4503' --host_cxxopt='/wo4503'
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'
 
 # build with ssl, zlib and bazel by default
-build --//src/kj:openssl=True --//src/kj:zlib=True --//src/kj:brotli=True
+build --//src/kj:openssl=True --//src/kj:zlib=True --//src/kj:brotli=True --//src/kj:shared_ptr=True
+
+build:no-omit-frame-pointer --copt="-fno-omit-frame-pointer"
+build:no-omit-frame-pointer --copt="-mno-omit-leaf-frame-pointer"
+
+# build:sanitizers-common --copt="-fsanitize-link-c++-runtime" --linkopt="-fsanitize-link-c++-runtime"
+build:sanitizers-common --copt="-Og"
+build:sanitizers-common --copt="-fno-optimize-sibling-calls"
+build:sanitizers-common --copt="-g"
+build:sanitizers-common --config=no-omit-frame-pointer
+
+build:asan --config=sanitizers-common
+build:asan --copt="-fsanitize=address" --linkopt="-fsanitize=address"
+# <!-- build:asan --test_env=ASAN_OPTIONS=abort_on_error=true -->
+

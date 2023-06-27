@@ -355,19 +355,19 @@ void BuilderArena::reportReadLimitReached() {
   }
 }
 
-kj::Maybe<kj::Own<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint index) {
+kj::Maybe<kj::Shared<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint index) {
 #if CAPNP_LITE
   KJ_UNIMPLEMENTED("no cap tables in lite mode");
 #else
   if (index < capTable.size()) {
-    return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+    return capTable[index].map([](kj::Shared<ClientHook>& cap) { return cap->addRef(); });
   } else {
     return nullptr;
   }
 #endif
 }
 
-uint BuilderArena::LocalCapTable::injectCap(kj::Own<ClientHook>&& cap) {
+uint BuilderArena::LocalCapTable::injectCap(kj::Shared<ClientHook>&& cap) {
 #if CAPNP_LITE
   KJ_UNIMPLEMENTED("no cap tables in lite mode");
 #else

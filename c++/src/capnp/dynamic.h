@@ -482,7 +482,7 @@ public:
   inline Client(T&& client);
 
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, DynamicCapability::Server*>()>>
-  inline Client(kj::Own<T>&& server);
+  inline Client(kj::Shared<T>&& server);
 
   template <typename T, typename = kj::EnableIf<kind<T>() == Kind::INTERFACE>>
   typename T::Client as();
@@ -503,11 +503,11 @@ public:
 private:
   InterfaceSchema schema;
 
-  Client(InterfaceSchema schema, kj::Own<ClientHook>&& hook)
+  Client(InterfaceSchema schema, kj::Shared<ClientHook>&& hook)
       : Capability::Client(kj::mv(hook)), schema(schema) {}
 
   template <typename T>
-  inline Client(InterfaceSchema schema, kj::Own<T>&& server);
+  inline Client(InterfaceSchema schema, kj::Shared<T>&& server);
 
   friend struct Capability;
   friend struct DynamicStruct;
@@ -553,7 +553,7 @@ class Request<DynamicStruct, DynamicStruct>: public DynamicStruct::Builder {
   // Specialization of `Request<T, U>` for DynamicStruct.
 
 public:
-  inline Request(DynamicStruct::Builder builder, kj::Own<RequestHook>&& hook,
+  inline Request(DynamicStruct::Builder builder, kj::Shared<RequestHook>&& hook,
                  StructSchema resultSchema)
       : DynamicStruct::Builder(builder), hook(kj::mv(hook)), resultSchema(resultSchema) {}
 
@@ -565,7 +565,7 @@ public:
   // streaming behavior. It is an error to call this if the response type is not StreamResult.
 
 private:
-  kj::Own<RequestHook> hook;
+  kj::Shared<RequestHook> hook;
   StructSchema resultSchema;
 
   friend class Capability::Client;
@@ -1613,10 +1613,10 @@ inline DynamicCapability::Client::Client(T&& client)
     : Capability::Client(kj::mv(client)), schema(Schema::from<FromClient<T>>()) {}
 
 template <typename T, typename>
-inline DynamicCapability::Client::Client(kj::Own<T>&& server)
+inline DynamicCapability::Client::Client(kj::Shared<T>&& server)
     : Client(server->getSchema(), kj::mv(server)) {}
 template <typename T>
-inline DynamicCapability::Client::Client(InterfaceSchema schema, kj::Own<T>&& server)
+inline DynamicCapability::Client::Client(InterfaceSchema schema, kj::Shared<T>&& server)
     : Capability::Client(kj::mv(server)), schema(schema) {}
 
 template <typename T, typename>
@@ -1676,7 +1676,7 @@ inline DynamicCapability::Client Capability::Client::castAs<DynamicCapability>(
 
 template <>
 inline DynamicCapability::Client CapabilityServerSet<DynamicCapability>::add(
-    kj::Own<DynamicCapability::Server>&& server) {
+    kj::Shared<DynamicCapability::Server>&& server) {
   void* ptr = reinterpret_cast<void*>(server.get());
   auto schema = server->getSchema();
   return addInternal(kj::mv(server), ptr).castAs<DynamicCapability>(schema);

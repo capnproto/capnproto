@@ -1498,7 +1498,7 @@ private:
 
 class PipeReadEnd final: public AsyncInputStream {
 public:
-  PipeReadEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
+  PipeReadEnd(kj::Shared<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeReadEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       pipe->abortRead();
@@ -1514,13 +1514,13 @@ public:
   }
 
 private:
-  Own<AsyncPipe> pipe;
+  Shared<AsyncPipe> pipe;
   UnwindDetector unwind;
 };
 
 class PipeWriteEnd final: public AsyncOutputStream {
 public:
-  PipeWriteEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
+  PipeWriteEnd(kj::Shared<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeWriteEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       pipe->shutdownWrite();
@@ -1545,13 +1545,13 @@ public:
   }
 
 private:
-  Own<AsyncPipe> pipe;
+  Shared<AsyncPipe> pipe;
   UnwindDetector unwind;
 };
 
 class TwoWayPipeEnd final: public AsyncCapabilityStream {
 public:
-  TwoWayPipeEnd(kj::Own<AsyncPipe> in, kj::Own<AsyncPipe> out)
+  TwoWayPipeEnd(kj::Shared<AsyncPipe> in, kj::Shared<AsyncPipe> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
   ~TwoWayPipeEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
@@ -1607,8 +1607,8 @@ public:
   }
 
 private:
-  kj::Own<AsyncPipe> in;
-  kj::Own<AsyncPipe> out;
+  kj::Shared<AsyncPipe> in;
+  kj::Shared<AsyncPipe> out;
   UnwindDetector unwind;
 };
 
@@ -1740,11 +1740,11 @@ class AsyncTee final: public Refcounted {
 public:
   class Branch final: public AsyncInputStream {
   public:
-    Branch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
+    Branch(Shared<AsyncTee> teeArg): tee(mv(teeArg)) {
       tee->branches.add(*this);
     }
 
-    Branch(Own<AsyncTee> teeArg, Branch& cloneFrom)
+    Branch(Shared<AsyncTee> teeArg, Branch& cloneFrom)
         : tee(mv(teeArg)), buffer(cloneFrom.buffer.clone()) {
       tee->branches.add(*this);
     }
@@ -1786,7 +1786,7 @@ public:
     }
 
   private:
-    Own<AsyncTee> tee;
+    Shared<AsyncTee> tee;
     ListLink<Branch> link;
 
     Buffer buffer;

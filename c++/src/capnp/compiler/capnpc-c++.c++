@@ -2454,7 +2454,7 @@ private:
           "  typedef ", name, " Reads;\n"
           "\n"
           "  Client(decltype(nullptr));\n"
-          "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
+          "  explicit Client(::kj::Shared< ::capnp::ClientHook>&& hook);\n"
           "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>\n"
           "  Client(::kj::Own<_t>&& server);\n"
           "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Client*>()>>\n"
@@ -2508,7 +2508,7 @@ private:
           "    : ::capnp::Capability::Client(nullptr) {}\n",
           templateContext.allDecls(),
           "inline ", fullName, "::Client::Client(\n"
-          "    ::kj::Own< ::capnp::ClientHook>&& hook)\n"
+          "    ::kj::Shared< ::capnp::ClientHook>&& hook)\n"
           "    : ::capnp::Capability::Client(::kj::mv(hook)) {}\n",
           templateContext.allDecls(),
           "template <typename _t, typename>\n"

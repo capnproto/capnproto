@@ -136,7 +136,7 @@ private:
 
   kj::ForkedPromise<void> disconnectPromise = nullptr;
 
-  kj::Vector<kj::Own<OutgoingMessageImpl>> queuedMessages;
+  kj::Vector<kj::Shared<OutgoingMessageImpl>> queuedMessages;
   size_t currentQueueSize = 0;
   const kj::MonotonicClock& clock;
   kj::TimePoint currentOutgoingMessageSendTime;
@@ -173,7 +173,7 @@ private:
 
   kj::Own<RpcFlowController> newStream() override;
   rpc::twoparty::VatId::Reader getPeerVatId() override;
-  kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
+  kj::Shared<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   kj::Promise<void> shutdown() override;
 

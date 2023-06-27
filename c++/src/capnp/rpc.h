@@ -311,7 +311,7 @@ class RpcFlowController {
   // Tracks a particular RPC stream in order to implement a flow control algorithm.
 
 public:
-  virtual kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) = 0;
+  virtual kj::Promise<void> send(kj::Shared<OutgoingRpcMessage> message, kj::Promise<void> ack) = 0;
   // Like calling message->send(), but the promise resolves when it's a good time to send the
   // next message.
   //
@@ -386,7 +386,7 @@ public:
     kj::Own<Connection> connection;
     // Connection to the new vat.
 
-    kj::Own<OutgoingRpcMessage> firstMessage;
+    kj::Shared<OutgoingRpcMessage> firstMessage;
     // An already-allocated `OutgoingRpcMessage` associated with `connection`.  The RPC system will
     // construct this as an `Accept` message and send it.
 
@@ -427,7 +427,7 @@ public:
     // authenticate this, so that the caller can be assured that they are really talking to the
     // identified vat and not an imposter.
 
-    virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override = 0;
+    virtual kj::Shared<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override = 0;
     // Allocate a new message to be sent on this connection.
     //
     // If `firstSegmentWordSize` is non-zero, it should be treated as a hint suggesting how large

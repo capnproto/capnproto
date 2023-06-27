@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "reconnect.h"
+#include "kj/refcount.h"
 
 namespace capnp {
 
@@ -29,19 +30,19 @@ class ReconnectHook final: public ClientHook, public kj::Refcounted {
 public:
   ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
-        current(lazy ? kj::Maybe<kj::Own<ClientHook>>() : ClientHook::from(connect())) {}
+        current(lazy ? kj::Maybe<kj::Shared<ClientHook>>() : ClientHook::from(connect())) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
       CallHints hints) override {
     auto result = getCurrent().newCall(interfaceId, methodId, sizeHint, hints);
     AnyPointer::Builder builder = result;
-    auto hook = kj::heap<RequestImpl>(kj::addRef(*this), RequestHook::from(kj::mv(result)));
+    auto hook = kj::refcounted<RequestImpl>(kj::addRef(*this), RequestHook::from(kj::mv(result)));
     return { builder, kj::mv(hook) };
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Shared<CallContextHook>&& context, CallHints hints) override {
     auto result = getCurrent().call(interfaceId, methodId, kj::mv(context), hints);
     if (hints.onlyPromisePipeline) {
       // Just in case the callee didn't implement the hint, replace its promise.
@@ -61,11 +62,11 @@ public:
     return nullptr;
   }
 
-  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+  kj::Maybe<kj::Promise<kj::Shared<ClientHook>>> whenMoreResolved() override {
     return nullptr;
   }
 
-  kj::Own<ClientHook> addRef() override {
+  kj::Shared<ClientHook> addRef() override {
     return kj::addRef(*this);
   }
 
@@ -82,7 +83,7 @@ public:
 
 private:
   kj::Function<Capability::Client()> connect;
-  kj::Maybe<kj::Own<ClientHook>> current;
+  kj::Maybe<kj::Shared<ClientHook>> current;
   uint generation = 0;
 
   template <typename T>
@@ -113,7 +114,7 @@ private:
 
   class RequestImpl final: public RequestHook {
   public:
-    RequestImpl(kj::Own<ReconnectHook> parent, kj::Own<RequestHook> inner)
+    RequestImpl(kj::Shared<ReconnectHook> parent, kj::Shared<RequestHook> inner)
         : parent(kj::mv(parent)), inner(kj::mv(inner)) {}
 
     RemotePromise<AnyPointer> send() override {
@@ -144,8 +145,8 @@ private:
     }
 
   private:
-    kj::Own<ReconnectHook> parent;
-    kj::Own<RequestHook> inner;
+    kj::Shared<ReconnectHook> parent;
+    kj::Shared<RequestHook> inner;
   };
 };
 
