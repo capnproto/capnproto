@@ -540,20 +540,35 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::Own<Capability::Server>&& serverParam)
-      : server(kj::mv(serverParam)) {
-    server->thisHook = this;
-    startResolveTask();
+  LocalClient(kj::Own<Capability::Server>&& serverParam, bool revocable = false) {
+    auto& serverRef = *server.emplace(kj::mv(serverParam));
+    serverRef.thisHook = this;
+    if (revocable) revoker.emplace();
+    startResolveTask(serverRef);
   }
   LocalClient(kj::Own<Capability::Server>&& serverParam,
-              _::CapabilityServerSetBase& capServerSet, void* ptr)
-      : server(kj::mv(serverParam)), capServerSet(&capServerSet), ptr(ptr) {
-    server->thisHook = this;
-    startResolveTask();
+              _::CapabilityServerSetBase& capServerSet, void* ptr,
+              bool revocable = false)
+      : capServerSet(&capServerSet), ptr(ptr) {
+    auto& serverRef = *server.emplace(kj::mv(serverParam));
+    serverRef.thisHook = this;
+    if (revocable) revoker.emplace();
+    startResolveTask(serverRef);
   }
 
   ~LocalClient() noexcept(false) {
-    server->thisHook = nullptr;
+    KJ_IF_MAYBE(s, server) {
+      s->get()->thisHook = nullptr;
+    }
+  }
+
+  void revoke(kj::Exception&& e) {
+    KJ_IF_MAYBE(s, server) {
+      KJ_ASSERT_NONNULL(revoker).cancel(e);
+      brokenException = kj::mv(e);
+      s->get()->thisHook = nullptr;
+      server = nullptr;
+    }
   }
 
   Request<AnyPointer, AnyPointer> newCall(
@@ -714,19 +729,30 @@ public:
   }
 
   kj::Maybe<int> getFd() override {
-    return server->getFd();
+    KJ_IF_MAYBE(s, server) {
+      return s->get()->getFd();
+    } else {
+      return nullptr;
+    }
   }
 
 private:
-  kj::Own<Capability::Server> server;
+  kj::Maybe<kj::Own<Capability::Server>> server;
   _::CapabilityServerSetBase* capServerSet = nullptr;
   void* ptr = nullptr;
 
   kj::Maybe<kj::ForkedPromise<void>> resolveTask;
   kj::Maybe<kj::Own<ClientHook>> resolved;
 
-  void startResolveTask() {
-    resolveTask = server->shortenPath().map([this](kj::Promise<Capability::Client> promise) {
+  kj::Maybe<kj::Canceler> revoker;
+  // If non-null, all promises must be wrapped in this revoker.
+
+  void startResolveTask(Capability::Server& serverRef) {
+    resolveTask = serverRef.shortenPath().map([this](kj::Promise<Capability::Client> promise) {
+      KJ_IF_MAYBE(r, revoker) {
+        promise = r->wrap(kj::mv(promise));
+      }
+
       return promise.then([this](Capability::Client&& cap) {
         auto hook = ClientHook::from(kj::mv(cap));
 
@@ -842,8 +868,13 @@ private:
       return kj::cp(*e);
     }
 
-    auto result = server->dispatchCall(interfaceId, methodId,
+    // `server` can't be null here since `brokenException` is null.
+    auto result = KJ_ASSERT_NONNULL(server)->dispatchCall(interfaceId, methodId,
                                        CallContext<AnyPointer, AnyPointer>(context));
+
+    KJ_IF_MAYBE(r, revoker) {
+      result.promise = r->wrap(kj::mv(result.promise));
+    }
 
     if (!result.allowCancellation) {
       // Make sure this call cannot be canceled by forking the promise and detaching one branch.
@@ -871,6 +902,19 @@ const uint LocalClient::BRAND = 0;
 
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
   return kj::refcounted<LocalClient>(kj::mv(server));
+}
+
+kj::Own<ClientHook> Capability::Client::makeRevocableLocalClient(Capability::Server& server) {
+  auto result = kj::refcounted<LocalClient>(
+      kj::Own<Capability::Server>(&server, kj::NullDisposer::instance), true /* revocable */);
+  return result;
+}
+void Capability::Client::revokeLocalClient(ClientHook& hook) {
+  revokeLocalClient(hook, KJ_EXCEPTION(FAILED,
+      "capability was revoked (RevocableServer was destroyed)"));
+}
+void Capability::Client::revokeLocalClient(ClientHook& hook, kj::Exception&& e) {
+  kj::downcast<LocalClient>(hook).revoke(kj::mv(e));
 }
 
 kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& promise) {
