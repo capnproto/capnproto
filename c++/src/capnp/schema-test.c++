@@ -395,6 +395,19 @@ KJ_TEST("StructSchema::hasNoCapabilites()") {
   KJ_EXPECT(Schema::from<test::TestCycleBWithCaps>().mayContainCapabilities());
 }
 
+KJ_TEST("list-of-enum as generic type parameter has working schema") {
+  // Tests for a bug where when a list-of-enum type was used as a type parameter to a generic,
+  // the schema would be constructed wrong.
+  auto field = Schema::from<test::TestUseGenerics>()
+      .getFieldByName("bindEnumList").getType().asStruct()
+      .getFieldByName("foo");
+  auto type = field.getType();
+  KJ_ASSERT(type.isList());
+  auto elementType = type.asList().getElementType();
+  KJ_ASSERT(elementType.isEnum());
+  KJ_ASSERT(elementType.asEnum() == Schema::from<TestEnum>());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

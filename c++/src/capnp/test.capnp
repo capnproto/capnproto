@@ -653,6 +653,8 @@ struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
       inner2Bind = (baz = "text", innerBound = (foo = (int16Field = 123))),
       inner2Text = (baz = "text", innerBound = (foo = (int16Field = 123))),
       revFoo = [12, 34, 56]);
+
+  bindEnumList @20 :TestGenerics(List(TestEnum), Text);
 }
 
 struct TestEmptyStruct {}
