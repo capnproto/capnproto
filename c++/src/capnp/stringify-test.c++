@@ -701,6 +701,18 @@ TEST(Stringify, Generics) {
   EXPECT_EQ("(foo = \"abcd\", bar = [123, 456])", kj::str(root));
 }
 
+KJ_TEST("Stringification benchmark") {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+  initTestMessage(root);
+  auto reader = root.asReader();
+  auto size = kj::toCharSequence(reader).size();
+
+  doBenchmark([&]() {
+    KJ_ASSERT(kj::toCharSequence(reader).size() == size);
+  });
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

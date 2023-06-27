@@ -769,28 +769,32 @@ private:
       }
     }
 
-    auto depMap = makeBrandDepMap(templateContext, schema);
-    auto dependencyCount = depMap.size();
+    auto depList = makeBrandDepList(templateContext, schema);
+    auto dependencyCount = depList.size();
     return {
       kj::strTree("{\n", scopes.finish(), "}"),
       kj::strTree("{\n", bindings.releaseAsArray(), "}"),
-      makeBrandDepInitializers(kj::mv(depMap)),
+      makeBrandDepInitializers(kj::mv(depList)),
       dependencyCount
     };
   }
 
-  std::map<uint, kj::StringTree>
-  makeBrandDepMap(const TemplateContext& templateContext, Schema schema) {
+  kj::Vector<kj::StringTree>
+  makeBrandDepList(const TemplateContext& templateContext, Schema schema) {
     // Build deps. This is separate from makeBrandDepInitializers to give calling code the
     // opportunity to count the number of dependencies, to calculate array sizes.
-    std::map<uint, kj::StringTree> depMap;
 
+    kj::Vector<kj::StringTree> depList;
+
+    // NOTE: This is a little funny-looking because we used to construct a map from "location"
+    //   (a function of `kind` and `index`) to dependency value, but we now just make an array, so
+    //   `kind` and `index` are not used.
 #define ADD_DEP(kind, index, ...) \
     { \
-      uint location = _::RawBrandedSchema::makeDepLocation( \
-          _::RawBrandedSchema::DepKind::kind, index); \
       KJ_IF_MAYBE(dep, makeBrandDepInitializer(__VA_ARGS__)) { \
-        depMap[location] = kj::mv(*dep); \
+        depList.add(kj::mv(*dep)); \
+      } else { \
+        depList.add(kj::strTree("nullptr")); \
       } \
     }
 
@@ -807,15 +811,15 @@ private:
         break;
       case schema::Node::INTERFACE: {
         auto interface = schema.asInterface();
-        auto superclasses = interface.getSuperclasses();
-        for (auto i: kj::indices(superclasses)) {
-          ADD_DEP(SUPERCLASS, i, superclasses[i]);
-        }
         auto methods = interface.getMethods();
         for (auto i: kj::indices(methods)) {
           auto method = methods[i];
           ADD_DEP(METHOD_PARAMS, i, method, method.getParamType(), "Params");
           ADD_DEP(METHOD_RESULTS, i, method, method.getResultType(), "Results");
+        }
+        auto superclasses = interface.getSuperclasses();
+        for (auto i: kj::indices(superclasses)) {
+          ADD_DEP(SUPERCLASS, i, superclasses[i]);
         }
         break;
       }
@@ -824,19 +828,19 @@ private:
         break;
     }
 #undef ADD_DEP
-    return depMap;
+    return depList;
   }
 
-  kj::StringTree makeBrandDepInitializers(std::map<uint, kj::StringTree>&& depMap) {
-    // Process depMap. Returns a braced initialiser list, or an empty string if there are no
+  kj::StringTree makeBrandDepInitializers(kj::Vector<kj::StringTree>&& depList) {
+    // Process depList. Returns a braced initialiser list, or an empty string if there are no
     // dependencies.
-    if (!depMap.size()) {
+    if (!depList.size()) {
       return kj::strTree();
     }
 
-    auto deps = kj::heapArrayBuilder<kj::StringTree>(depMap.size());
-    for (auto& entry: depMap) {
-      deps.add(kj::strTree("  { ", entry.first, ", ", kj::mv(entry.second), " },\n"));
+    auto deps = kj::heapArrayBuilder<kj::StringTree>(depList.size());
+    for (auto& dep: depList) {
+      deps.add(kj::strTree("  ", kj::mv(dep), ",\n"));
     }
 
     return kj::strTree("{\n", kj::StringTree(deps.finish(), ""), "}");
@@ -849,7 +853,7 @@ private:
     if (type.isBranded()) {
       return makeBrandDepInitializer(type, cppFullName(type, nullptr));
     } else {
-      return nullptr;
+      return makeBrandDepInitializer(type, {});  // name won't be used
     }
   }
 
@@ -881,7 +885,8 @@ private:
       name.addMemberValue("brand");
       return kj::strTree(name, "()");
     } else {
-      return nullptr;
+      return kj::strTree("&::capnp::schemas::s_",
+          kj::hex(type.getProto().getId()), ".defaultBrand");
     }
   }
 
@@ -901,10 +906,11 @@ private:
       case schema::Type::FLOAT64:
       case schema::Type::TEXT:
       case schema::Type::DATA:
-      case schema::Type::ENUM:
       case schema::Type::ANY_POINTER:
         return nullptr;
 
+      case schema::Type::ENUM:
+        return makeBrandDepInitializer(type.asEnum());
       case schema::Type::STRUCT:
         return makeBrandDepInitializer(type.asStruct());
       case schema::Type::INTERFACE:
@@ -1982,7 +1988,7 @@ private:
         "    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];\n"
         "    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];\n",
         (!hasBrandDependencies ? "" :
-            "    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];\n"),
+            "    static const ::capnp::_::RawBrandedSchema* const brandDependencies[];\n"),
         "    static const ::capnp::_::RawBrandedSchema specificBrand;\n"
         "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { "
         "return ::capnp::_::ChooseBrand<_capnpPrivate, ", templateContext.allArgs(), ">::brand(); }\n");
@@ -2007,7 +2013,7 @@ private:
         "::_capnpPrivate::brandBindings[] = ", kj::mv(brandInitializers.bindings), ";\n",
 
         (!hasBrandDependencies ? kj::strTree("") : kj::strTree(
-            templates, "const ::capnp::_::RawBrandedSchema::Dependency ", fullName,
+            templates, "const ::capnp::_::RawBrandedSchema* const ", fullName,
             "::_capnpPrivate::brandDependencies[] = ", kj::mv(brandInitializers.dependencies),
             ";\n")),
 
@@ -2793,7 +2799,7 @@ private:
     }
 
     auto brandDeps = makeBrandDepInitializers(
-        makeBrandDepMap(templateContext, schema.getGeneric()));
+        makeBrandDepList(templateContext, schema.getGeneric()));
 
     bool mayContainCapabilities = proto.isStruct() && schema.asStruct().mayContainCapabilities();
 
@@ -2818,7 +2824,7 @@ private:
             kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
             "};\n"),
         brandDeps.size() == 0 ? kj::strTree() : kj::strTree(
-            "KJ_CONSTEXPR(const) ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ",
+            "constexpr const ::capnp::_::RawBrandedSchema* bd_", hexId, "[] = ",
             kj::mv(brandDeps), ";\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", ",
