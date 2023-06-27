@@ -553,13 +553,27 @@ void runWebSocketBasicTestCase(
   }
 }
 
+void runWebSocketAbortTestCase(
+    kj::WebSocket& clientWs, kj::WebSocket& serverWs, kj::WaitScope& waitScope) {
+  auto onAbort = serverWs.whenAborted();
+  KJ_EXPECT(!onAbort.poll(waitScope));
+  clientWs.abort();
+
+  // At one time, this promise hung forever.
+  KJ_EXPECT(onAbort.poll(waitScope));
+  onAbort.wait(waitScope);
+}
+
 void runWebSocketTests(kj::HttpHeaderTable& headerTable,
                        HttpOverCapnpFactory& clientFactory, HttpOverCapnpFactory& serverFactory,
                        kj::WaitScope& waitScope) {
   // We take a different approach here, because writing out raw WebSocket frames is a pain.
   // It's easier to test WebSockets at the KJ API level.
 
-  for (auto testCase: { runWebSocketBasicTestCase }) {
+  for (auto testCase: {
+    runWebSocketBasicTestCase,
+    runWebSocketAbortTestCase,
+  }) {
     auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
     auto donePaf = kj::newPromiseAndFulfiller<void>();
 
