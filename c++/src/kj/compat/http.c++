@@ -3588,13 +3588,18 @@ public:
     }
   }
   kj::Promise<void> pumpTo(WebSocket& other) override {
+    auto onAbort = other.whenAborted()
+        .then([]() -> kj::Promise<void> {
+      return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
+    });
+
     KJ_IF_MAYBE(s, state) {
       auto before = other.receivedByteCount();
       return s->pumpTo(other).attach(kj::defer([this, &other, before]() {
         transferredBytes += other.receivedByteCount() - before;
-      }));
+      })).exclusiveJoin(kj::mv(onAbort));
     } else {
-      return newAdaptedPromise<void, BlockedPumpTo>(*this, other);
+      return newAdaptedPromise<void, BlockedPumpTo>(*this, other).exclusiveJoin(kj::mv(onAbort));
     }
   }
 
