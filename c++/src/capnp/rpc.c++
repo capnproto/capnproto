@@ -503,18 +503,23 @@ public:
     auto shutdownPromise = dyingConnection->shutdown()
         .attach(kj::mv(dyingConnection))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
-              [origException = kj::mv(exception)](kj::Exception&& e) -> kj::Promise<void> {
+              [this, origException = kj::mv(exception)](kj::Exception&& shutdownException) -> kj::Promise<void> {
           // Don't report disconnects as an error.
-          if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          if (shutdownException.getType() == kj::Exception::Type::DISCONNECTED) {
             return kj::READY_NOW;
           }
           // If the error is just what was passed in to disconnect(), don't report it back out
           // since it shouldn't be anything the caller doesn't already know about.
-          if (e.getType() == origException.getType() &&
-              e.getDescription() == origException.getDescription()) {
+          if (shutdownException.getType() == origException.getType() &&
+              shutdownException.getDescription() == origException.getDescription()) {
             return kj::READY_NOW;
           }
-          return kj::mv(e);
+          // We are shutting down after receive error, ignore shutdown exception since underlying
+          // transport is probably broken.
+          if (receiveIncomingMessageError) {
+            return kj::READY_NOW;
+          }
+          return kj::mv(shutdownException);
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
     canceler.cancel(networkException);
@@ -717,6 +722,9 @@ private:
 
   bool sentCapabilitiesInPipelineOnlyCall = false;
   // Becomes true if `sendPipelineOnly()` is ever called with parameters that include capabilities.
+
+  bool receiveIncomingMessageError = false;
+  // Becomes true when receiveIncomingMessage resulted in exception.
 
   // =====================================================================================
   // ClientHook implementations
@@ -2766,6 +2774,10 @@ private:
         tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
         return false;
       }
+    }, [this](kj::Exception&& exception) {
+      receiveIncomingMessageError = true;
+      kj::throwRecoverableException(kj::mv(exception));
+      return false;
     }).then([this](bool keepGoing) {
       // No exceptions; continue loop.
       //
