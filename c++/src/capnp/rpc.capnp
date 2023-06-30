@@ -738,6 +738,10 @@ struct Disembargo {
   # is expected that people sending messages to P will shortly start sending them to R instead and
   # drop P. P is at end-of-life anyway, so it doesn't matter if it ignores chances to further
   # optimize its path.
+  #
+  # Note well: the Tribble 4-way race condition does not require each vat to be *distinct*; as long
+  # as each resolution crosses a network boundary the race can occur -- so this concerns even level
+  # 1 implementations, not just level 3 implementations.
 
   target @0 :MessageTarget;
   # What is to be disembargoed.
