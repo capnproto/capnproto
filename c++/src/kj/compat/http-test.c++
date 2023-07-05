@@ -2339,6 +2339,27 @@ KJ_TEST("WebSocket pump disconnect on receive") {
   KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
 }
 
+KJ_TEST("WebSocket abort propagates through pipe") {
+  // Pumping one end of a WebSocket pipe into another WebSocket which later becomes aborted will
+  // cancel the pump promise with a DISCONNECTED exception.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto server = newWebSocket(kj::mv(pipe1.ends[1]), nullptr);
+  auto client = newWebSocket(kj::mv(pipe1.ends[0]), nullptr);
+
+  auto wsPipe = newWebSocketPipe();
+
+  auto downstreamPump = wsPipe.ends[0]->pumpTo(*server);
+  KJ_EXPECT(!downstreamPump.poll(waitScope));
+
+  client->abort();
+
+  KJ_EXPECT(downstreamPump.poll(waitScope));
+  KJ_EXPECT_THROW(DISCONNECTED, downstreamPump.wait(waitScope));
+}
+
 KJ_TEST("WebSocket maximum message size") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe =KJ_HTTP_TEST_CREATE_2PIPE;

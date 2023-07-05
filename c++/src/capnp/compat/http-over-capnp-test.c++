@@ -515,45 +515,29 @@ private:
   kj::Promise<void> done;
 };
 
-void runWebSocketTests(kj::HttpHeaderTable& headerTable,
-                       HttpOverCapnpFactory& clientFactory, HttpOverCapnpFactory& serverFactory,
-                       kj::WaitScope& waitScope) {
-  // We take a different approach here, because writing out raw WebSocket frames is a pain.
-  // It's easier to test WebSockets at the KJ API level.
-
-  auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
-  auto donePaf = kj::newPromiseAndFulfiller<void>();
-
-  auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
-    headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
-  auto front = clientFactory.capnpToKj(back);
-  auto client = kj::newHttpClient(*front);
-
-  auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable)).wait(waitScope);
-  KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
-
-  auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
-  auto serverWs = wsPaf.promise.wait(waitScope);
+void runWebSocketBasicTestCase(
+    kj::WebSocket& clientWs, kj::WebSocket& serverWs, kj::WaitScope& waitScope) {
+  // Called by `runWebSocketTests()`.
 
   {
-    auto promise = clientWs->send("foo"_kj);
-    auto message = serverWs->receive().wait(waitScope);
+    auto promise = clientWs.send("foo"_kj);
+    auto message = serverWs.receive().wait(waitScope);
     promise.wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "foo");
   }
 
   {
-    auto promise = serverWs->send("bar"_kj.asBytes());
-    auto message = clientWs->receive().wait(waitScope);
+    auto promise = serverWs.send("bar"_kj.asBytes());
+    auto message = clientWs.receive().wait(waitScope);
     promise.wait(waitScope);
     KJ_ASSERT(message.is<kj::Array<kj::byte>>());
     KJ_EXPECT(kj::str(message.get<kj::Array<kj::byte>>().asChars()) == "bar");
   }
 
   {
-    auto promise = clientWs->close(1234, "baz"_kj);
-    auto message = serverWs->receive().wait(waitScope);
+    auto promise = clientWs.close(1234, "baz"_kj);
+    auto message = serverWs.receive().wait(waitScope);
     promise.wait(waitScope);
     KJ_ASSERT(message.is<kj::WebSocket::Close>());
     KJ_EXPECT(message.get<kj::WebSocket::Close>().code == 1234);
@@ -561,11 +545,50 @@ void runWebSocketTests(kj::HttpHeaderTable& headerTable,
   }
 
   {
-    auto promise = serverWs->disconnect();
-    auto receivePromise = clientWs->receive();
+    auto promise = serverWs.disconnect();
+    auto receivePromise = clientWs.receive();
     KJ_EXPECT(receivePromise.poll(waitScope));
     KJ_EXPECT_THROW(DISCONNECTED, receivePromise.wait(waitScope));
     promise.wait(waitScope);
+  }
+}
+
+void runWebSocketAbortTestCase(
+    kj::WebSocket& clientWs, kj::WebSocket& serverWs, kj::WaitScope& waitScope) {
+  auto onAbort = serverWs.whenAborted();
+  KJ_EXPECT(!onAbort.poll(waitScope));
+  clientWs.abort();
+
+  // At one time, this promise hung forever.
+  KJ_EXPECT(onAbort.poll(waitScope));
+  onAbort.wait(waitScope);
+}
+
+void runWebSocketTests(kj::HttpHeaderTable& headerTable,
+                       HttpOverCapnpFactory& clientFactory, HttpOverCapnpFactory& serverFactory,
+                       kj::WaitScope& waitScope) {
+  // We take a different approach here, because writing out raw WebSocket frames is a pain.
+  // It's easier to test WebSockets at the KJ API level.
+
+  for (auto testCase: {
+    runWebSocketBasicTestCase,
+    runWebSocketAbortTestCase,
+  }) {
+    auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
+    auto donePaf = kj::newPromiseAndFulfiller<void>();
+
+    auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
+      headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
+    auto front = clientFactory.capnpToKj(back);
+    auto client = kj::newHttpClient(*front);
+
+    auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable)).wait(waitScope);
+    KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
+
+    auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
+    auto serverWs = wsPaf.promise.wait(waitScope);
+
+    testCase(*clientWs, *serverWs, waitScope);
   }
 }
 

@@ -120,7 +120,11 @@ public:
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    return kj::mv(shorteningPromise);
+    auto onAbort = webSocket.whenAborted()
+        .then([]() -> kj::Promise<Capability::Client> {
+      return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
+    });
+    return shorteningPromise.exclusiveJoin(kj::mv(onAbort));
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
