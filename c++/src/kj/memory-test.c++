@@ -459,6 +459,47 @@ KJ_TEST("Maybe<Own<T>>") {
   KJ_EXPECT(&KJ_ASSERT_NONNULL(mRef) == KJ_ASSERT_NONNULL(m).get());
 }
 
+#if __cplusplus > 201402L
+int* sawIntPtr = nullptr;
+
+void freeInt(int* ptr) {
+  sawIntPtr = ptr;
+  delete ptr;
+}
+
+void freeChar(char* c) {
+  delete c;
+}
+
+void free(StaticType* ptr) {
+  delete ptr;
+}
+
+void free(const char* ptr) {}
+
+KJ_TEST("disposeWith") {
+  auto i = new int(1);
+  {
+    auto p = disposeWith<freeInt>(i);
+    KJ_EXPECT(sawIntPtr == nullptr);
+  }
+  KJ_EXPECT(sawIntPtr == i);
+  {
+    auto c = new char('a');
+    auto p = disposeWith<freeChar>(c);
+  }
+  {
+    // Explicit cast required to avoid ambiguity when overloads are present.
+    auto s = new StaticType{1};
+    auto p = disposeWith<static_cast<void(*)(StaticType*)>(free)>(s);
+  }
+  {
+    const char c = 'a';
+    auto p2 = disposeWith<static_cast<void(*)(const char*)>(free)>(&c);
+  }
+}
+#endif
+
 // TODO(test):  More tests.
 
 }  // namespace
