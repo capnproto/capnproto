@@ -1162,13 +1162,13 @@ ExceptionCallback& getExceptionCallback() {
 }
 
 void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
-  exception.extendTrace(ignoreCount + 1);
+  if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onFatalException(kj::mv(exception));
   abort();
 }
 
 void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
-  exception.extendTrace(ignoreCount + 1);
+  if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onRecoverableException(kj::mv(exception));
 }
 

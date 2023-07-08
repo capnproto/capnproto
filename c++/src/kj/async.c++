@@ -3088,11 +3088,18 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result) {
+void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
   node->get(result);
 
   KJ_IF_MAYBE(exception, result.exception) {
-    kj::throwFatalException(kj::mv(*exception));
+    // Manually extend the stack trace with the instruction address where the co_await occurred.
+    exception->addTrace(awaitedAt);
+
+    // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` dosen't try to
+    // extend the stack trace. There's no point in extending the trace beyond the single frame we
+    // added above, as the rest of the trace will always be async framework stuff that no one wants
+    // to see.
+    kj::throwFatalException(kj::mv(*exception), kj::maxValue);
   }
 }
 

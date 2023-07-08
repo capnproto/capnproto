@@ -31,6 +31,10 @@
 #include "async.h"  // help IDE parse this file
 #endif
 
+#if _MSC_VER && KJ_HAS_COROUTINE
+#include <intrin.h>
+#endif
+
 KJ_BEGIN_HEADER
 
 #include <kj/list.h>
@@ -2232,7 +2236,7 @@ public:
   // suspension-less co_awaits.
 
 protected:
-  void getImpl(ExceptionOrValue& result);
+  void getImpl(ExceptionOrValue& result, void* awaitedAt);
   bool awaitSuspendImpl(CoroutineBase& coroutineEvent);
 
 private:
@@ -2259,8 +2263,19 @@ class Coroutine<T>::Awaiter: public AwaiterBase {
 public:
   explicit Awaiter(Promise<U> promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
 
-  U await_resume() {
-    getImpl(result);
+  U await_resume() KJ_NOINLINE {
+    // This is marked noinline in order to ensure __builtin_return_address() is accurate for stack
+    // trace purposes. In my experimentation, this method was not inlined anyway even in opt
+    // builds, but I want to make sure it doesn't suddenly start being inlined later causing stack
+    // traces to break. (I also tried always-inline, but this did not appear to cause the compiler
+    // to inline the method -- perhaps a limitation of coroutines?)
+#if __GNUC__
+    getImpl(result, __builtin_return_address(0));
+#elif _MSC_VER
+    getImpl(result, _ReturnAddress());
+#else
+    #error "please implement for your compiler"
+#endif
     auto value = kj::_::readMaybe(result.value);
     KJ_IASSERT(value != nullptr, "Neither exception nor value present.");
     return U(kj::mv(*value));
