@@ -35,9 +35,9 @@
 #include <intrin.h>
 #endif
 
-KJ_BEGIN_HEADER
-
 #include <kj/list.h>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
