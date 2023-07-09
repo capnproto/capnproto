@@ -690,7 +690,8 @@ KJ_TEST("TLS SNI") {
   KJ_ASSERT(callback.callCount == 1);
 }
 
-void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPtr message) {
+void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert,
+                       kj::StringPtr message, kj::Maybe<kj::StringPtr> altMessage = nullptr) {
   TlsKeypair keypair = { TlsPrivateKey(HOST_KEY), kj::mv(cert) };
   TlsContext::Options serverOpts;
   serverOpts.defaultKeypair = keypair;
@@ -702,25 +703,36 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPt
   auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), hostname));
   auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
 
-  KJ_EXPECT_THROW_MESSAGE(message, clientPromise.wait(test.io.waitScope), message);
+  clientPromise.then([](kj::Own<kj::AsyncOutputStream>) {
+    KJ_FAIL_EXPECT("expected exception");
+  }, [message, altMessage](kj::Exception&& e) {
+    if (kj::_::hasSubstring(e.getDescription(), message)) {
+      return;
+    }
+
+    KJ_IF_MAYBE(a, altMessage) {
+      if (kj::_::hasSubstring(e.getDescription(), *a)) {
+        return;
+      }
+    }
+
+    KJ_FAIL_EXPECT("exception didn't contain expected messag", message,
+        altMessage.orDefault(nullptr), e);
+  }).wait(test.io.waitScope);
 }
 
-// OpenSSL 3.0 changed error messages
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(OPENSSL_IS_BORINGSSL)
-#define SSL_MESSAGE_DIFFERENT_IN_V3(v11, v30) v30
-#else
-#define SSL_MESSAGE_DIFFERENT_IN_V3(v11, v30) v11
-#endif
-
 KJ_TEST("TLS certificate validation") {
+  // Where we've given two possible error texts below, it's because OpenSSL v1 produces the former
+  // text while v3 produces the latter. Note that as of this writing, our Windows CI build claims
+  // to be v3 but produces v1 text, for reasons I don't care to investigate.
   expectInvalidCert("wrong.com", TlsCertificate(kj::str(VALID_CERT, INTERMEDIATE_CERT)),
-                    SSL_MESSAGE_DIFFERENT_IN_V3("Hostname mismatch", "hostname mismatch"));
+                    "Hostname mismatch"_kj, "hostname mismatch"_kj);
   expectInvalidCert("example.com", TlsCertificate(VALID_CERT),
-                    "unable to get local issuer certificate");
+                    "unable to get local issuer certificate"_kj);
   expectInvalidCert("example.com", TlsCertificate(kj::str(EXPIRED_CERT, INTERMEDIATE_CERT)),
-                    "certificate has expired");
+                    "certificate has expired"_kj);
   expectInvalidCert("example.com", TlsCertificate(SELF_SIGNED_CERT),
-      SSL_MESSAGE_DIFFERENT_IN_V3("self signed certificate", "self-signed certificate"));
+                    "self signed certificate"_kj, "self-signed certificate"_kj);
 }
 
 // BoringSSL seems to print error messages differently.
