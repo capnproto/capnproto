@@ -702,7 +702,7 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPt
   auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), hostname));
   auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
 
-  KJ_EXPECT_THROW_MESSAGE(message, clientPromise.wait(test.io.waitScope));
+  KJ_EXPECT_THROW_MESSAGE(message, clientPromise.wait(test.io.waitScope), message);
 }
 
 // OpenSSL 3.0 changed error messages
