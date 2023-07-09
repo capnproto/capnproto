@@ -836,6 +836,15 @@ void Exception::wrapContext(const char* file, int line, String&& description) {
 }
 
 void Exception::extendTrace(uint ignoreCount, uint limit) {
+  if (isFullTrace) {
+    // Awkward: extendTrace() was called twice without truncating in between. This should probably
+    // be an error, but historically we didn't check for this so I'm hesitant to make it an error
+    // now. We shouldn't actually extend the trace, though, as our current trace is presumably
+    // rooted in main() and it'd be weird to append frames "above" that.
+    // TODO(cleanup): Abort here and see what breaks?
+    return;
+  }
+
   KJ_STACK_ARRAY(void*, newTraceSpace, kj::min(kj::size(trace), limit) + ignoreCount + 1,
       sizeof(trace)/sizeof(trace[0]) + 8, 128);
 
@@ -847,10 +856,26 @@ void Exception::extendTrace(uint ignoreCount, uint limit) {
     // Copy the rest into our trace.
     memcpy(trace + traceCount, newTrace.begin(), newTrace.asBytes().size());
     traceCount += newTrace.size();
+    isFullTrace = true;
   }
 }
 
 void Exception::truncateCommonTrace() {
+  if (isFullTrace) {
+    // We're truncating the common portion of the full trace, turning it back into a limited
+    // trace.
+    isFullTrace = false;
+  } else {
+    // If the trace was never extended in the first place, trying to truncate it is at best a waste
+    // of time and at worst might remove information for no reason. So, don't.
+    //
+    // This comes up in particular in coroutines, when the exception originated from a co_awaited
+    // promise. In that case we manually add the one relevant frame to the trace, rather than
+    // call extendTrace() just to have to truncate most of it again a moment later in the
+    // unhandled_exception() callback.
+    return;
+  }
+
   if (traceCount > 0) {
     // Create a "reference" stack trace that is a little bit deeper than the one in the exception.
     void* refTraceSpace[sizeof(this->trace) / sizeof(this->trace[0]) + 4];
@@ -888,6 +913,9 @@ void Exception::truncateCommonTrace() {
 }
 
 void Exception::addTrace(void* ptr) {
+  // TODO(cleanup): Abort here if isFullTrace is true, and see what breaks. This method only makes
+  // sense to call on partial traces.
+
   if (traceCount < kj::size(trace)) {
     trace[traceCount++] = ptr;
   }
@@ -1162,13 +1190,13 @@ ExceptionCallback& getExceptionCallback() {
 }
 
 void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
-  exception.extendTrace(ignoreCount + 1);
+  if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onFatalException(kj::mv(exception));
   abort();
 }
 
 void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
-  exception.extendTrace(ignoreCount + 1);
+  if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onRecoverableException(kj::mv(exception));
 }
 

@@ -144,6 +144,19 @@ private:
   void* trace[32];
   uint traceCount;
 
+  bool isFullTrace = false;
+  // Is `trace` a full trace to the top of the stack (or as close as we could get before we ran
+  // out of space)? If this is false, then `trace` is instead a partial trace covering just the
+  // frames between where the exception was thrown and where it was caught.
+  //
+  // extendTrace() transitions this to true, and truncateCommonTrace() changes it back to false.
+  //
+  // In theory, an exception should only hold a full trace when it is in the process of being
+  // thrown via the C++ exception handling mechanism -- extendTrace() is called before the throw
+  // and truncateCommonTrace() after it is caught. Note that when exceptions propagate through
+  // async promises, the trace is extended one frame at a time instead, so isFullTrace should
+  // remain false.
+
   friend class ExceptionImpl;
 };
 

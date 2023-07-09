@@ -2952,36 +2952,34 @@ void CoroutineBase::unhandled_exception() {
   // we're being destroyed, in which case we propagate it back to our disposer. Note that all
   // unhandled exceptions end up here, not just ones after the first co_await.
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([] { throw; })) {
-    KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
-      // Exception during coroutine destruction. Only record the first one.
-      if (disposalResults->exception == nullptr) {
-        disposalResults->exception = kj::mv(*exception);
-      }
-    } else if (isWaiting()) {
-      // Exception during coroutine execution.
-      resultRef.addException(kj::mv(*exception));
-      scheduleResumption();
-    } else {
-      // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
-      // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
-      // successful completion, and something in the frame threw. We can't already be rejected,
-      // because rejecting a coroutine involves throwing, which would have unwound the frame prior
-      // to setting `waiting = false`.
-      //
-      // Since we know we're unwinding due to a successful completion, we also know that whatever
-      // Event we may have armed has not yet fired, because we haven't had a chance to return to
-      // the event loop.
+  auto exception = getCaughtExceptionAsKj();
 
-      // final_suspend() has not been called.
-      KJ_IASSERT(!coroutine.done());
-
-      // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
-      // and will see this exception.
-      resultRef.addException(kj::mv(*exception));
+  KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
+    // Exception during coroutine destruction. Only record the first one.
+    if (disposalResults->exception == nullptr) {
+      disposalResults->exception = kj::mv(exception);
     }
+  } else if (isWaiting()) {
+    // Exception during coroutine execution.
+    resultRef.addException(kj::mv(exception));
+    scheduleResumption();
   } else {
-    KJ_UNREACHABLE;
+    // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
+    // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
+    // successful completion, and something in the frame threw. We can't already be rejected,
+    // because rejecting a coroutine involves throwing, which would have unwound the frame prior
+    // to setting `waiting = false`.
+    //
+    // Since we know we're unwinding due to a successful completion, we also know that whatever
+    // Event we may have armed has not yet fired, because we haven't had a chance to return to
+    // the event loop.
+
+    // final_suspend() has not been called.
+    KJ_IASSERT(!coroutine.done());
+
+    // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
+    // and will see this exception.
+    resultRef.addException(kj::mv(exception));
   }
 }
 
@@ -3090,11 +3088,18 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result) {
+void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
   node->get(result);
 
   KJ_IF_MAYBE(exception, result.exception) {
-    kj::throwFatalException(kj::mv(*exception));
+    // Manually extend the stack trace with the instruction address where the co_await occurred.
+    exception->addTrace(awaitedAt);
+
+    // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` dosen't try to
+    // extend the stack trace. There's no point in extending the trace beyond the single frame we
+    // added above, as the rest of the trace will always be async framework stuff that no one wants
+    // to see.
+    kj::throwFatalException(kj::mv(*exception), kj::maxValue);
   }
 }
 
