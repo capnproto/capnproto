@@ -127,7 +127,7 @@ public:
 private:
   ReaderOptions options;
 
-#if defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) || (defined(__APPLE__) && defined(__ppc__))
   static constexpr size_t arenaSpacePadding = 19;
 #else
   static constexpr size_t arenaSpacePadding = 18;
