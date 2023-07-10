@@ -716,7 +716,7 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert,
       }
     }
 
-    KJ_FAIL_EXPECT("exception didn't contain expected messag", message,
+    KJ_FAIL_EXPECT("exception didn't contain expected message", message,
         altMessage.orDefault(nullptr), e);
   }).wait(test.io.waitScope);
 }
