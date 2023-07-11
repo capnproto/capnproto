@@ -122,7 +122,7 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
-#if _MSC_VER && !defined(__clang__)
+#if KJ_MSVC_TRADITIONAL_CPP
 // MSVC does __VA_ARGS__ differently from GCC:
 // - A trailing comma before an empty __VA_ARGS__ is removed automatically, whereas GCC wants
 //   you to request this behavior with "##__VA_ARGS__".
@@ -283,14 +283,14 @@ namespace kj {
       KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
 
 #define KJ_REQUIRE_NONNULL(value, ...) \
-  (*({ \
+  (*[&] { \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
       ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                             #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
     } \
-    kj::mv(_kj_result); \
-  }))
+    return _kj_result; \
+  }())
 
 #define KJ_EXCEPTION(type, ...) \
   ::kj::Exception(::kj::Exception::Type::type, __FILE__, __LINE__, \
