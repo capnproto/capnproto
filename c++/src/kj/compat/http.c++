@@ -3626,7 +3626,7 @@ private:
 
   void endState(WebSocket& obj) {
     KJ_IF_MAYBE(s, state) {
-      if (s == &obj) {
+      if (&*s == &obj) {
         state = nullptr;
       }
     }
@@ -5995,7 +5995,7 @@ public:
           Function<kj::Promise<void>(kj::StringPtr)> cb =
               [wrapper, ref1 = transitConnectionRef->addWrappedRef()](
               kj::StringPtr expectedServerHostname) mutable {
-            ref1->startTls(wrapper, expectedServerHostname);
+            ref1->startTls(&*wrapper, expectedServerHostname);
             return kj::READY_NOW;
           };
           connection = transitConnectionRef->addWrappedRef();

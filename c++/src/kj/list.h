@@ -107,7 +107,7 @@ public:
     (element.*link).next = head;
     (element.*link).prev = &head;
     KJ_IF_MAYBE(oldHead, head) {
-      (oldHead->*link).prev = &(element.*link).next;
+      ((&*oldHead)->*link).prev = &(element.*link).next;
     } else {
       tail = &(element.*link).next;
     }
@@ -119,7 +119,7 @@ public:
     if ((element.*link).prev == nullptr) _::throwRemovedNotPresent();
     *((element.*link).prev) = (element.*link).next;
     KJ_IF_MAYBE(n, (element.*link).next) {
-      (n->*link).prev = (element.*link).prev;
+      ((&*n)->*link).prev = (element.*link).prev;
     } else {
       if (tail != &((element.*link).next)) _::throwRemovedWrongList();
       tail = (element.*link).prev;
@@ -175,19 +175,19 @@ public:
 
   MaybeConstT& operator*() {
     KJ_IREQUIRE(current != nullptr, "tried to dereference end of list");
-    return *_::readMaybe(current);
+    return _::readMaybe(current).operator*();
   }
   const T& operator*() const {
     KJ_IREQUIRE(current != nullptr, "tried to dereference end of list");
-    return *_::readMaybe(current);
+    return _::readMaybe(current).operator*();
   }
   MaybeConstT* operator->() {
     KJ_IREQUIRE(current != nullptr, "tried to dereference end of list");
-    return _::readMaybe(current);
+    return _::readMaybe(current).operator->();
   }
   const T* operator->() const {
     KJ_IREQUIRE(current != nullptr, "tried to dereference end of list");
-    return _::readMaybe(current);
+    return _::readMaybe(current).operator->();
   }
 
   inline ListIterator& operator++() {
@@ -203,10 +203,10 @@ public:
   }
 
   inline bool operator==(const ListIterator& other) const {
-    return _::readMaybe(current) == _::readMaybe(other.current);
+    return _::readMaybe(current).operator->() == _::readMaybe(other.current).operator->();
   }
   inline bool operator!=(const ListIterator& other) const {
-    return _::readMaybe(current) != _::readMaybe(other.current);
+    return _::readMaybe(current).operator->() != _::readMaybe(other.current).operator->();
   }
 
 private:

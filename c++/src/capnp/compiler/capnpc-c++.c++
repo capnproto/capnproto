@@ -722,7 +722,7 @@ private:
           result[current->node.getId()] = params;
         }
         KJ_IF_MAYBE(p, current->parent) {
-          current = p;
+          current = &*p;
         } else {
           return result;
         }

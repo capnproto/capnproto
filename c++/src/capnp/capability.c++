@@ -1157,7 +1157,7 @@ kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::C
   // Get the most-resolved-so-far version of the hook.
   for (;;) {
     KJ_IF_MAYBE(h, hook->getResolved()) {
-      hook = h;
+      hook = &*h;
     } else {
       break;
     }

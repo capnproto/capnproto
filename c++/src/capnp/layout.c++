@@ -790,7 +790,7 @@ struct WireHelpers {
 
     const word* ptr;
     KJ_IF_MAYBE(p, followFars(ref, ref->target(segment), segment)) {
-      ptr = p;
+      ptr = &*p;
     } else {
       return result;
     }
@@ -1969,7 +1969,7 @@ struct WireHelpers {
 
     const word* ptr;
     KJ_IF_MAYBE(p, WireHelpers::followFars(src, srcTarget, srcSegment)) {
-      ptr = p;
+      ptr = &*p;
     } else {
       goto useDefault;
     }
@@ -2190,7 +2190,7 @@ struct WireHelpers {
 
     const word* ptr;
     KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-      ptr = p;
+      ptr = &*p;
     } else {
       goto useDefault;
     }
@@ -2281,7 +2281,7 @@ struct WireHelpers {
 
     const word* ptr;
     KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-      ptr = p;
+      ptr = &*p;
     } else {
       goto useDefault;
     }
@@ -2453,7 +2453,7 @@ struct WireHelpers {
     } else {
       const word* ptr;
       KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-        ptr = p;
+        ptr = &*p;
       } else {
         goto useDefault;
       }
@@ -2508,7 +2508,7 @@ struct WireHelpers {
     } else {
       const word* ptr;
       KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-        ptr = p;
+        ptr = &*p;
       } else {
         goto useDefault;
       }

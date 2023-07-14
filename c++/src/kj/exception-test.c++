@@ -224,7 +224,7 @@ KJ_TEST("InFlightExceptionIterator works") {
       } catch (const kj::Exception& e) {
         InFlightExceptionIterator iter;
         KJ_IF_MAYBE(e2, iter.next()) {
-          KJ_EXPECT(e2 == &e, e2->getDescription());
+          KJ_EXPECT(&*e2 == &e, e2->getDescription());
         } else {
           KJ_FAIL_EXPECT("missing first exception");
         }

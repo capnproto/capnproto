@@ -818,7 +818,7 @@ TlsContext::TlsContext(Options options) {
   // honor options.sniCallback
   KJ_IF_MAYBE(sni, options.sniCallback) {
     SSL_CTX_set_tlsext_servername_callback(ctx, &SniCallback::callback);
-    SSL_CTX_set_tlsext_servername_arg(ctx, sni);
+    SSL_CTX_set_tlsext_servername_arg(ctx, &*sni);
   }
 
   KJ_IF_MAYBE(timeout, options.acceptTimeout) {

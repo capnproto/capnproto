@@ -206,7 +206,7 @@ ParsedSchema SchemaParser::parseDiskFile(
   auto lock = impl->compat.lockExclusive();
   DiskFileCompat* compat;
   KJ_IF_MAYBE(c, *lock) {
-    compat = c;
+    compat = &*c;
   } else {
     compat = &lock->emplace();
   }

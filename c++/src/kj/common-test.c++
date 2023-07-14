@@ -87,7 +87,7 @@ TEST(Common, Maybe) {
       const int& ref = m.orDefault([&]() -> int& { return notUsedForRef; });
 
       EXPECT_EQ(ref, *v);
-      EXPECT_EQ(&ref, v);
+      EXPECT_EQ(&ref, &*v);
 
       const int& ref2 = m.orDefault([notUsed = 5]() -> int { return notUsed; });
       EXPECT_NE(&ref, &ref2);
@@ -196,12 +196,12 @@ TEST(Common, Maybe) {
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
-      EXPECT_EQ(&i, v);
+      EXPECT_EQ(&i, &*v);
     } else {
       ADD_FAILURE();
     }
     KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_EQ(&i, v);
+      EXPECT_EQ(&i, &*v);
     } else {
       ADD_FAILURE();
     }
@@ -228,12 +228,12 @@ TEST(Common, Maybe) {
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
-      EXPECT_EQ(&i, v);
+      EXPECT_EQ(&i, &*v);
     } else {
       ADD_FAILURE();
     }
     KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_EQ(&i, v);
+      EXPECT_EQ(&i, &*v);
     } else {
       ADD_FAILURE();
     }
@@ -246,12 +246,12 @@ TEST(Common, Maybe) {
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
-      EXPECT_EQ(&i, v);
+      EXPECT_EQ(&i, &*v);
     } else {
       ADD_FAILURE();
     }
     KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_EQ(&i, v);
+      EXPECT_EQ(&i, &*v);
     } else {
       ADD_FAILURE();
     }
@@ -279,12 +279,12 @@ TEST(Common, Maybe) {
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &*v);
     } else {
       ADD_FAILURE();
     }
     KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &*v);
     } else {
       ADD_FAILURE();
     }
@@ -306,12 +306,12 @@ TEST(Common, Maybe) {
     EXPECT_FALSE(m == nullptr);
     EXPECT_TRUE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &*v);
     } else {
       ADD_FAILURE();
     }
     KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), v);
+      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &*v);
     } else {
       ADD_FAILURE();
     }
@@ -439,7 +439,7 @@ TEST(Common, MaybeConstness) {
 //  const Maybe<int&> cmi2 = cmi;    // shouldn't compile!  Transitive const violation.
 
   KJ_IF_MAYBE(i2, cmi) {
-    EXPECT_EQ(&i, i2);
+    EXPECT_EQ(&i, &*i2);
   } else {
     ADD_FAILURE();
   }
@@ -449,7 +449,7 @@ TEST(Common, MaybeConstness) {
   const Maybe<const int&> cmci2 = cmci;
 
   KJ_IF_MAYBE(i2, cmci2) {
-    EXPECT_EQ(&i, i2);
+    EXPECT_EQ(&i, &*i2);
   } else {
     ADD_FAILURE();
   }
@@ -581,7 +581,7 @@ TEST(Common, Downcast) {
   EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
 #else
   KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar>(foo)) {
-    EXPECT_EQ(&bar, m);
+    EXPECT_EQ(&bar, &*m);
   } else {
     KJ_FAIL_ASSERT("Dynamic downcast returned null.");
   }

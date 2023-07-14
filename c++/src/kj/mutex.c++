@@ -220,7 +220,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
   auto spec = timeout.map([](Duration d) { return toRelativeTimespec(d); });
   struct timespec* specp = nullptr;
   KJ_IF_MAYBE(s, spec) {
-    specp = s;
+    specp = &*s;
   }
 
   switch (exclusivity) {
@@ -358,7 +358,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         KJ_IF_MAYBE(waiter, nextWaiter) {
           nextWaiter = waiter->next;
 
-          if (waiter != waiterToSkip && checkPredicate(*waiter)) {
+          if (&*waiter != waiterToSkip && checkPredicate(*waiter)) {
             // This waiter's predicate now evaluates true, so wake it up.
             if (waiter->hasTimeout) {
               // In this case we need to be careful to make sure the target thread isn't already

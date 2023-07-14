@@ -394,7 +394,7 @@ private:
 
   void endState(AsyncIoStream& obj) {
     KJ_IF_MAYBE(s, state) {
-      if (s == &obj) {
+      if (&*s == &obj) {
         state = nullptr;
       }
     }
@@ -1932,7 +1932,7 @@ private:
   private:
     void detach() {
       KJ_IF_MAYBE(sink, sinkLink) {
-        if (sink == this) {
+        if (&*sink == this) {
           sinkLink = nullptr;
         }
       }

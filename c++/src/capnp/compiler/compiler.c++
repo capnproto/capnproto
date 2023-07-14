@@ -885,7 +885,7 @@ Compiler::Node::resolve(kj::StringPtr name) {
     return p->resolve(name);
   } else KJ_IF_MAYBE(b, module->getCompiler().lookupBuiltin(name)) {
     ResolveResult result;
-    result.init<ResolvedDecl>(ResolvedDecl { b->id, b->genericParamCount, 0, b->kind, b, nullptr });
+    result.init<ResolvedDecl>(ResolvedDecl { b->id, b->genericParamCount, 0, b->kind, &*b, nullptr });
     return result;
   } else {
     return nullptr;

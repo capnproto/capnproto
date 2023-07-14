@@ -894,7 +894,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
 
     const EventLoop* loop;
     KJ_IF_MAYBE(l, lock->loop) {
-      loop = l;
+      loop = &*l;
     } else {
       // Target event loop is already dead, so we know it's already working on transitioning all
       // events to the DONE state. We can just wait.
@@ -1035,7 +1035,7 @@ void XThreadEvent::sendReply() {
       auto lock = e->impl->state.lockExclusive();
       KJ_IF_MAYBE(l, lock->loop) {
         lock->replies.add(*this);
-        replyLoop = l;
+        replyLoop = &*l;
       } else {
         // Calling thread exited without cancelling the promise. This is UB. In fact,
         // `replyExecutor` is probably already destroyed and we are in use-after-free territory
@@ -1286,7 +1286,7 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
   auto lock = impl->state.lockExclusive();
   const EventLoop* loop;
   KJ_IF_MAYBE(l, lock->loop) {
-    loop = l;
+    loop = &*l;
   } else {
     event.setDisconnected();
     return;
@@ -1935,7 +1935,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
         "This WaitScope can only be used within the fiber that created it.");
 
     node->setSelfPointer(&node);
-    node->onReady(fiber);
+    node->onReady(&*fiber);
 
     fiber->currentInner = node;
     KJ_DEFER(fiber->currentInner = nullptr);

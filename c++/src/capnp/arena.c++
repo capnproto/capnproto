@@ -127,7 +127,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     KJ_IF_MAYBE(segment, s->find(id.value)) {
       return *segment;
     }
-    segments = s;
+    segments = &*s;
   }
 
   kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);

@@ -2276,8 +2276,8 @@ public:
 #else
     #error "please implement for your compiler"
 #endif
+    KJ_IASSERT(result.value != nullptr, "Neither exception nor value present.");
     auto value = kj::_::readMaybe(result.value);
-    KJ_IASSERT(value != nullptr, "Neither exception nor value present.");
     return U(kj::mv(*value));
   }
 

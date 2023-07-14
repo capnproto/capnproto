@@ -857,7 +857,7 @@ private:
         // Remove self from the import table, if the table is still pointing at us.
         KJ_IF_MAYBE(import, connectionState->imports.find(importId)) {
           KJ_IF_MAYBE(i, import->importClient) {
-            if (i == this) {
+            if (&*i == this) {
               connectionState->imports.erase(importId);
             }
           }
@@ -1009,7 +1009,7 @@ private:
         // object may actually outlive the import.
         KJ_IF_MAYBE(import, connectionState->imports.find(*id)) {
           KJ_IF_MAYBE(c, import->appClient) {
-            if (c == this) {
+            if (&*c == this) {
               import->appClient = nullptr;
             }
           }
@@ -1254,7 +1254,7 @@ private:
     ClientHook* inner = &cap;
     for (;;) {
       KJ_IF_MAYBE(resolved, inner->getResolved()) {
-        inner = resolved;
+        inner = &*resolved;
       } else {
         break;
       }
@@ -1343,7 +1343,7 @@ private:
     ClientHook* ptr = &client;
     for (;;) {
       KJ_IF_MAYBE(inner, ptr->getResolved()) {
-        ptr = inner;
+        ptr = &*inner;
       } else {
         break;
       }
@@ -2348,7 +2348,7 @@ private:
         if (ptr == resolution.returnedCap.get()) {
           return kj::mv(resolution.unwrapped);
         } else KJ_IF_MAYBE(r, ptr->getResolved()) {
-          ptr = r;
+          ptr = &*r;
         } else {
           break;
         }
