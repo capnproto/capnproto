@@ -301,7 +301,6 @@ private:
   kj::AsyncIoStream& inner;
   kj::Own<kj::AsyncIoStream> ownInner;
 
-  bool disconnected = false;
   kj::Maybe<kj::Promise<void>> shutdownTask;
 
   ReadyInputStreamWrapper readBuffer;
@@ -309,8 +308,6 @@ private:
 
   kj::Promise<size_t> tryReadInternal(
       void* buffer, size_t minBytes, size_t maxBytes, size_t alreadyDone) {
-    if (disconnected) return alreadyDone;
-
     return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
         .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
       if (n >= minBytes || n == 0) {
@@ -352,8 +349,6 @@ private:
 
   template <typename Func>
   kj::Promise<size_t> sslCall(Func&& func) {
-    if (disconnected) return constPromise<size_t, 0>();
-
     auto result = func();
 
     if (result > 0) {
@@ -362,7 +357,6 @@ private:
       int error = SSL_get_error(ssl, result);
       switch (error) {
         case SSL_ERROR_ZERO_RETURN:
-          disconnected = true;
           return constPromise<size_t, 0>();
         case SSL_ERROR_WANT_READ:
           return readBuffer.whenReady().then(
@@ -377,7 +371,6 @@ private:
             // OpenSSL pre-3.0 reports unexpected disconnects this way. Note that 3.0+ report it
             // as SSL_ERROR_SSL with the reason SSL_R_UNEXPECTED_EOF_WHILE_READING, which is
             // handled in throwOpensslError().
-            disconnected = true;
             return KJ_EXCEPTION(DISCONNECTED,
                 "peer disconnected without gracefully ending TLS session");
           } else {
