@@ -1131,8 +1131,11 @@ public:
   inline const T&& operator*() const && { return kj::mv(value); }
   inline T* operator->() { return &value; }
   inline const T* operator->() const { return &value; }
-  inline operator T*() { return isSet ? &value : nullptr; }
-  inline operator const T*() const { return isSet ? &value : nullptr; }
+
+  inline explicit operator T*() { return isSet ? &value : nullptr; }
+  inline explicit operator const T*() const { return isSet ? &value : nullptr; }
+
+  inline explicit operator bool() const { return isSet; }
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
@@ -1295,19 +1298,65 @@ private:
   friend NullableValue<U>&& readMaybe(Maybe<U>&& maybe);
 };
 
+template <typename T, typename = EnableIf<!isLvalueReference<T>()>>
+class ExplicitPtr {
+  // This class wraps a raw pointer to T. It supports one-way implicit conversion: raw pointers can
+  // be implicitly converted to an ExplicitPtr, but an ExplicitPtr cannot be implicitly converted
+  // back to a raw pointer. The only operations ExplicitPtr supports are:
+  //
+  //   - Dereferencing with operator*.
+  //   - Indirection with operator->.
+  //   - Contextual conversion to bool with operator bool.
+  //
+  // If you require a raw pointer from an ExplicitPtr, you must use explicit syntax such as `&*p` or
+  // `p.operator->()`, or `static_cast<T*>(p)`.
+  //
+  // The purpose of this class is to provide greater compile-time safety for the variable declared
+  // by the `KJ_IF_MAYBE(p, maybe)` macro -- it is common for authors to forget that `p` is a
+  // pointer, and this confusion has been the frequent cause of subtle bugs with sometimes-severe
+  // consequences over the years. By making `p` an ExplicitPtr instead of a raw pointer,
+  // accidentally passing `p` to a function which accepts both a raw pointer and the pointed-to type
+  // (e.g., `kj::str()`, `kj::hashCode()`, and many more) becomes a compile-time error.
+  //
+  // This class is SFINAE-friendly, so that it may be used in function signatures wherever T* may be
+  // used.
+
+public:
+  ExplicitPtr(T* ptr): ref(ptr) {}
+  // A raw pointer can be implicitly converted to ExplicitPtr.
+
+  T& operator*() { return *ref; }
+  T* operator->() { return ref; }
+  const T& operator*() const { return *ref; }
+  const T* operator->() const { return ref; }
+  // ExplicitPtr supports pointer-like dereference/indirection operations.
+
+  explicit operator T*() { return ref; }
+  explicit operator const T*() const { return ref; }
+  // An ExplicitPtr may be explicitly converted back to its raw pointer.
+
+  explicit operator bool() const { return ref != nullptr; }
+  // An ExplicitPtr may be contextually converted to bool for use in `if` conditions.
+
+private:
+  T* ref;
+};
+
 template <typename T>
 inline NullableValue<T>&& readMaybe(Maybe<T>&& maybe) { return kj::mv(maybe.ptr); }
 template <typename T>
-inline T* readMaybe(Maybe<T>& maybe) { return maybe.ptr; }
+inline ExplicitPtr<T> readMaybe(Maybe<T>& maybe) { return static_cast<T*>(maybe.ptr); }
 template <typename T>
-inline const T* readMaybe(const Maybe<T>& maybe) { return maybe.ptr; }
+inline ExplicitPtr<const T> readMaybe(const Maybe<T>& maybe) {
+  return static_cast<const T*>(maybe.ptr);
+}
 template <typename T>
-inline T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
+inline ExplicitPtr<T> readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
 template <typename T>
-inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
+inline ExplicitPtr<T> readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
 template <typename T>
-inline T* readMaybe(T* ptr) { return ptr; }
+inline ExplicitPtr<T> readMaybe(T* ptr) { return ptr; }
 // Allow KJ_IF_MAYBE to work on regular pointers.
 
 }  // namespace _ (private)
@@ -1578,9 +1627,9 @@ private:
   template <typename U>
   friend _::NullableValue<U>&& _::readMaybe(Maybe<U>&& maybe);
   template <typename U>
-  friend U* _::readMaybe(Maybe<U>& maybe);
+  friend _::ExplicitPtr<U> _::readMaybe(Maybe<U>& maybe);
   template <typename U>
-  friend const U* _::readMaybe(const Maybe<U>& maybe);
+  friend _::ExplicitPtr<const U> _::readMaybe(const Maybe<U>& maybe);
 };
 
 template <typename T>
@@ -1673,9 +1722,9 @@ private:
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend U* _::readMaybe(Maybe<U&>&& maybe);
+  friend _::ExplicitPtr<U> _::readMaybe(Maybe<U&>&& maybe);
   template <typename U>
-  friend U* _::readMaybe(const Maybe<U&>& maybe);
+  friend _::ExplicitPtr<U> _::readMaybe(const Maybe<U&>& maybe);
 };
 
 // =======================================================================================

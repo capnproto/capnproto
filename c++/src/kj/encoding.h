@@ -229,7 +229,7 @@ NullableValue<T> readMaybe(EncodingResult<T>&& value) {
 }
 
 template <typename T>
-T* readMaybe(EncodingResult<T>& value) {
+ExplicitPtr<T> readMaybe(EncodingResult<T>& value) {
   if (value.hadErrors) {
     return nullptr;
   } else {
@@ -238,7 +238,7 @@ T* readMaybe(EncodingResult<T>& value) {
 }
 
 template <typename T>
-const T* readMaybe(const EncodingResult<T>& value) {
+ExplicitPtr<const T> readMaybe(const EncodingResult<T>& value) {
   if (value.hadErrors) {
     return nullptr;
   } else {

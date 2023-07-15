@@ -422,8 +422,11 @@ public:
   inline const Own<T, D>&& operator*() const && { return kj::mv(value); }
   inline Own<T, D>* operator->() { return &value; }
   inline const Own<T, D>* operator->() const { return &value; }
-  inline operator Own<T, D>*() { return value ? &value : nullptr; }
-  inline operator const Own<T, D>*() const { return value ? &value : nullptr; }
+
+  inline explicit operator Own<T, D>*() { return value ? &value : nullptr; }
+  inline explicit operator const Own<T, D>*() const { return value ? &value : nullptr; }
+
+  inline explicit operator bool() const { return value != nullptr; }
 
 private:
   Own<T, D> value;
@@ -432,9 +435,11 @@ private:
 template <typename T, typename D>
 OwnOwn<T, D> readMaybe(Maybe<Own<T, D>>&& maybe) { return OwnOwn<T, D>(kj::mv(maybe.ptr)); }
 template <typename T, typename D>
-Own<T, D>* readMaybe(Maybe<Own<T, D>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
+ExplicitPtr<Own<T, D>> readMaybe(Maybe<Own<T, D>>& maybe) {
+  return maybe.ptr ? &maybe.ptr : nullptr;
+}
 template <typename T, typename D>
-const Own<T, D>* readMaybe(const Maybe<Own<T, D>>& maybe) {
+ExplicitPtr<const Own<T, D>> readMaybe(const Maybe<Own<T, D>>& maybe) {
   return maybe.ptr ? &maybe.ptr : nullptr;
 }
 
@@ -544,9 +549,9 @@ private:
   template <typename U, typename D2>
   friend _::OwnOwn<U, D2> _::readMaybe(Maybe<Own<U, D2>>&& maybe);
   template <typename U, typename D2>
-  friend Own<U, D2>* _::readMaybe(Maybe<Own<U, D2>>& maybe);
+  friend _::ExplicitPtr<Own<U, D2>> _::readMaybe(Maybe<Own<U, D2>>& maybe);
   template <typename U, typename D2>
-  friend const Own<U, D2>* _::readMaybe(const Maybe<Own<U, D2>>& maybe);
+  friend _::ExplicitPtr<const Own<U, D2>> _::readMaybe(const Maybe<Own<U, D2>>& maybe);
 };
 
 namespace _ {  // private
