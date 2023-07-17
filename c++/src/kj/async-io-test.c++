@@ -2785,7 +2785,7 @@ KJ_TEST("Userland tee pump cancellation implies write cancellation") {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     leftPipe.out = nullptr;
   })) {
-    KJ_FAIL_EXPECT("write promises were not canceled", exception);
+    KJ_FAIL_EXPECT("write promises were not canceled", *exception);
   }
 }
 
