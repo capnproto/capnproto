@@ -77,7 +77,7 @@ private:
   } KJ_UNIQUE_NAME(testCase); \
   void KJ_UNIQUE_NAME(TestCase)::run()
 
-#if _MSC_VER && !defined(__clang__)
+#if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_INDIRECT_EXPAND(m, vargs) m vargs
 #define KJ_FAIL_EXPECT(...) \
   KJ_INDIRECT_EXPAND(KJ_LOG, (ERROR , __VA_ARGS__));
