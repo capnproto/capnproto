@@ -7557,10 +7557,6 @@ private:
       return m == HttpMethod::GET;
     }).orDefault(false), "WebSocket must be initiated with a GET request.");
 
-    // Unlike send(), we neither need nor want to null out currentMethod. The error cases below
-    // depend on it being non-null to allow error responses to be sent, and the happy path expects
-    // it to be GET.
-
     if (requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_VERSION).orDefault(nullptr) != "13") {
       return sendWebSocketError("The requested WebSocket version is not supported.");
     }
@@ -7615,6 +7611,13 @@ private:
       agreedParameters = _::generateExtensionResponse(*parameters);
       connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_EXTENSIONS] = agreedParameters;
     }
+
+    // Since we're about to write headers, we should nullify `currentMethod`. This tells
+    // `sendError(kj::Exception)` (called from `HttpServer::Connection::startLoop()`) not to expose
+    // the `HttpService::Response&` reference to the HttpServer's error `handleApplicationError()`
+    // callback. This prevents the error handler from inadvertently trying to send another error on
+    // the connection.
+    currentMethod = nullptr;
 
     httpOutput.writeHeaders(headers.serializeResponse(
         101, "Switching Protocols", connectionHeaders));

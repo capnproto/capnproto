@@ -3664,9 +3664,8 @@ void testBadWebSocketHandshake(
 
   ErrorHandler errorHandler;
 
-  HttpServerSettings serverSettings {
-    .errorHandler = errorHandler,
-  };
+  HttpServerSettings serverSettings;
+  serverSettings.errorHandler = errorHandler;
 
   HttpServer server(timer, *headerTable, service, serverSettings);
 
@@ -3725,6 +3724,70 @@ KJ_TEST("HttpServer WebSocket handshake with missing Sec-WebSocket-Key") {
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
 
   testBadWebSocketHandshake(waitScope, timer, REQUEST, RESPONSE, KJ_HTTP_TEST_CREATE_2PIPE);
+}
+
+KJ_TEST("HttpServer WebSocket with application error after accept") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  class WebSocketApplicationErrorService: public HttpService, public HttpServerErrorHandler {
+    // Accepts a WebSocket, receives a message, and throws an exception (application error).
+
+  public:
+    Promise<void> request(
+        HttpMethod method, kj::StringPtr, const HttpHeaders&,
+        AsyncInputStream&, Response& response) override {
+      KJ_ASSERT(method == HttpMethod::GET);
+      HttpHeaderTable headerTable;
+      HttpHeaders responseHeaders(headerTable);
+      auto webSocket = response.acceptWebSocket(responseHeaders);
+      return webSocket->receive().then([](WebSocket::Message) {
+        throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
+      }).attach(kj::mv(webSocket));
+    }
+
+    Promise<void> handleApplicationError(Exception exception, Maybe<Response&> response) override {
+      // We accepted the WebSocket, so the response was already sent. At one time, we _did_ expose a
+      // useless Response reference here, so this is a regression test.
+      bool responseWasSent = response == nullptr;
+      KJ_EXPECT(responseWasSent);
+      KJ_EXPECT(exception.getDescription() == "test exception"_kj);
+      return READY_NOW;
+    }
+  };
+
+  // Set up the HTTP service.
+
+  WebSocketApplicationErrorService service;
+
+  HttpServerSettings serverSettings;
+  serverSettings.errorHandler = service;
+
+  HttpHeaderTable headerTable;
+  HttpServer server(timer, headerTable, service, serverSettings);
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Make a client and open a WebSocket to the service.
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  auto client = newHttpClient(
+      headerTable, *pipe.ends[1], clientSettings);
+
+  HttpHeaders headers(headerTable);
+  auto webSocketResponse = client->openWebSocket("/websocket"_kj, headers)
+      .wait(waitScope);
+
+  KJ_ASSERT(webSocketResponse.statusCode == 101);
+  auto webSocket = kj::mv(KJ_ASSERT_NONNULL(webSocketResponse.webSocketOrBody.tryGet<Own<WebSocket>>()));
+
+  webSocket->send("ignored"_kj).wait(waitScope);
+
+  listenTask.wait(waitScope);
 }
 
 // -----------------------------------------------------------------------------
