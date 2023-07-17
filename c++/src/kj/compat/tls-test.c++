@@ -489,6 +489,38 @@ KJ_TEST("TLS basics") {
   }
 }
 
+KJ_TEST("TLS half-duplex") {
+  // Test shutting down one direction of a connection but continuing to stream in the other
+  // direction.
+
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = test.io.provider->newTwoWayPipe();
+
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  client->shutdownWrite();
+  KJ_EXPECT(server->readAllText().wait(test.io.waitScope) == "");
+
+  for (uint i = 0; i < 100; i++) {
+    char buffer[7];
+    auto writePromise = server->write("foobar", 6);
+    auto readPromise = client->read(buffer, 6);
+    writePromise.wait(test.io.waitScope);
+    readPromise.wait(test.io.waitScope);
+    buffer[6] = '\0';
+    KJ_ASSERT(kj::StringPtr(buffer, 6) == "foobar");
+  }
+
+  server->shutdownWrite();
+  KJ_EXPECT(client->readAllText().wait(test.io.waitScope) == "");
+}
+
 KJ_TEST("TLS peer identity") {
   TlsTest test;
   ErrorNexus e;
