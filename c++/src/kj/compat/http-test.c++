@@ -3637,6 +3637,159 @@ KJ_TEST("HttpServer WebSocket handshake error") {
   listenTask.wait(waitScope);
 }
 
+void testBadWebSocketHandshake(
+    WaitScope& waitScope, Timer& timer, StringPtr request, StringPtr response, TwoWayPipe pipe) {
+  // Write an invalid WebSocket GET request, and expect a particular error response.
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId hMyHeader = tableBuilder.add("My-Header");
+  auto headerTable = tableBuilder.build();
+  TestWebSocketService service(*headerTable, hMyHeader);
+
+  class ErrorHandler final: public HttpServerErrorHandler {
+    Promise<void> handleApplicationError(
+        Exception exception, Maybe<HttpService::Response&> response) override {
+      // When I first wrote this, I expected this function to be called, because
+      // `TestWebSocketService::request()` definitely throws. However, the exception it throws comes
+      // from `HttpService::Response::acceptWebSocket()`, which stores the fact which it threw a
+      // WebSocket error. This prevents the HttpServer's listen loop from propagating the exception
+      // to our HttpServerErrorHandler (i.e., this function), because it assumes the exception is
+      // related to the WebSocket error response. See `HttpServer::Connection::startLoop()` for
+      // details.
+      bool responseWasSent = response == nullptr;
+      KJ_FAIL_EXPECT("Unexpected application error", responseWasSent, exception);
+      return READY_NOW;
+    }
+  };
+
+  ErrorHandler errorHandler;
+
+  HttpServerSettings serverSettings;
+  serverSettings.errorHandler = errorHandler;
+
+  HttpServer server(timer, *headerTable, service, serverSettings);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  pipe.ends[1]->write(request.begin(), request.size()).wait(waitScope);
+  pipe.ends[1]->shutdownWrite();
+
+  expectRead(*pipe.ends[1], response).wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+KJ_TEST("HttpServer WebSocket handshake with unsupported Sec-WebSocket-Version") {
+  static constexpr auto REQUEST =
+    "GET /websocket HTTP/1.1\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
+    "Sec-WebSocket-Version: 1\r\n"
+    "My-Header: foo\r\n"
+    "\r\n"_kj;
+
+  static constexpr auto RESPONSE =
+    "HTTP/1.1 400 Bad Request\r\n"
+    "Connection: close\r\n"
+    "Content-Length: 56\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "ERROR: The requested WebSocket version is not supported."_kj;
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  testBadWebSocketHandshake(waitScope, timer, REQUEST, RESPONSE, KJ_HTTP_TEST_CREATE_2PIPE);
+}
+
+KJ_TEST("HttpServer WebSocket handshake with missing Sec-WebSocket-Key") {
+  static constexpr auto REQUEST =
+    "GET /websocket HTTP/1.1\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "My-Header: foo\r\n"
+    "\r\n"_kj;
+
+  static constexpr auto RESPONSE =
+    "HTTP/1.1 400 Bad Request\r\n"
+    "Connection: close\r\n"
+    "Content-Length: 32\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "ERROR: Missing Sec-WebSocket-Key"_kj;
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  testBadWebSocketHandshake(waitScope, timer, REQUEST, RESPONSE, KJ_HTTP_TEST_CREATE_2PIPE);
+}
+
+KJ_TEST("HttpServer WebSocket with application error after accept") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  class WebSocketApplicationErrorService: public HttpService, public HttpServerErrorHandler {
+    // Accepts a WebSocket, receives a message, and throws an exception (application error).
+
+  public:
+    Promise<void> request(
+        HttpMethod method, kj::StringPtr, const HttpHeaders&,
+        AsyncInputStream&, Response& response) override {
+      KJ_ASSERT(method == HttpMethod::GET);
+      HttpHeaderTable headerTable;
+      HttpHeaders responseHeaders(headerTable);
+      auto webSocket = response.acceptWebSocket(responseHeaders);
+      return webSocket->receive().then([](WebSocket::Message) {
+        throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
+      }).attach(kj::mv(webSocket));
+    }
+
+    Promise<void> handleApplicationError(Exception exception, Maybe<Response&> response) override {
+      // We accepted the WebSocket, so the response was already sent. At one time, we _did_ expose a
+      // useless Response reference here, so this is a regression test.
+      bool responseWasSent = response == nullptr;
+      KJ_EXPECT(responseWasSent);
+      KJ_EXPECT(exception.getDescription() == "test exception"_kj);
+      return READY_NOW;
+    }
+  };
+
+  // Set up the HTTP service.
+
+  WebSocketApplicationErrorService service;
+
+  HttpServerSettings serverSettings;
+  serverSettings.errorHandler = service;
+
+  HttpHeaderTable headerTable;
+  HttpServer server(timer, headerTable, service, serverSettings);
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Make a client and open a WebSocket to the service.
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  auto client = newHttpClient(
+      headerTable, *pipe.ends[1], clientSettings);
+
+  HttpHeaders headers(headerTable);
+  auto webSocketResponse = client->openWebSocket("/websocket"_kj, headers)
+      .wait(waitScope);
+
+  KJ_ASSERT(webSocketResponse.statusCode == 101);
+  auto webSocket = kj::mv(KJ_ASSERT_NONNULL(webSocketResponse.webSocketOrBody.tryGet<Own<WebSocket>>()));
+
+  webSocket->send("ignored"_kj).wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("HttpServer request timeout") {
