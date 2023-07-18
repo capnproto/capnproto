@@ -1679,6 +1679,10 @@ private:
             // already received the return, then we've already built local proxies for the caps and
             // will send Release messages when those are destroyed.
             builder.setReleaseResultCaps(question.isAwaitingReturn);
+
+            // Let the peer know we don't have the early cancellation bug.
+            builder.setRequireEarlyCancellationWorkaround(false);
+
             message->send();
           })) {
             connectionState->tasks.add(kj::mv(*e));
@@ -3325,6 +3329,33 @@ private:
       // remember past answer IDs somewhere even when we said `noFinishNeeded`. Assuming the other
       // side respects the hint and doesn't send a `Finish`, we'd only be able to clean up these
       // records when the other end reuses the question ID, which might never happen.
+    }
+
+    if (finish.getRequireEarlyCancellationWorkaround()) {
+      // Defer actual cancellation of the call until the end of the event loop queue.
+      //
+      // This is needed for compatibility with older versions of Cap'n Proto (0.10 and prior) in
+      // which the default was to prohibit cancellation until it was explicitly allowed. In newer
+      // versions (1.0 and later) cancellation is allowed until explicitly prohibited, that is, if
+      // we haven't actually delivered the call yet, it can be canceled. This requires less
+      // bookkeeping and so improved performance.
+      //
+      // However, old clients might be inadvertently relying on the old behavior. For example, if
+      // someone using and old version called `.send()` on a message and then promptly dropped the
+      // returned Promise, the message would often be delivered. This was not intended to work, but
+      // did, and could be relied upon by accident. Moreover, the original implementation of
+      // streaming included a bug where streaming calls *always* sent an immediate Finish.
+      //
+      // By deferring cancellation until after a turn of the event loop, we provide an opportunity
+      // for any `Call` messages we've received to actually be delivered, so that they can opt out
+      // of cancellation if desired.
+      KJ_IF_MAYBE(task, promiseToRelease) {
+        KJ_IF_MAYBE(running, task->tryGet<Answer::Running>()) {
+          tasks.add(kj::evalLast([running = kj::mv(*running)]() {
+            // Just drop `running` here to cancel the call.
+          }));
+        }
+      }
     }
   }
 
