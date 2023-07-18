@@ -887,9 +887,22 @@ public:
     //
     // `statusText` and `headers` need only remain valid until send() returns (they can be
     // stack-allocated).
+    //
+    // `send()` may only be called a single time. Calling it a second time will cause an exception
+    // to be thrown.
 
     virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
     // If headers.isWebSocket() is true then you can call acceptWebSocket() instead of send().
+    //
+    // If the request is an invalid WebSocket request (e.g., it has an Upgrade: websocket header,
+    // but other WebSocket-related headers are invalid), `acceptWebSocket()` will throw an
+    // exception, and the HttpServer will return a 400 Bad Request response and close the
+    // connection. In this circumstance, the HttpServer will ignore any exceptions which propagate
+    // from the `HttpService::request()` promise. `HttpServerErrorHandler::handleApplicationError()`
+    // will not be invoked, and the HttpServer's listen task will be fulfilled normally.
+    //
+    // `acceptWebSocket()` may only be called a single time. Calling it a second time will cause an
+    // exception to be thrown.
 
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
                                 const HttpHeaders& headers);
@@ -916,6 +929,14 @@ public:
   //
   // Request processing can be canceled by dropping the returned promise. HttpServer may do so if
   // the client disconnects prematurely.
+  //
+  // The implementation of `request()` should usually not try to use `response` in any way in
+  // exception-handling code, because it is often not possible to tell whether `Response::send()` or
+  // `Response::acceptWebSocket()` has already been called. Instead, to generate error HTTP
+  // responses for the client, implement an HttpServerErrorHandler and pass it to the HttpServer via
+  // HttpServerSettings. If the `HttpService::request()` promise rejects and no response has yet
+  // been sent, `HttpServerErrorHandler::handleApplicationError()` will be passed a non-null
+  // `Maybe<Response&>` parameter.
 
   class ConnectResponse {
   public:
