@@ -3340,7 +3340,7 @@ private:
       KJ_IF_MAYBE(task, promiseToRelease) {
         KJ_IF_MAYBE(running, task->tryGet<Answer::Running>()) {
           tasks.add(kj::evalLast([running = kj::mv(*running)]() {
-            // Just drop `r` here to cancel the call.
+            // Just drop `running` here to cancel the call.
           }));
         }
       }

@@ -603,7 +603,7 @@ struct Finish {
   # `allowCancellation` annotation defined in `c++.capnp`.
   #
   # This is a work-around. Versions 1.0 and up of Cap'n Proto always set this to false. However,
-  # older versions of Cap'n Proto unintentionally exhibited this derring behavior by default, and
+  # older versions of Cap'n Proto unintentionally exhibited this errant behavior by default, and
   # as a result programs built with older versions could be inadvertently relying on their peers
   # to implement the behavior. The purpose of this flag is to let newer versions know when the
   # peer is an older version, so that it can attempt to work around the issue.
