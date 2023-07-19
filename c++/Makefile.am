@@ -174,6 +174,7 @@ includekj_HEADERS =                                            \
   src/kj/async-unix.h                                          \
   src/kj/async-win32.h                                         \
   src/kj/async-io.h                                            \
+  src/kj/cidr.h                                                \
   src/kj/async-queue.h                                         \
   src/kj/main.h                                                \
   src/kj/test.h                                                \

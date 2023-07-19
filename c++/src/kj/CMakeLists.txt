@@ -134,6 +134,7 @@ set(kj-async_headers
   async-win32.h
   async-io.h
   async-queue.h
+  cidr.h
   timer.h
 )
 if(NOT CAPNP_LITE)
