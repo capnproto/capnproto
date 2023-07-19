@@ -85,7 +85,8 @@ void doAutoReconnectTest(kj::WaitScope& ws,
   KJ_EXPECT(test(123, true) == "123 true 0");
 
   currentServer->setError(KJ_EXCEPTION(DISCONNECTED, "test1 disconnect"));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect", test(456, true));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect",
+      testPromise(456, true).ignoreResult().wait(ws));
 
   KJ_EXPECT(test(789, false) == "789 false 1");
   KJ_EXPECT(test(21, true) == "21 true 1");
@@ -99,8 +100,8 @@ void doAutoReconnectTest(kj::WaitScope& ws,
     KJ_EXPECT(!promise1.poll(ws));
     KJ_EXPECT(!promise2.poll(ws));
     fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "test2 disconnect"));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise1.wait(ws));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise2.wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise1.ignoreResult().wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise2.ignoreResult().wait(ws));
   }
 
   KJ_EXPECT(test(43, false) == "43 false 2");
@@ -127,7 +128,7 @@ void doAutoReconnectTest(kj::WaitScope& ws,
   client = nullptr;
 
   // Everything we initiated should still finish.
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test3 disconnect", promise4.wait(ws));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test3 disconnect", promise4.ignoreResult().wait(ws));
 
   // Send the request which we created before the disconnect. There are two behaviors we accept
   // as correct here: it may throw the disconnect exception, or it may automatically redirect to
@@ -195,6 +196,12 @@ KJ_TEST("lazyAutoReconnect() initialies lazily") {
     req.setJ(j);
     return kj::str(req.send().wait(ws).getX());
   };
+  auto testIgnoreResult = [&](uint i, bool j) {
+    auto req = client.fooRequest();
+    req.setI(i);
+    req.setJ(j);
+    req.send().ignoreResult().wait(ws);
+  };
 
   KJ_EXPECT(connectCount == 1);
   KJ_EXPECT(test(123, true) == "123 true 0");
@@ -208,7 +215,7 @@ KJ_TEST("lazyAutoReconnect() initialies lazily") {
   KJ_EXPECT(connectCount == 2);
 
   currentServer->setError(KJ_EXCEPTION(DISCONNECTED, "test1 disconnect"));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect", test(345, true));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect", testIgnoreResult(345, true));
 
   // lazyAutoReconnect is only lazy on the first request, not on reconnects.
   KJ_EXPECT(connectCount == 3);

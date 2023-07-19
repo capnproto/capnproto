@@ -212,7 +212,7 @@ public:
       auto result = SSL_get_verify_result(ssl);
       if (result != X509_V_OK) {
         const char* reason = X509_verify_cert_error_string(result);
-        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason);
+        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason) { break; }
       }
     });
   }

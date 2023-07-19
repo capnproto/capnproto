@@ -281,7 +281,7 @@ TEST(SchemaParser, SetFileIdsRequired) {
     SchemaParser parser;
     parser.setDiskFilesystem(reader);
 
-    KJ_EXPECT_THROW_MESSAGE("File does not declare an ID.",
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("File does not declare an ID.",
         parser.parseDiskFile("no-file-id.capnp", "no-file-id.capnp", nullptr));
   }
   {

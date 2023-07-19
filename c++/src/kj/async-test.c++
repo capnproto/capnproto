@@ -762,7 +762,7 @@ TEST(Async, ArrayJoinException) {
 
     // The final fulfillment makes the promise ready.
     fulfillers[i++]->fulfill();
-    KJ_EXPECT_THROW_MESSAGE("Test exception", promise.wait(waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Test exception", promise.wait(waitScope));
     KJ_EXPECT(tasksCompleted == 4);
   }
 }
@@ -792,7 +792,7 @@ TEST(Async, ArrayJoinFailFastException) {
     fulfillers[i++]->reject(KJ_EXCEPTION(FAILED, "Test exception"));
 
     // The first rejection makes the promise ready.
-    KJ_EXPECT_THROW_MESSAGE("Test exception", promise.wait(waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Test exception", promise.wait(waitScope));
     KJ_EXPECT(tasksCompleted == i - 1);
   }
 }
