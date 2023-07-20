@@ -495,7 +495,7 @@ private:
 class ImmediateBrokenPromiseNode final: public ImmediatePromiseNodeBase {
 public:
   ImmediateBrokenPromiseNode(Exception&& exception);
-  void destroy() override { freePromise(this); }
+  void destroy() override;
 
   void get(ExceptionOrValue& output) noexcept override;
 
@@ -924,7 +924,7 @@ class ChainPromiseNode final: public PromiseNode, public Event {
 public:
   explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location);
   ~ChainPromiseNode() noexcept(false);
-  void destroy() override { freePromise(this); }
+  void destroy() override;
 
   void onReady(Event* event) noexcept override;
   void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
@@ -976,7 +976,7 @@ class ExclusiveJoinPromiseNode final: public PromiseNode {
 public:
   ExclusiveJoinPromiseNode(OwnPromiseNode left, OwnPromiseNode right, SourceLocation location);
   ~ExclusiveJoinPromiseNode() noexcept(false);
-  void destroy() override { freePromise(this); }
+  void destroy() override;
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
@@ -1092,7 +1092,7 @@ public:
                        SourceLocation location,
                        ArrayJoinBehavior joinBehavior);
   ~ArrayJoinPromiseNode();
-  void destroy() override { freePromise(this); }
+  void destroy() override;
 
 protected:
   void getNoError(ExceptionOrValue& output) noexcept override;
