@@ -291,7 +291,7 @@ inline EncodingResult<String> decodeCEscape(ArrayPtr<const char> text) {
 }
 
 // If you pass a string literal to a function taking ArrayPtr<const char>, it'll include the NUL
-// termintator, which is surprising. Let's add overloads that avoid that. In practice this probably
+// terminator, which is surprising. Let's add overloads that avoid that. In practice this probably
 // only even matters for encoding-test.c++.
 
 template <size_t s>
