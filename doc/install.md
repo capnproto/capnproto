@@ -116,7 +116,7 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
    Proto uses C++14 language features that did not work in previous versions of Visual Studio,
    and the updates include many bug fixes that Cap'n Proto requires.
 
-2. Install [CMake](http://www.cmake.org/) version 3.1 or later.
+2. Install [CMake](http://www.cmake.org/) version 3.16 or later.
 
 3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
    You can use the CMake UI for this or run this shell command:
