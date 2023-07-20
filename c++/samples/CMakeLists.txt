@@ -17,7 +17,7 @@
 #      cmake --build .
 
 project("Cap'n Proto Samples" CXX)
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.16)
 
 find_package(CapnProto CONFIG REQUIRED)
 
