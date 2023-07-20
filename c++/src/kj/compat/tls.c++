@@ -51,18 +51,16 @@ namespace kj {
 
 namespace {
 
-KJ_NORETURN(void throwOpensslError());
-void throwOpensslError() {
-  // Call when an OpenSSL function returns an error code to convert that into an exception and
-  // throw it.
+kj::Exception getOpensslError() {
+  // Call when an OpenSSL function returns an error code to convert that into an exception.
 
   kj::Vector<kj::String> lines;
   while (unsigned long long error = ERR_get_error()) {
 #ifdef SSL_R_UNEXPECTED_EOF_WHILE_READING
     // OpenSSL 3.0+ reports unexpected disconnects this way.
     if (ERR_GET_REASON(error) == SSL_R_UNEXPECTED_EOF_WHILE_READING) {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED,
-          "peer disconnected without gracefully ending TLS session"));
+      return KJ_EXCEPTION(DISCONNECTED,
+          "peer disconnected without gracefully ending TLS session");
     }
 #endif
 
@@ -71,7 +69,15 @@ void throwOpensslError() {
     lines.add(kj::heapString(message));
   }
   kj::String message = kj::strArray(lines, "\n");
-  KJ_FAIL_ASSERT("OpenSSL error", message);
+  return KJ_EXCEPTION(FAILED, "OpenSSL error", message);
+}
+
+KJ_NORETURN(void throwOpensslError());
+void throwOpensslError() {
+  // Call when an OpenSSL function returns an error code to convert that into an exception and
+  // throw it.
+
+  kj::throwFatalException(getOpensslError());
 }
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(OPENSSL_IS_BORINGSSL)
@@ -177,22 +183,22 @@ public:
 
   kj::Promise<void> connect(kj::StringPtr expectedServerHostname) {
     if (!SSL_set_tlsext_host_name(ssl, expectedServerHostname.cStr())) {
-      throwOpensslError();
+      return getOpensslError();
     }
 
     X509_VERIFY_PARAM* verify = SSL_get0_param(ssl);
     if (verify == nullptr) {
-      throwOpensslError();
+      return getOpensslError();
     }
 
     if (isIpAddress(expectedServerHostname)) {
       if (X509_VERIFY_PARAM_set1_ip_asc(verify, expectedServerHostname.cStr()) <= 0) {
-        throwOpensslError();
+        return getOpensslError();
       }
     } else {
       if (X509_VERIFY_PARAM_set1_host(
           verify, expectedServerHostname.cStr(), expectedServerHostname.size()) <= 0) {
-        throwOpensslError();
+        return getOpensslError();
       }
     }
 
@@ -206,7 +212,7 @@ public:
 
     return sslCall([this]() { return SSL_connect(ssl); }).then([this](size_t) {
       X509* cert = SSL_get_peer_certificate(ssl);
-      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
+      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate") { return; }
       X509_free(cert);
 
       auto result = SSL_get_verify_result(ssl);
@@ -365,7 +371,7 @@ private:
           return writeBuffer.whenReady().then(
               [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
         case SSL_ERROR_SSL:
-          throwOpensslError();
+          return getOpensslError();
         case SSL_ERROR_SYSCALL:
           if (result == 0) {
             // OpenSSL pre-3.0 reports unexpected disconnects this way. Note that 3.0+ report it

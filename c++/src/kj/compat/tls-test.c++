@@ -813,18 +813,15 @@ KJ_TEST("TLS client certificate verification") {
     });
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("peer did not return a certificate",
                                            "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
-        serverPromise.wait(test.io.waitScope));
-#if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
-                       // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
-    KJ_EXPECT_THROW_MESSAGE(
+        serverPromise.ignoreResult().wait(test.io.waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(
             "alert",  // "alert handshake failure" or "alert certificate required"
             "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
-        clientPromise.wait(test.io.waitScope));
-#endif
+        clientPromise.ignoreResult().wait(test.io.waitScope));
   }
 
   {
@@ -844,17 +841,14 @@ KJ_TEST("TLS client certificate verification") {
     });
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("certificate verify failed",
                                            "CERTIFICATE_VERIFY_FAILED"),
-        serverPromise.wait(test.io.waitScope));
-#if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
-                       // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
-    KJ_EXPECT_THROW_MESSAGE(
+        serverPromise.ignoreResult().wait(test.io.waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("alert unknown ca",
                                            "TLSV1_ALERT_UNKNOWN_CA"),
-        clientPromise.wait(test.io.waitScope));
-#endif
+        clientPromise.ignoreResult().wait(test.io.waitScope));
   }
 
   {
