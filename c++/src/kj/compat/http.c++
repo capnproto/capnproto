@@ -7801,11 +7801,10 @@ kj::Promise<void> HttpServer::listenHttp(kj::ConnectionReceiver& port) {
 }
 
 kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {
-  return port.accept()
-      .then([this,&port](kj::Own<kj::AsyncIoStream>&& connection) -> kj::Promise<void> {
+  for (;;) {
+    auto connection = co_await port.accept();
     tasks.add(kj::evalNow([&]() { return listenHttp(kj::mv(connection)); }));
-    return listenLoop(port);
-  });
+  }
 }
 
 kj::Promise<void> HttpServer::listenHttp(kj::Own<kj::AsyncIoStream> connection) {
