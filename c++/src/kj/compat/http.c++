@@ -7470,7 +7470,7 @@ private:
     if (!closeAfterSend) {
       // Check if application wants us to close connections.
       //
-      // If the application used listenHttpClientDrain() to listen, then it expects that after a
+      // If the application used listenHttpCleanDrain() to listen, then it expects that after a
       // clean drain, the connection is still open and can receive more requests. Otherwise, after
       // receiving drain(), we will close the connection, so we should send a `Connection: close`
       // header.
