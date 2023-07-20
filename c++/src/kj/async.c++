@@ -292,7 +292,7 @@ public:
     node->onReady(this);
   }
 
-  void destroy() override { dtor(*this); }
+  void destroy() override { freePromise(this); }
 
   OwnTask pop() {
     KJ_IF_MAYBE(n, next) { n->get()->prev = prev; }
