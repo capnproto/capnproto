@@ -293,6 +293,9 @@ if(BUILD_TESTING)
     target_link_libraries(kj-heavy-tests kj-http kj-async kj-test kj)
     if(WITH_OPENSSL)
       target_link_libraries(kj-heavy-tests kj-tls)
+      # tls-test.c++ needs to use OpenSSL directly.
+      target_link_libraries(kj-heavy-tests OpenSSL::SSL OpenSSL::Crypto)
+      target_compile_definitions(kj-heavy-tests PRIVATE KJ_HAS_OPENSSL)
       set_property(
         SOURCE compat/tls-test.c++
         APPEND PROPERTY COMPILE_DEFINITIONS KJ_HAS_OPENSSL
