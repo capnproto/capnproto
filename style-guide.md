@@ -252,11 +252,11 @@ Note that even parsers for machine-readable text-based languages (config languag
 
 This section contains guidelines for usage of C++ language features.
 
-### Use C++11 (or later)
+### Use C++20 (or later)
 
-C++11 completely transformed the way the C++ language is used. New code should take heavy advantage of the new features, especially rvalue references (move semantics) and lambda expressions.
+C++11 and later revisions completely transformed the way the C++ language is used. New code should take heavy advantage of the new features, especially rvalue references (move semantics), lambda expressions, and the `co_await` keyword (from C++20) to await promises.
 
-KJ requires C++11. Application code (not used as a library) may consider requiring C++14, or even requiring a specific compiler and tracking the latest language features implemented by it.
+KJ requires C++20. Application code (not used as a library) may consider requiring later revisions, or even requiring a specific compiler and tracking the latest language features implemented by it.
 
 ### Heap allocation
 

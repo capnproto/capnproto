@@ -383,13 +383,6 @@ public:
     // - Access control info: Differs wildly across platforms, and KJ prefers capabilities anyway.
     // - Other timestamps: Differs across platforms.
     // - Device number: If you care, you're probably doing platform-specific stuff anyway.
-
-    Metadata() = default;
-    Metadata(Type type, uint64_t size, uint64_t spaceUsed, Date lastModified, uint linkCount,
-             uint64_t hashCode)
-        : type(type), size(size), spaceUsed(spaceUsed), lastModified(lastModified),
-          linkCount(linkCount), hashCode(hashCode) {}
-    // TODO(cleanup): This constructor is redundant in C++14, but needed in C++11.
   };
 
   virtual Metadata stat() const = 0;
