@@ -27,6 +27,7 @@ EXTRA_DIST =                                                                 \
   src/capnp/testdata/segmented-packed                                        \
   src/capnp/testdata/errors.capnp.nobuild                                    \
   src/capnp/testdata/errors2.capnp.nobuild                                   \
+  src/capnp/testdata/no-file-id.capnp.nobuild                                \
   src/capnp/testdata/short.txt                                               \
   src/capnp/testdata/flat                                                    \
   src/capnp/testdata/binary                                                  \
