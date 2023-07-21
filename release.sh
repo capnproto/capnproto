@@ -50,7 +50,7 @@ update_version() {
       c++/src/capnp/common.h
 
   local NEW_COMBINED=$(( ${NEW_ARR[0]} * 1000000 + ${NEW_ARR[1]} * 1000 + ${NEW_ARR[2]:-0 }))
-  doit sed -i -re "s/^#if CAPNP_VERSION != [0-9]*\$/#if CAPNP_VERSION != $NEW_COMBINED/g" \
+  doit sed -i -re "s/^#elif CAPNP_VERSION != [0-9]*\$/#elif CAPNP_VERSION != $NEW_COMBINED/g" \
       c++/src/*/*.capnp.h c++/src/*/*/*.capnp.h
 
   doit git commit -a -m "Set $BRANCH_DESC version to $NEW."
