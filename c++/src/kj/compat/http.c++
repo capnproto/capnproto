@@ -2541,7 +2541,7 @@ public:
 
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
     if (recvHeader.hasRsv2or3()) {
-      throw errorHandler.handleWebSocketProtocolError({
+      return errorHandler.handleWebSocketProtocolError({
         1002, "Received frame had RSV bits 2 or 3 set",
       });
     }
@@ -2550,7 +2550,7 @@ public:
 
     size_t payloadLen = recvHeader.getPayloadLen();
     if (payloadLen > maxSize) {
-      throw errorHandler.handleWebSocketProtocolError({
+      return errorHandler.handleWebSocketProtocolError({
         1009, kj::str("Message is too large: ", payloadLen, " > ", maxSize)
       });
     }
@@ -2559,7 +2559,7 @@ public:
     bool isData = opcode < OPCODE_FIRST_CONTROL;
     if (opcode == OPCODE_CONTINUATION) {
       if (fragments.empty()) {
-        throw errorHandler.handleWebSocketProtocolError({
+        return errorHandler.handleWebSocketProtocolError({
           1002, "Unexpected continuation frame"
         });
       }
@@ -2567,7 +2567,7 @@ public:
       opcode = fragmentOpcode;
     } else if (isData) {
       if (!fragments.empty()) {
-        throw errorHandler.handleWebSocketProtocolError({
+        return errorHandler.handleWebSocketProtocolError({
           1002, "Missing continuation frame"
         });
       }
@@ -2615,7 +2615,7 @@ public:
     } else {
       // Fragmented message, and this isn't the final fragment.
       if (!isData) {
-        throw errorHandler.handleWebSocketProtocolError({
+        return errorHandler.handleWebSocketProtocolError({
           1002, "Received fragmented control frame"
         });
       }
@@ -2711,7 +2711,7 @@ public:
           // Unsolicited pong. Ignore.
           return receive(maxSize);
         default:
-          throw errorHandler.handleWebSocketProtocolError({
+          return errorHandler.handleWebSocketProtocolError({
             1002, kj::str("Unknown opcode ", opcode)
           });
       }

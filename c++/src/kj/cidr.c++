@@ -19,6 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+// Request Vista-level APIs.
+#include <kj/win32-api-version.h>
+#endif
+
 #include "debug.h"
 #include "cidr.h"
 

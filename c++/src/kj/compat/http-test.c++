@@ -2357,7 +2357,7 @@ KJ_TEST("WebSocket abort propagates through pipe") {
   client->abort();
 
   KJ_EXPECT(downstreamPump.poll(waitScope));
-  KJ_EXPECT_THROW(DISCONNECTED, downstreamPump.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, downstreamPump.wait(waitScope));
 }
 
 KJ_TEST("WebSocket maximum message size") {
@@ -2384,7 +2384,8 @@ KJ_TEST("WebSocket maximum message size") {
   }
 
   {
-    KJ_EXPECT_THROW_MESSAGE("too large", server->receive(maxSize).wait(waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("too large",
+        server->receive(maxSize).ignoreResult().wait(waitScope));
     KJ_ASSERT(errorCatcher.errors.size() == 1);
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1009);
   }
@@ -3742,7 +3743,7 @@ KJ_TEST("HttpServer WebSocket with application error after accept") {
       HttpHeaders responseHeaders(headerTable);
       auto webSocket = response.acceptWebSocket(responseHeaders);
       return webSocket->receive().then([](WebSocket::Message) {
-        throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
+        throwRecoverableException(KJ_EXCEPTION(FAILED, "test exception"));
       }).attach(kj::mv(webSocket));
     }
 

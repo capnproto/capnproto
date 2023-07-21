@@ -292,7 +292,7 @@ public:
     node->onReady(this);
   }
 
-  void destroy() override { dtor(*this); }
+  void destroy() override { freePromise(this); }
 
   OwnTask pop() {
     KJ_IF_MAYBE(n, next) { n->get()->prev = prev; }
@@ -2363,6 +2363,8 @@ void ImmediatePromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNe
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
     : exception(kj::mv(exception)) {}
 
+void ImmediateBrokenPromiseNode::destroy() { freePromise(this); }
+
 void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
   output.exception = kj::mv(exception);
 }
@@ -2543,6 +2545,8 @@ ChainPromiseNode::ChainPromiseNode(OwnPromiseNode innerParam, SourceLocation loc
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
 
+void ChainPromiseNode::destroy() { freePromise(this); }
+
 void ChainPromiseNode::onReady(Event* event) noexcept {
   switch (state) {
     case STEP1:
@@ -2658,6 +2662,8 @@ ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
     : left(*this, kj::mv(left), location), right(*this, kj::mv(right), location) {}
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
+
+void ExclusiveJoinPromiseNode::destroy() { freePromise(this); }
 
 void ExclusiveJoinPromiseNode::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
@@ -2823,6 +2829,8 @@ ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
       resultParts(kj::mv(resultParts)) {}
 
 ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
+
+void ArrayJoinPromiseNode<void>::destroy() { freePromise(this); }
 
 void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
   output.as<_::Void>() = _::Void();

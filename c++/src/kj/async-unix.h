@@ -34,9 +34,8 @@
 KJ_BEGIN_HEADER
 
 #if !defined(KJ_USE_EPOLL) && !defined(KJ_USE_KQUEUE)
-#if __linux__ && !__BIONIC__
-// Default to epoll on Linux, except on Bionic (Android) which doesn't have signalfd.h.
-// TODO(soon): Now that we don't use signalfd, can we use epoll on Bionic?
+#if __linux__
+// Default to epoll on Linux.
 #define KJ_USE_EPOLL 1
 #elif __APPLE__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
 // MacOS and BSDs prefer kqueue() for event notification.

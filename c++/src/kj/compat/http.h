@@ -831,7 +831,7 @@ public:
       // outside the 200-299 range and errorBody *may* be specified if there is a rejection
       // payload.
 
-      // TODO(soon): Having Status own the statusText and headers is a bit unfortunate.
+      // TODO(perf): Having Status own the statusText and headers is a bit unfortunate.
       // Ideally we could have these be non-owned so that the headers object could just
       // point directly into HttpOutputStream's buffer and not be copied. That's a bit
       // more difficult to with CONNECT since the lifetimes of the buffers are a little
