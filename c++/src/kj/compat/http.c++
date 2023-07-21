@@ -7584,12 +7584,6 @@ private:
       // If MANUAL_COMPRESSION is enabled, we use the `headers` passed in by the application, and
       // try to find a configuration that respects both the server's preferred configuration,
       // as well as the client's requested configuration.
-      //
-      // TODO(now): Manual Mode and terminating in worker
-      //    - `headers` would be empty.
-      //    - This means client would offer x, and the server would always reject.
-      //    - We want a way to explicitly tell `acceptWebSocket()` to use the `requestHeaders` in
-      //      this case.
       KJ_IF_MAYBE(value, headers.get(HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
         // First, we get the manual configuration using `headers`.
         KJ_IF_MAYBE(manualConfig, _::tryParseExtensionOffers(*value)) {

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-if [ "$1" != "package" ]; then
+if [ "$1" != "package" ] && [ "$1" != "bump-major" ]; then
   if (grep -r KJ_DBG c++/src | egrep -v '/debug(-test)?[.]' | grep -v 'See KJ_DBG\.$'); then
     echo '*** Error:  There are instances of KJ_DBG in the code.' >&2
     exit 1
@@ -50,7 +50,7 @@ update_version() {
       c++/src/capnp/common.h
 
   local NEW_COMBINED=$(( ${NEW_ARR[0]} * 1000000 + ${NEW_ARR[1]} * 1000 + ${NEW_ARR[2]:-0 }))
-  doit sed -i -re "s/^#if CAPNP_VERSION != [0-9]*\$/#if CAPNP_VERSION != $NEW_COMBINED/g" \
+  doit sed -i -re "s/^#elif CAPNP_VERSION != [0-9]*\$/#elif CAPNP_VERSION != $NEW_COMBINED/g" \
       c++/src/*/*.capnp.h c++/src/*/*/*.capnp.h
 
   doit git commit -a -m "Set $BRANCH_DESC version to $NEW."
@@ -146,6 +146,14 @@ done_banner() {
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 case "${1-}:$BRANCH" in
+  bump-major:* )
+    echo "Bump major version number on HEAD."
+    HEAD_VERSION=$(get_version '^[0-9]+[.][0-9]+-dev$')
+    OLD_MAJOR=$(echo $HEAD_VERSION | cut -d. -f1)
+    NEW_VERSION=$(( OLD_MAJOR + 1 )).0-dev
+    update_version $HEAD_VERSION $NEW_VERSION "mainline"
+    ;;
+
   # ======================================================================================
   candidate:master )
     echo "New major release."
