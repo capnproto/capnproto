@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-if [ "$1" != "package" ]; then
+if [ "$1" != "package" ] && [ "$1" != "bump-major" ]; then
   if (grep -r KJ_DBG c++/src | egrep -v '/debug(-test)?[.]' | grep -v 'See KJ_DBG\.$'); then
     echo '*** Error:  There are instances of KJ_DBG in the code.' >&2
     exit 1
@@ -146,6 +146,14 @@ done_banner() {
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 case "${1-}:$BRANCH" in
+  bump-major:* )
+    echo "Bump major version number on HEAD."
+    HEAD_VERSION=$(get_version '^[0-9]+[.][0-9]+-dev$')
+    OLD_MAJOR=$(echo $HEAD_VERSION | cut -d. -f1)
+    NEW_VERSION=$(( OLD_MAJOR + 1 )).0-dev
+    update_version $HEAD_VERSION $NEW_VERSION "mainline"
+    ;;
+
   # ======================================================================================
   candidate:master )
     echo "New major release."
