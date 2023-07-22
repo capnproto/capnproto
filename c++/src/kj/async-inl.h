@@ -31,7 +31,7 @@
 #include "async.h"  // help IDE parse this file
 #endif
 
-#if _MSC_VER && KJ_HAS_COROUTINE
+#if _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -2031,10 +2031,8 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
 
 }  // namespace kj
 
-#if KJ_HAS_COROUTINE
-
 // =======================================================================================
-// Coroutines TS integration with kj::Promise<T>.
+// Coroutines integration with kj::Promise<T>.
 //
 // Here's a simple coroutine:
 //
@@ -2058,20 +2056,20 @@ namespace kj::_ { template <typename T> class Coroutine; }
 
 // Specializing the appropriate traits class tells the compiler about `kj::_::Coroutine<T>`.
 
-namespace KJ_COROUTINE_STD_NAMESPACE {
+namespace std {
 
 template <class T, class... Args>
 struct coroutine_traits<kj::Promise<T>, Args...> {
   // `Args...` are the coroutine's parameter types.
 
   using promise_type = kj::_::Coroutine<T>;
-  // The Coroutines TS calls this the "promise type". This makes sense when thinking of coroutines
+  // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
   // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
   // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
   // the "coroutine implementation type" instead.
 };
 
-}  // namespace KJ_COROUTINE_STD_NAMESPACE
+}  // namespace std
 
 // Now when the compiler sees our `connectToService()` coroutine above, it default-constructs a
 // `coroutine_traits<Promise<Own<AsyncIoStream>>, Network&>::promise_type`, or
@@ -2082,19 +2080,17 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
 
 namespace kj::_ {
 
-namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
-
 class CoroutineBase: public PromiseNode,
                      public Event {
 public:
-  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
+  CoroutineBase(std::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                 SourceLocation location);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
 
-  auto initial_suspend() { return stdcoro::suspend_never(); }
-  auto final_suspend() noexcept { return stdcoro::suspend_always(); }
+  auto initial_suspend() { return std::suspend_never(); }
+  auto final_suspend() noexcept { return std::suspend_always(); }
   // These adjust the suspension behavior of coroutines immediately upon initiation, and immediately
   // after completion.
   //
@@ -2128,7 +2124,7 @@ private:
   Maybe<Own<Event>> fire() override;
   void traceEvent(TraceBuilder& builder) override;
 
-  stdcoro::coroutine_handle<> coroutine;
+  std::coroutine_handle<> coroutine;
   ExceptionOrValue& resultRef;
 
   OnReadyEvent onReadyEvent;
@@ -2177,7 +2173,7 @@ class Coroutine final: public CoroutineBase,
   // `await_transform()`.
 
 public:
-  using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
+  using Handle = std::coroutine_handle<Coroutine<T>>;
 
   Coroutine(SourceLocation location = {})
       : CoroutineBase(Handle::from_promise(*this), result, location) {}
@@ -2207,8 +2203,8 @@ public:
   // member class template of Coroutine<T>, it is able to implement an
   // `await_suspend(Coroutine<T>::Handle)` override, providing it type-safe access to our enclosing
   // coroutine's PromiseNode. An `operator co_await()` free function would have to implement
-  // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
-  // suspension and resumption in terms of .then(). Yuck!
+  // a type-erased `await_suspend(std::coroutine_handle<void>)` override, and implement suspension
+  // and resumption in terms of .then(). Yuck!
 
 private:
   // -------------------------------------------------------
@@ -2319,10 +2315,6 @@ private:
   ExceptionOr<FixVoid<U>> result;
 };
 
-#undef KJ_COROUTINE_STD_NAMESPACE
-
 }  // namespace kj::_ (private)
-
-#endif  // KJ_HAS_COROUTINE
 
 KJ_END_HEADER

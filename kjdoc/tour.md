@@ -972,13 +972,6 @@ There are some caveats one should be aware of while writing coroutines:
 - When refactoring recursive asynchronous loops (see the "Loops" section), you must replace recursion with a traditional `for` or `while` loop. This is because while `.then()` supports tail-call optimization, `co_await` does not. Fortunately, this usually makes the code more readable anyway. If there are multiple points of recursion, one simple strategy is to replace the points of recursion (e.g. `return loop()`) with `continue`, and wrap the code in an infinite loop.
 - Replacing `.then()` with `co_await` can affect timing, because `co_await` effectively eagerly evaluates the awaited promise. If refactoring `.then()`-style code into a coroutine produces different results, or hung promises, it is likely you are running into a latent timing bug exposed by this subtle difference in semantics. Try adding `.eagerlyEvaluate(nullptr)` to each `.then()` promise and fixing the bug before proceeding.
 
-As of this writing, KJ supports C++20 coroutines and Coroutines TS coroutines, the latter being an experimental precursor to C++20 coroutines. They are functionally the same thing, but enabled with different compiler/linker flags:
-
-- Enable C++20 coroutines by requesting that language standard from your compiler.
-- Enable Coroutines TS coroutines with `-fcoroutines-ts` in C++17 clang, and `/await` in MSVC.
-
-KJ prefers C++20 coroutines when both implementations are available.
-
 ### Unit testing tips
 
 When unit-testing promise APIs, two tricky challenges frequently arise:

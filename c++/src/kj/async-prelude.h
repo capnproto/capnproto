@@ -28,24 +28,7 @@
 #include <kj/tuple.h>
 #include <kj/source-location.h>
 
-// Detect whether or not we should enable kj::Promise<T> coroutine integration.
-//
-// TODO(someday): Support coroutines with -fno-exceptions.
-#if !KJ_NO_EXCEPTIONS
-#ifdef __has_include
-#if (__cpp_impl_coroutine >= 201902L) && __has_include(<coroutine>)
-// C++20 Coroutines detected.
 #include <coroutine>
-#define KJ_HAS_COROUTINE 1
-#define KJ_COROUTINE_STD_NAMESPACE std
-#elif (__cpp_coroutines >= 201703L) && __has_include(<experimental/coroutine>)
-// Coroutines TS detected.
-#include <experimental/coroutine>
-#define KJ_HAS_COROUTINE 1
-#define KJ_COROUTINE_STD_NAMESPACE std::experimental
-#endif
-#endif
-#endif
 
 KJ_BEGIN_HEADER
 

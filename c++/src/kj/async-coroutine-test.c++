@@ -28,8 +28,6 @@
 namespace kj {
 namespace {
 
-#ifdef KJ_HAS_COROUTINE
-
 template <typename T>
 Promise<kj::Decay<T>> identity(T&& value) {
   co_return kj::fwd<T>(value);
@@ -571,8 +569,6 @@ KJ_TEST("Verify coCapture() with continuation functors") {
     KJ_REQUIRE(result == j);
   }
 }
-
-#endif  // KJ_HAS_COROUTINE
 
 }  // namespace
 }  // namespace kj
