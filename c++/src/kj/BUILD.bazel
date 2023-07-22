@@ -174,10 +174,6 @@ cc_library(
 cc_test(
     name = "async-coroutine-test",
     srcs = ["async-coroutine-test.c++"],
-    target_compatible_with = select({
-        ":use_coroutines": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
     deps = [
         ":kj-test",
         "//src/kj/compat:kj-http",
