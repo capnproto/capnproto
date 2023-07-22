@@ -31,7 +31,7 @@
 #include "async.h"  // help IDE parse this file
 #endif
 
-#if _MSC_VER && KJ_HAS_COROUTINE
+#if _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -2031,10 +2031,8 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
 
 }  // namespace kj
 
-#if KJ_HAS_COROUTINE
-
 // =======================================================================================
-// Coroutines TS integration with kj::Promise<T>.
+// Coroutines integration with kj::Promise<T>.
 //
 // Here's a simple coroutine:
 //
@@ -2065,7 +2063,7 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
   // `Args...` are the coroutine's parameter types.
 
   using promise_type = kj::_::Coroutine<T>;
-  // The Coroutines TS calls this the "promise type". This makes sense when thinking of coroutines
+  // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
   // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
   // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
   // the "coroutine implementation type" instead.
@@ -2322,7 +2320,5 @@ private:
 #undef KJ_COROUTINE_STD_NAMESPACE
 
 }  // namespace kj::_ (private)
-
-#endif  // KJ_HAS_COROUTINE
 
 KJ_END_HEADER

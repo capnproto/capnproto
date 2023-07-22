@@ -611,8 +611,6 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 // =======================================================================================
 // Hack for safely using a lambda as a coroutine.
 
-#if KJ_HAS_COROUTINE
-
 namespace _ {
 
 void throwMultipleCoCaptureInvocations();
@@ -716,8 +714,6 @@ auto coCapture(Functor&& f) {
 
   return _::CaptureForCoroutine(kj::mv(f));
 }
-
-#endif  // KJ_HAS_COROUTINE
 
 // =======================================================================================
 // Advanced promise construction
