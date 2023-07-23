@@ -302,6 +302,11 @@ kj::StringPtr Schema::getShortDisplayName() const {
   return proto.getDisplayName().slice(proto.getDisplayNamePrefixLength());
 }
 
+const kj::StringPtr Schema::getUnqualifiedName() const {
+  auto proto = getProto();
+  return proto.getDisplayName().slice(proto.getDisplayNamePrefixLength());
+}
+
 void Schema::requireUsableAs(const _::RawSchema* expected) const {
   KJ_REQUIRE(raw->generic == expected ||
              (expected != nullptr && raw->generic->canCastTo == expected),

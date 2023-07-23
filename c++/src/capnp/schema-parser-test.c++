@@ -112,6 +112,14 @@ TEST(SchemaParser, Basic) {
   EXPECT_EQ("garply", barFields[3].getProto().getName());
   EXPECT_EQ(0x856789abcdef1234ull, getFieldTypeFileId(barFields[3]));
 
+  auto barStructs = barSchema.getAllNested();
+  ASSERT_EQ(1, barStructs.size());
+  EXPECT_EQ("Bar", barStructs[0].getUnqualifiedName());
+  barFields = barStructs[0].asStruct().getFields();
+  ASSERT_EQ(4u, barFields.size());
+  EXPECT_EQ("baz", barFields[0].getProto().getName());
+  EXPECT_EQ(0x823456789abcdef1ull, getFieldTypeFileId(barFields[0]));
+
   auto bazSchema = parser.parseDiskFile(
       "not/used/because/already/loaded",
       "src/foo/baz.capnp", importPath);

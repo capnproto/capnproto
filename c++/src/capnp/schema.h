@@ -152,6 +152,9 @@ public:
   kj::StringPtr getShortDisplayName() const;
   // Get the short version of the node's display name.
 
+  const kj::StringPtr getUnqualifiedName() const;
+  // Get the display name "nickname" of this node minus the prefix
+
 private:
   const _::RawBrandedSchema* raw;
 
