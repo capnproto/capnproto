@@ -48,6 +48,18 @@
 #define KJ_END_HEADER
 #endif
 
+#ifdef __has_cpp_attribute
+#define KJ_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
+#else
+#define KJ_HAS_CPP_ATTRIBUTE(x) 0
+#endif
+
+#ifdef __has_feature
+#define KJ_HAS_COMPILER_FEATURE(x) __has_feature(x)
+#else
+#define KJ_HAS_COMPILER_FEATURE(x) 0
+#endif
+
 KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
@@ -175,13 +187,6 @@ typedef unsigned char byte;
 #define KJ_UNLIKELY(condition) (condition)
 #endif
 
-// Prefer standard attributes, if available.
-#if defined(__has_cpp_attribute)
-#define KJ_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
-#else
-#define KJ_HAS_CPP_ATTRIBUTE(x) 0
-#endif
-
 #if defined(KJ_DEBUG) || __NO_INLINE__
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
@@ -286,15 +291,7 @@ typedef unsigned char byte;
 #define KJ_NO_UNIQUE_ADDRESS
 #endif
 
-#if defined(__has_feature)
-#if __has_feature(thread_sanitizer)
-#define KJ_SANITIZE_THREAD 1
-#endif
-#elif __SANITIZE_THREAD__
-#define KJ_SANITIZE_THREAD 1
-#endif
-
-#if KJ_SANITIZE_THREAD
+#if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
 #define KJ_DISABLE_TSAN __attribute__((no_sanitize("thread"), noinline))
 #else
 #define KJ_DISABLE_TSAN

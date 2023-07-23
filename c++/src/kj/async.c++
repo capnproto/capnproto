@@ -489,6 +489,13 @@ public:
       }
     }
 #endif
+
+    // Make sure we're not leaking anything from the global freelist either.
+    auto lock = freelist.lockExclusive();
+    auto dangling = kj::mv(*lock);
+    for (auto& stack: dangling) {
+      delete stack;
+    }
   }
 
   void setMaxFreelist(size_t count) {
