@@ -272,6 +272,11 @@ public:
     return fd;
   }
 
+  void registerAncillaryMessageHandler(
+      kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> fn) override {
+    ancillaryMsgCallback = kj::mv(fn);
+  }
+
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
@@ -299,6 +304,7 @@ private:
   UnixEventPort& eventPort;
   UnixEventPort::FdObserver observer;
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
+  Maybe<Function<void(ArrayPtr<AncillaryMessage>)>> ancillaryMsgCallback;
 
   Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
                                       AutoCloseFd* fdBuffer, size_t maxFds,
@@ -308,7 +314,7 @@ private:
     // be included in the final return value.
 
     ssize_t n;
-    if (maxFds == 0) {
+    if (maxFds == 0 && ancillaryMsgCallback == nullptr) {
       KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
         // Error.
 
@@ -330,26 +336,35 @@ private:
       msg.msg_iovlen = 1;
 
       // Allocate space to receive a cmsg.
+      size_t msgBytes;
+      if (ancillaryMsgCallback == nullptr) {
 #if __APPLE__ || __FreeBSD__
-      // Until very recently (late 2018 / early 2019), FreeBSD suffered from a bug in which when
-      // an SCM_RIGHTS message was truncated on delivery, it would not close the FDs that weren't
-      // delivered -- they would simply leak: https://bugs.freebsd.org/131876
-      //
-      // My testing indicates that MacOS has this same bug as of today (April 2019). I don't know
-      // if they plan to fix it or are even aware of it.
-      //
-      // To handle both cases, we will always provide space to receive 512 FDs. Hopefully, this is
-      // greater than the maximum number of FDs that these kernels will transmit in one message
-      // PLUS enough space for any other ancillary messages that could be sent before the
-      // SCM_RIGHTS message to push it back in the buffer. I couldn't find any firm documentation
-      // on these limits, though -- I only know that Linux is limited to 253, and I saw a hint in
-      // a comment in someone else's application that suggested FreeBSD is the same. Hopefully,
-      // then, this is sufficient to prevent attacks. But if not, there's nothing more we can do;
-      // it's really up to the kernel to fix this.
-      size_t msgBytes = CMSG_SPACE(sizeof(int) * 512);
+        // Until very recently (late 2018 / early 2019), FreeBSD suffered from a bug in which when
+        // an SCM_RIGHTS message was truncated on delivery, it would not close the FDs that weren't
+        // delivered -- they would simply leak: https://bugs.freebsd.org/131876
+        //
+        // My testing indicates that MacOS has this same bug as of today (April 2019). I don't know
+        // if they plan to fix it or are even aware of it.
+        //
+        // To handle both cases, we will always provide space to receive 512 FDs. Hopefully, this is
+        // greater than the maximum number of FDs that these kernels will transmit in one message
+        // PLUS enough space for any other ancillary messages that could be sent before the
+        // SCM_RIGHTS message to push it back in the buffer. I couldn't find any firm documentation
+        // on these limits, though -- I only know that Linux is limited to 253, and I saw a hint in
+        // a comment in someone else's application that suggested FreeBSD is the same. Hopefully,
+        // then, this is sufficient to prevent attacks. But if not, there's nothing more we can do;
+        // it's really up to the kernel to fix this.
+        msgBytes = CMSG_SPACE(sizeof(int) * 512);
 #else
-      size_t msgBytes = CMSG_SPACE(sizeof(int) * maxFds);
+        msgBytes = CMSG_SPACE(sizeof(int) * maxFds);
 #endif
+      } else {
+        // If we want room for ancillary messages instead of or in addition to FDs, just use the
+        // same amount of cushion as in the MacOS/FreeBSD case above.
+        // Someday we may want to allow customization here, but there's no immediate use for it.
+        msgBytes = CMSG_SPACE(sizeof(int) * 512);
+      }
+
       // On Linux, CMSG_SPACE will align to a word-size boundary, but on Mac it always aligns to a
       // 32-bit boundary. I guess aligning to 32 bits helps avoid the problem where you
       // surprisingly end up with space for two file descriptors when you only wanted one. However,
@@ -394,6 +409,7 @@ private:
         //   first followed by SCM_RIGHTS. We need to make sure we see both.
         size_t nfds = 0;
         size_t spaceLeft = msg.msg_controllen;
+        Vector<AncillaryMessage> ancillaryMessages;
         for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
             cmsg != nullptr; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
           if (spaceLeft >= CMSG_LEN(0) &&
@@ -412,6 +428,10 @@ private:
                 trashFds.add(kj::mv(ownFd));
               }
             }
+          } else if (spaceLeft >= CMSG_LEN(0) && ancillaryMsgCallback != nullptr) {
+            auto len = kj::min(cmsg->cmsg_len, spaceLeft);
+            auto data = ArrayPtr<const byte>(CMSG_DATA(cmsg), len - CMSG_LEN(0));
+            ancillaryMessages.add(cmsg->cmsg_level, cmsg->cmsg_type, data);
           }
 
           if (spaceLeft >= CMSG_LEN(0) && spaceLeft >= cmsg->cmsg_len) {
@@ -426,6 +446,12 @@ private:
           setCloseOnExec(fdBuffer[i]);
         }
 #endif
+
+        if (ancillaryMessages.size() > 0) {
+          KJ_IF_MAYBE(fn, ancillaryMsgCallback) {
+            (*fn)(ancillaryMessages.asPtr());
+          }
+        }
 
         alreadyRead.capCount += nfds;
         fdBuffer += nfds;

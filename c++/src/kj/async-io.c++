@@ -70,6 +70,11 @@ Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t max
 
 Maybe<uint64_t> AsyncInputStream::tryGetLength() { return nullptr; }
 
+void AsyncInputStream::registerAncillaryMessageHandler(
+    Function<void(ArrayPtr<AncillaryMessage>)> fn) {
+ KJ_UNIMPLEMENTED("registerAncillaryMsgHandler is not implemented by this AsyncInputStream");
+}
+
 namespace {
 
 class AsyncPump {
