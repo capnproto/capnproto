@@ -775,7 +775,7 @@ XThreadEvent::XThreadEvent(ExceptionOrValue& result, const Executor& targetExecu
     : Event(targetExecutor.getLoop()), result(result), targetExecutor(targetExecutor.addRef()) {}
 
 void XThreadEvent::ensureDoneOrCanceled() {
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   {  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
 #else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
@@ -973,7 +973,7 @@ void XThreadEvent::done() {
 }
 
 inline void XThreadEvent::setDoneState() {
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
   state = DONE;
 #else

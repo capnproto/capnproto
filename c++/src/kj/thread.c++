@@ -117,7 +117,7 @@ Thread::ThreadState::ThreadState(Function<void()> func)
       refcount(2) {}
 
 void Thread::ThreadState::unref() {
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   if (_InterlockedDecrement(&refcount) == 0) {
 #else
   if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {

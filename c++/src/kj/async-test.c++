@@ -28,7 +28,7 @@
 namespace kj {
 namespace {
 
-#if !_MSC_VER
+#if !_MSC_VER || defined(__clang__)
 // TODO(msvc): GetFunctorStartAddress is not supported on MSVC currently, so skip the test.
 TEST(Async, GetFunctorStartAddress) {
   EXPECT_TRUE(nullptr != _::GetFunctorStartAddress<>::apply([](){return 0;}));

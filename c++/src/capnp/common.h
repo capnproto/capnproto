@@ -173,7 +173,7 @@ inline constexpr Kind kind() {
   return k;
 }
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 
 #define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
 // Avoid constexpr methods in MSVC (it remains buggy in many situations).
@@ -199,7 +199,7 @@ inline constexpr Style style() {
 template <typename T, Kind k = CAPNP_KIND(T)>
 struct List;
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 
 template <typename T, Kind k>
 struct List {};
@@ -314,7 +314,7 @@ namespace _ {  // private
 template <typename T, Kind k = CAPNP_KIND(T)>
 struct PointerHelpers;
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 
 template <typename T, Kind k>
 struct PointerHelpers {};

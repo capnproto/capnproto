@@ -3647,7 +3647,7 @@ constexpr ::capnp::Kind Field::_capnpPrivate::kind;
 constexpr ::capnp::_::RawSchema const* Field::_capnpPrivate::schema;
 #endif  // !CAPNP_LITE
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || defined(__clang__)
 constexpr  ::uint16_t Field::NO_DISCRIMINANT;
 #endif
 // Field::Slot

@@ -41,7 +41,7 @@ static BrokenCapFactory* brokenCapFactory = nullptr;
 void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
   // Called from capability.c++ when the capability API is used, to make sure that layout.c++
   // is ready for it.  May be called multiple times but always with the same value.
-#if __GNUC__
+#if __GNUC__ || defined(__clang__)
   __atomic_store_n(&brokenCapFactory, &factory, __ATOMIC_RELAXED);
 #elif _MSC_VER
   *static_cast<BrokenCapFactory* volatile*>(&brokenCapFactory) = &factory;

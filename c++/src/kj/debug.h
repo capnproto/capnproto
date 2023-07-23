@@ -114,7 +114,7 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 // MSVC does __VA_ARGS__ differently from GCC:
 // - A trailing comma before an empty __VA_ARGS__ is removed automatically, whereas GCC wants
 //   you to request this behavior with "##__VA_ARGS__".

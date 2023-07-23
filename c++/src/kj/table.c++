@@ -30,7 +30,7 @@ static inline uint lg(uint value) {
   // Compute floor(log2(value)).
   //
   // Undefined for value = 0.
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
   unsigned long i;
   auto found = _BitScanReverse(&i, value);
   KJ_DASSERT(found);  // !found means value = 0

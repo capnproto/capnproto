@@ -156,7 +156,7 @@ constexpr inline CharGroup_ charRange(char first, char last) {
   return CharGroup_().orRange(first, last);
 }
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 #define anyOfChars(chars) CharGroup_().orAny(chars)
 // TODO(msvc): MSVC ICEs on the proper definition of `anyOfChars()`, which in turn prevents us from
 //   building the compiler or schema parser. We don't know why this happens, but Harris found that

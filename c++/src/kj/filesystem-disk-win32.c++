@@ -298,7 +298,7 @@ protected:
   }
 };
 
-#if _MSC_VER && _MSC_VER < 1910
+#if _MSC_VER && _MSC_VER < 1910 && !defined(__clang__)
 // TODO(msvc): MSVC 2015 can't initialize a constexpr's vtable correctly.
 const MmapDisposer mmapDisposer = MmapDisposer();
 #else

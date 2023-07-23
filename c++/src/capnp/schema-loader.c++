@@ -31,7 +31,7 @@
 #include <kj/map.h>
 #include <capnp/stream.capnp.h>
 
-#if _MSC_VER
+#if _MSC_VER && !defined(__clang__)
 #include <atomic>
 #endif
 
@@ -1295,7 +1295,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
-#if __GNUC__
+#if __GNUC__ || defined(__clang__)
     __atomic_store_n(&schema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
     __atomic_store_n(&schema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
 #elif _MSC_VER
@@ -1392,7 +1392,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
-#if __GNUC__
+#if __GNUC__ || defined(__clang__)
     __atomic_store_n(&schema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
     __atomic_store_n(&schema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
 #elif _MSC_VER
@@ -1912,7 +1912,7 @@ void SchemaLoader::InitializerImpl::init(const _::RawSchema* schema) const {
               "A schema not belonging to this loader used its initializer.");
 
     // Disable the initializer.
-#if __GNUC__
+#if __GNUC__ || defined(__clang__)
     __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
     __atomic_store_n(&mutableSchema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
 #elif _MSC_VER
@@ -1949,7 +1949,7 @@ void SchemaLoader::BrandedInitializerImpl::init(const _::RawBrandedSchema* schem
   mutableSchema->dependencyCount = deps.size();
 
   // It's initialized now, so disable the initializer.
-#if __GNUC__
+#if __GNUC__ || defined(__clang__)
   __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
 #elif _MSC_VER
   std::atomic_thread_fence(std::memory_order_release);
