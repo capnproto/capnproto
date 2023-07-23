@@ -299,12 +299,14 @@ typedef unsigned char byte;
 // by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
 
+#if __clang__ || __GNUC__ >= 12
 #if KJ_HAS_CPP_ATTRIBUTE(maybe_unused)
 #define KJ_UNUSED_MEMBER [[maybe_unused]]
-#elif __clang__
+#else
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
 // complains if the attribute is set on members.
+#endif
 #else
 #define KJ_UNUSED_MEMBER
 #endif
