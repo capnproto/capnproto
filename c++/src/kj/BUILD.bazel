@@ -1,4 +1,4 @@
-load(":configure.bzl", "kj_configure")
+load("//:build/configure.bzl", "kj_configure")
 
 kj_configure()
 
@@ -7,12 +7,14 @@ cc_library(
     srcs = [
         "arena.c++",
         "array.c++",
+        "cidr.c++",
         "common.c++",
         "debug.c++",
         "encoding.c++",
         "exception.c++",
         "filesystem.c++",
         "filesystem-disk-unix.c++",
+        "filesystem-disk-win32.c++",
         "hash.c++",
         "io.c++",
         "list.c++",
@@ -33,6 +35,7 @@ cc_library(
     hdrs = [
         "arena.h",
         "array.h",
+        "cidr.h",
         "common.h",
         "debug.h",
         "encoding.h",
@@ -67,9 +70,13 @@ cc_library(
         "windows-sanity.h",
     ],
     include_prefix = "kj",
-    linkopts = ["-lpthread"] + select({
-        ":use_libdl": ["-ldl"],
-        "//conditions:default": [],
+    linkopts = select({
+        "@platforms//os:windows": [],
+        ":use_libdl": [
+            "-lpthread",
+            "-ldl",
+        ],
+        "//conditions:default": ["-lpthread"],
     }),
     visibility = ["//visibility:public"],
     deps = [":kj-defines"],
@@ -80,7 +87,6 @@ cc_library(
     srcs = [
         "async.c++",
         "async-io.c++",
-        "async-io-internal.h",
         "async-io-unix.c++",
         "async-io-win32.c++",
         "async-unix.c++",
@@ -91,6 +97,7 @@ cc_library(
         "async.h",
         "async-inl.h",
         "async-io.h",
+        "async-io-internal.h",
         "async-prelude.h",
         "async-queue.h",
         "async-unix.h",
@@ -98,6 +105,13 @@ cc_library(
         "timer.h",
     ],
     include_prefix = "kj",
+    linkopts = select({
+        "@platforms//os:windows": [
+            "Ws2_32.lib",
+            "Advapi32.lib",
+        ],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [":kj"],
 )
@@ -129,7 +143,6 @@ cc_library(
     "async-io-test.c++",
     "async-queue-test.c++",
     "async-test.c++",
-    "async-unix-test.c++",
     "async-xthread-test.c++",
     "common-test.c++",
     "debug-test.c++",
@@ -203,16 +216,32 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "async-os-test",
+    srcs = select({
+        "@platforms//os:windows": ["async-win32-test.c++"],
+        "//conditions:default": ["async-unix-test.c++"],
+    }),
+    deps = [
+        ":kj",
+        ":kj-async",
+        ":kj-test",
+    ],
+)
+
 cc_library(
-    name = "async-unix-xthread-test-base",
+    name = "async-os-xthread-test-base",
     hdrs = ["async-xthread-test.c++"],
 )
 
 cc_test(
-    name = "async-unix-xthread-test",
-    srcs = ["async-unix-xthread-test.c++"],
+    name = "async-os-xthread-test",
+    srcs = select({
+        "@platforms//os:windows": ["async-win32-xthread-test.c++"],
+        "//conditions:default": ["async-unix-xthread-test.c++"],
+    }),
     deps = [
-        ":async-unix-xthread-test-base",
+        ":async-os-xthread-test-base",
         ":kj-async",
         ":kj-test",
     ],
@@ -226,4 +255,7 @@ cc_test(
         ":kj-test",
     ],
     linkstatic = True,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )

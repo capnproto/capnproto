@@ -51,18 +51,16 @@ namespace kj {
 
 namespace {
 
-KJ_NORETURN(void throwOpensslError());
-void throwOpensslError() {
-  // Call when an OpenSSL function returns an error code to convert that into an exception and
-  // throw it.
+kj::Exception getOpensslError() {
+  // Call when an OpenSSL function returns an error code to convert that into an exception.
 
   kj::Vector<kj::String> lines;
   while (unsigned long long error = ERR_get_error()) {
 #ifdef SSL_R_UNEXPECTED_EOF_WHILE_READING
     // OpenSSL 3.0+ reports unexpected disconnects this way.
     if (ERR_GET_REASON(error) == SSL_R_UNEXPECTED_EOF_WHILE_READING) {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED,
-          "peer disconnected without gracefully ending TLS session"));
+      return KJ_EXCEPTION(DISCONNECTED,
+          "peer disconnected without gracefully ending TLS session");
     }
 #endif
 
@@ -71,7 +69,15 @@ void throwOpensslError() {
     lines.add(kj::heapString(message));
   }
   kj::String message = kj::strArray(lines, "\n");
-  KJ_FAIL_ASSERT("OpenSSL error", message);
+  return KJ_EXCEPTION(FAILED, "OpenSSL error", message);
+}
+
+KJ_NORETURN(void throwOpensslError());
+void throwOpensslError() {
+  // Call when an OpenSSL function returns an error code to convert that into an exception and
+  // throw it.
+
+  kj::throwFatalException(getOpensslError());
 }
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(OPENSSL_IS_BORINGSSL)
@@ -177,22 +183,22 @@ public:
 
   kj::Promise<void> connect(kj::StringPtr expectedServerHostname) {
     if (!SSL_set_tlsext_host_name(ssl, expectedServerHostname.cStr())) {
-      throwOpensslError();
+      return getOpensslError();
     }
 
     X509_VERIFY_PARAM* verify = SSL_get0_param(ssl);
     if (verify == nullptr) {
-      throwOpensslError();
+      return getOpensslError();
     }
 
     if (isIpAddress(expectedServerHostname)) {
       if (X509_VERIFY_PARAM_set1_ip_asc(verify, expectedServerHostname.cStr()) <= 0) {
-        throwOpensslError();
+        return getOpensslError();
       }
     } else {
       if (X509_VERIFY_PARAM_set1_host(
           verify, expectedServerHostname.cStr(), expectedServerHostname.size()) <= 0) {
-        throwOpensslError();
+        return getOpensslError();
       }
     }
 
@@ -206,13 +212,13 @@ public:
 
     return sslCall([this]() { return SSL_connect(ssl); }).then([this](size_t) {
       X509* cert = SSL_get_peer_certificate(ssl);
-      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
+      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate") { return; }
       X509_free(cert);
 
       auto result = SSL_get_verify_result(ssl);
       if (result != X509_V_OK) {
         const char* reason = X509_verify_cert_error_string(result);
-        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason);
+        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason) { break; }
       }
     });
   }
@@ -261,7 +267,7 @@ public:
   void shutdownWrite() override {
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
-    // TODO(0.10): shutdownWrite() is problematic because it doesn't return a promise. It was
+    // TODO(2.0): shutdownWrite() is problematic because it doesn't return a promise. It was
     //   designed to assume that it would only be called after all writes are finished and that
     //   there was no reason to block at that point, but SSL sessions don't fit this since they
     //   actually have to send a shutdown message.
@@ -301,7 +307,6 @@ private:
   kj::AsyncIoStream& inner;
   kj::Own<kj::AsyncIoStream> ownInner;
 
-  bool disconnected = false;
   kj::Maybe<kj::Promise<void>> shutdownTask;
 
   ReadyInputStreamWrapper readBuffer;
@@ -309,8 +314,6 @@ private:
 
   kj::Promise<size_t> tryReadInternal(
       void* buffer, size_t minBytes, size_t maxBytes, size_t alreadyDone) {
-    if (disconnected) return alreadyDone;
-
     return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
         .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
       if (n >= minBytes || n == 0) {
@@ -352,8 +355,6 @@ private:
 
   template <typename Func>
   kj::Promise<size_t> sslCall(Func&& func) {
-    if (disconnected) return constPromise<size_t, 0>();
-
     auto result = func();
 
     if (result > 0) {
@@ -362,7 +363,6 @@ private:
       int error = SSL_get_error(ssl, result);
       switch (error) {
         case SSL_ERROR_ZERO_RETURN:
-          disconnected = true;
           return constPromise<size_t, 0>();
         case SSL_ERROR_WANT_READ:
           return readBuffer.whenReady().then(
@@ -371,13 +371,12 @@ private:
           return writeBuffer.whenReady().then(
               [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
         case SSL_ERROR_SSL:
-          throwOpensslError();
+          return getOpensslError();
         case SSL_ERROR_SYSCALL:
           if (result == 0) {
             // OpenSSL pre-3.0 reports unexpected disconnects this way. Note that 3.0+ report it
             // as SSL_ERROR_SSL with the reason SSL_R_UNEXPECTED_EOF_WHILE_READING, which is
             // handled in throwOpensslError().
-            disconnected = true;
             return KJ_EXCEPTION(DISCONNECTED,
                 "peer disconnected without gracefully ending TLS session");
           } else {

@@ -120,7 +120,11 @@ public:
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    return kj::mv(shorteningPromise);
+    auto onAbort = webSocket.whenAborted()
+        .then([]() -> kj::Promise<Capability::Client> {
+      return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
+    });
+    return shorteningPromise.exclusiveJoin(kj::mv(onAbort));
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
@@ -478,13 +482,15 @@ public:
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
     rpcRequest.initSettings().setUseTls(settings.useTls);
 
+    auto context = kj::heap<ConnectClientRequestContextImpl>(factory, tunnel);
+    RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(*context);
+
     auto builder = capnp::Request<
         capnp::HttpService::ConnectParams,
         capnp::HttpService::ConnectResults>::Builder(rpcRequest);
     rpcRequest.adoptHeaders(factory.headersToCapnp(headers,
         Orphanage::getForMessageContaining(builder)));
-    rpcRequest.setContext(
-        kj::heap<ConnectClientRequestContextImpl>(factory, tunnel));
+    rpcRequest.setContext(revocableContext.getClient());
     RemotePromise<capnp::HttpService::ConnectResults> pipeline = rpcRequest.send();
 
     // We read from `downPipe` (the other side writes into it.)
@@ -495,6 +501,20 @@ public:
     });
     // We write to `up` (the other side reads from it).
     auto up = pipeline.getUp();
+
+    // We need to create a tlsStarter callback which sends a startTls request to the capnp server.
+    KJ_IF_MAYBE(tlsStarter, settings.tlsStarter) {
+      kj::Function<kj::Promise<void>(kj::StringPtr)> cb =
+          [upForStartTls = kj::cp(up)]
+          (kj::StringPtr expectedServerHostname)
+          mutable -> kj::Promise<void> {
+        auto startTlsRpcRequest = upForStartTls.startTlsRequest();
+        startTlsRpcRequest.setExpectedServerHostname(expectedServerHostname);
+        return startTlsRpcRequest.send();
+      };
+      *tlsStarter = kj::mv(cb);
+    }
+
     auto upStream = factory.streamFactory.capnpToKjExplicitEnd(up);
     auto upPumpTask = connection.pumpTo(*upStream)
         .then([&upStream = *upStream](uint64_t) mutable {
@@ -505,8 +525,9 @@ public:
     });
 
     return pipeline.ignoreResult()
-        .attach(kj::mv(downPumpTask))
-        .attach(kj::mv(upPumpTask));
+        .attach(kj::mv(downPumpTask), kj::mv(upPumpTask), kj::mv(revocableContext))
+        // Separate attach to make sure `revocableContext` is destroyed before `context`.
+        .attach(kj::mv(context));
   }
 
 
@@ -601,19 +622,16 @@ public:
       hasBody = *s > 0;
     }
 
+    auto logError = [hasBody](kj::Exception&& e) {
+      KJ_LOG(INFO, "HTTP-over-RPC startResponse() failed", hasBody, e);
+    };
     if (hasBody) {
       auto pipeline = req.send();
       auto result = factory.streamFactory.capnpToKj(pipeline.getBody());
-      replyTask = pipeline.ignoreResult()
-          .eagerlyEvaluate([](kj::Exception&& e) {
-        KJ_LOG(ERROR, "HTTP-over-RPC startResponse() failed", e);
-      });
+      replyTask = pipeline.ignoreResult().eagerlyEvaluate(kj::mv(logError));
       return result;
     } else {
-      replyTask = req.send().ignoreResult()
-          .eagerlyEvaluate([](kj::Exception&& e) {
-        KJ_LOG(ERROR, "HTTP-over-RPC startResponse() failed", e);
-      });
+      replyTask = req.send().ignoreResult().eagerlyEvaluate(kj::mv(logError));
       return kj::heap<NullOutputStream>();
     }
 
@@ -653,7 +671,7 @@ public:
     // since it holds a reference to `downSocket`.
     replyTask = pipeline.ignoreResult()
         .eagerlyEvaluate([](kj::Exception&& e) {
-      KJ_LOG(ERROR, "HTTP-over-RPC startWebSocketRequest() failed", e);
+      KJ_LOG(INFO, "HTTP-over-RPC startWebSocketRequest() failed", e);
     });
 
     return result;
@@ -845,15 +863,16 @@ public:
   kj::Promise<void> connect(ConnectContext context) override {
     auto params = context.getParams();
     auto host = params.getHost();
-    kj::HttpConnectSettings settings = {
-      .useTls = params.getSettings().getUseTls()
-    };
+    kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
+    kj::HttpConnectSettings settings = { .useTls = params.getSettings().getUseTls()};
+    settings.tlsStarter = tlsStarter;
     auto headers = factory.headersToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 
     class EofDetector final: public kj::AsyncOutputStream {
     public:
-      EofDetector(kj::Own<kj::AsyncIoStream> inner) : inner(kj::mv(inner)) {}
+      EofDetector(kj::Own<kj::AsyncIoStream> inner)
+          : inner(kj::mv(inner)) {}
       ~EofDetector() {
         inner->shutdownWrite();
       }
@@ -897,7 +916,7 @@ public:
 
     PipelineBuilder<ConnectResults> pb;
     auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
-    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper));
+    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
     pb.setUp(kj::cp(up));
 
     context.setPipeline(pb.build());

@@ -14,9 +14,9 @@ project's documentation for details.
 ##### Serialization + RPC
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
-* [C# (.NET Core)](https://github.com/c80k/capnproto-dotnetcore) by [@c80k](https://github.com/c80k)
+* [C#](https://github.com/c80k/capnproto-dotnetcore) by [@c80k](https://github.com/c80k)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
-* [Go](https://github.com/zombiezen/go-capnproto2) by [@zombiezen](https://github.com/zombiezen) (forked from [@glycerine](https://github.com/glycerine)'s serialization-only version, below)
+* [Go](https://github.com/capnproto/go-capnp) currently maintained by [@zenhack](https://github.com/zenhack) and [@lthibault](https://github.com/lthibault)
 * [Haskell](https://github.com/zenhack/haskell-capnp) by [@zenhack](https://github.com/zenhack)
 * [JavaScript (Node.js only)](https://github.com/capnproto/node-capnp) by [@kentonv](https://github.com/kentonv)
 * [OCaml](https://github.com/capnproto/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj) with [RPC](https://github.com/mirage/capnp-rpc) by [@talex5](https://github.com/talex5)
@@ -27,7 +27,6 @@ project's documentation for details.
 
 * [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [D](https://github.com/capnproto/capnproto-dlang) by [@ThomasBrixLarsen](https://github.com/ThomasBrixLarsen)
-* [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Java](https://github.com/capnproto/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [JavaScript](https://github.com/capnp-js/plugin/) by [@popham](https://github.com/popham)
 * [JavaScript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)

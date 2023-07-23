@@ -1358,7 +1358,7 @@ inline T* readMaybe(T* ptr) { return ptr; }
 
 #define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
 
-#if __GNUC__
+#if __GNUC__ || __clang__
 // These two macros provide a friendly syntax to extract the value of a Maybe or return early.
 //
 // Use KJ_UNWRAP_OR_RETURN if you just want to return a simple value when the Maybe is null:
@@ -1391,6 +1391,9 @@ inline T* readMaybe(T* ptr) { return ptr; }
 // "statement expressions" extension. IIFEs don't do the trick here because a lambda cannot
 // return out of the parent scope. These macros should therefore only be used in projects that
 // target GCC or GCC-compatible compilers.
+//
+// `__GNUC__` is not defined when using LLVM's MSVC-compatible compiler driver `clang-cl` (even
+// though clang supports the required extension), hence the additional `|| __clang__`.
 
 #define KJ_UNWRAP_OR_RETURN(value, ...) \
   (*({ \
@@ -1876,6 +1879,7 @@ public:
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
     if (isIntegral<RemoveConst<T>>()) {
+      if (size_ == 0) return true;
       return memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
     }
     for (size_t i = 0; i < size_; i++) {

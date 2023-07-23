@@ -26,7 +26,7 @@
 // so this check isn't appropriate for us.
 
 #if _WIN32 || __CYGWIN__
-#include "win32-api-version.h"
+#include <kj/win32-api-version.h>
 #elif __APPLE__
 // getcontext() and friends are marked deprecated on MacOS but seemingly no replacement is
 // provided. It appears as if they deprecated it solely because the standards bodies deprecated it,
@@ -52,7 +52,7 @@
 
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
-#include "windows-sanity.h"
+#include <kj/windows-sanity.h>
 #else
 
 #if KJ_USE_FIBERS
@@ -292,7 +292,7 @@ public:
     node->onReady(this);
   }
 
-  void destroy() override { dtor(*this); }
+  void destroy() override { freePromise(this); }
 
   OwnTask pop() {
     KJ_IF_MAYBE(n, next) { n->get()->prev = prev; }
@@ -2363,6 +2363,8 @@ void ImmediatePromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNe
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
     : exception(kj::mv(exception)) {}
 
+void ImmediateBrokenPromiseNode::destroy() { freePromise(this); }
+
 void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
   output.exception = kj::mv(exception);
 }
@@ -2543,6 +2545,8 @@ ChainPromiseNode::ChainPromiseNode(OwnPromiseNode innerParam, SourceLocation loc
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
 
+void ChainPromiseNode::destroy() { freePromise(this); }
+
 void ChainPromiseNode::onReady(Event* event) noexcept {
   switch (state) {
     case STEP1:
@@ -2659,6 +2663,8 @@ ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
 
+void ExclusiveJoinPromiseNode::destroy() { freePromise(this); }
+
 void ExclusiveJoinPromiseNode::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
@@ -2727,8 +2733,8 @@ void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
 
 ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
     Array<OwnPromiseNode> promises, ExceptionOrValue* resultParts, size_t partSize,
-    SourceLocation location)
-    : countLeft(promises.size()) {
+    SourceLocation location, ArrayJoinBehavior joinBehavior)
+    : joinBehavior(joinBehavior), countLeft(promises.size()) {
   // Make the branches.
   auto builder = heapArrayBuilder<Branch>(promises.size());
   for (uint i: indices(promises)) {
@@ -2749,12 +2755,20 @@ void ArrayJoinPromiseNodeBase::onReady(Event* event) noexcept {
 }
 
 void ArrayJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
-  // If any of the elements threw exceptions, propagate them.
   for (auto& branch: branches) {
-    KJ_IF_MAYBE(exception, branch.getPart()) {
+    if (joinBehavior == ArrayJoinBehavior::LAZY) {
+      // This implements `joinPromises()`'s lazy evaluation semantics.
+      branch.dependency->get(branch.output);
+    }
+
+    // If any of the elements threw exceptions, propagate them.
+    KJ_IF_MAYBE(exception, branch.output.exception) {
       output.addException(kj::mv(*exception));
     }
   }
+
+  // We either failed fast, or waited for all promises.
+  KJ_DASSERT(countLeft == 0 || output.exception != nullptr);
 
   if (output.exception == nullptr) {
     // No errors.  The template subclass will need to fill in the result.
@@ -2785,9 +2799,20 @@ ArrayJoinPromiseNodeBase::Branch::Branch(
 ArrayJoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
 
 Maybe<Own<Event>> ArrayJoinPromiseNodeBase::Branch::fire() {
-  if (--joinNode.countLeft == 0) {
+  if (--joinNode.countLeft == 0 && !joinNode.armed) {
     joinNode.onReadyEvent.arm();
+    joinNode.armed = true;
   }
+
+  if (joinNode.joinBehavior == ArrayJoinBehavior::EAGER) {
+    // This implements `joinPromisesFailFast()`'s eager-evaluation semantics.
+    dependency->get(output);
+    if (output.exception != nullptr && !joinNode.armed) {
+      joinNode.onReadyEvent.arm();
+      joinNode.armed = true;
+    }
+  }
+
   return nullptr;
 }
 
@@ -2796,19 +2821,16 @@ void ArrayJoinPromiseNodeBase::Branch::traceEvent(TraceBuilder& builder) {
   joinNode.onReadyEvent.traceEvent(builder);
 }
 
-Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
-  dependency->get(output);
-  return kj::mv(output.exception);
-}
-
 ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
     Array<OwnPromiseNode> promises, Array<ExceptionOr<_::Void>> resultParts,
-    SourceLocation location)
+    SourceLocation location, ArrayJoinBehavior joinBehavior)
     : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>),
-                               location),
+                               location, joinBehavior),
       resultParts(kj::mv(resultParts)) {}
 
 ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
+
+void ArrayJoinPromiseNode<void>::destroy() { freePromise(this); }
 
 void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
   output.as<_::Void>() = _::Void();
@@ -2819,7 +2841,15 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
 Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location) {
   return _::PromiseNode::to<Promise<void>>(_::allocPromise<_::ArrayJoinPromiseNode<void>>(
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
-      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location));
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location,
+      _::ArrayJoinBehavior::LAZY));
+}
+
+Promise<void> joinPromisesFailFast(Array<Promise<void>>&& promises, SourceLocation location) {
+  return _::PromiseNode::to<Promise<void>>(_::allocPromise<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size()), location,
+      _::ArrayJoinBehavior::EAGER));
 }
 
 namespace _ {  // (private)
@@ -2930,36 +2960,34 @@ void CoroutineBase::unhandled_exception() {
   // we're being destroyed, in which case we propagate it back to our disposer. Note that all
   // unhandled exceptions end up here, not just ones after the first co_await.
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([] { throw; })) {
-    KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
-      // Exception during coroutine destruction. Only record the first one.
-      if (disposalResults->exception == nullptr) {
-        disposalResults->exception = kj::mv(*exception);
-      }
-    } else if (isWaiting()) {
-      // Exception during coroutine execution.
-      resultRef.addException(kj::mv(*exception));
-      scheduleResumption();
-    } else {
-      // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
-      // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
-      // successful completion, and something in the frame threw. We can't already be rejected,
-      // because rejecting a coroutine involves throwing, which would have unwound the frame prior
-      // to setting `waiting = false`.
-      //
-      // Since we know we're unwinding due to a successful completion, we also know that whatever
-      // Event we may have armed has not yet fired, because we haven't had a chance to return to
-      // the event loop.
+  auto exception = getCaughtExceptionAsKj();
 
-      // final_suspend() has not been called.
-      KJ_IASSERT(!coroutine.done());
-
-      // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
-      // and will see this exception.
-      resultRef.addException(kj::mv(*exception));
+  KJ_IF_MAYBE(disposalResults, maybeDisposalResults) {
+    // Exception during coroutine destruction. Only record the first one.
+    if (disposalResults->exception == nullptr) {
+      disposalResults->exception = kj::mv(exception);
     }
+  } else if (isWaiting()) {
+    // Exception during coroutine execution.
+    resultRef.addException(kj::mv(exception));
+    scheduleResumption();
   } else {
-    KJ_UNREACHABLE;
+    // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
+    // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
+    // successful completion, and something in the frame threw. We can't already be rejected,
+    // because rejecting a coroutine involves throwing, which would have unwound the frame prior
+    // to setting `waiting = false`.
+    //
+    // Since we know we're unwinding due to a successful completion, we also know that whatever
+    // Event we may have armed has not yet fired, because we haven't had a chance to return to
+    // the event loop.
+
+    // final_suspend() has not been called.
+    KJ_IASSERT(!coroutine.done());
+
+    // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
+    // and will see this exception.
+    resultRef.addException(kj::mv(exception));
   }
 }
 
@@ -3068,11 +3096,18 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result) {
+void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
   node->get(result);
 
   KJ_IF_MAYBE(exception, result.exception) {
-    kj::throwFatalException(kj::mv(*exception));
+    // Manually extend the stack trace with the instruction address where the co_await occurred.
+    exception->addTrace(awaitedAt);
+
+    // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` dosen't try to
+    // extend the stack trace. There's no point in extending the trace beyond the single frame we
+    // added above, as the rest of the trace will always be async framework stuff that no one wants
+    // to see.
+    kj::throwFatalException(kj::mv(*exception), kj::maxValue);
   }
 }
 

@@ -8,7 +8,7 @@
 
 #ifndef CAPNP_VERSION
 #error "CAPNP_VERSION is not defined, is capnp/generated-header-support.h missing?"
-#elif CAPNP_VERSION != 11000
+#elif CAPNP_VERSION != 1001000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -1121,6 +1121,8 @@ public:
 
   inline bool getReleaseResultCaps() const;
 
+  inline bool getRequireEarlyCancellationWorkaround() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -1154,6 +1156,9 @@ public:
 
   inline bool getReleaseResultCaps();
   inline void setReleaseResultCaps(bool value);
+
+  inline bool getRequireEarlyCancellationWorkaround();
+  inline void setRequireEarlyCancellationWorkaround(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3847,6 +3852,20 @@ inline bool Finish::Builder::getReleaseResultCaps() {
 inline void Finish::Builder::setReleaseResultCaps(bool value) {
   _builder.setDataField<bool>(
       ::capnp::bounded<32>() * ::capnp::ELEMENTS, value, true);
+}
+
+inline bool Finish::Reader::getRequireEarlyCancellationWorkaround() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS, true);
+}
+
+inline bool Finish::Builder::getRequireEarlyCancellationWorkaround() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS, true);
+}
+inline void Finish::Builder::setRequireEarlyCancellationWorkaround(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS, value, true);
 }
 
 inline  ::capnp::rpc::Resolve::Which Resolve::Reader::which() const {

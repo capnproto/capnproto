@@ -137,7 +137,7 @@ struct BrandBindingFor_<List<T>, Kind::LIST> {
 template <typename T>
 struct BrandBindingFor_<T, Kind::ENUM> {
   static constexpr RawBrandedSchema::Binding get(uint16_t listDepth) {
-    return { 15, listDepth, nullptr };
+    return { 15, listDepth, &rawSchema<T>().defaultBrand };
   }
 };
 
@@ -334,6 +334,13 @@ inline constexpr uint sizeInWords() {
 #define CAPNP_AUTO_IF_MSVC(...) __VA_ARGS__
 #endif
 
+// TODO(msvc): MSVC does not even expect constexprs to have definitions below C++17.
+#if (__cplusplus < 201703L) && !(defined(_MSC_VER) && !defined(__clang__))
+#define CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL 1
+#else
+#define CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL 0
+#endif
+
 #if CAPNP_LITE
 
 #define CAPNP_DECLARE_SCHEMA(id) \
@@ -349,12 +356,11 @@ inline constexpr uint sizeInWords() {
       static inline ::capnp::word const* encodedSchema() { return bp_##id; } \
     }
 
-#if _MSC_VER && !defined(__clang__)
-// TODO(msvc): MSVC doesn't expect constexprs to have definitions.
-#define CAPNP_DEFINE_ENUM(type, id)
-#else
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 #define CAPNP_DEFINE_ENUM(type, id) \
     constexpr uint64_t EnumInfo<type>::typeId
+#else
+#define CAPNP_DEFINE_ENUM(type, id)
 #endif
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize_, pointerCount_) \
@@ -380,9 +386,14 @@ inline constexpr uint sizeInWords() {
       static inline ::capnp::word const* encodedSchema() { return bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &s_##id; \
     }
+
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 #define CAPNP_DEFINE_ENUM(type, id) \
     constexpr uint64_t EnumInfo<type>::typeId; \
     constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
+#else
+#define CAPNP_DEFINE_ENUM(type, id)
+#endif
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize_, pointerCount_) \
       struct IsStruct; \

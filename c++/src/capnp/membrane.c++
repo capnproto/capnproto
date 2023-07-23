@@ -325,6 +325,8 @@ private:
   kj::Maybe<AnyPointer::Builder> results;
 };
 
+}  // namespace
+
 class MembraneHook final: public ClientHook, public kj::Refcounted {
 public:
   MembraneHook(kj::Own<ClientHook>&& inner, kj::Own<MembranePolicy>&& policyParam, bool reverse)
@@ -334,6 +336,11 @@ public:
         this->inner = newBrokenCap(kj::mv(exception));
       });
     }
+  }
+
+  ~MembraneHook() noexcept(false) {
+    auto& map = reverse ? policy->reverseWrappers : policy->wrappers;
+    map.erase(inner.get());
   }
 
   static kj::Own<ClientHook> wrap(ClientHook& cap, MembranePolicy& policy, bool reverse) {
@@ -351,9 +358,19 @@ public:
       }
     }
 
-    return ClientHook::from(
-        reverse ? policy.importExternal(Capability::Client(cap.addRef()))
-                : policy.exportInternal(Capability::Client(cap.addRef())));
+    auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
+    ClientHook*& slot = map.findOrCreate(&cap, [&]() -> kj::Decay<decltype(map)>::Entry {
+      return { &cap, nullptr };
+    });
+    if (slot == nullptr) {
+      auto result = ClientHook::from(
+          reverse ? policy.importExternal(Capability::Client(cap.addRef()))
+                  : policy.exportInternal(Capability::Client(cap.addRef())));
+      slot = result;
+      return result;
+    } else {
+      return slot->addRef();
+    }
   }
 
   static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, MembranePolicy& policy, bool reverse) {
@@ -371,9 +388,19 @@ public:
       }
     }
 
-    return ClientHook::from(
-        reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
-                : policy.exportInternal(Capability::Client(kj::mv(cap))));
+    auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
+    ClientHook*& slot = map.findOrCreate(cap.get(), [&]() -> kj::Decay<decltype(map)>::Entry {
+      return { cap.get(), nullptr };
+    });
+    if (slot == nullptr) {
+      auto result = ClientHook::from(
+          reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
+                  : policy.exportInternal(Capability::Client(kj::mv(cap))));
+      slot = result;
+      return result;
+    } else {
+      return slot->addRef();
+    }
   }
 
   Request<AnyPointer, AnyPointer> newCall(
@@ -501,9 +528,11 @@ public:
   }
 
   kj::Maybe<int> getFd() override {
-    // We can't let FDs pass over membranes because we have no way to enforce the membrane policy
-    // on them. If the MembranePolicy wishes to explicitly permit certain FDs to pass, it can
-    // always do so by overriding the appropriate policy methods.
+    KJ_IF_MAYBE(f, inner->getFd()) {
+      if (policy->allowFdPassthrough()) {
+        return *f;
+      }
+    }
     return nullptr;
   }
 
@@ -514,6 +543,8 @@ private:
   kj::Maybe<kj::Own<ClientHook>> resolved;
   kj::Promise<void> revocationTask = nullptr;
 };
+
+namespace {
 
 kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, MembranePolicy& policy, bool reverse) {
   return MembraneHook::wrap(kj::mv(inner), policy, reverse);

@@ -556,7 +556,18 @@ private:
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises, SourceLocation location = {});
-// Join an array of promises into a promise for an array.
+// Join an array of promises into a promise for an array. Trailing continuations on promises are not
+// evaluated until all promises have settled. Exceptions are propagated only after the last promise
+// has settled.
+//
+// TODO(cleanup): It is likely that `joinPromisesFailFast()` is what everyone should be using.
+//   Deprecate this function.
+
+template <typename T>
+Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocation location = {});
+// Join an array of promises into a promise for an array. Trailing continuations on promises are
+// evaluated eagerly. If any promise results in an exception, the exception is immediately
+// propagated to the returned join promise.
 
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.

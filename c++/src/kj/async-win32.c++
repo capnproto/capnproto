@@ -22,7 +22,7 @@
 #if _WIN32
 
 // Request Vista-level APIs.
-#include "win32-api-version.h"
+#include <kj/win32-api-version.h>
 
 #include "async-win32.h"
 #include "debug.h"
@@ -158,6 +158,11 @@ Own<Win32EventPort::SignalObserver> Win32IocpEventPort::observeSignalState(HANDL
 }
 
 bool Win32IocpEventPort::wait() {
+  // It's possible that a wake event was received and discarded during ~IoPromiseAdapter. We
+  // need to check for that now. Otherwise, calling waitIocp may cause it to hang forever.
+  if (receivedWake()) {
+    return true;
+  }
   waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
       .map([](uint64_t t) -> DWORD { return t; })
       .orDefault(INFINITE));

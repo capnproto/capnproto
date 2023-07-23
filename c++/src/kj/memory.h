@@ -461,8 +461,14 @@ public:
     return ptr;
   }
 
-  inline operator Maybe<T&>() { return ptr.get(); }
-  inline operator Maybe<const T&>() const { return ptr.get(); }
+  template <typename U = T>
+  inline operator NoInfer<Maybe<U&>>() { return ptr.get(); }
+  template <typename U = T>
+  inline operator NoInfer<Maybe<const U&>>() const { return ptr.get(); }
+  // Implicit conversion to `Maybe<U&>`. The weird templating is to make sure that
+  // `Maybe<Own<void>>` can be instantiated with the compiler complaining about forming references
+  // to void -- the use of templates here will cause SFINAE to kick in and hide these, whereas if
+  // they are not templates then SFINAE isn't applied and so they are considered errors.
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
 
@@ -565,6 +571,19 @@ template <typename T>
 const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 #endif
 
+template <typename T, void(*F)(T*)>
+class CustomDisposer: public Disposer {
+public:
+  static const CustomDisposer instance;
+
+  void disposeImpl(void* pointer) const override {
+    (*F)(reinterpret_cast<T*>(pointer));
+  }
+};
+
+template <typename T, void(*F)(T*)>
+const CustomDisposer<T, F> CustomDisposer<T, F>::instance = CustomDisposer<T, F>();
+
 }  // namespace _ (private)
 
 template <typename T, typename... Params>
@@ -587,6 +606,16 @@ Own<Decay<T>> heap(T&& orig) {
   typedef Decay<T> T2;
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
+
+#if __cplusplus > 201402L
+template <auto F, typename T>
+Own<T> disposeWith(T* ptr) {
+  // Associate a pre-allocated raw pointer with a corresponding disposal function.
+  // The first template parameter should be a function pointer e.g. disposeWith<freeInt>(new int(0)).
+
+  return Own<T>(ptr, _::CustomDisposer<T, F>::instance);
+}
+#endif
 
 template <typename T, typename... Attachments>
 Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments);

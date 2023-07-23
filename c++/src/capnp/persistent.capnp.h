@@ -11,7 +11,7 @@
 
 #ifndef CAPNP_VERSION
 #error "CAPNP_VERSION is not defined, is capnp/generated-header-support.h missing?"
-#elif CAPNP_VERSION != 11000
+#elif CAPNP_VERSION != 1001000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -432,15 +432,19 @@ inline ::capnp::Orphan<Owner> Persistent<SturdyRef, Owner>::SaveParams::Builder:
 }
 
 // Persistent<SturdyRef, Owner>::SaveParams
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::dataWordSize;
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::pointerCount;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 #if !CAPNP_LITE
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::kind;
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::schema;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef, Owner>::SaveParams::_capnpPrivate::brandScopes[] = {
   { 0xc8cb212fcd9f5691, brandBindings + 0, 2, false},
@@ -511,15 +515,19 @@ inline ::capnp::Orphan<SturdyRef> Persistent<SturdyRef, Owner>::SaveResults::Bui
 }
 
 // Persistent<SturdyRef, Owner>::SaveResults
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::dataWordSize;
 template <typename SturdyRef, typename Owner>
 constexpr uint16_t Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::pointerCount;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 #if !CAPNP_LITE
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::kind;
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::schema;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef, Owner>::SaveResults::_capnpPrivate::brandScopes[] = {
   { 0xc8cb212fcd9f5691, brandBindings + 0, 2, false},
@@ -583,10 +591,12 @@ template <typename SturdyRef, typename Owner>
 
 // Persistent<SturdyRef, Owner>
 #if !CAPNP_LITE
+#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::Kind Persistent<SturdyRef, Owner>::_capnpPrivate::kind;
 template <typename SturdyRef, typename Owner>
 constexpr ::capnp::_::RawSchema const* Persistent<SturdyRef, Owner>::_capnpPrivate::schema;
+#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
 template <typename SturdyRef, typename Owner>
 const ::capnp::_::RawBrandedSchema::Scope Persistent<SturdyRef, Owner>::_capnpPrivate::brandScopes[] = {
   { 0xc8cb212fcd9f5691, brandBindings + 0, 2, false},

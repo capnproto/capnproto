@@ -50,6 +50,7 @@ struct HashCoder {
   inline uint operator*(const Array<char>& s) const { return operator*(s.asBytes()); }
   inline uint operator*(const String& s) const { return operator*(s.asBytes()); }
   inline uint operator*(const StringPtr& s) const { return operator*(s.asBytes()); }
+  inline uint operator*(const ConstString& s) const { return operator*(s.asBytes()); }
 
   inline uint operator*(decltype(nullptr)) const { return 0; }
   inline uint operator*(bool b) const { return b; }

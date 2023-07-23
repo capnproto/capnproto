@@ -595,6 +595,20 @@ struct Finish {
   # should always set this true.  This defaults true because if level 0 implementations forget to
   # set it they'll never notice (just silently leak caps), but if level >=1 implementations forget
   # set it false they'll quickly get errors.
+
+  requireEarlyCancellationWorkaround @2 :Bool = true;
+  # If true, if the RPC system receives this Finish message before the original call has even been
+  # delivered, it should defer cancellation util after delivery. In particular, this gives the
+  # destination object a chance to opt out of cancellation, e.g. as controlled by the
+  # `allowCancellation` annotation defined in `c++.capnp`.
+  #
+  # This is a work-around. Versions 1.0 and up of Cap'n Proto always set this to false. However,
+  # older versions of Cap'n Proto unintentionally exhibited this errant behavior by default, and
+  # as a result programs built with older versions could be inadvertently relying on their peers
+  # to implement the behavior. The purpose of this flag is to let newer versions know when the
+  # peer is an older version, so that it can attempt to work around the issue.
+  #
+  # See also comments in handleFinish() in rpc.c++ for more details.
 }
 
 # Level 1 message types ----------------------------------------------
@@ -738,6 +752,10 @@ struct Disembargo {
   # is expected that people sending messages to P will shortly start sending them to R instead and
   # drop P. P is at end-of-life anyway, so it doesn't matter if it ignores chances to further
   # optimize its path.
+  #
+  # Note well: the Tribble 4-way race condition does not require each vat to be *distinct*; as long
+  # as each resolution crosses a network boundary the race can occur -- so this concerns even level
+  # 1 implementations, not just level 3 implementations.
 
   target @0 :MessageTarget;
   # What is to be disembargoed.

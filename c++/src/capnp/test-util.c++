@@ -1127,7 +1127,7 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
     ADD_FAILURE() << "Looped too long, giving up.";
     return kj::READY_NOW;
   } else {
-    return kj::evalLater([this,depth,KJ_CPCAP(cap),KJ_CPCAP(context)]() mutable {
+    return kj::evalLast([this,depth,KJ_CPCAP(cap),KJ_CPCAP(context)]() mutable {
       return loop(depth + 1, cap, context);
     });
   }

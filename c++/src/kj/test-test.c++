@@ -90,9 +90,11 @@ KJ_TEST("expect exit from exit") {
   KJ_EXPECT_EXIT(nullptr, _exit(42));
 }
 
+#if !KJ_NO_EXCEPTIONS
 KJ_TEST("expect exit from thrown exception") {
   KJ_EXPECT_EXIT(1, throw std::logic_error("test error"));
 }
+#endif
 
 KJ_TEST("expect signal from abort") {
   KJ_EXPECT_SIGNAL(SIGABRT, abort());

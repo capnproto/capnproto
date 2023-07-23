@@ -66,8 +66,8 @@
 #include <sys/ucred.h>
 #endif
 
-#if !defined(SOL_LOCAL) && (__FreeBSD__ || __DragonflyBSD__)
-// On DragonFly or FreeBSD < 12.2 you're supposed to use 0 for SOL_LOCAL.
+#if !defined(SOL_LOCAL) && (__FreeBSD__ || __DragonflyBSD__ || __APPLE__)
+// On DragonFly, FreeBSD < 12.2 and older Darwin you're supposed to use 0 for SOL_LOCAL.
 #define SOL_LOCAL 0
 #endif
 
@@ -1746,7 +1746,7 @@ public:
       : lowLevel(parent.lowLevel), filter(allow, deny, parent.filter) {}
 
   Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
-    return evalLater([this,portHint,addr=heapString(addr)]() {
+    return evalNow([&]() {
       return SocketAddress::parse(lowLevel, addr, portHint, filter);
     }).then([this](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
       return heap<NetworkAddressImpl>(lowLevel, filter, kj::mv(addresses));

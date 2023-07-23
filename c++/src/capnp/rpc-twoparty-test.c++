@@ -1129,6 +1129,143 @@ KJ_TEST("Dropping capability during call doesn't destroy server") {
   KJ_EXPECT(count == 0);
 }
 
+RemotePromise<test::TestCallOrder::GetCallSequenceResults> getCallSequence(
+    test::TestCallOrder::Client& client, uint expected) {
+  auto req = client.getCallSequenceRequest();
+  req.setExpected(expected);
+  return req.send();
+}
+
+KJ_TEST("Two-hop embargo") {
+  // Copied from `TEST(Rpc, Embargo)` in `rpc-test.c++`, adapted to involve a two-hop path through
+  // a proxy. This tests what happens when disembargoes on multiple hops are happening in parallel.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0, handleCount = 0;
+
+  // Set up two two-party RPC connections in series. The middle node just proxies requests through.
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
+  TwoPartyClient tpClient(*frontPipe.ends[0]);
+  TwoPartyClient proxyBack(*backPipe.ends[0]);
+  TwoPartyClient proxyFront(*frontPipe.ends[1], proxyBack.bootstrap(), rpc::twoparty::Side::SERVER);
+  TwoPartyClient tpServer(*backPipe.ends[1], kj::heap<TestMoreStuffImpl>(callCount, handleCount),
+      rpc::twoparty::Side::SERVER);
+
+  // Perform some logic that does a bunch of promise pipelining, including passing a capability
+  // from the client to the server and back to the client, and making promise-pipelined calls on
+  // that capability. This should exercise the promise resolution and disembargo code.
+  auto client = tpClient.bootstrap().castAs<test::TestMoreStuff>();
+
+  auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>());
+
+  auto earlyCall = client.getCallSequenceRequest().send();
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  auto call0 = getCallSequence(pipeline, 0);
+  auto call1 = getCallSequence(pipeline, 1);
+
+  earlyCall.wait(waitScope);
+
+  auto call2 = getCallSequence(pipeline, 2);
+
+  auto resolved = echo.wait(waitScope).getCap();
+
+  auto call3 = getCallSequence(pipeline, 3);
+  auto call4 = getCallSequence(pipeline, 4);
+  auto call5 = getCallSequence(pipeline, 5);
+
+  EXPECT_EQ(0, call0.wait(waitScope).getN());
+  EXPECT_EQ(1, call1.wait(waitScope).getN());
+  EXPECT_EQ(2, call2.wait(waitScope).getN());
+  EXPECT_EQ(3, call3.wait(waitScope).getN());
+  EXPECT_EQ(4, call4.wait(waitScope).getN());
+  EXPECT_EQ(5, call5.wait(waitScope).getN());
+}
+
+class TestCallOrderImplAsPromise final: public test::TestCallOrder::Server {
+  // This is an implementation of TestCallOrder that presents itself as a promise by implementing
+  // `shortenPath()`, although it never resolves to anything (`shortenPath()` never completes).
+  // This tests deeper code paths in promise resolution and embargo code.
+public:
+  template <typename... Params>
+  TestCallOrderImplAsPromise(Params&&... params): inner(kj::fwd<Params>(params)...) {}
+
+  kj::Promise<void> getCallSequence(GetCallSequenceContext context) override {
+    return inner.getCallSequence(context);
+  }
+
+  kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
+    // Make this object appear to be a promise.
+    return kj::Promise<Capability::Client>(kj::NEVER_DONE);
+  }
+
+private:
+  TestCallOrderImpl inner;
+};
+
+KJ_TEST("Two-hop embargo") {
+  // Same as above, but the eventual resolution is itself a promise. This verifies that
+  // handleDisembargo() only waits for the target to resolve back to the capability that the
+  // disembargo should reflect to, but not beyond that.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0, handleCount = 0;
+
+  // Set up two two-party RPC connections in series. The middle node just proxies requests through.
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
+  TwoPartyClient tpClient(*frontPipe.ends[0]);
+  TwoPartyClient proxyBack(*backPipe.ends[0]);
+  TwoPartyClient proxyFront(*frontPipe.ends[1], proxyBack.bootstrap(), rpc::twoparty::Side::SERVER);
+  TwoPartyClient tpServer(*backPipe.ends[1], kj::heap<TestMoreStuffImpl>(callCount, handleCount),
+      rpc::twoparty::Side::SERVER);
+
+  // Perform some logic that does a bunch of promise pipelining, including passing a capability
+  // from the client to the server and back to the client, and making promise-pipelined calls on
+  // that capability. This should exercise the promise resolution and disembargo code.
+  auto client = tpClient.bootstrap().castAs<test::TestMoreStuff>();
+
+  auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImplAsPromise>());
+
+  auto earlyCall = client.getCallSequenceRequest().send();
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  auto call0 = getCallSequence(pipeline, 0);
+  auto call1 = getCallSequence(pipeline, 1);
+
+  earlyCall.wait(waitScope);
+
+  auto call2 = getCallSequence(pipeline, 2);
+
+  auto resolved = echo.wait(waitScope).getCap();
+
+  auto call3 = getCallSequence(pipeline, 3);
+  auto call4 = getCallSequence(pipeline, 4);
+  auto call5 = getCallSequence(pipeline, 5);
+
+  EXPECT_EQ(0, call0.wait(waitScope).getN());
+  EXPECT_EQ(1, call1.wait(waitScope).getN());
+  EXPECT_EQ(2, call2.wait(waitScope).getN());
+  EXPECT_EQ(3, call3.wait(waitScope).getN());
+  EXPECT_EQ(4, call4.wait(waitScope).getN());
+  EXPECT_EQ(5, call5.wait(waitScope).getN());
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

@@ -77,7 +77,7 @@ private:
   } KJ_UNIQUE_NAME(testCase); \
   void KJ_UNIQUE_NAME(TestCase)::run()
 
-#if _MSC_VER && !defined(__clang__)
+#if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_INDIRECT_EXPAND(m, vargs) m vargs
 #define KJ_FAIL_EXPECT(...) \
   KJ_INDIRECT_EXPAND(KJ_LOG, (ERROR , __VA_ARGS__));
@@ -92,32 +92,54 @@ private:
   else KJ_FAIL_EXPECT("failed: expected " #cond, _kjCondition, ##__VA_ARGS__)
 #endif
 
-#define KJ_EXPECT_THROW_RECOVERABLE(type, code) \
+#if _MSC_VER && !defined(__clang__)
+#define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
+  do { \
+    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_INDIRECT_EXPAND(KJ_EXPECT, (e->getType() == ::kj::Exception::Type::type, \
+          "code threw wrong exception type: " #code, *e, __VA_ARGS__)); \
+    } else { \
+      KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
+    } \
+  } while (false)
+
+#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
+  do { \
+    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_INDIRECT_EXPAND(KJ_EXPECT, (::kj::_::hasSubstring(e->getDescription(), message), \
+          "exception description didn't contain expected substring", *e, __VA_ARGS__)); \
+    } else { \
+      KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
+    } \
+  } while (false)
+#else
+#define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
   do { \
     KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_EXPECT(e->getType() == ::kj::Exception::Type::type, \
-          "code threw wrong exception type: " #code, *e); \
+          "code threw wrong exception type: " #code, *e, ##__VA_ARGS__); \
     } else { \
-      KJ_FAIL_EXPECT("code did not throw: " #code); \
+      KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
     } \
   } while (false)
 
-#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code) \
+#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
     KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_EXPECT(::kj::_::hasSubstring(e->getDescription(), message), \
-          "exception description didn't contain expected substring", *e); \
+          "exception description didn't contain expected substring", *e, ##__VA_ARGS__); \
     } else { \
-      KJ_FAIL_EXPECT("code did not throw: " #code); \
+      KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
     } \
   } while (false)
+#endif
 
 #if KJ_NO_EXCEPTIONS
-#define KJ_EXPECT_THROW(type, code) \
+#define KJ_EXPECT_THROW(type, code, ...) \
   do { \
     KJ_EXPECT(::kj::_::expectFatalThrow(::kj::Exception::Type::type, nullptr, [&]() { code; })); \
   } while (false)
-#define KJ_EXPECT_THROW_MESSAGE(message, code) \
+#define KJ_EXPECT_THROW_MESSAGE(message, code, ...) \
   do { \
     KJ_EXPECT(::kj::_::expectFatalThrow(nullptr, kj::StringPtr(message), [&]() { code; })); \
   } while (false)

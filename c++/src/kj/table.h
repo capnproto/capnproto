@@ -917,7 +917,7 @@ public:
 
   void clear() {
     erasedCount = 0;
-    memset(buckets.begin(), 0, buckets.asBytes().size());
+    if (buckets.size() > 0) memset(buckets.begin(), 0, buckets.asBytes().size());
   }
 
   template <typename Row>
