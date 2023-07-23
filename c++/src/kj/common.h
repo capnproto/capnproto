@@ -313,19 +313,27 @@ typedef unsigned char byte;
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
 #endif
+#if KJ_HAS_CPP_ATTRIBUTE(clang::unavailable)
+#define KJ_UNAVAILABLE(reason) [[clang::unavailable(reason)]]
+#else
 #define KJ_UNAVAILABLE(reason) \
     __attribute__((unavailable(reason)))
+#endif
 #elif __GNUC__
 #if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
 #endif
-#define KJ_UNAVAILABLE(reason)
+#define KJ_UNAVAILABLE(reason) = delete
+// If the `unavailable` attribute is not supproted, just mark the method deleted, which at least
+// makes it a compile-time error to try to call it. Note that on Clang, marking a method deleted
+// *and* unavailable unfortunately defeats the purpose of the unavailable annotation, as the
+// generic "deleted" error is reported instead.
 #else
 #if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason)
 #endif
-#define KJ_UNAVAILABLE(reason)
+#define KJ_UNAVAILABLE(reason) = delete
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 
