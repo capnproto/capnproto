@@ -718,7 +718,7 @@ Pafs makeCompletionCountingPafs(uint count, uint& tasksCompleted) {
   auto promisesBuilder = heapArrayBuilder<Promise<void>>(count);
   auto fulfillersBuilder = heapArrayBuilder<Own<PromiseFulfiller<void>>>(count);
 
-  for (auto KJ_UNUSED value: zeroTo(count)) {
+  for (auto value KJ_UNUSED: zeroTo(count)) {
     auto paf = newPromiseAndFulfiller<void>();
     promisesBuilder.add(paf.promise.then([&tasksCompleted]() {
       ++tasksCompleted;

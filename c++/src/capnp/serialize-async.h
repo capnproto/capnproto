@@ -64,32 +64,25 @@ public:
       kj::ArrayPtr<word> scratchSpace = nullptr);
   // Like tryReadMessage, but throws an exception on EOF.
 
-  virtual kj::Promise<void> writeMessage(
+  virtual kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
       kj::ArrayPtr<const int> fds,
-      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
-    KJ_WARN_UNUSED_RESULT = 0;
-  kj::Promise<void> writeMessage(
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) = 0;
+  kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
       kj::ArrayPtr<const int> fds,
-      MessageBuilder& builder)
-    KJ_WARN_UNUSED_RESULT;
+      MessageBuilder& builder);
   // Write a message with FDs attached, e.g. to a Unix socket with SCM_RIGHTS.
   // The parameters must remain valid until the returned promise resolves.
 
-  kj::Promise<void> writeMessage(
-      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
-    KJ_WARN_UNUSED_RESULT;
-  kj::Promise<void> writeMessage(MessageBuilder& builder)
-      KJ_WARN_UNUSED_RESULT;
+  kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
+  kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(MessageBuilder& builder);
   // Equivalent to the above with fds = nullptr.
 
-  kj::Promise<void> writeMessages(
-      kj::ArrayPtr<MessageAndFds> messages)
-    KJ_WARN_UNUSED_RESULT;
-  virtual kj::Promise<void> writeMessages(
-      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages)
-    KJ_WARN_UNUSED_RESULT = 0;
-  kj::Promise<void> writeMessages(kj::ArrayPtr<MessageBuilder*> builders)
-      KJ_WARN_UNUSED_RESULT;
+  kj::Promise<void> writeMessages KJ_WARN_UNUSED_RESULT(
+      kj::ArrayPtr<MessageAndFds> messages);
+  virtual kj::Promise<void> writeMessages KJ_WARN_UNUSED_RESULT(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) = 0;
+  kj::Promise<void> writeMessages KJ_WARN_UNUSED_RESULT(kj::ArrayPtr<MessageBuilder*> builders);
   // Similar to the above, but for writing multiple messages at a time in a batch.
 
   virtual kj::Maybe<int> getSendBufferSize() = 0;
@@ -251,12 +244,10 @@ kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
     kj::AsyncInputStream& input, ReaderOptions options = ReaderOptions(),
     kj::ArrayPtr<word> scratchSpace = nullptr);
 
-kj::Promise<void> writeMessage(kj::AsyncOutputStream& output,
-                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
-    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
+    kj::AsyncOutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 
-kj::Promise<void> writeMessage(kj::AsyncOutputStream& output, MessageBuilder& builder)
-    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(kj::AsyncOutputStream& output, MessageBuilder& builder);
 
 // -----------------------------------------------------------------------------
 // Stand-alone versions that support FD passing.
@@ -272,24 +263,23 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
     kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
     ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
 
-kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
-                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
-    KJ_WARN_UNUSED_RESULT;
-kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
-                               MessageBuilder& builder)
-    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
+    kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
+kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
+    kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
+    MessageBuilder& builder);
 
 
 // -----------------------------------------------------------------------------
 // Stand-alone functions for writing multiple messages at once on AsyncOutputStreams.
 
-kj::Promise<void> writeMessages(kj::AsyncOutputStream& output,
-                                kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages)
-    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessages KJ_WARN_UNUSED_RESULT(
+    kj::AsyncOutputStream& output,
+    kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages);
 
-kj::Promise<void> writeMessages(
-    kj::AsyncOutputStream& output, kj::ArrayPtr<MessageBuilder*> builders)
-    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessages KJ_WARN_UNUSED_RESULT(
+    kj::AsyncOutputStream& output, kj::ArrayPtr<MessageBuilder*> builders);
 
 // =======================================================================================
 // inline implementation details

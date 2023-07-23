@@ -501,21 +501,26 @@ inline void JsonCodec::addFieldHandler(StructSchema::Field field, Handler<T>& ha
   addFieldHandlerImpl(field, Type::from<T>(), handler);
 }
 
-template <> void JsonCodec::addTypeHandler(Handler<DynamicValue>& handler)
+template <> void JsonCodec::addTypeHandler
     KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
-                   "try specifying a specific type schema as the first parameter");
-template <> void JsonCodec::addTypeHandler(Handler<DynamicEnum>& handler)
+                   "try specifying a specific type schema as the first parameter",
+                   (Handler<DynamicValue>& handler));
+template <> void JsonCodec::addTypeHandler
     KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
-                   "try specifying a specific type schema as the first parameter");
-template <> void JsonCodec::addTypeHandler(Handler<DynamicStruct>& handler)
+                   "try specifying a specific type schema as the first parameter",
+                   (Handler<DynamicEnum>& handler));
+template <> void JsonCodec::addTypeHandler
     KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
-                   "try specifying a specific type schema as the first parameter");
-template <> void JsonCodec::addTypeHandler(Handler<DynamicList>& handler)
+                   "try specifying a specific type schema as the first parameter",
+                   (Handler<DynamicStruct>& handler));
+template <> void JsonCodec::addTypeHandler
     KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
-                   "try specifying a specific type schema as the first parameter");
-template <> void JsonCodec::addTypeHandler(Handler<DynamicCapability>& handler)
+                   "try specifying a specific type schema as the first parameter",
+                   (Handler<DynamicList>& handler));
+template <> void JsonCodec::addTypeHandler
     KJ_UNAVAILABLE("JSON handlers for type sets (e.g. all structs, all lists) not implemented; "
-                   "try specifying a specific type schema as the first parameter");
+                   "try specifying a specific type schema as the first parameter",
+                   (Handler<DynamicCapability>& handler));
 // TODO(someday): Implement support for registering handlers that cover thinsg like "all structs"
 //   or "all lists". Currently you can only target a specific struct or list type.
 

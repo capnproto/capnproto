@@ -92,7 +92,7 @@ public:
   // Get the encoded schema node content as a single message segment.  It is safe to read as an
   // unchecked message.
 
-  Schema getDependency(uint64_t id) const CAPNP_DEPRECATED("Does not handle generics correctly.");
+  Schema getDependency CAPNP_DEPRECATED("Does not handle generics correctly.")(uint64_t id) const;
   // DEPRECATED: This method cannot correctly account for generic type parameter bindings that
   //   may apply to the dependency. Instead of using this method, use a method of the Schema API
   //   that corresponds to the exact kind of dependency. For example, to get a field type, use
@@ -752,8 +752,8 @@ public:
   static ListSchema of(Type elementType);
   // Construct the schema for a list of the given type.
 
-  static ListSchema of(schema::Type::Reader elementType, Schema context)
-      CAPNP_DEPRECATED("Does not handle generics correctly.");
+  static ListSchema of CAPNP_DEPRECATED("Does not handle generics correctly.")(
+      schema::Type::Reader elementType, Schema context);
   // DEPRECATED: This method cannot correctly account for generic type parameter bindings that
   //   may apply to the input type. Instead of using this method, use a method of the Schema API
   //   that corresponds to the exact kind of dependency. For example, to get a field type, use

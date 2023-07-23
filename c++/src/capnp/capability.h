@@ -118,7 +118,7 @@ public:
       : Params::Builder(builder), hook(kj::mv(hook)) {}
   inline Request(decltype(nullptr)): Params::Builder(nullptr) {}
 
-  RemotePromise<Results> send() KJ_WARN_UNUSED_RESULT;
+  RemotePromise<Results> send KJ_WARN_UNUSED_RESULT();
   // Send the call and return a promise for the results.
 
   typename Results::Pipeline sendForPipeline();
@@ -158,7 +158,7 @@ public:
       : Params::Builder(builder), hook(kj::mv(hook)) {}
   inline StreamingRequest(decltype(nullptr)): Params::Builder(nullptr) {}
 
-  kj::Promise<void> send() KJ_WARN_UNUSED_RESULT;
+  kj::Promise<void> send KJ_WARN_UNUSED_RESULT();
 
 private:
   kj::Own<RequestHook> hook;
@@ -426,13 +426,13 @@ public:
   // In general, this should be the last thing a method implementation calls, and the promise
   // returned from `tailCall()` should then be returned by the method implementation.
 
-  void allowCancellation()
+  void allowCancellation
       KJ_UNAVAILABLE(
           "As of Cap'n Proto 1.0, allowCancellation must be applied statically using an "
           "annotation in the schema. See annotations defined in /capnp/c++.capnp. For "
           "DynamicCapability::Server, use the constructor option (the annotation does not apply "
           "to DynamicCapability). This change was made to gain a significant performance boost -- "
-          "dynamically allowing cancellation required excessive bookkeeping.");
+          "dynamically allowing cancellation required excessive bookkeeping.", ());
 
 private:
   CallContextHook* hook;
@@ -457,13 +457,13 @@ public:
   // - It wouldn't be particularly useful since streaming calls don't return anything, and they
   //   already compensate for latency.
 
-  void allowCancellation()
+  void allowCancellation
       KJ_UNAVAILABLE(
           "As of Cap'n Proto 1.0, allowCancellation must be applied statically using an "
           "annotation in the schema. See annotations defined in /capnp/c++.capnp. For "
           "DynamicCapability::Server, use the constructor option (the annotation does not apply "
           "to DynamicCapability). This change was made to gain a significant performance boost -- "
-          "dynamically allowing cancellation required excessive bookkeeping.");
+          "dynamically allowing cancellation required excessive bookkeeping.", ());
 
 private:
   CallContextHook* hook;

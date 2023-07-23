@@ -39,13 +39,11 @@ public:
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
       kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
-  kj::Promise<void> writeMessage(
+  kj::Promise<void> writeMessage KJ_WARN_UNUSED_RESULT(
       kj::ArrayPtr<const int> fds,
-      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override
-    KJ_WARN_UNUSED_RESULT;
-  kj::Promise<void> writeMessages(
-      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override
-    KJ_WARN_UNUSED_RESULT;
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override;
+  kj::Promise<void> writeMessages KJ_WARN_UNUSED_RESULT(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
   kj::Maybe<int> getSendBufferSize() override;
   kj::Promise<void> end() override;
 private:

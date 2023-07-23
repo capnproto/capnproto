@@ -39,7 +39,7 @@ inline T bitCast(U value) {
   return value;
 }
 template <>
-inline float bitCast<float, uint32_t>(uint32_t value) KJ_UNUSED;
+inline float bitCast<float, uint32_t> KJ_UNUSED(uint32_t value);
 template <>
 inline float bitCast<float, uint32_t>(uint32_t value) {
   float result;
@@ -47,7 +47,7 @@ inline float bitCast<float, uint32_t>(uint32_t value) {
   return result;
 }
 template <>
-inline double bitCast<double, uint64_t>(uint64_t value) KJ_UNUSED;
+inline double bitCast<double, uint64_t> KJ_UNUSED(uint64_t value);
 template <>
 inline double bitCast<double, uint64_t>(uint64_t value) {
   double result;

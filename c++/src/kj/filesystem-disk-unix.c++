@@ -83,7 +83,7 @@ namespace {
 #undef DT_UNKNOWN
 #endif
 
-static void setCloexec(int fd) KJ_UNUSED;
+static void setCloexec KJ_UNUSED(int fd);
 static void setCloexec(int fd) {
   // Set the O_CLOEXEC flag on the given fd.
   //

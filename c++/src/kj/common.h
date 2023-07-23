@@ -242,7 +242,6 @@ typedef unsigned char byte;
 #endif
 #if KJ_HAS_CPP_ATTRIBUTE(maybe_unused)
 #define KJ_UNUSED [[maybe_unused]]
-#define KJ_UNUSED_MEMBER [[maybe_unused]]
 #endif
 #if KJ_HAS_CPP_ATTRIBUTE(nodiscard)
 #define KJ_WARN_UNUSED_RESULT [[nodiscard]]
@@ -331,17 +330,17 @@ typedef unsigned char byte;
     __attribute__((deprecated(reason)))
 #endif
 #if KJ_HAS_CPP_ATTRIBUTE(clang::unavailable)
-#define KJ_UNAVAILABLE(reason) [[clang::unavailable(reason)]]
+#define KJ_UNAVAILABLE(reason, ...) [[clang::unavailable(reason)]] __VA_ARGS__
 #else
-#define KJ_UNAVAILABLE(reason) \
-    __attribute__((unavailable(reason)))
+#define KJ_UNAVAILABLE(reason, ...) \
+    __attribute__((unavailable(reason))) __VA_ARGS__
 #endif
 #elif __GNUC__
 #if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
 #endif
-#define KJ_UNAVAILABLE(reason) = delete
+#define KJ_UNAVAILABLE(reason, ...) __VA_ARGS__ = delete
 // If the `unavailable` attribute is not supproted, just mark the method deleted, which at least
 // makes it a compile-time error to try to call it. Note that on Clang, marking a method deleted
 // *and* unavailable unfortunately defeats the purpose of the unavailable annotation, as the
@@ -350,7 +349,7 @@ typedef unsigned char byte;
 #if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason)
 #endif
-#define KJ_UNAVAILABLE(reason) = delete
+#define KJ_UNAVAILABLE(reason, ...) __VA_ARGS__ = delete
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 
@@ -1903,7 +1902,7 @@ public:
   inline bool operator!=(const ArrayPtr<U>& other) const { return !(*this == other); }
 
   template <typename... Attachments>
-  Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
+  Array<T> attach KJ_WARN_UNUSED_RESULT(Attachments&&... attachments) const;
   // Like Array<T>::attach(), but also promotes an ArrayPtr to an Array. Generally the attachment
   // should be an object that actually owns the array that the ArrayPtr is pointing at.
   //

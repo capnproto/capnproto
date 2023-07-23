@@ -127,10 +127,12 @@ public:
   // Get the server's main (aka "bootstrap") interface.
 
   template <typename Type>
-  typename Type::Client importCap(kj::StringPtr name) CAPNP_DEPRECATED(
-      "Change your server to export a main interface, then use getMain() instead.");
-  Capability::Client importCap(kj::StringPtr name) CAPNP_DEPRECATED(
-      "Change your server to export a main interface, then use getMain() instead.");
+  typename Type::Client importCap CAPNP_DEPRECATED(
+      "Change your server to export a main interface, then use getMain() instead.")(
+      kj::StringPtr name);
+  Capability::Client importCap CAPNP_DEPRECATED(
+      "Change your server to export a main interface, then use getMain() instead.")(
+      kj::StringPtr name);
   // ** DEPRECATED **
   //
   // Ask the sever for the capability with the given name.  You may specify a type to automatically
@@ -193,14 +195,14 @@ public:
   // called).  `port` is returned by `getPort()` -- it serves no other purpose.
   // `readerOpts` acts as in the other two above constructors.
 
-  explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0,
-                       ReaderOptions readerOpts = ReaderOptions())
-      CAPNP_DEPRECATED("Please specify a main interface for your server.");
-  EzRpcServer(struct sockaddr* bindAddress, uint addrSize,
-              ReaderOptions readerOpts = ReaderOptions())
-      CAPNP_DEPRECATED("Please specify a main interface for your server.");
-  EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts = ReaderOptions())
-      CAPNP_DEPRECATED("Please specify a main interface for your server.");
+  CAPNP_DEPRECATED("Please specify a main interface for your server.") explicit EzRpcServer(
+      kj::StringPtr bindAddress, uint defaultPort = 0,
+      ReaderOptions readerOpts = ReaderOptions());
+  CAPNP_DEPRECATED("Please specify a main interface for your server.") EzRpcServer(
+      struct sockaddr* bindAddress, uint addrSize,
+      ReaderOptions readerOpts = ReaderOptions());
+  CAPNP_DEPRECATED("Please specify a main interface for your server.") EzRpcServer(
+      int socketFd, uint port, ReaderOptions readerOpts = ReaderOptions());
 
   ~EzRpcServer() noexcept(false);
 

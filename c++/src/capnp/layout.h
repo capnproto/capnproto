@@ -906,7 +906,7 @@ public:
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 
-  bool truncate(ElementCount size, bool isText) KJ_WARN_UNUSED_RESULT;
+  bool truncate KJ_WARN_UNUSED_RESULT(ElementCount size, bool isText);
   // Resize the orphan list to the given size. Returns false if the list is currently empty but
   // the requested size is non-zero, in which case the caller will need to allocate a new list.
 
