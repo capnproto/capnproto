@@ -168,7 +168,7 @@ bool BrandedDecl::compileAsType(
         addError(errorReporter,
             "As of Cap'n Proto 0.4, 'Object' has been renamed to 'AnyPointer'.  Sorry for the "
             "inconvenience, and thanks for being an early adopter.  :)");
-        // fallthrough
+        KJ_FALLTHROUGH;
       case Declaration::BUILTIN_ANY_POINTER:
         target.initAnyPointer().initUnconstrained().setAnyKind();
         return true;

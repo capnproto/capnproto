@@ -471,11 +471,14 @@ public:
       }
 
       return promise->then([this](kj::Own<ClientHook>&& newInner) {
-        kj::Own<ClientHook> newResolved = wrap(*newInner, *policy, reverse);
-        if (resolved == nullptr) {
-          resolved = newResolved->addRef();
+        // There's a chance resolved was set by getResolved() or a concurrent whenMoreResolved()
+        // while we yielded the event loop. If the inner ClientHook is maintaining the contract,
+        // then resolved would already be set to newInner after wrapping in a MembraneHook.
+        KJ_IF_MAYBE(r, resolved) {
+          return (*r)->addRef();
+        } else {
+          return resolved.emplace(wrap(*newInner, *policy, reverse))->addRef();
         }
-        return newResolved;
       });
     } else {
       return nullptr;

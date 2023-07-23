@@ -35,7 +35,7 @@ Fixed in
   - Unix: https://capnproto.org/capnproto-c++-0.4.1.1.tar.gz
 - release 0.6 (future)
 
-[0]: https://github.com/sandstorm-io/capnproto/commit/f343f0dbd0a2e87f17cd74f14186ed73e3fbdbfa
+[0]: https://github.com/capnproto/capnproto/commit/f343f0dbd0a2e87f17cd74f14186ed73e3fbdbfa
 
 Details
 =======
@@ -97,6 +97,6 @@ following preventative measures going forward:
 I am pleased that measures 1, 2, and 3 all detected this bug, suggesting that
 they have a high probability of catching any similar bugs.
 
-[1]: https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2015-03-02-0-all-cpu-amplification.md
-[2]: https://github.com/sandstorm-io/capnproto/tree/master/security-advisories/2015-03-02-1-c++-integer-underflow.md
+[1]: https://github.com/capnproto/capnproto/tree/master/security-advisories/2015-03-02-0-all-cpu-amplification.md
+[2]: https://github.com/capnproto/capnproto/tree/master/security-advisories/2015-03-02-1-c++-integer-underflow.md
 [3]: https://capnproto.org/news/2015-03-02-security-advisory-and-integer-overflow-protection.html

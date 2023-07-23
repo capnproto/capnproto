@@ -872,7 +872,7 @@ public:
   }
 
   kj::MainBuilder::Validity run() {
-    // https://github.com/sandstorm-io/capnproto/issues/344 describes an obscure bug in the layout
+    // https://github.com/capnproto/capnproto/issues/344 describes an obscure bug in the layout
     // algorithm, the fix for which breaks backwards-compatibility for any schema triggering the
     // bug. In order to avoid silently breaking protocols, we are temporarily throwing an exception
     // in cases where this bug would have occurred, so that people can decide what to do.

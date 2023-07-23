@@ -23,6 +23,7 @@
 #include <kj/compat/gtest.h>
 #include <string>
 #include "vector.h"
+#include <locale.h>
 
 namespace kj {
 namespace _ {  // private
@@ -265,6 +266,33 @@ KJ_TEST("String == String") {
   KJ_EXPECT_NOMAGIC(a != c);
 }
 
+KJ_TEST("float stringification and parsing is not locale-dependent") {
+  // Remember the old locale, set it back when we're done.
+  char* oldLocaleCstr = setlocale(LC_NUMERIC, nullptr);
+  KJ_ASSERT(oldLocaleCstr != nullptr);
+  auto oldLocale = kj::str(oldLocaleCstr);
+  KJ_DEFER(setlocale(LC_NUMERIC, oldLocale.cStr()));
+
+  // Set the locale to "C".
+  KJ_ASSERT(setlocale(LC_NUMERIC, "C") != nullptr);
+
+  KJ_ASSERT(kj::str(1.5) == "1.5");
+  KJ_ASSERT(kj::str(1.5f) == "1.5");
+  KJ_EXPECT("1.5"_kj.parseAs<float>() == 1.5);
+  KJ_EXPECT("1.5"_kj.parseAs<double>() == 1.5);
+
+  if (setlocale(LC_NUMERIC, "es_ES") == nullptr &&
+      setlocale(LC_NUMERIC, "es_ES.utf8") == nullptr &&
+      setlocale(LC_NUMERIC, "es_ES.UTF-8") == nullptr) {
+    // Some systems may not have the desired locale available.
+    KJ_LOG(WARNING, "Couldn't set locale to es_ES. Skipping this test.");
+  } else {
+    KJ_EXPECT(kj::str(1.5) == "1.5");
+    KJ_EXPECT(kj::str(1.5f) == "1.5");
+    KJ_EXPECT("1.5"_kj.parseAs<float>() == 1.5);
+    KJ_EXPECT("1.5"_kj.parseAs<double>() == 1.5);
+  }
+}
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

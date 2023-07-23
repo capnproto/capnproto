@@ -90,16 +90,17 @@
 #if KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
 #include <sanitizer/lsan_interface.h>
 #else
-static KJ_ALWAYS_INLINE(void __lsan_ignore_object(const void* p)) {}
+static void __lsan_ignore_object(const void* p) {}
 #endif
-// TODO(soon): Remove the LSAN stuff per https://github.com/capnproto/capnproto/pull/1255 feedback.
+// TODO(cleanup): Remove the LSAN stuff per https://github.com/capnproto/capnproto/pull/1255
+// feedback.
 
 namespace {
 template <typename T>
 inline T* lsanIgnoreObjectAndReturn(T* ptr) {
   // Defensively lsan_ignore_object since the documentation doesn't explicitly specify what happens
   // if you call this multiple times on the same object.
-  // TODO(soon): Remove this per https://github.com/capnproto/capnproto/pull/1255.
+  // TODO(cleanup): Remove this per https://github.com/capnproto/capnproto/pull/1255.
   __lsan_ignore_object(ptr);
   return ptr;
 }
@@ -444,7 +445,7 @@ namespace {
 
 #if !KJ_NO_EXCEPTIONS
 
-void terminateHandler() {
+[[noreturn]] void terminateHandler() {
   void* traceSpace[32];
 
   // ignoreCount = 3 to ignore std::terminate entry.
@@ -584,7 +585,7 @@ void printStackTraceOnCrash() {
 #else
 namespace {
 
-void crashHandler(int signo, siginfo_t* info, void* context) {
+[[noreturn]] void crashHandler(int signo, siginfo_t* info, void* context) {
   void* traceSpace[32];
 
 #if KJ_USE_WIN32_DBGHELP
@@ -1008,6 +1009,10 @@ Function<void(Function<void()>)> ExceptionCallback::getThreadInitializer() {
   return next.getThreadInitializer();
 }
 
+namespace _ {  // private
+  uint uncaughtExceptionCount();  // defined later in this file
+}
+
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
 public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
@@ -1016,7 +1021,7 @@ public:
 #if KJ_NO_EXCEPTIONS
     logException(LogSeverity::ERROR, mv(exception));
 #else
-    if (std::uncaught_exception()) {
+    if (_::uncaughtExceptionCount() > 0) {
       // Bad time to throw an exception.  Just log instead.
       //
       // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
@@ -1110,9 +1115,9 @@ ExceptionCallback& getExceptionCallback() {
   //  * Throwing exceptions is bound to do be expensive and malloc-happy anyway, so the incremental
   //    cost of 1 heap allocation is minimal.
   //
-  // TODO(soon): Harris has an excellent suggestion in https://github.com/capnproto/capnproto/pull/1255
-  //  that should ensure we initialize the root callback once on first use as a global & never
-  //  destroy it.
+  // TODO(cleanup): Harris has an excellent suggestion in
+  //  https://github.com/capnproto/capnproto/pull/1255 that should ensure we initialize the root
+  //  callback once on first use as a global & never destroy it.
 
   ExceptionCallback* scoped = threadLocalCallback;
   return scoped != nullptr ? *scoped : *defaultCallback;

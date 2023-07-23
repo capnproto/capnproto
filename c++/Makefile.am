@@ -174,6 +174,7 @@ includekj_HEADERS =                                            \
   src/kj/async-unix.h                                          \
   src/kj/async-win32.h                                         \
   src/kj/async-io.h                                            \
+  src/kj/async-queue.h                                         \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
   src/kj/windows-sanity.h
@@ -420,10 +421,15 @@ capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 # Also attempt to run ldconfig, because otherwise users get confused.  If
 # it fails (e.g. because the platform doesn't have it, or because the
 # user doesn't have root privileges), don't worry about it.
+#
+# We need to specify the path for OpenBSD.
 install-exec-hook:
 	ln -sf capnp $(DESTDIR)$(bindir)/capnpc
-	ldconfig < /dev/null > /dev/null 2>&1 || true
-
+	if [ `uname` == 'OpenBSD' ]; then \
+	        (ldconfig /usr/local/lib /usr/lib /usr/X11R6/lib > /dev/null 2>&1 || true); \
+	else \
+		ldconfig < /dev/null > /dev/null 2>&1 || true; \
+	fi
 uninstall-hook:
 	rm -f $(DESTDIR)$(bindir)/capnpc
 
@@ -498,11 +504,13 @@ endif
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
+  src/kj/async-coroutine-test.c++                              \
   src/kj/async-unix-test.c++                                   \
   src/kj/async-unix-xthread-test.c++                           \
   src/kj/async-win32-test.c++                                  \
   src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
+  src/kj/async-queue-test.c++                                  \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \
@@ -524,6 +532,7 @@ heavy_tests =                                                  \
   src/capnp/rpc-twoparty-test.c++                              \
   src/capnp/ez-rpc-test.c++                                    \
   src/capnp/compat/json-test.c++                               \
+  src/capnp/compat/websocket-rpc-test.c++                      \
   src/capnp/compiler/lexer-test.c++                            \
   src/capnp/compiler/type-id-test.c++
 capnp_test_LDADD =                                             \

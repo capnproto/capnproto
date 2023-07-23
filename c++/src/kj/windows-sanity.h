@@ -49,9 +49,11 @@
 #pragma once
 
 namespace win32 {
+#ifdef ERROR  // This could be absent if e.g. NOGDI was used.
   const auto ERROR_ = ERROR;
 #undef ERROR
   const auto ERROR = ERROR_;
+#endif
 
   typedef VOID VOID_;
 #undef VOID

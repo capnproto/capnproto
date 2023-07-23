@@ -904,7 +904,7 @@ private:
               state = COMMENT;
               break;
             }
-            // fallthrough
+            KJ_FALLTHROUGH;
           case NORMAL:
             switch (c) {
               case '#': state = COMMENT; break;
@@ -1287,8 +1287,13 @@ private:
       return IMPOSSIBLE;
     }
     if ((prefix[3] & 0x80) != 0) {
-      // Offset is negative (invalid).
-      return IMPOSSIBLE;
+      if (prefix[0] == 0xff && prefix[1] == 0xff && prefix[2] == 0xff && prefix[3] == 0xff &&
+          prefix[4] == 0    && prefix[5] == 0    && prefix[6] == 0    && prefix[7] == 0) {
+        // This is an empty struct with offset of -1. That's valid.
+      } else {
+        // Offset is negative (invalid).
+        return IMPOSSIBLE;
+      }
     }
     if ((prefix[3] & 0xe0) != 0) {
       // Offset is over a gigabyte (implausible).

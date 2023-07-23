@@ -258,8 +258,15 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         }
       }
       acquiredExclusive(TRACK_ACQUIRED_TID(), location);
+#if KJ_CONTENTION_WARNING_THRESHOLD
+      printContendedReader = false;
+#endif
       break;
     case SHARED: {
+#if KJ_CONTENTION_WARNING_THRESHOLD
+      kj::Maybe<kj::TimePoint> contentionWaitStart;
+#endif
+
       uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
 
       for (;;) {
@@ -267,6 +274,15 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
           // Acquired.
           break;
         }
+
+#if KJ_CONTENTION_WARNING_THRESHOLD
+        if (contentionWaitStart == nullptr) {
+          // We could have the exclusive mutex tell us how long it was holding the lock. That would
+          // be the nicest. However, I'm hesitant to bloat the structure. I suspect having a reader
+          // tell us how long it was waiting for is probably a good proxy.
+          contentionWaitStart = kj::systemPreciseMonotonicClock().now();
+        }
+#endif
 
         setCurrentThreadIsWaitingFor(&blockReason);
 
@@ -294,6 +310,19 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         }
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
       }
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+      KJ_IF_MAYBE(start, contentionWaitStart) {
+        if (__atomic_load_n(&printContendedReader, __ATOMIC_RELAXED)) {
+          // Double-checked lock avoids the CPU needing to acquire the lock in most cases.
+          if (__atomic_exchange_n(&printContendedReader, false, __ATOMIC_RELAXED)) {
+            auto contentionDuration = kj::systemPreciseMonotonicClock().now() - *start;
+            KJ_LOG(WARNING, "Acquired contended lock", location, contentionDuration,
+                kj::getStackTrace());
+          }
+        }
+      }
+#endif
 
       // We just want to record the lock being acquired somewhere but the specific location doesn't
       // matter. This does mean that race conditions could occur where a thread might read this
@@ -364,6 +393,18 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         }
       }
 
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+      uint readerCount;
+      {
+        uint oldState = __atomic_load_n(&futex, __ATOMIC_RELAXED);
+        readerCount = oldState & SHARED_COUNT_MASK;
+        if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
+          // Atomic not needed because we're still holding the exclusive lock.
+          printContendedReader = true;
+        }
+      }
+#endif
+
       // Didn't wake any waiters, so wake normally.
       uint oldState = __atomic_fetch_and(
           &futex, ~(EXCLUSIVE_HELD | EXCLUSIVE_REQUESTED), __ATOMIC_RELEASE);
@@ -376,10 +417,9 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
 
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
-        uint readerCount = oldState & SHARED_COUNT_MASK;
         if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
           KJ_LOG(WARNING, "excessively many readers were waiting on this lock", readerCount,
-              kj::getStackTrace(), acquiredLocation);
+              acquiredLocation, kj::getStackTrace());
         }
 #endif
       }
@@ -405,7 +445,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   }
 }
 
-void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
   switch (exclusivity) {
     case EXCLUSIVE:
       KJ_ASSERT(futex & EXCLUSIVE_HELD,
@@ -524,6 +564,11 @@ void Mutex::induceSpuriousWakeupForTest() {
       break;
     }
   }
+}
+
+uint Mutex::numReadersWaitingForTest() const {
+  assertLockedByCaller(EXCLUSIVE);
+  return futex & SHARED_COUNT_MASK;
 }
 
 void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
@@ -666,7 +711,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   }
 }
 
-void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
   // We could use TryAcquireSRWLock*() here like we do with the pthread version. However, as of
   // this writing, my version of Wine (1.6.2) doesn't implement these functions and will abort if
   // they are called. Since we were only going to use them as a hacky way to check if the lock is
@@ -879,7 +924,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   }
 }
 
-void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
   switch (exclusivity) {
     case EXCLUSIVE:
       // A read lock should fail if the mutex is already held for writing.

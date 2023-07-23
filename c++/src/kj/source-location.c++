@@ -19,8 +19,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if __cplusplus > 201703L
-
 #include "source-location.h"
 
 namespace kj {
@@ -28,5 +26,3 @@ kj::String KJ_STRINGIFY(const SourceLocation& l) {
   return kj::str(l.fileName, ":", l.lineNumber, ":", l.columnNumber, " in ", l.function);
 }
 }  // namespace kj
-
-#endif

@@ -1,0 +1,34 @@
+env:
+  CIRRUS_CLONE_DEPTH: 1
+
+freebsd_task:
+  matrix:
+    - name: FreeBSD 13.0 (GCC 10 from packages)
+      # RunCatchingExceptionsOtherException fails on 13.0 with system Clang
+      # 11.0 and ports Clang 10/11 as well, so GCC 10 is used instead.
+      freebsd_instance:
+        image_family: freebsd-13-0
+      preinstall_script:
+        # Stock clang11 fails some exception unit tests
+        pkg install -y gcc10
+      env:
+        CC: gcc10
+        CXX: g++10
+    - name: FreeBSD 12.2 (System Clang 10)
+      freebsd_instance:
+        image_family: freebsd-12-2
+    - name: FreeBSD 11.4 (System Clang 10)
+      freebsd_instance:
+        image_family: freebsd-11-4
+  install_script:
+    pkg install -y automake autoconf libtool
+  compiler_version_script:
+    ${CXX:-"c++"} --version
+  autoreconf_script:
+    - cd c++ && autoreconf -i
+  configure_script:
+    - cd c++ && ./configure
+  build_script:
+    - make -C c++
+  test_script:
+    - make -C c++ check

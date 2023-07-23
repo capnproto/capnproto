@@ -23,20 +23,33 @@
 
 #include "string.h"
 
-#if __clang__ && __clang_major__ >= 9
-#define KJ_CALLER_COLUMN() __builtin_COLUMN()
 // GCC does not implement __builtin_COLUMN() as that's non-standard but MSVC & clang do.
 // MSVC does as of version https://github.com/microsoft/STL/issues/54) but there's currently not any
 // pressing need for this for MSVC & writing the write compiler version check is annoying.
+// Checking for clang version is problematic due to the way that XCode lies about __clang_major__.
+// Instead we use __has_builtin as the feature check to check clang.
+// Context: https://github.com/capnproto/capnproto/issues/1305
+#ifdef __has_builtin
+#if __has_builtin(__builtin_COLUMN)
+#define KJ_CALLER_COLUMN() __builtin_COLUMN()
+#else
+#define KJ_CALLER_COLUMN() 0
+#endif
 #else
 #define KJ_CALLER_COLUMN() 0
 #endif
 
 #if __cplusplus > 201703L
 #define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION 1
-#elif __clang__ && __clang_major__ >= 9
+#elif defined(__has_builtin)
 // Clang 9 added these builtins: https://releases.llvm.org/9.0.0/tools/clang/docs/LanguageExtensions.html
-#define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION 1
+// Use __has_builtin as the way to detect this because __clang_major__ is unreliable (see above
+// about issue with Xcode-provided clang).
+#define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION (   \
+  __has_builtin(__builtin_FILE) &&               \
+  __has_builtin(__builtin_LINE) &&               \
+  __has_builtin(__builtin_FUNCTION)              \
+  )
 #elif __GNUC__ >= 5
 // GCC 5 supports the required builtins: https://gcc.gnu.org/onlinedocs/gcc-5.1.0/gcc/Other-Builtins.html
 #define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION 1
@@ -63,12 +76,21 @@ public:
   {}
 #endif
 
+#if KJ_COMPILER_SUPPORTS_SOURCE_LOCATION
+  // This can only be exposed if we actually generate valid SourceLocation objects as otherwise all
+  // SourceLocation objects would confusingly (and likely problematically) be equated equal.
+  constexpr bool operator==(const SourceLocation& o) const {
+    // Pointer equality is fine here based on how SourceLocation operates & how compilers will
+    // intern all duplicate string constants.
+    return fileName == o.fileName && function == o.function && lineNumber == o.lineNumber &&
+        columnNumber == o.columnNumber;
+  }
+#endif
+
   const char* fileName;
   const char* function;
   uint lineNumber;
   uint columnNumber;
-
-private:
 };
 
 kj::String KJ_STRINGIFY(const SourceLocation& l);

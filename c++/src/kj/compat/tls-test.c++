@@ -26,17 +26,21 @@
 #endif
 
 #include "tls.h"
-#include <kj/test.h>
-#include <kj/async-io.h>
-#include <stdlib.h>
+
 #include <openssl/opensslv.h>
+
+#include <stdlib.h>
 
 #if _WIN32
 #include <winsock2.h>
+
 #include <kj/windows-sanity.h>
 #else
 #include <sys/socket.h>
 #endif
+
+#include <kj/async-io.h>
+#include <kj/test.h>
 
 namespace kj {
 namespace {
@@ -424,6 +428,30 @@ struct TlsTest {
     options.trustedCertificates = kj::arrayPtr(&caCert, 1);
     return options;
   }
+
+  Promise<void> writeToServer(AsyncIoStream& client) {
+    return client.write("foo", 4);
+  }
+
+  Promise<void> readFromClient(AsyncIoStream& server) {
+    auto buf = heapArray<char>(4);
+
+    auto readPromise = server.read(buf.begin(), buf.size());
+
+    auto checkBuffer = [buf = kj::mv(buf)]() {
+      KJ_ASSERT(kj::StringPtr(buf.begin(), buf.end()-1) == kj::StringPtr("foo"));
+    };
+
+    return readPromise.then(kj::mv(checkBuffer));
+  }
+
+  void testConnection(AsyncIoStream& client, AsyncIoStream& server) {
+    auto writePromise = writeToServer(client);
+    auto readPromise = readFromClient(server);
+
+    writePromise.wait(io.waitScope);
+    readPromise.wait(io.waitScope);
+  };
 };
 
 KJ_TEST("TLS basics") {
@@ -438,12 +466,7 @@ KJ_TEST("TLS basics") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3);
-  char buf[4];
-  server->read(&buf, 3).wait(test.io.waitScope);
-  buf[3] = '\0';
-
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  test.testConnection(*client, *server);
 }
 
 KJ_TEST("TLS peer identity") {
@@ -483,12 +506,7 @@ KJ_TEST("TLS peer identity") {
     KJ_EXPECT(id->toString() == "(anonymous client)");
   }
 
-  auto writePromise = client.stream->write("foo", 3);
-  char buf[4];
-  server.stream->read(&buf, 3).wait(test.io.waitScope);
-  buf[3] = '\0';
-
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  test.testConnection(*client.stream, *server.stream);
 }
 
 KJ_TEST("TLS multiple messages") {
@@ -633,7 +651,7 @@ KJ_TEST("TLS SNI") {
   TestSniCallback callback;
   serverOptions.sniCallback = callback;
 
-  TlsTest test(TlsTest::defaultClient(), serverOptions);
+  TlsTest test(TlsTest::defaultClient(), kj::mv(serverOptions));
   ErrorNexus e;
 
   auto pipe = test.io.provider->newTwoWayPipe();
@@ -644,12 +662,7 @@ KJ_TEST("TLS SNI") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3);
-  char buf[4];
-  server->read(&buf, 3).wait(test.io.waitScope);
-  buf[3] = '\0';
-
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  test.testConnection(*client, *server);
 
   KJ_ASSERT(callback.callCount == 1);
 }
@@ -688,15 +701,34 @@ KJ_TEST("TLS certificate validation") {
 #endif
 
 KJ_TEST("TLS client certificate verification") {
-  TlsContext::Options serverOptions = TlsTest::defaultServer();
-  TlsContext::Options clientOptions = TlsTest::defaultClient();
+  enum class VerifyClients {
+    YES,
+    NO
+  };
+  auto makeServerOptionsForClient = [](
+      const TlsContext::Options& clientOptions,
+      VerifyClients verifyClients
+  ) {
+    TlsContext::Options serverOptions = TlsTest::defaultServer();
+    serverOptions.verifyClients = verifyClients == VerifyClients::YES;
 
-  serverOptions.verifyClients = true;
-  serverOptions.trustedCertificates = clientOptions.trustedCertificates;
+    // Share the certs between the client and server.
+    serverOptions.trustedCertificates = clientOptions.trustedCertificates;
 
-  // No certificate loaded in the client: fail
+    return serverOptions;
+  };
+
+  TlsKeypair selfSignedKeypair = { TlsPrivateKey(HOST_KEY), TlsCertificate(SELF_SIGNED_CERT) };
+  TlsKeypair altKeypair = {
+      TlsPrivateKey(HOST_KEY2),
+      TlsCertificate(kj::str(VALID_CERT2, INTERMEDIATE_CERT)),
+  };
+
   {
-    TlsTest test(clientOptions, serverOptions);
+    // No certificate loaded in the client: fail
+    auto clientOptions = TlsTest::defaultClient();
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::YES);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
 
     auto pipe = test.io.provider->newTwoWayPipe();
 
@@ -715,16 +747,18 @@ KJ_TEST("TLS client certificate verification") {
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
-                    "CERTIFICATE_REQUIRED"),
+                    "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
         clientPromise.wait(test.io.waitScope));
 #endif
   }
 
-  // Self-signed certificate loaded in the client: fail
-  TlsKeypair selfSignedKeypair = { TlsPrivateKey(HOST_KEY), TlsCertificate(SELF_SIGNED_CERT) };
-  clientOptions.defaultKeypair = selfSignedKeypair;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // Self-signed certificate loaded in the client: fail
+    auto clientOptions = TlsTest::defaultClient();
+    clientOptions.defaultKeypair = selfSignedKeypair;
+
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::YES);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
 
     auto pipe = test.io.provider->newTwoWayPipe();
 
@@ -748,14 +782,14 @@ KJ_TEST("TLS client certificate verification") {
 #endif
   }
 
-  // Trusted certificate loaded in the client: success.
-  TlsKeypair altKeypair = {
-    TlsPrivateKey(HOST_KEY2),
-    TlsCertificate(kj::str(VALID_CERT2, INTERMEDIATE_CERT))
-  };
-  clientOptions.defaultKeypair = altKeypair;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // Trusted certificate loaded in the client: success.
+    auto clientOptions = TlsTest::defaultClient();
+    clientOptions.defaultKeypair = altKeypair;
+
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::YES);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
+
     ErrorNexus e;
 
     auto pipe = test.io.provider->newTwoWayPipe();
@@ -771,18 +805,15 @@ KJ_TEST("TLS client certificate verification") {
     KJ_ASSERT(id->hasCertificate());
     KJ_EXPECT(id->getCommonName() == "example.net");
 
-    auto writePromise = client->write("foo", 3);
-    char buf[4];
-    server.stream->read(&buf, 3).wait(test.io.waitScope);
-    buf[3] = '\0';
-
-    KJ_ASSERT(kj::StringPtr(buf) == "foo");
+    test.testConnection(*client, *server.stream);
   }
 
-  // If verifyClients is off, client certificate is ignored, even if trusted.
-  serverOptions.verifyClients = false;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // If verifyClients is off, client certificate is ignored, even if trusted.
+    auto clientOptions = TlsTest::defaultClient();
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::NO);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
+
     ErrorNexus e;
 
     auto pipe = test.io.provider->newTwoWayPipe();
@@ -798,10 +829,14 @@ KJ_TEST("TLS client certificate verification") {
     KJ_EXPECT(!id->hasCertificate());
   }
 
-  // Non-trusted keys are ignored too (not errors).
-  clientOptions.defaultKeypair = selfSignedKeypair;
   {
-    TlsTest test(clientOptions, serverOptions);
+    // Non-trusted keys are ignored too (not errors).
+    auto clientOptions = TlsTest::defaultClient();
+    clientOptions.defaultKeypair = selfSignedKeypair;
+
+    auto serverOptions = makeServerOptionsForClient(clientOptions, VerifyClients::NO);
+    TlsTest test(kj::mv(clientOptions), kj::mv(serverOptions));
+
     ErrorNexus e;
 
     auto pipe = test.io.provider->newTwoWayPipe();
@@ -816,6 +851,276 @@ KJ_TEST("TLS client certificate verification") {
     auto id = server.peerIdentity.downcast<TlsPeerIdentity>();
     KJ_EXPECT(!id->hasCertificate());
   }
+}
+
+class MockConnectionReceiver final: public ConnectionReceiver {
+  // This connection receiver allows mocked async connection establishment without the network.
+
+  struct ClientRequest {
+    Maybe<Exception> maybeException;
+    Own<PromiseFulfiller<Own<AsyncIoStream>>> clientFulfiller;
+  };
+
+public:
+  MockConnectionReceiver(AsyncIoProvider& provider): provider(provider) {}
+
+  Promise<Own<AsyncIoStream>> accept() override {
+    return acceptImpl();
+  }
+
+  Promise<AuthenticatedStream> acceptAuthenticated() override {
+    return acceptImpl().then([](auto stream) -> AuthenticatedStream {
+      return { kj::mv(stream), LocalPeerIdentity::newInstance({}) };
+    });
+  }
+
+  uint getPort() override {
+    return 0;
+  }
+  void getsockopt(int, int, void*, uint*) override {}
+  void setsockopt(int, int, const void*, uint) override {}
+
+  Promise<Own<AsyncIoStream>> connect() {
+    // Mock a new successful connection to our receiver.
+    return connectImpl();
+  }
+
+  Promise<void> badConnect() {
+    // Mock a new failed connection to our receiver.
+    return connectImpl(KJ_EXCEPTION(DISCONNECTED, "Pipes are leaky")).ignoreResult();
+  }
+
+private:
+  Promise<Own<AsyncIoStream>> acceptImpl() {
+    if (clientRequests.empty()) {
+      KJ_ASSERT(!serverFulfiller);
+      auto paf = newPromiseAndFulfiller<void>();
+      serverFulfiller = kj::mv(paf.fulfiller);
+      return paf.promise.then([this] {
+        return acceptImpl();
+      });
+    }
+
+    // This is accepting in FILO order, it shouldn't matter in practice.
+    auto request = kj::mv(clientRequests.back());
+    clientRequests.removeLast();
+
+    KJ_IF_MAYBE(exception, kj::mv(request.maybeException)) {
+      request.clientFulfiller = nullptr;  // The other end had an issue, break the promise.
+      return kj::mv(*exception);
+    } else {
+      auto pipe = provider.newTwoWayPipe();
+      request.clientFulfiller->fulfill(kj::mv(pipe.ends[0]));
+      return kj::mv(pipe.ends[1]);
+    }
+  }
+
+  Promise<Own<AsyncIoStream>> connectImpl(Maybe<Exception> maybeException = nullptr) {
+    auto paf = newPromiseAndFulfiller<Own<AsyncIoStream>>();
+    clientRequests.add(ClientRequest{ kj::mv(maybeException), kj::mv(paf.fulfiller) });
+
+    if (auto fulfiller = kj::mv(serverFulfiller)) {
+      fulfiller->fulfill();
+    }
+
+    return kj::mv(paf.promise);
+  }
+
+  AsyncIoProvider& provider;
+
+  Own<PromiseFulfiller<void>> serverFulfiller;
+  Vector<ClientRequest> clientRequests;
+};
+
+class TlsReceiverTest final: public TlsTest {
+  // TlsReceiverTest augments TlsTest to test TlsConnectionReceiver.
+public:
+  TlsReceiverTest(): TlsTest() {
+    auto baseReceiverPtr = kj::heap<MockConnectionReceiver>(*io.provider);
+    baseReceiver = baseReceiverPtr.get();
+    receiver = tlsServer.wrapPort(kj::mv(baseReceiverPtr));
+  }
+
+  TlsReceiverTest(TlsReceiverTest&&) = delete;
+  TlsReceiverTest(const TlsReceiverTest&) = delete;
+  TlsReceiverTest& operator=(TlsReceiverTest&&) = delete;
+  TlsReceiverTest& operator=(const TlsReceiverTest&) = delete;
+
+  Own<ConnectionReceiver> receiver;
+  MockConnectionReceiver* baseReceiver;
+};
+
+KJ_TEST("TLS receiver basics") {
+  TlsReceiverTest test;
+
+  auto clientPromise = test.baseReceiver->connect().then([&](auto stream) {
+    return test.tlsClient.wrapClient(kj::mv(stream), "example.com");
+  });
+  auto serverPromise = test.receiver->accept();
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  test.testConnection(*client, *server);
+}
+
+KJ_TEST("TLS receiver experiences pre-TLS error") {
+  TlsReceiverTest test;
+
+  KJ_LOG(INFO, "Accepting before a bad connect");
+  auto promise = test.receiver->accept();
+
+  KJ_LOG(INFO, "Disappointing our server");
+  test.baseReceiver->badConnect();
+
+  // Can't use KJ_EXPECT_THROW_RECOVERABLE_MESSAGE because wait() that returns a value can't throw
+  // recoverable exceptions. Can't use KJ_EXPECT_THROW_MESSAGE because non-recoverable exceptions
+  // will fork() in -fno-exception which screws up our state.
+  promise.then([](auto) {
+    KJ_FAIL_EXPECT("expected exception");
+  }, [](kj::Exception&& e) {
+    KJ_EXPECT(e.getDescription() == "Pipes are leaky");
+  }).wait(test.io.waitScope);
+
+  KJ_LOG(INFO, "Trying to load a promise after failure");
+  test.receiver->accept().then([](auto) {
+    KJ_FAIL_EXPECT("expected exception");
+  }, [](kj::Exception&& e) {
+    KJ_EXPECT(e.getDescription() == "Pipes are leaky");
+  }).wait(test.io.waitScope);
+}
+
+KJ_TEST("TLS receiver accepts multiple clients") {
+  TlsReceiverTest test;
+
+  auto wrapClient = [&](auto stream) {
+    return test.tlsClient.wrapClient(kj::mv(stream), "example.com");
+  };
+
+  auto writeToServer = [&](auto client) {
+    return test.writeToServer(*client).attach(kj::mv(client));
+  };
+
+  auto readFromClient = [&](auto server) {
+    return test.readFromClient(*server).attach(kj::mv(server));
+  };
+
+  KJ_LOG(INFO, "Requesting a bunch of client connects");
+  constexpr auto kClientCount = 20;
+  auto clientPromises = Vector<Promise<void>>();
+  for (auto i = 0; i < kClientCount; ++i) {
+    auto clientPromise = test.baseReceiver->connect().then(wrapClient).then(writeToServer);
+    clientPromises.add(kj::mv(clientPromise));
+  }
+
+  KJ_LOG(INFO, "Requesting and resolving a bunch of server accepts in sequence");
+  for (auto i = 0; i < kClientCount; ++i) {
+    // Resolve each receive in sequence like the Supervisor/Network.
+    test.receiver->accept().then(readFromClient).wait(test.io.waitScope);
+  }
+
+  KJ_LOG(INFO, "Resolving all of our client connects in parallel");
+  joinPromises(clientPromises.releaseAsArray()).wait(test.io.waitScope);
+
+  KJ_LOG(INFO, "Requesting one last server accept that we'll never resolve");
+  auto extraAcceptPromise = test.receiver->accept().then(readFromClient);
+  KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
+}
+
+KJ_TEST("TLS receiver does not stall on client that disconnects before ssl handshake") {
+  TlsReceiverTest test;
+
+  auto wrapClient = [&](auto stream) {
+    return test.tlsClient.wrapClient(kj::mv(stream), "example.com");
+  };
+
+  auto writeToServer = [&](auto client) {
+    return test.writeToServer(*client).attach(kj::mv(client));
+  };
+
+  auto readFromClient = [&](auto server) {
+    return test.readFromClient(*server).attach(kj::mv(server));
+  };
+
+  constexpr auto kClientCount = 20;
+  auto clientPromises = Vector<Promise<void>>();
+
+  KJ_LOG(INFO, "Requesting the first batch of client connects in parallel");
+  for (auto i = 0; i < kClientCount / 2; ++i) {
+    auto clientPromise = test.baseReceiver->connect().then(wrapClient).then(writeToServer);
+    clientPromises.add(kj::mv(clientPromise));
+  }
+
+  KJ_LOG(INFO, "Requesting and resolving a client connect that hangs up before ssl connect");
+  KJ_ASSERT(test.baseReceiver->connect().wait(test.io.waitScope));
+
+  KJ_LOG(INFO, "Requesting the second batch of client connects in parallel");
+  for (auto i = 0; i < kClientCount / 2; ++i) {
+    auto clientPromise = test.baseReceiver->connect().then(wrapClient).then(writeToServer);
+    clientPromises.add(kj::mv(clientPromise));
+  }
+
+  KJ_LOG(INFO, "Requesting and resolving a bunch of server accepts in sequence");
+  for (auto i = 0; i < kClientCount; ++i) {
+    test.receiver->accept().then(readFromClient).wait(test.io.waitScope);
+  }
+
+  KJ_LOG(INFO, "Resolving all of our client connects in parallel");
+  joinPromises(clientPromises.releaseAsArray()).wait(test.io.waitScope);
+
+  KJ_LOG(INFO, "Requesting one last server accept that we'll never resolve");
+  auto extraAcceptPromise = test.receiver->accept().then(readFromClient);
+  KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
+}
+
+KJ_TEST("TLS receiver does not stall on hung client") {
+  TlsReceiverTest test;
+
+  auto wrapClient = [&](auto stream) {
+    return test.tlsClient.wrapClient(kj::mv(stream), "example.com");
+  };
+
+  auto writeToServer = [&](auto client) {
+    return test.writeToServer(*client).attach(kj::mv(client));
+  };
+
+  auto readFromClient = [&](auto server) {
+    return test.readFromClient(*server).attach(kj::mv(server));
+  };
+
+  constexpr auto kClientCount = 20;
+  auto clientPromises = Vector<Promise<void>>();
+
+  KJ_LOG(INFO, "Requesting the first batch of client connects in parallel");
+  for (auto i = 0; i < kClientCount / 2; ++i) {
+    auto clientPromise = test.baseReceiver->connect().then(wrapClient).then(writeToServer);
+    clientPromises.add(kj::mv(clientPromise));
+  }
+
+  KJ_LOG(INFO, "Requesting and resolving a client connect that never does ssl connect");
+  auto hungClient = test.baseReceiver->connect().wait(test.io.waitScope);
+  KJ_ASSERT(hungClient);
+
+  KJ_LOG(INFO, "Requesting the second batch of client connects in parallel");
+  for (auto i = 0; i < kClientCount / 2; ++i) {
+    auto clientPromise = test.baseReceiver->connect().then(wrapClient).then(writeToServer);
+    clientPromises.add(kj::mv(clientPromise));
+  }
+
+  KJ_LOG(INFO, "Requesting and resolving a bunch of server accepts in sequence");
+  for (auto i = 0; i < kClientCount; ++i) {
+    test.receiver->accept().then(readFromClient).wait(test.io.waitScope);
+  }
+
+  KJ_LOG(INFO, "Resolving all of our client connects in parallel");
+  joinPromises(clientPromises.releaseAsArray()).wait(test.io.waitScope);
+
+  KJ_LOG(INFO, "Releasing the hung client");
+  hungClient = {};
+
+  KJ_LOG(INFO, "Requesting one last server accept that we'll never resolve");
+  auto extraAcceptPromise = test.receiver->accept().then(readFromClient);
+  KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
 }
 
 #ifdef KJ_EXTERNAL_TESTS

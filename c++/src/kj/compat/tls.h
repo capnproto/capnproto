@@ -45,15 +45,24 @@ enum class TlsVersion {
   TLS_1_2
 };
 
+using TlsErrorHandler = kj::Function<void(kj::Exception&&)>;
+// Use a simple kj::Function for handling errors during parallel accept().
+
 class TlsContext {
   // TLS system. Allocate one of these, configure it with the proper keys and certificates (or
   // use the defaults), and then use it to wrap the standard KJ network interfaces in
   // implementations that transparently use TLS.
 
 public:
+
   struct Options {
     Options();
     // Initializes all values to reasonable defaults.
+
+    KJ_DISALLOW_COPY(Options);
+    Options(Options&&) = default;
+    Options& operator=(Options&&) = default;
+    // Options is a move-only value type.
 
     bool useSystemTrustStore;
     // Whether or not to trust the system's default trust store. Default: true.
@@ -97,6 +106,9 @@ public:
 
     kj::Maybe<kj::Duration> acceptTimeout;
     // Timeout applied to accepting a new TLS connection. `timer` is required if this is set.
+
+    kj::Maybe<TlsErrorHandler> acceptErrorHandler;
+    // Error handler used for TLS accept errors.
   };
 
   TlsContext(Options options = Options());
@@ -138,6 +150,7 @@ private:
   void* ctx;  // actually type SSL_CTX, but we don't want to #include the OpenSSL headers here
   kj::Maybe<kj::Timer&> timer;
   kj::Maybe<kj::Duration> acceptTimeout;
+  kj::Maybe<TlsErrorHandler> acceptErrorHandler;
 
   struct SniCallback;
 };

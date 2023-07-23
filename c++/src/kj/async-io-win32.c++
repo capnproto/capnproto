@@ -808,7 +808,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   auto thread = heap<Thread>(kj::mvCapture(params, [outFd,portHint](LookupParams&& params) {
     KJ_DEFER(closesocket(outFd));
 
-    struct addrinfo* list;
+    addrinfo* list;
     int status = getaddrinfo(
         params.host == "*" ? nullptr : params.host.cStr(),
         params.service == nullptr ? nullptr : params.service.cStr(),
@@ -816,7 +816,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     if (status == 0) {
       KJ_DEFER(freeaddrinfo(list));
 
-      struct addrinfo* cur = list;
+      addrinfo* cur = list;
       while (cur != nullptr) {
         if (params.service == nullptr) {
           switch (cur->ai_addr->sa_family) {

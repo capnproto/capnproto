@@ -315,7 +315,7 @@ kj::Promise<void> writeMessagesImpl(
 
   size_t tableValsWritten = 0;
   size_t piecesWritten = 0;
-  for (int i = 0; i < messages.size(); ++i) {
+  for (auto i : kj::indices(messages)) {
     const size_t tableValsToWrite = tableSizeForSegments(messages[i].size());
     const size_t piecesToWrite = messages[i].size() + 1;
     fillWriteArraysWithMessage(
@@ -360,7 +360,7 @@ kj::Promise<void> writeMessages(
 kj::Promise<void> writeMessages(
     kj::AsyncOutputStream& output, kj::ArrayPtr<MessageBuilder*> builders) {
   auto messages = kj::heapArray<kj::ArrayPtr<const kj::ArrayPtr<const word>>>(builders.size());
-  for (int i = 0; i < builders.size(); ++i) {
+  for (auto i : kj::indices(builders)) {
     messages[i] = builders[i]->getSegmentsForOutput();
   }
   return writeMessages(output, messages);
@@ -368,7 +368,7 @@ kj::Promise<void> writeMessages(
 
 kj::Promise<void> MessageStream::writeMessages(kj::ArrayPtr<MessageBuilder*> builders) {
   auto messages = kj::heapArray<kj::ArrayPtr<const kj::ArrayPtr<const word>>>(builders.size());
-  for (int i = 0; i < builders.size(); ++i) {
+  for (auto i : kj::indices(builders)) {
     messages[i] = builders[i]->getSegmentsForOutput();
   }
   return writeMessages(messages);

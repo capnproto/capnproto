@@ -75,6 +75,10 @@ void AsyncInputStream::registerAncillaryMessageHandler(
  KJ_UNIMPLEMENTED("registerAncillaryMsgHandler is not implemented by this AsyncInputStream");
 }
 
+Maybe<Own<AsyncInputStream>> AsyncInputStream::tryTee(uint64_t) {
+  return nullptr;
+}
+
 namespace {
 
 class AsyncPump {
@@ -1680,103 +1684,10 @@ CapabilityPipe newCapabilityPipe() {
 namespace {
 
 class AsyncTee final: public Refcounted {
-public:
-  using BranchId = uint;
-
-  explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
-      : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
-  ~AsyncTee() noexcept(false) {
-    bool hasBranches = false;
-    for (auto& branch: branches) {
-      hasBranches = hasBranches || branch != nullptr;
-    }
-    KJ_ASSERT(!hasBranches, "destroying AsyncTee with branch still alive") {
-      // Don't std::terminate().
-      break;
-    }
-  }
-
-  void addBranch(BranchId branch) {
-    KJ_REQUIRE(branches[branch] == nullptr, "branch already exists");
-    branches[branch] = Branch();
-  }
-
-  void removeBranch(BranchId branch) {
-    auto& state = KJ_REQUIRE_NONNULL(branches[branch], "branch was already destroyed");
-    KJ_REQUIRE(state.sink == nullptr,
-        "destroying tee branch with operation still in-progress; probably going to segfault") {
-      // Don't std::terminate().
-      break;
-    }
-
-    branches[branch] = nullptr;
-  }
-
-  Promise<size_t> tryRead(BranchId branch, void* buffer, size_t minBytes, size_t maxBytes)  {
-    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
-    KJ_ASSERT(state.sink == nullptr);
-
-    // If there is excess data in the buffer for us, slurp that up.
-    auto readBuffer = arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes);
-    auto readSoFar = state.buffer.consume(readBuffer, minBytes);
-
-    if (minBytes == 0) {
-      return readSoFar;
-    }
-
-    if (state.buffer.empty()) {
-      KJ_IF_MAYBE(reason, stoppage) {
-        // Prefer a short read to an exception. The exception prevents the pull loop from adding any
-        // data to the buffer, so `readSoFar` will be zero the next time someone calls `tryRead()`,
-        // and the caller will see the exception.
-        if (reason->is<Eof>() || readSoFar > 0) {
-          return readSoFar;
-        }
-        return cp(reason->get<Exception>());
-      }
-    }
-
-    auto promise = newAdaptedPromise<size_t, ReadSink>(state.sink, readBuffer, minBytes, readSoFar);
-    ensurePulling();
-    return mv(promise);
-  }
-
-  Maybe<uint64_t> tryGetLength(BranchId branch)  {
-    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
-
-    return length.map([&state](uint64_t amount) {
-      return amount + state.buffer.size();
-    });
-  }
-
-  Promise<uint64_t> pumpTo(BranchId branch, AsyncOutputStream& output, uint64_t amount)  {
-    auto& state = KJ_ASSERT_NONNULL(branches[branch]);
-    KJ_ASSERT(state.sink == nullptr);
-
-    if (amount == 0) {
-      return amount;
-    }
-
-    if (state.buffer.empty()) {
-      KJ_IF_MAYBE(reason, stoppage) {
-        if (reason->is<Eof>()) {
-          return uint64_t(0);
-        }
-        return cp(reason->get<Exception>());
-      }
-    }
-
-    auto promise = newAdaptedPromise<uint64_t, PumpSink>(state.sink, output, amount);
-    ensurePulling();
-    return mv(promise);
-  }
-
-private:
-  struct Eof {};
-  using Stoppage = OneOf<Eof, Exception>;
-
   class Buffer {
   public:
+    Buffer() = default;
+
     uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
     // Consume as many bytes as possible, copying them into `readBuffer`. Return the number of bytes
     // consumed.
@@ -1797,9 +1708,158 @@ private:
     bool empty() const;
     uint64_t size() const;
 
+    Buffer clone() const {
+      size_t size = 0;
+      for (const auto& buf: bufferList) {
+        size += buf.size();
+      }
+      auto builder = heapArrayBuilder<byte>(size);
+      for (const auto& buf: bufferList) {
+        builder.addAll(buf);
+      }
+      std::deque<Array<byte>> deque;
+      deque.emplace_back(builder.finish());
+      return Buffer{mv(deque)};
+    }
+
   private:
+    Buffer(std::deque<Array<byte>>&& buffer) : bufferList(mv(buffer)) {}
+
     std::deque<Array<byte>> bufferList;
   };
+
+  class Sink;
+
+public:
+  class Branch final: public AsyncInputStream {
+  public:
+    Branch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
+      tee->branches.add(*this);
+    }
+
+    Branch(Own<AsyncTee> teeArg, Branch& cloneFrom)
+        : tee(mv(teeArg)), buffer(cloneFrom.buffer.clone()) {
+      tee->branches.add(*this);
+    }
+
+    ~Branch() noexcept(false) {
+      KJ_ASSERT(link.isLinked()) {
+        // Don't std::terminate().
+        return;
+      }
+      tee->branches.remove(*this);
+
+      KJ_REQUIRE(sink == nullptr,
+          "destroying tee branch with operation still in-progress; probably going to segfault") {
+        // Don't std::terminate().
+        break;
+      }
+    }
+
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return tee->tryRead(*this, buffer, minBytes, maxBytes);
+    }
+
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+      return tee->pumpTo(*this, output, amount);
+    }
+
+    Maybe<uint64_t> tryGetLength() override {
+      return tee->tryGetLength(*this);
+    }
+
+    Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit) override {
+      if (tee->getBufferSizeLimit() != limit) {
+        // Cannot optimize this path as the limit has changed, so we need a new AsyncTee to manage
+        // the limit.
+        return nullptr;
+      }
+
+      return kj::heap<Branch>(addRef(*tee), *this);
+    }
+
+  private:
+    Own<AsyncTee> tee;
+    ListLink<Branch> link;
+
+    Buffer buffer;
+    Maybe<Sink&> sink;
+
+    friend class AsyncTee;
+  };
+
+  explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
+      : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
+  ~AsyncTee() noexcept(false) {
+    KJ_ASSERT(branches.size() == 0, "destroying AsyncTee with branch still alive") {
+      // Don't std::terminate().
+      break;
+    }
+  }
+
+  Promise<size_t> tryRead(Branch& branch, void* buffer, size_t minBytes, size_t maxBytes)  {
+    KJ_ASSERT(branch.sink == nullptr);
+
+    // If there is excess data in the buffer for us, slurp that up.
+    auto readBuffer = arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes);
+    auto readSoFar = branch.buffer.consume(readBuffer, minBytes);
+
+    if (minBytes == 0) {
+      return readSoFar;
+    }
+
+    if (branch.buffer.empty()) {
+      KJ_IF_MAYBE(reason, stoppage) {
+        // Prefer a short read to an exception. The exception prevents the pull loop from adding any
+        // data to the buffer, so `readSoFar` will be zero the next time someone calls `tryRead()`,
+        // and the caller will see the exception.
+        if (reason->is<Eof>() || readSoFar > 0) {
+          return readSoFar;
+        }
+        return cp(reason->get<Exception>());
+      }
+    }
+
+    auto promise = newAdaptedPromise<size_t, ReadSink>(
+        branch.sink, readBuffer, minBytes, readSoFar);
+    ensurePulling();
+    return mv(promise);
+  }
+
+  Maybe<uint64_t> tryGetLength(Branch& branch)  {
+    return length.map([&branch](uint64_t amount) {
+      return amount + branch.buffer.size();
+    });
+  }
+
+  uint64_t getBufferSizeLimit() const {
+    return bufferSizeLimit;
+  }
+
+  Promise<uint64_t> pumpTo(Branch& branch, AsyncOutputStream& output, uint64_t amount)  {
+    KJ_ASSERT(branch.sink == nullptr);
+
+    if (amount == 0) {
+      return amount;
+    }
+
+    if (branch.buffer.empty()) {
+      KJ_IF_MAYBE(reason, stoppage) {
+        if (reason->is<Eof>()) {
+          return uint64_t(0);
+        }
+        return cp(reason->get<Exception>());
+      }
+    }
+
+    auto promise = newAdaptedPromise<uint64_t, PumpSink>(branch.sink, output, amount);
+    ensurePulling();
+    return mv(promise);
+  }
+
+private:
+  struct Eof {};
+  using Stoppage = OneOf<Eof, Exception>;
 
   class Sink {
   public:
@@ -1873,11 +1933,6 @@ private:
 
     PromiseFulfiller<T>& fulfiller;
     Maybe<Sink&>& sinkLink;
-  };
-
-  struct Branch {
-    Buffer buffer;
-    Maybe<Sink&> sink;
   };
 
   class ReadSink final: public SinkBase<size_t> {
@@ -1999,18 +2054,14 @@ private:
     uint64_t minBytes = 0;
     uint64_t maxBytes = kj::maxValue;
 
-    uint nBranches = 0;
     uint nSinks = 0;
 
-    for (auto& state: branches) {
-      KJ_IF_MAYBE(s, state) {
-        ++nBranches;
-        KJ_IF_MAYBE(sink, s->sink) {
-          ++nSinks;
-          auto need = sink->need();
-          minBytes = kj::max(minBytes, need.minBytes);
-          maxBytes = kj::min(maxBytes, need.maxBytes);
-        }
+    for (auto& branch: branches) {
+      KJ_IF_MAYBE(sink, branch.sink) {
+        ++nSinks;
+        auto need = sink->need();
+        minBytes = kj::max(minBytes, need.minBytes);
+        maxBytes = kj::min(maxBytes, need.maxBytes);
       }
     }
 
@@ -2041,11 +2092,9 @@ private:
     return pullLoop().eagerlyEvaluate([this](Exception&& exception) {
       // Exception from our loop, not from inner tryRead(). Something is broken; tell everybody!
       pulling = false;
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          KJ_IF_MAYBE(sink, s->sink) {
-            sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
-          }
+      for (auto& branch: branches) {
+        KJ_IF_MAYBE(sink, branch.sink) {
+          sink->reject(KJ_EXCEPTION(FAILED, "Exception in tee loop", exception));
         }
       }
     });
@@ -2056,7 +2105,7 @@ private:
   Own<AsyncInputStream> inner;
   const uint64_t bufferSizeLimit = kj::maxValue;
   Maybe<uint64_t> length;
-  Maybe<Branch> branches[2];
+  List<Branch, &Branch::link> branches;
   Maybe<Stoppage> stoppage;
   Promise<void> pullPromise = READY_NOW;
   bool pulling = false;
@@ -2070,11 +2119,9 @@ private:
 
       Vector<Promise<void>> promises;
 
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          KJ_IF_MAYBE(sink, s->sink) {
-            promises.add(sink->fill(s->buffer, stoppage));
-          }
+      for (auto& branch: branches) {
+        KJ_IF_MAYBE(sink, branch.sink) {
+          promises.add(sink->fill(branch.buffer, stoppage));
         }
       }
 
@@ -2108,13 +2155,11 @@ private:
       n.maxBytes = kj::min(n.maxBytes, MAX_BLOCK_SIZE);
       n.maxBytes = kj::min(n.maxBytes, bufferSizeLimit);
       n.maxBytes = kj::max(n.minBytes, n.maxBytes);
-      for (auto& state: branches) {
-        KJ_IF_MAYBE(s, state) {
-          // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
-          if (s->buffer.size() + n.maxBytes > bufferSizeLimit) {
-            stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
-            return pullLoop();
-          }
+      for (auto& branch: branches) {
+        // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
+        if (branch.buffer.size() + n.maxBytes > bufferSizeLimit) {
+          stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
+          return pullLoop();
         }
       }
       auto heapBuffer = heapArray<byte>(n.maxBytes);
@@ -2142,19 +2187,17 @@ private:
 
         KJ_ASSERT(stoppage == nullptr);
         Maybe<ArrayPtr<byte>> bufferPtr = nullptr;
-        for (auto& state: branches) {
-          KJ_IF_MAYBE(s, state) {
-            // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
-            //
-            // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
-            //   only one buffer will be in use. If we generalize to the n-branch case, this would
-            //   become memcpy-heavy.
-            KJ_IF_MAYBE(ptr, bufferPtr) {
-              s->buffer.produce(heapArray(*ptr));
-            } else {
-              bufferPtr = ArrayPtr<byte>(heapBuffer);
-              s->buffer.produce(mv(heapBuffer));
-            }
+        for (auto& branch: branches) {
+          // Prefer to move the buffer into the receiving branch's deque, rather than memcpy.
+          //
+          // TODO(perf): For the 2-branch case, this is fine, since the majority of the time
+          //   only one buffer will be in use. If we generalize to the n-branch case, this would
+          //   become memcpy-heavy.
+          KJ_IF_MAYBE(ptr, bufferPtr) {
+            branch.buffer.produce(heapArray(*ptr));
+          } else {
+            bufferPtr = ArrayPtr<byte>(heapBuffer);
+            branch.buffer.produce(mv(heapBuffer));
           }
         }
 
@@ -2254,41 +2297,16 @@ uint64_t AsyncTee::Buffer::size() const {
   return result;
 }
 
-class TeeBranch final: public AsyncInputStream {
-public:
-  TeeBranch(Own<AsyncTee> tee, uint8_t branch): tee(mv(tee)), branch(branch) {
-    this->tee->addBranch(branch);
-  }
-  ~TeeBranch() noexcept(false) {
-    unwind.catchExceptionsIfUnwinding([&]() {
-      tee->removeBranch(branch);
-    });
-  }
-
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tee->tryRead(branch, buffer, minBytes, maxBytes);
-  }
-
-  Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    return tee->pumpTo(branch, output, amount);
-  }
-
-  Maybe<uint64_t> tryGetLength() override {
-    return tee->tryGetLength(branch);
-  }
-
-private:
-  Own<AsyncTee> tee;
-  const uint8_t branch;
-  UnwindDetector unwind;
-};
-
 }  // namespace
 
 Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
+  KJ_IF_MAYBE(t, input->tryTee(limit)) {
+    return { { mv(input), mv(*t) }};
+  }
+
   auto impl = refcounted<AsyncTee>(mv(input), limit);
-  Own<AsyncInputStream> branch1 = heap<TeeBranch>(addRef(*impl), 0);
-  Own<AsyncInputStream> branch2 = heap<TeeBranch>(mv(impl), 1);
+  Own<AsyncInputStream> branch1 = heap<AsyncTee::Branch>(addRef(*impl));
+  Own<AsyncInputStream> branch2 = heap<AsyncTee::Branch>(mv(impl));
   return { { mv(branch1), mv(branch2) } };
 }
 
@@ -2742,6 +2760,140 @@ Own<NetworkAddress> CapabilityStreamNetworkAddress::clone() {
 }
 String CapabilityStreamNetworkAddress::toString() {
   return kj::str("<CapabilityStreamNetworkAddress>");
+}
+
+// =======================================================================================
+
+namespace {
+
+class AggregateConnectionReceiver final: public ConnectionReceiver {
+public:
+  AggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receiversParam)
+      : receivers(kj::mv(receiversParam)),
+        acceptTasks(kj::heapArray<Maybe<Promise<void>>>(receivers.size())) {}
+
+  Promise<Own<AsyncIoStream>> accept() override {
+    return acceptAuthenticated().then([](AuthenticatedStream&& authenticated) {
+      return kj::mv(authenticated.stream);
+    });
+  }
+
+  Promise<AuthenticatedStream> acceptAuthenticated() override {
+    // Whenever our accept() is called, we want it to resolve to the first connection accepted by
+    // any of our child receivers. Naively, it may seem like we should call accept() on them all
+    // and exclusiveJoin() the results. Unfortunately, this might not work in a certain race
+    // condition: if two or more of our children receive connections simultaneously, both child
+    // acccept() calls may return, but we'll only end up taking one and dropping the other.
+    //
+    // To avoid this problem, we must instead initiate `accept()` calls on all children, and even
+    // after one of them returns a result, we must allow the others to keep running. If we end up
+    // accepting any sockets from children when there is no outstanding accept() on the aggregate,
+    // we must put that socket into a backlog. We only restart accept() calls on children if the
+    // backlog is empty, and hence the maximum length of the backlog is the number of children
+    // minus 1.
+
+    if (backlog.empty()) {
+      auto result = kj::newAdaptedPromise<AuthenticatedStream, Waiter>(*this);
+      ensureAllAccepting();
+      return result;
+    } else {
+      auto result = kj::mv(backlog.front());
+      backlog.pop_front();
+      return result;
+    }
+  }
+
+  uint getPort() override {
+    return receivers[0]->getPort();
+  }
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    return receivers[0]->getsockopt(level, option, value, length);
+  }
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    // Apply to all.
+    for (auto& r: receivers) {
+      r->setsockopt(level, option, value, length);
+    }
+  }
+  void getsockname(struct sockaddr* addr, uint* length) override {
+    return receivers[0]->getsockname(addr, length);
+  }
+
+private:
+  Array<Own<ConnectionReceiver>> receivers;
+  Array<Maybe<Promise<void>>> acceptTasks;
+
+  struct Waiter {
+    Waiter(PromiseFulfiller<AuthenticatedStream>& fulfiller,
+           AggregateConnectionReceiver& parent)
+        : fulfiller(fulfiller), parent(parent) {
+      parent.waiters.add(*this);
+    }
+    ~Waiter() noexcept(false) {
+      if (link.isLinked()) {
+        parent.waiters.remove(*this);
+      }
+    }
+
+    PromiseFulfiller<AuthenticatedStream>& fulfiller;
+    AggregateConnectionReceiver& parent;
+    ListLink<Waiter> link;
+  };
+
+  List<Waiter, &Waiter::link> waiters;
+  std::deque<Promise<AuthenticatedStream>> backlog;
+  // At least one of `waiters` or `backlog` is always empty.
+
+  void ensureAllAccepting() {
+    for (auto i: kj::indices(receivers)) {
+      if (acceptTasks[i] == nullptr) {
+        acceptTasks[i] = acceptLoop(i);
+      }
+    }
+  }
+
+  Promise<void> acceptLoop(size_t index) {
+    return kj::evalNow([&]() { return receivers[index]->acceptAuthenticated(); })
+        .then([this](AuthenticatedStream&& as) {
+      if (waiters.empty()) {
+        backlog.push_back(kj::mv(as));
+      } else {
+        auto& waiter = waiters.front();
+        waiter.fulfiller.fulfill(kj::mv(as));
+        waiters.remove(waiter);
+      }
+    }, [this](Exception&& e) {
+      if (waiters.empty()) {
+        backlog.push_back(kj::mv(e));
+      } else {
+        auto& waiter = waiters.front();
+        waiter.fulfiller.reject(kj::mv(e));
+        waiters.remove(waiter);
+      }
+    }).then([this, index]() -> Promise<void> {
+      if (waiters.empty()) {
+        // Don't keep accepting if there's no one waiting.
+        // HACK: We can't cancel ourselves, so detach the task so we can null out the slot.
+        //   We know that the promise we're detaching here is exactly the promise that's currently
+        //   executing and has no further `.then()`s on it, so no further callbacks will run in
+        //   detached state... we're just using `detach()` as a tricky way to have the event loop
+        //   dispose of this promise later after we've returned.
+        // TODO(cleanup): This pattern has come up several times, we need a better way to handle
+        //   it.
+        KJ_ASSERT_NONNULL(acceptTasks[index]).detach([](auto&&) {});
+        acceptTasks[index] = nullptr;
+        return READY_NOW;
+      } else {
+        return acceptLoop(index);
+      }
+    });
+  }
+};
+
+}  // namespace
+
+Own<ConnectionReceiver> newAggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receivers) {
+  return kj::heap<AggregateConnectionReceiver>(kj::mv(receivers));
 }
 
 // =======================================================================================

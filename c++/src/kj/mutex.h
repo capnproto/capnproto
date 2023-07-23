@@ -139,7 +139,7 @@ public:
   bool lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location);
   void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
-  void assertLockedByCaller(Exclusivity exclusivity);
+  void assertLockedByCaller(Exclusivity exclusivity) const;
   // In debug mode, assert that the mutex is locked by the calling thread, or if that is
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
@@ -161,6 +161,13 @@ public:
   // are waiting for a wait() condition. Assuming correct implementation, all those threads
   // should immediately go back to sleep.
 
+#if KJ_USE_FUTEX
+  uint numReadersWaitingForTest() const;
+  // The number of reader locks that are currently blocked on this lock (must be called while
+  // holding the writer lock). This is really only a utility method for mutex-test.c++ so it can
+  // validate certain invariants.
+#endif
+
 #if KJ_SAVE_ACQUIRED_LOCK_INFO
   using AcquiredMetadata = kj::OneOf<HoldingExclusively, HoldingShared>;
   KJ_DISABLE_TSAN AcquiredMetadata lockedInfo() const;
@@ -178,6 +185,10 @@ private:
   // bits 0-29 = count of readers; If an exclusive lock is held, this is the count of threads
   //   waiting for a read lock, otherwise it is the count of threads that currently hold a read
   //   lock.
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+  bool printContendedReader = false;
+#endif
 
   static constexpr uint EXCLUSIVE_HELD = 1u << 31;
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
@@ -236,7 +247,7 @@ private:
 
   kj::Maybe<Waiter&> waitersHead = nullptr;
   kj::Maybe<Waiter&>* waitersTail = &waitersHead;
-  // linked list of waitUntil()s; can only modify under lock
+  // linked list of waiters; can only modify under lock
 
   inline void addWaiter(Waiter& waiter);
   inline void removeWaiter(Waiter& waiter);
@@ -520,9 +531,10 @@ public:
       : location(location) {}
 
   template <typename U, typename... Params>
-  ExternalMutexGuarded(Locked<U> lock, Params&&... params)
+  ExternalMutexGuarded(Locked<U> lock, Params&&... params, LockSourceLocationArg location = {})
       : mutex(lock.mutex),
-        value(kj::fwd<Params>(params)...) {}
+        value(kj::fwd<Params>(params)...),
+        location(location) {}
   // Construct the value in-place. This constructor requires passing ownership of the lock into
   // the constructor. Normally this should be a lock that you take on the line calling the
   // constructor, like:
@@ -543,12 +555,13 @@ public:
   }
 
   ExternalMutexGuarded(ExternalMutexGuarded&& other)
-      : mutex(other.mutex), value(kj::mv(other.value)) {
+      : mutex(other.mutex), value(kj::mv(other.value)), location(other.location) {
     other.mutex = nullptr;
   }
   ExternalMutexGuarded& operator=(ExternalMutexGuarded&& other) {
     mutex = other.mutex;
     value = kj::mv(other.value);
+    location = other.location;
     other.mutex = nullptr;
     return *this;
   }

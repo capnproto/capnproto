@@ -35,7 +35,7 @@ Fixed in
   - Unix: https://capnproto.org/capnproto-c++-0.4.1.1.tar.gz
 - release 0.6 (future)
 
-[0]: https://github.com/sandstorm-io/capnproto/commit/104870608fde3c698483fdef6b97f093fc15685d
+[0]: https://github.com/capnproto/capnproto/commit/104870608fde3c698483fdef6b97f093fc15685d
 
 Details
 =======

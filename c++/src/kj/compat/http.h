@@ -331,7 +331,7 @@ public:
   void takeOwnership(kj::String&& string);
   void takeOwnership(kj::Array<char>&& chars);
   void takeOwnership(HttpHeaders&& otherHeaders);
-  // Takes overship of a string so that it lives until the HttpHeaders object is destroyed. Useful
+  // Takes ownership of a string so that it lives until the HttpHeaders object is destroyed. Useful
   // when you've passed a dynamic value to set() or add() or parse*().
 
   struct Request {
@@ -583,6 +583,9 @@ public:
   // if this WebSocket implementation is able to perform the pump in an optimized way, better than
   // the default implementation of pumpTo(). The default implementation of pumpTo() always tries
   // calling this first, and the default implementation of tryPumpFrom() always returns null.
+
+  virtual uint64_t sentByteCount() = 0;
+  virtual uint64_t receivedByteCount() = 0;
 };
 
 class HttpClient {
@@ -611,7 +614,7 @@ public:
     // Content-Length: 0.
 
     kj::Promise<Response> response;
-    // Promise for the eventual respnose.
+    // Promise for the eventual response.
   };
 
   virtual Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -896,6 +899,12 @@ public:
   //
   // Also unlike `HttpService::request()`, it is okay to return kj::READY_NOW without calling
   // `response.send()`. In this case, no response will be sent, and the connection will be closed.
+
+  virtual void handleListenLoopException(kj::Exception&& exception);
+  // Override this function to customize error handling for individual connections in the
+  // `listenHttp()` overload which accepts a ConnectionReceiver reference.
+  //
+  // The default handler uses KJ_LOG() to log the exception as an error.
 };
 
 class HttpServerCallbacks {
@@ -915,6 +924,9 @@ class HttpServer final: private kj::TaskSet::ErrorHandler {
 public:
   typedef HttpServerSettings Settings;
   typedef kj::Function<kj::Own<HttpService>(kj::AsyncIoStream&)> HttpServiceFactory;
+  class SuspendableRequest;
+  typedef kj::Function<kj::Maybe<kj::Own<HttpService>>(SuspendableRequest&)>
+      SuspendableHttpServiceFactory;
 
   HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable, HttpService& service,
              Settings settings = Settings());
@@ -955,6 +967,56 @@ public:
   // caller should close it without any further reads/writes. Note this only ever returns `true`
   // if you called `drain()` -- otherwise this server would keep handling the connection.
 
+  class SuspendedRequest {
+    // SuspendedRequest is a representation of a request immediately after parsing the method line and
+    // headers. You can obtain one of these by suspending a request by calling
+    // SuspendableRequest::suspend(), then later resume the request with another call to
+    // listenHttpCleanDrain().
+
+  public:
+    // Nothing, this is an opaque type.
+
+  private:
+    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, HttpMethod, kj::StringPtr, HttpHeaders);
+
+    kj::Array<byte> buffer;
+    // A buffer containing at least the request's method, URL, and headers, and possibly content
+    // thereafter.
+
+    kj::ArrayPtr<byte> leftover;
+    // Pointer to the end of the request headers. If this has a non-zero length, then our buffer
+    // contains additional content, presumably the head of the request body.
+
+    HttpMethod method;
+    kj::StringPtr url;
+    HttpHeaders headers;
+    // Parsed request front matter. `url` and `headers` both store pointers into `buffer`.
+
+    friend class HttpServer;
+  };
+
+  kj::Promise<bool> listenHttpCleanDrain(kj::AsyncIoStream& connection,
+      SuspendableHttpServiceFactory factory,
+      kj::Maybe<SuspendedRequest> suspendedRequest = nullptr);
+  // Like listenHttpCleanDrain(), but allows you to suspend requests.
+  //
+  // When this overload is in use, the HttpServer's default HttpService or HttpServiceFactory is not
+  // used. Instead, the HttpServer reads the request method line and headers, then calls `factory`
+  // with a SuspendableRequest representing the request parsed so far. The factory may then return
+  // a kj::Own<HttpService> for that specific request, or it may call SuspendableRequest::suspend()
+  // and return nullptr. (It is an error for the factory to return nullptr without also calling
+  // suspend(); this will result in a rejected listenHttpCleanDrain() promise.)
+  //
+  // If the factory chooses to suspend, the listenHttpCleanDrain() promise is resolved with false
+  // at the earliest opportunity.
+  //
+  // SuspendableRequest::suspend() returns a SuspendedRequest. You can resume this request later by
+  // calling this same listenHttpCleanDrain() overload with the original connection stream, and the
+  // SuspendedRequest in question.
+  //
+  // This overload of listenHttpCleanDrain() implements draining, as documented above. Note that the
+  // returned promise will resolve to false (not clean) if a request is suspended.
+
 private:
   class Connection;
 
@@ -979,6 +1041,32 @@ private:
   kj::Promise<void> listenLoop(kj::ConnectionReceiver& port);
 
   void taskFailed(kj::Exception&& exception) override;
+};
+
+class HttpServer::SuspendableRequest {
+  // Interface passed to the SuspendableHttpServiceFactory parameter of listenHttpCleanDrain().
+
+public:
+  HttpMethod method;
+  kj::StringPtr url;
+  const HttpHeaders& headers;
+  // Parsed request front matter, so the implementer can decide whether to suspend the request.
+
+  SuspendedRequest suspend();
+  // Signal to the HttpServer that the current request loop should be exited. Return a
+  // SuspendedRequest, containing HTTP method, URL, and headers access, along with the actual header
+  // buffer. The request can be later resumed with a call to listenHttpCleanDrain() using the same
+  // connection.
+
+private:
+  explicit SuspendableRequest(
+      Connection& connection, HttpMethod method, kj::StringPtr url, const HttpHeaders& headers)
+      : method(method), url(url), headers(headers), connection(connection) {}
+  KJ_DISALLOW_COPY(SuspendableRequest);
+
+  Connection& connection;
+
+  friend class Connection;
 };
 
 // =======================================================================================

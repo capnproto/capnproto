@@ -109,10 +109,19 @@ KJ_BEGIN_HEADER
 #undef _GLIBCXX_HAVE_GETS
 #endif
 
-#if defined(_MSC_VER)
+#if _WIN32
+// Windows likes to define macros for min() and max(). We just can't deal with this.
+// If windows.h was included already, undef these.
+#undef min
+#undef max
+// If windows.h was not included yet, define the macro that prevents min() and max() from being
+// defined.
 #ifndef NOMINMAX
 #define NOMINMAX 1
 #endif
+#endif
+
+#if defined(_MSC_VER)
 #include <intrin.h>  // __popcnt
 #endif
 
@@ -334,7 +343,10 @@ KJ_NORETURN(void unreachable());
 }  // namespace _ (private)
 
 #ifdef KJ_DEBUG
-#if _MSC_VER && !defined(__clang__)
+#if _MSC_VER && !defined(__clang__) && (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL)
+#define KJ_MSVC_TRADITIONAL_CPP 1
+#endif
+#if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, "" #__VA_ARGS__, __VA_ARGS__)
@@ -379,6 +391,12 @@ KJ_NORETURN(void unreachable());
 #else
 // TODO(someday): Add support for non-clang compilers.
 #define KJ_KNOWN_UNREACHABLE(code) do {code;} while(false)
+#endif
+
+#if KJ_HAS_CPP_ATTRIBUTE(fallthrough)
+#define KJ_FALLTHROUGH [[fallthrough]]
+#else
+#define KJ_FALLTHROUGH
 #endif
 
 // #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack)
@@ -791,7 +809,7 @@ struct ThrowOverflow {
   // Functor which throws an exception complaining about integer overflow. Usually this is used
   // with the interfaces in units.h, but is defined here because Cap'n Proto wants to avoid
   // including units.h when not using CAPNP_DEBUG_TYPES.
-  void operator()() const;
+  [[noreturn]] void operator()() const;
 };
 
 #if __GNUC__ || __clang__ || _MSC_VER
@@ -1045,8 +1063,7 @@ inline void dtor(T& location) {
 // forces the caller to handle the null case in order to satisfy the compiler, thus reliably
 // preventing null pointer dereferences at runtime.
 //
-// Maybe<T> can be implicitly constructed from T and from nullptr.  Additionally, it can be
-// implicitly constructed from T*, in which case the pointer is checked for nullness at runtime.
+// Maybe<T> can be implicitly constructed from T and from nullptr.
 // To read the value of a Maybe<T>, do:
 //
 //    KJ_IF_MAYBE(value, someFuncReturningMaybe()) {
@@ -1294,6 +1311,60 @@ inline T* readMaybe(T* ptr) { return ptr; }
 
 #define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
 
+#if __GNUC__
+// These two macros provide a friendly syntax to extract the value of a Maybe or return early.
+//
+// Use KJ_UNWRAP_OR_RETURN if you just want to return a simple value when the Maybe is null:
+//
+//     int foo(Maybe<int> maybe) {
+//       int value = KJ_UNWRAP_OR_RETURN(maybe, -1);
+//       // ... use value ...
+//     }
+//
+// For functions returning void, omit the second parameter to KJ_UNWRAP_OR_RETURN:
+//
+//     void foo(Maybe<int> maybe) {
+//       int value = KJ_UNWRAP_OR_RETURN(maybe);
+//       // ... use value ...
+//     }
+//
+// Use KJ_UNWRAP_OR if you want to execute a block with multiple statements.
+//
+//     int foo(Maybe<int> maybe) {
+//       int value = KJ_UNWRAP_OR(maybe, {
+//         KJ_LOG(ERROR, "problem!!!");
+//         return -1;
+//       });
+//       // ... use value ...
+//     }
+//
+// The block MUST return at the end or you will get a compiler error
+//
+// Unfortunately, these macros seem impossible to express without using GCC's non-standard
+// "statement expressions" extension. IIFEs don't do the trick here because a lambda cannot
+// return out of the parent scope. These macros should therefore only be used in projects that
+// target GCC or GCC-compatible compilers.
+
+#define KJ_UNWRAP_OR_RETURN(value, ...) \
+  (*({ \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (!_kj_result) { \
+      return __VA_ARGS__; \
+    } \
+    kj::mv(_kj_result); \
+  }))
+
+#define KJ_UNWRAP_OR(value, block) \
+  (*({ \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (!_kj_result) { \
+      block; \
+      asm("KJ_UNWRAP_OR_block_is_missing_return_statement\n"); \
+    } \
+    kj::mv(_kj_result); \
+  }))
+#endif
+
 template <typename T>
 class Maybe {
   // A T, or nullptr.
@@ -1412,6 +1483,46 @@ public:
   const T&& orDefault(const T&& defaultValue) const && {
     if (ptr == nullptr) {
       return kj::mv(defaultValue);
+    } else {
+      return kj::mv(*ptr);
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<T&>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) & {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return *ptr;
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<const T&>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) const & {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return *ptr;
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<T&&>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) && {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return kj::mv(*ptr);
+    }
+  }
+
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<const T&&>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) const && {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
     } else {
       return kj::mv(*ptr);
     }

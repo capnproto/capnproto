@@ -112,8 +112,16 @@ Orphan<List<rpc::PromisedAnswer::Op>> fromPipelineOps(
 }
 
 kj::Exception toException(const rpc::Exception::Reader& exception) {
+  auto reason = [&]() {
+    if (exception.getReason().startsWith("remote exception: ")) {
+      return kj::str(exception.getReason());
+    } else {
+      return kj::str("remote exception: ", exception.getReason());
+    }
+  }();
+
   kj::Exception result(static_cast<kj::Exception::Type>(exception.getType()),
-      "(remote)", 0, kj::str("remote exception: ", exception.getReason()));
+      "(remote)", 0, kj::mv(reason));
   if (exception.hasTrace()) {
     result.setRemoteTrace(kj::str(exception.getTrace()));
   }
@@ -3104,7 +3112,7 @@ public:
       // disassemble it.
       if (!connections.empty()) {
         kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connections.size());
-        kj::Exception shutdownException = KJ_EXCEPTION(FAILED, "RpcSystem was destroyed.");
+        kj::Exception shutdownException = KJ_EXCEPTION(DISCONNECTED, "RpcSystem was destroyed.");
         for (auto& entry: connections) {
           entry.second->disconnect(kj::cp(shutdownException));
           deleteMe.add(kj::mv(entry.second));

@@ -27,6 +27,19 @@
 
 KJ_BEGIN_HEADER
 
+#ifndef KJ_USE_FIBERS
+  #if __BIONIC__ || __FreeBSD__ || __OpenBSD__ || KJ_NO_EXCEPTIONS
+    // These platforms don't support fibers.
+    #define KJ_USE_FIBERS 0
+  #else
+    #define KJ_USE_FIBERS 1
+  #endif
+#else
+  #if KJ_NO_EXCEPTIONS && KJ_USE_FIBERS
+    #error "Fibers cannot be enabled when exceptions are disabled."
+  #endif
+#endif
+
 namespace kj {
 
 class EventLoop;
@@ -137,8 +150,8 @@ public:
   inline Promise(decltype(nullptr)) {}
 
   template <typename Func, typename ErrorFunc = _::PropagateException>
-  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException())
-      KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException(),
+                                 SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Register a continuation function to be executed when the promise completes.  The continuation
   // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation
   // may return a new value; `then()` itself returns a promise for the continuation's eventual
@@ -199,11 +212,11 @@ public:
   // You must still wait on the returned promise if you want the task to execute.
 
   template <typename ErrorFunc>
-  Promise<T> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  Promise<T> catch_(ErrorFunc&& errorHandler, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Equivalent to `.then(identityFunc, errorHandler)`, where `identifyFunc` is a function that
   // just returns its input.
 
-  T wait(WaitScope& waitScope);
+  T wait(WaitScope& waitScope, SourceLocation location = {});
   // Run the event loop until the promise is fulfilled, then return its result.  If the promise
   // is rejected, throw an exception.
   //
@@ -243,7 +256,7 @@ public:
   // switches back to the main stack in order to run the event loop, returning to the fiber's stack
   // once the awaited promise resolves.
 
-  bool poll(WaitScope& waitScope);
+  bool poll(WaitScope& waitScope, SourceLocation location = {});
   // Returns true if a call to wait() would complete without blocking, false if it would block.
   //
   // If the promise is not yet resolved, poll() will pump the event loop and poll for I/O in an
@@ -258,19 +271,19 @@ public:
   //
   // poll() is not supported in fibers; it will throw an exception.
 
-  ForkedPromise<T> fork() KJ_WARN_UNUSED_RESULT;
+  ForkedPromise<T> fork(SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
   // (or an equivalent) object (probably implemented via reference counting).
 
-  _::SplitTuplePromise<T> split();
+  _::SplitTuplePromise<T> split(SourceLocation location = {});
   // Split a promise for a tuple into a tuple of promises.
   //
   // E.g. if you have `Promise<kj::Tuple<T, U>>`, `split()` returns
   // `kj::Tuple<Promise<T>, Promise<U>>`.
 
-  Promise<T> exclusiveJoin(Promise<T>&& other) KJ_WARN_UNUSED_RESULT;
+  Promise<T> exclusiveJoin(Promise<T>&& other, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Return a new promise that resolves when either the original promise resolves or `other`
   // resolves (whichever comes first).  The promise that didn't resolve first is canceled.
 
@@ -285,8 +298,9 @@ public:
   // runs -- after calling then(), use attach() to add necessary objects to the result.
 
   template <typename ErrorFunc>
-  Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
-  Promise<T> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT;
+  Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation location = {})
+      KJ_WARN_UNUSED_RESULT;
+  Promise<T> eagerlyEvaluate(decltype(nullptr), SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Force eager evaluation of this promise.  Use this if you are going to hold on to the promise
   // for awhile without consuming the result, but you want to make sure that the system actually
   // processes it.
@@ -411,7 +425,8 @@ PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESUL
 // with the retry logic added.
 
 template <typename Func>
-PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_WARN_UNUSED_RESULT;
+PromiseForResult<Func, WaitScope&> startFiber(
+    size_t stackSize, Func&& func, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
 // Executes `func()` in a fiber, returning a promise for the eventual reseult. `func()` will be
 // passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on promises. Thus, `func()`
 // can be written in a synchronous, blocking style, instead of using `.then()`. This is often much
@@ -450,7 +465,8 @@ public:
   //   feature is only supported on Linux (the flag has no effect on other operating systems).
 
   template <typename Func>
-  PromiseForResult<Func, WaitScope&> startFiber(Func&& func) const KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, WaitScope&> startFiber(
+      Func&& func, SourceLocation location = {}) const KJ_WARN_UNUSED_RESULT;
   // Executes `func()` in a fiber from this pool, returning a promise for the eventual result.
   // `func()` will be passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on
   // promises. Thus, `func()` can be written in a synchronous, blocking style, instead of
@@ -483,7 +499,7 @@ private:
 };
 
 template <typename T>
-Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises, SourceLocation location = {});
 // Join an array of promises into a promise for an array.
 
 // =======================================================================================
@@ -600,7 +616,7 @@ struct PromiseFulfillerPair {
 };
 
 template <typename T>
-PromiseFulfillerPair<T> newPromiseAndFulfiller();
+PromiseFulfillerPair<T> newPromiseAndFulfiller(SourceLocation location = {});
 // Construct a Promise and a separate PromiseFulfiller which can be used to fulfill the promise.
 // If the PromiseFulfiller is destroyed before either of its methods are called, the Promise is
 // implicitly rejected.
@@ -787,7 +803,7 @@ public:
     virtual void taskFailed(kj::Exception&& exception) = 0;
   };
 
-  TaskSet(ErrorHandler& errorHandler);
+  TaskSet(ErrorHandler& errorHandler, SourceLocation location = {});
   // `errorHandler` will be executed any time a task throws an exception, and will execute within
   // the given EventLoop.
 
@@ -811,6 +827,7 @@ private:
   TaskSet::ErrorHandler& errorHandler;
   Maybe<Own<Task>> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
+  SourceLocation location;
 };
 
 // =======================================================================================
@@ -852,7 +869,7 @@ public:
   //   for "try" versions...
 
   template <typename Func>
-  PromiseForResult<Func, void> executeAsync(Func&& func) const;
+  PromiseForResult<Func, void> executeAsync(Func&& func, SourceLocation location = {}) const;
   // Call from any thread to request that the given function be executed on the executor's thread,
   // returning a promise for the result.
   //
@@ -894,7 +911,8 @@ public:
   // call provides E-Order in the same way as Cap'n Proto.)
 
   template <typename Func>
-  _::UnwrapPromise<PromiseForResult<Func, void>> executeSync(Func&& func) const;
+  _::UnwrapPromise<PromiseForResult<Func, void>> executeSync(
+      Func&& func, SourceLocation location = {}) const;
   // Schedules `func()` to execute on the executor thread, and then blocks the requesting thread
   // until `func()` completes. If `func()` returns a Promise, then the wait will continue until
   // that promise resolves, and the final result will be returned to the requesting thread.
@@ -1072,8 +1090,8 @@ private:
 
   friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
-                          WaitScope& waitScope);
-  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
+                          WaitScope& waitScope, SourceLocation location);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
   friend class _::Event;
   friend class WaitScope;
   friend class Executor;
@@ -1160,8 +1178,8 @@ private:
   friend class EventLoop;
   friend class _::FiberBase;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
-                          WaitScope& waitScope);
-  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
+                          WaitScope& waitScope, SourceLocation location);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };
 
 }  // namespace kj

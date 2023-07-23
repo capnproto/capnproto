@@ -91,6 +91,15 @@ public:
   // The provided callback will be called whenever any are encountered. The messages passed to
   // the function do not live beyond when function returns.
   // Only supported on Unix (the default impl throws UNIMPLEMENTED). Most apps will not use this.
+
+  virtual Maybe<Own<AsyncInputStream>> tryTee(uint64_t limit = kj::maxValue);
+  // Primarily intended as an optimization for the `tee` call. Returns an input stream whose state
+  // is independent from this one but which will return the exact same set of bytes read going
+  // forward. limit is a total limit on the amount of memory, in bytes, which a tee implementation
+  // may use to buffer stream data. An implementation must throw an exception if a read operation
+  // would cause the limit to be exceeded. If tryTee() can see that the new limit is impossible to
+  // satisfy, it should return nullptr so that the pessimized path is taken in newTee. This is
+  // likely to arise if tryTee() is called twice with different limits on the same stream.
 };
 
 class AsyncOutputStream {
@@ -429,6 +438,10 @@ public:
   virtual void getsockname(struct sockaddr* addr, uint* length);
   // Same as the methods of AsyncIoStream.
 };
+
+Own<ConnectionReceiver> newAggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receivers);
+// Create a ConnectionReceiver that listens on several other ConnectionReceivers and returns
+// sockets from any of them.
 
 // =======================================================================================
 // Datagram I/O

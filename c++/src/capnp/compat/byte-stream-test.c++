@@ -695,6 +695,14 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ promise stream -> ByteStream -> KJ") {
   waitScope.poll();
   exactPointerWriter.expectBuffer("corge");
   exactPointerWriter.fulfill();
+
+  // There may still be some detach()ed promises holding on to some capabilities that transitively
+  // hold a fake Own<AsyncOutputStream> pointing at exactPointerWriter, which is actually on the
+  // stack. We created a fake Own pointing to a stack variable by using
+  // kj::attachRef(exactPointerWriter), above; it does not actually own the object it points to.
+  // We need to make sure those Owns are dropped before exactPoniterWriter is destroyed, otherwise
+  // ASAN will flag some invalid reads (of exactPointerWriter's vtable, in particular).
+  waitScope.cancelAllDetached();
 }
 
 // TODO:

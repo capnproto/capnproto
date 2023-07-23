@@ -55,6 +55,11 @@
 #include <sys/ucred.h>
 #endif
 
+#if !defined(SOL_LOCAL) && (__FreeBSD__ || __DragonflyBSD__)
+// On DragonFly or FreeBSD < 12.2 you're supposed to use 0 for SOL_LOCAL.
+#define SOL_LOCAL 0
+#endif
+
 namespace kj {
 
 namespace {
@@ -222,6 +227,149 @@ public:
     auto promise = writeInternal(data, moreData, fds);
     return promise.attach(kj::mv(fds), kj::mv(streams));
   }
+
+#if __linux__
+  Maybe<Promise<uint64_t>> tryPumpFrom(
+      AsyncInputStream& inputParam, uint64_t amount = kj::maxValue) override {
+    AsyncStreamFd& input = KJ_UNWRAP_OR_RETURN(
+        kj::dynamicDowncastIfAvailable<AsyncStreamFd>(inputParam), nullptr);
+
+    // The input is another AsyncStreamFd, so perhaps we can do an optimized pump with splice().
+
+    // Before we resort to a bunch of syscalls, let's try to see if the pump is small and able to
+    // be fully satisfied immediately. This optimizes for the case of small streams, e.g. a short
+    // HTTP body.
+
+    byte buffer[4096];
+    size_t pos = 0;
+    size_t initialAmount = kj::min(sizeof(buffer), amount);
+
+    bool eof = false;
+
+    // Read into the buffer until it's full or there are no bytes available. Note that we'd expect
+    // one call to read() will pull as much data out of the socket as possible (up to our buffer
+    // size), so you might think the loop is unnecessary. The reason we want to do a second read(),
+    // though, is to find out if we're at EOF or merely waiting for more data. In the EOF case,
+    // we can end the pump early without splicing.
+    while (pos < initialAmount) {
+      ssize_t n;
+      KJ_NONBLOCKING_SYSCALL(n = ::read(input.fd, buffer + pos, initialAmount - pos));
+      if (n <= 0) {
+        eof = n == 0;
+        break;
+      }
+      pos += n;
+    }
+
+    // Write the bytes that we just read back out to the output.
+    {
+      ssize_t n;
+      KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer, pos));
+      if (n < 0) n = 0;  // treat EAGAIN as "zero bytes written"
+      if (size_t(n) < pos) {
+        // Oh crap, the output buffer is full. This should be rare. But, now we're going to have
+        // to copy the remaining bytes into the heap to do an async write.
+        auto leftover = kj::heapArray<byte>(buffer + n, pos - n);
+        auto promise = write(leftover.begin(), leftover.size());
+        promise = promise.attach(kj::mv(leftover));
+        if (eof || pos == amount) {
+          return promise.then([pos]() { return pos; });
+        } else {
+          return promise.then([&input, this, pos, amount]() {
+            return splicePumpFrom(input, pos, amount);
+          });
+        }
+      }
+    }
+
+    if (eof || pos == amount) {
+      // We finished the pump in one go, so don't splice.
+      return Promise<uint64_t>(uint64_t(pos));
+    } else {
+      // Use splice for the rest of the pump.
+      return splicePumpFrom(input, pos, amount);
+    }
+  }
+
+private:
+  static constexpr size_t MAX_SPLICE_BUFFER = 65536;
+
+  Promise<uint64_t> splicePumpFrom(AsyncStreamFd& input, uint64_t readSoFar, uint64_t limit) {
+    // splice() requires that either its input or its output is a pipe. But chances are neither
+    // `input.fd` nor `this->fd` is a pipe -- in most use cases they are sockets. In order to take
+    // advantage of splice(), then, we need to allocate a pipe to act as the middleman, so we can
+    // splice() from the input to the pipe, and then from the pipe to the output.
+    //
+    // You might wonder why this pipe middleman is required. Why can't splice() go directly from
+    // a socket to a socket? Linus Torvalds attempts to explain here:
+    //     https://yarchive.net/comp/linux/splice.html
+    //
+    // The short version is that the pipe itself is equivalent to an in-memory buffer. In a naive
+    // pump implementation, we allocate a buffer, read() into it and write() out. With splice(),
+    // we allocate a kernelspace buffer by allocating a pipe, then we splice() into the pipe and
+    // splice() back out.
+
+    int pipeFds[2];
+    KJ_SYSCALL(pipe2(pipeFds, O_NONBLOCK | O_CLOEXEC));
+
+    AutoCloseFd pipeIn(pipeFds[0]), pipeOut(pipeFds[1]);
+
+    KJ_SYSCALL(fcntl(pipeIn, F_SETPIPE_SZ, int(MAX_SPLICE_BUFFER)));
+
+    return splicePumpLoop(input, pipeFds[0], pipeFds[1], readSoFar, limit, 0)
+        .attach(kj::mv(pipeIn), kj::mv(pipeOut));
+  }
+
+  Promise<uint64_t> splicePumpLoop(AsyncStreamFd& input, int pipeIn, int pipeOut,
+                                   uint64_t readSoFar, uint64_t limit, size_t bufferedAmount) {
+    for (;;) {
+      while (bufferedAmount > 0) {
+        // First flush out whatever is in the pipe buffer.
+        ssize_t n;
+        KJ_NONBLOCKING_SYSCALL(n = splice(pipeIn, nullptr, fd, nullptr,
+            MAX_SPLICE_BUFFER, SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
+        if (n > 0) {
+          KJ_ASSERT(n <= bufferedAmount, "splice pipe larger than bufferedAmount?");
+          bufferedAmount -= n;
+        } else {
+          KJ_ASSERT(n < 0, "splice pipe empty before bufferedAmount reached?", bufferedAmount);
+          return observer.whenBecomesWritable()
+              .then([this, &input, pipeIn, pipeOut, readSoFar, limit, bufferedAmount]() {
+            return splicePumpLoop(input, pipeIn, pipeOut, readSoFar, limit, bufferedAmount);
+          });
+        }
+      }
+
+      // Now the pipe buffer is empty, so we can try to read some more.
+      {
+        if (readSoFar >= limit) {
+          // Hit the limit, we're done.
+          KJ_ASSERT(readSoFar == limit);
+          return readSoFar;
+        }
+
+        ssize_t n;
+        KJ_NONBLOCKING_SYSCALL(n = splice(input.fd, nullptr, pipeOut, nullptr,
+            kj::min(limit - readSoFar, MAX_SPLICE_BUFFER), SPLICE_F_MOVE | SPLICE_F_NONBLOCK));
+        if (n == 0) {
+          // EOF.
+          return readSoFar;
+        } else if (n < 0) {
+          // No data available, wait.
+          return input.observer.whenBecomesReadable()
+              .then([this, &input, pipeIn, pipeOut, readSoFar, limit]() {
+            return splicePumpLoop(input, pipeIn, pipeOut, readSoFar, limit, 0);
+          });
+        }
+
+        readSoFar += n;
+        bufferedAmount = n;
+      }
+    }
+  }
+
+public:
+#endif  // __linux__
 
   Promise<void> whenWriteDisconnected() override {
     KJ_IF_MAYBE(p, writeDisconnectedPromise) {
@@ -1141,6 +1289,9 @@ public:
               ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
           case EOPNOTSUPP:
           case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
+#if __FreeBSD__
+          case EINVAL: // (returned for AF_UNIX in FreeBSD)
+#endif
             break;
           default:
             KJ_FAIL_SYSCALL("setsocketopt(IPPROTO_TCP, TCP_NODELAY)", error);
@@ -1286,7 +1437,8 @@ public:
           // Fine.
           break;
         } else if (error != EINTR) {
-          KJ_FAIL_SYSCALL("connect()", error) { break; }
+          auto address = SocketAddress(addr, addrlen).toString();
+          KJ_FAIL_SYSCALL("connect()", error, address) { break; }
           return Own<AsyncIoStream>();
         }
       } else {
@@ -1348,29 +1500,31 @@ public:
   }
 
   Own<ConnectionReceiver> listen() override {
-    if (addrs.size() > 1) {
-      KJ_LOG(WARNING, "Bind address resolved to multiple addresses.  Only the first address will "
-          "be used.  If this is incorrect, specify the address numerically.  This may be fixed "
-          "in the future.", addrs[0].toString());
+    auto makeReceiver = [&](SocketAddress& addr) {
+      int fd = addr.socket(SOCK_STREAM);
+
+      {
+        KJ_ON_SCOPE_FAILURE(close(fd));
+
+        // We always enable SO_REUSEADDR because having to take your server down for five minutes
+        // before it can restart really sucks.
+        int optval = 1;
+        KJ_SYSCALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
+
+        addr.bind(fd);
+
+        // TODO(someday):  Let queue size be specified explicitly in string addresses.
+        KJ_SYSCALL(::listen(fd, SOMAXCONN));
+      }
+
+      return lowLevel.wrapListenSocketFd(fd, filter, NEW_FD_FLAGS);
+    };
+
+    if (addrs.size() == 1) {
+      return makeReceiver(addrs[0]);
+    } else {
+      return newAggregateConnectionReceiver(KJ_MAP(addr, addrs) { return makeReceiver(addr); });
     }
-
-    int fd = addrs[0].socket(SOCK_STREAM);
-
-    {
-      KJ_ON_SCOPE_FAILURE(close(fd));
-
-      // We always enable SO_REUSEADDR because having to take your server down for five minutes
-      // before it can restart really sucks.
-      int optval = 1;
-      KJ_SYSCALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
-
-      addrs[0].bind(fd);
-
-      // TODO(someday):  Let queue size be specified explicitly in string addresses.
-      KJ_SYSCALL(::listen(fd, SOMAXCONN));
-    }
-
-    return lowLevel.wrapListenSocketFd(fd, filter, NEW_FD_FLAGS);
   }
 
   Own<DatagramPort> bindDatagramPort() override {
@@ -1471,7 +1625,9 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
       // seen vague references on the internet saying that a PID of 0 and a UID of uid_t(-1) are used
       // as invalid values.
 
-#if defined(SO_PEERCRED)
+// OpenBSD defines SO_PEERCRED but uses a different interface for it
+// hence we're falling back to LOCAL_PEERCRED
+#if defined(SO_PEERCRED) && !__OpenBSD__
       struct ucred creds;
       uint length = sizeof(creds);
       stream.getsockopt(SOL_SOCKET, SO_PEERCRED, &creds, &length);
@@ -1483,7 +1639,7 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
       }
 
 #elif defined(LOCAL_PEERCRED)
-      // MacOS / FreeBSD
+      // MacOS / FreeBSD / OpenBSD
       struct xucred creds;
       uint length = sizeof(creds);
       stream.getsockopt(SOL_LOCAL, LOCAL_PEERCRED, &creds, &length);

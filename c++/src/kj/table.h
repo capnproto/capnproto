@@ -35,9 +35,20 @@
 #endif
 #endif
 
+#if KJ_DEBUG_TABLE_IMPL
+#include "debug.h"
+#define KJ_TABLE_IREQUIRE KJ_REQUIRE
+#define KJ_TABLE_IASSERT KJ_ASSERT
+#else
+#define KJ_TABLE_IREQUIRE KJ_IREQUIRE
+#define KJ_TABLE_IASSERT KJ_IASSERT
+#endif
+
 KJ_BEGIN_HEADER
 
 namespace kj {
+
+class String;
 
 namespace _ {  // private
 
@@ -761,7 +772,7 @@ void Table<Row, Indexes...>::verify() {
 
 template <typename Row, typename... Indexes>
 void Table<Row, Indexes...>::erase(Row& row) {
-  KJ_IREQUIRE(&row >= rows.begin() && &row < rows.end(), "row is not a member of this table");
+  KJ_TABLE_IREQUIRE(&row >= rows.begin() && &row < rows.end(), "row is not a member of this table");
   eraseImpl(&row - rows.begin());
 }
 template <typename Row, typename... Indexes>
@@ -777,7 +788,7 @@ void Table<Row, Indexes...>::eraseImpl(size_t pos) {
 
 template <typename Row, typename... Indexes>
 Row Table<Row, Indexes...>::release(Row& row) {
-  KJ_IREQUIRE(&row >= rows.begin() && &row < rows.end(), "row is not a member of this table");
+  KJ_TABLE_IREQUIRE(&row >= rows.begin() && &row < rows.end(), "row is not a member of this table");
   size_t pos = &row - rows.begin();
   Impl<>::erase(*this, pos, row);
   Row result = kj::mv(row);
@@ -863,7 +874,7 @@ struct HashBucket {
   inline const Row& getRow(ArrayPtr<const Row> table) const { return table[getPos()]; }
   inline bool isPos(uint pos) const { return pos + 2 == value; }
   inline uint getPos() const {
-    KJ_IASSERT(value >= 2);
+    KJ_TABLE_IASSERT(value >= 2);
     return value - 2;
   }
   inline void setEmpty() { value = 0; }
@@ -1076,6 +1087,10 @@ public:
   BTreeImpl();
   ~BTreeImpl() noexcept(false);
 
+  KJ_DISALLOW_COPY(BTreeImpl);
+  BTreeImpl(BTreeImpl&& other);
+  BTreeImpl& operator=(BTreeImpl&& other);
+
   void logInconsistency() const;
 
   void reserve(size_t size);
@@ -1162,11 +1177,13 @@ public:
   inline MaybeUint& operator=(decltype(nullptr)) { i = 0; return *this; }
   inline MaybeUint& operator=(uint j) { i = j + 1; return *this; }
 
-  inline uint operator*() const { KJ_IREQUIRE(i != 0); return i - 1; }
+  inline uint operator*() const { KJ_TABLE_IREQUIRE(i != 0); return i - 1; }
 
   template <typename Func>
   inline bool check(Func& func) const { return i != 0 && func(i - 1); }
   // Equivalent to *this != nullptr && func(**this)
+
+  kj::String toString() const;
 
 private:
   uint i;
@@ -1186,14 +1203,14 @@ struct BTreeImpl::Leaf {
   inline bool isHalfFull() const;
 
   inline void insert(uint i, uint newRow) {
-    KJ_IREQUIRE(rows[Leaf::NROWS - 1] == nullptr);  // check not full
+    KJ_TABLE_IREQUIRE(rows[Leaf::NROWS - 1] == nullptr);  // check not full
 
     amove(rows + i + 1, rows + i, Leaf::NROWS - (i + 1));
     rows[i] = newRow;
   }
 
   inline void erase(uint i) {
-    KJ_IREQUIRE(rows[0] != nullptr);  // check not empty
+    KJ_TABLE_IREQUIRE(rows[0] != nullptr);  // check not empty
 
     amove(rows + i, rows + i + 1, Leaf::NROWS - (i + 1));
     rows[Leaf::NROWS - 1] = nullptr;
@@ -1237,6 +1254,12 @@ struct BTreeImpl::Parent {
   static constexpr size_t NKEYS = 7;
   MaybeUint keys[NKEYS];
   // Pointers to table rows, offset by 1 so that 0 is an empty value.
+  //
+  // Each keys[i] specifies the table row which is the "last" row found under children[i].
+  //
+  // Note that `keys` has size 7 but `children` has size 8. `children[8]`'s "last row" is not
+  // recorded here, because the Parent's Parent records it instead. (Or maybe the Parent's Parent's
+  // Parent, if this Parent is `children[8]` of its own Parent. And so on.)
 
   static constexpr size_t NCHILDREN = NKEYS + 1;
   uint children[NCHILDREN];
@@ -1320,7 +1343,7 @@ bool BTreeImpl::Leaf::isMostlyFull() const {
   return rows[Leaf::NROWS / 2] != nullptr;
 }
 bool BTreeImpl::Leaf::isHalfFull() const {
-  KJ_IASSERT(rows[Leaf::NROWS / 2 - 1] != nullptr);
+  KJ_TABLE_IASSERT(rows[Leaf::NROWS / 2 - 1] != nullptr);
   return rows[Leaf::NROWS / 2] == nullptr;
 }
 
@@ -1331,7 +1354,7 @@ bool BTreeImpl::Parent::isMostlyFull() const {
   return keys[Parent::NKEYS / 2] != nullptr;
 }
 bool BTreeImpl::Parent::isHalfFull() const {
-  KJ_IASSERT(keys[Parent::NKEYS / 2 - 1] != nullptr);
+  KJ_TABLE_IASSERT(keys[Parent::NKEYS / 2 - 1] != nullptr);
   return keys[Parent::NKEYS / 2] == nullptr;
 }
 
@@ -1341,13 +1364,13 @@ public:
       : tree(tree), leaf(leaf), row(row) {}
 
   size_t operator*() const {
-    KJ_IREQUIRE(row < Leaf::NROWS && leaf->rows[row] != nullptr,
+    KJ_TABLE_IREQUIRE(row < Leaf::NROWS && leaf->rows[row] != nullptr,
         "tried to dereference end() iterator");
     return *leaf->rows[row];
   }
 
   inline Iterator& operator++() {
-    KJ_IREQUIRE(leaf->rows[row] != nullptr, "B-tree iterator overflow");
+    KJ_TABLE_IREQUIRE(leaf->rows[row] != nullptr, "B-tree iterator overflow");
     ++row;
     if (row >= Leaf::NROWS || leaf->rows[row] == nullptr) {
       if (leaf->next == 0) {
@@ -1367,7 +1390,7 @@ public:
 
   inline Iterator& operator--() {
     if (row == 0) {
-      KJ_IREQUIRE(leaf->prev != 0, "B-tree iterator underflow");
+      KJ_TABLE_IREQUIRE(leaf->prev != 0, "B-tree iterator underflow");
       leaf = &tree[leaf->prev].leaf;
       row = leaf->size() - 1;
     } else {
@@ -1393,17 +1416,17 @@ public:
   }
 
   void insert(BTreeImpl& impl, uint newRow) {
-    KJ_IASSERT(impl.tree == tree);
+    KJ_TABLE_IASSERT(impl.tree == tree);
     const_cast<Leaf*>(leaf)->insert(row, newRow);
   }
 
   void erase(BTreeImpl& impl) {
-    KJ_IASSERT(impl.tree == tree);
+    KJ_TABLE_IASSERT(impl.tree == tree);
     const_cast<Leaf*>(leaf)->erase(row);
   }
 
   void replace(BTreeImpl& impl, uint newRow) {
-    KJ_IASSERT(impl.tree == tree);
+    KJ_TABLE_IASSERT(impl.tree == tree);
     const_cast<Leaf*>(leaf)->rows[row] = newRow;
   }
 
@@ -1538,7 +1561,7 @@ public:
         : links(links), pos(pos) {}
 
     inline size_t operator*() const {
-      KJ_IREQUIRE(pos != 0, "can't derefrence end() iterator");
+      KJ_TABLE_IREQUIRE(pos != 0, "can't derefrence end() iterator");
       return pos - 1;
     };
 

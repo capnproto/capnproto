@@ -16,7 +16,7 @@ not yet implemented.
 
 ## Sample Code
 
-The [Calculator example](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples) implements
+The [Calculator example](https://github.com/capnproto/capnproto/tree/master/c++/samples) implements
 a fully-functional Cap'n Proto client and server.
 
 ## KJ Concurrency Framework
@@ -394,7 +394,7 @@ addresses.  Additionally, a Unix domain socket can be specified as `unix:` follo
 and an abstract Unix domain socket can be specified as `unix-abstract:` followed by an identifier.
 
 For a more complete example, see the
-[calculator client sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-client.c++).
+[calculator client sample](https://github.com/capnproto/capnproto/tree/master/c++/samples/calculator-client.c++).
 
 ### Starting a server
 
@@ -434,7 +434,7 @@ path name, and an abstract Unix domain socket can be specified as `unix-abstract
 an identifier.
 
 For a more complete example, see the
-[calculator server sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-server.c++).
+[calculator server sample](https://github.com/capnproto/capnproto/tree/master/c++/samples/calculator-server.c++).
 
 ## Debugging
 

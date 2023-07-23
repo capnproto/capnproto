@@ -433,7 +433,7 @@ public:
           // exception to alert developers of the problem.
           //
           // TODO(cleanup): Once sufficient time has elapsed, remove this assert.
-          KJ_FAIL_ASSERT("Bad news: Cap'n Proto 0.5.x and previous contained a bug which would cause this schema to be compiled incorrectly. Please see: https://github.com/sandstorm-io/capnproto/issues/344");
+          KJ_FAIL_ASSERT("Bad news: Cap'n Proto 0.5.x and previous contained a bug which would cause this schema to be compiled incorrectly. Please see: https://github.com/capnproto/capnproto/issues/344");
         }
         lgSizeUsed = desiredUsage;
         return true;
@@ -559,7 +559,7 @@ public:
           bool result = usage.tryExpand(
               *this, location, oldLgSize, localOldOffset, expansionFactor);
           if (mustFail && result) {
-            KJ_FAIL_ASSERT("Bad news: Cap'n Proto 0.5.x and previous contained a bug which would cause this schema to be compiled incorrectly. Please see: https://github.com/sandstorm-io/capnproto/issues/344");
+            KJ_FAIL_ASSERT("Bad news: Cap'n Proto 0.5.x and previous contained a bug which would cause this schema to be compiled incorrectly. Please see: https://github.com/capnproto/capnproto/issues/344");
           }
           return result;
         }
@@ -1370,7 +1370,7 @@ private:
       MemberInfo& member = *entry.second;
 
       // Make sure the exceptions added relating to
-      // https://github.com/sandstorm-io/capnproto/issues/344 identify the affected field.
+      // https://github.com/capnproto/capnproto/issues/344 identify the affected field.
       KJ_CONTEXT(member.name);
 
       if (member.declId.isOrdinal()) {
@@ -1893,7 +1893,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
         return kj::mv(result);
       }
 
-    } // fallthrough -- value is positive, so we can just go on to the uint case below.
+    } KJ_FALLTHROUGH;  // value is positive, so we can just go on to the uint case below.
 
     case DynamicValue::UINT: {
       uint64_t maxValue = 0;
@@ -2395,7 +2395,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
             }
           }
         }
-      } else if (*kind != Declaration::ANNOTATION) {
+      } else {
         errorReporter.addErrorOn(name, kj::str(
             "'", expressionString(name), "' is not an annotation."));
       }

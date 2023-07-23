@@ -919,7 +919,7 @@ KJ_TEST("cross-thread fulfiller rejects") {
     auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
-    KJ_EXPECT_THROW_MESSAGE("foo exception", paf.promise.wait(waitScope));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foo exception", paf.promise.wait(waitScope));
   });
 
   ([&]() noexcept {
@@ -945,7 +945,7 @@ KJ_TEST("cross-thread fulfiller destroyed") {
     auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
-    KJ_EXPECT_THROW_MESSAGE(
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
         "cross-thread PromiseFulfiller was destroyed without fulfilling the promise",
         paf.promise.wait(waitScope));
   });

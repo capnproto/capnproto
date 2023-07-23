@@ -37,7 +37,7 @@ Fixed in
   - Unix: https://capnproto.org/capnproto-c++-0.4.1.2.tar.gz
 - release 0.6 (future)
 
-[0]: https://github.com/sandstorm-io/capnproto/commit/80149744bdafa3ad4eedc83f8ab675e27baee868
+[0]: https://github.com/capnproto/capnproto/commit/80149744bdafa3ad4eedc83f8ab675e27baee868
 
 Details
 =======
@@ -55,7 +55,7 @@ loop that doesn't call any application code. Only CPU time is possibly
 consumed, not RAM or other resources. However, it is still possible to create
 significant delays for the receiver with a specially-crafted message.
 
-[1]: https://github.com/sandstorm-io/capnproto/blob/master/security-advisories/2015-03-02-2-all-cpu-amplification.md
+[1]: https://github.com/capnproto/capnproto/blob/master/security-advisories/2015-03-02-2-all-cpu-amplification.md
 
 Preventative measures
 =====================

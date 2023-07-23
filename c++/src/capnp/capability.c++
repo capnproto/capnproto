@@ -135,7 +135,7 @@ static inline uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint) {
   }
 }
 
-class LocalResponse final: public ResponseHook, public kj::Refcounted {
+class LocalResponse final: public ResponseHook {
 public:
   LocalResponse(kj::Maybe<MessageSize> sizeHint)
       : message(firstSegmentSize(sizeHint)) {}
@@ -162,7 +162,7 @@ public:
   }
   AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
     if (response == nullptr) {
-      auto localResponse = kj::refcounted<LocalResponse>(sizeHint);
+      auto localResponse = kj::heap<LocalResponse>(sizeHint);
       responseBuilder = localResponse->message.getRoot<AnyPointer>();
       response = Response<AnyPointer>(responseBuilder.asReader(), kj::mv(localResponse));
     }

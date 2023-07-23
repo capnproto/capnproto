@@ -59,6 +59,7 @@ uint64_t generateRandomId() {
 #else
   int fd;
   KJ_SYSCALL(fd = open("/dev/urandom", O_RDONLY));
+  KJ_DEFER(close(fd));
 
   ssize_t n;
   KJ_SYSCALL(n = read(fd, &result, sizeof(result)), "/dev/urandom");

@@ -72,7 +72,7 @@ then hands the parse tree off to another binary -- known as a "plugin" -- which 
 Plugins are independent executables (written in any language) which read a description of the
 schema from standard input and then generate the necessary code.  The description is itself a
 Cap'n Proto message, defined by
-[schema.capnp](https://github.com/sandstorm-io/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
+[schema.capnp](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
 Specifically, the plugin receives a `CodeGeneratorRequest`, using
 [standard serialization](encoding.html#serialization-over-a-stream)
 (not packed).  (Note that installing the C++ runtime causes schema.capnp to be placed in
@@ -100,8 +100,8 @@ If the user specifies an output directory, the compiler will run the plugin with
 as the working directory, so you do not need to worry about this.
 
 For examples of plugins, take a look at
-[capnpc-capnp](https://github.com/sandstorm-io/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B)
-or [capnpc-c++](https://github.com/sandstorm-io/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-c%2B%2B.c%2B%2B).
+[capnpc-capnp](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B)
+or [capnpc-c++](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-c%2B%2B.c%2B%2B).
 
 ### Supporting Dynamic Languages
 

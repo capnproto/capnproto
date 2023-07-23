@@ -452,7 +452,9 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
       SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena)) {
-    // Allocate space in the message for a new object, creating far pointers if necessary.
+    // Allocate space in the message for a new object, creating far pointers if necessary. The
+    // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
+    // return zero'd memory).
     //
     // * `ref` starts out being a reference to the pointer which shall be assigned to point at the
     //   new object.  On return, `ref` points to a pointer which needs to be initialized with
@@ -1620,7 +1622,8 @@ struct WireHelpers {
     // Initialize the pointer.
     ref->listRef.set(ElementSize::BYTE, byteSize * (ONE * ELEMENTS / BYTES));
 
-    // Build the Text::Builder.  This will initialize the NUL terminator.
+    // Build the Text::Builder. Note that since allocate()ed memory is pre-zero'd, we don't need
+    // to initialize the NUL terminator.
     return { segment, Text::Builder(reinterpret_cast<char*>(ptr), unbound(size / BYTES)) };
   }
 

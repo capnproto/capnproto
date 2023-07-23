@@ -25,6 +25,10 @@
 #include "mutex.h"
 #include "thread.h"
 
+#if !KJ_USE_FIBERS
+#include <pthread.h>
+#endif
+
 namespace kj {
 namespace {
 
@@ -733,6 +737,45 @@ TEST(Async, TaskSet) {
   EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
+TEST(Async, LargeTaskSetDestruction) {
+  static constexpr size_t stackSize = 200 * 1024;
+
+  static auto testBody = [] {
+
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    for (int i = 0; i < stackSize / sizeof(void*); i++) {
+      tasks.add(kj::NEVER_DONE);
+    }
+  };
+
+#if KJ_USE_FIBERS
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  startFiber(stackSize,
+      [](WaitScope&) mutable {
+    testBody();
+  }).wait(waitScope);
+
+#else
+  pthread_attr_t attr;
+  KJ_REQUIRE(0 == pthread_attr_init(&attr));
+  KJ_DEFER(KJ_REQUIRE(0 == pthread_attr_destroy(&attr)));
+
+  KJ_REQUIRE(0 == pthread_attr_setstacksize(&attr, stackSize));
+  pthread_t thread;
+  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [](void*) -> void* {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+    testBody();
+    return nullptr;
+  }, nullptr));
+  KJ_REQUIRE(0 == pthread_join(thread, nullptr));
+#endif
+}
+
 TEST(Async, TaskSet) {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -946,7 +989,7 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   KJ_EXPECT(!joined.poll(waitScope));
 }
 
-#if !__BIONIC__ && !KJ_NO_EXCEPTIONS
+#if KJ_USE_FIBERS
 KJ_TEST("start a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);

@@ -100,7 +100,7 @@ TEST(AsyncUnixTest, SignalWithValue) {
   //
   // Also, this test fails on Linux on mipsel. si_value comes back as zero. No one with a mips
   // machine wants to debug the problem but they demand a patch fixing it, so we disable the test.
-  // Sad. https://github.com/sandstorm-io/capnproto/issues/204
+  // Sad. https://github.com/capnproto/capnproto/issues/204
 
   captureSignals();
   UnixEventPort port;
@@ -135,7 +135,7 @@ TEST(AsyncUnixTest, SignalWithPointerValue) {
   //
   // Also, this test fails on Linux on mipsel. si_value comes back as zero. No one with a mips
   // machine wants to debug the problem but they demand a patch fixing it, so we disable the test.
-  // Sad. https://github.com/sandstorm-io/capnproto/issues/204
+  // Sad. https://github.com/capnproto/capnproto/issues/204
 
   captureSignals();
   UnixEventPort port;
@@ -489,7 +489,7 @@ TEST(AsyncUnixTest, WriteObserver) {
 }
 
 #if !__APPLE__
-// Disabled on macOS due to https://github.com/sandstorm-io/capnproto/issues/374.
+// Disabled on macOS due to https://github.com/capnproto/capnproto/issues/374.
 TEST(AsyncUnixTest, UrgentObserver) {
   // Verify that FdObserver correctly detects availability of out-of-band data.
   // Availability of out-of-band data is implementation-specific.
@@ -735,7 +735,7 @@ TEST(AsyncUnixTest, Wake) {
 }
 
 int exitCodeForSignal = 0;
-void exitSignalHandler(int) {
+[[noreturn]] void exitSignalHandler(int) {
   _exit(exitCodeForSignal);
 }
 

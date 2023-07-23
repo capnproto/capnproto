@@ -14,8 +14,8 @@ layout: none
 				<title>{{ post.title | xml_escape }}</title>
 				<description>{{ post.content | xml_escape }}</description>
 				<pubDate>{{ post.date | date: "%a, %d %b %Y %H:%M:%S %z" }}</pubDate>
-                                <link>{{ site.baseurl }}{{ post.url }}</link>
-                                <guid isPermaLink="true">{{ site.baseurl }}{{ post.url }}</guid>
+                                <link>{{ post.url }}</link>
+                                <guid isPermaLink="true">{{ post.url }}</guid>
 			</item>
 		{% endfor %}
 	</channel>

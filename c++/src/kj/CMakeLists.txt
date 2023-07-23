@@ -84,8 +84,9 @@ endif()
 #make sure the lite flag propagates to all users (internal + external) of this library
 target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
 #make sure external consumers don't need to manually set the include dirs
+get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 target_include_directories(kj INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+  $<BUILD_INTERFACE:${PARENT_DIR}>
   $<INSTALL_INTERFACE:include>
 )
 # Ensure the library has a version set to match autotools build
@@ -129,6 +130,7 @@ set(kj-async_headers
   async-unix.h
   async-win32.h
   async-io.h
+  async-queue.h
   timer.h
 )
 if(NOT CAPNP_LITE)
@@ -205,8 +207,7 @@ if(NOT CAPNP_LITE)
   find_package(ZLIB)
   if(ZLIB_FOUND)
     add_definitions(-D KJ_HAS_ZLIB=1)
-    include_directories(${ZLIB_INCLUDE_DIRS})
-    target_link_libraries(kj-gzip PUBLIC kj-async kj ${ZLIB_LIBRARIES})
+    target_link_libraries(kj-gzip PUBLIC kj-async kj ZLIB::ZLIB)
   endif()
 
   # Ensure the library has a version set to match autotools build
@@ -244,11 +245,13 @@ if(BUILD_TESTING)
     add_executable(kj-heavy-tests
       async-test.c++
       async-xthread-test.c++
+      async-coroutine-test.c++
       async-unix-test.c++
       async-unix-xthread-test.c++
       async-win32-test.c++
       async-win32-xthread-test.c++
       async-io-test.c++
+      async-queue-test.c++
       refcount-test.c++
       string-tree-test.c++
       encoding-test.c++
