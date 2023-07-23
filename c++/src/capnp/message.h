@@ -159,7 +159,7 @@ class MessageBuilder {
 public:
   MessageBuilder();
   virtual ~MessageBuilder() noexcept(false);
-  KJ_DISALLOW_COPY(MessageBuilder);
+  KJ_DISALLOW_COPY_AND_MOVE(MessageBuilder);
 
   struct SegmentInit {
     kj::ArrayPtr<word> space;
@@ -343,7 +343,7 @@ public:
   // Creates a message pointing at the given segment array, without taking ownership of the
   // segments.  All arrays passed in must remain valid until the MessageReader is destroyed.
 
-  KJ_DISALLOW_COPY(SegmentArrayMessageReader);
+  KJ_DISALLOW_COPY_AND_MOVE(SegmentArrayMessageReader);
   ~SegmentArrayMessageReader() noexcept(false);
 
   virtual kj::ArrayPtr<const word> getSegment(uint id) override;
@@ -400,7 +400,7 @@ public:
   // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
   // over any space that was used so that it can be reused.
 
-  KJ_DISALLOW_COPY(MallocMessageBuilder);
+  KJ_DISALLOW_COPY_AND_MOVE(MallocMessageBuilder);
   virtual ~MallocMessageBuilder() noexcept(false);
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) override;
@@ -431,7 +431,7 @@ class FlatMessageBuilder: public MessageBuilder {
 
 public:
   explicit FlatMessageBuilder(kj::ArrayPtr<word> array);
-  KJ_DISALLOW_COPY(FlatMessageBuilder);
+  KJ_DISALLOW_COPY_AND_MOVE(FlatMessageBuilder);
   virtual ~FlatMessageBuilder() noexcept(false);
 
   void requireFilled();

@@ -38,7 +38,7 @@ public:
   explicit ModuleLoader(GlobalErrorReporter& errorReporter);
   // Create a ModuleLoader that reports error messages to the given reporter.
 
-  KJ_DISALLOW_COPY(ModuleLoader);
+  KJ_DISALLOW_COPY_AND_MOVE(ModuleLoader);
 
   ~ModuleLoader() noexcept(false);
 

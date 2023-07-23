@@ -46,6 +46,10 @@ KJ_TEST("stringify times") {
   KJ_EXPECT(kj::str(50 * kj::MICROSECONDS) == "50μs");
   KJ_EXPECT(kj::str(5 * kj::MICROSECONDS + 300 * kj::NANOSECONDS) == "5.3μs");
   KJ_EXPECT(kj::str(50 * kj::NANOSECONDS) == "50ns");
+  KJ_EXPECT(kj::str(-256 * kj::MILLISECONDS) == "-256ms");
+  KJ_EXPECT(kj::str(-50 * kj::NANOSECONDS) == "-50ns");
+  KJ_EXPECT(kj::str((int64_t)kj::maxValue * kj::NANOSECONDS) == "9223372036.854775807s");
+  KJ_EXPECT(kj::str((int64_t)kj::minValue * kj::NANOSECONDS) == "-9223372036.854775808s");
 }
 
 #if _WIN32

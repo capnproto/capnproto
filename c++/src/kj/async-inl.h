@@ -147,7 +147,7 @@ public:
   Event(SourceLocation location);
   Event(kj::EventLoop& loop, SourceLocation location);
   ~Event() noexcept(false);
-  KJ_DISALLOW_COPY(Event);
+  KJ_DISALLOW_COPY_AND_MOVE(Event);
 
   void armDepthFirst();
   // Enqueue this event so that `fire()` will be called from the event loop soon.
@@ -1523,7 +1523,7 @@ class WeakFulfiller final: public PromiseFulfiller<T>, public WeakFulfillerBase 
   //   fulfiller and detach() is called when the promise is destroyed.
 
 public:
-  KJ_DISALLOW_COPY(WeakFulfiller);
+  KJ_DISALLOW_COPY_AND_MOVE(WeakFulfiller);
 
   static kj::Own<WeakFulfiller> make() {
     WeakFulfiller* ptr = new WeakFulfiller;
@@ -1909,7 +1909,7 @@ public:
 
   ~FulfillScope() noexcept(false);
 
-  KJ_DISALLOW_COPY(FulfillScope);
+  KJ_DISALLOW_COPY_AND_MOVE(FulfillScope);
 
   bool shouldFulfill() { return obj != nullptr; }
 
@@ -2039,7 +2039,7 @@ public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                 SourceLocation location);
   ~CoroutineBase() noexcept(false);
-  KJ_DISALLOW_COPY(CoroutineBase);
+  KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
 
   auto initial_suspend() { return stdcoro::suspend_never(); }

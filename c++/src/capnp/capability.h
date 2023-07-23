@@ -119,6 +119,24 @@ public:
   RemotePromise<Results> send() KJ_WARN_UNUSED_RESULT;
   // Send the call and return a promise for the results.
 
+  typename Results::Pipeline sendForPipeline();
+  // Send the call in pipeline-only mode. The returned object can be used to make pipelined calls,
+  // but there is no way to wait for the completion of the original call. This allows some
+  // bookkeeping to be skipped under the hood, saving some time.
+  //
+  // Generally, this method should only be used when the caller will immediately make one or more
+  // pipelined calls on the result, and then throw away the pipeline and all pipelined
+  // capabilities. Other uses may run into caveats, such as:
+  // - Normally, calling `whenResolved()` on a pipelined capability would wait for the original RPC
+  //   to complete (and possibly other things, if that RPC itself returned a promise capability),
+  //   but when using `sendPipelineOnly()`, `whenResolved()` may complete immediately, or never, or
+  //   at an arbitrary time. Do not rely on it.
+  // - Normal path shortening may not work with these capabilities. For exmaple, if the caller
+  //   forwards a pipelined capability back to the callee's vat, calls made by the callee to that
+  //   capability may continue to proxy through the caller. Conversely, if the callee ends up
+  //   returning a capability that points back to the caller's vat, calls on the pipelined
+  //   capability may continue to proxy through the callee.
+
 private:
   kj::Own<RequestHook> hook;
 
@@ -227,6 +245,18 @@ public:
 
   struct CallHints {
     bool noPromisePipelining = false;
+    // Hints that the pipeline part of the VoidPromiseAndPipeline won't be used, so it can be
+    // a bogus object.
+
+    bool onlyPromisePipeline = false;
+    // Hints that the promise part of the VoidPromiseAndPipeline won't be used, so it can be a
+    // bogus promise.
+    //
+    // This hint is primarily intended to be passed to `ClientHook::call()`. When using
+    // `ClientHook::newCall()`, you would instead indicate the hint by calling the `ResponseHook`'s
+    // `sendForPipeline()` method. The effect of setting `onlyPromisePipeline = true` when invoking
+    // `ClientHook::newCall()` is unspecified; it might cause the returned `Request` to support
+    // only pipelining even when `send()` is called, or it might not.
   };
 
   Request<AnyPointer, AnyPointer> typelessRequest(
@@ -563,7 +593,7 @@ class ReaderCapabilityTable: private _::CapTableReader {
 
 public:
   explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> table);
-  KJ_DISALLOW_COPY(ReaderCapabilityTable);
+  KJ_DISALLOW_COPY_AND_MOVE(ReaderCapabilityTable);
 
   template <typename T>
   T imbue(T reader);
@@ -584,7 +614,7 @@ class BuilderCapabilityTable: private _::CapTableBuilder {
 
 public:
   BuilderCapabilityTable();
-  KJ_DISALLOW_COPY(BuilderCapabilityTable);
+  KJ_DISALLOW_COPY_AND_MOVE(BuilderCapabilityTable);
 
   inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getTable() { return table; }
 
@@ -629,7 +659,7 @@ class CapabilityServerSet: private _::CapabilityServerSetBase {
 
 public:
   CapabilityServerSet() = default;
-  KJ_DISALLOW_COPY(CapabilityServerSet);
+  KJ_DISALLOW_COPY_AND_MOVE(CapabilityServerSet);
 
   typename T::Client add(kj::Own<typename T::Server>&& server);
   // Create a new capability Client for the given Server and also add this server to the set.
@@ -655,6 +685,9 @@ public:
 
   virtual kj::Promise<void> sendStreaming() = 0;
   // Send a streaming call.
+
+  virtual AnyPointer::Pipeline sendForPipeline() = 0;
+  // Send a call for pipelining purposes only.
 
   virtual const void* getBrand() = 0;
   // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
@@ -975,6 +1008,13 @@ RemotePromise<Results> Request<Params, Results>::send() {
       kj::mv(kj::implicitCast<AnyPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
+}
+
+template <typename Params, typename Results>
+typename Results::Pipeline Request<Params, Results>::sendForPipeline() {
+  auto typelessPipeline = hook->sendForPipeline();
+  hook = nullptr;  // prevent reuse
+  return typename Results::Pipeline(kj::mv(typelessPipeline));
 }
 
 template <typename Params>

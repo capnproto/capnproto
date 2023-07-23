@@ -6,7 +6,9 @@
 #include <capnp/generated-header-support.h>
 #include <kj/windows-sanity.h>
 
-#if CAPNP_VERSION != 11000
+#ifndef CAPNP_VERSION
+#error "CAPNP_VERSION is not defined, is capnp/generated-header-support.h missing?"
+#elif CAPNP_VERSION != 11000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -766,6 +768,8 @@ public:
 
   inline bool getNoPromisePipelining() const;
 
+  inline bool getOnlyPromisePipeline() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -825,6 +829,9 @@ public:
 
   inline bool getNoPromisePipelining();
   inline void setNoPromisePipelining(bool value);
+
+  inline bool getOnlyPromisePipeline();
+  inline void setOnlyPromisePipeline(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3426,6 +3433,20 @@ inline bool Call::Builder::getNoPromisePipelining() {
 inline void Call::Builder::setNoPromisePipelining(bool value) {
   _builder.setDataField<bool>(
       ::capnp::bounded<129>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool Call::Reader::getOnlyPromisePipeline() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<130>() * ::capnp::ELEMENTS);
+}
+
+inline bool Call::Builder::getOnlyPromisePipeline() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<130>() * ::capnp::ELEMENTS);
+}
+inline void Call::Builder::setOnlyPromisePipeline(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<130>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::capnp::rpc::Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {

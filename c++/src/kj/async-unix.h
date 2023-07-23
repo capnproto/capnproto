@@ -266,7 +266,7 @@ public:
 
   ~FdObserver() noexcept(false);
 
-  KJ_DISALLOW_COPY(FdObserver);
+  KJ_DISALLOW_COPY_AND_MOVE(FdObserver);
 
   Promise<void> whenBecomesReadable();
   // Resolves the next time the file descriptor transitions from having no data to read to having

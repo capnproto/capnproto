@@ -361,7 +361,7 @@ private:
   // the copy constructor. We don't want to disable the warning because it's a useful warning and
   // we'd have to disable it for all applications that include this header. Instead we allow `word`
   // to be copyable on GCC.
-  KJ_DISALLOW_COPY(word);
+  KJ_DISALLOW_COPY_AND_MOVE(word);
 #endif
 };
 

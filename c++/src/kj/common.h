@@ -185,7 +185,22 @@ typedef unsigned char byte;
 #define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
-// Deletes the implicit copy constructor and assignment operator.
+// Deletes the implicit copy constructor and assignment operator. This inhibits the compiler from
+// generating the implicit move constructor and assignment operator for this class, but allows the
+// code author to supply them, if they make sense to implement.
+//
+// This macro should not be your first choice. Instead, prefer using KJ_DISALLOW_COPY_AND_MOVE, and only use
+// this macro when you have determined that you must implement move semantics for your type.
+
+#define KJ_DISALLOW_COPY_AND_MOVE(classname) \
+  classname(const classname&) = delete; \
+  classname& operator=(const classname&) = delete; \
+  classname(classname&&) = delete; \
+  classname& operator=(classname&&) = delete
+// Deletes the implicit copy and move constructors and assignment operators. This is useful in cases
+// where the code author wants to provide an additional compile-time guard against subsequent
+// maintainers casually adding move operations. This is particularly useful when implementing RAII
+// classes that are intended to be completely immobile.
 
 #ifdef __GNUC__
 #define KJ_LIKELY(condition) __builtin_expect(condition, true)
@@ -2005,34 +2020,48 @@ namespace _ {  // private
 template <typename Func>
 class Deferred {
 public:
-  inline Deferred(Func&& func): func(kj::fwd<Func>(func)), canceled(false) {}
-  inline ~Deferred() noexcept(false) { if (!canceled) func(); }
+  Deferred(Func&& func): maybeFunc(kj::fwd<Func>(func)) {}
+  ~Deferred() noexcept(false) {
+    run();
+  }
   KJ_DISALLOW_COPY(Deferred);
 
-  // This move constructor is usually optimized away by the compiler.
-  inline Deferred(Deferred&& other): func(kj::fwd<Func>(other.func)), canceled(other.canceled) {
-    other.canceled = true;
+  Deferred(Deferred&&) = default;
+  // Since we use a kj::Maybe, the default move constructor does exactly what we want it to do.
+
+  void run() {
+    // Move `maybeFunc` to the local scope so that even if we throw, we destroy the functor we had.
+    auto maybeLocalFunc = kj::mv(maybeFunc);
+    KJ_IF_MAYBE(func, maybeLocalFunc) {
+      (*func)();
+    }
   }
 
   void cancel() {
-    canceled = true;
+    maybeFunc = nullptr;
   }
 
 private:
-  Func func;
-  bool canceled;
+  kj::Maybe<Func> maybeFunc;
+  // Note that `Func` may actually be an lvalue reference because `kj::defer` takes its argument via
+  // universal reference. `kj::Maybe` has specializations for lvalue reference types, so this works
+  // out.
 };
 
 }  // namespace _ (private)
 
 template <typename Func>
 _::Deferred<Func> defer(Func&& func) {
-  // Returns an object which will invoke the given functor in its destructor.  The object is not
-  // copyable but is movable with the semantics you'd expect.  Since the return type is private,
-  // you need to assign to an `auto` variable.
+  // Returns an object which will invoke the given functor in its destructor. The object is not
+  // copyable but is move-constructable with the semantics you'd expect. Since the return type is
+  // private, you need to assign to an `auto` variable.
   //
   // The KJ_DEFER macro provides slightly more convenient syntax for the common case where you
   // want some code to run at current scope exit.
+  //
+  // KJ_DEFER does not support move-assignment for its returned objects. If you need to reuse the
+  // variable for your deferred function object, then you will want to write your own class for that
+  // purpose.
 
   return _::Deferred<Func>(kj::fwd<Func>(func));
 }

@@ -187,7 +187,7 @@ class ExceptionCallback {
 
 public:
   ExceptionCallback();
-  KJ_DISALLOW_COPY(ExceptionCallback);
+  KJ_DISALLOW_COPY_AND_MOVE(ExceptionCallback);
   virtual ~ExceptionCallback() noexcept(false);
 
   virtual void onRecoverableException(Exception&& exception);

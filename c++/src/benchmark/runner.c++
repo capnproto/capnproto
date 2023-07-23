@@ -186,7 +186,7 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
   }
 
   char itersStr[64];
-  sprintf(itersStr, "%llu", (long long unsigned int)iters);
+  snprintf(itersStr, sizeof(itersStr), "%llu", (long long unsigned int)iters);
   argv[4] = itersStr;
 
   argv[5] = nullptr;

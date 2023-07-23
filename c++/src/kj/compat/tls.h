@@ -51,7 +51,7 @@ enum class TlsVersion {
 using TlsErrorHandler = kj::Function<void(kj::Exception&&)>;
 // Use a simple kj::Function for handling errors during parallel accept().
 
-class TlsContext {
+class TlsContext: public kj::SecureNetworkWrapper {
   // TLS system. Allocate one of these, configure it with the proper keys and certificates (or
   // use the defaults), and then use it to wrap the standard KJ network interfaces in
   // implementations that transparently use TLS.
@@ -116,7 +116,7 @@ public:
 
   TlsContext(Options options = Options());
   ~TlsContext() noexcept(false);
-  KJ_DISALLOW_COPY(TlsContext);
+  KJ_DISALLOW_COPY_AND_MOVE(TlsContext);
 
   kj::Promise<kj::Own<kj::AsyncIoStream>> wrapServer(kj::Own<kj::AsyncIoStream> stream);
   // Upgrade a regular network stream to TLS and begin the initial handshake as the server. The
@@ -268,7 +268,7 @@ public:
 
 class TlsPeerIdentity final: public kj::PeerIdentity {
 public:
-  KJ_DISALLOW_COPY(TlsPeerIdentity);
+  KJ_DISALLOW_COPY_AND_MOVE(TlsPeerIdentity);
   ~TlsPeerIdentity() noexcept(false);
 
   kj::String toString() override;

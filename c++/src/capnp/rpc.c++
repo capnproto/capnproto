@@ -168,18 +168,30 @@ uint exceptionSizeHint(const kj::Exception& exception) {
 ClientHook::CallHints callHintsFromReader(rpc::Call::Reader reader) {
   ClientHook::CallHints hints;
   hints.noPromisePipelining = reader.getNoPromisePipelining();
+  hints.onlyPromisePipeline = reader.getOnlyPromisePipeline();
   return hints;
 }
 
 // =======================================================================================
+
+template <typename Id>
+static constexpr Id highBit() {
+  return 1u << (sizeof(Id) * 8 - 1);
+}
 
 template <typename Id, typename T>
 class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
 
 public:
+  bool isHigh(Id& id) {
+    return (id & highBit<Id>()) != 0;
+  }
+
   kj::Maybe<T&> find(Id id) {
-    if (id < slots.size() && slots[id] != nullptr) {
+    if (isHigh(id)) {
+      return highSlots.find(id);
+    } else if (id < slots.size() && slots[id] != nullptr) {
       return slots[id];
     } else {
       return nullptr;
@@ -192,22 +204,48 @@ public:
     // `entry` is a reference to the entry being released -- we require this in order to prove
     // that the caller has already done a find() to check that this entry exists.  We can't check
     // ourselves because the caller may have nullified the entry in the meantime.
-    KJ_DREQUIRE(&entry == &slots[id]);
-    T toRelease = kj::mv(slots[id]);
-    slots[id] = T();
-    freeIds.push(id);
-    return toRelease;
+
+    if (isHigh(id)) {
+      auto& slot = KJ_REQUIRE_NONNULL(highSlots.findEntry(id));
+      return highSlots.release(slot).value;
+    } else {
+      KJ_DREQUIRE(&entry == &slots[id]);
+      T toRelease = kj::mv(slots[id]);
+      slots[id] = T();
+      freeIds.push(id);
+      return toRelease;
+    }
   }
 
   T& next(Id& id) {
     if (freeIds.empty()) {
       id = slots.size();
+      KJ_ASSERT(!isHigh(id), "2^31 concurrent questions?!!?!");
       return slots.add();
     } else {
       id = freeIds.top();
       freeIds.pop();
       return slots[id];
     }
+  }
+
+  T& nextHigh(Id& id) {
+    // Choose an ID with the top bit set in round-robin fashion, but don't choose an ID that
+    // is still in use.
+
+    KJ_ASSERT(highSlots.size() < Id(kj::maxValue) / 2);  // avoid infinite loop below.
+
+    bool created = false;
+    T* slot;
+    while (!created) {
+      id = highCounter++ | highBit<Id>();
+      slot = &highSlots.findOrCreate(id, [&]() {
+        created = true;
+        return typename kj::HashMap<Id, T>::Entry { id, T() };
+      });
+    }
+
+    return *slot;
   }
 
   template <typename Func>
@@ -217,17 +255,24 @@ public:
         func(i, slots[i]);
       }
     }
+    for (auto& slot: highSlots) {
+      func(slot.key, slot.value);
+    }
   }
 
   void release() {
     // Release memory backing the table.
     { auto drop = kj::mv(slots); }
     { auto drop = kj::mv(freeIds); }
+    { auto drop = kj::mv(highSlots); }
   }
 
 private:
   kj::Vector<T> slots;
   std::priority_queue<Id, std::vector<Id>, std::greater<Id>> freeIds;
+
+  kj::HashMap<Id, T> highSlots;
+  Id highCounter = 0;
 };
 
 template <typename Id, typename T>
@@ -652,6 +697,16 @@ private:
 
   kj::TaskSet tasks;
 
+  bool gotReturnForHighQuestionId = false;
+  // Becomes true if we ever get a `Return` message for a high question ID (with top bit set),
+  // which we use in cases where we've hinted to the peer that we don't want a `Return`. If the
+  // peer sends us one anyway then it seemingly doesn't not implement our hints. We need to stop
+  // using the hints in this case before the high question ID space wraps around since otherwise
+  // we might reuse an ID that the peer thinks is still in use.
+
+  bool sentCapabilitiesInPipelineOnlyCall = false;
+  // Becomes true if `sendPipelineOnly()` is ever called with parameters that include capabilities.
+
   // =====================================================================================
   // ClientHook implementations
 
@@ -733,6 +788,7 @@ private:
       callBuilder.setInterfaceId(interfaceId);
       callBuilder.setMethodId(methodId);
       callBuilder.setNoPromisePipelining(hints.noPromisePipelining);
+      callBuilder.setOnlyPromisePipeline(hints.onlyPromisePipeline);
 
       auto root = request->getRoot();
       return Request<AnyPointer, AnyPointer>(root, kj::mv(request));
@@ -1578,7 +1634,7 @@ private:
   public:
     inline QuestionRef(
         RpcConnectionState& connectionState, QuestionId id,
-        kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>> fulfiller)
+        kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>>> fulfiller)
         : connectionState(kj::addRef(connectionState)), id(id), fulfiller(kj::mv(fulfiller)) {}
 
     ~QuestionRef() noexcept {
@@ -1626,15 +1682,21 @@ private:
     inline QuestionId getId() const { return id; }
 
     void fulfill(kj::Own<RpcResponse>&& response) {
-      fulfiller->fulfill(kj::mv(response));
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->fulfill(kj::mv(response));
+      }
     }
 
     void fulfill(kj::Promise<kj::Own<RpcResponse>>&& promise) {
-      fulfiller->fulfill(kj::mv(promise));
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->fulfill(kj::mv(promise));
+      }
     }
 
     void reject(kj::Exception&& exception) {
-      fulfiller->reject(kj::mv(exception));
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->reject(kj::mv(exception));
+      }
     }
 
     void disconnect() {
@@ -1644,7 +1706,7 @@ private:
   private:
     kj::Maybe<kj::Own<RpcConnectionState>> connectionState;
     QuestionId id;
-    kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>> fulfiller;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>>> fulfiller;
   };
 
   class RpcRequest final: public RequestHook {
@@ -1669,6 +1731,7 @@ private:
     RemotePromise<AnyPointer> send() override {
       if (!connectionState->connection.is<Connected>()) {
         // Connection is broken.
+        // TODO(bug): Seems like we should check for redirect before this?
         const kj::Exception& e = connectionState->connection.get<Disconnected>();
         return RemotePromise<AnyPointer>(
             kj::Promise<Response<AnyPointer>>(kj::cp(e)),
@@ -1717,6 +1780,7 @@ private:
     kj::Promise<void> sendStreaming() override {
       if (!connectionState->connection.is<Connected>()) {
         // Connection is broken.
+        // TODO(bug): Seems like we should check for redirect before this?
         return kj::cp(connectionState->connection.get<Disconnected>());
       }
 
@@ -1731,6 +1795,34 @@ private:
         return RequestHook::from(kj::mv(replacement))->sendStreaming();
       } else {
         return sendStreamingInternal(false);
+      }
+    }
+
+    AnyPointer::Pipeline sendForPipeline() override {
+      if (!connectionState->connection.is<Connected>()) {
+        // Connection is broken.
+        // TODO(bug): Seems like we should check for redirect before this?
+        const kj::Exception& e = connectionState->connection.get<Disconnected>();
+        return AnyPointer::Pipeline(newBrokenPipeline(kj::cp(e)));
+      }
+
+      KJ_IF_MAYBE(redirect, target->writeTarget(callBuilder.getTarget())) {
+        // Whoops, this capability has been redirected while we were building the request!
+        // We'll have to make a new request and do a copy.  Ick.
+
+        auto replacement = redirect->get()->newCall(
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize(),
+            callHintsFromReader(callBuilder));
+        replacement.set(paramsBuilder);
+        return replacement.sendForPipeline();
+      } else if (connectionState->gotReturnForHighQuestionId) {
+        // Peer doesn't implement our hints. Fall back to a regular send().
+        return send();
+      } else {
+        auto questionRef = sendForPipelineInternal();
+        kj::Own<PipelineHook> pipeline = kj::refcounted<RpcPipeline>(
+            *connectionState, kj::mv(questionRef));
+        return AnyPointer::Pipeline(kj::mv(pipeline));
       }
     }
 
@@ -1846,6 +1938,9 @@ private:
       })) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
+        // TODO(bug): Attempts to use the pipeline will end up sending a request referencing a
+        //   bogus question ID. Can we rethrow after doing the appropriate cleanup, so the pipeline
+        //   is never created? See the approach in sendForPipelineInternal() below.
         result.question.isAwaitingReturn = false;
         result.question.skipFinish = true;
         connectionState->releaseExports(result.question.paramExports);
@@ -1886,6 +1981,47 @@ private:
       }
 
       return kj::mv(flowPromise);
+    }
+
+    kj::Own<QuestionRef> sendForPipelineInternal() {
+      // Since must of setupSend() is subtly different for this case, we don't reuse it.
+
+      // Build the cap table.
+      kj::Vector<int> fds;
+      auto exports = connectionState->writeDescriptors(
+          capTable.getTable(), callBuilder.getParams(), fds);
+      message->setFds(fds.releaseAsArray());
+
+      if (exports.size() > 0) {
+        connectionState->sentCapabilitiesInPipelineOnlyCall = true;
+      }
+
+      // Init the question table.  Do this after writing descriptors to avoid interference.
+      QuestionId questionId;
+      auto& question = connectionState->questions.nextHigh(questionId);
+      question.isAwaitingReturn = false;  // No Return needed
+      question.paramExports = kj::mv(exports);
+      question.isTailCall = false;
+
+      // Make the QuentionRef and result promise.
+      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, nullptr);
+      question.selfRef = *questionRef;
+
+      // If sending throws, we'll need to fix up the state a little...
+      KJ_ON_SCOPE_FAILURE({
+        question.skipFinish = true;
+        connectionState->releaseExports(question.paramExports);
+      });
+
+      // Finish and send.
+      callBuilder.setQuestionId(questionId);
+      callBuilder.setOnlyPromisePipeline(true);
+
+      KJ_CONTEXT("sending RPC call",
+          callBuilder.getInterfaceId(), callBuilder.getMethodId());
+      message->send();
+
+      return kj::mv(questionRef);
     }
   };
 
@@ -2124,9 +2260,11 @@ private:
                    kj::Own<IncomingRpcMessage>&& request,
                    kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
                    const AnyPointer::Reader& params,
-                   bool redirectResults, uint64_t interfaceId, uint16_t methodId)
+                   bool redirectResults, uint64_t interfaceId, uint16_t methodId,
+                   ClientHook::CallHints hints)
         : connectionState(kj::addRef(connectionState)),
           answerId(answerId),
+          hints(hints),
           interfaceId(interfaceId),
           methodId(methodId),
           requestSize(request->sizeInWords()),
@@ -2142,9 +2280,10 @@ private:
       if (isFirstResponder()) {
         // We haven't sent a return yet, so we must have been canceled.  Send a cancellation return.
         unwindDetector.catchExceptionsIfUnwinding([&]() {
-          // Don't send anything if the connection is broken.
+          // Don't send anything if the connection is broken, or if the onlyPromisePipeline hint
+          // was used (in which case the caller doesn't care to receive a `Return`).
           bool shouldFreePipeline = true;
-          if (connectionState->connection.is<Connected>()) {
+          if (connectionState->connection.is<Connected>() && !hints.onlyPromisePipeline) {
             auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
                 messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
             auto builder = message->getBody().initAs<rpc::Message>().initReturn();
@@ -2183,6 +2322,7 @@ private:
 
     void sendReturn() {
       KJ_ASSERT(!redirectResults);
+      KJ_ASSERT(!hints.onlyPromisePipeline);
 
       // Avoid sending results if canceled so that we don't have to figure out whether or not
       // `releaseResultCaps` was set in the already-received `Finish`.
@@ -2235,6 +2375,7 @@ private:
     }
     void sendErrorReturn(kj::Exception&& exception) {
       KJ_ASSERT(!redirectResults);
+      KJ_ASSERT(!hints.onlyPromisePipeline);
       if (isFirstResponder()) {
         if (connectionState->connection.is<Connected>()) {
           auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
@@ -2261,6 +2402,7 @@ private:
     }
     void sendRedirectReturn() {
       KJ_ASSERT(redirectResults);
+      KJ_ASSERT(!hints.onlyPromisePipeline);
 
       if (isFirstResponder()) {
         auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
@@ -2334,9 +2476,13 @@ private:
       KJ_REQUIRE(response == nullptr,
                  "Can't call tailCall() after initializing the results struct.");
 
-      if (request->getBrand() == connectionState.get() && !redirectResults) {
+      if (request->getBrand() == connectionState.get() &&
+          !redirectResults && !hints.noPromisePipelining) {
         // The tail call is headed towards the peer that called us in the first place, so we can
         // optimize out the return trip.
+        //
+        // If the noPromisePipelining hint was sent, we skip this trick since the caller will
+        // ignore the `Return` message anyway.
 
         KJ_IF_MAYBE(tailInfo, kj::downcast<RpcRequest>(*request).tailSend()) {
           if (isFirstResponder()) {
@@ -2361,6 +2507,14 @@ private:
       }
 
       // Just forwarding to another local call.
+
+      if (hints.onlyPromisePipeline) {
+        return {
+          kj::NEVER_DONE,
+          PipelineHook::from(request->sendForPipeline())
+        };
+      }
+
       auto promise = request->send();
 
       // Wait for response.
@@ -2385,6 +2539,8 @@ private:
   private:
     kj::Own<RpcConnectionState> connectionState;
     AnswerId answerId;
+
+    ClientHook::CallHints hints;
 
     uint64_t interfaceId;
     uint16_t methodId;
@@ -2721,9 +2877,15 @@ private:
 
     AnswerId answerId = call.getQuestionId();
 
+    auto hints = callHintsFromReader(call);
+
+    // Don't honor onlyPromisePipeline if results are redirected, because this situation isn't
+    // useful in practice and would be complicated to handle "correctly".
+    if (redirectResults) hints.onlyPromisePipeline = false;
+
     auto context = kj::refcounted<RpcCallContext>(
         *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
-        redirectResults, call.getInterfaceId(), call.getMethodId());
+        redirectResults, call.getInterfaceId(), call.getMethodId(), hints);
 
     // No more using `call` after this point, as it now belongs to the context.
 
@@ -2739,8 +2901,7 @@ private:
     }
 
     auto promiseAndPipeline = startCall(
-        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(),
-        callHintsFromReader(call));
+        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(), hints);
 
     // Things may have changed -- in particular if startCall() immediately called
     // context->directTailCall().
@@ -2755,6 +2916,11 @@ private:
             [context=kj::mv(context)]() mutable {
               return context->consumeRedirectedResponse();
             });
+      } else if (hints.onlyPromisePipeline) {
+        // The promise is probably fake anyway, so don't bother adding a .then(). We do, however,
+        // have to attach `context` to this, since we destroy `task` upon receiving a `Finish`
+        // message, and we want `RpcCallContext` to be destroyed no earlier than that.
+        answer.task = promiseAndPipeline.promise.attach(kj::mv(context));
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
@@ -2833,7 +2999,39 @@ private:
     KJ_DEFER(releaseExports(exportsToRelease));
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
-    KJ_IF_MAYBE(question, questions.find(ret.getAnswerId())) {
+    QuestionId questionId = ret.getAnswerId();
+    if (questions.isHigh(questionId)) {
+      // We sent hints with this question saying we didn't want a `Return` but we got one anyway.
+      // We cannot even look up the question on the question table because it's (remotely) possible
+      // that we already removed it and re-allocated the ID to something else. So, we should ignore
+      // the `Return`. But we might want to make note to stop using these hints, to protect against
+      // the (again, remote) possibility of our ID space wrapping around and leading to confusion.
+      if (ret.getReleaseParamCaps() && sentCapabilitiesInPipelineOnlyCall) {
+        // Oh no, it appears the peer wants us to release any capabilities in the params, something
+        // which only a level 0 peer would request (no version of the C++ RPC system has ever done
+        // this). And it appears we did send capabilities in at least one pipeline-only call
+        // previously. But we have no record of which capabilities were sent in *this* call, so
+        // we cannot release them. Log an error about the leak.
+        //
+        // This scenario is unlikely to happen in practice, because sendForPipeline() is not useful
+        // when talking to a peer that doesn't support capability-passing -- they couldn't possibly
+        // return a capability to pipeline on! So, I'm not going to spend time to find a solution
+        // for this corner case. We will log an error, though, just in case someone hits this
+        // somehow.
+        KJ_LOG(ERROR,
+            "sendForPipeline() was used when sending an RPC to a peer, the parameters of that "
+            "RPC included capabilities, but the peer seems to implement Cap'n Proto at level 0, "
+            "meaning it does not support capability passing (or, at least, it sent a `Return` "
+            "with `releaseParamCaps = true`). The capabilities that were sent may have been "
+            "leaked (they won't be dropped until the connection closes).");
+
+        sentCapabilitiesInPipelineOnlyCall = false;  // don't log again
+      }
+      gotReturnForHighQuestionId = true;
+      return;
+    }
+
+    KJ_IF_MAYBE(question, questions.find(questionId)) {
       KJ_REQUIRE(question->isAwaitingReturn, "Duplicate Return.") { return; }
       question->isAwaitingReturn = false;
 
@@ -3464,6 +3662,12 @@ bool IncomingRpcMessage::isShortLivedRpcMessage(AnyPointer::Reader body) {
     default:
       return true;
   }
+}
+
+kj::Function<bool(MessageReader&)> IncomingRpcMessage::getShortLivedCallback() {
+  return [](MessageReader& reader) {
+    return IncomingRpcMessage::isShortLivedRpcMessage(reader.getRoot<AnyPointer>());
+  };
 }
 
 }  // namespace capnp

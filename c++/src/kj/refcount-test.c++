@@ -57,4 +57,81 @@ TEST(Refcount, Basic) {
 #endif
 }
 
+struct SetTrueInDestructor2 {
+  // Like above but doesn't inherit Refcounted.
+
+  SetTrueInDestructor2(bool* ptr): ptr(ptr) {}
+  ~SetTrueInDestructor2() { *ptr = true; }
+
+  bool* ptr;
+};
+
+KJ_TEST("RefcountedWrapper") {
+  {
+    bool b = false;
+    Own<RefcountedWrapper<SetTrueInDestructor2>> w = refcountedWrapper<SetTrueInDestructor2>(&b);
+    KJ_EXPECT(!b);
+
+    Own<SetTrueInDestructor2> ref1 = w->addWrappedRef();
+    Own<SetTrueInDestructor2> ref2 = w->addWrappedRef();
+
+    KJ_EXPECT(ref1.get() == &w->getWrapped());
+    KJ_EXPECT(ref1.get() == ref2.get());
+
+    KJ_EXPECT(!b);
+
+    w = nullptr;
+    ref1 = nullptr;
+
+    KJ_EXPECT(!b);
+
+    ref2 = nullptr;
+
+    KJ_EXPECT(b);
+  }
+
+  // Wrap Own<T>.
+  {
+    bool b = false;
+    Own<RefcountedWrapper<Own<SetTrueInDestructor2>>> w =
+        refcountedWrapper<SetTrueInDestructor2>(kj::heap<SetTrueInDestructor2>(&b));
+    KJ_EXPECT(!b);
+
+    Own<SetTrueInDestructor2> ref1 = w->addWrappedRef();
+    Own<SetTrueInDestructor2> ref2 = w->addWrappedRef();
+
+    KJ_EXPECT(ref1.get() == &w->getWrapped());
+    KJ_EXPECT(ref1.get() == ref2.get());
+
+    KJ_EXPECT(!b);
+
+    w = nullptr;
+    ref1 = nullptr;
+
+    KJ_EXPECT(!b);
+
+    ref2 = nullptr;
+
+    KJ_EXPECT(b);
+  }
+
+  // Try wrapping an `int` to really demonstrate the wrapped type can be anything.
+  {
+    Own<RefcountedWrapper<int>> w = refcountedWrapper<int>(123);
+    int* ptr = &w->getWrapped();
+    KJ_EXPECT(*ptr == 123);
+
+    Own<int> ref1 = w->addWrappedRef();
+    Own<int> ref2 = w->addWrappedRef();
+
+    KJ_EXPECT(ref1.get() == ptr);
+    KJ_EXPECT(ref2.get() == ptr);
+
+    w = nullptr;
+    ref1 = nullptr;
+
+    KJ_EXPECT(*ref2 == 123);
+  }
+}
+
 }  // namespace kj

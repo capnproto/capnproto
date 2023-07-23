@@ -35,7 +35,7 @@ class GzipOutputContext final {
 public:
   GzipOutputContext(kj::Maybe<int> compressionLevel);
   ~GzipOutputContext() noexcept(false);
-  KJ_DISALLOW_COPY(GzipOutputContext);
+  KJ_DISALLOW_COPY_AND_MOVE(GzipOutputContext);
 
   void setInput(const void* in, size_t size);
   kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush);
@@ -54,7 +54,7 @@ class GzipInputStream final: public InputStream {
 public:
   GzipInputStream(InputStream& inner);
   ~GzipInputStream() noexcept(false);
-  KJ_DISALLOW_COPY(GzipInputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(GzipInputStream);
 
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
@@ -75,7 +75,7 @@ public:
   GzipOutputStream(OutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
   GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS));
   ~GzipOutputStream() noexcept(false);
-  KJ_DISALLOW_COPY(GzipOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(GzipOutputStream);
 
   void write(const void* buffer, size_t size) override;
   using OutputStream::write;
@@ -95,7 +95,7 @@ class GzipAsyncInputStream final: public AsyncInputStream {
 public:
   GzipAsyncInputStream(AsyncInputStream& inner);
   ~GzipAsyncInputStream() noexcept(false);
-  KJ_DISALLOW_COPY(GzipAsyncInputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncInputStream);
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
@@ -115,7 +115,7 @@ public:
 
   GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
   GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS));
-  KJ_DISALLOW_COPY(GzipAsyncOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncOutputStream);
 
   Promise<void> write(const void* buffer, size_t size) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;

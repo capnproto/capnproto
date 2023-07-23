@@ -22,6 +22,7 @@
 #pragma once
 
 #include <kj/async-io.h>
+#include <kj/io.h>
 #include "message.h"
 
 CAPNP_BEGIN_HEADER
@@ -123,6 +124,10 @@ public:
   kj::Maybe<int> getSendBufferSize() override;
 
   kj::Promise<void> end() override;
+
+  // Make sure the overridden virtual methods don't hide the non-virtual methods.
+  using MessageStream::tryReadMessage;
+  using MessageStream::writeMessage;
 private:
   kj::AsyncIoStream& stream;
 };
@@ -143,6 +148,10 @@ public:
       kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
   kj::Maybe<int> getSendBufferSize() override;
   kj::Promise<void> end() override;
+
+  // Make sure the overridden virtual methods don't hide the non-virtual methods.
+  using MessageStream::tryReadMessage;
+  using MessageStream::writeMessage;
 private:
   kj::AsyncCapabilityStream& stream;
 };
@@ -180,6 +189,10 @@ public:
       kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override;
   kj::Maybe<int> getSendBufferSize() override;
   kj::Promise<void> end() override;
+
+  // Make sure the overridden virtual methods don't hide the non-virtual methods.
+  using MessageStream::tryReadMessage;
+  using MessageStream::writeMessage;
 
 private:
   kj::AsyncIoStream& stream;

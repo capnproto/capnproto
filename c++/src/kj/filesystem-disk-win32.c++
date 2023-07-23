@@ -158,6 +158,17 @@ static void rmrfChildren(ArrayPtr<const wchar_t> path) {
   auto glob = join16(path, L"*");
 
   WIN32_FIND_DATAW data;
+  // TODO(security): If `path` is a reparse point (symlink), this will follow it and delete the
+  //   contents. We check for reparse points before recursing, but there is still a TOCTOU race
+  //   condition.
+  //
+  //   Apparently, there is a whole different directory-listing API we could be using here:
+  //   `GetFileInformationByHandleEx()`, with the `FileIdBothDirectoryInfo` flag. This lets us
+  //   list the contents of a directory from its already-open handle -- it's probably how we should
+  //   do directory listing in general! If we open a file with FILE_FLAG_OPEN_REPARSE_POINT, then
+  //   the handle will represent the reparse point itself, and attempting to list it will produce
+  //   no entries. I had no idea this API existed when I wrote much of this code; I wish I had
+  //   because it seems much cleaner than the ancient FindFirstFile/FindNextFile API!
   HANDLE handle = FindFirstFileW(glob.begin(), &data);
   if (handle == INVALID_HANDLE_VALUE) {
     auto error = GetLastError();
@@ -575,8 +586,8 @@ public:
     PathPtr path = KJ_ASSERT_NONNULL(dirPath);
     auto glob = join16(path.forWin32Api(true), L"*");
 
-    // TODO(perf): Use FindFileEx() with FindExInfoBasic? Not apparently supported on Vista.
-    // TODO(someday): Use NtQueryDirectoryObject() instead? It's "internal", but so much cleaner.
+    // TODO(someday): Use GetFileInformationByHandleEx() with FileIdBothDirectoryInfo to enumerate
+    //   directories instead. It's much cleaner.
     WIN32_FIND_DATAW data;
     HANDLE handle = FindFirstFileW(glob.begin(), &data);
     if (handle == INVALID_HANDLE_VALUE) {

@@ -36,7 +36,7 @@ class ReadyInputStreamWrapper {
 public:
   ReadyInputStreamWrapper(AsyncInputStream& input);
   ~ReadyInputStreamWrapper() noexcept(false);
-  KJ_DISALLOW_COPY(ReadyInputStreamWrapper);
+  KJ_DISALLOW_COPY_AND_MOVE(ReadyInputStreamWrapper);
 
   kj::Maybe<size_t> read(kj::ArrayPtr<byte> dst);
   // Reads bytes into `dst`, returning the number of bytes read. Returns zero only at EOF. Returns
@@ -44,6 +44,9 @@ public:
 
   kj::Promise<void> whenReady();
   // Returns a promise that resolves when read() will return non-null.
+
+  bool isAtEnd() { return eof; }
+  // Returns true if read() would return zero.
 
 private:
   AsyncInputStream& input;
@@ -64,7 +67,7 @@ class ReadyOutputStreamWrapper {
 public:
   ReadyOutputStreamWrapper(AsyncOutputStream& output);
   ~ReadyOutputStreamWrapper() noexcept(false);
-  KJ_DISALLOW_COPY(ReadyOutputStreamWrapper);
+  KJ_DISALLOW_COPY_AND_MOVE(ReadyOutputStreamWrapper);
 
   kj::Maybe<size_t> write(kj::ArrayPtr<const byte> src);
   // Writes bytes from `src`, returning the number of bytes written. Never returns zero for

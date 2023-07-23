@@ -230,7 +230,7 @@ public:
     kj::Own<HttpHeaderTable> table;
   };
 
-  KJ_DISALLOW_COPY(HttpHeaderTable);  // Can't copy because HttpHeaderId points to the table.
+  KJ_DISALLOW_COPY_AND_MOVE(HttpHeaderTable);  // Can't copy because HttpHeaderId points to the table.
   ~HttpHeaderTable() noexcept(false);
 
   uint idCount() const;
@@ -660,6 +660,26 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
+using TlsStarterCallback = kj::Maybe<kj::Function<kj::Own<kj::AsyncIoStream>(kj::StringPtr)>>;
+struct HttpConnectSettings {
+  bool useTls = false;
+  // Requests to automatically establish a TLS session over the connection. The remote party
+  // will be expected to present a valid certificate matching the requested hostname.
+  kj::Maybe<TlsStarterCallback&> tlsStarter;
+  // This is an output parameter. It doesn't need to be set. But if it is set, then it may get
+  // filled with a callback function. It will get filled with `nullptr` if any of the following
+  // are true:
+  //
+  // * kj is not built with TLS support
+  // * the underlying HttpClient does not support the startTls mechanism
+  // * `useTls` has been set to `true` and so TLS has already been started
+  //
+  // The callback function itself can be used to initiate a TLS handshake on the
+  // connection at any arbitrary point. The function returns an AsyncIoStream that is a secure
+  // TLS stream. This mechanism is required for certain protocols, more info can be found on
+  // https://en.wikipedia.org/wiki/Opportunistic_TLS.
+};
+
 class HttpClient {
   // Interface to the client end of an HTTP connection.
   //
@@ -717,20 +737,39 @@ public:
   // `url` and `headers` need only remain valid until `openWebSocket()` returns (they can be
   // stack-allocated).
 
-  struct ConnectResponse {
-    uint statusCode;
-    // Any 2xx response indicates that the CONNECT request was successful without regard to the
-    // standard semantics of the specifix 2xx code.
-    kj::StringPtr statusText;
-    const HttpHeaders* headers;
-    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<kj::AsyncIoStream>> connectionOrBody;
-    // If the CONNECT request is successful, the connectionOrBody will be a kj::AsyncIoStream
-    // through which both directions of the tunnel are accessible. If the CONNECT request errors,
-    // then the connectionOrBody will be a kj::AsyncInputStream used to provide the payload
-    // (if any) of the error.
+  struct ConnectRequest {
+    struct Status {
+      uint statusCode;
+      kj::String statusText;
+      kj::Own<HttpHeaders> headers;
+      kj::Maybe<kj::Own<kj::AsyncInputStream>> errorBody;
+      // If the connect request is rejected, the statusCode can be any HTTP status code
+      // outside the 200-299 range and errorBody *may* be specified if there is a rejection
+      // payload.
+
+      // TODO(soon): Having Status own the statusText and headers is a bit unfortunate.
+      // Ideally we could have these be non-owned so that the headers object could just
+      // point directly into HttpOutputStream's buffer and not be copied. That's a bit
+      // more difficult to with CONNECT since the lifetimes of the buffers are a little
+      // different than with regular HTTP requests. It should still be possible but for
+      // now copying and owning the status text and headers is easier.
+
+      Status(uint statusCode,
+             kj::String statusText,
+             kj::Own<HttpHeaders> headers,
+             kj::Maybe<kj::Own<kj::AsyncInputStream>> errorBody = nullptr)
+          : statusCode(statusCode),
+            statusText(kj::mv(statusText)),
+            headers(kj::mv(headers)),
+            errorBody(kj::mv(errorBody)) {}
+    };
+
+    kj::Promise<Status> status;
+    kj::Own<kj::AsyncIoStream> connection;
   };
 
-  virtual kj::Promise<ConnectResponse> connect(kj::StringPtr host, const HttpHeaders& headers);
+  virtual ConnectRequest connect(
+      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings);
   // Handles CONNECT requests.
   //
   // `host` must specify both the host and port (e.g. "example.org:1234").
@@ -796,24 +835,35 @@ public:
 
   class ConnectResponse {
   public:
-    virtual kj::Own<kj::AsyncIoStream> accept(uint statusCode,
-        kj::StringPtr statusText, const HttpHeaders& headers) = 0;
+    virtual void accept(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const HttpHeaders& headers) = 0;
     // Signals acceptance of the CONNECT tunnel.
 
-    virtual kj::Own<kj::AsyncOutputStream> reject(uint statusCode,
-        kj::StringPtr statusText, const HttpHeaders& headers,
+    virtual kj::Own<kj::AsyncOutputStream> reject(
+        uint statusCode,
+        kj::StringPtr statusText,
+        const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
     // Signals rejection of the CONNECT tunnel.
   };
 
-  virtual kj::Promise<void> connect(kj::StringPtr host, const HttpHeaders& headers,
-                                    ConnectResponse& tunnel);
+  virtual kj::Promise<void> connect(kj::StringPtr host,
+                                    const HttpHeaders& headers,
+                                    kj::AsyncIoStream& connection,
+                                    ConnectResponse& response,
+                                    HttpConnectSettings settings);
   // Handles CONNECT requests.
   //
   // The `host` must include host and port.
   //
   // `host` and `headers` are invalidated when accept or reject is called on the ConnectResponse
   // or when the returned promise resolves, whichever comes first.
+  //
+  // The connection is provided to support pipelining. Writes to the connection will be blocked
+  // until one of either accept() or reject() is called on tunnel. Reads from the connection are
+  // permitted at any time.
   //
   // Request processing can be canceled by dropping the returned promise. HttpServer may do so if
   // the client disconnects prematurely.
@@ -865,6 +915,9 @@ struct HttpClientSettings {
     AUTOMATIC_COMPRESSION, // Automatically includes the compression header in the WebSocket request.
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
+
+  kj::Maybe<SecureNetworkWrapper&> tlsContext;
+  // A reference to a TLS context that will be used when tlsStarter is invoked.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
@@ -1170,6 +1223,12 @@ private:
   kj::Promise<void> listenLoop(kj::ConnectionReceiver& port);
 
   void taskFailed(kj::Exception&& exception) override;
+
+  kj::Promise<bool> listenHttpImpl(kj::AsyncIoStream& connection, bool wantCleanDrain);
+  kj::Promise<bool> listenHttpImpl(kj::AsyncIoStream& connection,
+      SuspendableHttpServiceFactory factory,
+      kj::Maybe<SuspendedRequest> suspendedRequest,
+      bool wantCleanDrain);
 };
 
 class HttpServer::SuspendableRequest {
@@ -1191,7 +1250,7 @@ private:
   explicit SuspendableRequest(
       Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, const HttpHeaders& headers)
       : method(method), url(url), headers(headers), connection(connection) {}
-  KJ_DISALLOW_COPY(SuspendableRequest);
+  KJ_DISALLOW_COPY_AND_MOVE(SuspendableRequest);
 
   Connection& connection;
 

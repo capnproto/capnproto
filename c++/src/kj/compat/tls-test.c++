@@ -27,6 +27,8 @@
 
 #include "tls.h"
 
+#include "http.h"
+
 #include <openssl/opensslv.h>
 
 #include <stdlib.h>
@@ -467,6 +469,24 @@ KJ_TEST("TLS basics") {
   auto server = serverPromise.wait(test.io.waitScope);
 
   test.testConnection(*client, *server);
+
+  // Test clean shutdown.
+  {
+    auto eofPromise = server->readAllText();
+    KJ_EXPECT(!eofPromise.poll(test.io.waitScope));
+    client->shutdownWrite();
+    KJ_ASSERT(eofPromise.poll(test.io.waitScope));
+    KJ_EXPECT(eofPromise.wait(test.io.waitScope) == ""_kj);
+  }
+
+  // Test UNCLEAN shutdown in other direction.
+  {
+    auto eofPromise = client->readAllText();
+    KJ_EXPECT(!eofPromise.poll(test.io.waitScope));
+    { auto drop = kj::mv(server); }
+    KJ_EXPECT(eofPromise.poll(test.io.waitScope));
+    KJ_EXPECT_THROW(DISCONNECTED, eofPromise.wait(test.io.waitScope));
+  }
 }
 
 KJ_TEST("TLS peer identity") {
@@ -682,22 +702,29 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert, kj::StringPt
   KJ_EXPECT_THROW_MESSAGE(message, clientPromise.wait(test.io.waitScope));
 }
 
+// OpenSSL 3.0 changed error messages
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L && !defined(OPENSSL_IS_BORINGSSL)
+#define SSL_MESSAGE_DIFFERENT_IN_V3(v11, v30) v30
+#else
+#define SSL_MESSAGE_DIFFERENT_IN_V3(v11, v30) v11
+#endif
+
 KJ_TEST("TLS certificate validation") {
   expectInvalidCert("wrong.com", TlsCertificate(kj::str(VALID_CERT, INTERMEDIATE_CERT)),
-                    "Hostname mismatch");
+                    SSL_MESSAGE_DIFFERENT_IN_V3("Hostname mismatch", "hostname mismatch"));
   expectInvalidCert("example.com", TlsCertificate(VALID_CERT),
                     "unable to get local issuer certificate");
   expectInvalidCert("example.com", TlsCertificate(kj::str(EXPIRED_CERT, INTERMEDIATE_CERT)),
                     "certificate has expired");
   expectInvalidCert("example.com", TlsCertificate(SELF_SIGNED_CERT),
-                    "self signed certificate");
+      SSL_MESSAGE_DIFFERENT_IN_V3("self signed certificate", "self-signed certificate"));
 }
 
 // BoringSSL seems to print error messages differently.
 #ifdef OPENSSL_IS_BORINGSSL
-#define SSL_MESSAGE(interesting, boring) boring
+#define SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(interesting, boring) boring
 #else
-#define SSL_MESSAGE(interesting, boring) interesting
+#define SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(interesting, boring) interesting
 #endif
 
 KJ_TEST("TLS client certificate verification") {
@@ -740,14 +767,15 @@ KJ_TEST("TLS client certificate verification") {
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("peer did not return a certificate",
-                    "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("peer did not return a certificate",
+                                           "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.wait(test.io.waitScope));
 #if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
-                    "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(
+            "alert",  // "alert handshake failure" or "alert certificate required"
+            "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
         clientPromise.wait(test.io.waitScope));
 #endif
   }
@@ -770,14 +798,14 @@ KJ_TEST("TLS client certificate verification") {
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("certificate verify failed",
-                    "CERTIFICATE_VERIFY_FAILED"),
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("certificate verify failed",
+                                           "CERTIFICATE_VERIFY_FAILED"),
         serverPromise.wait(test.io.waitScope));
 #if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
-        SSL_MESSAGE("alert unknown ca",
-                    "TLSV1_ALERT_UNKNOWN_CA"),
+        SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("alert unknown ca",
+                                           "TLSV1_ALERT_UNKNOWN_CA"),
         clientPromise.wait(test.io.waitScope));
 #endif
   }
@@ -1122,6 +1150,44 @@ KJ_TEST("TLS receiver does not stall on hung client") {
   auto extraAcceptPromise = test.receiver->accept().then(readFromClient);
   KJ_EXPECT(!extraAcceptPromise.poll(test.io.waitScope));
 }
+
+#if !_WIN32 // TODO: Investigate and fix issue on Windows.
+KJ_TEST("NetworkHttpClient connect with tlsStarter") {
+  auto io = kj::setupAsyncIo();
+  auto& waitScope KJ_UNUSED = io.waitScope;
+  auto listener1 = io.provider->getNetwork().parseAddress("localhost", 0)
+      .wait(io.waitScope)->listen();
+
+  auto ignored KJ_UNUSED = listener1->accept().then([](Own<kj::AsyncIoStream> stream) {
+    auto buffer = kj::str("test");
+    return stream->write(buffer.cStr(), buffer.size()).attach(kj::mv(stream), kj::mv(buffer));
+  }).eagerlyEvaluate(nullptr);
+
+  HttpClientSettings clientSettings;
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+  TlsContext tls;
+
+  auto tlsNetwork = tls.wrapNetwork(io.provider->getNetwork());
+  clientSettings.tlsContext = tls;
+  auto client = newHttpClient(clientTimer, headerTable,
+      io.provider->getNetwork(), *tlsNetwork, clientSettings);
+  kj::HttpConnectSettings httpConnectSettings = { false, nullptr };
+  kj::TlsStarterCallback tlsStarter;
+  httpConnectSettings.tlsStarter = tlsStarter;
+  auto request = client->connect(
+      kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable), httpConnectSettings);
+
+  KJ_ASSERT(tlsStarter != nullptr);
+
+  auto buf = kj::heapArray<char>(4);
+  return request.connection->tryRead(buf.begin(), 1, buf.size())
+      .then([buf = kj::mv(buf)](size_t count) {
+    KJ_ASSERT(count == 4);
+    KJ_ASSERT(kj::str(buf.asChars()) == "test");
+  }).attach(kj::mv(request.connection)).wait(io.waitScope);
+}
+#endif
 
 #ifdef KJ_EXTERNAL_TESTS
 KJ_TEST("TLS to capnproto.org") {

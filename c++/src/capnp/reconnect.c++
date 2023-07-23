@@ -43,7 +43,15 @@ public:
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
     auto result = getCurrent().call(interfaceId, methodId, kj::mv(context), hints);
-    wrap(result.promise);
+    if (hints.onlyPromisePipeline) {
+      // Just in case the callee didn't implement the hint, replace its promise.
+      result.promise = kj::NEVER_DONE;
+
+      // TODO(bug): In this case we won't detect cancellation. This is essentially the same
+      //   bug as described in `RequestImpl::send()` below, and will need the same solution.
+    } else {
+      wrap(result.promise);
+    }
     return result;
   }
 
@@ -110,6 +118,12 @@ private:
 
     RemotePromise<AnyPointer> send() override {
       auto result = inner->send();
+      // TODO(bug): If the returned promise is dropped, e.g. because the caller only cares about
+      //   pipelining, then the DISCONNECTED exception will not be noticed. I suppose we have to
+      //   split the promise and hold one branch, but we don't want to prevent cancellation, so
+      //   we only want to hold that branch as long as the PipelineHook or some pipelined
+      //   capability obtained through it lives. So we need a bunch of custom wrappers for that.
+      //   Ugh.
       parent->wrap(result);
       return result;
     }
@@ -118,6 +132,11 @@ private:
       auto result = inner->sendStreaming();
       parent->wrap(result);
       return result;
+    }
+
+    AnyPointer::Pipeline sendForPipeline() override {
+      // TODO(bug): This definitely fails to detect disconnects; see comment in send().
+      return inner->sendForPipeline();
     }
 
     const void* getBrand() override {

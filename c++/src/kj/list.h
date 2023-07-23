@@ -84,7 +84,7 @@ class List {
 
 public:
   List() = default;
-  KJ_DISALLOW_COPY(List);
+  KJ_DISALLOW_COPY_AND_MOVE(List);
 
   bool empty() const {
     return head == nullptr;
@@ -154,7 +154,7 @@ public:
     // Intentionally `noexcept` because we want to crash if a dangling pointer was left in a list.
     if (prev != nullptr) _::throwDestroyedWhileInList();
   }
-  KJ_DISALLOW_COPY(ListLink);
+  KJ_DISALLOW_COPY_AND_MOVE(ListLink);
 
   bool isLinked() const { return prev != nullptr; }
 

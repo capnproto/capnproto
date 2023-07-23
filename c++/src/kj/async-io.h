@@ -1088,6 +1088,57 @@ inline ArrayPtr<const T> AncillaryMessage::asArray() const {
   return arrayPtr(reinterpret_cast<const T*>(data.begin()), data.size() / sizeof(T));
 }
 
+class SecureNetworkWrapper {
+  // Abstract interface for a class which implements a "secure" network as a wrapper around an
+  // insecure one. "secure" means:
+  // * Connections to a server will only succeed if it can be verified that the requested hostname
+  //   actually belongs to the responding server.
+  // * No man-in-the-middle attacker can potentially see the bytes sent and received.
+  //
+  // The typical implementation uses TLS. The object in this case could be configured to use cerain
+  // keys, certificates, etc. See kj/compat/tls.h for such an implementation.
+  //
+  // However, an implementation could use some other form of encryption, or might not need to use
+  // encryption at all. For example, imagine a kj::Network that exists only on a single machine,
+  // providing communications between various processes using unix sockets. Perhaps the "hostnames"
+  // are actually PIDs in this case. An implementation of such a network could verify the other
+  // side's identity using an `SCM_CREDENTIALS` auxiliary message, which cannot be forged. Once
+  // verified, there is no need to encrypt since unix sockets cannot be intercepted.
+
+public:
+  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> wrapServer(kj::Own<kj::AsyncIoStream> stream) = 0;
+  // Act as the server side of a connection. The given stream is already connected to a client, but
+  // no authentication has occurred. The returned stream represents the secure transport once
+  // established.
+
+  virtual kj::Promise<kj::Own<kj::AsyncIoStream>> wrapClient(
+      kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) = 0;
+  // Act as the client side of a connection. The given stream is already connecetd to a server, but
+  // no authentication has occurred. This method will verify that the server actually is the given
+  // hostname, then return the stream representing a secure transport to that server.
+
+  virtual kj::Promise<kj::AuthenticatedStream> wrapServer(kj::AuthenticatedStream stream) = 0;
+  virtual kj::Promise<kj::AuthenticatedStream> wrapClient(
+      kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname) = 0;
+  // Same as above, but implementing kj::AuthenticatedStream, which provides PeerIdentity objects
+  // with more details about the peer. The SecureNetworkWrapper will provide its own implementation
+  // of PeerIdentity with the specific details it is able to authenticate.
+
+  virtual kj::Own<kj::ConnectionReceiver> wrapPort(kj::Own<kj::ConnectionReceiver> port) = 0;
+  // Wrap a connection listener. This is equivalent to calling wrapServer() on every connection
+  // received.
+
+  virtual kj::Own<kj::NetworkAddress> wrapAddress(
+      kj::Own<kj::NetworkAddress> address, kj::StringPtr expectedServerHostname) = 0;
+  // Wrap a NetworkAddress. This is equivalent to calling `wrapClient()` on every connection
+  // formed by calling `connect()` on the address.
+
+  virtual kj::Own<kj::Network> wrapNetwork(kj::Network& network) = 0;
+  // Wrap a whole `kj::Network`. This automatically wraps everything constructed using the network.
+  // The network will only accept address strings that can be authenticated, and will automatically
+  // authenticate servers against those addresses when connecting to them.
+};
+
 }  // namespace kj
 
 KJ_END_HEADER

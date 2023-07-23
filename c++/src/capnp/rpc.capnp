@@ -424,6 +424,21 @@ struct Call {
   # when no pipelined calls are expected. The sender typically sets this to false when the method's
   # schema does not specify any return capabilities.
 
+  onlyPromisePipeline @10 :Bool = false;
+  # If true, the sender only plans to use this call to make pipelined calls. The receiver need not
+  # send a `Return` message (but is still allowed to do so).
+  #
+  # Since the sender does not know whether a `Return` will be sent, it must release all state
+  # related to the call when it sends `Finish`. However, in the case that the callee does not
+  # recognize this hint and chooses to send a `Return`, then technically the caller is not allowed
+  # to reuse the question ID until it receives said `Return`. This creates a conundrum: How does
+  # the caller decide when it's OK to reuse the ID? To sidestep the problem, the C++ implementation
+  # uses high-numbered IDs (with the high-order bit set) for such calls, and cycles through the
+  # IDs in order. If all 2^31 IDs in this space are used without ever seeing a `Return`, then the
+  # implementation assumes that the other end is in fact honoring the hint, and the ID counter is
+  # allowed to loop around. If a `Return` is ever seen when `onlyPromisePipeline` was set, then
+  # the implementation stops using this hint.
+
   params @4 :Payload;
   # The call parameters.  `params.content` is a struct whose fields correspond to the parameters of
   # the method.

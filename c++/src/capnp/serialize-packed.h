@@ -35,7 +35,7 @@ class PackedInputStream: public kj::InputStream {
 
 public:
   explicit PackedInputStream(kj::BufferedInputStream& inner);
-  KJ_DISALLOW_COPY(PackedInputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(PackedInputStream);
   ~PackedInputStream() noexcept(false);
 
   // implements InputStream ------------------------------------------
@@ -50,7 +50,7 @@ class PackedOutputStream: public kj::OutputStream {
   // An output stream that packs data. Buffers passed to `write()` must be word-aligned.
 public:
   explicit PackedOutputStream(kj::BufferedOutputStream& inner);
-  KJ_DISALLOW_COPY(PackedOutputStream);
+  KJ_DISALLOW_COPY_AND_MOVE(PackedOutputStream);
   ~PackedOutputStream() noexcept(false);
 
   // implements OutputStream -----------------------------------------
@@ -66,7 +66,7 @@ class PackedMessageReader: private _::PackedInputStream, public InputStreamMessa
 public:
   PackedMessageReader(kj::BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
                       kj::ArrayPtr<word> scratchSpace = nullptr);
-  KJ_DISALLOW_COPY(PackedMessageReader);
+  KJ_DISALLOW_COPY_AND_MOVE(PackedMessageReader);
   ~PackedMessageReader() noexcept(false);
 };
 
@@ -83,7 +83,7 @@ public:
                         kj::ArrayPtr<word> scratchSpace = nullptr);
   // Read a message from a file descriptor, taking ownership of the descriptor.
 
-  KJ_DISALLOW_COPY(PackedFdMessageReader);
+  KJ_DISALLOW_COPY_AND_MOVE(PackedFdMessageReader);
 
   ~PackedFdMessageReader() noexcept(false);
 };

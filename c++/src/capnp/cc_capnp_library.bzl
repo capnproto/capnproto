@@ -13,7 +13,7 @@ def _workspace_path(label, path):
 
 def _capnp_gen_impl(ctx):
     label = ctx.label
-    src_prefix = _workspace_path(label, ctx.attr.src_prefix)
+    src_prefix = _workspace_path(label, ctx.attr.src_prefix) if ctx.attr.src_prefix != "" else ""
     includes = []
 
     inputs = ctx.files.srcs + ctx.files.data
@@ -26,7 +26,8 @@ def _capnp_gen_impl(ctx):
 
     system_include = ctx.files._capnp_system[0].dirname.removesuffix("/capnp")
 
-    out_dir = ctx.var["GENDIR"]
+    gen_dir = ctx.var["GENDIR"]
+    out_dir = gen_dir
     if src_prefix != "":
         out_dir = out_dir + "/" + src_prefix
 
@@ -35,6 +36,14 @@ def _capnp_gen_impl(ctx):
     args.add_all(["compile", "--verbose", cc_out])
     args.add_all(["-I" + inc for inc in includes])
     args.add_all(["-I", system_include])
+
+    if src_prefix == "":
+        # guess src_prefix for generated files
+        for src in ctx.files.srcs:
+            if src.path.startswith(gen_dir):
+                src_prefix = gen_dir
+                break
+
     if src_prefix != "":
         args.add_all(["--src-prefix", src_prefix])
 

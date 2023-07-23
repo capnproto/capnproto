@@ -225,7 +225,7 @@ struct SingularDerivedDynamic final: public DynamicType1 {
   ~SingularDerivedDynamic() {
     destructorCalled = true;
   }
-  KJ_DISALLOW_COPY(SingularDerivedDynamic);
+  KJ_DISALLOW_COPY_AND_MOVE(SingularDerivedDynamic);
 
   bool& destructorCalled;
 };
@@ -238,7 +238,7 @@ struct MultipleDerivedDynamic final: public DynamicType1, public DynamicType2 {
     destructorCalled = true;
   }
 
-  KJ_DISALLOW_COPY(MultipleDerivedDynamic);
+  KJ_DISALLOW_COPY_AND_MOVE(MultipleDerivedDynamic);
 
   bool& destructorCalled;
 };

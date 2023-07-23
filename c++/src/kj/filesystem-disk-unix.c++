@@ -188,7 +188,7 @@ static void rmrfChildrenAndClose(int fd) {
       if (entry->d_type == DT_DIR) {
         int subdirFd;
         KJ_SYSCALL(subdirFd = openat(
-            fd, entry->d_name, O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC));
+            fd, entry->d_name, O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW));
         rmrfChildrenAndClose(subdirFd);
         KJ_SYSCALL(unlinkat(fd, entry->d_name, AT_REMOVEDIR));
       } else if (entry->d_type != DT_UNKNOWN) {
@@ -217,7 +217,9 @@ static bool rmrf(int fd, StringPtr path) {
   if (S_ISDIR(stats.st_mode)) {
     int subdirFd;
     KJ_SYSCALL(subdirFd = openat(
-        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC)) { return false; }
+        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW)) {
+      return false;
+    }
     rmrfChildrenAndClose(subdirFd);
     KJ_SYSCALL(unlinkat(fd, path.cStr(), AT_REMOVEDIR)) { return false; }
   } else {
@@ -302,6 +304,11 @@ public:
 
   int getFd() const {
     return fd.get();
+  }
+
+  void setFd(AutoCloseFd newFd) {
+    // Used for one hack in DiskFilesystem's constructor...
+    fd = kj::mv(newFd);
   }
 
   // FsNode --------------------------------------------------------------------
@@ -1656,7 +1663,25 @@ public:
   DiskFilesystem()
       : root(openDir("/")),
         current(openDir(".")),
-        currentPath(computeCurrentPath()) {}
+        currentPath(computeCurrentPath()) {
+    // We sometimes like to use qemu-user to test arm64 binaries cross-compiled from an x64 host
+    // machine. But, because it intercepts and rewrites system calls from userspace rather than
+    // emulating a whole kernel, it has a lot of quirks. One quirk that hits kj::Filesystem pretty
+    // badly is that open("/") actually returns a file descriptor for "/usr/aarch64-linux-gnu".
+    // Attempts to openat() any files within there then don't work. We can detect this problem and
+    // correct for it here.
+    struct stat realRoot, fsRoot;
+    KJ_SYSCALL_HANDLE_ERRORS(stat("/dev/..", &realRoot)) {
+      default:
+        // stat("/dev/..") failed? Give up.
+        return;
+    }
+    KJ_SYSCALL(fstat(root.DiskHandle::getFd(), &fsRoot));
+    if (realRoot.st_ino != fsRoot.st_ino) {
+      KJ_LOG(WARNING, "root dir file descriptor is broken, probably because of qemu; compensating");
+      root.setFd(openDir("/dev/.."));
+    }
+  }
 
   const Directory& getRoot() const override {
     return root;

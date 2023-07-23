@@ -67,7 +67,7 @@ class Refcounted: private Disposer {
 public:
   Refcounted() = default;
   virtual ~Refcounted() noexcept(false);
-  KJ_DISALLOW_COPY(Refcounted);
+  KJ_DISALLOW_COPY_AND_MOVE(Refcounted);
 
   inline bool isShared() const { return refcount > 1; }
   // Check if there are multiple references to this object. This is sometimes useful for deciding
@@ -85,6 +85,9 @@ private:
   friend Own<T> addRef(T& object);
   template <typename T, typename... Params>
   friend Own<T> refcounted(Params&&... params);
+
+  template <typename T>
+  friend class RefcountedWrapper;
 };
 
 template <typename T, typename... Params>
@@ -112,6 +115,59 @@ Own<T> Refcounted::addRefInternal(T* object) {
   return Own<T>(object, *refcounted);
 }
 
+template <typename T>
+class RefcountedWrapper: public Refcounted {
+  // Adds refcounting as a wrapper around an existing type, allowing you to construct references
+  // with type Own<T> that appears to point directly to the underlying object.
+
+public:
+  template <typename... Params>
+  RefcountedWrapper(Params&&... params): wrapped(kj::fwd<Params>(params)...) {}
+
+  T& getWrapped() { return wrapped; }
+  const T& getWrapped() const { return wrapped; }
+
+  Own<T> addWrappedRef() {
+    // Return an owned reference to the wrapped object that is backed by a refcount.
+    ++refcount;
+    return Own<T>(&wrapped, *this);
+  }
+
+private:
+  T wrapped;
+};
+
+template <typename T>
+class RefcountedWrapper<Own<T>>: public Refcounted {
+  // Specialization for when the wrapped type is itself Own<T>. We don't want this to result in
+  // Own<Own<T>>.
+
+public:
+  RefcountedWrapper(Own<T> wrapped): wrapped(kj::mv(wrapped)) {}
+
+  T& getWrapped() { return *wrapped; }
+  const T& getWrapped() const { return *wrapped; }
+
+  Own<T> addWrappedRef() {
+    // Return an owned reference to the wrapped object that is backed by a refcount.
+    ++refcount;
+    return Own<T>(wrapped.get(), *this);
+  }
+
+private:
+  Own<T> wrapped;
+};
+
+template <typename T, typename... Params>
+Own<RefcountedWrapper<T>> refcountedWrapper(Params&&... params) {
+  return refcounted<RefcountedWrapper<T>>(kj::fwd<Params>(params)...);
+}
+
+template <typename T>
+Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
+  return refcounted<RefcountedWrapper<Own<T>>>(kj::mv(wrapped));
+}
+
 // =======================================================================================
 // Atomic (thread-safe) refcounting
 //
@@ -129,7 +185,7 @@ class AtomicRefcounted: private kj::Disposer {
 public:
   AtomicRefcounted() = default;
   virtual ~AtomicRefcounted() noexcept(false);
-  KJ_DISALLOW_COPY(AtomicRefcounted);
+  KJ_DISALLOW_COPY_AND_MOVE(AtomicRefcounted);
 
   inline bool isShared() const {
 #if _MSC_VER && !defined(__clang__)

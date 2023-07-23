@@ -47,7 +47,7 @@ struct ImplicitToInt {
 
 struct Immovable {
   Immovable() = default;
-  KJ_DISALLOW_COPY(Immovable);
+  KJ_DISALLOW_COPY_AND_MOVE(Immovable);
 };
 
 struct CopyOrMove {
@@ -547,7 +547,7 @@ TEST(Common, MaybeUnwrapOrReturn) {
 
 class Foo {
 public:
-  KJ_DISALLOW_COPY(Foo);
+  KJ_DISALLOW_COPY_AND_MOVE(Foo);
   virtual ~Foo() {}
 protected:
   Foo() = default;
@@ -556,14 +556,14 @@ protected:
 class Bar: public Foo {
 public:
   Bar() = default;
-  KJ_DISALLOW_COPY(Bar);
+  KJ_DISALLOW_COPY_AND_MOVE(Bar);
   virtual ~Bar() {}
 };
 
 class Baz: public Foo {
 public:
   Baz() = delete;
-  KJ_DISALLOW_COPY(Baz);
+  KJ_DISALLOW_COPY_AND_MOVE(Baz);
   virtual ~Baz() {}
 };
 
@@ -832,31 +832,68 @@ KJ_TEST("kj::range()") {
 }
 
 KJ_TEST("kj::defer()") {
-  bool executed;
-
-  // rvalue reference
   {
-    executed = false;
-    auto deferred = kj::defer([&executed]() {
+    // rvalue reference
+    bool executed = false;
+    {
+      auto deferred = kj::defer([&executed]() {
+        executed = true;
+      });
+      KJ_EXPECT(!executed);
+    }
+
+    KJ_EXPECT(executed);
+  }
+
+  {
+    // lvalue reference
+    bool executed = false;
+    auto executor = [&executed]() {
       executed = true;
-    });
-    KJ_EXPECT(!executed);
+    };
+
+    {
+      auto deferred = kj::defer(executor);
+      KJ_EXPECT(!executed);
+    }
+
+    KJ_EXPECT(executed);
   }
-
-  KJ_EXPECT(executed);
-
-  // lvalue reference
-  auto executor = [&executed]() {
-    executed = true;
-  };
 
   {
-    executed = false;
-    auto deferred = kj::defer(executor);
+    // Cancellation via `cancel()`.
+    bool executed = false;
+    {
+      auto deferred = kj::defer([&executed]() {
+        executed = true;
+      });
+      KJ_EXPECT(!executed);
+
+      // Cancel and release the functor.
+      deferred.cancel();
+      KJ_EXPECT(!executed);
+    }
+
     KJ_EXPECT(!executed);
   }
 
-  KJ_EXPECT(executed);
+  {
+    // Execution via `run()`.
+    size_t runCount = 0;
+    {
+      auto deferred = kj::defer([&runCount](){
+        ++runCount;
+      });
+
+      // Run and release the functor.
+      deferred.run();
+      KJ_EXPECT(runCount == 1);
+    }
+
+    // `deferred` is already been run, so nothing is run when we destruct it.
+    KJ_EXPECT(runCount == 1);
+  }
+
 }
 
 KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {
