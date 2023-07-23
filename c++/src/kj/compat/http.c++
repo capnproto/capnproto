@@ -462,13 +462,8 @@ static void requireValidHeaderName(kj::StringPtr name) {
 }
 
 static void requireValidHeaderValue(kj::StringPtr value) {
-  for (char c: value) {
-    // While the HTTP spec suggests that only printable ASCII characters are allowed in header
-    // values, reality has a different opinion. See: https://github.com/httpwg/http11bis/issues/19
-    // We follow the browsers' lead.
-    KJ_REQUIRE(c != '\0' && c != '\r' && c != '\n', "invalid header value",
-        kj::encodeCEscape(value));
-  }
+  KJ_REQUIRE(HttpHeaders::isValidHeaderValue(value), "invalid header value",
+      kj::encodeCEscape(value));
 }
 
 static const char* BUILTIN_HEADER_NAMES[] = {
@@ -565,6 +560,19 @@ kj::Maybe<HttpHeaderId> HttpHeaderTable::stringToId(kj::StringPtr name) const {
 }
 
 // =======================================================================================
+
+bool HttpHeaders::isValidHeaderValue(kj::StringPtr value) {
+  for (char c: value) {
+    // While the HTTP spec suggests that only printable ASCII characters are allowed in header
+    // values, reality has a different opinion. See: https://github.com/httpwg/http11bis/issues/19
+    // We follow the browsers' lead.
+    if (c == '\0' || c == '\r' || c == '\n') {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
     : table(&table),
@@ -1041,7 +1049,7 @@ static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
 class HttpInputStreamImpl final: public HttpInputStream {
 public:
-  explicit HttpInputStreamImpl(AsyncInputStream& inner, HttpHeaderTable& table)
+  explicit HttpInputStreamImpl(AsyncInputStream& inner, const HttpHeaderTable& table)
       : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
   }
 
@@ -1743,7 +1751,8 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
 
 }  // namespace
 
-kj::Own<HttpInputStream> newHttpInputStream(kj::AsyncInputStream& input, HttpHeaderTable& table) {
+kj::Own<HttpInputStream> newHttpInputStream(
+    kj::AsyncInputStream& input, const HttpHeaderTable& table) {
   return kj::heap<HttpInputStreamImpl>(input, table);
 }
 
@@ -3325,7 +3334,7 @@ namespace {
 class HttpClientImpl final: public HttpClient,
                             private HttpClientErrorHandler {
 public:
-  HttpClientImpl(HttpHeaderTable& responseHeaderTable, kj::Own<kj::AsyncIoStream> rawStream,
+  HttpClientImpl(const HttpHeaderTable& responseHeaderTable, kj::Own<kj::AsyncIoStream> rawStream,
                  HttpClientSettings settings)
       : httpInput(*rawStream, responseHeaderTable),
         httpOutput(*rawStream),
@@ -3617,7 +3626,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> HttpClient::connect(kj::StringPtr host) 
 }
 
 kj::Own<HttpClient> newHttpClient(
-    HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
+    const HttpHeaderTable& responseHeaderTable, kj::AsyncIoStream& stream,
     HttpClientSettings settings) {
   return kj::heap<HttpClientImpl>(responseHeaderTable,
       kj::Own<kj::AsyncIoStream>(&stream, kj::NullDisposer::instance),
@@ -3644,7 +3653,7 @@ namespace {
 
 class NetworkAddressHttpClient final: public HttpClient {
 public:
-  NetworkAddressHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
+  NetworkAddressHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                            kj::Own<kj::NetworkAddress> address, HttpClientSettings settings)
       : timer(timer),
         responseHeaderTable(responseHeaderTable),
@@ -3701,7 +3710,7 @@ public:
 
 private:
   kj::Timer& timer;
-  HttpHeaderTable& responseHeaderTable;
+  const HttpHeaderTable& responseHeaderTable;
   kj::Own<kj::NetworkAddress> address;
   HttpClientSettings settings;
 
@@ -3868,7 +3877,7 @@ private:
 
 class NetworkHttpClient final: public HttpClient, private kj::TaskSet::ErrorHandler {
 public:
-  NetworkHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
+  NetworkHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                     kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
                     HttpClientSettings settings)
       : timer(timer),
@@ -3910,7 +3919,7 @@ public:
 
 private:
   kj::Timer& timer;
-  HttpHeaderTable& responseHeaderTable;
+  const HttpHeaderTable& responseHeaderTable;
   kj::Network& network;
   kj::Maybe<kj::Network&> tlsNetwork;
   HttpClientSettings settings;
@@ -4000,13 +4009,13 @@ private:
 
 }  // namespace
 
-kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
+kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                                   kj::NetworkAddress& addr, HttpClientSettings settings) {
   return kj::heap<NetworkAddressHttpClient>(timer, responseHeaderTable,
       kj::Own<kj::NetworkAddress>(&addr, kj::NullDisposer::instance), kj::mv(settings));
 }
 
-kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
+kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                                   kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
                                   HttpClientSettings settings) {
   return kj::heap<NetworkHttpClient>(
@@ -5133,17 +5142,17 @@ private:
   }
 };
 
-HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable, HttpService& service,
-                       Settings settings)
+HttpServer::HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
+                       HttpService& service, Settings settings)
     : HttpServer(timer, requestHeaderTable, &service, settings,
                  kj::newPromiseAndFulfiller<void>()) {}
 
-HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable,
+HttpServer::HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
                        HttpServiceFactory serviceFactory, Settings settings)
     : HttpServer(timer, requestHeaderTable, kj::mv(serviceFactory), settings,
                  kj::newPromiseAndFulfiller<void>()) {}
 
-HttpServer::HttpServer(kj::Timer& timer, HttpHeaderTable& requestHeaderTable,
+HttpServer::HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
                        kj::OneOf<HttpService*, HttpServiceFactory> service,
                        Settings settings, kj::PromiseFulfillerPair<void> paf)
     : timer(timer), requestHeaderTable(requestHeaderTable), service(kj::mv(service)),

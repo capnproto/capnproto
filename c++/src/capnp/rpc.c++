@@ -418,12 +418,18 @@ public:
     auto shutdownPromise = connection.get<Connected>()->shutdown()
         .attach(kj::mv(connection.get<Connected>()))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
-              [](kj::Exception&& e) -> kj::Promise<void> {
+              [origException = kj::mv(exception)](kj::Exception&& e) -> kj::Promise<void> {
           // Don't report disconnects as an error.
-          if (e.getType() != kj::Exception::Type::DISCONNECTED) {
-            return kj::mv(e);
+          if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+            return kj::READY_NOW;
           }
-          return kj::READY_NOW;
+          // If the error is just what was passed in to disconnect(), don't report it back out
+          // since it shouldn't be anything the caller doesn't already know about.
+          if (e.getType() == origException.getType() &&
+              e.getDescription() == origException.getDescription()) {
+            return kj::READY_NOW;
+          }
+          return kj::mv(e);
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
     connection.init<Disconnected>(kj::mv(networkException));

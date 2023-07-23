@@ -75,8 +75,13 @@ public:
   }
   inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
+  StringPtr& operator=(String&& value) = delete;
+  inline StringPtr& operator=(decltype(nullptr)) {
+    content = ArrayPtr<const char>("", 1);
+    return *this;
+  }
 
-#if __cplusplus >= 202000L
+#if __cpp_char8_t
   inline StringPtr(const char8_t* value): StringPtr(reinterpret_cast<const char*>(value)) {}
   inline StringPtr(const char8_t* value, size_t size)
       : StringPtr(reinterpret_cast<const char*>(value), size) {}
@@ -152,7 +157,7 @@ private:
   friend constexpr kj::StringPtr (::operator "" _kj)(const char* str, size_t n);
 };
 
-#if __cplusplus < 202000L
+#if !__cpp_impl_three_way_comparison
 inline bool operator==(const char* a, const StringPtr& b) { return b == a; }
 inline bool operator!=(const char* a, const StringPtr& b) { return b != a; }
 #endif
@@ -254,7 +259,7 @@ private:
   Array<char> content;
 };
 
-#if __cplusplus < 202000L
+#if !__cpp_impl_three_way_comparison
 inline bool operator==(const char* a, const String& b) { return b == a; }
 inline bool operator!=(const char* a, const String& b) { return b != a; }
 #endif
@@ -366,7 +371,7 @@ struct Stringifier {
   template<size_t n>
   inline ArrayPtr<const char> operator*(const FixedArray<char, n>& s) const { return s; }
   inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
-#if __cplusplus >= 202000L
+#if __cpp_char8_t
   inline ArrayPtr<const char> operator*(const char8_t* s) const {
     return operator*(reinterpret_cast<const char*>(s));
   }

@@ -623,11 +623,9 @@ static constexpr uint64_t COMMON_TEXT_ANNOTATION = 0x857745131db6fc83ull;
 // Type ID of `commonText` from `http.capnp`.
 // TODO(cleanup): Cap'n Proto should auto-generate constants for these.
 
-HttpOverCapnpFactory::HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
-                                           kj::HttpHeaderTable::Builder& headerTableBuilder)
-    : streamFactory(streamFactory), headerTable(headerTableBuilder.getFutureTable()) {
+HttpOverCapnpFactory::HeaderIdBundle::HeaderIdBundle(kj::HttpHeaderTable::Builder& builder)
+    : table(builder.getFutureTable()) {
   auto commonHeaderNames = Schema::from<capnp::CommonHeaderName>().getEnumerants();
-  size_t maxHeaderId = 0;
   nameCapnpToKj = kj::heapArray<kj::HttpHeaderId>(commonHeaderNames.size());
   for (size_t i = 1; i < commonHeaderNames.size(); i++) {
     kj::StringPtr nameText;
@@ -638,12 +636,26 @@ HttpOverCapnpFactory::HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
       }
     }
     KJ_ASSERT(nameText != nullptr);
-    kj::HttpHeaderId headerId = headerTableBuilder.add(nameText);
+    kj::HttpHeaderId headerId = builder.add(nameText);
     nameCapnpToKj[i] = headerId;
     maxHeaderId = kj::max(maxHeaderId, headerId.hashCode());
   }
+}
 
-  nameKjToCapnp = kj::heapArray<capnp::CommonHeaderName>(maxHeaderId + 1);
+HttpOverCapnpFactory::HeaderIdBundle::HeaderIdBundle(
+    const kj::HttpHeaderTable& table, kj::Array<kj::HttpHeaderId> nameCapnpToKj, size_t maxHeaderId)
+    : table(table), nameCapnpToKj(kj::mv(nameCapnpToKj)), maxHeaderId(maxHeaderId) {}
+
+HttpOverCapnpFactory::HeaderIdBundle HttpOverCapnpFactory::HeaderIdBundle::clone() const {
+  return HeaderIdBundle(table, kj::heapArray<kj::HttpHeaderId>(nameCapnpToKj), maxHeaderId);
+}
+
+HttpOverCapnpFactory::HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
+                                           HeaderIdBundle headerIds)
+    : streamFactory(streamFactory), headerTable(headerIds.table),
+      nameCapnpToKj(kj::mv(headerIds.nameCapnpToKj)) {
+  auto commonHeaderNames = Schema::from<capnp::CommonHeaderName>().getEnumerants();
+  nameKjToCapnp = kj::heapArray<capnp::CommonHeaderName>(headerIds.maxHeaderId + 1);
   for (auto& slot: nameKjToCapnp) slot = capnp::CommonHeaderName::INVALID;
 
   for (size_t i = 1; i < commonHeaderNames.size(); i++) {

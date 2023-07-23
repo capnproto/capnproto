@@ -31,15 +31,33 @@ namespace capnp {
 
 class HttpOverCapnpFactory {
 public:
-  HttpOverCapnpFactory(ByteStreamFactory& streamFactory,
-                       kj::HttpHeaderTable::Builder& headerTableBuilder);
+  class HeaderIdBundle {
+  public:
+    HeaderIdBundle(kj::HttpHeaderTable::Builder& builder);
+
+    HeaderIdBundle clone() const;
+
+  private:
+    HeaderIdBundle(const kj::HttpHeaderTable& table, kj::Array<kj::HttpHeaderId> nameCapnpToKj,
+        size_t maxHeaderId);
+    // Constructor for clone().
+
+    const kj::HttpHeaderTable& table;
+
+    kj::Array<kj::HttpHeaderId> nameCapnpToKj;
+    size_t maxHeaderId = 0;
+
+    friend class HttpOverCapnpFactory;
+  };
+
+  HttpOverCapnpFactory(ByteStreamFactory& streamFactory, HeaderIdBundle headerIds);
 
   kj::Own<kj::HttpService> capnpToKj(capnp::HttpService::Client rpcService);
   capnp::HttpService::Client kjToCapnp(kj::Own<kj::HttpService> service);
 
 private:
   ByteStreamFactory& streamFactory;
-  kj::HttpHeaderTable& headerTable;
+  const kj::HttpHeaderTable& headerTable;
   kj::Array<capnp::CommonHeaderName> nameKjToCapnp;
   kj::Array<kj::HttpHeaderId> nameCapnpToKj;
   kj::Array<kj::StringPtr> valueCapnpToKj;

@@ -91,6 +91,12 @@ public:
     kj::Maybe<TlsSniCallback&> sniCallback;
     // Callback that can be used to choose a different key/certificate based on the specific
     // hostname requested by the client.
+
+    kj::Maybe<kj::Timer&> timer;
+    // The timer used for `acceptTimeout` below.
+
+    kj::Maybe<kj::Duration> acceptTimeout;
+    // Timeout applied to accepting a new TLS connection. `timer` is required if this is set.
   };
 
   TlsContext(Options options = Options());
@@ -130,6 +136,8 @@ public:
 
 private:
   void* ctx;  // actually type SSL_CTX, but we don't want to #include the OpenSSL headers here
+  kj::Maybe<kj::Timer&> timer;
+  kj::Maybe<kj::Duration> acceptTimeout;
 
   struct SniCallback;
 };

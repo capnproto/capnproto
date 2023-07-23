@@ -1528,6 +1528,12 @@ public:
   inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+  ArrayPtr<T>& operator=(Array<T>&&) = delete;
+  ArrayPtr<T>& operator=(decltype(nullptr)) {
+    ptr = nullptr;
+    size_ = 0;
+    return *this;
+  }
 
 #if __GNUC__ && !__clang__ && __GNUC__ >= 9
 // GCC 9 added a warning when we take an initializer_list as a constructor parameter and save a

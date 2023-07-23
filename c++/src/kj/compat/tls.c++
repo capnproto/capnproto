@@ -644,6 +644,12 @@ TlsContext::TlsContext(Options options) {
     SSL_CTX_set_tlsext_servername_arg(ctx, sni);
   }
 
+  KJ_IF_MAYBE(timeout, options.acceptTimeout) {
+    this->timer = KJ_REQUIRE_NONNULL(options.timer,
+        "acceptTimeout option requires that a timer is also provided");
+    this->acceptTimeout = *timeout;
+  }
+
   this->ctx = ctx;
 }
 
@@ -707,6 +713,9 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::AsyncIoStream> stream) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
+  KJ_IF_MAYBE(timeout, acceptTimeout) {
+    promise = KJ_REQUIRE_NONNULL(timer).timeoutAfter(*timeout, kj::mv(promise));
+  }
   return promise.then(kj::mvCapture(conn, [](kj::Own<TlsConnection> conn)
       -> kj::Own<kj::AsyncIoStream> {
     return kj::mv(conn);
@@ -726,6 +735,9 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStream stream) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
+  KJ_IF_MAYBE(timeout, acceptTimeout) {
+    promise = KJ_REQUIRE_NONNULL(timer).timeoutAfter(*timeout, kj::mv(promise));
+  }
   return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
     auto id = conn->getIdentity(kj::mv(innerId));
     return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
