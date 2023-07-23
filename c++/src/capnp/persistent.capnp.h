@@ -539,7 +539,7 @@ template <typename SturdyRef, typename Owner>
 CAPNP_AUTO_IF_MSVC(::capnp::Request<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>)
 Persistent<SturdyRef, Owner>::Client::saveRequest(::kj::Maybe< ::capnp::MessageSize> sizeHint) {
   return newCall<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>(
-      0xc8cb212fcd9f5691ull, 0, sizeHint);
+      0xc8cb212fcd9f5691ull, 0, sizeHint, {false});
 }
 template <typename SturdyRef, typename Owner>
 ::kj::Promise<void> Persistent<SturdyRef, Owner>::Server::save(SaveContext) {

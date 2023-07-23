@@ -226,6 +226,9 @@ struct RawSchema {
   // Specifies the brand to use for this schema if no generic parameters have been bound to
   // anything. Generally, in the default brand, all generic parameters are treated as if they were
   // bound to `AnyPointer`.
+
+  bool mayContainCapabilities = true;
+  // See StructSchema::mayContainCapabilities.
 };
 
 inline bool RawBrandedSchema::isUnbound() const {

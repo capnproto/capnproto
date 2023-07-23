@@ -40,8 +40,11 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
   auto paramType = method.getParamType();
   auto resultType = method.getResultType();
 
+  CallHints hints;
+  hints.noPromisePipelining = !resultType.mayContainCapabilities();
+
   auto typeless = hook->newCall(
-      methodInterface.getProto().getId(), method.getIndex(), sizeHint);
+      methodInterface.getProto().getId(), method.getIndex(), sizeHint, hints);
 
   return Request<DynamicStruct, DynamicStruct>(
       typeless.getAs<DynamicStruct>(paramType), kj::mv(typeless.hook), resultType);

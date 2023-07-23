@@ -125,7 +125,7 @@ public:
   class BrandArgumentList;
   BrandArgumentList getBrandArgumentsAtScope(uint64_t scopeId) const;
   // Gets the values bound to the brand parameters at the given scope.
-  
+
   kj::Array<uint64_t> getGenericScopeIds() const;
   // Returns the type IDs of all parent scopes that have generic parameters, to which this type is
   // subject.
@@ -278,6 +278,25 @@ public:
 
   bool isStreamResult() const;
   // Convenience method to check if this is the result type of a streaming RPC method.
+
+  bool mayContainCapabilities() const { return raw->generic->mayContainCapabilities; }
+  // Returns true if a struct of this type may transitively contain any capabilities. I.e., are
+  // any of the fields an interface type, or a struct type that may in turn contain capabilities?
+  //
+  // This is meant for optimizations where various bookkeeping can possibly be skipped if it is
+  // known in advance that there are no capabilities. Note that this may conservatively return true
+  // spuriously, e.g. if it would be inconvenient to compute the correct answer. A false positive
+  // should never cause incorrect behavior, just potentially hurt performance.
+  //
+  // It's important to keep in mind that even if a schema has no capability-typed fields today,
+  // they could always be added in future versions of the schema. So, just because the schema
+  // doesn't contain capabilities does NOT necessarily mean that an instance of the struct can't
+  // contain capabilities. However, it is a pretty good hint that the application won't plan to
+  // use such capabilities -- for example, if there are no caps in an RPC call's response type
+  // according to the client's version of the schema, then the client clearly isn't going to try
+  // to make any pipelined calls. The server could be operating with a new version of the schema
+  // and could actually return capabilities, but for the client to make a pipelined call, the
+  // client would have to know in advance that capabilities could be returned.
 
 private:
   StructSchema(Schema base): Schema(base) {}

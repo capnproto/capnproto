@@ -764,6 +764,8 @@ public:
 
   inline bool getAllowThirdPartyTailCall() const;
 
+  inline bool getNoPromisePipelining() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -820,6 +822,9 @@ public:
 
   inline bool getAllowThirdPartyTailCall();
   inline void setAllowThirdPartyTailCall(bool value);
+
+  inline bool getNoPromisePipelining();
+  inline void setNoPromisePipelining(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -989,6 +994,8 @@ public:
   inline bool hasAcceptFromThirdParty() const;
   inline ::capnp::AnyPointer::Reader getAcceptFromThirdParty() const;
 
+  inline bool getNoFinishNeeded() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -1056,6 +1063,9 @@ public:
   inline bool hasAcceptFromThirdParty();
   inline ::capnp::AnyPointer::Builder getAcceptFromThirdParty();
   inline ::capnp::AnyPointer::Builder initAcceptFromThirdParty();
+
+  inline bool getNoFinishNeeded();
+  inline void setNoFinishNeeded(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3404,6 +3414,20 @@ inline void Call::Builder::setAllowThirdPartyTailCall(bool value) {
       ::capnp::bounded<128>() * ::capnp::ELEMENTS, value);
 }
 
+inline bool Call::Reader::getNoPromisePipelining() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<129>() * ::capnp::ELEMENTS);
+}
+
+inline bool Call::Builder::getNoPromisePipelining() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<129>() * ::capnp::ELEMENTS);
+}
+inline void Call::Builder::setNoPromisePipelining(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<129>() * ::capnp::ELEMENTS, value);
+}
+
 inline  ::capnp::rpc::Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {
   return _reader.getDataField<Which>(
       ::capnp::bounded<3>() * ::capnp::ELEMENTS);
@@ -3760,6 +3784,20 @@ inline ::capnp::AnyPointer::Builder Return::Builder::initAcceptFromThirdParty() 
       ::capnp::bounded<0>() * ::capnp::POINTERS));
   result.clear();
   return result;
+}
+
+inline bool Return::Reader::getNoFinishNeeded() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS);
+}
+
+inline bool Return::Builder::getNoFinishNeeded() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS);
+}
+inline void Return::Builder::setNoFinishNeeded(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<33>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t Finish::Reader::getQuestionId() const {
