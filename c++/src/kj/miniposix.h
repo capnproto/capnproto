@@ -24,10 +24,6 @@
 // This header provides a small subset of the POSIX API which also happens to be available on
 // Windows under slightly-different names.
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #if _WIN32
 #include <io.h>
 #include <direct.h>
@@ -46,6 +42,8 @@
 #if !_WIN32
 #include <sys/uio.h>
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace miniposix {
@@ -100,7 +98,7 @@ using ::close;
 // We're on Windows, including MinGW. pipe() and mkdir() are non-standard even on MinGW.
 
 inline int pipe(int fds[2]) {
-  return ::_pipe(fds, 8192, _O_BINARY);
+  return ::_pipe(fds, 8192, _O_BINARY | _O_NOINHERIT);
 }
 inline int mkdir(const char* path, int mode) {
   return ::_mkdir(path);
@@ -147,3 +145,5 @@ inline size_t iovMax(size_t count) {
 
 }  // namespace miniposix
 }  // namespace kj
+
+KJ_END_HEADER

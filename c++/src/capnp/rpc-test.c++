@@ -198,7 +198,7 @@ typedef VatNetwork<
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
 public:
-  TestNetworkAdapter(TestNetwork& network): network(network) {}
+  TestNetworkAdapter(TestNetwork& network, kj::StringPtr self): network(network), self(self) {}
 
   ~TestNetworkAdapter() {
     kj::Exception exception = KJ_EXCEPTION(FAILED, "Network was destroyed.");
@@ -246,6 +246,10 @@ public:
         return message.getRoot<AnyPointer>();
       }
 
+      size_t sizeInWords() override {
+        return data.size();
+      }
+
       kj::Array<word> data;
       FlatArrayMessageReader message;
     };
@@ -289,6 +293,10 @@ public:
             }
           }
         })));
+      }
+
+      size_t sizeInWords() override {
+        return message.sizeInWords();
       }
 
     private:
@@ -354,6 +362,10 @@ public:
   };
 
   kj::Maybe<kj::Own<Connection>> connect(test::TestSturdyRefHostId::Reader hostId) override {
+    if (hostId.getHost() == self) {
+      return nullptr;
+    }
+
     TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
     auto iter = connections.find(&dst);
@@ -392,6 +404,7 @@ public:
 
 private:
   TestNetwork& network;
+  kj::StringPtr self;
   uint sent = 0;
   uint received = 0;
 
@@ -403,7 +416,7 @@ private:
 TestNetwork::~TestNetwork() noexcept(false) {}
 
 TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
-  return *(map[name] = kj::heap<TestNetworkAdapter>(*this));
+  return *(map[name] = kj::heap<TestNetworkAdapter>(*this, name));
 }
 
 // =======================================================================================
@@ -448,6 +461,12 @@ struct TestContext {
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork)),
         rpcServer(makeRpcServer(serverNetwork, restorer)) {}
+  TestContext(Capability::Client bootstrap)
+      : waitScope(loop),
+        clientNetwork(network.add("client")),
+        serverNetwork(network.add("server")),
+        rpcClient(makeRpcClient(clientNetwork)),
+        rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
   TestContext(Capability::Client bootstrap,
               RealmGateway<test::TestSturdyRef, Text>::Client gateway)
       : waitScope(loop),
@@ -1254,6 +1273,26 @@ TEST(Rpc, RealmGatewayImportExport) {
   // Should have the original value. If it went through import and re-export, though, then this
   // will be "exported-imported-foo", which is wrong.
   EXPECT_EQ("foo", response.getSturdyRef());
+}
+
+KJ_TEST("loopback bootstrap()") {
+  int callCount = 0;
+  test::TestInterface::Client bootstrap = kj::heap<TestInterfaceImpl>(callCount);
+
+  MallocMessageBuilder hostIdBuilder;
+  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+
+  TestContext context(bootstrap);
+  auto client = context.rpcServer.bootstrap(hostId).castAs<test::TestInterface>();
+
+  auto request = client.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  auto response = request.send().wait(context.waitScope);
+
+  KJ_EXPECT(response.getX() == "foo");
+  KJ_EXPECT(callCount == 1);
 }
 
 }  // namespace

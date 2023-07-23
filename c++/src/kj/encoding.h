@@ -26,11 +26,9 @@
 // - URI encoding
 // - Base64
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "string.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -213,6 +211,9 @@ EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> text);
 // Decode base64 text. This function reports errors required by the WHATWG HTML/Infra specs: see
 // https://html.spec.whatwg.org/multipage/webappapis.html#atob for details.
 
+String encodeBase64Url(ArrayPtr<const byte> bytes);
+// Encode the given bytes as URL-safe base64 text. (RFC 4648, section 5)
+
 // =======================================================================================
 // inline implementation details
 
@@ -365,3 +366,5 @@ EncodingResult<Array<byte>> decodeBase64(const char (&text)[s]) {
 }
 
 } // namespace kj
+
+KJ_END_HEADER

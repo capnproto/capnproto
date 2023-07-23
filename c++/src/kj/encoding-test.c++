@@ -475,5 +475,50 @@ KJ_TEST("base64 encoding/decoding") {
   }
 }
 
+KJ_TEST("base64 url encoding") {
+  {
+    // Handles empty.
+    auto encoded = encodeBase64Url(StringPtr("").asBytes());
+    KJ_EXPECT(encoded == "", encoded, encoded.size());
+  }
+
+  {
+    // Handles paddingless encoding.
+    auto encoded = encodeBase64Url(StringPtr("foo").asBytes());
+    KJ_EXPECT(encoded == "Zm9v", encoded, encoded.size());
+  }
+
+  {
+    // Handles padded encoding.
+    auto encoded1 = encodeBase64Url(StringPtr("quux").asBytes());
+    KJ_EXPECT(encoded1 == "cXV1eA", encoded1, encoded1.size());
+    auto encoded2 = encodeBase64Url(StringPtr("corge").asBytes());
+    KJ_EXPECT(encoded2 == "Y29yZ2U", encoded2, encoded2.size());
+  }
+
+  {
+    // No line breaks.
+    StringPtr fullLine = "012345678901234567890123456789012345678901234567890123";
+    auto encoded = encodeBase64Url(StringPtr(fullLine).asBytes());
+    KJ_EXPECT(
+        encoded == "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIz",
+        encoded);
+  }
+
+  {
+    // Replaces plusses.
+    const byte data[] = { 0b11111011, 0b11101111, 0b10111110 };
+    auto encoded = encodeBase64Url(data);
+    KJ_EXPECT(encoded == "----", encoded, encoded.size(), data);
+  }
+
+  {
+    // Replaces slashes.
+    const byte data[] = { 0b11111111, 0b11111111, 0b11111111 };
+    auto encoded = encodeBase64Url(data);
+    KJ_EXPECT(encoded == "____", encoded, encoded.size(), data);
+  }
+}
+
 }  // namespace
 }  // namespace kj

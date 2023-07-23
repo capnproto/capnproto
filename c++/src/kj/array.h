@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
 #include <string.h>
 #include <initializer_list>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -162,7 +160,11 @@ public:
   }
 
   inline size_t size() const { return size_; }
-  inline T& operator[](size_t index) const {
+  inline T& operator[](size_t index) {
+    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
+    return ptr[index];
+  }
+  inline const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
@@ -356,7 +358,11 @@ public:
 
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
-  inline T& operator[](size_t index) const {
+  inline T& operator[](size_t index) {
+    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
+    return ptr[index];
+  }
+  inline const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
     return ptr[index];
   }
@@ -420,6 +426,16 @@ public:
     }
   }
 
+  void clear() {
+    if (__has_trivial_destructor(T)) {
+      pos = ptr;
+    } else {
+      while (pos > ptr) {
+        kj::dtor(*--pos);
+      }
+    }
+  }
+
   void resize(size_t size) {
     KJ_IREQUIRE(size <= capacity(), "can't resize past capacity");
 
@@ -447,7 +463,7 @@ public:
 
   Array<T> finish() {
     // We could safely remove this check if we assume that the disposer implementation doesn't
-    // need to know the original capacity, as is thes case with HeapArrayDisposer since it uses
+    // need to know the original capacity, as is the case with HeapArrayDisposer since it uses
     // operator new() or if we created a custom disposer for ArrayBuilder which stores the capacity
     // in a prefix.  But that would make it hard to write cleverer heap allocators, and anyway this
     // check might catch bugs.  Probably people should use Vector if they want to build arrays
@@ -621,7 +637,8 @@ struct ArrayDisposer::Dispose_<T, false> {
 
   static void dispose(T* firstElement, size_t elementCount, size_t capacity,
                       const ArrayDisposer& disposer) {
-    disposer.disposeImpl(firstElement, sizeof(T), elementCount, capacity, &destruct);
+    disposer.disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
+                         sizeof(T), elementCount, capacity, &destruct);
   }
 };
 
@@ -852,6 +869,7 @@ template <typename T>
 template <typename... Attachments>
 Array<T> Array<T>::attach(Attachments&&... attachments) {
   T* ptrCopy = ptr;
+  auto sizeCopy = size_;
 
   KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
 
@@ -862,7 +880,7 @@ Array<T> Array<T>::attach(Attachments&&... attachments) {
 
   auto bundle = new _::ArrayDisposableOwnedBundle<Array<T>, Attachments...>(
       kj::mv(*this), kj::fwd<Attachments>(attachments)...);
-  return Array<T>(ptrCopy, size_, *bundle);
+  return Array<T>(ptrCopy, sizeCopy, *bundle);
 }
 
 template <typename T>
@@ -883,3 +901,5 @@ Array<T> ArrayPtr<T>::attach(Attachments&&... attachments) const {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

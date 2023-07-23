@@ -21,24 +21,31 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
 #include <inttypes.h>
+#include "time.h"
+
+KJ_BEGIN_HEADER
 
 #if __linux__ && !defined(KJ_USE_FUTEX)
 #define KJ_USE_FUTEX 1
 #endif
 
-#if !KJ_USE_FUTEX && !_WIN32
-// On Linux we use futex.  On other platforms we wrap pthreads.
+#if !KJ_USE_FUTEX && !_WIN32 && !__CYGWIN__
+// We fall back to pthreads when we don't have a better platform-specific primitive. pthreads
+// mutexes are bloated, though, so we like to avoid them. Hence on Linux we use futex(), and on
+// Windows we use SRW locks and friends. On Cygwin we prefer the Win32 primitives both because they
+// are more efficient and because I ran into problems with Cygwin's implementation of RW locks
+// seeming to allow multiple threads to lock the same mutex (but I didn't investigate very
+// closely).
+//
 // TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
 #endif
 
 namespace kj {
+
+class Exception;
 
 // =======================================================================================
 // Private details -- public interfaces follow below.
@@ -47,6 +54,8 @@ namespace _ {  // private
 
 class Mutex {
   // Internal implementation details.  See `MutexGuarded<T>`.
+
+  struct Waiter;
 
 public:
   Mutex();
@@ -59,22 +68,29 @@ public:
   };
 
   void lock(Exclusivity exclusivity);
-  void unlock(Exclusivity exclusivity);
+  void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
   void assertLockedByCaller(Exclusivity exclusivity);
   // In debug mode, assert that the mutex is locked by the calling thread, or if that is
   // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
   // in unit tests).  In non-debug builds, do nothing.
 
-#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
   class Predicate {
   public:
     virtual bool check() = 0;
   };
 
-  void lockWhen(Predicate& predicate);
-  // Lock (exclusively) when predicate.check() returns true.
-#endif
+  void wait(Predicate& predicate, Maybe<Duration> timeout = nullptr);
+  // If predicate.check() returns false, unlock the mutex until predicate.check() returns true, or
+  // when the timeout (if any) expires. The mutex is always re-locked when this returns regardless
+  // of whether the timeout expired, and including if it throws.
+  //
+  // Requires that the mutex is already exclusively locked before calling.
+
+  void induceSpuriousWakeupForTest();
+  // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
+  // are waiting for a wait() condition. Assuming correct implementation, all those threads
+  // should immediately go back to sleep.
 
 private:
 #if KJ_USE_FUTEX
@@ -89,16 +105,42 @@ private:
   static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
   static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
 
-  struct Waiter;
-  kj::Maybe<Waiter&> waitersHead = nullptr;
-  kj::Maybe<Waiter&>* waitersTail = &waitersHead;
-  // linked list of waitUntil()s; can only modify under lock
-
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
   uintptr_t srwLock;  // Actually an SRWLOCK, but don't want to #include <windows.h> in header.
 
 #else
   mutable pthread_rwlock_t mutex;
+#endif
+
+  struct Waiter {
+    kj::Maybe<Waiter&> next;
+    kj::Maybe<Waiter&>* prev;
+    Predicate& predicate;
+    Maybe<Own<Exception>> exception;
+#if KJ_USE_FUTEX
+    uint futex;
+    bool hasTimeout;
+#elif _WIN32 || __CYGWIN__
+    uintptr_t condvar;
+    // Actually CONDITION_VARIABLE, but don't want to #include <windows.h> in header.
+#else
+    pthread_cond_t condvar;
+
+    pthread_mutex_t stupidMutex;
+    // pthread condvars are only compatible with basic pthread mutexes, not rwlocks, for no
+    // particularly good reason. To work around this, we need an extra mutex per condvar.
+#endif
+  };
+
+  kj::Maybe<Waiter&> waitersHead = nullptr;
+  kj::Maybe<Waiter&>* waitersTail = &waitersHead;
+  // linked list of waitUntil()s; can only modify under lock
+
+  inline void addWaiter(Waiter& waiter);
+  inline void removeWaiter(Waiter& waiter);
+  bool checkPredicate(Waiter& waiter);
+#if _WIN32 || __CYGWIN__
+  void wakeReadyWaiter(Waiter* waiterToSkip);
 #endif
 };
 
@@ -122,7 +164,7 @@ public:
 
   void runOnce(Initializer& init);
 
-#if _WIN32  // TODO(perf): Can we make this inline on win32 somehow?
+#if _WIN32 || __CYGWIN__  // TODO(perf): Can we make this inline on win32 somehow?
   bool isInitialized() noexcept;
 
 #else
@@ -152,7 +194,7 @@ private:
     INITIALIZED
   };
 
-#elif _WIN32
+#elif _WIN32 || __CYGWIN__
   uintptr_t initOnce;  // Actually an INIT_ONCE, but don't want to #include <windows.h> in header.
 
 #else
@@ -210,6 +252,31 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
+  template <typename Cond>
+  void wait(Cond&& condition, Maybe<Duration> timeout = nullptr) {
+    // Unlocks the lock until `condition(state)` evaluates true (where `state` is type `const T&`
+    // referencing the object protected by the lock).
+
+    // We can't wait on a shared lock because the internal bookkeeping needed for a wait requires
+    // the protection of an exclusive lock.
+    static_assert(!isConst<T>(), "cannot wait() on shared lock");
+
+    struct PredicateImpl final: public _::Mutex::Predicate {
+      bool check() override {
+        return condition(value);
+      }
+
+      Cond&& condition;
+      const T& value;
+
+      PredicateImpl(Cond&& condition, const T& value)
+          : condition(kj::fwd<Cond>(condition)), value(value) {}
+    };
+
+    PredicateImpl impl(kj::fwd<Cond>(condition), *ptr);
+    mutex->wait(impl, timeout);
+  }
+
 private:
   _::Mutex* mutex;
   T* ptr;
@@ -218,6 +285,16 @@ private:
 
   template <typename U>
   friend class MutexGuarded;
+  template <typename U>
+  friend class ExternalMutexGuarded;
+
+#if KJ_MUTEX_TEST
+public:
+#endif
+  void induceSpuriousWakeupForTest() { mutex->induceSpuriousWakeupForTest(); }
+  // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
+  // are waiting for a when() condition. Assuming correct implementation, all those threads should
+  // immediately go back to sleep.
 };
 
 template <typename T>
@@ -263,38 +340,30 @@ public:
   inline T& getAlreadyLockedExclusive() const;
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
 
-#if KJ_USE_FUTEX    // TODO(soon): Implement on pthread & win32
   template <typename Cond, typename Func>
-  auto when(Cond&& condition, Func&& callback) const -> decltype(callback(instance<T&>())) {
+  auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = nullptr) const
+      -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
     //
     // `condition`, when called, receives as its parameter a const reference to the state, which is
-    // locked (either shared or exclusive). `callback` returns a mutable reference, which is
+    // locked (either shared or exclusive). `callback` receives a mutable reference, which is
     // exclusively locked.
     //
     // `condition()` may be called multiple times, from multiple threads, while waiting for the
     // condition to become true. It may even return true once, but then be called more times.
     // It is guaranteed, though, that at the time `callback()` is finally called, `condition()`
     // would currently return true (assuming it is a pure function of the guarded data).
+    //
+    // If `timeout` is specified, then after the given amount of time, the callback will be called
+    // regardless of whether the condition is true. In this case, when `callback()` is called,
+    // `condition()` may in fact evaluate false, but *only* if the timeout was reached.
+    //
+    // TODO(cleanup): lock->wait() is a better interface. Can we deprecate this one?
 
-    struct PredicateImpl final: public _::Mutex::Predicate {
-      bool check() override {
-        return condition(value);
-      }
-
-      Cond&& condition;
-      const T& value;
-
-      PredicateImpl(Cond&& condition, const T& value)
-          : condition(kj::fwd<Cond>(condition)), value(value) {}
-    };
-
-    PredicateImpl impl(kj::fwd<Cond>(condition), value);
-    mutex.lockWhen(impl);
-    KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
+    auto lock = lockExclusive();
+    lock.wait(kj::fwd<Cond>(condition), timeout);
     return callback(value);
   }
-#endif
 
 private:
   mutable _::Mutex mutex;
@@ -306,6 +375,81 @@ class MutexGuarded<const T> {
   // MutexGuarded cannot guard a const type.  This would be pointless anyway, and would complicate
   // the implementation of Locked<T>, which uses constness to decide what kind of lock it holds.
   static_assert(sizeof(T) < 0, "MutexGuarded's type cannot be const.");
+};
+
+template <typename T>
+class ExternalMutexGuarded {
+  // Holds a value that can only be manipulated while some other mutex is locked.
+  //
+  // The ExternalMutexGuarded<T> lives *outside* the scope of any lock on the mutex, but ensures
+  // that the value it holds can only be accessed under lock by forcing the caller to present a
+  // lock before accessing the value.
+  //
+  // Additionally, ExternalMutexGuarded<T>'s destructor will take an exclusive lock on the mutex
+  // while destroying the held value, unless the value has been release()ed before hand.
+  //
+  // The type T must have the following properties (which probably all movable types satisfy):
+  // - T is movable.
+  // - Immediately after any of the following has happened, T's destructor is effectively a no-op
+  //   (hence certainly not requiring locks):
+  //   - The value has been default-constructed.
+  //   - The value has been initialized by-move from a default-constructed T.
+  //   - The value has been moved away.
+  // - If ExternalMutexGuarded<T> is ever moved, then T must have a move constructor and move
+  //   assignment operator that do not follow any pointers, therefore do not need to take a lock.
+
+public:
+  ExternalMutexGuarded() = default;
+  ~ExternalMutexGuarded() noexcept(false) {
+    if (mutex != nullptr) {
+      mutex->lock(_::Mutex::EXCLUSIVE);
+      KJ_DEFER(mutex->unlock(_::Mutex::EXCLUSIVE));
+      value = T();
+    }
+  }
+
+  ExternalMutexGuarded(ExternalMutexGuarded&& other)
+      : mutex(other.mutex), value(kj::mv(other.value)) {
+    other.mutex = nullptr;
+  }
+  ExternalMutexGuarded& operator=(ExternalMutexGuarded&& other) {
+    mutex = other.mutex;
+    value = kj::mv(other.value);
+    other.mutex = nullptr;
+    return *this;
+  }
+
+  template <typename U>
+  void set(Locked<U>& lock, T&& newValue) {
+    KJ_IREQUIRE(mutex == nullptr);
+    mutex = lock.mutex;
+    value = kj::mv(newValue);
+  }
+
+  template <typename U>
+  T& get(Locked<U>& lock) {
+    KJ_IREQUIRE(lock.mutex == mutex);
+    return value;
+  }
+
+  template <typename U>
+  const T& get(Locked<const U>& lock) const {
+    KJ_IREQUIRE(lock.mutex == mutex);
+    return value;
+  }
+
+  template <typename U>
+  T release(Locked<U>& lock) {
+    // Release (move away) the value. This allows the destructor to skip locking the mutex.
+    KJ_IREQUIRE(lock.mutex == mutex);
+    T result = kj::mv(value);
+    mutex = nullptr;
+    return result;
+  }
+
+private:
+  _::Mutex* mutex = nullptr;
+  T value;
 };
 
 template <typename T>
@@ -412,3 +556,5 @@ inline const T& Lazy<T>::get(Func&& init) const {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

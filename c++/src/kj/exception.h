@@ -21,13 +21,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+#include "windows-sanity.h"  // work-around macro conflict with `ERROR`
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -381,3 +380,5 @@ kj::String getCaughtExceptionType();
 // return "(unknown)".
 
 }  // namespace kj
+
+KJ_END_HEADER

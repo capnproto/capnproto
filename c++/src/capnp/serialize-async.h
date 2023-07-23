@@ -21,12 +21,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <kj/async-io.h>
 #include "message.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -51,11 +49,44 @@ kj::Promise<void> writeMessage(kj::AsyncOutputStream& output, MessageBuilder& bu
     KJ_WARN_UNUSED_RESULT;
 // Write asynchronously.  The parameters must remain valid until the returned promise resolves.
 
+// -----------------------------------------------------------------------------
+// Versions that support FD passing.
+
+struct MessageReaderAndFds {
+  kj::Own<MessageReader> reader;
+  kj::ArrayPtr<kj::AutoCloseFd> fds;
+};
+
+kj::Promise<MessageReaderAndFds> readMessage(
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
+// Read a message that may also have file descriptors attached, e.g. from a Unix socket with
+// SCM_RIGHTS.
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
+// Like `readMessage` but returns null on EOF.
+
+kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
+                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
+    KJ_WARN_UNUSED_RESULT;
+kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
+                               MessageBuilder& builder)
+    KJ_WARN_UNUSED_RESULT;
+// Write a message with FDs attached, e.g. to a Unix socket with SCM_RIGHTS.
+
 // =======================================================================================
 // inline implementation details
 
 inline kj::Promise<void> writeMessage(kj::AsyncOutputStream& output, MessageBuilder& builder) {
   return writeMessage(output, builder.getSegmentsForOutput());
 }
+inline kj::Promise<void> writeMessage(
+    kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds, MessageBuilder& builder) {
+  return writeMessage(output, fds, builder.getSegmentsForOutput());
+}
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

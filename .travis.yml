@@ -3,12 +3,6 @@ branches:
   - master
   - /release-.*/
 language: cpp
-os:
-  - linux
-  - osx
-compiler:
-  - gcc
-  - clang
 dist: trusty
 sudo: false
 addons:
@@ -18,4 +12,66 @@ addons:
       - autoconf
       - libtool
       - pkg-config
-script: ./super-test.sh -j2 quick  # limit parallelism due to limited memory on Travis
+# limit parallelism due to limited memory on Travis
+script: CC=$MATRIX_CC CXX=$MATRIX_CXX ./super-test.sh -j2 quick
+
+matrix:
+  include:
+    # Old GCC
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-5
+      env:
+        - MATRIX_CC=gcc-5
+        - MATRIX_CXX=g++-5
+
+    # New GCC
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env:
+        - MATRIX_CC=gcc-7
+        - MATRIX_CXX=g++-7
+
+    # Old Clang
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-trusty-3.6
+          packages:
+            - clang-3.6
+            - libc++-dev     # clang-3.6 can't compile C++14 against libstdc++, apparently.
+      env:
+        - MATRIX_CC=clang-3.6
+        - MATRIX_CXX=clang++-3.6
+
+    # New Clang
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-trusty-5.0
+          packages:
+            - clang-5.0
+      env:
+        - MATRIX_CC=clang-5.0
+        - MATRIX_CXX=clang++-5.0
+
+    # Mac. We only test Clang because Mac builds are expensive for Travis and probably any
+    # compiler-specific problems will be caught on the Linux matrix anyway.
+    - os: osx
+      osx_image: xcode9.3
+      env:
+        - MATRIX_CC=clang
+        - MATRIX_CXX=clang++

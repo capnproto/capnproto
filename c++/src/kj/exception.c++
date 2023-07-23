@@ -23,6 +23,13 @@
 #define _GNU_SOURCE
 #endif
 
+#if (_WIN32 && _M_X64) || (__CYGWIN__ && __x86_64__)
+// Currently the Win32 stack-trace code only supports x86_64. We could easily extend it to support
+// i386 as well but it requires some code changes around how we read the context to start the
+// trace.
+#define KJ_USE_WIN32_DBGHELP 1
+#endif
+
 #include "exception.h"
 #include "string.h"
 #include "debug.h"
@@ -41,9 +48,9 @@
 
 #if !KJ_NO_RTTI
 #include <typeinfo>
+#endif
 #if __GNUC__
 #include <cxxabi.h>
-#endif
 #endif
 
 #if (__linux__ && __GLIBC__ && !__UCLIBC__) || __APPLE__
@@ -51,16 +58,21 @@
 #include <execinfo.h>
 #endif
 
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "windows-sanity.h"
 #include <dbghelp.h>
 #endif
 
-#if (__linux__ || __APPLE__)
+#if (__linux__ || __APPLE__ || __CYGWIN__)
 #include <stdio.h>
 #include <pthread.h>
+#endif
+
+#if __CYGWIN__
+#include <sys/cygwin.h>
+#include <ucontext.h>
 #endif
 
 #if KJ_HAS_LIBDL
@@ -81,10 +93,7 @@ StringPtr KJ_STRINGIFY(LogSeverity severity) {
   return SEVERITY_STRINGS[static_cast<uint>(severity)];
 }
 
-#if _WIN32 && _M_X64
-// Currently the Win32 stack-trace code only supports x86_64. We could easily extend it to support
-// i386 as well but it requires some code changes around how we read the context to start the
-// trace.
+#if KJ_USE_WIN32_DBGHELP
 
 namespace {
 
@@ -136,6 +145,13 @@ const Dbghelp& getDbghelp() {
 
 ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
                                     HANDLE thread, CONTEXT& context) {
+  // NOTE: Apparently there is a function CaptureStackBackTrace() that is equivalent to glibc's
+  //   backtrace(). Somehow I missed that when I originally wrote this. However,
+  //   CaptureStackBackTrace() does not accept a CONTEXT parameter; it can only trace the caller.
+  //   That's more problematic on Windows where breakHandler(), sehHandler(), and Cygwin signal
+  //   handlers all depend on the ability to pass a CONTEXT. So we'll keep this code, which works
+  //   after all.
+
   const Dbghelp& dbghelp = getDbghelp();
   if (dbghelp.stackWalk64 == nullptr ||
       dbghelp.symFunctionTableAccess64 == nullptr ||
@@ -179,7 +195,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
     return nullptr;
   }
 
-#if _WIN32 && _M_X64
+#if KJ_USE_WIN32_DBGHELP
   CONTEXT context;
   RtlCaptureContext(&context);
   return getStackTrace(space, ignoreCount, GetCurrentThread(), context);
@@ -207,7 +223,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
     return nullptr;
   }
 
-#if _WIN32 && _M_X64 && _MSC_VER
+#if KJ_USE_WIN32_DBGHELP && _MSC_VER
 
   // Try to get file/line using SymGetLineFromAddr64(). We don't bother if we aren't on MSVC since
   // this requires MSVC debug info.
@@ -232,7 +248,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
 
   return strArray(lines, "");
 
-#elif (__linux__ || __APPLE__) && !__ANDROID__
+#elif (__linux__ || __APPLE__ || __CYGWIN__) && !__ANDROID__
   // We want to generate a human-readable stack trace.
 
   // TODO(someday):  It would be really great if we could avoid farming out to another process
@@ -274,6 +290,16 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   // The Mac OS X equivalent of addr2line is atos.
   // (Internally, it uses the private CoreSymbolication.framework library.)
   p = popen(str("xcrun atos -p ", getpid(), ' ', strTrace).cStr(), "r");
+#elif __CYGWIN__
+  wchar_t exeWinPath[MAX_PATH];
+  if (GetModuleFileNameW(nullptr, exeWinPath, sizeof(exeWinPath)) == 0) {
+    return nullptr;
+  }
+  char exePosixPath[MAX_PATH * 2];
+  if (cygwin_conv_path(CCP_WIN_W_TO_POSIX, exeWinPath, exePosixPath, sizeof(exePosixPath)) < 0) {
+    return nullptr;
+  }
+  p = popen(str("addr2line -e '", exePosixPath, "' ", strTrace).cStr(), "r");
 #endif
 
   if (p == nullptr) {
@@ -378,7 +404,44 @@ String getStackTrace() {
   return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
 }
 
-#if _WIN32 && _M_X64
+namespace {
+
+void terminateHandler() {
+  void* traceSpace[32];
+
+  // ignoreCount = 3 to ignore std::terminate entry.
+  auto trace = kj::getStackTrace(traceSpace, 3);
+
+  kj::String message;
+
+  auto eptr = std::current_exception();
+  if (eptr != nullptr) {
+    try {
+      std::rethrow_exception(eptr);
+    } catch (const kj::Exception& exception) {
+      message = kj::str("*** Fatal uncaught kj::Exception: ", exception, '\n');
+    } catch (const std::exception& exception) {
+      message = kj::str("*** Fatal uncaught std::exception: ", exception.what(),
+                        "\nstack: ", stringifyStackTraceAddresses(trace),
+                                     stringifyStackTrace(trace), '\n');
+    } catch (...) {
+      message = kj::str("*** Fatal uncaught exception of type: ", kj::getCaughtExceptionType(),
+                        "\nstack: ", stringifyStackTraceAddresses(trace),
+                                     stringifyStackTrace(trace), '\n');
+    }
+  } else {
+    message = kj::str("*** std::terminate() called with no exception"
+                      "\nstack: ", stringifyStackTraceAddresses(trace),
+                                   stringifyStackTrace(trace), '\n');
+  }
+
+  kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  _exit(1);
+}
+
+}  // namespace
+
+#if KJ_USE_WIN32_DBGHELP && !__CYGWIN__
 namespace {
 
 DWORD mainThreadId = 0;
@@ -461,16 +524,41 @@ void printStackTraceOnCrash() {
   mainThreadId = GetCurrentThreadId();
   KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
   SetUnhandledExceptionFilter(&sehHandler);
+
+  // Also override std::terminate() handler with something nicer for KJ.
+  std::set_terminate(&terminateHandler);
 }
 
-#elif KJ_HAS_BACKTRACE
+#elif _WIN32
+// Windows, but KJ_USE_WIN32_DBGHELP is not enabled. We can't print useful stack traces, so don't
+// try to catch SEH nor ctrl+C.
+
+void printStackTraceOnCrash() {
+  std::set_terminate(&terminateHandler);
+}
+
+#else
 namespace {
 
 void crashHandler(int signo, siginfo_t* info, void* context) {
   void* traceSpace[32];
 
+#if KJ_USE_WIN32_DBGHELP
+  // Win32 backtracing can't trace its way out of a Cygwin signal handler. However, Cygwin gives
+  // us direct access to the CONTEXT, which we can pass to the Win32 tracing functions.
+  ucontext_t* ucontext = reinterpret_cast<ucontext_t*>(context);
+  // Cygwin's mcontext_t has the same layout as CONTEXT.
+  // TODO(someday): Figure out why this produces garbage for SIGINT from ctrl+C. It seems to work
+  //   correctly for SIGSEGV.
+  CONTEXT win32Context;
+  static_assert(sizeof(ucontext->uc_mcontext) >= sizeof(win32Context),
+      "mcontext_t should be an extension of CONTEXT");
+  memcpy(&win32Context, &ucontext->uc_mcontext, sizeof(win32Context));
+  auto trace = getStackTrace(traceSpace, 0, GetCurrentThread(), win32Context);
+#else
   // ignoreCount = 2 to ignore crashHandler() and signal trampoline.
   auto trace = getStackTrace(traceSpace, 2);
+#endif
 
   auto message = kj::str("*** Received signal #", signo, ": ", strsignal(signo),
                          "\nstack: ", stringifyStackTraceAddresses(trace),
@@ -523,9 +611,9 @@ void printStackTraceOnCrash() {
   // because stack traces on ctrl+c can be obnoxious for, say, command-line tools.
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
 #endif
-}
-#else
-void printStackTraceOnCrash() {
+
+  // Also override std::terminate() handler with something nicer for KJ.
+  std::set_terminate(&terminateHandler);
 }
 #endif
 

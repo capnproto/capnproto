@@ -4,11 +4,12 @@
 #pragma once
 
 #include <capnp/generated-header-support.h>
+#include <kj/windows-sanity.h>
 #if !CAPNP_LITE
 #include <capnp/capability.h>
 #endif  // !CAPNP_LITE
 
-#if CAPNP_VERSION != 7000
+#if CAPNP_VERSION != 8000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -16,17 +17,26 @@
 namespace capnp {
 namespace schemas {
 
-CAPNP_DECLARE_SCHEMA(8825ffaa852cda72);
-CAPNP_DECLARE_SCHEMA(c27855d853a937cc);
-CAPNP_DECLARE_SCHEMA(9bbf84153dd4bb60);
+CAPNP_DECLARE_SCHEMA(a3fa7845f919dd83);
+CAPNP_DECLARE_SCHEMA(e31026e735d69ddf);
+CAPNP_DECLARE_SCHEMA(a0d9f6eca1c93d48);
+CAPNP_DECLARE_SCHEMA(fa5b1fd61c2e7c3d);
+CAPNP_DECLARE_SCHEMA(82d3e852af0336bf);
+CAPNP_DECLARE_SCHEMA(c4df13257bc2ea61);
+CAPNP_DECLARE_SCHEMA(cfa794e8d19a0162);
+CAPNP_DECLARE_SCHEMA(c2f8c20c293e5319);
+CAPNP_DECLARE_SCHEMA(d7d879450a253e4b);
+CAPNP_DECLARE_SCHEMA(f061e22f0ae5c7b5);
+CAPNP_DECLARE_SCHEMA(a0a054dea32fd98c);
 
 }  // namespace schemas
 }  // namespace capnp
 
 namespace capnp {
+namespace json {
 
-struct JsonValue {
-  JsonValue() = delete;
+struct Value {
+  Value() = delete;
 
   class Reader;
   class Builder;
@@ -44,14 +54,14 @@ struct JsonValue {
   struct Call;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(8825ffaa852cda72, 2, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(a3fa7845f919dd83, 2, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
   };
 };
 
-struct JsonValue::Field {
+struct Value::Field {
   Field() = delete;
 
   class Reader;
@@ -59,14 +69,14 @@ struct JsonValue::Field {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(c27855d853a937cc, 0, 2)
+    CAPNP_DECLARE_STRUCT_HEADER(e31026e735d69ddf, 0, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
   };
 };
 
-struct JsonValue::Call {
+struct Value::Call {
   Call() = delete;
 
   class Reader;
@@ -74,7 +84,37 @@ struct JsonValue::Call {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(9bbf84153dd4bb60, 0, 2)
+    CAPNP_DECLARE_STRUCT_HEADER(a0d9f6eca1c93d48, 0, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct FlattenOptions {
+  FlattenOptions() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c4df13257bc2ea61, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct DiscriminatorOptions {
+  DiscriminatorOptions() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c2f8c20c293e5319, 0, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -83,9 +123,9 @@ struct JsonValue::Call {
 
 // =======================================================================================
 
-class JsonValue::Reader {
+class Value::Reader {
 public:
-  typedef JsonValue Reads;
+  typedef Value Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -116,15 +156,15 @@ public:
 
   inline bool isArray() const;
   inline bool hasArray() const;
-  inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader getArray() const;
+  inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader getArray() const;
 
   inline bool isObject() const;
   inline bool hasObject() const;
-  inline  ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Reader getObject() const;
+  inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Reader getObject() const;
 
   inline bool isCall() const;
   inline bool hasCall() const;
-  inline  ::capnp::JsonValue::Call::Reader getCall() const;
+  inline  ::capnp::json::Value::Call::Reader getCall() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -138,9 +178,9 @@ private:
   friend class ::capnp::Orphanage;
 };
 
-class JsonValue::Builder {
+class Value::Builder {
 public:
-  typedef JsonValue Builds;
+  typedef Value Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
                        // You can explicitly initialize to nullptr instead.
@@ -177,27 +217,27 @@ public:
 
   inline bool isArray();
   inline bool hasArray();
-  inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder getArray();
-  inline void setArray( ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader value);
-  inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder initArray(unsigned int size);
-  inline void adoptArray(::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>> disownArray();
+  inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder getArray();
+  inline void setArray( ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder initArray(unsigned int size);
+  inline void adoptArray(::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>> disownArray();
 
   inline bool isObject();
   inline bool hasObject();
-  inline  ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Builder getObject();
-  inline void setObject( ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Reader value);
-  inline  ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Builder initObject(unsigned int size);
-  inline void adoptObject(::capnp::Orphan< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>> disownObject();
+  inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Builder getObject();
+  inline void setObject( ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Builder initObject(unsigned int size);
+  inline void adoptObject(::capnp::Orphan< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>> disownObject();
 
   inline bool isCall();
   inline bool hasCall();
-  inline  ::capnp::JsonValue::Call::Builder getCall();
-  inline void setCall( ::capnp::JsonValue::Call::Reader value);
-  inline  ::capnp::JsonValue::Call::Builder initCall();
-  inline void adoptCall(::capnp::Orphan< ::capnp::JsonValue::Call>&& value);
-  inline ::capnp::Orphan< ::capnp::JsonValue::Call> disownCall();
+  inline  ::capnp::json::Value::Call::Builder getCall();
+  inline void setCall( ::capnp::json::Value::Call::Reader value);
+  inline  ::capnp::json::Value::Call::Builder initCall();
+  inline void adoptCall(::capnp::Orphan< ::capnp::json::Value::Call>&& value);
+  inline ::capnp::Orphan< ::capnp::json::Value::Call> disownCall();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -209,9 +249,9 @@ private:
 };
 
 #if !CAPNP_LITE
-class JsonValue::Pipeline {
+class Value::Pipeline {
 public:
-  typedef JsonValue Pipelines;
+  typedef Value Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -225,7 +265,7 @@ private:
 };
 #endif  // !CAPNP_LITE
 
-class JsonValue::Field::Reader {
+class Value::Field::Reader {
 public:
   typedef Field Reads;
 
@@ -246,7 +286,7 @@ public:
   inline  ::capnp::Text::Reader getName() const;
 
   inline bool hasValue() const;
-  inline  ::capnp::JsonValue::Reader getValue() const;
+  inline  ::capnp::json::Value::Reader getValue() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -260,7 +300,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
-class JsonValue::Field::Builder {
+class Value::Field::Builder {
 public:
   typedef Field Builds;
 
@@ -284,11 +324,11 @@ public:
   inline ::capnp::Orphan< ::capnp::Text> disownName();
 
   inline bool hasValue();
-  inline  ::capnp::JsonValue::Builder getValue();
-  inline void setValue( ::capnp::JsonValue::Reader value);
-  inline  ::capnp::JsonValue::Builder initValue();
-  inline void adoptValue(::capnp::Orphan< ::capnp::JsonValue>&& value);
-  inline ::capnp::Orphan< ::capnp::JsonValue> disownValue();
+  inline  ::capnp::json::Value::Builder getValue();
+  inline void setValue( ::capnp::json::Value::Reader value);
+  inline  ::capnp::json::Value::Builder initValue();
+  inline void adoptValue(::capnp::Orphan< ::capnp::json::Value>&& value);
+  inline ::capnp::Orphan< ::capnp::json::Value> disownValue();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -300,7 +340,7 @@ private:
 };
 
 #if !CAPNP_LITE
-class JsonValue::Field::Pipeline {
+class Value::Field::Pipeline {
 public:
   typedef Field Pipelines;
 
@@ -308,7 +348,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::JsonValue::Pipeline getValue();
+  inline  ::capnp::json::Value::Pipeline getValue();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -317,7 +357,7 @@ private:
 };
 #endif  // !CAPNP_LITE
 
-class JsonValue::Call::Reader {
+class Value::Call::Reader {
 public:
   typedef Call Reads;
 
@@ -338,7 +378,7 @@ public:
   inline  ::capnp::Text::Reader getFunction() const;
 
   inline bool hasParams() const;
-  inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader getParams() const;
+  inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader getParams() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -352,7 +392,7 @@ private:
   friend class ::capnp::Orphanage;
 };
 
-class JsonValue::Call::Builder {
+class Value::Call::Builder {
 public:
   typedef Call Builds;
 
@@ -376,11 +416,11 @@ public:
   inline ::capnp::Orphan< ::capnp::Text> disownFunction();
 
   inline bool hasParams();
-  inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder getParams();
-  inline void setParams( ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader value);
-  inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder initParams(unsigned int size);
-  inline void adoptParams(::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>> disownParams();
+  inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder getParams();
+  inline void setParams( ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder initParams(unsigned int size);
+  inline void adoptParams(::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>> disownParams();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -392,7 +432,7 @@ private:
 };
 
 #if !CAPNP_LITE
-class JsonValue::Call::Pipeline {
+class Value::Call::Pipeline {
 public:
   typedef Call Pipelines;
 
@@ -408,451 +448,728 @@ private:
 };
 #endif  // !CAPNP_LITE
 
+class FlattenOptions::Reader {
+public:
+  typedef FlattenOptions Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline bool hasPrefix() const;
+  inline  ::capnp::Text::Reader getPrefix() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class FlattenOptions::Builder {
+public:
+  typedef FlattenOptions Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline bool hasPrefix();
+  inline  ::capnp::Text::Builder getPrefix();
+  inline void setPrefix( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initPrefix(unsigned int size);
+  inline void adoptPrefix(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownPrefix();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class FlattenOptions::Pipeline {
+public:
+  typedef FlattenOptions Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class DiscriminatorOptions::Reader {
+public:
+  typedef DiscriminatorOptions Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline bool hasName() const;
+  inline  ::capnp::Text::Reader getName() const;
+
+  inline bool hasValueName() const;
+  inline  ::capnp::Text::Reader getValueName() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class DiscriminatorOptions::Builder {
+public:
+  typedef DiscriminatorOptions Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline bool hasName();
+  inline  ::capnp::Text::Builder getName();
+  inline void setName( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initName(unsigned int size);
+  inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownName();
+
+  inline bool hasValueName();
+  inline  ::capnp::Text::Builder getValueName();
+  inline void setValueName( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initValueName(unsigned int size);
+  inline void adoptValueName(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownValueName();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class DiscriminatorOptions::Pipeline {
+public:
+  typedef DiscriminatorOptions Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
 // =======================================================================================
 
-inline  ::capnp::JsonValue::Which JsonValue::Reader::which() const {
+inline  ::capnp::json::Value::Which Value::Reader::which() const {
   return _reader.getDataField<Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline  ::capnp::JsonValue::Which JsonValue::Builder::which() {
+inline  ::capnp::json::Value::Which Value::Builder::which() {
   return _builder.getDataField<Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline bool JsonValue::Reader::isNull() const {
-  return which() == JsonValue::NULL_;
+inline bool Value::Reader::isNull() const {
+  return which() == Value::NULL_;
 }
-inline bool JsonValue::Builder::isNull() {
-  return which() == JsonValue::NULL_;
+inline bool Value::Builder::isNull() {
+  return which() == Value::NULL_;
 }
-inline  ::capnp::Void JsonValue::Reader::getNull() const {
-  KJ_IREQUIRE((which() == JsonValue::NULL_),
+inline  ::capnp::Void Value::Reader::getNull() const {
+  KJ_IREQUIRE((which() == Value::NULL_),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::capnp::Void JsonValue::Builder::getNull() {
-  KJ_IREQUIRE((which() == JsonValue::NULL_),
+inline  ::capnp::Void Value::Builder::getNull() {
+  KJ_IREQUIRE((which() == Value::NULL_),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void JsonValue::Builder::setNull( ::capnp::Void value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::NULL_);
+inline void Value::Builder::setNull( ::capnp::Void value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::NULL_);
   _builder.setDataField< ::capnp::Void>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
-inline bool JsonValue::Reader::isBoolean() const {
-  return which() == JsonValue::BOOLEAN;
+inline bool Value::Reader::isBoolean() const {
+  return which() == Value::BOOLEAN;
 }
-inline bool JsonValue::Builder::isBoolean() {
-  return which() == JsonValue::BOOLEAN;
+inline bool Value::Builder::isBoolean() {
+  return which() == Value::BOOLEAN;
 }
-inline bool JsonValue::Reader::getBoolean() const {
-  KJ_IREQUIRE((which() == JsonValue::BOOLEAN),
+inline bool Value::Reader::getBoolean() const {
+  KJ_IREQUIRE((which() == Value::BOOLEAN),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField<bool>(
       ::capnp::bounded<16>() * ::capnp::ELEMENTS);
 }
 
-inline bool JsonValue::Builder::getBoolean() {
-  KJ_IREQUIRE((which() == JsonValue::BOOLEAN),
+inline bool Value::Builder::getBoolean() {
+  KJ_IREQUIRE((which() == Value::BOOLEAN),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField<bool>(
       ::capnp::bounded<16>() * ::capnp::ELEMENTS);
 }
-inline void JsonValue::Builder::setBoolean(bool value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::BOOLEAN);
+inline void Value::Builder::setBoolean(bool value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::BOOLEAN);
   _builder.setDataField<bool>(
       ::capnp::bounded<16>() * ::capnp::ELEMENTS, value);
 }
 
-inline bool JsonValue::Reader::isNumber() const {
-  return which() == JsonValue::NUMBER;
+inline bool Value::Reader::isNumber() const {
+  return which() == Value::NUMBER;
 }
-inline bool JsonValue::Builder::isNumber() {
-  return which() == JsonValue::NUMBER;
+inline bool Value::Builder::isNumber() {
+  return which() == Value::NUMBER;
 }
-inline double JsonValue::Reader::getNumber() const {
-  KJ_IREQUIRE((which() == JsonValue::NUMBER),
+inline double Value::Reader::getNumber() const {
+  KJ_IREQUIRE((which() == Value::NUMBER),
               "Must check which() before get()ing a union member.");
   return _reader.getDataField<double>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
-inline double JsonValue::Builder::getNumber() {
-  KJ_IREQUIRE((which() == JsonValue::NUMBER),
+inline double Value::Builder::getNumber() {
+  KJ_IREQUIRE((which() == Value::NUMBER),
               "Must check which() before get()ing a union member.");
   return _builder.getDataField<double>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline void JsonValue::Builder::setNumber(double value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::NUMBER);
+inline void Value::Builder::setNumber(double value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::NUMBER);
   _builder.setDataField<double>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
-inline bool JsonValue::Reader::isString() const {
-  return which() == JsonValue::STRING;
+inline bool Value::Reader::isString() const {
+  return which() == Value::STRING;
 }
-inline bool JsonValue::Builder::isString() {
-  return which() == JsonValue::STRING;
+inline bool Value::Builder::isString() {
+  return which() == Value::STRING;
 }
-inline bool JsonValue::Reader::hasString() const {
-  if (which() != JsonValue::STRING) return false;
+inline bool Value::Reader::hasString() const {
+  if (which() != Value::STRING) return false;
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Builder::hasString() {
-  if (which() != JsonValue::STRING) return false;
+inline bool Value::Builder::hasString() {
+  if (which() != Value::STRING) return false;
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::Text::Reader JsonValue::Reader::getString() const {
-  KJ_IREQUIRE((which() == JsonValue::STRING),
+inline  ::capnp::Text::Reader Value::Reader::getString() const {
+  KJ_IREQUIRE((which() == Value::STRING),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::Text::Builder JsonValue::Builder::getString() {
-  KJ_IREQUIRE((which() == JsonValue::STRING),
+inline  ::capnp::Text::Builder Value::Builder::getString() {
+  KJ_IREQUIRE((which() == Value::STRING),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Builder::setString( ::capnp::Text::Reader value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::STRING);
+inline void Value::Builder::setString( ::capnp::Text::Reader value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::STRING);
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::Text::Builder JsonValue::Builder::initString(unsigned int size) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::STRING);
+inline  ::capnp::Text::Builder Value::Builder::initString(unsigned int size) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::STRING);
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
-inline void JsonValue::Builder::adoptString(
+inline void Value::Builder::adoptString(
     ::capnp::Orphan< ::capnp::Text>&& value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::STRING);
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::STRING);
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::Text> JsonValue::Builder::disownString() {
-  KJ_IREQUIRE((which() == JsonValue::STRING),
+inline ::capnp::Orphan< ::capnp::Text> Value::Builder::disownString() {
+  KJ_IREQUIRE((which() == Value::STRING),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Reader::isArray() const {
-  return which() == JsonValue::ARRAY;
+inline bool Value::Reader::isArray() const {
+  return which() == Value::ARRAY;
 }
-inline bool JsonValue::Builder::isArray() {
-  return which() == JsonValue::ARRAY;
+inline bool Value::Builder::isArray() {
+  return which() == Value::ARRAY;
 }
-inline bool JsonValue::Reader::hasArray() const {
-  if (which() != JsonValue::ARRAY) return false;
+inline bool Value::Reader::hasArray() const {
+  if (which() != Value::ARRAY) return false;
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Builder::hasArray() {
-  if (which() != JsonValue::ARRAY) return false;
+inline bool Value::Builder::hasArray() {
+  if (which() != Value::ARRAY) return false;
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader JsonValue::Reader::getArray() const {
-  KJ_IREQUIRE((which() == JsonValue::ARRAY),
+inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader Value::Reader::getArray() const {
+  KJ_IREQUIRE((which() == Value::ARRAY),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder JsonValue::Builder::getArray() {
-  KJ_IREQUIRE((which() == JsonValue::ARRAY),
+inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder Value::Builder::getArray() {
+  KJ_IREQUIRE((which() == Value::ARRAY),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Builder::setArray( ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::ARRAY);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
+inline void Value::Builder::setArray( ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::ARRAY);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder JsonValue::Builder::initArray(unsigned int size) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::ARRAY);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder Value::Builder::initArray(unsigned int size) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::ARRAY);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
-inline void JsonValue::Builder::adoptArray(
-    ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>&& value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::ARRAY);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
+inline void Value::Builder::adoptArray(
+    ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>&& value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::ARRAY);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>> JsonValue::Builder::disownArray() {
-  KJ_IREQUIRE((which() == JsonValue::ARRAY),
+inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>> Value::Builder::disownArray() {
+  KJ_IREQUIRE((which() == Value::ARRAY),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Reader::isObject() const {
-  return which() == JsonValue::OBJECT;
+inline bool Value::Reader::isObject() const {
+  return which() == Value::OBJECT;
 }
-inline bool JsonValue::Builder::isObject() {
-  return which() == JsonValue::OBJECT;
+inline bool Value::Builder::isObject() {
+  return which() == Value::OBJECT;
 }
-inline bool JsonValue::Reader::hasObject() const {
-  if (which() != JsonValue::OBJECT) return false;
+inline bool Value::Reader::hasObject() const {
+  if (which() != Value::OBJECT) return false;
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Builder::hasObject() {
-  if (which() != JsonValue::OBJECT) return false;
+inline bool Value::Builder::hasObject() {
+  if (which() != Value::OBJECT) return false;
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Reader JsonValue::Reader::getObject() const {
-  KJ_IREQUIRE((which() == JsonValue::OBJECT),
+inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Reader Value::Reader::getObject() const {
+  KJ_IREQUIRE((which() == Value::OBJECT),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Builder JsonValue::Builder::getObject() {
-  KJ_IREQUIRE((which() == JsonValue::OBJECT),
+inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Builder Value::Builder::getObject() {
+  KJ_IREQUIRE((which() == Value::OBJECT),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Builder::setObject( ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Reader value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::OBJECT);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
+inline void Value::Builder::setObject( ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Reader value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::OBJECT);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>::Builder JsonValue::Builder::initObject(unsigned int size) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::OBJECT);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Builder Value::Builder::initObject(unsigned int size) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::OBJECT);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
-inline void JsonValue::Builder::adoptObject(
-    ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>&& value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::OBJECT);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
+inline void Value::Builder::adoptObject(
+    ::capnp::Orphan< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>&& value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::OBJECT);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>> JsonValue::Builder::disownObject() {
-  KJ_IREQUIRE((which() == JsonValue::OBJECT),
+inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>> Value::Builder::disownObject() {
+  KJ_IREQUIRE((which() == Value::OBJECT),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue::Field,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Reader::isCall() const {
-  return which() == JsonValue::CALL;
+inline bool Value::Reader::isCall() const {
+  return which() == Value::CALL;
 }
-inline bool JsonValue::Builder::isCall() {
-  return which() == JsonValue::CALL;
+inline bool Value::Builder::isCall() {
+  return which() == Value::CALL;
 }
-inline bool JsonValue::Reader::hasCall() const {
-  if (which() != JsonValue::CALL) return false;
+inline bool Value::Reader::hasCall() const {
+  if (which() != Value::CALL) return false;
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Builder::hasCall() {
-  if (which() != JsonValue::CALL) return false;
+inline bool Value::Builder::hasCall() {
+  if (which() != Value::CALL) return false;
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::JsonValue::Call::Reader JsonValue::Reader::getCall() const {
-  KJ_IREQUIRE((which() == JsonValue::CALL),
+inline  ::capnp::json::Value::Call::Reader Value::Reader::getCall() const {
+  KJ_IREQUIRE((which() == Value::CALL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::Call>::get(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::JsonValue::Call::Builder JsonValue::Builder::getCall() {
-  KJ_IREQUIRE((which() == JsonValue::CALL),
+inline  ::capnp::json::Value::Call::Builder Value::Builder::getCall() {
+  KJ_IREQUIRE((which() == Value::CALL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::Call>::get(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Builder::setCall( ::capnp::JsonValue::Call::Reader value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::CALL);
-  ::capnp::_::PointerHelpers< ::capnp::JsonValue::Call>::set(_builder.getPointerField(
+inline void Value::Builder::setCall( ::capnp::json::Value::Call::Reader value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::CALL);
+  ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::JsonValue::Call::Builder JsonValue::Builder::initCall() {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::CALL);
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::Call>::init(_builder.getPointerField(
+inline  ::capnp::json::Value::Call::Builder Value::Builder::initCall() {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::CALL);
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Builder::adoptCall(
-    ::capnp::Orphan< ::capnp::JsonValue::Call>&& value) {
-  _builder.setDataField<JsonValue::Which>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, JsonValue::CALL);
-  ::capnp::_::PointerHelpers< ::capnp::JsonValue::Call>::adopt(_builder.getPointerField(
+inline void Value::Builder::adoptCall(
+    ::capnp::Orphan< ::capnp::json::Value::Call>&& value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::CALL);
+  ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::JsonValue::Call> JsonValue::Builder::disownCall() {
-  KJ_IREQUIRE((which() == JsonValue::CALL),
+inline ::capnp::Orphan< ::capnp::json::Value::Call> Value::Builder::disownCall() {
+  KJ_IREQUIRE((which() == Value::CALL),
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue::Call>::disown(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Field::Reader::hasName() const {
+inline bool Value::Field::Reader::hasName() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Field::Builder::hasName() {
+inline bool Value::Field::Builder::hasName() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::Text::Reader JsonValue::Field::Reader::getName() const {
+inline  ::capnp::Text::Reader Value::Field::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::Text::Builder JsonValue::Field::Builder::getName() {
+inline  ::capnp::Text::Builder Value::Field::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Field::Builder::setName( ::capnp::Text::Reader value) {
+inline void Value::Field::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::Text::Builder JsonValue::Field::Builder::initName(unsigned int size) {
+inline  ::capnp::Text::Builder Value::Field::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
-inline void JsonValue::Field::Builder::adoptName(
+inline void Value::Field::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::Text> JsonValue::Field::Builder::disownName() {
+inline ::capnp::Orphan< ::capnp::Text> Value::Field::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Field::Reader::hasValue() const {
+inline bool Value::Field::Reader::hasValue() const {
   return !_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Field::Builder::hasValue() {
+inline bool Value::Field::Builder::hasValue() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::JsonValue::Reader JsonValue::Field::Reader::getValue() const {
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue>::get(_reader.getPointerField(
+inline  ::capnp::json::Value::Reader Value::Field::Reader::getValue() const {
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::capnp::JsonValue::Builder JsonValue::Field::Builder::getValue() {
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue>::get(_builder.getPointerField(
+inline  ::capnp::json::Value::Builder Value::Field::Builder::getValue() {
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 #if !CAPNP_LITE
-inline  ::capnp::JsonValue::Pipeline JsonValue::Field::Pipeline::getValue() {
-  return  ::capnp::JsonValue::Pipeline(_typeless.getPointerField(1));
+inline  ::capnp::json::Value::Pipeline Value::Field::Pipeline::getValue() {
+  return  ::capnp::json::Value::Pipeline(_typeless.getPointerField(1));
 }
 #endif  // !CAPNP_LITE
-inline void JsonValue::Field::Builder::setValue( ::capnp::JsonValue::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::JsonValue>::set(_builder.getPointerField(
+inline void Value::Field::Builder::setValue( ::capnp::json::Value::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::json::Value>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::JsonValue::Builder JsonValue::Field::Builder::initValue() {
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue>::init(_builder.getPointerField(
+inline  ::capnp::json::Value::Builder Value::Field::Builder::initValue() {
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Field::Builder::adoptValue(
-    ::capnp::Orphan< ::capnp::JsonValue>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::JsonValue>::adopt(_builder.getPointerField(
+inline void Value::Field::Builder::adoptValue(
+    ::capnp::Orphan< ::capnp::json::Value>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::json::Value>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::JsonValue> JsonValue::Field::Builder::disownValue() {
-  return ::capnp::_::PointerHelpers< ::capnp::JsonValue>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::json::Value> Value::Field::Builder::disownValue() {
+  return ::capnp::_::PointerHelpers< ::capnp::json::Value>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Call::Reader::hasFunction() const {
+inline bool Value::Call::Reader::hasFunction() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Call::Builder::hasFunction() {
+inline bool Value::Call::Builder::hasFunction() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::Text::Reader JsonValue::Call::Reader::getFunction() const {
+inline  ::capnp::Text::Reader Value::Call::Reader::getFunction() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline  ::capnp::Text::Builder JsonValue::Call::Builder::getFunction() {
+inline  ::capnp::Text::Builder Value::Call::Builder::getFunction() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Call::Builder::setFunction( ::capnp::Text::Reader value) {
+inline void Value::Call::Builder::setFunction( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::Text::Builder JsonValue::Call::Builder::initFunction(unsigned int size) {
+inline  ::capnp::Text::Builder Value::Call::Builder::initFunction(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), size);
 }
-inline void JsonValue::Call::Builder::adoptFunction(
+inline void Value::Call::Builder::adoptFunction(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::Text> JsonValue::Call::Builder::disownFunction() {
+inline ::capnp::Orphan< ::capnp::Text> Value::Call::Builder::disownFunction() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline bool JsonValue::Call::Reader::hasParams() const {
+inline bool Value::Call::Reader::hasParams() const {
   return !_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline bool JsonValue::Call::Builder::hasParams() {
+inline bool Value::Call::Builder::hasParams() {
   return !_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader JsonValue::Call::Reader::getParams() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
+inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader Value::Call::Reader::getParams() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder JsonValue::Call::Builder::getParams() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder Value::Call::Builder::getParams() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void JsonValue::Call::Builder::setParams( ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
+inline void Value::Call::Builder::setParams( ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>::Builder JsonValue::Call::Builder::initParams(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
+inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Builder Value::Call::Builder::initParams(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), size);
 }
-inline void JsonValue::Call::Builder::adoptParams(
-    ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
+inline void Value::Call::Builder::adoptParams(
+    ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>> JsonValue::Call::Builder::disownParams() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::JsonValue,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>> Value::Call::Builder::disownParams() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
+inline bool FlattenOptions::Reader::hasPrefix() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool FlattenOptions::Builder::hasPrefix() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader FlattenOptions::Reader::getPrefix() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS),
+        ::capnp::schemas::bp_c4df13257bc2ea61 + 34);
+}
+inline  ::capnp::Text::Builder FlattenOptions::Builder::getPrefix() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS),
+        ::capnp::schemas::bp_c4df13257bc2ea61 + 34);
+}
+inline void FlattenOptions::Builder::setPrefix( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder FlattenOptions::Builder::initPrefix(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), size);
+}
+inline void FlattenOptions::Builder::adoptPrefix(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> FlattenOptions::Builder::disownPrefix() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline bool DiscriminatorOptions::Reader::hasName() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool DiscriminatorOptions::Builder::hasName() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader DiscriminatorOptions::Reader::getName() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder DiscriminatorOptions::Builder::getName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void DiscriminatorOptions::Builder::setName( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder DiscriminatorOptions::Builder::initName(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), size);
+}
+inline void DiscriminatorOptions::Builder::adoptName(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> DiscriminatorOptions::Builder::disownName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline bool DiscriminatorOptions::Reader::hasValueName() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool DiscriminatorOptions::Builder::hasValueName() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader DiscriminatorOptions::Reader::getValueName() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder DiscriminatorOptions::Builder::getValueName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void DiscriminatorOptions::Builder::setValueName( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder DiscriminatorOptions::Builder::initValueName(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void DiscriminatorOptions::Builder::adoptValueName(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> DiscriminatorOptions::Builder::disownValueName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
+}  // namespace
 }  // namespace
 

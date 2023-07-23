@@ -31,6 +31,7 @@
 #include <map>
 #include <queue>
 #include <capnp/rpc.capnp.h>
+#include <kj/io.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -55,7 +56,9 @@ constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>(
 constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
 
 uint copySizeHint(MessageSize size) {
-  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT;
+  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
+                    // if capCount > 0, the cap descriptor list has a 1-word tag
+                    + (size.capCount > 0);
   return kj::min(MAX_SIZE_HINT, sizeHint);
 }
 
@@ -575,7 +578,8 @@ private:
     RpcClient(RpcConnectionState& connectionState)
         : connectionState(kj::addRef(connectionState)) {}
 
-    virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) = 0;
+    virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                                kj::Vector<int>& fds) = 0;
     // Writes a CapDescriptor referencing this client.  The CapDescriptor must be sent as part of
     // the very next message sent on the connection, as it may become invalid if other things
     // happen.
@@ -597,6 +601,25 @@ private:
     // If this client just wraps some other client -- even if it is only *temporarily* wrapping
     // that other client -- return a reference to the other client, transitively.  Otherwise,
     // return a new reference to *this.
+
+    virtual void adoptFlowController(kj::Own<RpcFlowController> flowController) {
+      // Called when a PromiseClient resolves to another RpcClient. If streaming calls were
+      // outstanding on the old client, we'd like to keep using the same FlowController on the new
+      // client, so as to keep the flow steady.
+
+      if (this->flowController == nullptr) {
+        // We don't have any existing flowController so we can adopt this one, yay!
+        this->flowController = kj::mv(flowController);
+      } else {
+        // Apparently, there is an existing flowController. This is an unusual scenario: Apparently
+        // we had two stream capabilities, we were streaming to both of them, and they later
+        // resolved to the same capability. This probably never happens because streaming use cases
+        // normally call for there to be only one client. But, it's certainly possible, and we need
+        // to handle it. We'll do the conservative thing and just make sure that all the calls
+        // finish. This may mean we'll over-buffer temporarily; oh well.
+        connectionState->tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+      }
+    }
 
     // implements ClientHook -----------------------------------------
 
@@ -704,14 +727,18 @@ private:
     }
 
     kj::Own<RpcConnectionState> connectionState;
+
+    kj::Maybe<kj::Own<RpcFlowController>> flowController;
+    // Becomes non-null the first time a streaming call is made on this capability.
   };
 
   class ImportClient final: public RpcClient {
     // A ClientHook that wraps an entry in the import table.
 
   public:
-    ImportClient(RpcConnectionState& connectionState, ImportId importId)
-        : RpcClient(connectionState), importId(importId) {}
+    ImportClient(RpcConnectionState& connectionState, ImportId importId,
+                 kj::Maybe<kj::AutoCloseFd> fd)
+        : RpcClient(connectionState), importId(importId), fd(kj::mv(fd)) {}
 
     ~ImportClient() noexcept(false) {
       unwindDetector.catchExceptionsIfUnwinding([&]() {
@@ -736,12 +763,19 @@ private:
       });
     }
 
+    void setFdIfMissing(kj::Maybe<kj::AutoCloseFd> newFd) {
+      if (fd == nullptr) {
+        fd = kj::mv(newFd);
+      }
+    }
+
     void addRemoteRef() {
       // Add a new RemoteRef and return a new ref to this client representing it.
       ++remoteRefcount;
     }
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                        kj::Vector<int>& fds) override {
       descriptor.setReceiverHosted(importId);
       return nullptr;
     }
@@ -766,8 +800,13 @@ private:
       return nullptr;
     }
 
+    kj::Maybe<int> getFd() override {
+      return fd.map([](auto& f) { return f.get(); });
+    }
+
   private:
     ImportId importId;
+    kj::Maybe<kj::AutoCloseFd> fd;
 
     uint remoteRefcount = 0;
     // Number of times we've received this import from the peer.
@@ -784,7 +823,8 @@ private:
                    kj::Array<PipelineOp>&& ops)
         : RpcClient(connectionState), questionRef(kj::mv(questionRef)), ops(kj::mv(ops)) {}
 
-   kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+   kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                       kj::Vector<int>& fds) override {
       auto promisedAnswer = descriptor.initReceiverAnswer();
       promisedAnswer.setQuestionId(questionRef->getId());
       promisedAnswer.adoptTransform(fromPipelineOps(
@@ -814,6 +854,10 @@ private:
       return nullptr;
     }
 
+    kj::Maybe<int> getFd() override {
+      return nullptr;
+    }
+
   private:
     kj::Own<QuestionRef> questionRef;
     kj::Array<PipelineOp> ops;
@@ -825,7 +869,7 @@ private:
 
   public:
     PromiseClient(RpcConnectionState& connectionState,
-                  kj::Own<ClientHook> initial,
+                  kj::Own<RpcClient> initial,
                   kj::Promise<kj::Own<ClientHook>> eventual,
                   kj::Maybe<ImportId> importId)
         : RpcClient(connectionState),
@@ -867,9 +911,10 @@ private:
       }
     }
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                        kj::Vector<int>& fds) override {
       receivedCall = true;
-      return connectionState->writeDescriptor(*cap, descriptor);
+      return connectionState->writeDescriptor(*cap, descriptor, fds);
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
@@ -881,6 +926,17 @@ private:
     kj::Own<ClientHook> getInnermostClient() override {
       receivedCall = true;
       return connectionState->getInnermostClient(*cap);
+    }
+
+    void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
+      if (cap->getBrand() == connectionState.get()) {
+        // Pass the flow controller on to our inner cap.
+        kj::downcast<RpcClient>(*cap).adoptFlowController(kj::mv(flowController));
+      } else {
+        // We resolved to a capability that isn't another RPC capability. We should simply make
+        // sure that all the calls complete.
+        connectionState->tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+      }
     }
 
     // implements ClientHook -----------------------------------------
@@ -939,6 +995,20 @@ private:
       return fork.addBranch();
     }
 
+    kj::Maybe<int> getFd() override {
+      if (isResolved) {
+        return cap->getFd();
+      } else {
+        // In theory, before resolution, the ImportClient for the promise could have an FD
+        // attached, if the promise itself was presented with an attached FD. However, we can't
+        // really return that one here because it may be closed when we get the Resolve message
+        // later. In theory we could have the PromiseClient itself take ownership of an FD that
+        // arrived attached to a promise cap, but the use case for that is questionable. I'm
+        // keeping it simple for now.
+        return nullptr;
+      }
+    }
+
   private:
     bool isResolved;
     kj::Own<ClientHook> cap;
@@ -954,6 +1024,25 @@ private:
 
     void resolve(kj::Own<ClientHook> replacement, bool isError) {
       const void* replacementBrand = replacement->getBrand();
+
+      // If the original capability was used for streaming calls, it will have a
+      // `flowController` that might still be shepherding those calls. We'll need make sure that
+      // it doesn't get thrown away. Note that we know that *cap is an RpcClient because resolve()
+      // is only called once and our constructor required that the initial capability is an
+      // RpcClient.
+      KJ_IF_MAYBE(f, kj::downcast<RpcClient>(*cap).flowController) {
+        if (replacementBrand == connectionState.get()) {
+          // The new target is on the same connection. It would make a lot of sense to keep using
+          // the same flow controller if possible.
+          kj::downcast<RpcClient>(*replacement).adoptFlowController(kj::mv(*f));
+        } else {
+          // The new target is something else. The best we can do is wait for the controller to
+          // drain. New calls will be flow-controlled in a new way without knowing about the old
+          // controller.
+          connectionState->tasks.add(f->get()->waitAllAcked().attach(kj::mv(*f)));
+        }
+      }
+
       if (replacementBrand != connectionState.get() &&
           replacementBrand != &ClientHook::NULL_CAPABILITY_BRAND &&
           receivedCall && !isError && connectionState->connection.is<Connected>()) {
@@ -1016,8 +1105,9 @@ private:
         : RpcClient(*inner.connectionState),
           inner(kj::addRef(inner)) {}
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
-      return inner->writeDescriptor(descriptor);
+    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                        kj::Vector<int>& fds) override {
+      return inner->writeDescriptor(descriptor, fds);
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(rpc::MessageTarget::Builder target) override {
@@ -1045,11 +1135,16 @@ private:
       return nullptr;
     }
 
+    kj::Maybe<int> getFd() override {
+      return nullptr;
+    }
+
   private:
     kj::Own<RpcClient> inner;
   };
 
-  kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor) {
+  kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor,
+                                      kj::Vector<int>& fds) {
     // Write a descriptor for the given capability.
 
     // Find the innermost wrapped capability.
@@ -1062,8 +1157,13 @@ private:
       }
     }
 
+    KJ_IF_MAYBE(fd, inner->getFd()) {
+      descriptor.setAttachedFd(fds.size());
+      fds.add(kj::mv(*fd));
+    }
+
     if (inner->getBrand() == this) {
-      return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor);
+      return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor, fds);
     } else {
       auto iter = exportsByCap.find(inner);
       if (iter != exportsByCap.end()) {
@@ -1094,12 +1194,17 @@ private:
   }
 
   kj::Array<ExportId> writeDescriptors(kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
-                                       rpc::Payload::Builder payload) {
+                                       rpc::Payload::Builder payload, kj::Vector<int>& fds) {
+    if (capTable.size() == 0) {
+      // Calling initCapTable(0) will still allocate a 1-word tag, which we'd like to avoid...
+      return nullptr;
+    }
+
     auto capTableBuilder = payload.initCapTable(capTable.size());
     kj::Vector<ExportId> exports(capTable.size());
     for (uint i: kj::indices(capTable)) {
       KJ_IF_MAYBE(cap, capTable[i]) {
-        KJ_IF_MAYBE(exportId, writeDescriptor(**cap, capTableBuilder[i])) {
+        KJ_IF_MAYBE(exportId, writeDescriptor(**cap, capTableBuilder[i], fds)) {
           exports.add(*exportId);
         }
       } else {
@@ -1199,7 +1304,9 @@ private:
           messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
-      writeDescriptor(*exp.clientHook, resolve.initCap());
+      kj::Vector<int> fds;
+      writeDescriptor(*exp.clientHook, resolve.initCap(), fds);
+      message->setFds(fds.releaseAsArray());
       message->send();
 
       return kj::READY_NOW;
@@ -1220,7 +1327,7 @@ private:
   // =====================================================================================
   // Interpreting CapDescriptor
 
-  kj::Own<ClientHook> import(ImportId importId, bool isPromise) {
+  kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::AutoCloseFd> fd) {
     // Receive a new import.
 
     auto& import = imports[importId];
@@ -1229,8 +1336,17 @@ private:
     // Create the ImportClient, or if one already exists, use it.
     KJ_IF_MAYBE(c, import.importClient) {
       importClient = kj::addRef(*c);
+
+      // If the same import is introduced multiple times, and it is missing an FD the first time,
+      // but it has one on a later attempt, we want to attach the later one. This could happen
+      // because the first introduction was part of a message that had too many other FDs and went
+      // over the per-message limit. Perhaps the protocol design is such that this other message
+      // doesn't really care if the FDs are transferred or not, but the later message really does
+      // care; it would be bad if the previous message blocked later messages from delivering the
+      // FD just because it happened to reference the same capability.
+      importClient->setFdIfMissing(kj::mv(fd));
     } else {
-      importClient = kj::refcounted<ImportClient>(*this, importId);
+      importClient = kj::refcounted<ImportClient>(*this, importId, kj::mv(fd));
       import.importClient = *importClient;
     }
 
@@ -1262,15 +1378,22 @@ private:
     }
   }
 
-  kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor) {
+  kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
+                                            kj::ArrayPtr<kj::AutoCloseFd> fds) {
+    uint fdIndex = descriptor.getAttachedFd();
+    kj::Maybe<kj::AutoCloseFd> fd;
+    if (fdIndex < fds.size() && fds[fdIndex] != nullptr) {
+      fd = kj::mv(fds[fdIndex]);
+    }
+
     switch (descriptor.which()) {
       case rpc::CapDescriptor::NONE:
         return nullptr;
 
       case rpc::CapDescriptor::SENDER_HOSTED:
-        return import(descriptor.getSenderHosted(), false);
+        return import(descriptor.getSenderHosted(), false, kj::mv(fd));
       case rpc::CapDescriptor::SENDER_PROMISE:
-        return import(descriptor.getSenderPromise(), true);
+        return import(descriptor.getSenderPromise(), true, kj::mv(fd));
 
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_MAYBE(exp, exports.find(descriptor.getReceiverHosted())) {
@@ -1299,7 +1422,7 @@ private:
 
       case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
         // We don't support third-party caps, so use the vine instead.
-        return import(descriptor.getThirdPartyHosted().getVineId(), false);
+        return import(descriptor.getThirdPartyHosted().getVineId(), false, kj::mv(fd));
 
       default:
         KJ_FAIL_REQUIRE("unknown CapDescriptor type") { break; }
@@ -1307,10 +1430,11 @@ private:
     }
   }
 
-  kj::Array<kj::Maybe<kj::Own<ClientHook>>> receiveCaps(List<rpc::CapDescriptor>::Reader capTable) {
+  kj::Array<kj::Maybe<kj::Own<ClientHook>>> receiveCaps(List<rpc::CapDescriptor>::Reader capTable,
+                                                        kj::ArrayPtr<kj::AutoCloseFd> fds) {
     auto result = kj::heapArrayBuilder<kj::Maybe<kj::Own<ClientHook>>>(capTable.size());
     for (auto cap: capTable) {
-      result.add(receiveCap(cap));
+      result.add(receiveCap(cap, fds));
     }
     return result.finish();
   }
@@ -1438,6 +1562,25 @@ private:
       }
     }
 
+    kj::Promise<void> sendStreaming() override {
+      if (!connectionState->connection.is<Connected>()) {
+        // Connection is broken.
+        return kj::cp(connectionState->connection.get<Disconnected>());
+      }
+
+      KJ_IF_MAYBE(redirect, target->writeTarget(callBuilder.getTarget())) {
+        // Whoops, this capability has been redirected while we were building the request!
+        // We'll have to make a new request and do a copy.  Ick.
+
+        auto replacement = redirect->get()->newCall(
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
+        replacement.set(paramsBuilder);
+        return RequestHook::from(kj::mv(replacement))->sendStreaming();
+      } else {
+        return sendStreamingInternal(false);
+      }
+    }
+
     struct TailInfo {
       QuestionId questionId;
       kj::Promise<void> promise;
@@ -1495,10 +1638,21 @@ private:
       kj::Promise<kj::Own<RpcResponse>> promise = nullptr;
     };
 
-    SendInternalResult sendInternal(bool isTailCall) {
+    struct SetupSendResult: public SendInternalResult {
+      QuestionId questionId;
+      Question& question;
+
+      SetupSendResult(SendInternalResult&& super, QuestionId questionId, Question& question)
+          : SendInternalResult(kj::mv(super)), questionId(questionId), question(question) {}
+      // TODO(cleanup): This constructor is implicit in C++17.
+    };
+
+    SetupSendResult setupSend(bool isTailCall) {
       // Build the cap table.
+      kj::Vector<int> fds;
       auto exports = connectionState->writeDescriptors(
-          capTable.getTable(), callBuilder.getParams());
+          capTable.getTable(), callBuilder.getParams(), fds);
+      message->setFds(fds.releaseAsArray());
 
       // Init the question table.  Do this after writing descriptors to avoid interference.
       QuestionId questionId;
@@ -1515,8 +1669,14 @@ private:
       question.selfRef = *result.questionRef;
       result.promise = paf.promise.attach(kj::addRef(*result.questionRef));
 
+      return { kj::mv(result), questionId, question };
+    }
+
+    SendInternalResult sendInternal(bool isTailCall) {
+      auto result = setupSend(isTailCall);
+
       // Finish and send.
-      callBuilder.setQuestionId(questionId);
+      callBuilder.setQuestionId(result.questionId);
       if (isTailCall) {
         callBuilder.getSendResultsTo().setYourself();
       }
@@ -1527,13 +1687,45 @@ private:
       })) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
-        question.isAwaitingReturn = false;
-        question.skipFinish = true;
+        result.question.isAwaitingReturn = false;
+        result.question.skipFinish = true;
         result.questionRef->reject(kj::mv(*exception));
       }
 
       // Send and return.
       return kj::mv(result);
+    }
+
+    kj::Promise<void> sendStreamingInternal(bool isTailCall) {
+      auto setup = setupSend(isTailCall);
+
+      // Finish and send.
+      callBuilder.setQuestionId(setup.questionId);
+      if (isTailCall) {
+        callBuilder.getSendResultsTo().setYourself();
+      }
+      kj::Promise<void> flowPromise = nullptr;
+      KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+        KJ_CONTEXT("sending RPC call",
+           callBuilder.getInterfaceId(), callBuilder.getMethodId());
+        RpcFlowController* flow;
+        KJ_IF_MAYBE(f, target->flowController) {
+          flow = *f;
+        } else {
+          flow = target->flowController.emplace(
+              connectionState->connection.get<Connected>()->newStream());
+        }
+        flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
+      })) {
+        // We can't safely throw the exception from here since we've already modified the question
+        // table state. We'll have to reject the promise instead.
+        setup.question.isAwaitingReturn = false;
+        setup.question.skipFinish = true;
+        setup.questionRef->reject(kj::cp(*exception));
+        return kj::mv(*exception);
+      }
+
+      return kj::mv(flowPromise);
     }
   };
 
@@ -1691,7 +1883,9 @@ private:
 
       // Build the cap table.
       auto capTable = this->capTable.getTable();
-      auto exports = connectionState.writeDescriptors(capTable, payload);
+      kj::Vector<int> fds;
+      auto exports = connectionState.writeDescriptors(capTable, payload, fds);
+      message->setFds(fds.releaseAsArray());
 
       // Capabilities that we are returning are subject to embargos. See `Disembargo` in rpc.capnp.
       // As explained there, in order to deal with the Tribble 4-way race condition, we need to
@@ -1754,7 +1948,7 @@ private:
           answerId(answerId),
           interfaceId(interfaceId),
           methodId(methodId),
-          requestSize(request->getBody().targetSize().wordCount),
+          requestSize(request->sizeInWords()),
           request(kj::mv(request)),
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),
@@ -2130,7 +2324,7 @@ private:
         break;
 
       case rpc::Message::RESOLVE:
-        handleResolve(reader.getResolve());
+        handleResolve(kj::mv(message), reader.getResolve());
         break;
 
       case rpc::Message::RELEASE:
@@ -2262,7 +2456,9 @@ private:
 
       auto capTableArray = capTable.getTable();
       KJ_DASSERT(capTableArray.size() == 1);
-      resultExports = writeDescriptors(capTableArray, payload);
+      kj::Vector<int> fds;
+      resultExports = writeDescriptors(capTableArray, payload, fds);
+      response->setFds(fds.releaseAsArray());
       capHook = KJ_ASSERT_NONNULL(capTableArray[0])->addRef();
     })) {
       fromException(*exception, ret.initException());
@@ -2307,7 +2503,7 @@ private:
     }
 
     auto payload = call.getParams();
-    auto capTableArray = receiveCaps(payload.getCapTable());
+    auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
     AnswerId answerId = call.getQuestionId();
@@ -2500,7 +2696,7 @@ private:
             }
 
             auto payload = ret.getResults();
-            auto capTableArray = receiveCaps(payload.getCapTable());
+            auto capTableArray = receiveCaps(payload.getCapTable(), message->getAttachedFds());
             questionRef->fulfill(kj::refcounted<RpcResponseImpl>(
                 *this, kj::addRef(*questionRef), kj::mv(message),
                 kj::mv(capTableArray), payload.getContent()));
@@ -2593,21 +2789,21 @@ private:
         answerToRelease = answers.erase(finish.getQuestionId());
       }
     } else {
-      KJ_REQUIRE(answer->active, "'Finish' for invalid question ID.") { return; }
+      KJ_FAIL_REQUIRE("'Finish' for invalid question ID.") { return; }
     }
   }
 
   // ---------------------------------------------------------------------------
   // Level 1
 
-  void handleResolve(const rpc::Resolve::Reader& resolve) {
+  void handleResolve(kj::Own<IncomingRpcMessage>&& message, const rpc::Resolve::Reader& resolve) {
     kj::Own<ClientHook> replacement;
     kj::Maybe<kj::Exception> exception;
 
     // Extract the replacement capability.
     switch (resolve.which()) {
       case rpc::Resolve::CAP:
-        KJ_IF_MAYBE(cap, receiveCap(resolve.getCap())) {
+        KJ_IF_MAYBE(cap, receiveCap(resolve.getCap(), message->getAttachedFds())) {
           replacement = kj::mv(*cap);
         } else {
           KJ_FAIL_REQUIRE("'Resolve' contained 'CapDescriptor.none'.") { return; }
@@ -2699,9 +2895,9 @@ private:
 
         EmbargoId embargoId = context.getSenderLoopback();
 
-        // We need to insert an evalLater() here to make sure that any pending calls towards this
+        // We need to insert an evalLast() here to make sure that any pending calls towards this
         // cap have had time to find their way through the event loop.
-        tasks.add(kj::evalLater(kj::mvCapture(
+        tasks.add(kj::evalLast(kj::mvCapture(
             target, [this,embargoId](kj::Own<ClientHook>&& target) {
           if (!connection.is<Connected>()) {
             return;
@@ -2803,11 +2999,16 @@ public:
     KJ_IF_MAYBE(connection, network.baseConnect(vatId)) {
       auto& state = getConnectionState(kj::mv(*connection));
       return Capability::Client(state.restore(objectId));
+    } else if (objectId.isNull()) {
+      // Turns out `vatId` refers to ourselves, so we can also pass it as the client ID for
+      // baseCreateFor().
+      return bootstrapFactory.baseCreateFor(vatId);
     } else KJ_IF_MAYBE(r, restorer) {
       return r->baseRestore(objectId);
     } else {
       return Capability::Client(newBrokenCap(
-          "SturdyRef referred to a local object but there is no local SturdyRef restorer."));
+          "This vat only supports a bootstrap interface, not the old Cap'n-Proto-0.4-style "
+          "named exports."));
     }
   }
 
@@ -2914,4 +3115,146 @@ void RpcSystemBase::baseSetFlowLimit(size_t words) {
 }
 
 }  // namespace _ (private)
+
+// =======================================================================================
+
+namespace {
+
+class WindowFlowController final: public RpcFlowController, private kj::TaskSet::ErrorHandler {
+public:
+  WindowFlowController(RpcFlowController::WindowGetter& windowGetter)
+      : windowGetter(windowGetter), tasks(*this) {
+    state.init<Running>();
+  }
+
+  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
+    auto size = message->sizeInWords() * sizeof(capnp::word);
+    maxMessageSize = kj::max(size, maxMessageSize);
+
+    // We are REQUIRED to send the message NOW to maintain correct ordering.
+    message->send();
+
+    inFlight += size;
+    tasks.add(ack.then([this, size]() {
+      inFlight -= size;
+      KJ_SWITCH_ONEOF(state) {
+        KJ_CASE_ONEOF(blockedSends, Running) {
+          if (isReady()) {
+            // Release all fulfillers.
+            for (auto& fulfiller: blockedSends) {
+              fulfiller->fulfill();
+            }
+            blockedSends.clear();
+
+          }
+
+          KJ_IF_MAYBE(f, emptyFulfiller) {
+            if (inFlight == 0) {
+              f->get()->fulfill(tasks.onEmpty());
+            }
+          }
+        }
+        KJ_CASE_ONEOF(exception, kj::Exception) {
+          // A previous call failed, but this one -- which was already in-flight at the time --
+          // ended up succeeding. That may indicate that the server side is not properly
+          // handling streaming error propagation. Nothing much we can do about it here though.
+        }
+      }
+    }));
+
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedSends, Running) {
+        if (isReady()) {
+          return kj::READY_NOW;
+        } else {
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          blockedSends.add(kj::mv(paf.fulfiller));
+          return kj::mv(paf.promise);
+        }
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        return kj::cp(exception);
+      }
+    }
+    KJ_UNREACHABLE;
+  }
+
+  kj::Promise<void> waitAllAcked() override {
+    KJ_IF_MAYBE(q, state.tryGet<Running>()) {
+      if (!q->empty()) {
+        auto paf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+        emptyFulfiller = kj::mv(paf.fulfiller);
+        return kj::mv(paf.promise);
+      }
+    }
+    return tasks.onEmpty();
+  }
+
+private:
+  RpcFlowController::WindowGetter& windowGetter;
+  size_t inFlight = 0;
+  size_t maxMessageSize = 0;
+
+  typedef kj::Vector<kj::Own<kj::PromiseFulfiller<void>>> Running;
+  kj::OneOf<Running, kj::Exception> state;
+
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<void>>>> emptyFulfiller;
+
+  kj::TaskSet tasks;
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedSends, Running) {
+        // Fail out all pending sends.
+        for (auto& fulfiller: blockedSends) {
+          fulfiller->reject(kj::cp(exception));
+        }
+        // Fail out all future sends.
+        state = kj::mv(exception);
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        // ignore redundant exception
+      }
+    }
+  }
+
+  bool isReady() {
+    // We extend the window by maxMessageSize to avoid a pathological situation when a message
+    // is larger than the window size. Otherwise, after sending that message, we would end up
+    // not sending any others until the ack was received, wasting a round trip's worth of
+    // bandwidth.
+    return inFlight <= maxMessageSize  // avoid getWindow() call if unnecessary
+        || inFlight < windowGetter.getWindow() + maxMessageSize;
+  }
+};
+
+class FixedWindowFlowController final
+    : public RpcFlowController, public RpcFlowController::WindowGetter {
+public:
+  FixedWindowFlowController(size_t windowSize): windowSize(windowSize), inner(*this) {}
+
+  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
+    return inner.send(kj::mv(message), kj::mv(ack));
+  }
+
+  kj::Promise<void> waitAllAcked() override {
+    return inner.waitAllAcked();
+  }
+
+  size_t getWindow() override { return windowSize; }
+
+private:
+  size_t windowSize;
+  WindowFlowController inner;
+};
+
+}  // namespace
+
+kj::Own<RpcFlowController> RpcFlowController::newFixedWindowController(size_t windowSize) {
+  return kj::heap<FixedWindowFlowController>(windowSize);
+}
+kj::Own<RpcFlowController> RpcFlowController::newVariableWindowController(WindowGetter& getter) {
+  return kj::heap<WindowFlowController>(getter);
+}
+
 }  // namespace capnp

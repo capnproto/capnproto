@@ -10,6 +10,7 @@ set(capnp_sources_lite
   any.c++
   message.c++
   schema.capnp.c++
+  stream.capnp.c++
   serialize.c++
   serialize-packed.c++
 )
@@ -28,6 +29,7 @@ endif()
 set(capnp_headers
   c++.capnp.h
   common.h
+  compat/std-iterator.h
   blob.h
   endian.h
   layout.h
@@ -40,6 +42,7 @@ set(capnp_headers
   dynamic.h
   schema.h
   schema.capnp.h
+  stream.capnp.h
   schema-lite.h
   schema-loader.h
   schema-parser.h
@@ -55,6 +58,7 @@ set(capnp_headers
 set(capnp_schemas
   c++.capnp
   schema.capnp
+  stream.capnp
 )
 add_library(capnp ${capnp_sources})
 add_library(CapnProto::capnp ALIAS capnp)
@@ -182,7 +186,7 @@ if(NOT CAPNP_LITE)
   install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 
   # Symlink capnpc -> capnp
-  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc\")")
+  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp${CMAKE_EXECUTABLE_SUFFIX} \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
 endif()  # NOT CAPNP_LITE
 
 # Tests ========================================================================
@@ -192,6 +196,7 @@ if(BUILD_TESTING)
     test.capnp
     test-import.capnp
     test-import2.capnp
+    compat/json-test.capnp
   )
 
   set(CAPNPC_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_capnp")

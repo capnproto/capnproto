@@ -168,6 +168,14 @@ TEST(Message, ReadWriteDataStruct) {
   checkTestMessageAllZero(defaultValue<TestAllTypes>());
 }
 
+KJ_TEST("clone()") {
+  MallocMessageBuilder builder(2048);
+  initTestMessage(builder.getRoot<TestAllTypes>());
+
+  auto copy = clone(builder.getRoot<TestAllTypes>().asReader());
+  checkTestMessage(*copy);
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

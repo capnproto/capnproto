@@ -45,6 +45,20 @@ struct ImplicitToInt {
   }
 };
 
+struct Immovable {
+  Immovable() = default;
+  KJ_DISALLOW_COPY(Immovable);
+};
+
+struct CopyOrMove {
+  // Type that detects the difference between copy and move.
+  CopyOrMove(int i): i(i) {}
+  CopyOrMove(CopyOrMove&& other): i(other.i) { i = -1; }
+  CopyOrMove(const CopyOrMove&) = default;
+
+  int i;
+};
+
 TEST(Common, Maybe) {
   {
     Maybe<int> m = 123;
@@ -61,6 +75,23 @@ TEST(Common, Maybe) {
       ADD_FAILURE();
     }
     EXPECT_EQ(123, m.orDefault(456));
+  }
+
+  {
+    Maybe<int> m = 0;
+    EXPECT_FALSE(m == nullptr);
+    EXPECT_TRUE(m != nullptr);
+    KJ_IF_MAYBE(v, m) {
+      EXPECT_EQ(0, *v);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, mv(m)) {
+      EXPECT_EQ(0, *v);
+    } else {
+      ADD_FAILURE();
+    }
+    EXPECT_EQ(0, m.orDefault(456));
   }
 
   {
@@ -169,38 +200,6 @@ TEST(Common, Maybe) {
   }
 
   {
-    Maybe<int> m = &i;
-    EXPECT_FALSE(m == nullptr);
-    EXPECT_TRUE(m != nullptr);
-    KJ_IF_MAYBE(v, m) {
-      EXPECT_NE(v, &i);
-      EXPECT_EQ(234, *v);
-    } else {
-      ADD_FAILURE();
-    }
-    KJ_IF_MAYBE(v, mv(m)) {
-      EXPECT_NE(v, &i);
-      EXPECT_EQ(234, *v);
-    } else {
-      ADD_FAILURE();
-    }
-  }
-
-  {
-    Maybe<int> m = implicitCast<int*>(nullptr);
-    EXPECT_TRUE(m == nullptr);
-    EXPECT_FALSE(m != nullptr);
-    KJ_IF_MAYBE(v, m) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, *v);  // avoid unused warning
-    }
-    KJ_IF_MAYBE(v, mv(m)) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, *v);  // avoid unused warning
-    }
-  }
-
-  {
     // Test a case where an implicit conversion didn't used to happen correctly.
     Maybe<ImplicitToInt> m(ImplicitToInt { 123 });
     Maybe<uint> m2(m);
@@ -215,6 +214,25 @@ TEST(Common, Maybe) {
     } else {
       ADD_FAILURE();
     }
+  }
+
+  {
+    // Test usage of immovable types.
+    Maybe<Immovable> m;
+    KJ_EXPECT(m == nullptr);
+    m.emplace();
+    KJ_EXPECT(m != nullptr);
+    m = nullptr;
+    KJ_EXPECT(m == nullptr);
+  }
+
+  {
+    // Test that initializing Maybe<T> from Maybe<T&>&& does a copy, not a move.
+    CopyOrMove x(123);
+    Maybe<CopyOrMove&> m(x);
+    Maybe<CopyOrMove> m2 = kj::mv(m);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m).i == 123);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m2).i == 123);
   }
 }
 

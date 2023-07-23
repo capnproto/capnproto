@@ -175,5 +175,27 @@ KJ_TEST("InputStream::readAllText() / readAllBytes()") {
   }
 }
 
+KJ_TEST("ArrayOutputStream::write() does not assume adjacent write buffer is its own") {
+  // Previously, if ArrayOutputStream::write(src, size) saw that `src` equaled its fill position, it
+  // would assume that the write was already in its buffer. This assumption was buggy if the write
+  // buffer was directly adjacent in memory to the ArrayOutputStream's buffer, and the
+  // ArrayOutputStream was full (i.e., its fill position was one-past-the-end).
+  //
+  // VectorOutputStream also suffered a similar bug, but it is much harder to test, since it
+  // performs its own allocation.
+
+  kj::byte buffer[10] = { 0 };
+
+  ArrayOutputStream output(arrayPtr(buffer, buffer + 5));
+
+  // Succeeds and fills the ArrayOutputStream.
+  output.write(buffer + 5, 5);
+
+  // Previously this threw an inscrutable "size <= array.end() - fillPos" requirement failure.
+  KJ_EXPECT_THROW_MESSAGE(
+      "backing array was not large enough for the data written",
+      output.write(buffer + 5, 5));
+}
+
 }  // namespace
 }  // namespace kj

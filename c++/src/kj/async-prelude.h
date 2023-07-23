@@ -24,12 +24,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "exception.h"
 #include "tuple.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -67,6 +65,12 @@ using ReducePromises = decltype(reducePromiseType((T*)nullptr, false));
 // Like ChainPromises, but also takes into account whether T has a method `reducePromise` that
 // reduces Promise<T> to something else. In particular this allows Promise<capnp::RemotePromise<U>>
 // to reduce to capnp::RemotePromise<U>.
+
+template <typename T> struct UnwrapPromise_;
+template <typename T> struct UnwrapPromise_<Promise<T>> { typedef T Type; };
+
+template <typename T>
+using UnwrapPromise = typename UnwrapPromise_<T>::Type;
 
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
@@ -184,8 +188,10 @@ class PromiseNode;
 class ChainPromiseNode;
 template <typename T>
 class ForkHub;
+class FiberBase;
 
 class Event;
+class XThreadEvent;
 
 class PromiseBase {
 public:
@@ -198,31 +204,27 @@ private:
   PromiseBase() = default;
   PromiseBase(Own<PromiseNode>&& node): node(kj::mv(node)) {}
 
-  friend class kj::EventLoop;
-  friend class ChainPromiseNode;
   template <typename>
   friend class kj::Promise;
-  friend class kj::TaskSet;
-  template <typename U>
-  friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
-  friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
+  friend class PromiseNode;
 };
 
 void detach(kj::Promise<void>&& promise);
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope);
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope);
 Promise<void> yield();
+Promise<void> yieldHarder();
 Own<PromiseNode> neverDone();
 
 class NeverDone {
 public:
   template <typename T>
-  operator Promise<T>() const {
-    return Promise<T>(false, neverDone());
-  }
+  operator Promise<T>() const;
 
   KJ_NORETURN(void wait(WaitScope& waitScope) const);
 };
 
 }  // namespace _ (private)
 }  // namespace kj
+
+KJ_END_HEADER

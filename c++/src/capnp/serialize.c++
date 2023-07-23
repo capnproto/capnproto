@@ -26,7 +26,7 @@
 
 namespace capnp {
 
-FlatArrayMessageReader::FlatArrayMessageReader(
+UnalignedFlatArrayMessageReader::UnalignedFlatArrayMessageReader(
     kj::ArrayPtr<const word> array, ReaderOptions options)
     : MessageReader(options), end(array.end()) {
   if (array.size() < 1) {
@@ -98,7 +98,7 @@ size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> array) {
   return totalSize;
 }
 
-kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
+kj::ArrayPtr<const word> UnalignedFlatArrayMessageReader::getSegment(uint id) {
   if (id == 0) {
     return segment0;
   } else if (id <= moreSegments.size()) {
@@ -106,6 +106,15 @@ kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
   } else {
     return nullptr;
   }
+}
+
+kj::ArrayPtr<const word> FlatArrayMessageReader::checkAlignment(kj::ArrayPtr<const word> array) {
+  KJ_REQUIRE((uintptr_t)array.begin() % sizeof(void*) == 0,
+      "Input to FlatArrayMessageReader is not aligned. If your architecture supports unaligned "
+      "access (e.g. x86/x64/modern ARM), you may use UnalignedFlatArrayMessageReader instead, "
+      "though this may harm performance.");
+
+  return array;
 }
 
 kj::ArrayPtr<const word> initMessageBuilderFromFlatArrayCopy(

@@ -389,6 +389,17 @@ TEST(SchemaLoader, Generics) {
   }
 }
 
+TEST(SchemaLoader, LoadStreaming) {
+  SchemaLoader loader;
+
+  InterfaceSchema schema =
+      loader.load(Schema::from<test::TestStreaming>().getProto()).asInterface();
+
+  auto results = schema.getMethodByName("doStreamI").getResultType();
+  KJ_EXPECT(results.isStreamResult());
+  KJ_EXPECT(results.getShortDisplayName() == "StreamResult", results.getShortDisplayName());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

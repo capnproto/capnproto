@@ -22,6 +22,7 @@
 #include "json.h"
 #include <capnp/test-util.h>
 #include <capnp/compat/json.capnp.h>
+#include <capnp/compat/json-test.capnp.h>
 #include <kj/debug.h>
 #include <kj/string.h>
 #include <kj/test.h>
@@ -280,6 +281,9 @@ KJ_TEST("decode all types") {
   CASE_NO_ROUNDTRIP(R"({"structField":{"boolField":false}})", root.getStructField().getBoolField() == false);
   CASE(R"({"structField":{"boolField":true}})", root.getStructField().getBoolField() == true);
   CASE(R"({"enumField":"bar"})", root.getEnumField() == TestEnum::BAR);
+
+  CASE_NO_ROUNDTRIP(R"({"textField":"foo\u1234bar"})",
+      kj::str(u8"foo\u1234bar") == root.getTextField());
 
   CASE_THROW_RECOVERABLE(R"({"structField":null})", "Expected object value");
   CASE_THROW_RECOVERABLE(R"({"structList":null})", "Expected list value");
@@ -820,6 +824,170 @@ KJ_TEST("register capability handler") {
   TestCapabilityHandler handler;
   JsonCodec json;
   json.addTypeHandler(handler);
+}
+
+static constexpr kj::StringPtr GOLDEN_ANNOTATED =
+R"({ "names-can_contain!anything Really": "foo",
+  "flatFoo": 123,
+  "flatBar": "abc",
+  "renamed-flatBaz": {"hello": true},
+  "flatQux": "cba",
+  "pfx.foo": "this is a long string in order to force multi-line pretty printing",
+  "pfx.renamed-bar": 321,
+  "pfx.baz": {"hello": true},
+  "pfx.xfp.qux": "fed",
+  "union-type": "renamed-bar",
+  "barMember": 789,
+  "multiMember": "ghi",
+  "dependency": {"renamed-foo": "corge"},
+  "simpleGroup": {"renamed-grault": "garply"},
+  "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
+  "innerJson": [123, "hello", {"object": true}],
+  "customFieldHandler": "add-prefix-waldo",
+  "testBase64": "ZnJlZA==",
+  "testHex": "706c756768",
+  "bUnion": "renamed-bar",
+  "bValue": 678,
+  "externalUnion": {"type": "bar", "value": "cba"},
+  "unionWithVoid": {"type": "voidValue"} })"_kj;
+
+static constexpr kj::StringPtr GOLDEN_ANNOTATED_REVERSE =
+R"({
+  "unionWithVoid": {"type": "voidValue"},
+  "externalUnion": {"type": "bar", "value": "cba"},
+  "bValue": 678,
+  "bUnion": "renamed-bar",
+  "testHex": "706c756768",
+  "testBase64": "ZnJlZA==",
+  "customFieldHandler": "add-prefix-waldo",
+  "innerJson": [123, "hello", {"object": true}],
+  "enums": ["qux", "renamed-bar", "foo", "renamed-baz"],
+  "simpleGroup": { "renamed-grault": "garply" },
+  "dependency": { "renamed-foo": "corge" },
+  "multiMember": "ghi",
+  "barMember": 789,
+  "union-type": "renamed-bar",
+  "pfx.xfp.qux": "fed",
+  "pfx.baz": {"hello": true},
+  "pfx.renamed-bar": 321,
+  "pfx.foo": "this is a long string in order to force multi-line pretty printing",
+  "flatQux": "cba",
+  "renamed-flatBaz": {"hello": true},
+  "flatBar": "abc",
+  "flatFoo": 123,
+  "names-can_contain!anything Really": "foo"
+})"_kj;
+
+class PrefixAdder: public JsonCodec::Handler<capnp::Text> {
+public:
+  void encode(const JsonCodec& codec, capnp::Text::Reader input, JsonValue::Builder output) const {
+    output.setString(kj::str("add-prefix-", input));
+  }
+
+  Orphan<capnp::Text> decode(const JsonCodec& codec, JsonValue::Reader input,
+                             Orphanage orphanage) const {
+    return orphanage.newOrphanCopy(capnp::Text::Reader(input.getString().slice(11)));
+  }
+};
+
+KJ_TEST("rename fields") {
+  JsonCodec json;
+  json.handleByAnnotation<TestJsonAnnotations>();
+  json.setPrettyPrint(true);
+
+  PrefixAdder customHandler;
+  json.addFieldHandler(Schema::from<TestJsonAnnotations>().getFieldByName("customFieldHandler"),
+                       customHandler);
+
+  kj::String goldenText;
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestJsonAnnotations>();
+    root.setSomeField("foo");
+
+    auto aGroup = root.getAGroup();
+    aGroup.setFlatFoo(123);
+    aGroup.setFlatBar("abc");
+    aGroup.getFlatBaz().setHello(true);
+    aGroup.getDoubleFlat().setFlatQux("cba");
+
+    auto prefixedGroup = root.getPrefixedGroup();
+    prefixedGroup.setFoo("this is a long string in order to force multi-line pretty printing");
+    prefixedGroup.setBar(321);
+    prefixedGroup.getBaz().setHello(true);
+    prefixedGroup.getMorePrefix().setQux("fed");
+
+    auto unionBar = root.getAUnion().initBar();
+    unionBar.setBarMember(789);
+    unionBar.setMultiMember("ghi");
+
+    root.initDependency().setFoo("corge");
+    root.initSimpleGroup().setGrault("garply");
+
+    root.setEnums({
+      TestJsonAnnotatedEnum::QUX,
+      TestJsonAnnotatedEnum::BAR,
+      TestJsonAnnotatedEnum::FOO,
+      TestJsonAnnotatedEnum::BAZ
+    });
+
+    auto val = root.initInnerJson();
+    auto arr = val.initArray(3);
+    arr[0].setNumber(123);
+    arr[1].setString("hello");
+    auto field = arr[2].initObject(1)[0];
+    field.setName("object");
+    field.initValue().setBoolean(true);
+
+    root.setCustomFieldHandler("waldo");
+
+    root.setTestBase64("fred"_kj.asBytes());
+    root.setTestHex("plugh"_kj.asBytes());
+
+    root.getBUnion().setBar(678);
+
+    root.initExternalUnion().initBar().setValue("cba");
+
+    root.initUnionWithVoid().setVoidValue();
+
+    auto encoded = json.encode(root.asReader());
+    KJ_EXPECT(encoded == GOLDEN_ANNOTATED, encoded);
+
+    goldenText = kj::str(root);
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestJsonAnnotations>();
+    json.decode(GOLDEN_ANNOTATED, root);
+
+    KJ_EXPECT(kj::str(root) == goldenText, root, goldenText);
+  }
+
+  {
+    // Try parsing in reverse, mostly to test that union tags can come after content.
+    MallocMessageBuilder message;
+    auto root = message.getRoot<TestJsonAnnotations>();
+    json.decode(GOLDEN_ANNOTATED_REVERSE, root);
+
+    KJ_EXPECT(kj::str(root) == goldenText, root, goldenText);
+  }
+}
+
+KJ_TEST("base64 union encoded correctly") {
+  // At one point field handlers were not correctly applied when the field was a member of a union
+  // in a type that was handled by annotation.
+
+  JsonCodec json;
+  json.handleByAnnotation<TestBase64Union>();
+  json.setPrettyPrint(true);
+
+  MallocMessageBuilder message;
+  auto root = message.getRoot<TestBase64Union>();
+  root.initFoo(5);
+
+  KJ_EXPECT(json.encode(root) == "{\"foo\": \"AAAAAAA=\"}", json.encode(root));
 }
 
 }  // namespace

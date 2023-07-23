@@ -28,15 +28,14 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <kj/common.h>
 #include <kj/memory.h>
 #include "common.h"
 #include "blob.h"
 #include "endian.h"
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+
+CAPNP_BEGIN_HEADER
 
 #if (defined(__mips__) || defined(__hppa__)) && !defined(CAPNP_CANONICALIZE_NAN)
 #define CAPNP_CANONICALIZE_NAN 1
@@ -1270,3 +1269,5 @@ inline OrphanBuilder& OrphanBuilder::operator=(OrphanBuilder&& other) {
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

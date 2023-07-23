@@ -21,16 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "layout.h"
 #include "orphan.h"
 #include <initializer_list>
-#ifdef KJ_STD_COMPAT
-#include <iterator>
-#endif  // KJ_STD_COMPAT
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 namespace _ {  // private
@@ -51,6 +46,8 @@ private:
   T value;
 };
 
+// By default this isn't compatible with STL algorithms. To add STL support either define
+// KJ_STD_COMPAT at the top of your compilation unit or include capnp/compat/std-iterator.h.
 template <typename Container, typename Element>
 class IndexingIterator {
 public:
@@ -549,11 +546,7 @@ private:
 }  // namespace capnp
 
 #ifdef KJ_STD_COMPAT
-namespace std {
-
-template <typename Container, typename Element>
-struct iterator_traits<capnp::_::IndexingIterator<Container, Element>>
-      : public std::iterator<std::random_access_iterator_tag, Element, int> {};
-
-}  // namespace std
+#include "compat/std-iterator.h"
 #endif  // KJ_STD_COMPAT
+
+CAPNP_END_HEADER

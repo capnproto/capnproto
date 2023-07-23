@@ -27,6 +27,11 @@
 
 namespace capnp {
 
+typedef json::Value JsonValue;
+// For backwards-compatibility.
+//
+// TODO(cleanup): Consider replacing all uses of JsonValue with json::Value?
+
 class JsonCodec {
   // Flexible class for encoding Cap'n Proto types as JSON, and decoding JSON back to Cap'n Proto.
   //
@@ -198,6 +203,16 @@ public:
   void addFieldHandler(StructSchema::Field field, Handler<T>& handler);
   // Matches only the specific field. T can be a dynamic type. T must match the field's type.
 
+  void handleByAnnotation(Schema schema);
+  template <typename T> void handleByAnnotation();
+  // Inspects the given type (as specified by type parameter or dynamic schema) and all its
+  // dependencies looking for JSON annotations (see json.capnp), building and registering Handlers
+  // based on these annotations.
+  //
+  // If you'd like to use annotations to control JSON, you must call these functions before you
+  // start using the codec. They are not loaded "on demand" because that would require mutex
+  // locking.
+
   // ---------------------------------------------------------------------------
   // Hack to support string literal parameters
 
@@ -214,6 +229,11 @@ public:
 
 private:
   class HandlerBase;
+  class AnnotatedHandler;
+  class AnnotatedEnumHandler;
+  class Base64Handler;
+  class HexHandler;
+  class JsonValueHandler;
   struct Impl;
 
   kj::Own<Impl> impl;
@@ -222,8 +242,16 @@ private:
                    JsonValue::Builder output) const;
   Orphan<DynamicList> decodeArray(List<JsonValue>::Reader input, ListSchema type, Orphanage orphanage) const;
   void decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const;
+  void decodeField(StructSchema::Field fieldSchema, JsonValue::Reader fieldValue,
+                   Orphanage orphanage, DynamicStruct::Builder output) const;
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
+
+  AnnotatedHandler& loadAnnotatedHandler(
+      StructSchema schema,
+      kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
+      kj::Maybe<kj::StringPtr> unionDeclName,
+      kj::Vector<Schema>& dependencies);
 };
 
 // =======================================================================================
@@ -273,6 +301,12 @@ template <typename T>
 void JsonCodec::encode(T&& value, JsonValue::Builder output) const {
   typedef FromAny<kj::Decay<T>> Base;
   encode(DynamicValue::Reader(ReaderFor<Base>(kj::fwd<T>(value))), Type::from<Base>(), output);
+}
+
+template <>
+inline void JsonCodec::encode<DynamicStruct::Reader>(
+      DynamicStruct::Reader&& value, JsonValue::Builder output) const {
+  encode(DynamicValue::Reader(value), value.getSchema(), output);
 }
 
 template <typename T>
@@ -479,5 +513,10 @@ template <> void JsonCodec::addTypeHandler(Handler<DynamicCapability>& handler)
                    "try specifying a specific type schema as the first parameter");
 // TODO(someday): Implement support for registering handlers that cover thinsg like "all structs"
 //   or "all lists". Currently you can only target a specific struct or list type.
+
+template <typename T>
+void JsonCodec::handleByAnnotation() {
+  return handleByAnnotation(Schema::from<T>());
+}
 
 } // namespace capnp

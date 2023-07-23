@@ -21,13 +21,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "debug.h"
 #include "vector.h"
 #include "function.h"
+#include "windows-sanity.h"  // work-around macro conflict with `ERROR`
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -97,7 +96,7 @@ private:
 #if KJ_NO_EXCEPTIONS
 #define KJ_EXPECT_THROW(type, code) \
   do { \
-    KJ_EXPECT(::kj::_::expectFatalThrow(type, nullptr, [&]() { code; })); \
+    KJ_EXPECT(::kj::_::expectFatalThrow(::kj::Exception::Type::type, nullptr, [&]() { code; })); \
   } while (false)
 #define KJ_EXPECT_THROW_MESSAGE(message, code) \
   do { \
@@ -162,3 +161,5 @@ private:
 
 }  // namespace _ (private)
 }  // namespace kj
+
+KJ_END_HEADER

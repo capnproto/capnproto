@@ -23,12 +23,12 @@
 //
 // If Cap'n Proto is installed, build the sample like:
 //   capnp compile -oc++ addressbook.capnp
-//   c++ -std=c++11 -Wall addressbook.c++ addressbook.capnp.c++ `pkg-config --cflags --libs capnp` -o addressbook
+//   c++ -std=c++14 -Wall addressbook.c++ addressbook.capnp.c++ `pkg-config --cflags --libs capnp` -o addressbook
 //
 // If Cap'n Proto is not installed, but the source is located at $SRC and has been
 // compiled in $BUILD (often both are simply ".." from here), you can do:
 //   $BUILD/capnp compile -I$SRC/src -o$BUILD/capnpc-c++ addressbook.capnp
-//   c++ -std=c++11 -Wall addressbook.c++ addressbook.capnp.c++ -I$SRC/src -L$BUILD/.libs -lcapnp -lkj -o addressbook
+//   c++ -std=c++14 -Wall addressbook.c++ addressbook.capnp.c++ -I$SRC/src -L$BUILD/.libs -lcapnp -lkj -o addressbook
 //
 // Run like:
 //   ./addressbook write | ./addressbook read

@@ -25,19 +25,25 @@
 #error "This file is Unix-specific. On Windows, include async-win32.h instead."
 #endif
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "async.h"
 #include "timer.h"
 #include "vector.h"
 #include "io.h"
 #include <signal.h>
 
+KJ_BEGIN_HEADER
+
 #if __linux__ && !__BIONIC__ && !defined(KJ_USE_EPOLL)
 // Default to epoll on Linux, except on Bionic (Android) which doesn't have signalfd.h.
 #define KJ_USE_EPOLL 1
+#endif
+
+#if __CYGWIN__ && !defined(KJ_USE_PIPE_FOR_WAKEUP)
+// Cygwin has serious issues with the intersection of signals and threads, reported here:
+//     https://cygwin.com/ml/cygwin/2019-07/msg00052.html
+// On Cygwin, therefore, we do not use signals to wake threads. Instead, each thread allocates a
+// pipe, and we write a byte to the pipe to wake the thread... ick.
+#define KJ_USE_PIPE_FOR_WAKEUP 1
 #endif
 
 namespace kj {
@@ -142,12 +148,12 @@ private:
   class SignalPromiseAdapter;
   class ChildExitPromiseAdapter;
 
+  const MonotonicClock& clock;
   TimerImpl timerImpl;
 
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
 
-  TimePoint readClock();
   void gotSignal(const siginfo_t& siginfo);
 
   friend class TimerPromiseAdapter;
@@ -169,7 +175,12 @@ private:
   FdObserver* observersHead = nullptr;
   FdObserver** observersTail = &observersHead;
 
+#if KJ_USE_PIPE_FOR_WAKEUP
+  AutoCloseFd wakePipeIn;
+  AutoCloseFd wakePipeOut;
+#else
   unsigned long long threadId;  // actually pthread_t
+#endif
 #endif
 
   struct ChildSet;
@@ -278,6 +289,9 @@ public:
   // WARNING: This has some known weird behavior on macOS. See
   //   https://github.com/sandstorm-io/capnproto/issues/374.
 
+  Promise<void> whenWriteDisconnected();
+  // Resolves when poll() on the file descriptor reports POLLHUP or POLLERR.
+
 private:
   UnixEventPort& eventPort;
   int fd;
@@ -286,6 +300,7 @@ private:
   kj::Maybe<Own<PromiseFulfiller<void>>> readFulfiller;
   kj::Maybe<Own<PromiseFulfiller<void>>> writeFulfiller;
   kj::Maybe<Own<PromiseFulfiller<void>>> urgentFulfiller;
+  kj::Maybe<Own<PromiseFulfiller<void>>> hupFulfiller;
   // Replaced each time `whenBecomesReadable()` or `whenBecomesWritable()` is called. Reverted to
   // null every time an event is fired.
 
@@ -306,3 +321,5 @@ private:
 };
 
 }  // namespace kj
+
+KJ_END_HEADER

@@ -21,10 +21,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include <capnp/test.capnp.h>
 #include <iostream>
 #include "blob.h"
@@ -32,7 +28,10 @@
 
 #if !CAPNP_LITE
 #include "dynamic.h"
+#include <kj/io.h>
 #endif  // !CAPNP_LITE
+
+CAPNP_BEGIN_HEADER
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnproto_test {
@@ -274,6 +273,8 @@ public:
 
   kj::Promise<void> getEnormousString(GetEnormousStringContext context) override;
 
+  kj::Promise<void> writeToFd(WriteToFdContext context) override;
+
 private:
   int& callCount;
   int& handleCount;
@@ -303,7 +304,57 @@ private:
   TestInterfaceImpl impl;
 };
 
+class TestFdCap final: public test::TestInterface::Server {
+  // Implementation of TestInterface that wraps a file descriptor.
+
+public:
+  TestFdCap(kj::AutoCloseFd fd): fd(kj::mv(fd)) {}
+
+  kj::Maybe<int> getFd() override { return fd.get(); }
+
+private:
+  kj::AutoCloseFd fd;
+};
+
+class TestStreamingImpl final: public test::TestStreaming::Server {
+public:
+  uint iSum = 0;
+  uint jSum = 0;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
+  bool jShouldThrow = false;
+
+  kj::Promise<void> doStreamI(DoStreamIContext context) override {
+    iSum += context.getParams().getI();
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  kj::Promise<void> doStreamJ(DoStreamJContext context) override {
+    context.allowCancellation();
+    jSum += context.getParams().getJ();
+
+    if (jShouldThrow) {
+      KJ_FAIL_ASSERT("throw requested") { break; }
+      return kj::READY_NOW;
+    }
+
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  kj::Promise<void> finishStream(FinishStreamContext context) override {
+    auto results = context.getResults();
+    results.setTotalI(iSum);
+    results.setTotalJ(jSum);
+    return kj::READY_NOW;
+  }
+};
+
 #endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

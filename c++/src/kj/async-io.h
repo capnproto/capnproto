@@ -21,14 +21,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "async.h"
 #include "function.h"
 #include "thread.h"
 #include "timer.h"
+
+KJ_BEGIN_HEADER
 
 struct sockaddr;
 
@@ -106,6 +104,20 @@ public:
   // output stream. If it finds one, it performs the pump. Otherwise, it returns null.
   //
   // The default implementation always returns null.
+
+  virtual Promise<void> whenWriteDisconnected() = 0;
+  // Returns a promise that resolves when the stream has become disconnected such that new write()s
+  // will fail with a DISCONNECTED exception. This is particularly useful, for example, to cancel
+  // work early when it is detected that no one will receive the result.
+  //
+  // Note that not all streams are able to detect this condition without actually performing a
+  // write(); such stream implementations may return a promise that never resolves. (In particular,
+  // as of this writing, whenWriteDisconnected() is not implemented on Windows. Also, for TCP
+  // streams, not all disconnects are detectable -- a power or network failure may lead the
+  // connection to hang forever, or until configured socket options lead to a timeout.)
+  //
+  // Unlike most other asynchronous stream methods, it is safe to call whenWriteDisconnected()
+  // multiple times without canceling the previous promises.
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
@@ -161,15 +173,57 @@ class AsyncCapabilityStream: public AsyncIoStream {
   // broker, or in terms of direct handle passing if at least one process trusts the other.
 
 public:
+  virtual Promise<void> writeWithFds(ArrayPtr<const byte> data,
+                                     ArrayPtr<const ArrayPtr<const byte>> moreData,
+                                     ArrayPtr<const int> fds) = 0;
+  Promise<void> writeWithFds(ArrayPtr<const byte> data,
+                             ArrayPtr<const ArrayPtr<const byte>> moreData,
+                             ArrayPtr<const AutoCloseFd> fds);
+  // Write some data to the stream with some file descriptors attached to it.
+  //
+  // The maximum number of FDs that can be sent at a time is usually subject to an OS-imposed
+  // limit. On Linux, this is 253. In practice, sending more than a handful of FDs at once is
+  // probably a bad idea.
+
+  struct ReadResult {
+    size_t byteCount;
+    size_t capCount;
+  };
+
+  virtual Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
+                                             AutoCloseFd* fdBuffer, size_t maxFds) = 0;
+  // Read data from the stream that may have file descriptors attached. Any attached descriptors
+  // will be placed in `fdBuffer`. If multiple bundles of FDs are encountered in the course of
+  // reading the amount of data requested by minBytes/maxBytes, then they will be concatenated. If
+  // more FDs are received than fit in the buffer, then the excess will be discarded and closed --
+  // this behavior, while ugly, is important to defend against denial-of-service attacks that may
+  // fill up the FD table with garbage. Applications must think carefully about how many FDs they
+  // really need to receive at once and set a well-defined limit.
+
+  virtual Promise<void> writeWithStreams(ArrayPtr<const byte> data,
+                                         ArrayPtr<const ArrayPtr<const byte>> moreData,
+                                         Array<Own<AsyncCapabilityStream>> streams) = 0;
+  virtual Promise<ReadResult> tryReadWithStreams(
+      void* buffer, size_t minBytes, size_t maxBytes,
+      Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) = 0;
+  // Like above, but passes AsyncCapabilityStream objects. The stream implementations must be from
+  // the same AsyncIoProvider.
+
+  // ---------------------------------------------------------------------------
+  // Helpers for sending individual capabilities.
+  //
+  // These are equivalent to the above methods with the constraint that only one FD is
+  // sent/received at a time and the corresponding data is a single zero-valued byte.
+
   Promise<Own<AsyncCapabilityStream>> receiveStream();
-  virtual Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream() = 0;
-  virtual Promise<void> sendStream(Own<AsyncCapabilityStream> stream) = 0;
-  // Transfer a stream.
+  Promise<Maybe<Own<AsyncCapabilityStream>>> tryReceiveStream();
+  Promise<void> sendStream(Own<AsyncCapabilityStream> stream);
+  // Transfer a single stream.
 
   Promise<AutoCloseFd> receiveFd();
-  virtual Promise<Maybe<AutoCloseFd>> tryReceiveFd();
-  virtual Promise<void> sendFd(int fd);
-  // Transfer a raw file descriptor. Default implementation throws UNIMPLEMENTED.
+  Promise<Maybe<AutoCloseFd>> tryReceiveFd();
+  Promise<void> sendFd(int fd);
+  // Transfer a single raw file descriptor.
 };
 
 struct OneWayPipe {
@@ -203,6 +257,35 @@ struct CapabilityPipe {
   Own<AsyncCapabilityStream> ends[2];
 };
 
+struct Tee {
+  // Two AsyncInputStreams which each read the same data from some wrapped inner AsyncInputStream.
+
+  Own<AsyncInputStream> branches[2];
+};
+
+Tee newTee(Own<AsyncInputStream> input, uint64_t limit = kj::maxValue);
+// Constructs a Tee that operates in-process. The tee buffers data if any read or pump operations is
+// called on one of the two input ends. If a read or pump operation is subsequently called on the
+// other input end, the buffered data is consumed.
+//
+// `pumpTo()` operations on the input ends will proactively read from the inner stream and block
+// while writing to the output stream. While one branch has an active `pumpTo()` operation, any
+// `tryRead()` operation on the other branch will not be allowed to read faster than allowed by the
+// pump's backpressure. (In other words, it will never cause buffering on the pump.) Similarly, if
+// there are `pumpTo()` operations active on both branches, the greater of the two backpressures is
+// respected -- the two pumps progress in lockstep, and there is no buffering.
+//
+// At no point will a branch's buffer be allowed to grow beyond `limit` bytes. If the buffer would
+// grow beyond the limit, an exception is generated, which both branches see once they have
+// exhausted their buffers.
+//
+// It is recommended that you use a more conservative value for `limit` than the default.
+
+Own<AsyncOutputStream> newPromisedStream(Promise<Own<AsyncOutputStream>> promise);
+Own<AsyncIoStream> newPromisedStream(Promise<Own<AsyncIoStream>> promise);
+// Constructs an Async*Stream which waits for a promise to resolve, then forwards all calls to the
+// promised stream.
+
 class ConnectionReceiver {
   // Represents a server socket listening on a port.
 
@@ -217,6 +300,7 @@ public:
 
   virtual void getsockopt(int level, int option, void* value, uint* length);
   virtual void setsockopt(int level, int option, const void* value, uint length);
+  virtual void getsockname(struct sockaddr* addr, uint* length);
   // Same as the methods of AsyncIoStream.
 };
 
@@ -766,3 +850,5 @@ inline ArrayPtr<const T> AncillaryMessage::asArray() {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

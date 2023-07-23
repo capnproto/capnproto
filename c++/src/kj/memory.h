@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -318,6 +316,13 @@ public:
 
   inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
+  inline Own<T>& emplace(Own<T> value) {
+    // Assign the Maybe to the given value and return the content. This avoids the need to do a
+    // KJ_ASSERT_NONNULL() immediately after setting the Maybe just to read it back again.
+    ptr = kj::mv(value);
+    return ptr;
+  }
+
   inline operator Maybe<T&>() { return ptr.get(); }
   inline operator Maybe<const T&>() const { return ptr.get(); }
 
@@ -426,6 +431,21 @@ Own<Decay<T>> heap(T&& orig) {
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
 
+template <typename T, typename... Attachments>
+Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments);
+// Returns an Own<T> that takes ownership of `value` and `attachments`, and points to `value`.
+//
+// This is equivalent to heap(value).attach(attachments), but only does one allocation rather than
+// two.
+
+template <typename T, typename... Attachments>
+Own<T> attachRef(T& value, Attachments&&... attachments);
+// Like attach() but `value` is not moved; the resulting Own<T> points to its existing location.
+// This is preferred if `value` is already owned by one of `attachments`.
+//
+// This is equivalent to Own<T>(&value, kj::NullDisposer::instance).attach(attachments), but
+// is easier to write and allocates slightly less memory.
+
 // =======================================================================================
 // SpaceFor<T> -- assists in manual allocation
 
@@ -519,4 +539,19 @@ Own<T> Own<T>::attach(Attachments&&... attachments) {
   return Own<T>(ptrCopy, *bundle);
 }
 
+template <typename T, typename... Attachments>
+Own<T> attachRef(T& value, Attachments&&... attachments) {
+  auto bundle = new _::DisposableOwnedBundle<Attachments...>(kj::fwd<Attachments>(attachments)...);
+  return Own<T>(&value, *bundle);
+}
+
+template <typename T, typename... Attachments>
+Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
+  auto bundle = new _::DisposableOwnedBundle<T, Attachments...>(
+      kj::fwd<T>(value), kj::fwd<Attachments>(attachments)...);
+  return Own<Decay<T>>(&bundle->first, *bundle);
+}
+
 }  // namespace kj
+
+KJ_END_HEADER

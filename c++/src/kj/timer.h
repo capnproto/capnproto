@@ -22,16 +22,14 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "time.h"
 #include "async.h"
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
-class Timer {
+class Timer: public MonotonicClock {
   // Interface to time and timer functionality.
   //
   // Each `Timer` may have a different origin, and some `Timer`s may in fact tick at a different
@@ -40,7 +38,7 @@ class Timer {
   // date as tracked by the system is manually modified.
 
 public:
-  virtual TimePoint now() = 0;
+  virtual TimePoint now() const = 0;
   // Returns the current value of a clock that moves steadily forward, independent of any
   // changes in the wall clock. The value is updated every time the event loop waits,
   // and is constant in-between waits.
@@ -99,7 +97,7 @@ public:
   // Set the time to `time` and fire any at() events that have been passed.
 
   // implements Timer ----------------------------------------------------------
-  TimePoint now() override;
+  TimePoint now() const override;
   Promise<void> atTime(TimePoint time) override;
   Promise<void> afterDelay(Duration delay) override;
 
@@ -127,6 +125,8 @@ Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
   }));
 }
 
-inline TimePoint TimerImpl::now() { return time; }
+inline TimePoint TimerImpl::now() const { return time; }
 
 }  // namespace kj
+
+KJ_END_HEADER

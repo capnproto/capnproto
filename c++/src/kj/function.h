@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -88,6 +86,15 @@ class Function;
 template <typename Signature>
 class ConstFunction;
 // Like Function, but wraps a "const" (i.e. thread-safe) call.
+
+template <typename Signature>
+class FunctionParam;
+// Like Function, but used specifically as a call parameter type. Does not do any heap allocation.
+//
+// This type MUST NOT be used for anything other than a parameter type to a function or method.
+// This is because if FunctionParam binds to a temporary, it assumes that the temporary will
+// outlive the FunctionParam instance. This is true when FunctionParam is used as a parameter type,
+// but not if it is used as a local variable nor a class member variable.
 
 template <typename Return, typename... Params>
 class Function<Return(Params...)> {
@@ -195,80 +202,92 @@ private:
   Own<Iface> impl;
 };
 
-#if 1
+template <typename Return, typename... Params>
+class FunctionParam<Return(Params...)> {
+public:
+  template <typename Func>
+  FunctionParam(Func&& func) {
+    typedef Wrapper<Decay<Func>> WrapperType;
+
+    // All instances of Wrapper<Func> are two pointers in size: a vtable, and a Func&. So if we
+    // allocate space for two pointers, we can construct a Wrapper<Func> in it!
+    static_assert(sizeof(WrapperType) == sizeof(space),
+        "expected WrapperType to be two pointers");
+
+    // Even if `func` is an rvalue reference, it's OK to use it as an lvalue here, because
+    // FunctionParam is used strictly for parameters. If we captured a temporary, we know that
+    // temporary will not be destroyed until after the function call completes.
+    ctor(*reinterpret_cast<WrapperType*>(space), func);
+  }
+
+  FunctionParam(const FunctionParam& other) = default;
+  FunctionParam(FunctionParam&& other) = default;
+  // Magically, a plain copy works.
+
+  inline Return operator()(Params... params) {
+    return (*reinterpret_cast<WrapperBase*>(space))(kj::fwd<Params>(params)...);
+  }
+
+private:
+  void* space[2];
+
+  class WrapperBase {
+  public:
+    virtual Return operator()(Params... params) = 0;
+  };
+
+  template <typename Func>
+  class Wrapper: public WrapperBase {
+  public:
+    Wrapper(Func& func): func(func) {}
+
+    inline Return operator()(Params... params) override {
+      return func(kj::fwd<Params>(params)...);
+    }
+
+  private:
+    Func& func;
+  };
+};
 
 namespace _ {  // private
 
-template <typename T, typename Signature, Signature method>
-class BoundMethod;
-
-template <typename T, typename Return, typename... Params, Return (Decay<T>::*method)(Params...)>
-class BoundMethod<T, Return (Decay<T>::*)(Params...), method> {
+template <typename T, typename Func, typename ConstFunc>
+class BoundMethod {
 public:
-  BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
+  BoundMethod(T&& t, Func&& func, ConstFunc&& constFunc)
+      : t(kj::fwd<T>(t)), func(kj::mv(func)), constFunc(kj::mv(constFunc)) {}
 
-  Return operator()(Params&&... params) {
-    return (t.*method)(kj::fwd<Params>(params)...);
+  template <typename... Params>
+  auto operator()(Params&&... params) {
+    return func(t, kj::fwd<Params>(params)...);
+  }
+  template <typename... Params>
+  auto operator()(Params&&... params) const {
+    return constFunc(t, kj::fwd<Params>(params)...);
   }
 
 private:
   T t;
+  Func func;
+  ConstFunc constFunc;
 };
 
-template <typename T, typename Return, typename... Params,
-          Return (Decay<T>::*method)(Params...) const>
-class BoundMethod<T, Return (Decay<T>::*)(Params...) const, method> {
-public:
-  BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
-
-  Return operator()(Params&&... params) const {
-    return (t.*method)(kj::fwd<Params>(params)...);
-  }
-
-private:
-  T t;
-};
+template <typename T, typename Func, typename ConstFunc>
+BoundMethod<T, Func, ConstFunc> boundMethod(T&& t, Func&& func, ConstFunc&& constFunc) {
+  return { kj::fwd<T>(t), kj::fwd<Func>(func), kj::fwd<ConstFunc>(constFunc) };
+}
 
 }  // namespace _ (private)
 
 #define KJ_BIND_METHOD(obj, method) \
-  ::kj::_::BoundMethod<KJ_DECLTYPE_REF(obj), \
-                       decltype(&::kj::Decay<decltype(obj)>::method), \
-                       &::kj::Decay<decltype(obj)>::method>(obj)
+  ::kj::_::boundMethod(obj, \
+      [](auto& s, auto&&... p) mutable { return s.method(kj::fwd<decltype(p)>(p)...); }, \
+      [](auto& s, auto&&... p) { return s.method(kj::fwd<decltype(p)>(p)...); })
 // Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
 // lvalue, the functor will hold a reference to it.  If `obj` is an rvalue, the functor will
-// contain a copy (by move) of it.
-//
-// The current implementation requires that the method is not overloaded.
-//
-// TODO(someday):  C++14's generic lambdas may be able to simplify this code considerably, and
-//   probably make it work with overloaded methods.
-
-#else
-// Here's a better implementation of the above that doesn't work with GCC (but does with Clang)
-// because it uses a local class with a template method.  Sigh.  This implementation supports
-// overloaded methods.
-
-#define KJ_BIND_METHOD(obj, method) \
-  ({ \
-    typedef KJ_DECLTYPE_REF(obj) T; \
-    class F { \
-    public: \
-      inline F(T&& t): t(::kj::fwd<T>(t)) {} \
-      template <typename... Params> \
-      auto operator()(Params&&... params) \
-          -> decltype(::kj::instance<T>().method(::kj::fwd<Params>(params)...)) { \
-        return t.method(::kj::fwd<Params>(params)...); \
-      } \
-    private: \
-      T t; \
-    }; \
-    (F(obj)); \
-  })
-// Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
-// lvalue, the functor will hold a reference to it.  If `obj` is an rvalue, the functor will
-// contain a copy (by move) of it.
-
-#endif
+// contain a copy (by move) of it. The method is allowed to be overloaded.
 
 }  // namespace kj
+
+KJ_END_HEADER

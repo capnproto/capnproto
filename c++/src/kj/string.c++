@@ -82,6 +82,23 @@ double parseDouble(const StringPtr& s) {
   errno = 0;
   auto value = strtod(s.begin(), &endPtr);
   KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s) { return 0; }
+#if _WIN32 || __CYGWIN__ || __BIONIC__
+  // When Windows' strtod() parses "nan", it returns a value with the sign bit set. But, our
+  // preferred canonical value for NaN does not have the sign bit set, and all other platforms
+  // return one without the sign bit set. So, on Windows, detect NaN and return our preferred
+  // version.
+  //
+  // Cygwin seemingly does not try to emulate Linux behavior here, but rather allows Windows'
+  // behavior to leak through. (Conversely, WINE actually produces the Linux behavior despite
+  // trying to behave like Win32...)
+  //
+  // Bionic (Android) failed the unit test and so I added it to the list without investigating
+  // further.
+  if (isNaN(value)) {
+    // NaN
+    return kj::nan();
+  }
+#endif
   return value;
 }
 

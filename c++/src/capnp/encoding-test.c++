@@ -1955,6 +1955,19 @@ TEST(Encoding, ListSize) {
   EXPECT_EQ(structSize.wordCount - shallowSize, listSizes.wordCount);
 }
 
+KJ_TEST("list.setWithCaveats(i, list[i]) doesn't corrupt contents") {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+  auto list = root.initStructList(2);
+  initTestMessage(list[0]);
+  list.setWithCaveats(0, list[0]);
+  checkTestMessage(list[0]);
+  checkTestMessageAllZero(list[1]);
+  list.setWithCaveats(1, list[0]);
+  checkTestMessage(list[0]);
+  checkTestMessage(list[1]);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

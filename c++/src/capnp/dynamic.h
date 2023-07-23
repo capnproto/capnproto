@@ -32,15 +32,14 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "schema.h"
 #include "layout.h"
 #include "message.h"
 #include "any.h"
 #include "capability.h"
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -261,7 +260,7 @@ public:
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
 
-  inline operator AnyStruct::Reader() { return AnyStruct::Builder(builder); }
+  inline operator AnyStruct::Builder() { return AnyStruct::Builder(builder); }
 
   inline MessageSize totalSize() const { return asReader().totalSize(); }
 
@@ -530,8 +529,8 @@ public:
   virtual kj::Promise<void> call(InterfaceSchema::Method method,
                                  CallContext<DynamicStruct, DynamicStruct> context) = 0;
 
-  kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
-                                 CallContext<AnyPointer, AnyPointer> context) override final;
+  DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                  CallContext<AnyPointer, AnyPointer> context) override final;
 
   inline InterfaceSchema getSchema() const { return schema; }
 
@@ -550,6 +549,10 @@ public:
 
   RemotePromise<DynamicStruct> send();
   // Send the call and return a promise for the results.
+
+  kj::Promise<void> sendStreaming();
+  // Use when the caller is aware that the response type is StreamResult and wants to invoke
+  // streaming behavior. It is an error to call this if the response type is not StreamResult.
 
 private:
   kj::Own<RequestHook> hook;
@@ -582,6 +585,9 @@ public:
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
   void allowCancellation();
+
+  StructSchema getParamsType() const { return paramType; }
+  StructSchema getResultsType() const { return resultType; }
 
 private:
   CallContextHook* hook;
@@ -1670,3 +1676,5 @@ ReaderFor<T> ConstSchema::as() const {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

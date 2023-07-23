@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -208,3 +206,5 @@ ArrayBuilder<T> Arena::allocateOwnArrayBuilder(size_t capacity) {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

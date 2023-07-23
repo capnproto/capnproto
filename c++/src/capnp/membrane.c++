@@ -219,6 +219,18 @@ public:
     return RemotePromise<AnyPointer>(kj::mv(newPromise), kj::mv(newPipeline));
   }
 
+  kj::Promise<void> sendStreaming() override {
+    auto promise = inner->sendStreaming();
+
+    KJ_IF_MAYBE(r, policy->onRevoked()) {
+      promise = promise.exclusiveJoin(r->then([]() {
+        KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
+      }));
+    }
+
+    return promise;
+  }
+
   const void* getBrand() override {
     return MEMBRANE_BRAND;
   }
@@ -250,7 +262,7 @@ public:
   }
 
   void releaseParams() override {
-    KJ_REQUIRE(!releasedParams);
+    // Note that releaseParams() is idempotent -- it can be called multiple times.
     releasedParams = true;
     inner->releaseParams();
   }
@@ -467,6 +479,13 @@ public:
 
   const void* getBrand() override {
     return MEMBRANE_BRAND;
+  }
+
+  kj::Maybe<int> getFd() override {
+    // We can't let FDs pass over membranes because we have no way to enforce the membrane policy
+    // on them. If the MembranePolicy wishes to explicitly permit certain FDs to pass, it can
+    // always do so by overriding the appropriate policy methods.
+    return nullptr;
   }
 
 private:

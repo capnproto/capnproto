@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "string.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -217,3 +215,5 @@ StringTree strTree(Params&&... params) {
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

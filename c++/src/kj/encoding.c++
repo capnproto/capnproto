@@ -249,6 +249,13 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
 
 namespace {
 
+#if __GNUC__ >= 8 && !__clang__
+// GCC 8's new class-memaccess warning rightly dislikes the following hacks, but we're really sure
+// we want to allow them so disable the warning.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 template <typename To, typename From>
 Array<To> coerceTo(Array<From>&& array) {
   static_assert(sizeof(To) == sizeof(From), "incompatible coercion");
@@ -268,6 +275,10 @@ template <typename To, typename From>
 EncodingResult<Array<To>> coerceTo(EncodingResult<Array<From>>&& result) {
   return { coerceTo<To>(Array<From>(kj::mv(result))), result.hadErrors };
 }
+
+#if __GNUC__ >= 8 && !__clang__
+#pragma GCC diagnostic pop
+#endif
 
 template <size_t s>
 struct WideConverter;
@@ -728,6 +739,7 @@ int base64_encode_block(const char* plaintext_in, int length_in,
       result = (fragment & 0x0fc) >> 2;
       *codechar++ = base64_encode_value(result);
       result = (fragment & 0x003) << 4;
+      // fallthrough
   case step_B:
       if (plainchar == plaintextend) {
         state_in->result = result;
@@ -738,6 +750,7 @@ int base64_encode_block(const char* plaintext_in, int length_in,
       result |= (fragment & 0x0f0) >> 4;
       *codechar++ = base64_encode_value(result);
       result = (fragment & 0x00f) << 2;
+      // fallthrough
   case step_C:
       if (plainchar == plaintextend) {
         state_in->result = result;
@@ -907,6 +920,7 @@ int base64_decode_block(const char* code_in, const int length_in,
         ERROR_IF(fragment < -1);
       } while (fragment < 0);
       *plainchar    = (fragment & 0x03f) << 2;
+      // fallthrough
   case step_b:
       do {
         if (codechar == code_in+length_in) {
@@ -924,6 +938,7 @@ int base64_decode_block(const char* code_in, const int length_in,
       } while (fragment < 0);
       *plainchar++ |= (fragment & 0x030) >> 4;
       *plainchar    = (fragment & 0x00f) << 4;
+      // fallthrough
   case step_c:
       do {
         if (codechar == code_in+length_in) {
@@ -943,6 +958,7 @@ int base64_decode_block(const char* code_in, const int length_in,
       ERROR_IF(state_in->nPaddingBytesSeen > 0);
       *plainchar++ |= (fragment & 0x03c) >> 2;
       *plainchar    = (fragment & 0x003) << 6;
+      // fallthrough
   case step_d:
       do {
         if (codechar == code_in+length_in) {
@@ -983,6 +999,26 @@ EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> input) {
   }
 
   return EncodingResult<Array<byte>>(kj::mv(output), state.hadErrors);
+}
+
+String encodeBase64Url(ArrayPtr<const byte> bytes) {
+  // TODO(perf): Rewrite as single pass?
+  // TODO(someday): Write decoder?
+
+  auto base64 = kj::encodeBase64(bytes);
+
+  for (char& c: base64) {
+    if (c == '+') c = '-';
+    if (c == '/') c = '_';
+  }
+
+  // Remove trailing '='s.
+  kj::ArrayPtr<const char> slice = base64;
+  while (slice.size() > 0 && slice.back() == '=') {
+    slice = slice.slice(0, slice.size() - 1);
+  }
+
+  return kj::str(slice);
 }
 
 } // namespace kj

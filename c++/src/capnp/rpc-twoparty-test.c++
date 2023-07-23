@@ -21,12 +21,27 @@
 
 #define CAPNP_TESTING_CAPNP 1
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "rpc-twoparty.h"
 #include "test-util.h"
 #include <capnp/rpc.capnp.h>
 #include <kj/debug.h>
 #include <kj/thread.h>
 #include <kj/compat/gtest.h>
+#include <kj/miniposix.h>
+
+// Includes just for need SOL_SOCKET and SO_SNDBUF
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#include <winsock2.h>
+#include <mswsock.h>
+#include <kj/windows-sanity.h>
+#else
+#include <sys/socket.h>
+#endif
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnp {
@@ -417,6 +432,313 @@ TEST(TwoPartyNetwork, BootstrapFactory) {
       .getCallerIdRequest().send().wait(ioContext.waitScope);
   EXPECT_EQ(rpc::twoparty::Side::CLIENT, resp.getCaller().getSide());
   EXPECT_TRUE(bootstrapFactory.called);
+}
+
+// =======================================================================================
+
+#if !_WIN32 && !__CYGWIN__  // Windows and Cygwin don't support SCM_RIGHTS.
+KJ_TEST("send FD over RPC") {
+  auto io = kj::setupAsyncIo();
+
+  int callCount = 0;
+  int handleCount = 0;
+  TwoPartyServer server(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
+  auto pipe = io.provider->newCapabilityPipe();
+  server.accept(kj::mv(pipe.ends[0]), 2);
+  TwoPartyClient client(*pipe.ends[1], 2);
+
+  auto cap = client.bootstrap().castAs<test::TestMoreStuff>();
+
+  int pipeFds[2];
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  capnp::RemotePromise<test::TestMoreStuff::WriteToFdResults> promise = nullptr;
+  {
+    auto req = cap.writeToFdRequest();
+
+    // Order reversal intentional, just trying to mix things up.
+    req.setFdCap1(kj::heap<TestFdCap>(kj::mv(out2)));
+    req.setFdCap2(kj::heap<TestFdCap>(kj::mv(out1)));
+
+    promise = req.send();
+  }
+
+  int in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in3))->readAllText().wait(io.waitScope)
+            == "baz");
+
+  {
+    auto promise2 = kj::mv(promise);  // make sure the PipelineHook also goes out of scope
+    auto response = promise2.wait(io.waitScope);
+    KJ_EXPECT(response.getSecondFdPresent());
+  }
+
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in1))->readAllText().wait(io.waitScope)
+            == "bar");
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in2))->readAllText().wait(io.waitScope)
+            == "foo");
+}
+
+KJ_TEST("FD per message limit") {
+  auto io = kj::setupAsyncIo();
+
+  int callCount = 0;
+  int handleCount = 0;
+  TwoPartyServer server(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
+  auto pipe = io.provider->newCapabilityPipe();
+  server.accept(kj::mv(pipe.ends[0]), 1);
+  TwoPartyClient client(*pipe.ends[1], 1);
+
+  auto cap = client.bootstrap().castAs<test::TestMoreStuff>();
+
+  int pipeFds[2];
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in1(pipeFds[0]);
+  kj::AutoCloseFd out1(pipeFds[1]);
+  KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
+  kj::AutoCloseFd in2(pipeFds[0]);
+  kj::AutoCloseFd out2(pipeFds[1]);
+
+  capnp::RemotePromise<test::TestMoreStuff::WriteToFdResults> promise = nullptr;
+  {
+    auto req = cap.writeToFdRequest();
+
+    // Order reversal intentional, just trying to mix things up.
+    req.setFdCap1(kj::heap<TestFdCap>(kj::mv(out2)));
+    req.setFdCap2(kj::heap<TestFdCap>(kj::mv(out1)));
+
+    promise = req.send();
+  }
+
+  int in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in3))->readAllText().wait(io.waitScope)
+            == "baz");
+
+  {
+    auto promise2 = kj::mv(promise);  // make sure the PipelineHook also goes out of scope
+    auto response = promise2.wait(io.waitScope);
+    KJ_EXPECT(!response.getSecondFdPresent());
+  }
+
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in1))->readAllText().wait(io.waitScope)
+            == "");
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in2))->readAllText().wait(io.waitScope)
+            == "foo");
+}
+#endif  // !_WIN32 && !__CYGWIN__
+
+// =======================================================================================
+
+class MockSndbufStream final: public kj::AsyncIoStream {
+public:
+  MockSndbufStream(kj::Own<AsyncIoStream> inner, size_t& window, size_t& written)
+      : inner(kj::mv(inner)), window(window), written(written) {}
+
+  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->read(buffer, minBytes, maxBytes);
+  }
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    return inner->tryRead(buffer, minBytes, maxBytes);
+  }
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return inner->tryGetLength();
+  }
+  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    return inner->pumpTo(output, amount);
+  }
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    written += size;
+    return inner->write(buffer, size);
+  }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    for (auto& piece: pieces) written += piece.size();
+    return inner->write(pieces);
+  }
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+      kj::AsyncInputStream& input, uint64_t amount) override {
+    return inner->tryPumpFrom(input, amount);
+  }
+  kj::Promise<void> whenWriteDisconnected() override { return inner->whenWriteDisconnected(); }
+  void shutdownWrite() override { return inner->shutdownWrite(); }
+  void abortRead() override { return inner->abortRead(); }
+
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    if (level == SOL_SOCKET && option == SO_SNDBUF) {
+      KJ_ASSERT(*length == sizeof(int));
+      *reinterpret_cast<int*>(value) = window;
+    } else {
+      KJ_UNIMPLEMENTED("not implemented for test", level, option);
+    }
+  }
+
+private:
+  kj::Own<AsyncIoStream> inner;
+  size_t& window;
+  size_t& written;
+};
+
+KJ_TEST("Streaming over RPC") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  size_t window = 1024;
+  size_t clientWritten = 0;
+  size_t serverWritten = 0;
+
+  pipe.ends[0] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[0]), window, clientWritten);
+  pipe.ends[1] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[1]), window, serverWritten);
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestStreaming>();
+
+  // Send stream requests until we can't anymore.
+  kj::Promise<void> promise = kj::READY_NOW;
+  uint count = 0;
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = cap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // We should have sent... several.
+  KJ_EXPECT(count > 5);
+
+  // Now, cause calls to finish server-side one-at-a-time and check that this causes the client
+  // side to be willing to send more.
+  uint countReceived = 0;
+  for (uint i = 0; i < 50; i++) {
+    KJ_EXPECT(server.iSum == ++countReceived);
+    server.iSum = 0;
+    KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+
+    auto req = cap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+    if (promise.poll(waitScope)) {
+      // We'll see a couple of instances where completing one request frees up space to make two
+      // more. This is because the first few requests we made are a little bit larger than the
+      // rest due to being pipelined on the bootstrap. Once the bootstrap resolves, the request
+      // size gets smaller.
+      promise.wait(waitScope);
+      req = cap.doStreamIRequest();
+      req.setI(++count);
+      promise = req.send();
+
+      // We definitely shouldn't have freed up stream space for more than two additional requests!
+      KJ_ASSERT(!promise.poll(waitScope));
+    }
+  }
+}
+
+KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  CapabilityServerSet<test::TestStreaming> capSet;
+
+  auto ownServer = kj::heap<TestStreamingImpl>();
+  auto& server = *ownServer;
+  auto serverCap = capSet.add(kj::mv(ownServer));
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestStreaming::Client>();
+
+  TwoPartyClient tpClient(*pipe.ends[0], serverCap);
+  TwoPartyClient tpServer(*pipe.ends[1], kj::mv(paf.promise), rpc::twoparty::Side::SERVER);
+
+  auto clientCap = tpClient.bootstrap().castAs<test::TestStreaming>();
+
+  // Send stream requests until we can't anymore.
+  kj::Promise<void> promise = kj::READY_NOW;
+  uint count = 0;
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = clientCap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // We should have sent... several.
+  KJ_EXPECT(count > 10);
+
+  // Now try to unwrap.
+  auto unwrapPromise = capSet.getLocalServer(clientCap);
+
+  // It won't work yet, obviously, because we haven't resolved the promise.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // So do that.
+  paf.fulfiller->fulfill(tpServer.bootstrap().castAs<test::TestStreaming>());
+  clientCap.whenResolved().wait(waitScope);
+
+  // But the unwrap still doesn't resolve because streaming requests are queued up.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // OK, let's resolve a streaming request.
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+
+  // All of our call promises have now completed from the client's perspective.
+  promise.wait(waitScope);
+
+  // But we still can't unwrap, because calls are queued server-side.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // Let's even make one more call now. But this is actually a local call since the promise
+  // resolved.
+  {
+    auto req = clientCap.doStreamIRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // Because it's a local call, it doesn't resolve early. The window is no longer in effect.
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Our unwrap promise is also still not resolved.
+  KJ_EXPECT(!unwrapPromise.poll(waitScope));
+
+  // Close out stream calls until it does resolve!
+  while (!unwrapPromise.poll(waitScope)) {
+    KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  }
+
+  // Now we can unwrap!
+  KJ_EXPECT(&KJ_ASSERT_NONNULL(unwrapPromise.wait(waitScope)) == &server);
+
+  // But our last stream call still isn't done.
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // Finish it.
+  KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  promise.wait(waitScope);
 }
 
 }  // namespace

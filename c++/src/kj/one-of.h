@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -114,6 +112,14 @@ public:
   Maybe<T&> tryGet() {
     if (is<T>()) {
       return *reinterpret_cast<T*>(space);
+    } else {
+      return nullptr;
+    }
+  }
+  template <typename T>
+  Maybe<const T&> tryGet() const {
+    if (is<T>()) {
+      return *reinterpret_cast<const T*>(space);
     } else {
       return nullptr;
     }
@@ -246,8 +252,8 @@ void OneOf<Variants...>::allHandled() {
 #endif
 #define KJ_CASE_ONEOF(name, ...) \
     break; \
-  case ::kj::Decay<decltype(*_kj_switch_subject)>::tagFor<__VA_ARGS__>(): \
-    for (auto& name = _kj_switch_subject->get<__VA_ARGS__>(), *_kj_switch_done = &name; \
+  case ::kj::Decay<decltype(*_kj_switch_subject)>::template tagFor<__VA_ARGS__>(): \
+    for (auto& name = _kj_switch_subject->template get<__VA_ARGS__>(), *_kj_switch_done = &name; \
          _kj_switch_done; _kj_switch_done = nullptr)
 #define KJ_CASE_ONEOF_DEFAULT break; default:
 // Allows switching over a OneOf.
@@ -283,3 +289,5 @@ void OneOf<Variants...>::allHandled() {
 //   looping, but it's defined as a pointer since that's all we can define in this context.
 
 }  // namespace kj
+
+KJ_END_HEADER

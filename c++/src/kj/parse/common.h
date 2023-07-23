@@ -35,10 +35,6 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "../common.h"
 #include "../memory.h"
 #include "../array.h"
@@ -47,6 +43,8 @@
 #if _MSC_VER && !__clang__
 #include <type_traits>  // result_of_t
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace parse {
@@ -819,3 +817,5 @@ constexpr EndOfInput_ endOfInput = EndOfInput_();
 
 }  // namespace parse
 }  // namespace kj
+
+KJ_END_HEADER

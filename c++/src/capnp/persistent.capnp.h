@@ -4,11 +4,12 @@
 #pragma once
 
 #include <capnp/generated-header-support.h>
+#include <kj/windows-sanity.h>
 #if !CAPNP_LITE
 #include <capnp/capability.h>
 #endif  // !CAPNP_LITE
 
-#if CAPNP_VERSION != 7000
+#if CAPNP_VERSION != 8000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -195,7 +196,8 @@ class Persistent<SturdyRef, Owner>::Server
 public:
   typedef Persistent Serves;
 
-  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
+  ::capnp::Capability::Server::DispatchCallResult dispatchCall(
+      uint64_t interfaceId, uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)
       override;
 
@@ -208,7 +210,8 @@ protected:
         .template castAs< ::capnp::Persistent<SturdyRef, Owner>>();
   }
 
-  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,
+  ::capnp::Capability::Server::DispatchCallResult dispatchCallInternal(
+      uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);
 };
 #endif  // !CAPNP_LITE
@@ -445,7 +448,8 @@ class RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Serv
 public:
   typedef RealmGateway Serves;
 
-  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
+  ::capnp::Capability::Server::DispatchCallResult dispatchCall(
+      uint64_t interfaceId, uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)
       override;
 
@@ -462,7 +466,8 @@ protected:
         .template castAs< ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>>();
   }
 
-  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,
+  ::capnp::Capability::Server::DispatchCallResult dispatchCallInternal(
+      uint16_t methodId,
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);
 };
 #endif  // !CAPNP_LITE
@@ -892,7 +897,7 @@ template <typename SturdyRef, typename Owner>
       0xc8cb212fcd9f5691ull, 0);
 }
 template <typename SturdyRef, typename Owner>
-::kj::Promise<void> Persistent<SturdyRef, Owner>::Server::dispatchCall(
+::capnp::Capability::Server::DispatchCallResult Persistent<SturdyRef, Owner>::Server::dispatchCall(
     uint64_t interfaceId, uint16_t methodId,
     ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {
   switch (interfaceId) {
@@ -903,13 +908,16 @@ template <typename SturdyRef, typename Owner>
   }
 }
 template <typename SturdyRef, typename Owner>
-::kj::Promise<void> Persistent<SturdyRef, Owner>::Server::dispatchCallInternal(
+::capnp::Capability::Server::DispatchCallResult Persistent<SturdyRef, Owner>::Server::dispatchCallInternal(
     uint16_t methodId,
     ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {
   switch (methodId) {
     case 0:
-      return save(::capnp::Capability::Server::internalGetTypedContext<
-          typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>(context));
+      return {
+        save(::capnp::Capability::Server::internalGetTypedContext<
+            typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>(context)),
+        false
+      };
     default:
       (void)context;
       return ::capnp::Capability::Server::internalUnimplemented(
@@ -1261,7 +1269,7 @@ template <typename InternalRef, typename ExternalRef, typename InternalOwner, ty
       0x84ff286cd00a3ed4ull, 1);
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
-::kj::Promise<void> RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Server::dispatchCall(
+::capnp::Capability::Server::DispatchCallResult RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Server::dispatchCall(
     uint64_t interfaceId, uint16_t methodId,
     ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {
   switch (interfaceId) {
@@ -1272,16 +1280,22 @@ template <typename InternalRef, typename ExternalRef, typename InternalOwner, ty
   }
 }
 template <typename InternalRef, typename ExternalRef, typename InternalOwner, typename ExternalOwner>
-::kj::Promise<void> RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Server::dispatchCallInternal(
+::capnp::Capability::Server::DispatchCallResult RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::Server::dispatchCallInternal(
     uint16_t methodId,
     ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {
   switch (methodId) {
     case 0:
-      return import(::capnp::Capability::Server::internalGetTypedContext<
-          typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams, typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveResults>(context));
+      return {
+        import(::capnp::Capability::Server::internalGetTypedContext<
+            typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ImportParams, typename  ::capnp::Persistent<InternalRef, InternalOwner>::SaveResults>(context)),
+        false
+      };
     case 1:
-      return export_(::capnp::Capability::Server::internalGetTypedContext<
-          typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams, typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveResults>(context));
+      return {
+        export_(::capnp::Capability::Server::internalGetTypedContext<
+            typename  ::capnp::RealmGateway<InternalRef, ExternalRef, InternalOwner, ExternalOwner>::ExportParams, typename  ::capnp::Persistent<ExternalRef, ExternalOwner>::SaveResults>(context)),
+        false
+      };
     default:
       (void)context;
       return ::capnp::Capability::Server::internalUnimplemented(

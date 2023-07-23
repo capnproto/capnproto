@@ -21,12 +21,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "capability.h"
 #include "rpc-prelude.h"
+
+CAPNP_BEGIN_HEADER
+
+namespace kj { class AutoCloseFd; }
 
 namespace capnp {
 
@@ -305,9 +305,18 @@ public:
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
   // implementation initializes it as a Message as defined in rpc.capnp.)
 
+  virtual void setFds(kj::Array<int> fds) {}
+  // Set the list of file descriptors to send along with this message, if FD passing is supported.
+  // An implementation may ignore this.
+
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
+
+  virtual size_t sizeInWords() = 0;
+  // Get the total size of the message, for flow control purposes. Although the caller could
+  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
+  // implementations can compute the size more cheaply by summing segment sizes.
 };
 
 class IncomingRpcMessage {
@@ -317,6 +326,71 @@ public:
   virtual AnyPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
+
+  virtual kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() { return nullptr; }
+  // If the transport supports attached file descriptors and some were attached to this message,
+  // returns them. Otherwise returns an empty array. It is intended that the caller will move the
+  // FDs out of this table when they are consumed, possibly leaving behind a null slot. Callers
+  // should be careful to check if an FD was already consumed by comparing the slot with `nullptr`.
+  // (We don't use Maybe here because moving from a Maybe doesn't make it null, so it would only
+  // add confusion. Moving from an AutoCloseFd does in fact make it null.)
+
+  virtual size_t sizeInWords() = 0;
+  // Get the total size of the message, for flow control purposes. Although the caller could
+  // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
+  // implementations can compute the size more cheaply by summing segment sizes.
+};
+
+class RpcFlowController {
+  // Tracks a particular RPC stream in order to implement a flow control algorithm.
+
+public:
+  virtual kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) = 0;
+  // Like calling message->send(), but the promise resolves when it's a good time to send the
+  // next message.
+  //
+  // `ack` is a promise that resolves when the message has been acknowledged from the other side.
+  // In practice, `message` is typically a `Call` message and `ack` is a `Return`. Note that this
+  // means `ack` counts not only time to transmit the message but also time for the remote
+  // application to process the message. The flow controller is expected to apply backpressure if
+  // the remote application responds slowly. If `ack` rejects, then all outstanding and future
+  // sends will propagate the exception.
+  //
+  // Note that messages sent with this method must still be delivered in the same order as if they
+  // had been sent with `message->send()`; they cannot be delayed until later. This is important
+  // because the message may introduce state changes in the RPC system that later messages rely on,
+  // such as introducing a new Question ID that a later message may reference. Thus, the controller
+  // can only create backpressure by having the returned promise resolve slowly.
+  //
+  // Dropping the returned promise does not cancel the send. Once send() is called, there's no way
+  // to stop it.
+
+  virtual kj::Promise<void> waitAllAcked() = 0;
+  // Wait for all `ack`s previously passed to send() to finish. It is an error to call send() again
+  // after this.
+
+  // ---------------------------------------------------------------------------
+  // Common implementations.
+
+  static kj::Own<RpcFlowController> newFixedWindowController(size_t windowSize);
+  // Constructs a flow controller that implements a strict fixed window of the given size. In other
+  // words, the controller will throttle the stream when the total bytes in-flight exceeds the
+  // window.
+
+  class WindowGetter {
+  public:
+    virtual size_t getWindow() = 0;
+  };
+
+  static kj::Own<RpcFlowController> newVariableWindowController(WindowGetter& getter);
+  // Like newFixedWindowController(), but the window size is allowed to vary over time. Useful if
+  // you have a technique for estimating one good window size for the connection as a whole but not
+  // for individual streams. Keep in mind, though, that in situations where the other end of the
+  // connection is merely proxying capabilities from a variety of final destinations across a
+  // variety of networks, no single window will be appropriate for all streams.
+
+  static constexpr size_t DEFAULT_WINDOW_SIZE = 65536;
+  // The window size used by the default implementation of Connection::newStream().
 };
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
@@ -363,6 +437,19 @@ public:
     // connection is ready, so that the caller doesn't need to know the difference.
 
   public:
+    virtual kj::Own<RpcFlowController> newStream() override
+        { return RpcFlowController::newFixedWindowController(65536); }
+    // Construct a flow controller for a new stream on this connection. The controller can be
+    // passed into OutgoingRpcMessage::sendStreaming().
+    //
+    // The default implementation returns a dummy stream controller that just applies a fixed
+    // window of 64k to everything. This always works but may constrain throughput on networks
+    // where the bandwidth-delay product is high, while conversely providing too much buffer when
+    // the bandwidth-delay product is low.
+    //
+    // TODO(perf): We should introduce a flow controller implementation that uses a clock to
+    //   measure RTT and bandwidth and dynamically update the window size, like BBR.
+
     // Level 0 features ----------------------------------------------
 
     virtual typename VatId::Reader getPeerVatId() = 0;
@@ -564,3 +651,5 @@ RpcSystem<VatId> makeRpcClient(
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

@@ -26,6 +26,7 @@
 #include <inttypes.h>
 #include "time.h"
 #include "function.h"
+#include "hash.h"
 
 namespace kj {
 
@@ -156,6 +157,9 @@ public:
   bool operator>=(PathPtr other) const;
   // Compare path components lexically.
 
+  uint hashCode() const;
+  // Can use in HashMap.
+
   bool startsWith(PathPtr prefix) const;
   bool endsWith(PathPtr suffix) const;
   // Compare prefix / suffix.
@@ -264,6 +268,7 @@ public:
   bool operator> (PathPtr other) const;
   bool operator<=(PathPtr other) const;
   bool operator>=(PathPtr other) const;
+  uint hashCode() const;
   bool startsWith(PathPtr prefix) const;
   bool endsWith(PathPtr suffix) const;
   Path evalWin32(StringPtr pathText) const;
@@ -991,6 +996,7 @@ inline bool Path::operator< (PathPtr other) const { return PathPtr(*this) <  oth
 inline bool Path::operator> (PathPtr other) const { return PathPtr(*this) >  other; }
 inline bool Path::operator<=(PathPtr other) const { return PathPtr(*this) <= other; }
 inline bool Path::operator>=(PathPtr other) const { return PathPtr(*this) >= other; }
+inline uint Path::hashCode() const { return kj::hashCode(parts); }
 inline bool Path::startsWith(PathPtr prefix) const { return PathPtr(*this).startsWith(prefix); }
 inline bool Path::endsWith  (PathPtr suffix) const { return PathPtr(*this).endsWith  (suffix); }
 inline String Path::toString(bool absolute) const { return PathPtr(*this).toString(absolute); }
@@ -1020,6 +1026,7 @@ inline bool PathPtr::operator!=(PathPtr other) const { return !(*this == other);
 inline bool PathPtr::operator> (PathPtr other) const { return other < *this; }
 inline bool PathPtr::operator<=(PathPtr other) const { return !(other < *this); }
 inline bool PathPtr::operator>=(PathPtr other) const { return !(*this < other); }
+inline uint PathPtr::hashCode() const { return kj::hashCode(parts); }
 inline String PathPtr::toWin32String(bool absolute) const {
   return toWin32StringImpl(absolute, false);
 }

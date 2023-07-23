@@ -25,9 +25,6 @@
 #include "arena.h"
 #include "orphan.h"
 #include <stdlib.h>
-#include <exception>
-#include <string>
-#include <vector>
 #include <errno.h>
 
 namespace capnp {
@@ -58,7 +55,7 @@ bool MessageReader::isCanonical() {
     static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    new(arena()) _::ReaderArena(this);
+    kj::ctor(*arena(), this);
     allocatedArena = true;
   }
 
@@ -83,13 +80,16 @@ bool MessageReader::isCanonical() {
   return rootIsCanonical && allWordsConsumed;
 }
 
+size_t MessageReader::sizeInWords() {
+  return arena()->sizeInWords();
+}
 
 AnyPointer::Reader MessageReader::getRootInternal() {
   if (!allocatedArena) {
     static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    new(arena()) _::ReaderArena(this);
+    kj::ctor(*arena(), this);
     allocatedArena = true;
   }
 
@@ -181,6 +181,14 @@ bool MessageBuilder::isCanonical() {
                                   .isCanonical(&readHead);
 }
 
+size_t MessageBuilder::sizeInWords() {
+  return arena()->sizeInWords();
+}
+
+kj::Own<_::CapTableBuilder> MessageBuilder::releaseBuiltinCapTable() {
+  return arena()->releaseLocalCapTable();
+}
+
 // =======================================================================================
 
 SegmentArrayMessageReader::SegmentArrayMessageReader(
@@ -198,10 +206,6 @@ kj::ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
 }
 
 // -------------------------------------------------------------------
-
-struct MallocMessageBuilder::MoreSegments {
-  std::vector<void*> segments;
-};
 
 MallocMessageBuilder::MallocMessageBuilder(
     uint firstSegmentWords, AllocationStrategy allocationStrategy)
@@ -233,10 +237,8 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
       }
     }
 
-    KJ_IF_MAYBE(s, moreSegments) {
-      for (void* ptr: s->get()->segments) {
-        free(ptr);
-      }
+    for (void* ptr: moreSegments) {
+      free(ptr);
     }
   }
 }
@@ -273,15 +275,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     // After the first segment, we want nextSize to equal the total size allocated so far.
     if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize = size;
   } else {
-    MoreSegments* segments;
-    KJ_IF_MAYBE(s, moreSegments) {
-      segments = *s;
-    } else {
-      auto newSegments = kj::heap<MoreSegments>();
-      segments = newSegments;
-      moreSegments = mv(newSegments);
-    }
-    segments->segments.push_back(result);
+    moreSegments.add(result);
     if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) {
       // set nextSize = min(nextSize+size, MAX_SEGMENT_WORDS)
       // while protecting against possible overflow of (nextSize+size)

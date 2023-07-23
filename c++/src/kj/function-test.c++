@@ -48,6 +48,10 @@ struct TestType {
   int foo(int a, int b) {
     return a + b + callCount++;
   }
+
+  int foo(int c) {
+    return c * 100;
+  }
 };
 
 TEST(Function, Method) {
@@ -60,6 +64,9 @@ TEST(Function, Method) {
   EXPECT_EQ(9u + 2u + 2u, f2(2, 9));
 
   EXPECT_EQ(3, obj.callCount);
+
+  Function<int(int)> f3 = KJ_BIND_METHOD(obj, foo);
+  EXPECT_EQ(12300, f3(123));
 
   // Bind to a temporary.
   f = KJ_BIND_METHOD(TestType(10), foo);
@@ -115,6 +122,52 @@ TEST(ConstFunction, Method) {
   EXPECT_EQ(123 + 456 + 3, f(123, 456));
   EXPECT_EQ(7 + 8 + 4, f(7, 8));
   EXPECT_EQ(9 + 2 + 5, f(2, 9));
+}
+
+int testFunctionParam(FunctionParam<int(char, bool)> func, char c, bool b) {
+  return func(c, b);
+}
+
+int testFunctionParamRecursive(FunctionParam<int(char, bool)> func, char c, bool b) {
+  return testFunctionParam(func, c, b);
+}
+
+KJ_TEST("FunctionParam") {
+  {
+    int i = 123;
+    int result = testFunctionParam([i](char c, bool b) {
+      KJ_EXPECT(c == 'x');
+      KJ_EXPECT(b);
+      KJ_EXPECT(i == 123);
+      return 456;
+    }, 'x', true);
+
+    KJ_EXPECT(result == 456);
+  }
+
+  {
+    int i = 123;
+    auto func = [i](char c, bool b) {
+      KJ_EXPECT(c == 'x');
+      KJ_EXPECT(b);
+      KJ_EXPECT(i == 123);
+      return 456;
+    };
+    int result = testFunctionParam(func, 'x', true);
+    KJ_EXPECT(result == 456);
+  }
+
+  {
+    int i = 123;
+    int result = testFunctionParamRecursive([i](char c, bool b) {
+      KJ_EXPECT(c == 'x');
+      KJ_EXPECT(b);
+      KJ_EXPECT(i == 123);
+      return 456;
+    }, 'x', true);
+
+    KJ_EXPECT(result == 456);
+  }
 }
 
 } // namespace

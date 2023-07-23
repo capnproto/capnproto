@@ -26,14 +26,12 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #ifndef KJ_ASYNC_H_INCLUDED
 #error "Do not include this directly; include kj/async.h."
 #include "async.h"  // help IDE parse this file
 #endif
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -78,12 +76,43 @@ public:
   Maybe<T> value;
 };
 
+template <typename T>
+inline T convertToReturn(ExceptionOr<T>&& result) {
+  KJ_IF_MAYBE(value, result.value) {
+    KJ_IF_MAYBE(exception, result.exception) {
+      throwRecoverableException(kj::mv(*exception));
+    }
+    return _::returnMaybeVoid(kj::mv(*value));
+  } else KJ_IF_MAYBE(exception, result.exception) {
+    throwFatalException(kj::mv(*exception));
+  } else {
+    // Result contained neither a value nor an exception?
+    KJ_UNREACHABLE;
+  }
+}
+
+inline void convertToReturn(ExceptionOr<Void>&& result) {
+  // Override <void> case to use throwRecoverableException().
+
+  if (result.value != nullptr) {
+    KJ_IF_MAYBE(exception, result.exception) {
+      throwRecoverableException(kj::mv(*exception));
+    }
+  } else KJ_IF_MAYBE(exception, result.exception) {
+    throwRecoverableException(kj::mv(*exception));
+  } else {
+    // Result contained neither a value nor an exception?
+    KJ_UNREACHABLE;
+  }
+}
+
 class Event {
   // An event waiting to be executed.  Not for direct use by applications -- promises use this
   // internally.
 
 public:
   Event();
+  Event(kj::EventLoop& loop);
   ~Event() noexcept(false);
   KJ_DISALLOW_COPY(Event);
 
@@ -104,6 +133,14 @@ public:
 
   void armBreadthFirst();
   // Like `armDepthFirst()` except that the event is placed at the end of the queue.
+
+  void armLast();
+  // Enqueues this event to happen after all other events have run to completion and there is
+  // really nothing left to do except wait for I/O.
+
+  void disarm();
+  // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
+  // implicitly.)
 
   kj::String trace();
   // Dump debug info about this event.
@@ -157,6 +194,22 @@ public:
   // If this node wraps some other PromiseNode, get the wrapped node.  Used for debug tracing.
   // Default implementation returns nullptr.
 
+  template <typename T>
+  static Own<PromiseNode> from(T&& promise) {
+    // Given a Promise, extract the PromiseNode.
+    return kj::mv(promise.node);
+  }
+  template <typename T>
+  static PromiseNode& from(T& promise) {
+    // Given a Promise, extract the PromiseNode.
+    return *promise.node;
+  }
+  template <typename T>
+  static T to(Own<PromiseNode>&& node) {
+    // Construct a Promise from a PromiseNode. (T should be a Promise type.)
+    return T(false, kj::mv(node));
+  }
+
 protected:
   class OnReadyEvent {
     // Helper class for implementing onReady().
@@ -165,6 +218,7 @@ protected:
     void init(Event* newEvent);
 
     void arm();
+    void armBreadthFirst();
     // Arms the event if init() has already been called and makes future calls to init()
     // automatically arm the event.
 
@@ -172,6 +226,13 @@ protected:
     Event* event = nullptr;
   };
 };
+
+// -------------------------------------------------------------------
+
+template <typename T>
+inline NeverDone::operator Promise<T>() const {
+  return PromiseNode::to<Promise<T>>(neverDone());
+}
 
 // -------------------------------------------------------------------
 
@@ -249,6 +310,13 @@ private:
 
 // -------------------------------------------------------------------
 
+#if __GNUC__ >= 8 && !__clang__
+// GCC 8's class-memaccess warning rightly does not like the memcpy()'s below, but there's no
+// "legal" way for us to extract the contetn of a PTMF so too bad.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 class PtmfHelper {
   // This class is a private helper for GetFunctorStartAddress. The class represents the internal
   // representation of a pointer-to-member-function.
@@ -309,6 +377,10 @@ class PtmfHelper {
   // necessary to be precise about P.
 #undef BODY
 };
+
+#if __GNUC__ >= 8 && !__clang__
+#pragma GCC diagnostic pop
+#endif
 
 template <typename... ParamTypes>
 struct GetFunctorStartAddress {
@@ -508,7 +580,7 @@ public:
   ForkHub(Own<PromiseNode>&& inner): ForkHubBase(kj::mv(inner), result) {}
 
   Promise<_::UnfixVoid<T>> addBranch() {
-    return Promise<_::UnfixVoid<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
+    return _::PromiseNode::to<Promise<_::UnfixVoid<T>>>(kj::heap<ForkBranch<T>>(addRef(*this)));
   }
 
   _::SplitTuplePromise<T> split() {
@@ -525,9 +597,9 @@ private:
 
   template <size_t index>
   ReducePromises<typename SplitBranch<T, index>::Element> addSplit() {
-    return ReducePromises<typename SplitBranch<T, index>::Element>(
-        false, maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
-                          implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
+    return _::PromiseNode::to<ReducePromises<typename SplitBranch<T, index>::Element>>(
+        maybeChain(kj::heap<SplitBranch<T, index>>(addRef(*this)),
+                   implicitCast<typename SplitBranch<T, index>::Element*>(nullptr)));
   }
 };
 
@@ -799,6 +871,81 @@ private:
   }
 };
 
+// -------------------------------------------------------------------
+
+class FiberBase: public PromiseNode, private Event {
+  // Base class for the outer PromiseNode representing a fiber.
+
+public:
+  FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  ~FiberBase() noexcept(false);
+
+  void start() { armDepthFirst(); }
+  // Call immediately after construction to begin executing the fiber.
+
+  class WaitDoneEvent;
+
+  void onReady(_::Event* event) noexcept override;
+  PromiseNode* getInnerForTrace() override;
+
+protected:
+  bool isFinished() { return state == FINISHED; }
+
+private:
+  enum { WAITING, RUNNING, CANCELED, FINISHED } state;
+
+  size_t stackSize;
+
+#if _WIN32 || __CYGWIN__
+  void* osFiber;
+#else
+  struct Impl;
+  Impl& impl;
+#endif
+
+  _::PromiseNode* currentInner = nullptr;
+  OnReadyEvent onReadyEvent;
+  _::ExceptionOrValue& result;
+
+  void run();
+  virtual void runImpl(WaitScope& waitScope) = 0;
+
+  struct StartRoutine;
+
+  void switchToFiber();
+  void switchToMain();
+
+  Maybe<Own<Event>> fire() override;
+  // Implements Event. Each time the event is fired, switchToFiber() is called.
+
+  friend class WaitScope;
+  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+                          WaitScope& waitScope);
+  friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
+};
+
+template <typename Func>
+class Fiber final: public FiberBase {
+public:
+  Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+
+  typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
+
+  void get(ExceptionOrValue& output) noexcept override {
+    KJ_IREQUIRE(isFinished());
+    output.as<ResultType>() = kj::mv(result);
+  }
+
+private:
+  Func func;
+  ExceptionOr<ResultType> result;
+
+  void runImpl(WaitScope& waitScope) override {
+    result.template as<ResultType>() =
+        MaybeVoidCaller<WaitScope&, ResultType>::apply(func, waitScope);
+  }
+};
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -819,7 +966,7 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
   Own<_::PromiseNode> intermediate =
       heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  auto result = _::ChainPromises<_::ReturnType<Func, T>>(false,
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
   return _::maybeReduce(kj::mv(result), false);
 }
@@ -866,40 +1013,8 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler) {
 template <typename T>
 T Promise<T>::wait(WaitScope& waitScope) {
   _::ExceptionOr<_::FixVoid<T>> result;
-
   _::waitImpl(kj::mv(node), result, waitScope);
-
-  KJ_IF_MAYBE(value, result.value) {
-    KJ_IF_MAYBE(exception, result.exception) {
-      throwRecoverableException(kj::mv(*exception));
-    }
-    return _::returnMaybeVoid(kj::mv(*value));
-  } else KJ_IF_MAYBE(exception, result.exception) {
-    throwFatalException(kj::mv(*exception));
-  } else {
-    // Result contained neither a value nor an exception?
-    KJ_UNREACHABLE;
-  }
-}
-
-template <>
-inline void Promise<void>::wait(WaitScope& waitScope) {
-  // Override <void> case to use throwRecoverableException().
-
-  _::ExceptionOr<_::Void> result;
-
-  _::waitImpl(kj::mv(node), result, waitScope);
-
-  if (result.value != nullptr) {
-    KJ_IF_MAYBE(exception, result.exception) {
-      throwRecoverableException(kj::mv(*exception));
-    }
-  } else KJ_IF_MAYBE(exception, result.exception) {
-    throwRecoverableException(kj::mv(*exception));
-  } else {
-    // Result contained neither a value nor an exception?
-    KJ_UNREACHABLE;
-  }
+  return convertToReturn(kj::mv(result));
 }
 
 template <typename T>
@@ -959,6 +1074,11 @@ inline PromiseForResult<Func, void> evalLater(Func&& func) {
 }
 
 template <typename Func>
+inline PromiseForResult<Func, void> evalLast(Func&& func) {
+  return _::yieldHarder().then(kj::fwd<Func>(func), _::PropagateException());
+}
+
+template <typename Func>
 inline PromiseForResult<Func, void> evalNow(Func&& func) {
   PromiseForResult<Func, void> result = nullptr;
   KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
@@ -967,6 +1087,17 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
     result = kj::mv(*e);
   }
   return result;
+}
+
+template <typename Func>
+inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) {
+  typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
+
+  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
+  intermediate->start();
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 template <typename T>
@@ -983,8 +1114,8 @@ void Promise<void>::detach(ErrorFunc&& errorHandler) {
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
-  return Promise<Array<T>>(false, kj::heap<_::ArrayJoinPromiseNode<T>>(
-      KJ_MAP(p, promises) { return kj::mv(p.node); },
+  return _::PromiseNode::to<Promise<Array<T>>>(kj::heap<_::ArrayJoinPromiseNode<T>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size())));
 }
 
@@ -1108,9 +1239,12 @@ bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
 }
 
 template <typename T, typename Adapter, typename... Params>
-Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
-  return Promise<T>(false, heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
-      kj::fwd<Params>(adapterConstructorParams)...));
+_::ReducePromises<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
+  Own<_::PromiseNode> intermediate(
+      heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
+          kj::fwd<Params>(adapterConstructorParams)...));
+  return _::PromiseNode::to<_::ReducePromises<T>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 }
 
 template <typename T>
@@ -1119,10 +1253,162 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  _::ReducePromises<T> promise(false,
+  auto promise = _::PromiseNode::to<_::ReducePromises<T>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
 }
 
+// =======================================================================================
+// cross-thread stuff
+
+namespace _ {  // (private)
+
+class XThreadEvent: private Event,         // it's an event in the target thread
+                    public PromiseNode {   // it's a PromiseNode in the requesting thread
+public:
+  XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor)
+      : Event(targetExecutor.loop), result(result), targetExecutor(targetExecutor) {}
+
+protected:
+  void ensureDoneOrCanceled();
+  // MUST be called in destructor of subclasses to make sure the object is not destroyed while
+  // still being accessed by the other thread. (This can't be placed in ~XThreadEvent() because
+  // that destructor doesn't run until the subclass has already been destroyed.)
+
+  virtual kj::Maybe<Own<PromiseNode>> execute() = 0;
+  // Run the function. If the function returns a promise, returns the inner PromiseNode, otherwise
+  // returns null.
+
+  // implements PromiseNode ----------------------------------------------------
+  void onReady(Event* event) noexcept override;
+
+private:
+  ExceptionOrValue& result;
+
+  const Executor& targetExecutor;
+  Maybe<const Executor&> replyExecutor;  // If executeAsync() was used.
+
+  kj::Maybe<Own<PromiseNode>> promiseNode;
+  // Accessed only in target thread.
+
+  Maybe<XThreadEvent&> targetNext;
+  Maybe<XThreadEvent&>* targetPrev = nullptr;
+  // Membership in one of the linked lists in the target Executor's work list or cancel list. These
+  // fields are protected by the target Executor's mutex.
+
+  enum {
+    UNUSED,
+    // Object was never queued on another thread.
+
+    QUEUED,
+    // Target thread has not yet dequeued the event from crossThreadRequests.events. The requesting
+    // thread can cancel execution by removing the event from the list.
+
+    EXECUTING,
+    // Target thread has dequeued the event and is executing it. To cancel, the requesting thread
+    // must add the event to the crossThreadRequests.cancel list.
+
+    DONE
+    // Target thread has completed handling this event and will not touch it again. The requesting
+    // thread can safely delete the object. The `state` is updated to `DONE` using an atomic
+    // release operation after ensuring that the event will not be touched again, so that the
+    // requesting can safely skip locking if it observes the state is already DONE.
+  } state = UNUSED;
+  // State, which is also protected by `targetExecutor`'s mutex.
+
+  Maybe<XThreadEvent&> replyNext;
+  Maybe<XThreadEvent&>* replyPrev = nullptr;
+  // Membership in `replyExecutor`'s reply list. Protected by `replyExecutor`'s mutex. The
+  // executing thread places the event in the reply list near the end of the `EXECUTING` state.
+  // Because the thread cannot lock two mutexes at once, it's possible that the reply executor
+  // will receive the reply while the event is still listed in the EXECUTING state, but it can
+  // ignore the state and proceed with the result.
+
+  OnReadyEvent onReadyEvent;
+  // Accessed only in requesting thread.
+
+  friend class kj::Executor;
+
+  void done();
+
+  class DelayedDoneHack;
+
+  // implements Event ----------------------------------------------------------
+  Maybe<Own<Event>> fire() override;
+  // If called with promiseNode == nullptr, it's time to call execute(). If promiseNode != nullptr,
+  // then it just indicated readiness and we need to get its result.
+};
+
+template <typename Func, typename = _::FixVoid<_::ReturnType<Func, void>>>
+class XThreadEventImpl final: public XThreadEvent {
+  // Implementation for a function that does not return a Promise.
+public:
+  XThreadEventImpl(Func&& func, const Executor& target)
+      : XThreadEvent(result, target), func(kj::fwd<Func>(func)) {}
+  ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
+
+  typedef _::FixVoid<_::ReturnType<Func, void>> ResultT;
+
+  kj::Maybe<Own<_::PromiseNode>> execute() override {
+    result.value = MaybeVoidCaller<Void, FixVoid<decltype(func())>>::apply(func, Void());
+    return nullptr;
+  }
+
+  // implements PromiseNode ----------------------------------------------------
+  void get(ExceptionOrValue& output) noexcept override {
+    output.as<ResultT>() = kj::mv(result);
+  }
+
+private:
+  Func func;
+  ExceptionOr<ResultT> result;
+  friend Executor;
+};
+
+template <typename Func, typename T>
+class XThreadEventImpl<Func, Promise<T>> final: public XThreadEvent {
+  // Implementation for a function that DOES return a Promise.
+public:
+  XThreadEventImpl(Func&& func, const Executor& target)
+      : XThreadEvent(result, target), func(kj::fwd<Func>(func)) {}
+  ~XThreadEventImpl() noexcept(false) { ensureDoneOrCanceled(); }
+
+  typedef _::FixVoid<_::UnwrapPromise<PromiseForResult<Func, void>>> ResultT;
+
+  kj::Maybe<Own<_::PromiseNode>> execute() override {
+    auto result = _::PromiseNode::from(func());
+    KJ_IREQUIRE(result.get() != nullptr);
+    return kj::mv(result);
+  }
+
+  // implements PromiseNode ----------------------------------------------------
+  void get(ExceptionOrValue& output) noexcept override {
+    output.as<ResultT>() = kj::mv(result);
+  }
+
+private:
+  Func func;
+  ExceptionOr<ResultT> result;
+  friend Executor;
+};
+
+}  // namespace _ (private)
+
+template <typename Func>
+_::UnwrapPromise<PromiseForResult<Func, void>> Executor::executeSync(Func&& func) const {
+  _::XThreadEventImpl<Func> event(kj::fwd<Func>(func), *this);
+  send(event, true);
+  return convertToReturn(kj::mv(event.result));
+}
+
+template <typename Func>
+PromiseForResult<Func, void> Executor::executeAsync(Func&& func) const {
+  auto event = kj::heap<_::XThreadEventImpl<Func>>(kj::fwd<Func>(func), *this);
+  send(*event, false);
+  return _::PromiseNode::to<PromiseForResult<Func, void>>(kj::mv(event));
+}
+
 }  // namespace kj
+
+KJ_END_HEADER

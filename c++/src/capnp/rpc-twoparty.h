@@ -21,14 +21,13 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "rpc.h"
 #include "message.h"
 #include <kj/async-io.h>
 #include <capnp/rpc-twoparty.capnp.h>
+#include <kj/one-of.h>
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -43,7 +42,8 @@ typedef VatNetwork<rpc::twoparty::VatId, rpc::twoparty::ProvisionId,
     TwoPartyVatNetworkBase;
 
 class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
-                          private TwoPartyVatNetworkBase::Connection {
+                          private TwoPartyVatNetworkBase::Connection,
+                          private RpcFlowController::WindowGetter {
   // A `VatNetwork` that consists of exactly two parties communicating over an arbitrary byte
   // stream.  This is used to implement the common case of a client/server network.
   //
@@ -53,6 +53,19 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
 public:
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                      ReaderOptions receiveOptions = ReaderOptions());
+  TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
+                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
+  // To support FD passing, pass an AsyncCapabilityStream and `maxFdsPerMessage`, which specifies
+  // the maximum number of file descriptors to accept from the peer in any one RPC message. It is
+  // important to keep maxFdsPerMessage low in order to stop DoS attacks that fill up your FD table.
+  //
+  // Note that this limit applies only to incoming messages; outgoing messages are allowed to have
+  // more FDs. Sometimes it makes sense to enforce a limit of zero in one direction while having
+  // a non-zero limit in the other. For example, in a supervisor/sandbox scenario, typically there
+  // are many use cases for passing FDs from supervisor to sandbox but no use case for vice versa.
+  // The supervisor may be configured not to accept any FDs from the sandbox in order to reduce
+  // risk of DoS attacks.
+
   KJ_DISALLOW_COPY(TwoPartyVatNetwork);
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
@@ -70,11 +83,15 @@ private:
   class OutgoingMessageImpl;
   class IncomingMessageImpl;
 
-  kj::AsyncIoStream& stream;
+  kj::OneOf<kj::AsyncIoStream*, kj::AsyncCapabilityStream*> stream;
+  uint maxFdsPerMessage;
   rpc::twoparty::Side side;
   MallocMessageBuilder peerVatId;
   ReaderOptions receiveOptions;
   bool accepted = false;
+
+  bool solSndbufUnimplemented = false;
+  // Whether stream.getsockopt(SO_SNDBUF) has been observed to throw UNIMPLEMENTED.
 
   kj::Maybe<kj::Promise<void>> previousWrite;
   // Resolves when the previous write completes.  This effectively serves as the write queue.
@@ -106,10 +123,15 @@ private:
 
   // implements Connection -----------------------------------------------------
 
+  kj::Own<RpcFlowController> newStream() override;
   rpc::twoparty::VatId::Reader getPeerVatId() override;
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   kj::Promise<void> shutdown() override;
+
+  // implements WindowGetter ---------------------------------------------------
+
+  size_t getWindow() override;
 };
 
 class TwoPartyServer: private kj::TaskSet::ErrorHandler {
@@ -120,12 +142,21 @@ public:
   explicit TwoPartyServer(Capability::Client bootstrapInterface);
 
   void accept(kj::Own<kj::AsyncIoStream>&& connection);
+  void accept(kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMessage);
   // Accepts the connection for servicing.
 
   kj::Promise<void> listen(kj::ConnectionReceiver& listener);
   // Listens for connections on the given listener. The returned promise never resolves unless an
   // exception is thrown while trying to accept. You may discard the returned promise to cancel
   // listening.
+
+  kj::Promise<void> listenCapStreamReceiver(
+      kj::ConnectionReceiver& listener, uint maxFdsPerMessage);
+  // Listen with support for FD transfers. `listener.accept()` must return instances of
+  // AsyncCapabilityStream, otherwise this will crash.
+
+  kj::Promise<void> drain() { return tasks.onEmpty(); }
+  // Resolves when all clients have disconnected.
 
 private:
   Capability::Client bootstrapInterface;
@@ -141,7 +172,11 @@ class TwoPartyClient {
 
 public:
   explicit TwoPartyClient(kj::AsyncIoStream& connection);
+  explicit TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage);
   TwoPartyClient(kj::AsyncIoStream& connection, Capability::Client bootstrapInterface,
+                 rpc::twoparty::Side side = rpc::twoparty::Side::CLIENT);
+  TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage,
+                 Capability::Client bootstrapInterface,
                  rpc::twoparty::Side side = rpc::twoparty::Side::CLIENT);
 
   Capability::Client bootstrap();
@@ -155,3 +190,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

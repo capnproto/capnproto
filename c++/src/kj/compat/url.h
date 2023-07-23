@@ -38,11 +38,11 @@ struct UrlOptions {
   // True if URL components should be automatically percent-decoded during parsing, and
   // percent-encoded during serialization.
 
-#if __cplusplus < 201402L
-  inline constexpr UrlOptions(bool percentDecode = true): percentDecode(percentDecode) {}
-  // TODO(cleanup): This constructor is only here to support brace initialization in C++11. It
-  //   should be removed once we upgrade to C++14.
-#endif
+  bool allowEmpty = false;
+  // Whether or not to allow empty path and query components when parsing; otherwise, they are
+  // silently removed. In other words, setting this false causes consecutive slashes in the path or
+  // consecutive ampersands in the query to be collapsed into one, whereas if true then they
+  // produce empty components.
 };
 
 struct Url {
@@ -102,17 +102,6 @@ struct Url {
   Url(Url&&) = default;
   ~Url() noexcept(false);
   Url& operator=(Url&&) = default;
-
-#if __cplusplus < 201402L
-  inline Url(String&& scheme, Maybe<UserInfo>&& userInfo, String&& host, Vector<String>&& path,
-             bool hasTrailingSlash, Vector<QueryParam>&& query, Maybe<String>&& fragment,
-             UrlOptions options)
-      : scheme(kj::mv(scheme)), userInfo(kj::mv(userInfo)), host(kj::mv(host)), path(kj::mv(path)),
-        hasTrailingSlash(hasTrailingSlash), query(kj::mv(query)), fragment(kj::mv(fragment)),
-        options(options) {}
-  // TODO(cleanup): This constructor is only here to support brace initialization in C++11. It
-  //   should be removed once we upgrade to C++14.
-#endif
 
   Url clone() const;
 

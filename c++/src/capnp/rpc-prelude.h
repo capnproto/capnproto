@@ -24,17 +24,16 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "capability.h"
 #include "persistent.capnp.h"
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
 class OutgoingRpcMessage;
 class IncomingRpcMessage;
+class RpcFlowController;
 
 template <typename SturdyRefHostId>
 class RpcSystem;
@@ -59,6 +58,7 @@ public:
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual kj::Promise<void> shutdown() = 0;
     virtual AnyStruct::Reader baseGetPeerVatId() = 0;
+    virtual kj::Own<RpcFlowController> newStream() = 0;
   };
   virtual kj::Maybe<kj::Own<Connection>> baseConnect(AnyStruct::Reader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;
@@ -125,3 +125,5 @@ using ExternalRefFromRealmGatewayClient = ExternalRefFromRealmGateway<typename T
 
 }  // namespace _ (private)
 }  // namespace capnp
+
+CAPNP_END_HEADER

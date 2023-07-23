@@ -72,6 +72,11 @@ namespace {
 #undef SEEK_HOLE
 #endif
 
+#if __BIONIC__
+// No no DTTOIF function
+#undef DT_UNKNOWN
+#endif
+
 static void setCloexec(int fd) KJ_UNUSED;
 static void setCloexec(int fd) {
   // Set the O_CLOEXEC flag on the given fd.
@@ -222,7 +227,12 @@ struct MmapRange {
 };
 
 static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
-  // Rounds the given byte range up to page boundaries.
+  // Comes up with an offset and size to pass to mmap(), given an offset and size requested by
+  // the caller, and considering the fact that mappings must start at a page boundary.
+  //
+  // The offset is rounded down to the nearest page boundary, and the size is increased to
+  // compensate. Note that the endpoint of the mapping is *not* rounded up to a page boundary, as
+  // mmap() does not actually require this, and it causes trouble on some systems (notably Cygwin).
 
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE _SC_PAGE_SIZE
@@ -232,10 +242,7 @@ static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
 
   uint64_t realOffset = offset & ~pageMask;
 
-  uint64_t end = offset + size;
-  uint64_t realEnd = (end + pageMask) & ~pageMask;
-
-  return { realOffset, realEnd - realOffset };
+  return { realOffset, offset + size - realOffset };
 }
 
 class MmapDisposer: public ArrayDisposer {
@@ -339,6 +346,7 @@ public:
   }
 
   Array<const byte> mmap(uint64_t offset, uint64_t size) const {
+    if (size == 0) return nullptr;  // zero-length mmap() returns EINVAL, so avoid it
     auto range = getMmapRange(offset, size);
     const void* mapping = ::mmap(NULL, range.size, PROT_READ, MAP_SHARED, fd, range.offset);
     if (mapping == MAP_FAILED) {
@@ -349,6 +357,7 @@ public:
   }
 
   Array<byte> mmapPrivate(uint64_t offset, uint64_t size) const {
+    if (size == 0) return nullptr;  // zero-length mmap() returns EINVAL, so avoid it
     auto range = getMmapRange(offset, size);
     void* mapping = ::mmap(NULL, range.size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, range.offset);
     if (mapping == MAP_FAILED) {
@@ -389,8 +398,8 @@ public:
 
     static const byte ZEROS[4096] = { 0 };
 
-#if __APPLE__ || __CYGWIN__
-    // Mac & Cygwin doesn't have pwritev().
+#if __APPLE__ || __CYGWIN__ || (defined(__ANDROID__) && __ANDROID_API__ < 24)
+    // Mac & Cygwin & Android API levels 23 and lower doesn't have pwritev().
     while (size > sizeof(ZEROS)) {
       write(offset, ZEROS);
       size -= sizeof(ZEROS);
@@ -447,6 +456,7 @@ public:
     void changed(ArrayPtr<byte> slice) const override {
       KJ_REQUIRE(slice.begin() >= bytes.begin() && slice.end() <= bytes.end(),
                  "byte range is not part of this mapping");
+      if (slice.size() == 0) return;
 
       // msync() requires page-alignment, apparently, so use getMmapRange() to accomplish that.
       auto range = getMmapRange(reinterpret_cast<uintptr_t>(slice.begin()), slice.size());
@@ -456,6 +466,7 @@ public:
     void sync(ArrayPtr<byte> slice) const override {
       KJ_REQUIRE(slice.begin() >= bytes.begin() && slice.end() <= bytes.end(),
                  "byte range is not part of this mapping");
+      if (slice.size() == 0) return;
 
       // msync() requires page-alignment, apparently, so use getMmapRange() to accomplish that.
       auto range = getMmapRange(reinterpret_cast<uintptr_t>(slice.begin()), slice.size());
@@ -467,6 +478,10 @@ public:
   };
 
   Own<const WritableFileMapping> mmapWritable(uint64_t offset, uint64_t size) const {
+    if (size == 0) {
+      // zero-length mmap() returns EINVAL, so avoid it
+      return heap<WritableFileMappingImpl>(nullptr);
+    }
     auto range = getMmapRange(offset, size);
     void* mapping = ::mmap(NULL, range.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, range.offset);
     if (mapping == MAP_FAILED) {
@@ -495,6 +510,7 @@ public:
           default:
             KJ_FAIL_SYSCALL("sendfile", error) { return fromPos - fromOffset; }
         }
+        if (n == 0) break;
       }
       return fromPos - fromOffset;
     }
@@ -936,6 +952,7 @@ public:
             // Retry, but make sure we don't try to create the parent again.
             return tryReplaceNode(path, mode - WriteMode::CREATE_PARENT, kj::mv(tryCreate));
           }
+          // fallthrough
         default:
           KJ_FAIL_SYSCALL("create(path)", error, path) { return false; }
       } else {
@@ -1321,6 +1338,7 @@ public:
         SYS_openat, fd.get(), ".", O_RDWR | O_TMPFILE, 0700)) {
       case EOPNOTSUPP:
       case EINVAL:
+      case EISDIR:
         // Maybe not supported by this kernel / filesystem. Fall back to below.
         break;
       default:

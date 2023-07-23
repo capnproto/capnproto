@@ -57,4 +57,6 @@ file:150:38-43: error: Sorry, only pointer types can be used as generic paramete
 file:153:30-44: error: Embeds can only be used when Text, Data, or a struct is expected.
 file:154:37-51: error: Couldn't read file for embed: no-such-file
 file:160:23-27: error: Only pointer parameters can declare their default as 'null'.
+file:161:10-16: error: 'stream' can only appear after '->', not before.
+file:161:10-16: error: A method declaration uses streaming, but '/capnp/stream.capnp' is not found in the import path. This is a standard file that should always be installed with the Cap'n Proto compiler.
 file:156:20-45: error: Import failed: nosuchfile-unused.capnp

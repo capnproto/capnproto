@@ -158,4 +158,5 @@ using Baz = import "nosuchfile-unused.capnp".Baz;
 
 interface TestInterface {
   foo @0 (a :UInt32 = null);
+  bar @1 stream -> ();
 }

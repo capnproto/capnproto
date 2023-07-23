@@ -55,11 +55,6 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
 const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
 // Defined here rather than capability.c++ so that we can safely call isNull() in this file.
 
-void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
-  // Defined here rather than capability.c++ because otherwise building with -fsanitize=vptr fails.
-  return nullptr;
-}
-
 namespace _ {  // private
 
 #endif  // !CAPNP_LITE
@@ -71,6 +66,16 @@ namespace _ {  // private
 #endif
 
 // =======================================================================================
+
+#if __GNUC__ >= 8 && !__clang__
+// GCC 8 introduced a warning which complains whenever we try to memset() or memcpy() a
+// WirePointer, becaues we deleted the regular copy constructor / assignment operator. Weirdly, if
+// I remove those deletions, GCC *still* complains that WirePointer is non-trivial. I don't
+// understand why -- maybe because WireValue has private members? We don't want to make WireValue's
+// member public, but memset() and memcpy() on it are certainly valid and desirable, so we'll just
+// have to disable the warning I guess.
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
 
 struct WirePointer {
   // A pointer, in exactly the format in which it appears on the wire.
@@ -2843,6 +2848,17 @@ void StructBuilder::transferContentFrom(StructBuilder other) {
 void StructBuilder::copyContentFrom(StructReader other) {
   // Determine the amount of data the builders have in common.
   auto sharedDataSize = kj::min(dataSize, other.dataSize);
+  auto sharedPointerCount = kj::min(pointerCount, other.pointerCount);
+
+  if ((sharedDataSize > ZERO * BITS && other.data == data) ||
+      (sharedPointerCount > ZERO * POINTERS && other.pointers == pointers)) {
+    // At least one of the section pointers is pointing to ourself. Verify that the other is two
+    // (but ignore empty sections).
+    KJ_ASSERT((sharedDataSize == ZERO * BITS || other.data == data) &&
+              (sharedPointerCount == ZERO * POINTERS || other.pointers == pointers));
+    // So `other` appears to be a reader for this same struct. No coping is needed.
+    return;
+  }
 
   if (dataSize > sharedDataSize) {
     // Since the target is larger than the source, make sure to zero out the extra bits that the
@@ -2872,7 +2888,6 @@ void StructBuilder::copyContentFrom(StructReader other) {
   WireHelpers::zeroMemory(pointers, pointerCount);
 
   // Copy the pointers.
-  auto sharedPointerCount = kj::min(pointerCount, other.pointerCount);
   for (auto i: kj::zeroTo(sharedPointerCount)) {
     WireHelpers::copyPointer(segment, capTable, pointers + i,
         other.segment, other.capTable, other.pointers + i, other.nestingLimit);
@@ -3100,11 +3115,6 @@ StructReader ListReader::getStructElement(ElementCount index) const {
   const byte* structData = ptr + indexBit / BITS_PER_BYTE;
   const WirePointer* structPointers =
       reinterpret_cast<const WirePointer*>(structData + structDataSize / BITS_PER_BYTE);
-
-  // This check should pass if there are no bugs in the list pointer validation code.
-  KJ_DASSERT(structPointerCount == ZERO * POINTERS ||
-         (uintptr_t)structPointers % sizeof(void*) == 0,
-         "Pointer section of struct list element not aligned.");
 
   KJ_DASSERT(indexBit % BITS_PER_BYTE == ZERO * BITS);
   return StructReader(
@@ -3486,6 +3496,8 @@ OrphanBuilder OrphanBuilder::concat(
 }
 
 OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
+  // TODO(someday): We now allow unaligned segments on architectures thata support it. We could
+  //   consider relaxing this check as well?
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");
 

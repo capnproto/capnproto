@@ -85,6 +85,16 @@ ReaderArena::ReaderArena(MessageReader* message)
 
 ReaderArena::~ReaderArena() noexcept(false) {}
 
+size_t ReaderArena::sizeInWords() {
+  size_t total = segment0.getArray().size();
+
+  for (uint i = 0; ; i++) {
+    SegmentReader* segment = tryGetSegment(SegmentId(i));
+    if (segment == nullptr) return total;
+    total += unboundAs<size_t>(segment->getSize() / WORDS);
+  }
+}
+
 SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     if (segment0.getArray() == nullptr) {
@@ -98,11 +108,10 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 
   SegmentMap* segments = nullptr;
   KJ_IF_MAYBE(s, *lock) {
-    auto iter = s->get()->find(id.value);
-    if (iter != s->get()->end()) {
-      return iter->second;
+    KJ_IF_MAYBE(segment, s->find(id.value)) {
+      return *segment;
     }
-    segments = *s;
+    segments = s;
   }
 
   kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);
@@ -114,15 +123,13 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 
   if (*lock == nullptr) {
     // OK, the segment exists, so allocate the map.
-    auto s = kj::heap<SegmentMap>();
-    segments = s;
-    *lock = kj::mv(s);
+    segments = &lock->emplace();
   }
 
   auto segment = kj::heap<SegmentReader>(
       this, id, newSegment.begin(), newSegmentSize, &readLimiter);
   SegmentReader* result = segment;
-  segments->insert(std::make_pair(id.value, mv(segment)));
+  segments->insert(id.value, kj::mv(segment));
   return result;
 }
 
@@ -167,6 +174,24 @@ BuilderArena::BuilderArena(MessageBuilder* message,
 }
 
 BuilderArena::~BuilderArena() noexcept(false) {}
+
+size_t BuilderArena::sizeInWords() {
+  KJ_IF_MAYBE(segmentState, moreSegments) {
+    size_t total = segment0.currentlyAllocated().size();
+    for (auto& builder: segmentState->get()->builders) {
+      total += builder->currentlyAllocated().size();
+    }
+    return total;
+  } else {
+    if (segment0.getArena() == nullptr) {
+      // We haven't actually allocated any segments yet.
+      return 0;
+    } else {
+      // We have only one segment so far.
+      return segment0.currentlyAllocated().size();
+    }
+  }
+}
 
 SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   // This method is allowed to fail if the segment ID is not valid.

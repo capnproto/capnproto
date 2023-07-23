@@ -818,6 +818,13 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
+interface TestStreaming {
+  doStreamI @0 (i :UInt32) -> stream;
+  doStreamJ @1 (j :UInt32) -> stream;
+  finishStream @2 () -> (totalI :UInt32, totalJ :UInt32);
+  # Test streaming. finishStream() returns the totals of the values streamed to the other calls.
+}
+
 interface TestHandle {}
 
 interface TestMoreStuff extends(TestCallOrder) {
@@ -860,6 +867,11 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   getEnormousString @11 () -> (str :Text);
   # Attempts to return an 100MB string. Should always fail.
+
+  writeToFd @13 (fdCap1 :TestInterface, fdCap2 :TestInterface)
+             -> (fdCap3 :TestInterface, secondFdPresent :Bool);
+  # Expects fdCap1 and fdCap2 wrap socket file descriptors. Writes "foo" to the first and "bar" to
+  # the second. Also creates a socketpair, writes "baz" to one end, and returns the other end.
 }
 
 interface TestMembrane {

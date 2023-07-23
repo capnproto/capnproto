@@ -30,6 +30,7 @@
 //   in the constructor, teardown in the destructor.
 
 #include "../test.h"
+#include <kj/windows-sanity.h>  // work-around macro conflict with `ERROR`
 
 namespace kj {
 

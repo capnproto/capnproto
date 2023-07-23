@@ -21,15 +21,15 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #if CAPNP_LITE
 #error "Reflection APIs, including this header, are not available in lite mode."
 #endif
 
 #include <capnp/schema.capnp.h>
+#include <kj/hash.h>
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -127,6 +127,8 @@ public:
   // Determine whether two Schemas are wrapping the exact same underlying data, by identity.  If
   // you want to check if two Schemas represent the same type (but possibly different versions of
   // it), compare their IDs instead.
+
+  inline uint hashCode() const { return kj::hashCode(raw); }
 
   template <typename T>
   void requireUsableAs() const;
@@ -256,6 +258,9 @@ public:
   // there is no such field.  (If the schema does not represent a union or a struct containing
   // an unnamed union, then this always returns null.)
 
+  bool isStreamResult() const;
+  // Convenience method to check if this is the result type of a streaming RPC method.
+
 private:
   StructSchema(Schema base): Schema(base) {}
   template <typename T> static inline StructSchema fromImpl() {
@@ -301,6 +306,7 @@ public:
 
   inline bool operator==(const Field& other) const;
   inline bool operator!=(const Field& other) const { return !(*this == other); }
+  inline uint hashCode() const;
 
 private:
   StructSchema parent;
@@ -399,6 +405,7 @@ public:
 
   inline bool operator==(const Enumerant& other) const;
   inline bool operator!=(const Enumerant& other) const { return !(*this == other); }
+  inline uint hashCode() const;
 
 private:
   EnumSchema parent;
@@ -485,12 +492,16 @@ public:
   inline uint16_t getOrdinal() const { return ordinal; }
   inline uint getIndex() const { return ordinal; }
 
+  bool isStreaming() const { return getResultType().isStreamResult(); }
+  // Check if this is a streaming method.
+
   StructSchema getParamType() const;
   StructSchema getResultType() const;
   // Get the parameter and result types, including substituting generic parameters.
 
   inline bool operator==(const Method& other) const;
   inline bool operator!=(const Method& other) const { return !(*this == other); }
+  inline uint hashCode() const;
 
 private:
   InterfaceSchema parent;
@@ -643,7 +654,7 @@ public:
   bool operator==(const Type& other) const;
   inline bool operator!=(const Type& other) const { return !(*this == other); }
 
-  size_t hashCode() const;
+  uint hashCode() const;
 
   inline Type wrapInList(uint depth = 1) const;
   // Return the Type formed by wrapping this type in List() `depth` times.
@@ -793,6 +804,16 @@ inline bool EnumSchema::Enumerant::operator==(const Enumerant& other) const {
 }
 inline bool InterfaceSchema::Method::operator==(const Method& other) const {
   return parent == other.parent && ordinal == other.ordinal;
+}
+
+inline uint StructSchema::Field::hashCode() const {
+  return kj::hashCode(parent, index);
+}
+inline uint EnumSchema::Enumerant::hashCode() const {
+  return kj::hashCode(parent, ordinal);
+}
+inline uint InterfaceSchema::Method::hashCode() const {
+  return kj::hashCode(parent, ordinal);
 }
 
 inline ListSchema ListSchema::of(StructSchema elementType) {
@@ -957,3 +978,5 @@ inline Type Type::wrapInList(uint depth) const {
 }
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

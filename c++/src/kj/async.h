@@ -21,13 +21,11 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "async-prelude.h"
 #include "exception.h"
 #include "refcount.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -231,8 +229,16 @@ public:
   //   around them in arbitrary ways.  Therefore, callers really need to know if a function they
   //   are calling might wait(), and the `WaitScope&` parameter makes this clear.
   //
-  // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
-  //   event.
+  // Usually, there is only one `WaitScope` for each `EventLoop`, and it can only be used at the
+  // top level of the thread owning the loop. Calling `wait()` with this `WaitScope` is what
+  // actually causes the event loop to run at all. This top-level `WaitScope` cannot be used
+  // recursively, so cannot be used within an event callback.
+  //
+  // However, it is possible to obtain a `WaitScope` in lower-level code by using fibers. Use
+  // kj::startFiber() to start some code executing on an alternate call stack. That code will get
+  // its own `WaitScope` allowing it to operate in a synchronous style. In this case, `wait()`
+  // switches back to the main stack in order to run the event loop, returning to the fiber's stack
+  // once the awaited promise resolves.
 
   bool poll(WaitScope& waitScope);
   // Returns true if a call to wait() would complete without blocking, false if it would block.
@@ -246,6 +252,8 @@ public:
   // The first poll() verifies that the promise doesn't resolve early, which would otherwise be
   // hard to do deterministically. The second poll() allows you to check that the promise has
   // resolved and avoid a wait() that might deadlock in the case that it hasn't.
+  //
+  // poll() is not supported in fibers; it will throw an exception.
 
   ForkedPromise<T> fork() KJ_WARN_UNUSED_RESULT;
   // Forks the promise, so that multiple different clients can independently wait on the result.
@@ -281,7 +289,7 @@ public:
   // processes it.
   //
   // `errorHandler` is a function that takes `kj::Exception&&`, like the second parameter to
-  // `then()`, except that it must return void.  We make you specify this because otherwise it's
+  // `then()`, or the parameter to `catch_()`.  We make you specify this because otherwise it's
   // easy to forget to handle errors in a promise that you never use.  You may specify nullptr for
   // the error handler if you are sure that ignoring errors is fine, or if you know that you'll
   // eventually wait on the promise somewhere.
@@ -307,21 +315,7 @@ private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
-  template <typename>
-  friend class Promise;
-  friend class EventLoop;
-  template <typename U, typename Adapter, typename... Params>
-  friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
-  template <typename U>
-  friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
-  template <typename>
-  friend class _::ForkHub;
-  friend class TaskSet;
-  friend Promise<void> _::yield();
-  friend class _::NeverDone;
-  template <typename U>
-  friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
-  friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
+  friend class _::PromiseNode;
 };
 
 template <typename T>
@@ -376,6 +370,48 @@ PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
 // Run `func()` and return a promise for its result. `func()` executes before `evalNow()` returns.
 // If `func()` throws an exception, the exception is caught and wrapped in a promise -- this is the
 // main reason why `evalNow()` is useful.
+
+template <typename Func>
+PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
+// Like `evalLater()`, except that the function doesn't run until the event queue is otherwise
+// completely empty and the thread is about to suspend waiting for I/O.
+//
+// This is useful when you need to perform some disruptive action and you want to make sure that
+// you don't interrupt some other task between two .then() continuations. For example, say you want
+// to cancel a read() operation on a socket and know for sure that if any bytes were read, you saw
+// them. It could be that a read() has completed and bytes have been transferred to the target
+// buffer, but the .then() callback that handles the read result hasn't executed yet. If you
+// cancel the promise at this inopportune moment, the bytes in the buffer are lost. If you do
+// evalLast(), then you can be sure that any pending .then() callbacks had a chance to finish out
+// and if you didn't receive the read result yet, then you know nothing has been read, and you can
+// simply drop the promise.
+//
+// If evalLast() is called multiple times, functions are executed in LIFO order. If the first
+// callback enqueues new events, then latter callbacks will not execute until those events are
+// drained.
+
+template <typename Func>
+PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_WARN_UNUSED_RESULT;
+// Executes `func()` in a fiber, returning a promise for the eventual reseult. `func()` will be
+// passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on promises. Thus, `func()`
+// can be written in a synchronous, blocking style, instead of using `.then()`. This is often much
+// easier to write and read, and may even be significantly faster if it allows the use of stack
+// allocation rather than heap allocation.
+//
+// However, fibers have a major disadvantage: memory must be allocated for the fiber's call stack.
+// The entire stack must be allocated at once, making it necessary to choose a stack size upfront
+// that is big enough for whatever the fiber needs to do. Estimating this is often difficult. That
+// said, over-estimating is not too terrible since pages of the stack will actually be allocated
+// lazily when first accessed; actual memory usage will correspond to the "high watermark" of the
+// actual stack usage. That said, this lazy allocation forces page faults, which can be quite slow.
+// Worse, freeing a stack forces a TLB flush and shootdown -- all currently-executing threads will
+// have to be interrupted to flush their CPU cores' TLB caches.
+//
+// In short, when performance matters, you should try to avoid creating fibers very frequently.
+//
+// TODO(perf): We should add a mechanism for freelisting stacks. However, this improves CPU usage
+//   at the expense of memory usage: stacks on the freelist will consume however many pages they
+//   used at their high watermark, forever.
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -460,7 +496,7 @@ public:
 };
 
 template <typename T, typename Adapter, typename... Params>
-Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
+_::ReducePromises<T> newAdaptedPromise(Params&&... adapterConstructorParams);
 // Creates a new promise which owns an instance of `Adapter` which encapsulates the operation
 // that will eventually fulfill the promise.  This is primarily useful for adapting non-KJ
 // asynchronous APIs to use promises.
@@ -546,7 +582,7 @@ public:
   // Releases previously-wrapped promises, so that they will not be canceled regardless of what
   // happens to this Canceler.
 
-  bool isEmpty() { return list == nullptr; }
+  bool isEmpty() const { return list == nullptr; }
   // Indicates if any previously-wrapped promises are still executing. (If this returns false, then
   // cancel() would be a no-op.)
 
@@ -648,6 +684,94 @@ private:
   Maybe<Own<Task>> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
 };
+
+// =======================================================================================
+// Cross-thread execution.
+
+class Executor {
+  // Executes code on another thread's event loop.
+  //
+  // Use `kj::getCurrentThreadExecutor()` to get an executor that schedules calls on the current
+  // thread's event loop. You may then pass the reference to other threads to enable them to call
+  // back to this one.
+
+public:
+  Executor(EventLoop& loop, Badge<EventLoop>);
+  ~Executor() noexcept(false);
+
+  template <typename Func>
+  PromiseForResult<Func, void> executeAsync(Func&& func) const;
+  // Call from any thread to request that the given function be executed on the executor's thread,
+  // returning a promise for the result.
+  //
+  // The Promise returned by executeAsync() belongs to the requesting thread, not the executor
+  // thread. Hence, for example, continuations added to this promise with .then() will exceute in
+  // the requesting thread.
+  //
+  // If func() itself returns a Promise, that Promise is *not* returned verbatim to the requesting
+  // thread -- after all, Promise objects cannot be used cross-thread. Instead, the executor thread
+  // awaits the promise. Once it resolves to a final result, that result is transferred to the
+  // requesting thread, resolving the promise that executeAsync() returned earlier.
+  //
+  // `func` will be destroyed in the requesting thread, after the final result has been returned
+  // from the executor thread. This means that it is safe for `func` to capture objects that cannot
+  // safely be destroyed from another thread. It is also safe for `func` to be an lvalue reference,
+  // so long as the functor remains live until the promise completes or is canceled, and the
+  // function is thread-safe.
+  //
+  // Of course, the body of `func` must be careful that any access it makes on these objects is
+  // safe cross-thread. For example, it must not attempt to access Promise-related objects
+  // cross-thread; you cannot create a `PromiseFulfiller` in one thread and then `fulfill()` it
+  // from another. Unfortunately, the usual convention of using const-correctness to enforce
+  // thread-safety does not work here, because applications can often ensure that `func` has
+  // exclusive access to captured objects, and thus can safely mutate them even in non-thread-safe
+  // ways; the const qualifier is not sufficient to express this.
+  //
+  // The final return value of `func` is transferred between threads, and hence is constructed and
+  // destroyed in separate threads. It is the app's responsibility to make sure this is OK.
+  // Alternatively, the app can perhaps arrange to send the return value back to the original
+  // thread for destruction, if needed.
+  //
+  // If the requesting thread destroys the returned Promise, the destructor will block waiting for
+  // the executor thread to acknowledge cancellation. This ensures that `func` can be destroyed
+  // before the Promise's destructor returns.
+  //
+  // Multiple calls to executeAsync() from the same requesting thread to the same target thread
+  // will be delivered in the same order in which they were requested. (However, if func() returns
+  // a promise, delivery of subsequent calls is not blocked on that promise. In other words, this
+  // call provides E-Order in the same way as Cap'n Proto.)
+
+  template <typename Func>
+  _::UnwrapPromise<PromiseForResult<Func, void>> executeSync(Func&& func) const;
+  // Schedules `func()` to execute on the executor thread, and then blocks the requesting thread
+  // until `func()` completes. If `func()` returns a Promise, then the wait will continue until
+  // that promise resolves, and the final result will be returned to the requesting thread.
+  //
+  // The requesting thread does not need to have an EventLoop. If it does have an EventLoop, that
+  // loop will *not* execute while the thread is blocked. This method is particularly useful to
+  // allow non-event-loop threads to perform I/O via a separate event-loop thread.
+  //
+  // As with `executeAsync()`, `func` is always destroyed on the requesting thread, after the
+  // executor thread has signaled completion. The return value is transferred between threads.
+
+private:
+  EventLoop& loop;
+
+  struct Impl;
+  Own<Impl> impl;
+  // To avoid including mutex.h...
+
+  friend class EventLoop;
+  friend class _::XThreadEvent;
+
+  void send(_::XThreadEvent& event, bool sync) const;
+  void wait();
+  bool poll();
+};
+
+const Executor& getCurrentThreadExecutor();
+// Get the executor for the current thread's event loop. This reference can then be passed to other
+// threads.
 
 // =======================================================================================
 // The EventLoop class
@@ -753,8 +877,19 @@ public:
   bool isRunnable();
   // Returns true if run() would currently do anything, or false if the queue is empty.
 
+  const Executor& getExecutor();
+  // Returns an Executor that can be used to schedule events on this EventLoop from another thread.
+  //
+  // Use the global function kj::getCurrentThreadExecutor() to get the current thread's EventLoop's
+  // Executor.
+  //
+  // Note that this is only needed for cross-thread scheduling. To schedule code to run later in
+  // the current thread, use `kj::evalLater()`, which will be more efficient.
+
 private:
-  EventPort& port;
+  kj::Maybe<EventPort&> port;
+  // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
+  // events from other threads via the Executor.
 
   bool running = false;
   // True while looping -- wait() is then not allowed.
@@ -765,13 +900,24 @@ private:
   _::Event* head = nullptr;
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
+  _::Event** breadthFirstInsertPoint = &head;
+
+  kj::Maybe<Executor> executor;
+  // Allocated the first time getExecutor() is requested, making cross-thread request possible.
 
   Own<TaskSet> daemons;
+
+#if _WIN32 || __CYGWIN__
+  void* mainFiber = nullptr;
+#endif
 
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
   void leaveScope();
+
+  void wait();
+  void poll();
 
   friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
@@ -779,6 +925,9 @@ private:
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
   friend class _::Event;
   friend class WaitScope;
+  friend class Executor;
+  friend class _::XThreadEvent;
+  friend class _::FiberBase;
 };
 
 class WaitScope {
@@ -792,15 +941,31 @@ class WaitScope {
 
 public:
   inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
-  inline ~WaitScope() { loop.leaveScope(); }
+  inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
   KJ_DISALLOW_COPY(WaitScope);
 
   void poll();
   // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking).
+  //
+  // Not supported in fibers.
+
+  void setBusyPollInterval(uint count) { busyPollInterval = count; }
+  // Set the maximum number of events to run in a row before calling poll() on the EventPort to
+  // check for new I/O.
+  //
+  // This has no effect when used in a fiber.
 
 private:
   EventLoop& loop;
+  uint busyPollInterval = kj::maxValue;
+
+  kj::Maybe<_::FiberBase&> fiber;
+
+  explicit WaitScope(EventLoop& loop, _::FiberBase& fiber)
+      : loop(loop), fiber(fiber) {}
+
   friend class EventLoop;
+  friend class _::FiberBase;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
@@ -810,3 +975,5 @@ private:
 
 #define KJ_ASYNC_H_INCLUDED
 #include "async-inl.h"
+
+KJ_END_HEADER

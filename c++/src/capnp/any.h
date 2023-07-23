@@ -21,14 +21,13 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !defined(CAPNP_HEADER_WARNINGS)
-#pragma GCC system_header
-#endif
-
 #include "layout.h"
 #include "pointer-helpers.h"
 #include "orphan.h"
 #include "list.h"
+#include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+
+CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
@@ -1092,3 +1091,5 @@ inline kj::Own<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
 #endif  // !CAPNP_LITE
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

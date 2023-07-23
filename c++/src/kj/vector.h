@@ -21,11 +21,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "array.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 
@@ -52,7 +50,8 @@ public:
   inline size_t size() const { return builder.size(); }
   inline bool empty() const { return size() == 0; }
   inline size_t capacity() const { return builder.capacity(); }
-  inline T& operator[](size_t index) const { return builder[index]; }
+  inline T& operator[](size_t index) { return builder[index]; }
+  inline const T& operator[](size_t index) const { return builder[index]; }
 
   inline const T* begin() const { return builder.begin(); }
   inline const T* end() const { return builder.end(); }
@@ -115,7 +114,7 @@ public:
   }
 
   inline void clear() {
-    builder.resize(0);
+    builder.clear();
   }
 
   inline void truncate(size_t size) {
@@ -150,3 +149,5 @@ inline auto KJ_STRINGIFY(const Vector<T>& v) -> decltype(toCharSequence(v.asPtr(
 }
 
 }  // namespace kj
+
+KJ_END_HEADER

@@ -21,6 +21,7 @@
 
 #include "serialize-async.h"
 #include <kj/debug.h>
+#include <kj/io.h>
 
 namespace capnp {
 
@@ -34,6 +35,10 @@ public:
   ~AsyncMessageReader() noexcept(false) {}
 
   kj::Promise<bool> read(kj::AsyncInputStream& inputStream, kj::ArrayPtr<word> scratchSpace);
+
+  kj::Promise<kj::Maybe<size_t>> readWithFds(
+      kj::AsyncCapabilityStream& inputStream,
+      kj::ArrayPtr<kj::AutoCloseFd> fds, kj::ArrayPtr<word> scratchSpace);
 
   // implements MessageReader ----------------------------------------
 
@@ -71,12 +76,32 @@ kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
       return false;
     } else if (n < sizeof(firstWord)) {
       // EOF in first word.
-      KJ_FAIL_REQUIRE("Premature EOF.") {
-        return false;
-      }
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+      return false;
     }
 
     return readAfterFirstWord(inputStream, scratchSpace).then([]() { return true; });
+  });
+}
+
+kj::Promise<kj::Maybe<size_t>> AsyncMessageReader::readWithFds(
+    kj::AsyncCapabilityStream& inputStream, kj::ArrayPtr<kj::AutoCloseFd> fds,
+    kj::ArrayPtr<word> scratchSpace) {
+  return inputStream.tryReadWithFds(firstWord, sizeof(firstWord), sizeof(firstWord),
+                                    fds.begin(), fds.size())
+      .then([this,&inputStream,KJ_CPCAP(scratchSpace)]
+            (kj::AsyncCapabilityStream::ReadResult result) mutable
+            -> kj::Promise<kj::Maybe<size_t>> {
+    if (result.byteCount == 0) {
+      return kj::Maybe<size_t>(nullptr);
+    } else if (result.byteCount < sizeof(firstWord)) {
+      // EOF in first word.
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+      return kj::Maybe<size_t>(nullptr);
+    }
+
+    return readAfterFirstWord(inputStream, scratchSpace)
+        .then([result]() -> kj::Maybe<size_t> { return result.capCount; });
   });
 }
 
@@ -152,24 +177,57 @@ kj::Promise<kj::Own<MessageReader>> readMessage(
     kj::AsyncInputStream& input, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   auto reader = kj::heap<AsyncMessageReader>(options);
   auto promise = reader->read(input, scratchSpace);
-  return promise.then(kj::mvCapture(reader, [](kj::Own<MessageReader>&& reader, bool success) {
-    KJ_REQUIRE(success, "Premature EOF.") { break; }
+  return promise.then([reader = kj::mv(reader)](bool success) mutable -> kj::Own<MessageReader> {
+    if (!success) {
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+    }
     return kj::mv(reader);
-  }));
+  });
 }
 
 kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
     kj::AsyncInputStream& input, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   auto reader = kj::heap<AsyncMessageReader>(options);
   auto promise = reader->read(input, scratchSpace);
-  return promise.then(kj::mvCapture(reader,
-        [](kj::Own<MessageReader>&& reader, bool success) -> kj::Maybe<kj::Own<MessageReader>> {
+  return promise.then([reader = kj::mv(reader)](bool success) mutable
+                      -> kj::Maybe<kj::Own<MessageReader>> {
     if (success) {
       return kj::mv(reader);
     } else {
       return nullptr;
     }
-  }));
+  });
+}
+
+kj::Promise<MessageReaderAndFds> readMessage(
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  auto reader = kj::heap<AsyncMessageReader>(options);
+  auto promise = reader->readWithFds(input, fdSpace, scratchSpace);
+  return promise.then([reader = kj::mv(reader), fdSpace](kj::Maybe<size_t> nfds) mutable
+                      -> MessageReaderAndFds {
+    KJ_IF_MAYBE(n, nfds) {
+      return { kj::mv(reader), fdSpace.slice(0, *n) };
+    } else {
+      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
+      return { kj::mv(reader), nullptr };
+    }
+  });
+}
+
+kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  auto reader = kj::heap<AsyncMessageReader>(options);
+  auto promise = reader->readWithFds(input, fdSpace, scratchSpace);
+  return promise.then([reader = kj::mv(reader), fdSpace](kj::Maybe<size_t> nfds) mutable
+                      -> kj::Maybe<MessageReaderAndFds> {
+    KJ_IF_MAYBE(n, nfds) {
+      return MessageReaderAndFds { kj::mv(reader), fdSpace.slice(0, *n) };
+    } else {
+      return nullptr;
+    }
+  });
 }
 
 // =======================================================================================
@@ -183,10 +241,9 @@ struct WriteArrays {
   kj::Array<kj::ArrayPtr<const byte>> pieces;
 };
 
-}  // namespace
-
-kj::Promise<void> writeMessage(kj::AsyncOutputStream& output,
-                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+template <typename WriteFunc>
+kj::Promise<void> writeMessageImpl(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
+                                   WriteFunc&& writeFunc) {
   KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
   WriteArrays arrays;
@@ -211,10 +268,28 @@ kj::Promise<void> writeMessage(kj::AsyncOutputStream& output,
     arrays.pieces[i + 1] = segments[i].asBytes();
   }
 
-  auto promise = output.write(arrays.pieces);
+  auto promise = writeFunc(arrays.pieces);
 
   // Make sure the arrays aren't freed until the write completes.
   return promise.then(kj::mvCapture(arrays, [](WriteArrays&&) {}));
+}
+
+}  // namespace
+
+kj::Promise<void> writeMessage(kj::AsyncOutputStream& output,
+                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return writeMessageImpl(segments,
+      [&](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+    return output.write(pieces);
+  });
+}
+
+kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,
+                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  return writeMessageImpl(segments,
+      [&](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+    return output.writeWithFds(pieces[0], pieces.slice(1, pieces.size()), fds);
+  });
 }
 
 }  // namespace capnp

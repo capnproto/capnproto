@@ -447,6 +447,7 @@ TEST(Array, AttachNested) {
   Array<Own<DestructionOrderRecorder>> combined = arr.attach(kj::mv(obj2)).attach(kj::mv(obj3));
 
   KJ_EXPECT(combined.begin() == ptr);
+  KJ_EXPECT(combined.size() == 1);
 
   KJ_EXPECT(obj1.get() == nullptr);
   KJ_EXPECT(obj2.get() == nullptr);

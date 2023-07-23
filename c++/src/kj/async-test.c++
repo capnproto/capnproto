@@ -379,57 +379,75 @@ TEST(Async, Ordering) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  int counter = 0;
-  Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+  class ErrorHandlerImpl: public TaskSet::ErrorHandler {
+  public:
+    void taskFailed(kj::Exception&& exception) override {
+      KJ_FAIL_EXPECT(exception);
+    }
+  };
 
-  promises[1] = evalLater([&]() {
+  int counter = 0;
+  ErrorHandlerImpl errorHandler;
+  kj::TaskSet tasks(errorHandler);
+
+  tasks.add(evalLater([&]() {
     EXPECT_EQ(0, counter++);
 
     {
       // Use a promise and fulfiller so that we can fulfill the promise after waiting on it in
       // order to induce depth-first scheduling.
       auto paf = kj::newPromiseAndFulfiller<void>();
-      promises[2] = paf.promise.then([&]() {
+      tasks.add(paf.promise.then([&]() {
         EXPECT_EQ(1, counter++);
-      }).eagerlyEvaluate(nullptr);
+      }));
       paf.fulfiller->fulfill();
     }
 
     // .then() is scheduled breadth-first if the promise has already resolved, but depth-first
     // if the promise resolves later.
-    promises[3] = Promise<void>(READY_NOW).then([&]() {
+    tasks.add(Promise<void>(READY_NOW).then([&]() {
       EXPECT_EQ(4, counter++);
     }).then([&]() {
       EXPECT_EQ(5, counter++);
-    }).eagerlyEvaluate(nullptr);
+      tasks.add(kj::evalLast([&]() {
+        EXPECT_EQ(7, counter++);
+        tasks.add(kj::evalLater([&]() {
+          EXPECT_EQ(8, counter++);
+        }));
+      }));
+    }));
 
     {
       auto paf = kj::newPromiseAndFulfiller<void>();
-      promises[4] = paf.promise.then([&]() {
+      tasks.add(paf.promise.then([&]() {
         EXPECT_EQ(2, counter++);
-      }).eagerlyEvaluate(nullptr);
+        tasks.add(kj::evalLast([&]() {
+          EXPECT_EQ(9, counter++);
+          tasks.add(kj::evalLater([&]() {
+            EXPECT_EQ(10, counter++);
+          }));
+        }));
+      }));
       paf.fulfiller->fulfill();
     }
 
     // evalLater() is like READY_NOW.then().
-    promises[5] = evalLater([&]() {
+    tasks.add(evalLater([&]() {
       EXPECT_EQ(6, counter++);
-    }).eagerlyEvaluate(nullptr);
-  }).eagerlyEvaluate(nullptr);
+    }));
+  }));
 
-  promises[0] = evalLater([&]() {
+  tasks.add(evalLater([&]() {
     EXPECT_EQ(3, counter++);
 
-    // Making this a chain should NOT cause it to preempt promises[1].  (This was a problem at one
-    // point.)
+    // Making this a chain should NOT cause it to preempt the first promise.  (This was a problem
+    // at one point.)
     return Promise<void>(READY_NOW);
-  }).eagerlyEvaluate(nullptr);
+  }));
 
-  for (auto i: indices(promises)) {
-    kj::mv(promises[i]).wait(waitScope);
-  }
+  tasks.onEmpty().wait(waitScope);
 
-  EXPECT_EQ(7, counter);
+  EXPECT_EQ(11, counter);
 }
 
 TEST(Async, Fork) {
@@ -597,7 +615,7 @@ TEST(Async, Canceler) {
 
   canceler.cancel("foobar");
 
-  KJ_EXPECT_THROW_MESSAGE("foobar", never.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", never.wait(waitScope));
   now.wait(waitScope);
   KJ_EXPECT_THROW_MESSAGE("foobar", neverI.wait(waitScope));
   KJ_EXPECT(nowI.wait(waitScope) == 123u);
@@ -631,7 +649,7 @@ TEST(Async, TaskSet) {
     EXPECT_EQ(2, counter++);
   }));
 
-  (void)evalLater([&]() {
+  auto ignore KJ_UNUSED = evalLater([&]() {
     KJ_FAIL_EXPECT("Promise without waiter shouldn't execute.");
   });
 
@@ -725,7 +743,10 @@ TEST(Async, Detach) {
   bool ran2 = false;
   bool ran3 = false;
 
-  (void)evalLater([&]() { ran1 = true; });  // let returned promise be destroyed (canceled)
+  {
+    // let returned promise be destroyed (canceled)
+    auto ignore KJ_UNUSED = evalLater([&]() { ran1 = true; });
+  }
   evalLater([&]() { ran2 = true; }).detach([](kj::Exception&&) { ADD_FAILURE(); });
   evalLater([]() { KJ_FAIL_ASSERT("foo"){break;} }).detach([&](kj::Exception&& e) { ran3 = true; });
 
@@ -804,6 +825,111 @@ TEST(Async, Poll) {
   paf.fulfiller->fulfill();
   KJ_ASSERT(paf.promise.poll(waitScope));
   paf.promise.wait(waitScope);
+}
+
+KJ_TEST("exclusiveJoin both events complete simultaneously") {
+  // Previously, if both branches of an exclusiveJoin() completed simultaneously, then the parent
+  // event could be armed twice. This is an error, but the exact results of this error depend on
+  // the parent PromiseNode type. One case where it matters is ArrayJoinPromiseNode, which counts
+  // events and decides it is done when it has received exactly the number of events expected.
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto builder = kj::heapArrayBuilder<kj::Promise<uint>>(2);
+  builder.add(kj::Promise<uint>(123).exclusiveJoin(kj::Promise<uint>(456)));
+  builder.add(kj::NEVER_DONE);
+  auto joined = kj::joinPromises(builder.finish());
+
+  KJ_EXPECT(!joined.poll(waitScope));
+}
+
+KJ_TEST("start a fiber") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int>();
+
+  Promise<StringPtr> fiber = startFiber(65536,
+      [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
+    int i = promise.wait(fiberScope);
+    KJ_EXPECT(i == 123);
+    return "foo"_kj;
+  });
+
+  KJ_EXPECT(!fiber.poll(waitScope));
+
+  paf.fulfiller->fulfill(123);
+
+  KJ_ASSERT(fiber.poll(waitScope));
+  KJ_EXPECT(fiber.wait(waitScope) == "foo");
+}
+
+KJ_TEST("fiber promise chaining") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int>();
+  bool ran = false;
+
+  Promise<int> fiber = startFiber(65536,
+      [promise = kj::mv(paf.promise), &ran](WaitScope& fiberScope) mutable {
+    ran = true;
+    return kj::mv(promise);
+  });
+
+  KJ_EXPECT(!ran);
+  KJ_EXPECT(!fiber.poll(waitScope));
+  KJ_EXPECT(ran);
+
+  paf.fulfiller->fulfill(123);
+
+  KJ_ASSERT(fiber.poll(waitScope));
+  KJ_EXPECT(fiber.wait(waitScope) == 123);
+}
+
+KJ_TEST("throw from a fiber") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+
+  Promise<void> fiber = startFiber(65536,
+      [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
+    promise.wait(fiberScope);
+    KJ_FAIL_EXPECT("wait() should have thrown");
+  });
+
+  KJ_EXPECT(!fiber.poll(waitScope));
+
+  paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "test exception"));
+
+  KJ_ASSERT(fiber.poll(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("test exception", fiber.wait(waitScope));
+}
+
+KJ_TEST("cancel a fiber") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<int>();
+
+  bool exited = false;
+
+  {
+    Promise<StringPtr> fiber = startFiber(65536,
+        [promise = kj::mv(paf.promise), &exited](WaitScope& fiberScope) mutable {
+      KJ_DEFER(exited = true);
+      int i = promise.wait(fiberScope);
+      KJ_EXPECT(i == 123);
+      return "foo"_kj;
+    });
+
+    KJ_EXPECT(!fiber.poll(waitScope));
+    KJ_EXPECT(!exited);
+  }
+
+  KJ_EXPECT(exited);
 }
 
 }  // namespace

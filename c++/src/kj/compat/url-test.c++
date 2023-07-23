@@ -39,6 +39,12 @@ Url parseAndCheck(kj::StringPtr originalText, kj::StringPtr expectedRestringifie
 
 static constexpr Url::Options NO_DECODE {
   false,  // percentDecode
+  false,  // allowEmpty
+};
+
+static constexpr Url::Options ALLOW_EMPTY {
+  true,    // percentDecode
+  true,    // allowEmpty
 };
 
 KJ_TEST("parse / stringify URL") {
@@ -281,6 +287,25 @@ KJ_TEST("parse / stringify URL") {
   parseAndCheck("https://capnproto.org/foo%25bar");
   parseAndCheck("https://capnproto.org/?foo%25bar=baz%25qux");
   parseAndCheck("https://capnproto.org/#foo%25bar");
+
+  // Make sure redundant /'s and &'s aren't collapsed when options.removeEmpty is false.
+  parseAndCheck("https://capnproto.org/foo//bar///test//?foo=bar&&baz=qux&", nullptr, ALLOW_EMPTY);
+
+  // "." and ".." are still processed, though.
+  parseAndCheck("https://capnproto.org/foo//../bar/.",
+                "https://capnproto.org/foo/bar/", ALLOW_EMPTY);
+
+  {
+    auto url = parseAndCheck("https://foo/", nullptr, ALLOW_EMPTY);
+    KJ_EXPECT(url.path.size() == 0);
+    KJ_EXPECT(url.hasTrailingSlash);
+  }
+
+  {
+    auto url = parseAndCheck("https://foo/bar/", nullptr, ALLOW_EMPTY);
+    KJ_EXPECT(url.path.size() == 1);
+    KJ_EXPECT(url.hasTrailingSlash);
+  }
 }
 
 KJ_TEST("URL percent encoding") {

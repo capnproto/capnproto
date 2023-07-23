@@ -22,12 +22,10 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "units.h"
 #include <inttypes.h>
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -50,8 +48,9 @@ constexpr Duration HOURS = 60 * MINUTES;
 constexpr Duration DAYS = 24 * HOURS;
 
 using TimePoint = Absolute<Duration, _::TimeLabel>;
-// An absolute time measured by some particular instance of `Timer`.  `Time`s from two different
-// `Timer`s may be measured from different origins and so are not necessarily compatible.
+// An absolute time measured by some particular instance of `Timer` or `MonotonicClock`. `Time`s
+// from two different `Timer`s or `MonotonicClock`s may be measured from different origins and so
+// are not necessarily compatible.
 
 using Date = Absolute<Duration, _::DateLabel>;
 // A point in real-world time, measured relative to the Unix epoch (Jan 1, 1970 00:00:00 UTC).
@@ -65,8 +64,48 @@ public:
   virtual Date now() const = 0;
 };
 
+class MonotonicClock {
+  // Interface to read time in a way that increases as real-world time increases, independent of
+  // any manual changes to the calendar date/time. Such a clock never "goes backwards" even if the
+  // system administrator changes the calendar time or suspends the system. However, this clock's
+  // time points are only meaningful in comparison to other time points from the same clock, and
+  // cannot be used to determine the current calendar date.
+
+public:
+  virtual TimePoint now() const = 0;
+};
+
 const Clock& nullClock();
 // A clock which always returns UNIX_EPOCH as the current time. Useful when you don't care about
 // time.
 
+const Clock& systemCoarseCalendarClock();
+const Clock& systemPreciseCalendarClock();
+// A clock that reads the real system time.
+//
+// In well-designed code, this should only be called by the top-level dependency injector. All
+// other modules should request that the caller provide a Clock so that alternate clock
+// implementations can be injected for testing, simulation, reproducibility, and other purposes.
+//
+// The "coarse" version has precision around 1-10ms, while the "precise" version has precision
+// better than 1us. The "precise" version may be slightly slower, though on modern hardware and
+// a reasonable operating system the difference is usually negligible.
+//
+// Note: On Windows prior to Windows 8, there is no precise calendar clock; the "precise" clock
+//   will be no more precise than the "coarse" clock in this case.
+
+const MonotonicClock& systemCoarseMonotonicClock();
+const MonotonicClock& systemPreciseMonotonicClock();
+// A MonotonicClock that reads the real system time.
+//
+// In well-designed code, this should only be called by the top-level dependency injector. All
+// other modules should request that the caller provide a Clock so that alternate clock
+// implementations can be injected for testing, simulation, reproducibility, and other purposes.
+//
+// The "coarse" version has precision around 1-10ms, while the "precise" version has precision
+// better than 1us. The "precise" version may be slightly slower, though on modern hardware and
+// a reasonable operating system the difference is usually negligible.
+
 }  // namespace kj
+
+KJ_END_HEADER

@@ -52,15 +52,19 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
   return newRequest(schema.getMethodByName(methodName), sizeHint);
 }
 
-kj::Promise<void> DynamicCapability::Server::dispatchCall(
+Capability::Server::DispatchCallResult DynamicCapability::Server::dispatchCall(
     uint64_t interfaceId, uint16_t methodId,
     CallContext<AnyPointer, AnyPointer> context) {
   KJ_IF_MAYBE(interface, schema.findSuperclass(interfaceId)) {
     auto methods = interface->getMethods();
     if (methodId < methods.size()) {
       auto method = methods[methodId];
-      return call(method, CallContext<DynamicStruct, DynamicStruct>(*context.hook,
-          method.getParamType(), method.getResultType()));
+      auto resultType = method.getResultType();
+      return {
+        call(method, CallContext<DynamicStruct, DynamicStruct>(*context.hook,
+            method.getParamType(), resultType)),
+        resultType.isStreamResult()
+      };
     } else {
       return internalUnimplemented(
           interface->getProto().getDisplayName().cStr(), interfaceId, methodId);
@@ -72,6 +76,7 @@ kj::Promise<void> DynamicCapability::Server::dispatchCall(
 
 RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
   auto typelessPromise = hook->send();
+  hook = nullptr;  // prevent reuse
   auto resultSchemaCopy = resultSchema;
 
   // Convert the Promise to return the correct response type.
@@ -88,6 +93,14 @@ RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
       kj::mv(kj::implicitCast<AnyPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<DynamicStruct>(kj::mv(typedPromise), kj::mv(typedPipeline));
+}
+
+kj::Promise<void> Request<DynamicStruct, DynamicStruct>::sendStreaming() {
+  KJ_REQUIRE(resultSchema.isStreamResult());
+
+  auto promise = hook->sendStreaming();
+  hook = nullptr;  // prevent reuse
+  return promise;
 }
 
 }  // namespace capnp

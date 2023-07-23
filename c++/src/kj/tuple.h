@@ -37,11 +37,9 @@
 
 #pragma once
 
-#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
-#pragma GCC system_header
-#endif
-
 #include "common.h"
+
+KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
@@ -93,19 +91,17 @@ struct TupleElement {
   // from a TupleElement for each element, which is more efficient than a recursive definition.
 
   T value;
-  TupleElement() = default;
+  TupleElement() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
   constexpr inline TupleElement(const T& value): value(value) {}
   constexpr inline TupleElement(T&& value): value(kj::mv(value)) {}
 };
 
 template <uint index, typename T>
 struct TupleElement<index, T&> {
-  // If tuples contained references, one of the following would have to be true:
-  // - `auto x = tuple(y, z)` would cause x to be a tuple of references to y and z, which is
-  //   probably not what you expected.
-  // - `Tuple<Foo&, Bar&> x = tuple(a, b)` would not work, because `tuple()` returned
-  //   Tuple<Foo, Bar>.
-  static_assert(sizeof(T*) == 0, "Sorry, tuples cannot contain references.");
+  // A tuple containing references can be constucted using refTuple().
+
+  T& value;
+  constexpr inline TupleElement(T& value): value(value) {}
 };
 
 template <uint index, typename... T>
@@ -125,6 +121,8 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 
   static_assert(sizeof...(indexes) == sizeof...(Types), "Incorrect use of TupleImpl.");
 
+  TupleImpl() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
+
   template <typename... Params>
   inline TupleImpl(Params&&... params)
       : TupleElement<indexes, Types>(kj::fwd<Params>(params))... {
@@ -136,7 +134,7 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 
   template <typename... U>
   constexpr inline TupleImpl(Tuple<U...>&& other)
-      : TupleElement<indexes, Types>(kj::mv(getImpl<indexes>(other)))... {}
+      : TupleElement<indexes, Types>(kj::fwd<U>(getImpl<indexes>(other)))... {}
   template <typename... U>
   constexpr inline TupleImpl(Tuple<U...>& other)
       : TupleElement<indexes, Types>(getImpl<indexes>(other))... {}
@@ -146,12 +144,15 @@ struct TupleImpl<Indexes<indexes...>, Types...>
 };
 
 struct MakeTupleFunc;
+struct MakeRefTupleFunc;
 
 template <typename... T>
 class Tuple {
   // The actual Tuple class (used for tuples of size other than 1).
 
 public:
+  Tuple() KJ_DEFAULT_CONSTRUCTOR_VS2015_BUGGY
+
   template <typename... U>
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
@@ -172,6 +173,7 @@ private:
   template <size_t index, typename... U>
   friend inline const TypeByIndex<index, U...>& getImpl(const Tuple<U...>& tuple);
   friend struct MakeTupleFunc;
+  friend struct MakeRefTupleFunc;
 };
 
 template <>
@@ -313,6 +315,17 @@ struct MakeTupleFunc {
   }
 };
 
+struct MakeRefTupleFunc {
+  template <typename... Params>
+  Tuple<Params...> operator()(Params&&... params) {
+    return Tuple<Params...>(kj::fwd<Params>(params)...);
+  }
+  template <typename Param>
+  Param operator()(Param&& param) {
+    return kj::fwd<Param>(param);
+  }
+};
+
 }  // namespace _ (private)
 
 template <typename... T> struct Tuple_ { typedef _::Tuple<T...> Type; };
@@ -333,6 +346,14 @@ inline auto tuple(Params&&... params)
   // Construct a new tuple from the given values.  Any tuples in the argument list will be
   // flattened into the result.
   return _::expandAndApply(_::MakeTupleFunc(), kj::fwd<Params>(params)...);
+}
+
+template <typename... Params>
+inline auto refTuple(Params&&... params)
+    -> decltype(_::expandAndApply(_::MakeRefTupleFunc(), kj::fwd<Params>(params)...)) {
+  // Like tuple(), but if the params include lvalue references, they will be captured as
+  // references. rvalue references will still be captured as whole values (moved).
+  return _::expandAndApply(_::MakeRefTupleFunc(), kj::fwd<Params>(params)...);
 }
 
 template <size_t index, typename Tuple>
@@ -358,4 +379,65 @@ template <typename T>
 constexpr size_t tupleSize() { return TupleSize_<T>::size; }
 // Returns size of the tuple T.
 
+template <typename T, typename Tuple>
+struct IndexOfType_;
+template <typename T, typename Tuple>
+struct HasType_ {
+  static constexpr bool value = false;
+};
+
+template <typename T>
+struct IndexOfType_<T, T> {
+  static constexpr size_t value = 0;
+};
+template <typename T>
+struct HasType_<T, T> {
+  static constexpr bool value = true;
+};
+
+template <typename T, typename... U>
+struct IndexOfType_<T, _::Tuple<T, U...>> {
+  static constexpr size_t value = 0;
+  static_assert(!HasType_<T, _::Tuple<U...>>::value,
+      "requested type appears multiple times in tuple");
+};
+template <typename T, typename... U>
+struct HasType_<T, _::Tuple<T, U...>> {
+  static constexpr bool value = true;
+};
+
+template <typename T, typename U, typename... V>
+struct IndexOfType_<T, _::Tuple<U, V...>> {
+  static constexpr size_t value = IndexOfType_<T, _::Tuple<V...>>::value + 1;
+};
+template <typename T, typename U, typename... V>
+struct HasType_<T, _::Tuple<U, V...>> {
+  static constexpr bool value = HasType_<T, _::Tuple<V...>>::value;
+};
+
+template <typename T, typename U>
+inline constexpr size_t indexOfType() {
+  static_assert(HasType_<T, U>::value, "type not present");
+  return IndexOfType_<T, U>::value;
+}
+
+template <size_t i, typename T>
+struct TypeOfIndex_;
+template <typename T>
+struct TypeOfIndex_<0, T> {
+  typedef T Type;
+};
+template <size_t i, typename T, typename... U>
+struct TypeOfIndex_<i, _::Tuple<T, U...>>
+    : public TypeOfIndex_<i - 1, _::Tuple<U...>> {};
+template <typename T, typename... U>
+struct TypeOfIndex_<0, _::Tuple<T, U...>> {
+  typedef T Type;
+};
+
+template <size_t i, typename Tuple>
+using TypeOfIndex = typename TypeOfIndex_<i, Tuple>::Type;
+
 }  // namespace kj
+
+KJ_END_HEADER

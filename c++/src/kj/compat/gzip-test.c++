@@ -126,6 +126,8 @@ public:
     }
     return kj::READY_NOW;
   }
+
+  Promise<void> whenWriteDisconnected() override { KJ_UNIMPLEMENTED("not used"); }
 };
 
 KJ_TEST("gzip decompression") {

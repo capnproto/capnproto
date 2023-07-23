@@ -4,8 +4,9 @@
 #pragma once
 
 #include <capnp/generated-header-support.h>
+#include <kj/windows-sanity.h>
 
-#if CAPNP_VERSION != 7000
+#if CAPNP_VERSION != 8000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -294,6 +295,7 @@ struct Declaration::ParamList {
   enum Which: uint16_t {
     NAMED_LIST,
     TYPE,
+    STREAM,
   };
 
   struct _capnpPrivate {
@@ -1967,6 +1969,9 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
+  inline bool isStream() const;
+  inline  ::capnp::Void getStream() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -2017,6 +2022,10 @@ public:
 
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
+
+  inline bool isStream();
+  inline  ::capnp::Void getStream();
+  inline void setStream( ::capnp::Void value = ::capnp::VOID);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -5755,6 +5764,32 @@ inline  ::uint32_t Declaration::ParamList::Builder::getEndByte() {
 inline void Declaration::ParamList::Builder::setEndByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool Declaration::ParamList::Reader::isStream() const {
+  return which() == Declaration::ParamList::STREAM;
+}
+inline bool Declaration::ParamList::Builder::isStream() {
+  return which() == Declaration::ParamList::STREAM;
+}
+inline  ::capnp::Void Declaration::ParamList::Reader::getStream() const {
+  KJ_IREQUIRE((which() == Declaration::ParamList::STREAM),
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Declaration::ParamList::Builder::getStream() {
+  KJ_IREQUIRE((which() == Declaration::ParamList::STREAM),
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void Declaration::ParamList::Builder::setStream( ::capnp::Void value) {
+  _builder.setDataField<Declaration::ParamList::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Declaration::ParamList::STREAM);
+  _builder.setDataField< ::capnp::Void>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline bool Declaration::Param::Reader::hasName() const {
