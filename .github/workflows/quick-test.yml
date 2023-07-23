@@ -25,6 +25,23 @@ jobs:
       - name: super-test
         run: |
             ./super-test.sh quick ${{ matrix.compiler }}
+  Linux-lock-tracking:
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang-9]
+        features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1"]
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dependencies
+        run: |
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
+      - name: super-test
+        run: |
+            # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
+            ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
   MacOS:
     runs-on: macos-latest
     strategy:

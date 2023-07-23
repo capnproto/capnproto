@@ -278,6 +278,28 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
+#if __cplusplus > 201703L || (__clang__  && __clang_major__ >= 9 && __cplusplus >= 201103L)
+// Technically this was only added to C++20 but Clang allows it for >= C++11 and spelunking the
+// attributes manual indicates it first came in with Clang 9.
+#define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#else
+#define KJ_NO_UNIQUE_ADDRESS
+#endif
+
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define KJ_SANITIZE_THREAD 1
+#endif
+#elif __SANITIZE_THREAD__
+#define KJ_SANITIZE_THREAD 1
+#endif
+
+#if KJ_SANITIZE_THREAD
+#define KJ_DISABLE_TSAN __attribute__((no_sanitize("thread"), noinline))
+#else
+#define KJ_DISABLE_TSAN
+#endif
+
 #if __clang__
 #if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \

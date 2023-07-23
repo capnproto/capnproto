@@ -162,6 +162,7 @@ includekj_HEADERS =                                            \
   src/kj/one-of.h                                              \
   src/kj/function.h                                            \
   src/kj/mutex.h                                               \
+  src/kj/source-location.h                                     \
   src/kj/thread.h                                              \
   src/kj/threadlocal.h                                         \
   src/kj/filesystem.h                                          \
@@ -269,6 +270,7 @@ libkj_la_SOURCES=                                              \
   src/kj/list.c++                                              \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
+  src/kj/source-location.c++                                   \
   src/kj/hash.c++                                              \
   src/kj/table.c++                                             \
   src/kj/encoding.c++                                          \

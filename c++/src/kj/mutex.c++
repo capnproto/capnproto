@@ -59,6 +59,52 @@
 #endif
 
 namespace kj {
+#if KJ_TRACK_LOCK_BLOCKING
+static thread_local const BlockedOnReason* tlsBlockReason __attribute((tls_model("initial-exec")));
+// The initial-exec model ensures that even if this code is part of a shared library built PIC, then
+// we still place this variable in the appropriate ELF section so that __tls_get_addr is avoided.
+// It's unclear if __tls_get_addr is still not async signal safe in glibc. The only negative
+// downside of this approach is that a shared library built with kj & lock tracking will fail if
+// dlopen'ed which isn't an intended use-case for the initial implementation.
+
+Maybe<const BlockedOnReason&> blockedReason() noexcept {
+  if (tlsBlockReason == nullptr) {
+    return nullptr;
+  }
+  return *tlsBlockReason;
+}
+
+static void setCurrentThreadIsWaitingFor(const BlockedOnReason* meta) {
+  tlsBlockReason = meta;
+}
+
+static void setCurrentThreadIsNoLongerWaiting() {
+  tlsBlockReason = nullptr;
+}
+#elif KJ_USE_FUTEX
+struct BlockedOnMutexAcquisition {
+  constexpr BlockedOnMutexAcquisition(const _::Mutex& mutex, LockSourceLocationArg) {}
+};
+
+struct BlockedOnCondVarWait {
+  constexpr BlockedOnCondVarWait(const _::Mutex& mutex, const void *waiter,
+      LockSourceLocationArg) {}
+};
+
+struct BlockedOnOnceInit {
+  constexpr BlockedOnOnceInit(const _::Once& once, LockSourceLocationArg) {}
+};
+
+struct BlockedOnReason {
+  constexpr BlockedOnReason(const BlockedOnMutexAcquisition&) {}
+  constexpr BlockedOnReason(const BlockedOnCondVarWait&) {}
+  constexpr BlockedOnReason(const BlockedOnOnceInit&) {}
+};
+
+static void setCurrentThreadIsWaitingFor(const BlockedOnReason* meta) {}
+static void setCurrentThreadIsNoLongerWaiting() {}
+#endif
+
 namespace _ {  // private
 
 #if KJ_USE_FUTEX
@@ -133,13 +179,44 @@ struct timespec toAbsoluteTimespec(TimePoint time) {
 // =======================================================================================
 // Futex-based implementation (Linux-only)
 
+#if KJ_SAVE_ACQUIRED_LOCK_INFO
+#if !__GLIBC_PREREQ(2, 30)
+#ifndef SYS_gettid
+#error SYS_gettid is unavailable on this system
+#endif
+
+#define gettid() ((pid_t)syscall(SYS_gettid))
+#endif
+
+static thread_local pid_t tlsTid = gettid();
+#define TRACK_ACQUIRED_TID() tlsTid
+
+Mutex::AcquiredMetadata Mutex::lockedInfo() const {
+  auto state = __atomic_load_n(&futex, __ATOMIC_RELAXED);
+  auto tid = lockedExclusivelyByThread;
+  auto location = lockAcquiredLocation;
+
+  if (state & EXCLUSIVE_HELD) {
+    return HoldingExclusively{tid, location};
+  } else {
+    return HoldingShared{location};
+  }
+}
+
+#else
+#define TRACK_ACQUIRED_TID() 0
+#endif
+
 Mutex::Mutex(): futex(0) {}
 Mutex::~Mutex() {
   // This will crash anyway, might as well crash with a nice error message.
   KJ_ASSERT(futex == 0, "Mutex destroyed while locked.") { break; }
 }
 
-bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location) {
+  BlockedOnReason blockReason = BlockedOnMutexAcquisition{*this, location};
+  KJ_DEFER(setCurrentThreadIsNoLongerWaiting());
+
   auto spec = timeout.map([](Duration d) { return toRelativeTimespec(d); });
   struct timespec* specp = nullptr;
   KJ_IF_MAYBE(s, spec) {
@@ -152,6 +229,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
         uint state = 0;
         if (KJ_LIKELY(__atomic_compare_exchange_n(&futex, &state, EXCLUSIVE_HELD, false,
                                                   __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
+
           // Acquired.
           break;
         }
@@ -167,23 +245,30 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
           state |= EXCLUSIVE_REQUESTED;
         }
 
+        setCurrentThreadIsWaitingFor(&blockReason);
+
         auto result = syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, state, specp, nullptr, 0);
         if (result < 0) {
           if (errno == ETIMEDOUT) {
+            setCurrentThreadIsNoLongerWaiting();
             // We timed out, we can't remove the exclusive request flag (since others might be waiting)
             // so we just return false.
             return false;
           }
         }
       }
+      acquiredExclusive(TRACK_ACQUIRED_TID(), location);
       break;
     case SHARED: {
       uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
+
       for (;;) {
         if (KJ_LIKELY((state & EXCLUSIVE_HELD) == 0)) {
           // Acquired.
           break;
         }
+
+        setCurrentThreadIsWaitingFor(&blockReason);
 
         // The mutex is exclusively locked by another thread.  Since we incremented the counter
         // already, we just have to wait for it to be unlocked.
@@ -191,6 +276,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
         if (result < 0) {
           // If we timeout though, we need to signal that we're not waiting anymore.
           if (errno == ETIMEDOUT) {
+            setCurrentThreadIsNoLongerWaiting();
             state = __atomic_sub_fetch(&futex, 1, __ATOMIC_RELAXED);
 
             // We may have unlocked since we timed out. So act like we just unlocked the mutex
@@ -208,6 +294,19 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
         }
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
       }
+
+      // We just want to record the lock being acquired somewhere but the specific location doesn't
+      // matter. This does mean that race conditions could occur where a thread might read this
+      // inconsistently (e.g. filename from 1 lock & function from another). This currently is just
+      // meant to be a debugging aid for manual analysis so it's OK for that purpose. If it's ever
+      // required for this to be used for anything else, then this should probably be changed to
+      // use an additional atomic variable that can ensure only one writer updates this. Or use the
+      // futex variable to ensure that this is only done for the first one to acquire the lock,
+      // although there may be thundering herd problems with that whereby there's a long wallclock
+      // time between when the lock is acquired and when the location is updated (since the first
+      // locker isn't really guaranteed to be the first one unlocked).
+      acquiredShared(location);
+
       break;
     }
   }
@@ -218,6 +317,10 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   switch (exclusivity) {
     case EXCLUSIVE: {
       KJ_DASSERT(futex & EXCLUSIVE_HELD, "Unlocked a mutex that wasn't locked.");
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+      auto acquiredLocation = releasingExclusive();
+#endif
 
       // First check if there are any conditional waiters. Note we only do this when unlocking an
       // exclusive lock since under a shared lock the state couldn't have changed.
@@ -276,7 +379,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         uint readerCount = oldState & SHARED_COUNT_MASK;
         if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
           KJ_LOG(WARNING, "excessively many readers were waiting on this lock", readerCount,
-              kj::getStackTrace());
+              kj::getStackTrace(), acquiredLocation);
         }
 #endif
       }
@@ -315,16 +418,22 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocationArg location) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0, timeout != nullptr };
   addWaiter(waiter);
+
+  BlockedOnReason blockReason = BlockedOnCondVarWait{*this, &waiter, location};
+  KJ_DEFER(setCurrentThreadIsNoLongerWaiting());
 
   // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE);
+    // Infinite timeout for re-obtaining the lock is on purpose because the post-condition for this
+    // function has to be that the lock state hasn't changed (& we have to be locked when we enter
+    // since that's how condvars work).
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, location);
     removeWaiter(waiter);
   });
 
@@ -338,6 +447,8 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
       ts = toAbsoluteTimespec(now() + *t);
       tsp = &ts;
     }
+
+    setCurrentThreadIsWaitingFor(&blockReason);
 
     // Wait for someone to set our futex to 1.
     for (;;) {
@@ -362,7 +473,8 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
                                           __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
             // OK, we set our own futex to 1. That means no other thread will, and so we won't be
             // receiving a mutex ownership transfer. We have to lock the mutex ourselves.
-            lock(EXCLUSIVE);
+            setCurrentThreadIsNoLongerWaiting();
+            lock(EXCLUSIVE, nullptr, location);
             currentlyLocked = true;
             return;
           } else {
@@ -374,6 +486,8 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
         default:
           KJ_FAIL_SYSCALL("futex(FUTEX_WAIT_PRIVATE)", error);
       }
+
+      setCurrentThreadIsNoLongerWaiting();
 
       if (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE)) {
         // We received a lock ownership transfer from another thread.
@@ -412,7 +526,7 @@ void Mutex::induceSpuriousWakeupForTest() {
   }
 }
 
-void Once::runOnce(Initializer& init) {
+void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
 startOver:
   uint state = UNINITIALIZED;
   if (__atomic_compare_exchange_n(&futex, &state, INITIALIZING, false,
@@ -436,6 +550,9 @@ startOver:
       syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
     }
   } else {
+    BlockedOnReason blockReason = BlockedOnOnceInit{*this, location};
+    KJ_DEFER(setCurrentThreadIsNoLongerWaiting());
+
     for (;;) {
       if (state == INITIALIZED) {
         break;
@@ -451,6 +568,7 @@ startOver:
       }
 
       // Wait for initialization.
+      setCurrentThreadIsWaitingFor(&blockReason);
       syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS,
                          nullptr, nullptr, 0);
       state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
@@ -486,7 +604,7 @@ Mutex::Mutex() {
 }
 Mutex::~Mutex() {}
 
-bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
   if (timeout != nullptr) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
@@ -555,7 +673,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   // held for debug purposes anyway, we just don't bother.
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocation) {
   // Add waiter to list.
   Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0 };
   static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
@@ -662,7 +780,7 @@ Once::Once(bool startInitialized) {
 }
 Once::~Once() {}
 
-void Once::runOnce(Initializer& init) {
+void Once::runOnce(Initializer& init, NoopSourceLocation) {
   BOOL needInit;
   while (!InitOnceBeginInitialize(&coercedInitOnce, 0, &needInit, nullptr)) {
     // Init was occurring in another thread, but then failed with an exception. Retry.
@@ -712,7 +830,7 @@ Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
 
-bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout) {
+bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
   if (timeout != nullptr) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
@@ -781,7 +899,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
   }
 }
 
-void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
+void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocation) {
   // Add waiter to list.
   Waiter waiter {
     nullptr, waitersTail, predicate, nullptr,
@@ -793,7 +911,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE, nullptr);
+    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, NoopSourceLocation{});
     removeWaiter(waiter);
 
     // Destroy pthread objects.
@@ -861,7 +979,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout) {
     // because we've already been signaled.
     KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
 
-    lock(EXCLUSIVE);
+    lock(EXCLUSIVE, nullptr, NoopSourceLocation{});
     currentlyLocked = true;
 
     KJ_IF_MAYBE(exception, waiter.exception) {
@@ -901,7 +1019,7 @@ Once::~Once() {
   KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
 }
 
-void Once::runOnce(Initializer& init) {
+void Once::runOnce(Initializer& init, NoopSourceLocation) {
   KJ_PTHREAD_CALL(pthread_mutex_lock(&mutex));
   KJ_DEFER(KJ_PTHREAD_CALL(pthread_mutex_unlock(&mutex)));
 

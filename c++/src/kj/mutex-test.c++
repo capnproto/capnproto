@@ -42,6 +42,13 @@
 #include <unistd.h>
 #endif
 
+#if KJ_TRACK_LOCK_BLOCKING
+#include <syscall.h>
+#include <signal.h>
+#include <time.h>
+#include <atomic>
+#endif
+
 namespace kj {
 namespace {
 
@@ -625,6 +632,256 @@ KJ_TEST("condvar wait with flapping predicate") {
     });
   }
 }
+
+#if KJ_TRACK_LOCK_BLOCKING
+#if !__GLIBC_PREREQ(2, 30)
+#ifndef SYS_gettid
+#error SYS_gettid is unavailable on this system
+#endif
+
+#define gettid() ((pid_t)syscall(SYS_gettid))
+#endif
+
+KJ_TEST("tracking blocking on mutex acquisition") {
+  // SIGEV_THREAD is supposed to be "private" to the pthreads implementation, but, as
+  // usual, the higher-level POSIX API that we're supposed to use sucks: the "handler" runs on
+  // some other thread, which means the stack trace it prints won't be useful.
+  //
+  // So, we cheat and work around libc.
+  MutexGuarded<int> foo(5);
+  auto lock = foo.lockExclusive();
+
+  struct BlockDetected {
+    volatile bool blockedOnMutexAcquisition;
+    SourceLocation blockLocation;
+  } blockingInfo = {};
+
+  struct sigaction handler;
+  memset(&handler, 0, sizeof(handler));
+  handler.sa_sigaction = [](int, siginfo_t* info, void*) {
+    auto& blockage = *reinterpret_cast<BlockDetected *>(info->si_value.sival_ptr);
+    KJ_IF_MAYBE(r, blockedReason()) {
+      KJ_SWITCH_ONEOF(*r) {
+        KJ_CASE_ONEOF(b, BlockedOnMutexAcquisition) {
+          blockage.blockedOnMutexAcquisition = true;
+          blockage.blockLocation = b.origin;
+        }
+        KJ_CASE_ONEOF_DEFAULT {}
+      }
+    }
+  };
+  handler.sa_flags = SA_SIGINFO | SA_RESTART;
+
+  sigaction(SIGINT, &handler, nullptr);
+
+  timer_t timer;
+  struct sigevent event;
+  memset(&event, 0, sizeof(event));
+  event.sigev_notify = SIGEV_THREAD_ID;
+  event.sigev_signo = SIGINT;
+  event.sigev_value.sival_ptr = &blockingInfo;
+  KJ_SYSCALL(event._sigev_un._tid = gettid());
+  KJ_SYSCALL(timer_create(CLOCK_MONOTONIC, &event, &timer));
+
+  kj::Duration timeout = 50 * MILLISECONDS;
+  struct itimerspec spec;
+  memset(&spec, 0, sizeof(spec));
+  spec.it_value.tv_sec = timeout / kj::SECONDS;
+  spec.it_value.tv_nsec = timeout % kj::SECONDS / kj::NANOSECONDS;
+  // We can't use KJ_SYSCALL() because it is not async-signal-safe.
+  KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
+
+  static constexpr int blockedLine = __LINE__ + 1;
+  KJ_REQUIRE(foo.lockSharedWithTimeout(100 * MILLISECONDS) == nullptr);
+
+  KJ_EXPECT(blockingInfo.blockedOnMutexAcquisition);
+  KJ_EXPECT(kj::StringPtr{blockingInfo.blockLocation.fileName}.endsWith("/mutex-test.c++"),
+      blockingInfo.blockLocation.fileName);
+  EXPECT_EQ(blockingInfo.blockLocation.lineNumber, blockedLine);
+}
+
+KJ_TEST("tracking blocked on CondVar::wait") {
+  // SIGEV_THREAD is supposed to be "private" to the pthreads implementation, but, as
+  // usual, the higher-level POSIX API that we're supposed to use sucks: the "handler" runs on
+  // some other thread, which means the stack trace it prints won't be useful.
+  //
+  // So, we cheat and work around libc.
+  MutexGuarded<int> foo(5);
+  auto lock = foo.lockExclusive();
+
+  struct BlockDetected {
+    volatile bool blockedOnCondVar;
+    SourceLocation blockLocation;
+  } blockingInfo = {};
+
+  struct sigaction handler;
+  memset(&handler, 0, sizeof(handler));
+  handler.sa_sigaction = [](int, siginfo_t* info, void*) {
+    auto& blockage = *reinterpret_cast<BlockDetected *>(info->si_value.sival_ptr);
+    KJ_IF_MAYBE(r, blockedReason()) {
+      KJ_SWITCH_ONEOF(*r) {
+        KJ_CASE_ONEOF(b, BlockedOnCondVarWait) {
+          blockage.blockedOnCondVar = true;
+          blockage.blockLocation = b.origin;
+        }
+        KJ_CASE_ONEOF_DEFAULT {}
+      }
+    }
+  };
+  handler.sa_flags = SA_SIGINFO | SA_RESTART;
+
+  sigaction(SIGINT, &handler, nullptr);
+
+  timer_t timer;
+  struct sigevent event;
+  memset(&event, 0, sizeof(event));
+  event.sigev_notify = SIGEV_THREAD_ID;
+  event.sigev_signo = SIGINT;
+  event.sigev_value.sival_ptr = &blockingInfo;
+  KJ_SYSCALL(event._sigev_un._tid = gettid());
+  KJ_SYSCALL(timer_create(CLOCK_MONOTONIC, &event, &timer));
+
+  kj::Duration timeout = 50 * MILLISECONDS;
+  struct itimerspec spec;
+  memset(&spec, 0, sizeof(spec));
+  spec.it_value.tv_sec = timeout / kj::SECONDS;
+  spec.it_value.tv_nsec = timeout % kj::SECONDS / kj::NANOSECONDS;
+  // We can't use KJ_SYSCALL() because it is not async-signal-safe.
+  KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
+
+  static constexpr int blockedLine = __LINE__ + 1;
+  lock.wait([](const int& value) {
+    return false;
+  }, 100 * MILLISECONDS);
+
+  KJ_EXPECT(blockingInfo.blockedOnCondVar);
+  KJ_EXPECT(kj::StringPtr{blockingInfo.blockLocation.fileName}.endsWith("/mutex-test.c++"),
+      blockingInfo.blockLocation.fileName);
+
+#if __clang__
+  static constexpr int lineCorrection = 0;
+#else
+  static constexpr int lineCorrection = 2;
+  // GCC apparently captures the caller's line number as the line number of the argument location
+  // rather than the start of the expression like clang does, so in this case we have to adjust an
+  // extra 2 lines to account for the lambda body (since the location is captured as the last arg).
+#endif
+
+  EXPECT_EQ(blockingInfo.blockLocation.lineNumber, blockedLine + lineCorrection);
+}
+
+KJ_TEST("tracking blocked on Once::init") {
+  // SIGEV_THREAD is supposed to be "private" to the pthreads implementation, but, as
+  // usual, the higher-level POSIX API that we're supposed to use sucks: the "handler" runs on
+  // some other thread, which means the stack trace it prints won't be useful.
+  //
+  // So, we cheat and work around libc.
+  struct BlockDetected {
+    volatile bool blockedOnOnceInit;
+    SourceLocation blockLocation;
+  } blockingInfo = {};
+
+  struct sigaction handler;
+  memset(&handler, 0, sizeof(handler));
+  handler.sa_sigaction = [](int, siginfo_t* info, void*) {
+    auto& blockage = *reinterpret_cast<BlockDetected *>(info->si_value.sival_ptr);
+    KJ_IF_MAYBE(r, blockedReason()) {
+      KJ_SWITCH_ONEOF(*r) {
+        KJ_CASE_ONEOF(b, BlockedOnOnceInit) {
+          blockage.blockedOnOnceInit = true;
+          blockage.blockLocation = b.origin;
+        }
+        KJ_CASE_ONEOF_DEFAULT {}
+      }
+    }
+  };
+  handler.sa_flags = SA_SIGINFO | SA_RESTART;
+
+  sigaction(SIGINT, &handler, nullptr);
+
+  timer_t timer;
+  struct sigevent event;
+  memset(&event, 0, sizeof(event));
+  event.sigev_notify = SIGEV_THREAD_ID;
+  event.sigev_signo = SIGINT;
+  event.sigev_value.sival_ptr = &blockingInfo;
+  KJ_SYSCALL(event._sigev_un._tid = gettid());
+  KJ_SYSCALL(timer_create(CLOCK_MONOTONIC, &event, &timer));
+
+  Lazy<int> once;
+  MutexGuarded<bool> onceInitializing(false);
+
+  Thread backgroundInit([&] {
+    once.get([&](SpaceFor<int>& x) {
+      *onceInitializing.lockExclusive() = true;
+      usleep(100 * 1000);  // 100 ms
+      return x.construct(5);
+    });
+  });
+
+  kj::Duration timeout = 50 * MILLISECONDS;
+  struct itimerspec spec;
+  memset(&spec, 0, sizeof(spec));
+  spec.it_value.tv_sec = timeout / kj::SECONDS;
+  spec.it_value.tv_nsec = timeout % kj::SECONDS / kj::NANOSECONDS;
+  // We can't use KJ_SYSCALL() because it is not async-signal-safe.
+  KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
+
+  onceInitializing.lockExclusive().wait([](const bool& initializing) {
+    return initializing;
+  });
+
+  static constexpr int blockedLine = __LINE__ + 1;
+  once.get([](SpaceFor<int>& x) {
+      return x.construct(5);
+  });
+
+  KJ_EXPECT(blockingInfo.blockedOnOnceInit);
+  KJ_EXPECT(kj::StringPtr{blockingInfo.blockLocation.fileName}.endsWith("/mutex-test.c++"),
+      blockingInfo.blockLocation.fileName);
+
+#if __clang__
+  static constexpr int lineCorrection = 0;
+#else
+  static constexpr int lineCorrection = 2;
+  // GCC apparently captures the caller's line number as the line number of the argument location
+  // rather than the start of the expression like clang does, so in this case we have to adjust an
+  // extra 2 lines to account for the lambda body (since the location is captured as the last arg).
+#endif
+
+
+  EXPECT_EQ(blockingInfo.blockLocation.lineNumber, blockedLine + lineCorrection);
+}
+
+#if KJ_SAVE_ACQUIRED_LOCK_INFO
+KJ_TEST("get location of exclusive mutex") {
+  _::Mutex mutex;
+  static constexpr auto lockLine = __LINE__ + 1;
+  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, SourceLocation{});
+  KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
+
+  const auto& lockedInfo = mutex.lockedInfo();
+  const auto& lockInfo = lockedInfo.get<_::HoldingExclusively>();
+  EXPECT_EQ(gettid(), lockInfo.threadHoldingLock());
+  KJ_EXPECT(kj::StringPtr{lockInfo.lockAcquiredAt().fileName}.endsWith("/mutex-test.c++"),
+      lockInfo.lockAcquiredAt().fileName);
+  EXPECT_EQ(lockInfo.lockAcquiredAt().lineNumber, lockLine);
+}
+
+KJ_TEST("get location of shared mutex") {
+  _::Mutex mutex;
+  static constexpr auto lockLine = __LINE__ + 1;
+  mutex.lock(_::Mutex::SHARED, nullptr, SourceLocation{});
+  KJ_DEFER(mutex.unlock(_::Mutex::SHARED));
+
+  const auto& lockedInfo = mutex.lockedInfo();
+  const auto& lockInfo = lockedInfo.get<_::HoldingShared>();
+  KJ_EXPECT(kj::StringPtr{lockInfo.lockAcquiredAt().fileName}.endsWith("/mutex-test.c++"));
+  EXPECT_EQ(lockInfo.lockAcquiredAt().lineNumber, lockLine);
+}
+#endif
+
+#endif
 
 }  // namespace
 }  // namespace kj

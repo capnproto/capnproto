@@ -11,6 +11,7 @@ set(kj_sources_lite
   memory.c++
   mutex.c++
   string.c++
+  source-location.c++
   hash.c++
   table.c++
   thread.c++
@@ -45,6 +46,7 @@ set(kj_headers
   vector.h
   string.h
   string-tree.h
+  source-location.h
   hash.h
   table.h
   map.h
