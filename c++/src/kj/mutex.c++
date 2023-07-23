@@ -872,7 +872,8 @@ void Once::reset() {
 
 Mutex::Mutex(): mutex(PTHREAD_RWLOCK_INITIALIZER) {
 #if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
-  // see https://github.com/capnproto/capnproto/issues/1715
+  // In older versions of MacOS, mutexes initialized statically cannot be destroyed,
+  // so we must call the init function.
   KJ_PTHREAD_CALL(pthread_rwlock_init(&mutex, NULL));
 #endif
 }
@@ -957,7 +958,8 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   };
 
 #if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
-  // see https://github.com/capnproto/capnproto/issues/1715
+  // In older versions of MacOS, mutexes initialized statically cannot be destroyed,
+  // so we must call the init function.
   KJ_PTHREAD_CALL(pthread_cond_init(&waiter.condvar, NULL));
   KJ_PTHREAD_CALL(pthread_mutex_init(&waiter.stupidMutex, NULL));
 #endif
@@ -1073,7 +1075,8 @@ Once::Once(bool startInitialized)
     : state(startInitialized ? INITIALIZED : UNINITIALIZED),
       mutex(PTHREAD_MUTEX_INITIALIZER) {
 #if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
-  // see https://github.com/capnproto/capnproto/issues/1715
+  // In older versions of MacOS, mutexes initialized statically cannot be destroyed,
+  // so we must call the init function.
   KJ_PTHREAD_CALL(pthread_mutex_init(&mutex, NULL));
 #endif
 }
