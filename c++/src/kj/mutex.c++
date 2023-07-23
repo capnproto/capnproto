@@ -871,8 +871,10 @@ void Once::reset() {
   }
 
 Mutex::Mutex(): mutex(PTHREAD_RWLOCK_INITIALIZER) {
+#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
   // see https://github.com/capnproto/capnproto/issues/1715
   KJ_PTHREAD_CALL(pthread_rwlock_init(&mutex, NULL));
+#endif
 }
 Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
@@ -954,9 +956,11 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
   };
 
+#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
   // see https://github.com/capnproto/capnproto/issues/1715
   KJ_PTHREAD_CALL(pthread_cond_init(&waiter.condvar, NULL));
   KJ_PTHREAD_CALL(pthread_mutex_init(&waiter.stupidMutex, NULL));
+#endif
 
   addWaiter(waiter);
 
@@ -1068,8 +1072,10 @@ void Mutex::induceSpuriousWakeupForTest() {
 Once::Once(bool startInitialized)
     : state(startInitialized ? INITIALIZED : UNINITIALIZED),
       mutex(PTHREAD_MUTEX_INITIALIZER) {
+#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
   // see https://github.com/capnproto/capnproto/issues/1715
   KJ_PTHREAD_CALL(pthread_mutex_init(&mutex, NULL));
+#endif
 }
 Once::~Once() {
   KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
