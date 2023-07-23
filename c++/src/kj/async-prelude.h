@@ -240,7 +240,13 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 Promise<void> yield();
 Promise<void> yieldHarder();
+OwnPromiseNode readyNow();
 OwnPromiseNode neverDone();
+
+class ReadyNow {
+public:
+  operator Promise<void>() const;
+};
 
 class NeverDone {
 public:

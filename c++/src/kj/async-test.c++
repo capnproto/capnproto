@@ -1586,5 +1586,14 @@ KJ_TEST("capture weird alignment in continuation") {
 }
 #endif
 
+KJ_TEST("constPromise") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<int> p = constPromise<int, 123>();
+  int i = p.wait(waitScope);
+  KJ_EXPECT(i == 123);
+}
+
 }  // namespace
 }  // namespace kj

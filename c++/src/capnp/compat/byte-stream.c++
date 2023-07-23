@@ -418,7 +418,7 @@ public:
         // We already completed a path-shortening. Probably SubstreamCallbackImpl::ended() was
         // eventually called, meaning the substream was ended without redirecting back to us. So,
         // we're at EOF.
-        return uint64_t(0);
+        return kj::constPromise<uint64_t, 0>();
       }
     }
 
@@ -430,7 +430,7 @@ public:
       // works because pumps do not propagate EOF -- the destination can still receive further
       // writes and pumps. Basically our probing pump becomes a no-op, and then we revert to having
       // each write() RPC directly call write() on the inner stream.
-      return size_t(0);
+      return kj::constPromise<size_t, 0>();
     }
 
     kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
@@ -442,7 +442,7 @@ public:
         return kj::mv(*promise);
       } else {
         // There is no shorter path. As with tryRead(), we pretend we get immediate EOF.
-        return uint64_t(0);
+        return kj::constPromise<uint64_t, 0>();
       }
     }
 
