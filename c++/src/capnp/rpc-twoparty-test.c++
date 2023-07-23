@@ -741,6 +741,38 @@ KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
   promise.wait(waitScope);
 }
 
+KJ_TEST("promise cap resolves between starting request and sending it") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  auto pipe = kj::newTwoWayPipe();
+
+  // Client exports TestCallOrderImpl as its bootstrap.
+  TwoPartyClient client(*pipe.ends[0], kj::heap<TestCallOrderImpl>(), rpc::twoparty::Side::SERVER);
+
+  // Server exports a promise, which will later resolve to loop back to the capability the client
+  // exported.
+  auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+  TwoPartyClient server(*pipe.ends[1], kj::mv(paf.promise), rpc::twoparty::Side::SERVER);
+
+  // Create a request but don't send it yet.
+  auto cap = client.bootstrap().castAs<test::TestCallOrder>();
+  auto req1 = cap.getCallSequenceRequest();
+
+  // Fulfill the promise now so that the server's bootstrap loops back to the client's bootstrap.
+  paf.fulfiller->fulfill(server.bootstrap());
+  cap.whenResolved().wait(waitScope);
+
+  // Send the request we created earlier, and also create and send a second request.
+  auto promise1 = req1.send();
+  auto promise2 = cap.getCallSequenceRequest().send();
+
+  // They should arrive in order of send()s.
+  auto n1 = promise1.wait(waitScope).getN();
+  KJ_EXPECT(n1 == 0, n1);
+  auto n2 = promise2.wait(waitScope).getN();
+  KJ_EXPECT(n2 == 1, n2);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

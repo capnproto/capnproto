@@ -92,6 +92,10 @@ public:
     return kj::NEVER_DONE;
   }
 
+  void expectBuffer(kj::StringPtr expected) {
+    KJ_EXPECT(receivedBuffer == expected.asArray(), receivedBuffer, expected);
+  }
+
 private:
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 };
@@ -585,6 +589,70 @@ KJ_TEST("Two Substreams on one destination no limits (pump to EOF)") {
     { auto drop = kj::mv(wrapped); }
     KJ_EXPECT(midPumpPormise.wait(waitScope) == 3);
   }
+}
+
+KJ_TEST("KJ -> ByteStream RPC -> KJ promise stream -> ByteStream -> KJ") {
+  // Test what happens if we queue up several requests on a ByteStream and then it resolves to
+  // a shorter path.
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory factory;
+  ExactPointerWriter exactPointerWriter;
+
+  auto paf = kj::newPromiseAndFulfiller<kj::Own<kj::AsyncOutputStream>>();
+  auto backCap = factory.kjToCapnp(kj::newPromisedStream(kj::mv(paf.promise)));
+
+  auto rpcPipe = kj::newTwoWayPipe();
+  capnp::TwoPartyClient client(*rpcPipe.ends[0]);
+  capnp::TwoPartyClient server(*rpcPipe.ends[1], kj::mv(backCap), rpc::twoparty::Side::SERVER);
+  auto front = factory.capnpToKj(client.bootstrap().castAs<ByteStream>());
+
+  // These will all queue up in the RPC layer.
+  front->write("foo", 3).wait(waitScope);
+  front->write("bar", 3).wait(waitScope);
+  front->write("baz", 3).wait(waitScope);
+  front->write("qux", 3).wait(waitScope);
+
+  // Make sure those writes manage to get all the way through the RPC system and queue up in the
+  // LocalClient wrapping the CapnpToKjStreamAdapter at the other end.
+  waitScope.poll();
+
+  // Fulfill the promise.
+  paf.fulfiller->fulfill(factory.capnpToKj(factory.kjToCapnp(kj::attachRef(exactPointerWriter))));
+  waitScope.poll();
+
+  // Now:
+  // - "foo" should have made it all the way down to the final output stream.
+  // - "bar", "baz", and "qux" are queued on the CapnpToKjStreamAdapter immediately wrapping the
+  //   KJ promise stream.
+  // - But that stream adapter has discovered that there's another capnp stream downstream and has
+  //   resolved itself to the later stream.
+  // - A new call at this time should NOT be allowed to hop the queue.
+
+  exactPointerWriter.expectBuffer("foo");
+
+  front->write("corge", 5).wait(waitScope);
+  waitScope.poll();
+
+  exactPointerWriter.fulfill();
+
+  waitScope.poll();
+  exactPointerWriter.expectBuffer("bar");
+  exactPointerWriter.fulfill();
+
+  waitScope.poll();
+  exactPointerWriter.expectBuffer("baz");
+  exactPointerWriter.fulfill();
+
+  waitScope.poll();
+  exactPointerWriter.expectBuffer("qux");
+  exactPointerWriter.fulfill();
+
+  waitScope.poll();
+  exactPointerWriter.expectBuffer("corge");
+  exactPointerWriter.fulfill();
 }
 
 // TODO:

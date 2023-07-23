@@ -44,7 +44,7 @@ echo "Regenerating site..."
 
 rm -rf _site _site.tar.gz
 
-jekyll build --safe $FUTURE --config $CONFIG
+jekyll _3.8.1_ build --safe $FUTURE --config $CONFIG
 
 echo -n "Push now? (y/N)"
 read -n 1 YESNO

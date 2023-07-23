@@ -422,6 +422,71 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, with path shortening") {
   runEndToEndTests(timer, *headerTable, factory, factory, waitScope);
 }
 
+KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
+  // Test that a 205 with a hanging body doesn't prevent headers from being delivered. (This was
+  // a bug at one point. See, 205 responses are supposed to have empty bodies. But they must
+  // explicitly indicate an empty body. http-over-capnp, though, *assumed* an empty body when it
+  // saw a 205. But, on the client side, when HttpClientAdapter sees an empty body, it blocks
+  // delivery of the *headers* until the service promise resolves, in order to avoid prematurely
+  // cancelling the service. But on the server side, the service method is left hanging because
+  // it's waiting for the 205 to actually produce its empty body. If that didn't make any sense,
+  // consider yourself lucky.)
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  auto headerTable = tableBuilder.build();
+
+  auto pipe = kj::newTwoWayPipe();
+
+  OneConnectNetworkAddress oneConnectAddr(kj::mv(pipe.ends[0]));
+
+  auto backHttp = kj::newHttpClient(timer, *headerTable, oneConnectAddr);
+  auto backCapnp = factory.kjToCapnp(kj::newHttpService(*backHttp));
+  auto frontCapnp = factory.capnpToKj(backCapnp);
+
+  auto frontClient = kj::newHttpClient(*frontCapnp);
+
+  auto req = frontClient->request(kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable));
+
+  {
+    auto readPromise = expectRead(*pipe.ends[1], "GET / HTTP/1.1\r\n\r\n");
+    KJ_ASSERT(readPromise.poll(waitScope));
+    readPromise.wait(waitScope);
+  }
+
+  KJ_EXPECT(!req.response.poll(waitScope));
+
+  {
+    // A 205 response with no content-length or transfer-encoding is terminated by EOF (but also
+    // the body is required to be empty). We don't send the EOF yet, just the response line and
+    // empty headers.
+    kj::StringPtr resp = "HTTP/1.1 205 Reset Content\r\n\r\n";
+    pipe.ends[1]->write(resp.begin(), resp.size()).wait(waitScope);
+  }
+
+  // On the client end, we should get a response now!
+  KJ_ASSERT(req.response.poll(waitScope));
+
+  auto resp = req.response.wait(waitScope);
+  KJ_EXPECT(resp.statusCode == 205);
+
+  // But the body is still blocked.
+  auto promise = resp.body->readAllText();
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  // OK now send the EOF it's waiting for.
+  pipe.ends[1]->shutdownWrite();
+
+  // And now the body is unblocked.
+  KJ_ASSERT(promise.poll(waitScope));
+  KJ_EXPECT(promise.wait(waitScope) == "");
+}
+
 // =======================================================================================
 
 class WebSocketAccepter final: public kj::HttpService {

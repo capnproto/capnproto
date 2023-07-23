@@ -1070,7 +1070,8 @@ public:
               -> HttpInputStream::Response {
       auto response = KJ_REQUIRE_NONNULL(
           responseOrProtocolError.tryGet<HttpHeaders::Response>(), "bad response");
-      auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, requestMethod, 0, headers);
+      auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, requestMethod,
+                                response.statusCode, headers);
 
       return { response.statusCode, response.statusText, headers, kj::mv(body) };
     });
@@ -1662,7 +1663,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
         length = uint64_t(0);
       }
       return kj::heap<HttpNullEntityReader>(*this, length);
-    } else if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
+    } else if (statusCode == 204 || statusCode == 304) {
       // No body.
       return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
     }
@@ -4570,6 +4571,37 @@ public:
     }
   }
 
+public:
+  kj::Promise<bool> startLoop(bool firstRequest) {
+    return loop(firstRequest).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
+      // Exception; report 5xx.
+
+      KJ_IF_MAYBE(p, webSocketError) {
+        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
+        // the exception because it's probably a side-effect of this.
+        auto promise = kj::mv(*p);
+        webSocketError = nullptr;
+        return kj::mv(promise);
+      }
+
+      return sendError(kj::mv(e));
+    });
+  }
+
+private:
+  HttpServer& server;
+  kj::AsyncIoStream& stream;
+  HttpService& service;
+  HttpInputStreamImpl httpInput;
+  HttpOutputStream httpOutput;
+  kj::Maybe<HttpMethod> currentMethod;
+  bool timedOut = false;
+  bool closed = false;
+  bool upgraded = false;
+  bool webSocketClosed = false;
+  bool closeAfterSend = false;  // True if send() should set Connection: close.
+  kj::Maybe<kj::Promise<bool>> webSocketError;
+
   kj::Promise<bool> loop(bool firstRequest) {
     if (!firstRequest && server.draining && httpInput.isCleanDrain()) {
       // Don't call awaitNextMessage() in this case because that will initiate a read() which will
@@ -4785,34 +4817,8 @@ public:
       }
 
       KJ_UNREACHABLE;
-    }).catch_([this](kj::Exception&& e) -> kj::Promise<bool> {
-      // Exception; report 5xx.
-
-      KJ_IF_MAYBE(p, webSocketError) {
-        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
-        // the exception because it's probably a side-effect of this.
-        auto promise = kj::mv(*p);
-        webSocketError = nullptr;
-        return kj::mv(promise);
-      }
-
-      return sendError(kj::mv(e));
     });
   }
-
-private:
-  HttpServer& server;
-  kj::AsyncIoStream& stream;
-  HttpService& service;
-  HttpInputStreamImpl httpInput;
-  HttpOutputStream httpOutput;
-  kj::Maybe<HttpMethod> currentMethod;
-  bool timedOut = false;
-  bool closed = false;
-  bool upgraded = false;
-  bool webSocketClosed = false;
-  bool closeAfterSend = false;  // True if send() should set Connection: close.
-  kj::Maybe<kj::Promise<bool>> webSocketError;
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
@@ -4827,8 +4833,16 @@ private:
       connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
     }
 
-    if (statusCode == 204 || statusCode == 205 || statusCode == 304) {
+    if (statusCode == 204 || statusCode == 304) {
       // No entity-body.
+    } else if (statusCode == 205) {
+      // Status code 205 also has no body, but unlike 204 and 304, it must explicitly encode an
+      // empty body, e.g. using content-length: 0. I'm guessing this is one of those things, where
+      // some early clients expected an explicit body while others assumed an empty body, and so
+      // the standard had to choose the common denominator.
+      //
+      // Spec: https://tools.ietf.org/html/rfc7231#section-6.3.6
+      connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "0";
     } else KJ_IF_MAYBE(s, expectedBodySize) {
       // HACK: We interpret a zero-length expected body length on responses to HEAD requests to mean
       //   "don't set a Content-Length header at all." This provides a way to omit a body header on
@@ -5067,7 +5081,7 @@ kj::Promise<bool> HttpServer::listenHttpCleanDrain(kj::AsyncIoStream& connection
 
   // Start reading requests and responding to them, but immediately cancel processing if the client
   // disconnects.
-  auto promise = obj->loop(true)
+  auto promise = obj->startLoop(true)
       .exclusiveJoin(connection.whenWriteDisconnected().then([]() {return false;}));
 
   // Eagerly evaluate so that we drop the connection when the promise resolves, even if the caller

@@ -72,7 +72,7 @@ class Win32PreciseClock: public Clock {
   typedef VOID WINAPI GetSystemTimePreciseAsFileTimeFunc(LPFILETIME);
 public:
   Date now() const override {
-    static const GetSystemTimePreciseAsFileTimeFunc* getSystemTimePreciseAsFileTimePtr =
+    static GetSystemTimePreciseAsFileTimeFunc* const getSystemTimePreciseAsFileTimePtr =
         getGetSystemTimePreciseAsFileTime();
     FILETIME ft;
     if (getSystemTimePreciseAsFileTimePtr == nullptr) {

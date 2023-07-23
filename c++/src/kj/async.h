@@ -41,6 +41,9 @@ class PromiseFulfiller;
 template <typename T>
 struct PromiseFulfillerPair;
 
+template <typename Func>
+class FunctionParam;
+
 template <typename Func, typename T>
 using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
@@ -391,6 +394,14 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // drained.
 
 template <typename Func>
+PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESULT;
+// Promises to run `func()` asynchronously, retrying once if it fails with a DISCONNECTED exception.
+// If the retry also fails, the exception is passed through.
+//
+// `func()` should return a `Promise`. `retryOnDisconnect(func)` returns the same promise, except
+// with the retry logic added.
+
+template <typename Func>
 PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_WARN_UNUSED_RESULT;
 // Executes `func()` in a fiber, returning a promise for the eventual reseult. `func()` will be
 // passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on promises. Thus, `func()`
@@ -408,10 +419,59 @@ PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) KJ_
 // have to be interrupted to flush their CPU cores' TLB caches.
 //
 // In short, when performance matters, you should try to avoid creating fibers very frequently.
-//
-// TODO(perf): We should add a mechanism for freelisting stacks. However, this improves CPU usage
-//   at the expense of memory usage: stacks on the freelist will consume however many pages they
-//   used at their high watermark, forever.
+
+class FiberPool final {
+  // A freelist pool of fibers with a set stack size. This improves CPU usage with fibers at
+  // the expense of memory usage. Fibers in this pool will always use the max amount of memory
+  // used until the pool is destroyed.
+
+public:
+  explicit FiberPool(size_t stackSize);
+  ~FiberPool() noexcept(false);
+  KJ_DISALLOW_COPY(FiberPool);
+
+  void setMaxFreelist(size_t count);
+  // Set the maximum number of stacks to add to the freelist. If the freelist is full, stacks will
+  // be deleted rather than returned to the freelist.
+
+  void useCoreLocalFreelists();
+  // EXPERIMENTAL: Call to tell FiberPool to try to use core-local stack freelists, which
+  //   in theory should increase L1/L2 cache efficacy for freelisted stacks. In practice, as of
+  //   this writing, no performance advantage has yet been demonstrated. Note that currently this
+  //   feature is only supported on Linux (the flag has no effect on other operating systems).
+
+  template <typename Func>
+  PromiseForResult<Func, WaitScope&> startFiber(Func&& func) const KJ_WARN_UNUSED_RESULT;
+  // Executes `func()` in a fiber from this pool, returning a promise for the eventual result.
+  // `func()` will be passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on
+  // promises. Thus, `func()` can be written in a synchronous, blocking style, instead of
+  // using `.then()`. This is often much easier to write and read, and may even be significantly
+  // faster if it allows the use of stack allocation rather than heap allocation.
+
+  void runSynchronously(kj::FunctionParam<void()> func) const;
+  // Use one of the stacks in the pool to synchronously execute func(), returning the result that
+  // func() returns. This is not the usual use case for fibers, but can be a nice optimization
+  // in programs that have many threads that mostly only need small stacks, but occasionally need
+  // a much bigger stack to run some deeply recursive algorithm. If the algorithm is run on each
+  // thread's normal call stack, then every thread's stack will tend to grow to be very big
+  // (usually, stacks automatically grow as needed, but do not shrink until the thread exits
+  // completely). If the thread can share a small set of big stacks that they use only when calling
+  // the deeply recursive algorithm, and use small stacks for everything else, overall memory usage
+  // is reduced.
+  //
+  // TODO(someday): If func() returns a value, return it from runSynchronously? Current use case
+  //   doesn't need it.
+
+  size_t getFreelistSize() const;
+  // Get the number of stacks currently in the freelist. Does not count stacks that are active.
+
+private:
+  class Impl;
+  Own<Impl> impl;
+
+  friend class _::FiberStack;
+  friend class _::FiberBase;
+};
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -701,6 +761,30 @@ public:
   Executor(EventLoop& loop, Badge<EventLoop>);
   ~Executor() noexcept(false);
 
+  virtual kj::Own<const Executor> addRef() const = 0;
+  // Add a reference to this Executor. The Executor will not be destroyed until all references are
+  // dropped. This uses atomic refcounting for thread-safety.
+  //
+  // Use this when you can't guarantee that the target thread's event loop won't concurrently exit
+  // (including due to an uncaught exception!) while another thread is still using the Executor.
+  // Otherwise, the Executor object is destroyed when the owning event loop exits.
+  //
+  // If the target event loop has exited, then `execute{Async,Sync}` will throw DISCONNECTED
+  // exceptions.
+
+  bool isLive() const;
+  // Returns true if the remote event loop still exists, false if it has been destroyed. In the
+  // latter case, `execute{Async,Sync}()` will definitely throw. Of course, if this returns true,
+  // it could still change to false at any moment, and `execute{Async,Sync}()` could still throw as
+  // a result.
+  //
+  // TODO(cleanup): Should we have tryExecute{Async,Sync}() that return Maybes that are null if
+  //   the remote event loop exited? Currently there are multiple known use cases that check
+  //   isLive() after catching a DISCONNECTED exception to decide whether it is due to the executor
+  //   exiting, and then handling that case. This is borderline in violation of KJ exception
+  //   philosophy, but right now I'm not excited about the extra template metaprogramming needed
+  //   for "try" versions...
+
   template <typename Func>
   PromiseForResult<Func, void> executeAsync(Func&& func) const;
   // Call from any thread to request that the given function be executed on the executor's thread,
@@ -757,8 +841,6 @@ public:
   // executor thread has signaled completion. The return value is transferred between threads.
 
 private:
-  EventLoop& loop;
-
   struct Impl;
   Own<Impl> impl;
   // To avoid including mutex.h...
@@ -769,6 +851,8 @@ private:
   void send(_::XThreadEvent& event, bool sync) const;
   void wait();
   bool poll();
+
+  EventLoop& getLoop() const;
 };
 
 const Executor& getCurrentThreadExecutor();
@@ -904,14 +988,10 @@ private:
   _::Event** depthFirstInsertPoint = &head;
   _::Event** breadthFirstInsertPoint = &head;
 
-  kj::Maybe<Executor> executor;
+  kj::Maybe<Own<Executor>> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
 
   Own<TaskSet> daemons;
-
-#if _WIN32 || __CYGWIN__
-  void* mainFiber = nullptr;
-#endif
 
   bool turn();
   void setRunnable(bool runnable);
@@ -930,6 +1010,7 @@ private:
   friend class Executor;
   friend class _::XThreadEvent;
   friend class _::FiberBase;
+  friend class _::FiberStack;
 };
 
 class WaitScope {
@@ -957,14 +1038,43 @@ public:
   //
   // This has no effect when used in a fiber.
 
+  void runEventCallbacksOnStackPool(kj::Maybe<const FiberPool&> pool) { runningStacksPool = pool; }
+  // Arranges to switch stacks while event callbacks are executing. This is an optimization that
+  // is useful for programs that use extremely high thread counts, where each thread has its own
+  // event loop, but each thread has relatively low event throughput, i.e. each thread spends
+  // most of its time waiting for I/O. Normally, the biggest problem with having lots of threads
+  // is that each thread must allocate a stack, and stacks can take a lot of memory if the
+  // application commonly makes deep calls. But, most of that stack space is only needed while
+  // the thread is executing, not while it's sleeping. So, if threads only switch to a big stack
+  // during execution, switching back when it's time to sleep, and if those stacks are freelisted
+  // so that they can be shared among threads, then a lot of memory is saved.
+  //
+  // We use the `FiberPool` type here because it implements a freelist of stacks, which is exactly
+  // what we happen to want! In our case, though, we don't use those stacks to implement fibers;
+  // we use them as the main thread stack.
+  //
+  // This has no effect if this WaitScope itself is for a fiber.
+  //
+  // Pass `nullptr` as the parameter to go back to running events on the main stack.
+
 private:
   EventLoop& loop;
   uint busyPollInterval = kj::maxValue;
 
   kj::Maybe<_::FiberBase&> fiber;
+  kj::Maybe<const FiberPool&> runningStacksPool;
 
   explicit WaitScope(EventLoop& loop, _::FiberBase& fiber)
       : loop(loop), fiber(fiber) {}
+
+  template <typename Func>
+  inline void runOnStackPool(Func&& func) {
+    KJ_IF_MAYBE(pool, runningStacksPool) {
+      pool->runSynchronously(kj::fwd<Func>(func));
+    } else {
+      func();
+    }
+  }
 
   friend class EventLoop;
   friend class _::FiberBase;

@@ -109,7 +109,7 @@ Keep in mind that atomic (thread-safe) reference counting can be extremely slow.
 
 A "singleton" is any mutable object or value that is globally accessible. "Globally accessible" means that the object is declared as a global variable or static member variable, or that the object can be found by following pointers from such variables.
 
-Never use singletons. Singletons cause invisible and unexpected dependencies between components of your software that appear unrelated. Worse, the assumption that "there should only be one of this object per process" is almost always wrong, but its wrongness only becomes apparent after so much code uses the singleton that it is infeasible to change. Singleton interfaces ofter turn into unusable monstrosities in an attempt to work around the fact that they should never have been a singleton in the first place.
+Never use singletons. Singletons cause invisible and unexpected dependencies between components of your software that appear unrelated. Worse, the assumption that "there should only be one of this object per process" is almost always wrong, but its wrongness only becomes apparent after so much code uses the singleton that it is infeasible to change. Singleton interfaces often turn into unusable monstrosities in an attempt to work around the fact that they should never have been a singleton in the first place.
 
 See ["Singletons Considered Harmful"](http://www.object-oriented-security.org/lets-argue/singletons) for a complete discussion.
 

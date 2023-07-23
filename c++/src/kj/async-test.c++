@@ -22,6 +22,8 @@
 #include "async.h"
 #include "debug.h"
 #include <kj/compat/gtest.h>
+#include "mutex.h"
+#include "thread.h"
 
 namespace kj {
 namespace {
@@ -954,7 +956,344 @@ KJ_TEST("cancel a fiber") {
   KJ_EXPECT(canceled);
 }
 #endif
+
+KJ_TEST("fiber pool") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  FiberPool pool(65536);
+
+  int* i1_local = nullptr;
+  int* i2_local = nullptr;
+
+  auto run = [&]() mutable {
+    auto paf1 = newPromiseAndFulfiller<int>();
+    auto paf2 = newPromiseAndFulfiller<int>();
+
+    {
+      Promise<int> fiber1 = pool.startFiber([&, promise = kj::mv(paf1.promise)](WaitScope& scope) mutable {
+        int i = promise.wait(scope);
+        KJ_EXPECT(i == 123);
+        if (i1_local == nullptr) {
+          i1_local = &i;
+        } else {
+          KJ_ASSERT(i1_local == &i);
+        }
+        return i;
+      });
+      {
+        Promise<int> fiber2 = pool.startFiber([&, promise = kj::mv(paf2.promise)](WaitScope& scope) mutable {
+          int i = promise.wait(scope);
+          KJ_EXPECT(i == 456);
+          if (i2_local == nullptr) {
+            i2_local = &i;
+          } else {
+            KJ_ASSERT(i2_local == &i);
+          }
+          return i;
+        });
+
+        KJ_EXPECT(!fiber1.poll(waitScope));
+        KJ_EXPECT(!fiber2.poll(waitScope));
+
+        KJ_EXPECT(pool.getFreelistSize() == 0);
+
+        paf2.fulfiller->fulfill(456);
+
+        KJ_EXPECT(!fiber1.poll(waitScope));
+        KJ_ASSERT(fiber2.poll(waitScope));
+        KJ_EXPECT(fiber2.wait(waitScope) == 456);
+
+        KJ_EXPECT(pool.getFreelistSize() == 1);
+      }
+
+      paf1.fulfiller->fulfill(123);
+
+      KJ_ASSERT(fiber1.poll(waitScope));
+      KJ_EXPECT(fiber1.wait(waitScope) == 123);
+
+      KJ_EXPECT(pool.getFreelistSize() == 2);
+    }
+  };
+  run();
+  KJ_ASSERT_NONNULL(i1_local);
+  KJ_ASSERT_NONNULL(i2_local);
+  // run the same thing and reuse the fibers
+  run();
+}
+
+bool onOurStack(char* p) {
+  // If p points less than 64k away from a random stack variable, then it must be on the same
+  // stack, since we never allocate stacks smaller than 64k.
+  char c;
+  ptrdiff_t diff = p - &c;
+  return diff < 65536 && diff > -65536;
+}
+
+KJ_TEST("fiber pool runSynchronously()") {
+  FiberPool pool(65536);
+
+  {
+    char c;
+    KJ_EXPECT(onOurStack(&c));  // sanity check...
+  }
+
+  char* ptr1 = nullptr;
+  char* ptr2 = nullptr;
+
+  pool.runSynchronously([&]() {
+    char c;
+    ptr1 = &c;
+  });
+  KJ_ASSERT(ptr1 != nullptr);
+
+  pool.runSynchronously([&]() {
+    char c;
+    ptr2 = &c;
+  });
+  KJ_ASSERT(ptr2 != nullptr);
+
+  // Should have used the same stack both times, so local var would be in the same place.
+  KJ_EXPECT(ptr1 == ptr2);
+
+  // Should have been on a different stack from the main stack.
+  KJ_EXPECT(!onOurStack(ptr1));
+
+  KJ_EXPECT_THROW_MESSAGE("test exception",
+      pool.runSynchronously([&]() { KJ_FAIL_ASSERT("test exception"); }));
+}
+
+KJ_TEST("fiber pool limit") {
+  FiberPool pool(65536);
+
+  pool.setMaxFreelist(1);
+
+  kj::MutexGuarded<uint> state;
+
+  char* ptr1;
+  char* ptr2;
+
+  // Run some code that uses two stacks in separate threads at the same time.
+  {
+    kj::Thread thread([&]() noexcept {
+      auto lock = state.lockExclusive();
+      lock.wait([](uint val) { return val == 1; });
+
+      pool.runSynchronously([&]() {
+        char c;
+        ptr2 = &c;
+
+        *lock = 2;
+        lock.wait([](uint val) { return val == 3; });
+      });
+    });
+
+    ([&]() noexcept {
+      auto lock = state.lockExclusive();
+
+      pool.runSynchronously([&]() {
+        char c;
+        ptr1 = &c;
+
+        *lock = 1;
+        lock.wait([](uint val) { return val == 2; });
+      });
+
+      *lock = 3;
+    })();
+  }
+
+  KJ_EXPECT(pool.getFreelistSize() == 1);
+
+  // We expect that if we reuse a stack from the pool, it will be the last one that exited, which
+  // is the one from the thread.
+  pool.runSynchronously([&]() {
+    KJ_EXPECT(onOurStack(ptr2));
+    KJ_EXPECT(!onOurStack(ptr1));
+
+    KJ_EXPECT(pool.getFreelistSize() == 0);
+  });
+
+  KJ_EXPECT(pool.getFreelistSize() == 1);
+
+  // Note that it would NOT work to try to allocate two stacks at the same time again and verify
+  // that the second stack doesn't match the previously-deleted stack, because there's a high
+  // likelihood that the new stack would be allocated in the same location.
+}
+
+KJ_TEST("run event loop on freelisted stacks") {
+  FiberPool pool(65536);
+
+  class MockEventPort: public EventPort {
+  public:
+    bool wait() override {
+      char c;
+      waitStack = &c;
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->fulfill();
+        fulfiller = nullptr;
+      }
+      return false;
+    }
+    bool poll() override {
+      char c;
+      pollStack = &c;
+      KJ_IF_MAYBE(f, fulfiller) {
+        f->get()->fulfill();
+        fulfiller = nullptr;
+      }
+      return false;
+    }
+
+    char* waitStack = nullptr;
+    char* pollStack = nullptr;
+
+    kj::Maybe<kj::Own<PromiseFulfiller<void>>> fulfiller;
+  };
+
+  MockEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+  waitScope.runEventCallbacksOnStackPool(pool);
+
+  {
+    auto paf = newPromiseAndFulfiller<void>();
+    port.fulfiller = kj::mv(paf.fulfiller);
+
+    char* ptr1 = nullptr;
+    char* ptr2 = nullptr;
+    kj::evalLater([&]() {
+      char c;
+      ptr1 = &c;
+      return kj::mv(paf.promise);
+    }).then([&]() {
+      char c;
+      ptr2 = &c;
+    }).wait(waitScope);
+
+    KJ_EXPECT(ptr1 != nullptr);
+    KJ_EXPECT(ptr2 != nullptr);
+    KJ_EXPECT(port.waitStack != nullptr);
+    KJ_EXPECT(port.pollStack == nullptr);
+
+    // The event callbacks should have run on a different stack, but the wait should have been on
+    // the main stack.
+    KJ_EXPECT(!onOurStack(ptr1));
+    KJ_EXPECT(!onOurStack(ptr2));
+    KJ_EXPECT(onOurStack(port.waitStack));
+
+    pool.runSynchronously([&]() {
+      // This should run on the same stack where the event callbacks ran.
+      KJ_EXPECT(onOurStack(ptr1));
+      KJ_EXPECT(onOurStack(ptr2));
+      KJ_EXPECT(!onOurStack(port.waitStack));
+    });
+  }
+
+  port.waitStack = nullptr;
+  port.pollStack = nullptr;
+
+  // Now try poll() instead of wait(). Note that since poll() doesn't block, we let it run on the
+  // event stack.
+  {
+    auto paf = newPromiseAndFulfiller<void>();
+    port.fulfiller = kj::mv(paf.fulfiller);
+
+    char* ptr1 = nullptr;
+    char* ptr2 = nullptr;
+    auto promise = kj::evalLater([&]() {
+      char c;
+      ptr1 = &c;
+      return kj::mv(paf.promise);
+    }).then([&]() {
+      char c;
+      ptr2 = &c;
+    });
+
+    KJ_EXPECT(promise.poll(waitScope));
+
+    KJ_EXPECT(ptr1 != nullptr);
+    KJ_EXPECT(ptr2 == nullptr);  // didn't run because of lazy continuation evaluation
+    KJ_EXPECT(port.waitStack == nullptr);
+    KJ_EXPECT(port.pollStack != nullptr);
+
+    // The event callback should have run on a different stack, and poll() should have run on
+    // a separate stack too.
+    KJ_EXPECT(!onOurStack(ptr1));
+    KJ_EXPECT(!onOurStack(port.pollStack));
+
+    pool.runSynchronously([&]() {
+      // This should run on the same stack where the event callbacks ran.
+      KJ_EXPECT(onOurStack(ptr1));
+      KJ_EXPECT(onOurStack(port.pollStack));
+    });
+  }
+}
 #endif
+
+KJ_TEST("retryOnDisconnect") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  {
+    uint i = 0;
+    auto promise = retryOnDisconnect([&]() -> Promise<int> {
+      i++;
+      return 123;
+    });
+    KJ_EXPECT(i == 0);
+    KJ_EXPECT(promise.wait(waitScope) == 123);
+    KJ_EXPECT(i == 1);
+  }
+
+  {
+    uint i = 0;
+    auto promise = retryOnDisconnect([&]() -> Promise<int> {
+      if (i++ == 0) {
+        return KJ_EXCEPTION(DISCONNECTED, "test disconnect");
+      } else {
+        return 123;
+      }
+    });
+    KJ_EXPECT(i == 0);
+    KJ_EXPECT(promise.wait(waitScope) == 123);
+    KJ_EXPECT(i == 2);
+  }
+
+
+  {
+    uint i = 0;
+    auto promise = retryOnDisconnect([&]() -> Promise<int> {
+      if (i++ <= 1) {
+        return KJ_EXCEPTION(DISCONNECTED, "test disconnect", i);
+      } else {
+        return 123;
+      }
+    });
+    KJ_EXPECT(i == 0);
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test disconnect; i = 2", promise.wait(waitScope));
+    KJ_EXPECT(i == 2);
+  }
+
+  {
+    // Test passing a reference to a function.
+    struct Func {
+      uint i = 0;
+      Promise<int> operator()() {
+        if (i++ == 0) {
+          return KJ_EXCEPTION(DISCONNECTED, "test disconnect");
+        } else {
+          return 123;
+        }
+      }
+    };
+    Func func;
+
+    auto promise = retryOnDisconnect(func);
+    KJ_EXPECT(func.i == 0);
+    KJ_EXPECT(promise.wait(waitScope) == 123);
+    KJ_EXPECT(func.i == 2);
+  }
+}
 
 }  // namespace
 }  // namespace kj

@@ -67,7 +67,7 @@ public:
     SHARED
   };
 
-  void lock(Exclusivity exclusivity);
+  bool lock(Exclusivity exclusivity, Maybe<Duration> timeout = nullptr);
   void unlock(Exclusivity exclusivity, Waiter* waiterToSkip = nullptr);
 
   void assertLockedByCaller(Exclusivity exclusivity);
@@ -330,6 +330,14 @@ public:
   // Lock the value for shared access.  Multiple shared locks can be taken concurrently, but cannot
   // be held at the same time as a non-shared lock.
 
+  Maybe<Locked<T>> lockExclusiveWithTimeout(Duration timeout) const;
+  // Attempts to exclusively lock the object. If the timeout elapses before the lock is aquired,
+  // this returns null.
+
+  Maybe<Locked<const T>> lockSharedWithTimeout(Duration timeout) const;
+  // Attempts to lock the value for shared access. If the timeout elapses before the lock is aquired,
+  // this returns null.
+
   inline const T& getWithoutLock() const { return value; }
   inline T& getWithoutLock() { return value; }
   // Escape hatch for cases where some external factor guarantees that it's safe to get the
@@ -496,6 +504,24 @@ template <typename T>
 inline Locked<const T> MutexGuarded<T>::lockShared() const {
   mutex.lock(_::Mutex::SHARED);
   return Locked<const T>(mutex, value);
+}
+
+template <typename T>
+inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeout) const {
+  if (mutex.lock(_::Mutex::EXCLUSIVE, timeout)) {
+    return Locked<T>(mutex, value);
+  } else {
+    return nullptr;
+  }
+}
+
+template <typename T>
+inline Maybe<Locked<const T>> MutexGuarded<T>::lockSharedWithTimeout(Duration timeout) const {
+  if (mutex.lock(_::Mutex::SHARED, timeout)) {
+    return Locked<const T>(mutex, value);
+  } else {
+    return nullptr;
+  }
 }
 
 template <typename T>

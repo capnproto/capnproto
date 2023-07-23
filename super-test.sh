@@ -13,10 +13,14 @@ function test_samples() {
   ./addressbook dwrite | ./addressbook dread
   rm -f /tmp/capnp-calculator-example-$$
   ./calculator-server unix:/tmp/capnp-calculator-example-$$ &
+  local SERVER_PID=$!
   sleep 1
   ./calculator-client unix:/tmp/capnp-calculator-example-$$
-  kill %./calculator-server
-  wait %./calculator-server || true
+  # `kill %./calculator-server` doesn't seem to work on recent Cygwins, but we can kill by PID.
+  kill -9 $SERVER_PID
+  # This `fg` will fail if bash happens to have already noticed the quit and reaped the process
+  # before `fg` is invoked, so in that case we just proceed.
+  fg %./calculator-server || true
   rm -f /tmp/capnp-calculator-example-$$
 }
 

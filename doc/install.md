@@ -74,6 +74,7 @@ Some package managers include Cap'n Proto packages.
 Note: These packages are not maintained by us and are sometimes not up to date with the latest Cap'n Proto release.
 
 * Debian / Ubuntu: `apt-get install capnproto`
+* Arch Linux: `sudo pacman -S capnproto`
 * Homebrew (OSX): `brew install capnp`
 
 **From Git**

@@ -19,6 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#undef _FORTIFY_SOURCE
+// If _FORTIFY_SOURCE is defined, longjmp will complain when it detects the stack
+// pointer moving in the "wrong direction", thinking you're jumping to a non-existent
+// stack frame. But we use longjmp to jump between different stacks to implement fibers,
+// so this check isn't appropriate for us.
+
 #if _WIN32 || __CYGWIN__
 #define WIN32_LEAN_AND_MEAN 1  // lolz
 #elif __APPLE__
@@ -38,12 +44,16 @@
 #include "vector.h"
 #include "threadlocal.h"
 #include "mutex.h"
+#include "one-of.h"
+#include "function.h"
+#include <deque>
 
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
 #include "windows-sanity.h"
 #else
 #include <ucontext.h>
+#include <setjmp.h>    // for fibers
 #include <sys/mman.h>  // mmap(), for allocating new stacks
 #include <unistd.h>    // sysconf()
 #include <errno.h>
@@ -291,6 +301,282 @@ Promise<void> TaskSet::onEmpty() {
   }
 }
 
+// =======================================================================================
+
+namespace {
+
+#if _WIN32 || __CYGWIN__
+thread_local void* threadMainFiber = nullptr;
+
+void* getMainWin32Fiber() {
+  return threadMainFiber;
+}
+#endif
+
+inline void ensureThreadCanRunFibers() {
+#if _WIN32 || __CYGWIN__
+  // Make sure the current thread has been converted to a fiber.
+  void* fiber = threadMainFiber;
+  if (fiber == nullptr) {
+    // Thread not initialized. Convert it to a fiber now.
+    // Note: Unfortunately, if the application has already converted the thread to a fiber, I
+    //   guess this will fail. But trying to call GetCurrentFiber() when the thread isn't a fiber
+    //   doesn't work (it returns null on WINE but not on real windows, ugh). So I guess we're
+    //   just incompatible with the application doing anything with fibers, which is sad.
+    threadMainFiber = fiber = ConvertThreadToFiber(nullptr);
+  }
+#endif
+}
+
+}  // namespace
+
+namespace _ {
+
+class FiberStack final {
+  // A class containing a fiber stack impl. This is separate from fiber
+  // promises since it lets us move the stack itself around and reuse it.
+
+public:
+  FiberStack(size_t stackSize);
+  ~FiberStack() noexcept(false);
+
+  struct SynchronousFunc {
+    kj::FunctionParam<void()>& func;
+    kj::Maybe<kj::Exception> exception;
+  };
+
+  void initialize(FiberBase& fiber);
+  void initialize(SynchronousFunc& syncFunc);
+
+  void reset() {
+    main = {};
+  }
+
+  void switchToFiber();
+  void switchToMain();
+
+private:
+  size_t stackSize;
+  OneOf<FiberBase*, SynchronousFunc*> main;
+
+  friend class FiberBase;
+  friend class FiberPool::Impl;
+
+  struct StartRoutine;
+
+#if _WIN32 || __CYGWIN__
+  void* osFiber;
+#elif !__BIONIC__
+  struct Impl;
+  Impl* impl;
+#endif
+
+  void run();
+
+  bool isReset() { return main == nullptr; }
+};
+
+}  // namespace _
+
+#if __linux__
+// TODO(someday): Support core-local freelists on OSs other than Linux. The only tricky part is
+//   finding what to use instead of sched_getcpu() to get the current CPU ID.
+#define USE_CORE_LOCAL_FREELISTS 1
+#endif
+
+#if USE_CORE_LOCAL_FREELISTS
+static const size_t CACHE_LINE_SIZE = 64;
+// Most modern architectures have 64-byte cache lines.
+#endif
+
+class FiberPool::Impl final: private Disposer {
+public:
+  Impl(size_t stackSize): stackSize(stackSize) {}
+  ~Impl() noexcept(false) {
+#if USE_CORE_LOCAL_FREELISTS
+    if (coreLocalFreelists != nullptr) {
+      KJ_DEFER(free(coreLocalFreelists));
+
+      for (uint i: kj::zeroTo(nproc)) {
+        for (auto stack: coreLocalFreelists[i].stacks) {
+          if (stack != nullptr) {
+            delete stack;
+          }
+        }
+      }
+    }
+#endif
+  }
+
+  void setMaxFreelist(size_t count) {
+    maxFreelist = count;
+  }
+
+  size_t getFreelistSize() const {
+    return freelist.lockShared()->size();
+  }
+
+  void useCoreLocalFreelists() {
+#if USE_CORE_LOCAL_FREELISTS
+    if (coreLocalFreelists != nullptr) {
+      // Ignore repeat call.
+      return;
+    }
+
+    int nproc_;
+    KJ_SYSCALL(nproc_ = sysconf(_SC_NPROCESSORS_CONF));
+    nproc = nproc_;
+
+    void* allocPtr;
+    size_t totalSize = nproc * sizeof(CoreLocalFreelist);
+    int error = posix_memalign(&allocPtr, CACHE_LINE_SIZE, totalSize);
+    if (error != 0) {
+      KJ_FAIL_SYSCALL("posix_memalign", error);
+    }
+    memset(allocPtr, 0, totalSize);
+    coreLocalFreelists = reinterpret_cast<CoreLocalFreelist*>(allocPtr);
+#endif
+  }
+
+  Own<_::FiberStack> takeStack() const {
+    // Get a stack from the pool. The disposer on the returned Own pointer will return the stack
+    // to the pool, provided that reset() has been called to indicate that the stack is not in
+    // a weird state.
+
+#if USE_CORE_LOCAL_FREELISTS
+    KJ_IF_MAYBE(core, lookupCoreLocalFreelist()) {
+      for (auto& stackPtr: core->stacks) {
+        _::FiberStack* result = __atomic_exchange_n(&stackPtr, nullptr, __ATOMIC_ACQUIRE);
+        if (result != nullptr) {
+          // Found a stack in this slot!
+          return { result, *this };
+        }
+      }
+      // No stacks found, fall back to global freelist.
+    }
+#endif
+
+    {
+      auto lock = freelist.lockExclusive();
+      if (!lock->empty()) {
+        _::FiberStack* result = lock->back();
+        lock->pop_back();
+        return { result, *this };
+      }
+    }
+
+    _::FiberStack* result = new _::FiberStack(stackSize);
+    return { result, *this };
+  }
+
+private:
+  size_t stackSize;
+  size_t maxFreelist = kj::maxValue;
+  MutexGuarded<std::deque<_::FiberStack*>> freelist;
+
+#if USE_CORE_LOCAL_FREELISTS
+  struct CoreLocalFreelist {
+    union {
+      _::FiberStack* stacks[2];
+      // For now, we don't try to freelist more than 2 stacks per core. If you have three or more
+      // threads interleaved on a core, chances are you have bigger problems...
+
+      byte padToCacheLine[CACHE_LINE_SIZE];
+      // We don't want two core-local freelists to live in the same cache line, otherwise the
+      // cores will fight over ownership of that line.
+    };
+  };
+
+  uint nproc;
+  CoreLocalFreelist* coreLocalFreelists = nullptr;
+
+  kj::Maybe<CoreLocalFreelist&> lookupCoreLocalFreelist() const {
+    if (coreLocalFreelists == nullptr) {
+      return nullptr;
+    } else {
+      int cpu = sched_getcpu();
+      if (cpu >= 0) {
+        // TODO(perf): Perhaps two hyperthreads on the same physical core should share a freelist?
+        //   But I don't know how to find out if the system uses hyperthreading.
+        return coreLocalFreelists[cpu];
+      } else {
+        static bool logged = false;
+        if (!logged) {
+          KJ_LOG(ERROR, "invalid cpu number from sched_getcpu()?", cpu, nproc);
+          logged = true;
+        }
+        return nullptr;
+      }
+    }
+  }
+#endif
+
+  void disposeImpl(void* pointer) const {
+    _::FiberStack* stack = reinterpret_cast<_::FiberStack*>(pointer);
+    KJ_DEFER(delete stack);
+
+    // Verify that the stack was reset before returning, otherwise it might be in a weird state
+    // where we don't want to reuse it.
+    if (stack->isReset()) {
+#if USE_CORE_LOCAL_FREELISTS
+      KJ_IF_MAYBE(core, lookupCoreLocalFreelist()) {
+        for (auto& stackPtr: core->stacks) {
+          stack = __atomic_exchange_n(&stackPtr, stack, __ATOMIC_RELEASE);
+          if (stack == nullptr) {
+            // Cool, we inserted the stack into an unused slot. We're done.
+            return;
+          }
+        }
+        // All slots were occupied, so we inserted the new stack in the front, pushed the rest back,
+        // and now `stack` refers to the stack that fell off the end of the core-local list. That
+        // needs to go into the global freelist.
+      }
+#endif
+
+      auto lock = freelist.lockExclusive();
+      lock->push_back(stack);
+      if (lock->size() > maxFreelist) {
+        stack = lock->front();
+        lock->pop_front();
+      } else {
+        stack = nullptr;
+      }
+    }
+  }
+};
+
+FiberPool::FiberPool(size_t stackSize) : impl(kj::heap<FiberPool::Impl>(stackSize)) {}
+FiberPool::~FiberPool() noexcept(false) {}
+
+void FiberPool::setMaxFreelist(size_t count) {
+  impl->setMaxFreelist(count);
+}
+
+size_t FiberPool::getFreelistSize() const {
+  return impl->getFreelistSize();
+}
+
+void FiberPool::useCoreLocalFreelists() {
+  impl->useCoreLocalFreelists();
+}
+
+void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
+  ensureThreadCanRunFibers();
+
+  _::FiberStack::SynchronousFunc syncFunc { func, nullptr };
+
+  {
+    auto stack = impl->takeStack();
+    stack->initialize(syncFunc);
+    stack->switchToFiber();
+    stack->reset();  // safe to reuse
+  }
+
+  KJ_IF_MAYBE(e, syncFunc.exception) {
+    kj::throwRecoverableException(kj::mv(*e));
+  }
+}
+
 namespace _ {  // private
 
 class LoggingErrorHandler: public TaskSet::ErrorHandler {
@@ -309,6 +595,8 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 // =======================================================================================
 
 struct Executor::Impl {
+  Impl(EventLoop& loop): state(loop) {}
+
   typedef Maybe<_::XThreadEvent&> _::XThreadEvent::*NextMember;
   typedef Maybe<_::XThreadEvent&>* _::XThreadEvent::*PrevMember;
 
@@ -359,22 +647,33 @@ struct Executor::Impl {
   struct State {
     // Queues of notifications from other threads that need this thread's attention.
 
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> run;
+    State(EventLoop& loop): loop(loop) {}
+
+    kj::Maybe<EventLoop&> loop;
+    // Becomes null when the loop is destroyed.
+
+    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> start;
     List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> cancel;
     List<&_::XThreadEvent::replyNext, &_::XThreadEvent::replyPrev> replies;
+    // Lists of events that need actioning by this thread.
+
+    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> executing;
+    // Events that have already been dispatched and are happily executing. This list is maintained
+    // so that they can be canceled if the event loop exits.
 
     bool waitingForCancel = false;
     // True if this thread is currently blocked waiting for some other thread to pump its
     // cancellation queue. If that other thread tries to block on *this* thread, then it could
     // deadlock -- it must take precautions against this.
 
-    bool empty() const {
-      return run.empty() && cancel.empty() && replies.empty();
+    bool isDispatchNeeded() const {
+      return !start.empty() || !cancel.empty() || !replies.empty();
     }
 
     void dispatchAll(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
-      run.forEach([&](_::XThreadEvent& event) {
-        run.erase(event);
+      start.forEach([&](_::XThreadEvent& event) {
+        start.erase(event);
+        executing.insert(event);
         event.state = _::XThreadEvent::EXECUTING;
         event.armBreadthFirst();
       });
@@ -392,7 +691,7 @@ struct Executor::Impl {
         cancel.erase(event);
 
         if (event.promiseNode == nullptr) {
-          event.state = _::XThreadEvent::DONE;
+          event.setDoneState();
         } else {
           // We can't destroy the promiseNode while the mutex is locked, because we don't know
           // what the destructor might do. But, we *must* destroy it before acknowledging
@@ -421,12 +720,59 @@ struct Executor::Impl {
     // Now we need to mark all the events "done" under lock.
     auto lock = state.lockExclusive();
     for (auto& event: eventsToCancelOutsideLock) {
-      event->state = _::XThreadEvent::DONE;
+      event->setDoneState();
     }
   }
-};
+
+  void disconnect() {
+    state.lockExclusive()->loop = nullptr;
+
+    // Now that `loop` is set null in `state`, other threads will no longer try to manipulate our
+    // lists, so we can access them without a lock. That's convenient because a bunch of the things
+    // we want to do with them would require dropping the lock to avoid deadlocks. We'd end up
+    // copying all the lists over into separate vectors first, dropping the lock, operating on
+    // them, and then locking again.
+    auto& s = state.getWithoutLock();
+
+    // We do, however, take and release the lock on the way out, to make sure anyone performing
+    // a conditional wait for state changes gets a chance to have their wait condition re-checked.
+    KJ_DEFER(state.lockExclusive());
+
+    s.start.forEach([&](_::XThreadEvent& event) {
+      s.start.erase(event);
+      event.setDisconnected();
+      event.sendReply();
+      event.setDoneState();
+    });
+
+    s.executing.forEach([&](_::XThreadEvent& event) {
+      s.executing.erase(event);
+      event.promiseNode = nullptr;
+      event.setDisconnected();
+      event.sendReply();
+      event.setDoneState();
+    });
+
+    s.cancel.forEach([&](_::XThreadEvent& event) {
+      s.executing.erase(event);
+      event.promiseNode = nullptr;
+      event.setDoneState();
+    });
+
+    // The replies list "should" be empty, because any locally-initiated tasks should have been
+    // canceled before destroying the EventLoop.
+    if (!s.replies.empty()) {
+      KJ_LOG(ERROR, "EventLoop destroyed with cross-thread event replies outstanding");
+      s.replies.forEach([&](_::XThreadEvent& event) {
+        s.replies.erase(event);
+      });
+    }
+  }};
 
 namespace _ {  // (private)
+
+XThreadEvent::XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor)
+    : Event(targetExecutor.getLoop()), result(result), targetExecutor(targetExecutor.addRef()) {}
 
 void XThreadEvent::ensureDoneOrCanceled() {
 #if _MSC_VER
@@ -434,26 +780,39 @@ void XThreadEvent::ensureDoneOrCanceled() {
 #else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
 #endif
-    auto lock = targetExecutor.impl->state.lockExclusive();
+    auto lock = targetExecutor->impl->state.lockExclusive();
+
+    const EventLoop* loop;
+    KJ_IF_MAYBE(l, lock->loop) {
+      loop = l;
+    } else {
+      // Target event loop is already dead, so we know it's already working on transitioning all
+      // events to the DONE state. We can just wait.
+      lock.wait([&](auto&) { return state == DONE; });
+      return;
+    }
+
     switch (state) {
       case UNUSED:
         // Nothing to do.
         break;
       case QUEUED:
-        lock->run.erase(*this);
+        lock->start.erase(*this);
         // No wake needed since we removed work rather than adding it.
         state = DONE;
         break;
       case EXECUTING: {
+        lock->executing.erase(*this);
         lock->cancel.insert(*this);
-        KJ_IF_MAYBE(p, targetExecutor.loop.port) {
+        state = CANCELING;
+        KJ_IF_MAYBE(p, loop->port) {
           p->wake();
         }
 
         Maybe<Executor&> maybeSelfExecutor = nullptr;
         if (threadLocalEventLoop != nullptr) {
           KJ_IF_MAYBE(e, threadLocalEventLoop->executor) {
-            maybeSelfExecutor = *e;
+            maybeSelfExecutor = **e;
           }
         }
 
@@ -520,7 +879,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
             }
 
             // OK now we can take the original lock again.
-            lock = targetExecutor.impl->state.lockExclusive();
+            lock = targetExecutor->impl->state.lockExclusive();
 
             // OK, now we can wait for the other thread to either process our cancellation or
             // indicate that it is waiting for remote cancellation.
@@ -539,6 +898,8 @@ void XThreadEvent::ensureDoneOrCanceled() {
         KJ_DASSERT(targetPrev == nullptr);
         break;
       }
+      case CANCELING:
+        KJ_FAIL_ASSERT("impossible state: CANCELING should only be set within the above case");
       case DONE:
         // Became done while we waited for lock. Nothing to do.
         break;
@@ -556,37 +917,73 @@ void XThreadEvent::ensureDoneOrCanceled() {
   }
 }
 
-void XThreadEvent::done() {
+void XThreadEvent::sendReply() {
   KJ_IF_MAYBE(e, replyExecutor) {
     // Queue the reply.
+    const EventLoop* replyLoop;
     {
       auto lock = e->impl->state.lockExclusive();
-      lock->replies.insert(*this);
+      KJ_IF_MAYBE(l, lock->loop) {
+        lock->replies.insert(*this);
+        replyLoop = l;
+      } else {
+        // Calling thread exited without cancelling the promise. This is UB. In fact,
+        // `replyExecutor` is probably already destroyed and we are in use-after-free territory
+        // already. Better abort.
+        KJ_LOG(FATAL,
+            "the thread which called kj::Executor::executeAsync() apparently exited its own "
+            "event loop without canceling the cross-thread promise first; this is undefined "
+            "behavior so I will crash now");
+        abort();
+      }
     }
 
-    KJ_IF_MAYBE(p, e->loop.port) {
+    // Note that it's safe to assume `replyLoop` still exists even though we dropped the lock
+    // because that thread would have had to cancel any promises before destroying its own
+    // EventLoop, and when it tries to destroy this promise, it will wait for `state` to become
+    // `DONE`, which we don't set until later on. That's nice because wake() probably makes a
+    // syscall and we'd rather not hold the lock through syscalls.
+    KJ_IF_MAYBE(p, replyLoop->port) {
       p->wake();
     }
   }
+}
+
+void XThreadEvent::done() {
+  sendReply();
 
   {
-    auto lock = targetExecutor.impl->state.lockExclusive();
-    KJ_DASSERT(state == EXECUTING);
+    auto lock = targetExecutor->impl->state.lockExclusive();
 
-    if (targetPrev != nullptr) {
-      // We must be in the cancel list, because we can't be in the run list during EXECUTING state.
-      // We can remove ourselves from the cancel list because at this point we're done anyway, so
-      // whatever.
-      lock->cancel.erase(*this);
+    switch (state) {
+      case EXECUTING:
+        lock->executing.erase(*this);
+        break;
+      case CANCELING:
+        // Sending thread requested cancelation, but we're done anyway, so it doesn't matter at this
+        // point.
+        lock->cancel.erase(*this);
+        break;
+      default:
+        KJ_FAIL_ASSERT("can't call done() from this state", (uint)state);
     }
 
-#if _MSC_VER
-    // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-    state = DONE;
-#else
-    __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
-#endif
+    setDoneState();
   }
+}
+
+inline void XThreadEvent::setDoneState() {
+#if _MSC_VER
+  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
+  state = DONE;
+#else
+  __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
+#endif
+}
+
+void XThreadEvent::setDisconnected() {
+  result.addException(KJ_EXCEPTION(DISCONNECTED,
+      "Executor's event loop exited before cross-thread event could complete"));
 }
 
 class XThreadEvent::DelayedDoneHack: public Disposer {
@@ -637,16 +1034,31 @@ void XThreadEvent::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
+class ExecutorImpl: public Executor, public AtomicRefcounted {
+public:
+  using Executor::Executor;
+
+  kj::Own<const Executor> addRef() const override {
+    return kj::atomicAddRef(static_cast<const _::ExecutorImpl&>(*this));
+  }
+};
+
 }  // namespace _
 
-Executor::Executor(EventLoop& loop, Badge<EventLoop>): loop(loop), impl(kj::heap<Impl>()) {}
+Executor::Executor(EventLoop& loop, Badge<EventLoop>): impl(kj::heap<Impl>(loop)) {}
 Executor::~Executor() noexcept(false) {}
+
+bool Executor::isLive() const {
+  return impl->state.lockShared()->loop != nullptr;
+}
 
 void Executor::send(_::XThreadEvent& event, bool sync) const {
   KJ_ASSERT(event.state == _::XThreadEvent::UNUSED);
 
   if (sync) {
-    if (threadLocalEventLoop == &loop) {
+    EventLoop* thisThread = threadLocalEventLoop;
+    if (thisThread != nullptr &&
+        thisThread->executor.map([this](auto& e) { return e == this; }).orDefault(false)) {
       // Invoking a sync request on our own thread. Just execute it directly; if we try to queue
       // it to the loop, we'll deadlock.
       auto promiseNode = event.execute();
@@ -667,10 +1079,18 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
   }
 
   auto lock = impl->state.lockExclusive();
-  event.state = _::XThreadEvent::QUEUED;
-  lock->run.insert(event);
+  const EventLoop* loop;
+  KJ_IF_MAYBE(l, lock->loop) {
+    loop = l;
+  } else {
+    event.setDisconnected();
+    return;
+  }
 
-  KJ_IF_MAYBE(p, loop.port) {
+  event.state = _::XThreadEvent::QUEUED;
+  lock->start.insert(event);
+
+  KJ_IF_MAYBE(p, loop->port) {
     p->wake();
   } else {
     // Event loop will be waiting on executor.wait(), which will be woken when we unlock the mutex.
@@ -688,7 +1108,7 @@ void Executor::wait() {
   auto lock = impl->state.lockExclusive();
 
   lock.wait([](const Impl::State& state) {
-    return !state.empty();
+    return state.isDispatchNeeded();
   });
 
   lock->dispatchAll(eventsToCancelOutsideLock);
@@ -699,11 +1119,19 @@ bool Executor::poll() {
   KJ_DEFER(impl->processAsyncCancellations(eventsToCancelOutsideLock));
 
   auto lock = impl->state.lockExclusive();
-  if (lock->empty()) {
-    return false;
-  } else {
+  if (lock->isDispatchNeeded()) {
     lock->dispatchAll(eventsToCancelOutsideLock);
     return true;
+  } else {
+    return false;
+  }
+}
+
+EventLoop& Executor::getLoop() const {
+  KJ_IF_MAYBE(l, impl->state.lockShared()->loop) {
+    return *l;
+  } else {
+    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "Executor's event loop has exited"));
   }
 }
 
@@ -717,18 +1145,16 @@ const Executor& getCurrentThreadExecutor() {
 namespace _ {  // private
 
 #if !(_WIN32 || __CYGWIN__ || __BIONIC__)
-struct FiberBase::Impl {
+struct FiberStack::Impl {
   // This struct serves two purposes:
   // - It contains OS-specific state that we don't want to declare in the header.
   // - It is allocated at the top of the fiber's stack area, so the Impl pointer also serves to
   //   track where the stack was allocated.
 
-  ucontext_t fiberContext;
-  ucontext_t originalContext;
+  jmp_buf fiberJmpBuf;
+  jmp_buf originalJmpBuf;
 
-  static Impl& alloc(size_t stackSize) {
-    // TODO(perf): Freelist stacks to avoid TLB flushes.
-
+  static Impl* alloc(size_t stackSize, ucontext_t* context) {
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif
@@ -758,22 +1184,26 @@ struct FiberBase::Impl {
                         stackSize, PROT_READ | PROT_WRITE));
 
     // Stick `Impl` at the top of the stack.
-    Impl& impl = *(reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
+    Impl* impl = (reinterpret_cast<Impl*>(reinterpret_cast<byte*>(stack) + allocSize) - 1);
 
     // Note: mmap() allocates zero'd pages so we don't have to memset() anything here.
 
-    KJ_SYSCALL(getcontext(&impl.fiberContext));
-    impl.fiberContext.uc_stack.ss_size = allocSize - sizeof(Impl);
-    impl.fiberContext.uc_stack.ss_sp = reinterpret_cast<char*>(stack);
-    impl.fiberContext.uc_stack.ss_flags = 0;
-    impl.fiberContext.uc_link = &impl.originalContext;
+    KJ_SYSCALL(getcontext(context));
+    context->uc_stack.ss_size = allocSize - sizeof(Impl);
+    context->uc_stack.ss_sp = reinterpret_cast<char*>(stack);
+    context->uc_stack.ss_flags = 0;
+    // We don't use uc_link since our fiber start routine runs forever in a loop to allow for
+    // reuse. When we're done with the fiber, we just destroy it, without switching to it's
+    // stack. This is safe since the start routine doesn't allocate any memory or RAII objects
+    // before looping.
+    context->uc_link = 0;
 
     return impl;
   }
 
-  static void free(Impl& impl, size_t stackSize) {
+  static void free(Impl* impl, size_t stackSize) {
     size_t allocSize = stackSize + getPageSize();
-    void* stack = reinterpret_cast<byte*>(&impl + 1) - allocSize;
+    void* stack = reinterpret_cast<byte*>(impl + 1) - allocSize;
     KJ_SYSCALL(munmap(stack, allocSize)) { break; }
   }
 
@@ -787,16 +1217,11 @@ struct FiberBase::Impl {
 };
 #endif
 
-struct FiberBase::StartRoutine {
+struct FiberStack::StartRoutine {
 #if _WIN32 || __CYGWIN__
   static void WINAPI run(LPVOID ptr) {
     // This is the static C-style function we pass to CreateFiber().
-    auto& fiber = *reinterpret_cast<FiberBase*>(ptr);
-    fiber.run();
-
-    // On Windows, if the fiber main function returns, the thread exits. We need to explicitly switch
-    // back to the main stack.
-    fiber.switchToMain();
+    reinterpret_cast<FiberStack*>(ptr)->run();
   }
 #else
   static void run(int arg1, int arg2) {
@@ -806,35 +1231,56 @@ struct FiberBase::StartRoutine {
     // work correctly on 64-bit machines. Gross.
     uintptr_t ptr = static_cast<uint>(arg1);
     ptr |= static_cast<uintptr_t>(static_cast<uint>(arg2)) << (sizeof(ptr) * 4);
-    reinterpret_cast<FiberBase*>(ptr)->run();
+
+    auto& stack = *reinterpret_cast<FiberStack*>(ptr);
+
+    // We first switch to the fiber inside of the FiberStack constructor. This is just for
+    // initialization purposes, and we're expected to switch back immediately.
+    stack.switchToMain();
+
+    // OK now have a real job.
+    stack.run();
   }
 #endif
 };
 
-FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
-    : state(WAITING),
-      // Force stackSize to a reasonable minimum.
-      stackSize(kj::max(stackSizeParam, 65536)),
-#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
-      impl(Impl::alloc(stackSize)),
-#endif
-      result(result) {
+void FiberStack::run() {
+  // Loop forever so that the fiber can be reused.
+  for (;;) {
+    KJ_SWITCH_ONEOF(main) {
+      KJ_CASE_ONEOF(event, FiberBase*) {
+        event->run();
+      }
+      KJ_CASE_ONEOF(func, SynchronousFunc*) {
+        KJ_IF_MAYBE(exception, kj::runCatchingExceptions(func->func)) {
+          func->exception.emplace(kj::mv(*exception));
+        }
+      }
+    }
+
+    // Wait for the fiber to be used again. Note the fiber might simply be destroyed without this
+    // ever returning. That's OK because we don't have any nontrivial destructors on the stack
+    // at this point.
+    switchToMain();
+  }
+}
+
+FiberStack::FiberStack(size_t stackSizeParam)
+    // Force stackSize to a reasonable minimum.
+    : stackSize(kj::max(stackSizeParam, 65536))
+{
 #if KJ_NO_EXCEPTIONS
   KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
 
 #elif _WIN32 || __CYGWIN__
-  auto& eventLoop = currentEventLoop();
-  if (eventLoop.mainFiber == nullptr) {
-    // First time we've created a fiber. We need to convert the main stack into a fiber as well
-    // before we can start switching.
-    eventLoop.mainFiber = ConvertThreadToFiber(nullptr);
-  }
-
+  // We can create fibers before we convert the main thread into a fiber in FiberBase
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
 
 #elif !__BIONIC__
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
+  ucontext_t context;
+  impl = Impl::alloc(stackSize, &context);
 
   // POSIX says the arguments are ints, not pointers. So we split our pointer in half in order to
   // work correctly on 64-bit machines. Gross.
@@ -842,8 +1288,11 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
   int arg1 = ptr & ((uintptr_t(1) << (sizeof(ptr) * 4)) - 1);
   int arg2 = ptr >> (sizeof(ptr) * 4);
 
-  makecontext(&impl.fiberContext, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
+  makecontext(&context, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
 
+  if (_setjmp(impl->originalJmpBuf) == 0) {
+    setcontext(&context);
+  }
 #else
   KJ_UNIMPLEMENTED(
       "Fibers are not implemented on this platform because its C library lacks setcontext() "
@@ -853,13 +1302,38 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
 #endif
 }
 
-FiberBase::~FiberBase() noexcept(false) {
+FiberStack::~FiberStack() noexcept(false) {
 #if _WIN32 || __CYGWIN__
   DeleteFiber(osFiber);
 #elif !__BIONIC__
   Impl::free(impl, stackSize);
 #endif
 }
+
+void FiberStack::initialize(FiberBase& fiber) {
+  KJ_REQUIRE(this->main == nullptr);
+  this->main = &fiber;
+}
+
+void FiberStack::initialize(SynchronousFunc& func) {
+  KJ_REQUIRE(this->main == nullptr);
+  this->main = &func;
+}
+
+FiberBase::FiberBase(size_t stackSize, _::ExceptionOrValue& result)
+    : state(WAITING), stack(kj::heap<FiberStack>(stackSize)), result(result) {
+  stack->initialize(*this);
+  ensureThreadCanRunFibers();
+}
+
+FiberBase::FiberBase(const FiberPool& pool, _::ExceptionOrValue& result)
+    : state(WAITING), result(result) {
+  stack = pool.impl->takeStack();
+  stack->initialize(*this);
+  ensureThreadCanRunFibers();
+}
+
+FiberBase::~FiberBase() noexcept(false) {}
 
 void FiberBase::destroy() {
   // Called by `~Fiber()` to begin teardown. We can't do this work in `~FiberBase()` because the
@@ -870,11 +1344,14 @@ void FiberBase::destroy() {
       // We can't just free the stack while the fiber is running. We need to force it to execute
       // until finished, so we cause it to throw an exception.
       state = CANCELED;
-      switchToFiber();
+      stack->switchToFiber();
 
       // The fiber should only switch back to the main stack on completion, because any further
       // calls to wait() would throw before trying to switch.
       KJ_ASSERT(state == FINISHED);
+
+      // The fiber shut down properly so the stack is safe to reuse.
+      stack->reset();
       break;
 
     case RUNNING:
@@ -886,6 +1363,7 @@ void FiberBase::destroy() {
 
     case FINISHED:
       // Normal completion, yay.
+      stack->reset();
       break;
   }
 }
@@ -893,26 +1371,30 @@ void FiberBase::destroy() {
 Maybe<Own<Event>> FiberBase::fire() {
   KJ_ASSERT(state == WAITING);
   state = RUNNING;
-  switchToFiber();
+  stack->switchToFiber();
   return nullptr;
 }
 
-void FiberBase::switchToFiber() {
+void FiberStack::switchToFiber() {
   // Switch from the main stack to the fiber. Returns once the fiber either calls switchToMain()
   // or returns from its main function.
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #elif !__BIONIC__
-  KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
+  if (_setjmp(impl->originalJmpBuf) == 0) {
+    _longjmp(impl->fiberJmpBuf, 1);
+  }
 #endif
 }
-void FiberBase::switchToMain() {
+void FiberStack::switchToMain() {
   // Switch from the fiber to the main stack. Returns the next time the main stack calls
   // switchToFiber().
 #if _WIN32 || __CYGWIN__
-  SwitchToFiber(currentEventLoop().mainFiber);
+  SwitchToFiber(getMainWin32Fiber());
 #elif !__BIONIC__
-  KJ_SYSCALL(swapcontext(&impl.fiberContext, &impl.originalContext));
+  if (_setjmp(impl->fiberJmpBuf) == 0) {
+    _longjmp(impl->originalJmpBuf, 1);
+  }
 #endif
 }
 
@@ -974,14 +1456,10 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
-#if _WIN32 || __CYGWIN__
-  KJ_DEFER({
-    if (mainFiber != nullptr) {
-      // We converted the thread to a fiber, need to convert it back.
-      KJ_WIN32(ConvertFiberToThread());
-    }
-  });
-#endif
+  KJ_IF_MAYBE(e, executor) {
+    // Cancel all outstanding cross-thread events.
+    e->get()->impl->disconnect();
+  }
 
   // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
   // some more.
@@ -1063,9 +1541,9 @@ bool EventLoop::isRunnable() {
 
 const Executor& EventLoop::getExecutor() {
   KJ_IF_MAYBE(e, executor) {
-    return *e;
+    return **e;
   } else {
-    return executor.emplace(*this, Badge<EventLoop>());
+    return *executor.emplace(kj::atomicRefcounted<_::ExecutorImpl>(*this, Badge<EventLoop>()));
   }
 }
 
@@ -1096,11 +1574,11 @@ void EventLoop::wait() {
     if (p->wait()) {
       // Another thread called wake(). Check for cross-thread events.
       KJ_IF_MAYBE(e, executor) {
-        e->poll();
+        e->get()->poll();
       }
     }
   } else KJ_IF_MAYBE(e, executor) {
-    e->wait();
+    e->get()->wait();
   } else {
     KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
   }
@@ -1111,11 +1589,11 @@ void EventLoop::poll() {
     if (p->poll()) {
       // Another thread called wake(). Check for cross-thread events.
       KJ_IF_MAYBE(e, executor) {
-        e->poll();
+        e->get()->poll();
       }
     }
   } else KJ_IF_MAYBE(e, executor) {
-    e->poll();
+    e->get()->poll();
   }
 }
 
@@ -1126,17 +1604,19 @@ void WaitScope::poll() {
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
-  for (;;) {
-    if (!loop.turn()) {
-      // No events in the queue.  Poll for I/O.
-      loop.poll();
+  runOnStackPool([&]() {
+    for (;;) {
+      if (!loop.turn()) {
+        // No events in the queue.  Poll for I/O.
+        loop.poll();
 
-      if (!loop.isRunnable()) {
-        // Still no events in the queue. We're done.
-        return;
+        if (!loop.isRunnable()) {
+          // Still no events in the queue. We're done.
+          return;
+        }
       }
     }
-  }
+  });
 }
 
 namespace _ {  // private
@@ -1170,7 +1650,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
     // Switch to the main stack to run the event loop.
     fiber->state = FiberBase::WAITING;
-    fiber->switchToMain();
+    fiber->stack->switchToMain();
 
     // The main stack switched back to us, meaning either the event we registered with
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
@@ -1191,16 +1671,25 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     loop.running = true;
     KJ_DEFER(loop.running = false);
 
-    uint counter = 0;
-    while (!doneEvent.fired) {
-      if (!loop.turn()) {
-        // No events in the queue.  Wait for callback.
-        counter = 0;
+    for (;;) {
+      waitScope.runOnStackPool([&]() {
+        uint counter = 0;
+        while (!doneEvent.fired) {
+          if (!loop.turn()) {
+            // No events in the queue.  Wait for callback.
+            return;
+          } else if (++counter > waitScope.busyPollInterval) {
+            // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
+            counter = 0;
+            loop.poll();
+          }
+        }
+      });
+
+      if (doneEvent.fired) {
+        break;
+      } else {
         loop.wait();
-      } else if (++counter > waitScope.busyPollInterval) {
-        // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
-        counter = 0;
-        loop.poll();
       }
     }
 
@@ -1209,12 +1698,14 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   }
 #endif
 
-  node->get(result);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    node = nullptr;
-  })) {
-    result.addException(kj::mv(*exception));
-  }
+  waitScope.runOnStackPool([&]() {
+    node->get(result);
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      node = nullptr;
+    })) {
+      result.addException(kj::mv(*exception));
+    }
+  });
 }
 
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
@@ -1229,18 +1720,24 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   loop.running = true;
   KJ_DEFER(loop.running = false);
 
-  while (!doneEvent.fired) {
-    if (!loop.turn()) {
-      // No events in the queue.  Poll for I/O.
-      loop.poll();
+  waitScope.runOnStackPool([&]() {
+    while (!doneEvent.fired) {
+      if (!loop.turn()) {
+        // No events in the queue.  Poll for I/O.
+        loop.poll();
 
-      if (!doneEvent.fired && !loop.isRunnable()) {
-        // No progress. Give up.
-        node.onReady(nullptr);
-        loop.setRunnable(false);
-        return false;
+        if (!doneEvent.fired && !loop.isRunnable()) {
+          // No progress. Give up.
+          node.onReady(nullptr);
+          loop.setRunnable(false);
+          break;
+        }
       }
     }
+  });
+
+  if (!doneEvent.fired) {
+    return false;
   }
 
   loop.setRunnable(loop.isRunnable());

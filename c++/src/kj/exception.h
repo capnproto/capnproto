@@ -301,7 +301,7 @@ public:
 template <typename Func>
 class RunnableImpl: public Runnable {
 public:
-  RunnableImpl(Func&& func): func(kj::mv(func)) {}
+  RunnableImpl(Func&& func): func(kj::fwd<Func>(func)) {}
   void run() override {
     func();
   }
@@ -315,7 +315,7 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable);
 
 template <typename Func>
 Maybe<Exception> runCatchingExceptions(Func&& func) {
-  _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
+  _::RunnableImpl<Func> runnable(kj::fwd<Func>(func));
   return _::runCatchingExceptions(runnable);
 }
 

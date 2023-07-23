@@ -540,6 +540,14 @@ public:
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+    KJ_IF_MAYBE(r, resolved) {
+      // We resolved to a shortened path. New calls MUST go directly to the replacement capability
+      // so that their ordering is consistent with callers who call getResolved() to get direct
+      // access to the new capability. In particular it's important that we don't place these calls
+      // in our streaming queue.
+      return r->get()->newCall(interfaceId, methodId, sizeHint);
+    }
+
     auto hook = kj::heap<LocalRequest>(
         interfaceId, methodId, sizeHint, kj::addRef(*this));
     auto root = hook->message->getRoot<AnyPointer>();
@@ -548,6 +556,14 @@ public:
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context) override {
+    KJ_IF_MAYBE(r, resolved) {
+      // We resolved to a shortened path. New calls MUST go directly to the replacement capability
+      // so that their ordering is consistent with callers who call getResolved() to get direct
+      // access to the new capability. In particular it's important that we don't place these calls
+      // in our streaming queue.
+      return r->get()->call(interfaceId, methodId, kj::mv(context));
+    }
+
     auto contextPtr = context.get();
 
     // We don't want to actually dispatch the call synchronously, because we don't want the callee
@@ -667,7 +683,17 @@ private:
     resolveTask = server->shortenPath().map([this](kj::Promise<Capability::Client> promise) {
       return promise.then([this](Capability::Client&& cap) {
         auto hook = ClientHook::from(kj::mv(cap));
-        resolved = hook->addRef();
+
+        if (blocked) {
+          // This is a streaming interface and we have some calls queued up as a result. We cannot
+          // resolve directly to the new shorter path because this may allow new calls to hop
+          // the queue -- we need to embargo new calls until the queue clears out.
+          auto promise = kj::newAdaptedPromise<kj::Promise<void>, BlockedCall>(*this)
+              .then([hook = kj::mv(hook)]() mutable { return kj::mv(hook); });
+          hook = newLocalPromiseClient(kj::mv(promise));
+        }
+
+        resolved = kj::mv(hook);
       }).fork();
     });
   }

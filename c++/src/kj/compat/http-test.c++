@@ -938,6 +938,34 @@ kj::ArrayPtr<const HttpResponseTestCase> responseTestCases() {
     },
 
     {
+      "HTTP/1.1 204 No Content\r\n"
+      "\r\n",
+
+      204, "No Content",
+      {},
+      uint64_t(0), {},
+    },
+
+    {
+      "HTTP/1.1 205 Reset Content\r\n"
+      "Content-Length: 0\r\n"
+      "\r\n",
+
+      205, "Reset Content",
+      {},
+      uint64_t(0), {},
+    },
+
+    {
+      "HTTP/1.1 304 Not Modified\r\n"
+      "\r\n",
+
+      304, "Not Modified",
+      {},
+      uint64_t(0), {},
+    },
+
+    {
       "HTTP/1.1 200 OK\r\n"
       "Content-Length: 8\r\n"
       "Content-Type: text/plain\r\n"

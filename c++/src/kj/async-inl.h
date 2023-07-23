@@ -877,7 +877,8 @@ class FiberBase: public PromiseNode, private Event {
   // Base class for the outer PromiseNode representing a fiber.
 
 public:
-  FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  explicit FiberBase(size_t stackSize, _::ExceptionOrValue& result);
+  explicit FiberBase(const FiberPool& pool, _::ExceptionOrValue& result);
   ~FiberBase() noexcept(false);
 
   void start() { armDepthFirst(); }
@@ -895,31 +896,18 @@ protected:
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
-  size_t stackSize;
-
-#if _WIN32 || __CYGWIN__
-  void* osFiber;
-#elif !__BIONIC__
-  struct Impl;
-  Impl& impl;
-#endif
-
   _::PromiseNode* currentInner = nullptr;
   OnReadyEvent onReadyEvent;
+  Own<FiberStack> stack;
   _::ExceptionOrValue& result;
 
   void run();
   virtual void runImpl(WaitScope& waitScope) = 0;
 
-  struct StartRoutine;
-
-  void switchToFiber();
-  void switchToMain();
-
   Maybe<Own<Event>> fire() override;
   // Implements Event. Each time the event is fired, switchToFiber() is called.
 
-  friend class WaitScope;
+  friend class FiberStack;
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope);
@@ -928,7 +916,8 @@ private:
 template <typename Func>
 class Fiber final: public FiberBase {
 public:
-  Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+  explicit Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+  explicit Fiber(const FiberPool& pool, Func&& func): FiberBase(pool, result), func(kj::fwd<Func>(func)) {}
   ~Fiber() noexcept(false) { destroy(); }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
@@ -1092,10 +1081,57 @@ inline PromiseForResult<Func, void> evalNow(Func&& func) {
 }
 
 template <typename Func>
+struct RetryOnDisconnect_ {
+  static inline PromiseForResult<Func, void> apply(Func&& func) {
+    return evalLater([func = kj::mv(func)]() mutable -> PromiseForResult<Func, void> {
+      auto promise = evalNow(func);
+      return promise.catch_([func = kj::mv(func)](kj::Exception&& e) mutable -> PromiseForResult<Func, void> {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          return func();
+        } else {
+          return kj::mv(e);
+        }
+      });
+    });
+  }
+};
+template <typename Func>
+struct RetryOnDisconnect_<Func&> {
+  // Specialization for references. Needed because the syntax for capturing references in a
+  // lambda is different. :(
+  static inline PromiseForResult<Func, void> apply(Func& func) {
+    auto promise = evalLater(func);
+    return promise.catch_([&func](kj::Exception&& e) -> PromiseForResult<Func, void> {
+      if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+        return func();
+      } else {
+        return kj::mv(e);
+      }
+    });
+  }
+};
+
+template <typename Func>
+inline PromiseForResult<Func, void> retryOnDisconnect(Func&& func) {
+  return RetryOnDisconnect_<Func>::apply(kj::fwd<Func>(func));
+}
+
+template <typename Func>
 inline PromiseForResult<Func, WaitScope&> startFiber(size_t stackSize, Func&& func) {
   typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
 
   Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(stackSize, kj::fwd<Func>(func));
+  intermediate->start();
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+  return _::maybeReduce(kj::mv(result), false);
+}
+
+template <typename Func>
+inline PromiseForResult<Func, WaitScope&> FiberPool::startFiber(Func&& func) const {
+  typedef _::FixVoid<_::ReturnType<Func, WaitScope&>> ResultT;
+
+  Own<_::FiberBase> intermediate = kj::heap<_::Fiber<Func>>(*this, kj::fwd<Func>(func));
   intermediate->start();
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, WaitScope&>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
@@ -1269,8 +1305,7 @@ namespace _ {  // (private)
 class XThreadEvent: private Event,         // it's an event in the target thread
                     public PromiseNode {   // it's a PromiseNode in the requesting thread
 public:
-  XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor)
-      : Event(targetExecutor.loop), result(result), targetExecutor(targetExecutor) {}
+  XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor);
 
 protected:
   void ensureDoneOrCanceled();
@@ -1288,7 +1323,7 @@ protected:
 private:
   ExceptionOrValue& result;
 
-  const Executor& targetExecutor;
+  kj::Own<const Executor> targetExecutor;
   Maybe<const Executor&> replyExecutor;  // If executeAsync() was used.
 
   kj::Maybe<Own<PromiseNode>> promiseNode;
@@ -1304,12 +1339,17 @@ private:
     // Object was never queued on another thread.
 
     QUEUED,
-    // Target thread has not yet dequeued the event from crossThreadRequests.events. The requesting
+    // Target thread has not yet dequeued the event from the state.start list. The requesting
     // thread can cancel execution by removing the event from the list.
 
     EXECUTING,
-    // Target thread has dequeued the event and is executing it. To cancel, the requesting thread
-    // must add the event to the crossThreadRequests.cancel list.
+    // Target thread has dequeued the event from state.start and moved it to state.executing. To
+    // cancel, the requesting thread must add the event to the state.cancel list and change the
+    // state to CANCELING.
+
+    CANCELING,
+    // Requesting thread is trying to cancel this event. The target thread will change the state to
+    // `DONE` once canceled.
 
     DONE
     // Target thread has completed handling this event and will not touch it again. The requesting
@@ -1333,6 +1373,23 @@ private:
   friend class kj::Executor;
 
   void done();
+  // Sets the state to `DONE` and notifies the originating thread that this event is done. Do NOT
+  // call under lock.
+
+  void sendReply();
+  // Notifies the originating thread that this event is done, but doesn't set the state to DONE
+  // yet. Do NOT call under lock.
+
+  void setDoneState();
+  // Assigns `state` to `DONE`, being careful to use an atomic-release-store if needed. This must
+  // only be called in the destination thread, and must either be called under lock, or the thread
+  // must take the lock and release it again shortly after setting the state (because some threads
+  // may be waiting on the DONE state using a conditional wait on the mutex). After calling
+  // setDoneState(), the destination thread MUST NOT touch this object ever again; it now belongs
+  // solely to the requesting thread.
+
+  void setDisconnected();
+  // Sets the result to a DISCONNECTED exception indicating that the target event loop exited.
 
   class DelayedDoneHack;
 

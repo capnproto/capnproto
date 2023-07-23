@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "time.h"
 #if _WIN32
 #define WIN32_LEAN_AND_MEAN 1  // lolz
 #define WINVER 0x0600
@@ -59,6 +60,29 @@ TEST(Mutex, MutexGuarded) {
     EXPECT_EQ(123u, *lock);
     EXPECT_EQ(123u, value.getAlreadyLockedExclusive());
 
+#if KJ_USE_FUTEX
+    auto timeout = MILLISECONDS * 50;
+
+    auto startTime = systemPreciseMonotonicClock().now();
+    EXPECT_TRUE(value.lockExclusiveWithTimeout(timeout) == nullptr);
+    auto duration = startTime - systemPreciseMonotonicClock().now();
+    EXPECT_TRUE(duration < timeout);
+
+    startTime = systemPreciseMonotonicClock().now();
+    EXPECT_TRUE(value.lockSharedWithTimeout(timeout) == nullptr);
+    duration = startTime - systemPreciseMonotonicClock().now();
+    EXPECT_TRUE(duration < timeout);
+
+    // originally, upon timing out, the exclusive requested flag would be removed
+    // from the futex state. if we did remove the exclusive request flag this test
+    // would hang.
+    Thread lockTimeoutThread([&]() {
+      // try to timeout during 10 ms delay
+      Maybe<Locked<uint>> maybeLock = value.lockExclusiveWithTimeout(MILLISECONDS * 8);
+      EXPECT_TRUE(maybeLock == nullptr);
+    });
+#endif
+
     Thread thread([&]() {
       Locked<uint> threadLock = value.lockExclusive();
       EXPECT_EQ(456u, *threadLock);
@@ -70,6 +94,11 @@ TEST(Mutex, MutexGuarded) {
     *lock = 456;
     auto earlyRelease = kj::mv(lock);
   }
+
+#if KJ_USE_FUTEX
+  EXPECT_EQ(789u, *KJ_ASSERT_NONNULL(value.lockExclusiveWithTimeout(MILLISECONDS * 50)));
+  EXPECT_EQ(789u, *KJ_ASSERT_NONNULL(value.lockSharedWithTimeout(MILLISECONDS * 50)));
+#endif
 
   EXPECT_EQ(789u, *value.lockExclusive());
 

@@ -83,6 +83,9 @@ jobs:
       - name: Build and test
         shell: cmd
         run: |
+            echo "Deleting broken Postgres install until https://github.com/actions/virtual-environments/issues/1089 is fixed..."
+            rmdir /s /q C:\PROGRA~1\POSTGR~1
+
             echo "Building Cap'n Proto with MinGW"
             cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND"
             cmake --build build-output --target install -- -j2
