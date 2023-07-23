@@ -29,10 +29,32 @@ namespace kj {
 
 namespace _ {  // private
 
-template <uint i, typename Key, typename First, typename... Rest>
-struct TypeIndex_ { static constexpr uint value = TypeIndex_<i + 1, Key, Rest...>::value; };
-template <uint i, typename Key, typename... Rest>
-struct TypeIndex_<i, Key, Key, Rest...> { static constexpr uint value = i; };
+template <uint i, template<uint> class Fail, typename Key, typename... Variants>
+struct TypeIndex_;
+template <uint i, template<uint> class Fail, typename Key, typename First, typename... Rest>
+struct TypeIndex_<i, Fail, Key, First, Rest...> {
+  static constexpr uint value = TypeIndex_<i + 1, Fail, Key, Rest...>::value;
+};
+template <uint i, template<uint> class Fail, typename Key, typename... Rest>
+struct TypeIndex_<i, Fail, Key, Key, Rest...> { static constexpr uint value = i; };
+template <uint i, template<uint> class Fail, typename Key>
+struct TypeIndex_<i, Fail, Key>: public Fail<i> {};
+
+template <uint i>
+struct OneOfFailError_ {
+  static_assert(i == -1, "type does not match any in OneOf");
+};
+template <uint i>
+struct OneOfFailZero_ {
+  static constexpr int value = 0;
+};
+
+template <uint i>
+struct SuccessIfNotZero {
+  typedef int Success;
+};
+template <>
+struct SuccessIfNotZero<0> {};
 
 enum class Variants0 {};
 enum class Variants1 { _variant0 };
@@ -44,6 +66,8 @@ enum class Variants6 { _variant0, _variant1, _variant2, _variant3, _variant4, _v
 enum class Variants7 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6 };
 enum class Variants8 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
                        _variant7 };
+enum class Variants9 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                       _variant7, _variant8 };
 
 template <uint i> struct Variants_;
 template <> struct Variants_<0> { typedef Variants0 Type; };
@@ -55,6 +79,7 @@ template <> struct Variants_<5> { typedef Variants5 Type; };
 template <> struct Variants_<6> { typedef Variants6 Type; };
 template <> struct Variants_<7> { typedef Variants7 Type; };
 template <> struct Variants_<8> { typedef Variants8 Type; };
+template <> struct Variants_<9> { typedef Variants9 Type; };
 
 template <uint i>
 using Variants = typename Variants_<i>::Type;
@@ -64,18 +89,43 @@ using Variants = typename Variants_<i>::Type;
 template <typename... Variants>
 class OneOf {
   template <typename Key>
-  static inline constexpr uint typeIndex() { return _::TypeIndex_<1, Key, Variants...>::value; }
-  // Get the 1-based index of Key within the type list Types.
+  static inline constexpr uint typeIndex() {
+    return _::TypeIndex_<1, _::OneOfFailError_, Key, Variants...>::value;
+  }
+  // Get the 1-based index of Key within the type list Types, or static_assert with a nice error.
+
+  template <typename Key>
+  static inline constexpr uint typeIndexOrZero() {
+    return _::TypeIndex_<1, _::OneOfFailZero_, Key, Variants...>::value;
+  }
+
+  template <uint i, typename... OtherVariants>
+  struct HasAll;
+  // Has a member type called "Success" if and only if all of `OtherVariants` are types that
+  // appear in `Variants`. Used with SFINAE to enable subset constructors.
 
 public:
   inline OneOf(): tag(0) {}
+
   OneOf(const OneOf& other) { copyFrom(other); }
   OneOf(OneOf& other) { copyFrom(other); }
   OneOf(OneOf&& other) { moveFrom(other); }
-  template <typename T>
+  // Copy/move from same OneOf type.
+
+  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
+  OneOf(const OneOf<OtherVariants...>& other) { copyFromSubset(other); }
+  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
+  OneOf(OneOf<OtherVariants...>& other) { copyFromSubset(other); }
+  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
+  OneOf(OneOf<OtherVariants...>&& other) { moveFromSubset(other); }
+  // Copy/move from OneOf that contains a subset of the types we do.
+
+  template <typename T, typename = typename HasAll<0, Decay<T>>::Success>
   OneOf(T&& other): tag(typeIndex<Decay<T>>()) {
     ctor(*reinterpret_cast<Decay<T>*>(space), kj::fwd<T>(other));
   }
+  // Copy/move from a value that matches one of the individual types in the OneOf.
+
   ~OneOf() { destroy(); }
 
   OneOf& operator=(const OneOf& other) { if (tag != 0) destroy(); copyFrom(other); return *this; }
@@ -228,7 +278,54 @@ private:
     tag = other.tag;
     doAll(moveVariantFrom<Variants>(other)...);
   }
+
+  template <typename T, typename... OtherVariants>
+  inline bool copySubsetVariantFrom(const OneOf<OtherVariants...>& other) {
+    if (other.template is<T>()) {
+      tag = typeIndex<Decay<T>>();
+      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+    }
+    return false;
+  }
+  template <typename... OtherVariants>
+  void copyFromSubset(const OneOf<OtherVariants...>& other) {
+    doAll(copySubsetVariantFrom<OtherVariants>(other)...);
+  }
+
+  template <typename T, typename... OtherVariants>
+  inline bool copySubsetVariantFrom(OneOf<OtherVariants...>& other) {
+    if (other.template is<T>()) {
+      tag = typeIndex<Decay<T>>();
+      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+    }
+    return false;
+  }
+  template <typename... OtherVariants>
+  void copyFromSubset(OneOf<OtherVariants...>& other) {
+    doAll(copySubsetVariantFrom<OtherVariants>(other)...);
+  }
+
+  template <typename T, typename... OtherVariants>
+  inline bool moveSubsetVariantFrom(OneOf<OtherVariants...>& other) {
+    if (other.template is<T>()) {
+      tag = typeIndex<Decay<T>>();
+      ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
+    }
+    return false;
+  }
+  template <typename... OtherVariants>
+  void moveFromSubset(OneOf<OtherVariants...>& other) {
+    doAll(moveSubsetVariantFrom<OtherVariants>(other)...);
+  }
 };
+
+template <typename... Variants>
+template <uint i, typename First, typename... Rest>
+struct OneOf<Variants...>::HasAll<i, First, Rest...>
+    : public HasAll<typeIndexOrZero<First>(), Rest...> {};
+template <typename... Variants>
+template <uint i>
+struct OneOf<Variants...>::HasAll<i>: public _::SuccessIfNotZero<i> {};
 
 template <typename... Variants>
 template <uint i>

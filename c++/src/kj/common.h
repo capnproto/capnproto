@@ -63,16 +63,16 @@ KJ_BEGIN_HEADER
 
 #ifdef __GNUC__
   #if __clang__
-    #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 4)
-      #warning "This library requires at least Clang 3.4."
+    #if __clang_major__ < 5
+      #warning "This library requires at least Clang 5.0."
     #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
       #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
     #endif
   #else
-    #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 9)
-      #warning "This library requires at least GCC 4.9."
+    #if __GNUC__ < 5
+      #warning "This library requires at least GCC 5.0."
     #endif
   #endif
 #elif defined(_MSC_VER)
@@ -747,7 +747,7 @@ inline constexpr float inf() { return (float)(1e300 * 1e300); }
 #pragma warning(pop)
 
 float nan();
-// Unfortunatley, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
+// Unfortunately, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
 // canonical NaN should not have the sign bit set. std::numeric_limits<float>::quiet_NaN()
 // returns the correct NaN, but we don't want to #include that here. So, we give up and make
 // this out-of-line on MSVC.
@@ -1434,8 +1434,34 @@ public:
   inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+
+#if __GNUC__ && !__clang__ && __GNUC__ >= 9
+// GCC 9 added a warning when we take an initializer_list as a constructor parameter and save a
+// pointer to its content in a class member. GCC apparently imagines we're going to do something
+// dumb like this:
+//     ArrayPtr<const int> ptr = { 1, 2, 3 };
+//     foo(ptr[1]); // undefined behavior!
+// Any KJ programmer should be able to recognize that this is UB, because an ArrayPtr does not own
+// its content. That's not what this constructor is for, tohugh. This constructor is meant to allow
+// code like this:
+//     int foo(ArrayPtr<const int> p);
+//     // ... later ...
+//     foo({1, 2, 3});
+// In this case, the initializer_list's backing array, like any temporary, lives until the end of
+// the statement `foo({1, 2, 3});`. Therefore, it lives at least until the call to foo() has
+// returned, which is exactly what we care about. This usage is fine! GCC is wrong to warn.
+//
+// Amusingly, Clang's implementation has a similar type that they call ArrayRef which apparently
+// triggers this same GCC warning. My guess is that Clang will not introduce a similar warning
+// given that it triggers on their own, legitimate code.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winit-list-lifetime"
+#endif
   inline KJ_CONSTEXPR() ArrayPtr(::std::initializer_list<RemoveConstOrDisable<T>> init)
       : ptr(init.begin()), size_(init.size()) {}
+#if __GNUC__ && !__clang__ && __GNUC__ >= 9
+#pragma GCC diagnostic pop
+#endif
 
   template <size_t size>
   inline constexpr ArrayPtr(T (&native)[size]): ptr(native), size_(size) {

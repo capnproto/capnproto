@@ -27,6 +27,36 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
+template <typename T>
+inline constexpr bool _kj_internal_isPolymorphic(T*) {
+  // If you get a compiler error here complaining that T is incomplete, it's because you are trying
+  // to use kj::Own<T> with a type that has only been forward-declared. Since KJ doesn't know if
+  // the type might be involved in inheritance (especially multiple inheritance), it doesn't know
+  // how to correctly call the disposer to destroy the type, since the object's true memory address
+  // may differ from the address used to point to a superclass.
+  //
+  // However, if you know for sure that T is NOT polymorphic (i.e. it doesn't have a vtable and
+  // isn't involved in inheritance), then you can use KJ_DECLARE_NON_POLYMORPHIC(T) to declare this
+  // to KJ without actually completing the type. Place this macro invocation either in the global
+  // scope, or in the same namespace as T is defined.
+  return __is_polymorphic(T);
+}
+
+#define KJ_DECLARE_NON_POLYMORPHIC(...) \
+  inline constexpr bool _kj_internal_isPolymorphic(__VA_ARGS__*) { \
+    return false; \
+  }
+// If you want to use kj::Own<T> for an incomplete type T that you know is not polymorphic, then
+// write `KJ_DECLARE_NON_POLYMORPHIC(T)` either at the global scope or in the same namespace as
+// T is declared.
+//
+// This also works for templates, e.g.:
+//
+//     template <typename X, typename Y>
+//     struct MyType;
+//     template <typename X, typename Y>
+//     KJ_DECLARE_NON_POLYMORPHIC(MyType<X, Y>)
+
 namespace _ {  // private
 
 template <typename T> struct RefOrVoid_ { typedef T& Type; };
@@ -39,7 +69,7 @@ using RefOrVoid = typename RefOrVoid_<T>::Type;
 //
 // This is a hack needed to avoid defining Own<void> as a totally separate class.
 
-template <typename T, bool isPolymorphic = __is_polymorphic(T)>
+template <typename T, bool isPolymorphic = _kj_internal_isPolymorphic((T*)nullptr)>
 struct CastToVoid_;
 
 template <typename T>
@@ -110,7 +140,7 @@ public:
   // an exception.
 
 private:
-  template <typename T, bool polymorphic = __is_polymorphic(T)>
+  template <typename T, bool polymorphic = _kj_internal_isPolymorphic((T*)nullptr)>
   struct Dispose_;
 };
 
@@ -174,7 +204,7 @@ public:
   ~Own() noexcept(false) { dispose(); }
 
   inline Own& operator=(Own&& other) {
-    // Move-assingnment operator.
+    // Move-assignnment operator.
 
     // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
     // dispose.
@@ -251,7 +281,7 @@ private:
 
   template <typename U>
   static inline T* cast(U* ptr) {
-    static_assert(__is_polymorphic(T),
+    static_assert(_kj_internal_isPolymorphic((T*)nullptr),
         "Casting owned pointers requires that the target type is polymorphic.");
     return ptr;
   }

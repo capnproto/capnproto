@@ -328,12 +328,12 @@ private:
   ReadLimiter dummyLimiter;
 
   class LocalCapTable final: public CapTableBuilder {
-#if !CAPNP_LITE
   public:
     kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
     uint injectCap(kj::Own<ClientHook>&& cap) override;
     void dropCap(uint index) override;
 
+#if !CAPNP_LITE
   private:
     kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
 #endif // ! CAPNP_LITE

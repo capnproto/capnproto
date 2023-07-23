@@ -80,7 +80,7 @@ KJ_TEST("synchonous simple cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeSync([&]() {
       KJ_ASSERT(isChild);
       KJ_FAIL_ASSERT("test exception") { break; }
     }));
@@ -132,7 +132,7 @@ KJ_TEST("asynchonous simple cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeAsync([&]() {
       KJ_ASSERT(isChild);
       KJ_FAIL_ASSERT("test exception") { break; }
     }).wait(waitScope));
@@ -191,7 +191,7 @@ KJ_TEST("synchonous promise cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeSync([&]() {
       KJ_ASSERT(isChild);
       return kj::Promise<void>(KJ_EXCEPTION(FAILED, "test exception"));
     }));
@@ -252,7 +252,7 @@ KJ_TEST("asynchonous promise cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeAsync([&]() {
       KJ_ASSERT(isChild);
       return kj::Promise<void>(KJ_EXCEPTION(FAILED, "test exception"));
     }).wait(waitScope));

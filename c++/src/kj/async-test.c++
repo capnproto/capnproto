@@ -621,6 +621,16 @@ TEST(Async, Canceler) {
   KJ_EXPECT(nowI.wait(waitScope) == 123u);
 }
 
+TEST(Async, CancelerDoubleWrap) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // This used to crash.
+  Canceler canceler;
+  auto promise = canceler.wrap(canceler.wrap(kj::Promise<void>(kj::NEVER_DONE)));
+  canceler.cancel("whoops");
+}
+
 class ErrorHandlerImpl: public TaskSet::ErrorHandler {
 public:
   uint exceptionCount = 0;
@@ -844,6 +854,7 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
   KJ_EXPECT(!joined.poll(waitScope));
 }
 
+#if !__BIONIC__ && !KJ_NO_EXCEPTIONS
 KJ_TEST("start a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -905,32 +916,45 @@ KJ_TEST("throw from a fiber") {
   paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "test exception"));
 
   KJ_ASSERT(fiber.poll(waitScope));
-  KJ_EXPECT_THROW_MESSAGE("test exception", fiber.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", fiber.wait(waitScope));
 }
 
+#if !__MINGW32__ || __MINGW64__
+// This test fails on MinGW 32-bit builds due to a compiler bug with exceptions + fibers:
+//     https://sourceforge.net/p/mingw-w64/bugs/835/
 KJ_TEST("cancel a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto paf = newPromiseAndFulfiller<int>();
+  // When exceptions are disabled we can't wait() on a non-void promise that throws.
+  auto paf = newPromiseAndFulfiller<void>();
 
   bool exited = false;
+  bool canceled = false;
 
   {
     Promise<StringPtr> fiber = startFiber(65536,
-        [promise = kj::mv(paf.promise), &exited](WaitScope& fiberScope) mutable {
+        [promise = kj::mv(paf.promise), &exited, &canceled](WaitScope& fiberScope) mutable {
       KJ_DEFER(exited = true);
-      int i = promise.wait(fiberScope);
-      KJ_EXPECT(i == 123);
+      try {
+        promise.wait(fiberScope);
+      } catch (kj::CanceledException) {
+        canceled = true;
+        throw;
+      }
       return "foo"_kj;
     });
 
     KJ_EXPECT(!fiber.poll(waitScope));
     KJ_EXPECT(!exited);
+    KJ_EXPECT(!canceled);
   }
 
   KJ_EXPECT(exited);
+  KJ_EXPECT(canceled);
 }
+#endif
+#endif
 
 }  // namespace
 }  // namespace kj

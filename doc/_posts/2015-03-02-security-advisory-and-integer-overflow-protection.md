@@ -50,7 +50,7 @@ In the past, C and C++ code has been plagued by buffer overrun bugs, but these d
 
 But developing a similar sense for integer overflow is hard. We do arithmetic in code all the time, and the vast majority of it isn't an issue. The few places where overflow can happen all too easily go unnoticed.
 
-And by the way, integer overflow affects many memory-safe languages too! Java and C# don't protect against overflow. Python does, using slow arbitrary-precision integers. Javascript doesn't use integers, and is instead succeptible to loss-of-precision bugs, which can have similar (but more subtle) consequences.
+And by the way, integer overflow affects many memory-safe languages too! Java and C# don't protect against overflow. Python does, using slow arbitrary-precision integers. JavaScript doesn't use integers, and is instead succeptible to loss-of-precision bugs, which can have similar (but more subtle) consequences.
 
 While writing Cap'n Proto, I made sure to think carefully about overflow and managed to correct for it most of the time. On learning that I missed a case, I immediately feared that I might have missed many more, and wondered how I might go about systematically finding them.
 

@@ -187,7 +187,7 @@ public:
   void shutdownWrite() override {
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
-    // TODO(0.8): shutdownWrite() is problematic because it doesn't return a promise. It was
+    // TODO(0.9): shutdownWrite() is problematic because it doesn't return a promise. It was
     //   designed to assume that it would only be called after all writes are finished and that
     //   there was no reason to block at that point, but SSL sessions don't fit this since they
     //   actually have to send a shutdown message.
@@ -248,6 +248,16 @@ private:
                               kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
     KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
 
+    // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
+    // an error. So, we need to avoid zero-sized writes entirely.
+    while (first.size() == 0) {
+      if (rest.size() == 0) {
+        return kj::READY_NOW;
+      }
+      first = rest.front();
+      rest = rest.slice(1, rest.size());
+    }
+
     return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
         .then([this,first,rest](size_t n) -> kj::Promise<void> {
       if (n == 0) {
@@ -266,7 +276,7 @@ private:
   kj::Promise<size_t> sslCall(Func&& func) {
     if (disconnected) return size_t(0);
 
-    ssize_t result = func();
+    auto result = func();
 
     if (result > 0) {
       return result;
@@ -493,8 +503,8 @@ private:
 TlsContext::Options::Options()
     : useSystemTrustStore(true),
       verifyClients(false),
-      minVersion(TlsVersion::TLS_1_0),
-      cipherList("ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA:!DSS") {}
+      minVersion(TlsVersion::TLS_1_2),
+      cipherList("ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305") {}
 // Cipher list is Mozilla's "intermediate" list, except with classic DH removed since we don't
 // currently support setting dhparams. See:
 //     https://mozilla.github.io/server-side-tls/ssl-config-generator/

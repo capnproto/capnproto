@@ -148,9 +148,12 @@ public:
   // If the final node has already been built, this will actually return the final node (in fact,
   // it's the same node object).
 
-  NodeSet finish();
+  NodeSet finish(Schema selfUnboundBootstrap);
   // Finish translating the node (including filling in all the pieces that are missing from the
   // bootstrap node) and return it.
+  //
+  // `selfUnboundBootstrap` is a Schema build using the Node returned by getBootstrapNode(), and
+  // with generic parameters "unbound", i.e. it was returned by SchemaLoader::getUnbound().
 
   static kj::Maybe<Resolver::ResolveResult> compileDecl(
       uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
@@ -196,7 +199,7 @@ private:
   struct UnfinishedValue {
     Expression::Reader source;
     schema::Type::Reader type;
-    Schema typeScope;
+    kj::Maybe<Schema> typeScope;
     schema::Value::Builder target;
   };
   kj::Vector<UnfinishedValue> unfinishedValues;
@@ -257,15 +260,13 @@ private:
 
   void compileBootstrapValue(
       Expression::Reader source, schema::Type::Reader type, schema::Value::Builder target,
-      Schema typeScope = Schema());
+      kj::Maybe<Schema> typeScope = nullptr);
   // Calls compileValue() if this value should be interpreted at bootstrap time.  Otheriwse,
   // adds the value to `unfinishedValues` for later evaluation.
   //
-  // If `type` comes from some other node, `typeScope` is the schema for that node. This is only
-  // really needed for looking up generic parameter bindings, therefore if the type comes from
-  // the node being built, an empty "Schema" (the default) works here because the node being built
-  // is of course being built for all possible bindings and thus none of its generic parameters are
-  // bound.
+  // If `type` comes from some other node, `typeScope` is the schema for that node. Otherwise the
+  // scope of the type expression is assumed to be this node (meaning, in particular, that no
+  // generic type parameters are bound).
 
   void compileValue(Expression::Reader source, schema::Type::Reader type,
                     Schema typeScope, schema::Value::Builder target, bool isBootstrap);

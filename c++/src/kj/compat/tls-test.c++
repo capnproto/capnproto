@@ -27,6 +27,14 @@
 #include <stdlib.h>
 #include <openssl/opensslv.h>
 
+#if _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <kj/windows-sanity.h>
+#else
+#include <sys/socket.h>
+#endif
+
 namespace kj {
 namespace {
 
@@ -385,6 +393,32 @@ KJ_TEST("TLS multiple messages") {
   KJ_ASSERT(kj::StringPtr(buf) == "qux");
 }
 
+KJ_TEST("TLS zero-sized write") {
+  TlsTest test;
+  ErrorNexus e;
+
+  auto pipe = test.io.provider->newTwoWayPipe();
+
+  auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
+  auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
+
+  auto client = clientPromise.wait(test.io.waitScope);
+  auto server = serverPromise.wait(test.io.waitScope);
+
+  char buf[7];
+  auto readPromise = server->read(&buf, 6);
+
+  client->write("", 0).wait(test.io.waitScope);
+  client->write("foo", 3).wait(test.io.waitScope);
+  client->write("", 0).wait(test.io.waitScope);
+  client->write("bar", 3).wait(test.io.waitScope);
+
+  readPromise.wait(test.io.waitScope);
+  buf[6] = '\0';
+
+  KJ_ASSERT(kj::StringPtr(buf) == "foobar");
+}
+
 kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
   if (count == 0) return kj::READY_NOW;
   --count;
@@ -410,6 +444,16 @@ KJ_TEST("TLS full duplex") {
   ErrorNexus e;
 
   auto pipe = test.io.provider->newTwoWayPipe();
+
+#if _WIN32
+  // On Windows we observe that `writeUp`, below, completes before the other end has started
+  // reading, failing the `!writeUp.poll()` expectation. I guess Windows has big buffers. We can
+  // fix this by requesting small buffers here. (Worth keeping in mind that Windows doesn't have
+  // socketpairs, so `newTwoWayPipe()` is implemented in terms of loopback TCP, ugh.)
+  uint small = 256;
+  pipe.ends[0]->setsockopt(SOL_SOCKET, SO_SNDBUF, &small, sizeof(small));
+  pipe.ends[0]->setsockopt(SOL_SOCKET, SO_RCVBUF, &small, sizeof(small));
+#endif
 
   auto clientPromise = e.wrap(test.tlsClient.wrapClient(kj::mv(pipe.ends[0]), "example.com"));
   auto serverPromise = e.wrap(test.tlsServer.wrapServer(kj::mv(pipe.ends[1])));
@@ -529,10 +573,13 @@ KJ_TEST("TLS client certificate verification") {
         SSL_MESSAGE("peer did not return a certificate",
                     "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.wait(test.io.waitScope));
+#if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
+                       // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
                     "TLSV1_CERTIFICATE_REQUIRED"),
         clientPromise.wait(test.io.waitScope));
+#endif
   }
 
   // Self-signed certificate loaded in the client: fail
@@ -555,10 +602,13 @@ KJ_TEST("TLS client certificate verification") {
         SSL_MESSAGE("certificate verify failed",
                     "CERTIFICATE_VERIFY_FAILED"),
         serverPromise.wait(test.io.waitScope));
+#if !KJ_NO_EXCEPTIONS  // if exceptions are disabled, we're now in a bad state because
+                       // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert unknown ca",
                     "TLSV1_ALERT_UNKNOWN_CA"),
         clientPromise.wait(test.io.waitScope));
+#endif
   }
 
   // Trusted certificate loaded in the client: success.

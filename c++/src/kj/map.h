@@ -400,7 +400,9 @@ void HashMap<Key, Value>::erase(Entry& entry) {
 template <typename Key, typename Value>
 template <typename Predicate, typename>
 size_t HashMap<Key, Value>::eraseAll(Predicate&& predicate) {
-  return table.eraseAll(kj::fwd<Predicate>(predicate));
+  return table.eraseAll([&](Entry& entry) {
+    return predicate(entry.key, entry.value);
+  });
 }
 
 // -----------------------------------------------------------------------------
@@ -522,7 +524,9 @@ void TreeMap<Key, Value>::erase(Entry& entry) {
 template <typename Key, typename Value>
 template <typename Predicate, typename>
 size_t TreeMap<Key, Value>::eraseAll(Predicate&& predicate) {
-  return table.eraseAll(kj::fwd<Predicate>(predicate));
+  return table.eraseAll([&](Entry& entry) {
+    return predicate(entry.key, entry.value);
+  });
 }
 
 template <typename Key, typename Value>

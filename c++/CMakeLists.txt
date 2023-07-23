@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.4)
 project("Cap'n Proto" CXX)
-set(VERSION 0.8-dev)
+set(VERSION 0.9-dev)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -39,6 +39,29 @@ if(CAPNP_LITE)
   # This flag is attached as PUBLIC target_compile_definition to kj target
 else()
   set(CAPNP_LITE_FLAG)
+endif()
+
+set(WITH_OPENSSL "AUTO" CACHE STRING
+  "Whether or not to build libkj-tls by linking against openssl")
+# define list of values GUI will offer for the variable
+set_property(CACHE WITH_OPENSSL PROPERTY STRINGS AUTO ON OFF)
+
+# shadow cache variable original value with ON/OFF,
+# so from now on OpenSSL-specific code just has to check:
+#     if (WITH_OPENSSL)
+#         ...
+#     endif()
+if (CAPNP_LITE)
+  set(WITH_OPENSSL OFF)
+elseif (WITH_OPENSSL STREQUAL "AUTO")
+  find_package(OpenSSL COMPONENTS Crypto SSL)
+  if (OPENSSL_FOUND)
+    set(WITH_OPENSSL ON)
+  else()
+    set(WITH_OPENSSL OFF)
+  endif()
+elseif (WITH_OPENSSL)
+  find_package(OpenSSL REQUIRED COMPONENTS Crypto SSL)
 endif()
 
 if(MSVC)
@@ -134,8 +157,10 @@ if(NOT MSVC)  # Don't install pkg-config files when building with MSVC
   if(NOT CAPNP_LITE)
     list(APPEND CAPNP_PKG_CONFIG_FILES
       pkgconfig/kj-async.pc
+      pkgconfig/kj-gzip.pc
       pkgconfig/kj-http.pc
       pkgconfig/kj-test.pc
+      pkgconfig/kj-tls.pc
       pkgconfig/capnp-rpc.pc
       pkgconfig/capnp-json.pc
     )

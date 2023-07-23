@@ -351,6 +351,50 @@ TEST(Memory, OwnConstVoid) {
   }
 }
 
+struct IncompleteType;
+KJ_DECLARE_NON_POLYMORPHIC(IncompleteType)
+
+template <typename T, typename U>
+struct IncompleteTemplate;
+template <typename T, typename U>
+KJ_DECLARE_NON_POLYMORPHIC(IncompleteTemplate<T, U>)
+
+struct IncompleteDisposer: public Disposer {
+  mutable void* sawPtr = nullptr;
+
+  virtual void disposeImpl(void* pointer) const {
+    sawPtr = pointer;
+  }
+};
+
+KJ_TEST("Own<IncompleteType>") {
+  static int i;
+  void* ptr = &i;
+
+  {
+    IncompleteDisposer disposer;
+
+    {
+      kj::Own<IncompleteType> foo(reinterpret_cast<IncompleteType*>(ptr), disposer);
+      kj::Own<IncompleteType> bar = kj::mv(foo);
+    }
+
+    KJ_EXPECT(disposer.sawPtr == ptr);
+  }
+
+  {
+    IncompleteDisposer disposer;
+
+    {
+      kj::Own<IncompleteTemplate<int, char>> foo(
+          reinterpret_cast<IncompleteTemplate<int, char>*>(ptr), disposer);
+      kj::Own<IncompleteTemplate<int, char>> bar = kj::mv(foo);
+    }
+
+    KJ_EXPECT(disposer.sawPtr == ptr);
+  }
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

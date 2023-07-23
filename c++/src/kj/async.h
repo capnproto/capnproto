@@ -594,6 +594,8 @@ private:
 
     virtual void cancel(Exception&& e) = 0;
 
+    void unlink();
+
   private:
     Maybe<Maybe<AdapterBase&>&> prev;
     Maybe<AdapterBase&> next;
@@ -705,7 +707,7 @@ public:
   // returning a promise for the result.
   //
   // The Promise returned by executeAsync() belongs to the requesting thread, not the executor
-  // thread. Hence, for example, continuations added to this promise with .then() will exceute in
+  // thread. Hence, for example, continuations added to this promise with .then() will execute in
   // the requesting thread.
   //
   // If func() itself returns a Promise, that Promise is *not* returned verbatim to the requesting

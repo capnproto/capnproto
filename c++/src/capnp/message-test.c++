@@ -176,6 +176,22 @@ KJ_TEST("clone()") {
   checkTestMessage(*copy);
 }
 
+#if !CAPNP_ALLOW_UNALIGNED
+KJ_TEST("disallow unaligned") {
+  union {
+    char buffer[16];
+    word align;
+  };
+  memset(buffer, 0, sizeof(buffer));
+
+  auto unaligned = kj::arrayPtr(reinterpret_cast<word*>(buffer + 1), 1);
+
+  kj::ArrayPtr<const word> segments[1] = {unaligned};
+  SegmentArrayMessageReader message(segments);
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("unaligned", message.getRoot<TestAllTypes>());
+}
+#endif
+
 // TODO(test):  More tests.
 
 }  // namespace

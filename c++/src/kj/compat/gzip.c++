@@ -163,7 +163,9 @@ void GzipOutputStream::pump(int flush) {
     auto result = ctx.pumpOnce(flush);
     ok = get<0>(result);
     auto chunk = get<1>(result);
-    inner.write(chunk.begin(), chunk.size());
+    if (chunk.size() > 0) {
+      inner.write(chunk.begin(), chunk.size());
+    }
   } while (ok);
 }
 
@@ -254,11 +256,20 @@ kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
   auto result = ctx.pumpOnce(flush);
   auto ok = get<0>(result);
   auto chunk = get<1>(result);
-  auto promise = inner.write(chunk.begin(), chunk.size());
-  if (ok) {
-    promise = promise.then([this, flush]() { return pump(flush); });
+
+  if (chunk.size() == 0) {
+    if (ok) {
+      return pump(flush);
+    } else {
+      return kj::READY_NOW;
+    }
+  } else {
+    auto promise = inner.write(chunk.begin(), chunk.size());
+    if (ok) {
+      promise = promise.then([this, flush]() { return pump(flush); });
+    }
+    return promise;
   }
-  return promise;
 }
 
 }  // namespace kj

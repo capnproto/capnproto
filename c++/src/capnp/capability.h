@@ -649,11 +649,15 @@ public:
   // therefore it can transfer the capability without proxying.
 
   static const uint NULL_CAPABILITY_BRAND;
-  // Value is irrelevant; used for pointer.
+  static const uint BROKEN_CAPABILITY_BRAND;
+  // Values are irrelevant; used for pointers.
 
   inline bool isNull() { return getBrand() == &NULL_CAPABILITY_BRAND; }
   // Returns true if the capability was created as a result of assigning a Client to null or by
   // reading a null pointer out of a Cap'n Proto message.
+
+  inline bool isError() { return getBrand() == &BROKEN_CAPABILITY_BRAND; }
+  // Returns true if the capability was created by newBrokenCap().
 
   virtual kj::Maybe<int> getFd() = 0;
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns

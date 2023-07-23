@@ -148,6 +148,58 @@ KJ_TEST("TreeMap range") {
   }
 }
 
+#if !KJ_NO_EXCEPTIONS
+KJ_TEST("HashMap findOrCreate throws") {
+  HashMap<int, String> m;
+  try {
+    m.findOrCreate(1, []() -> HashMap<int, String>::Entry {
+      throw "foo";
+    });
+    KJ_FAIL_ASSERT("shouldn't get here");
+  } catch (const char*) {
+    // expected
+  }
+
+  KJ_EXPECT(m.find(1) == nullptr);
+  m.findOrCreate(1, []() {
+    return HashMap<int, String>::Entry { 1, kj::str("ok") };
+  });
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(1)) == "ok");
+}
+#endif
+
+template <typename MapType>
+void testEraseAll(MapType& m) {
+  m.insert(12, "foo");
+  m.insert(83, "bar");
+  m.insert(99, "baz");
+  m.insert(6, "qux");
+  m.insert(55, "corge");
+
+  auto count = m.eraseAll([](int i, StringPtr s) {
+    return i == 99 || s == "foo";
+  });
+
+  KJ_EXPECT(count == 2);
+  KJ_EXPECT(m.size() == 3);
+  KJ_EXPECT(m.find(12) == nullptr);
+  KJ_EXPECT(m.find(99) == nullptr);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(83)) == "bar");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(6)) == "qux");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(55)) == "corge");
+}
+
+KJ_TEST("HashMap eraseAll") {
+  HashMap<int, StringPtr> m;
+  testEraseAll(m);
+}
+
+KJ_TEST("TreeMap eraseAll") {
+  TreeMap<int, StringPtr> m;
+  testEraseAll(m);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace kj

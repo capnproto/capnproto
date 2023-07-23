@@ -350,7 +350,7 @@ inline constexpr uint sizeInWords() {
     }
 
 #if _MSC_VER
-// TODO(msvc): MSVC dosen't expect constexprs to have definitions.
+// TODO(msvc): MSVC doesn't expect constexprs to have definitions.
 #define CAPNP_DEFINE_ENUM(type, id)
 #else
 #define CAPNP_DEFINE_ENUM(type, id) \

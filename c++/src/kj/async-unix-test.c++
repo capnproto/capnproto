@@ -39,6 +39,12 @@
 #include <errno.h>
 #include "mutex.h"
 
+#if __BIONIC__
+// Android's Bionic defines SIGRTMIN but using it in sigaddset() throws EINVAL, which means we
+// definitely can't actually use RT signals.
+#undef SIGRTMIN
+#endif
+
 namespace kj {
 namespace {
 
@@ -54,8 +60,6 @@ inline void delay() { usleep(10000); }
 void captureSignals() {
   static bool captured = false;
   if (!captured) {
-    captured = true;
-
     // We use SIGIO and SIGURG as our test signals because they're two signals that we can be
     // reasonably confident won't otherwise be delivered to any KJ or Cap'n Proto test.  We can't
     // use SIGUSR1 because it is reserved by UnixEventPort and SIGUSR2 is used by Valgrind on OSX.
@@ -67,6 +71,8 @@ void captureSignals() {
 #endif
 
     UnixEventPort::captureChildExit();
+
+    captured = true;
   }
 }
 
@@ -722,8 +728,9 @@ TEST(AsyncUnixTest, Wake) {
       port.wake();
     });
 
-    delay();
-    EXPECT_TRUE(port.poll());
+    do {
+      delay();
+    } while (!port.poll());
   }
 }
 
@@ -852,6 +859,33 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
   KJ_EXPECT(!hupPromise.poll(waitScope));
 
   fds[1] = nullptr;
+  KJ_ASSERT(hupPromise.poll(waitScope));
+  hupPromise.wait(waitScope);
+}
+
+KJ_TEST("UnixEventPort FdObserver(..., flags=0)::whenWriteDisconnected()") {
+  // Verifies that given `0' as a `flags' argument,
+  // FdObserver still observes whenWriteDisconnected().
+  //
+  // This can be useful to watch disconnection on a blocking file descriptor.
+  // See discussion: https://github.com/capnproto/capnproto/issues/924
+
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  int pipefds[2];
+  KJ_SYSCALL(pipe(pipefds));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+
+  UnixEventPort::FdObserver observer(port, outfd, 0);
+
+  auto hupPromise = observer.whenWriteDisconnected();
+
+  KJ_EXPECT(!hupPromise.poll(waitScope));
+
+  infd = nullptr;
   KJ_ASSERT(hupPromise.poll(waitScope));
   hupPromise.wait(waitScope);
 }

@@ -1,6 +1,6 @@
 ## Process this file with autoconf to produce configure.
 
-AC_INIT([Capn Proto],[0.8-dev],[capnproto@googlegroups.com],[capnproto-c++])
+AC_INIT([Capn Proto],[0.9-dev],[capnproto@googlegroups.com],[capnproto-c++])
 
 AC_CONFIG_SRCDIR([src/capnp/layout.c++])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -21,6 +21,11 @@ AC_ARG_WITH([external-capnp],
     [use the system capnp binary (or the one specified with $CAPNP) instead of compiling a new
      one (useful for cross-compiling)])],
   [external_capnp=yes],[external_capnp=no])
+
+AC_ARG_WITH([zlib],
+  [AS_HELP_STRING([--with-zlib],
+    [build libkj-gzip by linking against zlib @<:@default=check@:>@])],
+  [],[with_zlib=check])
 
 AC_ARG_WITH([openssl],
   [AS_HELP_STRING([--with-openssl],
@@ -117,6 +122,8 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/kj.pc \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
+  pkgconfig/kj-gzip.pc \
+  pkgconfig/kj-tls.pc \
   pkgconfig/kj-test.pc \
 ])
 AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
@@ -145,6 +152,25 @@ AC_SUBST([PACKAGE_CMAKE_INSTALL_FULL_INCLUDEDIR])
 AC_CHECK_SIZEOF([void *])
 AC_SUBST(CMAKE_SIZEOF_VOID_P, $ac_cv_sizeof_void_p)
 
+# Detect presence of zlib, if it was not specified explicitly.
+AS_IF([test "$with_zlib" = check], [
+  AC_CHECK_LIB(z, deflate, [:], [
+    with_zlib=no
+  ])
+  AC_CHECK_HEADER([zlib.h], [:], [
+    with_zlib=no
+  ])
+  AS_IF([test "$with_zlib" = no], [
+    AC_MSG_WARN("could not find zlib -- won't build libkj-gzip")
+  ], [
+    with_zlib=yes
+  ])
+])
+AS_IF([test "$with_zlib" != no], [
+  CXXFLAGS="$CXXFLAGS -DKJ_HAS_ZLIB"
+])
+AM_CONDITIONAL([BUILD_KJ_GZIP], [test "$with_zlib" != no])
+
 # Detect presence of OpenSSL, if it was not specified explicitly.
 AS_IF([test "$with_openssl" = check], [
   AC_CHECK_LIB(crypto, CRYPTO_new_ex_data, [:], [
@@ -166,6 +192,9 @@ AS_IF([test "$with_openssl" != no], [
   CXXFLAGS="$CXXFLAGS -DKJ_HAS_OPENSSL"
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
+
+# CapnProtoConfig.cmake.in needs this variable.
+AC_SUBST(WITH_OPENSSL, $with_openssl)
 
 AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES CAPNP_CMAKE_CONFIG_FILES)
 AC_OUTPUT

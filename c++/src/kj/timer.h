@@ -36,6 +36,11 @@ class Timer: public MonotonicClock {
   // rate than real time (e.g. a `Timer` could represent CPU time consumed by a thread).  However,
   // all `Timer`s are monotonic: time will never appear to move backwards, even if the calendar
   // date as tracked by the system is manually modified.
+  //
+  // That said, the `Timer` returned by `kj::setupAsyncIo().provider->getTimer()` in particular is
+  // guaranteed to be synchronized with the `MonotonicClock` returned by
+  // `systemPreciseMonotonicClock()` (or, more precisely, is updated to match that clock whenever
+  // the loop waits).
 
 public:
   virtual TimePoint now() const = 0;

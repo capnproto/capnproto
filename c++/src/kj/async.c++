@@ -57,9 +57,10 @@
 #include <typeinfo>
 #if __GNUC__
 #include <cxxabi.h>
+#endif
+#endif
+
 #include <stdlib.h>
-#endif
-#endif
 
 namespace kj {
 
@@ -131,9 +132,7 @@ void Canceler::cancel(StringPtr cancelReason) {
 void Canceler::cancel(const Exception& exception) {
   for (;;) {
     KJ_IF_MAYBE(a, list) {
-      list = a->next;
-      a->prev = nullptr;
-      a->next = nullptr;
+      a->unlink();
       a->cancel(kj::cp(exception));
     } else {
       break;
@@ -144,9 +143,7 @@ void Canceler::cancel(const Exception& exception) {
 void Canceler::release() {
   for (;;) {
     KJ_IF_MAYBE(a, list) {
-      list = a->next;
-      a->prev = nullptr;
-      a->next = nullptr;
+      a->unlink();
     } else {
       break;
     }
@@ -163,12 +160,18 @@ Canceler::AdapterBase::AdapterBase(Canceler& canceler)
 }
 
 Canceler::AdapterBase::~AdapterBase() noexcept(false) {
+  unlink();
+}
+
+void Canceler::AdapterBase::unlink() {
   KJ_IF_MAYBE(p, prev) {
     *p = next;
   }
   KJ_IF_MAYBE(n, next) {
     n->prev = prev;
   }
+  next = nullptr;
+  prev = nullptr;
 }
 
 Canceler::AdapterImpl<void>::AdapterImpl(kj::PromiseFulfiller<void>& fulfiller,
@@ -713,7 +716,7 @@ const Executor& getCurrentThreadExecutor() {
 
 namespace _ {  // private
 
-#if !(_WIN32 || __CYGWIN__)
+#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
 struct FiberBase::Impl {
   // This struct serves two purposes:
   // - It contains OS-specific state that we don't want to declare in the header.
@@ -812,11 +815,14 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
     : state(WAITING),
       // Force stackSize to a reasonable minimum.
       stackSize(kj::max(stackSizeParam, 65536)),
-#if !(_WIN32 || __CYGWIN__)
+#if !(_WIN32 || __CYGWIN__ || __BIONIC__)
       impl(Impl::alloc(stackSize)),
 #endif
       result(result) {
-#if _WIN32 || __CYGWIN__
+#if KJ_NO_EXCEPTIONS
+  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
+
+#elif _WIN32 || __CYGWIN__
   auto& eventLoop = currentEventLoop();
   if (eventLoop.mainFiber == nullptr) {
     // First time we've created a fiber. We need to convert the main stack into a fiber as well
@@ -826,7 +832,7 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
 
   KJ_WIN32(osFiber = CreateFiber(stackSize, &StartRoutine::run, this));
 
-#else
+#elif !__BIONIC__
   // Note: Nothing below here can throw. If that changes then we need to call Impl::free(impl)
   //   on exceptions...
 
@@ -837,15 +843,27 @@ FiberBase::FiberBase(size_t stackSizeParam, _::ExceptionOrValue& result)
   int arg2 = ptr >> (sizeof(ptr) * 4);
 
   makecontext(&impl.fiberContext, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
+
+#else
+  KJ_UNIMPLEMENTED(
+      "Fibers are not implemented on this platform because its C library lacks setcontext() "
+      "and friends. If you'd like to see fiber support added, file a bug to let us know. "
+      "We can likely make it happen using assembly, but didn't want to try unless it was "
+      "actually needed.");
 #endif
 }
 
 FiberBase::~FiberBase() noexcept(false) {
 #if _WIN32 || __CYGWIN__
-  KJ_DEFER(DeleteFiber(osFiber));
-#else
-  KJ_DEFER(Impl::free(impl, stackSize));
+  DeleteFiber(osFiber);
+#elif !__BIONIC__
+  Impl::free(impl, stackSize);
 #endif
+}
+
+void FiberBase::destroy() {
+  // Called by `~Fiber()` to begin teardown. We can't do this work in `~FiberBase()` because the
+  // `Fiber` subclass contains members that may still be in-use until the fiber stops.
 
   switch (state) {
     case WAITING:
@@ -884,7 +902,7 @@ void FiberBase::switchToFiber() {
   // or returns from its main function.
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
-#else
+#elif !__BIONIC__
   KJ_SYSCALL(swapcontext(&impl.originalContext, &impl.fiberContext));
 #endif
 }
@@ -893,23 +911,40 @@ void FiberBase::switchToMain() {
   // switchToFiber().
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(currentEventLoop().mainFiber);
-#else
+#elif !__BIONIC__
   KJ_SYSCALL(swapcontext(&impl.fiberContext, &impl.originalContext));
 #endif
 }
 
 void FiberBase::run() {
+#if !KJ_NO_EXCEPTIONS
+  bool caughtCanceled = false;
   state = RUNNING;
   KJ_DEFER(state = FINISHED);
 
   WaitScope waitScope(currentEventLoop(), *this);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-    runImpl(waitScope);
-  })) {
-    result.addException(kj::mv(*exception));
+
+  try {
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      runImpl(waitScope);
+    })) {
+      result.addException(kj::mv(*exception));
+    }
+  } catch (CanceledException) {
+    if (state != CANCELED) {
+      // no idea who would throw this but it's not really our problem
+      result.addException(KJ_EXCEPTION(FAILED, "Caught CanceledException, but fiber wasn't canceled"));
+    }
+    caughtCanceled = true;
+  }
+
+  if (state == CANCELED && !caughtCanceled) {
+    KJ_LOG(ERROR, "Canceled fiber apparently caught CanceledException and didn't rethrow it. "
+      "Generally, applications should not catch CanceledException, but if they do, they must always rethrow.");
   }
 
   onReadyEvent.arm();
+#endif
 }
 
 void FiberBase::onReady(_::Event* event) noexcept {
@@ -1106,23 +1141,23 @@ void WaitScope::poll() {
 
 namespace _ {  // private
 
-static kj::Exception fiberCanceledException() {
+#if !KJ_NO_EXCEPTIONS
+static kj::CanceledException fiberCanceledException() {
   // Construct the exception to throw from wait() when the fiber has been canceled (because the
   // promise returned by startFiber() was dropped before completion).
-  //
-  // TODO(someday): Should we have a dedicated exception type for cancellation? Do we even want
-  //   to build stack traces and such for these?
-  return KJ_EXCEPTION(FAILED, "This fiber is being canceled.");
+  return kj::CanceledException { };
 };
+#endif
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
 
+#if !KJ_NO_EXCEPTIONS
+  // we don't support fibers when running without exceptions, so just remove the whole block
   KJ_IF_MAYBE(fiber, waitScope.fiber) {
     if (fiber->state == FiberBase::CANCELED) {
-      result.addException(fiberCanceledException());
-      return;
+      throw fiberCanceledException();
     }
     KJ_REQUIRE(fiber->state == FiberBase::RUNNING,
         "This WaitScope can only be used within the fiber that created it.");
@@ -1141,12 +1176,12 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     // node->onReady() fired, or we are being canceled by FiberBase's destructor.
 
     if (fiber->state == FiberBase::CANCELED) {
-      result.addException(fiberCanceledException());
-      return;
+      throw fiberCanceledException();
     }
 
     KJ_ASSERT(fiber->state == FiberBase::RUNNING);
   } else {
+#endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
     BoolEvent doneEvent;
@@ -1170,7 +1205,9 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
     }
 
     loop.setRunnable(loop.isRunnable());
+#if !KJ_NO_EXCEPTIONS
   }
+#endif
 
   node->get(result);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {

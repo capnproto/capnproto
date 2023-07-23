@@ -30,7 +30,7 @@ bar() on the result of the first call".  These messages can be sent together -- 
 to wait for the first call to actually return.
 
 To make programming to this model easy, in your code, each call returns a "promise".  Promises
-work much like Javascript promises or promises/futures in other languages:  the promise is returned
+work much like JavaScript promises or promises/futures in other languages:  the promise is returned
 immediately, but you must later call `wait()` on it, or call `then()` to register an asynchronous
 callback.
 

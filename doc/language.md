@@ -393,7 +393,7 @@ Cap'n Proto generics work very similarly to Java generics or C++ templates. Some
   a type is wire-compatible with any specific parameterization, so long as you interpret the
   `AnyPointer`s as the correct type at runtime.
 
-* Relatedly, it is safe to cast an generic interface of a specific parameterization to a generic
+* Relatedly, it is safe to cast a generic interface of a specific parameterization to a generic
   interface where all parameters are `AnyPointer` and vice versa, as long as the `AnyPointer`s are
   treated as the correct type at runtime. This means that e.g. you can implement a server in a
   generic way that is correct for all parameterizations but call it from clients using a specific
@@ -403,17 +403,27 @@ Cap'n Proto generics work very similarly to Java generics or C++ templates. Some
   substituting the type parameters manually. For example, `Map(Text, Person)` is encoded exactly
   the same as:
 
-  <div>{% highlight capnp %}
-  struct PersonMap {
-    # Encoded the same as Map(Text, Person).
-    entries @0 :List(Entry);
-    struct Entry {
-      key @0 :Text;
-      value @1 :Person;
+  <figure class="highlight"><pre><code class="language-capnp" data-lang="capnp"><span></span><span class="k">struct</span> <span class="n">PersonMap</span> {
+    <span class="c1"># Encoded the same as Map(Text, Person).</span>
+    <span class="n">entries</span> <span class="nd">@0</span> <span class="nc">:List(Entry)</span>;
+    <span class="k">struct</span> <span class="n">Entry</span> {
+      <span class="n">key</span> <span class="nd">@0</span> <span class="nc">:Text</span>;
+      <span class="n">value</span> <span class="nd">@1</span> <span class="nc">:Person</span>;
     }
-  }
-  {% endhighlight %}
-  </div>
+  }</code></pre></figure>
+
+  {% comment %}
+  Highlighter manually invoked because of: https://github.com/jekyll/jekyll/issues/588
+  Original code was:
+    struct PersonMap {
+      # Encoded the same as Map(Text, Person).
+      entries @0 :List(Entry);
+      struct Entry {
+        key @0 :Text;
+        value @1 :Person;
+      }
+    }
+  {% endcomment %}
 
   Therefore, it is possible to upgrade non-generic types to generic types while retaining
   backwards-compatibility.
@@ -733,29 +743,47 @@ without changing the [canonical](encoding.html#canonicalization) encoding of a m
   be replaced with the new generic parameter so long as all existing users of the type are updated
   to bind that generic parameter to the type it replaced. For example:
 
-  <div>{% highlight capnp %}
-  struct Map {
-    entries @0 :List(Entry);
-    struct Entry {
-      key @0 :Text;
-      value @1 :Text;
+  <figure class="highlight"><pre><code class="language-capnp" data-lang="capnp"><span></span><span class="k">struct</span> <span class="n">Map</span> {
+    <span class="n">entries</span> <span class="nd">@0</span> <span class="nc">:List(Entry)</span>;
+    <span class="k">struct</span> <span class="n">Entry</span> {
+      <span class="n">key</span> <span class="nd">@0</span> <span class="nc">:Text</span>;
+      <span class="n">value</span> <span class="nd">@1</span> <span class="nc">:Text</span>;
     }
-  }
-  {% endhighlight %}
-  </div>
+  }</code></pre></figure>
+
+  {% comment %}
+  Highlighter manually invoked because of: https://github.com/jekyll/jekyll/issues/588
+  Original code was:
+    struct Map {
+      entries @0 :List(Entry);
+      struct Entry {
+        key @0 :Text;
+        value @1 :Text;
+      }
+    }
+  {% endcomment %}
 
   Can change to:
 
-  <div>{% highlight capnp %}
-  struct Map(Key, Value) {
-    entries @0 :List(Entry);
-    struct Entry {
-      key @0 :Key;
-      value @1 :Value;
+  <figure class="highlight"><pre><code class="language-capnp" data-lang="capnp"><span></span><span class="k">struct</span> <span class="n">Map</span>(<span class="n">Key</span>, <span class="n">Value</span>) {
+    <span class="n">entries</span> <span class="nd">@0</span> <span class="nc">:List(Entry)</span>;
+    <span class="k">struct</span> <span class="n">Entry</span> {
+      <span class="n">key</span> <span class="nd">@0</span> <span class="nc">:Key</span>;
+      <span class="n">value</span> <span class="nd">@1</span> <span class="nc">:Value</span>;
     }
-  }
-  {% endhighlight %}
-  </div>
+  }</code></pre></figure>
+
+  {% comment %}
+  Highlighter manually invoked because of: https://github.com/jekyll/jekyll/issues/588
+  Original code was:
+    struct Map(Key, Value) {
+      entries @0 :List(Entry);
+      struct Entry {
+        key @0 :Key;
+        value @1 :Value;
+      }
+    }
+  {% endcomment %}
 
   As long as all existing uses of `Map` are replaced with `Map(Text, Text)` (and any uses of
   `Map.Entry` are replaced with `Map(Text, Text).Entry`).

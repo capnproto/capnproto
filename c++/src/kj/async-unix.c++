@@ -58,6 +58,7 @@ struct SignalCapture {
   sigjmp_buf jumpTo;
   siginfo_t siginfo;
 
+#if __APPLE__
   sigset_t originalMask;
   // The signal mask to be restored when jumping out of the signal handler.
   //
@@ -70,6 +71,16 @@ struct SignalCapture {
   // cannot be used in the presence of threads.
   //
   // We'll just have to restore the signal mask ourselves, rather than rely on siglongjmp()...
+  //
+  // ... but we ONLY do that on Apple systems, because it turns out, ironically, on Android, this
+  // hack breaks signal delivery. pthread_sigmask() vs. sigprocmask() is not the issue; we
+  // apparently MUST let siglongjmp() itself deal with the signal mask, otherwise various tests in
+  // async-unix-test.c++ end up hanging (I haven't gotten to the bottom of why). Note that on stock
+  // Linux, _either_ strategy works fine; this appears to be a problem with Android's Bionic libc.
+  // Since letting siglongjmp() do the work _seeems_ more "correct", we'll make it the default and
+  // only do something different on Apple platforms.
+#define KJ_BROKEN_SIGLONGJMP 1
+#endif
 };
 
 #if !KJ_USE_EPOLL  // on Linux we'll use signalfd
@@ -80,6 +91,7 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
   if (capture != nullptr) {
     capture->siginfo = *siginfo;
 
+#if KJ_BROKEN_SIGLONGJMP
     // See comments on SignalCapture::originalMask, above: We can't rely on siglongjmp() to restore
     // the signal mask; we must do it ourselves using pthread_sigmask(). We pass false as the
     // second parameter to siglongjmp() so that it skips changing the signal mask. This makes it
@@ -87,6 +99,9 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
     // SignalCapture::originalMask for explanation.
     pthread_sigmask(SIG_SETMASK, &capture->originalMask, nullptr);
     siglongjmp(capture->jumpTo, false);
+#else
+    siglongjmp(capture->jumpTo, true);
+#endif
   }
 }
 #endif
@@ -915,7 +930,11 @@ bool UnixEventPort::wait() {
   // Capture signals.
   SignalCapture capture;
 
+#if KJ_BROKEN_SIGLONGJMP
   if (sigsetjmp(capture.jumpTo, false)) {
+#else
+  if (sigsetjmp(capture.jumpTo, true)) {
+#endif
     // We received a signal and longjmp'd back out of the signal handler.
     threadCapture = nullptr;
 
@@ -932,15 +951,20 @@ bool UnixEventPort::wait() {
   }
 
   // Enable signals, run the poll, then mask them again.
+#if KJ_BROKEN_SIGLONGJMP
+  auto& originalMask = capture.originalMask;
+#else
+  sigset_t originalMask;
+#endif
   threadCapture = &capture;
-  pthread_sigmask(SIG_UNBLOCK, &newMask, &capture.originalMask);
+  pthread_sigmask(SIG_UNBLOCK, &newMask, &originalMask);
 
   pollContext.run(
       timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1));
 
-  pthread_sigmask(SIG_SETMASK, &capture.originalMask, nullptr);
+  pthread_sigmask(SIG_SETMASK, &originalMask, nullptr);
   threadCapture = nullptr;
 
   // Queue events.
@@ -987,11 +1011,17 @@ bool UnixEventPort::poll() {
   // available on OSX.  :(  Instead, we call sigsuspend() once per expected signal.
   {
     SignalCapture capture;
+#if KJ_BROKEN_SIGLONGJMP
     pthread_sigmask(SIG_SETMASK, nullptr, &capture.originalMask);
+#endif
     threadCapture = &capture;
     KJ_DEFER(threadCapture = nullptr);
     while (signalCount-- > 0) {
+#if KJ_BROKEN_SIGLONGJMP
       if (sigsetjmp(capture.jumpTo, false)) {
+#else
+      if (sigsetjmp(capture.jumpTo, true)) {
+#endif
         // We received a signal and longjmp'd back out of the signal handler.
         sigdelset(&waitMask, capture.siginfo.si_signo);
 #if !KJ_USE_PIPE_FOR_WAKEUP
@@ -1014,8 +1044,9 @@ bool UnixEventPort::poll() {
         // loop.
         //
         // Bug reported here: https://cygwin.com/ml/cygwin/2019-07/msg00051.html
-        sigprocmask(SIG_SETMASK, &waitMask, nullptr);
-        sigprocmask(SIG_SETMASK, &capture.originalMask, nullptr);
+        sigset_t origMask;
+        sigprocmask(SIG_SETMASK, &waitMask, &origMask);
+        sigprocmask(SIG_SETMASK, &origMask, nullptr);
         break;
 #else
         sigsuspend(&waitMask);

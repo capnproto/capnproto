@@ -558,7 +558,7 @@ public:
             // in 4.8.x nor in 4.9.4:
             //     https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=781060
             //
-            // Unfortunatley 4.9.2 is present on many Debian Jessie systems..
+            // Unfortunately 4.9.2 is present on many Debian Jessie systems..
             //
             // For the moment, we can get away with skipping the last line as the previous line
             // will set things up in a way that allows the test to complete successfully.
@@ -1288,9 +1288,9 @@ KJ_TEST("Streaming call throwing cascades to following calls") {
   KJ_EXPECT(server.iSum == 123);
   KJ_EXPECT(server.jSum == 321);
 
-  KJ_EXPECT_THROW_MESSAGE("throw requested", promise2.wait(waitScope));
-  KJ_EXPECT_THROW_MESSAGE("throw requested", promise3.wait(waitScope));
-  KJ_EXPECT_THROW_MESSAGE("throw requested", promise4.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise2.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise3.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("throw requested", promise4.ignoreResult().wait(waitScope));
 }
 
 }  // namespace

@@ -47,7 +47,7 @@ CAPNP_BEGIN_HEADER
 namespace capnp {
 
 #define CAPNP_VERSION_MAJOR 0
-#define CAPNP_VERSION_MINOR 8
+#define CAPNP_VERSION_MINOR 9
 #define CAPNP_VERSION_MICRO 0
 
 #define CAPNP_VERSION \
@@ -358,7 +358,7 @@ private:
   uint64_t content KJ_UNUSED_MEMBER;
 #if __GNUC__ < 8 || __clang__
   // GCC 8's -Wclass-memaccess complains whenever we try to memcpy() a `word` if we've disallowed
-  // the copy constructor. We don't want to disable the warning becaues it's a useful warning and
+  // the copy constructor. We don't want to disable the warning because it's a useful warning and
   // we'd have to disable it for all applications that include this header. Instead we allow `word`
   // to be copyable on GCC.
   KJ_DISALLOW_COPY(word);

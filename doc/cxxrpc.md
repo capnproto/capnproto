@@ -35,8 +35,8 @@ must have its own event loop.  KJ discourages fine-grained interaction between t
 synchronization is expensive and error-prone.  Instead, threads are encouraged to communicate
 through Cap'n Proto RPC.
 
-KJ's event loop model bears a lot of similarity to the Javascript concurrency model.  Experienced
-Javascript hackers -- especially node.js hackers -- will feel right at home.
+KJ's event loop model bears a lot of similarity to the JavaScript concurrency model.  Experienced
+JavaScript hackers -- especially node.js hackers -- will feel right at home.
 
 _As of version 0.4, the only supported way to communicate between threads is over pipes or
 socketpairs.  This will be improved in future versions.  For now, just set up an RPC connection
@@ -64,7 +64,7 @@ kj::Promise<void> sendEmail(kj::StringPtr address,
 // the message has been successfully sent.
 {% endhighlight %}
 
-As you will see, KJ promises are very similar to the evolving Javascript promise standard, and
+As you will see, KJ promises are very similar to the evolving JavaScript promise standard, and
 much of the [wisdom around it](https://www.google.com/search?q=javascript+promises) can be directly
 applied to KJ promises.
 

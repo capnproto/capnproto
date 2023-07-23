@@ -890,6 +890,7 @@ public:
 
 protected:
   bool isFinished() { return state == FINISHED; }
+  void destroy();
 
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
@@ -898,7 +899,7 @@ private:
 
 #if _WIN32 || __CYGWIN__
   void* osFiber;
-#else
+#elif !__BIONIC__
   struct Impl;
   Impl& impl;
 #endif
@@ -928,6 +929,7 @@ template <typename Func>
 class Fiber final: public FiberBase {
 public:
   Fiber(size_t stackSize, Func&& func): FiberBase(stackSize, result), func(kj::fwd<Func>(func)) {}
+  ~Fiber() noexcept(false) { destroy(); }
 
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
 

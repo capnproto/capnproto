@@ -1,0 +1,2 @@
+file:31:18-29: error: Cannot interpret value because the type is a generic type parameter which is not yet bound. We don't know what type to expect here.
+file:32:30-41: error: Cannot interpret value because the type is a generic type parameter which is not yet bound. We don't know what type to expect here.

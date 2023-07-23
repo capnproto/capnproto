@@ -1,0 +1,11 @@
+{
+   <bogus_post_exit_error_from_tls_test>
+   Memcheck:Addr8
+   fun:check_free
+   fun:free_key_mem
+   fun:__dlerror_main_freeres
+   fun:__libc_freeres
+   fun:_vgnU_freeres
+   fun:_ZN2kj22TopLevelProcessContext4exitEv
+}
+

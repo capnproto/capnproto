@@ -842,7 +842,15 @@ KJ_TEST("DiskDirectory replace file with directory") {
   KJ_EXPECT(dir->openFile(Path({"foo", "bar"}))->readAllText() == "bazqux");
 }
 
-#ifndef HOLES_NOT_SUPPORTED
+#if !defined(HOLES_NOT_SUPPORTED) && (CAPNP_DEBUG_TYPES || CAPNP_EXPENSIVE_TESTS)
+// Not all filesystems support sparse files, and if they do, they don't necessarily support
+// copying them in a way that preserves holes. We don't want the capnp test suite to fail just
+// because it was run on the wrong filesystem. We could design the test to check first if the
+// filesystem supports holes, but the code to do that would be almost the same as the code being
+// tested... Instead, we've marked this test so it only runs when building this library using
+// defines that only the Cap'n Proto maintainers use. So, we run the test ourselves but we don't
+// make other people run it.
+
 KJ_TEST("DiskFile holes") {
   if (isWine()) {
     // WINE doesn't support sparse files.

@@ -53,6 +53,7 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
 }  // namespace _ (private)
 
 const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
+const uint ClientHook::BROKEN_CAPABILITY_BRAND = 0;
 // Defined here rather than capability.c++ so that we can safely call isNull() in this file.
 
 namespace _ {  // private
@@ -69,7 +70,7 @@ namespace _ {  // private
 
 #if __GNUC__ >= 8 && !__clang__
 // GCC 8 introduced a warning which complains whenever we try to memset() or memcpy() a
-// WirePointer, becaues we deleted the regular copy constructor / assignment operator. Weirdly, if
+// WirePointer, because we deleted the regular copy constructor / assignment operator. Weirdly, if
 // I remove those deletions, GCC *still* complains that WirePointer is non-trivial. I don't
 // understand why -- maybe because WireValue has private members? We don't want to make WireValue's
 // member public, but memset() and memcpy() on it are certainly valid and desirable, so we'll just
@@ -2768,12 +2769,23 @@ bool PointerReader::isCanonical(const word **readHead) {
       // The pointer is null, we are canonical and do not read
       return true;
     case PointerType::STRUCT: {
-      bool dataTrunc, ptrTrunc;
+      bool dataTrunc = false, ptrTrunc = false;
       auto structReader = this->getStruct(nullptr);
       if (structReader.getDataSectionSize() == ZERO * BITS &&
           structReader.getPointerSectionSize() == ZERO * POINTERS) {
         return reinterpret_cast<const word*>(this->pointer) == structReader.getLocation();
       } else {
+        // Fun fact: Once this call to isCanonical() returns, Clang may re-order the evaluation of
+        //   the && operators. In theory this is wrong because && is short-circuiting, but Clang
+        //   apparently sees that there are no side effects to the right of &&, so decides it is
+        //   safe to skip short-circuiting. It turns out, though, this is observable under
+        //   valgrind: if we don't initialize `dataTrunc` when declaring it above, then valgrind
+        //   reports "Conditional jump or move depends on uninitialised value(s)". Specifically
+        //   this happens in cases where structReader.isCanonical() returns false -- it is allowed
+        //   to skip initializing `dataTrunc` in that case. The short-circuiting && should mean
+        //   that we don't read `dataTrunc` in that case, except Clang's optimizations. Ultimately
+        //   the uninitialized read is fine because eventually the whole expression evaluates false
+        //   either way. But, to make valgrind happy, we initialize the bools above...
         return structReader.isCanonical(readHead, readHead, &dataTrunc, &ptrTrunc) && dataTrunc && ptrTrunc;
       }
     }
@@ -3496,8 +3508,6 @@ OrphanBuilder OrphanBuilder::concat(
 }
 
 OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
-  // TODO(someday): We now allow unaligned segments on architectures thata support it. We could
-  //   consider relaxing this check as well?
   KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
              "Cannot referenceExternalData() that is not aligned.");
 

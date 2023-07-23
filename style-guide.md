@@ -67,7 +67,7 @@ KJ code is RAII-strict. Whenever it is the case that "this block of code cannot 
 
 Use the macros `KJ_DEFER`, `KJ_ON_SCOPE_SUCCESS`, and `KJ_ON_SCOPE_FAILURE` to easily specify some code that must be executed on exit from the current scope, without the need to define a whole class with a destructor.
 
-Be careful when writing complicated destructors. If a destructor performs multiple cleanup actions, you generally need to make sure that the latter actions occur even if the former ones throw an exception. For this reason, a destructor should generally perform no more than one cleanup action. If you need to clean up multiple things, have you class contain multiple members representing the different things that need cleanup, each with its own destructor. This way, if one member's destructor throws, the others still run.
+Be careful when writing complicated destructors. If a destructor performs multiple cleanup actions, you generally need to make sure that the latter actions occur even if the former ones throw an exception. For this reason, a destructor should generally perform no more than one cleanup action. If you need to clean up multiple things, have your class contain multiple members representing the different things that need cleanup, each with its own destructor. This way, if one member's destructor throws, the others still run.
 
 ### Ownership
 
@@ -449,7 +449,7 @@ As a code reviewer, when you see a violation of formatting rules, think carefull
 
 **Rationale:** There has never been broad agreement on C++ naming style. The closest we have is the C++ standard library. Unfortunately, the C++ standard library made the awful decision of naming types and values in the same style, losing a highly useful visual cue that makes programming more pleasant, and preventing variables from being named after their type (which in many contexts is perfectly appropriate).
 
-Meanwhile, the Java style, which KJ emulates, has been broadly adopted to varying degrees in other languages, from Javascript to Haskell. Using a similar style in KJ code makes it less jarring to switch between C++ and those other languages. Being consistent with Javascript is especially useful because it is the one language that everyone pretty much has to use, due to its use in the web platform.
+Meanwhile, the Java style, which KJ emulates, has been broadly adopted to varying degrees in other languages, from JavaScript to Haskell. Using a similar style in KJ code makes it less jarring to switch between C++ and those other languages. Being consistent with JavaScript is especially useful because it is the one language that everyone pretty much has to use, due to its use in the web platform.
 
 There has also never been any agreement on C++ file extensions, for some reason. The extension `.c++`, though not widely used, is accepted by all reasonable tools and is clearly the most precise choice.
 

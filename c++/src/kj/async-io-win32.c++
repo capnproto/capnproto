@@ -312,8 +312,8 @@ public:
     //
     // And here's an interesting discussion: https://github.com/python-trio/trio/issues/52
     //
-    // TODO(soon): Implement this with IOCTL_AFD_POLL. For now I'm leaving it unimplemented because
-    //   I added this method for a Linux-only use case.
+    // TODO(someday): Implement this with IOCTL_AFD_POLL. For now I'm leaving it unimplemented
+    //   because I added this method for a Linux-only use case.
     return NEVER_DONE;
   }
 
@@ -792,7 +792,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   // - Not implemented in Wine.
   // - Doesn't seem compatible with I/O completion ports, in particular because it's not associated
   //   with a handle. Could signal completion as an APC instead, but that requires the IOCP code
-  //   to use GetQueuedCompletionStatusEx() which it doesn't right now becaues it's not available
+  //   to use GetQueuedCompletionStatusEx() which it doesn't right now because it's not available
   //   in Wine.
   // - Requires Unicode, for some reason. Only GetAddrInfoExW() supports async, according to the
   //   docs. Never mind that DNS itself is ASCII...

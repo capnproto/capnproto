@@ -49,7 +49,18 @@ if(NOT _IMPORT_PREFIX)
   set(_IMPORT_PREFIX ${PACKAGE_PREFIX_DIR})
 endif()
 
-
+if (@WITH_OPENSSL@)  # WITH_OPENSSL
+  include(CMakeFindDependencyMacro)
+  if (CMAKE_VERSION VERSION_LESS 3.9)
+    # find_dependency() did not support COMPONENTS until CMake 3.9
+    #
+    # in practice, this call can be erroneous
+    # if the user has only libcrypto installed, but not libssl
+    find_dependency(OpenSSL)
+  else()
+    find_dependency(OpenSSL COMPONENTS Crypto SSL)
+  endif()
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/CapnProtoTargets.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/CapnProtoMacros.cmake")
@@ -65,7 +76,7 @@ set(CAPNP_INCLUDE_DIRS ${CAPNP_INCLUDE_DIRECTORY})
 # No need to list all libraries, just the leaves of the dependency tree.
 set(CAPNP_LIBRARIES_LITE CapnProto::capnp)
 set(CAPNP_LIBRARIES CapnProto::capnp-rpc CapnProto::capnp-json
-                    CapnProto::kj-http CapnProto::kj-test)
+                    CapnProto::kj-http)
 
 set(CAPNP_DEFINITIONS)
 if(TARGET CapnProto::capnp AND NOT TARGET CapnProto::capnp-rpc)

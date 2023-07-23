@@ -370,7 +370,7 @@ private:
   template <typename OtherNumber, typename OtherUnit>
   friend class Quantity;
 
-  template <typename Number1, typename Number2, typename Unit2>
+  template <typename Number1, typename Number2, typename Unit2, typename>
   friend inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit2> b)
       -> Quantity<decltype(Number1() * Number2()), Unit2>;
 };
@@ -390,7 +390,8 @@ inline constexpr auto unit() -> decltype(Unit_<T>::get()) { return Unit_<T>::get
 // unit<Quantity<T, U>>() returns a Quantity of value 1.  It also, intentionally, works on basic
 // numeric types.
 
-template <typename Number1, typename Number2, typename Unit>
+template <typename Number1, typename Number2, typename Unit,
+          typename = EnableIf<isIntegralOrBounded<Number1>()>>
 inline constexpr auto operator*(Number1 a, Quantity<Number2, Unit> b)
     -> Quantity<decltype(Number1() * Number2()), Unit> {
   return Quantity<decltype(Number1() * Number2()), Unit>(a * b.value, unsafe);

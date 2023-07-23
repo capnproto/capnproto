@@ -115,6 +115,13 @@ struct Dbghelp {
   BOOL (WINAPI *symGetLineFromAddr64)(
       HANDLE hProcess,DWORD64 qwAddr,PDWORD pdwDisplacement,PIMAGEHLP_LINE64 Line64);
 
+#if __GNUC__ && !__clang__ && __GNUC__ >= 8
+// GCC 8 warns that our reinterpret_casts of function pointers below are casting between
+// incompatible types. Yes, GCC, we know that. This is the nature of GetProcAddress(); it returns
+// everything as `long long int (*)()` and we have to cast to the actual type.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif
   Dbghelp()
       : lib(LoadLibraryA("dbghelp.dll")),
         symInitialize(lib == nullptr ? nullptr :
@@ -136,6 +143,9 @@ struct Dbghelp {
       symInitialize(GetCurrentProcess(), NULL, TRUE);
     }
   }
+#if __GNUC__ && !__clang__ && __GNUC__ >= 9
+#pragma GCC diagnostic pop
+#endif
 };
 
 const Dbghelp& getDbghelp() {
@@ -406,6 +416,8 @@ String getStackTrace() {
 
 namespace {
 
+#if !KJ_NO_EXCEPTIONS
+
 void terminateHandler() {
   void* traceSpace[32];
 
@@ -438,6 +450,8 @@ void terminateHandler() {
   kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
   _exit(1);
 }
+
+#endif
 
 }  // namespace
 
@@ -525,8 +539,10 @@ void printStackTraceOnCrash() {
   KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
   SetUnhandledExceptionFilter(&sehHandler);
 
+#if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
+#endif
 }
 
 #elif _WIN32
@@ -534,7 +550,9 @@ void printStackTraceOnCrash() {
 // try to catch SEH nor ctrl+C.
 
 void printStackTraceOnCrash() {
+#if !KJ_NO_EXCEPTIONS
   std::set_terminate(&terminateHandler);
+#endif
 }
 
 #else
@@ -612,8 +630,10 @@ void printStackTraceOnCrash() {
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
 #endif
 
+#if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
+#endif
 }
 #endif
 
@@ -1098,7 +1118,7 @@ public:
   Maybe<Exception> caught;
 };
 
-Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
+Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
 #if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
@@ -1113,6 +1133,8 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
   } catch (Exception& e) {
     e.truncateCommonTrace();
     return kj::mv(e);
+  } catch (CanceledException) {
+    throw;
   } catch (std::bad_alloc& e) {
     return Exception(Exception::Type::OVERLOADED,
                      "(unknown)", -1, str("std::bad_alloc: ", e.what()));

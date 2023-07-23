@@ -65,7 +65,7 @@ This prints the value of `myConstant`, a [const](language.html#constants) declar
 applying variable substitution.  It can also output the value in binary format (`--binary` or
 `--packed`).
 
-At first glance, this may seem no more interesting that `capnp encode`:  the syntax used to define
+At first glance, this may seem no more interesting than `capnp encode`:  the syntax used to define
 constants in schema files is the same as the format accepted by `capnp encode`, right?  There is,
 however, a big difference:  constants in schema files may be defined in terms of other constants,
 which may even be imported from other files.

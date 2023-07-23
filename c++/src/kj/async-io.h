@@ -149,15 +149,18 @@ public:
 };
 
 class AsyncCapabilityStream: public AsyncIoStream {
-  // An AsyncIoStream that also allows sending and receiving new connections or other kinds of
-  // capabilities, in addition to simple data.
+  // An AsyncIoStream that also allows transmitting new stream objects and file descirptors
+  // (capabilities, in the object-capability model sense), in addition to bytes.
   //
-  // For correct functioning, a protocol must be designed such that the receiver knows when to
-  // expect a capability transfer. The receiver must not read() when a capability is expected, and
-  // must not receiveStream() when data is expected -- if it does, an exception may be thrown or
-  // invalid data may be returned. This implies that data sent over an AsyncCapabilityStream must
-  // be framed such that the receiver knows exactly how many bytes to read before receiving a
-  // capability.
+  // Capabilities can be attached to bytes when they are written. On the receiving end, the read()
+  // that receives the first byte of such a message will also receive the capabilities.
+  //
+  // Note that AsyncIoStream's regular byte-oriented methods can be used on AsyncCapabilityStream,
+  // with the effect of silently dropping any capabilities attached to the respective bytes. E.g.
+  // using `AsyncIoStream::tryRead()` to read bytes that had been sent with `writeWithFds()` will
+  // silently drop the FDs (closing them if appropriate). Also note that puming a stream with
+  // `pumpTo()` always drops all capabilities attached to the pumped data. (TODO(someday): Do we
+  // want a version of pumpTo() that preserves capabilities?)
   //
   // On Unix, KJ provides an implementation based on Unix domain sockets and file descriptor
   // passing via SCM_RIGHTS. Due to the nature of SCM_RIGHTS, if the application accidentally
@@ -165,8 +168,8 @@ class AsyncCapabilityStream: public AsyncIoStream {
   // and the capability will be discarded. Of course, an application should not depend on this
   // behavior; it should avoid read()ing through a capability.
   //
-  // KJ does not provide any implementation of this type on Windows, as there's no obvious
-  // implementation there. Handle passing on Windows requires at least one of the processes
+  // KJ does not provide any inter-process implementation of this type on Windows, as there's no
+  // obvious implementation there. Handle passing on Windows requires at least one of the processes
   // involved to have permission to modify the other's handle table, which is effectively full
   // control. Handle passing between mutually non-trusting processes would require a trusted
   // broker process to facilitate. One could possibly implement this type in terms of such a
@@ -256,6 +259,16 @@ struct CapabilityPipe {
 
   Own<AsyncCapabilityStream> ends[2];
 };
+
+CapabilityPipe newCapabilityPipe();
+// Like newTwoWayPipe() but creates a capability pipe.
+//
+// The requirement of `writeWithStreams()` that "The stream implementations must be from the same
+// AsyncIoProvider." does not apply to this pipe; any kind of AsyncCapabilityStream implementation
+// is supported.
+//
+// This implementation does not know how to convert streams to FDs or vice versa; if you write FDs
+// you must read FDs, and if you write streams you must read streams.
 
 struct Tee {
   // Two AsyncInputStreams which each read the same data from some wrapped inner AsyncInputStream.
@@ -803,15 +816,18 @@ class CapabilityStreamNetworkAddress final: public NetworkAddress {
   // Trivial wrapper which allows an AsyncCapabilityStream to act as a NetworkAddress.
   //
   // connect() is implemented by calling provider.newCapabilityPipe(), sending one end over the
-  // original capability stream, and returning the other end.
+  // original capability stream, and returning the other end. If `provider` is null, then the
+  // global kj::newCapabilityPipe() will be used, but this ONLY works if `inner` itself is agnostic
+  // to the type of streams it receives, e.g. because it was also created using
+  // kj::NewCapabilityPipe().
   //
   // listen().accept() is implemented by receiving new streams over the original stream.
   //
-  // Note that clone() dosen't work (due to ownership issues) and toString() returns a static
+  // Note that clone() doesn't work (due to ownership issues) and toString() returns a static
   // string.
 
 public:
-  CapabilityStreamNetworkAddress(AsyncIoProvider& provider, AsyncCapabilityStream& inner)
+  CapabilityStreamNetworkAddress(kj::Maybe<AsyncIoProvider&> provider, AsyncCapabilityStream& inner)
       : provider(provider), inner(inner) {}
 
   Promise<Own<AsyncIoStream>> connect() override;
@@ -821,7 +837,7 @@ public:
   String toString() override;
 
 private:
-  AsyncIoProvider& provider;
+  kj::Maybe<AsyncIoProvider&> provider;
   AsyncCapabilityStream& inner;
 };
 

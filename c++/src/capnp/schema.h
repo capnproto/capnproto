@@ -25,6 +25,17 @@
 #error "Reflection APIs, including this header, are not available in lite mode."
 #endif
 
+#undef CONST
+// For some ridiculous reason, Windows defines CONST to const. We have an enum value called CONST
+// in schema.capnp.h, so if this is defined, compilation is gonna fail. So we undef it because
+// that seems strictly better than failing entirely. But this could cause trouble for people later
+// on if they, say, include windows.h, then include schema.h, then include another windows API
+// header that uses CONST. I suppose they may have to re-#define CONST in between, or change the
+// header ordering. Sorry.
+//
+// Please don't file a bug report telling us to change our enum naming style. You are at least
+// seven years too late.
+
 #include <capnp/schema.capnp.h>
 #include <kj/hash.h>
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`

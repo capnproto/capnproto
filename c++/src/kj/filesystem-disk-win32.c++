@@ -1028,7 +1028,7 @@ public:
                 }
             }
 
-            // Succeded, delete temporary.
+            // Succeeded, delete temporary.
             rmrf(*tempName);
             return true;
           } else {
@@ -1295,7 +1295,7 @@ public:
         default:
           KJ_FAIL_WIN32("CopyFile", error, fromPath, toPath) { return false; }
       } else {
-        // Copy succeded.
+        // Copy succeeded.
         return true;
       }
     }

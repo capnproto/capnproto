@@ -41,7 +41,7 @@ namespace kj {
 // verbatim. But NO, they decided to throw a whole complicated hash algorithm in there, AND
 // THEY CHOSE A BROKEN ONE THAT WE OTHERWISE WOULDN'T NEED ANYMORE.
 //
-// TODO(cleanup): Move this to a shared hashing library. Maybe. Or maybe don't, becaues no one
+// TODO(cleanup): Move this to a shared hashing library. Maybe. Or maybe don't, because no one
 //   should be using SHA-1 anymore.
 //
 // THIS USAGE IS NOT SECURITY SENSITIVE. IF YOU REPORT A SECURITY ISSUE BECAUSE YOU SAW SHA1 IN THE
@@ -1275,7 +1275,7 @@ private:
   // Parsed headers, after a call to parseAwaited*().
 
   bool lineBreakBeforeNextHeader = false;
-  // If true, the next await should expect to start with a spurrious '\n' or '\r\n'. This happens
+  // If true, the next await should expect to start with a spurious '\n' or '\r\n'. This happens
   // as a side-effect of HTTP chunked encoding, where such a newline is added to the end of each
   // chunk, for no good reason.
 
@@ -1746,6 +1746,10 @@ class HttpOutputStream {
 public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
+  bool isInBody() {
+    return inBody;
+  }
+
   bool canReuse() {
     return !inBody && !broken && !writeInProgress;
   }
@@ -1779,8 +1783,6 @@ public:
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return kj::READY_NOW; }
     KJ_REQUIRE(inBody) { return kj::READY_NOW; }
 
-    // TODO(soon): Queueing writes this way is flawed, because it means the caller cannot cancel
-    //   the write.
     writeInProgress = true;
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
@@ -1875,6 +1877,13 @@ private:
   // underlying stream is in an inconsistent state and cannot be reused.
 
   void queueWrite(kj::String content) {
+    // We only use queueWrite() in cases where we can take ownership of the write buffer, and where
+    // it is convenient if we can return `void` rather than a promise.  In particular, this is used
+    // to write headers and chunk boundaries. Writes of application data do not go into
+    // `writeQueue` because this would prevent cancellation. Instead, they wait until `writeQueue`
+    // is empty, then they make the write directly, using `writeInProgress` to detect and block
+    // concurrent writes.
+
     writeQueue = writeQueue.then(kj::mvCapture(content, [this](kj::String&& content) {
       auto promise = inner.write(content.begin(), content.size());
       return promise.attach(kj::mv(content));
@@ -3451,20 +3460,36 @@ private:
   // point in history.
 
   void watchForClose() {
-    closeWatcherTask = httpInput.awaitNextMessage().then([this](bool hasData) {
+    closeWatcherTask = httpInput.awaitNextMessage()
+        .then([this](bool hasData) -> kj::Promise<void> {
       if (hasData) {
         // Uhh... The server sent some data before we asked for anything. Perhaps due to properties
         // of this application, the server somehow already knows what the next request will be, and
         // it is trying to optimize. Or maybe this is some sort of test and the server is just
         // replaying a script. In any case, we will humor it -- leave the data in the buffer and
         // let it become the response to the next request.
+        return kj::READY_NOW;
       } else {
         // EOF -- server disconnected.
-
-        // Proactively free up the socket.
-        ownStream = nullptr;
-
         closed = true;
+        if (httpOutput.isInBody()) {
+          // Huh, the application is still sending a request. We should let it finish. We do not
+          // need to proactively free the socket in this case because we know that we're not
+          // sitting in a reusable connection pool, because we know the application is still
+          // actively using the connection.
+          return kj::READY_NOW;
+        } else {
+          return httpOutput.flush().then([this]() {
+            // We might be sitting in NetworkAddressHttpClient's `availableClients` pool. We don't
+            // have a way to notify it to remove this client from the pool; instead, when it tries
+            // to pull this client from the pool later, it will notice the client is dead and will
+            // discard it then. But, we would like to avoid holding on to a socket forever. So,
+            // destroy the socket now.
+            // TODO(cleanup): Maybe we should arrange to proactively remove ourselves? Seems
+            //   like the code will be awkward.
+            ownStream = nullptr;
+          });
+        }
       }
     }).eagerlyEvaluate(nullptr);
   }
@@ -3618,9 +3643,9 @@ private:
   void returnClientToAvailable(kj::Own<HttpClientImpl> client) {
     // Only return the connection to the pool if it is reusable and if our settings indicate we
     // should reuse connections.
-    if (client->canReuse() && settings.idleTimout > 0 * kj::SECONDS) {
+    if (client->canReuse() && settings.idleTimeout > 0 * kj::SECONDS) {
       availableClients.push_back(AvailableClient {
-        kj::mv(client), timer.now() + settings.idleTimout
+        kj::mv(client), timer.now() + settings.idleTimeout
       });
     }
 
@@ -4153,23 +4178,7 @@ private:
         : inner(kj::mv(inner)), completionTask(kj::mv(completionTask)) {}
 
     kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner->tryRead(buffer, minBytes, maxBytes)
-          .then([this, minBytes](size_t amount) -> kj::Promise<size_t> {
-        if (amount < minBytes) {
-          // Must have reached EOF.
-          KJ_IF_MAYBE(t, completionTask) {
-            // Delay until completion.
-            auto result = t->then([amount]() { return amount; });
-            completionTask = nullptr;
-            return result;
-          } else {
-            // Must have called tryRead() again after we already signaled EOF. Fine.
-            return amount;
-          }
-        } else {
-          return amount;
-        }
-      });
+      return wrap(minBytes, inner->tryRead(buffer, minBytes, maxBytes));
     }
 
     kj::Maybe<uint64_t> tryGetLength() override {
@@ -4177,28 +4186,49 @@ private:
     }
 
     kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
-      return inner->pumpTo(output, amount)
-          .then([this,amount](uint64_t actual) -> kj::Promise<uint64_t> {
-        if (actual < amount) {
-          // Must have reached EOF.
-          KJ_IF_MAYBE(t, completionTask) {
-            // Delay until completion.
-            auto result = t->then([amount]() { return amount; });
-            completionTask = nullptr;
-            return result;
-          } else {
-            // Must have called tryRead() again after we already signaled EOF. Fine.
-            return amount;
-          }
-        } else {
-          return amount;
-        }
-      });
+      return wrap(amount, inner->pumpTo(output, amount));
     }
 
   private:
     kj::Own<kj::AsyncInputStream> inner;
     kj::Maybe<kj::Promise<void>> completionTask;
+
+    template <typename T>
+    kj::Promise<T> wrap(T requested, kj::Promise<T> innerPromise) {
+      return innerPromise.then([this,requested](T actual) -> kj::Promise<T> {
+        if (actual < requested) {
+          // Must have reached EOF.
+          KJ_IF_MAYBE(t, completionTask) {
+            // Delay until completion.
+            auto result = t->then([actual]() { return actual; });
+            completionTask = nullptr;
+            return result;
+          } else {
+            // Must have called tryRead() again after we already signaled EOF. Fine.
+            return actual;
+          }
+        } else {
+          return actual;
+        }
+      }, [this](kj::Exception&& e) -> kj::Promise<T> {
+        // The stream threw an exception, but this exception is almost certainly just complaining
+        // that the other end of the stream was dropped. In all likelihood, the HttpService
+        // request() call itself will throw a much more interesting error -- we'd rather propagate
+        // that one, if so.
+        KJ_IF_MAYBE(t, completionTask) {
+          auto result = t->then([e = kj::mv(e)]() mutable -> kj::Promise<T> {
+            // Looks like the service didn't throw. I guess we should propagate the stream error
+            // after all.
+            return kj::mv(e);
+          });
+          completionTask = nullptr;
+          return result;
+        } else {
+          // Must have called tryRead() again after we already signaled EOF or threw. Fine.
+          return kj::mv(e);
+        }
+      });
+    }
   };
 
   class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
@@ -4212,8 +4242,8 @@ private:
         if (fulfiller->isWaiting()) {
           fulfiller->reject(kj::mv(exception));
         } else {
-          KJ_LOG(ERROR, "HttpService threw an exception after having already started responding",
-                        exception);
+          // We need to cause the response stream's read() to throw this, so we should propagate it.
+          kj::throwRecoverableException(kj::mv(exception));
         }
       });
     }
@@ -4359,8 +4389,9 @@ private:
         if (fulfiller->isWaiting()) {
           fulfiller->reject(kj::mv(exception));
         } else {
-          KJ_LOG(ERROR, "HttpService threw an exception after having already started responding",
-                        exception);
+          // We need to cause the client-side WebSocket to throw on close, so propagate the
+          // exception.
+          kj::throwRecoverableException(kj::mv(exception));
         }
       });
     }
@@ -4726,7 +4757,7 @@ public:
                 });
                 lengthGrace = lengthGrace.attach(kj::mv(dummy), kj::mv(body));
 
-                auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGacePeriod)
+                auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGracePeriod)
                     .then([]() { return false; });
 
                 return lengthGrace.exclusiveJoin(kj::mv(timeGrace))

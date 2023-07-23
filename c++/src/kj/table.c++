@@ -302,7 +302,14 @@ void BTreeImpl::growTree(uint minCapacity) {
   // aligned_alloc() function. Unfortunately, many platforms don't implement it. Luckily, there
   // are usually alternatives.
 
-#if __APPLE__ || __BIONIC__ || __OpenBSD__
+#if _WIN32
+  // Windows lacks aligned_alloc() but has its own _aligned_malloc() (which requires freeing using
+  // _aligned_free()).
+  // WATCH OUT: The argument order for _aligned_malloc() is opposite of aligned_alloc()!
+  NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
+      _aligned_malloc(newCapacity * sizeof(BTreeImpl::NodeUnion), sizeof(BTreeImpl::NodeUnion)));
+  KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
+#else
   // macOS, OpenBSD, and Android lack aligned_alloc(), but have posix_memalign(). Fine.
   void* allocPtr;
   int error = posix_memalign(&allocPtr,
@@ -311,19 +318,13 @@ void BTreeImpl::growTree(uint minCapacity) {
     KJ_FAIL_SYSCALL("posix_memalign", error);
   }
   NodeUnion* newTree = reinterpret_cast<NodeUnion*>(allocPtr);
-#elif _WIN32
-  // Windows lacks aligned_alloc() but has its own _aligned_malloc() (which requires freeing using
-  // _aligned_free()).
-  // WATCH OUT: The argument order for _aligned_malloc() is opposite of aligned_alloc()!
-  NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
-      _aligned_malloc(newCapacity * sizeof(BTreeImpl::NodeUnion), sizeof(BTreeImpl::NodeUnion)));
-  KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
-#else
-  // Let's use the C11 standard.
-  NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
-      aligned_alloc(sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion)));
-  KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
 #endif
+
+  // Note: C11 introduces aligned_alloc() as a standard, but it's still missing on many platforms,
+  //   so we don't use it. But if you wanted to use it, you'd do this:
+//  NodeUnion* newTree = reinterpret_cast<NodeUnion*>(
+//      aligned_alloc(sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion)));
+//  KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
 
   acopy(newTree, tree, treeCapacity);
   azero(newTree + treeCapacity, newCapacity - treeCapacity);

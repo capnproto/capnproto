@@ -54,7 +54,7 @@ namespace kj {
   MACRO(TRACE) \
   /* standard methods */ \
   /* */ \
-  /* (CONNECT is intentionally omitted since it is handled specially in HttpHandler) */ \
+  /* (CONNECT is intentionally omitted since it should be handled specially in HttpServer) */ \
   \
   MACRO(COPY) \
   MACRO(LOCK) \
@@ -285,7 +285,7 @@ public:
   template <typename Func1, typename Func2>
   void forEach(Func1&& func1, Func2&& func2) const;
   // Calls `func1(id, value)` for each header in the set that has a registered HttpHeaderId, and
-  // `func2(name, value)` for each header that does not. All calls to func1() preceed all calls to
+  // `func2(name, value)` for each header that does not. All calls to func1() precede all calls to
   // func2().
 
   void set(HttpHeaderId id, kj::StringPtr value);
@@ -512,7 +512,7 @@ class WebSocket {
   // Each side can send and receive data and "close" messages.
   //
   // Ping/Pong and message fragmentation are not exposed through this interface. These features of
-  // the underlying WebSocket protocol are not exposed by the browser-level Javascript API either,
+  // the underlying WebSocket protocol are not exposed by the browser-level JavaScript API either,
   // and thus applications typically need to implement these features at the application protocol
   // level instead. The implementation is, however, expected to reply to Ping messages it receives.
 
@@ -695,7 +695,7 @@ public:
 };
 
 struct HttpClientSettings {
-  kj::Duration idleTimout = 5 * kj::SECONDS;
+  kj::Duration idleTimeout = 5 * kj::SECONDS;
   // For clients which automatically create new connections, any connection idle for at least this
   // long will be closed. Set this to 0 to prevent connection reuse entirely.
 
@@ -807,7 +807,7 @@ struct HttpServerSettings {
   // After one request/response completes, we'll wait up to this long for a pipelined request to
   // arrive.
 
-  kj::Duration canceledUploadGacePeriod = 1 * kj::SECONDS;
+  kj::Duration canceledUploadGracePeriod = 1 * kj::SECONDS;
   size_t canceledUploadGraceBytes = 65536;
   // If the HttpService sends a response and returns without having read the entire request body,
   // then we have to decide whether to close the connection or wait for the client to finish the

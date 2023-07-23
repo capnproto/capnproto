@@ -365,7 +365,14 @@ public:
       auto bodyOut = factory.streamFactory.capnpToKj(pipeline.getRequestBody());
       pumpRequestTask = rb->pumpTo(*bodyOut).attach(kj::mv(bodyOut)).ignoreResult()
           .eagerlyEvaluate([state = kj::addRef(*state)](kj::Exception&& e) mutable {
-        state->taskFailed(kj::mv(e));
+        // A DISCONNECTED exception probably means the server decided not to read the whole request
+        // before responding. In that case we simply want the pump to end, so that on this end it
+        // also appears that the service simply didn't read everything. So we don't propagate the
+        // exception in that case. For any other exception, we want to merge the exception with
+        // the final result.
+        if (e.getType() != kj::Exception::Type::DISCONNECTED) {
+          state->taskFailed(kj::mv(e));
+        }
       });
     }
 

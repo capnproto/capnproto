@@ -71,6 +71,22 @@ static SegmentWordCount verifySegmentSize(size_t size) {
   });
 }
 
+static SegmentWordCount verifySegment(kj::ArrayPtr<const word> segment) {
+#if !CAPNP_ALLOW_UNALIGNED
+  KJ_REQUIRE(reinterpret_cast<uintptr_t>(segment.begin()) % sizeof(void*) == 0,
+      "Detected unaligned data in Cap'n Proto message. Messages must be aligned to the "
+      "architecture's word size. Yes, even on x86: Unaligned access is undefined behavior "
+      "under the C/C++ language standard, and compilers can and do assume alignment for the "
+      "purpose of optimizations. Unaligned access may lead to crashes or subtle corruption. "
+      "For example, GCC will use SIMD instructions in optimizations, and those instrsuctions "
+      "require alignment. If you really insist on taking your changes with unaligned data, "
+      "compile the Cap'n Proto library with -DCAPNP_ALLOW_UNALIGNED to remove this check.") {
+    break;
+  }
+#endif
+  return verifySegmentSize(segment.size());
+}
+
 inline ReaderArena::ReaderArena(MessageReader* message, const word* firstSegment,
                                 SegmentWordCount firstSegmentSize)
     : message(message),
@@ -78,7 +94,7 @@ inline ReaderArena::ReaderArena(MessageReader* message, const word* firstSegment
       segment0(this, SegmentId(0), firstSegment, firstSegmentSize, &readLimiter) {}
 
 inline ReaderArena::ReaderArena(MessageReader* message, kj::ArrayPtr<const word> firstSegment)
-    : ReaderArena(message, firstSegment.begin(), verifySegmentSize(firstSegment.size())) {}
+    : ReaderArena(message, firstSegment.begin(), verifySegment(firstSegment)) {}
 
 ReaderArena::ReaderArena(MessageReader* message)
     : ReaderArena(message, message->getSegment(0)) {}
@@ -119,7 +135,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     return nullptr;
   }
 
-  SegmentWordCount newSegmentSize = verifySegmentSize(newSegment.size());
+  SegmentWordCount newSegmentSize = verifySegment(newSegment);
 
   if (*lock == nullptr) {
     // OK, the segment exists, so allocate the map.
@@ -148,7 +164,7 @@ BuilderArena::BuilderArena(MessageBuilder* message,
                            kj::ArrayPtr<MessageBuilder::SegmentInit> segments)
     : message(message),
       segment0(this, SegmentId(0), segments[0].space.begin(),
-               verifySegmentSize(segments[0].space.size()),
+               verifySegment(segments[0].space),
                &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed)) {
   if (segments.size() > 1) {
     kj::Vector<kj::Own<SegmentBuilder>> builders(segments.size() - 1);
@@ -156,7 +172,7 @@ BuilderArena::BuilderArena(MessageBuilder* message,
     uint i = 1;
     for (auto& segment: segments.slice(1, segments.size())) {
       builders.add(kj::heap<SegmentBuilder>(
-          this, SegmentId(i++), segment.space.begin(), verifySegmentSize(segment.space.size()),
+          this, SegmentId(i++), segment.space.begin(), verifySegment(segment.space),
           &this->dummyLimiter, verifySegmentSize(segment.wordsUsed)));
     }
 
@@ -211,7 +227,7 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
     kj::ArrayPtr<word> ptr = message->allocateSegment(unbound(amount / WORDS));
-    auto actualSize = verifySegmentSize(ptr.size());
+    auto actualSize = verifySegment(ptr);
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
     // pointers to this segment yet, so it should be fine.
@@ -339,28 +355,38 @@ void BuilderArena::reportReadLimitReached() {
   }
 }
 
-#if !CAPNP_LITE
 kj::Maybe<kj::Own<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint index) {
+#if CAPNP_LITE
+  KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
   } else {
     return nullptr;
   }
+#endif
 }
 
 uint BuilderArena::LocalCapTable::injectCap(kj::Own<ClientHook>&& cap) {
+#if CAPNP_LITE
+  KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
   uint result = capTable.size();
   capTable.add(kj::mv(cap));
   return result;
+#endif
 }
 
 void BuilderArena::LocalCapTable::dropCap(uint index) {
+#if CAPNP_LITE
+  KJ_UNIMPLEMENTED("no cap tables in lite mode");
+#else
   KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
     return;
   }
   capTable[index] = nullptr;
+#endif
 }
-#endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
 }  // namespace capnp

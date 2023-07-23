@@ -622,7 +622,7 @@ Own<const Directory> Directory::openSubdir(PathPtr path, WriteMode mode) const {
 void Directory::symlink(PathPtr linkpath, StringPtr content, WriteMode mode) const {
   if (!trySymlink(linkpath, content, mode)) {
     if (has(mode, WriteMode::CREATE)) {
-      KJ_FAIL_REQUIRE("path already exsits", linkpath) { break; }
+      KJ_FAIL_REQUIRE("path already exists", linkpath) { break; }
     } else {
       // Shouldn't happen.
       KJ_FAIL_ASSERT("symlink() returned null despite no preconditions", linkpath) { break; }

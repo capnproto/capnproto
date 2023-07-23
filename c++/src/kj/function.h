@@ -229,7 +229,7 @@ public:
   }
 
 private:
-  void* space[2];
+  alignas(void*) char space[2 * sizeof(void*)];
 
   class WrapperBase {
   public:
