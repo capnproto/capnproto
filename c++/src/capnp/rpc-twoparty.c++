@@ -30,14 +30,17 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(
     kj::OneOf<MessageStream*, kj::Own<MessageStream>>&& stream,
     uint maxFdsPerMessage,
     rpc::twoparty::Side side,
-    ReaderOptions receiveOptions)
+    ReaderOptions receiveOptions,
+    const kj::MonotonicClock& clock)
 
     : stream(kj::mv(stream)),
       maxFdsPerMessage(maxFdsPerMessage),
       side(side),
       peerVatId(4),
       receiveOptions(receiveOptions),
-      previousWrite(kj::READY_NOW) {
+      previousWrite(kj::READY_NOW),
+      clock(clock),
+      currentOutgoingMessageSendTime(clock.now()) {
   peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
       side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
                                           : rpc::twoparty::Side::CLIENT);
@@ -48,25 +51,29 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(
 }
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(capnp::MessageStream& stream,
-                   rpc::twoparty::Side side, ReaderOptions receiveOptions)
-  : TwoPartyVatNetwork(stream, 0, side, receiveOptions) {}
+                   rpc::twoparty::Side side, ReaderOptions receiveOptions,
+                   const kj::MonotonicClock& clock)
+  : TwoPartyVatNetwork(stream, 0, side, receiveOptions, clock) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(
     capnp::MessageStream& stream,
     uint maxFdsPerMessage,
     rpc::twoparty::Side side,
-    ReaderOptions receiveOptions)
-    : TwoPartyVatNetwork(&stream, maxFdsPerMessage, side, receiveOptions) {}
+    ReaderOptions receiveOptions,
+    const kj::MonotonicClock& clock)
+    : TwoPartyVatNetwork(&stream, maxFdsPerMessage, side, receiveOptions, clock) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
-                                       ReaderOptions receiveOptions)
+                                       ReaderOptions receiveOptions,
+                                       const kj::MonotonicClock& clock)
     : TwoPartyVatNetwork(kj::Own<MessageStream>(kj::heap<AsyncIoMessageStream>(stream)),
-                         0, side, receiveOptions) {}
+                         0, side, receiveOptions, clock) {}
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
-                                       rpc::twoparty::Side side, ReaderOptions receiveOptions)
+                                       rpc::twoparty::Side side, ReaderOptions receiveOptions,
+                                       const kj::MonotonicClock& clock)
     : TwoPartyVatNetwork(kj::Own<MessageStream>(kj::heap<AsyncCapabilityMessageStream>(stream)),
-                         maxFdsPerMessage, side, receiveOptions) {}
+                         maxFdsPerMessage, side, receiveOptions, clock) {}
 
 MessageStream& TwoPartyVatNetwork::getStream() {
   KJ_SWITCH_ONEOF(stream) {
@@ -148,10 +155,13 @@ public:
       --network.currentQueueCount;
     });
 
+    auto sendTime = network.clock.now();
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
-        .then([this]() {
-      return kj::evalNow([&]() { return network.getStream().writeMessage(fds, message); })
-          .catch_([this](kj::Exception&& e) {
+        .then([this, sendTime]() {
+      return kj::evalNow([&]() {
+        network.currentOutgoingMessageSendTime = sendTime;
+        return network.getStream().writeMessage(fds, message);
+      }).catch_([this](kj::Exception&& e) {
         // Since no one checks write failures, we need to propagate them into read failures,
         // otherwise we might get stuck sending all messages into a black hole and wondering why
         // the peer never replies.
@@ -177,6 +187,14 @@ private:
   MallocMessageBuilder message;
   kj::Array<int> fds;
 };
+
+kj::Duration TwoPartyVatNetwork::getOutgoingMessageWaitTime() {
+  if (currentQueueCount > 0) {
+    return clock.now() - currentOutgoingMessageSendTime;
+  } else {
+    return 0 * kj::SECONDS;
+  }
+}
 
 class TwoPartyVatNetwork::IncomingMessageImpl final: public IncomingRpcMessage {
 public:
