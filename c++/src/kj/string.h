@@ -69,12 +69,13 @@ class StringPtr {
 public:
   inline StringPtr(): content("", 1) {}
   inline StringPtr(decltype(nullptr)): content("", 1) {}
-  inline StringPtr(const char* value): content(value, strlen(value) + 1) {}
-  inline StringPtr(const char* value, size_t size): content(value, size + 1) {
+  inline StringPtr(const char* value KJ_LIFETIMEBOUND): content(value, strlen(value) + 1) {}
+  inline StringPtr(const char* value KJ_LIFETIMEBOUND, size_t size): content(value, size + 1) {
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
-  inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
-  inline StringPtr(const String& value);
+  inline StringPtr(const char* begin KJ_LIFETIMEBOUND, const char* end KJ_LIFETIMEBOUND): StringPtr(begin, end - begin) {}
+  inline StringPtr(String&& value KJ_LIFETIMEBOUND) : StringPtr(value) {}
+  inline StringPtr(const String& value KJ_LIFETIMEBOUND);
   StringPtr& operator=(String&& value) = delete;
   inline StringPtr& operator=(decltype(nullptr)) {
     content = ArrayPtr<const char>("", 1);
@@ -82,17 +83,17 @@ public:
   }
 
 #if __cpp_char8_t
-  inline StringPtr(const char8_t* value): StringPtr(reinterpret_cast<const char*>(value)) {}
-  inline StringPtr(const char8_t* value, size_t size)
+  inline StringPtr(const char8_t* value KJ_LIFETIMEBOUND): StringPtr(reinterpret_cast<const char*>(value)) {}
+  inline StringPtr(const char8_t* value KJ_LIFETIMEBOUND, size_t size)
       : StringPtr(reinterpret_cast<const char*>(value), size) {}
-  inline StringPtr(const char8_t* begin, const char8_t* end)
+  inline StringPtr(const char8_t* begin KJ_LIFETIMEBOUND, const char8_t* end KJ_LIFETIMEBOUND)
       : StringPtr(reinterpret_cast<const char*>(begin), reinterpret_cast<const char*>(end)) {}
   // KJ strings are and always have been UTF-8, so screw this C++20 char8_t stuff.
 #endif
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
   template <typename T, typename = decltype(instance<T>().c_str())>
-  inline StringPtr(const T& t): StringPtr(t.c_str()) {}
+  inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str()) {}
   // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
@@ -195,30 +196,35 @@ public:
   inline explicit String(Array<char> buffer);
   // Does not copy.  Requires `buffer` ends with `\0`.
 
-  inline operator ArrayPtr<char>();
-  inline operator ArrayPtr<const char>() const;
-  inline ArrayPtr<char> asArray();
-  inline ArrayPtr<const char> asArray() const;
-  inline ArrayPtr<byte> asBytes() { return asArray().asBytes(); }
-  inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
+  inline operator ArrayPtr<char>() KJ_LIFETIMEBOUND;
+  inline operator ArrayPtr<const char>() const KJ_LIFETIMEBOUND;
+  inline ArrayPtr<char> asArray() KJ_LIFETIMEBOUND;
+  inline ArrayPtr<const char> asArray() const KJ_LIFETIMEBOUND;
+  inline ArrayPtr<byte> asBytes() KJ_LIFETIMEBOUND { return asArray().asBytes(); }
+  inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asArray().asBytes(); }
   // Result does not include NUL terminator.
+
+  inline StringPtr asPtr() const KJ_LIFETIMEBOUND {
+    // Convenience operator to return a StringPtr.
+    return StringPtr{*this};
+  }
 
   inline Array<char> releaseArray() { return kj::mv(content); }
   // Disowns the backing array (which includes the NUL terminator) and returns it. The String value
   // is clobbered (as if moved away).
 
-  inline const char* cStr() const;
+  inline const char* cStr() const KJ_LIFETIMEBOUND;
 
   inline size_t size() const;
   // Result does not include NUL terminator.
 
   inline char operator[](size_t index) const;
-  inline char& operator[](size_t index);
+  inline char& operator[](size_t index) KJ_LIFETIMEBOUND;
 
-  inline char* begin();
-  inline char* end();
-  inline const char* begin() const;
-  inline const char* end() const;
+  inline char* begin() KJ_LIFETIMEBOUND;
+  inline char* end() KJ_LIFETIMEBOUND;
+  inline const char* begin() const KJ_LIFETIMEBOUND;
+  inline const char* end() const KJ_LIFETIMEBOUND;
 
   inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
@@ -243,8 +249,10 @@ public:
   inline bool startsWith(const StringPtr& other) const { return StringPtr(*this).startsWith(other);}
   inline bool endsWith(const StringPtr& other) const { return StringPtr(*this).endsWith(other); }
 
-  inline StringPtr slice(size_t start) const { return StringPtr(*this).slice(start); }
-  inline ArrayPtr<const char> slice(size_t start, size_t end) const {
+  inline StringPtr slice(size_t start) const KJ_LIFETIMEBOUND {
+    return StringPtr(*this).slice(start);
+  }
+  inline ArrayPtr<const char> slice(size_t start, size_t end) const KJ_LIFETIMEBOUND {
     return StringPtr(*this).slice(start, end);
   }
 
@@ -364,19 +372,29 @@ struct Stringifier {
 
   inline ArrayPtr<const char> operator*(ArrayPtr<const char> s) const { return s; }
   inline ArrayPtr<const char> operator*(ArrayPtr<char> s) const { return s; }
-  inline ArrayPtr<const char> operator*(const Array<const char>& s) const { return s; }
-  inline ArrayPtr<const char> operator*(const Array<char>& s) const { return s; }
+  inline ArrayPtr<const char> operator*(const Array<const char>& s) const KJ_LIFETIMEBOUND {
+    return s;
+  }
+  inline ArrayPtr<const char> operator*(const Array<char>& s) const KJ_LIFETIMEBOUND { return s; }
   template<size_t n>
-  inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const { return s; }
+  inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const KJ_LIFETIMEBOUND {
+    return s;
+  }
   template<size_t n>
-  inline ArrayPtr<const char> operator*(const FixedArray<char, n>& s) const { return s; }
-  inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
+  inline ArrayPtr<const char> operator*(const FixedArray<char, n>& s) const KJ_LIFETIMEBOUND {
+    return s;
+  }
+  inline ArrayPtr<const char> operator*(const char* s) const KJ_LIFETIMEBOUND {
+    return arrayPtr(s, strlen(s));
+  }
 #if __cpp_char8_t
-  inline ArrayPtr<const char> operator*(const char8_t* s) const {
+  inline ArrayPtr<const char> operator*(const char8_t* s) const KJ_LIFETIMEBOUND {
     return operator*(reinterpret_cast<const char*>(s));
   }
 #endif
-  inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
+  inline ArrayPtr<const char> operator*(const String& s) const KJ_LIFETIMEBOUND {
+    return s.asArray();
+  }
   inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
 
   inline Range<char> operator*(const Range<char>& r) const { return r; }
