@@ -1,0 +1,229 @@
+load(":configure.bzl", "kj_configure")
+
+kj_configure()
+
+cc_library(
+    name = "kj",
+    srcs = [
+        "arena.c++",
+        "array.c++",
+        "common.c++",
+        "debug.c++",
+        "encoding.c++",
+        "exception.c++",
+        "filesystem.c++",
+        "filesystem-disk-unix.c++",
+        "hash.c++",
+        "io.c++",
+        "list.c++",
+        "main.c++",
+        "memory.c++",
+        "mutex.c++",
+        "parse/char.c++",
+        "refcount.c++",
+        "source-location.c++",
+        "string.c++",
+        "string-tree.c++",
+        "table.c++",
+        "test-helpers.c++",
+        "thread.c++",
+        "time.c++",
+        "units.c++",
+    ],
+    hdrs = [
+        "arena.h",
+        "array.h",
+        "common.h",
+        "debug.h",
+        "encoding.h",
+        "exception.h",
+        "filesystem.h",
+        "function.h",
+        "hash.h",
+        "io.h",
+        "list.h",
+        "main.h",
+        "map.h",
+        "memory.h",
+        "miniposix.h",
+        "mutex.h",
+        "one-of.h",
+        "parse/char.h",
+        "parse/common.h",
+        "refcount.h",
+        "source-location.h",
+        "std/iostream.h",
+        "string.h",
+        "string-tree.h",
+        "table.h",
+        "test.h",
+        "thread.h",
+        "threadlocal.h",
+        "time.h",
+        "tuple.h",
+        "units.h",
+        "vector.h",
+        "win32-api-version.h",
+        "windows-sanity.h",
+    ],
+    include_prefix = "kj",
+    linkopts = ["-lpthread"] + select({
+        ":use_libdl": ["-ldl"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [":kj-defines"],
+)
+
+cc_library(
+    name = "kj-async",
+    srcs = [
+        "async.c++",
+        "async-io.c++",
+        "async-io-internal.h",
+        "async-io-unix.c++",
+        "async-io-win32.c++",
+        "async-unix.c++",
+        "async-win32.c++",
+        "timer.c++",
+    ],
+    hdrs = [
+        "async.h",
+        "async-inl.h",
+        "async-io.h",
+        "async-prelude.h",
+        "async-queue.h",
+        "async-unix.h",
+        "async-win32.h",
+        "timer.h",
+    ],
+    include_prefix = "kj",
+    visibility = ["//visibility:public"],
+    deps = [":kj"],
+)
+
+cc_library(
+    name = "kj-test",
+    srcs = [
+        "test.c++",
+    ],
+    include_prefix = "kj",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":kj",
+        "//src/kj/compat:gtest",
+    ],
+)
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [
+        ":kj",
+        ":kj-async",
+        ":kj-test",
+    ],
+) for f in [
+    "arena-test.c++",
+    "array-test.c++",
+    "async-io-test.c++",
+    "async-queue-test.c++",
+    "async-test.c++",
+    "async-unix-test.c++",
+    "async-xthread-test.c++",
+    "common-test.c++",
+    "debug-test.c++",
+    "encoding-test.c++",
+    "exception-test.c++",
+    "filesystem-disk-test.c++",
+    "filesystem-test.c++",
+    "function-test.c++",
+    "io-test.c++",
+    "list-test.c++",
+    "map-test.c++",
+    "memory-test.c++",
+    "mutex-test.c++",
+    "one-of-test.c++",
+    "parse/char-test.c++",
+    "refcount-test.c++",
+    "std/iostream-test.c++",
+    "string-test.c++",
+    "string-tree-test.c++",
+    "table-test.c++",
+    "test-test.c++",
+    "threadlocal-test.c++",
+    "thread-test.c++",
+    "time-test.c++",
+    "tuple-test.c++",
+    "units-test.c++",
+]]
+
+cc_test(
+    name = "async-coroutine-test",
+    srcs = ["async-coroutine-test.c++"],
+    target_compatible_with = select({
+        ":use_coroutines": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":kj-test",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+cc_library(
+    name = "filesystem-disk-test-base",
+    hdrs = [
+        "filesystem-disk-test.c++",
+        "filesystem-disk-unix.c++",
+    ],
+)
+
+cc_test(
+    name = "filesystem-disk-generic-test",
+    srcs = ["filesystem-disk-generic-test.c++"],
+    deps = [
+        ":filesystem-disk-test-base",
+        ":kj-test",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+cc_test(
+    name = "filesystem-disk-old-kernel-test",
+    srcs = ["filesystem-disk-old-kernel-test.c++"],
+    deps = [
+        ":filesystem-disk-test-base",
+        ":kj-test",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+cc_library(
+    name = "async-unix-xthread-test-base",
+    hdrs = ["async-xthread-test.c++"],
+)
+
+cc_test(
+    name = "async-unix-xthread-test",
+    srcs = ["async-unix-xthread-test.c++"],
+    deps = [
+        ":async-unix-xthread-test-base",
+        ":kj-async",
+        ":kj-test",
+    ],
+)
+
+cc_test(
+    name = "exception-override-symbolizer-test",
+    srcs = ["exception-override-symbolizer-test.c++"],
+    deps = [
+        ":kj",
+        ":kj-test",
+    ],
+    linkstatic = True,
+)

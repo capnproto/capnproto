@@ -98,6 +98,43 @@ TEST(Common, Maybe) {
   }
 
   {
+    Maybe<Own<CopyOrMove>> m = kj::heap<CopyOrMove>(123);
+    EXPECT_FALSE(m == nullptr);
+    EXPECT_TRUE(m != nullptr);
+    KJ_IF_MAYBE(v, m) {
+      EXPECT_EQ(123, (*v)->i);
+    } else {
+      ADD_FAILURE();
+    }
+    KJ_IF_MAYBE(v, mv(m)) {
+      EXPECT_EQ(123, (*v)->i);
+    } else {
+      ADD_FAILURE();
+    }
+    // We have moved the kj::Own away, so this should give us the default and leave the Maybe empty.
+    EXPECT_EQ(456, m.orDefault(heap<CopyOrMove>(456))->i);
+    EXPECT_TRUE(m == nullptr);
+
+    bool ranLazy = false;
+    EXPECT_EQ(123, mv(m).orDefault([&] {
+      ranLazy = true;
+      return heap<CopyOrMove>(123);
+    })->i);
+    EXPECT_TRUE(ranLazy);
+    EXPECT_TRUE(m == nullptr);
+
+    m = heap<CopyOrMove>(123);
+    EXPECT_TRUE(m != nullptr);
+    ranLazy = false;
+    EXPECT_EQ(123, mv(m).orDefault([&] {
+      ranLazy = true;
+      return heap<CopyOrMove>(456);
+    })->i);
+    EXPECT_FALSE(ranLazy);
+    EXPECT_TRUE(m == nullptr);
+  }
+
+  {
     Maybe<int> empty;
     int defaultValue = 5;
     auto& ref1 = empty.orDefault([&defaultValue]() -> int& {
@@ -774,6 +811,10 @@ KJ_TEST("ArrayPtr operator ==") {
              ArrayPtr<const char* const>({"foo", "baz"})));
   KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) !=
              ArrayPtr<const char* const>({"foo"})));
+
+  // operator== should not use memcmp for double elements.
+  double d[1] = { nan() };
+  KJ_EXPECT(ArrayPtr<double>(d, 1) != ArrayPtr<double>(d, 1));
 }
 
 KJ_TEST("kj::range()") {
@@ -816,6 +857,35 @@ KJ_TEST("kj::defer()") {
   }
 
   KJ_EXPECT(executed);
+}
+
+KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {
+  // Note: char-/byte- optimized versions are covered by string-test.c++.
+
+  int rawArray[] = {12, 34, 56, 34, 12};
+  ArrayPtr<int> arr(rawArray);
+
+  KJ_EXPECT(arr.startsWith({12, 34}));
+  KJ_EXPECT(arr.startsWith({12, 34, 56}));
+  KJ_EXPECT(!arr.startsWith({12, 34, 56, 78}));
+  KJ_EXPECT(arr.startsWith({12, 34, 56, 34, 12}));
+  KJ_EXPECT(!arr.startsWith({12, 34, 56, 34, 12, 12}));
+
+  KJ_EXPECT(arr.endsWith({34, 12}));
+  KJ_EXPECT(arr.endsWith({56, 34, 12}));
+  KJ_EXPECT(!arr.endsWith({78, 56, 34, 12}));
+  KJ_EXPECT(arr.endsWith({12, 34, 56, 34, 12}));
+  KJ_EXPECT(!arr.endsWith({12, 12, 34, 56, 34, 12}));
+
+  KJ_EXPECT(arr.findFirst(12).orDefault(100) == 0);
+  KJ_EXPECT(arr.findFirst(34).orDefault(100) == 1);
+  KJ_EXPECT(arr.findFirst(56).orDefault(100) == 2);
+  KJ_EXPECT(arr.findFirst(78).orDefault(100) == 100);
+
+  KJ_EXPECT(arr.findLast(12).orDefault(100) == 4);
+  KJ_EXPECT(arr.findLast(34).orDefault(100) == 3);
+  KJ_EXPECT(arr.findLast(56).orDefault(100) == 2);
+  KJ_EXPECT(arr.findLast(78).orDefault(100) == 100);
 }
 
 }  // namespace

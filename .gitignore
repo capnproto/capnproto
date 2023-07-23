@@ -21,6 +21,7 @@
 # Ekam build artifacts.
 /c++/tmp/
 /c++/bin/
+/c++/deps/
 
 # setup-ekam.sh
 /c++/.ekam
@@ -74,3 +75,9 @@
 
 # editor artefacts
 *~
+
+# cross-compiling / glibc testing
+/dockcross
+
+# bazel output
+bazel-*

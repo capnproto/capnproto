@@ -589,10 +589,10 @@ kj::Promise<void> readN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t co
   --count;
   auto buf = kj::heapString(text.size());
   auto promise = stream.read(buf.begin(), buf.size());
-  return promise.then(kj::mvCapture(buf, [&stream, text, count](kj::String buf) {
+  return promise.then([&stream, text, buf=kj::mv(buf), count]() {
     KJ_ASSERT(buf == text, buf, text, count);
     return readN(stream, text, count);
-  }));
+  });
 }
 
 KJ_TEST("TLS full duplex") {

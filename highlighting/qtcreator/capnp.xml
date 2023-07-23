@@ -112,7 +112,7 @@
           of these, like "keyword" and "type", could be mapped to dsKeyword and dsDataType, but
           there's a chance the user has mapped the colors for those things to things that would
           conflict with the manually-defined colors here, which would probably be even more annoying
-          than having the colors be inconsitent from other languages.  So, I use manual colors for
+          than having the colors be inconsistent from other languages.  So, I use manual colors for
           everything, except comments, which I figure are less likely to have this problem. -->
       <itemData name="Normal"       defStyleNum="dsNormal"/>
       <itemData name="Keyword"      defStyleNum="dsOthers" color="#000099" bold="1"/>

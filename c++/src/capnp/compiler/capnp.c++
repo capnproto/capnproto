@@ -249,6 +249,12 @@ public:
     // Default convert to text unless -o is given.
     convertTo = Format::TEXT;
 
+    // When using `capnp eval`, type IDs don't really matter, because `eval` won't actually use
+    // them for anything. When using Cap'n Proto an a config format -- the common use case for
+    // `capnp eval` -- the exercise of adding a file ID to every file is pointless busy work. So,
+    // we don't require it.
+    loader.setFileIdsRequired(false);
+
     kj::MainBuilder builder(context, VERSION_STRING,
           "Prints (or encodes) the value of <name>, which must be defined in <schema-file>.  "
           "<name> must refer to a const declaration, a field of a struct type (prints the default "

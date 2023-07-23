@@ -147,6 +147,7 @@ TEST(TwoPartyNetwork, Basic) {
   clock.increment(1 * kj::SECONDS);
 
   KJ_EXPECT(network.getCurrentQueueCount() == 1);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > 0);
   KJ_EXPECT(network.getOutgoingMessageWaitTime() == 1 * kj::SECONDS);
   size_t oldSize = network.getCurrentQueueSize();
@@ -158,6 +159,7 @@ TEST(TwoPartyNetwork, Basic) {
   auto promise1 = request1.send();
 
   KJ_EXPECT(network.getCurrentQueueCount() == 2);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   KJ_EXPECT(network.getOutgoingMessageWaitTime() == 1 * kj::SECONDS);
   oldSize = network.getCurrentQueueSize();
@@ -167,6 +169,7 @@ TEST(TwoPartyNetwork, Basic) {
   auto promise2 = request2.send();
 
   KJ_EXPECT(network.getCurrentQueueCount() == 3);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   oldSize = network.getCurrentQueueSize();
 
@@ -184,6 +187,7 @@ TEST(TwoPartyNetwork, Basic) {
   EXPECT_EQ(0, callCount);
 
   KJ_EXPECT(network.getCurrentQueueCount() == 4);
+  KJ_EXPECT(network.getCurrentQueueSize() % sizeof(word) == 0);
   KJ_EXPECT(network.getCurrentQueueSize() > oldSize);
   // Oldest message is now 2 seconds old
   KJ_EXPECT(network.getOutgoingMessageWaitTime() == 2 * kj::SECONDS);
@@ -213,6 +217,18 @@ TEST(TwoPartyNetwork, Basic) {
   // Now nothing is queued.
   KJ_EXPECT(network.getCurrentQueueCount() == 0);
   KJ_EXPECT(network.getCurrentQueueSize() == 0);
+
+  // Ensure that sending a message after not sending one for some time
+  // doesn't return incorrect waitTime statistics.
+  clock.increment(10 * kj::SECONDS);
+
+  auto request4 = client.fooRequest();
+  request4.setI(123);
+  request4.setJ(true);
+  auto promise4 = request4.send();
+
+  KJ_EXPECT(network.getCurrentQueueCount() == 1);
+  KJ_EXPECT(network.getOutgoingMessageWaitTime() == 0 * kj::SECONDS);
 }
 
 TEST(TwoPartyNetwork, Pipelining) {
@@ -889,6 +905,71 @@ KJ_TEST("write error propagates to read error") {
     KJ_ASSERT(promise.poll(waitScope));
     promise.wait(waitScope);
   }
+}
+
+class TestStreamingCancellationBug final: public test::TestStreaming::Server {
+public:
+  uint iSum = 0;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
+
+  kj::Promise<void> doStreamI(DoStreamIContext context) override {
+    context.allowCancellation();
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+    return paf.promise.then([this,context]() mutable {
+      // Don't count the sum until here so we actually detect if the call is canceled.
+      iSum += context.getParams().getI();
+    });
+  }
+
+  kj::Promise<void> finishStream(FinishStreamContext context) override {
+    auto results = context.getResults();
+    results.setTotalI(iSum);
+    return kj::READY_NOW;
+  }
+};
+
+KJ_TEST("Streaming over RPC no premature cancellation when client dropped") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto ownServer = kj::heap<TestStreamingCancellationBug>();
+  auto& server = *ownServer;
+  test::TestStreaming::Client serverCap = kj::mv(ownServer);
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], kj::mv(serverCap), rpc::twoparty::Side::SERVER);
+
+  auto client = tpClient.bootstrap().castAs<test::TestStreaming>();
+
+  kj::Promise<void> promise1 = nullptr, promise2 = nullptr;
+
+  {
+    auto req = client.doStreamIRequest();
+    req.setI(123);
+    promise1 = req.send();
+  }
+  {
+    auto req = client.doStreamIRequest();
+    req.setI(456);
+    promise2 = req.send();
+  }
+
+  auto finishPromise = client.finishStreamRequest().send();
+
+  KJ_EXPECT(server.iSum == 0);
+
+  // Drop the client. This shouldn't cause a problem for the already-running RPCs.
+  { auto drop = kj::mv(client); }
+
+  while (!finishPromise.poll(waitScope)) {
+    KJ_ASSERT_NONNULL(server.fulfiller)->fulfill();
+  }
+
+  finishPromise.wait(waitScope);
+  KJ_EXPECT(server.iSum == 579);
 }
 
 }  // namespace

@@ -531,7 +531,7 @@ getAll @3 (page :UInt32 = 0 $httpQuery)
     $http(method = get);
 # GET /?page=<num>
 # Query is optional.
-# JSAN (JSON array) repsonse body.
+# JSAN (JSON array) response body.
 {% endhighlight %}
 
 </section>

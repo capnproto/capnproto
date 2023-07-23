@@ -110,7 +110,7 @@ public:
       // from the given offset.  The idea is that you just allocated an lgSize-sized field from
       // an limitLgSize-sized space, such as a newly-added word on the end of the data segment.
 
-      KJ_DREQUIRE(limitLgSize <= kj::size(holes));
+      KJ_ASSUME(limitLgSize <= kj::size(holes));
 
       while (lgSize < limitLgSize) {
         KJ_DREQUIRE(holes[lgSize] == 0);
@@ -1841,31 +1841,52 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
 
   Orphan<DynamicValue> result = compileValueInner(src, type);
 
+  if (result.getType() == DynamicValue::UNKNOWN) {
+    // Error already reported.
+    return nullptr;
+  } else if (matchesType(src, type, result)) {
+    return kj::mv(result);
+  } else {
+    // If the expected type is a struct, we try matching its first field.
+    if (type.isStruct()) {
+      auto structType = type.asStruct();
+      auto fields = structType.getFields();
+      if (fields.size() > 0) {
+        auto field = fields[0];
+        if (matchesType(src, field.getType(), result)) {
+          // Success. Wrap in a struct.
+          auto outer = orphanage.newOrphan(type.asStruct());
+          outer.get().adopt(field, kj::mv(result));
+          return Orphan<DynamicValue>(kj::mv(outer));
+        }
+      }
+    }
+
+    // That didn't work, so this is just a type mismatch.
+    errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
+    return nullptr;
+  }
+}
+
+bool ValueTranslator::matchesType(Expression::Reader src, Type type, Orphan<DynamicValue>& result) {
   // compileValueInner() evaluated `src` and only used `type` as a hint in interpreting `src` if
   // `src`'s type wasn't already obvious. So, now we need to check that the resulting value
   // actually matches `type`.
 
   switch (result.getType()) {
     case DynamicValue::UNKNOWN:
-      // Error already reported.
-      return nullptr;
+      KJ_UNREACHABLE;
 
     case DynamicValue::VOID:
-      if (type.isVoid()) {
-        return kj::mv(result);
-      }
-      break;
+      return type.isVoid();
 
     case DynamicValue::BOOL:
-      if (type.isBool()) {
-        return kj::mv(result);
-      }
-      break;
+      return type.isBool();
 
     case DynamicValue::INT: {
       int64_t value = result.getReader().as<int64_t>();
       if (value < 0) {
-        int64_t minValue = 1;
+        int64_t minValue;
         switch (type.which()) {
           case schema::Type::INT8: minValue = (int8_t)kj::minValue; break;
           case schema::Type::INT16: minValue = (int16_t)kj::minValue; break;
@@ -1882,21 +1903,20 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
             minValue = (int64_t)kj::minValue;
             break;
 
-          default: break;
+          default: return false;
         }
-        if (minValue == 1) break;
 
         if (value < minValue) {
           errorReporter.addErrorOn(src, "Integer value out of range.");
           result = minValue;
         }
-        return kj::mv(result);
+        return true;
       }
 
     } KJ_FALLTHROUGH;  // value is positive, so we can just go on to the uint case below.
 
     case DynamicValue::UINT: {
-      uint64_t maxValue = 0;
+      uint64_t maxValue;
       switch (type.which()) {
         case schema::Type::INT8: maxValue = (int8_t)kj::maxValue; break;
         case schema::Type::INT16: maxValue = (int16_t)kj::maxValue; break;
@@ -1913,76 +1933,62 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
           maxValue = (uint64_t)kj::maxValue;
           break;
 
-        default: break;
+        default: return false;
       }
-      if (maxValue == 0) break;
 
       if (result.getReader().as<uint64_t>() > maxValue) {
         errorReporter.addErrorOn(src, "Integer value out of range.");
         result = maxValue;
       }
-      return kj::mv(result);
+      return true;
     }
 
     case DynamicValue::FLOAT:
-      if (type.isFloat32() || type.isFloat64()) {
-        return kj::mv(result);
-      }
-      break;
+      return type.isFloat32() || type.isFloat64();
 
     case DynamicValue::TEXT:
-      if (type.isText()) {
-        return kj::mv(result);
-      }
-      break;
+      return type.isText();
 
     case DynamicValue::DATA:
-      if (type.isData()) {
-        return kj::mv(result);
-      }
-      break;
+      return type.isData();
 
     case DynamicValue::LIST:
       if (type.isList()) {
-        if (result.getReader().as<DynamicList>().getSchema() == type.asList()) {
-          return kj::mv(result);
-        }
+        return result.getReader().as<DynamicList>().getSchema() == type.asList();
       } else if (type.isAnyPointer()) {
         switch (type.whichAnyPointerKind()) {
           case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
           case schema::Type::AnyPointer::Unconstrained::LIST:
-            return kj::mv(result);
+            return true;
           case schema::Type::AnyPointer::Unconstrained::STRUCT:
           case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
-            break;
+            return false;
         }
+        KJ_UNREACHABLE;
+      } else {
+        return false;
       }
-      break;
 
     case DynamicValue::ENUM:
-      if (type.isEnum()) {
-        if (result.getReader().as<DynamicEnum>().getSchema() == type.asEnum()) {
-          return kj::mv(result);
-        }
-      }
-      break;
+      return type.isEnum() &&
+             result.getReader().as<DynamicEnum>().getSchema() == type.asEnum();
 
     case DynamicValue::STRUCT:
       if (type.isStruct()) {
-        if (result.getReader().as<DynamicStruct>().getSchema() == type.asStruct()) {
-          return kj::mv(result);
-        }
+        return result.getReader().as<DynamicStruct>().getSchema() == type.asStruct();
       } else if (type.isAnyPointer()) {
         switch (type.whichAnyPointerKind()) {
           case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
           case schema::Type::AnyPointer::Unconstrained::STRUCT:
-            return kj::mv(result);
+            return true;
           case schema::Type::AnyPointer::Unconstrained::LIST:
           case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
-            break;
+            return false;
         }
+        KJ_UNREACHABLE;
+      } else {
+        return false;
       }
-      break;
 
     case DynamicValue::CAPABILITY:
       KJ_FAIL_ASSERT("Interfaces can't have literal values.");
@@ -1991,8 +1997,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(Expression::Reader
       KJ_FAIL_ASSERT("AnyPointers can't have literal values.");
   }
 
-  errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
-  return nullptr;
+  KJ_UNREACHABLE;
 }
 
 Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, Type type) {
@@ -2183,9 +2188,26 @@ void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
             break;
 
           case schema::Field::GROUP:
+            auto groupBuilder = builder.init(*field).as<DynamicStruct>();
             if (value.isTuple()) {
-              fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getTuple());
+              fillStructValue(groupBuilder, value.getTuple());
             } else {
+              auto groupFields = groupBuilder.getSchema().getFields();
+              if (groupFields.size() > 0) {
+                auto groupField = groupFields[0];
+
+                // Call compileValueInner() using the group's type as `type`. Since we already
+                // established `value` is not a tuple, this will only return a valid result if
+                // the value has unambiguous type.
+                auto result = compileValueInner(value, field->getType());
+
+                // Does it match the first field?
+                if (matchesType(value, groupField.getType(), result)) {
+                  groupBuilder.adopt(groupField, kj::mv(result));
+                  break;
+                }
+              }
+
               errorReporter.addErrorOn(value, "Type mismatch; expected group.");
             }
             break;

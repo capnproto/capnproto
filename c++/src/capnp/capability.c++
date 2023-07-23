@@ -239,8 +239,7 @@ public:
         .detach([](kj::Exception&&) {});  // ignore exceptions
 
     // Now the other branch returns the response from the context.
-    auto promise = forked.addBranch().then(kj::mvCapture(context,
-        [](kj::Own<LocalCallContext>&& context) {
+    auto promise = forked.addBranch().then([context=kj::mv(context)]() mutable {
       // force response allocation
       auto reader = context->getResults(MessageSize { 0, 0 }).asReader();
 
@@ -258,7 +257,7 @@ public:
       } else {
         return kj::mv(KJ_ASSERT_NONNULL(context->response));
       }
-    }));
+    });
 
     // We return the other branch.
     return RemotePromise<AnyPointer>(
@@ -422,11 +421,11 @@ public:
 
     // Create a promise for the call initiation.
     kj::ForkedPromise<kj::Own<CallResultHolder>> callResultPromise =
-        promiseForCallForwarding.addBranch().then(kj::mvCapture(context,
-        [=](kj::Own<CallContextHook>&& context, kj::Own<ClientHook>&& client){
+        promiseForCallForwarding.addBranch().then(
+        [=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
           return kj::refcounted<CallResultHolder>(
               client->call(interfaceId, methodId, kj::mv(context)));
-        })).fork();
+        }).fork();
 
     // Create a promise that extracts the pipeline from the call initiation, and construct our
     // QueuedPipeline to chain to it.
@@ -606,11 +605,11 @@ public:
     // We have to fork this promise for the pipeline to receive a copy of the answer.
     auto forked = promise.fork();
 
-    auto pipelinePromise = forked.addBranch().then(kj::mvCapture(context->addRef(),
-        [=](kj::Own<CallContextHook>&& context) -> kj::Own<PipelineHook> {
+    auto pipelinePromise = forked.addBranch()
+        .then([=,context=context->addRef()]() mutable -> kj::Own<PipelineHook> {
           context->releaseParams();
           return kj::refcounted<LocalPipeline>(kj::mv(context));
-        }));
+        });
 
     auto tailPipelinePromise = context->onTailCall().then([](AnyPointer::Pipeline&& pipeline) {
       return kj::mv(pipeline.hook);

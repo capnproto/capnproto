@@ -22,8 +22,8 @@
 #pragma once
 
 #include "async-prelude.h"
-#include "exception.h"
-#include "refcount.h"
+#include <kj/exception.h>
+#include <kj/refcount.h>
 
 KJ_BEGIN_HEADER
 
@@ -62,6 +62,57 @@ using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
 // T.  If T is void, then the promise is for the result of calling Func with no arguments.  If
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
+
+// =======================================================================================
+
+class AsyncObject {
+  // You may optionally inherit privately from this to indicate that the type is a KJ async object,
+  // meaning it deals with KJ async I/O making it tied to a specific thread and event loop. This
+  // enables some additional debug checks, but does not otherwise have any effect on behavior as
+  // long as there are no bugs.
+  //
+  // (We prefer inheritance rather than composition here because inheriting an empty type adds zero
+  // size to the derived class.)
+
+public:
+  ~AsyncObject();
+
+private:
+  KJ_NORETURN(static void failed() noexcept);
+};
+
+class DisallowAsyncDestructorsScope {
+  // Create this type on the stack in order to specify that during its scope, no KJ async objects
+  // should be destroyed. If AsyncObject's destructor is called in this scope, the process will
+  // crash with std::terminate().
+  //
+  // This is useful as a sort of "sanitizer" to catch bugs. When tearing down an object that is
+  // intended to be passed between threads, you can set up one of these scopes to catch whether
+  // the object contains any async objects, which are not legal to pass across threads.
+
+public:
+  explicit DisallowAsyncDestructorsScope(kj::StringPtr reason);
+  ~DisallowAsyncDestructorsScope();
+  KJ_DISALLOW_COPY(DisallowAsyncDestructorsScope);
+
+private:
+  kj::StringPtr reason;
+  DisallowAsyncDestructorsScope* previousValue;
+
+  friend class AsyncObject;
+};
+
+class AllowAsyncDestructorsScope {
+  // Negates the effect of DisallowAsyncDestructorsScope.
+
+public:
+  AllowAsyncDestructorsScope();
+  ~AllowAsyncDestructorsScope();
+  KJ_DISALLOW_COPY(AllowAsyncDestructorsScope);
+
+private:
+  DisallowAsyncDestructorsScope* previousValue;
+};
 
 // =======================================================================================
 // Promises
@@ -329,7 +380,7 @@ public:
   // This method does NOT consume the promise as other methods do.
 
 private:
-  Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
+  Promise(bool, _::OwnPromiseNode&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
   friend class _::PromiseNode;
@@ -523,6 +574,10 @@ private:
 };
 
 template <typename Func, typename MovedParam>
+inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func)
+    KJ_DEPRECATED("Use C++14 generalized captures instead.");
+
+template <typename Func, typename MovedParam>
 inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func) {
   // Hack to create a "lambda" which captures a variable by moving it rather than copying or
   // referencing.  C++14 generalized captures should make this obsolete, but for now in C++11 this
@@ -538,9 +593,120 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 }
 
 // =======================================================================================
+// Hack for safely using a lambda as a coroutine.
+
+#if KJ_HAS_COROUTINE
+
+namespace _ {
+
+void throwMultipleCoCaptureInvocations();
+
+template<typename Functor>
+struct CaptureForCoroutine {
+  kj::Maybe<Functor> maybeFunctor;
+
+  explicit CaptureForCoroutine(Functor&& f) : maybeFunctor(kj::mv(f)) {}
+
+  template<typename ...Args>
+  static auto coInvoke(Functor functor, Args&&... args)
+      -> decltype(functor(kj::fwd<Args>(args)...)) {
+    // Since the functor is now in the local scope and no longer a member variable, it will be
+    // persisted in the coroutine state.
+
+    // Note that `co_await functor(...)` can still return `void`. It just happens that
+    // `co_return voidReturn();` is explicitly allowed.
+    co_return co_await functor(kj::fwd<Args>(args)...);
+  }
+
+  template<typename ...Args>
+  auto operator()(Args&&... args) {
+    if (maybeFunctor == nullptr) {
+      throwMultipleCoCaptureInvocations();
+    }
+    auto localFunctor = kj::mv(*kj::_::readMaybe(maybeFunctor));
+    maybeFunctor = nullptr;
+    return coInvoke(kj::mv(localFunctor), kj::fwd<Args>(args)...);
+  }
+};
+
+}  // namespace _
+
+template <typename Functor>
+auto coCapture(Functor&& f) {
+  // Assuming `f()` returns a Promise<T> `p`, wrap `f` in such a way that it will outlive its
+  // returned Promise. Note that the returned object may only be invoked once.
+  //
+  // This function is meant to help address this pain point with functors that return a coroutine:
+  // https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture
+  //
+  // The two most common patterns where this may be useful look like so:
+  // ```
+  // void addTask(Value myValue) {
+  //   auto myFun = [myValue]() -> kj::Promise<void> {
+  //     ...
+  //     co_return;
+  //   };
+  //   tasks.add(myFun());
+  // }
+  // ```
+  // and
+  // ```
+  // kj::Promise<void> afterPromise(kj::Promise<void> promise, Value myValue) {
+  //   auto myFun = [myValue]() -> kj::Promise<void> {
+  //     ...
+  //     co_return;
+  //   };
+  //   return promise.then(kj::mv(myFun));
+  // }
+  // ```
+  //
+  // Note that there are potentially more optimal alternatives to both of these patterns:
+  // ```
+  // void addTask(Value myValue) {
+  //   auto myFun = [](auto myValue) -> kj::Promise<void> {
+  //     ...
+  //     co_return;
+  //   };
+  //   tasks.add(myFun(myValue));
+  // }
+  // ```
+  // and
+  // ```
+  // kj::Promise<void> afterPromise(kj::Promise<void> promise, Value myValue) {
+  //   auto myFun = [&]() -> kj::Promise<void> {
+  //     ...
+  //     co_return;
+  //   };
+  //   co_await promise;
+  //   co_await myFun();
+  //   co_return;
+  // }
+  // ```
+  //
+  // For situations where you are trying to capture a specific local variable, kj::mvCapture() can
+  // also be useful:
+  // ```
+  // kj::Promise<void> reactToPromise(kj::Promise<MyType> promise) {
+  //   BigA a;
+  //   TinyB b;
+  //
+  //   doSomething(a, b);
+  //   return promise.then(kj::mvCapture(b, [](TinyB b, MyType type) -> kj::Promise<void> {
+  //     ...
+  //     co_return;
+  //   });
+  // }
+  // ```
+
+  return _::CaptureForCoroutine(kj::mv(f));
+}
+
+#endif  // KJ_HAS_COROUTINE
+
+// =======================================================================================
 // Advanced promise construction
 
-class PromiseRejector {
+class PromiseRejector: private AsyncObject {
   // Superclass of PromiseFulfiller containing the non-typed methods. Useful when you only really
   // need to be able to reject a promise, and you need to operate on fulfillers of different types.
 public:
@@ -681,7 +847,7 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
 // =======================================================================================
 // Canceler
 
-class Canceler {
+class Canceler: private AsyncObject {
   // A Canceler can wrap some set of Promises and then forcefully cancel them on-demand, or
   // implicitly when the Canceler is destroyed.
   //
@@ -695,7 +861,7 @@ class Canceler {
   // Canceler and using it to wrap promises before returning them to callers. When Bob is
   // destroyed, the Canceler is destroyed too, and all promises Bob wrapped with it throw errors.
   //
-  // Note that another common strategy for cancelation is to use exclusiveJoin() to join a promise
+  // Note that another common strategy for cancellation is to use exclusiveJoin() to join a promise
   // with some "cancellation promise" which only resolves if the operation should be canceled. The
   // cancellation promise could itself be created by newPromiseAndFulfiller<void>(), and thus
   // calling the PromiseFulfiller cancels the operation. There is a major problem with this
@@ -786,7 +952,7 @@ private:
 // =======================================================================================
 // TaskSet
 
-class TaskSet {
+class TaskSet: private AsyncObject {
   // Holds a collection of Promise<void>s and ensures that each executes to completion.  Memory
   // associated with each promise is automatically freed when the promise completes.  Destroying
   // the TaskSet itself automatically cancels all unfinished promises.
@@ -794,7 +960,7 @@ class TaskSet {
   // This is useful for "daemon" objects that perform background tasks which aren't intended to
   // fulfill any particular external promise, but which may need to be canceled (and thus can't
   // use `Promise::detach()`).  The daemon object holds a TaskSet to collect these tasks it is
-  // working on.  This way, if the daemon itself is destroyed, the TaskSet is detroyed as well,
+  // working on.  This way, if the daemon itself is destroyed, the TaskSet is destroyed as well,
   // and everything the daemon is doing is canceled.
 
 public:
@@ -823,9 +989,10 @@ public:
 
 private:
   class Task;
+  using OwnTask = Own<Task, _::PromiseDisposer>;
 
   TaskSet::ErrorHandler& errorHandler;
-  Maybe<Own<Task>> tasks;
+  Maybe<OwnTask> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
   SourceLocation location;
 };
@@ -1089,7 +1256,7 @@ private:
   void poll();
 
   friend void _::detach(kj::Promise<void>&& promise);
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
   friend class _::Event;
@@ -1116,8 +1283,10 @@ public:
   inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
   KJ_DISALLOW_COPY(WaitScope);
 
-  void poll();
-  // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking).
+  uint poll(uint maxTurnCount = maxValue);
+  // Pumps the event queue and polls for I/O until there's nothing left to do (without blocking) or
+  // the maximum turn count has been reached. Returns the number of events popped off the event
+  // queue.
   //
   // Not supported in fibers.
 
@@ -1177,7 +1346,7 @@ private:
 
   friend class EventLoop;
   friend class _::FiberBase;
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+  friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };

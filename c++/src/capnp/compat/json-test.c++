@@ -50,6 +50,17 @@ KJ_TEST("basic json encoding") {
   KJ_EXPECT(json.encode(Data::Reader(bytes, 3)) == "[12, 34, 56]");
 }
 
+KJ_TEST("raw encoding") {
+  JsonCodec json;
+
+  auto text = kj::str("{\"field\":\"value\"}");
+  MallocMessageBuilder message;
+  auto value = message.initRoot<JsonValue>();
+  value.setRaw(text);
+
+  KJ_EXPECT(json.encodeRaw(value) == text);
+}
+
 const char ALL_TYPES_JSON[] =
     "{ \"voidField\": null,\n"
     "  \"boolField\": true,\n"
@@ -605,6 +616,17 @@ KJ_TEST("basic json decoding") {
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("--", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("\f{}", root));
     KJ_EXPECT_THROW_MESSAGE("Unexpected input", json.decodeRaw("{\v}", root));
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    json.decodeRaw(R"("\u007f")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+
+    char utf_buffer[] = {127, 0};
+    KJ_EXPECT(kj::str(utf_buffer) == root.getString());
   }
 }
 

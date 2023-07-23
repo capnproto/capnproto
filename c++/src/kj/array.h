@@ -56,7 +56,7 @@ public:
   // an exception.
 
 private:
-  template <typename T, bool hasTrivialDestructor = __has_trivial_destructor(T)>
+  template <typename T, bool hasTrivialDestructor = KJ_HAS_TRIVIAL_DESTRUCTOR(T)>
   struct Dispose_;
 };
 
@@ -285,8 +285,8 @@ private:
   virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                            size_t capacity, void (*destroyElement)(void*)) const override;
 
-  template <typename T, bool hasTrivialConstructor = __has_trivial_constructor(T),
-                        bool hasNothrowConstructor = __has_nothrow_constructor(T)>
+  template <typename T, bool hasTrivialConstructor = KJ_HAS_TRIVIAL_CONSTRUCTOR(T),
+                        bool hasNothrowConstructor = KJ_HAS_NOTHROW_CONSTRUCTOR(T)>
   struct Allocate_;
 };
 
@@ -417,7 +417,7 @@ public:
     KJ_IREQUIRE(size <= this->size(), "can't use truncate() to expand");
 
     T* target = ptr + size;
-    if (__has_trivial_destructor(T)) {
+    if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
       pos = target;
     } else {
       while (pos > target) {
@@ -427,7 +427,7 @@ public:
   }
 
   void clear() {
-    if (__has_trivial_destructor(T)) {
+    if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
       pos = ptr;
     } else {
       while (pos > ptr) {
@@ -442,7 +442,7 @@ public:
     T* target = ptr + size;
     if (target > pos) {
       // expand
-      if (__has_trivial_constructor(T)) {
+      if (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
         pos = target;
       } else {
         while (pos < target) {
@@ -451,7 +451,7 @@ public:
       }
     } else {
       // truncate
-      if (__has_trivial_destructor(T)) {
+      if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
         pos = target;
       } else {
         while (pos > target) {

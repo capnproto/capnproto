@@ -132,10 +132,16 @@ TEST(Exception, UnwindDetector) {
 }
 #endif
 
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
+    KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+    defined(__SANITIZE_ADDRESS__)
+// The implementation skips this check in these cases.
+#else
 #if !__MINGW32__  // Inexplicably crashes when exception is thrown from constructor.
 TEST(Exception, ExceptionCallbackMustBeOnStack) {
   KJ_EXPECT_THROW_MESSAGE("must be allocated on the stack", new ExceptionCallback);
 }
+#endif
 #endif  // !__MINGW32__
 
 #if !KJ_NO_EXCEPTIONS
@@ -196,7 +202,7 @@ KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   //    contain the right one.
   // 2) This test only detects the problem if the call instruction to testStackTrace() is the
   //    *last* instruction attributed to its line of code. Whether or not this is true seems to be
-  //    dependent on obscure complier behavior. For example, below, it could only be the case if
+  //    dependent on obscure compiler behavior. For example, below, it could only be the case if
   //    RVO is applied -- but in my testing, RVO does seem to be applied here. I tried several
   //    variations involving passing via an output parameter or a global variable rather than
   //    returning, but found some variations detected the problem and others didn't, essentially

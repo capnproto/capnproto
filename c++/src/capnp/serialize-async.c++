@@ -295,7 +295,7 @@ kj::Promise<void> writeMessageImpl(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
   auto promise = writeFunc(arrays.pieces);
 
   // Make sure the arrays aren't freed until the write completes.
-  return promise.then(kj::mvCapture(arrays, [](WriteArrays&&) {}));
+  return promise.then([arrays=kj::mv(arrays)]() {});
 }
 
 template <typename WriteFunc>
@@ -364,6 +364,45 @@ kj::Promise<void> writeMessages(
     messages[i] = builders[i]->getSegmentsForOutput();
   }
   return writeMessages(output, messages);
+}
+
+kj::Promise<void> MessageStream::writeMessages(kj::ArrayPtr<MessageAndFds> messages) {
+  if (messages.size() == 0) return kj::READY_NOW;
+  kj::ArrayPtr<MessageAndFds> remainingMessages;
+
+  auto writeProm = [&]() {
+    if (messages[0].fds.size() > 0) {
+      // We have a message with FDs attached. We need to write any bare messages we've accumulated,
+      // if any, then write the message with FDs, then continue on with any remaining messages.
+
+      if (messages.size() > 1) {
+        remainingMessages = messages.slice(1, messages.size());
+      }
+
+      return writeMessage(messages[0].fds, messages[0].segments);
+    } else {
+      kj::Vector<kj::ArrayPtr<const kj::ArrayPtr<const word>>> bareMessages(messages.size());
+      for(auto i : kj::zeroTo(messages.size())) {
+        if (messages[i].fds.size() > 0) {
+          break;
+        }
+        bareMessages.add(messages[i].segments);
+      }
+
+      if (messages.size() > bareMessages.size()) {
+        remainingMessages = messages.slice(bareMessages.size(), messages.size());
+      }
+      return writeMessages(bareMessages.asPtr()).attach(kj::mv(bareMessages));
+    }
+  }();
+
+  if (remainingMessages.size() > 0) {
+    return writeProm.then([this, remainingMessages]() mutable {
+      return writeMessages(remainingMessages);
+    });
+  } else {
+    return writeProm;
+  }
 }
 
 kj::Promise<void> MessageStream::writeMessages(kj::ArrayPtr<MessageBuilder*> builders) {

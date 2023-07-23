@@ -25,8 +25,13 @@
 #include "mutex.h"
 #include "thread.h"
 
-#if !KJ_USE_FIBERS
+#if !KJ_USE_FIBERS && !_WIN32
 #include <pthread.h>
+#endif
+
+#if KJ_USE_FIBERS && __linux__
+#include <errno.h>
+#include <ucontext.h>
 #endif
 
 namespace kj {
@@ -36,6 +41,36 @@ namespace {
 // TODO(msvc): GetFunctorStartAddress is not supported on MSVC currently, so skip the test.
 TEST(Async, GetFunctorStartAddress) {
   EXPECT_TRUE(nullptr != _::GetFunctorStartAddress<>::apply([](){return 0;}));
+}
+#endif
+
+#if KJ_USE_FIBERS
+bool isLibcContextHandlingKnownBroken() {
+  // manylinux2014-x86's libc implements getcontext() to fail with ENOSYS. This is flagrantly
+  // against spec: getcontext() is not a syscall and is documented as never failing. Our configure
+  // script cannot detect this problem because it would require actually executing code to see
+  // what happens, which wouldn't work when cross-compiling. It would have been so much better if
+  // they had removed the symbol from libc entirely. But as a work-around, we will skip the tests
+  // when libc is broken.
+#if __linux__
+  static bool result = ([]() {
+    ucontext_t context;
+    if (getcontext(&context) < 0 && errno == ENOSYS) {
+      KJ_LOG(WARNING,
+          "This platform's libc is broken. Its getcontext() errors with ENOSYS. Fibers will not "
+          "work, so we'll skip the tests, but libkj was still built with fiber support, which "
+          "is broken. Please tell your libc maitnainer to remove the getcontext() function "
+          "entirely rather than provide an intentionally-broken version -- that way, the "
+          "configure script will detect that it should build libkj without fiber support.");
+      return true;
+    } else {
+      return false;
+    }
+  })();
+  return result;
+#else
+  return false;
+#endif
 }
 #endif
 
@@ -192,9 +227,9 @@ TEST(Async, DeepChain) {
 
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
-    promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
+    promise = evalLater([promise=kj::mv(promise)]() mutable {
       return kj::mv(promise);
-    }));
+    });
   }
 
   loop.run();
@@ -229,9 +264,9 @@ TEST(Async, DeepChain2) {
 
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
-    promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
+    promise = evalLater([promise=kj::mv(promise)]() mutable {
       return kj::mv(promise);
-    }));
+    });
   }
 
   promise.wait(waitScope);
@@ -268,9 +303,9 @@ TEST(Async, DeepChain3) {
 
 Promise<void> makeChain2(uint i, Promise<void> promise) {
   if (i > 0) {
-    return evalLater(mvCapture(promise, [i](Promise<void>&& promise) -> Promise<void> {
+    return evalLater([i, promise=kj::mv(promise)]() mutable -> Promise<void> {
       return makeChain2(i - 1, kj::mv(promise));
-    }));
+    });
   } else {
     return kj::mv(promise);
   }
@@ -737,6 +772,10 @@ TEST(Async, TaskSet) {
   EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
+#if KJ_USE_FIBERS || !_WIN32
+// This test requires either fibers or pthreads in order to limit the stack size. Currently we
+// don't have a version that works on Windows without fibers, so skip the test there.
+
 TEST(Async, LargeTaskSetDestruction) {
   static constexpr size_t stackSize = 200 * 1024;
 
@@ -751,6 +790,8 @@ TEST(Async, LargeTaskSetDestruction) {
   };
 
 #if KJ_USE_FIBERS
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -775,6 +816,8 @@ TEST(Async, LargeTaskSetDestruction) {
   KJ_REQUIRE(0 == pthread_join(thread, nullptr));
 #endif
 }
+
+#endif  // KJ_USE_FIBERS || !_WIN32
 
 TEST(Async, TaskSet) {
   EventLoop loop;
@@ -972,6 +1015,46 @@ TEST(Async, Poll) {
   paf.promise.wait(waitScope);
 }
 
+KJ_TEST("Maximum turn count during wait scope poll is enforced") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  ErrorHandlerImpl errorHandler;
+  TaskSet tasks(errorHandler);
+
+  auto evaluated1 = false;
+  tasks.add(evalLater([&]() {
+    evaluated1 = true;
+  }));
+
+  auto evaluated2 = false;
+  tasks.add(evalLater([&]() {
+    evaluated2 = true;
+  }));
+
+  auto evaluated3 = false;
+  tasks.add(evalLater([&]() {
+    evaluated3 = true;
+  }));
+
+  uint count;
+
+  // Check that only events up to a maximum are resolved:
+  count = waitScope.poll(2);
+  KJ_ASSERT(count == 2);
+  KJ_EXPECT(evaluated1);
+  KJ_EXPECT(evaluated2);
+  KJ_EXPECT(!evaluated3);
+
+  // Get the last remaining event in the queue:
+  count = waitScope.poll(1);
+  KJ_ASSERT(count == 1);
+  KJ_EXPECT(evaluated3);
+
+  // No more events:
+  count = waitScope.poll(1);
+  KJ_ASSERT(count == 0);
+}
+
 KJ_TEST("exclusiveJoin both events complete simultaneously") {
   // Previously, if both branches of an exclusiveJoin() completed simultaneously, then the parent
   // event could be armed twice. This is an error, but the exact results of this error depend on
@@ -991,6 +1074,8 @@ KJ_TEST("exclusiveJoin both events complete simultaneously") {
 
 #if KJ_USE_FIBERS
 KJ_TEST("start a fiber") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1012,6 +1097,8 @@ KJ_TEST("start a fiber") {
 }
 
 KJ_TEST("fiber promise chaining") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1035,6 +1122,8 @@ KJ_TEST("fiber promise chaining") {
 }
 
 KJ_TEST("throw from a fiber") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1058,6 +1147,8 @@ KJ_TEST("throw from a fiber") {
 // This test fails on MinGW 32-bit builds due to a compiler bug with exceptions + fibers:
 //     https://sourceforge.net/p/mingw-w64/bugs/835/
 KJ_TEST("cancel a fiber") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -1091,6 +1182,8 @@ KJ_TEST("cancel a fiber") {
 #endif
 
 KJ_TEST("fiber pool") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   EventLoop loop;
   WaitScope waitScope(loop);
   FiberPool pool(65536);
@@ -1109,7 +1202,12 @@ KJ_TEST("fiber pool") {
         if (i1_local == nullptr) {
           i1_local = &i;
         } else {
+#if !KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+          // Verify that the stack variable is in the exact same spot as before.
+          // May not work under ASAN as the instrumentation to detect stack-use-after-return can
+          // change the address.
           KJ_ASSERT(i1_local == &i);
+#endif
         }
         return i;
       });
@@ -1120,7 +1218,9 @@ KJ_TEST("fiber pool") {
           if (i2_local == nullptr) {
             i2_local = &i;
           } else {
+#if !KJ_HAS_COMPILER_FEATURE(address_sanitizer)
             KJ_ASSERT(i2_local == &i);
+#endif
           }
           return i;
         });
@@ -1157,12 +1257,29 @@ KJ_TEST("fiber pool") {
 bool onOurStack(char* p) {
   // If p points less than 64k away from a random stack variable, then it must be on the same
   // stack, since we never allocate stacks smaller than 64k.
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  // The stack-use-after-return detection mechanism breaks our ability to check this, so don't.
+  return true;
+#else
   char c;
   ptrdiff_t diff = p - &c;
   return diff < 65536 && diff > -65536;
+#endif
+}
+
+bool notOnOurStack(char* p) {
+  // Opposite of onOurStack(), except returns true if the check can't be performed.
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  // The stack-use-after-return detection mechanism breaks our ability to check this, so don't.
+  return true;
+#else
+  return !onOurStack(p);
+#endif
 }
 
 KJ_TEST("fiber pool runSynchronously()") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   FiberPool pool(65536);
 
   {
@@ -1185,17 +1302,22 @@ KJ_TEST("fiber pool runSynchronously()") {
   });
   KJ_ASSERT(ptr2 != nullptr);
 
+#if !KJ_HAS_COMPILER_FEATURE(address_sanitizer)
   // Should have used the same stack both times, so local var would be in the same place.
+  // Under ASAN, the stack-use-after-return detection correctly fires on this, so we skip the check.
   KJ_EXPECT(ptr1 == ptr2);
+#endif
 
   // Should have been on a different stack from the main stack.
-  KJ_EXPECT(!onOurStack(ptr1));
+  KJ_EXPECT(notOnOurStack(ptr1));
 
   KJ_EXPECT_THROW_MESSAGE("test exception",
       pool.runSynchronously([&]() { KJ_FAIL_ASSERT("test exception"); }));
 }
 
 KJ_TEST("fiber pool limit") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   FiberPool pool(65536);
 
   pool.setMaxFreelist(1);
@@ -1241,7 +1363,7 @@ KJ_TEST("fiber pool limit") {
   // is the one from the thread.
   pool.runSynchronously([&]() {
     KJ_EXPECT(onOurStack(ptr2));
-    KJ_EXPECT(!onOurStack(ptr1));
+    KJ_EXPECT(notOnOurStack(ptr1));
 
     KJ_EXPECT(pool.getFreelistSize() == 0);
   });
@@ -1254,6 +1376,8 @@ KJ_TEST("fiber pool limit") {
 }
 
 KJ_TEST("run event loop on freelisted stacks") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
   FiberPool pool(65536);
 
   class MockEventPort: public EventPort {
@@ -1310,15 +1434,15 @@ KJ_TEST("run event loop on freelisted stacks") {
 
     // The event callbacks should have run on a different stack, but the wait should have been on
     // the main stack.
-    KJ_EXPECT(!onOurStack(ptr1));
-    KJ_EXPECT(!onOurStack(ptr2));
+    KJ_EXPECT(notOnOurStack(ptr1));
+    KJ_EXPECT(notOnOurStack(ptr2));
     KJ_EXPECT(onOurStack(port.waitStack));
 
     pool.runSynchronously([&]() {
       // This should run on the same stack where the event callbacks ran.
       KJ_EXPECT(onOurStack(ptr1));
       KJ_EXPECT(onOurStack(ptr2));
-      KJ_EXPECT(!onOurStack(port.waitStack));
+      KJ_EXPECT(notOnOurStack(port.waitStack));
     });
   }
 
@@ -1351,8 +1475,8 @@ KJ_TEST("run event loop on freelisted stacks") {
 
     // The event callback should have run on a different stack, and poll() should have run on
     // a separate stack too.
-    KJ_EXPECT(!onOurStack(ptr1));
-    KJ_EXPECT(!onOurStack(port.pollStack));
+    KJ_EXPECT(notOnOurStack(ptr1));
+    KJ_EXPECT(notOnOurStack(port.pollStack));
 
     pool.runSynchronously([&]() {
       // This should run on the same stack where the event callbacks ran.
@@ -1428,6 +1552,33 @@ KJ_TEST("retryOnDisconnect") {
     KJ_EXPECT(func.i == 2);
   }
 }
+
+#if !(__GLIBC__ == 2 && __GLIBC_MINOR__ <= 17)
+// manylinux2014-x86 doesn't seem to respect `alignas(16)`. I am guessing this is a glibc issue
+// but I don't really know. It uses glibc 2.17, so testing for that and skipping the test makes
+// CI work.
+KJ_TEST("capture weird alignment in continuation") {
+  struct alignas(16) WeirdAlign {
+    ~WeirdAlign() {
+      KJ_EXPECT(reinterpret_cast<uintptr_t>(this) % 16 == 0);
+    }
+    int i;
+  };
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  kj::Promise<void> p = kj::READY_NOW;
+
+  WeirdAlign value = { 123 };
+  WeirdAlign value2 = { 456 };
+  auto p2 = p.then([value, value2]() -> WeirdAlign {
+    return { value.i + value2.i };
+  });
+
+  KJ_EXPECT(p2.wait(waitScope).i == 579);
+}
+#endif
 
 }  // namespace
 }  // namespace kj

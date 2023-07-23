@@ -10,6 +10,15 @@ on:
     - 'release-*'
 
 jobs:
+  Linux-musl:
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dependencies
+        run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev
+      - name: super-test
+        run: ./super-test.sh quick
   Linux:
     runs-on: ubuntu-latest
     strategy:
@@ -42,6 +51,24 @@ jobs:
         run: |
             # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
             ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
+  ManyLinux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cross-compiler: manylinux2014-x64
+          - cross-compiler: manylinux2014-x86
+            docker-run-args: --platform linux/386
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dockcross
+        run: |
+            docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross
+            chmod +x ./dockcross
+      - name: super-test
+        run: |
+            ./dockcross ./super-test.sh quick g++
   MacOS:
     runs-on: macos-latest
     strategy:
@@ -59,13 +86,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['windows-2016', 'windows-latest']
+        os: ['windows-2019', 'windows-latest']
         include:
-          - os: windows-2016
-            target: 'Visual Studio 15 2017'
+          - os: windows-2019
+            target: 'Visual Studio 16 2019'
             arch: -A x64
           - os: windows-latest
-            target: 'Visual Studio 16 2019'
+            target: 'Visual Studio 17 2022'
             arch: -A x64
     steps:
       - uses: actions/checkout@v2
@@ -104,7 +131,7 @@ jobs:
             rmdir /s /q C:\PROGRA~1\POSTGR~1
 
             echo "Building Cap'n Proto with MinGW"
-            cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND"
+            cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND" -DCMAKE_CXX_STANDARD_LIBRARIES="-static-libgcc -static-libstdc++"
             cmake --build build-output --target install -- -j2
 
             echo "Building Cap'n Proto samples with MinGW"
@@ -137,3 +164,20 @@ jobs:
   #       shell: cmd
   #       run: |
   #         C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh quick'
+  Linux-bazel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang-10]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: bazelbuild/setup-bazelisk@v2
+      - name: install dependencies
+        run: |
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get install -y build-essential git ${{ matrix.compiler }}
+      - name: super-test
+        run: |
+            cd c++
+            bazel test --verbose_failures --test_output=errors //...

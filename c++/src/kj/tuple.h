@@ -98,7 +98,7 @@ struct TupleElement {
 
 template <uint index, typename T>
 struct TupleElement<index, T&> {
-  // A tuple containing references can be constucted using refTuple().
+  // A tuple containing references can be constructed using refTuple().
 
   T& value;
   constexpr inline TupleElement(T& value): value(value) {}

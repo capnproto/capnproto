@@ -254,6 +254,13 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 #endif
 }
 
+#if __GNUC__ && !_WIN32
+// Allow dependents to override the implementation of stack symbolication by making it a weak
+// symbol. We prefer weak symbols over some sort of callback registration mechanism becasue this
+// allows an alternate symbolication library to be easily linked into tests without changing the
+// code of the test.
+__attribute__((weak))
+#endif
 String stringifyStackTrace(ArrayPtr<void* const> trace) {
   if (trace.size() == 0) return nullptr;
   if (getExceptionCallback().stackTraceMode() != ExceptionCallback::StackTraceMode::FULL) {
@@ -714,6 +721,29 @@ retry:
   return filename;
 }
 
+void resetCrashHandlers() {
+#ifndef _WIN32
+  struct sigaction action;
+  memset(&action, 0, sizeof(action));
+
+  action.sa_handler = SIG_DFL;
+  KJ_SYSCALL(sigaction(SIGSEGV, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGBUS, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGFPE, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGABRT, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGILL, &action, nullptr));
+  KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));
+
+#ifdef KJ_DEBUG
+  KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
+#endif
+#endif
+
+#if !KJ_NO_EXCEPTIONS
+  std::set_terminate(nullptr);
+#endif
+}
+
 StringPtr KJ_STRINGIFY(Exception::Type type) {
   static const char* TYPE_STRINGS[] = {
     "failed",
@@ -969,14 +999,21 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 
 }  // namespace
 
-ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
+void requireOnStack(void* ptr, kj::StringPtr description) {
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
+    KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+    defined(__SANITIZE_ADDRESS__)
+  // When using libfuzzer or ASAN, this sanity check may spurriously fail, so skip it.
+#else
   char stackVar;
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-  ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
-  KJ_ASSERT(offset < 65536 && offset > -65536,
-            "ExceptionCallback must be allocated on the stack.");
+  ptrdiff_t offset = reinterpret_cast<char*>(ptr) - &stackVar;
+  KJ_REQUIRE(offset < 65536 && offset > -65536,
+            kj::str(description));
 #endif
+}
 
+ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
+  requireOnStack(this, "ExceptionCallback must be allocated on the stack.");
   threadLocalCallback = this;
 }
 
@@ -1220,12 +1257,14 @@ bool UnwindDetector::isUnwinding() const {
   return _::uncaughtExceptionCount() > uncaughtCount;
 }
 
-void UnwindDetector::catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const {
+#if !KJ_NO_EXCEPTIONS
+void UnwindDetector::catchThrownExceptionAsSecondaryFault() const {
   // TODO(someday):  Attach the secondary exception to whatever primary exception is causing
   //   the unwind.  For now we just drop it on the floor as this is probably fine most of the
   //   time.
-  runCatchingExceptions(runnable);
+  getCaughtExceptionAsKj();
 }
+#endif
 
 #if __GNUC__ && !KJ_NO_RTTI
 static kj::String demangleTypeName(const char* name) {
@@ -1294,6 +1333,8 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
   return bestMatch;
 }
 
+#if KJ_NO_EXCEPTIONS
+
 namespace _ {  // private
 
 class RecoverableExceptionCatcher: public ExceptionCallback {
@@ -1315,17 +1356,21 @@ public:
 };
 
 Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
-#if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();
   KJ_IF_MAYBE(e, catcher.caught) {
     e->truncateCommonTrace();
   }
   return mv(catcher.caught);
-#else
+}
+
+}  // namespace _ (private)
+
+#else  // KJ_NO_EXCEPTIONS
+
+kj::Exception getCaughtExceptionAsKj() {
   try {
-    runnable.run();
-    return nullptr;
+    throw;
   } catch (Exception& e) {
     e.truncateCommonTrace();
     return kj::mv(e);
@@ -1347,9 +1392,7 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
     return Exception(Exception::Type::FAILED, "(unknown)", -1, str("unknown non-KJ exception"));
 #endif
   }
-#endif
 }
-
-}  // namespace _ (private)
+#endif  // !KJ_NO_EXCEPTIONS
 
 }  // namespace kj

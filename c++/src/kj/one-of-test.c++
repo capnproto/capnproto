@@ -210,4 +210,25 @@ KJ_TEST("OneOf copy/move from alternative variants") {
   }
 }
 
+template<unsigned int N>
+struct T {
+  unsigned int n = N;
+};
+
+TEST(OneOf, MaxVariants) {
+  kj::OneOf<
+      T<1>, T<2>, T<3>, T<4>, T<5>, T<6>, T<7>, T<8>, T<9>, T<10>,
+      T<11>, T<12>, T<13>, T<14>, T<15>, T<16>, T<17>, T<18>, T<19>, T<20>,
+      T<21>, T<22>, T<23>, T<24>, T<25>, T<26>, T<27>, T<28>, T<29>, T<30>,
+      T<31>, T<32>, T<33>, T<34>, T<35>, T<36>, T<37>, T<38>, T<39>, T<40>,
+      T<41>, T<42>, T<43>, T<44>, T<45>, T<46>, T<47>, T<48>, T<49>, T<50>
+  > v;
+
+  v = T<1>();
+  EXPECT_TRUE(v.is<T<1>>());
+
+  v = T<50>();
+  EXPECT_TRUE(v.is<T<50>>());
+}
+
 }  // namespace kj

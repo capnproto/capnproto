@@ -1,0 +1,269 @@
+load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
+
+cc_library(
+    name = "capnp",
+    srcs = [
+        "any.c++",
+        "arena.c++",
+        "blob.c++",
+        "c++.capnp.c++",
+        "dynamic.c++",
+        "layout.c++",
+        "list.c++",
+        "message.c++",
+        "schema.c++",
+        "schema.capnp.c++",
+        "schema-loader.c++",
+        "serialize.c++",
+        "serialize-packed.c++",
+        "stream.capnp.c++",
+        "stringify.c++",
+    ],
+    hdrs = [
+        "any.h",
+        "arena.h",
+        "blob.h",
+        "c++.capnp.h",
+        "capability.h",
+        "common.h",
+        "dynamic.h",
+        "endian.h",
+        "generated-header-support.h",
+        "layout.h",
+        "list.h",
+        "membrane.h",
+        "message.h",
+        "orphan.h",
+        "pointer-helpers.h",
+        "pretty-print.h",
+        "raw-schema.h",
+        "schema.capnp.h",
+        "schema.h",
+        "schema-lite.h",
+        "schema-loader.h",
+        "schema-parser.h",
+        "serialize.h",
+        "serialize-async.h",
+        "serialize-packed.h",
+        "serialize-text.h",
+        "stream.capnp.h",
+    ],
+    include_prefix = "capnp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/kj:kj-async",
+    ],
+)
+
+cc_library(
+    name = "capnp-rpc",
+    srcs = [
+        "capability.c++",
+        "dynamic-capability.c++",
+        "ez-rpc.c++",
+        "membrane.c++",
+        "persistent.capnp.c++",
+        "reconnect.c++",
+        "rpc.c++",
+        "rpc.capnp.c++",
+        "rpc-twoparty.c++",
+        "rpc-twoparty.capnp.c++",
+        "serialize-async.c++",
+    ],
+    hdrs = [
+        "ez-rpc.h",
+        "persistent.capnp.h",
+        "reconnect.h",
+        "rpc.capnp.h",
+        "rpc.h",
+        "rpc-prelude.h",
+        "rpc-twoparty.capnp.h",
+        "rpc-twoparty.h",
+    ],
+    include_prefix = "capnp",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnp",
+    ],
+)
+
+cc_library(
+    name = "capnpc",
+    srcs = [
+        "compiler/compiler.c++",
+        "compiler/error-reporter.c++",
+        "compiler/generics.c++",
+        "compiler/grammar.capnp.c++",
+        "compiler/lexer.c++",
+        "compiler/lexer.capnp.c++",
+        "compiler/node-translator.c++",
+        "compiler/parser.c++",
+        "compiler/type-id.c++",
+        "schema-parser.c++",
+        "serialize-text.c++",
+    ],
+    hdrs = [
+        "compiler/compiler.h",
+        "compiler/error-reporter.h",
+        "compiler/generics.h",
+        "compiler/grammar.capnp.h",
+        "compiler/lexer.capnp.h",
+        "compiler/lexer.h",
+        "compiler/module-loader.h",
+        "compiler/node-translator.h",
+        "compiler/parser.h",
+        "compiler/resolver.h",
+        "compiler/type-id.h",
+    ],
+    include_prefix = "capnp",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnp",
+    ],
+)
+
+cc_binary(
+    name = "capnp_tool",
+    srcs = [
+        "compiler/capnp.c++",
+        "compiler/module-loader.c++",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnpc",
+        "//src/capnp/compat:json",
+    ],
+)
+
+cc_binary(
+    name = "capnpc-c++",
+    srcs = [
+        "compiler/capnpc-c++.c++",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnpc",
+    ],
+)
+
+cc_binary(
+    name = "capnpc-capnp",
+    srcs = [
+        "compiler/capnpc-capnp.c++",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":capnpc",
+    ],
+)
+
+# capnp files that are implicitly available for import to any .capnp.
+filegroup(
+    name = "capnp_system_library",
+    srcs = [
+        "c++.capnp",
+        "schema.capnp",
+        "stream.capnp",
+        "//src/capnp/compat:json.capnp",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# library to link with every cc_capnp_library
+cc_library(
+    name = "capnp_runtime",
+    visibility = ["//visibility:public"],
+    # include json since it is not exposed as cc_capnp_library
+    deps = [
+        ":capnp",
+        "//src/capnp/compat:json",
+    ],
+)
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**/*"]),
+)
+
+cc_capnp_library(
+    name = "capnp_test",
+    srcs = [
+        "test.capnp",
+        "test-import.capnp",
+        "test-import2.capnp",
+    ],
+    data = [
+        "c++.capnp",
+        "schema.capnp",
+        "stream.capnp",
+        ":testdata",
+    ],
+    include_prefix = "capnp",
+    src_prefix = "src",
+)
+
+cc_library(
+    name = "capnp-test",
+    srcs = ["test-util.c++"],
+    hdrs = ["test-util.h"],
+    deps = [
+        ":capnp-rpc",
+        ":capnp_test",
+        ":capnpc",
+        "//src/kj:kj-test",
+    ],
+    visibility = [":__subpackages__" ]
+)
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [":capnp-test"],
+) for f in [
+    "any-test.c++",
+    "blob-test.c++",
+    "canonicalize-test.c++",
+    "common-test.c++",
+    "capability-test.c++",
+    "compiler/lexer-test.c++",
+    "compiler/type-id-test.c++",
+    "dynamic-test.c++",
+    "encoding-test.c++",
+    "endian-reverse-test.c++",
+    "endian-test.c++",
+    "ez-rpc-test.c++",
+    "layout-test.c++",
+    "membrane-test.c++",
+    "message-test.c++",
+    "orphan-test.c++",
+    "reconnect-test.c++",
+    "rpc-test.c++",
+    "rpc-twoparty-test.c++",
+    "schema-test.c++",
+    "schema-loader-test.c++",
+    "schema-parser-test.c++",
+    "serialize-async-test.c++",
+    "serialize-packed-test.c++",
+    "serialize-test.c++",
+    "serialize-text-test.c++",
+    "stringify-test.c++",
+]]
+
+cc_library(
+    name = "endian-test-base",
+    hdrs = ["endian-test.c++"],
+    deps = [":capnp-test"],
+)
+
+cc_test(
+    name = "endian-fallback-test",
+    srcs = ["endian-fallback-test.c++"],
+    deps = [":endian-test-base"],
+)
+
+cc_test(
+    name = "fuzz-test",
+    size = "large",
+    srcs = ["fuzz-test.c++"],
+    deps = [":capnp-test"],
+)

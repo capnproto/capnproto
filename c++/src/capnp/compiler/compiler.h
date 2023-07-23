@@ -197,11 +197,11 @@ public:
     // dependencies.
 
     PARENTS = 1 << 1,
-    // Eagerly compile all lexical parents of the requested node.  Only meaningful in conjuction
+    // Eagerly compile all lexical parents of the requested node.  Only meaningful in conjunction
     // with NODE.
 
     CHILDREN = 1 << 2,
-    // Eagerly compile all of the node's lexically nested nodes.  Only meaningful in conjuction
+    // Eagerly compile all of the node's lexically nested nodes.  Only meaningful in conjunction
     // with NODE.
 
     DEPENDENCIES = NODE << 15,

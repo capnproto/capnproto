@@ -186,6 +186,20 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
             initTok(t, loc).setStringLiteral(text);
             return t;
           }),
+      p::transformWithLocation(
+          sequence(p::exactChar<'`'>(), p::many(p::anyOfChars("\r\n").invert())),
+          [this](Location loc, kj::Array<char> text) -> Orphan<Token> {
+            // Backtick-quoted line. Note that we assume either `\r` or `\n` is a valid line
+            // ending (to cover all known line ending formats) but we replace the line ending
+            // with `\n`. This way, changing the line endings of your source code doesn't affect
+            // the compiled code.
+            auto t = orphanage.newOrphan<Token>();
+            // Append '\n' to the text.
+            auto out = initTok(t, loc).initStringLiteral(text.size() + 1);
+            memcpy(out.begin(), text.begin(), text.size());
+            out[out.size() - 1] = '\n';
+            return t;
+          }),
       p::transformWithLocation(p::doubleQuotedHexBinary,
           [this](Location loc, kj::Array<byte> data) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();

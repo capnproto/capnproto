@@ -27,6 +27,8 @@
 #include <kj/map.h>
 #include "byte-stream.h"
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 
 class HttpOverCapnpFactory {
@@ -82,3 +84,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

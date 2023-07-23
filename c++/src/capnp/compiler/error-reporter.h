@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "../common.h"
+#include <capnp/common.h>
 #include <kj/string.h>
 #include <kj/exception.h>
 #include <kj/vector.h>

@@ -51,7 +51,7 @@ Cap'n Proto generates classes with accessor methods that you use to traverse the
 
 Thus, Cap'n Proto checks the structural integrity of the message just like any other serialization protocol would. And, just like any other protocol, it is up to the app to check the validity of the content.
 
-Cap'n Proto was built to be used in [Sandstorm.io](https://sandstorm.io), where security is a major concern. As of this writing, Cap'n Proto has not undergone a security review, therefore we suggest caution when handling messages from untrusted sources. That said, our response to security issues was once described by security guru Ben Laurie as ["the most awesome response I've ever had."](https://twitter.com/BenLaurie/status/575079375307153409) (Please report all security issues to [security@sandstorm.io](mailto:security@sandstorm.io).)
+Cap'n Proto was built to be used in [Sandstorm.io](https://sandstorm.io), and is now heavily used in [Cloudflare Workers](https://workers.dev), two environments where security is a major concern. Cap'n Proto has undergone fuzzing and expert security review. Our response to security issues was once described by security guru Ben Laurie as ["the most awesome response I've ever had."](https://twitter.com/BenLaurie/status/575079375307153409) (Please report all security issues to [kenton@cloudflare.com](mailto:kenton@cloudflare.com).)
 
 **_Are there other advantages?_**
 
@@ -90,7 +90,7 @@ version 2, which is the version that Google released open source. Cap'n Proto is
 years of experience working on Protobufs, listening to user feedback, and thinking about how
 things could be done better.
 
-Note that I no longer work for Google. Cap'n Proto is not, and never has been, affiliated with Google; in fact, it is a property of [Sandstorm.io](https://sandstorm.io), of which I am co-founder.
+Note that I no longer work for Google. Cap'n Proto is not, and never has been, affiliated with Google.
 
 **_OK, how do I get started?_**
 

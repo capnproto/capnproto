@@ -31,6 +31,7 @@
 #include "io.h"
 #include "one-of.h"
 #include <deque>
+#include <kj/filesystem.h>
 
 #if _WIN32
 #include <winsock2.h>
@@ -83,8 +84,8 @@ namespace {
 
 class AsyncPump {
 public:
-  AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit)
-      : input(input), output(output), limit(limit) {}
+  AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit, uint64_t doneSoFar)
+      : input(input), output(output), limit(limit), doneSoFar(doneSoFar) {}
 
   Promise<uint64_t> pump() {
     // TODO(perf): This could be more efficient by reading half a buffer at a time and then
@@ -108,11 +109,19 @@ private:
   AsyncInputStream& input;
   AsyncOutputStream& output;
   uint64_t limit;
-  uint64_t doneSoFar = 0;
+  uint64_t doneSoFar;
   byte buffer[4096];
 };
 
 }  // namespace
+
+Promise<uint64_t> unoptimizedPumpTo(
+    AsyncInputStream& input, AsyncOutputStream& output, uint64_t amount,
+    uint64_t completedSoFar) {
+  auto pump = heap<AsyncPump>(input, output, amount, completedSoFar);
+  auto promise = pump->pump();
+  return promise.attach(kj::mv(pump));
+}
 
 Promise<uint64_t> AsyncInputStream::pumpTo(
     AsyncOutputStream& output, uint64_t amount) {
@@ -122,9 +131,7 @@ Promise<uint64_t> AsyncInputStream::pumpTo(
   }
 
   // OK, fall back to naive approach.
-  auto pump = heap<AsyncPump>(*this, output, amount);
-  auto promise = pump->pump();
-  return promise.attach(kj::mv(pump));
+  return unoptimizedPumpTo(*this, output, amount);
 }
 
 namespace {
@@ -2567,7 +2574,7 @@ kj::Promise<Maybe<Own<AsyncCapabilityStream>>> AsyncCapabilityStream::tryReceive
     }
 
     KJ_REQUIRE(actual.capCount == 1,
-        "expected to receive a capability (e.g. file descirptor via SCM_RIGHTS), but didn't") {
+        "expected to receive a capability (e.g. file descriptor via SCM_RIGHTS), but didn't") {
       return nullptr;
     }
 
@@ -2742,9 +2749,9 @@ Promise<Own<AsyncIoStream>> CapabilityStreamNetworkAddress::connect() {
   }
   auto result = kj::mv(pipe.ends[0]);
   return inner.sendStream(kj::mv(pipe.ends[1]))
-      .then(kj::mvCapture(result, [](Own<AsyncIoStream>&& result) {
-    return kj::mv(result);
-  }));
+      .then([result=kj::mv(result)]() mutable {
+    return Own<AsyncIoStream>(kj::mv(result));
+  });
 }
 Promise<AuthenticatedStream> CapabilityStreamNetworkAddress::connectAuthenticated() {
   return connect().then([](Own<AsyncIoStream>&& stream) {
@@ -2760,6 +2767,40 @@ Own<NetworkAddress> CapabilityStreamNetworkAddress::clone() {
 }
 String CapabilityStreamNetworkAddress::toString() {
   return kj::str("<CapabilityStreamNetworkAddress>");
+}
+
+Promise<size_t> FileInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
+  // Note that our contract with `minBytes` is that we should only return fewer than `minBytes` on
+  // EOF. A file read will only produce fewer than the requested number of bytes if EOF was reached.
+  // `minBytes` cannot be greater than `maxBytes`. So, this read satisfies the `minBytes`
+  // requirement.
+  size_t result = file.read(offset, arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes));
+  offset += result;
+  return result;
+}
+
+Maybe<uint64_t> FileInputStream::tryGetLength() {
+  uint64_t size = file.stat().size;
+  return offset < size ? size - offset : 0;
+}
+
+Promise<void> FileOutputStream::write(const void* buffer, size_t size) {
+  file.write(offset, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  offset += size;
+  return kj::READY_NOW;
+}
+
+Promise<void> FileOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  // TODO(perf): Extend kj::File with an array-of-arrays write?
+  for (auto piece: pieces) {
+    file.write(offset, piece);
+    offset += piece.size();
+  }
+  return kj::READY_NOW;
+}
+
+Promise<void> FileOutputStream::whenWriteDisconnected() {
+  return kj::NEVER_DONE;
 }
 
 // =======================================================================================
@@ -2783,7 +2824,7 @@ public:
     // any of our child receivers. Naively, it may seem like we should call accept() on them all
     // and exclusiveJoin() the results. Unfortunately, this might not work in a certain race
     // condition: if two or more of our children receive connections simultaneously, both child
-    // acccept() calls may return, but we'll only end up taking one and dropping the other.
+    // accept() calls may return, but we'll only end up taking one and dropping the other.
     //
     // To avoid this problem, we must instead initiate `accept()` calls on all children, and even
     // after one of them returns a result, we must allow the others to keep running. If we end up

@@ -49,7 +49,7 @@ if(NOT _IMPORT_PREFIX)
   set(_IMPORT_PREFIX ${PACKAGE_PREFIX_DIR})
 endif()
 
-if (@WITH_OPENSSL@)  # WITH_OPENSSL
+if (@WITH_OPENSSL@) # WITH_OPENSSL
   include(CMakeFindDependencyMacro)
   if (CMAKE_VERSION VERSION_LESS 3.9)
     # find_dependency() did not support COMPONENTS until CMake 3.9
@@ -60,6 +60,43 @@ if (@WITH_OPENSSL@)  # WITH_OPENSSL
   else()
     find_dependency(OpenSSL COMPONENTS Crypto SSL)
   endif()
+endif()
+
+if (@WITH_ZLIB@) # WITH_ZLIB
+  include(CMakeFindDependencyMacro)
+  find_dependency(ZLIB)
+endif()
+
+if (@_WITH_LIBUCONTEXT@) # _WITH_LIBUCONTEXT
+  set(forwarded_config_flags)
+  if(CapnProto_FIND_QUIETLY)
+    list(APPEND forwarded_config_flags QUIET)
+  endif()
+  if(CapnProto_FIND_REQUIRED)
+    list(APPEND forwarded_config_flags REQUIRED)
+  endif()
+  # If the consuming project called find_package(CapnProto) with the QUIET or REQUIRED flags, forward
+  # them to calls to find_package(PkgConfig) and pkg_check_modules(). Note that find_dependency()
+  # would do this for us in the former case, but there is no such forwarding wrapper for
+  # pkg_check_modules().
+
+  find_package(PkgConfig ${forwarded_config_flags})
+  if(NOT ${PkgConfig_FOUND})
+    # If we're here, the REQUIRED flag must not have been passed, else we would have had a fatal
+    # error. Nevertheless, a diagnostic for this case is probably nice.
+    if(NOT CapnProto_FIND_QUIETLY)
+      message(WARNING "pkg-config cannot be found")
+    endif()
+    set(CapnProto_FOUND OFF)
+    return()
+  endif()
+
+  if (CMAKE_VERSION VERSION_LESS 3.6)
+    # CMake >= 3.6 required due to the use of IMPORTED_TARGET
+    message(SEND_ERROR "libucontext support requires CMake >= 3.6.")
+  endif()
+
+  pkg_check_modules(libucontext IMPORTED_TARGET ${forwarded_config_flags} libucontext)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/CapnProtoTargets.cmake")

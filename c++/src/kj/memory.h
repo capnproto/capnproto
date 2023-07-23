@@ -171,8 +171,11 @@ public:
 // =======================================================================================
 // Own<T> -- An owned pointer.
 
+template <typename T, typename StaticDisposer = decltype(nullptr)>
+class Own;
+
 template <typename T>
-class Own {
+class Own<T, decltype(nullptr)> {
   // A transferrable title to a T.  When an Own<T> goes out of scope, the object's Disposer is
   // called to dispose of it.  An Own<T> can be efficiently passed by move, without relocating the
   // underlying object; this transfers ownership.
@@ -199,6 +202,9 @@ public:
       : disposer(other.disposer), ptr(cast(other.ptr)) {
     other.ptr = nullptr;
   }
+  template <typename U, typename StaticDisposer, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Own(Own<U, StaticDisposer>&& other) noexcept;
+  // Convert statically-disposed Own to dynamically-disposed Own.
   inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
 
   ~Own() noexcept(false) { dispose(); }
@@ -286,7 +292,7 @@ private:
     return ptr;
   }
 
-  template <typename U>
+  template <typename, typename>
   friend class Own;
   friend class Maybe<Own<T>>;
 };
@@ -303,50 +309,152 @@ inline const void* Own<const void>::cast(U* ptr) {
   return _::castToConstVoid(ptr);
 }
 
-namespace _ {  // private
+template <typename T, typename StaticDisposer>
+class Own {
+  // If a `StaticDisposer` is specified (which is not the norm), then the object will be deleted
+  // by calling StaticDisposer::dispose(pointer). The pointer passed to `dispose()` could be a
+  // superclass of `T`, if the pointer has been upcast.
+  //
+  // This type can be useful for micro-optimization, if you've found that you are doing excessive
+  // heap allocations to the point where the virtual call on destruction is costing non-negligible
+  // resources. You should avoid this unless you have a specific need, because it precludes a lot
+  // of power.
 
-template <typename T>
-class OwnOwn {
 public:
-  inline OwnOwn(Own<T>&& value) noexcept: value(kj::mv(value)) {}
+  KJ_DISALLOW_COPY(Own);
+  inline Own(): ptr(nullptr) {}
+  inline Own(Own&& other) noexcept
+      : ptr(other.ptr) { other.ptr = nullptr; }
+  inline Own(Own<RemoveConstOrDisable<T>, StaticDisposer>&& other) noexcept
+      : ptr(other.ptr) { other.ptr = nullptr; }
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Own(Own<U, StaticDisposer>&& other) noexcept
+      : ptr(cast(other.ptr)) {
+    other.ptr = nullptr;
+  }
+  inline explicit Own(T* ptr) noexcept: ptr(ptr) {}
 
-  inline Own<T>& operator*() & { return value; }
-  inline const Own<T>& operator*() const & { return value; }
-  inline Own<T>&& operator*() && { return kj::mv(value); }
-  inline const Own<T>&& operator*() const && { return kj::mv(value); }
-  inline Own<T>* operator->() { return &value; }
-  inline const Own<T>* operator->() const { return &value; }
-  inline operator Own<T>*() { return value ? &value : nullptr; }
-  inline operator const Own<T>*() const { return value ? &value : nullptr; }
+  ~Own() noexcept(false) { dispose(); }
+
+  inline Own& operator=(Own&& other) {
+    // Move-assignnment operator.
+
+    // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
+    // dispose.
+    T* ptrCopy = ptr;
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    if (ptrCopy != nullptr) {
+      StaticDisposer::dispose(ptrCopy);
+    }
+    return *this;
+  }
+
+  inline Own& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
+  }
+
+  template <typename U>
+  Own<U, StaticDisposer> downcast() {
+    // Downcast the pointer to Own<U>, destroying the original pointer.  If this pointer does not
+    // actually point at an instance of U, the results are undefined (throws an exception in debug
+    // mode if RTTI is enabled, otherwise you're on your own).
+
+    Own<U, StaticDisposer> result;
+    if (ptr != nullptr) {
+      result.ptr = &kj::downcast<U>(*ptr);
+      ptr = nullptr;
+    }
+    return result;
+  }
+
+#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Own<> dereference")
+  inline T* operator->() { NULLCHECK; return ptr; }
+  inline const T* operator->() const { NULLCHECK; return ptr; }
+  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *ptr; }
+  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *ptr; }
+#undef NULLCHECK
+  inline T* get() { return ptr; }
+  inline const T* get() const { return ptr; }
+  inline operator T*() { return ptr; }
+  inline operator const T*() const { return ptr; }
 
 private:
-  Own<T> value;
+  T* ptr;
+
+  inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
+
+  inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
+  inline bool operator!=(decltype(nullptr)) { return ptr != nullptr; }
+  // Only called by Maybe<Own<T>>.
+
+  inline void dispose() {
+    // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
+    // dispose again.
+    T* ptrCopy = ptr;
+    if (ptrCopy != nullptr) {
+      ptr = nullptr;
+      StaticDisposer::dispose(ptrCopy);
+    }
+  }
+
+  template <typename U>
+  static inline T* cast(U* ptr) {
+    return ptr;
+  }
+
+  template <typename, typename>
+  friend class Own;
+  friend class Maybe<Own<T, StaticDisposer>>;
 };
 
-template <typename T>
-OwnOwn<T> readMaybe(Maybe<Own<T>>&& maybe) { return OwnOwn<T>(kj::mv(maybe.ptr)); }
-template <typename T>
-Own<T>* readMaybe(Maybe<Own<T>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
-template <typename T>
-const Own<T>* readMaybe(const Maybe<Own<T>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
+namespace _ {  // private
+
+template <typename T, typename D>
+class OwnOwn {
+public:
+  inline OwnOwn(Own<T, D>&& value) noexcept: value(kj::mv(value)) {}
+
+  inline Own<T, D>& operator*() & { return value; }
+  inline const Own<T, D>& operator*() const & { return value; }
+  inline Own<T, D>&& operator*() && { return kj::mv(value); }
+  inline const Own<T, D>&& operator*() const && { return kj::mv(value); }
+  inline Own<T, D>* operator->() { return &value; }
+  inline const Own<T, D>* operator->() const { return &value; }
+  inline operator Own<T, D>*() { return value ? &value : nullptr; }
+  inline operator const Own<T, D>*() const { return value ? &value : nullptr; }
+
+private:
+  Own<T, D> value;
+};
+
+template <typename T, typename D>
+OwnOwn<T, D> readMaybe(Maybe<Own<T, D>>&& maybe) { return OwnOwn<T, D>(kj::mv(maybe.ptr)); }
+template <typename T, typename D>
+Own<T, D>* readMaybe(Maybe<Own<T, D>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
+template <typename T, typename D>
+const Own<T, D>* readMaybe(const Maybe<Own<T, D>>& maybe) {
+  return maybe.ptr ? &maybe.ptr : nullptr;
+}
 
 }  // namespace _ (private)
 
-template <typename T>
-class Maybe<Own<T>> {
+template <typename T, typename D>
+class Maybe<Own<T, D>> {
 public:
   inline Maybe(): ptr(nullptr) {}
-  inline Maybe(Own<T>&& t) noexcept: ptr(kj::mv(t)) {}
+  inline Maybe(Own<T, D>&& t) noexcept: ptr(kj::mv(t)) {}
   inline Maybe(Maybe&& other) noexcept: ptr(kj::mv(other.ptr)) {}
 
   template <typename U>
-  inline Maybe(Maybe<Own<U>>&& other): ptr(mv(other.ptr)) {}
+  inline Maybe(Maybe<Own<U, D>>&& other): ptr(mv(other.ptr)) {}
   template <typename U>
-  inline Maybe(Own<U>&& other): ptr(mv(other)) {}
+  inline Maybe(Own<U, D>&& other): ptr(mv(other)) {}
 
   inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
-  inline Own<T>& emplace(Own<T> value) {
+  inline Own<T, D>& emplace(Own<T, D> value) {
     // Assign the Maybe to the given value and return the content. This avoids the need to do a
     // KJ_ASSERT_NONNULL() immediately after setting the Maybe just to read it back again.
     ptr = kj::mv(value);
@@ -361,14 +469,14 @@ public:
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
-  Own<T>& orDefault(Own<T>& defaultValue) {
+  Own<T, D>& orDefault(Own<T, D>& defaultValue) {
     if (ptr == nullptr) {
       return defaultValue;
     } else {
       return ptr;
     }
   }
-  const Own<T>& orDefault(const Own<T>& defaultValue) const {
+  const Own<T, D>& orDefault(const Own<T, D>& defaultValue) const {
     if (ptr == nullptr) {
       return defaultValue;
     } else {
@@ -376,8 +484,18 @@ public:
     }
   }
 
+  template <typename F,
+      typename Result = decltype(instance<bool>() ? instance<Own<T, D>>() : instance<F>()())>
+  Result orDefault(F&& lazyDefaultValue) && {
+    if (ptr == nullptr) {
+      return lazyDefaultValue();
+    } else {
+      return kj::mv(ptr);
+    }
+  }
+
   template <typename Func>
-  auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T>&>()))> {
+  auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T, D>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -386,7 +504,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T>&>()))> {
+  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T, D>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -395,7 +513,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T>&&>()))> {
+  auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T, D>&&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -404,7 +522,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T>&&>()))> {
+  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T, D>&&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -413,16 +531,16 @@ public:
   }
 
 private:
-  Own<T> ptr;
+  Own<T, D> ptr;
 
   template <typename U>
   friend class Maybe;
-  template <typename U>
-  friend _::OwnOwn<U> _::readMaybe(Maybe<Own<U>>&& maybe);
-  template <typename U>
-  friend Own<U>* _::readMaybe(Maybe<Own<U>>& maybe);
-  template <typename U>
-  friend const Own<U>* _::readMaybe(const Maybe<Own<U>>& maybe);
+  template <typename U, typename D2>
+  friend _::OwnOwn<U, D2> _::readMaybe(Maybe<Own<U, D2>>&& maybe);
+  template <typename U, typename D2>
+  friend Own<U, D2>* _::readMaybe(Maybe<Own<U, D2>>& maybe);
+  template <typename U, typename D2>
+  friend const Own<U, D2>* _::readMaybe(const Maybe<Own<U, D2>>& maybe);
 };
 
 namespace _ {  // private
@@ -559,6 +677,21 @@ struct DisposableOwnedBundle final: public Disposer, public OwnedBundle<T...> {
   void disposeImpl(void* pointer) const override { delete this; }
 };
 
+template <typename T, typename StaticDisposer>
+class StaticDisposerAdapter final: public Disposer {
+  // Adapts a static disposer to be called dynamically.
+public:
+  virtual void disposeImpl(void* pointer) const override {
+    StaticDisposer::dispose(reinterpret_cast<T*>(pointer));
+  }
+
+  static const StaticDisposerAdapter instance;
+};
+
+template <typename T, typename D>
+const StaticDisposerAdapter<T, D> StaticDisposerAdapter<T, D>::instance =
+    StaticDisposerAdapter<T, D>();
+
 }  // namespace _ (private)
 
 template <typename T>
@@ -589,6 +722,22 @@ Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
   auto bundle = new _::DisposableOwnedBundle<T, Attachments...>(
       kj::fwd<T>(value), kj::fwd<Attachments>(attachments)...);
   return Own<Decay<T>>(&bundle->first, *bundle);
+}
+
+template <typename T>
+template <typename U, typename StaticDisposer, typename>
+inline Own<T>::Own(Own<U, StaticDisposer>&& other) noexcept
+    : ptr(cast(other.ptr)) {
+  if (_::castToVoid(other.ptr) != reinterpret_cast<void*>(other.ptr)) {
+    // Oh dangit, there's some sort of multiple inheritance going on and `StaticDisposerAdapter`
+    // won't actually work because it'll receive a pointer pointing to the top of the object, which
+    // isn't exactly the same as the `U*` pointer it wants. We have no choice but to allocate
+    // a dynamic disposer here.
+    disposer = new _::DisposableOwnedBundle<Own<U, StaticDisposer>>(kj::mv(other));
+  } else {
+    disposer = &_::StaticDisposerAdapter<U, StaticDisposer>::instance;
+    other.ptr = nullptr;
+  }
 }
 
 }  // namespace kj

@@ -23,6 +23,8 @@
 
 #include <kj/async-io.h>
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 class ReadyInputStreamWrapper {
@@ -122,3 +124,5 @@ private:
 };
 
 } // namespace kj
+
+KJ_END_HEADER

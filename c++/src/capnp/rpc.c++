@@ -213,6 +213,12 @@ public:
     }
   }
 
+  void release() {
+    // Release memory backing the table.
+    { auto drop = kj::mv(slots); }
+    { auto drop = kj::mv(freeIds); }
+  }
+
 private:
   kj::Vector<T> slots;
   std::priority_queue<Id, std::vector<Id>, std::greater<Id>> freeIds;
@@ -371,8 +377,18 @@ public:
         KJ_IF_MAYBE(questionRef, question.selfRef) {
           // QuestionRef still present.
           questionRef->reject(kj::cp(networkException));
+
+          // We need to fully disconnect each QuestionRef otherwise it holds a reference back to
+          // the connection state. Meanwhile `tasks` may hold streaming calls that end up holding
+          // these QuestionRefs. Technically this is a cyclic reference, but as long as the cycle
+          // is broken on disconnect (which happens when the RpcSystem itself is destroyed), then
+          // we're OK.
+          questionRef->disconnect();
         }
       });
+      // Since we've disconnected the QuestionRefs, they won't clean up the questions table for
+      // us, so do that here.
+      questions.release();
 
       answers.forEach([&](AnswerId id, Answer& answer) {
         KJ_IF_MAYBE(p, answer.pipeline) {
@@ -624,6 +640,13 @@ private:
   public:
     RpcClient(RpcConnectionState& connectionState)
         : connectionState(kj::addRef(connectionState)) {}
+
+    ~RpcClient() noexcept(false) {
+      KJ_IF_MAYBE(f, this->flowController) {
+        // Destroying the client should not cancel outstanding streaming calls.
+        connectionState->tasks.add(f->get()->waitAllAcked().attach(kj::mv(*f)));
+      }
+    }
 
     virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                                 kj::Vector<int>& fds) = 0;
@@ -1037,7 +1060,7 @@ private:
 
           if (other->isResolved()) {
             // The other capability resolved already. If it determined that it resolved as
-            // relfected, then we determine the same.
+            // reflected, then we determine the same.
             resolutionType = other->resolutionType;
           } else {
             // The other capability hasn't resolved yet, so we can safely merge with it and do a
@@ -1387,7 +1410,7 @@ private:
     //
     // 2. The `Resolve` message contained a `CapDescriptor` of type `receiverHosted`, naming an
     //    entry in the receiver's export table. That entry just happened to contain an
-    //    `ImportClient` refering back to the sender. This specifically happens when the entry
+    //    `ImportClient` referring back to the sender. This specifically happens when the entry
     //    in question had previously itself referred to a promise, and that promise has since
     //    resolved to a remote capability, at which point the export table entry was replaced by
     //    the appropriate `ImportClient` representing that. Presumably, the peer *did not yet know*
@@ -1542,36 +1565,40 @@ private:
       // throws (without being caught) we're probably in pretty bad shape and going to be crashing
       // later anyway. Better to abort now.
 
-      auto& question = KJ_ASSERT_NONNULL(
-          connectionState->questions.find(id), "Question ID no longer on table?");
+      KJ_IF_MAYBE(c, connectionState) {
+        auto& connectionState = *c;
 
-      // Send the "Finish" message (if the connection is not already broken).
-      if (connectionState->connection.is<Connected>() && !question.skipFinish) {
-        KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-              messageSizeHint<rpc::Finish>());
-          auto builder = message->getBody().getAs<rpc::Message>().initFinish();
-          builder.setQuestionId(id);
-          // If we're still awaiting a return, then this request is being canceled, and we're going
-          // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
-          // already received the return, then we've already built local proxies for the caps and
-          // will send Release messages when those are destroyed.
-          builder.setReleaseResultCaps(question.isAwaitingReturn);
-          message->send();
-        })) {
-          connectionState->disconnect(kj::mv(*e));
+        auto& question = KJ_ASSERT_NONNULL(
+            connectionState->questions.find(id), "Question ID no longer on table?");
+
+        // Send the "Finish" message (if the connection is not already broken).
+        if (connectionState->connection.is<Connected>() && !question.skipFinish) {
+          KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+            auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+                messageSizeHint<rpc::Finish>());
+            auto builder = message->getBody().getAs<rpc::Message>().initFinish();
+            builder.setQuestionId(id);
+            // If we're still awaiting a return, then this request is being canceled, and we're going
+            // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
+            // already received the return, then we've already built local proxies for the caps and
+            // will send Release messages when those are destroyed.
+            builder.setReleaseResultCaps(question.isAwaitingReturn);
+            message->send();
+          })) {
+            connectionState->disconnect(kj::mv(*e));
+          }
         }
-      }
 
-      // Check if the question has returned and, if so, remove it from the table.
-      // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
-      // the ID is not re-allocated before the `Finish` message can be sent.
-      if (question.isAwaitingReturn) {
-        // Still waiting for return, so just remove the QuestionRef pointer from the table.
-        question.selfRef = nullptr;
-      } else {
-        // Call has already returned, so we can now remove it from the table.
-        connectionState->questions.erase(id, question);
+        // Check if the question has returned and, if so, remove it from the table.
+        // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
+        // the ID is not re-allocated before the `Finish` message can be sent.
+        if (question.isAwaitingReturn) {
+          // Still waiting for return, so just remove the QuestionRef pointer from the table.
+          question.selfRef = nullptr;
+        } else {
+          // Call has already returned, so we can now remove it from the table.
+          connectionState->questions.erase(id, question);
+        }
       }
     }
 
@@ -1589,8 +1616,12 @@ private:
       fulfiller->reject(kj::mv(exception));
     }
 
+    void disconnect() {
+      connectionState = nullptr;
+    }
+
   private:
-    kj::Own<RpcConnectionState> connectionState;
+    kj::Maybe<kj::Own<RpcConnectionState>> connectionState;
     QuestionId id;
     kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>> fulfiller;
   };
@@ -2128,7 +2159,7 @@ private:
 
         kj::Maybe<kj::Array<ExportId>> exports;
         KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-          // Debug info incase send() fails due to overside message.
+          // Debug info in case send() fails due to overside message.
           KJ_CONTEXT("returning from RPC call", interfaceId, methodId);
           exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
         })) {
@@ -2429,13 +2460,13 @@ private:
       //
       // TODO(perf): We add an evalLater() here so that anything we needed to do in reaction to
       //   the previous message has a chance to complete before the next message is handled. In
-      //   paticular, without this, I observed an ordering problem: I saw a case where a `Return`
+      //   particular, without this, I observed an ordering problem: I saw a case where a `Return`
       //   message was followed by a `Resolve` message, but the `PromiseClient` associated with the
       //   `Resolve` had its `resolve()` method invoked _before_ any `PromiseClient`s associated
       //   with pipelined capabilities resolved by the `Return`. This could lead to an
       //   incorrectly-ordered interaction between `PromiseClient`s when they resolve to each
       //   other. This is probably really a bug in the way `Return`s are handled -- apparently,
-      //   resolution of `PromiseClient`s based on returned capabilites does not occur in a
+      //   resolution of `PromiseClient`s based on returned capabilities does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
       //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
       if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));
@@ -2686,9 +2717,9 @@ private:
 
       if (redirectResults) {
         auto resultsPromise = promiseAndPipeline.promise.then(
-            kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
+            [context=kj::mv(context)]() mutable {
               return context->consumeRedirectedResponse();
-            }));
+            });
 
         // If the call that later picks up `redirectedResults` decides to discard it, we need to
         // make sure our call is not itself canceled unless it has called allowCancellation().
@@ -3032,8 +3063,7 @@ private:
 
         // We need to insert an evalLast() here to make sure that any pending calls towards this
         // cap have had time to find their way through the event loop.
-        tasks.add(canceler.wrap(kj::evalLast(kj::mvCapture(
-            target, [this,embargoId](kj::Own<ClientHook>&& target) {
+        tasks.add(canceler.wrap(kj::evalLast([this,embargoId,target=kj::mv(target)]() mutable {
           if (!connection.is<Connected>()) {
             return;
           }
@@ -3062,7 +3092,7 @@ private:
           builder.getContext().setReceiverLoopback(embargoId);
 
           message->send();
-        }))));
+        })));
 
         break;
       }

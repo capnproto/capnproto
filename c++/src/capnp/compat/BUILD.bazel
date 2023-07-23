@@ -1,0 +1,83 @@
+load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
+
+exports_files([
+    "json.capnp",
+])
+
+# because git contains generated artifacts (which are used to bootstrap the compiler)
+# we can't have cc_capnp_library for json.capnp. Expose it as cc library and a file.
+cc_library(
+    name = "json",
+    srcs = [
+        "json.c++",
+        "json.capnp.c++",
+    ],
+    hdrs = [
+        "json.capnp.h",
+        "json.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/capnp",
+    ],
+)
+
+cc_capnp_library(
+    name = "http-over-capnp_capnp",
+    srcs = [
+        "byte-stream.capnp",
+        "http-over-capnp.capnp",
+    ],
+    include_prefix = "capnp/compat",
+    src_prefix = "src",
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "http-over-capnp",
+    srcs = [
+        "byte-stream.c++",
+        "http-over-capnp.c++",
+    ],
+    hdrs = [
+        "byte-stream.h",
+        "http-over-capnp.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":http-over-capnp_capnp",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+cc_library(
+    name = "websocket-rpc",
+    srcs = [
+        "websocket-rpc.c++",
+    ],
+    hdrs = [
+        "websocket-rpc.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/capnp",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [
+        ":websocket-rpc",
+        ":http-over-capnp",
+        "//src/capnp:capnp-test"
+    ],
+) for f in [
+    "byte-stream-test.c++",
+    "http-over-capnp-test.c++",
+    "websocket-rpc-test.c++",
+]]

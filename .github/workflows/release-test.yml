@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         # We can only run extended tests with the default version of g++, because it has to match
-        # the verison of g++-multilib for 32-bit cross-compilation, and alternate versions of
+        # the version of g++-multilib for 32-bit cross-compilation, and alternate versions of
         # g++-multilib generally aren't available. Clang is more lenient, but we might as well be
         # consistent. The quick tests should be able to catch issues with older and newer compiler
         # versions.
@@ -47,6 +47,16 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
+      # See: https://github.com/actions/virtual-environments/issues/4589#issuecomment-1100899313
+      # GitHub's Ubuntu image installs all kinds of stuff from non-Ubuntu repositories which cause
+      # conflicts with Ubuntu packages ultimately preventing installation of wine32. Let's try to
+      # fix that...
+      - name: remove unwanted packages and repositories
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get update -qq
+          sudo apt-get install -yqq --allow-downgrades libgd3/focal libpcre2-8-0/focal libpcre2-16-0/focal libpcre2-32-0/focal libpcre2-posix2/focal
+          sudo apt-get purge -yqq libmono* moby* mono* php* libgdiplus libpcre2-posix3 libzip4
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive

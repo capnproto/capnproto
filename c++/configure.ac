@@ -1,6 +1,6 @@
 ## Process this file with autoconf to produce configure.
 
-AC_INIT([Capn Proto],[0.10-dev],[capnproto@googlegroups.com],[capnproto-c++])
+AC_INIT([Capn Proto],[0.11-dev],[capnproto@googlegroups.com],[capnproto-c++])
 
 AC_CONFIG_SRCDIR([src/capnp/layout.c++])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -31,6 +31,11 @@ AC_ARG_WITH([openssl],
   [AS_HELP_STRING([--with-openssl],
     [build libkj-tls by linking against openssl @<:@default=check@:>@])],
   [],[with_openssl=check])
+
+AC_ARG_WITH([fibers],
+  [AS_HELP_STRING([--with-fibers],
+    [build libkj-async with fibers @<:@default=check@:>@])],
+  [],[with_fibers=check])
 
 AC_ARG_ENABLE([reflection], [
   AS_HELP_STRING([--disable-reflection], [
@@ -195,8 +200,71 @@ AS_IF([test "$with_openssl" != no], [
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
-# CapnProtoConfig.cmake.in needs this variable.
-AC_SUBST(WITH_OPENSSL, $with_openssl)
+# Fibers don't work if exceptions are disabled, so default off in that case.
+AS_IF([test "$with_fibers" != no], [
+  AC_MSG_CHECKING([if exceptions are enabled])
+  AC_COMPILE_IFELSE([void foo() { throw 1; }], [
+    AC_MSG_RESULT([yes])
+  ], [
+    AS_IF([test "$with_fibers" = check], [
+      AC_MSG_RESULT([no -- therefore, disabling fibers])
+      with_fibers=no
+    ], [
+      AC_MSG_RESULT([no])
+      AC_MSG_ERROR([Fibers require exceptions, but your compiler flags disable exceptions. Please either enable exceptions or disable fibers (--without-fibers).])
+    ])
+  ])
+])
+
+# Check for library support necessary for fibers.
+AS_IF([test "$with_fibers" != no], [
+  case "${host_os}" in
+    cygwin* | mingw* )
+      # Fibers always work on Windows, where there's an explicit API for them.
+      with_fibers=yes
+      ;;
+    * )
+      # Fibers need the symbols getcontext, setcontext, swapcontext and makecontext.
+      # We assume that makecontext implies the rest.
+      libc_supports_fibers=yes
+      AC_SEARCH_LIBS([makecontext], [], [], [
+        libc_supports_fibers=no
+      ])
+
+      AS_IF([test "$libc_supports_fibers" = yes], [
+          with_fibers=yes
+        ], [
+        # If getcontext does not exist in libc, try with libucontext
+        ucontext_supports_fibers=yes
+        AC_CHECK_LIB(ucontext, [makecontext], [], [
+          ucontext_supports_fibers=no
+        ])
+        AS_IF([test "$ucontext_supports_fibers" = yes], [
+          ASYNC_LIBS="$ASYNC_LIBS -lucontext"
+          with_fibers=yes
+        ], [
+          AS_IF([test "$with_fibers" = yes], [
+            AC_MSG_ERROR([Missing symbols required for fibers (makecontext, setcontext, ...). Disable fibers (--without-fibers) or install libucontext])
+          ], [
+            AC_MSG_WARN([could not find required symbols (makecontext, setcontext, ...) -- won't build with fibers])
+            with_fibers=no
+          ])
+        ])
+      ])
+      ;;
+  esac
+])
+AS_IF([test "$with_fibers" = yes], [
+  CXXFLAGS="$CXXFLAGS -DKJ_USE_FIBERS"
+], [
+  CXXFLAGS="$CXXFLAGS -DKJ_USE_FIBERS=0"
+])
+
+# CapnProtoConfig.cmake.in needs these variables,
+# we force them to NO because we don't need the CMake dependency for them,
+# the dependencies are provided by the .pc files.
+AC_SUBST(WITH_OPENSSL, NO)
+AC_SUBST(_WITH_LIBUCONTEXT, NO)
 
 AM_CONDITIONAL([HAS_FUZZING_ENGINE], [test "x$LIB_FUZZING_ENGINE" != "x"])
 

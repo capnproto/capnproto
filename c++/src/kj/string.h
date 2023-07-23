@@ -92,15 +92,20 @@ public:
 #endif
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
-  template <typename T, typename = decltype(instance<T>().c_str())>
-  inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str()) {}
-  // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
+  template <
+    typename T,
+    typename = decltype(instance<T>().c_str()),
+    typename = decltype(instance<T>().size())>
+  inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str(), t.size()) {}
+  // Allow implicit conversion from any class that has a c_str() and a size() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
-
-  template <typename T, typename = decltype(instance<T>().c_str())>
-  inline operator T() const { return cStr(); }
-  // Allow implicit conversion to any class that has a c_str() method (namely, std::string).
+  template <
+    typename T,
+    typename = decltype(instance<T>().c_str()),
+    typename = decltype(instance<T>().size())>
+  inline operator T() const { return {cStr(), size()}; }
+  // Allow implicit conversion to any class that has a c_str() method and a size() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
 #endif
@@ -136,11 +141,11 @@ public:
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
-  inline bool startsWith(const StringPtr& other) const;
-  inline bool endsWith(const StringPtr& other) const;
+  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
-  inline Maybe<size_t> findFirst(char c) const;
-  inline Maybe<size_t> findLast(char c) const;
+  inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
+  inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
 
   template <typename T>
   T parseAs() const;
@@ -149,6 +154,9 @@ public:
   // Integer numbers prefixed by "0" are parsed in base 10 (unlike strtoi with base 0).
   // Overflowed integer numbers throw exception.
   // Overflowed floating numbers return inf.
+  template <typename T>
+  Maybe<T> tryParseAs() const;
+  // Same as parseAs, but rather than throwing an exception we return NULL.
 
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
@@ -178,6 +186,19 @@ template <> unsigned long long StringPtr::parseAs<unsigned long long>() const;
 template <> float StringPtr::parseAs<float>() const;
 template <> double StringPtr::parseAs<double>() const;
 
+template <> Maybe<char> StringPtr::tryParseAs<char>() const;
+template <> Maybe<signed char> StringPtr::tryParseAs<signed char>() const;
+template <> Maybe<unsigned char> StringPtr::tryParseAs<unsigned char>() const;
+template <> Maybe<short> StringPtr::tryParseAs<short>() const;
+template <> Maybe<unsigned short> StringPtr::tryParseAs<unsigned short>() const;
+template <> Maybe<int> StringPtr::tryParseAs<int>() const;
+template <> Maybe<unsigned> StringPtr::tryParseAs<unsigned>() const;
+template <> Maybe<long> StringPtr::tryParseAs<long>() const;
+template <> Maybe<unsigned long> StringPtr::tryParseAs<unsigned long>() const;
+template <> Maybe<long long> StringPtr::tryParseAs<long long>() const;
+template <> Maybe<unsigned long long> StringPtr::tryParseAs<unsigned long long>() const;
+template <> Maybe<float> StringPtr::tryParseAs<float>() const;
+template <> Maybe<double> StringPtr::tryParseAs<double>() const;
 // =======================================================================================
 // String -- A NUL-terminated Array<char> containing UTF-8 text.
 //
@@ -247,8 +268,8 @@ public:
   // comparisons between two strings are ambiguous. (Clang turns this into a warning,
   // -Wambiguous-reversed-operator, due to the stupidity...)
 
-  inline bool startsWith(const StringPtr& other) const { return StringPtr(*this).startsWith(other);}
-  inline bool endsWith(const StringPtr& other) const { return StringPtr(*this).endsWith(other); }
+  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
   inline StringPtr slice(size_t start) const KJ_LIFETIMEBOUND {
     return StringPtr(*this).slice(start);
@@ -257,12 +278,15 @@ public:
     return StringPtr(*this).slice(start, end);
   }
 
-  inline Maybe<size_t> findFirst(char c) const { return StringPtr(*this).findFirst(c); }
-  inline Maybe<size_t> findLast(char c) const { return StringPtr(*this).findLast(c); }
+  inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
+  inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
 
   template <typename T>
   T parseAs() const { return StringPtr(*this).parseAs<T>(); }
   // Parse as number
+
+  template <typename T>
+  Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
 private:
   Array<char> content;
@@ -570,33 +594,6 @@ inline StringPtr StringPtr::slice(size_t start) const {
 }
 inline ArrayPtr<const char> StringPtr::slice(size_t start, size_t end) const {
   return content.slice(start, end);
-}
-
-inline bool StringPtr::startsWith(const StringPtr& other) const {
-  return other.content.size() <= content.size() &&
-      memcmp(content.begin(), other.content.begin(), other.size()) == 0;
-}
-inline bool StringPtr::endsWith(const StringPtr& other) const {
-  return other.content.size() <= content.size() &&
-      memcmp(end() - other.size(), other.content.begin(), other.size()) == 0;
-}
-
-inline Maybe<size_t> StringPtr::findFirst(char c) const {
-  const char* pos = reinterpret_cast<const char*>(memchr(content.begin(), c, size()));
-  if (pos == nullptr) {
-    return nullptr;
-  } else {
-    return pos - content.begin();
-  }
-}
-
-inline Maybe<size_t> StringPtr::findLast(char c) const {
-  for (size_t i = size(); i > 0; --i) {
-    if (content[i-1] == c) {
-      return i-1;
-    }
-  }
-  return nullptr;
 }
 
 inline String::operator ArrayPtr<char>() {

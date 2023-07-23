@@ -674,7 +674,7 @@ public:
         nativePath(path).begin(),
         GENERIC_READ,
         // When opening directories, we do NOT use FILE_SHARE_DELETE, because we need the directory
-        // path to remain vaild.
+        // path to remain valid.
         //
         // TODO(someday): Use NtCreateFile() and related "internal" APIs that allow for
         //   openat()-like behavior?
@@ -932,7 +932,7 @@ public:
         NULL)) {
       case ERROR_PATH_NOT_FOUND:
         if (has(mode, WriteMode::CREATE)) {
-          // A parent directory didn't exist. Maybe cerate it.
+          // A parent directory didn't exist. Maybe create it.
           if (has(mode, WriteMode::CREATE_PARENT) && path.size() > 0 &&
               tryMkdir(path.parent(), WriteMode::CREATE | WriteMode::MODIFY |
                                       WriteMode::CREATE_PARENT, true)) {
@@ -1233,7 +1233,7 @@ public:
     // We can't really create symlinks on Windows. Reasons:
     // - We'd need to know whether the target is a file or a directory to pass the correct flags.
     //   That means we'd need to evaluate the link content and track down the target. What if the
-    //   taget doesn't exist? It's unclear if this is even allowed on Windows.
+    //   target doesn't exist? It's unclear if this is even allowed on Windows.
     // - Apparently, creating symlinks is a privileged operation on Windows prior to Windows 10.
     //   The flag SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE is very new.
     KJ_UNIMPLEMENTED(
@@ -1286,7 +1286,7 @@ public:
         case ERROR_PATH_NOT_FOUND:
           return false;
         case ERROR_ACCESS_DENIED:
-          // This usually means that fromPath was a directory or toPath was a direcotry. Fall back
+          // This usually means that fromPath was a directory or toPath was a directory. Fall back
           // to default implementation.
           break;
         default:

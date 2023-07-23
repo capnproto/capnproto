@@ -24,6 +24,8 @@
 #include <kj/compat/http.h>
 #include <capnp/serialize-async.h>
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 
 class WebSocketMessageStream final : public MessageStream {
@@ -51,3 +53,5 @@ private:
 };
 
 }  // namespace capnp
+
+CAPNP_END_HEADER

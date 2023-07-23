@@ -47,7 +47,7 @@ KJ_TEST("_::tryReserveSize() works") {
   {
     Vector<int> vec;
     tryReserveSize(vec, "foo"_kj);
-    KJ_EXPECT(vec.capacity() == 3);
+    KJ_EXPECT(vec.capacity() == 4);  // Vectors always grow by powers of two.
   }
   {
     Vector<int> vec;
@@ -972,6 +972,27 @@ KJ_TEST("TreeIndex fuzz test") {
   }
 }
 
+KJ_TEST("TreeIndex clear() leaves tree in valid state") {
+  // A test which ensures that calling clear() does not break the internal state of a TreeIndex.
+  // It used to be the case that clearing a non-empty tree would leave it thinking that it had room
+  // for one more node than it really did, causing it to write and read beyond the end of its
+  // internal array of nodes.
+  Table<uint, TreeIndex<UintCompare>> table;
+
+  // Insert at least one value to allocate an initial set of tree nodes.
+  table.upsert(1, [](auto&&, auto&&) {});
+  KJ_EXPECT(table.find(1) != nullptr);
+  table.clear();
+
+  // Insert enough values to force writes/reads beyond the end of the tree's internal node array.
+  for (uint i = 0; i < 29; ++i) {
+    table.upsert(i, [](auto&&, auto&&) {});
+  }
+  for (uint i = 0; i < 29; ++i) {
+    KJ_EXPECT(table.find(i) != nullptr);
+  }
+}
+
 KJ_TEST("benchmark: kj::Table<uint, TreeIndex>") {
   constexpr uint SOME_PRIME = BIG_PRIME;
   constexpr uint STEP[] = {1, 2, 4, 7, 43, 127};
@@ -1294,6 +1315,94 @@ KJ_TEST("insertion order index is movable") {
   KJ_ASSERT(iter != range.end());
   KJ_EXPECT(*iter++ == 999);
   KJ_EXPECT(iter == range.end());
+}
+
+// =======================================================================================
+// Test bug where insertion failure on a later index in the table would not be rolled back
+// correctly if a previous index was TreeIndex.
+
+class StringLengthCompare {
+  // Considers two strings equal if they have the same length.
+public:
+  inline size_t keyForRow(StringPtr entry) const {
+    return entry.size();
+  }
+
+  inline bool matches(StringPtr e, size_t key) const {
+    return e.size() == key;
+  }
+
+  inline bool isBefore(StringPtr e, size_t key) const {
+    return e.size() < key;
+  }
+
+  uint hashCode(size_t size) const {
+    return size;
+  }
+};
+
+KJ_TEST("HashIndex rollback on insertion failure") {
+  // Test that when an insertion produces a duplicate on a later index, changes to previous indexes
+  // are properly rolled back.
+
+  Table<StringPtr, HashIndex<StringHasher>, HashIndex<StringLengthCompare>> table;
+  table.insert("a"_kj);
+  table.insert("ab"_kj);
+  table.insert("abc"_kj);
+
+  {
+    // We use upsert() so that we don't throw an exception from the duplicate, but this exercises
+    // the same logic as a duplicate insert() other than throwing.
+    kj::StringPtr& found = table.upsert("xyz"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "abc");
+      KJ_EXPECT(param == "xyz");
+    });
+    KJ_EXPECT(found == "abc");
+
+    table.erase(found);
+  }
+
+  table.insert("xyz"_kj);
+
+  {
+    kj::StringPtr& found = table.upsert("tuv"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "xyz");
+      KJ_EXPECT(param == "tuv");
+    });
+    KJ_EXPECT(found == "xyz");
+  }
+}
+
+KJ_TEST("TreeIndex rollback on insertion failure") {
+  // Test that when an insertion produces a duplicate on a later index, changes to previous indexes
+  // are properly rolled back.
+
+  Table<StringPtr, TreeIndex<StringCompare>, TreeIndex<StringLengthCompare>> table;
+  table.insert("a"_kj);
+  table.insert("ab"_kj);
+  table.insert("abc"_kj);
+
+  {
+    // We use upsert() so that we don't throw an exception from the duplicate, but this exercises
+    // the same logic as a duplicate insert() other than throwing.
+    kj::StringPtr& found = table.upsert("xyz"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "abc");
+      KJ_EXPECT(param == "xyz");
+    });
+    KJ_EXPECT(found == "abc");
+
+    table.erase(found);
+  }
+
+  table.insert("xyz"_kj);
+
+  {
+    kj::StringPtr& found = table.upsert("tuv"_kj, [&](StringPtr& existing, StringPtr&& param) {
+      KJ_EXPECT(existing == "xyz");
+      KJ_EXPECT(param == "tuv");
+    });
+    KJ_EXPECT(found == "xyz");
+  }
 }
 
 }  // namespace

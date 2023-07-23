@@ -71,7 +71,7 @@ class List {
   //
   // Note that you MUST manually remove an element from the list before destroying it. ListLinks
   // do not automatically unlink themselves because this could lead to subtle thread-safety bugs
-  // if the List is guarded by a mutex, and that mutex is not currenty locked. Normally, you should
+  // if the List is guarded by a mutex, and that mutex is not currently locked. Normally, you should
   // have T's destructor remove it from any lists. You can use `link.isLinked()` to check if the
   // item is currently in a list.
   //
@@ -99,6 +99,19 @@ public:
     *tail = element;
     (element.*link).prev = tail;
     tail = &((element.*link).next);
+    ++listSize;
+  }
+
+  void addFront(T& element) {
+    if ((element.*link).prev != nullptr) _::throwDoubleAdd();
+    (element.*link).next = head;
+    (element.*link).prev = &head;
+    KJ_IF_MAYBE(oldHead, head) {
+      (oldHead->*link).prev = &(element.*link).next;
+    } else {
+      tail = &(element.*link).next;
+    }
+    head = element;
     ++listSize;
   }
 

@@ -938,7 +938,7 @@ private:
         }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client*) {
-        // Pumping from some other kind of steram. Optimize the pump by reading from the input
+        // Pumping from some other kind of stream. Optimize the pump by reading from the input
         // directly into outgoing RPC messages.
         size_t size = kj::min(remaining, 8192);
         auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word) });

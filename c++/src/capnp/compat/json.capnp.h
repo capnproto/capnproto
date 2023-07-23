@@ -9,7 +9,7 @@
 #include <capnp/capability.h>
 #endif  // !CAPNP_LITE
 
-#if CAPNP_VERSION != 10000
+#if CAPNP_VERSION != 11000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -51,6 +51,7 @@ struct Value {
     ARRAY,
     OBJECT,
     CALL,
+    RAW,
   };
   struct Field;
   struct Call;
@@ -168,6 +169,10 @@ public:
   inline bool hasCall() const;
   inline  ::capnp::json::Value::Call::Reader getCall() const;
 
+  inline bool isRaw() const;
+  inline bool hasRaw() const;
+  inline  ::capnp::Text::Reader getRaw() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -240,6 +245,14 @@ public:
   inline  ::capnp::json::Value::Call::Builder initCall();
   inline void adoptCall(::capnp::Orphan< ::capnp::json::Value::Call>&& value);
   inline ::capnp::Orphan< ::capnp::json::Value::Call> disownCall();
+
+  inline bool isRaw();
+  inline bool hasRaw();
+  inline  ::capnp::Text::Builder getRaw();
+  inline void setRaw( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initRaw(unsigned int size);
+  inline void adoptRaw(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownRaw();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -924,6 +937,60 @@ inline ::capnp::Orphan< ::capnp::json::Value::Call> Value::Builder::disownCall()
   KJ_IREQUIRE((which() == Value::CALL),
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::json::Value::Call>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline bool Value::Reader::isRaw() const {
+  return which() == Value::RAW;
+}
+inline bool Value::Builder::isRaw() {
+  return which() == Value::RAW;
+}
+inline bool Value::Reader::hasRaw() const {
+  if (which() != Value::RAW) return false;
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool Value::Builder::hasRaw() {
+  if (which() != Value::RAW) return false;
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader Value::Reader::getRaw() const {
+  KJ_IREQUIRE((which() == Value::RAW),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder Value::Builder::getRaw() {
+  KJ_IREQUIRE((which() == Value::RAW),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Value::Builder::setRaw( ::capnp::Text::Reader value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::RAW);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder Value::Builder::initRaw(unsigned int size) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::RAW);
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), size);
+}
+inline void Value::Builder::adoptRaw(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::RAW);
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> Value::Builder::disownRaw() {
+  KJ_IREQUIRE((which() == Value::RAW),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 

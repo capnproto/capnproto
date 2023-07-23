@@ -24,20 +24,21 @@
 
 #pragma once
 
-#include "exception.h"
-#include "tuple.h"
-#include "source-location.h"
+#include <kj/exception.h>
+#include <kj/tuple.h>
+#include <kj/source-location.h>
 
 // Detect whether or not we should enable kj::Promise<T> coroutine integration.
 //
 // TODO(someday): Support coroutines with -fno-exceptions.
 #if !KJ_NO_EXCEPTIONS
 #ifdef __has_include
-// For now, we only support the Coroutines TS.
-//
-// TODO(someday): Also support standardized C++20 Coroutines. The latest VS2019 and GCC 10 both have
-//   support, though MSVC hides it behind /std:c++latest, which brings an ICE with it.
-#if __cpp_coroutines && __has_include(<experimental/coroutine>)
+#if __cpp_coroutines && __has_include(<coroutine>)
+// C++20 Coroutines detected.
+#include <coroutine>
+#define KJ_HAS_COROUTINE 1
+#define KJ_COROUTINE_STD_NAMESPACE std
+#elif __cpp_coroutines && __has_include(<experimental/coroutine>)
 // Coroutines TS detected.
 #include <experimental/coroutine>
 #define KJ_HAS_COROUTINE 1
@@ -213,16 +214,20 @@ class Event;
 class XThreadEvent;
 class XThreadPaf;
 
+class PromiseDisposer;
+using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
+// PromiseNode uses a static disposer.
+
 class PromiseBase {
 public:
   kj::String trace();
   // Dump debug info about this promise.
 
 private:
-  Own<PromiseNode> node;
+  OwnPromiseNode node;
 
   PromiseBase() = default;
-  PromiseBase(Own<PromiseNode>&& node): node(kj::mv(node)) {}
+  PromiseBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
 
   template <typename>
   friend class kj::Promise;
@@ -230,12 +235,12 @@ private:
 };
 
 void detach(kj::Promise<void>&& promise);
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
               SourceLocation location);
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 Promise<void> yield();
 Promise<void> yieldHarder();
-Own<PromiseNode> neverDone();
+OwnPromiseNode neverDone();
 
 class NeverDone {
 public:

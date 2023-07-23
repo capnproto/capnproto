@@ -42,6 +42,8 @@ namespace {
 TestCase* testCasesHead = nullptr;
 TestCase** testCasesTail = &testCasesHead;
 
+size_t benchmarkIterCount = 1;
+
 }  // namespace
 
 TestCase::TestCase(const char* file, uint line, const char* description)
@@ -58,6 +60,10 @@ TestCase::~TestCase() {
   } else {
     next->prev = prev;
   }
+}
+
+size_t TestCase::iterCount() {
+  return benchmarkIterCount;
 }
 
 // =======================================================================================
@@ -172,7 +178,7 @@ public:
 
     if (severity == LogSeverity::ERROR || severity == LogSeverity::FATAL) {
       sawError = true;
-      context.error(kj::str(text, "\nstack: ", strArray(trace, " "), stringifyStackTrace(trace)));
+      context.error(kj::str(text, "\nstack: ", stringifyStackTraceAddresses(trace), stringifyStackTrace(trace)));
     } else {
       context.warning(text);
     }
@@ -205,6 +211,9 @@ public:
         .addOption({'l', "list"}, KJ_BIND_METHOD(*this, setList),
             "List all test cases that would run, but don't run them. If --filter is specified "
             "then only the match tests will be listed.")
+        .addOptionWithArg({'b', "benchmark"}, KJ_BIND_METHOD(*this, setBenchmarkIters), "<iters>",
+            "Specifies that any benchmarks in the tests should run for <iters> iterations. "
+            "If not specified, then count is 1, which simply tests that the benchmarks function.")
         .callAfterParsing(KJ_BIND_METHOD(*this, run))
         .build();
   }
@@ -261,6 +270,15 @@ public:
   MainBuilder::Validity setList() {
     listOnly = true;
     return true;
+  }
+
+  MainBuilder::Validity setBenchmarkIters(StringPtr param) {
+    KJ_IF_MAYBE(i, param.tryParseAs<size_t>()) {
+      benchmarkIterCount = *i;
+      return true;
+    } else {
+      return "expected an integer";
+    }
   }
 
   MainBuilder::Validity run() {

@@ -88,7 +88,7 @@ public:
     compiler::lex(content, statements, *this);
 
     auto parsed = orphanage.newOrphan<compiler::ParsedFile>();
-    compiler::parseFile(statements.getStatements(), parsed.get(), *this);
+    compiler::parseFile(statements.getStatements(), parsed.get(), *this, parser.fileIdsRequired);
     return parsed;
   }
 
@@ -310,6 +310,10 @@ SchemaParser::ModuleImpl& SchemaParser::getModuleImpl(kj::Own<SchemaFile>&& file
 }
 
 SchemaLoader& SchemaParser::getLoader() {
+  return impl->compiler.getLoader();
+}
+
+const SchemaLoader& SchemaParser::getLoader() const {
   return impl->compiler.getLoader();
 }
 

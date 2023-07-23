@@ -93,6 +93,10 @@ struct JsonCodec::Impl {
         return kj::strTree(call.getFunction(), '(', encodeList(
             kj::mv(encodedElements), childMultiline, indent, multiline, true), ')');
       }
+
+      case JsonValue::RAW: {
+        return kj::strTree(value.getRaw());
+      }
     }
 
     KJ_FAIL_ASSERT("unknown JsonValue type", static_cast<uint>(value.which()));
@@ -741,7 +745,7 @@ public:
 private:
   kj::String consumeQuotedString() {
     input.consume('"');
-    // TODO(perf): Avoid copy / alloc if no escapes encoutered.
+    // TODO(perf): Avoid copy / alloc if no escapes encountered.
     // TODO(perf): Get statistics on string size and preallocate?
     kj::Vector<char> decoded;
 
@@ -819,9 +823,9 @@ private:
       if ('0' <= c && c <= '9') {
         codePoint |= c - '0';
       } else if ('a' <= c && c <= 'f') {
-        codePoint |= c - 'a';
+        codePoint |= c - 'a' + 10;
       } else if ('A' <= c && c <= 'F') {
-        codePoint |= c - 'A';
+        codePoint |= c - 'A' + 10;
       } else {
         KJ_FAIL_REQUIRE("Invalid hex digit in unicode escape.", c);
       }
@@ -1324,7 +1328,7 @@ private:
 
   const void* getUnionInstanceIdentifier(DynamicStruct::Builder obj) const {
     // Gets a value uniquely identifying an instance of a union.
-    // HACK: We return a poniter to the union's discriminant within the underlying buffer.
+    // HACK: We return a pointer to the union's discriminant within the underlying buffer.
     return reinterpret_cast<const uint16_t*>(
         AnyStruct::Reader(obj.asReader()).getDataSection().begin()) + discriminantOffset;
   }

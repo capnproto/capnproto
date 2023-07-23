@@ -99,7 +99,7 @@ KJ_TEST("synchonous simple cross-thread events") {
   })();
 }
 
-KJ_TEST("asynchonous simple cross-thread events") {
+KJ_TEST("asynchronous simple cross-thread events") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
   thread_local bool isChild = false;  // to assert which thread we're in
@@ -210,7 +210,7 @@ KJ_TEST("synchonous promise cross-thread events") {
   })();
 }
 
-KJ_TEST("asynchonous promise cross-thread events") {
+KJ_TEST("asynchronous promise cross-thread events") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
   Promise<uint> promise = nullptr;  // accessed only from the subthread

@@ -68,8 +68,10 @@ public:
 
   template <typename UpdateFunc>
   Entry& upsert(Key key, Value value, UpdateFunc&& update);
+  Entry& upsert(Key key, Value value);
   // Tries to insert a new entry. However, if a duplicate already exists (according to some index),
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
+  // If no function is provided, the default is to simply replace the value (but not the key).
 
   template <typename KeyLike>
   kj::Maybe<Value&> find(KeyLike&& key);
@@ -97,7 +99,7 @@ public:
   bool erase(KeyLike&& key);
   // Erase the entry with the matching key.
   //
-  // WARNING: This invalidates all pointers and interators into the map. Use eraseAll() if you need
+  // WARNING: This invalidates all pointers and iterators into the map. Use eraseAll() if you need
   //   to iterate and erase multiple entries.
 
   void erase(Entry& entry);
@@ -167,8 +169,10 @@ public:
 
   template <typename UpdateFunc>
   Entry& upsert(Key key, Value value, UpdateFunc&& update);
+  Entry& upsert(Key key, Value value);
   // Tries to insert a new entry. However, if a duplicate already exists (according to some index),
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
+  // If no function is provided, the default is to simply replace the value (but not the key).
 
   template <typename KeyLike>
   kj::Maybe<Value&> find(KeyLike&& key);
@@ -200,7 +204,7 @@ public:
   bool erase(KeyLike&& key);
   // Erase the entry with the matching key.
   //
-  // WARNING: This invalidates all pointers and interators into the map. Use eraseAll() if you need
+  // WARNING: This invalidates all pointers and iterators into the map. Use eraseAll() if you need
   //   to iterate and erase multiple entries.
 
   void erase(Entry& entry);
@@ -351,6 +355,15 @@ typename HashMap<Key, Value>::Entry& HashMap<Key, Value>::upsert(
 }
 
 template <typename Key, typename Value>
+typename HashMap<Key, Value>::Entry& HashMap<Key, Value>::upsert(
+    Key key, Value value) {
+  return table.upsert(Entry { kj::mv(key), kj::mv(value) },
+      [&](Entry& existingEntry, Entry&& newEntry) {
+    existingEntry.value = kj::mv(newEntry.value);
+  });
+}
+
+template <typename Key, typename Value>
 template <typename KeyLike>
 kj::Maybe<Value&> HashMap<Key, Value>::find(KeyLike&& key) {
   return table.find(key).map([](Entry& e) -> Value& { return e.value; });
@@ -460,6 +473,15 @@ typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::upsert(
   return table.upsert(Entry { kj::mv(key), kj::mv(value) },
       [&](Entry& existingEntry, Entry&& newEntry) {
     update(existingEntry.value, kj::mv(newEntry.value));
+  });
+}
+
+template <typename Key, typename Value>
+typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::upsert(
+    Key key, Value value) {
+  return table.upsert(Entry { kj::mv(key), kj::mv(value) },
+      [&](Entry& existingEntry, Entry&& newEntry) {
+    existingEntry.value = kj::mv(newEntry.value);
   });
 }
 

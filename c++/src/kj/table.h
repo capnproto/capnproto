@@ -336,7 +336,7 @@ class HashIndex;
 //     // methods to match this row.
 //
 //     bool matches(const Row&, SearchParams&&...) const;
-//     // Returns true if the row on the left matches thes search params on the right.
+//     // Returns true if the row on the left matches the search params on the right.
 //
 //     uint hashCode(SearchParams&&...) const;
 //     // Computes the hash code of the given search params. Matching rows (as determined by
@@ -1484,7 +1484,7 @@ public:
 
   template <typename Row, typename... Params>
   void erase(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
-    impl.erase(pos, searchKey(table, params...));
+    impl.erase(pos, searchKeyForErase(table, pos, params...));
   }
 
   template <typename Row, typename... Params>
@@ -1537,6 +1537,16 @@ private:
     auto predicate = [&](uint i) { return cb.isBefore(table[i], params...); };
     return SearchKeyImpl<decltype(predicate)>(kj::mv(predicate));
   }
+
+  template <typename Row, typename... Params>
+  inline auto searchKeyForErase(kj::ArrayPtr<Row>& table, uint pos, Params&... params) const {
+    // When erasing, the table entry for the erased row may already be invalid, so we must avoid
+    // accessing it.
+    auto predicate = [&,pos](uint i) {
+      return i != pos && cb.isBefore(table[i], params...);
+    };
+    return SearchKeyImpl<decltype(predicate)>(kj::mv(predicate));
+  }
 };
 
 // -----------------------------------------------------------------------------
@@ -1561,7 +1571,7 @@ public:
         : links(links), pos(pos) {}
 
     inline size_t operator*() const {
-      KJ_TABLE_IREQUIRE(pos != 0, "can't derefrence end() iterator");
+      KJ_TABLE_IREQUIRE(pos != 0, "can't dereference end() iterator");
       return pos - 1;
     };
 

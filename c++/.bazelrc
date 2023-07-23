@@ -1,0 +1,9 @@
+build --cxxopt='-std=c++14' --host_cxxopt='-std=c++14' --force_pic --verbose_failures
+build --cxxopt='-Wall' --host_cxxopt='-Wall'
+build --cxxopt='-Wextra' --host_cxxopt='-Wextra'
+build --cxxopt='-Wno-strict-aliasing' --host_cxxopt='-Wno-strict-aliasing'
+build --cxxopt='-Wno-sign-compare' --host_cxxopt='-Wno-sign-compare'
+build --cxxopt='-Wno-unused-parameter' --host_cxxopt='-Wno-unused-parameter'
+
+# build with ssl and zlib by default
+build --//src/kj:openssl=True --//src/kj:zlib=True

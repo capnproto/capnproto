@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if !CAPNP_NO_PROTOBUF_BENCHMARK
+
 #include "carsales.pb.h"
 #include "protobuf-common.h"
 
@@ -139,3 +141,5 @@ int main(int argc, char* argv[]) {
       capnp::benchmark::protobuf::BenchmarkTypes,
       capnp::benchmark::protobuf::CarSalesTestCase>(argc, argv);
 }
+
+#endif  // !CAPNP_NO_PROTOBUF_BENCHMARK

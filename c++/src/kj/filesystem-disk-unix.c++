@@ -25,6 +25,12 @@
 #define _GNU_SOURCE
 #endif
 
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+// Request 64-bit off_t. (The code will still work if we get 32-bit off_t as long as actual files
+// are under 4GB.)
+#endif
+
 #include "filesystem.h"
 #include "debug.h"
 #include <sys/types.h>
@@ -1090,7 +1096,7 @@ public:
       }
     }
 
-#if __linux__ && defined(RENAME_EXCHANGE)
+#if __linux__ && defined(RENAME_EXCHANGE) && defined(SYS_renameat2)
     // Try to use Linux's renameat2() to atomically check preconditions and apply.
 
     if (has(mode, WriteMode::MODIFY)) {
@@ -1111,7 +1117,7 @@ public:
           // Presumably because the target path doesn't exist.
           if (has(mode, WriteMode::CREATE)) {
             KJ_FAIL_ASSERT("rename(tmp, path) claimed path exists but "
-                "renameat2(fromPath, toPath, EXCAHNGE) said it doest; concurrent modification?",
+                "renameat2(fromPath, toPath, EXCHANGE) said it doest; concurrent modification?",
                 fromPath, toPath) { return false; }
           } else {
             // Assume target doesn't exist.
@@ -1710,7 +1716,7 @@ private:
     KJ_STACK_ARRAY(char, buf, size, 256, 4096);
     if (getcwd(buf.begin(), size) == nullptr) {
       int error = errno;
-      if (error == ENAMETOOLONG) {
+      if (error == ERANGE) {
         size *= 2;
         goto retry;
       } else {

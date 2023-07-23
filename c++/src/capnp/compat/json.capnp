@@ -44,6 +44,18 @@ struct Value {
     # "binary" and "date" types in text, since JSON has no analog of these. This is basically the
     # reason this extension exists. We do NOT recommend using `call` unless you specifically need
     # to be compatible with some silly format that uses this syntax.
+
+    raw @7 :Text;
+    # Used to indicate that the text should be written directly to the output without
+    # modifications. Use this if you have an already serialized JSON value and don't want
+    # to feel the cost of deserializing the value just to serialize it again.
+    #
+    # The parser will never produce a `raw` value -- this is only useful for serialization.
+    #
+    # WARNING: You MUST ensure that the value is valid stand-alone JSOn. It will not be verified.
+    # Invalid JSON could mjake the whole message unparsable. Worse, a malicious raw value could
+    # perform JSON injection attacks. Make sure that the value was produced by a trustworthy JSON
+    # encoder.
   }
 
   struct Field {

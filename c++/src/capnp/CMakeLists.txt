@@ -213,7 +213,7 @@ if(NOT CAPNP_LITE)
   install(TARGETS capnp_tool capnpc_cpp capnpc_capnp ${INSTALL_TARGETS_DEFAULT_ARGS})
 
   if(WIN32)
-    # On Windows platforms symlinks are not guranteed to support. Also differnt version of CMake handle create_symlink in a different way.
+    # On Windows platforms symlinks are not guaranteed to support. Also different version of CMake handle create_symlink in a different way.
     # The most portable way in this case just copy the file.
     install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnp${CMAKE_EXECUTABLE_SUFFIX}\" \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
   else()

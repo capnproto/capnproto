@@ -29,11 +29,19 @@
 #include "../list.h"
 #include <iterator>
 
+CAPNP_BEGIN_HEADER
+
 namespace std {
 
 template <typename Container, typename Element>
-struct iterator_traits<capnp::_::IndexingIterator<Container, Element>>
-      : public std::iterator<std::random_access_iterator_tag, Element, int> {};
+struct iterator_traits<capnp::_::IndexingIterator<Container, Element>> {
+  using iterator_category = std::random_access_iterator_tag;
+  using value_type = Element;
+  using difference_type	= int;
+  using pointer = Element*;
+  using reference = Element&;
+};
 
 }  // namespace std
 
+CAPNP_END_HEADER

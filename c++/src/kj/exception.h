@@ -80,6 +80,8 @@ public:
   StringPtr getDescription() const { return description; }
   ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
+  void setDescription(kj::String&& desc) { description = kj::mv(desc); }
+
   StringPtr getRemoteTrace() const { return remoteTrace; }
   void setRemoteTrace(kj::String&& value) { remoteTrace = kj::mv(value); }
   // Additional stack trace data originating from a remote server. If present, then
@@ -275,6 +277,20 @@ Maybe<Exception> runCatchingExceptions(Func&& func);
 // If exception are disabled (e.g. with -fno-exceptions), this will still detect whether any
 // recoverable exceptions occurred while running the function and will return those.
 
+#if !KJ_NO_EXCEPTIONS
+
+kj::Exception getCaughtExceptionAsKj();
+// Call from the catch block of a try/catch to get a `kj::Exception` representing the exception
+// that was caught, the same way that `kj::runCatchingExceptions` would when catching an exception.
+// This is sometimes useful if `runCatchingExceptions()` doesn't quite fit your use case. You can
+// call this from any catch block, including `catch (...)`.
+//
+// Some exception types will actually be rethrown by this function, rather than returned. The most
+// common example is `CanceledException`, whose purpose is to unwind the stack and is not meant to
+// be caught.
+
+#endif  // !KJ_NO_EXCEPTIONS
+
 class UnwindDetector {
   // Utility for detecting when a destructor is called due to unwind.  Useful for:
   // - Avoiding throwing exceptions in this case, which would terminate the program.
@@ -301,8 +317,12 @@ public:
 private:
   uint uncaughtCount;
 
-  void catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const;
+#if !KJ_NO_EXCEPTIONS
+  void catchThrownExceptionAsSecondaryFault() const;
+#endif
 };
+
+#if KJ_NO_EXCEPTIONS
 
 namespace _ {  // private
 
@@ -326,20 +346,39 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable);
 
 }  // namespace _ (private)
 
+#endif  // KJ_NO_EXCEPTIONS
+
 template <typename Func>
 Maybe<Exception> runCatchingExceptions(Func&& func) {
+#if KJ_NO_EXCEPTIONS
   _::RunnableImpl<Func> runnable(kj::fwd<Func>(func));
   return _::runCatchingExceptions(runnable);
+#else
+  try {
+    func();
+    return nullptr;
+  } catch (...) {
+    return getCaughtExceptionAsKj();
+  }
+#endif
 }
 
 template <typename Func>
 void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
+#if KJ_NO_EXCEPTIONS
+  // Can't possibly be unwinding...
+  func();
+#else
   if (isUnwinding()) {
-    _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
-    catchExceptionsAsSecondaryFaults(runnable);
+    try {
+      func();
+    } catch (...) {
+      catchThrownExceptionAsSecondaryFault();
+    }
   } else {
     func();
   }
+#endif
 }
 
 #define KJ_ON_SCOPE_SUCCESS(code) \
@@ -387,6 +426,9 @@ void printStackTraceOnCrash();
 // Registers signal handlers on common "crash" signals like SIGSEGV that will (attempt to) print
 // a stack trace. You should call this as early as possible on program startup. Programs using
 // KJ_MAIN get this automatically.
+
+void resetCrashHandlers();
+// Resets all signal handlers set by printStackTraceOnCrash().
 
 kj::StringPtr trimSourceFilename(kj::StringPtr filename);
 // Given a source code file name, trim off noisy prefixes like "src/" or
@@ -439,6 +481,10 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
 // that is different from `relativeTo`, considering that either or both traces might be truncated.
 //
 // This is useful for debugging, when reporting several related traces at once.
+
+void requireOnStack(void* ptr, kj::StringPtr description);
+// Throw an exception if `ptr` does not appear to point to something near the top of the stack.
+// Used as a safety check for types that must be stack-allocated, like ExceptionCallback.
 
 }  // namespace kj
 

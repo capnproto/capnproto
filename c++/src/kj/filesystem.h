@@ -28,6 +28,8 @@
 #include "function.h"
 #include "hash.h"
 
+KJ_BEGIN_HEADER
+
 namespace kj {
 
 template <typename T>
@@ -938,7 +940,7 @@ Own<Directory> newInMemoryDirectory(const Clock& clock);
 //   which would expand it will throw.
 //
 // InMemoryDirectory has the following special properties:
-// - Symlinks are processed using Path::parse(). This implies tha a symlink cannot point to a
+// - Symlinks are processed using Path::parse(). This implies that a symlink cannot point to a
 //   parent directory -- InMemoryDirectory does not know its parent.
 // - link() can link directory nodes in addition to files.
 // - link() and rename() accept any kind of Directory as `fromDirectory` -- it doesn't need to be
@@ -1110,3 +1112,5 @@ void Directory::Replacer<T>::commit() {
 }
 
 } // namespace kj
+
+KJ_END_HEADER

@@ -5,8 +5,11 @@
 
 #include <capnp/generated-header-support.h>
 #include <kj/windows-sanity.h>
+#if !CAPNP_LITE
+#include <capnp/capability.h>
+#endif  // !CAPNP_LITE
 
-#if CAPNP_VERSION != 10000
+#if CAPNP_VERSION != 11000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -532,7 +535,9 @@ public:
   inline bool getSucceeded() const;
 
   inline bool hasCap() const;
-  inline ::capnp::AnyPointer::Reader getCap() const;
+#if !CAPNP_LITE
+  inline  ::capnp::Capability::Client getCap() const;
+#endif  // !CAPNP_LITE
 
 private:
   ::capnp::_::StructReader _reader;
@@ -569,8 +574,13 @@ public:
   inline void setSucceeded(bool value);
 
   inline bool hasCap();
-  inline ::capnp::AnyPointer::Builder getCap();
-  inline ::capnp::AnyPointer::Builder initCap();
+#if !CAPNP_LITE
+  inline  ::capnp::Capability::Client getCap();
+  inline void setCap( ::capnp::Capability::Client&& value);
+  inline void setCap( ::capnp::Capability::Client& value);
+  inline void adoptCap(::capnp::Orphan< ::capnp::Capability>&& value);
+  inline ::capnp::Orphan< ::capnp::Capability> disownCap();
+#endif  // !CAPNP_LITE
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -590,6 +600,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::Capability::Client getCap();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -706,20 +717,36 @@ inline bool JoinResult::Builder::hasCap() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::AnyPointer::Reader JoinResult::Reader::getCap() const {
-  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+#if !CAPNP_LITE
+inline  ::capnp::Capability::Client JoinResult::Reader::getCap() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Capability>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder JoinResult::Builder::getCap() {
-  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+inline  ::capnp::Capability::Client JoinResult::Builder::getCap() {
+  return ::capnp::_::PointerHelpers< ::capnp::Capability>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder JoinResult::Builder::initCap() {
-  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
-      ::capnp::bounded<0>() * ::capnp::POINTERS));
-  result.clear();
-  return result;
+inline  ::capnp::Capability::Client JoinResult::Pipeline::getCap() {
+  return  ::capnp::Capability::Client(_typeless.getPointerField(0).asCap());
 }
+inline void JoinResult::Builder::setCap( ::capnp::Capability::Client&& cap) {
+  ::capnp::_::PointerHelpers< ::capnp::Capability>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(cap));
+}
+inline void JoinResult::Builder::setCap( ::capnp::Capability::Client& cap) {
+  ::capnp::_::PointerHelpers< ::capnp::Capability>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), cap);
+}
+inline void JoinResult::Builder::adoptCap(
+    ::capnp::Orphan< ::capnp::Capability>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Capability>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Capability> JoinResult::Builder::disownCap() {
+  return ::capnp::_::PointerHelpers< ::capnp::Capability>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+#endif  // !CAPNP_LITE
 
 }  // namespace
 }  // namespace

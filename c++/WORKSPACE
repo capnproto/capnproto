@@ -1,0 +1,47 @@
+workspace(name = "capnp-cpp")
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "f7be3474d42aae265405a592bb7da8e171919d74c16f082a5457840f06054728",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
+
+http_archive(
+    name = "ssl",
+    sha256 = "873ec711658f65192e9c58554ce058d1cfa4e57e13ab5366ee16f76d1c757efc",
+    strip_prefix = "google-boringssl-ed2e74e",
+    type = "tgz",
+    # from master-with-bazel branch
+    urls = ["https://github.com/google/boringssl/tarball/ed2e74e737dc802ed9baad1af62c1514430a70d6"],
+)
+
+# Based on https://github.com/bazelbuild/bazel/blob/master/third_party/zlib/BUILD.
+_zlib_build = """
+cc_library(
+    name = "zlib",
+    srcs = glob(["*.c"]),
+    hdrs = glob(["*.h"]),
+    copts = [
+        "-w",
+        "-Dverbose=-1",
+    ],
+    visibility = ["//visibility:public"],
+)
+"""
+
+http_archive(
+    name = "zlib",
+    build_file_content = _zlib_build,
+    sha256 = "d14c38e313afc35a9a8760dadf26042f51ea0f5d154b0630a31da0540107fb98",
+    strip_prefix = "zlib-1.2.13",
+    urls = ["https://zlib.net/zlib-1.2.13.tar.xz"],
+)

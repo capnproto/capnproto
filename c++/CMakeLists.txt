@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.6)
 project("Cap'n Proto" CXX)
-set(VERSION 0.10-dev)
+set(VERSION 0.11-dev)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -46,6 +46,10 @@ set(WITH_OPENSSL "AUTO" CACHE STRING
 # define list of values GUI will offer for the variable
 set_property(CACHE WITH_OPENSSL PROPERTY STRINGS AUTO ON OFF)
 
+set(WITH_ZLIB "AUTO" CACHE STRING
+  "Whether or not to build libkj-gzip by linking against zlib")
+set_property(CACHE WITH_ZLIB PROPERTY STRINGS AUTO ON OFF)
+
 # shadow cache variable original value with ON/OFF,
 # so from now on OpenSSL-specific code just has to check:
 #     if (WITH_OPENSSL)
@@ -62,6 +66,68 @@ elseif (WITH_OPENSSL STREQUAL "AUTO")
   endif()
 elseif (WITH_OPENSSL)
   find_package(OpenSSL REQUIRED COMPONENTS Crypto SSL)
+endif()
+
+# shadow cache variable original value with ON/OFF,
+# so from now on ZLIB-specific code just has to check:
+#     if (WITH_ZLIB)
+#         ...
+#     endif()
+if(CAPNP_LITE)
+  set(WITH_ZLIB OFF)
+elseif (WITH_ZLIB STREQUAL "AUTO")
+  find_package(ZLIB)
+  if(ZLIB_FOUND)
+    set(WITH_ZLIB ON)
+  else()
+    set(WITH_ZLIB OFF)
+  endif()
+elseif (WITH_ZLIB)
+  find_package(ZLIB REQUIRED)
+endif()
+
+set(WITH_FIBERS "AUTO" CACHE STRING
+  "Whether or not to build libkj-async with fibers")
+# define list of values GUI will offer for the variable
+set_property(CACHE WITH_FIBERS PROPERTY STRINGS AUTO ON OFF)
+
+# CapnProtoConfig.cmake.in needs this variable.
+set(_WITH_LIBUCONTEXT OFF)
+
+if (WITH_FIBERS OR WITH_FIBERS STREQUAL "AUTO")
+  set(_capnp_fibers_found OFF)
+  if (WIN32 OR CYGWIN)
+    set(_capnp_fibers_found ON)
+  else()
+    # Fibers need makecontext, setcontext, getcontext, swapcontext that may be in libc,
+    # or in libucontext (e.g. for musl).
+    # We assume that makecontext implies that the others are present.
+    include(CheckLibraryExists)
+    check_library_exists(c makecontext "" HAVE_UCONTEXT_LIBC)
+    if (HAVE_UCONTEXT_LIBC)
+      set(_capnp_fibers_found ON)
+    else()
+      # Try with libucontext
+      find_package(PkgConfig)
+      if (PKG_CONFIG_FOUND)
+        pkg_check_modules(libucontext IMPORTED_TARGET libucontext)
+        if (libucontext_FOUND)
+          set(_WITH_LIBUCONTEXT ON)
+          set(_capnp_fibers_found ON)
+        endif()
+      else()
+        set(_capnp_fibers_found OFF)
+      endif()
+    endif()
+  endif()
+
+  if (_capnp_fibers_found)
+    set(WITH_FIBERS ON)
+  elseif(WITH_FIBERS STREQUAL "AUTO")
+    set(WITH_FIBERS OFF)
+  else()
+    message(FATAL_ERROR "Missing 'makecontext', 'getcontext', 'setcontext' or 'swapcontext' symbol in libc and no libucontext found: KJ won't be able to build with fibers. Disable fibers (-DWITH_FIBERS=OFF).")
+  endif()
 endif()
 
 if(MSVC)

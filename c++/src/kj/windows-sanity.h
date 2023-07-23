@@ -48,7 +48,11 @@
 // now, we use `#pragma once` to tell the compiler never to include this file again.
 #pragma once
 
-namespace win32 {
+namespace kj_win32_workarounds {
+  // Namespace containing constant definitions intended to replace constants that are defined as
+  // macros in the Windows headers. Do not refer to this namespace directly, we'll import it into
+  // the global scope below.
+
 #ifdef ERROR  // This could be absent if e.g. NOGDI was used.
   const auto ERROR_ = ERROR;
 #undef ERROR
@@ -60,7 +64,8 @@ namespace win32 {
   typedef VOID_ VOID;
 }
 
-using win32::ERROR;
-using win32::VOID;
+// Pull our constant definitions into the global namespace -- but only if they don't already exist
+// in the global namespace.
+using namespace kj_win32_workarounds;
 
 #endif
