@@ -105,6 +105,28 @@ y
 y
 EOF
 
+# Create alternate host key and CSR
+openssl genrsa -out example2.key 4096
+openssl req -new -sha256 -key example2.key -out example2.csr << EOF
+US
+California
+Palo Alto
+Sandstorm.io
+Testing Department
+example.net
+garply@sandstorm.io
+
+
+EOF
+echo
+
+# Sign valid host certificate with intermediate CA.
+setup_ca_dir int
+openssl ca -extensions v3_ca -days 36524 -notext -md sha256 -in example2.csr -out valid2.crt << EOF
+y
+y
+EOF
+
 # Create self-signed host certificate.
 openssl req -key example.key -new -x509 -days 36524 -sha256 -out self.crt << EOF
 US
@@ -134,5 +156,7 @@ write_constant CA_CERT ca.crt
 write_constant INTERMEDIATE_CERT int.crt
 write_constant HOST_KEY example.key
 write_constant VALID_CERT valid.crt
+write_constant HOST_KEY2 example2.key
+write_constant VALID_CERT2 valid2.crt
 write_constant EXPIRED_CERT expired.crt
 write_constant SELF_SIGNED_CERT self.crt

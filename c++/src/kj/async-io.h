@@ -299,12 +299,114 @@ Own<AsyncIoStream> newPromisedStream(Promise<Own<AsyncIoStream>> promise);
 // Constructs an Async*Stream which waits for a promise to resolve, then forwards all calls to the
 // promised stream.
 
+// =======================================================================================
+// Authenticated streams
+
+class PeerIdentity {
+  // PeerIdentity provides information about a connecting client. Various subclasses exist to
+  // address different network types.
+public:
+  virtual kj::String toString() = 0;
+  // Returns a human-readable string identifying the peer. Where possible, this string will be
+  // in the same format as the addresses you could pass to `kj::Network::parseAddress()`. However,
+  // only certain subclasses of `PeerIdentity` guarantee this property.
+};
+
+struct AuthenticatedStream {
+  // A pair of an `AsyncIoStream` and a `PeerIdentity`. This is used as the return type of
+  // `NetworkAddress::connectAuthenticated()` and `ConnectionReceiver::acceptAuthenticated()`.
+
+  Own<AsyncIoStream> stream;
+  // The byte stream.
+
+  Own<PeerIdentity> peerIdentity;
+  // An object indicating who is at the other end of the stream.
+  //
+  // Different subclasses of `PeerIdentity` are used in different situations:
+  // - TCP connections will use NetworkPeerIdentity, which gives the network address of the client.
+  // - Local (unix) socket connections will use LocalPeerIdentity, which identifies the UID
+  //   and PID of the process that initiated the connection.
+  // - TLS connections will use TlsPeerIdentity which provides details of the client certificate,
+  //   if any was provided.
+  // - When no meaningful peer identity can be provided, `UnknownPeerIdentity` is returned.
+  //
+  // Implementations of `Network`, `ConnectionReceiver`, `NetworkAddress`, etc. should document the
+  // specific assumptions the caller can make about the type of `PeerIdentity`s used, allowing for
+  // identities to be statically downcast if the right conditions are met. In the absence of
+  // documented promises, RTTI may be needed to query the type.
+};
+
+class NetworkPeerIdentity: public PeerIdentity {
+  // PeerIdentity used for network protocols like TCP/IP. This identifies the remote peer.
+  //
+  // This is only "authenticated" to the extent that we know data written to the stream will be
+  // routed to the given address. This does not preclude the possibility of man-in-the-middle
+  // attacks by attackers who are able to manipulate traffic along the route.
+public:
+  virtual NetworkAddress& getAddress() = 0;
+  // Obtain the peer's address as a NetworkAddress object. The returned reference's lifetime is the
+  // same as the `NetworkPeerIdentity`, but you can always call `clone()` on it to get a copy that
+  // lives longer.
+
+  static kj::Own<NetworkPeerIdentity> newInstance(kj::Own<NetworkAddress> addr);
+  // Construct an instance of this interface wrapping the given address.
+};
+
+class LocalPeerIdentity: public PeerIdentity {
+  // PeerIdentity used for connections between processes on the local machine -- in particular,
+  // Unix sockets.
+  //
+  // (This interface probably isn't useful on Windows.)
+public:
+  struct Credentials {
+    kj::Maybe<int> pid;
+    kj::Maybe<uint> uid;
+
+    // We don't cover groups at present because some systems produce a list of groups while others
+    // only provide the peer's main group, the latter being pretty useless.
+  };
+
+  virtual Credentials getCredentials() = 0;
+  // Get the PID and UID of the peer process, if possible.
+  //
+  // Either ID may be null if the peer could not be identified. Some operating systems do not
+  // support retrieving these credentials, or can only provide one or the other. Some situations
+  // (like user and PID namespaces on Linux) may also make it impossible to represent the peer's
+  // credentials accurately.
+  //
+  // Note the meaning here can be subtle. Multiple processes can potentially have the socket in
+  // their file descriptor tables. The identified process is the one who called `connect()` or
+  // `listen()`.
+  //
+  // On Linux this is implemented with SO_PEERCRED.
+
+  static kj::Own<LocalPeerIdentity> newInstance(Credentials creds);
+  // Construct an instance of this interface wrapping the given credentials.
+};
+
+class UnknownPeerIdentity: public PeerIdentity {
+public:
+  static kj::Own<UnknownPeerIdentity> newInstance();
+  // Get an instance of this interface. This actually always returns the same instance with no
+  // memory allocation.
+};
+
+// =======================================================================================
+// Accepting connections
+
 class ConnectionReceiver {
   // Represents a server socket listening on a port.
 
 public:
   virtual Promise<Own<AsyncIoStream>> accept() = 0;
   // Accept the next incoming connection.
+
+  virtual Promise<AuthenticatedStream> acceptAuthenticated();
+  // Accept the next incoming connection, and also provide a PeerIdentity with any information
+  // about the client.
+  //
+  // For backwards-compatibility, the default implementation of this method calls `accept()` and
+  // then adds `UnknownPeerIdentity`.
 
   virtual uint getPort() = 0;
   // Gets the port number, if applicable (i.e. if listening on IP).  This is useful if you didn't
@@ -431,6 +533,14 @@ public:
   // Make a new connection to this address.
   //
   // The address must not be a wildcard ("*").  If it is an IP address, it must have a port number.
+
+  virtual Promise<AuthenticatedStream> connectAuthenticated();
+  // Connect to the address and return both the connection and information about the peer identity.
+  // This is especially useful when using TLS, to get certificate details.
+  //
+  // For backwards-compatibility, the default implementation of this method calls `connect()` and
+  // then uses a `NetworkPeerIdentity` wrapping a clone of this `NetworkAddress` -- which is not
+  // particularly useful.
 
   virtual Own<ConnectionReceiver> listen() = 0;
   // Listen for incoming connections on this address.
@@ -808,6 +918,11 @@ public:
   Promise<Own<AsyncIoStream>> accept() override;
   uint getPort() override;
 
+  Promise<AuthenticatedStream> acceptAuthenticated() override;
+  // Always produces UnknownIdentity. Capability-based security patterns should not rely on
+  // authenticating peers; the other end of the capability stream should only be given to
+  // authorized parties in the first place.
+
 private:
   AsyncCapabilityStream& inner;
 };
@@ -835,6 +950,11 @@ public:
 
   Own<NetworkAddress> clone() override;
   String toString() override;
+
+  Promise<AuthenticatedStream> connectAuthenticated() override;
+  // Always produces UnknownIdentity. Capability-based security patterns should not rely on
+  // authenticating peers; the other end of the capability stream should only be given to
+  // authorized parties in the first place.
 
 private:
   kj::Maybe<AsyncIoProvider&> provider;

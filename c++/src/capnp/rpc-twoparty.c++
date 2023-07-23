@@ -339,6 +339,26 @@ void TwoPartyServer::accept(
   tasks.add(promise.attach(kj::mv(connectionState)));
 }
 
+kj::Promise<void> TwoPartyServer::accept(kj::AsyncIoStream& connection) {
+  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface,
+      kj::Own<kj::AsyncIoStream>(&connection, kj::NullDisposer::instance));
+
+  // Run the connection until disconnect.
+  auto promise = connectionState->network.onDisconnect();
+  return promise.attach(kj::mv(connectionState));
+}
+
+kj::Promise<void> TwoPartyServer::accept(
+    kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage) {
+  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface,
+      kj::Own<kj::AsyncCapabilityStream>(&connection, kj::NullDisposer::instance),
+      maxFdsPerMessage);
+
+  // Run the connection until disconnect.
+  auto promise = connectionState->network.onDisconnect();
+  return promise.attach(kj::mv(connectionState));
+}
+
 kj::Promise<void> TwoPartyServer::listen(kj::ConnectionReceiver& listener) {
   return listener.accept()
       .then([this,&listener](kj::Own<kj::AsyncIoStream>&& connection) mutable {

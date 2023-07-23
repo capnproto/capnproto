@@ -36,6 +36,7 @@ class TlsPrivateKey;
 class TlsCertificate;
 struct TlsKeypair;
 class TlsSniCallback;
+class TlsConnection;
 
 enum class TlsVersion {
   SSL_3,     // avoid; cryptographically broken
@@ -111,6 +112,12 @@ public:
   //    server serving multiple hosts knows which certificate to use.
   // 2. The server's certificate is validated against this hostname. If validation fails, the
   //    promise returned by wrapClient() will be broken; you'll never get a stream.
+
+  kj::Promise<kj::AuthenticatedStream> wrapServer(kj::AuthenticatedStream stream);
+  kj::Promise<kj::AuthenticatedStream> wrapClient(
+      kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname);
+  // Like wrapServer() and wrapClient(), but also produces information about the peer's
+  // certificate (if any). The returned `peerIdentity` will be a `TlsPeerIdentity`.
 
   kj::Own<kj::ConnectionReceiver> wrapPort(kj::Own<kj::ConnectionReceiver> port);
   // Upgrade a ConnectionReceiver to one that automatically upgrades all accepted connections to
@@ -227,6 +234,44 @@ public:
   virtual kj::Maybe<TlsKeypair> getKey(kj::StringPtr hostname) = 0;
   // Get the key to use for `hostname`. Null return means use the default from
   // TlsContext::Options::defaultKeypair.
+};
+
+class TlsPeerIdentity final: public kj::PeerIdentity {
+public:
+  KJ_DISALLOW_COPY(TlsPeerIdentity);
+  ~TlsPeerIdentity() noexcept(false);
+
+  kj::String toString() override;
+
+  kj::PeerIdentity& getNetworkIdentity() { return *inner; }
+  // Gets the PeerIdentity of the underlying network connection.
+
+  bool hasCertificate() { return cert != nullptr; }
+  // Did the peer even present a (trusted) certificate? Servers must always present certificates.
+  // Clients need only present certificates when the `verifyClients` option is enabled.
+  //
+  // Methods of this class that read details of the certificate will throw exceptions when no
+  // certificate was presented. We don't have them return `Maybe`s because most applications know
+  // in advance whether or not a certificate should be present, so it would lead to lots of
+  // `KJ_ASSERT_NONNULL`...
+
+  kj::String getCommonName();
+  // Get the authenticated common name from the certificate.
+
+  bool matchesHostname(kj::StringPtr hostname);
+  // Check if the certificate authenticates the given hostname, considering wildcards and SAN
+  // extensions. If no certificate was provided, always returns false.
+
+  // TODO(someday): Methods for other things. Match hostnames (i.e. evaluate wildcards and SAN)?
+  //   Key fingerprint? Other certificate fields?
+
+private:
+  void* cert;  // actually type X509*, but we don't want to #include the OpenSSL headers here.
+  kj::Own<kj::PeerIdentity> inner;
+
+public:  // (not really public, only TlsConnection can call this)
+  TlsPeerIdentity(void* cert, kj::Own<kj::PeerIdentity> inner, kj::Badge<TlsConnection>)
+      : cert(cert), inner(kj::mv(inner)) {}
 };
 
 } // namespace kj

@@ -51,6 +51,10 @@
 #include <limits.h>
 #include <sys/ioctl.h>
 
+#if !defined(SO_PEERCRED) && defined(LOCAL_PEERCRED)
+#include <sys/ucred.h>
+#endif
+
 namespace kj {
 
 namespace {
@@ -888,6 +892,10 @@ public:
     return filter.shouldAllowParse(&addr.generic, addrlen);
   }
 
+  kj::Own<PeerIdentity> getIdentity(LowLevelAsyncIoProvider& llaiop,
+                                    LowLevelAsyncIoProvider::NetworkFilter& filter,
+                                    AsyncIoStream& stream) const;
+
 private:
   SocketAddress() {
     // We need to memset the whole object 0 otherwise Valgrind gets unhappy when we write it to a
@@ -1059,12 +1067,21 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
 public:
-  FdConnectionReceiver(UnixEventPort& eventPort, int fd,
+  FdConnectionReceiver(LowLevelAsyncIoProvider& lowLevel,
+                       UnixEventPort& eventPort, int fd,
                        LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
-      : OwnedFileDescriptor(fd, flags), eventPort(eventPort), filter(filter),
+      : OwnedFileDescriptor(fd, flags), lowLevel(lowLevel), eventPort(eventPort), filter(filter),
         observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ) {}
 
   Promise<Own<AsyncIoStream>> accept() override {
+    return acceptImpl(false).then([](AuthenticatedStream&& a) { return kj::mv(a.stream); });
+  }
+
+  Promise<AuthenticatedStream> acceptAuthenticated() override {
+    return acceptImpl(true);
+  }
+
+  Promise<AuthenticatedStream> acceptImpl(bool authenticated) {
     int newFd;
 
     struct sockaddr_storage addr;
@@ -1079,12 +1096,18 @@ public:
 #endif
 
     if (newFd >= 0) {
+      kj::AutoCloseFd ownFd(newFd);
       if (!filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), addrlen)) {
-        // Drop disallowed address.
-        close(newFd);
-        return accept();
+        // Ignore disallowed address.
+        return acceptImpl(authenticated);
       } else {
-        return Own<AsyncIoStream>(heap<AsyncStreamFd>(eventPort, newFd, NEW_FD_FLAGS));
+        AuthenticatedStream result;
+        result.stream = heap<AsyncStreamFd>(eventPort, ownFd.release(), NEW_FD_FLAGS);
+        if (authenticated) {
+          result.peerIdentity = SocketAddress(reinterpret_cast<struct sockaddr*>(&addr), addrlen)
+              .getIdentity(lowLevel, filter, *result.stream);
+        }
+        return kj::mv(result);
       }
     } else {
       int error = errno;
@@ -1095,8 +1118,8 @@ public:
         case EWOULDBLOCK:
 #endif
           // Not ready yet.
-          return observer.whenBecomesReadable().then([this]() {
-            return accept();
+          return observer.whenBecomesReadable().then([this,authenticated]() {
+            return acceptImpl(authenticated);
           });
 
         case EINTR:
@@ -1142,6 +1165,7 @@ public:
   }
 
 public:
+  LowLevelAsyncIoProvider& lowLevel;
   UnixEventPort& eventPort;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
   UnixEventPort::FdObserver observer;
@@ -1239,7 +1263,7 @@ public:
   }
   Own<ConnectionReceiver> wrapListenSocketFd(
       int fd, NetworkFilter& filter, uint flags = 0) override {
-    return heap<FdConnectionReceiver>(eventPort, fd, filter, flags);
+    return heap<FdConnectionReceiver>(*this, eventPort, fd, filter, flags);
   }
   Own<DatagramPort> wrapDatagramSocketFd(
       int fd, NetworkFilter& filter, uint flags = 0) override {
@@ -1267,7 +1291,14 @@ public:
 
   Promise<Own<AsyncIoStream>> connect() override {
     auto addrsCopy = heapArray(addrs.asPtr());
-    auto promise = connectImpl(lowLevel, filter, addrsCopy);
+    auto promise = connectImpl(lowLevel, filter, addrsCopy, false);
+    return promise.attach(kj::mv(addrsCopy))
+        .then([](AuthenticatedStream&& a) { return kj::mv(a.stream); });
+  }
+
+  Promise<AuthenticatedStream> connectAuthenticated() override {
+    auto addrsCopy = heapArray(addrs.asPtr());
+    auto promise = connectImpl(lowLevel, filter, addrsCopy, true);
     return promise.attach(kj::mv(addrsCopy));
   }
 
@@ -1339,10 +1370,11 @@ private:
   Array<SocketAddress> addrs;
   uint counter = 0;
 
-  static Promise<Own<AsyncIoStream>> connectImpl(
+  static Promise<AuthenticatedStream> connectImpl(
       LowLevelAsyncIoProvider& lowLevel,
       LowLevelAsyncIoProvider::NetworkFilter& filter,
-      ArrayPtr<SocketAddress> addrs) {
+      ArrayPtr<SocketAddress> addrs,
+      bool authenticated) {
     KJ_ASSERT(addrs.size() > 0);
 
     return kj::evalNow([&]() -> Promise<Own<AsyncIoStream>> {
@@ -1353,14 +1385,21 @@ private:
         return lowLevel.wrapConnectingSocketFd(
             fd, addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
       }
-    }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
+    }).then([&lowLevel,&filter,addrs,authenticated](Own<AsyncIoStream>&& stream)
+        -> Promise<AuthenticatedStream> {
       // Success, pass along.
-      return kj::mv(stream);
-    }, [&lowLevel,&filter,addrs](Exception&& exception) mutable -> Promise<Own<AsyncIoStream>> {
+      AuthenticatedStream result;
+      result.stream = kj::mv(stream);
+      if (authenticated) {
+        result.peerIdentity = addrs[0].getIdentity(lowLevel, filter, *result.stream);
+      }
+      return kj::mv(result);
+    }, [&lowLevel,&filter,addrs,authenticated](Exception&& exception) mutable
+        -> Promise<AuthenticatedStream> {
       // Connect failed.
       if (addrs.size() > 1) {
         // Try the next address instead.
-        return connectImpl(lowLevel, filter, addrs.slice(1, addrs.size()));
+        return connectImpl(lowLevel, filter, addrs.slice(1, addrs.size()), authenticated);
       } else {
         // No more addresses to try, so propagate the exception.
         return kj::mv(exception);
@@ -1368,6 +1407,64 @@ private:
     });
   }
 };
+
+kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& llaiop,
+                                                 LowLevelAsyncIoProvider::NetworkFilter& filter,
+                                                 AsyncIoStream& stream) const {
+  switch (addr.generic.sa_family) {
+    case AF_INET:
+    case AF_INET6: {
+      auto builder = kj::heapArrayBuilder<SocketAddress>(1);
+      builder.add(*this);
+      return NetworkPeerIdentity::newInstance(
+          kj::heap<NetworkAddressImpl>(llaiop, filter, builder.finish()));
+    }
+    case AF_UNIX: {
+      LocalPeerIdentity::Credentials result;
+
+      // There is little documentation on what happens when the uid/pid can't be obtained, but I've
+      // seen vague references on the internet saying that a PID of 0 and a UID of uid_t(-1) are used
+      // as invalid values.
+
+#if defined(SO_PEERCRED)
+      struct ucred creds;
+      uint length = sizeof(creds);
+      stream.getsockopt(SOL_SOCKET, SO_PEERCRED, &creds, &length);
+      if (creds.pid > 0) {
+        result.pid = creds.pid;
+      }
+      if (creds.uid != static_cast<uid_t>(-1)) {
+        result.uid = creds.uid;
+      }
+
+#elif defined(LOCAL_PEERCRED)
+      // MacOS / FreeBSD
+      struct xucred creds;
+      uint length = sizeof(creds);
+      stream.getsockopt(SOL_LOCAL, LOCAL_PEERCRED, &creds, &length);
+      KJ_ASSERT(length == sizeof(creds));
+      if (creds.cr_uid != static_cast<uid_t>(-1)) {
+        result.uid = creds.cr_uid;
+      }
+
+#if defined(LOCAL_PEERPID)
+      // MacOS only?
+      pid_t pid;
+      length = sizeof(pid);
+      stream.getsockopt(SOL_LOCAL, LOCAL_PEERPID, &pid, &length);
+      KJ_ASSERT(length == sizeof(pid));
+      if (pid > 0) {
+        result.pid = pid;
+      }
+#endif
+#endif
+
+      return LocalPeerIdentity::newInstance(result);
+    }
+    default:
+      return UnknownPeerIdentity::newInstance();
+  }
+}
 
 class SocketNetwork final: public Network {
 public:

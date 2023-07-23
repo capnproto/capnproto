@@ -145,6 +145,17 @@ public:
   void accept(kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMessage);
   // Accepts the connection for servicing.
 
+  kj::Promise<void> accept(kj::AsyncIoStream& connection) KJ_WARN_UNUSED_RESULT;
+  kj::Promise<void> accept(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage)
+      KJ_WARN_UNUSED_RESULT;
+  // Accept connection without taking ownership. The returned promise resolves when the client
+  // disconnects. Dropping the promise forcefully cancels the RPC protocol.
+  //
+  // You probably can't do anything with `connection` after the RPC protocol has terminated, other
+  // than to close it. The main reason to use these methods rather than the ownership-taking ones
+  // is if your stream object becomes invalid outside some scope, so you want to make sure to
+  // cancel all usage of it before that by cancelling the promise.
+
   kj::Promise<void> listen(kj::ConnectionReceiver& listener);
   // Listens for connections on the given listener. The returned promise never resolves unless an
   // exception is thrown while trying to accept. You may discard the returned promise to cancel
@@ -157,6 +168,8 @@ public:
 
   kj::Promise<void> drain() { return tasks.onEmpty(); }
   // Resolves when all clients have disconnected.
+  //
+  // Only considers clients whose connections TwoPartyServer took ownership of.
 
 private:
   Capability::Client bootstrapInterface;
