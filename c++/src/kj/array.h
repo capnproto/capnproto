@@ -853,6 +853,12 @@ inline Array<Decay<T>> arr(T&& param1, Params&&... params) {
   (builder.add(kj::fwd<T>(param1)), ... , builder.add(kj::fwd<Params>(params)));
   return builder.finish();
 }
+template <typename T, typename... Params>
+inline Array<Decay<T>> arrOf(Params&&... params) {
+  ArrayBuilder<Decay<T>> builder = heapArrayBuilder<Decay<T>>(sizeof...(params));
+  (... , builder.add(kj::fwd<Params>(params)));
+  return builder.finish();
+}
 #endif
 
 namespace _ {  // private

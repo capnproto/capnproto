@@ -35,12 +35,12 @@ public:
     tasks.emplace(*this);
   }
 
-  template <typename T>
-  kj::Promise<T> wrap(kj::Promise<T>&& promise) {
+  template <typename Func>
+  auto wrap(Func&& func) -> decltype(func()) {
     if (tasks == nullptr) {
       return KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request");
     } else {
-      return canceler.wrap(kj::mv(promise));
+      return canceler.wrap(func());
     }
   }
 
@@ -123,14 +123,14 @@ public:
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
-    return state->wrap(webSocket.send(context.getParams().getText()));
+    return state->wrap([&]() { return webSocket.send(context.getParams().getText()); });
   }
   kj::Promise<void> sendData(SendDataContext context) override {
-    return state->wrap(webSocket.send(context.getParams().getData()));
+    return state->wrap([&]() { return webSocket.send(context.getParams().getData()); });
   }
   kj::Promise<void> close(CloseContext context) override {
     auto params = context.getParams();
-    return state->wrap(webSocket.close(params.getCode(), params.getReason()));
+    return state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
   }
 
 private:
@@ -203,8 +203,8 @@ public:
     });
   }
 
-  kj::Promise<Message> receive() override {
-    return KJ_ASSERT_NONNULL(in)->receive();
+  kj::Promise<Message> receive(size_t maxSize) override {
+    return KJ_ASSERT_NONNULL(in)->receive(maxSize);
   }
 
   kj::Promise<void> pumpTo(WebSocket& other) override {
@@ -450,11 +450,12 @@ class HttpOverCapnpFactory::ServerRequestContextImpl final
       public kj::HttpService::Response {
 public:
   ServerRequestContextImpl(HttpOverCapnpFactory& factory,
+                           HttpService::Client serviceCap,
                            capnp::HttpRequest::Reader request,
                            capnp::HttpService::ClientRequestContext::Client clientContext,
                            kj::Own<kj::AsyncInputStream> requestBodyIn,
                            kj::HttpService& kjService)
-      : factory(factory),
+      : factory(factory), serviceCap(kj::mv(serviceCap)),
         method(validateMethod(request.getMethod())),
         url(kj::str(request.getUrl())),
         headers(factory.headersToKj(request.getHeaders()).clone()),
@@ -560,6 +561,7 @@ public:
 
 private:
   HttpOverCapnpFactory& factory;
+  HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
   kj::HttpMethod method;
   kj::String url;
   kj::HttpHeaders headers;
@@ -601,7 +603,7 @@ public:
       requestBody = kj::heap<NullInputStream>();
     }
     results.setContext(kj::heap<ServerRequestContextImpl>(
-        factory, metadata, params.getContext(), kj::mv(requestBody), *inner));
+        factory, thisCap(), metadata, params.getContext(), kj::mv(requestBody), *inner));
 
     return kj::READY_NOW;
   }

@@ -246,6 +246,8 @@ const T* readMaybe(const EncodingResult<T>& value) {
   }
 }
 
+String encodeCEscapeImpl(ArrayPtr<const byte> bytes, bool isBinary);
+
 }  // namespace _ (private)
 
 inline String encodeUriComponent(ArrayPtr<const char> text) {
@@ -276,8 +278,13 @@ inline EncodingResult<String> decodeWwwForm(ArrayPtr<const char> text) {
 }
 
 inline String encodeCEscape(ArrayPtr<const char> text) {
-  return encodeCEscape(text.asBytes());
+  return _::encodeCEscapeImpl(text.asBytes(), false);
 }
+
+inline String encodeCEscape(ArrayPtr<const byte> bytes) {
+  return _::encodeCEscapeImpl(bytes, true);
+}
+
 inline EncodingResult<String> decodeCEscape(ArrayPtr<const char> text) {
   auto result = decodeBinaryCEscape(text, true);
   return { String(result.releaseAsChars()), result.hadErrors };
@@ -364,6 +371,74 @@ template <size_t s>
 EncodingResult<Array<byte>> decodeBase64(const char (&text)[s]) {
   return decodeBase64(arrayPtr(text, s - 1));
 }
+
+#if __cplusplus >= 202000L
+template <size_t s>
+inline EncodingResult<Array<char16_t>> encodeUtf16(const char8_t (&text)[s], bool nulTerminate=false) {
+  return encodeUtf16(arrayPtr(reinterpret_cast<const char*>(text), s - 1), nulTerminate);
+}
+template <size_t s>
+inline EncodingResult<Array<char32_t>> encodeUtf32(const char8_t (&text)[s], bool nulTerminate=false) {
+  return encodeUtf32(arrayPtr(reinterpret_cast<const char*>(text), s - 1), nulTerminate);
+}
+template <size_t s>
+inline EncodingResult<Array<wchar_t>> encodeWideString(
+    const char8_t (&text)[s], bool nulTerminate=false) {
+  return encodeWideString(arrayPtr(reinterpret_cast<const char*>(text), s - 1), nulTerminate);
+}
+template <size_t s>
+inline EncodingResult<Array<byte>> decodeHex(const char8_t (&text)[s]) {
+  return decodeHex(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline String encodeUriComponent(const char8_t (&text)[s]) {
+  return encodeUriComponent(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline Array<byte> decodeBinaryUriComponent(const char8_t (&text)[s]) {
+  return decodeBinaryUriComponent(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline EncodingResult<String> decodeUriComponent(const char8_t (&text)[s]) {
+  return decodeUriComponent(arrayPtr(reinterpret_cast<const char*>(text), s-1));
+}
+template <size_t s>
+inline String encodeUriFragment(const char8_t (&text)[s]) {
+  return encodeUriFragment(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline String encodeUriPath(const char8_t (&text)[s]) {
+  return encodeUriPath(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline String encodeUriUserInfo(const char8_t (&text)[s]) {
+  return encodeUriUserInfo(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline String encodeWwwForm(const char8_t (&text)[s]) {
+  return encodeWwwForm(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline EncodingResult<String> decodeWwwForm(const char8_t (&text)[s]) {
+  return decodeWwwForm(arrayPtr(reinterpret_cast<const char*>(text), s-1));
+}
+template <size_t s>
+inline String encodeCEscape(const char8_t (&text)[s]) {
+  return encodeCEscape(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline EncodingResult<Array<byte>> decodeBinaryCEscape(const char8_t (&text)[s]) {
+  return decodeBinaryCEscape(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+template <size_t s>
+inline EncodingResult<String> decodeCEscape(const char8_t (&text)[s]) {
+  return decodeCEscape(arrayPtr(reinterpret_cast<const char*>(text), s-1));
+}
+template <size_t s>
+EncodingResult<Array<byte>> decodeBase64(const char8_t (&text)[s]) {
+  return decodeBase64(arrayPtr(reinterpret_cast<const char*>(text), s - 1));
+}
+#endif
 
 } // namespace kj
 

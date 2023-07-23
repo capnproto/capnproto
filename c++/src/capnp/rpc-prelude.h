@@ -79,13 +79,15 @@ class RpcSystemBase {
   // Non-template version of RpcSystem.  Ignore this class; see RpcSystem in rpc.h.
 
 public:
-  RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface,
-                kj::Maybe<RealmGateway<>::Client> gateway);
-  RpcSystemBase(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory,
-                kj::Maybe<RealmGateway<>::Client> gateway);
+  RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface);
+  RpcSystemBase(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory);
   RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer);
   RpcSystemBase(RpcSystemBase&& other) noexcept;
   ~RpcSystemBase() noexcept(false);
+
+  void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
+
+  kj::Promise<void> run();
 
 private:
   class Impl;
@@ -98,30 +100,6 @@ private:
   template <typename>
   friend class capnp::RpcSystem;
 };
-
-template <typename T> struct InternalRefFromRealmGateway_;
-template <typename InternalRef, typename ExternalRef, typename InternalOwner,
-          typename ExternalOwner>
-struct InternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef, InternalOwner,
-                                    ExternalOwner>> {
-  typedef InternalRef Type;
-};
-template <typename T>
-using InternalRefFromRealmGateway = typename InternalRefFromRealmGateway_<T>::Type;
-template <typename T>
-using InternalRefFromRealmGatewayClient = InternalRefFromRealmGateway<typename T::Calls>;
-
-template <typename T> struct ExternalRefFromRealmGateway_;
-template <typename InternalRef, typename ExternalRef, typename InternalOwner,
-          typename ExternalOwner>
-struct ExternalRefFromRealmGateway_<RealmGateway<InternalRef, ExternalRef, InternalOwner,
-                                    ExternalOwner>> {
-  typedef ExternalRef Type;
-};
-template <typename T>
-using ExternalRefFromRealmGateway = typename ExternalRefFromRealmGateway_<T>::Type;
-template <typename T>
-using ExternalRefFromRealmGatewayClient = ExternalRefFromRealmGateway<typename T::Calls>;
 
 }  // namespace _ (private)
 }  // namespace capnp

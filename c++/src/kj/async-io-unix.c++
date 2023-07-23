@@ -268,6 +268,10 @@ public:
     *length = socklen;
   }
 
+  kj::Maybe<int> getFd() const override {
+    return fd;
+  }
+
   Promise<void> waitConnected() {
     // Wait until initial connection has completed. This actually just waits until it is writable.
 
@@ -471,7 +475,7 @@ private:
   Promise<void> writeInternal(ArrayPtr<const byte> firstPiece,
                               ArrayPtr<const ArrayPtr<const byte>> morePieces,
                               ArrayPtr<const int> fds) {
-    const size_t iovmax = kj::miniposix::iovMax(1 + morePieces.size());
+    const size_t iovmax = kj::miniposix::iovMax();
     // If there are more than IOV_MAX pieces, we'll only write the first IOV_MAX for now, and
     // then we'll loop later.
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(1 + morePieces.size(), iovmax), 16, 128);
@@ -1544,7 +1548,7 @@ Promise<size_t> DatagramPortImpl::send(
   msg.msg_name = const_cast<void*>(implicitCast<const void*>(addr.getRaw()));
   msg.msg_namelen = addr.getRawSize();
 
-  const size_t iovmax = kj::miniposix::iovMax(pieces.size());
+  const size_t iovmax = kj::miniposix::iovMax();
   KJ_STACK_ARRAY(struct iovec, iov, kj::min(pieces.size(), iovmax), 16, 64);
 
   for (size_t i: kj::indices(pieces)) {
@@ -1557,7 +1561,7 @@ Promise<size_t> DatagramPortImpl::send(
     // Too many pieces, but we can't use multiple syscalls because they'd send separate
     // datagrams. We'll have to copy the trailing pieces into a temporary array.
     //
-    // TODO(perf): On Linux we could use multiple syscalls via MSG_MORE.
+    // TODO(perf): On Linux we could use multiple syscalls via MSG_MORE or sendmsg/sendmmsg.
     size_t extraSize = 0;
     for (size_t i = iovmax - 1; i < pieces.size(); i++) {
       extraSize += pieces[i].size();
@@ -1568,8 +1572,8 @@ Promise<size_t> DatagramPortImpl::send(
       memcpy(extra.begin() + extraSize, pieces[i].begin(), pieces[i].size());
       extraSize += pieces[i].size();
     }
-    iov[iovmax - 1].iov_base = extra.begin();
-    iov[iovmax - 1].iov_len = extra.size();
+    iov.back().iov_base = extra.begin();
+    iov.back().iov_len = extra.size();
   }
 
   msg.msg_iov = iov.begin();

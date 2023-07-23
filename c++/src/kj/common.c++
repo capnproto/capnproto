@@ -22,9 +22,6 @@
 #include "common.h"
 #include "debug.h"
 #include <stdlib.h>
-#ifdef _MSC_VER
-#include <limits>
-#endif
 
 namespace kj {
 namespace _ {  // private
@@ -48,11 +45,5 @@ void unreachable() {
 }
 
 }  // namespace _ (private)
-
-#if _MSC_VER && !__clang__
-
-float nan() { return std::numeric_limits<float>::quiet_NaN(); }
-
-#endif
 
 }  // namespace kj

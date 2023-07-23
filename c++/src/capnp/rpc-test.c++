@@ -210,6 +210,11 @@ public:
   uint getSentCount() { return sent; }
   uint getReceivedCount() { return received; }
 
+  void onSend(kj::Function<void(MessageBuilder& message)> callback) {
+    // Invokes the given callback every time a message is sent.
+    sendCallback = kj::mv(callback);
+  }
+
   typedef TestNetworkAdapterBase::Connection Connection;
 
   class ConnectionImpl final
@@ -266,6 +271,8 @@ public:
       }
 
       void send() override {
+        connection.network.sendCallback(message);
+
         if (connection.networkException != nullptr) {
           return;
         }
@@ -411,6 +418,8 @@ private:
   std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
   std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
   std::queue<kj::Own<Connection>> connectionQueue;
+
+  kj::Function<void(MessageBuilder& message)> sendCallback = [](MessageBuilder&) {};
 };
 
 TestNetwork::~TestNetwork() noexcept(false) {}
@@ -467,21 +476,6 @@ struct TestContext {
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork)),
         rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
-  TestContext(Capability::Client bootstrap,
-              RealmGateway<test::TestSturdyRef, Text>::Client gateway)
-      : waitScope(loop),
-        clientNetwork(network.add("client")),
-        serverNetwork(network.add("server")),
-        rpcClient(makeRpcClient(clientNetwork, gateway)),
-        rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
-  TestContext(Capability::Client bootstrap,
-              RealmGateway<test::TestSturdyRef, Text>::Client gateway,
-              bool)
-      : waitScope(loop),
-        clientNetwork(network.add("client")),
-        serverNetwork(network.add("server")),
-        rpcClient(makeRpcClient(clientNetwork)),
-        rpcServer(makeRpcServer(serverNetwork, bootstrap, gateway)) {}
 
   Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
     MallocMessageBuilder refMessage(128);
@@ -569,6 +563,35 @@ TEST(Rpc, Pipelining) {
 
   EXPECT_EQ(3, context.restorer.callCount);
   EXPECT_EQ(1, chainedCallCount);
+}
+
+KJ_TEST("RPC context.setPipeline") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
+      .castAs<test::TestPipeline>();
+
+  auto promise = client.getCapPipelineOnlyRequest().send();
+
+  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  auto pipelineRequest2 = promise.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
+  auto pipelinePromise2 = pipelineRequest2.send();
+
+  EXPECT_EQ(0, context.restorer.callCount);
+
+  auto response = pipelinePromise.wait(context.waitScope);
+  EXPECT_EQ("bar", response.getX());
+
+  auto response2 = pipelinePromise2.wait(context.waitScope);
+  checkTestMessage(response2);
+
+  EXPECT_EQ(3, context.restorer.callCount);
+
+  // The original promise never completed.
+  KJ_EXPECT(!promise.poll(context.waitScope));
 }
 
 TEST(Rpc, Release) {
@@ -671,6 +694,107 @@ TEST(Rpc, TailCall) {
 
   EXPECT_EQ(1, calleeCallCount);
   EXPECT_EQ(1, context.restorer.callCount);
+}
+
+class TestHangingTailCallee final: public test::TestTailCallee::Server {
+public:
+  TestHangingTailCallee(int& callCount, int& cancelCount)
+      : callCount(callCount), cancelCount(cancelCount) {}
+
+  kj::Promise<void> foo(FooContext context) override {
+    context.allowCancellation();
+    ++callCount;
+    return kj::Promise<void>(kj::NEVER_DONE)
+        .attach(kj::defer([&cancelCount = cancelCount]() { ++cancelCount; }));
+  }
+
+private:
+  int& callCount;
+  int& cancelCount;
+};
+
+class TestRacingTailCaller final: public test::TestTailCaller::Server {
+public:
+  TestRacingTailCaller(kj::Promise<void> unblock): unblock(kj::mv(unblock)) {}
+
+  kj::Promise<void> foo(FooContext context) override {
+    return unblock.then([context]() mutable {
+      auto tailRequest = context.getParams().getCallee().fooRequest();
+      return context.tailCall(kj::mv(tailRequest));
+    });
+  }
+
+private:
+  kj::Promise<void> unblock;
+};
+
+TEST(Rpc, TailCallCancel) {
+  TestContext context;
+
+  auto caller = context.connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
+      .castAs<test::TestTailCaller>();
+
+  int callCount = 0, cancelCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestHangingTailCallee>(callCount, cancelCount));
+
+  {
+    auto request = caller.fooRequest();
+    request.setCallee(callee);
+
+    auto promise = request.send();
+
+    KJ_ASSERT(callCount == 0);
+    KJ_ASSERT(cancelCount == 0);
+
+    KJ_ASSERT(!promise.poll(context.waitScope));
+
+    KJ_ASSERT(callCount == 1);
+    KJ_ASSERT(cancelCount == 0);
+  }
+
+  kj::Promise<void>(kj::NEVER_DONE).poll(context.waitScope);
+
+  KJ_ASSERT(callCount == 1);
+  KJ_ASSERT(cancelCount == 1);
+}
+
+TEST(Rpc, TailCallCancelRace) {
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  TestContext context(kj::heap<TestRacingTailCaller>(kj::mv(paf.promise)));
+
+  MallocMessageBuilder serverHostIdBuilder;
+  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
+  serverHostId.setHost("server");
+
+  auto caller = context.rpcClient.bootstrap(serverHostId).castAs<test::TestTailCaller>();
+
+  int callCount = 0, cancelCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestHangingTailCallee>(callCount, cancelCount));
+
+  {
+    auto request = caller.fooRequest();
+    request.setCallee(callee);
+
+    auto promise = request.send();
+
+    KJ_ASSERT(callCount == 0);
+    KJ_ASSERT(cancelCount == 0);
+
+    KJ_ASSERT(!promise.poll(context.waitScope));
+
+    KJ_ASSERT(callCount == 0);
+    KJ_ASSERT(cancelCount == 0);
+
+    // Unblock the server and at the same time cancel the client.
+    paf.fulfiller->fulfill();
+  }
+
+  kj::Promise<void>(kj::NEVER_DONE).poll(context.waitScope);
+
+  KJ_ASSERT(callCount == 1);
+  KJ_ASSERT(cancelCount == 1);
 }
 
 TEST(Rpc, Cancelation) {
@@ -1143,198 +1267,6 @@ TEST(Rpc, Abort) {
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
 }
 
-// =======================================================================================
-
-typedef RealmGateway<test::TestSturdyRef, Text> TestRealmGateway;
-
-class TestGateway final: public TestRealmGateway::Server {
-public:
-  kj::Promise<void> import(ImportContext context) override {
-    auto cap = context.getParams().getCap();
-    context.releaseParams();
-    return cap.saveRequest().send()
-        .then([KJ_CPCAP(context)](Response<Persistent<Text>::SaveResults> response) mutable {
-      context.getResults().initSturdyRef().getObjectId().setAs<Text>(
-          kj::str("imported-", response.getSturdyRef()));
-    });
-  }
-
-  kj::Promise<void> export_(ExportContext context) override {
-    auto cap = context.getParams().getCap();
-    context.releaseParams();
-    return cap.saveRequest().send()
-        .then([KJ_CPCAP(context)]
-            (Response<Persistent<test::TestSturdyRef>::SaveResults> response) mutable {
-      context.getResults().setSturdyRef(kj::str("exported-",
-          response.getSturdyRef().getObjectId().getAs<Text>()));
-    });
-  }
-};
-
-class TestPersistent final: public Persistent<test::TestSturdyRef>::Server {
-public:
-  TestPersistent(kj::StringPtr name): name(name) {}
-
-  kj::Promise<void> save(SaveContext context) override {
-    context.initResults().initSturdyRef().getObjectId().setAs<Text>(name);
-    return kj::READY_NOW;
-  }
-
-private:
-  kj::StringPtr name;
-};
-
-class TestPersistentText final: public Persistent<Text>::Server {
-public:
-  TestPersistentText(kj::StringPtr name): name(name) {}
-
-  kj::Promise<void> save(SaveContext context) override {
-    context.initResults().setSturdyRef(name);
-    return kj::READY_NOW;
-  }
-
-private:
-  kj::StringPtr name;
-};
-
-TEST(Rpc, RealmGatewayImport) {
-  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
-  Persistent<Text>::Client bootstrap = kj::heap<TestPersistentText>("foo");
-
-  MallocMessageBuilder hostIdBuilder;
-  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  hostId.setHost("server");
-
-  TestContext context(bootstrap, gateway);
-  auto client = context.rpcClient.bootstrap(hostId).castAs<Persistent<test::TestSturdyRef>>();
-
-  auto response = client.saveRequest().send().wait(context.waitScope);
-
-  EXPECT_EQ("imported-foo", response.getSturdyRef().getObjectId().getAs<Text>());
-}
-
-TEST(Rpc, RealmGatewayExport) {
-  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
-  Persistent<test::TestSturdyRef>::Client bootstrap = kj::heap<TestPersistent>("foo");
-
-  MallocMessageBuilder hostIdBuilder;
-  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  hostId.setHost("server");
-
-  TestContext context(bootstrap, gateway, true);
-  auto client = context.rpcClient.bootstrap(hostId).castAs<Persistent<Text>>();
-
-  auto response = client.saveRequest().send().wait(context.waitScope);
-
-  EXPECT_EQ("exported-foo", response.getSturdyRef());
-}
-
-TEST(Rpc, RealmGatewayImportExport) {
-  // Test that a save request which leaves the realm, bounces through a promise capability, and
-  // then comes back into the realm, does not actually get translated both ways.
-
-  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
-  Persistent<test::TestSturdyRef>::Client bootstrap = kj::heap<TestPersistent>("foo");
-
-  MallocMessageBuilder serverHostIdBuilder;
-  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  serverHostId.setHost("server");
-
-  MallocMessageBuilder clientHostIdBuilder;
-  auto clientHostId = clientHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  clientHostId.setHost("client");
-
-  kj::EventLoop loop;
-  kj::WaitScope waitScope(loop);
-  TestNetwork network;
-  TestNetworkAdapter& clientNetwork = network.add("client");
-  TestNetworkAdapter& serverNetwork = network.add("server");
-  RpcSystem<test::TestSturdyRefHostId> rpcClient =
-      makeRpcServer(clientNetwork, bootstrap, gateway);
-  auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
-  RpcSystem<test::TestSturdyRefHostId> rpcServer =
-      makeRpcServer(serverNetwork, kj::mv(paf.promise));
-
-  auto client = rpcClient.bootstrap(serverHostId).castAs<Persistent<test::TestSturdyRef>>();
-
-  bool responseReady = false;
-  auto responsePromise = client.saveRequest().send()
-      .then([&](Response<Persistent<test::TestSturdyRef>::SaveResults>&& response) {
-    responseReady = true;
-    return kj::mv(response);
-  }).eagerlyEvaluate(nullptr);
-
-  // Crank the event loop to give the message time to reach the server and block on the promise
-  // resolution.
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-
-  EXPECT_FALSE(responseReady);
-
-  paf.fulfiller->fulfill(rpcServer.bootstrap(clientHostId));
-
-  auto response = responsePromise.wait(waitScope);
-
-  // Should have the original value. If it went through export and re-import, though, then this
-  // will be "imported-exported-foo", which is wrong.
-  EXPECT_EQ("foo", response.getSturdyRef().getObjectId().getAs<Text>());
-}
-
-TEST(Rpc, RealmGatewayImportExport) {
-  // Test that a save request which enters the realm, bounces through a promise capability, and
-  // then goes back out of the realm, does not actually get translated both ways.
-
-  TestRealmGateway::Client gateway = kj::heap<TestGateway>();
-  Persistent<Text>::Client bootstrap = kj::heap<TestPersistentText>("foo");
-
-  MallocMessageBuilder serverHostIdBuilder;
-  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  serverHostId.setHost("server");
-
-  MallocMessageBuilder clientHostIdBuilder;
-  auto clientHostId = clientHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  clientHostId.setHost("client");
-
-  kj::EventLoop loop;
-  kj::WaitScope waitScope(loop);
-  TestNetwork network;
-  TestNetworkAdapter& clientNetwork = network.add("client");
-  TestNetworkAdapter& serverNetwork = network.add("server");
-  RpcSystem<test::TestSturdyRefHostId> rpcClient =
-      makeRpcServer(clientNetwork, bootstrap);
-  auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
-  RpcSystem<test::TestSturdyRefHostId> rpcServer =
-      makeRpcServer(serverNetwork, kj::mv(paf.promise), gateway);
-
-  auto client = rpcClient.bootstrap(serverHostId).castAs<Persistent<Text>>();
-
-  bool responseReady = false;
-  auto responsePromise = client.saveRequest().send()
-      .then([&](Response<Persistent<Text>::SaveResults>&& response) {
-    responseReady = true;
-    return kj::mv(response);
-  }).eagerlyEvaluate(nullptr);
-
-  // Crank the event loop to give the message time to reach the server and block on the promise
-  // resolution.
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-
-  EXPECT_FALSE(responseReady);
-
-  paf.fulfiller->fulfill(rpcServer.bootstrap(clientHostId));
-
-  auto response = responsePromise.wait(waitScope);
-
-  // Should have the original value. If it went through import and re-export, though, then this
-  // will be "exported-imported-foo", which is wrong.
-  EXPECT_EQ("foo", response.getSturdyRef());
-}
-
 KJ_TEST("loopback bootstrap()") {
   int callCount = 0;
   test::TestInterface::Client bootstrap = kj::heap<TestInterfaceImpl>(callCount);
@@ -1353,6 +1285,240 @@ KJ_TEST("loopback bootstrap()") {
 
   KJ_EXPECT(response.getX() == "foo");
   KJ_EXPECT(callCount == 1);
+}
+
+KJ_TEST("method throws exception") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == nullptr);
+}
+
+KJ_TEST("method throws exception with trace encoder") {
+  TestContext context;
+
+  context.rpcServer.setTraceEncoder([](const kj::Exception& e) {
+    return kj::str("trace for ", e.getDescription());
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
+}
+
+KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
+  // When OutgoingRpcMessage::send() throws an exception on a Call message, we need to clean up
+  // anything that had been added to the export table as part of the call. At one point this
+  // cleanup was missing, so exports would leak.
+
+  TestContext context;
+
+  uint32_t expectedExportNumber = 0;
+  uint interceptCount = 0;
+  bool shouldThrowFromSend = false;
+  context.clientNetwork.onSend([&](MessageBuilder& builder) {
+    auto message = builder.getRoot<rpc::Message>().asReader();
+    if (message.isCall()) {
+      auto call = message.getCall();
+      if (call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
+          call.getMethodId() == 0) {
+        // callFoo() request, expect a capability in the param caps. Specifically we expect a
+        // promise, because that's what we send below.
+        auto capTable = call.getParams().getCapTable();
+        KJ_ASSERT(capTable.size() == 1);
+        auto desc = capTable[0];
+        KJ_ASSERT(desc.isSenderPromise());
+        KJ_ASSERT(desc.getSenderPromise() == expectedExportNumber);
+
+        ++interceptCount;
+        if (shouldThrowFromSend) {
+          kj::throwRecoverableException(KJ_EXCEPTION(FAILED, "intercepted"));
+        }
+      }
+    }
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  {
+    shouldThrowFromSend = true;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    req.send().then([](auto&&) {
+      KJ_FAIL_ASSERT("should have thrown");
+    }, [](kj::Exception&& e) {
+      KJ_EXPECT(e.getDescription() == "intercepted", e);
+    }).wait(context.waitScope);
+  }
+
+  KJ_EXPECT(interceptCount == 1);
+
+  // Sending again should use the same export number, because the export table entry should have
+  // been released when send() threw. (At one point, this was a bug...)
+  {
+    shouldThrowFromSend = true;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    req.send().then([](auto&&) {
+      KJ_FAIL_ASSERT("should have thrown");
+    }, [](kj::Exception&& e) {
+      KJ_EXPECT(e.getDescription() == "intercepted", e);
+    }).wait(context.waitScope);
+  }
+
+  KJ_EXPECT(interceptCount == 2);
+
+  // Now lets start a call that doesn't throw. The export number should still be zero because
+  // the previous exports were released.
+  {
+    shouldThrowFromSend = false;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    auto promise = req.send();
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT(interceptCount == 3);
+  }
+
+  // We canceled the previous call, BUT the exported capability is still present until the other
+  // side drops it, which it won't because the call isn't marked cancelable and never completes.
+  // Now, let's send another call. This time, we expect a new export number will actually be
+  // allocated.
+  {
+    shouldThrowFromSend = false;
+    expectedExportNumber = 1;
+    auto req = client.callFooRequest();
+    auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+    req.setCap(kj::mv(paf.promise));
+    auto promise = req.send();
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT(interceptCount == 4);
+
+    // Now let's actually let the RPC complete so we can verify the RPC system isn't broken or
+    // anything.
+    int callCount = 0;
+    paf.fulfiller->fulfill(kj::heap<TestInterfaceImpl>(callCount));
+    auto resp = promise.wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+    KJ_EXPECT(callCount == 1);
+  }
+
+  // Now if we do yet another call, it'll reuse export number 1.
+  {
+    shouldThrowFromSend = false;
+    expectedExportNumber = 1;
+    auto req = client.callFooRequest();
+    req.setCap(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+    auto promise = req.send();
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT(interceptCount == 5);
+  }
+}
+
+KJ_TEST("export the same promise twice") {
+  TestContext context;
+
+  bool exportIsPromise;
+  uint32_t expectedExportNumber;
+  uint interceptCount = 0;
+  context.clientNetwork.onSend([&](MessageBuilder& builder) {
+    auto message = builder.getRoot<rpc::Message>().asReader();
+    if (message.isCall()) {
+      auto call = message.getCall();
+      if (call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
+          call.getMethodId() == 0) {
+        // callFoo() request, expect a capability in the param caps. Specifically we expect a
+        // promise, because that's what we send below.
+        auto capTable = call.getParams().getCapTable();
+        KJ_ASSERT(capTable.size() == 1);
+        auto desc = capTable[0];
+        if (exportIsPromise) {
+          KJ_ASSERT(desc.isSenderPromise());
+          KJ_ASSERT(desc.getSenderPromise() == expectedExportNumber);
+        } else {
+          KJ_ASSERT(desc.isSenderHosted());
+          KJ_ASSERT(desc.getSenderHosted() == expectedExportNumber);
+        }
+
+        ++interceptCount;
+      }
+    }
+  });
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto sendReq = [&](test::TestInterface::Client cap) {
+    auto req = client.callFooRequest();
+    req.setCap(kj::mv(cap));
+    return req.send();
+  };
+
+  auto expectNeverDone = [&](auto& promise) {
+    if (promise.poll(context.waitScope)) {
+      promise.wait(context.waitScope);  // let it throw if it's going to
+      KJ_FAIL_ASSERT("promise finished without throwing");
+    }
+  };
+
+  int callCount = 0;
+  test::TestInterface::Client normalCap = kj::heap<TestInterfaceImpl>(callCount);
+  test::TestInterface::Client promiseCap = kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE);
+
+  // Send request with a promise capability in the params.
+  exportIsPromise = true;
+  expectedExportNumber = 0;
+  auto promise1 = sendReq(promiseCap);
+  expectNeverDone(promise1);
+  KJ_EXPECT(interceptCount == 1);
+
+  // Send a second request with the same promise should use the same export table entry.
+  auto promise2 = sendReq(promiseCap);
+  expectNeverDone(promise2);
+  KJ_EXPECT(interceptCount == 2);
+
+  // Sending a request with a different promise should use a different export table entry.
+  expectedExportNumber = 1;
+  auto promise3 = sendReq(kj::Promise<test::TestInterface::Client>(kj::NEVER_DONE));
+  expectNeverDone(promise3);
+  KJ_EXPECT(interceptCount == 3);
+
+  // Now try sending a non-promise cap. We'll send all these requests at once before waiting on
+  // any of them since these will acutally complete.k
+  exportIsPromise = false;
+  expectedExportNumber = 2;
+  auto promise4 = sendReq(normalCap);
+  auto promise5 = sendReq(normalCap);
+  expectedExportNumber = 3;
+  auto promise6 = sendReq(kj::heap<TestInterfaceImpl>(callCount));
+  KJ_EXPECT(interceptCount == 6);
+
+  KJ_EXPECT(promise4.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(promise5.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(promise6.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(callCount == 3);
 }
 
 }  // namespace

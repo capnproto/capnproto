@@ -24,6 +24,7 @@
 #include "rpc.h"
 #include "message.h"
 #include <kj/async-io.h>
+#include <capnp/serialize-async.h>
 #include <capnp/rpc-twoparty.capnp.h>
 #include <kj/one-of.h>
 
@@ -51,13 +52,18 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
   // Use `TwoPartyVatNetwork` only if you need the advanced features.
 
 public:
+  TwoPartyVatNetwork(MessageStream& msgStream,
+                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
+  TwoPartyVatNetwork(MessageStream& msgStream, uint maxFdsPerMessage,
+                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                      ReaderOptions receiveOptions = ReaderOptions());
   TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
-  // To support FD passing, pass an AsyncCapabilityStream and `maxFdsPerMessage`, which specifies
-  // the maximum number of file descriptors to accept from the peer in any one RPC message. It is
-  // important to keep maxFdsPerMessage low in order to stop DoS attacks that fill up your FD table.
+  // To support FD passing, pass an AsyncCapabilityStream or a MessageStream which supports
+  // fd passing, and `maxFdsPerMessage`, which specifies the maximum number of file descriptors
+  // to accept from the peer in any one RPC message. It is important to keep maxFdsPerMessage
+  // low in order to stop DoS attacks that fill up your FD table.
   //
   // Note that this limit applies only to incoming messages; outgoing messages are allowed to have
   // more FDs. Sometimes it makes sense to enforce a limit of zero in one direction while having
@@ -73,6 +79,14 @@ public:
 
   rpc::twoparty::Side getSide() { return side; }
 
+  size_t getCurrentQueueSize() { return currentQueueSize; }
+  // Get the number of bytes worth of outgoing messages that are currently queued in memory waiting
+  // to be sent on this connection. This may be useful for backpressure.
+
+  size_t getCurrentQueueCount() { return currentQueueCount; }
+  // Get the count outgoing messages that are currently queued in memory waiting
+  // to be sent on this connection. This may be useful for backpressure.
+
   // implements VatNetwork -----------------------------------------------------
 
   kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connect(
@@ -83,7 +97,10 @@ private:
   class OutgoingMessageImpl;
   class IncomingMessageImpl;
 
-  kj::OneOf<kj::AsyncIoStream*, kj::AsyncCapabilityStream*> stream;
+  kj::OneOf<MessageStream*, kj::Own<MessageStream>> stream;
+  // The underlying stream, which we may or may not own. Get a reference to
+  // this with getStream, rather than reading it directly.
+
   uint maxFdsPerMessage;
   rpc::twoparty::Side side;
   MallocMessageBuilder peerVatId;
@@ -92,6 +109,10 @@ private:
 
   bool solSndbufUnimplemented = false;
   // Whether stream.getsockopt(SO_SNDBUF) has been observed to throw UNIMPLEMENTED.
+
+  kj::Canceler readCanceler;
+  kj::Maybe<kj::Exception> readCancelReason;
+  // Used to propagate write errors into (permanent) read errors.
 
   kj::Maybe<kj::Promise<void>> previousWrite;
   // Resolves when the previous write completes.  This effectively serves as the write queue.
@@ -102,6 +123,9 @@ private:
   // second call on the server side.  Never fulfilled, because there is only one connection.
 
   kj::ForkedPromise<void> disconnectPromise = nullptr;
+
+  size_t currentQueueSize = 0;
+  size_t currentQueueCount = 0;
 
   class FulfillerDisposer: public kj::Disposer {
     // Hack:  TwoPartyVatNetwork is both a VatNetwork and a VatNetwork::Connection.  When the RPC
@@ -117,6 +141,15 @@ private:
     void disposeImpl(void* pointer) const override;
   };
   FulfillerDisposer disconnectFulfiller;
+
+
+  TwoPartyVatNetwork(
+      kj::OneOf<MessageStream*, kj::Own<MessageStream>>&& stream,
+      uint maxFdsPerMessage,
+      rpc::twoparty::Side side,
+      ReaderOptions receiveOptions);
+
+  MessageStream& getStream();
 
   kj::Own<TwoPartyVatNetworkBase::Connection> asConnection();
   // Returns a pointer to this with the disposer set to disconnectFulfiller.
@@ -196,6 +229,12 @@ public:
   // Get the server's bootstrap interface.
 
   inline kj::Promise<void> onDisconnect() { return network.onDisconnect(); }
+
+  void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
+  // Forwarded to rpcSystem.setTraceEncoder().
+
+  size_t getCurrentQueueSize() { return network.getCurrentQueueSize(); }
+  size_t getCurrentQueueCount() { return network.getCurrentQueueCount(); }
 
 private:
   TwoPartyVatNetwork network;

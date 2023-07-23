@@ -146,6 +146,7 @@ includekj_HEADERS =                                            \
   src/kj/memory.h                                              \
   src/kj/refcount.h                                            \
   src/kj/array.h                                               \
+  src/kj/list.h                                                \
   src/kj/vector.h                                              \
   src/kj/string.h                                              \
   src/kj/string-tree.h                                         \
@@ -229,7 +230,8 @@ includecapnp_HEADERS =                                         \
 includecapnpcompat_HEADERS =                                   \
   src/capnp/compat/json.h                                      \
   src/capnp/compat/json.capnp.h                                \
-  src/capnp/compat/std-iterator.h
+  src/capnp/compat/std-iterator.h                              \
+  src/capnp/compat/websocket-rpc.h
 
 if BUILD_KJ_TLS
 MAYBE_KJ_TLS_LA=libkj-tls.la
@@ -253,7 +255,7 @@ endif
 if LITE_MODE
 lib_LTLIBRARIES = libkj.la libkj-test.la libcapnp.la
 else
-lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) $(MAYBE_KJ_GZIP_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-test.la libkj-async.la libkj-http.la $(MAYBE_KJ_TLS_LA) $(MAYBE_KJ_GZIP_LA) libcapnp.la libcapnp-rpc.la libcapnp-json.la libcapnp-websocket.la libcapnpc.la
 endif
 
 libkj_la_LIBADD = $(PTHREAD_LIBS)
@@ -264,6 +266,7 @@ libkj_la_SOURCES=                                              \
   src/kj/memory.c++                                            \
   src/kj/refcount.c++                                          \
   src/kj/array.c++                                             \
+  src/kj/list.c++                                              \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
   src/kj/hash.c++                                              \
@@ -365,6 +368,11 @@ libcapnp_json_la_SOURCES=                                      \
   src/capnp/compat/json.c++                                    \
   src/capnp/compat/json.capnp.c++
 
+libcapnp_websocket_la_LIBADD = libcapnp.la libcapnp-rpc.la libkj.la libkj-async.la libkj-http.la $(PTHREAD_LIBS)
+libcapnp_websocket_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
+libcapnp_websocket_la_SOURCES=                                 \
+  src/capnp/compat/websocket-rpc.c++
+
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnpc_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libcapnpc_la_SOURCES=                                          \
@@ -380,6 +388,9 @@ libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/grammar.capnp.c++                         \
   src/capnp/compiler/parser.h                                  \
   src/capnp/compiler/parser.c++                                \
+  src/capnp/compiler/resolver.h                                \
+  src/capnp/compiler/generics.h                                \
+  src/capnp/compiler/generics.c++                              \
   src/capnp/compiler/node-translator.h                         \
   src/capnp/compiler/node-translator.c++                       \
   src/capnp/compiler/compiler.h                                \
@@ -479,6 +490,9 @@ capnp_test_LDADD = libcapnp-test.a libcapnp.la libkj-test.la libkj.la
 else !LITE_MODE
 
 check_PROGRAMS = capnp-test capnp-evolution-test capnp-afl-testcase
+if HAS_FUZZING_ENGINE
+    check_PROGRAMS += capnp-llvm-fuzzer-testcase
+endif
 heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
@@ -514,6 +528,7 @@ capnp_test_LDADD =                                             \
   libcapnp-test.a                                              \
   libcapnpc.la                                                 \
   libcapnp-rpc.la                                              \
+  libcapnp-websocket.la                                        \
   libcapnp-json.la                                             \
   libcapnp.la                                                  \
   libkj-http.la                                                \
@@ -533,6 +548,7 @@ capnp_test_SOURCES =                                           \
   src/kj/memory-test.c++                                       \
   src/kj/refcount-test.c++                                     \
   src/kj/array-test.c++                                        \
+  src/kj/list-test.c++                                         \
   src/kj/string-test.c++                                       \
   src/kj/string-tree-test.c++                                  \
   src/kj/table-test.c++                                        \
@@ -573,6 +589,12 @@ capnp_evolution_test_SOURCES = src/capnp/compiler/evolution-test.c++
 
 capnp_afl_testcase_LDADD = libcapnp-test.a libcapnp-rpc.la libcapnp.la libkj.la libkj-async.la
 capnp_afl_testcase_SOURCES = src/capnp/afl-testcase.c++
+
+if HAS_FUZZING_ENGINE
+    capnp_llvm_fuzzer_testcase_LDADD = libcapnp-test.a libcapnp-rpc.la libcapnp.la libkj.la libkj-async.la
+    capnp_llvm_fuzzer_testcase_SOURCES = src/capnp/llvm-fuzzer-testcase.c++
+    capnp_llvm_fuzzer_testcase_LDFLAGS = $(LIB_FUZZING_ENGINE)
+endif
 endif !LITE_MODE
 
 if LITE_MODE

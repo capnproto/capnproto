@@ -981,6 +981,14 @@ kj::Promise<void> TestPipelineImpl::getAnyCap(GetAnyCapContext context) {
       });
 }
 
+kj::Promise<void> TestPipelineImpl::getCapPipelineOnly(GetCapPipelineOnlyContext context) {
+  ++callCount;
+  PipelineBuilder<GetCapPipelineOnlyResults> pb;
+  pb.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
+  context.setPipeline(pb.build());
+  return kj::NEVER_DONE;
+}
+
 kj::Promise<void> TestCallOrderImpl::getCallSequence(GetCallSequenceContext context) {
   auto result = context.getResults();
   result.setN(count++);
@@ -1176,6 +1184,10 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
   context.getResults().setFdCap3(kj::heap<TestFdCap>(kj::mv(in)));
 
   return kj::joinPromises(promises.finish());
+}
+
+kj::Promise<void> TestMoreStuffImpl::throwException(ThrowExceptionContext context) {
+  return KJ_EXCEPTION(FAILED, "test exception");
 }
 
 #endif  // !CAPNP_LITE

@@ -39,7 +39,13 @@
 
 #ifndef SYS_futex
 // Missing on Android/Bionic.
+#ifdef __NR_futex
 #define SYS_futex __NR_futex
+#elif defined(SYS_futex_time64)
+#define SYS_futex SYS_futex_time64
+#else
+#error "Need working SYS_futex"
+#endif
 #endif
 
 #ifndef FUTEX_WAIT_PRIVATE
@@ -54,6 +60,12 @@
 
 namespace kj {
 namespace _ {  // private
+
+#if KJ_USE_FUTEX
+constexpr uint Mutex::EXCLUSIVE_HELD;
+constexpr uint Mutex::EXCLUSIVE_REQUESTED;
+constexpr uint Mutex::SHARED_COUNT_MASK;
+#endif
 
 inline void Mutex::addWaiter(Waiter& waiter) {
 #ifdef KJ_DEBUG
@@ -259,6 +271,14 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
         // them up even if readers are waiting so that at the very least they may re-establish the
         // EXCLUSIVE_REQUESTED bit that we just removed.
         syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
+
+#ifdef KJ_CONTENTION_WARNING_THRESHOLD
+        uint readerCount = oldState & SHARED_COUNT_MASK;
+        if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
+          KJ_LOG(WARNING, "excessively many readers were waiting on this lock", readerCount,
+              kj::getStackTrace());
+        }
+#endif
       }
       break;
     }

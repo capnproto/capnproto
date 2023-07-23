@@ -396,13 +396,13 @@ struct List<List<T>, Kind::LIST> {
         l.set(i++, element);
       }
     }
-    inline void adopt(uint index, Orphan<T>&& value) {
+    inline void adopt(uint index, Orphan<List<T>>&& value) {
       KJ_IREQUIRE(index < size());
       builder.getPointerElement(bounded(index) * ELEMENTS).adopt(kj::mv(value.builder));
     }
-    inline Orphan<T> disown(uint index) {
+    inline Orphan<List<T>> disown(uint index) {
       KJ_IREQUIRE(index < size());
-      return Orphan<T>(builder.getPointerElement(bounded(index) * ELEMENTS).disown());
+      return Orphan<List<T>>(builder.getPointerElement(bounded(index) * ELEMENTS).disown());
     }
 
     typedef _::IndexingIterator<Builder, typename List<T>::Builder> Iterator;

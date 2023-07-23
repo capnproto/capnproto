@@ -377,7 +377,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   OutputStream::write(pieces);
 
 #else
-  const size_t iovmax = miniposix::iovMax(pieces.size());
+  const size_t iovmax = miniposix::iovMax();
   while (pieces.size() > iovmax) {
     write(pieces.slice(0, iovmax));
     pieces = pieces.slice(iovmax, pieces.size());

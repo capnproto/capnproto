@@ -80,6 +80,13 @@ public:
   StringPtr getDescription() const { return description; }
   ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
+  StringPtr getRemoteTrace() const { return remoteTrace; }
+  void setRemoteTrace(kj::String&& value) { remoteTrace = kj::mv(value); }
+  // Additional stack trace data originating from a remote server. If present, then
+  // `getStackTrace()` only traces up until entry into the RPC system, and the remote trace
+  // contains any trace information returned over the wire. This string is human-readable but the
+  // format is otherwise unspecified.
+
   struct Context {
     // Describes a bit about what was going on when the exception was thrown.
 
@@ -106,9 +113,11 @@ public:
   // is expected that contexts will be added in reverse order as the exception passes up the
   // callback stack.
 
-  KJ_NOINLINE void extendTrace(uint ignoreCount);
+  KJ_NOINLINE void extendTrace(uint ignoreCount, uint limit = kj::maxValue);
   // Append the current stack trace to the exception's trace, ignoring the first `ignoreCount`
   // frames (see `getStackTrace()` for discussion of `ignoreCount`).
+  //
+  // If `limit` is set, limit the number of frames added to the given number.
 
   KJ_NOINLINE void truncateCommonTrace();
   // Remove the part of the stack trace which the exception shares with the caller of this method.
@@ -119,6 +128,9 @@ public:
   // Append the given pointer to the backtrace, if it is not already full. This is used by the
   // async library to trace through the promise chain that led to the exception.
 
+  KJ_NOINLINE void addTraceHere();
+  // Adds the location that called this method to the stack trace.
+
 private:
   String ownFile;
   const char* file;
@@ -126,6 +138,7 @@ private:
   Type type;
   String description;
   Maybe<Own<Context>> context;
+  String remoteTrace;
   void* trace[32];
   uint traceCount;
 
@@ -384,6 +397,48 @@ kj::String getCaughtExceptionType();
 // currently being thrown. This can be called inside a catch block, including a catch (...) block,
 // for the purpose of error logging. This function is best-effort; on some platforms it may simply
 // return "(unknown)".
+
+#if !KJ_NO_EXCEPTIONS
+
+class InFlightExceptionIterator {
+  // A class that can be used to iterate over exceptions that are in-flight in the current thread,
+  // meaning they are either uncaught, or caught by a catch block that is current executing.
+  //
+  // This is meant for debugging purposes, and the results are best-effort. The C++ standard
+  // library does not provide any way to inspect uncaught exceptions, so this class can only
+  // discover KJ exceptions thrown using throwFatalException() or throwRecoverableException().
+  // All KJ code uses those two functions to throw exceptions, but if your own code uses a bare
+  // `throw`, or if the standard library throws an exception, these cannot be inspected.
+  //
+  // This class is safe to use in a signal handler.
+
+public:
+  InFlightExceptionIterator();
+
+  Maybe<const Exception&> next();
+
+private:
+  const Exception* ptr;
+};
+
+#endif  // !KJ_NO_EXCEPTIONS
+
+kj::Exception getDestructionReason(void* traceSeparator,
+    kj::Exception::Type defaultType, const char* defaultFile, int defaultLine,
+    kj::StringPtr defaultDescription);
+// Returns an exception that attempts to capture why a destructor has been invoked. If a KJ
+// exception is currently in-flight (see InFlightExceptionIterator), then that exception is
+// returned. Otherwise, an exception is constructed using the current stack trace and the type,
+// file, line, and description provided. In the latter case, `traceSeparator` is appended to the
+// stack trace; this should be a pointer to some dummy symbol which acts as a separator between the
+// original stack trace and any new trace frames added later.
+
+kj::ArrayPtr<void* const> computeRelativeTrace(
+    kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo);
+// Given two traces expected to have started from the same root, try to find the part of `trace`
+// that is different from `relativeTo`, considering that either or both traces might be truncated.
+//
+// This is useful for debugging, when reporting several related traces at once.
 
 }  // namespace kj
 

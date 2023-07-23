@@ -58,6 +58,15 @@ void expectRes(EncodingResult<T> result,
   expectResImpl(kj::mv(result), arrayPtr(expected, s - 1), errors);
 }
 
+#if __cplusplus >= 202000L
+template <typename T, size_t s>
+void expectRes(EncodingResult<T> result,
+               const char8_t (&expected)[s],
+               bool errors = false) {
+  expectResImpl(kj::mv(result), arrayPtr(reinterpret_cast<const char*>(expected), s - 1), errors);
+}
+#endif
+
 template <typename T, size_t s>
 void expectRes(EncodingResult<T> result,
                byte (&expected)[s],
@@ -362,10 +371,12 @@ KJ_TEST("application/x-www-form-urlencoded encoding/decoding") {
 }
 
 KJ_TEST("C escape encoding/decoding") {
-  KJ_EXPECT(encodeCEscape("fooo\a\b\f\n\r\t\v\'\"\\bar") ==
-      "fooo\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\\bar");
+  KJ_EXPECT(encodeCEscape("fooo\a\b\f\n\r\t\v\'\"\\barПривет, Мир! Ж=О") ==
+      "fooo\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\\bar\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82\x2c\x20\xd0\x9c\xd0\xb8\xd1\x80\x21\x20\xd0\x96\x3d\xd0\x9e");
   KJ_EXPECT(encodeCEscape("foo\x01\x7fxxx") ==
       "foo\\001\\177xxx");
+  byte bytes[] = {'f', 'o', 'o', 0, '\x01', '\x7f', 'x', 'x', 'x', 128, 254, 255};
+  KJ_EXPECT(encodeCEscape(bytes) == "foo\\000\\001\\177xxx\\200\\376\\377");
 
   expectRes(decodeCEscape("fooo\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\\bar"),
       "fooo\a\b\f\n\r\t\v\'\"\\bar");

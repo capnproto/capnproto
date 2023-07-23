@@ -103,6 +103,15 @@ struct Url {
   ~Url() noexcept(false);
   Url& operator=(Url&&) = default;
 
+  inline Url(String&& scheme, Maybe<UserInfo>&& userInfo, String&& host, Vector<String>&& path,
+             bool hasTrailingSlash, Vector<QueryParam>&& query, Maybe<String>&& fragment,
+             UrlOptions options)
+      : scheme(kj::mv(scheme)), userInfo(kj::mv(userInfo)), host(kj::mv(host)), path(kj::mv(path)),
+        hasTrailingSlash(hasTrailingSlash), query(kj::mv(query)), fragment(kj::mv(fragment)),
+        options(options) {}
+  // This constructor makes brace initialization work in C++11 and C++20 -- but is technically not
+  // needed in C++14 nor C++17. Go figure.
+
   Url clone() const;
 
   enum Context {

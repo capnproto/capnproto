@@ -135,6 +135,24 @@ if(NOT CAPNP_LITE)
   install(FILES ${capnp-json_headers} ${capnp-json_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp/compat")
 endif()
 
+# capnp-websocket ========================================================================
+
+set(capnp-websocket_sources
+  compat/websocket-rpc.c++
+)
+set(capnp-websocket_headers
+  compat/websocket-rpc.h
+)
+if(NOT CAPNP_LITE)
+  add_library(capnp-websocket ${capnp-websocket_sources})
+  add_library(CapnProto::capnp-websocket ALIAS capnp-websocket)
+  target_link_libraries(capnp-websocket PUBLIC capnp capnp-rpc kj-http kj-async kj)
+  # Ensure the library has a version set to match autotools build
+  set_target_properties(capnp-websocket PROPERTIES VERSION ${VERSION})
+  install(TARGETS capnp-websocket ${INSTALL_TARGETS_DEFAULT_ARGS})
+  install(FILES ${capnp-websocket_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp/compat")
+endif()
+
 # Tools/Compilers ==============================================================
 
 set(capnpc_sources
@@ -144,6 +162,7 @@ set(capnpc_sources
   compiler/lexer.c++
   compiler/grammar.capnp.c++
   compiler/parser.c++
+  compiler/generics.c++
   compiler/node-translator.c++
   compiler/compiler.c++
   schema-parser.c++
@@ -225,7 +244,7 @@ if(BUILD_TESTING)
   if(CAPNP_LITE)
     set(test_libraries capnp kj-test kj)
   else()
-    set(test_libraries capnp-json capnp-rpc capnp capnpc kj-async kj-test kj)
+    set(test_libraries capnp-json capnp-rpc capnp-websocket capnp capnpc kj-http kj-async kj-test kj)
   endif()
 
   add_executable(capnp-tests
@@ -270,6 +289,7 @@ if(BUILD_TESTING)
       compiler/type-id-test.c++
       test-util.c++
       compat/json-test.c++
+      compat/websocket-rpc-test.c++
       ${test_capnp_cpp_files}
       ${test_capnp_h_files}
     )
@@ -290,3 +310,8 @@ if(BUILD_TESTING)
     add_test(NAME capnp-evolution-tests-run COMMAND capnp-evolution-tests)
   endif()  # NOT CAPNP_LITE
 endif()  # BUILD_TESTING
+
+if(DEFINED ENV{LIB_FUZZING_ENGINE})
+  add_executable(capnp_llvm_fuzzer_testcase llvm-fuzzer-testcase.c++ test-util.c++ test-util.h ${test_capnp_cpp_files} ${test_capnp_h_files})
+  target_link_libraries(capnp_llvm_fuzzer_testcase capnp-rpc capnp kj kj-async capnp-json $ENV{LIB_FUZZING_ENGINE})
+endif()

@@ -168,6 +168,11 @@ public:
     }
     return responseBuilder;
   }
+  void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+    KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
+      f->get()->fulfill(AnyPointer::Pipeline(kj::mv(pipeline)));
+    }
+  }
   kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
     auto result = directTailCall(kj::mv(request));
     KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
@@ -838,6 +843,36 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
 kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise) {
   return kj::refcounted<QueuedPipeline>(kj::mv(promise));
 }
+
+// =======================================================================================
+
+namespace _ {  // private
+
+class PipelineBuilderHook final: public PipelineHook, public kj::Refcounted {
+public:
+  PipelineBuilderHook(uint firstSegmentWords)
+      : message(firstSegmentWords),
+        root(message.getRoot<AnyPointer>()) {}
+
+  kj::Own<PipelineHook> addRef() override {
+    return kj::addRef(*this);
+  }
+
+  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+    return root.asReader().getPipelinedCap(ops);
+  }
+
+  MallocMessageBuilder message;
+  AnyPointer::Builder root;
+};
+
+PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords) {
+  auto hook = kj::refcounted<PipelineBuilderHook>(firstSegmentWords);
+  auto root = hook->root;
+  return { root, kj::mv(hook) };
+}
+
+}  // namespace _ (private)
 
 // =======================================================================================
 

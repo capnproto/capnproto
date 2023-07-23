@@ -41,8 +41,6 @@ namespace kj {
 
 namespace _ {  // private
 
-template <typename Inner, typename Mapping>
-class MappedIterable;
 template <typename Row>
 class TableMapping;
 template <typename Row, typename Inner>
@@ -359,72 +357,6 @@ template <typename... Params>
 inline void tryReserveSize(Params&&...) {}
 // If `src` has a `.size()` method, call dst.reserve(dst.size() + src.size()).
 // Otherwise, do nothing.
-
-template <typename Inner, class Mapping>
-class MappedIterator: private Mapping {
-  // An iterator that wraps some other iterator and maps the values through a mapping function.
-  // The type `Mapping` must define a method `map()` which performs this mapping.
-  //
-  // TODO(cleanup): This seems generally useful. Should we put it somewhere resuable?
-
-public:
-  template <typename... Params>
-  MappedIterator(Inner inner, Params&&... params)
-      : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
-
-  inline auto operator->() const { return &Mapping::map(*inner); }
-  inline decltype(auto) operator* () const { return Mapping::map(*inner); }
-  inline decltype(auto) operator[](size_t index) const { return Mapping::map(inner[index]); }
-  inline MappedIterator& operator++() { ++inner; return *this; }
-  inline MappedIterator  operator++(int) { return MappedIterator(inner++, *this); }
-  inline MappedIterator& operator--() { --inner; return *this; }
-  inline MappedIterator  operator--(int) { return MappedIterator(inner--, *this); }
-  inline MappedIterator& operator+=(ptrdiff_t amount) { inner += amount; return *this; }
-  inline MappedIterator& operator-=(ptrdiff_t amount) { inner -= amount; return *this; }
-  inline MappedIterator  operator+ (ptrdiff_t amount) const {
-    return MappedIterator(inner + amount, *this);
-  }
-  inline MappedIterator  operator- (ptrdiff_t amount) const {
-    return MappedIterator(inner - amount, *this);
-  }
-  inline ptrdiff_t operator- (const MappedIterator& other) const { return inner - other.inner; }
-
-  inline bool operator==(const MappedIterator& other) const { return inner == other.inner; }
-  inline bool operator!=(const MappedIterator& other) const { return inner != other.inner; }
-  inline bool operator<=(const MappedIterator& other) const { return inner <= other.inner; }
-  inline bool operator>=(const MappedIterator& other) const { return inner >= other.inner; }
-  inline bool operator< (const MappedIterator& other) const { return inner <  other.inner; }
-  inline bool operator> (const MappedIterator& other) const { return inner >  other.inner; }
-
-private:
-  Inner inner;
-};
-
-template <typename Inner, typename Mapping>
-class MappedIterable: private Mapping {
-  // An iterable that wraps some other iterable and maps the values through a mapping function.
-  // The type `Mapping` must define a method `map()` which performs this mapping.
-  //
-  // TODO(cleanup): This seems generally useful. Should we put it somewhere resuable?
-
-public:
-  template <typename... Params>
-  MappedIterable(Inner inner, Params&&... params)
-      : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
-
-  typedef Decay<decltype(instance<Inner>().begin())> InnerIterator;
-  typedef MappedIterator<InnerIterator, Mapping> Iterator;
-  typedef Decay<decltype(instance<const Inner>().begin())> InnerConstIterator;
-  typedef MappedIterator<InnerConstIterator, Mapping> ConstIterator;
-
-  inline Iterator begin() { return { inner.begin(), (Mapping&)*this }; }
-  inline Iterator end() { return { inner.end(), (Mapping&)*this }; }
-  inline ConstIterator begin() const { return { inner.begin(), (const Mapping&)*this }; }
-  inline ConstIterator end() const { return { inner.end(), (const Mapping&)*this }; }
-
-private:
-  Inner inner;
-};
 
 template <typename Row>
 class TableMapping {
@@ -813,7 +745,7 @@ size_t Table<Row, Indexes...>::eraseAll(Predicate&& predicate) {
 template <typename Row, typename... Indexes>
 template <typename Collection, typename, bool>
 size_t Table<Row, Indexes...>::eraseAll(Collection&& collection) {
-  return eraseAllImpl(_::MappedIterable<Collection&, _::TableUnmapping<Row>>(
+  return eraseAllImpl(MappedIterable<Collection&, _::TableUnmapping<Row>>(
       collection, rows.begin()));
 }
 
@@ -896,6 +828,11 @@ public:
   template <typename... Params>
   HashIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
 
+  size_t capacity() {
+    // This method is for testing.
+    return buckets.size();
+  }
+
   void reserve(size_t size) {
     if (buckets.size() < size * 2) {
       rehash(size);
@@ -915,8 +852,12 @@ public:
   template <typename Row, typename... Params>
   kj::Maybe<size_t> insert(kj::ArrayPtr<Row> table, size_t pos, Params&&... params) {
     if (buckets.size() * 2 < (table.size() + 1 + erasedCount) * 3) {
-      // Load factor is more than 2/3, let's rehash.
-      rehash(kj::max(buckets.size() * 2, (table.size() + 1) * 2));
+      // Load factor is more than 2/3, let's rehash so that it's 1/3, i.e. double the buckets.
+      // Note that rehashing also cleans up erased entries, so we may not actually be doubling if
+      // there are a lot of erasures. Nevertheless, this gives us amortized constant time -- it
+      // would take at least O(table.size()) more insertions (whether or not erasures occur)
+      // before another rehash is needed.
+      rehash((table.size() + 1) * 3);
     }
 
     uint hashCode = cb.hashCode(params...);
@@ -1010,6 +951,7 @@ private:
 
   void rehash(size_t targetSize) {
     buckets = _::rehash(buckets, targetSize);
+    erasedCount = 0;
   }
 };
 

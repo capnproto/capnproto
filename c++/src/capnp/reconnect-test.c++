@@ -168,6 +168,54 @@ KJ_TEST("autoReconnect() through RPC (exercises call() / CallContextHook)") {
   });
 }
 
+KJ_TEST("lazyAutoReconnect() direct call (exercises newCall() / RequestHook)") {
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+
+  doAutoReconnectTest(ws, [](auto c) {return kj::mv(c);});
+}
+
+KJ_TEST("lazyAutoReconnect() initialies lazily") {
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+
+  int connectCount = 0;
+  TestInterfaceImpl* currentServer = nullptr;
+  auto connectCounter = [&]() {
+    auto server = kj::heap<TestInterfaceImpl>(connectCount++);
+    currentServer = server;
+    return test::TestInterface::Client(kj::mv(server));
+  };
+
+  test::TestInterface::Client client = autoReconnect(connectCounter);
+
+  auto test = [&](uint i, bool j) {
+    auto req = client.fooRequest();
+    req.setI(i);
+    req.setJ(j);
+    return kj::str(req.send().wait(ws).getX());
+  };
+
+  KJ_EXPECT(connectCount == 1);
+  KJ_EXPECT(test(123, true) == "123 true 0");
+  KJ_EXPECT(connectCount == 1);
+
+  client = lazyAutoReconnect(connectCounter);
+  KJ_EXPECT(connectCount == 1);
+  KJ_EXPECT(test(123, true) == "123 true 1");
+  KJ_EXPECT(connectCount == 2);
+  KJ_EXPECT(test(234, false) == "234 false 1");
+  KJ_EXPECT(connectCount == 2);
+
+  currentServer->setError(KJ_EXCEPTION(DISCONNECTED, "test1 disconnect"));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect", test(345, true));
+
+  // lazyAutoReconnect is only lazy on the first request, not on reconnects.
+  KJ_EXPECT(connectCount == 3);
+  KJ_EXPECT(test(456, false) == "456 false 2");
+  KJ_EXPECT(connectCount == 3);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

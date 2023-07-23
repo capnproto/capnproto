@@ -212,6 +212,7 @@ public:
 
   kj::Promise<void> getCap(GetCapContext context) override;
   kj::Promise<void> getAnyCap(GetAnyCapContext context) override;
+  kj::Promise<void> getCapPipelineOnly(GetCapPipelineOnlyContext context) override;
 
 private:
   int& callCount;
@@ -276,6 +277,8 @@ public:
   kj::Promise<void> getEnormousString(GetEnormousStringContext context) override;
 
   kj::Promise<void> writeToFd(WriteToFdContext context) override;
+
+  kj::Promise<void> throwException(ThrowExceptionContext context) override;
 
 private:
   int& callCount;

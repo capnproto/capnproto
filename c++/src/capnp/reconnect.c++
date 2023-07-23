@@ -27,13 +27,13 @@ namespace {
 
 class ReconnectHook final: public ClientHook, public kj::Refcounted {
 public:
-  ReconnectHook(kj::Function<Capability::Client()> connectParam)
+  ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
-        current(ClientHook::from(connect())) {}
+        current(lazy ? kj::Maybe<kj::Own<ClientHook>>() : ClientHook::from(connect())) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-    auto result = current->newCall(interfaceId, methodId, sizeHint);
+    auto result = getCurrent().newCall(interfaceId, methodId, sizeHint);
     AnyPointer::Builder builder = result;
     auto hook = kj::heap<RequestImpl>(kj::addRef(*this), RequestHook::from(kj::mv(result)));
     return { builder, kj::mv(hook) };
@@ -41,7 +41,7 @@ public:
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context) override {
-    auto result = current->call(interfaceId, methodId, kj::mv(context));
+    auto result = getCurrent().call(interfaceId, methodId, kj::mv(context));
     wrap(result.promise);
     return result;
   }
@@ -73,7 +73,7 @@ public:
 
 private:
   kj::Function<Capability::Client()> connect;
-  kj::Own<ClientHook> current;
+  kj::Maybe<kj::Own<ClientHook>> current;
   uint generation = 0;
 
   template <typename T>
@@ -92,6 +92,14 @@ private:
       }
       return kj::mv(exception);
     });
+  }
+
+  ClientHook& getCurrent() {
+    KJ_IF_MAYBE(c, current) {
+      return **c;
+    } else {
+      return *current.emplace(ClientHook::from(connect()));
+    }
   }
 
   class RequestImpl final: public RequestHook {
@@ -127,4 +135,7 @@ Capability::Client autoReconnect(kj::Function<Capability::Client()> connect) {
   return Capability::Client(kj::refcounted<ReconnectHook>(kj::mv(connect)));
 }
 
+Capability::Client lazyAutoReconnect(kj::Function<Capability::Client()> connect) {
+  return Capability::Client(kj::refcounted<ReconnectHook>(kj::mv(connect), true));
+}
 }  // namespace capnp

@@ -76,6 +76,15 @@ public:
   inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
 
+#if __cplusplus >= 202000L
+  inline StringPtr(const char8_t* value): StringPtr(reinterpret_cast<const char*>(value)) {}
+  inline StringPtr(const char8_t* value, size_t size)
+      : StringPtr(reinterpret_cast<const char*>(value), size) {}
+  inline StringPtr(const char8_t* begin, const char8_t* end)
+      : StringPtr(reinterpret_cast<const char*>(begin), reinterpret_cast<const char*>(end)) {}
+  // KJ strings are and always have been UTF-8, so screw this C++20 char8_t stuff.
+#endif
+
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
   template <typename T, typename = decltype(instance<T>().c_str())>
   inline StringPtr(const T& t): StringPtr(t.c_str()) {}
@@ -136,15 +145,17 @@ public:
   // Overflowed floating numbers return inf.
 
 private:
-  inline constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
+  inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
 
   ArrayPtr<const char> content;
 
   friend constexpr kj::StringPtr (::operator "" _kj)(const char* str, size_t n);
 };
 
+#if __cplusplus < 202000L
 inline bool operator==(const char* a, const StringPtr& b) { return b == a; }
 inline bool operator!=(const char* a, const StringPtr& b) { return b != a; }
+#endif
 
 template <> char StringPtr::parseAs<char>() const;
 template <> signed char StringPtr::parseAs<signed char>() const;
@@ -214,6 +225,16 @@ public:
   inline bool operator<=(const StringPtr& other) const { return StringPtr(*this) <= other; }
   inline bool operator>=(const StringPtr& other) const { return StringPtr(*this) >= other; }
 
+  inline bool operator==(const String& other) const { return StringPtr(*this) == StringPtr(other); }
+  inline bool operator!=(const String& other) const { return StringPtr(*this) != StringPtr(other); }
+  inline bool operator< (const String& other) const { return StringPtr(*this) <  StringPtr(other); }
+  inline bool operator> (const String& other) const { return StringPtr(*this) >  StringPtr(other); }
+  inline bool operator<=(const String& other) const { return StringPtr(*this) <= StringPtr(other); }
+  inline bool operator>=(const String& other) const { return StringPtr(*this) >= StringPtr(other); }
+  // Note that if we don't overload for `const String&` specifically, then C++20 will decide that
+  // comparisons between two strings are ambiguous. (Clang turns this into a warning,
+  // -Wambiguous-reversed-operator, due to the stupidity...)
+
   inline bool startsWith(const StringPtr& other) const { return StringPtr(*this).startsWith(other);}
   inline bool endsWith(const StringPtr& other) const { return StringPtr(*this).endsWith(other); }
 
@@ -233,8 +254,10 @@ private:
   Array<char> content;
 };
 
+#if __cplusplus < 202000L
 inline bool operator==(const char* a, const String& b) { return b == a; }
 inline bool operator!=(const char* a, const String& b) { return b != a; }
+#endif
 
 String heapString(size_t size);
 // Allocate a String of the given size on the heap, not including NUL terminator.  The NUL
@@ -312,9 +335,13 @@ class Delimited;
 // Delimits a sequence of type T with a string delimiter. Implements kj::delimited().
 
 template <typename T, typename... Rest>
-char* fill(char* __restrict__ target, Delimited<T> first, Rest&&... rest);
+char* fill(char* __restrict__ target, Delimited<T>&& first, Rest&&... rest);
 template <typename T, typename... Rest>
-char* fillLimited(char* __restrict__ target, char* limit, Delimited<T> first,Rest&&... rest);
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>&& first,Rest&&... rest);
+template <typename T, typename... Rest>
+char* fill(char* __restrict__ target, Delimited<T>& first, Rest&&... rest);
+template <typename T, typename... Rest>
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first,Rest&&... rest);
 // As with StringTree, we special-case Delimited<T>.
 
 struct Stringifier {
@@ -339,6 +366,11 @@ struct Stringifier {
   template<size_t n>
   inline ArrayPtr<const char> operator*(const FixedArray<char, n>& s) const { return s; }
   inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
+#if __cplusplus >= 202000L
+  inline ArrayPtr<const char> operator*(const char8_t* s) const {
+    return operator*(reinterpret_cast<const char*>(s));
+  }
+#endif
   inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
   inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
 
@@ -367,11 +399,6 @@ struct Stringifier {
   CappedArray<char, 24> operator*(float f) const;
   CappedArray<char, 32> operator*(double f) const;
   CappedArray<char, sizeof(const void*) * 2 + 1> operator*(const void* s) const;
-
-  template <typename T>
-  _::Delimited<ArrayPtr<T>> operator*(ArrayPtr<T> arr) const;
-  template <typename T>
-  _::Delimited<ArrayPtr<const T>> operator*(const Array<T>& arr) const;
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
   template <typename T, typename Result = decltype(instance<T>().toString())>
@@ -466,19 +493,15 @@ StringPtr strPreallocated(ArrayPtr<char> buffer, Params&&... params) {
   return StringPtr(buffer.begin(), end);
 }
 
-namespace _ {  // private
-
-template <typename T>
-inline _::Delimited<ArrayPtr<T>> Stringifier::operator*(ArrayPtr<T> arr) const {
+template <typename T, typename = decltype(toCharSequence(kj::instance<T&>()))>
+inline _::Delimited<ArrayPtr<T>> operator*(const _::Stringifier&, ArrayPtr<T> arr) {
   return _::Delimited<ArrayPtr<T>>(arr, ", ");
 }
 
-template <typename T>
-inline _::Delimited<ArrayPtr<const T>> Stringifier::operator*(const Array<T>& arr) const {
+template <typename T, typename = decltype(toCharSequence(kj::instance<const T&>()))>
+inline _::Delimited<ArrayPtr<const T>> operator*(const _::Stringifier&, const Array<T>& arr) {
   return _::Delimited<ArrayPtr<const T>>(arr, ", ");
 }
-
-}  // namespace _ (private)
 
 #define KJ_STRINGIFY(...) operator*(::kj::_::Stringifier, __VA_ARGS__)
 // Defines a stringifier for a custom type.  Example:
@@ -673,12 +696,22 @@ private:
 };
 
 template <typename T, typename... Rest>
-char* fill(char* __restrict__ target, Delimited<T> first, Rest&&... rest) {
+char* fill(char* __restrict__ target, Delimited<T>&& first, Rest&&... rest) {
   target = first.flattenTo(target);
   return fill(target, kj::fwd<Rest>(rest)...);
 }
 template <typename T, typename... Rest>
-char* fillLimited(char* __restrict__ target, char* limit, Delimited<T> first, Rest&&... rest) {
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>&& first, Rest&&... rest) {
+  target = first.flattenTo(target, limit);
+  return fillLimited(target, limit, kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fill(char* __restrict__ target, Delimited<T>& first, Rest&&... rest) {
+  target = first.flattenTo(target);
+  return fill(target, kj::fwd<Rest>(rest)...);
+}
+template <typename T, typename... Rest>
+char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first, Rest&&... rest) {
   target = first.flattenTo(target, limit);
   return fillLimited(target, limit, kj::fwd<Rest>(rest)...);
 }

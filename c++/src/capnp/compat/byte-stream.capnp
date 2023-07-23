@@ -8,7 +8,7 @@ interface ByteStream {
 
   end @1 ();
   # Signals clean EOF. (If the ByteStream is dropped without calling this, then the stream was
-  # prematurely canceled and so thet body should not be considered complete.)
+  # prematurely canceled and so the body should not be considered complete.)
 
   getSubstream @2 (callback :SubstreamCallback,
                    limit :UInt64 = 0xffffffffffffffff) -> (substream :ByteStream);

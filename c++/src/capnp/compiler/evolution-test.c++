@@ -682,7 +682,7 @@ static kj::Maybe<kj::Exception> loadFile(
     uint sharedOrdinalCount) {
   Compiler compiler;
   ModuleImpl module(file);
-  KJ_ASSERT(compiler.add(module) == 0x8123456789abcdefllu);
+  KJ_ASSERT(compiler.add(module).getId() == 0x8123456789abcdefllu);
 
   if (allNodes) {
     // Eagerly compile and load the whole thing.

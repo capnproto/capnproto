@@ -120,6 +120,7 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/capnpc.pc \
   pkgconfig/capnp-rpc.pc \
   pkgconfig/capnp-json.pc \
+  pkgconfig/capnp-websocket.pc \
   pkgconfig/kj.pc \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
@@ -196,6 +197,8 @@ AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
 # CapnProtoConfig.cmake.in needs this variable.
 AC_SUBST(WITH_OPENSSL, $with_openssl)
+
+AM_CONDITIONAL([HAS_FUZZING_ENGINE], [test "x$LIB_FUZZING_ENGINE" != "x"])
 
 AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES CAPNP_CMAKE_CONFIG_FILES)
 AC_OUTPUT

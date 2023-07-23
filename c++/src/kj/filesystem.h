@@ -157,6 +157,13 @@ public:
   bool operator>=(PathPtr other) const;
   // Compare path components lexically.
 
+  bool operator==(const Path& other) const;
+  bool operator!=(const Path& other) const;
+  bool operator< (const Path& other) const;
+  bool operator> (const Path& other) const;
+  bool operator<=(const Path& other) const;
+  bool operator>=(const Path& other) const;
+
   uint hashCode() const;
   // Can use in HashMap.
 
@@ -996,6 +1003,12 @@ inline bool Path::operator< (PathPtr other) const { return PathPtr(*this) <  oth
 inline bool Path::operator> (PathPtr other) const { return PathPtr(*this) >  other; }
 inline bool Path::operator<=(PathPtr other) const { return PathPtr(*this) <= other; }
 inline bool Path::operator>=(PathPtr other) const { return PathPtr(*this) >= other; }
+inline bool Path::operator==(const Path& other) const { return PathPtr(*this) == PathPtr(other); }
+inline bool Path::operator!=(const Path& other) const { return PathPtr(*this) != PathPtr(other); }
+inline bool Path::operator< (const Path& other) const { return PathPtr(*this) <  PathPtr(other); }
+inline bool Path::operator> (const Path& other) const { return PathPtr(*this) >  PathPtr(other); }
+inline bool Path::operator<=(const Path& other) const { return PathPtr(*this) <= PathPtr(other); }
+inline bool Path::operator>=(const Path& other) const { return PathPtr(*this) >= PathPtr(other); }
 inline uint Path::hashCode() const { return kj::hashCode(parts); }
 inline bool Path::startsWith(PathPtr prefix) const { return PathPtr(*this).startsWith(prefix); }
 inline bool Path::endsWith  (PathPtr suffix) const { return PathPtr(*this).endsWith  (suffix); }

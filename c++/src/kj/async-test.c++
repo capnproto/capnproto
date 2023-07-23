@@ -366,11 +366,29 @@ TEST(Async, SeparateFulfillerDiscarded) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto pair = newPromiseAndFulfiller<int>();
+  auto pair = newPromiseAndFulfiller<void>();
   pair.fulfiller = nullptr;
 
-  EXPECT_ANY_THROW(pair.promise.wait(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "PromiseFulfiller was destroyed without fulfilling the promise",
+      pair.promise.wait(waitScope));
 }
+
+#if !KJ_NO_EXCEPTIONS
+TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto pair = newPromiseAndFulfiller<int>();
+  kj::runCatchingExceptions([&]() {
+    auto fulfillerToDrop = kj::mv(pair.fulfiller);
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
+  });
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+      "test exception", pair.promise.wait(waitScope));
+}
+#endif
 
 TEST(Async, SeparateFulfillerMemoryLeak) {
   auto paf = kj::newPromiseAndFulfiller<void>();
@@ -460,14 +478,28 @@ TEST(Async, Fork) {
 
   auto fork = promise.fork();
 
+#if __GNUC__ && !__clang__ && __GNUC__ >= 7
+// GCC 7 decides the open-brace below is "misleadingly indented" as if it were guarded by the `for`
+// that appears in the implementation of KJ_REQUIRE(). Shut up shut up shut up.
+#pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+  KJ_ASSERT(!fork.hasBranches());
+  {
+    auto cancelBranch = fork.addBranch();
+    KJ_ASSERT(fork.hasBranches());
+  }
+  KJ_ASSERT(!fork.hasBranches());
+
   auto branch1 = fork.addBranch().then([](int i) {
     EXPECT_EQ(123, i);
     return 456;
   });
+  KJ_ASSERT(fork.hasBranches());
   auto branch2 = fork.addBranch().then([](int i) {
     EXPECT_EQ(123, i);
     return 789;
   });
+  KJ_ASSERT(fork.hasBranches());
 
   {
     auto releaseFork = kj::mv(fork);
@@ -509,6 +541,34 @@ TEST(Async, ForkRef) {
   EXPECT_EQ(456, branch1.wait(waitScope));
   EXPECT_EQ(789, branch2.wait(waitScope));
 }
+
+TEST(Async, ForkMaybeRef) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<Maybe<Own<RefcountedInt>>> promise = evalLater([&]() {
+    return Maybe<Own<RefcountedInt>>(refcounted<RefcountedInt>(123));
+  });
+
+  auto fork = promise.fork();
+
+  auto branch1 = fork.addBranch().then([](Maybe<Own<RefcountedInt>>&& i) {
+    EXPECT_EQ(123, KJ_REQUIRE_NONNULL(i)->i);
+    return 456;
+  });
+  auto branch2 = fork.addBranch().then([](Maybe<Own<RefcountedInt>>&& i) {
+    EXPECT_EQ(123, KJ_REQUIRE_NONNULL(i)->i);
+    return 789;
+  });
+
+  {
+    auto releaseFork = kj::mv(fork);
+  }
+
+  EXPECT_EQ(456, branch1.wait(waitScope));
+  EXPECT_EQ(789, branch2.wait(waitScope));
+}
+
 
 TEST(Async, Split) {
   EventLoop loop;
@@ -671,6 +731,36 @@ TEST(Async, TaskSet) {
 
   EXPECT_EQ(4, counter);
   EXPECT_EQ(1u, errorHandler.exceptionCount);
+}
+
+TEST(Async, TaskSet) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool destroyed = false;
+
+  {
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    tasks.add(kj::Promise<void>(kj::NEVER_DONE)
+        .attach(kj::defer([&]() {
+      // During cancellation, append another task!
+      // It had better be canceled too!
+      tasks.add(kj::Promise<void>(kj::READY_NOW)
+          .then([]() { KJ_FAIL_EXPECT("shouldn't get here"); },
+                [](auto) { KJ_FAIL_EXPECT("shouldn't get here"); })
+          .attach(kj::defer([&]() {
+        destroyed = true;
+      })));
+    })));
+  }
+
+  KJ_EXPECT(destroyed);
+
+  // Give a chance for the "shouldn't get here" asserts to execute, if the event is still running,
+  // which it shouldn't be.
+  waitScope.poll();
 }
 
 TEST(Async, TaskSetOnEmpty) {

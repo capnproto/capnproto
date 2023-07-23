@@ -391,7 +391,7 @@ void runEndToEndTests(kj::Timer& timer, kj::HttpHeaderTable& headerTable,
   clientPipe.ends[0] = nullptr;
   auto lastRead = serverPipe.ends[1]->readAllText();
   KJ_ASSERT(lastRead.poll(waitScope), "last read hung");
-  KJ_EXPECT(lastRead.wait(waitScope) == 0);
+  KJ_EXPECT(lastRead.wait(waitScope) == nullptr);
 }
 
 KJ_TEST("HTTP-over-Cap'n-Proto E2E, no path shortening") {
@@ -589,6 +589,59 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory, factory, waitScope);
+}
+
+// =======================================================================================
+// bug fixes
+
+class HangingHttpService final: public kj::HttpService {
+public:
+  HangingHttpService(bool& called, bool& destroyed)
+      : called(called), destroyed(destroyed) {}
+  ~HangingHttpService() noexcept(false) {
+    destroyed = true;
+  }
+
+  kj::Promise<void> request(
+      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) {
+    called = true;
+    return kj::NEVER_DONE;
+  }
+
+private:
+  bool& called;
+  bool& destroyed;
+};
+
+KJ_TEST("HttpService isn't destroyed while call outstanding") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  auto headerTable = tableBuilder.build();
+
+  bool called = false;
+  bool destroyed = false;
+  auto service = factory.kjToCapnp(kj::heap<HangingHttpService>(called, destroyed));
+
+  KJ_EXPECT(!called);
+  KJ_EXPECT(!destroyed);
+
+  auto req = service.startRequestRequest();
+  auto httpReq = req.initRequest();
+  httpReq.setMethod(capnp::HttpMethod::GET);
+  httpReq.setUrl("/");
+  auto serverContext = req.send().wait(waitScope).getContext();
+  service = nullptr;
+
+  auto promise = serverContext.whenResolved();
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  KJ_EXPECT(called);
+  KJ_EXPECT(!destroyed);
 }
 
 }  // namespace

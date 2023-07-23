@@ -383,7 +383,12 @@ public:
   }
 
   void zero(uint64_t offset, uint64_t size) const {
-#ifdef FALLOC_FL_PUNCH_HOLE
+    // If FALLOC_FL_PUNCH_HOLE is defined, use it to efficiently zero the area.
+    //
+    // A fallocate() wrapper was only added to Android's Bionic C library as of API level 21,
+    // but FALLOC_FL_PUNCH_HOLE is apparently defined in the headers before that, so we'll
+    // have to explicitly test for that case.
+#if defined(FALLOC_FL_PUNCH_HOLE) && !(__ANDROID__ && __BIONIC__ && __ANDROID_API__ < 21)
     KJ_SYSCALL_HANDLE_ERRORS(
         fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
       case EOPNOTSUPP:
@@ -409,7 +414,7 @@ public:
 #else
     // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
     size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
-    const size_t iovmax = miniposix::iovMax(count);
+    const size_t iovmax = miniposix::iovMax();
     KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
 
     for (auto& item: iov) {

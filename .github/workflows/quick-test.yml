@@ -11,7 +11,7 @@ on:
 
 jobs:
   Linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
       matrix:
@@ -45,8 +45,8 @@ jobs:
         os: ['windows-2016', 'windows-latest']
         include:
           - os: windows-2016
-            target: 'Ninja'
-            arch:
+            target: 'Visual Studio 15 2017'
+            arch: -A x64
           - os: windows-latest
             target: 'Visual Studio 16 2019'
             arch: -A x64
@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Include $CONDA in $PATH
         run: |
-          echo "::add-path::$Env:CONDA\condabin"
+          echo "$Env:CONDA\condabin" >> $env:GITHUB_PATH
       - name: Install dependencies via Conda
         run: |
           conda update -n base -c defaults -q conda

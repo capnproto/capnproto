@@ -46,6 +46,7 @@
 #include "mutex.h"
 #include "one-of.h"
 #include "function.h"
+#include "list.h"
 #include <deque>
 
 #if _WIN32 || __CYGWIN__
@@ -72,6 +73,28 @@
 
 #include <stdlib.h>
 
+#if _MSC_VER && !__clang__
+// MSVC's atomic intrinsics are weird and different, whereas the C++ standard atomics match the GCC
+// builtins -- except for requiring the obnoxious std::atomic<T> wrapper. So, on MSVC let's just
+// #define the builtins based on the C++ library, reinterpret-casting native types to
+// std::atomic... this is cheating but ugh, whatever.
+#include <atomic>
+template <typename T>
+static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::atomic<T>*>(ptr); }
+#define __atomic_store_n(ptr, val, order) \
+    std::atomic_store_explicit(reinterpretAtomic(ptr), val, order)
+#define __atomic_load_n(ptr, order) \
+    std::atomic_load_explicit(reinterpretAtomic(ptr), order)
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, succ, fail) \
+    std::atomic_compare_exchange_strong_explicit( \
+        reinterpretAtomic(ptr), expected, desired, succ, fail)
+#define __atomic_exchange_n(ptr, val, order) \
+    std::atomic_exchange_explicit(reinterpretAtomic(ptr), val, order)
+#define __ATOMIC_RELAXED std::memory_order_relaxed
+#define __ATOMIC_ACQUIRE std::memory_order_acquire
+#define __ATOMIC_RELEASE std::memory_order_release
+#endif
+
 namespace kj {
 
 namespace {
@@ -86,14 +109,29 @@ EventLoop& currentEventLoop() {
   return *loop;
 }
 
-class BoolEvent: public _::Event {
+class RootEvent: public _::Event {
 public:
+  RootEvent(_::PromiseNode* node, void* traceAddr): node(node), traceAddr(traceAddr) {}
+
   bool fired = false;
 
   Maybe<Own<_::Event>> fire() override {
     fired = true;
     return nullptr;
   }
+
+  void traceEvent(_::TraceBuilder& builder) override {
+    node->tracePromise(builder, true);
+    builder.add(traceAddr);
+  }
+
+private:
+  _::PromiseNode* node;
+  void* traceAddr;
+};
+
+struct DummyFunctor {
+  void operator()() {};
 };
 
 class YieldPromiseNode final: public _::PromiseNode {
@@ -103,6 +141,9 @@ public:
   }
   void get(_::ExceptionOrValue& output) noexcept override {
     output.as<_::Void>() = _::Void();
+  }
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+    builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
   }
 };
 
@@ -114,6 +155,9 @@ public:
   void get(_::ExceptionOrValue& output) noexcept override {
     output.as<_::Void>() = _::Void();
   }
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+    builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
+  }
 };
 
 class NeverDonePromiseNode final: public _::PromiseNode {
@@ -124,19 +168,32 @@ public:
   void get(_::ExceptionOrValue& output) noexcept override {
     KJ_FAIL_REQUIRE("Not ready.");
   }
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+    builder.add(_::getMethodStartAddress(kj::NEVER_DONE, &_::NeverDone::wait));
+  }
 };
 
 }  // namespace
 
 // =======================================================================================
 
+void END_CANCELER_STACK_START_CANCELEE_STACK() {}
+// Dummy symbol used when reporting how a Canceler was canceled. We end up combining two stack
+// traces into one and we use this as a separator.
+
 Canceler::~Canceler() noexcept(false) {
-  cancel("operation canceled");
+  if (isEmpty()) return;
+  cancel(getDestructionReason(
+      reinterpret_cast<void*>(&END_CANCELER_STACK_START_CANCELEE_STACK),
+      Exception::Type::DISCONNECTED, __FILE__, __LINE__, "operation canceled"_kj));
 }
 
 void Canceler::cancel(StringPtr cancelReason) {
   if (isEmpty()) return;
-  cancel(Exception(Exception::Type::FAILED, __FILE__, __LINE__, kj::str(cancelReason)));
+  // We can't use getDestructionReason() here because if an exception is in-flight, it would use
+  // that exception, totally discarding the reason given by the caller. This would probably be
+  // unexpected. The caller can always use getDestructionReason() themselves if desired.
+  cancel(Exception(Exception::Type::DISCONNECTED, __FILE__, __LINE__, kj::str(cancelReason)));
 }
 
 void Canceler::cancel(const Exception& exception) {
@@ -203,7 +260,15 @@ void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler)
   : errorHandler(errorHandler) {}
 
-TaskSet::~TaskSet() noexcept(false) {}
+TaskSet::~TaskSet() noexcept(false) {
+  // You could argue it is dubious, but some applications would like for the destructor of a
+  // task to be able to schedule new tasks. So when we cancel our tasks... we might find new
+  // tasks added! We'll have to repeatedly cancel.
+  while (tasks != nullptr) {
+    auto toDestroy = kj::mv(tasks);
+    tasks = nullptr;
+  }
+}
 
 class TaskSet::Task final: public _::Event {
 public:
@@ -215,6 +280,13 @@ public:
 
   Maybe<Own<Task>> next;
   Maybe<Own<Task>>* prev = nullptr;
+
+  kj::String trace() {
+    void* space[32];
+    _::TraceBuilder builder(space);
+    node->tracePromise(builder, false);
+    return kj::str("task: ", builder);
+  }
 
 protected:
   Maybe<Own<Event>> fire() override {
@@ -254,8 +326,10 @@ protected:
     return mv(self);
   }
 
-  _::PromiseNode* getInnerForTrace() override {
-    return node;
+  void traceEvent(_::TraceBuilder& builder) override {
+    // Pointing out the ErrorHandler's taskFailed() implementation will usually identify the
+    // particular TaskSet that contains this event.
+    builder.add(_::getMethodStartAddress(taskSet.errorHandler, &ErrorHandler::taskFailed));
   }
 
 private:
@@ -286,7 +360,7 @@ kj::String TaskSet::trace() {
     }
   }
 
-  return kj::strArray(traces, "\n============================================\n");
+  return kj::strArray(traces, "\n");
 }
 
 Promise<void> TaskSet::onEmpty() {
@@ -358,6 +432,11 @@ public:
 
   void switchToFiber();
   void switchToMain();
+
+  void trace(TraceBuilder& builder) {
+    // TODO(someday): Trace through fiber stack? Can it be done???
+    builder.add(getMethodStartAddress(*this, &FiberStack::trace));
+  }
 
 private:
   size_t stackSize;
@@ -601,53 +680,6 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 struct Executor::Impl {
   Impl(EventLoop& loop): state(loop) {}
 
-  typedef Maybe<_::XThreadEvent&> _::XThreadEvent::*NextMember;
-  typedef Maybe<_::XThreadEvent&>* _::XThreadEvent::*PrevMember;
-
-  template <NextMember next, PrevMember prev>
-  struct List {
-    kj::Maybe<_::XThreadEvent&> head;
-    kj::Maybe<_::XThreadEvent&>* tail = &head;
-
-    bool empty() const {
-      return head == nullptr;
-    }
-
-    void insert(_::XThreadEvent& event) {
-      KJ_REQUIRE(event.*prev == nullptr);
-      *tail = event;
-      event.*prev = tail;
-      tail = &(event.*next);
-    }
-
-    void erase(_::XThreadEvent& event) {
-      KJ_REQUIRE(event.*prev != nullptr);
-      *(event.*prev) = event.*next;
-      KJ_IF_MAYBE(n, event.*next) {
-        n->*prev = event.*prev;
-      } else {
-        KJ_DASSERT(tail == &(event.*next));
-        tail = event.*prev;
-      }
-      event.*next = nullptr;
-      event.*prev = nullptr;
-    }
-
-    template <typename Func>
-    void forEach(Func&& func) {
-      kj::Maybe<_::XThreadEvent&> current = head;
-      for (;;) {
-        KJ_IF_MAYBE(c, current) {
-          auto nextItem = c->*next;
-          func(*c);
-          current = nextItem;
-        } else {
-          break;
-        }
-      }
-    }
-  };
-
   struct State {
     // Queues of notifications from other threads that need this thread's attention.
 
@@ -656,14 +688,17 @@ struct Executor::Impl {
     kj::Maybe<EventLoop&> loop;
     // Becomes null when the loop is destroyed.
 
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> start;
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> cancel;
-    List<&_::XThreadEvent::replyNext, &_::XThreadEvent::replyPrev> replies;
+    List<_::XThreadEvent, &_::XThreadEvent::targetLink> start;
+    List<_::XThreadEvent, &_::XThreadEvent::targetLink> cancel;
+    List<_::XThreadEvent, &_::XThreadEvent::replyLink> replies;
     // Lists of events that need actioning by this thread.
 
-    List<&_::XThreadEvent::targetNext, &_::XThreadEvent::targetPrev> executing;
+    List<_::XThreadEvent, &_::XThreadEvent::targetLink> executing;
     // Events that have already been dispatched and are happily executing. This list is maintained
     // so that they can be canceled if the event loop exits.
+
+    List<_::XThreadPaf, &_::XThreadPaf::link> fulfilled;
+    // Set of XThreadPafs that have been fulfilled by another thread.
 
     bool waitingForCancel = false;
     // True if this thread is currently blocked waiting for some other thread to pump its
@@ -671,28 +706,34 @@ struct Executor::Impl {
     // deadlock -- it must take precautions against this.
 
     bool isDispatchNeeded() const {
-      return !start.empty() || !cancel.empty() || !replies.empty();
+      return !start.empty() || !cancel.empty() || !replies.empty() || !fulfilled.empty();
     }
 
     void dispatchAll(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
-      start.forEach([&](_::XThreadEvent& event) {
-        start.erase(event);
-        executing.insert(event);
+      for (auto& event: start) {
+        start.remove(event);
+        executing.add(event);
         event.state = _::XThreadEvent::EXECUTING;
         event.armBreadthFirst();
-      });
+      }
 
       dispatchCancels(eventsToCancelOutsideLock);
 
-      replies.forEach([&](_::XThreadEvent& event) {
-        replies.erase(event);
+      for (auto& event: replies) {
+        replies.remove(event);
         event.onReadyEvent.armBreadthFirst();
-      });
+      }
+
+      for (auto& event: fulfilled) {
+        fulfilled.remove(event);
+        event.state = _::XThreadPaf::DISPATCHED;
+        event.onReadyEvent.armBreadthFirst();
+      }
     }
 
     void dispatchCancels(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
-      cancel.forEach([&](_::XThreadEvent& event) {
-        cancel.erase(event);
+      for (auto& event: cancel) {
+        cancel.remove(event);
 
         if (event.promiseNode == nullptr) {
           event.setDoneState();
@@ -702,7 +743,7 @@ struct Executor::Impl {
           // cancellation. So we have to add it to a list to destroy later.
           eventsToCancelOutsideLock.add(&event);
         }
-      });
+      }
     }
   };
 
@@ -742,48 +783,63 @@ struct Executor::Impl {
     // a conditional wait for state changes gets a chance to have their wait condition re-checked.
     KJ_DEFER(state.lockExclusive());
 
-    s.start.forEach([&](_::XThreadEvent& event) {
-      s.start.erase(event);
+    for (auto& event: s.start) {
+      KJ_ASSERT(event.state == _::XThreadEvent::QUEUED, event.state) { break; }
+      s.start.remove(event);
       event.setDisconnected();
       event.sendReply();
       event.setDoneState();
-    });
+    }
 
-    s.executing.forEach([&](_::XThreadEvent& event) {
-      s.executing.erase(event);
+    for (auto& event: s.executing) {
+      KJ_ASSERT(event.state == _::XThreadEvent::EXECUTING, event.state) { break; }
+      s.executing.remove(event);
       event.promiseNode = nullptr;
       event.setDisconnected();
       event.sendReply();
       event.setDoneState();
-    });
+    }
 
-    s.cancel.forEach([&](_::XThreadEvent& event) {
-      s.executing.erase(event);
+    for (auto& event: s.cancel) {
+      KJ_ASSERT(event.state == _::XThreadEvent::CANCELING, event.state) { break; }
+      s.cancel.remove(event);
       event.promiseNode = nullptr;
       event.setDoneState();
-    });
+    }
 
     // The replies list "should" be empty, because any locally-initiated tasks should have been
     // canceled before destroying the EventLoop.
     if (!s.replies.empty()) {
       KJ_LOG(ERROR, "EventLoop destroyed with cross-thread event replies outstanding");
-      s.replies.forEach([&](_::XThreadEvent& event) {
-        s.replies.erase(event);
-      });
+      for (auto& event: s.replies) {
+        s.replies.remove(event);
+      }
+    }
+
+    // Similarly for cross-thread fulfillers. The waiting tasks should have been canceled.
+    if (!s.fulfilled.empty()) {
+      KJ_LOG(ERROR, "EventLoop destroyed with cross-thread fulfiller replies outstanding");
+      for (auto& event: s.fulfilled) {
+        s.fulfilled.remove(event);
+        event.state = _::XThreadPaf::DISPATCHED;
+      }
     }
   }};
 
 namespace _ {  // (private)
 
-XThreadEvent::XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor)
-    : Event(targetExecutor.getLoop()), result(result), targetExecutor(targetExecutor.addRef()) {}
+XThreadEvent::XThreadEvent(
+    ExceptionOrValue& result, const Executor& targetExecutor, void* funcTracePtr)
+    : Event(targetExecutor.getLoop()), result(result), funcTracePtr(funcTracePtr),
+      targetExecutor(targetExecutor.addRef()) {}
+
+void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // We can't safely trace into another thread, so we'll stop here.
+  builder.add(funcTracePtr);
+}
 
 void XThreadEvent::ensureDoneOrCanceled() {
-#if _MSC_VER && !defined(__clang__)
-  {  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-#else
   if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
-#endif
     auto lock = targetExecutor->impl->state.lockExclusive();
 
     const EventLoop* loop;
@@ -801,13 +857,13 @@ void XThreadEvent::ensureDoneOrCanceled() {
         // Nothing to do.
         break;
       case QUEUED:
-        lock->start.erase(*this);
+        lock->start.remove(*this);
         // No wake needed since we removed work rather than adding it.
         state = DONE;
         break;
       case EXECUTING: {
-        lock->executing.erase(*this);
-        lock->cancel.insert(*this);
+        lock->executing.remove(*this);
+        lock->cancel.add(*this);
         state = CANCELING;
         KJ_IF_MAYBE(p, loop->port) {
           p->wake();
@@ -899,7 +955,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
           //   synchronous execution, which means there's no way to cancel it.
           lock.wait([&](auto&) { return state == DONE; });
         }
-        KJ_DASSERT(targetPrev == nullptr);
+        KJ_DASSERT(!targetLink.isLinked());
         break;
       }
       case CANCELING:
@@ -914,9 +970,9 @@ void XThreadEvent::ensureDoneOrCanceled() {
     // Since we know we reached the DONE state (or never left UNUSED), we know that the remote
     // thread is all done playing with our `replyPrev` pointer. Only the current thread could
     // possibly modify it after this point. So we can skip the lock if it's already null.
-    if (replyPrev != nullptr) {
+    if (replyLink.isLinked()) {
       auto lock = e->impl->state.lockExclusive();
-      lock->replies.erase(*this);
+      lock->replies.remove(*this);
     }
   }
 }
@@ -928,7 +984,7 @@ void XThreadEvent::sendReply() {
     {
       auto lock = e->impl->state.lockExclusive();
       KJ_IF_MAYBE(l, lock->loop) {
-        lock->replies.insert(*this);
+        lock->replies.add(*this);
         replyLoop = l;
       } else {
         // Calling thread exited without cancelling the promise. This is UB. In fact,
@@ -954,6 +1010,9 @@ void XThreadEvent::sendReply() {
 }
 
 void XThreadEvent::done() {
+  KJ_ASSERT(targetExecutor.get() == &currentEventLoop().getExecutor(),
+      "calling done() from wrong thread?");
+
   sendReply();
 
   {
@@ -961,12 +1020,12 @@ void XThreadEvent::done() {
 
     switch (state) {
       case EXECUTING:
-        lock->executing.erase(*this);
+        lock->executing.remove(*this);
         break;
       case CANCELING:
         // Sending thread requested cancelation, but we're done anyway, so it doesn't matter at this
         // point.
-        lock->cancel.erase(*this);
+        lock->cancel.remove(*this);
         break;
       default:
         KJ_FAIL_ASSERT("can't call done() from this state", (uint)state);
@@ -977,12 +1036,7 @@ void XThreadEvent::done() {
 }
 
 inline void XThreadEvent::setDoneState() {
-#if _MSC_VER && !defined(__clang__)
-  // TODO(perf): TODO(msvc): Implement the double-checked lock optimization on MSVC.
-  state = DONE;
-#else
   __atomic_store_n(&state, DONE, __ATOMIC_RELEASE);
-#endif
 }
 
 void XThreadEvent::setDisconnected() {
@@ -1034,8 +1088,108 @@ Maybe<Own<Event>> XThreadEvent::fire() {
   return nullptr;
 }
 
+void XThreadEvent::traceEvent(TraceBuilder& builder) {
+  KJ_IF_MAYBE(n, promiseNode) {
+    n->get()->tracePromise(builder, true);
+  }
+
+  // We can't safely trace into another thread, so we'll stop here.
+  builder.add(funcTracePtr);
+}
+
 void XThreadEvent::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
+}
+
+XThreadPaf::XThreadPaf()
+    : state(WAITING), executor(getCurrentThreadExecutor()) {}
+XThreadPaf::~XThreadPaf() noexcept(false) {}
+
+void XThreadPaf::Disposer::disposeImpl(void* pointer) const {
+  XThreadPaf* obj = reinterpret_cast<XThreadPaf*>(pointer);
+  auto oldState = WAITING;
+
+  if (__atomic_load_n(&obj->state, __ATOMIC_ACQUIRE) == DISPATCHED) {
+    // Common case: Promise was fully fulfilled and dispatched, no need for locking.
+    delete obj;
+  } else if (__atomic_compare_exchange_n(&obj->state, &oldState, CANCELED, false,
+                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+    // State transitioned from WAITING to CANCELED, so now it's the fulfiller's job to destroy the
+    // object.
+  } else {
+    // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
+    // wait for it to finish and transition the state to FULFILLED.
+    obj->executor.impl->state.when([&](auto&) {
+      return obj->state == FULFILLED || obj->state == DISPATCHED;
+    }, [&](Executor::Impl::State& exState) {
+      if (obj->state == FULFILLED) {
+        // The object is on the queue but was not yet dispatched. Remove it.
+        exState.fulfilled.remove(*obj);
+      }
+    });
+
+    // It's ours now, delete it.
+    delete obj;
+  }
+}
+
+const XThreadPaf::Disposer XThreadPaf::DISPOSER;
+
+void XThreadPaf::onReady(Event* event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void XThreadPaf::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // We can't safely trace into another thread, so we'll stop here.
+  // Maybe returning the address of get() will give us a function name with meaningful type
+  // information.
+  builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
+}
+
+XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
+  obj = __atomic_exchange_n(pointer, static_cast<XThreadPaf*>(nullptr), __ATOMIC_ACQUIRE);
+  auto oldState = WAITING;
+  if (obj == nullptr) {
+    // Already fulfilled (possibly by another thread).
+  } else if (__atomic_compare_exchange_n(&obj->state, &oldState, FULFILLING, false,
+                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+    // Transitioned to FULFILLING, good.
+  } else {
+    // The waiting thread must have canceled.
+    KJ_ASSERT(oldState == CANCELED);
+
+    // It's our responsibility to clean up, then.
+    delete obj;
+
+    // Set `obj` null so that we don't try to fill it in or delete it later.
+    obj = nullptr;
+  }
+}
+XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
+  if (obj != nullptr) {
+    auto lock = obj->executor.impl->state.lockExclusive();
+    KJ_IF_MAYBE(l, lock->loop) {
+      lock->fulfilled.add(*obj);
+      __atomic_store_n(&obj->state, FULFILLED, __ATOMIC_RELEASE);
+      KJ_IF_MAYBE(p, l->port) {
+        // TODO(perf): It's annoying we have to call wake() with the lock held, but we have to
+        //   prevent the destination EventLoop from being destroyed first.
+        p->wake();
+      }
+    } else {
+      KJ_LOG(FATAL,
+          "the thread which called kj::newPromiseAndCrossThreadFulfiller<T>() apparently exited "
+          "its own event loop without canceling the cross-thread promise first; this is "
+          "undefined behavior so I will crash now");
+      abort();
+    }
+  }
+}
+
+kj::Exception XThreadPaf::unfulfilledException() {
+  // TODO(soon): Share code with regular PromiseAndFulfiller for stack tracing here.
+  return kj::Exception(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::heapString(
+      "cross-thread PromiseFulfiller was destroyed without fulfilling the promise."));
 }
 
 class ExecutorImpl: public Executor, public AtomicRefcounted {
@@ -1043,7 +1197,7 @@ public:
   using Executor::Executor;
 
   kj::Own<const Executor> addRef() const override {
-    return kj::atomicAddRef(static_cast<const _::ExecutorImpl&>(*this));
+    return kj::atomicAddRef(*this);
   }
 };
 
@@ -1092,7 +1246,7 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
   }
 
   event.state = _::XThreadEvent::QUEUED;
-  lock->start.insert(event);
+  lock->start.add(event);
 
   KJ_IF_MAYBE(p, loop->port) {
     p->wake();
@@ -1437,8 +1591,16 @@ void FiberBase::onReady(_::Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-PromiseNode* FiberBase::getInnerForTrace() {
-  return currentInner;
+void FiberBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  if (stopAtNextEvent) return;
+  currentInner->tracePromise(builder, false);
+  stack->trace(builder);
+}
+
+void FiberBase::traceEvent(TraceBuilder& builder) {
+  currentInner->tracePromise(builder, true);
+  stack->trace(builder);
+  onReadyEvent.traceEvent(builder);
 }
 
 }  // namespace _ (private)
@@ -1460,8 +1622,11 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
-  // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
-  // some more.
+  // Destroy all "daemon" tasks, noting that their destructors might register more daemon tasks.
+  while (!daemons->isEmpty()) {
+    auto oldDaemons = kj::mv(daemons);
+    daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
+  }
   daemons = nullptr;
 
   KJ_IF_MAYBE(e, executor) {
@@ -1472,7 +1637,7 @@ EventLoop::~EventLoop() noexcept(false) {
   // The application _should_ destroy everything using the EventLoop before destroying the
   // EventLoop itself, so if there are events on the loop, this indicates a memory leak.
   KJ_REQUIRE(head == nullptr, "EventLoop destroyed with events still in the queue.  Memory leak?",
-             head->trace()) {
+             head->traceEvent()) {
     // Unlink all the events and hope that no one ever fires them...
     _::Event* event = head;
     while (event != nullptr) {
@@ -1531,6 +1696,8 @@ bool EventLoop::turn() {
     {
       event->firing = true;
       KJ_DEFER(event->firing = false);
+      currentlyFiring = event;
+      KJ_DEFER(currentlyFiring = nullptr);
       eventToDestroy = event->fire();
     }
 
@@ -1623,6 +1790,17 @@ void WaitScope::poll() {
   });
 }
 
+void WaitScope::cancelAllDetached() {
+  KJ_REQUIRE(fiber == nullptr,
+      "can't call cancelAllDetached() on a fiber WaitScope, only top-level");
+
+  while (!loop.daemons->isEmpty()) {
+    auto oldDaemons = kj::mv(loop.daemons);
+    loop.daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
+    // Destroying `oldDaemons` could theoretically add new ones.
+  }
+}
+
 namespace _ {  // private
 
 #if !KJ_NO_EXCEPTIONS
@@ -1668,7 +1846,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 #endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
-    BoolEvent doneEvent;
+    RootEvent doneEvent(node, reinterpret_cast<void*>(&waitImpl));
     node->setSelfPointer(&node);
     node->onReady(&doneEvent);
 
@@ -1718,7 +1896,7 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope) {
   KJ_REQUIRE(waitScope.fiber == nullptr, "poll() is not supported in fibers.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
-  BoolEvent doneEvent;
+  RootEvent doneEvent(&node, reinterpret_cast<void*>(&pollImpl));
   node.onReady(&doneEvent);
 
   loop.running = true;
@@ -1885,62 +2063,49 @@ void Event::disarm() {
   }
 }
 
-_::PromiseNode* Event::getInnerForTrace() {
-  return nullptr;
+String Event::traceEvent() {
+  void* space[32];
+  TraceBuilder builder(space);
+  traceEvent(builder);
+  return kj::str(builder);
 }
 
-#if !KJ_NO_RTTI
-#if __GNUC__
-static kj::String demangleTypeName(const char* name) {
-  int status;
-  char* buf = abi::__cxa_demangle(name, nullptr, nullptr, &status);
-  kj::String result = kj::heapString(buf == nullptr ? name : buf);
-  free(buf);
-  return kj::mv(result);
-}
-#else
-static kj::String demangleTypeName(const char* name) {
-  return kj::heapString(name);
-}
-#endif
-#endif
-
-static kj::String traceImpl(Event* event, _::PromiseNode* node) {
-#if KJ_NO_RTTI
-  return heapString("Trace not available because RTTI is disabled.");
-#else
-  kj::Vector<kj::String> trace;
-
-  if (event != nullptr) {
-    trace.add(demangleTypeName(typeid(*event).name()));
-  }
-
-  while (node != nullptr) {
-    trace.add(demangleTypeName(typeid(*node).name()));
-    node = node->getInnerForTrace();
-  }
-
-  return strArray(trace, "\n");
-#endif
-}
-
-kj::String Event::trace() {
-  return traceImpl(this, getInnerForTrace());
+String TraceBuilder::toString() {
+  auto result = finish();
+  return kj::str(stringifyStackTraceAddresses(result),
+                 stringifyStackTrace(result));
 }
 
 }  // namespace _ (private)
+
+ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space) {
+  EventLoop* loop = threadLocalEventLoop;
+  if (loop == nullptr) return nullptr;
+  if (loop->currentlyFiring == nullptr) return nullptr;
+
+  _::TraceBuilder builder(space);
+  loop->currentlyFiring->traceEvent(builder);
+  return builder.finish();
+}
+
+kj::String getAsyncTrace() {
+  void* space[32];
+  auto trace = getAsyncTrace(space);
+  return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
+}
 
 // =======================================================================================
 
 namespace _ {  // private
 
 kj::String PromiseBase::trace() {
-  return traceImpl(nullptr, node);
+  void* space[32];
+  TraceBuilder builder(space);
+  node->tracePromise(builder, false);
+  return kj::str(builder);
 }
 
 void PromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {}
-
-PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 
 void PromiseNode::OnReadyEvent::init(Event* newEvent) {
   if (event == _kJ_ALREADY_READY) {
@@ -1986,6 +2151,12 @@ void ImmediatePromiseNodeBase::onReady(Event* event) noexcept {
   if (event) event->armBreadthFirst();
 }
 
+void ImmediatePromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // Maybe returning the address of get() will give us a function name with meaningful type
+  // information.
+  builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
+}
+
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
     : exception(kj::mv(exception)) {}
 
@@ -2008,8 +2179,11 @@ void AttachmentPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   dependency->get(output);
 }
 
-PromiseNode* AttachmentPromiseNodeBase::getInnerForTrace() {
-  return dependency;
+void AttachmentPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  dependency->tracePromise(builder, stopAtNextEvent);
+
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called fork() and
+  //   addBranch()?
 }
 
 void AttachmentPromiseNodeBase::dropDependency() {
@@ -2037,8 +2211,15 @@ void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   }
 }
 
-PromiseNode* TransformPromiseNodeBase::getInnerForTrace() {
-  return dependency;
+void TransformPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // Note that we null out the dependency just before calling our own continuation, which
+  // conveniently means that if we're currently executing the continuation when the trace is
+  // requested, it won't trace into the obsolete dependency. Nice.
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, stopAtNextEvent);
+  }
+
+  builder.add(continuationTracePtr);
 }
 
 void TransformPromiseNodeBase::dropDependency() {
@@ -2096,8 +2277,15 @@ void ForkBranchBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-PromiseNode* ForkBranchBase::getInnerForTrace() {
-  return hub->getInnerForTrace();
+void ForkBranchBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  if (stopAtNextEvent) return;
+
+  if (hub.get() != nullptr) {
+    hub->inner->tracePromise(builder, false);
+  }
+
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called fork() and
+  //   addBranch()?
 }
 
 // -------------------------------------------------------------------
@@ -2130,8 +2318,11 @@ Maybe<Own<Event>> ForkHubBase::fire() {
   return nullptr;
 }
 
-_::PromiseNode* ForkHubBase::getInnerForTrace() {
-  return inner;
+void ForkHubBase::traceEvent(TraceBuilder& builder) {
+  if (headBranch != nullptr) {
+    // We'll trace down the first branch, I guess.
+    headBranch->onReadyEvent.traceEvent(builder);
+  }
 }
 
 // -------------------------------------------------------------------
@@ -2170,8 +2361,15 @@ void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
   return inner->get(output);
 }
 
-PromiseNode* ChainPromiseNode::getInnerForTrace() {
-  return inner;
+void ChainPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  if (stopAtNextEvent && state == STEP1) {
+    // In STEP1, we are an Event -- when the inner node resolves, it will arm *this* object.
+    // In STEP2, we are not an Event -- when the inner node resolves, it directly arms our parent
+    // event.
+    return;
+  }
+
+  inner->tracePromise(builder, stopAtNextEvent);
 }
 
 Maybe<Own<Event>> ChainPromiseNode::fire() {
@@ -2226,6 +2424,25 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   }
 }
 
+void ChainPromiseNode::traceEvent(TraceBuilder& builder) {
+  switch (state) {
+    case STEP1:
+      if (inner.get() != nullptr) {
+        inner->tracePromise(builder, true);
+      }
+      if (!builder.full() && onReadyEvent != nullptr) {
+        onReadyEvent->traceEvent(builder);
+      }
+      break;
+    case STEP2:
+      // This probably never happens -- a trace being generated after the meat of fire() already
+      // executed. If it does, though, we probably can't do anything here. We don't know if
+      // `onReadyEvent` is still valid because we passed it on to the phase-2 promise, and tracing
+      // just `inner` would probably be confusing. Let's just do nothing.
+      break;
+  }
+}
+
 // -------------------------------------------------------------------
 
 ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right)
@@ -2241,12 +2458,18 @@ void ExclusiveJoinPromiseNode::get(ExceptionOrValue& output) noexcept {
   KJ_REQUIRE(left.get(output) || right.get(output), "get() called before ready.");
 }
 
-PromiseNode* ExclusiveJoinPromiseNode::getInnerForTrace() {
-  auto result = left.getInnerForTrace();
-  if (result == nullptr) {
-    result = right.getInnerForTrace();
+void ExclusiveJoinPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   exclusiveJoin()?
+
+  if (stopAtNextEvent) return;
+
+  // Trace the left branch I guess.
+  if (left.dependency.get() != nullptr) {
+    left.dependency->tracePromise(builder, false);
+  } else if (right.dependency.get() != nullptr) {
+    right.dependency->tracePromise(builder, false);
   }
-  return result;
 }
 
 ExclusiveJoinPromiseNode::Branch::Branch(
@@ -2284,8 +2507,11 @@ Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
   return nullptr;
 }
 
-PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
-  return dependency;
+void ExclusiveJoinPromiseNode::Branch::traceEvent(TraceBuilder& builder) {
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, true);
+  }
+  joinNode.onReadyEvent.traceEvent(builder);
 }
 
 // -------------------------------------------------------------------
@@ -2326,8 +2552,16 @@ void ArrayJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   }
 }
 
-PromiseNode* ArrayJoinPromiseNodeBase::getInnerForTrace() {
-  return branches.size() == 0 ? nullptr : branches[0].getInnerForTrace();
+void ArrayJoinPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   joinPromises()?
+
+  if (stopAtNextEvent) return;
+
+  // Trace the first branch I guess.
+  if (branches != nullptr) {
+    branches[0].dependency->tracePromise(builder, false);
+  }
 }
 
 ArrayJoinPromiseNodeBase::Branch::Branch(
@@ -2346,8 +2580,9 @@ Maybe<Own<Event>> ArrayJoinPromiseNodeBase::Branch::fire() {
   return nullptr;
 }
 
-_::PromiseNode* ArrayJoinPromiseNodeBase::Branch::getInnerForTrace() {
-  return dependency->getInnerForTrace();
+void ArrayJoinPromiseNodeBase::Branch::traceEvent(TraceBuilder& builder) {
+  dependency->tracePromise(builder, true);
+  joinNode.onReadyEvent.traceEvent(builder);
 }
 
 Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
@@ -2389,8 +2624,22 @@ void EagerPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-PromiseNode* EagerPromiseNodeBase::getInnerForTrace() {
-  return dependency;
+void EagerPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+  //   eagerlyEvaluate()? But note that if a non-null exception handler was passed to it, that
+  //   creates a TransformPromiseNode which will report the location anyhow.
+
+  if (stopAtNextEvent) return;
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, stopAtNextEvent);
+  }
+}
+
+void EagerPromiseNodeBase::traceEvent(TraceBuilder& builder) {
+  if (dependency.get() != nullptr) {
+    dependency->tracePromise(builder, true);
+  }
+  onReadyEvent.traceEvent(builder);
 }
 
 Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
@@ -2411,7 +2660,38 @@ void AdapterPromiseNodeBase::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
+void AdapterPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
+  // Maybe returning the address of get() will give us a function name with meaningful type
+  // information.
+  builder.add(getMethodStartAddress(implicitCast<PromiseNode&>(*this), &PromiseNode::get));
+}
+
+void END_FULFILLER_STACK_START_LISTENER_STACK() {}
+// Dummy symbol used when reporting how a PromiseFulfiller was destroyed without fulfilling the
+// promise. We end up combining two stack traces into one and we use this as a separator.
+
+void WeakFulfillerBase::disposeImpl(void* pointer) const {
+  if (inner == nullptr) {
+    // Already detached.
+    delete this;
+  } else {
+    if (inner->isWaiting()) {
+      // Let's find out if there's an exception being thrown. If so, we'll use it to reject the
+      // promise.
+      inner->reject(getDestructionReason(
+          reinterpret_cast<void*>(&END_FULFILLER_STACK_START_LISTENER_STACK),
+          kj::Exception::Type::FAILED, __FILE__, __LINE__,
+          "PromiseFulfiller was destroyed without fulfilling the promise."_kj));
+    }
+    inner = nullptr;
+  }
+}
+
+}  // namespace _ (private)
+
 // -------------------------------------------------------------------
+
+namespace _ {  // (private)
 
 Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW; }
 

@@ -239,7 +239,7 @@ EncodingResult<String> decodeUtf32(ArrayPtr<const char32_t> utf16) {
     }
 
   error:
-    result.addAll(StringPtr(reinterpret_cast<const char *>(u8"\ufffd")));
+    result.addAll(StringPtr(u8"\ufffd"));
     hadErrors = true;
   }
 
@@ -536,7 +536,9 @@ EncodingResult<Array<byte>> decodeBinaryUriComponent(
 
 // =======================================================================================
 
-String encodeCEscape(ArrayPtr<const byte> bytes) {
+namespace _ { // private
+
+String encodeCEscapeImpl(ArrayPtr<const byte> bytes, bool isBinary) {
   Vector<char> escaped(bytes.size());
 
   for (byte b: bytes) {
@@ -552,7 +554,7 @@ String encodeCEscape(ArrayPtr<const byte> bytes) {
       case '\"': escaped.addAll(StringPtr("\\\"")); break;
       case '\\': escaped.addAll(StringPtr("\\\\")); break;
       default:
-        if (b < 0x20 || b == 0x7f) {
+        if (b < 0x20 || b == 0x7f || (isBinary && b > 0x7f)) {
           // Use octal escape, not hex, because hex escapes technically have no length limit and
           // so can create ambiguity with subsequent characters.
           escaped.add('\\');
@@ -569,6 +571,8 @@ String encodeCEscape(ArrayPtr<const byte> bytes) {
   escaped.add(0);
   return String(escaped.releaseAsArray());
 }
+
+} // namespace
 
 EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool nulTerminate) {
   Vector<byte> result(text.size() + nulTerminate);

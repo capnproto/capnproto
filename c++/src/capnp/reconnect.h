@@ -52,6 +52,12 @@ auto autoReconnect(ConnectFunc&& connect);
 // to avoid an infinite loop in the case that the DISCONNECTED exception actually represents a
 // permanent problem. Consider using `kj::retryOnDisconnect()` to implement this behavior.
 
+template <typename ConnectFunc>
+auto lazyAutoReconnect(ConnectFunc&& connect);
+// The same as autoReconnect, but doesn't call the provided connect function until the first
+// time the capability is used. Note that only the initial connection is lazy -- upon
+// disconnected errors this will still reconnect eagerly.
+
 // =======================================================================================
 // inline implementation details
 
@@ -59,6 +65,13 @@ Capability::Client autoReconnect(kj::Function<Capability::Client()> connect);
 template <typename ConnectFunc>
 auto autoReconnect(ConnectFunc&& connect) {
   return autoReconnect(kj::Function<Capability::Client()>(kj::fwd<ConnectFunc>(connect)))
+      .castAs<FromClient<kj::Decay<decltype(connect())>>>();
+}
+
+Capability::Client lazyAutoReconnect(kj::Function<Capability::Client()> connect);
+template <typename ConnectFunc>
+auto lazyAutoReconnect(ConnectFunc&& connect) {
+  return lazyAutoReconnect(kj::Function<Capability::Client()>(kj::fwd<ConnectFunc>(connect)))
       .castAs<FromClient<kj::Decay<decltype(connect())>>>();
 }
 

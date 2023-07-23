@@ -25,6 +25,8 @@
 
 namespace capnp {
 
+const uint MAX_BYTES_PER_WRITE = 1 << 16;
+
 class ByteStreamFactory::StreamServerBase: public capnp::ByteStream::Server {
 public:
   virtual void returnStream(uint64_t written) = 0;
@@ -715,25 +717,35 @@ public:
         });
       }
       KJ_CASE_ONEOF(kjStream, StreamServerBase::BorrowedStream) {
-        if (size <= kjStream.limit) {
+        auto limit = kj::min(kjStream.limit, MAX_BYTES_PER_WRITE);
+        if (size <= limit) {
           auto promise = kjStream.stream.write(buffer, size);
           return promise.then([kjStream,size]() mutable {
             kjStream.lender.returnStream(size);
           });
         } else {
-          auto promise = kjStream.stream.write(buffer, kjStream.limit);
-          return promise.then([this,kjStream,buffer,size]() mutable {
-            kjStream.lender.returnStream(kjStream.limit);
-            return write(reinterpret_cast<const byte*>(buffer) + kjStream.limit,
-                         size - kjStream.limit);
+          auto promise = kjStream.stream.write(buffer, limit);
+          return promise.then([this,kjStream,buffer,size,limit]() mutable {
+            kjStream.lender.returnStream(limit);
+            return write(reinterpret_cast<const byte*>(buffer) + limit,
+                         size - limit);
           });
         }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client*) {
-        // TODO(perf): Split very large writes into many smaller writes.
-        auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
-        req.setBytes(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-        return req.send();
+        if (size <= MAX_BYTES_PER_WRITE) {
+          auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
+          req.setBytes(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+          return req.send();
+        } else {
+          auto req = capnpStream->writeRequest(
+              MessageSize { 8 + MAX_BYTES_PER_WRITE / sizeof(word), 0 });
+          req.setBytes(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), MAX_BYTES_PER_WRITE));
+          return req.send().then([this,buffer,size]() mutable {
+            return write(reinterpret_cast<const byte*>(buffer) + MAX_BYTES_PER_WRITE,
+                         size - MAX_BYTES_PER_WRITE);
+          });
+        }
       }
     }
     KJ_UNREACHABLE;
@@ -749,66 +761,45 @@ public:
       KJ_CASE_ONEOF(kjStream, StreamServerBase::BorrowedStream) {
         size_t size = 0;
         for (auto& piece: pieces) { size += piece.size(); }
-        if (size <= kjStream.limit) {
+        auto limit = kj::min(kjStream.limit, MAX_BYTES_PER_WRITE);
+        if (size <= limit) {
           auto promise = kjStream.stream.write(pieces);
           return promise.then([kjStream,size]() mutable {
             kjStream.lender.returnStream(size);
           });
         } else {
           // ughhhhhhhhhh, we need to split the pieces.
-          size_t splitByte = kjStream.limit;
-          size_t splitPiece = 0;
-          while (pieces[splitPiece].size() <= splitByte) {
-            splitByte -= pieces[splitPiece].size();
-            ++splitPiece;
-          }
-
-          if (splitByte == 0) {
-            // Oh thank god, the split is between two pieces.
-            auto rest = pieces.slice(splitPiece, pieces.size());
-            return kjStream.stream.write(pieces.slice(0, splitPiece))
-                .then([this,kjStream,rest]() {
-              kjStream.lender.returnStream(kjStream.limit);
-              return write(rest);
+          return splitAndWrite(pieces, kjStream.limit,
+              [kjStream,limit](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) mutable {
+            return kjStream.stream.write(pieces).then([kjStream,limit]() mutable {
+              kjStream.lender.returnStream(limit);
             });
-          } else {
-            // FUUUUUUUU---- we need to split one of the pieces in two.
-            auto left = kj::heapArrayBuilder<kj::ArrayPtr<const byte>>(splitPiece + 1);
-            auto right = kj::heapArrayBuilder<kj::ArrayPtr<const byte>>(pieces.size() - splitPiece);
-
-            for (auto i: kj::zeroTo(splitPiece)) {
-              left[i] = pieces[i];
-            }
-            for (auto i: kj::zeroTo(right.size())) {
-              right[i] = pieces[splitPiece + i];
-            }
-
-            left.back() = pieces[splitPiece].slice(0, splitByte);
-            right.front() = pieces[splitPiece].slice(splitByte, pieces[splitPiece].size());
-
-            return kjStream.stream.write(left).attach(kj::mv(left))
-                .then([this,kjStream,right = kj::mv(right)]() mutable {
-              kjStream.lender.returnStream(kjStream.limit);
-              return write(right).attach(kj::mv(right));
-            });
-          }
+          });
         }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client*) {
-        // TODO(perf): Split very large writes into many smaller writes.
+        auto writePieces = [capnpStream](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+          size_t size = 0;
+          for (auto& piece: pieces) size += piece.size();
+          auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
+          auto out = req.initBytes(size);
+          byte* ptr = out.begin();
+          for (auto& piece: pieces) {
+            memcpy(ptr, piece.begin(), piece.size());
+            ptr += piece.size();
+          }
+          KJ_ASSERT(ptr == out.end());
+          return req.send();
+        };
+
         size_t size = 0;
         for (auto& piece: pieces) size += piece.size();
-        auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
-
-        auto out = req.initBytes(size);
-        byte* ptr = out.begin();
-        for (auto& piece: pieces) {
-          memcpy(ptr, piece.begin(), piece.size());
-          ptr += piece.size();
+        if (size <= MAX_BYTES_PER_WRITE) {
+          return writePieces(pieces);
+        } else {
+          // ughhhhhhhhhh, we need to split the pieces.
+          return splitAndWrite(pieces, MAX_BYTES_PER_WRITE, writePieces);
         }
-        KJ_ASSERT(ptr == out.end());
-
-        return req.send();
       }
     }
     KJ_UNREACHABLE;
@@ -985,6 +976,43 @@ private:
       }
     }
     KJ_UNREACHABLE;
+  }
+
+  template <typename WritePieces>
+  kj::Promise<void> splitAndWrite(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces,
+                                  size_t limit, WritePieces&& writeFirstPieces) {
+    size_t splitByte = limit;
+    size_t splitPiece = 0;
+    while (pieces[splitPiece].size() <= splitByte) {
+      splitByte -= pieces[splitPiece].size();
+      ++splitPiece;
+    }
+
+    if (splitByte == 0) {
+      // Oh thank god, the split is between two pieces.
+      auto rest = pieces.slice(splitPiece, pieces.size());
+      return writeFirstPieces(pieces.slice(0, splitPiece))
+          .then([this,rest]() mutable {
+        return write(rest);
+      });
+    } else {
+      // FUUUUUUUU---- we need to split one of the pieces in two.
+      auto left = kj::heapArray<kj::ArrayPtr<const byte>>(splitPiece + 1);
+      auto right = kj::heapArray<kj::ArrayPtr<const byte>>(pieces.size() - splitPiece);
+      for (auto i: kj::zeroTo(splitPiece)) {
+        left[i] = pieces[i];
+      }
+      for (auto i: kj::zeroTo(right.size())) {
+        right[i] = pieces[splitPiece + i];
+      }
+      left.back() = pieces[splitPiece].slice(0, splitByte);
+      right.front() = pieces[splitPiece].slice(splitByte, pieces[splitPiece].size());
+
+      return writeFirstPieces(left).attach(kj::mv(left))
+          .then([this,right=kj::mv(right)]() mutable {
+        return write(right).attach(kj::mv(right));
+      });
+    }
   }
 };
 

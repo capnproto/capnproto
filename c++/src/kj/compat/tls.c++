@@ -227,6 +227,10 @@ public:
     inner.getpeername(addr, length);
   }
 
+  kj::Maybe<int> getFd() const override {
+    return inner.getFd();
+  }
+
 private:
   SSL* ssl;
   kj::AsyncIoStream& inner;
@@ -408,13 +412,21 @@ public:
 
   Promise<Own<AsyncIoStream>> accept() override {
     return inner->accept().then([this](kj::Own<AsyncIoStream> stream) {
-      return tls.wrapServer(kj::mv(stream));
+      return kj::evalNow([&] { return tls.wrapServer(kj::mv(stream)); })
+          .catch_([this](kj::Exception&& e) {
+        KJ_LOG(ERROR, "error accepting tls connection", e);
+        return accept();
+      });
     });
   }
 
   Promise<kj::AuthenticatedStream> acceptAuthenticated() override {
     return inner->acceptAuthenticated().then([this](kj::AuthenticatedStream stream) {
-      return tls.wrapServer(kj::mv(stream));
+      return kj::evalNow([&] { return tls.wrapServer(kj::mv(stream)); })
+          .catch_([this](kj::Exception&& e) {
+        KJ_LOG(ERROR, "error accepting tls connection", e);
+        return acceptAuthenticated();
+      });
     });
   }
 

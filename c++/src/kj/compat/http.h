@@ -552,7 +552,9 @@ public:
 
   typedef kj::OneOf<kj::String, kj::Array<byte>, Close> Message;
 
-  virtual kj::Promise<Message> receive() = 0;
+  static constexpr size_t SUGGESTED_MAX_MESSAGE_SIZE = 1u << 20;  // 1MB
+
+  virtual kj::Promise<Message> receive(size_t maxSize = SUGGESTED_MAX_MESSAGE_SIZE) = 0;
   // Read one message from the WebSocket and return it. Can only call once at a time. Do not call
   // again after Close is received.
 
@@ -694,6 +696,28 @@ public:
   // UNIMPLEMENTED.
 };
 
+class HttpClientErrorHandler {
+public:
+  virtual HttpClient::Response handleProtocolError(HttpHeaders::ProtocolError protocolError);
+  // Override this function to customize error handling when the client receives an HTTP message
+  // that fails to parse. The default implementations throws an exception.
+  //
+  // There are two main use cases for overriding this:
+  // 1. `protocolError` contains the actual header content that failed to parse, giving you the
+  //    opportunity to log it for debugging purposes. The default implementation throws away this
+  //    content.
+  // 2. You could potentially convert protocol errors into HTTP error codes, e.g. 502 Bad Gateway.
+  //
+  // Note that `protocolError` may contain pointers into buffers that are no longer valid once
+  // this method returns; you will have to make copies if you want to keep them.
+
+  virtual HttpClient::WebSocketResponse handleWebSocketProtocolError(
+      HttpHeaders::ProtocolError protocolError);
+  // Like handleProtocolError() but for WebSocket requests. The default implementation calls
+  // handleProtocolError() and converts the Response to WebSocketResponse. There is probably very
+  // little reason to override this.
+};
+
 struct HttpClientSettings {
   kj::Duration idleTimeout = 5 * kj::SECONDS;
   // For clients which automatically create new connections, any connection idle for at least this
@@ -707,6 +731,10 @@ struct HttpClientSettings {
   // or vulnerable proxies between you and the server, you can provide a dummy entropy source that
   // doesn't generate real entropy (e.g. returning the same value every time). Otherwise, you must
   // provide a cryptographically-random entropy source.
+
+  kj::Maybe<HttpClientErrorHandler&> errorHandler = nullptr;
+  // Customize how protocol errors are handled by the HttpClient. If null, HttpClientErrorHandler's
+  // default implementation will be used.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, HttpHeaderTable& responseHeaderTable,
@@ -797,6 +825,7 @@ WebSocketPipe newWebSocketPipe();
 // accepts the message.
 
 class HttpServerErrorHandler;
+class HttpServerCallbacks;
 
 struct HttpServerSettings {
   kj::Duration headerTimeout = 15 * kj::SECONDS;
@@ -818,6 +847,9 @@ struct HttpServerSettings {
   kj::Maybe<HttpServerErrorHandler&> errorHandler = nullptr;
   // Customize how client protocol errors and service application exceptions are handled by the
   // HttpServer. If null, HttpServerErrorHandler's default implementation will be used.
+
+  kj::Maybe<HttpServerCallbacks&> callbacks = nullptr;
+  // Additional optional callbacks used to control some server behavior.
 };
 
 class HttpServerErrorHandler {
@@ -852,6 +884,17 @@ public:
   //
   // Also unlike `HttpService::request()`, it is okay to return kj::READY_NOW without calling
   // `response.send()`. In this case, no response will be sent, and the connection will be closed.
+};
+
+class HttpServerCallbacks {
+public:
+  virtual bool shouldClose() { return false; }
+  // Whenever the HttpServer begins response headers, it will check `shouldClose()` to decide
+  // whether to send a `Connection: close` header and close the connection.
+  //
+  // This can be useful e.g. if the server has too many connections open and wants to shed some
+  // of them. Note that to implement graceful shutdown of a server, you should use
+  // `HttpServer::drain()` instead.
 };
 
 class HttpServer final: private kj::TaskSet::ErrorHandler {

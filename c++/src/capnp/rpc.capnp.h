@@ -404,7 +404,7 @@ struct Exception {
 
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d625b7063acf691a, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d625b7063acf691a, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -2404,6 +2404,9 @@ public:
 
   inline  ::capnp::rpc::Exception::Type getType() const;
 
+  inline bool hasTrace() const;
+  inline  ::capnp::Text::Reader getTrace() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -2447,6 +2450,13 @@ public:
 
   inline  ::capnp::rpc::Exception::Type getType();
   inline void setType( ::capnp::rpc::Exception::Type value);
+
+  inline bool hasTrace();
+  inline  ::capnp::Text::Builder getTrace();
+  inline void setTrace( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initTrace(unsigned int size);
+  inline void adoptTrace(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownTrace();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4911,6 +4921,40 @@ inline  ::capnp::rpc::Exception::Type Exception::Builder::getType() {
 inline void Exception::Builder::setType( ::capnp::rpc::Exception::Type value) {
   _builder.setDataField< ::capnp::rpc::Exception::Type>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool Exception::Reader::hasTrace() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool Exception::Builder::hasTrace() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader Exception::Reader::getTrace() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder Exception::Builder::getTrace() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void Exception::Builder::setTrace( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder Exception::Builder::initTrace(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void Exception::Builder::adoptTrace(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> Exception::Builder::disownTrace() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
 }  // namespace

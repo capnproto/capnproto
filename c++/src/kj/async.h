@@ -332,6 +332,9 @@ public:
   Promise<T> addBranch();
   // Add a new branch to the fork.  The branch is equivalent to the original promise.
 
+  bool hasBranches();
+  // Returns true if there are any branches that haven't been canceled.
+
 private:
   Own<_::ForkHub<_::FixVoid<T>>> hub;
 
@@ -392,6 +395,12 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If evalLast() is called multiple times, functions are executed in LIFO order. If the first
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
+
+ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+kj::String getAsyncTrace();
+// If the event loop is currently running in this thread, get a trace back through the promise
+// chain leading to the currently-executing event. The format is the same as kj::getStackTrace()
+// from exception.c++.
 
 template <typename Func>
 PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESULT;
@@ -515,8 +524,16 @@ inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func
 // =======================================================================================
 // Advanced promise construction
 
+class PromiseRejector {
+  // Superclass of PromiseFulfiller containing the non-typed methods. Useful when you only really
+  // need to be able to reject a promise, and you need to operate on fulfillers of different types.
+public:
+  virtual void reject(Exception&& exception) = 0;
+  virtual bool isWaiting() = 0;
+};
+
 template <typename T>
-class PromiseFulfiller {
+class PromiseFulfiller: public PromiseRejector {
   // A callback which can be used to fulfill a promise.  Only the first call to fulfill() or
   // reject() matters; subsequent calls are ignored.
 
@@ -540,7 +557,7 @@ public:
 };
 
 template <>
-class PromiseFulfiller<void> {
+class PromiseFulfiller<void>: public PromiseRejector {
   // Specialization of PromiseFulfiller for void promises.  See PromiseFulfiller<T>.
 
 public:
@@ -595,6 +612,55 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller();
 // `newPromiseAndFulfiller<Promise<U>>()` will produce a promise of type `Promise<U>` but the
 // fulfiller will be of type `PromiseFulfiller<Promise<U>>`.  Thus you pass a `Promise<U>` to the
 // `fulfill()` callback, and the promises are chained.
+
+template <typename T>
+class CrossThreadPromiseFulfiller: public kj::PromiseFulfiller<T> {
+  // Like PromiseFulfiller<T> but the methods are `const`, indicating they can safely be called
+  // from another thread.
+
+public:
+  virtual void fulfill(T&& value) const = 0;
+  virtual void reject(Exception&& exception) const = 0;
+  virtual bool isWaiting() const = 0;
+
+  void fulfill(T&& value) override { return constThis()->fulfill(kj::fwd<T>(value)); }
+  void reject(Exception&& exception) override { return constThis()->reject(kj::mv(exception)); }
+  bool isWaiting() override { return constThis()->isWaiting(); }
+
+private:
+  const CrossThreadPromiseFulfiller* constThis() { return this; }
+};
+
+template <>
+class CrossThreadPromiseFulfiller<void>: public kj::PromiseFulfiller<void> {
+  // Specialization of CrossThreadPromiseFulfiller for void promises.  See
+  // CrossThreadPromiseFulfiller<T>.
+
+public:
+  virtual void fulfill(_::Void&& value = _::Void()) const = 0;
+  virtual void reject(Exception&& exception) const = 0;
+  virtual bool isWaiting() const = 0;
+
+  void fulfill(_::Void&& value) override { return constThis()->fulfill(kj::mv(value)); }
+  void reject(Exception&& exception) override { return constThis()->reject(kj::mv(exception)); }
+  bool isWaiting() override { return constThis()->isWaiting(); }
+
+private:
+  const CrossThreadPromiseFulfiller* constThis() { return this; }
+};
+
+template <typename T>
+struct PromiseCrossThreadFulfillerPair {
+  _::ReducePromises<T> promise;
+  Own<CrossThreadPromiseFulfiller<T>> fulfiller;
+};
+
+template <typename T>
+PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
+// Like `newPromiseAndFulfiller()`, but the fulfiller is allowed to be invoked from any thread,
+// not just the one that called this method. Note that the Promise is still tied to the calling
+// thread's event loop and *cannot* be used from another thread -- only the PromiseFulfiller is
+// cross-thread.
 
 // =======================================================================================
 // Canceler
@@ -847,6 +913,7 @@ private:
 
   friend class EventLoop;
   friend class _::XThreadEvent;
+  friend class _::XThreadPaf;
 
   void send(_::XThreadEvent& event, bool sync) const;
   void wait();
@@ -993,6 +1060,8 @@ private:
 
   Own<TaskSet> daemons;
 
+  _::Event* currentlyFiring = nullptr;
+
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -1009,8 +1078,10 @@ private:
   friend class WaitScope;
   friend class Executor;
   friend class _::XThreadEvent;
+  friend class _::XThreadPaf;
   friend class _::FiberBase;
   friend class _::FiberStack;
+  friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 };
 
 class WaitScope {
@@ -1056,6 +1127,16 @@ public:
   // This has no effect if this WaitScope itself is for a fiber.
   //
   // Pass `nullptr` as the parameter to go back to running events on the main stack.
+
+  void cancelAllDetached();
+  // HACK: Immediately cancel all detached promises.
+  //
+  // New code should not use detached promises, and therefore should not need this.
+  //
+  // This method exists to help existing code deal with the problems of detached promises,
+  // especially at teardown time.
+  //
+  // This method may be removed in the future.
 
 private:
   EventLoop& loop;

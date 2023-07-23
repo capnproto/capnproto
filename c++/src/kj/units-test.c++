@@ -349,5 +349,35 @@ TEST(UnitMeasure, BoundedMinMax) {
   assertTypeAndValue(boundedValue<4,t2>(3), kj::min(bounded<5>(), boundedValue<4,t2>(3)));
 }
 
+#if !_MSC_VER  // MSVC barfs on this test and I just don't have time to care.
+KJ_TEST("compare bounded quantities of different bounds") {
+  auto foo = boundedValue<12345, uint>(123) * unit<Quantity<BoundedConst<1>, byte>>();
+  auto bar = boundedValue<54321, uint>(123) * unit<Quantity<BoundedConst<1>, byte>>();
+  auto baz = bounded<123>() * unit<Quantity<BoundedConst<1>, byte>>();
+
+  KJ_EXPECT(foo == foo);
+  KJ_EXPECT(foo == bar);
+  KJ_EXPECT(foo == baz);
+  KJ_EXPECT(bar == foo);
+  KJ_EXPECT(bar == bar);
+  KJ_EXPECT(bar == baz);
+  KJ_EXPECT(baz == foo);
+  KJ_EXPECT(baz == bar);
+  KJ_EXPECT(baz == baz);
+
+  auto denom = unit<Quantity<BoundedConst<1>, int>>();
+
+  KJ_EXPECT(foo / denom == foo / denom);
+  KJ_EXPECT(foo / denom == bar / denom);
+  KJ_EXPECT(foo / denom == baz / denom);
+  KJ_EXPECT(bar / denom == foo / denom);
+  KJ_EXPECT(bar / denom == bar / denom);
+  KJ_EXPECT(bar / denom == baz / denom);
+  KJ_EXPECT(baz / denom == foo / denom);
+  KJ_EXPECT(baz / denom == bar / denom);
+  KJ_EXPECT(baz / denom == baz / denom);
+}
+#endif
+
 }  // namespace
 }  // namespace kj

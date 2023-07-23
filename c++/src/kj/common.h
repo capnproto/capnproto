@@ -430,7 +430,7 @@ template <> struct EnableIf_<true> { typedef void Type; };
 template <bool b> using EnableIf = typename EnableIf_<b>::Type;
 // Use like:
 //
-//     template <typename T, typename = EnableIf<isValid<T>()>
+//     template <typename T, typename = EnableIf<isValid<T>()>>
 //     void func(T&& t);
 
 template <typename...> struct VoidSfinae_ { using Type = void; };
@@ -752,25 +752,9 @@ struct ThrowOverflow {
   void operator()() const;
 };
 
-#if __GNUC__ || __clang__
+#if __GNUC__ || __clang__ || _MSC_VER
 inline constexpr float inf() { return __builtin_huge_valf(); }
 inline constexpr float nan() { return __builtin_nanf(""); }
-
-#elif _MSC_VER
-
-// Do what MSVC math.h does
-#pragma warning(push)
-#pragma warning(disable: 4756)  // "overflow in constant arithmetic"
-inline constexpr float inf() { return (float)(1e300 * 1e300); }
-#pragma warning(pop)
-
-float nan();
-// Unfortunately, inf() * 0.0f produces a NaN with the sign bit set, whereas our preferred
-// canonical NaN should not have the sign bit set. std::numeric_limits<float>::quiet_NaN()
-// returns the correct NaN, but we don't want to #include that here. So, we give up and make
-// this out-of-line on MSVC.
-//
-// TODO(msvc): Can we do better?
 
 #else
 #error "Not sure how to support your compiler."
@@ -917,6 +901,68 @@ inline constexpr Repeat<Decay<T>> repeat(T&& value, size_t count) {
 
   return Repeat<Decay<T>>(value, count);
 }
+
+template <typename Inner, class Mapping>
+class MappedIterator: private Mapping {
+  // An iterator that wraps some other iterator and maps the values through a mapping function.
+  // The type `Mapping` must define a method `map()` which performs this mapping.
+
+public:
+  template <typename... Params>
+  MappedIterator(Inner inner, Params&&... params)
+      : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
+
+  inline auto operator->() const { return &Mapping::map(*inner); }
+  inline decltype(auto) operator* () const { return Mapping::map(*inner); }
+  inline decltype(auto) operator[](size_t index) const { return Mapping::map(inner[index]); }
+  inline MappedIterator& operator++() { ++inner; return *this; }
+  inline MappedIterator  operator++(int) { return MappedIterator(inner++, *this); }
+  inline MappedIterator& operator--() { --inner; return *this; }
+  inline MappedIterator  operator--(int) { return MappedIterator(inner--, *this); }
+  inline MappedIterator& operator+=(ptrdiff_t amount) { inner += amount; return *this; }
+  inline MappedIterator& operator-=(ptrdiff_t amount) { inner -= amount; return *this; }
+  inline MappedIterator  operator+ (ptrdiff_t amount) const {
+    return MappedIterator(inner + amount, *this);
+  }
+  inline MappedIterator  operator- (ptrdiff_t amount) const {
+    return MappedIterator(inner - amount, *this);
+  }
+  inline ptrdiff_t operator- (const MappedIterator& other) const { return inner - other.inner; }
+
+  inline bool operator==(const MappedIterator& other) const { return inner == other.inner; }
+  inline bool operator!=(const MappedIterator& other) const { return inner != other.inner; }
+  inline bool operator<=(const MappedIterator& other) const { return inner <= other.inner; }
+  inline bool operator>=(const MappedIterator& other) const { return inner >= other.inner; }
+  inline bool operator< (const MappedIterator& other) const { return inner <  other.inner; }
+  inline bool operator> (const MappedIterator& other) const { return inner >  other.inner; }
+
+private:
+  Inner inner;
+};
+
+template <typename Inner, typename Mapping>
+class MappedIterable: private Mapping {
+  // An iterable that wraps some other iterable and maps the values through a mapping function.
+  // The type `Mapping` must define a method `map()` which performs this mapping.
+
+public:
+  template <typename... Params>
+  MappedIterable(Inner inner, Params&&... params)
+      : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
+
+  typedef Decay<decltype(instance<Inner>().begin())> InnerIterator;
+  typedef MappedIterator<InnerIterator, Mapping> Iterator;
+  typedef Decay<decltype(instance<const Inner>().begin())> InnerConstIterator;
+  typedef MappedIterator<InnerConstIterator, Mapping> ConstIterator;
+
+  inline Iterator begin() { return { inner.begin(), (Mapping&)*this }; }
+  inline Iterator end() { return { inner.end(), (Mapping&)*this }; }
+  inline ConstIterator begin() const { return { inner.begin(), (const Mapping&)*this }; }
+  inline ConstIterator end() const { return { inner.end(), (const Mapping&)*this }; }
+
+private:
+  Inner inner;
+};
 
 // =======================================================================================
 // Manually invoking constructors and destructors
@@ -1217,7 +1263,7 @@ public:
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) {}
+  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) { other = nullptr; }
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
@@ -1225,12 +1271,14 @@ public:
   Maybe(Maybe<U>&& other) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
       ptr.emplace(kj::mv(*val));
+      other = nullptr;
     }
   }
   template <typename U>
   Maybe(Maybe<U&>&& other) {
     KJ_IF_MAYBE(val, other) {
       ptr.emplace(*val);
+      other = nullptr;
     }
   }
   template <typename U>
@@ -1244,7 +1292,7 @@ public:
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
-    // Replace this Maybe's content with a new value constructed by passing the given parametrs to
+    // Replace this Maybe's content with a new value constructed by passing the given parameters to
     // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
     // Returns a reference to the newly-constructed value.
 
@@ -1255,7 +1303,7 @@ public:
   inline Maybe& operator=(T& other) { ptr = other; return *this; }
   inline Maybe& operator=(const T& other) { ptr = other; return *this; }
 
-  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
+  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); other = nullptr; return *this; }
   inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
@@ -1263,6 +1311,7 @@ public:
   Maybe& operator=(Maybe<U>&& other) {
     KJ_IF_MAYBE(val, kj::mv(other)) {
       ptr.emplace(kj::mv(*val));
+      other = nullptr;
     } else {
       ptr = nullptr;
     }
@@ -1367,24 +1416,51 @@ private:
 };
 
 template <typename T>
-class Maybe<T&>: public DisallowConstCopyIfNotConst<T> {
+class Maybe<T&> {
 public:
   constexpr Maybe(): ptr(nullptr) {}
   constexpr Maybe(T& t): ptr(&t) {}
   constexpr Maybe(T* t): ptr(t) {}
 
+  inline constexpr Maybe(PropagateConst<T, Maybe>& other): ptr(other.ptr) {}
+  // Allow const copy only if `T` itself is const. Otherwise allow only non-const copy, to
+  // protect transitive constness. Clang is happy for this constructor to be declared `= default`
+  // since, after evaluation of `PropagateConst`, it does end up being a default-able constructor.
+  // But, GCC and MSVC both complain about that, claiming this constructor cannot be declared
+  // default. I don't know who is correct, but whatever, we'll write out an implementation, fine.
+  //
+  // Note that we can't solve this by inheriting DisallowConstCopyIfNotConst<T> because we want
+  // to override the move constructor, and if we override the move constructor then we must define
+  // the copy constructor here.
+
+  inline constexpr Maybe(Maybe&& other): ptr(other.ptr) { other.ptr = nullptr; }
+
   template <typename U>
   inline constexpr Maybe(Maybe<U&>& other): ptr(other.ptr) {}
   template <typename U>
   inline constexpr Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
+  template <typename U>
+  inline constexpr Maybe(Maybe<U&>&& other): ptr(other.ptr) { other.ptr = nullptr; }
+  template <typename U>
+  inline constexpr Maybe(const Maybe<U&>&& other) = delete;
+  template <typename U>
+  constexpr Maybe(Maybe<U>& other): ptr(other.ptr.operator U*()) {}
+  template <typename U>
+  constexpr Maybe(const Maybe<U>& other): ptr(other.ptr.operator const U*()) {}
   inline constexpr Maybe(decltype(nullptr)): ptr(nullptr) {}
 
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
+  inline Maybe& operator=(PropagateConst<T, Maybe>& other) { ptr = other.ptr; return *this; }
+  inline Maybe& operator=(Maybe&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }
   template <typename U>
   inline Maybe& operator=(Maybe<U&>& other) { ptr = other.ptr; return *this; }
   template <typename U>
   inline Maybe& operator=(const Maybe<const U&>& other) { ptr = other.ptr; return *this; }
+  template <typename U>
+  inline Maybe& operator=(Maybe<U&>&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }
+  template <typename U>
+  inline Maybe& operator=(const Maybe<U&>&& other) = delete;
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
@@ -1663,7 +1739,7 @@ public:
   KJ_DISALLOW_COPY(Deferred);
 
   // This move constructor is usually optimized away by the compiler.
-  inline Deferred(Deferred&& other): func(kj::mv(other.func)), canceled(false) {
+  inline Deferred(Deferred&& other): func(kj::fwd<Func>(other.func)), canceled(false) {
     other.canceled = true;
   }
 private:

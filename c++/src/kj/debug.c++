@@ -202,18 +202,20 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
           quoted = true;
         } else if (c == ',' && depth == 0) {
           if (index < argValues.size()) {
-            argNames[index] = arrayPtr(start, pos - 1);
+            argNames[index++] = arrayPtr(start, pos - 1);
           }
-          ++index;
           while (isspace(*pos)) ++pos;
           start = pos;
+          if (*pos == '\0') {
+            // ignore trailing comma
+            break;
+          }
         }
       }
     }
     if (index < argValues.size()) {
-      argNames[index] = arrayPtr(start, pos - 1);
+      argNames[index++] = arrayPtr(start, pos - 1);
     }
-    ++index;
 
     if (index != argValues.size()) {
       getExceptionCallback().logMessage(LogSeverity::ERROR, __FILE__, __LINE__, 0,
@@ -244,6 +246,8 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     StringPtr sep = " = ";
     StringPtr delim = "; ";
     StringPtr colon = ": ";
+    StringPtr openBracket = " [";
+    StringPtr closeBracket = "]";
 
     StringPtr sysErrorArray;
 // On android before marshmallow only the posix version of stderror_r was
@@ -281,11 +285,26 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
     }
 
+    auto needsLabel = [](ArrayPtr<const char> &argName) -> bool {
+      return (argName.size() > 0 && argName[0] != '\"' &&
+          !(argName.size() >= 8 && memcmp(argName.begin(), "kj::str(", 8) == 0));
+    };
+
     for (size_t i = 0; i < argValues.size(); i++) {
+      if (argNames[i] == "_kjCondition"_kj) {
+        // Special handling: don't output delimiter, we want to append this to the previous item,
+        // in brackets. Also, if it's just "[false]" (meaning we didn't manage to extract a
+        // comparison), don't add it at all.
+        if (argValues[i] != "false") {
+          totalSize += openBracket.size() + argValues[i].size() + closeBracket.size();
+        }
+        continue;
+      }
+
       if (i > 0 || style != LOG) {
         totalSize += delim.size();
       }
-      if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
+      if (needsLabel(argNames[i])) {
         totalSize += argNames[i].size() + sep.size();
       }
       totalSize += argValues[i].size();
@@ -306,10 +325,20 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     }
 
     for (size_t i = 0; i < argValues.size(); i++) {
+      if (argNames[i] == "_kjCondition"_kj) {
+        // Special handling: don't output delimiter, we want to append this to the previous item,
+        // in brackets. Also, if it's just "[false]" (meaning we didn't manage to extract a
+        // comparison), don't add it at all.
+        if (argValues[i] != "false") {
+          pos = _::fill(pos, openBracket, argValues[i], closeBracket);
+        }
+        continue;
+      }
+
       if (i > 0 || style != LOG) {
         pos = _::fill(pos, delim);
       }
-      if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
+      if (needsLabel(argNames[i])) {
         pos = _::fill(pos, argNames[i], sep);
       }
       pos = _::fill(pos, argValues[i]);
@@ -331,7 +360,7 @@ Debug::Fault::~Fault() noexcept(false) {
   if (exception != nullptr) {
     Exception copy = mv(*exception);
     delete exception;
-    throwRecoverableException(mv(copy), 2);
+    throwRecoverableException(mv(copy), 1);
   }
 }
 
@@ -339,7 +368,7 @@ void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
   delete exception;
   exception = nullptr;
-  throwFatalException(mv(copy), 2);
+  throwFatalException(mv(copy), 1);
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
@@ -436,7 +465,7 @@ void Debug::Context::logMessage(LogSeverity severity, const char* file, int line
                                 String&& text) {
   if (!logged) {
     Value v = ensureInitialized();
-    next.logMessage(LogSeverity::INFO, v.file, v.line, 0,
+    next.logMessage(LogSeverity::INFO, trimSourceFilename(v.file).cStr(), v.line, 0,
                     str("context: ", mv(v.description), '\n'));
     logged = true;
   }

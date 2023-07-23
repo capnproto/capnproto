@@ -40,6 +40,7 @@
 #include "threadlocal.h"
 #include "miniposix.h"
 #include "function.h"
+#include "main.h"
 #include <stdlib.h>
 #include <exception>
 #include <new>
@@ -80,6 +81,10 @@
 
 #if KJ_HAS_LIBDL
 #include "dlfcn.h"
+#endif
+
+#if _MSC_VER
+#include <intrin.h>
 #endif
 
 namespace kj {
@@ -721,16 +726,20 @@ String KJ_STRINGIFY(const Exception& e) {
   for (;;) {
     KJ_IF_MAYBE(c, contextPtr) {
       contextText[contextDepth++] =
-          str(c->file, ":", c->line, ": context: ", c->description, "\n");
+          str(trimSourceFilename(c->file), ":", c->line, ": context: ", c->description, "\n");
       contextPtr = c->next;
     } else {
       break;
     }
   }
 
+  // Note that we put "remote" before "stack" because trace frames are ordered callee before
+  // caller, so this is the most natural presentation ordering.
   return str(strArray(contextText, ""),
              e.getFile(), ":", e.getLine(), ": ", e.getType(),
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+             e.getRemoteTrace().size() > 0 ? "\nremote: " : "",
+             e.getRemoteTrace(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "",
              stringifyStackTraceAddresses(e.getStackTrace()),
              stringifyStackTrace(e.getStackTrace()));
@@ -750,6 +759,10 @@ Exception::Exception(const Exception& other) noexcept
   if (file == other.ownFile.cStr()) {
     ownFile = heapString(other.ownFile);
     file = ownFile.cStr();
+  }
+
+  if (other.remoteTrace != nullptr) {
+    remoteTrace = kj::str(other.remoteTrace);
   }
 
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
@@ -772,8 +785,8 @@ void Exception::wrapContext(const char* file, int line, String&& description) {
   context = heap<Context>(file, line, mv(description), mv(context));
 }
 
-void Exception::extendTrace(uint ignoreCount) {
-  KJ_STACK_ARRAY(void*, newTraceSpace, kj::size(trace) + ignoreCount + 1,
+void Exception::extendTrace(uint ignoreCount, uint limit) {
+  KJ_STACK_ARRAY(void*, newTraceSpace, kj::min(kj::size(trace), limit) + ignoreCount + 1,
       sizeof(trace)/sizeof(trace[0]) + 8, 128);
 
   auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);
@@ -830,22 +843,103 @@ void Exception::addTrace(void* ptr) {
   }
 }
 
+void Exception::addTraceHere() {
+#if __GNUC__
+  addTrace(__builtin_return_address(0));
+#elif _MSC_VER
+  addTrace(_ReturnAddress());
+#else
+  #error "please implement for your compiler"
+#endif
+}
+
+#if !KJ_NO_EXCEPTIONS
+
+namespace {
+
+KJ_THREADLOCAL_PTR(ExceptionImpl) currentException = nullptr;
+
+}  // namespace
+
 class ExceptionImpl: public Exception, public std::exception {
 public:
-  inline ExceptionImpl(Exception&& other): Exception(mv(other)) {}
+  inline ExceptionImpl(Exception&& other): Exception(mv(other)) {
+    insertIntoCurrentExceptions();
+  }
   ExceptionImpl(const ExceptionImpl& other): Exception(other) {
     // No need to copy whatBuffer since it's just to hold the return value of what().
+    insertIntoCurrentExceptions();
+  }
+  ~ExceptionImpl() {
+    // Look for ourselves in the list.
+    for (auto* ptr = &currentException; *ptr != nullptr; ptr = &(*ptr)->nextCurrentException) {
+      if (*ptr == this) {
+        *ptr = nextCurrentException;
+        return;
+      }
+    }
+
+    // Possibly the ExceptionImpl was destroyed on a different thread than created it? That's
+    // pretty bad, we'd better abort.
+    abort();
   }
 
   const char* what() const noexcept override;
 
 private:
   mutable String whatBuffer;
+  ExceptionImpl* nextCurrentException = nullptr;
+
+  void insertIntoCurrentExceptions() {
+    nextCurrentException = currentException;
+    currentException = this;
+  }
+
+  friend class InFlightExceptionIterator;
 };
 
 const char* ExceptionImpl::what() const noexcept {
   whatBuffer = str(*this);
   return whatBuffer.begin();
+}
+
+InFlightExceptionIterator::InFlightExceptionIterator()
+    : ptr(currentException) {}
+
+Maybe<const Exception&> InFlightExceptionIterator::next() {
+  if (ptr == nullptr) return nullptr;
+
+  const ExceptionImpl& result = *static_cast<const ExceptionImpl*>(ptr);
+  ptr = result.nextCurrentException;
+  return result;
+}
+
+#endif  // !KJ_NO_EXCEPTIONS
+
+kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
+    const char* defaultFile, int defaultLine, kj::StringPtr defaultDescription) {
+#if !KJ_NO_EXCEPTIONS
+  InFlightExceptionIterator iter;
+  KJ_IF_MAYBE(e, iter.next()) {
+    auto copy = kj::cp(*e);
+    copy.truncateCommonTrace();
+    return copy;
+  } else {
+#endif
+    // Darn, use a generic exception.
+    kj::Exception exception(defaultType, defaultFile, defaultLine,
+        kj::heapString(defaultDescription));
+
+    // Let's give some context on where the PromiseFulfiller was destroyed.
+    exception.extendTrace(2, 16);
+
+    // Add a separator that hopefully makes this understandable...
+    exception.addTrace(traceSeparator);
+
+    return exception;
+#if !KJ_NO_EXCEPTIONS
+  }
+#endif
 }
 
 // =======================================================================================
@@ -858,9 +952,11 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 
 ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
   char stackVar;
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
   ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
   KJ_ASSERT(offset < 65536 && offset > -65536,
             "ExceptionCallback must be allocated on the stack.");
+#endif
 
   threadLocalCallback = this;
 }
@@ -965,6 +1061,8 @@ private:
     // anyway.
     getExceptionCallback().logMessage(severity, e.getFile(), e.getLine(), 0, str(
         e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+        e.getRemoteTrace().size() > 0 ? "\nremote: " : "",
+        e.getRemoteTrace(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "",
         stringifyStackTraceAddresses(e.getStackTrace()),
         stringifyStackTrace(e.getStackTrace()), "\n"));
@@ -1101,6 +1199,53 @@ kj::String getCaughtExceptionType() {
 }
 #endif
 
+namespace {
+
+size_t sharedSuffixLength(kj::ArrayPtr<void* const> a, kj::ArrayPtr<void* const> b) {
+  size_t result = 0;
+  while (a.size() > 0 && b.size() > 0 && a.back() == b.back())  {
+    ++result;
+    a = a.slice(0, a.size() - 1);
+    b = b.slice(0, b.size() - 1);
+  }
+  return result;
+}
+
+}  // namespace
+
+kj::ArrayPtr<void* const> computeRelativeTrace(
+    kj::ArrayPtr<void* const> trace, kj::ArrayPtr<void* const> relativeTo) {
+  using miniposix::ssize_t;
+
+  static constexpr size_t MIN_MATCH_LEN = 4;
+  if (trace.size() < MIN_MATCH_LEN || relativeTo.size() < MIN_MATCH_LEN) {
+    return trace;
+  }
+
+  kj::ArrayPtr<void* const> bestMatch = trace;
+  uint bestMatchLen = MIN_MATCH_LEN - 1;  // must beat this to choose something else
+
+  // `trace` and `relativeTrace` may have been truncated at different points. We iterate through
+  // truncating various suffixes from one of the two and then seeing if the remaining suffixes
+  // match.
+  for (ssize_t i = -(ssize_t)(trace.size() - MIN_MATCH_LEN);
+       i <= (ssize_t)(relativeTo.size() - MIN_MATCH_LEN);
+       i++) {
+    // Negative values truncate `trace`, positive values truncate `relativeTo`.
+    kj::ArrayPtr<void* const> subtrace = trace.slice(0, trace.size() - kj::max<ssize_t>(0, -i));
+    kj::ArrayPtr<void* const> subrt = relativeTo
+        .slice(0, relativeTo.size() - kj::max<ssize_t>(0, i));
+
+    uint matchLen = sharedSuffixLength(subtrace, subrt);
+    if (matchLen > bestMatchLen) {
+      bestMatchLen = matchLen;
+      bestMatch = subtrace.slice(0, subtrace.size() - matchLen + 1);
+    }
+  }
+
+  return bestMatch;
+}
+
 namespace _ {  // private
 
 class RecoverableExceptionCatcher: public ExceptionCallback {
@@ -1144,6 +1289,8 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
   } catch (std::exception& e) {
     return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("std::exception: ", e.what()));
+  } catch (TopLevelProcessContext::CleanShutdownException) {
+    throw;
   } catch (...) {
 #if __GNUC__ && !KJ_NO_RTTI
     return Exception(Exception::Type::FAILED, "(unknown)", -1, str(

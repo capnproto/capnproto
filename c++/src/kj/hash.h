@@ -103,6 +103,8 @@ struct HashCoder {
   uint operator*(ArrayPtr<T> arr) const;
   template <typename T, typename = decltype(instance<const HashCoder&>() * instance<const T&>())>
   uint operator*(const Array<T>& arr) const;
+  template <typename T, typename = EnableIf<__is_enum(T)>>
+  inline uint operator*(T e) const;
 
   template <typename T, typename Result = decltype(instance<T>().hashCode())>
   inline Result operator*(T&& value) const { return kj::fwd<T>(value).hashCode(); }
@@ -170,6 +172,11 @@ inline uint HashCoder::operator*(ArrayPtr<T> arr) const {
 template <typename T, typename>
 inline uint HashCoder::operator*(const Array<T>& arr) const {
   return operator*(arr.asPtr());
+}
+
+template <typename T, typename>
+inline uint HashCoder::operator*(T e) const {
+  return operator*(static_cast<__underlying_type(T)>(e));
 }
 
 }  // namespace _ (private)

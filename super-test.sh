@@ -97,6 +97,9 @@ while [ $# -gt 0 ]; do
       ;;
     clang* )
       export CXX=clang++${1#clang}
+      if [ "$1" != "clang-5.0" ]; then
+        export LIB_FUZZING_ENGINE=-fsanitize=fuzzer
+      fi
       ;;
     gcc* )
       export CXX=g++${1#gcc}
@@ -379,7 +382,7 @@ doit make -j$PARALLEL check
 if [ $IS_CLANG = no ]; then
   # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
   # as system headers so warnings in them are ignored.
-  doit ${CXX:-g++} -isystem src -std=c++1y -fno-permissive -pedantic -Wall -Wextra -Werror \
+  doit ${CXX:-g++} -isystem src -std=c++14 -fno-permissive -pedantic -Wall -Wextra -Werror \
       -c src/capnp/test.capnp.c++ -o /dev/null
 fi
 
@@ -395,13 +398,13 @@ test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 cd samples
 
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++1y addressbook.c++ addressbook.capnp.c++ -o addressbook \
+doit ${CXX:-g++} -std=c++14 addressbook.c++ addressbook.capnp.c++ -o addressbook \
     $CXXFLAGS $(pkg-config --cflags --libs capnp)
 
 doit capnp compile -oc++ calculator.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++1y calculator-client.c++ calculator.capnp.c++ -o calculator-client \
+doit ${CXX:-g++} -std=c++14 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
-doit ${CXX:-g++} -std=c++1y calculator-server.c++ calculator.capnp.c++ -o calculator-server \
+doit ${CXX:-g++} -std=c++14 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
 
 test_samples
