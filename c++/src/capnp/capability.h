@@ -59,6 +59,11 @@ public:
   RemotePromise(RemotePromise&& other) = default;
   RemotePromise& operator=(RemotePromise&& other) = default;
 
+  kj::Promise<Response<T>> dropPipeline() {
+    // Convenience method to convert this into a plain promise.
+    return kj::mv(*this);
+  }
+
   static RemotePromise<T> reducePromise(kj::Promise<RemotePromise>&& promise);
   // Hook for KJ so that Promise<RemotePromise<T>> automatically reduces to RemotePromise<T>.
 };

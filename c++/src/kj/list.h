@@ -90,11 +90,16 @@ public:
     return head == nullptr;
   }
 
+  size_t size() const {
+    return listSize;
+  }
+
   void add(T& element) {
     if ((element.*link).prev != nullptr) _::throwDoubleAdd();
     *tail = element;
     (element.*link).prev = tail;
     tail = &((element.*link).next);
+    ++listSize;
   }
 
   void remove(T& element) {
@@ -108,6 +113,7 @@ public:
     }
     (element.*link).next = nullptr;
     (element.*link).prev = nullptr;
+    --listSize;
   }
 
   typedef ListIterator<T, T, link> Iterator;
@@ -124,6 +130,7 @@ public:
 private:
   Maybe<T&> head;
   Maybe<T&>* tail = &head;
+  size_t listSize = 0;
 };
 
 template <typename T>

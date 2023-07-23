@@ -195,6 +195,9 @@ KJ_TEST("OneOf copy/move from alternative variants") {
     OneOf<int, bool, String> dst = kj::mv(src);
     KJ_ASSERT(dst.is<String>());
     KJ_EXPECT(dst.get<String>() == "foo");
+
+    String s = kj::mv(dst).get<String>();
+    KJ_EXPECT(s == "foo");
   }
 
   {

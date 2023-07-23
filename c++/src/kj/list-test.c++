@@ -35,6 +35,7 @@ struct TestElement {
 KJ_TEST("List") {
   List<TestElement, &TestElement::link> list;
   KJ_EXPECT(list.empty());
+  KJ_EXPECT(list.size() == 0);
 
   TestElement foo(123);
   TestElement bar(456);
@@ -43,10 +44,12 @@ KJ_TEST("List") {
     list.add(foo);
     KJ_DEFER(list.remove(foo));
     KJ_EXPECT(!list.empty());
+    KJ_EXPECT(list.size() == 1);
     KJ_EXPECT(list.front().i == 123);
 
     {
       list.add(bar);
+      KJ_EXPECT(list.size() == 2);
       KJ_DEFER(list.remove(bar));
 
       {
@@ -76,6 +79,8 @@ KJ_TEST("List") {
       }
     }
 
+    KJ_EXPECT(list.size() == 1);
+
     KJ_EXPECT(!list.empty());
     KJ_EXPECT(list.front().i == 123);
 
@@ -89,11 +94,13 @@ KJ_TEST("List") {
   }
 
   KJ_EXPECT(list.empty());
+  KJ_EXPECT(list.size() == 0);
 
   {
     list.add(bar);
     KJ_DEFER(list.remove(bar));
     KJ_EXPECT(!list.empty());
+    KJ_EXPECT(list.size() == 1);
     KJ_EXPECT(list.front().i == 321);
 
     {
@@ -106,6 +113,7 @@ KJ_TEST("List") {
   }
 
   KJ_EXPECT(list.empty());
+  KJ_EXPECT(list.size() == 0);
 }
 
 KJ_TEST("List remove while iterating") {
