@@ -3426,4 +3426,14 @@ kj::Own<RpcFlowController> RpcFlowController::newVariableWindowController(Window
   return kj::heap<WindowFlowController>(getter);
 }
 
+bool IncomingRpcMessage::isShortLivedRpcMessage(AnyPointer::Reader body) {
+  switch (body.getAs<rpc::Message>().which()) {
+    case rpc::Message::CALL:
+    case rpc::Message::RETURN:
+      return false;
+    default:
+      return true;
+  }
+}
+
 }  // namespace capnp

@@ -25,6 +25,7 @@
 #include "vector.h"
 #include "async-io.h"
 #include <stdint.h>
+#include "one-of.h"
 
 KJ_BEGIN_HEADER
 
@@ -82,6 +83,8 @@ private:
   Vector<CidrRange> denyCidrs;
   bool allowUnix;
   bool allowAbstractUnix;
+  bool allowPublic = false;
+  bool allowNetwork = false;
 
   kj::Maybe<NetworkFilter&> next;
 };

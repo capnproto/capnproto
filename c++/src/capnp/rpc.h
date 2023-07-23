@@ -293,6 +293,11 @@ public:
   // Get the total size of the message, for flow control purposes. Although the caller could
   // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
   // implementations can compute the size more cheaply by summing segment sizes.
+
+  static bool isShortLivedRpcMessage(AnyPointer::Reader body);
+  // Helper function which computes whether the standard RpcSystem implementation would consider
+  // the given message body to be short-lived, meaning it will be dropped before the next message
+  // is read. This is useful to implement BufferedMessageStream::IsShortLivedCallback.
 };
 
 class RpcFlowController {
