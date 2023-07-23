@@ -426,7 +426,7 @@ public:
 #endif
     ~Fault() noexcept(false);
 
-    KJ_NOINLINE KJ_NORETURN(void fatal());
+    KJ_NORETURN(KJ_NOINLINE void fatal());
     // Throw the exception.
 
   private:
