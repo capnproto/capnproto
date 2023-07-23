@@ -46,7 +46,7 @@ public:
 
   void cancel() {
     if (tasks != nullptr) {
-      if (canceler.isEmpty()) {
+      if (!canceler.isEmpty()) {
         canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
       }
       tasks = nullptr;
@@ -468,11 +468,7 @@ public:
   KJ_DISALLOW_COPY(ServerRequestContextImpl);
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    return task.then([this]() -> kj::Promise<void> {
-      // Merge in any errors from our reply call, so that they propagate somewhere.
-      return kj::mv(KJ_REQUIRE_NONNULL(replyTask,
-          "server never called send() or acceptWebSocket()"));
-    }).then([]() -> Capability::Client {
+    return task.then([]() -> Capability::Client {
       // If all went well, resolve to a settled capability.
       // TODO(perf): Could save a message by resolving to a capability hosted by the client, or
       //     some special "null" capability that isn't an error but is still transmitted by value.
@@ -507,12 +503,22 @@ public:
     if (hasBody) {
       auto pipeline = req.send();
       auto result = factory.streamFactory.capnpToKj(pipeline.getBody());
-      replyTask = pipeline.ignoreResult();
+      replyTask = pipeline.ignoreResult()
+          .eagerlyEvaluate([](kj::Exception&& e) {
+        KJ_LOG(ERROR, "HTTP-over-RPC startResponse() failed", e);
+      });
       return result;
     } else {
-      replyTask = req.send().ignoreResult();
+      replyTask = req.send().ignoreResult()
+          .eagerlyEvaluate([](kj::Exception&& e) {
+        KJ_LOG(ERROR, "HTTP-over-RPC startResponse() failed", e);
+      });
       return kj::heap<NullOutputStream>();
     }
+
+    // We don't actually wait for replyTask anywhere, because we may be all done with this HTTP
+    // message before the client gets a chance to respond, and we don't want to force an extra
+    // network round trip. If the client fails this call that's the client's problem, really.
   }
 
   kj::Own<kj::WebSocket> acceptWebSocket(const kj::HttpHeaders& headers) override {
@@ -544,7 +550,10 @@ public:
 
     // Note we need eagerlyEvaluate() here to force proactively discarding the response object,
     // since it holds a reference to `downSocket`.
-    replyTask = pipeline.ignoreResult().eagerlyEvaluate(nullptr);
+    replyTask = pipeline.ignoreResult()
+        .eagerlyEvaluate([](kj::Exception&& e) {
+      KJ_LOG(ERROR, "HTTP-over-RPC startWebSocketRequest() failed", e);
+    });
 
     return result;
   }

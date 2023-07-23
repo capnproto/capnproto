@@ -21,8 +21,7 @@
 
 #if _WIN32
 // Request Vista-level APIs.
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
+#include "win32-api-version.h"
 #elif !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
@@ -164,11 +163,18 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
 #endif
 
 #if !_WIN32 && !__CYGWIN__  // TODO(someday): Debug why this deadlocks on Cygwin.
+
+#if __ANDROID__
+#define TMPDIR "/data/local/tmp"
+#else
+#define TMPDIR "/tmp"
+#endif
+
 TEST(AsyncIo, UnixSocket) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();
 
-  auto path = kj::str("/tmp/kj-async-io-test.", getpid());
+  auto path = kj::str(TMPDIR "/kj-async-io-test.", getpid());
   KJ_DEFER(unlink(path.cStr()));
 
   Own<ConnectionReceiver> listener;

@@ -32,7 +32,7 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
-KJ_TEST("TestAllTypes") {
+KJ_TEST("TextCodec TestAllTypes") {
   MallocMessageBuilder builder;
   initTestMessage(builder.initRoot<TestAllTypes>());
 
@@ -66,7 +66,7 @@ KJ_TEST("TestAllTypes") {
   }
 }
 
-KJ_TEST("TestDefaults") {
+KJ_TEST("TextCodec TestDefaults") {
   MallocMessageBuilder builder;
   initTestMessage(builder.initRoot<TestDefaults>());
 
@@ -79,7 +79,7 @@ KJ_TEST("TestDefaults") {
   checkTestMessage(structReader);
 }
 
-KJ_TEST("TestListDefaults") {
+KJ_TEST("TextCodec TestListDefaults") {
   MallocMessageBuilder builder;
   initTestMessage(builder.initRoot<TestListDefaults>());
 
@@ -92,7 +92,7 @@ KJ_TEST("TestListDefaults") {
   checkTestMessage(structReader);
 }
 
-KJ_TEST("raw text") {
+KJ_TEST("TextCodec raw text") {
   using TestType = capnproto_test::capnp::test::TestLateUnion;
 
   kj::String message =
@@ -124,6 +124,22 @@ KJ_TEST("raw text") {
   KJ_EXPECT(reader.getAnotherUnion().getCorge()[0] == 7);
   KJ_EXPECT(reader.getAnotherUnion().getCorge()[1] == 8);
   KJ_EXPECT(reader.getAnotherUnion().getCorge()[2] == 9);
+}
+
+KJ_TEST("TextCodec parse error") {
+  auto message = "\n  (,)"_kj;
+
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  TextCodec codec;
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions(
+      [&]() { codec.decode(message, root); }));
+
+  KJ_EXPECT(exception.getFile() == "(capnp text input)"_kj);
+  KJ_EXPECT(exception.getLine() == 2);
+  KJ_EXPECT(exception.getDescription() == "3-6: Parse error: Empty list item.",
+            exception.getDescription());
 }
 
 }  // namespace

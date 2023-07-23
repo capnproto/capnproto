@@ -23,8 +23,7 @@
 // For Unix implementation, see async-io-unix.c++.
 
 // Request Vista-level APIs.
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
+#include "win32-api-version.h"
 
 #include "async-io.h"
 #include "async-io-internal.h"

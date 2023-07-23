@@ -79,7 +79,7 @@ void doAutoReconnectTest(kj::WaitScope& ws,
   };
 
   auto test = [&](uint i, bool j) {
-    return testPromise(i, j).wait(ws).getX();
+    return kj::str(testPromise(i, j).wait(ws).getX());
   };
 
   KJ_EXPECT(test(123, true) == "123 true 0");

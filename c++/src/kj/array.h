@@ -484,7 +484,7 @@ private:
   T* ptr;
   RemoveConst<T>* pos;
   T* endPtr;
-  const ArrayDisposer* disposer;
+  const ArrayDisposer* disposer = &NullArrayDisposer::instance;
 
   inline void dispose() {
     // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly

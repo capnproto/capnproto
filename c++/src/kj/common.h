@@ -325,6 +325,20 @@ KJ_NORETURN(void unreachable());
 #define KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT KJ_UNREACHABLE
 #endif
 
+#if __clang__
+#define KJ_KNOWN_UNREACHABLE(code) \
+    do { \
+      _Pragma("clang diagnostic push") \
+      _Pragma("clang diagnostic ignored \"-Wunreachable-code\"") \
+      code; \
+      _Pragma("clang diagnostic pop") \
+    } while (false)
+// Suppress "unreachable code" warnings on intentionally unreachable code.
+#else
+// TODO(someday): Add support for non-clang compilers.
+#define KJ_KNOWN_UNREACHABLE(code) do {code;} while(false)
+#endif
+
 // #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack)
 //
 // Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use

@@ -117,6 +117,7 @@ CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
 AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/capnp.pc \
+  pkgconfig/capnpc.pc \
   pkgconfig/capnp-rpc.pc \
   pkgconfig/capnp-json.pc \
   pkgconfig/kj.pc \

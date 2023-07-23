@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32 || __CYGWIN__
+#include "win32-api-version.h"
+#endif
+
 #include "debug.h"
 #include <stdlib.h>
 #include <ctype.h>
@@ -29,11 +33,6 @@
 #if !__CYGWIN__
 #define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
 #endif
-#define NOMINMAX 1
-#define WIN32_LEAN_AND_MEAN 1
-#define NOSERVICE 1
-#define NOMCX 1
-#define NOIME 1
 #include <windows.h>
 #include "windows-sanity.h"
 #include "encoding.h"
@@ -341,7 +340,7 @@ void Debug::Fault::fatal() {
   delete exception;
   exception = nullptr;
   throwFatalException(mv(copy), 2);
-  abort();
+  KJ_KNOWN_UNREACHABLE(abort());
 }
 
 void Debug::Fault::init(

@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Copyright (c) 2013-2017 Sandstorm Development Group, Inc. and contributors
 // Licensed under the MIT License:
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,40 +19,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "common.h"
-#include "debug.h"
-#include <stdlib.h>
-#ifdef _MSC_VER
-#include <limits>
+#pragma once
+
+// Request Vista-level APIs.
+#ifndef WINVER
+#define WINVER 0x0600
+#elif WINVER < 0x0600
+#error "WINVER defined but older than Vista"
 #endif
 
-namespace kj {
-namespace _ {  // private
-
-void inlineRequireFailure(const char* file, int line, const char* expectation,
-                          const char* macroArgs, const char* message) {
-  if (message == nullptr) {
-    Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs);
-    f.fatal();
-  } else {
-    Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs, message);
-    f.fatal();
-  }
-}
-
-void unreachable() {
-  KJ_FAIL_ASSERT("Supposedly-unreachable branch executed.");
-
-  // Really make sure we abort.
-  KJ_KNOWN_UNREACHABLE(abort());
-}
-
-}  // namespace _ (private)
-
-#if _MSC_VER && !__clang__
-
-float nan() { return std::numeric_limits<float>::quiet_NaN(); }
-
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#elif _WIN32_WINNT < 0x0600
+#error "_WIN32_WINNT defined but older than Vista"
 #endif
 
-}  // namespace kj
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN  // ::eyeroll::
+#endif
+
+#define NOSERVICE 1
+#define NOMCX 1
+#define NOIME 1
+#define NOMINMAX 1

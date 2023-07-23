@@ -168,6 +168,9 @@ if(NOT CAPNP_LITE)
   set_target_properties(capnp_tool PROPERTIES CAPNP_INCLUDE_DIRECTORY
     $<JOIN:$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>,$<INSTALL_INTERFACE:${CMAKE_INSTALL_BINDIR}/..>>
   )
+  set_target_properties(capnp_tool PROPERTIES
+    COMPILE_DEFINITIONS CAPNP_INCLUDE_DIR=\"${CMAKE_INSTALL_FULL_INCLUDEDIR}\"
+  )
 
   add_executable(capnpc_cpp
     compiler/capnpc-c++.c++

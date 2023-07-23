@@ -1101,6 +1101,21 @@ public:
         // Ignore disallowed address.
         return acceptImpl(authenticated);
       } else {
+        // TODO(perf):  As a hack for the 0.4 release we are always setting
+        //   TCP_NODELAY because Nagle's algorithm pretty much kills Cap'n Proto's
+        //   RPC protocol.  Later, we should extend the interface to provide more
+        //   control over this.  Perhaps write() should have a flag which
+        //   specifies whether to pass MSG_MORE.
+        int one = 1;
+        KJ_SYSCALL_HANDLE_ERRORS(::setsockopt(
+              ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
+          case EOPNOTSUPP:
+          case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
+            break;
+          default:
+            KJ_FAIL_SYSCALL("setsocketopt(IPPROTO_TCP, TCP_NODELAY)", error);
+        }
+
         AuthenticatedStream result;
         result.stream = heap<AsyncStreamFd>(eventPort, ownFd.release(), NEW_FD_FLAGS);
         if (authenticated) {

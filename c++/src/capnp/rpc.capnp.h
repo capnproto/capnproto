@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -4913,4 +4915,6 @@ inline void Exception::Builder::setType( ::capnp::rpc::Exception::Type value) {
 
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 

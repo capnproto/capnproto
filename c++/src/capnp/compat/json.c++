@@ -20,9 +20,6 @@
 // THE SOFTWARE.
 
 #include "json.h"
-#include <math.h>    // for HUGEVAL to check for overflow in strtod
-#include <stdlib.h>  // strtod
-#include <errno.h>   // for strtod errors
 #include <capnp/orphan.h>
 #include <kj/debug.h>
 #include <kj/function.h>
@@ -37,6 +34,7 @@ struct JsonCodec::Impl {
   bool prettyPrint = false;
   HasMode hasMode = HasMode::NON_NULL;
   size_t maxNestingDepth = 64;
+  bool rejectUnknownFields = false;
 
   kj::HashMap<Type, HandlerBase*> typeHandlers;
   kj::HashMap<StructSchema::Field, HandlerBase*> fieldHandlers;
@@ -184,6 +182,8 @@ void JsonCodec::setMaxNestingDepth(size_t maxNestingDepth) {
 }
 
 void JsonCodec::setHasMode(HasMode mode) { impl->hasMode = mode; }
+
+void JsonCodec::setRejectUnknownFields(bool enabled) { impl->rejectUnknownFields = enabled; }
 
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
   MallocMessageBuilder message;
@@ -386,7 +386,7 @@ void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphana
     KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
       decodeField(*fieldSchema, field.getValue(), orphanage, output);
     } else {
-      // Unknown json fields are ignored to allow schema evolution
+      KJ_REQUIRE(!impl->rejectUnknownFields, "Unknown field", field.getName());
     }
   }
 }
@@ -1316,7 +1316,8 @@ private:
 
       KJ_UNREACHABLE;
     } else {
-      // Ignore undefined field.
+      // Ignore undefined field -- unless the flag is set to reject them.
+      KJ_REQUIRE(!codec.impl->rejectUnknownFields, "Unknown field", name);
       return true;
     }
   }

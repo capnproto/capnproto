@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if _WIN32
+#include <kj/win32-api-version.h>
+#endif
+
 #include "parser.h"
 #include "type-id.h"
 #include <capnp/dynamic.h>
@@ -31,10 +35,10 @@
 #include <fcntl.h>
 
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <wincrypt.h>
-#undef VOID
+#undef CONST
+#include <kj/windows-sanity.h>
 #endif
 
 namespace capnp {

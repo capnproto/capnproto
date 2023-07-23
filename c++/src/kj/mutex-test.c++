@@ -19,13 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "time.h"
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN 1  // lolz
-#define WINVER 0x0600
-#define _WIN32_WINNT 0x0600
+#include "win32-api-version.h"
 #define NOGDI  // NOGDI is needed to make EXPECT_EQ(123u, *lock) compile for some reason
 #endif
+
+#include "time.h"
 
 #define KJ_MUTEX_TEST 1
 

@@ -21,6 +21,10 @@
 
 #if KJ_HAS_OPENSSL
 
+#if _WIN32
+#include <kj/win32-api-version.h>
+#endif
+
 #include "tls.h"
 #include <kj/test.h>
 #include <kj/async-io.h>
@@ -28,7 +32,6 @@
 #include <openssl/opensslv.h>
 
 #if _WIN32
-#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <kj/windows-sanity.h>
 #else
@@ -712,7 +715,7 @@ KJ_TEST("TLS client certificate verification") {
                        // KJ_EXPECT_THROW_MESSAGE() runs in a forked child process.
     KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE("alert",  // "alert handshake failure" or "alert certificate required"
-                    "TLSV1_CERTIFICATE_REQUIRED"),
+                    "CERTIFICATE_REQUIRED"),
         clientPromise.wait(test.io.waitScope));
 #endif
   }

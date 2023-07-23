@@ -68,6 +68,8 @@ enum class Variants8 { _variant0, _variant1, _variant2, _variant3, _variant4, _v
                        _variant7 };
 enum class Variants9 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
                        _variant7, _variant8 };
+enum class Variants10 { _variant0, _variant1, _variant2, _variant3, _variant4, _variant5, _variant6,
+                        _variant7, _variant8, _variant9 };
 
 template <uint i> struct Variants_;
 template <> struct Variants_<0> { typedef Variants0 Type; };
@@ -80,6 +82,7 @@ template <> struct Variants_<6> { typedef Variants6 Type; };
 template <> struct Variants_<7> { typedef Variants7 Type; };
 template <> struct Variants_<8> { typedef Variants8 Type; };
 template <> struct Variants_<9> { typedef Variants9 Type; };
+template <> struct Variants_<10> { typedef Variants10 Type; };
 
 template <uint i>
 using Variants = typename Variants_<i>::Type;
@@ -347,11 +350,23 @@ void OneOf<Variants...>::allHandled() {
   auto _kj_switch_subject = (value)._switchSubject(); \
   switch (_kj_switch_subject->which())
 #endif
+#if !_MSC_VER || defined(__clang__)
 #define KJ_CASE_ONEOF(name, ...) \
     break; \
   case ::kj::Decay<decltype(*_kj_switch_subject)>::template tagFor<__VA_ARGS__>(): \
     for (auto& name = _kj_switch_subject->template get<__VA_ARGS__>(), *_kj_switch_done = &name; \
          _kj_switch_done; _kj_switch_done = nullptr)
+#else
+// TODO(msvc): The latest MSVC which ships with VS2019 now ICEs on the implementation above. It
+//   appears we can hack around the problem by moving the `->template get<>()` syntax to an outer
+//   `if`. (This unfortunately allows wonky syntax like `KJ_CASE_ONEOF(a, B) { } else { }`.)
+//   https://developercommunity.visualstudio.com/content/problem/1143733/internal-compiler-error-on-v1670.html
+#define KJ_CASE_ONEOF(name, ...) \
+    break; \
+  case ::kj::Decay<decltype(*_kj_switch_subject)>::template tagFor<__VA_ARGS__>(): \
+    if (auto* _kj_switch_done = &_kj_switch_subject->template get<__VA_ARGS__>()) \
+      for (auto& name = *_kj_switch_done; _kj_switch_done; _kj_switch_done = nullptr)
+#endif
 #define KJ_CASE_ONEOF_DEFAULT break; default:
 // Allows switching over a OneOf.
 //

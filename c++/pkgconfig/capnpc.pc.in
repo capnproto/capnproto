@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: Cap'n Proto
+Description: Insanely fast serialization system compiler library
+Version: @VERSION@
+Libs: -L${libdir} -lcapnpc @PTHREAD_CFLAGS@ @PTHREAD_LIBS@ @STDLIB_FLAG@
+Libs.private: @LIBS@
+Requires: kj = @VERSION@
+Cflags: -I${includedir} @PTHREAD_CFLAGS@ @STDLIB_FLAG@ @CAPNP_LITE_FLAG@

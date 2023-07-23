@@ -14,6 +14,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -1337,4 +1339,6 @@ const ::capnp::_::RawBrandedSchema RealmGateway<InternalRef, ExternalRef, Intern
 #endif  // !CAPNP_LITE
 
 }  // namespace
+
+CAPNP_END_HEADER
 

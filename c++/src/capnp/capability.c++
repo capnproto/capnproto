@@ -143,7 +143,7 @@ public:
   MallocMessageBuilder message;
 };
 
-class LocalCallContext final: public CallContextHook, public kj::Refcounted {
+class LocalCallContext final: public CallContextHook, public ResponseHook, public kj::Refcounted {
 public:
   LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef,
                    kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller)
@@ -236,8 +236,23 @@ public:
     // Now the other branch returns the response from the context.
     auto promise = forked.addBranch().then(kj::mvCapture(context,
         [](kj::Own<LocalCallContext>&& context) {
-      context->getResults(MessageSize { 0, 0 });  // force response allocation
-      return kj::mv(KJ_ASSERT_NONNULL(context->response));
+      // force response allocation
+      auto reader = context->getResults(MessageSize { 0, 0 }).asReader();
+
+      if (context->isShared()) {
+        // We can't just move away context->response as `context` itself is still referenced by
+        // something -- probably a Pipeline object. As a bit of a hack, LocalCallContext itself
+        // implements ResponseHook so that we can just return a ref on it.
+        //
+        // TODO(cleanup): Maybe ResponseHook should be refcounted? Note that context->response
+        //   might not necessarily contain a LocalResponse if it was resolved by a tail call, so
+        //   we'd have to add refcounting to all ResponseHook implementations.
+        context->releaseParams();      // The call is done so params can definitely be dropped.
+        context->clientRef = nullptr;  // Definitely not using the client cap anymore either.
+        return Response<AnyPointer>(reader, kj::mv(context));
+      } else {
+        return kj::mv(KJ_ASSERT_NONNULL(context->response));
+      }
     }));
 
     // We return the other branch.

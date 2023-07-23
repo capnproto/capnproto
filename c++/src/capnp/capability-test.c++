@@ -145,6 +145,43 @@ TEST(Capability, Pipelining) {
   EXPECT_EQ(1, chainedCallCount);
 }
 
+KJ_TEST("use pipeline after dropping response") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  int chainedCallCount = 0;
+  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+
+  auto request = client.getCapRequest();
+  request.setN(234);
+  request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
+
+  auto promise = request.send();
+  test::TestPipeline::GetCapResults::Pipeline pipeline = kj::mv(promise);
+
+  {
+    auto response = promise.wait(waitScope);
+    KJ_EXPECT(response.getS() == "bar");
+  }
+
+  auto pipelineRequest = pipeline.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  auto pipelineRequest2 = pipeline.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
+  auto pipelinePromise2 = pipelineRequest2.send();
+
+  auto response = pipelinePromise.wait(waitScope);
+  EXPECT_EQ("bar", response.getX());
+
+  auto response2 = pipelinePromise2.wait(waitScope);
+  checkTestMessage(response2);
+
+  EXPECT_EQ(3, callCount);
+  EXPECT_EQ(1, chainedCallCount);
+}
+
 TEST(Capability, TailCall) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);

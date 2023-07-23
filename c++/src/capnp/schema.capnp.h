@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -8228,4 +8230,6 @@ inline ::capnp::Orphan< ::capnp::Text> CodeGeneratorRequest::RequestedFile::Impo
 
 }  // namespace
 }  // namespace
+
+CAPNP_END_HEADER
 

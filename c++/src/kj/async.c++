@@ -26,7 +26,7 @@
 // so this check isn't appropriate for us.
 
 #if _WIN32 || __CYGWIN__
-#define WIN32_LEAN_AND_MEAN 1  // lolz
+#include "win32-api-version.h"
 #elif __APPLE__
 // getcontext() and friends are marked deprecated on MacOS but seemingly no replacement is
 // provided. It appears as if they deprecated it solely because the standards bodies deprecated it,
@@ -290,7 +290,11 @@ kj::String TaskSet::trace() {
 }
 
 Promise<void> TaskSet::onEmpty() {
-  KJ_REQUIRE(emptyFulfiller == nullptr, "onEmpty() can only be called once at a time");
+  KJ_IF_MAYBE(fulfiller, emptyFulfiller) {
+    if (fulfiller->get()->isWaiting()) {
+      KJ_FAIL_REQUIRE("onEmpty() can only be called once at a time");
+    }
+  }
 
   if (tasks == nullptr) {
     return READY_NOW;
@@ -1456,14 +1460,14 @@ EventLoop::EventLoop(EventPort& port)
       daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
+  // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
+  // some more.
+  daemons = nullptr;
+
   KJ_IF_MAYBE(e, executor) {
     // Cancel all outstanding cross-thread events.
     e->get()->impl->disconnect();
   }
-
-  // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
-  // some more.
-  daemons = nullptr;
 
   // The application _should_ destroy everything using the EventLoop before destroying the
   // EventLoop itself, so if there are events on the loop, this indicates a memory leak.

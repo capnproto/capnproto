@@ -11,6 +11,8 @@
 #endif
 
 
+CAPNP_BEGIN_HEADER
+
 namespace capnp {
 namespace schemas {
 
@@ -112,4 +114,6 @@ private:
 // =======================================================================================
 
 }  // namespace
+
+CAPNP_END_HEADER
 

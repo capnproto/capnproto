@@ -647,6 +647,23 @@ KJ_TEST("maximum nesting depth") {
   }
 }
 
+KJ_TEST("unknown fields") {
+  JsonCodec json;
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestJsonAnnotations2>();
+  auto valid = R"({"foo": "a"})"_kj;
+  auto unknown = R"({"foo": "a", "unknown-field": "b"})"_kj;
+  json.decode(valid, root);
+  json.decode(unknown, root);
+  json.setRejectUnknownFields(true);
+  json.decode(valid, root);
+  KJ_EXPECT_THROW_MESSAGE("Unknown field", json.decode(unknown, root));
+
+  // Verify unknown field rejection still works when handling by annotation.
+  json.handleByAnnotation<TestJsonAnnotations2>();
+  KJ_EXPECT_THROW_MESSAGE("Unknown field", json.decode(unknown, root));
+}
+
 class TestCallHandler: public JsonCodec::Handler<Text> {
 public:
   void encode(const JsonCodec& codec, Text::Reader input,
