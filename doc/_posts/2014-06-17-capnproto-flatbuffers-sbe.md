@@ -42,7 +42,7 @@ Note: For features which are properties of the implementation rather than the pr
 <tr><td>Pointers take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="pass">no</td><td class="fail">yes</td></tr>
 <tr><td>C++</td><td class="pass">yes</td><td class="pass">yes (C++11)*</td><td class="pass">yes</td><td class="pass">yes</td></tr>
 <tr><td>Java</td><td class="pass">yes</td><td class="pass">yes*</td><td class="pass">yes</td><td class="pass">yes</td></tr>
-<tr><td>C#</td><td class="pass">yes</td><td class="pass">yes*</td><td class="pass">yes</td><td class="pass">yes*</td></tr>
+<tr><td>C#</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes</td><td class="pass">yes*</td></tr>
 <tr><td>Go</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes*</td></tr>
 <tr><td>Other languages</td><td class="pass">lots!</td><td class="warn">6+ others*</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Authors' preferred use case</td><td>distributed<br>computing</td><td><a href="https://sandstorm.io">platforms /<br>sandboxing</a></td><td>financial<br>trading</td><td>games</td></tr>
