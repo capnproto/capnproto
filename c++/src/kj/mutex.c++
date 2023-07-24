@@ -870,7 +870,13 @@ void Once::reset() {
     } \
   }
 
-Mutex::Mutex(): mutex(PTHREAD_RWLOCK_INITIALIZER) {}
+Mutex::Mutex(): mutex(PTHREAD_RWLOCK_INITIALIZER) {
+#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
+  // In older versions of MacOS, mutexes initialized statically cannot be destroyed,
+  // so we must call the init function.
+  KJ_PTHREAD_CALL(pthread_rwlock_init(&mutex, NULL));
+#endif
+}
 Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
@@ -950,6 +956,14 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
     nullptr, waitersTail, predicate, nullptr,
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
   };
+
+#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
+  // In older versions of MacOS, mutexes initialized statically cannot be destroyed,
+  // so we must call the init function.
+  KJ_PTHREAD_CALL(pthread_cond_init(&waiter.condvar, NULL));
+  KJ_PTHREAD_CALL(pthread_mutex_init(&waiter.stupidMutex, NULL));
+#endif
+
   addWaiter(waiter);
 
   // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
@@ -1059,7 +1073,13 @@ void Mutex::induceSpuriousWakeupForTest() {
 
 Once::Once(bool startInitialized)
     : state(startInitialized ? INITIALIZED : UNINITIALIZED),
-      mutex(PTHREAD_MUTEX_INITIALIZER) {}
+      mutex(PTHREAD_MUTEX_INITIALIZER) {
+#if defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070
+  // In older versions of MacOS, mutexes initialized statically cannot be destroyed,
+  // so we must call the init function.
+  KJ_PTHREAD_CALL(pthread_mutex_init(&mutex, NULL));
+#endif
+}
 Once::~Once() {
   KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
 }
