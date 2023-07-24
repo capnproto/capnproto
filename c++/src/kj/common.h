@@ -100,6 +100,7 @@ KJ_BEGIN_HEADER
 #include <cstring>
 #include <initializer_list>
 #include <string.h>
+#include <coroutine>
 
 #if __linux__ && __cplusplus > 201200L
 // Hack around stdlib bug with C++14 that exists on some Linux systems.
@@ -2030,5 +2031,67 @@ _::Deferred<Func> defer(Func&& func) {
 // Run the given code when the function exits, whether by return or exception.
 
 }  // namespace kj
+
+namespace kj::_ { template <typename T> class MaybeCoroutine; }
+
+namespace std {
+
+template <class T, class... Args>
+struct coroutine_traits<kj::Maybe<T>, Args...> {
+  using promise_type = kj::_::MaybeCoroutine<T>;
+};
+
+}  // namespace std
+
+namespace kj::_ {
+
+template <typename T>
+static constexpr bool isMaybe = false;
+template <typename T>
+static constexpr bool isMaybe<Maybe<T>> = true;
+
+template <typename T>
+class MaybeCoroutine {
+public:
+  auto initial_suspend() { return std::suspend_never(); }
+  auto final_suspend() noexcept { return std::suspend_never(); }
+
+  void unhandled_exception() {}
+
+  MaybeCoroutine& get_return_object() { return *this; }
+
+  operator Maybe<T>() {
+    // TODO(now): Can we destroy the coroutine here?
+    return kj::mv(KJ_ASSERT_NONNULL(result));
+  }
+
+  void return_value(T value) {
+    KJ_ASSERT(result == nullptr);
+    result = Maybe<T>(kj::mv(value));
+  }
+
+  template <typename U> requires (isMaybe<U>)
+  auto await_transform(U&& maybe) {
+    struct Awaiter {
+      U&& maybe;
+      bool await_ready() const { return maybe != nullptr; }
+      auto await_resume() { return KJ_ASSERT_NONNULL(maybe); }
+      bool await_suspend(std::coroutine_handle<MaybeCoroutine> handle) {
+        // TODO(now): Can we destroy the coroutine now? If it hasn't been converted to a Maybe<T>
+        //   yet, we can't.
+        KJ_ASSERT(handle.promise().result == nullptr);
+        handle.promise().result = Maybe<T>(nullptr);
+        return true;
+      }
+    };
+
+    return Awaiter(kj::fwd<U>(maybe));
+  }
+
+private:
+  Maybe<Maybe<T>> result;
+};
+
+}  // namespace kj::_
 
 KJ_END_HEADER
