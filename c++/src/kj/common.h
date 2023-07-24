@@ -618,7 +618,7 @@ template <> constexpr bool isIntegral<unsigned long long>() { return true; }
 template <typename T>
 struct CanConvert_ {
   static int sfinae(T);
-  static bool sfinae(...);
+  static char sfinae(...);
 };
 
 template <typename T, typename U>
