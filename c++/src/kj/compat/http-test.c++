@@ -184,6 +184,35 @@ KJ_TEST("HttpHeaders::parseRequest") {
       "\r\n");
 }
 
+KJ_TEST("HttpHeaders::serializeRequestNoOverride") {
+  HttpHeaderTable::Builder builder;
+  auto fooBar = builder.add("Foo-Bar");
+  auto table = builder.build();
+
+  kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
+
+  HttpHeaders headers(*table);
+  // Set in headers,   set in connectionHeaders      ==> Value from connectionHeaders
+  headers.set(HttpHeaderId::CONNECTION, "upgrade");
+  connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "keep-alive";
+  // Set in headers,   unset in connectionHeaders    ==> Value from headers
+  headers.set(HttpHeaderId::KEEP_ALIVE, "timeout=5");
+  // Set in headers,   missing in connectionHeaders  ==> Value from headers
+  headers.set(fooBar, "baz"); 
+  // Unset in headers, set in connectionHeaders      ==> Value from connectionHeaders
+  connectionHeaders[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "123";
+
+  kj::String request = headers.serializeRequest(kj::HttpMethod::POST, "/some/path", connectionHeaders);
+
+  KJ_EXPECT(request ==
+      "POST /some/path HTTP/1.1\r\n"
+      "Connection: keep-alive\r\n"
+      "Keep-Alive: timeout=5\r\n"
+      "Content-Length: 123\r\n"
+      "Foo-Bar: baz\r\n"
+      "\r\n");
+}
+
 KJ_TEST("HttpHeaders::parseResponse") {
   HttpHeaderTable::Builder builder;
 

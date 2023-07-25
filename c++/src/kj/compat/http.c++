@@ -1076,7 +1076,8 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   }
   KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
   for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
+    kj::StringPtr value = (i < connectionHeaders.size() && connectionHeaders[i] != nullptr) ? 
+                          connectionHeaders[i] : indexedHeaders[i];
     if (value != nullptr) {
       size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
     }
@@ -1092,7 +1093,8 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
     ptr = kj::_::fill(ptr, word1, space, word2, space, word3, newline);
   }
   for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
+    kj::StringPtr value = (i < connectionHeaders.size() && connectionHeaders[i] != nullptr) ? 
+                          connectionHeaders[i] : indexedHeaders[i];
     if (value != nullptr) {
       ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
     }
