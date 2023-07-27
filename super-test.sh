@@ -125,9 +125,7 @@ while [ $# -gt 0 ]; do
       # Need to set CC as well for configure to handle -fcoroutines-ts.
       export CC=clang${1#clang}
       export CXX=clang++${1#clang}
-      if [ "$1" != "clang-5.0" ]; then
-        export LIB_FUZZING_ENGINE=-fsanitize=fuzzer
-      fi
+      export LIB_FUZZING_ENGINE=-fsanitize=fuzzer
       ;;
     gcc* )
       export CXX=g++${1#gcc}
@@ -400,38 +398,29 @@ else
 fi
 
 if [ $IS_CLANG = yes ]; then
+  if [ "${CXX#*-}" -ge 12 ] 2>/dev/null; then
+    # TODO(someday): On Ubuntu 22.04, clang 12, 13, 14, and 15 with -stdlib=libc++ fail to link with
+    #   libfuzzer, which looks like it might itself be linked against libstdc++? Need to
+    #   investigate.
+    unset LIB_FUZZING_ENGINE
+  fi
+
   # Don't fail out on this ridiculous "argument unused during compilation" warning.
   export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
 
-  # Enable coroutines if supported.
-  if [ "${CXX#*-}" -ge 14 ] 2>/dev/null; then
-    # Somewhere between version 10 and 14, Clang started supporting coroutines as a C++20 feature,
-    # and started issuing deprecating warnings for -fcoroutines-ts. (I'm not sure which version it
-    # was exactly since our CI jumped from 10 to 14, so I'm somewhat arbitrarily choosing 14 as the
-    # cutoff.)
-    export CXXFLAGS="$CXXFLAGS -std=c++20 -stdlib=libc++"
-    export LDFLAGS="-stdlib=libc++"
+  # Require C++20.
+  export CXXFLAGS="$CXXFLAGS -std=gnu++20"
 
-    # TODO(someday): On Ubuntu 22.04, clang-14 with -stdlib=libc++ fails to link with libfuzzer,
-    #   which looks like it might itself be linked against libstdc++? Need to investigate.
-    unset LIB_FUZZING_ENGINE
-  elif [ "${CXX#*-}" -ge 10 ] 2>/dev/null; then
-    # At the moment, only our clang-10 CI run seems to like -fcoroutines-ts. Earlier versions seem
-    # to have a library misconfiguration causing ./configure to result in the following error:
-    #   conftest.cpp:12:12: fatal error: 'initializer_list' file not found
-    #   #include <initializer_list>
-    # Let's use any clang version >= 10 so that if we move to a newer version, we'll get additional
-    # coverage by default.
-    export CXXFLAGS="$CXXFLAGS -std=gnu++17 -stdlib=libc++ -fcoroutines-ts"
-    export LDFLAGS="-fcoroutines-ts -stdlib=libc++"
-  fi
+  # Embed -stdlib=libc++ into CXX instead of CXXFLAGS in order to work around an irritating libtool
+  # bug.
+  export CXX="${CXX:-g++} -stdlib=libc++"
 else
   # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
   # uninitialized memory usage later on. GCC 4 also emits strange bogus warnings with
   # -Wstrict-overflow, so we disable it.
   CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized -Wno-strict-overflow"
 
-  # TODO(someday): Enable coroutines in g++ if supported.
+  export CXXFLAGS="$CXXFLAGS -std=gnu++20"
 fi
 
 cd c++
@@ -442,7 +431,7 @@ doit make -j$PARALLEL check
 if [ $IS_CLANG = no ]; then
   # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
   # as system headers so warnings in them are ignored.
-  doit ${CXX:-g++} -isystem src -std=c++14 -fno-permissive -pedantic -Wall -Wextra -Werror \
+  doit ${CXX:-g++} -isystem src -std=c++20 -fno-permissive -pedantic -Wall -Wextra -Werror \
       -c src/capnp/test.capnp.c++ -o /dev/null
 fi
 
@@ -458,13 +447,13 @@ test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 cd samples
 
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++14 addressbook.c++ addressbook.capnp.c++ -o addressbook \
+doit ${CXX:-g++} -std=c++20 addressbook.c++ addressbook.capnp.c++ -o addressbook \
     $CXXFLAGS $(pkg-config --cflags --libs capnp)
 
 doit capnp compile -oc++ calculator.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++14 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
+doit ${CXX:-g++} -std=c++20 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
-doit ${CXX:-g++} -std=c++14 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
+doit ${CXX:-g++} -std=c++20 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
 
 test_samples
