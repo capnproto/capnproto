@@ -28,6 +28,10 @@ namespace {
 
 CappedArray<char, sizeof(char    ) * 2 + 1> hex(byte     i) { return kj::hex((uint8_t )i); }
 CappedArray<char, sizeof(char    ) * 2 + 1> hex(char     i) { return kj::hex((uint8_t )i); }
+#if __cpp_char8_t
+[[maybe_unused]]
+CappedArray<char, sizeof(char8_t ) * 2 + 1> hex(char8_t  i) { return kj::hex((uint8_t )i); }
+#endif
 CappedArray<char, sizeof(char16_t) * 2 + 1> hex(char16_t i) { return kj::hex((uint16_t)i); }
 CappedArray<char, sizeof(char32_t) * 2 + 1> hex(char32_t i) { return kj::hex((uint32_t)i); }
 CappedArray<char, sizeof(uint32_t) * 2 + 1> hex(wchar_t  i) { return kj::hex((uint32_t)i); }
@@ -58,7 +62,7 @@ void expectRes(EncodingResult<T> result,
   expectResImpl(kj::mv(result), arrayPtr(expected, s - 1), errors);
 }
 
-#if __cplusplus >= 202000L
+#if __cpp_char8_t
 template <typename T, size_t s>
 void expectRes(EncodingResult<T> result,
                const char8_t (&expected)[s],
