@@ -7,6 +7,14 @@ build:unix --cxxopt='-Wno-strict-aliasing' --host_cxxopt='-Wno-strict-aliasing'
 build:unix --cxxopt='-Wno-sign-compare' --host_cxxopt='-Wno-sign-compare'
 build:unix --cxxopt='-Wno-unused-parameter' --host_cxxopt='-Wno-unused-parameter'
 
+# I needed these magic spells to build locally with clang-11 and clang-12 on Ubuntu. clang-13 and up
+# work out-of-the-box.
+# TODO(2.0): Remove this when we support g++ again.
+build:unix --action_env=CXXFLAGS=-stdlib=libc++
+build:unix --action_env=LDFLAGS=-stdlib=libc++
+build:unix --action_env=BAZEL_CXXOPTS=-stdlib=libc++
+build:unix --action_env=BAZEL_LINKOPTS=-lc++:-lm
+
 build:linux --config=unix
 build:macos --config=unix
 

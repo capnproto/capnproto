@@ -1,3 +1,5 @@
+# TODO(2.0): Support g++ once they fix coroutines. This also blocks MinGW and ManyLinux builds.
+
 name: Quick Tests
 
 on:
@@ -23,42 +25,44 @@ jobs:
         run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang16 libc++-dev
       - name: super-test
         run: ./super-test.sh quick clang-16
-  Linux-old:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [g++-7, clang-6.0]
-    steps:
-      - uses: actions/checkout@v2
-      - name: install dependencies
-        run: |
-            export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
-      - name: super-test
-        run: |
-            ./super-test.sh quick ${{ matrix.compiler }}
-  Linux:
+  Linux-clang:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-12, clang-14]
+        clang: [11, 12, 13, 14, 15]
+        driver: [bazel, super-test]
+        include:
+          - driver: bazel
+            run-test: cd c++ && bazel test --verbose_failures --test_output=errors //...
+          - driver: super-test
+            run-test: ./super-test.sh quick
+          - clang: 12
+            # clang-12 on Ubuntu requires libunwind to be installed explicitly
+            libunwind: libunwind-12-dev
     steps:
       - uses: actions/checkout@v2
+      - uses: bazelbuild/setup-bazelisk@v2
       - name: install dependencies
+        # I observed 404s for some packages and added an `apt-get update`. Then, I observed package
+        # conflicts between LLVM 14 and 15, and added the line which removes LLVM 14, the default on
+        # Ubuntu as of this writing.
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
-      - name: super-test
+            sudo apt-get update
+            sudo apt-get remove clang-14 libc++1-14 libc++abi1-14 libc++-14-dev libc++abi-14-dev libunwind-14 libunwind-14-dev
+            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev clang-${{ matrix.clang }} libc++-${{ matrix.clang }}-dev libc++abi-${{ matrix.clang }}-dev ${{ matrix.libunwind }}
+      - name: test
         run: |
-            ./super-test.sh quick ${{ matrix.compiler }}
+            export CC=clang-${{ matrix.clang }}
+            export CXX=clang++-${{ matrix.clang }}
+            ${{ matrix.run-test }}
   Linux-lock-tracking:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        compiler: [clang-9]
+        compiler: [clang-14]
         features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1 -DKJ_CONTENTION_WARNING_THRESHOLD=200"]
     steps:
       - uses: actions/checkout@v2
@@ -66,28 +70,28 @@ jobs:
         run: |
             export DEBIAN_FRONTEND=noninteractive
             sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
-      - name: super-test
+      - name: super-test ${{ matrix.compiler }}
         run: |
             # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
             ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
-  ManyLinux:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - cross-compiler: manylinux2014-x64
-          - cross-compiler: manylinux2014-x86
-            docker-run-args: --platform linux/386
-    steps:
-      - uses: actions/checkout@v2
-      - name: install dockcross
-        run: |
-            docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross
-            chmod +x ./dockcross
-      - name: super-test
-        run: |
-            ./dockcross ./super-test.sh quick g++
+  # ManyLinux:
+  #   runs-on: ubuntu-20.04
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - cross-compiler: manylinux2014-x64
+  #         - cross-compiler: manylinux2014-x86
+  #           docker-run-args: --platform linux/386
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: install dockcross
+  #       run: |
+  #           docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross
+  #           chmod +x ./dockcross
+  #     - name: super-test
+  #       run: |
+  #           ./dockcross ./super-test.sh quick g++
   MacOS:
     runs-on: macos-latest
     strategy:
@@ -137,28 +141,28 @@ jobs:
 
             cd build-output\src
             ctest -V -C debug
-  MinGW:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v2
-      - name: Build and test
-        shell: cmd
-        run: |
-            echo "Deleting broken Postgres install until https://github.com/actions/virtual-environments/issues/1089 is fixed..."
-            rmdir /s /q C:\PROGRA~1\POSTGR~1
+  # MinGW:
+  #   runs-on: windows-latest
+  #   strategy:
+  #     fail-fast: false
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Build and test
+  #       shell: cmd
+  #       run: |
+  #           echo "Deleting broken Postgres install until https://github.com/actions/virtual-environments/issues/1089 is fixed..."
+  #           rmdir /s /q C:\PROGRA~1\POSTGR~1
 
-            echo "Building Cap'n Proto with MinGW"
-            cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND" -DCMAKE_CXX_STANDARD_LIBRARIES="-static-libgcc -static-libstdc++"
-            cmake --build build-output --target install -- -j2
+  #           echo "Building Cap'n Proto with MinGW"
+  #           cmake -Hc++ -Bbuild-output -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND" -DCMAKE_CXX_STANDARD_LIBRARIES="-static-libgcc -static-libstdc++"
+  #           cmake --build build-output --target install -- -j2
 
-            echo "Building Cap'n Proto samples with MinGW"
-            cmake -Hc++/samples -Bbuild-output-samples -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND"
-            cmake --build build-output-samples
+  #           echo "Building Cap'n Proto samples with MinGW"
+  #           cmake -Hc++/samples -Bbuild-output-samples -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH=%CD%\capnproto-c++-install -DCMAKE_SH="CMAKE_SH-NOTFOUND"
+  #           cmake --build build-output-samples
 
-            cd build-output\src
-            ctest -V -C debug
+  #           cd build-output\src
+  #           ctest -V -C debug
   # Cygwin:
   #   runs-on: windows-latest
   #   strategy:
@@ -183,25 +187,3 @@ jobs:
   #       shell: cmd
   #       run: |
   #         C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh quick'
-  Linux-bazel-clang:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-      matrix:
-        clang_version: [16]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: bazelbuild/setup-bazelisk@v2
-      - name: install dependencies
-        run: |
-            export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git
-      # todo: replace with apt-get when clang-16 is part of ubuntu lts
-      - name: install clang
-        uses: egor-tensin/setup-clang@v1
-        with:
-          version: ${{ matrix.clang_version }}
-      - name: super-test
-        run: |
-            cd c++
-            bazel test --verbose_failures --test_output=errors //...
