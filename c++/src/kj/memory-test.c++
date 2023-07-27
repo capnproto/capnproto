@@ -459,7 +459,6 @@ KJ_TEST("Maybe<Own<T>>") {
   KJ_EXPECT(&KJ_ASSERT_NONNULL(mRef) == KJ_ASSERT_NONNULL(m).get());
 }
 
-#if __cplusplus > 201402L
 int* sawIntPtr = nullptr;
 
 void freeInt(int* ptr) {
@@ -498,7 +497,6 @@ KJ_TEST("disposeWith") {
     auto p2 = disposeWith<static_cast<void(*)(const char*)>(free)>(&c);
   }
 }
-#endif
 
 // TODO(test):  More tests.
 
