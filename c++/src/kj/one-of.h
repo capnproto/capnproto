@@ -604,15 +604,8 @@ void OneOf<Variants...>::allHandled() {
   KJ_UNREACHABLE;
 }
 
-#if __cplusplus > 201402L
 #define KJ_SWITCH_ONEOF(value) \
   switch (auto _kj_switch_subject = (value)._switchSubject(); _kj_switch_subject->which())
-#else
-#define KJ_SWITCH_ONEOF(value) \
-  /* Without C++17, we can only support one switch per containing block. Deal with it. */ \
-  auto _kj_switch_subject = (value)._switchSubject(); \
-  switch (_kj_switch_subject->which())
-#endif
 #if !_MSC_VER || defined(__clang__)
 #define KJ_CASE_ONEOF(name, ...) \
     break; \
@@ -653,9 +646,6 @@ void OneOf<Variants...>::allHandled() {
 //   compiler warning, just like a regular switch() over an enum where one of the enum values is
 //   missing.
 // - There's no need for a `break` statement in a KJ_CASE_ONEOF; it is implied.
-// - Under C++11 and C++14, only one KJ_SWITCH_ONEOF() can appear in a block. Wrap the switch in
-//   a pair of braces if you need a second switch in the same block. If C++17 is enabled, this is
-//   not an issue.
 //
 // Implementation notes:
 // - The use of __VA_ARGS__ is to account for template types that have commas separating type

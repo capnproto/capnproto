@@ -1204,79 +1204,9 @@ void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
 
 namespace _ {  // private
 
-#if __cplusplus >= 201703L
-
 uint uncaughtExceptionCount() {
   return std::uncaught_exceptions();
 }
-
-#elif __GNUC__
-
-// Horrible -- but working -- hack:  We can dig into __cxa_get_globals() in order to extract the
-// count of uncaught exceptions.  This function is part of the C++ ABI implementation used on Linux,
-// OSX, and probably other platforms that use GCC.  Unfortunately, __cxa_get_globals() is only
-// actually defined in cxxabi.h on some platforms (e.g. Linux, but not OSX), and even where it is
-// defined, it returns an incomplete type.  Here we use the same hack used by Evgeny Panasyuk:
-//   https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
-//
-// Notice that a similar hack is possible on MSVC -- if its C++11 support ever gets to the point of
-// supporting KJ in the first place.
-//
-// It appears likely that a future version of the C++ standard may include an
-// uncaught_exception_count() function in the standard library, or an equivalent language feature.
-// Some discussion:
-//   https://groups.google.com/a/isocpp.org/d/msg/std-proposals/HglEslyZFYs/kKdu5jJw5AgJ
-
-struct FakeEhGlobals {
-  // Fake
-
-  void* caughtExceptions;
-  uint uncaughtExceptions;
-};
-
-// LLVM's libstdc++ doesn't declare __cxa_get_globals in its cxxabi.h. GNU does. Because it is
-// extern "C", the compiler wills get upset if we re-declare it even in a different namespace.
-#if _LIBCPPABI_VERSION
-extern "C" void* __cxa_get_globals();
-#else
-using abi::__cxa_get_globals;
-#endif
-
-uint uncaughtExceptionCount() {
-  return reinterpret_cast<FakeEhGlobals*>(__cxa_get_globals())->uncaughtExceptions;
-}
-
-#elif _MSC_VER
-
-#if _MSC_VER >= 1900
-// MSVC14 has a refactored CRT which now provides a direct accessor for this value.
-// See https://svn.boost.org/trac/boost/ticket/10158 for a brief discussion.
-extern "C" int *__cdecl __processing_throw();
-
-uint uncaughtExceptionCount() {
-  return static_cast<uint>(*__processing_throw());
-}
-
-#elif _MSC_VER >= 1400
-// The below was copied from:
-// https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
-
-extern "C" char *__cdecl _getptd();
-
-uint uncaughtExceptionCount() {
-  return *reinterpret_cast<uint*>(_getptd() + (sizeof(void*) == 8 ? 0x100 : 0x90));
-}
-#else
-uint uncaughtExceptionCount() {
-  // Since the above doesn't work, fall back to uncaught_exception(). This will produce incorrect
-  // results in very obscure cases that Cap'n Proto doesn't really rely on anyway.
-  return std::uncaught_exception();
-}
-#endif
-
-#else
-#error "This needs to be ported to your compiler / C++ ABI."
-#endif
 
 }  // namespace _ (private)
 
