@@ -109,11 +109,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['windows-2019', 'windows-latest']
+        os: ['windows-latest']
         include:
-          - os: windows-2019
-            target: 'Visual Studio 16 2019'
-            arch: -A x64
           - os: windows-latest
             target: 'Visual Studio 17 2022'
             arch: -A x64

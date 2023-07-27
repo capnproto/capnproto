@@ -88,8 +88,8 @@ KJ_BEGIN_HEADER
     // #endif
   #endif
 #elif defined(_MSC_VER)
-  #if _MSC_VER < 1910 && !defined(__clang__)
-    #error "You need Visual Studio 2017 or better to compile this code."
+  #if _MSC_VER < 1930 && !defined(__clang__)
+    #error "You need Visual Studio 2022 or better to compile this code."
   #endif
 #else
   #warning "I don't recognize your compiler. As of this writing, Clang, GCC, and Visual Studio "\
