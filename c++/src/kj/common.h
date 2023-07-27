@@ -103,14 +103,6 @@ KJ_BEGIN_HEADER
 #include <initializer_list>
 #include <string.h>
 
-#if __linux__ && __cplusplus > 201200L
-// Hack around stdlib bug with C++14 that exists on some Linux systems.
-// Apparently in this mode the C library decides not to define gets() but the C++ library still
-// tries to import it into the std namespace. This bug has been fixed at the source but is still
-// widely present in the wild e.g. on Ubuntu 14.04.
-#undef _GLIBCXX_HAVE_GETS
-#endif
-
 #if _WIN32
 // Windows likes to define macros for min() and max(). We just can't deal with this.
 // If windows.h was included already, undef these.

@@ -479,16 +479,6 @@ struct HttpRequestTestCase {
   InitializeableArray<kj::StringPtr> requestBodyParts;
 
   Side side = BOTH;
-
-  // TODO(cleanup): Delete this constructor if/when we move to C++14.
-  HttpRequestTestCase(kj::StringPtr raw, HttpMethod method, kj::StringPtr path,
-                      InitializeableArray<HeaderTestCase> requestHeaders,
-                      kj::Maybe<uint64_t> requestBodySize,
-                      InitializeableArray<kj::StringPtr> requestBodyParts,
-                      Side side = BOTH)
-      : raw(raw), method(method), path(path), requestHeaders(kj::mv(requestHeaders)),
-        requestBodySize(requestBodySize), requestBodyParts(kj::mv(requestBodyParts)),
-        side(side) {}
 };
 
 struct HttpResponseTestCase {
@@ -503,17 +493,6 @@ struct HttpResponseTestCase {
   HttpMethod method = HttpMethod::GET;
 
   Side side = BOTH;
-
-  // TODO(cleanup): Delete this constructor if/when we move to C++14.
-  HttpResponseTestCase(kj::StringPtr raw, uint64_t statusCode, kj::StringPtr statusText,
-                       InitializeableArray<HeaderTestCase> responseHeaders,
-                       kj::Maybe<uint64_t> responseBodySize,
-                       InitializeableArray<kj::StringPtr> responseBodyParts,
-                       HttpMethod method = HttpMethod::GET,
-                       Side side = BOTH)
-      : raw(raw), statusCode(statusCode), statusText(statusText),
-        responseHeaders(kj::mv(responseHeaders)), responseBodySize(responseBodySize),
-        responseBodyParts(kj::mv(responseBodyParts)), method(method), side(side) {}
 };
 
 struct HttpTestCase {
