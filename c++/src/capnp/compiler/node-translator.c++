@@ -701,7 +701,6 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
 }
 
 static kj::StringPtr getExpressionTargetName(Expression::Reader exp) {
-  kj::StringPtr targetName;
   switch (exp.which()) {
     case Expression::ABSOLUTE_NAME:
       return exp.getAbsoluteName().getValue();
