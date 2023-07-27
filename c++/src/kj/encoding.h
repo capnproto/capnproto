@@ -372,7 +372,7 @@ EncodingResult<Array<byte>> decodeBase64(const char (&text)[s]) {
   return decodeBase64(arrayPtr(text, s - 1));
 }
 
-#if __cplusplus >= 202000L
+#if __cpp_char8_t
 template <size_t s>
 inline EncodingResult<Array<char16_t>> encodeUtf16(const char8_t (&text)[s], bool nulTerminate=false) {
   return encodeUtf16(arrayPtr(reinterpret_cast<const char*>(text), s - 1), nulTerminate);
