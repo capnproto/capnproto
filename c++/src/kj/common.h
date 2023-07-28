@@ -1843,7 +1843,9 @@ public:
     }
     return true;
   }
+#if !__cpp_impl_three_way_comparison
   inline bool operator!=(const ArrayPtr& other) const { return !(*this == other); }
+#endif
 
   template <typename U>
   inline bool operator==(const ArrayPtr<U>& other) const {
@@ -1853,8 +1855,10 @@ public:
     }
     return true;
   }
+#if !__cpp_impl_three_way_comparison
   template <typename U>
   inline bool operator!=(const ArrayPtr<U>& other) const { return !(*this == other); }
+#endif
 
   template <typename... Attachments>
   Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
