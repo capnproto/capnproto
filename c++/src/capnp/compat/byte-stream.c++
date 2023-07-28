@@ -1063,7 +1063,7 @@ private:
         // Pumping from some other kind of stream. Optimize the pump by reading from the input
         // directly into outgoing RPC messages.
         size_t size = kj::min(remaining, 8192);
-        auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word) });
+        auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
 
         auto orphanage = Orphanage::getForMessageContaining(
             capnp::ByteStream::WriteParams::Builder(req));
