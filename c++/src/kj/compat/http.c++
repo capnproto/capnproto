@@ -3563,8 +3563,9 @@ private:
       }
     };
 
-    co_await doPump(*this, other)
-        .exclusiveJoin(onDisconnect(*this, other));
+    co_await kj::evalNow([&]() {
+      return doPump(*this, other).exclusiveJoin(onDisconnect(*this, other));
+    });
   }
 };
 
@@ -3591,47 +3592,66 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 }
 
 static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
-  return from.receive().then([&from,&to](WebSocket::Message&& message) {
+  constexpr auto sendMessage = [](WebSocket& to, const WebSocket::Message& message) {
     KJ_SWITCH_ONEOF(message) {
       KJ_CASE_ONEOF(text, kj::String) {
-        return to.send(text)
-            .attach(kj::mv(text))
-            .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        return to.send(text);
       }
       KJ_CASE_ONEOF(data, kj::Array<byte>) {
-        return to.send(data)
-            .attach(kj::mv(data))
-            .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+        return to.send(data);
       }
       KJ_CASE_ONEOF(close, WebSocket::Close) {
-        // Once a close has passed through, the pump is complete.
-        return to.close(close.code, close.reason)
-            .attach(kj::mv(close));
+        return to.close(close.code, close.reason);
       }
     }
     KJ_UNREACHABLE;
-  }, [&to](kj::Exception&& e) {
-    if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-      return to.disconnect();
-    } else {
-      return to.close(1002, e.getDescription());
+  };
+
+  for (;;) {
+    auto message = co_await from.receive();
+
+    {
+      // We can't put `co_await` inside catch clauses, resulting in this awkward arrangement.
+      Maybe<Promise<void>> resultOnSendException;
+
+      try {
+        co_await sendMessage(to, message);
+      } catch (kj::Exception& e) {
+        if (e.getType() == kj::Exception::Type::DISCONNECTED) {
+          resultOnSendException = to.disconnect();
+        } else {
+          resultOnSendException = to.close(1002, e.getDescription());
+        }
+      }
+
+      KJ_IF_MAYBE(promise, resultOnSendException) {
+        co_return co_await *promise;
+      }
     }
-  });
+
+    if (message.is<WebSocket::Close>()) {
+      // Once a close has passed through, the pump is complete.
+      co_return;
+    }
+  }
 }
 
 kj::Promise<void> WebSocket::pumpTo(WebSocket& other) {
   KJ_IF_MAYBE(p, other.tryPumpFrom(*this)) {
     // Yay, optimized pump!
-    return kj::mv(*p);
+    co_return co_await kj::mv(*p);
   } else {
     // Fall back to default implementation.
-    return kj::evalNow([&]() {
-      auto cancelPromise = other.whenAborted().then([this]() -> kj::Promise<void> {
-        this->abort();
-        return KJ_EXCEPTION(DISCONNECTED,
-            "destination of WebSocket pump disconnected prematurely");
-      });
-      return pumpWebSocketLoop(*this, other).exclusiveJoin(kj::mv(cancelPromise));
+    constexpr auto onDisconnect = [](WebSocket& self, WebSocket& other) -> kj::Promise<void> {
+      // TODO(now): Code duplication with WebSocketImpl::optimizedPumpTo().
+      co_await other.whenAborted();
+      self.abort();
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED,
+          "destination of WebSocket pump disconnected prematurely"));
+    };
+
+    co_return co_await kj::evalNow([&]() {
+      return pumpWebSocketLoop(*this, other).exclusiveJoin(onDisconnect(*this, other));
     });
   }
 }
