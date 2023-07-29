@@ -7154,5 +7154,117 @@ KJ_TEST("CONNECT pipelined via an adapter (reject)") {
   KJ_ASSERT(text == "ok");
 }
 
+struct HttpRangeTestCase {
+  kj::StringPtr value;
+  uint64_t contentLength;
+  kj::OneOf<InitializeableArray<HttpByteRange>, HttpEverythingRange, HttpUnsatisfiableRange> expected;
+
+  HttpRangeTestCase(kj::StringPtr value, uint64_t contentLength) :
+    value(value), contentLength(contentLength), expected(HttpUnsatisfiableRange {}) {} 
+  HttpRangeTestCase(kj::StringPtr value, uint64_t contentLength, HttpEverythingRange expected) :
+    value(value), contentLength(contentLength), expected(expected) {}  
+  HttpRangeTestCase(kj::StringPtr value, uint64_t contentLength, InitializeableArray<HttpByteRange> expected) :
+    value(value), contentLength(contentLength), expected(kj::mv(expected)) {}
+};
+
+KJ_TEST("Range header parsing") {
+  static const HttpRangeTestCase RANGE_TEST_CASES[] {
+    // ===== Unit =====
+    // Check case-insensitive unit must be "bytes" and ignores whitespace
+    {"bytes=0-1"_kjc,                 2, HttpEverythingRange {}},
+    {"BYTES    =0-1"_kjc,             2, HttpEverythingRange {}},
+    {"     bYtEs=0-1"_kjc,            4, {{0,1}}},
+    {"    Bytes        =0-1"_kjc,     2, HttpEverythingRange {}},
+    // Check fails with other units
+    {"nibbles=0-1"_kjc,               2},
+    
+    // ===== Interval =====
+    // Check valid ranges accepted
+    {"bytes=0-1"_kjc,                 8, {{0,1}}},
+    {"bytes=  2 -   7   "_kjc,        8, {{2,7}}},
+    {"bytes=5-5"_kjc,                 8, {{5,5}}},
+    // Check start after end rejected
+    {"bytes=1-0"_kjc,                 2},
+    // Check start after content rejected
+    {"bytes=2-3"_kjc,                 2},
+    {"bytes=5-7"_kjc,                 2},
+    // Check end after content clamped
+    {"bytes=0-2"_kjc,                 2, HttpEverythingRange {}},
+    {"bytes=1-5"_kjc,                 3, {{1,2}}},
+    // Check multiple valid ranges accepted
+    {"bytes=  1-3  , 6-7,10-11"_kjc, 12, {{1,3},{6,7},{10,11}}},
+    // Check overlapping ranges accepted
+    {"bytes=0-2,1-3"_kjc,             5, {{0,2},{1,3}}},
+    // Check unsatisfiable ranges ignored
+    {"bytes=1-2,7-8"_kjc,             5, {{1,2}}},
+    
+    // ===== Prefix =====
+    // Check valid ranges accepted
+    {"bytes=2-"_kjc,                  8, {{2,7}}},
+    {"bytes=5-"_kjc,                  6, {{5,5}}},
+    // Check start after content rejected
+    {"bytes=2-"_kjc,                  2},
+    {"bytes=5-"_kjc,                  2},
+    // Check multiple valid ranges accepted
+    {"bytes=  1-  ,6-, 10-11 "_kjc,  12, {{1,11},{6,11},{10,11}}},
+    
+    // ===== Suffix =====
+    // Check valid ranges accepted
+    {"bytes=-2"_kjc,                  8, {{6,7}}},
+    {"bytes=-6"_kjc,                  7, {{1,6}}},
+    // Check start after content truncated and entire response response
+    {"bytes=-7"_kjc,                  7, HttpEverythingRange {}},
+    {"bytes=-10"_kjc,                 5, HttpEverythingRange {}},
+    // Check if any range returns entire response, other ranges ignored
+    {"bytes=0-1,-5,2-3"_kjc,          5, HttpEverythingRange {}},
+    // Check unsatisfiable empty range ignored
+    {"bytes=-0"_kjc,                  2},
+    {"bytes=0-1,-0,2-3"_kjc,          4, {{0,1},{2,3}}},
+    
+    // ===== Invalid =====
+    // Check range with no start or end rejected
+    {"bytes=-"_kjc,                   2},
+    // Check range wih no dash rejected
+    {"bytes=0"_kjc,                   2},
+    // Check empty range rejected
+    {"bytes=0-1,"_kjc,                2},
+    // Check no ranges rejected
+    {"bytes="_kjc,                    2},
+    {"bytes"_kjc,                     2},
+  };
+  
+  for (auto& testCase : RANGE_TEST_CASES) {
+    auto ranges = tryParseHttpRangeHeader(testCase.value, testCase.contentLength);
+    KJ_SWITCH_ONEOF(testCase.expected) {
+      KJ_CASE_ONEOF(expectedArray, InitializeableArray<HttpByteRange>) {
+        KJ_SWITCH_ONEOF(ranges) {
+          KJ_CASE_ONEOF(array, kj::Array<HttpByteRange>) {
+            KJ_ASSERT(array == expectedArray);
+          }
+          KJ_CASE_ONEOF_DEFAULT {
+            KJ_FAIL_ASSERT("Expected ", testCase.value, testCase.contentLength, "to return ranges");
+          }
+        }
+      }
+      KJ_CASE_ONEOF(_, HttpEverythingRange) {
+        KJ_SWITCH_ONEOF(ranges) {
+          KJ_CASE_ONEOF(_, HttpEverythingRange) {}
+          KJ_CASE_ONEOF_DEFAULT {
+            KJ_FAIL_ASSERT("Expected ", testCase.value, testCase.contentLength, "to return everything");
+          }
+        }
+      }
+      KJ_CASE_ONEOF(_, HttpUnsatisfiableRange) {
+        KJ_SWITCH_ONEOF(ranges) {
+          KJ_CASE_ONEOF(_, HttpUnsatisfiableRange) {}
+          KJ_CASE_ONEOF_DEFAULT {
+            KJ_FAIL_ASSERT("Expected ", testCase.value, testCase.contentLength, "to be unsatisfiable");
+          }
+        }
+      } 
+    }
+  }
+}
+
 }  // namespace
 }  // namespace kj

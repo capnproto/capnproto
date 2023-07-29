@@ -762,7 +762,7 @@ void HttpHeaders::takeOwnership(HttpHeaders&& otherHeaders) {
 
 // -----------------------------------------------------------------------------
 
-static inline char* skipSpace(char* p) {
+static inline const char* skipSpace(const char* p) {
   for (;;) {
     switch (*p) {
       case '\t':
@@ -773,6 +773,9 @@ static inline char* skipSpace(char* p) {
         return p;
     }
   }
+}
+static inline char* skipSpace(char* p) {
+  return const_cast<char*>(skipSpace(const_cast<const char*>(p)));
 }
 
 static kj::Maybe<kj::StringPtr> consumeWord(char*& ptr) {
@@ -805,14 +808,14 @@ static kj::Maybe<kj::StringPtr> consumeWord(char*& ptr) {
   }
 }
 
-static kj::Maybe<uint> consumeNumber(char*& ptr) {
-  char* start = skipSpace(ptr);
-  char* p = start;
+static kj::Maybe<uint> consumeNumber(const char*& ptr) {
+  const char* start = skipSpace(ptr);
+  const char* p = start;
 
   uint result = 0;
 
   for (;;) {
-    char c = *p;
+    const char c = *p;
     if ('0' <= c && c <= '9') {
       result = result * 10 + (c - '0');
       ++p;
@@ -822,6 +825,12 @@ static kj::Maybe<uint> consumeNumber(char*& ptr) {
       return result;
     }
   }
+}
+static kj::Maybe<uint> consumeNumber(char*& ptr) {
+  const char* constPtr = ptr;
+  auto result = consumeNumber(constPtr);
+  ptr = const_cast<char*>(constPtr);
+  return result;
 }
 
 static kj::StringPtr consumeLine(char*& ptr) {
@@ -1108,6 +1117,155 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
 
 kj::String HttpHeaders::toString() const {
   return serialize(nullptr, nullptr, nullptr, nullptr);
+}
+
+// -----------------------------------------------------------------------------
+
+
+namespace {
+
+// The functions below parse HTTP "ranges specifiers" set in `Range` headers and defined by
+// RFC9110 section 14.1: https://www.rfc-editor.org/rfc/rfc9110#section-14.1.
+//
+// Ranges specifiers consist of a case-insensitive "range unit", followed by an '=', followed by a
+// comma separated list of "range specs". We currently only support byte ranges, with a range unit
+// of "bytes". A byte range spec can either be:
+//
+// - An "int range" consisting of an inclusive start index, followed by a '-', and optionally an
+//   inclusive end index (e.g. "2-5", "7-7", "9-"). Satisfiable if the start index is less than
+//   the content length. Note the end index defaults to, and is clamped to the content length.
+// - A "suffix range" consisting of a '-', followed by a suffix length (e.g. "-5"). Satisfiable
+//   if the suffix length is not 0. Note the suffix length is clamped to the content length.
+//
+// A full ranges specifier might look something like "bytes=2-4,-1", which requests bytes 2 through
+// 4, and the last byte.
+//
+// A range spec is invalid if it doesn't match the above structure, or if it is an int range
+// with an end index > start index. A ranges specifier is invalid if any of its range specs are.
+// A byte ranges specifier is satisfiable if at least one of its range specs are.
+//
+// `tryParseHttpRangeHeader()` will return an array of satisfiable ranges, unless the ranges
+// specifier is invalid.
+
+static bool consumeByteRangeUnit(const char*& ptr) {
+  const char* p = ptr;
+  p = skipSpace(p);
+
+  // Match case-insensitive "bytes"
+  if (*p != 'b' && *p != 'B') return false;
+  if (*(++p) != 'y' && *p != 'Y') return false;
+  if (*(++p) != 't' && *p != 'T') return false;
+  if (*(++p) != 'e' && *p != 'E') return false;
+  if (*(++p) != 's' && *p != 'S') return false;
+  ++p;
+
+  p = skipSpace(p);
+  ptr = p;
+  return true;
+}
+
+static kj::Maybe<HttpByteRange> consumeIntRange(const char*& ptr, uint64_t contentLength) {
+  const char* p = ptr;
+  p = skipSpace(p);
+  uint firstPos;
+  KJ_IF_MAYBE(n, consumeNumber(p)) {
+    firstPos = *n;
+  } else {
+    return nullptr;
+  }
+  p = skipSpace(p);
+  if (*(p++) != '-') return nullptr;
+  p = skipSpace(p);
+  auto maybeLastPos = consumeNumber(p);
+  p = skipSpace(p);
+
+  KJ_IF_MAYBE(lastPos, maybeLastPos) {
+    // "An int-range is invalid if the last-pos value is present and less than the first-pos"
+    if (firstPos > *lastPos) return nullptr;
+    // "if the value is greater than or equal to the current length of the representation data
+    // ... interpreted as the remainder of the representation"
+    if (*lastPos >= contentLength) *lastPos = contentLength - 1;
+    ptr = p;
+    return HttpByteRange { firstPos, *lastPos };
+  } else {
+    // "if the last-pos value is absent ... interpreted as the remainder of the representation"
+    ptr = p;
+    return HttpByteRange { firstPos, contentLength - 1 };
+  }
+}
+
+static kj::Maybe<HttpByteRange> consumeSuffixRange(const char*& ptr, uint64_t contentLength) {
+  const char* p = ptr;
+  p = skipSpace(p);
+  if (*(p++) != '-') return nullptr;
+  p = skipSpace(p);
+  uint suffixLength;
+  KJ_IF_MAYBE(n, consumeNumber(p)) {
+    suffixLength = *n;
+  } else {
+    return nullptr;
+  }
+  p = skipSpace(p);
+
+  ptr = p;
+  if (suffixLength >= contentLength) {
+    // "if the selected representation is shorter than the specified suffix-length, the entire
+    // representation is used"
+    return HttpByteRange { 0, contentLength - 1 };
+  } else {
+    return HttpByteRange { contentLength - suffixLength, contentLength - 1 };
+  }
+}
+
+static kj::Maybe<HttpByteRange> consumeRangeSpec(const char*& ptr, uint64_t contentLength) {
+  KJ_IF_MAYBE(range, consumeIntRange(ptr, contentLength)) {
+    return *range;
+  } else {
+    // If we failed to consume an int range, try consume a suffix range instead
+    return consumeSuffixRange(ptr, contentLength);
+  }
+}
+
+}  // namespace
+
+kj::String KJ_STRINGIFY(HttpByteRange range) {
+  return kj::str(range.start, "-", range.end);
+}
+
+HttpRanges tryParseHttpRangeHeader(kj::ArrayPtr<const char> value, uint64_t contentLength) {
+  const char* p = value.begin();
+  if (!consumeByteRangeUnit(p)) return HttpUnsatisfiableRange {};
+  if (*(p++) != '=') return HttpUnsatisfiableRange {};
+
+  auto fullRange = false;
+  kj::Vector<HttpByteRange> satisfiableRanges;
+  do {
+    KJ_IF_MAYBE(range, consumeRangeSpec(p, contentLength)) {
+      // Don't record more ranges if we've already recorded a full range
+      if (!fullRange && range->start <= range->end) {
+        if (range->start == 0 && range->end == contentLength - 1) {
+          // A range evaluated to the full range, but still need to check rest are valid
+          fullRange = true;
+        } else {
+          // "a valid bytes range-spec is satisfiable if it is either:
+          // - an int-range with a first-pos that is less than the current length of the selected
+          //   representation or
+          // - a suffix-range with a non-zero suffix-length"
+          satisfiableRanges.add(*range);
+        }
+      }
+    } else {
+      // If we failed to parse a range, the whole range specification is invalid
+      return HttpUnsatisfiableRange {};
+    }
+  } while (*(p++) == ',');
+
+  if ((--p) != value.end()) return HttpUnsatisfiableRange {};
+  if (fullRange) return HttpEverythingRange {};
+  // "A valid ranges-specifier is "satisfiable" if it contains at least one range-spec that is
+  // satisfiable"
+  if (satisfiableRanges.size() == 0) return HttpUnsatisfiableRange {};
+  return satisfiableRanges.releaseAsArray();
 }
 
 // =======================================================================================
