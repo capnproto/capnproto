@@ -161,7 +161,9 @@ public:
   MACRO(HOST, "Host") \
   MACRO(DATE, "Date") \
   MACRO(LOCATION, "Location") \
-  MACRO(CONTENT_TYPE, "Content-Type")
+  MACRO(CONTENT_TYPE, "Content-Type") \
+  MACRO(RANGE, "Range") \
+  MACRO(CONTENT_RANGE, "Content-Range")
   // For convenience, these headers are valid for all HttpHeaderTables. You can refer to them like:
   //
   //     HttpHeaderId::HOST
@@ -491,6 +493,33 @@ private:
   // TODO(perf): We could optimize for common headers by storing them directly as fields. We could
   //   also add direct accessors for those headers.
 };
+
+struct HttpByteRange {
+  // Inclusive HTTP range
+
+  uint64_t start;
+  uint64_t end;
+
+  inline bool operator==(const HttpByteRange& other) const {
+    return start == other.start && end == other.end;
+  }
+  inline bool operator!=(const HttpByteRange& other) const {
+    return !operator==(other);
+  }
+};
+
+kj::String KJ_STRINGIFY(HttpByteRange range);
+
+struct HttpEverythingRange {};
+struct HttpUnsatisfiableRange {};
+
+typedef kj::OneOf<kj::Array<HttpByteRange>, HttpEverythingRange, HttpUnsatisfiableRange> HttpRanges;
+
+HttpRanges tryParseHttpRangeHeader(kj::ArrayPtr<const char> value, uint64_t contentLength);
+// Parses a HTTP Range header into an array of satisfiable inclusive ranges. Returns
+// `HttpUnsatisfiableRange` if the range specifier was invalid/unsatisfiable per
+// https://www.rfc-editor.org/rfc/rfc9110#section-14. Returns `HttpEverythingRange` if at least one
+// of the specifier's range specs covers the full range.
 
 class HttpInputStream {
   // Low-level interface to receive HTTP-formatted messages (headers followed by body) from an
