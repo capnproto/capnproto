@@ -32,7 +32,12 @@
 //
 // TODO(someday): Support coroutines with -fno-exceptions.
 #if !KJ_NO_EXCEPTIONS
-#ifdef __has_include
+#if defined(_MSC_VER) && (_MSC_VER >= 1928) && (_MSVC_LANG >= 201705) && !defined(__clang__)
+// On Windows, we only support C++20 coroutines, not TS coroutines.
+#include <coroutine>
+#define KJ_HAS_COROUTINE 1
+#define KJ_COROUTINE_STD_NAMESPACE std
+#elif defined(__has_include)
 #if (__cpp_impl_coroutine >= 201902L) && __has_include(<coroutine>)
 // C++20 Coroutines detected.
 #include <coroutine>
