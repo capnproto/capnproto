@@ -352,6 +352,10 @@ public:
     *length = socklen;
   }
 
+  Maybe<void*> getWin32Handle() const {
+    return reinterpret_cast<void*>(fd);
+  }
+
 private:
   Own<Win32EventPort::IoObserver> observer;
 
