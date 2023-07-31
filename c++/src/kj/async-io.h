@@ -169,6 +169,10 @@ public:
   virtual kj::Maybe<int> getFd() const { return nullptr; }
   // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually
   // isn't wrapping a file descriptor.
+
+  virtual Maybe<void*> getWin32Handle() const { return nullptr; }
+  // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
+  // wrapping a handle.
 };
 
 Promise<uint64_t> unoptimizedPumpTo(
