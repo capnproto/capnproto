@@ -570,5 +570,26 @@ KJ_TEST("Verify coCapture() with continuation functors") {
   }
 }
 
+KJ_TEST("Test CoExclusiveJoin<T>") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto coro = []() -> Promise<int> {
+    auto paf = newPromiseAndFulfiller<void>();
+    auto nestedCoro = [&]() -> Promise<int> {
+      co_await paf.promise;
+      co_return 123;
+    };
+
+    auto task = co_await _::CoExclusiveJoin<int>(nestedCoro());
+
+    paf.fulfiller->fulfill();
+
+    co_return co_await Promise<int>(NEVER_DONE);
+  };
+
+  KJ_EXPECT(123 == coro().wait(waitScope));
+}
+
 }  // namespace
 }  // namespace kj
