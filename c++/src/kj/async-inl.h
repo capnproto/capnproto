@@ -31,7 +31,7 @@
 #include "async.h"  // help IDE parse this file
 #endif
 
-#if _MSC_VER && KJ_HAS_COROUTINE
+#if _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -2031,10 +2031,8 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
 
 }  // namespace kj
 
-#if KJ_HAS_COROUTINE
-
 // =======================================================================================
-// Coroutines TS integration with kj::Promise<T>.
+// Coroutines integration with kj::Promise<T>.
 //
 // Here's a simple coroutine:
 //
@@ -2065,7 +2063,7 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
   // `Args...` are the coroutine's parameter types.
 
   using promise_type = kj::_::Coroutine<T>;
-  // The Coroutines TS calls this the "promise type". This makes sense when thinking of coroutines
+  // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
   // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
   // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
   // the "coroutine implementation type" instead.
@@ -2094,7 +2092,13 @@ public:
   void destroy() override;
 
   auto initial_suspend() { return stdcoro::suspend_never(); }
-  auto final_suspend() noexcept { return stdcoro::suspend_always(); }
+  auto final_suspend() noexcept {
+#if _MSC_VER && !defined(__clang__)
+    // See comment at `finalSuspendCalled`'s definition.
+    finalSuspendCalled = true;
+#endif
+    return stdcoro::suspend_always();
+  }
   // These adjust the suspension behavior of coroutines immediately upon initiation, and immediately
   // after completion.
   //
@@ -2135,6 +2139,17 @@ private:
   bool waiting = true;
 
   bool hasSuspendedAtLeastOnce = false;
+
+#if _MSC_VER && !defined(__clang__)
+  bool finalSuspendCalled = false;
+  // MSVC erroneously reports the coroutine as done (that is, `coroutine.done()` returns true)
+  // seemingly as soon as `return_value()`/`return_void()` are called. This matters in our
+  // implementation of `unhandled_exception()`, which must arrange to propagate exceptions during
+  // coroutine frame unwind via the returned promise, even if `return_value()`/`return_void()` have
+  // already been called. To prove that our assumptions are correct in that function, we want to be
+  // able to assert that `final_suspend()` has not yet been called. This boolean hack allows us to
+  // preserve that assertion.
+#endif
 
   Maybe<PromiseNode&> promiseNodeForTrace;
   // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
@@ -2293,7 +2308,7 @@ class Coroutine<T>::Awaiter: public AwaiterBase {
 public:
   explicit Awaiter(Promise<U> promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
 
-  U await_resume() KJ_NOINLINE {
+  KJ_NOINLINE U await_resume() {
     // This is marked noinline in order to ensure __builtin_return_address() is accurate for stack
     // trace purposes. In my experimentation, this method was not inlined anyway even in opt
     // builds, but I want to make sure it doesn't suddenly start being inlined later causing stack
@@ -2322,7 +2337,5 @@ private:
 #undef KJ_COROUTINE_STD_NAMESPACE
 
 }  // namespace kj::_ (private)
-
-#endif  // KJ_HAS_COROUTINE
 
 KJ_END_HEADER

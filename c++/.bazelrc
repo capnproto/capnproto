@@ -1,11 +1,19 @@
 common --enable_platform_specific_config
 
-build:unix --cxxopt='-std=c++14' --host_cxxopt='-std=c++14' --force_pic --verbose_failures
+build:unix --cxxopt='-std=c++20' --host_cxxopt='-std=c++20' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall' --host_cxxopt='-Wall'
 build:unix --cxxopt='-Wextra' --host_cxxopt='-Wextra'
 build:unix --cxxopt='-Wno-strict-aliasing' --host_cxxopt='-Wno-strict-aliasing'
 build:unix --cxxopt='-Wno-sign-compare' --host_cxxopt='-Wno-sign-compare'
 build:unix --cxxopt='-Wno-unused-parameter' --host_cxxopt='-Wno-unused-parameter'
+
+# I needed these magic spells to build locally with clang-11 and clang-12 on Ubuntu. clang-13 and up
+# work out-of-the-box.
+# TODO(2.0): Remove this when we support g++ again.
+build:unix --action_env=CXXFLAGS=-stdlib=libc++
+build:unix --action_env=LDFLAGS=-stdlib=libc++
+build:unix --action_env=BAZEL_CXXOPTS=-stdlib=libc++
+build:unix --action_env=BAZEL_LINKOPTS=-lc++:-lm
 
 build:linux --config=unix
 build:macos --config=unix
@@ -16,9 +24,9 @@ startup --windows_enable_symlinks
 # under Bazel. MSVC is natively supported when using CMake builds.
 build:windows --compiler=clang-cl
 
-build:windows --cxxopt='/std:c++14' --host_cxxopt='/std:c++14' --verbose_failures
+build:windows --cxxopt='/std:c++20' --host_cxxopt='/std:c++20' --verbose_failures
 build:windows --cxxopt='/wo4503' --host_cxxopt='/wo4503'
-# The `/std:c++14` argument is unused during boringssl compilation and we don't
+# The `/std:c++20` argument is unused during boringssl compilation and we don't
 # want a warning when compiling each file.
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'
 

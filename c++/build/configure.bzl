@@ -37,11 +37,6 @@ def kj_configure():
         build_setting_default = False,
     )
 
-    bool_flag(
-        name = "coroutines",
-        build_setting_default = False,
-    )
-
     # Settings to use in select() expressions
     native.config_setting(
         name = "use_openssl",
@@ -62,11 +57,6 @@ def kj_configure():
     native.config_setting(
         name = "use_libdl",
         flag_values = {"libdl": "True"},
-    )
-
-    native.config_setting(
-        name = "use_coroutines",
-        flag_values = {"coroutines": "True"},
     )
 
     native.config_setting(

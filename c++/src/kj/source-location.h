@@ -41,21 +41,7 @@ KJ_BEGIN_HEADER
 #define KJ_CALLER_COLUMN() 0
 #endif
 
-#if __cplusplus > 201703L
 #define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION 1
-#elif defined(__has_builtin)
-// Clang 9 added these builtins: https://releases.llvm.org/9.0.0/tools/clang/docs/LanguageExtensions.html
-// Use __has_builtin as the way to detect this because __clang_major__ is unreliable (see above
-// about issue with Xcode-provided clang).
-#define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION (   \
-  __has_builtin(__builtin_FILE) &&               \
-  __has_builtin(__builtin_LINE) &&               \
-  __has_builtin(__builtin_FUNCTION)              \
-  )
-#elif __GNUC__ >= 5
-// GCC 5 supports the required builtins: https://gcc.gnu.org/onlinedocs/gcc-5.1.0/gcc/Other-Builtins.html
-#define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION 1
-#endif
 
 namespace kj {
 class SourceLocation {

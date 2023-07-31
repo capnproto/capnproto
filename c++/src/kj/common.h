@@ -63,37 +63,37 @@
 KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
-// Technically, __cplusplus should be 201402L for C++14, but GCC 4.9 -- which is supported -- still
-// had it defined to 201300L even with -std=c++14.
-#if __cplusplus < 201300L && !__CDT_PARSER__ && !_MSC_VER
-  #error "This code requires C++14. Either your compiler does not support it or it is not enabled."
+#if __cplusplus < 202002L && !__CDT_PARSER__ && !_MSC_VER
+  #error "This code requires C++20. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
-    #error "Pass -std=c++14 on the compiler command line to enable C++14."
+    #error "Pass -std=c++20 on the compiler command line to enable C++20."
   #endif
 #endif
 
 #ifdef __GNUC__
   #if __clang__
-    #if __clang_major__ < 5
-      #warning "This library requires at least Clang 5.0."
-    #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
-      #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
+    #if __clang_major__ < 11
+      #warning "This library requires at least Clang 11.0."
+    #endif
+    #if __cplusplus >= 202002L && !(__has_include(<coroutine>) || __has_include(<experimental/coroutine>))
+      #warning "Your compiler supports C++20 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
     #endif
   #else
-    #if __GNUC__ < 5
-      #warning "This library requires at least GCC 5.0."
-    #endif
+    #error "This library does not currently support GCC due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051."
+    // #if __GNUC__ < 10
+    //   #warning "This library requires at least GCC 10.0."
+    // #endif
   #endif
 #elif defined(_MSC_VER)
-  #if _MSC_VER < 1910 && !defined(__clang__)
-    #error "You need Visual Studio 2017 or better to compile this code."
+  #if _MSC_VER < 1930 && !defined(__clang__)
+    #error "You need Visual Studio 2022 or better to compile this code."
   #endif
 #else
   #warning "I don't recognize your compiler. As of this writing, Clang, GCC, and Visual Studio "\
-           "are the only known compilers with enough C++14 support for this library. "\
+           "are the only known compilers with enough C++20 support for this library. "\
            "#define KJ_NO_COMPILER_CHECK to make this warning go away."
 #endif
 #endif
@@ -102,14 +102,6 @@ KJ_BEGIN_HEADER
 #include <cstring>
 #include <initializer_list>
 #include <string.h>
-
-#if __linux__ && __cplusplus > 201200L
-// Hack around stdlib bug with C++14 that exists on some Linux systems.
-// Apparently in this mode the C library decides not to define gets() but the C++ library still
-// tries to import it into the std namespace. This bug has been fixed at the source but is still
-// widely present in the wild e.g. on Ubuntu 14.04.
-#undef _GLIBCXX_HAVE_GETS
-#endif
 
 #if _WIN32
 // Windows likes to define macros for min() and max(). We just can't deal with this.
@@ -1843,9 +1835,6 @@ public:
     }
     return true;
   }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const ArrayPtr& other) const { return !(*this == other); }
-#endif
 
   template <typename U>
   inline bool operator==(const ArrayPtr<U>& other) const {
@@ -1855,10 +1844,6 @@ public:
     }
     return true;
   }
-#if !__cpp_impl_three_way_comparison
-  template <typename U>
-  inline bool operator!=(const ArrayPtr<U>& other) const { return !(*this == other); }
-#endif
 
   template <typename... Attachments>
   Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;

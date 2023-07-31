@@ -133,14 +133,8 @@ public:
   inline constexpr const char* end() const { return content.end() - 1; }
 
   inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
-#if !__cpp_impl_three_way_comparison
-  inline constexpr bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
-#endif
 
   inline bool operator==(const StringPtr& other) const;
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const StringPtr& other) const { return !(*this == other); }
-#endif
   inline bool operator< (const StringPtr& other) const;
   inline bool operator> (const StringPtr& other) const { return other < *this; }
   inline bool operator<=(const StringPtr& other) const { return !(other < *this); }
@@ -182,11 +176,6 @@ private:
   ArrayPtr<const char> content;
   friend class SourceLocation;
 };
-
-#if !__cpp_impl_three_way_comparison
-inline bool operator==(const char* a, const StringPtr& b) { return b == a; }
-inline bool operator!=(const char* a, const StringPtr& b) { return b != a; }
-#endif
 
 template <> char StringPtr::parseAs<char>() const;
 template <> signed char StringPtr::parseAs<signed char>() const;
@@ -278,18 +267,12 @@ public:
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(const StringPtr& other) const { return StringPtr(*this) == other; }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const StringPtr& other) const { return StringPtr(*this) != other; }
-#endif
   inline bool operator< (const StringPtr& other) const { return StringPtr(*this) <  other; }
   inline bool operator> (const StringPtr& other) const { return StringPtr(*this) >  other; }
   inline bool operator<=(const StringPtr& other) const { return StringPtr(*this) <= other; }
   inline bool operator>=(const StringPtr& other) const { return StringPtr(*this) >= other; }
 
   inline bool operator==(const String& other) const { return StringPtr(*this) == StringPtr(other); }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const String& other) const { return StringPtr(*this) != StringPtr(other); }
-#endif
   inline bool operator< (const String& other) const { return StringPtr(*this) <  StringPtr(other); }
   inline bool operator> (const String& other) const { return StringPtr(*this) >  StringPtr(other); }
   inline bool operator<=(const String& other) const { return StringPtr(*this) <= StringPtr(other); }
@@ -299,9 +282,6 @@ public:
   // -Wambiguous-reversed-operator, due to the stupidity...)
 
   inline bool operator==(const ConstString& other) const { return StringPtr(*this) == StringPtr(other); }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const ConstString& other) const { return StringPtr(*this) != StringPtr(other); }
-#endif
   inline bool operator< (const ConstString& other) const { return StringPtr(*this) <  StringPtr(other); }
   inline bool operator> (const ConstString& other) const { return StringPtr(*this) >  StringPtr(other); }
   inline bool operator<=(const ConstString& other) const { return StringPtr(*this) <= StringPtr(other); }
@@ -378,27 +358,18 @@ public:
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(const StringPtr& other) const { return StringPtr(*this) == other; }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const StringPtr& other) const { return StringPtr(*this) != other; }
-#endif
   inline bool operator< (const StringPtr& other) const { return StringPtr(*this) <  other; }
   inline bool operator> (const StringPtr& other) const { return StringPtr(*this) >  other; }
   inline bool operator<=(const StringPtr& other) const { return StringPtr(*this) <= other; }
   inline bool operator>=(const StringPtr& other) const { return StringPtr(*this) >= other; }
 
   inline bool operator==(const String& other) const { return StringPtr(*this) == StringPtr(other); }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const String& other) const { return StringPtr(*this) != StringPtr(other); }
-#endif
   inline bool operator< (const String& other) const { return StringPtr(*this) <  StringPtr(other); }
   inline bool operator> (const String& other) const { return StringPtr(*this) >  StringPtr(other); }
   inline bool operator<=(const String& other) const { return StringPtr(*this) <= StringPtr(other); }
   inline bool operator>=(const String& other) const { return StringPtr(*this) >= StringPtr(other); }
 
   inline bool operator==(const ConstString& other) const { return StringPtr(*this) == StringPtr(other); }
-#if !__cpp_impl_three_way_comparison
-  inline bool operator!=(const ConstString& other) const { return StringPtr(*this) != StringPtr(other); }
-#endif
   inline bool operator< (const ConstString& other) const { return StringPtr(*this) <  StringPtr(other); }
   inline bool operator> (const ConstString& other) const { return StringPtr(*this) >  StringPtr(other); }
   inline bool operator<=(const ConstString& other) const { return StringPtr(*this) <= StringPtr(other); }
@@ -430,11 +401,6 @@ public:
 private:
   Array<const char> content;
 };
-
-#if !__cpp_impl_three_way_comparison
-inline bool operator==(const char* a, const String& b) { return b == a; }
-inline bool operator!=(const char* a, const String& b) { return b != a; }
-#endif
 
 String heapString(size_t size);
 // Allocate a String of the given size on the heap, not including NUL terminator.  The NUL

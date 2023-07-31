@@ -574,15 +574,13 @@ const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 template <typename T, void(*F)(T*)>
 class CustomDisposer: public Disposer {
 public:
-  static const CustomDisposer instance;
-
   void disposeImpl(void* pointer) const override {
     (*F)(reinterpret_cast<T*>(pointer));
   }
 };
 
 template <typename T, void(*F)(T*)>
-const CustomDisposer<T, F> CustomDisposer<T, F>::instance = CustomDisposer<T, F>();
+static constexpr CustomDisposer<T, F> CUSTOM_DISPOSER_INSTANCE {};
 
 }  // namespace _ (private)
 
@@ -607,15 +605,13 @@ Own<Decay<T>> heap(T&& orig) {
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
 
-#if __cplusplus > 201402L
 template <auto F, typename T>
 Own<T> disposeWith(T* ptr) {
   // Associate a pre-allocated raw pointer with a corresponding disposal function.
   // The first template parameter should be a function pointer e.g. disposeWith<freeInt>(new int(0)).
 
-  return Own<T>(ptr, _::CustomDisposer<T, F>::instance);
+  return Own<T>(ptr, _::CUSTOM_DISPOSER_INSTANCE<T, F>);
 }
-#endif
 
 template <typename T, typename... Attachments>
 Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments);

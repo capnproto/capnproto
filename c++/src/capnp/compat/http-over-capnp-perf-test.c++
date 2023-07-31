@@ -29,8 +29,6 @@
 #include <dlfcn.h>
 #endif
 
-#if KJ_HAS_COROUTINE
-
 namespace capnp {
 namespace {
 
@@ -442,5 +440,3 @@ KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
 
 }  // namespace
 }  // namespace capnp
-
-#endif  // KJ_HAS_COROUTINE

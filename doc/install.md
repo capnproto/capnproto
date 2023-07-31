@@ -18,16 +18,18 @@ This package is licensed under the [MIT License](http://opensource.org/licenses/
 
 ### Supported Compilers
 
-Cap'n Proto makes extensive use of C++14 language features. As a result, it requires a relatively
+Cap'n Proto makes extensive use of C++20 language features. As a result, it requires a relatively
 new version of a well-supported compiler. The minimum versions are:
 
-* GCC 7.0
-* Clang 6.0
+* GCC 10.0*
+* Clang 11.0
 * Visual C++ 2019
+
+*: Cap'n Proto 2.0 and above cannot currently compile with GCC due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051
 
 If your system's default compiler is older that the above, you will need to install a newer
 compiler and set the `CXX` environment variable before trying to build Cap'n Proto. For example,
-after installing GCC 7, you could set `CXX=g++-7` to use this compiler.
+after installing GCC 10, you could set `CXX=g++-10` to use this compiler.
 
 ### Supported Operating Systems
 
@@ -113,10 +115,10 @@ provided by projects implementing Cap'n Proto in other languages.
 If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
 1. Make sure that you are using Visual Studio 2019 or newer, with all updates installed. Cap'n
-   Proto uses C++14 language features that did not work in previous versions of Visual Studio,
+   Proto uses C++20 language features that did not work in previous versions of Visual Studio,
    and the updates include many bug fixes that Cap'n Proto requires.
 
-2. Install [CMake](http://www.cmake.org/) version 3.1 or later.
+2. Install [CMake](http://www.cmake.org/) version 3.16 or later.
 
 3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
    You can use the CMake UI for this or run this shell command:

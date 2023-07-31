@@ -2942,8 +2942,6 @@ Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW
 
 // -------------------------------------------------------------------
 
-#if KJ_HAS_COROUTINE
-
 namespace _ {  // (private)
 
 CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
@@ -2983,7 +2981,12 @@ void CoroutineBase::unhandled_exception() {
     // the event loop.
 
     // final_suspend() has not been called.
+#if _MSC_VER && !defined(__clang__)
+    // See comment at `finalSuspendCalled`'s definition.
+    KJ_IASSERT(!finalSuspendCalled);
+#else
     KJ_IASSERT(!coroutine.done());
+#endif
 
     // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
     // and will see this exception.
@@ -3057,11 +3060,10 @@ void CoroutineBase::destroy() {
   bool shouldRethrow = !unwindDetector.isUnwinding();
 
   do {
-    // Clang's implementation of the Coroutines TS does not destroy the Coroutine object or
-    // deallocate the coroutine frame if a destructor of an object on the frame threw an
-    // exception. This is despite the fact that it delivered the exception to _us_ via
-    // unhandled_exception(). Anyway, it appears we can work around this by running
-    // coroutine.destroy() a second time.
+    // Clang's implementation of Coroutines does not destroy the Coroutine object or deallocate the
+    // coroutine frame if a destructor of an object on the frame threw an exception. This is despite
+    // the fact that it delivered the exception to _us_ via unhandled_exception(). Anyway, it
+    // appears we can work around this by running coroutine.destroy() a second time.
     //
     // On Clang, `disposalResults.exception != nullptr` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
@@ -3145,7 +3147,5 @@ void throwMultipleCoCaptureInvocations() {
 }
 
 }  // namespace _ (private)
-
-#endif  // KJ_HAS_COROUTINE
 
 }  // namespace kj
