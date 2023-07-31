@@ -2194,8 +2194,10 @@ class Coroutine final: public CoroutineBase,
 public:
   using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
 
-  Coroutine(SourceLocation location = {})
-      : CoroutineBase(Handle::from_promise(*this), result, location) {}
+  Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
+
+  Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
+      : CoroutineBase(handle, result, location) {}
 
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
@@ -2225,14 +2227,6 @@ public:
   // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
   // suspension and resumption in terms of .then(). Yuck!
 
-private:
-  // -------------------------------------------------------
-  // PromiseNode implementation
-
-  void get(ExceptionOrValue& output) noexcept override {
-    output.as<FixVoid<T>>() = kj::mv(result);
-  }
-
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
@@ -2242,9 +2236,15 @@ private:
     }
   }
 
-  ExceptionOr<FixVoid<T>> result;
+private:
+  // -------------------------------------------------------
+  // PromiseNode implementation
 
-  friend class CoroutineMixin<Coroutine<T>, T>;
+  void get(ExceptionOrValue& output) noexcept override {
+    output.as<FixVoid<T>>() = kj::mv(result);
+  }
+
+  ExceptionOr<FixVoid<T>> result;
 };
 
 template <typename Self, typename T>
@@ -2326,15 +2326,14 @@ public:
     return U(kj::mv(*value));
   }
 
-  bool await_suspend(Coroutine::Handle coroutine) {
+  template <typename V>
+  bool await_suspend(stdcoro::coroutine_handle<V> coroutine) {
     return awaitSuspendImpl(coroutine.promise());
   }
 
 private:
   ExceptionOr<FixVoid<U>> result;
 };
-
-#undef KJ_COROUTINE_STD_NAMESPACE
 
 }  // namespace kj::_ (private)
 
