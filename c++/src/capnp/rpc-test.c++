@@ -382,8 +382,8 @@ public:
       auto remote = kj::refcounted<ConnectionImpl>(dst, RpcDumper::SERVER);
       local->attach(*remote);
 
-      connections[&dst] = kj::addRef(*local);
-      dst.connections[this] = kj::addRef(*remote);
+      connections[&dst] = local.addRef();
+      dst.connections[this] = remote.addRef();
 
       if (dst.fulfillerQueue.empty()) {
         dst.connectionQueue.push(kj::mv(remote));
@@ -394,7 +394,7 @@ public:
 
       return kj::Own<Connection>(kj::mv(local));
     } else {
-      return kj::Own<Connection>(kj::addRef(*iter->second));
+      return kj::Own<Connection>(iter->second.addRef());
     }
   }
 
@@ -416,7 +416,7 @@ private:
   uint sent = 0;
   uint received = 0;
 
-  std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
+  std::map<const TestNetworkAdapter*, kj::Rc<ConnectionImpl>> connections;
   std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
   std::queue<kj::Own<Connection>> connectionQueue;
 

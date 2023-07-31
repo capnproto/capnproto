@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/refcount.h"
 #include "membrane.h"
 #include <kj/test.h>
 #include "test-util.h"
@@ -94,7 +95,7 @@ protected:
   }
 };
 
-class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
+class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted, public kj::EnableSharedFromThis<MembranePolicyImpl> {
 public:
   MembranePolicyImpl() = default;
   MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise)
@@ -118,8 +119,8 @@ public:
     }
   }
 
-  kj::Own<MembranePolicy> addRef() override {
-    return kj::addRef(*this);
+  kj::Rc<MembranePolicy> addRef() override {
+    return addRefToThis();
   }
 
   kj::Maybe<kj::Promise<void>> onRevoked() override {

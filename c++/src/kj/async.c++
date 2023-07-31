@@ -1253,12 +1253,12 @@ kj::Exception XThreadPaf::unfulfilledException() {
       "cross-thread PromiseFulfiller was destroyed without fulfilling the promise."));
 }
 
-class ExecutorImpl: public Executor, public AtomicRefcounted {
+class ExecutorImpl: public Executor, public AtomicRefcounted, public EnableSharedFromThis<ExecutorImpl> {
 public:
   using Executor::Executor;
 
   kj::Own<const Executor> addRef() const override {
-    return kj::atomicAddRef(*this);
+    return addRefToThis();
   }
 };
 

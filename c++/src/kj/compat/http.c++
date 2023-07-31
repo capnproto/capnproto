@@ -4291,7 +4291,7 @@ WebSocketPipe newWebSocketPipe() {
   auto pipe1 = kj::refcounted<WebSocketPipeImpl>();
   auto pipe2 = kj::refcounted<WebSocketPipeImpl>();
 
-  auto end1 = kj::heap<WebSocketPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto end1 = kj::heap<WebSocketPipeEnd>(pipe1.addRef(), pipe2.addRef());
   auto end2 = kj::heap<WebSocketPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
 
   return { { kj::mv(end1), kj::mv(end2) } };
@@ -5772,7 +5772,7 @@ public:
                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     auto refcounted = getClient();
     auto result = refcounted->client->request(method, url, headers, expectedBodySize);
-    result.body = result.body.attach(kj::addRef(*refcounted));
+    result.body = result.body.attach(refcounted.addRef());
     result.response = result.response.then(
         [refcounted=kj::mv(refcounted)](Response&& response) mutable {
       response.body = response.body.attach(kj::mv(refcounted));
@@ -5809,7 +5809,7 @@ public:
     auto refcounted = getClient();
     auto request = refcounted->client->connect(host, headers, settings);
     return ConnectRequest {
-      request.status.attach(kj::addRef(*refcounted)),
+      request.status.attach(refcounted.addRef()),
       request.connection.attach(kj::mv(refcounted))
     };
   }
@@ -5851,7 +5851,7 @@ private:
     kj::Own<HttpClientImpl> client;
   };
 
-  kj::Own<RefcountedClient> getClient() {
+  kj::Rc<RefcountedClient> getClient() {
     for (;;) {
       if (availableClients.empty()) {
         auto stream = newPromisedStream(address->connect());
@@ -6674,7 +6674,7 @@ private:
     }
   };
 
-  class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
+  class ResponseImpl final: public HttpService::Response, public kj::Refcounted, public EnableSharedFromThis<ResponseImpl> {
   public:
     ResponseImpl(kj::HttpMethod method,
                  kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller)
@@ -6720,7 +6720,7 @@ private:
         // Wrap the stream in a wrapper that delays the last read (the one that signals EOF) until
         // the service's request promise has finished.
         auto wrapper = kj::heap<DelayedEofInputStream>(
-            kj::mv(pipe.in), task.attach(kj::addRef(*this)));
+            kj::mv(pipe.in), task.attach(addRefToThis()));
 
         fulfiller->fulfill({
           statusCode, statusTextCopy, headersCopy.get(),
@@ -6825,7 +6825,7 @@ private:
     }
   };
 
-  class WebSocketResponseImpl final: public HttpService::Response, public kj::Refcounted {
+  class WebSocketResponseImpl final: public HttpService::Response, public kj::Refcounted, public EnableSharedFromThis<WebSocketResponseImpl> {
   public:
     WebSocketResponseImpl(kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller)
         : fulfiller(kj::mv(fulfiller)) {}
@@ -6871,7 +6871,7 @@ private:
         // Wrap the stream in a wrapper that delays the last read (the one that signals EOF) until
         // the service's request promise has finished.
         kj::Own<AsyncInputStream> wrapper =
-            kj::heap<DelayedEofInputStream>(kj::mv(pipe.in), task.attach(kj::addRef(*this)));
+            kj::heap<DelayedEofInputStream>(kj::mv(pipe.in), task.attach(addRefToThis()));
 
         fulfiller->fulfill({
           statusCode, statusTextCopy, headersCopy.get(),
@@ -6892,7 +6892,7 @@ private:
       // Wrap the client-side WebSocket in a wrapper that delays clean close of the WebSocket until
       // the service's request promise has finished.
       kj::Own<WebSocket> wrapper =
-          kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
+          kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), task.attach(addRefToThis()));
       fulfiller->fulfill({
         101, "Switching Protocols", headersCopy.get(),
         wrapper.attach(kj::mv(headersCopy))
@@ -6905,7 +6905,7 @@ private:
     kj::Promise<void> task = nullptr;
   };
 
-  class ConnectResponseImpl final: public HttpService::ConnectResponse, public kj::Refcounted {
+  class ConnectResponseImpl final: public HttpService::ConnectResponse, public kj::Refcounted, public EnableSharedFromThis<ConnectResponseImpl> {
   public:
     ConnectResponseImpl(
         kj::Own<kj::PromiseFulfiller<HttpClient::ConnectRequest::Status>> fulfiller,
@@ -6994,7 +6994,7 @@ private:
     kj::Own<kj::AsyncIoStream> getConnectStream() {
       KJ_ASSERT(!connectStreamDetached, "the connect stream was already detached");
       connectStreamDetached = true;
-      return streamAndFulfiller.guarded.attach(kj::addRef(*this));
+      return streamAndFulfiller.guarded.attach(addRefToThis());
     }
 
     void respond(uint statusCode,

@@ -29,7 +29,7 @@ BrandedDecl::BrandedDecl(BrandedDecl& other)
     : body(other.body),
       source(other.source) {
   if (body.is<Resolver::ResolvedDecl>()) {
-    brand = kj::addRef(*other.brand);
+    brand = other.brand.addRef();
   }
 }
 
@@ -37,7 +37,7 @@ BrandedDecl& BrandedDecl::operator=(BrandedDecl& other) {
   body = other.body;
   source = other.source;
   if (body.is<Resolver::ResolvedDecl>()) {
-    brand = kj::addRef(*other.brand);
+    brand = other.brand->addRefToThis();
   }
   return *this;
 }
@@ -48,7 +48,7 @@ kj::Maybe<BrandedDecl> BrandedDecl::applyParams(
     return kj::none;
   } else {
     return brand->setParams(kj::mv(params), body.get<Resolver::ResolvedDecl>().kind, subSource)
-        .map([&](kj::Own<BrandScope>&& scope) {
+        .map([&](kj::Rc<BrandScope>&& scope) {
       BrandedDecl result = *this;
       result.brand = kj::mv(scope);
       result.source = subSource;
@@ -266,11 +266,11 @@ bool BrandScope::isGeneric() {
   }
 }
 
-kj::Own<BrandScope> BrandScope::push(uint64_t typeId, uint paramCount) {
-  return kj::refcounted<BrandScope>(kj::addRef(*this), typeId, paramCount);
+kj::Rc<BrandScope> BrandScope::push(uint64_t typeId, uint paramCount) {
+  return kj::refcounted<BrandScope>(addRefToThis(), typeId, paramCount);
 }
 
-kj::Maybe<kj::Own<BrandScope>> BrandScope::setParams(
+kj::Maybe<kj::Rc<BrandScope>> BrandScope::setParams(
     kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source) {
   if (this->params.size() != 0) {
     errorReporter.addErrorOn(source, "Double-application of generic parameters.");
@@ -311,9 +311,9 @@ kj::Maybe<kj::Own<BrandScope>> BrandScope::setParams(
   }
 }
 
-kj::Own<BrandScope> BrandScope::pop(uint64_t newLeafId) {
+kj::Rc<BrandScope> BrandScope::pop(uint64_t newLeafId) {
   if (leafId == newLeafId) {
-    return kj::addRef(*this);
+    return addRefToThis();
   }
   KJ_IF_SOME(p, parent) {
     return p->pop(newLeafId);
@@ -385,7 +385,7 @@ BrandedDecl BrandScope::interpretResolve(
   }
 }
 
-kj::Own<BrandScope> BrandScope::evaluateBrand(
+kj::Rc<BrandScope> BrandScope::evaluateBrand(
     Resolver& resolver, Resolver::ResolvedDecl decl,
     List<schema::Brand::Scope>::Reader brand, uint index) {
   auto result = kj::refcounted<BrandScope>(errorReporter, decl.id);

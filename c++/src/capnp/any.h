@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "kj/refcount.h"
 #include "layout.h"
 #include "pointer-helpers.h"
 #include "orphan.h"
@@ -738,7 +739,7 @@ class PipelineHook {
   // Represents a currently-running call, and implements pipelined requests on its result.
 
 public:
-  virtual kj::Own<PipelineHook> addRef() = 0;
+  virtual kj::Rc<PipelineHook> addRef() = 0;
   // Increment this object's reference count.
 
   virtual kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;

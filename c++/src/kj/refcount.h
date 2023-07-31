@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "kj/common.h"
+#include "kj/debug.h"
 #include "memory.h"
 
 #if _MSC_VER
@@ -35,10 +37,20 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
+
+template<typename T>
+class Rc;
+
+template<typename T>
+class Arc;
+
+template<typename T>
+class EnableSharedFromThis;
+
 // =======================================================================================
 // Non-atomic (thread-unsafe) refcounting
 
-class Refcounted: private Disposer {
+class Refcounted: public Disposer {
   // Subclass this to create a class that contains a reference count. Then, use
   // `kj::refcounted<T>()` to allocate a new refcounted pointer.
   //
@@ -66,54 +78,56 @@ class Refcounted: private Disposer {
 
 public:
   Refcounted() = default;
-  virtual ~Refcounted() noexcept(false);
+  virtual ~Refcounted() noexcept(false) {
+    KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
+  }
   KJ_DISALLOW_COPY_AND_MOVE(Refcounted);
 
   inline bool isShared() const { return refcount > 1; }
   // Check if there are multiple references to this object. This is sometimes useful for deciding
   // whether it's safe to modify the object vs. make a copy.
 
+  void addRefInternal() { ++refcount; }
+
 private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
 
-  void disposeImpl(void* pointer) const override;
-  template <typename T>
-  static Own<T> addRefInternal(T* object);
+  void disposeImpl(void* pointer) const override {
+    if (--refcount == 0) {
+      delete this;
+    }
+  }
 
-  template <typename T>
-  friend Own<T> addRef(T& object);
   template <typename T, typename... Params>
-  friend Own<T> refcounted(Params&&... params);
+  friend Rc<T> refcounted(Params&&... params);
 
   template <typename T>
   friend class RefcountedWrapper;
+
+  template <typename>
+  friend class Rc;
 };
 
 template <typename T, typename... Params>
-inline Own<T> refcounted(Params&&... params) {
+inline Rc<T> refcounted(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.  Returns an
   // initial reference to the object.  More references can be created with `kj::addRef()`.
-
-  return Refcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
+  auto t = new T(kj::fwd<Params>(params)...);
+  t->addRefInternal();
+  return Rc(t);
 }
 
-template <typename T>
-Own<T> addRef(T& object) {
-  // Return a new reference to `object`, which must subclass Refcounted and have been allocated
-  // using `kj::refcounted<>()`.  It is suggested that subclasses implement a non-static addRef()
-  // method which wraps this and returns the appropriate type.
+// template <typename T>
+// Own<T> addRef(T& object) {
+//   // Return a new reference to `object`, which must subclass Refcounted and have been allocated
+//   // using `kj::refcounted<>()`.  It is suggested that subclasses implement a non-static addRef()
+//   // method which wraps this and returns the appropriate type.
 
-  KJ_IREQUIRE(object.Refcounted::refcount > 0, "Object not allocated with kj::refcounted().");
-  return Refcounted::addRefInternal(&object);
-}
-
-template <typename T>
-Own<T> Refcounted::addRefInternal(T* object) {
-  Refcounted* refcounted = object;
-  ++refcounted->refcount;
-  return Own<T>(object, *refcounted);
-}
+//   KJ_IREQUIRE(object.Refcounted::refcount > 0, "Object not allocated with kj::refcounted().");
+//   object.addRefInternal();
+//   return ARC(&object);
+// }
 
 template <typename T>
 class RefcountedWrapper: public Refcounted {
@@ -128,8 +142,7 @@ public:
   const T& getWrapped() const { return wrapped; }
 
   Own<T> addWrappedRef() {
-    // Return an owned reference to the wrapped object that is backed by a refcount.
-    ++refcount;
+    this->addRefInternal();
     return Own<T>(&wrapped, *this);
   }
 
@@ -150,7 +163,7 @@ public:
 
   Own<T> addWrappedRef() {
     // Return an owned reference to the wrapped object that is backed by a refcount.
-    ++refcount;
+    this->addRefInternal();
     return Own<T>(wrapped.get(), *this);
   }
 
@@ -168,6 +181,7 @@ Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
   return refcounted<RefcountedWrapper<Own<T>>>(kj::mv(wrapped));
 }
 
+
 // =======================================================================================
 // Atomic (thread-safe) refcounting
 //
@@ -181,11 +195,13 @@ Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
 #endif
 #endif
 
-class AtomicRefcounted: private kj::Disposer {
+
+class AtomicRefcounted: public kj::Disposer {
 public:
   AtomicRefcounted() = default;
-  virtual ~AtomicRefcounted() noexcept(false);
+  virtual ~AtomicRefcounted() noexcept(false) {}
   KJ_DISALLOW_COPY_AND_MOVE(AtomicRefcounted);
+
 
   inline bool isShared() const {
 #if _MSC_VER && !defined(__clang__)
@@ -195,88 +211,233 @@ public:
 #endif
   }
 
+  template <typename U>
+  Rc<U> refDowncast() {
+    KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
+  }
+
+  inline void addRefInternal() const {
+#if _MSC_VER && !defined(__clang__)
+  KJ_MSVC_INTERLOCKED(Increment, nf)(&refcount);
+#else
+  __atomic_add_fetch(&refcount, 1, __ATOMIC_RELAXED);
+#endif
+  }
+
 private:
 #if _MSC_VER && !defined(__clang__)
-  mutable volatile long refcount = 0;
+  mutable volatile long refcount = 1;
 #else
-  mutable volatile uint refcount = 0;
+  mutable volatile uint refcount = 1;
 #endif
 
   bool addRefWeakInternal() const;
 
-  void disposeImpl(void* pointer) const override;
-  template <typename T>
-  static kj::Own<T> addRefInternal(T* object);
-  template <typename T>
-  static kj::Own<const T> addRefInternal(const T* object);
+  void disposeImpl(void* pointer) const override {
+#if _MSC_VER && !defined(__clang__)
+  if (KJ_MSVC_INTERLOCKED(Decrement, rel)(&refcount) == 0) {
+    std::atomic_thread_fence(std::memory_order_acquire);
+    delete this;
+  }
+#else
+  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    delete this;
+  }
+#endif
+  }
 
-  template <typename T>
-  friend kj::Own<T> atomicAddRef(T& object);
-  template <typename T>
-  friend kj::Own<const T> atomicAddRef(const T& object);
-  template <typename T>
-  friend kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object);
+  // template <typename T>
+  // static kj::Own<T> addRefInternal(T* object);
+  // template <typename T>
+  // static kj::Own<const T> addRefInternal(const T* object);
+
+  // template <typename T>
+  // friend kj::Own<T> atomicAddRef(T& object);
+  // template <typename T>
+  // friend kj::Own<const T> atomicAddRef(const T& object);
+  // template <typename T>
+  // friend kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object);
   template <typename T, typename... Params>
-  friend kj::Own<T> atomicRefcounted(Params&&... params);
+  friend kj::Arc<T> atomicRefcounted(Params&&... params);
+
+  template<typename>
+  friend class Arc;
+};
+
+
+template<typename T>
+class Rc: public Own<T> {
+public:
+  KJ_DISALLOW_COPY(Rc);
+  Rc() { }
+  Rc(decltype(nullptr)) { }
+
+  inline Rc(Rc&& other) noexcept: Own<T>(kj::mv(other)) { }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Rc(Rc<U>&& other) noexcept : Own<T>(kj::mv(other)) { }
+
+  kj::Rc<T> addRef() {
+    auto refcounted = this->get();
+    if (refcounted) {
+      refcounted->addRefInternal();
+    }
+    return kj::Rc<T>(refcounted);
+  }
+
+  kj::Rc<const T> addRef() const {
+    auto refcounted = this->get();
+    refcounted->addRefInternal();
+    return kj::Rc<T>(refcounted);
+  }
+
+  Rc& operator=(decltype(nullptr)) {
+    Own<T>::operator=(nullptr);
+    return *this;
+  }
+
+  Rc& operator=(Rc&& other) {
+    Own<T>::operator=(kj::mv(other));
+    return *this;
+  }
+
+  template <typename U>
+  Rc<U> downcast() {
+    auto own = Own<T>::template downcast<U>();
+    return Rc<U>(kj::mv(own));
+  }
+
+private:
+  Rc(T* t) : Own<T>(t, *t) { }
+  Rc(Own<T>&& t) : Own<T>(kj::mv(t)) { }
+
+  template <typename X, typename... Params>
+  friend kj::Rc<X> refcounted(Params&&... params);
+
+  template<typename>
+  friend class EnableSharedFromThis;
+
+  template <typename>
+  friend class Rc;
+};
+
+
+template<typename T>
+class Arc: public Own<T> {
+public:
+  KJ_DISALLOW_COPY(Arc);
+  Arc() { }
+
+  inline Arc(Arc&& other) noexcept: Own<T>(kj::mv(other)) { }
+
+  operator Arc<const T>() {
+    KJ_FAIL_REQUIRE("NOT IMPLEMEMTED");
+  }
+
+  kj::Arc<T> addRef() {
+    auto refcounted = this->get();
+    refcounted->addRefInternal();
+    return kj::Arc<T>(refcounted);
+  }
+
+  kj::Arc<const T> addRef() const {
+    auto refcounted = this->get();
+    refcounted->addRefInternal();
+    return kj::Arc<T>(refcounted);
+  }
+
+  Arc& operator=(decltype(nullptr)) {
+    Own<T>::operator=(nullptr);
+    return *this;
+  }
+
+  Arc& operator=(Arc&& other) {
+    Own<T>::operator=(kj::mv(other));
+    return *this;
+  }
+
+  template <typename U>
+  Arc<U> downcast() {
+    KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
+  }
+
+private:
+  Arc(T* t) : Own<T>(t, *t) { }
+
+  template <typename X, typename... Params>
+  friend kj::Arc<X> atomicRefcounted(Params&&... params);
 };
 
 template <typename T, typename... Params>
-inline kj::Own<T> atomicRefcounted(Params&&... params) {
-  return AtomicRefcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
+inline kj::Arc<T> atomicRefcounted(Params&&... params) {
+  return kj::Arc(new T(kj::fwd<Params>(params)...));
 }
 
-template <typename T>
-kj::Own<T> atomicAddRef(T& object) {
-  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
-      "Object not allocated with kj::atomicRefcounted().");
-  return AtomicRefcounted::addRefInternal(&object);
-}
+// template <typename T>
+// kj::Own<T> atomicAddRef(T& object) {
+//   KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
+//       "Object not allocated with kj::atomicRefcounted().");
+//   return AtomicRefcounted::addRefInternal(&object);
+// }
 
-template <typename T>
-kj::Own<const T> atomicAddRef(const T& object) {
-  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
-      "Object not allocated with kj::atomicRefcounted().");
-  return AtomicRefcounted::addRefInternal(&object);
-}
+// template <typename T>
+// kj::Own<const T> atomicAddRef(const T& object) {
+//   KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
+//       "Object not allocated with kj::atomicRefcounted().");
+//   return AtomicRefcounted::addRefInternal(&object);
+// }
 
-template <typename T>
-kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
-  // Try to addref an object whose refcount could have already reached zero in another thread, and
-  // whose destructor could therefore already have started executing. The destructor must contain
-  // some synchronization that guarantees that said destructor has not yet completed when
-  // attomicAddRefWeak() is called (so that the object is still valid). Since the destructor cannot
-  // be canceled once it has started, in the case that it has already started, this function
-  // returns nullptr.
+// template <typename T>
+// kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
+//   // Try to addref an object whose refcount could have already reached zero in another thread, and
+//   // whose destructor could therefore already have started executing. The destructor must contain
+//   // some synchronization that guarantees that said destructor has not yet completed when
+//   // attomicAddRefWeak() is called (so that the object is still valid). Since the destructor cannot
+//   // be canceled once it has started, in the case that it has already started, this function
+//   // returns nullptr.
 
-  const AtomicRefcounted* refcounted = &object;
-  if (refcounted->addRefWeakInternal()) {
-    return kj::Own<const T>(&object, *refcounted);
-  } else {
-    return nullptr;
+//   const AtomicRefcounted* refcounted = &object;
+//   if (refcounted->addRefWeakInternal()) {
+//     return kj::Own<const T>(&object, *refcounted);
+//   } else {
+//     return nullptr;
+//   }
+// }
+
+// template <typename T>
+// kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
+// }
+
+// template <typename T>
+// kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
+//   const AtomicRefcounted* refcounted = object;
+// #if _MSC_VER && !defined(__clang__)
+//   KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
+// #else
+//   __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
+// #endif
+//   return kj::Own<const T>(object, *refcounted);
+// }
+
+template<typename Self>
+class EnableSharedFromThis {
+protected:
+  kj::Rc<const Self> addRefToThis() const {
+    const Self* self = static_cast<const Self*>(this);
+    self->addRefInternal();
+    kj::Rc<const Self> result(self);
+    return kj::mv(result);
   }
-}
 
-template <typename T>
-kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
-  AtomicRefcounted* refcounted = object;
-#if _MSC_VER && !defined(__clang__)
-  KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
-#else
-  __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
-#endif
-  return kj::Own<T>(object, *refcounted);
-}
+  kj::Rc<Self> addRefToThis() {
+    Self* self = static_cast<Self*>(this);
+    self->addRefInternal();
+    kj::Rc<Self> result(self);
+    return kj::mv(result);
+  }
+};
 
-template <typename T>
-kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
-  const AtomicRefcounted* refcounted = object;
-#if _MSC_VER && !defined(__clang__)
-  KJ_MSVC_INTERLOCKED(Increment, nf)(&refcounted->refcount);
-#else
-  __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
-#endif
-  return kj::Own<const T>(object, *refcounted);
-}
 
 }  // namespace kj
 

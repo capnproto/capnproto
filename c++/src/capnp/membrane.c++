@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "membrane.h"
+#include "capnp/any.h"
 #include <kj/debug.h>
 
 namespace capnp {
@@ -115,14 +116,14 @@ private:
   bool reverse;
 };
 
-class MembranePipelineHook final: public PipelineHook, public kj::Refcounted {
+class MembranePipelineHook final: public PipelineHook, public kj::Refcounted, public kj::EnableSharedFromThis<MembranePipelineHook> {
 public:
   MembranePipelineHook(
       kj::Own<PipelineHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse) {}
 
-  kj::Own<PipelineHook> addRef() override {
-    return kj::addRef(*this);
+  kj::Rc<PipelineHook> addRef() override {
+    return addRefToThis();
   }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
@@ -247,7 +248,7 @@ private:
   MembraneCapTableBuilder capTable;
 };
 
-class MembraneCallContextHook final: public CallContextHook, public kj::Refcounted {
+class MembraneCallContextHook final: public CallContextHook, public kj::Refcounted, public kj::EnableSharedFromThis<MembraneCallContextHook> {
 public:
   MembraneCallContextHook(kj::Own<CallContextHook>&& inner,
                           kj::Own<MembranePolicy>&& policy, bool reverse)
@@ -309,7 +310,7 @@ public:
   }
 
   kj::Own<CallContextHook> addRef() override {
-    return kj::addRef(*this);
+    return addRefToThis();
   }
 
 private:
@@ -327,7 +328,7 @@ private:
 
 }  // namespace
 
-class MembraneHook final: public ClientHook, public kj::Refcounted {
+class MembraneHook final: public ClientHook, public kj::Refcounted, public kj::EnableSharedFromThis<MembraneHook> {
 public:
   MembraneHook(kj::Own<ClientHook>&& inner, kj::Own<MembranePolicy>&& policyParam, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policyParam)), reverse(reverse) {
@@ -520,7 +521,7 @@ public:
   }
 
   kj::Own<ClientHook> addRef() override {
-    return kj::addRef(*this);
+    return addRefToThis();
   }
 
   const void* getBrand() override {

@@ -1664,7 +1664,7 @@ private:
 
 OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength) {
   auto impl = kj::refcounted<AsyncPipe>();
-  Own<AsyncInputStream> readEnd = kj::heap<PipeReadEnd>(kj::addRef(*impl));
+  Own<AsyncInputStream> readEnd = kj::heap<PipeReadEnd>(impl.addRef());
   KJ_IF_SOME(l, expectedLength) {
     readEnd = kj::heap<LimitedInputStream>(kj::mv(readEnd), l);
   }
@@ -1675,7 +1675,7 @@ OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength) {
 TwoWayPipe newTwoWayPipe() {
   auto pipe1 = kj::refcounted<AsyncPipe>();
   auto pipe2 = kj::refcounted<AsyncPipe>();
-  auto end1 = kj::heap<TwoWayPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto end1 = kj::heap<TwoWayPipeEnd>(pipe1.addRef(), pipe2.addRef());
   auto end2 = kj::heap<TwoWayPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
   return { { kj::mv(end1), kj::mv(end2) } };
 }
@@ -1683,7 +1683,7 @@ TwoWayPipe newTwoWayPipe() {
 CapabilityPipe newCapabilityPipe() {
   auto pipe1 = kj::refcounted<AsyncPipe>();
   auto pipe2 = kj::refcounted<AsyncPipe>();
-  auto end1 = kj::heap<TwoWayPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto end1 = kj::heap<TwoWayPipeEnd>(pipe1.addRef(), pipe2.addRef());
   auto end2 = kj::heap<TwoWayPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
   return { { kj::mv(end1), kj::mv(end2) } };
 }
@@ -1740,11 +1740,11 @@ class AsyncTee final: public Refcounted {
 public:
   class Branch final: public AsyncInputStream {
   public:
-    Branch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
+    Branch(Rc<AsyncTee> teeArg): tee(mv(teeArg)) {
       tee->branches.add(*this);
     }
 
-    Branch(Own<AsyncTee> teeArg, Branch& cloneFrom)
+    Branch(Rc<AsyncTee> teeArg, Branch& cloneFrom)
         : tee(mv(teeArg)), buffer(cloneFrom.buffer.clone()) {
       tee->branches.add(*this);
     }
@@ -1782,11 +1782,11 @@ public:
         return kj::none;
       }
 
-      return kj::heap<Branch>(addRef(*tee), *this);
+      return kj::heap<Branch>(tee.addRef(), *this);
     }
 
   private:
-    Own<AsyncTee> tee;
+    Rc<AsyncTee> tee;
     ListLink<Branch> link;
 
     Buffer buffer;
@@ -2312,7 +2312,7 @@ Tee newTee(Own<AsyncInputStream> input, uint64_t limit) {
   }
 
   auto impl = refcounted<AsyncTee>(mv(input), limit);
-  Own<AsyncInputStream> branch1 = heap<AsyncTee::Branch>(addRef(*impl));
+  Own<AsyncInputStream> branch1 = heap<AsyncTee::Branch>(impl.addRef());
   Own<AsyncInputStream> branch2 = heap<AsyncTee::Branch>(mv(impl));
   return { { mv(branch1), mv(branch2) } };
 }

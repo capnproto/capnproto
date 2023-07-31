@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "kj/refcount.h"
 #if CAPNP_LITE
 #error "RPC APIs, including this header, are not available in lite mode."
 #endif
@@ -899,7 +900,7 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
     kj::Exception&& reason, kj::Maybe<MessageSize> sizeHint);
 // Helper function that creates a Request object that simply throws exceptions when sent.
 
-kj::Own<PipelineHook> getDisabledPipeline();
+kj::Rc<PipelineHook> getDisabledPipeline();
 // Gets a PipelineHook appropriate to use when CallHints::noPromisePipelining is true. This will
 // throw from all calls. This does not actually allocate the object; a static global object is
 // returned with a null disposer.

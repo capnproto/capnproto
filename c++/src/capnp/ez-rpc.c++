@@ -31,7 +31,7 @@ namespace capnp {
 
 KJ_THREADLOCAL_PTR(EzRpcContext) threadEzContext = nullptr;
 
-class EzRpcContext: public kj::Refcounted {
+class EzRpcContext: public kj::Refcounted, public kj::EnableSharedFromThis<EzRpcContext> {
 public:
   EzRpcContext(): ioContext(kj::setupAsyncIo()) {
     threadEzContext = this;
@@ -60,7 +60,7 @@ public:
   static kj::Own<EzRpcContext> getThreadLocal() {
     EzRpcContext* existing = threadEzContext;
     if (existing != nullptr) {
-      return kj::addRef(*existing);
+      return existing->addRefToThis();
     } else {
       return kj::refcounted<EzRpcContext>();
     }

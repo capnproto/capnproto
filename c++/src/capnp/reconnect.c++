@@ -25,7 +25,7 @@ namespace capnp {
 
 namespace {
 
-class ReconnectHook final: public ClientHook, public kj::Refcounted {
+class ReconnectHook final: public ClientHook, public kj::Refcounted, public kj::EnableSharedFromThis<ReconnectHook> {
 public:
   ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
@@ -36,7 +36,7 @@ public:
       CallHints hints) override {
     auto result = getCurrent().newCall(interfaceId, methodId, sizeHint, hints);
     AnyPointer::Builder builder = result;
-    auto hook = kj::heap<RequestImpl>(kj::addRef(*this), RequestHook::from(kj::mv(result)));
+    auto hook = kj::heap<RequestImpl>(addRefToThis(), RequestHook::from(kj::mv(result)));
     return { builder, kj::mv(hook) };
   }
 
@@ -66,7 +66,7 @@ public:
   }
 
   kj::Own<ClientHook> addRef() override {
-    return kj::addRef(*this);
+    return addRefToThis();
   }
 
   const void* getBrand() override {
@@ -88,7 +88,7 @@ private:
   template <typename T>
   void wrap(kj::Promise<T>& promise) {
     promise = promise.catch_(
-        [self = kj::addRef(*this), startGeneration = generation]
+        [self = addRefToThis(), startGeneration = generation]
         (kj::Exception&& exception) mutable -> kj::Promise<T> {
       if (exception.getType() == kj::Exception::Type::DISCONNECTED &&
           self->generation == startGeneration) {

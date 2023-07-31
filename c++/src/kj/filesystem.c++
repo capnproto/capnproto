@@ -770,12 +770,12 @@ void Directory::commitFailed(WriteMode mode) {
 
 namespace {
 
-class InMemoryFile final: public File, public AtomicRefcounted {
+class InMemoryFile final: public File, public AtomicRefcounted, public EnableSharedFromThis<InMemoryFile> {
 public:
   InMemoryFile(const Clock& clock): impl(clock) {}
 
   Own<const FsNode> cloneFsNode() const override {
-    return atomicAddRef(*this);
+    return addRefToThis();
   }
 
   Maybe<int> getFd() const override {
@@ -809,7 +809,7 @@ public:
     auto lock = impl.lockExclusive();
     lock->ensureCapacity(offset + size);
 
-    ArrayDisposer* disposer = new MmapDisposer(atomicAddRef(*this));
+    ArrayDisposer* disposer = new MmapDisposer(addRefToThis());
     return Array<const byte>(lock->bytes.begin() + offset, size, *disposer);
   }
 
@@ -870,7 +870,7 @@ public:
     KJ_REQUIRE(end >= offset, "mmapWritable() request overflows uint64");
     auto lock = impl.lockExclusive();
     lock->ensureCapacity(end);
-    return heap<WritableFileMappingImpl>(atomicAddRef(*this), lock->bytes.slice(offset, end));
+    return heap<WritableFileMappingImpl>(addRefToThis(), lock->bytes.slice(offset, end));
   }
 
   size_t copy(uint64_t offset, const ReadableFile& from,
@@ -976,12 +976,12 @@ private:
 
 // -----------------------------------------------------------------------------
 
-class InMemoryDirectory final: public Directory, public AtomicRefcounted {
+class InMemoryDirectory final: public Directory, public AtomicRefcounted, public EnableSharedFromThis<InMemoryDirectory> {
 public:
   InMemoryDirectory(const Clock& clock): impl(clock) {}
 
   Own<const FsNode> cloneFsNode() const override {
-    return atomicAddRef(*this);
+    return addRefToThis();
   }
 
   Maybe<int> getFd() const override {
@@ -1155,7 +1155,7 @@ public:
       KJ_FAIL_REQUIRE("can't replace self") { break; }
     } else if (path.size() == 1) {
       // don't need lock just to read the clock ref
-      return heap<ReplacerImpl<File>>(*this, path[0],
+      return heap<ReplacerImpl<File>>(addRefToThis(), path[0],
           newInMemoryFile(impl.getWithoutLock().clock), mode);
     } else {
       KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
@@ -1168,7 +1168,7 @@ public:
   Maybe<Own<const Directory>> tryOpenSubdir(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
       if (has(mode, WriteMode::MODIFY)) {
-        return atomicAddRef(*this);
+        return addRefToThis();
       } else if (has(mode, WriteMode::CREATE)) {
         return kj::none;  // already exists
       } else {
@@ -1195,7 +1195,7 @@ public:
       KJ_FAIL_REQUIRE("can't replace self") { break; }
     } else if (path.size() == 1) {
       // don't need lock just to read the clock ref
-      return heap<ReplacerImpl<Directory>>(*this, path[0],
+      return heap<ReplacerImpl<Directory>>(addRefToThis(), path[0],
           newInMemoryDirectory(impl.getWithoutLock().clock), mode);
     } else {
       KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
@@ -1399,9 +1399,9 @@ private:
   template <typename T>
   class ReplacerImpl final: public Replacer<T> {
   public:
-    ReplacerImpl(const InMemoryDirectory& directory, kj::StringPtr name,
+    ReplacerImpl(Rc<const InMemoryDirectory> directory, kj::StringPtr name,
                  Own<const T> inner, WriteMode mode)
-        : Replacer<T>(mode), directory(atomicAddRef(directory)), name(heapString(name)),
+        : Replacer<T>(mode), directory(kj::mv(directory)), name(heapString(name)),
           inner(kj::mv(inner)) {}
 
     const T& get() override { return *inner; }

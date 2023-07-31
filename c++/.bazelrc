@@ -36,3 +36,16 @@ build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 build --//src/kj:openssl=True
 build --//src/kj:zlib=True
 build --//src/kj:brotli=True
+
+build:no-omit-frame-pointer --copt="-fno-omit-frame-pointer"
+build:no-omit-frame-pointer --copt="-mno-omit-leaf-frame-pointer"
+
+build:sanitizers-common --copt="-fsanitize-link-c++-runtime" --linkopt="-fsanitize-link-c++-runtime"
+build:sanitizers-common --copt="-Og"
+build:sanitizers-common --copt="-fno-optimize-sibling-calls"
+build:sanitizers-common --copt="-g"
+build:sanitizers-common --config=no-omit-frame-pointer
+
+build:asan --config=sanitizers-common
+build:asan --copt="-fsanitize=address" --linkopt="-fsanitize=address"
+

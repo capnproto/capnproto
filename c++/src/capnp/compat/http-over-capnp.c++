@@ -247,7 +247,7 @@ class HttpOverCapnpFactory::ClientRequestContextImpl final
     : public capnp::HttpService::ClientRequestContext::Server {
 public:
   ClientRequestContextImpl(HttpOverCapnpFactory& factory,
-                           kj::Own<RequestState> state,
+                           kj::Rc<RequestState> state,
                            kj::HttpService::Response& kjResponse)
       : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
 
@@ -313,14 +313,14 @@ public:
 
     auto results = context.getResults(MessageSize { 16, 1 });
     results.setDownSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::addRef(*state), webSocket, kj::mv(shorteningPaf.promise)));
+        state.addRef(), webSocket, kj::mv(shorteningPaf.promise)));
 
     return kj::READY_NOW;
   }
 
 private:
   HttpOverCapnpFactory& factory;
-  kj::Own<RequestState> state;
+  kj::Rc<RequestState> state;
   bool sent = false;
 
   kj::HttpService::Response& kjResponse;
@@ -419,12 +419,12 @@ public:
     }
 
     auto state = kj::refcounted<RequestState>();
-    auto deferredCancel = kj::defer([state = kj::addRef(*state)]() mutable {
+    auto deferredCancel = kj::defer([state = state.addRef()]() mutable {
       state->cancel();
     });
 
     rpcRequest.setContext(
-        kj::heap<ClientRequestContextImpl>(factory, kj::addRef(*state), kjResponse));
+        kj::heap<ClientRequestContextImpl>(factory, state.addRef(), kjResponse));
 
     auto pipeline = rpcRequest.send();
 
@@ -435,7 +435,7 @@ public:
       pumpRequestTask = rb.pumpTo(*bodyOut)
           .then([&bodyOut = *bodyOut](uint64_t) mutable {
         return bodyOut.end();
-      }).eagerlyEvaluate([state = kj::addRef(*state), bodyOut = kj::mv(bodyOut)]
+      }).eagerlyEvaluate([state = state.addRef(), bodyOut = kj::mv(bodyOut)]
                          (kj::Exception&& e) mutable {
         // A DISCONNECTED exception probably means the server decided not to read the whole request
         // before responding. In that case we simply want the pump to end, so that on this end it
