@@ -3699,50 +3699,46 @@ public:
 
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
     KJ_IF_MAYBE(s, state) {
-      return s->send(message).then([&, size = message.size()]() { transferredBytes += size; });
+      co_await s->send(message);
     } else {
-      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message))
-          .then([&, size = message.size()]() { transferredBytes += size; });
+      co_await newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message));
     }
+    transferredBytes += message.size();
   }
   kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
     KJ_IF_MAYBE(s, state) {
-      return s->send(message).then([&, size = message.size()]() { transferredBytes += size; });
+      co_await s->send(message);
     } else {
-      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message))
-          .then([&, size = message.size()]() { transferredBytes += size; });
+      co_await newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(message));
     }
+    transferredBytes += message.size();
   }
   kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
     KJ_IF_MAYBE(s, state) {
-      return s->close(code, reason)
-          .then([&, size = reason.size()]() { transferredBytes += (2 +size); });
+      co_await s->close(code, reason);
     } else {
-      return newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(ClosePtr { code, reason }))
-          .then([&, size = reason.size()]() { transferredBytes += (2 +size); });
+      co_await newAdaptedPromise<void, BlockedSend>(*this, MessagePtr(ClosePtr { code, reason }));
     }
+    transferredBytes += (2 + reason.size());
   }
   kj::Promise<void> disconnect() override {
     KJ_IF_MAYBE(s, state) {
-      return s->disconnect();
+      co_await s->disconnect();
     } else {
       ownState = heap<Disconnected>();
       state = *ownState;
-      return kj::READY_NOW;
     }
   }
   kj::Promise<void> whenAborted() override {
     if (aborted) {
-      return kj::READY_NOW;
+      co_return;
     } else KJ_IF_MAYBE(p, abortedPromise) {
-      return p->addBranch();
+      co_await p->addBranch();
     } else {
       auto paf = newPromiseAndFulfiller<void>();
       abortedFulfiller = kj::mv(paf.fulfiller);
-      auto fork = paf.promise.fork();
-      auto result = fork.addBranch();
-      abortedPromise = kj::mv(fork);
-      return result;
+      auto& fork = abortedPromise.emplace(paf.promise.fork());
+      co_await fork.addBranch();
     }
   }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
@@ -3761,19 +3757,22 @@ public:
     }
   }
   kj::Promise<void> pumpTo(WebSocket& other) override {
-    auto onAbort = other.whenAborted()
-        .then([]() -> kj::Promise<void> {
-      return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
-    });
+    constexpr auto onAbort = [](WebSocket& other) -> kj::Promise<void> {
+      co_await other.whenAborted();
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted"));
+    };
 
-    KJ_IF_MAYBE(s, state) {
-      auto before = other.receivedByteCount();
-      return s->pumpTo(other).attach(kj::defer([this, &other, before]() {
-        transferredBytes += other.receivedByteCount() - before;
-      })).exclusiveJoin(kj::mv(onAbort));
-    } else {
-      return newAdaptedPromise<void, BlockedPumpTo>(*this, other).exclusiveJoin(kj::mv(onAbort));
-    }
+    constexpr auto doPump = [](WebSocketPipeImpl& from, WebSocket& to) -> kj::Promise<void> {
+      KJ_IF_MAYBE(s, from.state) {
+        auto before = to.receivedByteCount();
+        KJ_DEFER(from.transferredBytes += to.receivedByteCount() - before);
+        co_return co_await s->pumpTo(to);
+      } else {
+        co_return co_await newAdaptedPromise<void, BlockedPumpTo>(from, to);
+      }
+    };
+
+    return doPump(*this, other).exclusiveJoin(onAbort(other));
   }
 
   uint64_t sentByteCount() override {
@@ -3869,29 +3868,34 @@ private:
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
-      kj::Promise<void> promise = nullptr;
-      KJ_SWITCH_ONEOF(message) {
-        KJ_CASE_ONEOF(arr, kj::ArrayPtr<const char>) {
-          promise = other.send(arr);
+
+      constexpr auto doSend = [](BlockedSend& from, WebSocket& to) -> Promise<void> {
+        try {
+          KJ_SWITCH_ONEOF(from.message) {
+            KJ_CASE_ONEOF(arr, kj::ArrayPtr<const char>) {
+              co_await to.send(arr);
+            }
+            KJ_CASE_ONEOF(arr, kj::ArrayPtr<const byte>) {
+              co_await to.send(arr);
+            }
+            KJ_CASE_ONEOF(close, ClosePtr) {
+              co_await to.close(close.code, close.reason);
+            }
+          }
+        } catch (...) {
+          auto e = getCaughtExceptionAsKj();
+          from.canceler.release();
+          from.fulfiller.reject(kj::cp(e));
+          from.pipe.endState(from);
+          throwFatalException(kj::mv(e));
         }
-        KJ_CASE_ONEOF(arr, kj::ArrayPtr<const byte>) {
-          promise = other.send(arr);
-        }
-        KJ_CASE_ONEOF(close, ClosePtr) {
-          promise = other.close(close.code, close.reason);
-        }
-      }
-      return canceler.wrap(promise.then([this,&other]() {
-        canceler.release();
-        fulfiller.fulfill();
-        pipe.endState(*this);
-        return pipe.pumpTo(other);
-      }, [this](kj::Exception&& e) -> kj::Promise<void> {
-        canceler.release();
-        fulfiller.reject(kj::cp(e));
-        pipe.endState(*this);
-        return kj::mv(e);
-      }));
+        from.canceler.release();
+        from.fulfiller.fulfill();
+        from.pipe.endState(from);
+        co_return co_await from.pipe.pumpTo(to);
+      };
+
+      return canceler.wrap(doSend(*this, other));
     }
 
   uint64_t sentByteCount() override {
@@ -3909,6 +3913,7 @@ private:
   };
 
   class BlockedPumpFrom final: public WebSocket {
+    // TODO(now): This class' members are pretty hard to coroutinify well...
   public:
     BlockedPumpFrom(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe,
                     WebSocket& input)
@@ -3994,6 +3999,7 @@ private:
   };
 
   class BlockedReceive final: public WebSocket {
+    // TODO(now): This class' members are pretty hard to coroutinify well...
   public:
     BlockedReceive(kj::PromiseFulfiller<Message>& fulfiller, WebSocketPipeImpl& pipe,
                    size_t maxSize)
@@ -4078,6 +4084,7 @@ private:
   };
 
   class BlockedPumpTo final: public WebSocket {
+    // TODO(now): This class' members are pretty hard to coroutinify well...
   public:
     BlockedPumpTo(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, WebSocket& output)
         : fulfiller(fulfiller), pipe(pipe), output(output) {
