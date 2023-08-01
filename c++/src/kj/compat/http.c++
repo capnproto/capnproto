@@ -2216,49 +2216,52 @@ public:
   }
 
   kj::Promise<void> writeBodyData(const void* buffer, size_t size) {
-    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return kj::READY_NOW; }
-    KJ_REQUIRE(inBody) { return kj::READY_NOW; }
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
 
     writeInProgress = true;
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    return fork.addBranch().then([this,buffer,size]() {
-      return inner.write(buffer, size);
-    }).then([this]() {
-      writeInProgress = false;
-    });
+    co_await fork.addBranch();
+    co_await inner.write(buffer, size);
+
+    // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
+    // want to block further writes.
+    writeInProgress = false;
   }
 
   kj::Promise<void> writeBodyData(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
-    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return kj::READY_NOW; }
-    KJ_REQUIRE(inBody) { return kj::READY_NOW; }
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
 
     writeInProgress = true;
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    return fork.addBranch().then([this,pieces]() {
-      return inner.write(pieces);
-    }).then([this]() {
-      writeInProgress = false;
-    });
+    co_await fork.addBranch();
+    co_await inner.write(pieces);
+
+    // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
+    // want to block further writes.
+    writeInProgress = false;
   }
 
   Promise<uint64_t> pumpBodyFrom(AsyncInputStream& input, uint64_t amount) {
-    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return uint64_t(0); }
-    KJ_REQUIRE(inBody) { return uint64_t(0); }
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
 
     writeInProgress = true;
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    return fork.addBranch().then([this,&input,amount]() {
-      return input.pumpTo(inner, amount);
-    }).then([this](uint64_t actual) {
-      writeInProgress = false;
-      return actual;
-    });
+    co_await fork.addBranch();
+    auto actual = co_await input.pumpTo(inner, amount);
+
+    // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
+    // want to block further writes.
+    writeInProgress = false;
+    co_return actual;
   }
 
   void finishBody() {
