@@ -2441,7 +2441,11 @@ public:
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    if (amount == 0) return constPromise<uint64_t, 0>();
+    return pumpFrom(input, amount);
+  }
+
+  Promise<uint64_t> pumpFrom(AsyncInputStream& input, uint64_t amount) {
+    if (amount == 0) co_return 0;
 
     bool overshot = amount > length;
     if (overshot) {
@@ -2460,34 +2464,27 @@ public:
     amount = kj::min(amount, length);
     length -= amount;
 
-    auto promise = amount == 0
-        ? kj::Promise<uint64_t>(amount)
-        : getInner().pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
-      // Adjust for bytes not written.
-      length += amount - actual;
-      if (length == 0) doneWriting();
-      return actual;
-    });
+    if (amount == 0) co_return 0;
+
+    auto actual = co_await getInner().pumpBodyFrom(input, amount);
+    // Adjust for bytes not written.
+    length += amount - actual;
+    if (length == 0) doneWriting();
 
     if (overshot) {
-      promise = promise.then([amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
-        if (actual == amount) {
-          // We read exactly the amount expected. In order to detect an overshoot, we have to
-          // try reading one more byte. Ugh.
-          static byte junk;
-          return input.tryRead(&junk, 1, 1).then([actual](size_t extra) {
-            KJ_REQUIRE(extra == 0, "overwrote Content-Length");
-            return actual;
-          });
-        } else {
-          // We actually read less data than requested so we couldn't have overshot. In fact, we
-          // undershot.
-          return actual;
-        }
-      });
+      if (actual == amount) {
+        // We read exactly the amount expected. In order to detect an overshoot, we have to
+        // try reading one more byte. Ugh.
+        static byte junk;
+        auto extra = co_await input.tryRead(&junk, 1, 1);
+        KJ_REQUIRE(extra == 0, "overwrote Content-Length");
+      } else {
+        // We actually read less data than requested so we couldn't have overshot. In fact, we
+        // undershot.
+      }
     }
 
-    return kj::mv(promise);
+    co_return actual;
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -2521,62 +2518,70 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
+    if (size == 0) co_return;  // can't encode zero-size chunk since it indicates EOF.
 
-    auto header = kj::str(kj::hex(size), "\r\n");
-    auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
+    // The size of a hex-encoded uint64_t is 16 bytes. The CRLF and NUL terminator contribute an
+    // additional 3 bytes, for a total required space of 19.
+    kj::FixedArray<char, 19> headerSpace;
+    auto header = strPreallocated(headerSpace, kj::hex(size), "\r\n"_kj);
+
+    auto partCount = 4;
+    constexpr auto MAX_IN_FRAME = 256;
+    KJ_STACK_ARRAY(ArrayPtr<const byte>, parts, partCount, MAX_IN_FRAME, MAX_IN_FRAME);
+
     parts[0] = header.asBytes();
     parts[1] = kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size);
-    parts[2] = kj::StringPtr("\r\n").asBytes();
+    parts[2] = "\r\n"_kj.asBytes();
 
-    auto promise = getInner().writeBodyData(parts.asPtr());
-    return promise.attach(kj::mv(header), kj::mv(parts));
+    co_await getInner().writeBodyData(parts);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
-    if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
+    if (size == 0) co_return;  // can't encode zero-size chunk since it indicates EOF.
 
-    auto header = kj::str(kj::hex(size), "\r\n");
-    auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size() + 2);
-    partsBuilder.add(header.asBytes());
-    for (auto& piece: pieces) {
-      partsBuilder.add(piece);
-    }
-    partsBuilder.add(kj::StringPtr("\r\n").asBytes());
+    // The size of a hex-encoded uint64_t is 16 bytes. The CRLF and NUL terminator contribute an
+    // additional 3 bytes, for a total required space of 19.
+    kj::FixedArray<char, 19> headerSpace;
+    auto header = strPreallocated(headerSpace, kj::hex(size), "\r\n"_kj);
 
-    auto parts = partsBuilder.finish();
-    auto promise = getInner().writeBodyData(parts.asPtr());
-    return promise.attach(kj::mv(header), kj::mv(parts));
+    auto partCount = pieces.size() + 2;
+    constexpr auto MAX_IN_FRAME = 256;
+    KJ_STACK_ARRAY(ArrayPtr<const byte>, parts, partCount, MAX_IN_FRAME, MAX_IN_FRAME);
+
+    parts[0] = header.asBytes();
+    std::copy(pieces.begin(), pieces.end(), parts.begin() + 1);
+    parts[parts.size() - 1] = "\r\n"_kj.asBytes();
+
+    co_await getInner().writeBodyData(parts);
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
     KJ_IF_MAYBE(l, input.tryGetLength()) {
       // Hey, we know exactly how large the input is, so we can write just one chunk.
-
-      uint64_t length = kj::min(amount, *l);
-      auto& inner = getInner();
-      inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
-      return inner.pumpBodyFrom(input, length)
-          .then([this,length](uint64_t actual) {
-        auto& inner = getInner();
-        if (actual < length) {
-          inner.abortBody();
-          KJ_FAIL_REQUIRE(
-              "value returned by input.tryGetLength() was greater than actual bytes transferred") {
-            break;
-          }
-        }
-
-        inner.writeBodyData(kj::str("\r\n"));
-        return actual;
-      });
+      return pumpFrom(input, kj::min(amount, *l));
     } else {
       // Need to use naive read/write loop.
       return nullptr;
     }
+  }
+
+  Promise<uint64_t> pumpFrom(AsyncInputStream& input, uint64_t length) {
+    getInner().writeBodyData(kj::str(kj::hex(length), "\r\n"));
+
+    auto actual = co_await getInner().pumpBodyFrom(input, length);
+    if (actual < length) {
+      getInner().abortBody();
+      KJ_FAIL_REQUIRE(
+          "value returned by input.tryGetLength() was greater than actual bytes transferred") {
+        break;
+      }
+    }
+
+    getInner().writeBodyData(kj::str("\r\n"));
+    co_return actual;
   }
 
   Promise<void> whenWriteDisconnected() override {
