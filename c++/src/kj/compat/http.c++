@@ -2475,16 +2475,16 @@ public:
     }
 
     if (overshot) {
-        if (actual == amount) {
-          // We read exactly the amount expected. In order to detect an overshoot, we have to
-          // try reading one more byte. Ugh.
-          static byte junk;
-          auto extra = co_await input.tryRead(&junk, 1, 1);
-          KJ_REQUIRE(extra == 0, "overwrote Content-Length");
-        } else {
-          // We actually read less data than requested so we couldn't have overshot. In fact, we
-          // undershot.
-        }
+      if (actual == amount) {
+        // We read exactly the amount expected. In order to detect an overshoot, we have to
+        // try reading one more byte. Ugh.
+        static byte junk;
+        auto extra = co_await input.tryRead(&junk, 1, 1);
+        KJ_REQUIRE(extra == 0, "overwrote Content-Length");
+      } else {
+        // We actually read less data than requested so we couldn't have overshot. In fact, we
+        // undershot.
+      }
     }
 
     co_return actual;
@@ -2513,35 +2513,41 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
+    if (size == 0) co_return;  // can't encode zero-size chunk since it indicates EOF.
 
-    auto header = kj::str(kj::hex(size), "\r\n");
-    auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
+    // The size of a hex-encoded uint64_t is 16 bytes. The CRLF and NUL terminator contribute an
+    // additional 3 bytes, for a total required space of 19.
+    kj::FixedArray<char, 19> headerSpace;
+    auto header = strPreallocated(headerSpace, kj::hex(size), "\r\n"_kj);
+
+    kj::ArrayPtr<const byte> parts[3];
     parts[0] = header.asBytes();
     parts[1] = kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size);
-    parts[2] = kj::StringPtr("\r\n").asBytes();
+    parts[2] = "\r\n"_kj.asBytes();
 
-    auto promise = getInner().writeBodyData(parts.asPtr());
-    return promise.attach(kj::mv(header), kj::mv(parts));
+    co_await getInner().writeBodyData(parts);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
-    if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
+    if (size == 0) co_return;  // can't encode zero-size chunk since it indicates EOF.
 
-    auto header = kj::str(kj::hex(size), "\r\n");
-    auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size() + 2);
-    partsBuilder.add(header.asBytes());
-    for (auto& piece: pieces) {
-      partsBuilder.add(piece);
-    }
-    partsBuilder.add(kj::StringPtr("\r\n").asBytes());
+    // The size of a hex-encoded uint64_t is 16 bytes. The CRLF and NUL terminator contribute an
+    // additional 3 bytes, for a total required space of 19.
+    kj::FixedArray<char, 19> headerSpace;
+    auto header = strPreallocated(headerSpace, kj::hex(size), "\r\n"_kj);
 
-    auto parts = partsBuilder.finish();
-    auto promise = getInner().writeBodyData(parts.asPtr());
-    return promise.attach(kj::mv(header), kj::mv(parts));
+    auto partCount = pieces.size() + 2;
+    constexpr auto MAX_IN_FRAME = 8;
+    KJ_STACK_ARRAY(ArrayPtr<const byte>, parts, partCount, MAX_IN_FRAME);
+
+    parts[0] = header.asBytes();
+    std::copy(pieces.begin(), pieces.end(), parts.begin() + 1);
+    parts[parts.size() - 1] = "\r\n"_kj.asBytes();
+
+    co_await getInner().writeBodyData(parts);
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
