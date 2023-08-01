@@ -2618,28 +2618,25 @@ public:
       memcpy(payload.begin() + 2, reason.begin(), reason.size());
     }
 
-    auto promise = sendImpl(OPCODE_CLOSE, payload);
-    return promise.attach(kj::mv(payload));
+    co_await sendImpl(OPCODE_CLOSE, payload);
   }
 
   kj::Promise<void> disconnect() override {
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
-    KJ_IF_SOME(p, sendingPong) {
+    while (sendingPong != kj::none) {
       // We recently sent a pong, make sure it's finished before proceeding.
-      currentlySending = true;
-      auto promise = p.then([this]() {
-        currentlySending = false;
-        return disconnect();
-      });
+      auto promise = kj::mv(KJ_ASSERT_NONNULL(sendingPong));
       sendingPong = kj::none;
-      return promise;
+      currentlySending = true;
+      co_await promise;
+
+      currentlySending = false;
     }
 
     disconnected = true;
 
     stream->shutdownWrite();
-    return kj::READY_NOW;
   }
 
   void abort() override {
@@ -2655,139 +2652,152 @@ public:
   }
 
   kj::Promise<Message> receive(size_t maxSize) override {
-    size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
+    for (;;) {
+      size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
 
-    if (headerSize > recvData.size()) {
-      if (recvData.begin() != recvBuffer.begin()) {
-        // Move existing data to front of buffer.
-        if (recvData.size() > 0) {
-          memmove(recvBuffer.begin(), recvData.begin(), recvData.size());
+      if (headerSize > recvData.size()) {
+        if (recvData.begin() != recvBuffer.begin()) {
+          // Move existing data to front of buffer.
+          if (recvData.size() > 0) {
+            memmove(recvBuffer.begin(), recvData.begin(), recvData.size());
+          }
+          recvData = recvBuffer.slice(0, recvData.size());
         }
-        recvData = recvBuffer.slice(0, recvData.size());
-      }
 
-      return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
-          .then([this,maxSize](size_t actual) -> kj::Promise<Message> {
+        auto actual = co_await stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end());
         receivedBytes += actual;
         if (actual == 0) {
           if (recvData.size() > 0) {
-            return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
+            kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header"));
           } else {
             // It's incorrect for the WebSocket to disconnect without sending `Close`.
-            return KJ_EXCEPTION(DISCONNECTED,
-                "WebSocket disconnected between frames without sending `Close`.");
+            kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED,
+                "WebSocket disconnected between frames without sending `Close`."));
           }
         }
 
         recvData = recvBuffer.slice(0, recvData.size() + actual);
-        return receive(maxSize);
-      });
-    }
-
-    auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
-    if (recvHeader.hasRsv2or3()) {
-      return errorHandler.handleWebSocketProtocolError({
-        1002, "Received frame had RSV bits 2 or 3 set",
-      });
-    }
-
-    recvData = recvData.slice(headerSize, recvData.size());
-
-    size_t payloadLen = recvHeader.getPayloadLen();
-    if (payloadLen > maxSize) {
-      return errorHandler.handleWebSocketProtocolError({
-        1009, kj::str("Message is too large: ", payloadLen, " > ", maxSize)
-      });
-    }
-
-    auto opcode = recvHeader.getOpcode();
-    bool isData = opcode < OPCODE_FIRST_CONTROL;
-    if (opcode == OPCODE_CONTINUATION) {
-      if (fragments.empty()) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, "Unexpected continuation frame"
-        });
+        continue;
       }
 
-      opcode = fragmentOpcode;
-    } else if (isData) {
-      if (!fragments.empty()) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, "Missing continuation frame"
-        });
-      }
-    }
-
-    bool isFin = recvHeader.isFin();
-
-    kj::Array<byte> message;           // space to allocate
-    byte* payloadTarget;               // location into which to read payload (size is payloadLen)
-    kj::Maybe<size_t> originalMaxSize; // maxSize from first `receive()` call
-    if (isFin) {
-      size_t amountToAllocate;
-      if (recvHeader.isCompressed() || fragmentCompressed) {
-        // Add 4 since we append 0x00 0x00 0xFF 0xFF to the tail of the payload.
-        // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
-        amountToAllocate = payloadLen + 4;
-      } else {
-        // Add space for NUL terminator when allocating text message.
-        amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+      auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
+      if (recvHeader.hasRsv2or3()) {
+        kj::throwFatalException(errorHandler.handleWebSocketProtocolError({
+          1002, "Received frame had RSV bits 2 or 3 set",
+        }));
       }
 
-      if (isData && !fragments.empty()) {
-        // Final frame of a fragmented message. Gather the fragments.
-        size_t offset = 0;
-        for (auto& fragment: fragments) offset += fragment.size();
-        message = kj::heapArray<byte>(offset + amountToAllocate);
-        originalMaxSize = offset + maxSize; // gives us back the original maximum message size.
+      recvData = recvData.slice(headerSize, recvData.size());
 
-        offset = 0;
-        for (auto& fragment: fragments) {
-          memcpy(message.begin() + offset, fragment.begin(), fragment.size());
-          offset += fragment.size();
+      size_t payloadLen = recvHeader.getPayloadLen();
+      if (payloadLen > maxSize) {
+        kj::throwFatalException(errorHandler.handleWebSocketProtocolError({
+          1009, kj::str("Message is too large: ", payloadLen, " > ", maxSize)
+        }));
+      }
+
+      auto opcode = recvHeader.getOpcode();
+      bool isData = opcode < OPCODE_FIRST_CONTROL;
+      if (opcode == OPCODE_CONTINUATION) {
+        if (fragments.empty()) {
+          kj::throwFatalException(errorHandler.handleWebSocketProtocolError({
+            1002, "Unexpected continuation frame"
+          }));
         }
-        payloadTarget = message.begin() + offset;
 
-        fragments.clear();
-        fragmentOpcode = 0;
-        fragmentCompressed = false;
+        opcode = fragmentOpcode;
+      } else if (isData) {
+        if (!fragments.empty()) {
+          kj::throwFatalException(errorHandler.handleWebSocketProtocolError({
+            1002, "Missing continuation frame"
+          }));
+        }
+      }
+
+      bool isFin = recvHeader.isFin();
+
+      kj::Array<byte> message;           // space to allocate
+      byte* payloadTarget;               // location into which to read payload (size is payloadLen)
+      kj::Maybe<size_t> originalMaxSize; // maxSize from first `receive()` call
+      if (isFin) {
+        size_t amountToAllocate;
+        if (recvHeader.isCompressed() || fragmentCompressed) {
+          // Add 4 since we append 0x00 0x00 0xFF 0xFF to the tail of the payload.
+          // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+          amountToAllocate = payloadLen + 4;
+        } else {
+          // Add space for NUL terminator when allocating text message.
+          amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+        }
+
+        if (isData && !fragments.empty()) {
+          // Final frame of a fragmented message. Gather the fragments.
+          size_t offset = 0;
+          for (auto& fragment: fragments) offset += fragment.size();
+          message = kj::heapArray<byte>(offset + amountToAllocate);
+          originalMaxSize = offset + maxSize; // gives us back the original maximum message size.
+
+          offset = 0;
+          for (auto& fragment: fragments) {
+            memcpy(message.begin() + offset, fragment.begin(), fragment.size());
+            offset += fragment.size();
+          }
+          payloadTarget = message.begin() + offset;
+
+          fragments.clear();
+          fragmentOpcode = 0;
+          fragmentCompressed = false;
+        } else {
+          // Single-frame message.
+          message = kj::heapArray<byte>(amountToAllocate);
+          originalMaxSize = maxSize; // gives us back the original maximum message size.
+          payloadTarget = message.begin();
+        }
       } else {
-        // Single-frame message.
-        message = kj::heapArray<byte>(amountToAllocate);
-        originalMaxSize = maxSize; // gives us back the original maximum message size.
+        // Fragmented message, and this isn't the final fragment.
+        if (!isData) {
+          kj::throwFatalException(errorHandler.handleWebSocketProtocolError({
+            1002, "Received fragmented control frame"
+          }));
+        }
+
+        message = kj::heapArray<byte>(payloadLen);
         payloadTarget = message.begin();
-      }
-    } else {
-      // Fragmented message, and this isn't the final fragment.
-      if (!isData) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, "Received fragmented control frame"
-        });
+        if (fragments.empty()) {
+          // This is the first fragment, so set the opcode.
+          fragmentOpcode = opcode;
+          fragmentCompressed = recvHeader.isCompressed();
+        }
       }
 
-      message = kj::heapArray<byte>(payloadLen);
-      payloadTarget = message.begin();
-      if (fragments.empty()) {
-        // This is the first fragment, so set the opcode.
-        fragmentOpcode = opcode;
-        fragmentCompressed = recvHeader.isCompressed();
+      Mask mask = recvHeader.getMask();
+
+      if (payloadLen <= recvData.size()) {
+        // All data already received.
+        memcpy(payloadTarget, recvData.begin(), payloadLen);
+        recvData = recvData.slice(payloadLen, recvData.size());
+      } else {
+        // Need to read more data.
+        auto size = recvData.size();
+        memcpy(payloadTarget, recvData.begin(), size);
+        recvData = nullptr;
+        size_t remaining = payloadLen - size;
+        auto amount = co_await stream->tryRead(payloadTarget + size, remaining, remaining);
+        receivedBytes += amount;
+        if (amount < remaining) {
+          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
+        }
       }
-    }
 
-    Mask mask = recvHeader.getMask();
-
-    auto handleMessage =
-        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize,originalMaxSize,message=kj::mv(message)]() mutable
-        -> kj::Promise<Message> {
       if (!mask.isZero()) {
         mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
       }
 
       if (!isFin) {
         // Add fragment to the list and loop.
-        auto newMax = maxSize - message.size();
+        maxSize = maxSize - message.size();
         fragments.add(kj::mv(message));
-        return receive(newMax);
+        continue;
       }
 
       switch (opcode) {
@@ -2813,11 +2823,11 @@ public:
             // We want to add the null terminator when receiving a TEXT message.
             auto decompressed = decompressor.processMessage(message, originalMaxSize,
                 addNullTerminator);
-            return Message(kj::String(decompressed.releaseAsChars()));
+            co_return Message(kj::String(decompressed.releaseAsChars()));
           }
 #endif // KJ_HAS_ZLIB
           message.back() = '\0';
-          return Message(kj::String(message.releaseAsChars()));
+          co_return Message(kj::String(message.releaseAsChars()));
         case OPCODE_BINARY:
 #if KJ_HAS_ZLIB
           KJ_IF_SOME(config, compressionConfig) {
@@ -2834,52 +2844,32 @@ public:
               decompressor.reset();
             }
             auto decompressed = decompressor.processMessage(message, originalMaxSize);
-            return Message(decompressed.releaseAsBytes());
+            co_return Message(decompressed.releaseAsBytes());
           }
 #endif // KJ_HAS_ZLIB
-          return Message(message.releaseAsBytes());
+          co_return Message(message.releaseAsBytes());
         case OPCODE_CLOSE:
           if (message.size() < 2) {
-            return Message(Close { 1005, nullptr });
+            co_return Message(Close { 1005, nullptr });
           } else {
             uint16_t status = (static_cast<uint16_t>(message[0]) << 8)
                             | (static_cast<uint16_t>(message[1])     );
-            return Message(Close {
+            co_return Message(Close {
               status, kj::heapString(message.slice(2, message.size()).asChars())
             });
           }
         case OPCODE_PING:
           // Send back a pong.
           queuePong(kj::mv(message));
-          return receive(maxSize);
+          continue;
         case OPCODE_PONG:
           // Unsolicited pong. Ignore.
-          return receive(maxSize);
+          continue;
         default:
-          return errorHandler.handleWebSocketProtocolError({
+          kj::throwFatalException(errorHandler.handleWebSocketProtocolError({
             1002, kj::str("Unknown opcode ", opcode)
-          });
+          }));
       }
-    };
-
-    if (payloadLen <= recvData.size()) {
-      // All data already received.
-      memcpy(payloadTarget, recvData.begin(), payloadLen);
-      recvData = recvData.slice(payloadLen, recvData.size());
-      return handleMessage();
-    } else {
-      // Need to read more data.
-      memcpy(payloadTarget, recvData.begin(), recvData.size());
-      size_t remaining = payloadLen - recvData.size();
-      auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
-          .then([this, remaining](size_t amount) {
-        receivedBytes += amount;
-        if (amount < remaining) {
-          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
-        }
-      });
-      recvData = nullptr;
-      return promise.then(kj::mv(handleMessage));
     }
   }
 
@@ -3410,14 +3400,11 @@ private:
 
     currentlySending = true;
 
-    KJ_IF_SOME(p, sendingPong) {
+    while (sendingPong != kj::none) {
       // We recently sent a pong, make sure it's finished before proceeding.
-      auto promise = p.then([this, opcode, message]() {
-        currentlySending = false;
-        return sendImpl(opcode, message);
-      });
+      auto promise = kj::mv(KJ_ASSERT_NONNULL(sendingPong));
       sendingPong = kj::none;
-      return promise;
+      co_await promise;
     }
 
     // We don't stop the application from sending further messages after close() -- this is the
@@ -3468,19 +3455,16 @@ private:
     KJ_ASSERT(!sendHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
         "support an extension that would set these bits");
 
-    auto promise = stream->write(sendParts).attach(kj::mv(compressedMessage));
-    if (!mask.isZero()) {
-      promise = promise.attach(kj::mv(ownMessage));
-    }
-    return promise.then([this, size = sendParts[0].size() + sendParts[1].size()]() {
-      currentlySending = false;
+    auto size = sendParts[0].size() + sendParts[1].size();
 
-      // Send queued pong if needed.
-      if (queuedPong != kj::none) {
-        setUpSendingPong();
-      }
-      sentBytes += size;
-    });
+    co_await stream->write(sendParts);
+    currentlySending = false;
+
+    // Send queued pong if needed.
+    if (queuedPong != kj::none) {
+      setUpSendingPong();
+    }
+    sentBytes += size;
   }
 
   void queuePong(kj::Array<byte> payload) {
@@ -3532,48 +3516,57 @@ private:
   }
 
   kj::Promise<void> optimizedPumpTo(WebSocketImpl& other) {
-    KJ_IF_SOME(p, other.sendingPong) {
-      // We recently sent a pong, make sure it's finished before proceeding.
-      auto promise = p.then([this, &other]() {
-        return optimizedPumpTo(other);
-      });
-      other.sendingPong = kj::none;
-      return promise;
-    }
+    for (;;) {
+      KJ_IF_SOME(p, other.sendingPong) {
+        // We recently sent a pong, make sure it's finished before proceeding.
+        auto promise = kj::mv(p);
+        other.sendingPong = kj::none;
+        co_await promise;
+        continue;
+      }
 
-    if (recvData.size() > 0) {
-      // We have some data buffered. Write it first.
-      return other.stream->write(recvData.begin(), recvData.size())
-          .then([this, &other, size = recvData.size()]() {
+      auto size = recvData.size();
+      if (size > 0) {
+        // We have some data buffered. Write it first.
+        co_await other.stream->write(recvData.begin(), size);
         recvData = nullptr;
         other.sentBytes += size;
-        return optimizedPumpTo(other);
-      });
+        continue;
+      }
+
+      break;
     }
 
-    auto cancelPromise = other.stream->whenWriteDisconnected()
-        .then([this]() -> kj::Promise<void> {
-      this->abort();
-      return KJ_EXCEPTION(DISCONNECTED,
-          "destination of WebSocket pump disconnected prematurely");
-    });
-
     // There's no buffered incoming data, so start pumping stream now.
-    return stream->pumpTo(*other.stream).then([this, &other](size_t s) -> kj::Promise<void> {
-      // WebSocket pumps are expected to include end-of-stream.
-      other.disconnected = true;
-      other.stream->shutdownWrite();
-      receivedBytes += s;
-      other.sentBytes += s;
-      return kj::READY_NOW;
-    }, [&other](kj::Exception&& e) -> kj::Promise<void> {
-      // We don't know if it was a read or a write that threw. If it was a read that threw, we need
-      // to send a disconnect on the destination. If it was the destination that threw, it
-      // shouldn't hurt to disconnect() it again, but we'll catch and squelch any exceptions.
-      other.disconnected = true;
-      kj::runCatchingExceptions([&other]() { other.stream->shutdownWrite(); });
-      return kj::mv(e);
-    }).exclusiveJoin(kj::mv(cancelPromise));
+
+    constexpr auto onDisconnect =
+        [](WebSocketImpl& self, WebSocketImpl& other) -> kj::Promise<void> {
+      co_await other.stream->whenWriteDisconnected();
+      self.abort();
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED,
+          "destination of WebSocket pump disconnected prematurely"));
+    };
+
+    constexpr auto doPump = [](WebSocketImpl& self, WebSocketImpl& other) -> kj::Promise<void> {
+      try {
+        auto s = co_await self.stream->pumpTo(*other.stream);
+        // WebSocket pumps are expected to include end-of-stream.
+        other.disconnected = true;
+        other.stream->shutdownWrite();
+        self.receivedBytes += s;
+        other.sentBytes += s;
+      } catch (Exception& e) {
+        // We don't know if it was a read or a write that threw. If it was a read that threw, we
+        // need to send a disconnect on the destination. If it was the destination that threw, it
+        // shouldn't hurt to disconnect() it again, but we'll catch and squelch any exceptions.
+        other.disconnected = true;
+        kj::runCatchingExceptions([&other]() { other.stream->shutdownWrite(); });
+        kj::throwFatalException(kj::mv(e));
+      }
+    };
+
+    co_await doPump(*this, other)
+        .exclusiveJoin(onDisconnect(*this, other));
   }
 };
 
