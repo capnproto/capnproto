@@ -1069,6 +1069,8 @@ void UnixEventPort::wake() const {
   EV_SET(&event, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
 #elif defined(EV_TRIGGER)
   EV_SET(&event, 0, EVFILT_USER, EV_TRIGGER, 0, 0, nullptr);
+#else
+#error "neither NOTE_TRIGGER nor EV_TRIGGER is defined; we need at least one of these"
 #endif
   KJ_SYSCALL(kevent(kqueueFd, &event, 1, nullptr, 0, nullptr));
 }
