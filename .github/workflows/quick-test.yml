@@ -124,11 +124,11 @@ jobs:
             echo "Activate conda base environment"
             call activate base
             echo "Building Cap'n Proto with ${{ matrix.target }}"
-            cmake -Hc++ -Bbuild-output ${{ matrix.arch }} -G "${{ matrix.target }}" -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%" -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install
+            cmake -Hc++ -Bbuild-output ${{ matrix.arch }} -G "${{ matrix.target }}" -DCMAKE_BUILD_TYPE=debug -DCMAKE_CXX_STANDARD=20 -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%" -DCMAKE_INSTALL_PREFIX=%CD%\capnproto-c++-install
             cmake --build build-output --config debug --target install
 
             echo "Building Cap'n Proto samples with ${{ matrix.target }}"
-            cmake -Hc++/samples -Bbuild-output-samples ${{ matrix.arch }} -G "${{ matrix.target }}" -DCMAKE_BUILD_TYPE=debug -DCMAKE_PREFIX_PATH=%CD%\capnproto-c++-install
+            cmake -Hc++/samples -Bbuild-output-samples ${{ matrix.arch }} -G "${{ matrix.target }}" -DCMAKE_BUILD_TYPE=debug -DCMAKE_CXX_STANDARD=20 -DCMAKE_PREFIX_PATH=%CD%\capnproto-c++-install
             cmake --build build-output-samples --config debug
 
             cd build-output\src
