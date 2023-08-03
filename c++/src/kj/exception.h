@@ -271,10 +271,15 @@ ExceptionCallback& getExceptionCallback();
 KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
 // Invoke the exception callback to throw the given fatal exception.  If the exception callback
 // returns, abort.
+//
+// TODO(2.0): Rename this to `throwException()`.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
 // Invoke the exception callback to throw the given recoverable exception.  If the exception
 // callback returns, return normally.
+//
+// TODO(2.0): Rename this to `throwExceptionUnlessUnwinding()`. (Or, can we fix the unwind problem
+//   and be able to remove this entirely?)
 
 // =======================================================================================
 
@@ -285,6 +290,9 @@ Maybe<Exception> runCatchingExceptions(Func&& func);
 // Executes the given function (usually, a lambda returning nothing) catching any exceptions that
 // are thrown.  Returns the Exception if there was one, or null if the operation completed normally.
 // Non-KJ exceptions will be wrapped.
+//
+// TODO(2.0): Remove this. Introduce KJ_CATCH() macro which uses getCaughtExceptionAsKj() to handle
+//   exception coercion and stack trace management. Then use try/KJ_CATCH everywhere.
 
 kj::Exception getCaughtExceptionAsKj();
 // Call from the catch block of a try/catch to get a `kj::Exception` representing the exception
