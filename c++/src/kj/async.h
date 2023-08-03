@@ -570,45 +570,6 @@ Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocat
 // propagated to the returned join promise.
 
 // =======================================================================================
-// Hack for creating a lambda that holds an owned pointer.
-
-template <typename Func, typename MovedParam>
-class CaptureByMove {
-public:
-  inline CaptureByMove(Func&& func, MovedParam&& param)
-      : func(kj::mv(func)), param(kj::mv(param)) {}
-
-  template <typename... Params>
-  inline auto operator()(Params&&... params)
-      -> decltype(kj::instance<Func>()(kj::instance<MovedParam&&>(), kj::fwd<Params>(params)...)) {
-    return func(kj::mv(param), kj::fwd<Params>(params)...);
-  }
-
-private:
-  Func func;
-  MovedParam param;
-};
-
-template <typename Func, typename MovedParam>
-inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func)
-    KJ_DEPRECATED("Use C++14 generalized captures instead.");
-
-template <typename Func, typename MovedParam>
-inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func) {
-  // Hack to create a "lambda" which captures a variable by moving it rather than copying or
-  // referencing.  C++14 generalized captures should make this obsolete, but for now in C++11 this
-  // is commonly needed for Promise continuations that own their state.  Example usage:
-  //
-  //    Own<Foo> ptr = makeFoo();
-  //    Promise<int> promise = callRpc();
-  //    promise.then(mvCapture(ptr, [](Own<Foo>&& ptr, int result) {
-  //      return ptr->finish(result);
-  //    }));
-
-  return CaptureByMove<Func, Decay<MovedParam>>(kj::fwd<Func>(func), kj::mv(param));
-}
-
-// =======================================================================================
 // Hack for safely using a lambda as a coroutine.
 
 namespace _ {
