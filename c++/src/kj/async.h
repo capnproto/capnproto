@@ -219,9 +219,7 @@ public:
   // exception to the returned promise.
   //
   // Either `func` or `errorHandler` may, of course, throw an exception, in which case the promise
-  // is broken.  When compiled with -fno-exceptions, the framework will still detect when a
-  // recoverable exception was thrown inside of a continuation and will consider the promise
-  // broken even though a (presumably garbage) result was returned.
+  // is broken.
   //
   // If the returned promise is destroyed before the callback runs, the callback will be canceled
   // (it will never run).
@@ -273,10 +271,7 @@ public:
   // server-side code generally cannot use wait(), because it has to be able to accept multiple
   // requests at once.
   //
-  // If the promise is rejected, `wait()` throws an exception.  If the program was compiled without
-  // exceptions (-fno-exceptions), this will usually abort.  In this case you really should first
-  // use `then()` to set an appropriate handler for the exception case, so that the promise you
-  // actually wait on never throws.
+  // If the promise is rejected, `wait()` throws an exception.
   //
   // `waitScope` is an object proving that the caller is in a scope where wait() is allowed.  By
   // convention, any function which might call wait(), or which might call another function which

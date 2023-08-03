@@ -2247,13 +2247,7 @@ KJ_TEST("WebSocket pump byte counting") {
   pumpTask.wait(waitScope);
 
   // The eventual receiver gets a disconnect exception.
-  // (Note: We don't use KJ_EXPECT_THROW here because under -fno-exceptions it forks and we lose
-  // state.)
-  receiveTask.then([](auto) {
-    KJ_FAIL_EXPECT("expected exception");
-  }, [](kj::Exception&& e) {
-    KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
-  }).wait(waitScope);
+  KJ_EXPECT_THROW(DISCONNECTED, receiveTask.wait(waitScope));
 
   KJ_EXPECT(server1->receivedByteCount() == 3);
 #if KJ_NO_RTTI

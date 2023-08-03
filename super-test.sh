@@ -531,15 +531,10 @@ if [ "x`uname`" = xLinux ]; then
 fi
 
 echo "========================================================================="
-echo "Testing with -fno-rtti and -fno-exceptions"
+echo "Testing with -fno-rtti"
 echo "========================================================================="
 
-# GCC miscompiles capnpc-c++ when -fno-exceptions and -O2 are specified together. The
-# miscompilation happens in one specific inlined call site of Array::dispose(), but this method
-# is inlined in hundreds of other places without issue, so I have no idea how to narrow down the
-# bug. Clang works fine. So, for now, we disable optimizations on GCC for -fno-exceptions tests.
-
-doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions $DISABLE_OPTIMIZATION_IF_GCC"
+doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti"
 doit make -j$PARALLEL check
 
 if [ "x`uname`" = xLinux ]; then

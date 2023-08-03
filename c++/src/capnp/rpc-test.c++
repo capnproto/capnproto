@@ -1404,8 +1404,7 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
 
         ++interceptCount;
         if (shouldThrowFromSend) {
-          kj::throwRecoverableException(KJ_EXCEPTION(FAILED, "intercepted"));
-          return false;  // only matters when -fno-exceptions
+          kj::throwFatalException(KJ_EXCEPTION(FAILED, "intercepted"));
         }
       }
     }

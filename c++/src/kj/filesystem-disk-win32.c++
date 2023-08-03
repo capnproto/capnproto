@@ -783,7 +783,7 @@ public:
     return true;
   }
 
-  kj::Maybe<Array<wchar_t>> createNamedTemporary(
+  Array<wchar_t> createNamedTemporary(
       PathPtr finalName, WriteMode mode, Path& kjTempPath,
       Function<BOOL(const wchar_t*)> tryCreate) const {
     // Create a temporary file which will eventually replace `finalName`.
@@ -794,14 +794,12 @@ public:
     // not checked in advance, since it needs to be checked atomically. In the case of
     // ERROR_*_EXISTS, tryCreate() will be called again with a new path.
     //
-    // Returns the temporary path that succeeded. Only returns nullptr if there was an exception
-    // but we're compiled with -fno-exceptions.
+    // Returns the temporary path that succeeded.
     //
     // The optional parameter `kjTempPath` is filled in with the KJ Path of the temporary.
 
     if (finalName.size() == 0) {
-      KJ_FAIL_REQUIRE("can't replace self") { break; }
-      return nullptr;
+      KJ_FAIL_REQUIRE("can't replace self");
     }
 
     static uint counter = 0;
@@ -826,14 +824,13 @@ public:
         }
         KJ_FALLTHROUGH;
       default:
-        KJ_FAIL_WIN32("create(path)", error, path) { break; }
-        return nullptr;
+        KJ_FAIL_WIN32("create(path)", error, path);
     }
 
     return kj::mv(path);
   }
 
-  kj::Maybe<Array<wchar_t>> createNamedTemporary(
+  Array<wchar_t> createNamedTemporary(
       PathPtr finalName, WriteMode mode, Function<BOOL(const wchar_t*)> tryCreate) const {
     Path dummy = nullptr;
     return createNamedTemporary(finalName, mode, dummy, kj::mv(tryCreate));
@@ -887,21 +884,17 @@ public:
     // Either we don't have CREATE mode or the target already exists. We need to perform a
     // replacement instead.
 
-    KJ_IF_MAYBE(tempPath, createNamedTemporary(path, mode, kj::mv(tryCreate))) {
-      if (tryCommitReplacement(path, *tempPath, mode)) {
-        return true;
-      } else {
-        KJ_WIN32_HANDLE_ERRORS(DeleteFileW(tempPath->begin())) {
-          case ERROR_FILE_NOT_FOUND:
-            // meh
-            break;
-          default:
-            KJ_FAIL_WIN32("DeleteFile(tempPath)", error, dbgStr(*tempPath));
-        }
-        return false;
-      }
+    auto tempPath = createNamedTemporary(path, mode, kj::mv(tryCreate));
+    if (tryCommitReplacement(path, tempPath, mode)) {
+      return true;
     } else {
-      // threw, but exceptions are disabled
+      KJ_WIN32_HANDLE_ERRORS(DeleteFileW(tempPath.begin())) {
+        case ERROR_FILE_NOT_FOUND:
+          // meh
+          break;
+        default:
+          KJ_FAIL_WIN32("DeleteFile(tempPath)", error, dbgStr(tempPath));
+      }
       return false;
     }
   }
@@ -1023,26 +1016,22 @@ public:
         // delete the old thing.
 
         if (has(mode, WriteMode::MODIFY)) {
-          KJ_IF_MAYBE(tempName,
+          auto tempName =
               createNamedTemporary(toPath, WriteMode::CREATE, [&](const wchar_t* tempName2) {
             return MoveFileW(wToPath.begin(), tempName2);
-          })) {
-            KJ_WIN32_HANDLE_ERRORS(MoveFileW(fromPath.begin(), wToPath.begin())) {
-              default:
-                // Try to move back.
-                MoveFileW(tempName->begin(), wToPath.begin());
-                KJ_FAIL_WIN32("MoveFile", error, dbgStr(fromPath), dbgStr(wToPath)) {
-                  return false;
-                }
-            }
-
-            // Succeeded, delete temporary.
-            rmrf(*tempName);
-            return true;
-          } else {
-            // createNamedTemporary() threw exception but exceptions are disabled.
-            return false;
+          });
+          KJ_WIN32_HANDLE_ERRORS(MoveFileW(fromPath.begin(), wToPath.begin())) {
+            default:
+              // Try to move back.
+              MoveFileW(tempName.begin(), wToPath.begin());
+              KJ_FAIL_WIN32("MoveFile", error, dbgStr(fromPath), dbgStr(wToPath)) {
+                return false;
+              }
           }
+
+          // Succeeded, delete temporary.
+          rmrf(tempName);
+          return true;
         } else {
           // Not MODIFY, so no overwrite allowed. If the file really does exist, we need to return
           // false.
@@ -1149,7 +1138,7 @@ public:
 
   Own<Directory::Replacer<File>> replaceFile(PathPtr path, WriteMode mode) const {
     HANDLE newHandle_;
-    KJ_IF_MAYBE(temp, createNamedTemporary(path, mode,
+    auto temp = createNamedTemporary(path, mode,
         [&](const wchar_t* candidatePath) {
       newHandle_ = CreateFileW(
           candidatePath,
@@ -1160,19 +1149,15 @@ public:
           FILE_ATTRIBUTE_NORMAL,
           NULL);
       return newHandle_ != INVALID_HANDLE_VALUE;
-    })) {
-      AutoCloseHandle newHandle(newHandle_);
-      return heap<ReplacerImpl<File>>(newDiskFile(kj::mv(newHandle)), *this, kj::mv(*temp),
-                                      path.clone(), mode);
-    } else {
-      // threw, but exceptions are disabled
-      return heap<BrokenReplacer<File>>(newInMemoryFile(nullClock()));
-    }
+    });
+    AutoCloseHandle newHandle(newHandle_);
+    return heap<ReplacerImpl<File>>(newDiskFile(kj::mv(newHandle)), *this, kj::mv(temp),
+                                    path.clone(), mode);
   }
 
   Own<const File> createTemporary() const {
     HANDLE newHandle_;
-    KJ_IF_MAYBE(temp, createNamedTemporary(Path("unnamed"), WriteMode::CREATE,
+    createNamedTemporary(Path("unnamed"), WriteMode::CREATE,
         [&](const wchar_t* candidatePath) {
       newHandle_ = CreateFileW(
           candidatePath,
@@ -1183,13 +1168,9 @@ public:
           FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
           NULL);
       return newHandle_ != INVALID_HANDLE_VALUE;
-    })) {
-      AutoCloseHandle newHandle(newHandle_);
-      return newDiskFile(kj::mv(newHandle));
-    } else {
-      // threw, but exceptions are disabled
-      return newInMemoryFile(nullClock());
-    }
+    });
+    AutoCloseHandle newHandle(newHandle_);
+    return newDiskFile(kj::mv(newHandle));
   }
 
   Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) const {
@@ -1209,35 +1190,28 @@ public:
 
   Own<Directory::Replacer<Directory>> replaceSubdir(PathPtr path, WriteMode mode) const {
     Path kjTempPath = nullptr;
-    KJ_IF_MAYBE(temp, createNamedTemporary(path, mode, kjTempPath,
+    auto temp = createNamedTemporary(path, mode, kjTempPath,
         [&](const wchar_t* candidatePath) {
       return CreateDirectoryW(candidatePath, makeSecAttr(mode));
-    })) {
-      HANDLE subdirHandle_;
-      KJ_WIN32_HANDLE_ERRORS(subdirHandle_ = CreateFileW(
-          temp->begin(),
-          GENERIC_READ,
-          FILE_SHARE_READ | FILE_SHARE_WRITE,
-          NULL,
-          OPEN_EXISTING,
-          FILE_FLAG_BACKUP_SEMANTICS,  // apparently, this flag is required for directories
-          NULL)) {
-        default:
-          KJ_FAIL_WIN32("CreateFile(just-created-temporary, OPEN_EXISTING)", error, path) {
-            goto fail;
-          }
-      }
-
-      AutoCloseHandle subdirHandle(subdirHandle_);
-      return heap<ReplacerImpl<Directory>>(
-          newDiskDirectory(kj::mv(subdirHandle),
-              KJ_ASSERT_NONNULL(dirPath).append(kj::mv(kjTempPath))),
-          *this, kj::mv(*temp), path.clone(), mode);
-    } else {
-      // threw, but exceptions are disabled
-    fail:
-      return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(nullClock()));
+    });
+    HANDLE subdirHandle_;
+    KJ_WIN32_HANDLE_ERRORS(subdirHandle_ = CreateFileW(
+        temp.begin(),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,  // apparently, this flag is required for directories
+        NULL)) {
+      default:
+        KJ_FAIL_WIN32("CreateFile(just-created-temporary, OPEN_EXISTING)", error, path);
     }
+
+    AutoCloseHandle subdirHandle(subdirHandle_);
+    return heap<ReplacerImpl<Directory>>(
+        newDiskDirectory(kj::mv(subdirHandle),
+            KJ_ASSERT_NONNULL(dirPath).append(kj::mv(kjTempPath))),
+        *this, kj::mv(temp), path.clone(), mode);
   }
 
   bool trySymlink(PathPtr linkpath, StringPtr content, WriteMode mode) const {
