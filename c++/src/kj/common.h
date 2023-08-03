@@ -323,10 +323,11 @@ KJ_NORETURN(void unreachable());
 
 }  // namespace _ (private)
 
-#ifdef KJ_DEBUG
 #if _MSC_VER && !defined(__clang__) && (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL)
 #define KJ_MSVC_TRADITIONAL_CPP 1
 #endif
+
+#ifdef KJ_DEBUG
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
