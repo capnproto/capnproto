@@ -2082,6 +2082,14 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
+template <typename T>
+class CoExclusiveJoin: public Promise<T> {
+// A magic type which causes `co_await` to call a particular `await_transform()` overload.
+
+public:
+  CoExclusiveJoin(Promise<T>&& promise): Promise<T>(kj::mv(promise)) {}
+};
+
 class CoroutineBase: public PromiseNode,
                      public Event {
 public:
@@ -2225,6 +2233,45 @@ public:
   // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
   // suspension and resumption in terms of .then(). Yuck!
 
+  auto await_transform(CoExclusiveJoin<T> promise) {
+    struct ExclusiveJoinTask: public Event {
+      Coroutine& coroutine;
+      OwnPromiseNode node;
+      ExclusiveJoinTask(Coroutine& coroutine, Promise<T> promise)
+          : Event(/*coroutine.loop, */SourceLocation()),
+            coroutine(coroutine),
+            node(PromiseNode::from(kj::mv(promise))) {
+        node->setSelfPointer(&node);
+        node->onReady(this);
+      }
+      KJ_DISALLOW_COPY_AND_MOVE(ExclusiveJoinTask);
+      Maybe<Own<Event>> fire() override {
+        ExceptionOr<T> result;
+        node->get(result);
+        KJ_IF_MAYBE(exception, result.exception) {
+          coroutine.reject(kj::mv(*exception));
+        } else {
+          KJ_IASSERT(result.value != nullptr);
+          coroutine.fulfill(kj::mv(*readMaybe(result.value)));
+        }
+        return nullptr;
+      }
+      void traceEvent(TraceBuilder& builder) override {}
+    };
+
+    struct Awaitable {
+      Coroutine& coroutine;
+      CoExclusiveJoin<T> promise;
+      Awaitable(Coroutine& coroutine, CoExclusiveJoin<T> promise)
+          : coroutine(coroutine), promise(kj::mv(promise)) {}
+      bool await_ready() const { return true; }
+      auto await_resume() { return ExclusiveJoinTask { coroutine, kj::mv(promise) }; }
+      void await_suspend(stdcoro::coroutine_handle<>) { KJ_UNREACHABLE; }
+    };
+
+    return Awaitable { *this, kj::mv(promise) };
+  }
+
 private:
   // -------------------------------------------------------
   // PromiseNode implementation
@@ -2234,10 +2281,22 @@ private:
   }
 
   void fulfill(FixVoid<T>&& value) {
-    // Called by the return_value()/return_void() functions in our mixin class.
+    // Called by the return_value()/return_void() functions in our mixin class, and by the
+    // implementation of CoExclusiveJoin<T>.
 
     if (isWaiting()) {
       result = kj::mv(value);
+      scheduleResumption();
+    }
+  }
+
+  void reject(Exception&& exception) {
+    // `unhandled_exception()` does NOT call this function, because it has trickier logic: it needs
+    // to override any result which was returned with any exceptions thrown during frame unwind.
+    // This function is called by the implementation of CoExclusiveJoin<T>.
+
+    if (isWaiting()) {
+      result.addException(kj::mv(exception));
       scheduleResumption();
     }
   }
