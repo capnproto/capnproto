@@ -47,11 +47,7 @@ TEST(Exception, RunCatchingExceptions) {
     recovered = true;
   });
 
-#if KJ_NO_EXCEPTIONS
-  EXPECT_TRUE(recovered);
-#else
   EXPECT_FALSE(recovered);
-#endif
 
   KJ_IF_MAYBE(ex, e) {
     EXPECT_EQ("foo", ex->getDescription());
@@ -60,7 +56,6 @@ TEST(Exception, RunCatchingExceptions) {
   }
 }
 
-#if !KJ_NO_EXCEPTIONS
 TEST(Exception, RunCatchingExceptionsStdException) {
   Maybe<Exception> e = kj::runCatchingExceptions([&]() {
     throw std::logic_error("foo");
@@ -88,12 +83,6 @@ TEST(Exception, RunCatchingExceptionsOtherException) {
     ADD_FAILURE() << "Expected exception";
   }
 }
-#endif
-
-#if !KJ_NO_EXCEPTIONS
-// We skip this test when exceptions are disabled because making it no-exceptions-safe defeats
-// the purpose of the test: recoverable exceptions won't throw inside a destructor in the first
-// place.
 
 class ThrowingDestructor: public UnwindDetector {
 public:
@@ -130,7 +119,6 @@ TEST(Exception, UnwindDetector) {
     ADD_FAILURE() << "Expected exception";
   }
 }
-#endif
 
 #if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
     KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
@@ -144,7 +132,6 @@ TEST(Exception, ExceptionCallbackMustBeOnStack) {
 #endif
 #endif  // !__MINGW32__
 
-#if !KJ_NO_EXCEPTIONS
 TEST(Exception, ScopeSuccessFail) {
   bool success = false;
   bool failure = false;
@@ -176,7 +163,6 @@ TEST(Exception, ScopeSuccessFail) {
   EXPECT_FALSE(success);
   EXPECT_TRUE(failure);
 }
-#endif
 
 #if __GNUG__ || defined(__clang__)
 kj::String testStackTrace() __attribute__((noinline));
@@ -214,7 +200,6 @@ KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   KJ_ASSERT(strstr(trace.cStr(), wrong.cStr()) == nullptr, trace, wrong);
 }
 
-#if !KJ_NO_EXCEPTIONS
 KJ_TEST("InFlightExceptionIterator works") {
   bool caught = false;
   try {
@@ -247,7 +232,6 @@ KJ_TEST("InFlightExceptionIterator works") {
 
   KJ_EXPECT(caught);
 }
-#endif
 
 KJ_TEST("computeRelativeTrace") {
   auto testCase = [](uint expectedPrefix,

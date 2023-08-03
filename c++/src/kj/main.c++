@@ -61,14 +61,7 @@ StringPtr TopLevelProcessContext::getProgramName() {
 void TopLevelProcessContext::exit() {
   int exitCode = hadErrors ? 1 : 0;
   if (cleanShutdown) {
-#if KJ_NO_EXCEPTIONS
-    // This is the best we can do.
-    warning("warning: KJ_CLEAN_SHUTDOWN may not work correctly when compiled "
-            "with -fno-exceptions.");
-    ::exit(exitCode);
-#else
     throw CleanShutdownException { exitCode };
-#endif
   }
   _exit(exitCode);
 }
@@ -215,9 +208,7 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
   setStandardIoMode(STDOUT_FILENO);
   setStandardIoMode(STDERR_FILENO);
 
-#if !KJ_NO_EXCEPTIONS
   try {
-#endif
     KJ_ASSERT(argc > 0);
 
     KJ_STACK_ARRAY(StringPtr, params, argc - 1, 8, 32);
@@ -231,11 +222,9 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
       context.error(str("*** Uncaught exception ***\n", *exception));
     }
     context.exit();
-#if !KJ_NO_EXCEPTIONS
   } catch (const TopLevelProcessContext::CleanShutdownException& e) {
     return e.exitCode;
   }
-#endif
   KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 

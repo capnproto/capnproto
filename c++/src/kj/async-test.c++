@@ -413,7 +413,6 @@ TEST(Async, SeparateFulfillerDiscarded) {
       pair.promise.wait(waitScope));
 }
 
-#if !KJ_NO_EXCEPTIONS
 TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -427,7 +426,6 @@ TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
       "test exception", pair.promise.wait(waitScope));
 }
-#endif
 
 TEST(Async, SeparateFulfillerMemoryLeak) {
   auto paf = kj::newPromiseAndFulfiller<void>();

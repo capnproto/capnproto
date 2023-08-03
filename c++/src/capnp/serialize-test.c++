@@ -449,9 +449,7 @@ TEST(Serialize, RejectTooManySegments) {
 
   kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
     InputStreamMessageReader reader(input);
-#if !KJ_NO_EXCEPTIONS
     ADD_FAILURE() << "Should have thrown an exception.";
-#endif
   });
 
   KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
@@ -470,9 +468,7 @@ TEST(Serialize, RejectHugeMessage) {
 
   kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
     InputStreamMessageReader reader(input, options);
-#if !KJ_NO_EXCEPTIONS
     ADD_FAILURE() << "Should have thrown an exception.";
-#endif
   });
 
   KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
