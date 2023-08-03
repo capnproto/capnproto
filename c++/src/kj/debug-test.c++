@@ -153,16 +153,7 @@ public:
     }
     text += '\n';
     flush();
-#if KJ_NO_EXCEPTIONS
-    if (outputPipe >= 0) {
-      // This is a child process.  We got what we want, now exit quickly without writing any
-      // additional messages, with a status code that the parent will interpret as "exited in the
-      // way we expected".
-      _exit(74);
-    }
-#else
     throw MockException();
-#endif
   }
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
@@ -184,14 +175,10 @@ public:
   EXPECT_EQ(expText, text); \
 } while(0)
 
-#if KJ_NO_EXCEPTIONS
-#define EXPECT_FATAL(code) if (mockCallback.forkForDeathTest()) { code; abort(); }
-#else
 #define EXPECT_FATAL(code) \
   try { code; KJ_FAIL_EXPECT("expected exception"); } \
   catch (MockException e) {} \
   catch (...) { KJ_FAIL_EXPECT("wrong exception"); }
-#endif
 
 std::string fileLine(std::string file, int line) {
   file = trimSourceFilename(file.c_str()).cStr();
@@ -313,7 +300,6 @@ TEST(Debug, Catch) {
     }
   }
 
-#if !KJ_NO_EXCEPTIONS
   {
     // Catch fatal as kj::Exception.
     Maybe<Exception> exception = kj::runCatchingExceptions([&](){
@@ -348,7 +334,6 @@ TEST(Debug, Catch) {
       EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
     }
   }
-#endif
 }
 
 int mockSyscall(int i, int error = 0) {

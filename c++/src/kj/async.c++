@@ -1533,15 +1533,11 @@ FiberStack::FiberStack(size_t stackSizeParam)
   __sanitizer_finish_switch_fiber(impl->originalFakeStack, nullptr, nullptr);
 #endif
 #else
-#if KJ_NO_EXCEPTIONS
-  KJ_UNIMPLEMENTED("Fibers are not implemented because exceptions are disabled");
-#else
   KJ_UNIMPLEMENTED(
       "Fibers are not implemented on this platform because its C library lacks setcontext() "
       "and friends. If you'd like to see fiber support added, file a bug to let us know. "
       "We can likely make it happen using assembly, but didn't want to try unless it was "
       "actually needed.");
-#endif
 #endif
 }
 
@@ -1662,7 +1658,6 @@ void FiberStack::switchToMain() {
 }
 
 void FiberBase::run() {
-#if !KJ_NO_EXCEPTIONS
   bool caughtCanceled = false;
   state = RUNNING;
   KJ_DEFER(state = FINISHED);
@@ -1689,7 +1684,6 @@ void FiberBase::run() {
   }
 
   onReadyEvent.arm();
-#endif
 }
 
 void FiberBase::onReady(_::Event* event) noexcept {
@@ -1912,20 +1906,17 @@ void WaitScope::cancelAllDetached() {
 
 namespace _ {  // private
 
-#if !KJ_NO_EXCEPTIONS
 static kj::CanceledException fiberCanceledException() {
   // Construct the exception to throw from wait() when the fiber has been canceled (because the
   // promise returned by startFiber() was dropped before completion).
   return kj::CanceledException { };
 };
-#endif
 
 void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
               SourceLocation location) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
 
-#if !KJ_NO_EXCEPTIONS
   // we don't support fibers when running without exceptions, so just remove the whole block
   KJ_IF_MAYBE(fiber, waitScope.fiber) {
     if (fiber->state == FiberBase::CANCELED) {
@@ -1953,7 +1944,6 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
 
     KJ_ASSERT(fiber->state == FiberBase::RUNNING);
   } else {
-#endif
     KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
     RootEvent doneEvent(node, reinterpret_cast<void*>(&waitImpl), location);
@@ -1986,9 +1976,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
     }
 
     loop.setRunnable(loop.isRunnable());
-#if !KJ_NO_EXCEPTIONS
   }
-#endif
 
   waitScope.runOnStackPool([&]() {
     node->get(result);
@@ -3017,12 +3005,8 @@ Maybe<Own<Event>> CoroutineBase::fire() {
   //
   // It's tempting to arrange to check for exceptions right now and reject the promise that owns
   // us without resuming the coroutine, which would save us from throwing an exception when we
-  // already know where it's going. But, we don't really know: unlike in the KJ_NO_EXCEPTIONS
-  // case, the `co_await` might be in a try-catch block, so we have no choice but to resume and
-  // throw later.
-  //
-  // TODO(someday): If we ever support coroutines with -fno-exceptions, we'll need to reject the
-  //   enclosing coroutine promise here, if the Awaiter's result is exceptional.
+  // already know where it's going. But, we don't really know: the `co_await` might be in a
+  // try-catch block, so we have no choice but to resume and throw later.
 
   promiseNodeForTrace = nullptr;
 

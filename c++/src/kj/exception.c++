@@ -451,8 +451,6 @@ String getStackTrace() {
 
 namespace {
 
-#if !KJ_NO_EXCEPTIONS
-
 [[noreturn]] void terminateHandler() {
   void* traceSpace[32];
 
@@ -485,8 +483,6 @@ namespace {
   kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
   _exit(1);
 }
-
-#endif
 
 }  // namespace
 
@@ -574,10 +570,8 @@ void printStackTraceOnCrash() {
   KJ_WIN32(SetConsoleCtrlHandler(breakHandler, TRUE));
   SetUnhandledExceptionFilter(&sehHandler);
 
-#if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
-#endif
 }
 
 #elif _WIN32
@@ -585,9 +579,7 @@ void printStackTraceOnCrash() {
 // try to catch SEH nor ctrl+C.
 
 void printStackTraceOnCrash() {
-#if !KJ_NO_EXCEPTIONS
   std::set_terminate(&terminateHandler);
-#endif
 }
 
 #else
@@ -665,10 +657,8 @@ void printStackTraceOnCrash() {
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
 #endif
 
-#if !KJ_NO_EXCEPTIONS
   // Also override std::terminate() handler with something nicer for KJ.
   std::set_terminate(&terminateHandler);
-#endif
 }
 #endif
 
@@ -740,9 +730,7 @@ void resetCrashHandlers() {
 #endif
 #endif
 
-#if !KJ_NO_EXCEPTIONS
   std::set_terminate(nullptr);
-#endif
 }
 
 StringPtr KJ_STRINGIFY(Exception::Type type) {
@@ -931,8 +919,6 @@ void Exception::addTraceHere() {
 #endif
 }
 
-#if !KJ_NO_EXCEPTIONS
-
 namespace {
 
 KJ_THREADLOCAL_PTR(ExceptionImpl) currentException = nullptr;
@@ -992,18 +978,14 @@ Maybe<const Exception&> InFlightExceptionIterator::next() {
   return result;
 }
 
-#endif  // !KJ_NO_EXCEPTIONS
-
 kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
     const char* defaultFile, int defaultLine, kj::StringPtr defaultDescription) {
-#if !KJ_NO_EXCEPTIONS
   InFlightExceptionIterator iter;
   KJ_IF_MAYBE(e, iter.next()) {
     auto copy = kj::cp(*e);
     copy.truncateCommonTrace();
     return copy;
   } else {
-#endif
     // Darn, use a generic exception.
     kj::Exception exception(defaultType, defaultFile, defaultLine,
         kj::heapString(defaultDescription));
@@ -1015,9 +997,7 @@ kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type def
     exception.addTrace(traceSeparator);
 
     return exception;
-#if !KJ_NO_EXCEPTIONS
   }
-#endif
 }
 
 // =======================================================================================
@@ -1084,9 +1064,6 @@ public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
 
   void onRecoverableException(Exception&& exception) override {
-#if KJ_NO_EXCEPTIONS
-    logException(LogSeverity::ERROR, mv(exception));
-#else
     if (_::uncaughtExceptionCount() > 0) {
       // Bad time to throw an exception.  Just log instead.
       //
@@ -1097,15 +1074,10 @@ public:
     } else {
       throw ExceptionImpl(mv(exception));
     }
-#endif
   }
 
   void onFatalException(Exception&& exception) override {
-#if KJ_NO_EXCEPTIONS
-    logException(LogSeverity::FATAL, mv(exception));
-#else
     throw ExceptionImpl(mv(exception));
-#endif
   }
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
@@ -1216,14 +1188,12 @@ bool UnwindDetector::isUnwinding() const {
   return _::uncaughtExceptionCount() > uncaughtCount;
 }
 
-#if !KJ_NO_EXCEPTIONS
 void UnwindDetector::catchThrownExceptionAsSecondaryFault() const {
   // TODO(someday):  Attach the secondary exception to whatever primary exception is causing
   //   the unwind.  For now we just drop it on the floor as this is probably fine most of the
   //   time.
   getCaughtExceptionAsKj();
 }
-#endif
 
 #if __GNUC__ && !KJ_NO_RTTI
 static kj::String demangleTypeName(const char* name) {
@@ -1292,41 +1262,6 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
   return bestMatch;
 }
 
-#if KJ_NO_EXCEPTIONS
-
-namespace _ {  // private
-
-class RecoverableExceptionCatcher: public ExceptionCallback {
-  // Catches a recoverable exception without using try/catch.  Used when compiled with
-  // -fno-exceptions.
-
-public:
-  virtual ~RecoverableExceptionCatcher() noexcept(false) {}
-
-  void onRecoverableException(Exception&& exception) override {
-    if (caught == nullptr) {
-      caught = mv(exception);
-    } else {
-      // TODO(someday):  Consider it a secondary fault?
-    }
-  }
-
-  Maybe<Exception> caught;
-};
-
-Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
-  RecoverableExceptionCatcher catcher;
-  runnable.run();
-  KJ_IF_MAYBE(e, catcher.caught) {
-    e->truncateCommonTrace();
-  }
-  return mv(catcher.caught);
-}
-
-}  // namespace _ (private)
-
-#else  // KJ_NO_EXCEPTIONS
-
 kj::Exception getCaughtExceptionAsKj() {
   try {
     throw;
@@ -1352,6 +1287,5 @@ kj::Exception getCaughtExceptionAsKj() {
 #endif
   }
 }
-#endif  // !KJ_NO_EXCEPTIONS
 
 }  // namespace kj

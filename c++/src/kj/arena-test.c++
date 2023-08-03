@@ -148,8 +148,6 @@ TEST(Arena, OwnArray) {
   EXPECT_EQ(0, TestObject::count);
 }
 
-#ifndef KJ_NO_EXCEPTIONS
-
 TEST(Arena, ObjectThrow) {
   TestObject::count = 0;
   TestObject::throwAt = 1;
@@ -177,8 +175,6 @@ TEST(Arena, ArrayThrow) {
 
   EXPECT_EQ(0, TestObject::count);
 }
-
-#endif
 
 TEST(Arena, Alignment) {
   Arena arena;

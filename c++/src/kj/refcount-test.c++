@@ -50,7 +50,7 @@ TEST(Refcount, Basic) {
   ref2 = Own<SetTrueInDestructor>();
   EXPECT_TRUE(b);
 
-#if defined(KJ_DEBUG) && !KJ_NO_EXCEPTIONS
+#ifdef KJ_DEBUG
   b = false;
   SetTrueInDestructor obj(&b);
   EXPECT_ANY_THROW(addRef(obj));
