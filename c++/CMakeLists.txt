@@ -16,6 +16,10 @@ if(NOT HAS_CXX14)
   message(SEND_ERROR "Requires a C++14 compiler and standard library.")
 endif()
 
+if(MSVC)
+  add_compile_options(/Zc:__cplusplus)
+endif()
+
 # these arguments are passed to all install(TARGETS) calls
 set(INSTALL_TARGETS_DEFAULT_ARGS
   EXPORT CapnProtoTargets
