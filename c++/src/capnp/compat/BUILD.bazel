@@ -79,6 +79,7 @@ cc_library(
 ) for f in [
     "byte-stream-test.c++",
     "http-over-capnp-test.c++",
+    "http-over-capnp-perf-test.c++",
     "websocket-rpc-test.c++",
 ]]
 
