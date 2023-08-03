@@ -889,7 +889,7 @@ public:
     return true;
   }
 
-  kj::Maybe<String> createNamedTemporary(
+  String createNamedTemporary(
       PathPtr finalName, WriteMode mode, Function<int(StringPtr)> tryCreate) const {
     // Create a temporary file which will eventually replace `finalName`.
     //
@@ -899,12 +899,10 @@ public:
     // advance, since it needs to be checked atomically. In the case of EEXIST, tryCreate() will
     // be called again with a new path.
     //
-    // Returns the temporary path that succeeded. Only returns nullptr if there was an exception
-    // but we're compiled with -fno-exceptions.
+    // Returns the temporary path that succeeded.
 
     if (finalName.size() == 0) {
-      KJ_FAIL_REQUIRE("can't replace self") { break; }
-      return nullptr;
+      KJ_FAIL_REQUIRE("can't replace self");
     }
 
     static uint counter = 0;
@@ -929,8 +927,7 @@ public:
         }
         KJ_FALLTHROUGH;
       default:
-        KJ_FAIL_SYSCALL("create(path)", error, path) { break; }
-        return nullptr;
+        KJ_FAIL_SYSCALL("create(path)", error, path);
     }
 
     return kj::mv(path);
@@ -982,21 +979,17 @@ public:
     // Either we don't have CREATE mode or the target already exists. We need to perform a
     // replacement instead.
 
-    KJ_IF_MAYBE(tempPath, createNamedTemporary(path, mode, kj::mv(tryCreate))) {
-      if (tryCommitReplacement(filename, fd, *tempPath, mode)) {
-        return true;
-      } else {
-        KJ_SYSCALL_HANDLE_ERRORS(unlinkat(fd, tempPath->cStr(), 0)) {
-          case ENOENT:
-            // meh
-            break;
-          default:
-            KJ_FAIL_SYSCALL("unlinkat(fd, tempPath, 0)", error, *tempPath);
-        }
-        return false;
-      }
+    auto tempPath = createNamedTemporary(path, mode, kj::mv(tryCreate));
+    if (tryCommitReplacement(filename, fd, tempPath, mode)) {
+      return true;
     } else {
-      // threw, but exceptions are disabled
+      KJ_SYSCALL_HANDLE_ERRORS(unlinkat(fd, tempPath.cStr(), 0)) {
+        case ENOENT:
+          // meh
+          break;
+        default:
+          KJ_FAIL_SYSCALL("unlinkat(fd, tempPath, 0)", error, tempPath);
+      }
       return false;
     }
   }
@@ -1183,8 +1176,7 @@ public:
       // non-directory to replace a non-directory, and allows a directory to replace an empty
       // directory. So we have to create the right type.
       Path toPathParsed = Path::parse(toPath);
-      String away;
-      KJ_IF_MAYBE(awayPath, createNamedTemporary(toPathParsed, WriteMode::CREATE,
+      String away = createNamedTemporary(toPathParsed, WriteMode::CREATE,
           [&](StringPtr candidatePath) {
         if (S_ISDIR(stats.st_mode)) {
           return mkdirat(fd, candidatePath.cStr(), 0700);
@@ -1201,12 +1193,7 @@ public:
           return mknodat(fd, candidatePath.cStr(), S_IFREG | 0600, dev_t());
 #endif
         }
-      })) {
-        away = kj::mv(*awayPath);
-      } else {
-        // Already threw.
-        return false;
-      }
+      });
 
       // OK, now move the target object to replace the thing we just created.
       KJ_SYSCALL(renameat(fd, toPath.cStr(), fd, away.cStr())) {
@@ -1337,21 +1324,17 @@ public:
     }
 
     int newFd_;
-    KJ_IF_MAYBE(temp, createNamedTemporary(path, mode,
+    auto temp = createNamedTemporary(path, mode,
         [&](StringPtr candidatePath) {
       return newFd_ = openat(fd, candidatePath.cStr(),
                              O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, acl);
-    })) {
-      AutoCloseFd newFd(newFd_);
+    });
+    AutoCloseFd newFd(newFd_);
 #ifndef O_CLOEXEC
-      setCloexec(newFd);
+    setCloexec(newFd);
 #endif
-      return heap<ReplacerImpl<File>>(newDiskFile(kj::mv(newFd)), *this, kj::mv(*temp),
-                                      path.toString(), mode);
-    } else {
-      // threw, but exceptions are disabled
-      return heap<BrokenReplacer<File>>(newInMemoryFile(nullClock()));
-    }
+    return heap<ReplacerImpl<File>>(newDiskFile(kj::mv(newFd)), *this, kj::mv(temp),
+                                    path.toString(), mode);
   }
 
   Own<const File> createTemporary() const {
@@ -1379,21 +1362,17 @@ public:
     }
 #endif
 
-    KJ_IF_MAYBE(temp, createNamedTemporary(Path("unnamed"), WriteMode::CREATE,
+    auto temp = createNamedTemporary(Path("unnamed"), WriteMode::CREATE,
         [&](StringPtr path) {
       return newFd_ = openat(fd, path.cStr(), O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0600);
-    })) {
-      AutoCloseFd newFd(newFd_);
+    });
+    AutoCloseFd newFd(newFd_);
 #ifndef O_CLOEXEC
-      setCloexec(newFd);
+    setCloexec(newFd);
 #endif
-      auto result = newDiskFile(kj::mv(newFd));
-      KJ_SYSCALL(unlinkat(fd, temp->cStr(), 0)) { break; }
-      return kj::mv(result);
-    } else {
-      // threw, but exceptions are disabled
-      return newInMemoryFile(nullClock());
-    }
+    auto result = newDiskFile(kj::mv(newFd));
+    KJ_SYSCALL(unlinkat(fd, temp.cStr(), 0)) { break; }
+    return kj::mv(result);
   }
 
   Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) const {
@@ -1412,28 +1391,24 @@ public:
   Own<Directory::Replacer<Directory>> replaceSubdir(PathPtr path, WriteMode mode) const {
     mode_t acl = has(mode, WriteMode::PRIVATE) ? 0700 : 0777;
 
-    KJ_IF_MAYBE(temp, createNamedTemporary(path, mode,
+    auto temp = createNamedTemporary(path, mode,
         [&](StringPtr candidatePath) {
       return mkdirat(fd, candidatePath.cStr(), acl);
-    })) {
-      int subdirFd_;
-      KJ_SYSCALL_HANDLE_ERRORS(subdirFd_ = openat(
-          fd, temp->cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
-        default:
-          KJ_FAIL_SYSCALL("open(just-created-temporary)", error);
-          return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(nullClock()));
-      }
-
-      AutoCloseFd subdirFd(subdirFd_);
-#ifndef O_CLOEXEC
-      setCloexec(subdirFd);
-#endif
-      return heap<ReplacerImpl<Directory>>(
-          newDiskDirectory(kj::mv(subdirFd)), *this, kj::mv(*temp), path.toString(), mode);
-    } else {
-      // threw, but exceptions are disabled
-      return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(nullClock()));
+    });
+    int subdirFd_;
+    KJ_SYSCALL_HANDLE_ERRORS(subdirFd_ = openat(
+        fd, temp.cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
+      default:
+        KJ_FAIL_SYSCALL("open(just-created-temporary)", error);
+        return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(nullClock()));
     }
+
+    AutoCloseFd subdirFd(subdirFd_);
+#ifndef O_CLOEXEC
+    setCloexec(subdirFd);
+#endif
+    return heap<ReplacerImpl<Directory>>(
+        newDiskDirectory(kj::mv(subdirFd)), *this, kj::mv(temp), path.toString(), mode);
   }
 
   bool trySymlink(PathPtr linkpath, StringPtr content, WriteMode mode) const {

@@ -208,16 +208,15 @@ public:
   // producing garbage output.  This method _should_ throw the exception, but is allowed to simply
   // return if garbage output is acceptable.
   //
-  // The global default implementation throws an exception unless the library was compiled with
-  // -fno-exceptions, in which case it logs an error and returns.
+  // The global default implementation throws an exception, unless we're currently in a destructor
+  // unwinding due to another exception being thrown, in which case it logs an error and returns.
 
   virtual void onFatalException(Exception&& exception);
   // Called when an exception has been raised and the calling code cannot continue.  If this method
   // returns normally, abort() will be called.  The method must throw the exception to avoid
   // aborting.
   //
-  // The global default implementation throws an exception unless the library was compiled with
-  // -fno-exceptions, in which case it logs an error and returns.
+  // The global default implementation throws an exception.
 
   virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                           String&& text);
@@ -286,9 +285,6 @@ Maybe<Exception> runCatchingExceptions(Func&& func);
 // Executes the given function (usually, a lambda returning nothing) catching any exceptions that
 // are thrown.  Returns the Exception if there was one, or null if the operation completed normally.
 // Non-KJ exceptions will be wrapped.
-//
-// If exception are disabled (e.g. with -fno-exceptions), this will still detect whether any
-// recoverable exceptions occurred while running the function and will return those.
 
 kj::Exception getCaughtExceptionAsKj();
 // Call from the catch block of a try/catch to get a `kj::Exception` representing the exception

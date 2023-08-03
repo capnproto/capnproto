@@ -130,10 +130,7 @@ TEST(Async, Exception) {
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
-  EXPECT_TRUE(kj::runCatchingExceptions([&]() {
-    // wait() only returns when compiling with -fno-exceptions.
-    EXPECT_EQ(123, promise.wait(waitScope));
-  }) != nullptr);
+  KJ_EXPECT_THROW_MESSAGE("foo", promise.wait(waitScope));
 }
 
 TEST(Async, HandleException) {
