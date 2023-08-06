@@ -134,13 +134,8 @@ if(MSVC)
   # TODO(cleanup): Enable higher warning level in MSVC, but make sure to test
   #   build with that warning level and clean out false positives.
 
-  add_compile_options(/wo4503)
-  # Only warn once on truncated decorated names. The maximum symbol length MSVC
-  # supports is 4k characters, which the parser framework regularly blows. The
-  # compiler likes to print out the entire type that went over the limit along
-  # with this warning, which gets unbearably spammy. That said, we don't want to
-  # just ignore it, so I'm letting it trigger once until we find some places to
-  # inject ParserRefs.
+  add_compile_options(/Zc:__cplusplus)
+  # Set the __cplusplus macro properly.
 else()
   # Note that it's important to add new CXXFLAGS before ones specified by the
   # user, so that the user's flags override them. This is particularly

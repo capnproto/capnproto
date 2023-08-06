@@ -334,8 +334,7 @@ inline constexpr uint sizeInWords() {
 #define CAPNP_AUTO_IF_MSVC(...) __VA_ARGS__
 #endif
 
-// TODO(msvc): MSVC does not even expect constexprs to have definitions below C++17.
-#if (__cplusplus < 201703L) && !(defined(_MSC_VER) && !defined(__clang__))
+#if (__cplusplus < 201703L)
 #define CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL 1
 #else
 #define CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL 0

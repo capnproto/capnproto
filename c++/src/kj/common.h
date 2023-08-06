@@ -63,7 +63,7 @@
 KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
-#if __cplusplus < 202002L && !__CDT_PARSER__ && !_MSC_VER
+#if __cplusplus < 202002L && !__CDT_PARSER__
   #error "This code requires C++20. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
