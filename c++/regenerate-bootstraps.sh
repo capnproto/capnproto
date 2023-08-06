@@ -1,5 +1,10 @@
 #! /usr/bin/env bash
 
+#TODO (later): Try to convert this to a bazel run command, although bazel's sandboxing might make
+# this difficult. For now, running `bazel-bin/src/capnp/capnp_tool compile -Isrc
+# --no-standard-import --src-prefix=src -obazel-bin/src/capnp/capnpc-c++:src <set of files>`
+# achieves the same.
+
 set -euo pipefail
 
 export PATH=$PWD/bin:$PWD:$PATH

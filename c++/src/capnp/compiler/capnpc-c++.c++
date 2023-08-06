@@ -2044,17 +2044,7 @@ private:
          "    CAPNP_DECLARE_STRUCT_HEADER(", hexId, ", ", structNode.getDataWordCount(), ", ",
          structNode.getPointerCount(), ")\n");
 
-    kj::StringTree defineText = kj::strTree(
-        "// ", fullName, "\n",
-        "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
-        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
-        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n",
-        "#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
-        "#if !CAPNP_LITE\n",
-        "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
-        templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
-        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
-        "#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n");
+    kj::StringTree defineText = kj::strTree();
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
@@ -2065,9 +2055,12 @@ private:
           makeGenericDeclarations(templateContext, hasDeps),
           "    #endif  // !CAPNP_LITE\n");
 
-      defineText = kj::strTree(kj::mv(defineText),
+      defineText = kj::strTree(
+        "// ", fullName, "\n",
+        "#if !CAPNP_LITE\n",
           makeGenericDefinitions(
-              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)),
+        "#endif  // !CAPNP_LITE\n\n");
     } else {
       declareText = kj::strTree(kj::mv(declareText),
           "    #if !CAPNP_LITE\n"
@@ -2076,7 +2069,6 @@ private:
     }
 
     declareText = kj::strTree(kj::mv(declareText), "  };");
-    defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
 
     // Name of the ::Which type, when applicable.
     CppTypeName whichName;
@@ -2393,13 +2385,7 @@ private:
          "  struct _capnpPrivate {\n"
          "    CAPNP_DECLARE_INTERFACE_HEADER(", hexId, ")\n");
 
-    kj::StringTree defineText = kj::strTree(
-        "// ", fullName, "\n",
-        "#if !CAPNP_LITE\n",
-        "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n",
-        templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
-        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n"
-        "#endif  // !CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n");
+    kj::StringTree defineText = kj::strTree();
 
     if (templateContext.isGeneric()) {
       auto brandInitializers = makeBrandInitializers(templateContext, schema);
@@ -2408,16 +2394,18 @@ private:
       declareText = kj::strTree(kj::mv(declareText),
           makeGenericDeclarations(templateContext, hasDeps));
 
-      defineText = kj::strTree(kj::mv(defineText),
+      defineText = kj::strTree(
+          "// ", fullName, "\n",
+          "#if !CAPNP_LITE\n",
           makeGenericDefinitions(
-              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+              templateContext, fullName, kj::str(hexId), kj::mv(brandInitializers)),
+          "#endif  // !CAPNP_LITE\n\n");
     } else {
       declareText = kj::strTree(kj::mv(declareText),
         "    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }\n");
     }
 
     declareText = kj::strTree(kj::mv(declareText), "  };\n  #endif  // !CAPNP_LITE");
-    defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
 
     return InterfaceText {
       kj::strTree(
@@ -2608,10 +2596,7 @@ private:
           false,
           kj::strTree("static constexpr ", typeName_, ' ', upperCase, " = ",
               literalValue(schema.getType(), constProto.getValue()), ";\n"),
-          scope.size() == 0 ? kj::strTree() : kj::strTree(
-              "#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL\n"
-              "constexpr ", typeName_, ' ', scope, upperCase, ";\n"
-              "#endif\n")
+          kj::strTree()
         };
 
       case schema::Type::VOID:
@@ -2934,9 +2919,8 @@ private:
               },
               "};\n"
               "CAPNP_DECLARE_ENUM(", name, ", ", hexId, ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_ENUM(", name, "_", hexId, ", ", hexId, ");\n"),
 
+          kj::strTree(),
           kj::strTree(),
         };
       }
