@@ -25,10 +25,12 @@ startup --windows_enable_symlinks
 build:windows --compiler=clang-cl
 
 build:windows --cxxopt='/std:c++20' --host_cxxopt='/std:c++20' --verbose_failures
-build:windows --cxxopt='/wo4503' --host_cxxopt='/wo4503'
 # The `/std:c++20` argument is unused during boringssl compilation and we don't
 # want a warning when compiling each file.
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'
+# MSVC disappointingly sets __cplusplus to 199711L by default. Defining /Zc:__cplusplus makes it
+# set the correct value.
+build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 
 # build with ssl, zlib and bazel by default
 build --//src/kj:openssl=True --//src/kj:zlib=True --//src/kj:brotli=True

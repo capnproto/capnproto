@@ -334,13 +334,6 @@ inline constexpr uint sizeInWords() {
 #define CAPNP_AUTO_IF_MSVC(...) __VA_ARGS__
 #endif
 
-// TODO(msvc): MSVC does not even expect constexprs to have definitions below C++17.
-#if (__cplusplus < 201703L) && !(defined(_MSC_VER) && !defined(__clang__))
-#define CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL 1
-#else
-#define CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL 0
-#endif
-
 #if CAPNP_LITE
 
 #define CAPNP_DECLARE_SCHEMA(id) \
@@ -355,13 +348,6 @@ inline constexpr uint sizeInWords() {
       static constexpr uint64_t typeId = 0x##id; \
       static inline ::capnp::word const* encodedSchema() { return bp_##id; } \
     }
-
-#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
-#define CAPNP_DEFINE_ENUM(type, id) \
-    constexpr uint64_t EnumInfo<type>::typeId
-#else
-#define CAPNP_DEFINE_ENUM(type, id)
-#endif
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize_, pointerCount_) \
       struct IsStruct; \
@@ -386,14 +372,6 @@ inline constexpr uint sizeInWords() {
       static inline ::capnp::word const* encodedSchema() { return bp_##id; } \
       static constexpr ::capnp::_::RawSchema const* schema = &s_##id; \
     }
-
-#if CAPNP_NEED_REDUNDANT_CONSTEXPR_DECL
-#define CAPNP_DEFINE_ENUM(type, id) \
-    constexpr uint64_t EnumInfo<type>::typeId; \
-    constexpr ::capnp::_::RawSchema const* EnumInfo<type>::schema
-#else
-#define CAPNP_DEFINE_ENUM(type, id)
-#endif
 
 #define CAPNP_DECLARE_STRUCT_HEADER(id, dataWordSize_, pointerCount_) \
       struct IsStruct; \
