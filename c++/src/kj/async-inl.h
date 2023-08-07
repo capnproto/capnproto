@@ -2052,7 +2052,16 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
 // coroutine implementation type via a traits class parameterized by the coroutine return and
 // parameter types. We'll name our coroutine implementation `kj::_::Coroutine<T>`,
 
-namespace kj::_ { template <typename T> class Coroutine; }
+namespace kj::_ {
+
+template <typename T> class Coroutine;
+
+template <typename T>
+concept NoWaitScope = !isSameType<Decay<T>, WaitScope>();
+// Define a Concept to use in our `coroutine_traits` specialization to validate allowable coroutine
+// parameter types.
+
+}  // namespace kj::_
 
 // Specializing the appropriate traits class tells the compiler about `kj::_::Coroutine<T>`.
 
@@ -2061,6 +2070,17 @@ namespace KJ_COROUTINE_STD_NAMESPACE {
 template <class T, class... Args>
 struct coroutine_traits<kj::Promise<T>, Args...> {
   // `Args...` are the coroutine's parameter types.
+
+  static_assert((::kj::_::NoWaitScope<Args> && ...),
+      "Coroutines are not allowed to accept `WaitScope` parameters.");
+  // Coroutines should never have access to a WaitScope. If they could, coroutines could be both a
+  // coroutine and a fiber at the same time, and we'd like to ban that.
+  //
+  // Note: We could have just declared `Args` as `NoWaitScope...`, but the default compiler message
+  // about a missing `promise_type` in `coroutine_traits` is not the greatest.
+  //
+  // A second note: This has the reasonable side effect of making it impossible for us to write
+  // WaitScope member coroutines.
 
   using promise_type = kj::_::Coroutine<T>;
   // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
