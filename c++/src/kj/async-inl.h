@@ -2335,6 +2335,25 @@ private:
   ExceptionOr<FixVoid<U>> result;
 };
 
+// ---------------------------------------------------------
+// Coroutine Magic
+//
+// KJ coroutines sometimes have access to "magic" functionality provided by coroutine adapter
+// implementations. To invoke this functionality, coroutines use the `KJ_CO_MAGIC` operator on a
+// "magic" object which the coroutine adapter implementation knows about.
+//
+// As of this writing, `kj::_::Coroutine<T>` does not itself provide any such magic functionality,
+// but soon will.
+
+#define KJ_CO_MAGIC co_yield
+// To invoke a coroutine's magic functionality `FOO`, use `KJ_CO_MAGIC FOO`. What `FOO` is, what the
+// expression evaluates to, and what side effects occur are all defined by the implementation of the
+// coroutine adapter.
+//
+// Coroutine magic is implemented in terms of the `co_yield` keyword, so this is just a define to
+// `co_yield`. The purpose of the macro is primarily as a visual signal that the code is not
+// actually yielding a value, but rather something different is going on.
+
 }  // namespace kj::_ (private)
 
 KJ_END_HEADER
