@@ -134,19 +134,8 @@ private:
   } while (false)
 #endif
 
-#if KJ_NO_EXCEPTIONS
-#define KJ_EXPECT_THROW(type, code, ...) \
-  do { \
-    KJ_EXPECT(::kj::_::expectFatalThrow(::kj::Exception::Type::type, nullptr, [&]() { code; })); \
-  } while (false)
-#define KJ_EXPECT_THROW_MESSAGE(message, code, ...) \
-  do { \
-    KJ_EXPECT(::kj::_::expectFatalThrow(nullptr, kj::StringPtr(message), [&]() { code; })); \
-  } while (false)
-#else
 #define KJ_EXPECT_THROW KJ_EXPECT_THROW_RECOVERABLE
 #define KJ_EXPECT_THROW_MESSAGE KJ_EXPECT_THROW_RECOVERABLE_MESSAGE
-#endif
 
 #define KJ_EXPECT_EXIT(statusCode, code) \
   do { \
@@ -171,14 +160,6 @@ private:
 namespace _ {  // private
 
 bool hasSubstring(kj::StringPtr haystack, kj::StringPtr needle);
-
-#if KJ_NO_EXCEPTIONS
-bool expectFatalThrow(Maybe<Exception::Type> type, Maybe<StringPtr> message,
-                      Function<void()> code);
-// Expects that the given code will throw a fatal exception matching the given type and/or message.
-// Since exceptions are disabled, the test will fork() and run in a subprocess. On Windows, where
-// fork() is not available, this always returns true.
-#endif
 
 bool expectExit(Maybe<int> statusCode, FunctionParam<void()> code) noexcept;
 // Expects that the given code will exit with a given statusCode.

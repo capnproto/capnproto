@@ -208,16 +208,15 @@ public:
   // producing garbage output.  This method _should_ throw the exception, but is allowed to simply
   // return if garbage output is acceptable.
   //
-  // The global default implementation throws an exception unless the library was compiled with
-  // -fno-exceptions, in which case it logs an error and returns.
+  // The global default implementation throws an exception, unless we're currently in a destructor
+  // unwinding due to another exception being thrown, in which case it logs an error and returns.
 
   virtual void onFatalException(Exception&& exception);
   // Called when an exception has been raised and the calling code cannot continue.  If this method
   // returns normally, abort() will be called.  The method must throw the exception to avoid
   // aborting.
   //
-  // The global default implementation throws an exception unless the library was compiled with
-  // -fno-exceptions, in which case it logs an error and returns.
+  // The global default implementation throws an exception.
 
   virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                           String&& text);
@@ -272,10 +271,15 @@ ExceptionCallback& getExceptionCallback();
 KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
 // Invoke the exception callback to throw the given fatal exception.  If the exception callback
 // returns, abort.
+//
+// TODO(2.0): Rename this to `throwException()`.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
 // Invoke the exception callback to throw the given recoverable exception.  If the exception
 // callback returns, return normally.
+//
+// TODO(2.0): Rename this to `throwExceptionUnlessUnwinding()`. (Or, can we fix the unwind problem
+//   and be able to remove this entirely?)
 
 // =======================================================================================
 
@@ -287,10 +291,8 @@ Maybe<Exception> runCatchingExceptions(Func&& func);
 // are thrown.  Returns the Exception if there was one, or null if the operation completed normally.
 // Non-KJ exceptions will be wrapped.
 //
-// If exception are disabled (e.g. with -fno-exceptions), this will still detect whether any
-// recoverable exceptions occurred while running the function and will return those.
-
-#if !KJ_NO_EXCEPTIONS
+// TODO(2.0): Remove this. Introduce KJ_CATCH() macro which uses getCaughtExceptionAsKj() to handle
+//   exception coercion and stack trace management. Then use try/KJ_CATCH everywhere.
 
 kj::Exception getCaughtExceptionAsKj();
 // Call from the catch block of a try/catch to get a `kj::Exception` representing the exception
@@ -301,8 +303,6 @@ kj::Exception getCaughtExceptionAsKj();
 // Some exception types will actually be rethrown by this function, rather than returned. The most
 // common example is `CanceledException`, whose purpose is to unwind the stack and is not meant to
 // be caught.
-
-#endif  // !KJ_NO_EXCEPTIONS
 
 class UnwindDetector {
   // Utility for detecting when a destructor is called due to unwind.  Useful for:
@@ -330,58 +330,21 @@ public:
 private:
   uint uncaughtCount;
 
-#if !KJ_NO_EXCEPTIONS
   void catchThrownExceptionAsSecondaryFault() const;
-#endif
 };
-
-#if KJ_NO_EXCEPTIONS
-
-namespace _ {  // private
-
-class Runnable {
-public:
-  virtual void run() = 0;
-};
-
-template <typename Func>
-class RunnableImpl: public Runnable {
-public:
-  RunnableImpl(Func&& func): func(kj::fwd<Func>(func)) {}
-  void run() override {
-    func();
-  }
-private:
-  Func func;
-};
-
-Maybe<Exception> runCatchingExceptions(Runnable& runnable);
-
-}  // namespace _ (private)
-
-#endif  // KJ_NO_EXCEPTIONS
 
 template <typename Func>
 Maybe<Exception> runCatchingExceptions(Func&& func) {
-#if KJ_NO_EXCEPTIONS
-  _::RunnableImpl<Func> runnable(kj::fwd<Func>(func));
-  return _::runCatchingExceptions(runnable);
-#else
   try {
     func();
     return nullptr;
   } catch (...) {
     return getCaughtExceptionAsKj();
   }
-#endif
 }
 
 template <typename Func>
 void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
-#if KJ_NO_EXCEPTIONS
-  // Can't possibly be unwinding...
-  func();
-#else
   if (isUnwinding()) {
     try {
       func();
@@ -391,7 +354,6 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
   } else {
     func();
   }
-#endif
 }
 
 #define KJ_ON_SCOPE_SUCCESS(code) \
@@ -453,8 +415,6 @@ kj::String getCaughtExceptionType();
 // for the purpose of error logging. This function is best-effort; on some platforms it may simply
 // return "(unknown)".
 
-#if !KJ_NO_EXCEPTIONS
-
 class InFlightExceptionIterator {
   // A class that can be used to iterate over exceptions that are in-flight in the current thread,
   // meaning they are either uncaught, or caught by a catch block that is current executing.
@@ -475,8 +435,6 @@ public:
 private:
   const Exception* ptr;
 };
-
-#endif  // !KJ_NO_EXCEPTIONS
 
 kj::Exception getDestructionReason(void* traceSeparator,
     kj::Exception::Type defaultType, const char* defaultFile, int defaultLine,

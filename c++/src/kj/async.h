@@ -28,15 +28,11 @@
 KJ_BEGIN_HEADER
 
 #ifndef KJ_USE_FIBERS
-  #if __BIONIC__ || __FreeBSD__ || __OpenBSD__ || KJ_NO_EXCEPTIONS
+  #if __BIONIC__ || __FreeBSD__ || __OpenBSD__
     // These platforms don't support fibers.
     #define KJ_USE_FIBERS 0
   #else
     #define KJ_USE_FIBERS 1
-  #endif
-#else
-  #if KJ_NO_EXCEPTIONS && KJ_USE_FIBERS
-    #error "Fibers cannot be enabled when exceptions are disabled."
   #endif
 #endif
 
@@ -223,9 +219,7 @@ public:
   // exception to the returned promise.
   //
   // Either `func` or `errorHandler` may, of course, throw an exception, in which case the promise
-  // is broken.  When compiled with -fno-exceptions, the framework will still detect when a
-  // recoverable exception was thrown inside of a continuation and will consider the promise
-  // broken even though a (presumably garbage) result was returned.
+  // is broken.
   //
   // If the returned promise is destroyed before the callback runs, the callback will be canceled
   // (it will never run).
@@ -277,10 +271,7 @@ public:
   // server-side code generally cannot use wait(), because it has to be able to accept multiple
   // requests at once.
   //
-  // If the promise is rejected, `wait()` throws an exception.  If the program was compiled without
-  // exceptions (-fno-exceptions), this will usually abort.  In this case you really should first
-  // use `then()` to set an appropriate handler for the exception case, so that the promise you
-  // actually wait on never throws.
+  // If the promise is rejected, `wait()` throws an exception.
   //
   // `waitScope` is an object proving that the caller is in a scope where wait() is allowed.  By
   // convention, any function which might call wait(), or which might call another function which
@@ -568,45 +559,6 @@ Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocat
 // Join an array of promises into a promise for an array. Trailing continuations on promises are
 // evaluated eagerly. If any promise results in an exception, the exception is immediately
 // propagated to the returned join promise.
-
-// =======================================================================================
-// Hack for creating a lambda that holds an owned pointer.
-
-template <typename Func, typename MovedParam>
-class CaptureByMove {
-public:
-  inline CaptureByMove(Func&& func, MovedParam&& param)
-      : func(kj::mv(func)), param(kj::mv(param)) {}
-
-  template <typename... Params>
-  inline auto operator()(Params&&... params)
-      -> decltype(kj::instance<Func>()(kj::instance<MovedParam&&>(), kj::fwd<Params>(params)...)) {
-    return func(kj::mv(param), kj::fwd<Params>(params)...);
-  }
-
-private:
-  Func func;
-  MovedParam param;
-};
-
-template <typename Func, typename MovedParam>
-inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func)
-    KJ_DEPRECATED("Use C++14 generalized captures instead.");
-
-template <typename Func, typename MovedParam>
-inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func) {
-  // Hack to create a "lambda" which captures a variable by moving it rather than copying or
-  // referencing.  C++14 generalized captures should make this obsolete, but for now in C++11 this
-  // is commonly needed for Promise continuations that own their state.  Example usage:
-  //
-  //    Own<Foo> ptr = makeFoo();
-  //    Promise<int> promise = callRpc();
-  //    promise.then(mvCapture(ptr, [](Own<Foo>&& ptr, int result) {
-  //      return ptr->finish(result);
-  //    }));
-
-  return CaptureByMove<Func, Decay<MovedParam>>(kj::fwd<Func>(func), kj::mv(param));
-}
 
 // =======================================================================================
 // Hack for safely using a lambda as a coroutine.

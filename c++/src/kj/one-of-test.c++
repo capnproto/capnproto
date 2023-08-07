@@ -42,7 +42,7 @@ TEST(OneOf, Basic) {
   EXPECT_FALSE(var.is<String>());
 
   EXPECT_EQ(123, var.get<int>());
-#if !KJ_NO_EXCEPTIONS && defined(KJ_DEBUG)
+#ifdef KJ_DEBUG
   EXPECT_ANY_THROW(var.get<float>());
   EXPECT_ANY_THROW(var.get<String>());
 #endif

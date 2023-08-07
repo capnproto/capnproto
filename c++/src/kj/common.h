@@ -130,8 +130,8 @@ typedef unsigned char byte;
 // Common macros, especially for common yet compiler-specific features.
 
 // Detect whether RTTI and exceptions are enabled, assuming they are unless we have specific
-// evidence to the contrary.  Clients can always define KJ_NO_RTTI or KJ_NO_EXCEPTIONS explicitly
-// to override these checks.
+// evidence to the contrary.  Clients can always define KJ_NO_RTTI explicitly to override the
+// check. As of version 2, exceptions are required, so this produces an error otherwise.
 
 // TODO: Ideally we'd use __cpp_exceptions/__cpp_rtti not being defined as the first pass since
 //   that is the standard compliant way. However, it's unclear how to use those macros (or any
@@ -141,22 +141,22 @@ typedef unsigned char byte;
   #if !defined(KJ_NO_RTTI) && !__has_feature(cxx_rtti)
     #define KJ_NO_RTTI 1
   #endif
-  #if !defined(KJ_NO_EXCEPTIONS) && !__has_feature(cxx_exceptions)
-    #define KJ_NO_EXCEPTIONS 1
+  #if !__has_feature(cxx_exceptions)
+    #error "KJ requires C++ exceptions, please enable them"
   #endif
 #elif defined(__GNUC__)
   #if !defined(KJ_NO_RTTI) && !__GXX_RTTI
     #define KJ_NO_RTTI 1
   #endif
-  #if !defined(KJ_NO_EXCEPTIONS) && !__EXCEPTIONS
-    #define KJ_NO_EXCEPTIONS 1
+  #if !__EXCEPTIONS
+    #error "KJ requires C++ exceptions, please enable them"
   #endif
 #elif defined(_MSC_VER)
   #if !defined(KJ_NO_RTTI) && !defined(_CPPRTTI)
     #define KJ_NO_RTTI 1
   #endif
-  #if !defined(KJ_NO_EXCEPTIONS) && !defined(_CPPUNWIND)
-    #define KJ_NO_EXCEPTIONS 1
+  #if !defined(_CPPUNWIND)
+    #error "KJ requires C++ exceptions, please enable them"
   #endif
 #endif
 

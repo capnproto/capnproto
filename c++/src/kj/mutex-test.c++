@@ -216,7 +216,6 @@ TEST(Mutex, When) {
     KJ_EXPECT(*value.lockShared() == 101);
   }
 
-#if !KJ_NO_EXCEPTIONS
   {
     // Throw from predicate.
     KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
@@ -256,7 +255,6 @@ TEST(Mutex, When) {
     });
     KJ_EXPECT(m == 654);
   }
-#endif
 }
 
 TEST(Mutex, WhenWithTimeout) {
@@ -338,7 +336,6 @@ TEST(Mutex, WhenWithTimeout) {
     KJ_EXPECT(m == 56);
   }
 
-#if !KJ_NO_EXCEPTIONS
   {
     // Throw from predicate.
     KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
@@ -385,7 +382,6 @@ TEST(Mutex, WhenWithTimeout) {
     }, LONG_TIMEOUT);
     KJ_EXPECT(m == 654);
   }
-#endif
 }
 
 TEST(Mutex, WhenWithTimeoutPreciseTiming) {
@@ -515,13 +511,7 @@ TEST(Mutex, LazyException) {
         return space.construct(456);
       });
 
-  // Unfortunately, the results differ depending on whether exceptions are enabled.
-  // TODO(someday):  Fix this?  Does it matter?
-#if KJ_NO_EXCEPTIONS
-  EXPECT_EQ(123, i);
-#else
   EXPECT_EQ(456, i);
-#endif
 }
 
 class OnlyTouchUnderLock {
