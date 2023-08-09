@@ -1,0 +1,20 @@
+option('external_capnp', type: 'boolean',
+       value: false,
+       description: 'Use the system capnp binary.')
+
+option('capnp_program', type: 'string', value: '',
+      description: 'Use this capnp program IF external_capnp is set to true')
+
+option('with_openssl', type: 'feature', value: 'auto',
+       description: '"Whether or not to build libkj-tls by linking against openssl')
+
+option('with_zlib', type: 'feature', value: 'auto',
+       description: '"Whether or not to build libkj-gzip by linking against zlib')
+
+option('with_fibers', type: 'feature', value: 'auto',
+      description: 'Whether or not to build libkj-async with fibers')
+
+option('build_testing', type: 'boolean', value: false,
+       description: 'Build tests')
+
+option('_meson_nested_invocation', type: 'boolean', value: false)

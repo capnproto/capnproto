@@ -1051,7 +1051,7 @@ bool UnixEventPort::poll() {
         sigprocmask(SIG_SETMASK, &waitMask, &origMask);
         sigprocmask(SIG_SETMASK, &origMask, nullptr);
         break;
-#else
+#elif !defined(__EMSCRIPTEN__)
         sigsuspend(&waitMask);
         KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
                       "have siglongjmp()ed.");

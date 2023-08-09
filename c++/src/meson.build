@@ -1,0 +1,2 @@
+subdir('kj')
+subdir('capnp')
