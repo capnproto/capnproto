@@ -173,8 +173,8 @@ inline kj::StringPtr KJ_STRINGIFY(Text::Builder builder) {
   return builder.asString();
 }
 
-inline bool operator==(const char* a, const Text::Builder& b) { return a == b.asString(); }
-inline bool operator!=(const char* a, const Text::Builder& b) { return a != b.asString(); }
+inline bool operator==(const char* a, const Text::Builder& b) { return kj::StringPtr(a) == b.asString(); }
+inline bool operator!=(const char* a, const Text::Builder& b) { return kj::StringPtr(a) != b.asString(); }
 
 inline Text::Builder::operator kj::StringPtr() const {
   return kj::StringPtr(content.begin(), content.size() - 1);

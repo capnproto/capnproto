@@ -388,18 +388,18 @@ public:
     // A fallocate() wrapper was only added to Android's Bionic C library as of API level 21,
     // but FALLOC_FL_PUNCH_HOLE is apparently defined in the headers before that, so we'll
     // have to explicitly test for that case.
-#if defined(FALLOC_FL_PUNCH_HOLE) && !(__ANDROID__ && __BIONIC__ && __ANDROID_API__ < 21)
-    KJ_SYSCALL_HANDLE_ERRORS(
-        fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
-      case EOPNOTSUPP:
-        // fall back to below
-        break;
-      default:
-        KJ_FAIL_SYSCALL("fallocate(FALLOC_FL_PUNCH_HOLE)", error) { return; }
-    } else {
-      return;
-    }
-#endif
+// #if defined(FALLOC_FL_PUNCH_HOLE) && !(__ANDROID__ && __BIONIC__ && __ANDROID_API__ < 21)
+//     KJ_SYSCALL_HANDLE_ERRORS(
+//         fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
+//       case EOPNOTSUPP:
+//         // fall back to below
+//         break;
+//         default:
+//         KJ_FAIL_SYSCALL("fallocate(FALLOC_FL_PUNCH_HOLE)", error) { return; }
+//     } else {
+//       return;
+//     }
+// #endif
 
     static const byte ZEROS[4096] = { 0 };
 

@@ -95,6 +95,10 @@ static void __lsan_ignore_object(const void* p) {}
 // TODO(cleanup): Remove the LSAN stuff per https://github.com/capnproto/capnproto/pull/1255
 // feedback.
 
+#if defined(__EMSCRIPTEN__)
+#include <exception>
+#endif
+
 namespace {
 template <typename T>
 inline T* lsanIgnoreObjectAndReturn(T* ptr) {
@@ -632,6 +636,7 @@ void printStackTraceOnCrash() {
   stack.ss_sp = reinterpret_cast<char*>(mmap(
       nullptr, stack.ss_size, PROT_READ | PROT_WRITE,
       MAP_ANONYMOUS | MAP_PRIVATE | MAP_GROWSDOWN, -1, 0));
+#if !defined(__EMSCRIPTEN__)
   KJ_SYSCALL(sigaltstack(&stack, nullptr));
 
   // Catch all relevant signals.
@@ -650,8 +655,9 @@ void printStackTraceOnCrash() {
 
   // Dump stack on unimplemented syscalls -- useful in seccomp sandboxes.
   KJ_SYSCALL(sigaction(SIGSYS, &action, nullptr));
+#endif
 
-#ifdef KJ_DEBUG
+#if defined(KJ_DEBUG) && !defined(__EMSCRIPTEN__)
   // Dump stack on keyboard interrupt -- useful for infinite loops. Only in debug mode, though,
   // because stack traces on ctrl+c can be obnoxious for, say, command-line tools.
   KJ_SYSCALL(sigaction(SIGINT, &action, nullptr));
@@ -1172,16 +1178,9 @@ struct FakeEhGlobals {
   uint uncaughtExceptions;
 };
 
-// LLVM's libstdc++ doesn't declare __cxa_get_globals in its cxxabi.h. GNU does. Because it is
-// extern "C", the compiler wills get upset if we re-declare it even in a different namespace.
-#if _LIBCPPABI_VERSION
-extern "C" void* __cxa_get_globals();
-#else
-using abi::__cxa_get_globals;
-#endif
 
 uint uncaughtExceptionCount() {
-  return reinterpret_cast<FakeEhGlobals*>(__cxa_get_globals())->uncaughtExceptions;
+  return std::uncaught_exceptions();
 }
 
 #elif _MSC_VER
@@ -1243,7 +1242,19 @@ static kj::String demangleTypeName(const char* name) {
 }
 
 kj::String getCaughtExceptionType() {
+  #if !defined (__EMSCRIPTEN__)
   return demangleTypeName(abi::__cxa_current_exception_type()->name());
+  #else
+  try {
+    std::rethrow_exception(std::current_exception());
+  } catch (kj::Exception const & e) {
+     return kj::heapString(typeid(e).name());
+  } catch (std::exception const & e) {
+    return kj::heapString(typeid(e).name());
+  } catch (...) {
+    return kj::heapString(static_cast<const char *>("Unknown exception type"));
+  }
+  #endif
 }
 #else
 kj::String getCaughtExceptionType() {
