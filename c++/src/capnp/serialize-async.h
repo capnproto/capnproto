@@ -291,6 +291,10 @@ kj::Promise<void> writeMessages(
     kj::AsyncOutputStream& output, kj::ArrayPtr<MessageBuilder*> builders)
     KJ_WARN_UNUSED_RESULT;
 
+kj::Promise<void> writeMessages(
+    kj::AsyncOutputStream& output, kj::ArrayPtr<kj::Own<MessageBuilder>> builders)
+    KJ_WARN_UNUSED_RESULT;
+
 // =======================================================================================
 // inline implementation details
 
