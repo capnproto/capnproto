@@ -364,6 +364,19 @@ kj::Promise<void> writeMessages(
   for (auto i : kj::indices(builders)) {
     messages[i] = builders[i]->getSegmentsForOutput();
   }
+  // Note that we don't have to `.attach(messages)` because `writeMessageImpl()` consumes the array
+  // upfront.
+  return writeMessages(output, messages);
+}
+
+kj::Promise<void> writeMessages(
+    kj::AsyncOutputStream& output, kj::ArrayPtr<kj::Own<MessageBuilder>> builders) {
+  auto messages = kj::heapArray<kj::ArrayPtr<const kj::ArrayPtr<const word>>>(builders.size());
+  for (auto i : kj::indices(builders)) {
+    messages[i] = builders[i]->getSegmentsForOutput();
+  }
+  // Note that we don't have to `.attach(messages)` because `writeMessageImpl()` consumes the array
+  // upfront.
   return writeMessages(output, messages);
 }
 
