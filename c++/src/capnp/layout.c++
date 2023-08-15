@@ -1825,7 +1825,7 @@ struct WireHelpers {
 #if !CAPNP_LITE
   static void setCapabilityPointer(
       SegmentBuilder* segment, CapTableBuilder* capTable, WirePointer* ref,
-      kj::Own<ClientHook>&& cap) {
+      kj::Rc<ClientHook>&& cap) {
     if (!ref->isNull()) {
       zeroObject(segment, capTable, ref);
     }
@@ -2216,7 +2216,7 @@ struct WireHelpers {
   }
 
 #if !CAPNP_LITE
-  static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
+  static KJ_ALWAYS_INLINE(kj::Rc<ClientHook> readCapabilityPointer(
       SegmentReader* segment, CapTableReader* capTable,
       const WirePointer* ref, int nestingLimit)) {
     kj::Maybe<kj::Own<ClientHook>> maybeCap;
@@ -2613,12 +2613,12 @@ void PointerBuilder::setList(const ListReader& value, bool canonical) {
 }
 
 #if !CAPNP_LITE
-kj::Own<ClientHook> PointerBuilder::getCapability() {
+kj::Rc<ClientHook> PointerBuilder::getCapability() {
   return WireHelpers::readCapabilityPointer(
       segment, capTable, pointer, kj::maxValue);
 }
 
-void PointerBuilder::setCapability(kj::Own<ClientHook>&& cap) {
+void PointerBuilder::setCapability(kj::Rc<ClientHook>&& cap) {
   WireHelpers::setCapabilityPointer(segment, capTable, pointer, kj::mv(cap));
 }
 #endif  // !CAPNP_LITE
@@ -2744,7 +2744,7 @@ Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount de
 }
 
 #if !CAPNP_LITE
-kj::Own<ClientHook> PointerReader::getCapability() const {
+kj::Rc<ClientHook> PointerReader::getCapability() const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readCapabilityPointer(segment, capTable, ref, nestingLimit);
 }
@@ -3452,7 +3452,7 @@ OrphanBuilder OrphanBuilder::copy(
 
 #if !CAPNP_LITE
 OrphanBuilder OrphanBuilder::copy(
-    BuilderArena* arena, CapTableBuilder* capTable, kj::Own<ClientHook> copyFrom) {
+    BuilderArena* arena, CapTableBuilder* capTable, kj::Rc<ClientHook> copyFrom) {
   OrphanBuilder result;
   WireHelpers::setCapabilityPointer(nullptr, capTable, result.tagAsPtr(), kj::mv(copyFrom));
   result.segment = arena->getSegment(SegmentId(0));
@@ -3661,7 +3661,7 @@ ListReader OrphanBuilder::asListReaderAnySize() const {
 }
 
 #if !CAPNP_LITE
-kj::Own<ClientHook> OrphanBuilder::asCapability() const {
+kj::Rc<ClientHook> OrphanBuilder::asCapability() const {
   return WireHelpers::readCapabilityPointer(segment, capTable, tagAsPtr(), kj::maxValue);
 }
 #endif  // !CAPNP_LITE

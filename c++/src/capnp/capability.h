@@ -177,11 +177,11 @@ class Response: public Results::Reader {
   // is move-only -- once it goes out-of-scope, the underlying message will be freed.
 
 public:
-  inline Response(typename Results::Reader reader, kj::Own<ResponseHook>&& hook)
+  inline Response(typename Results::Reader reader, kj::Rc<ResponseHook>&& hook)
       : Results::Reader(reader), hook(kj::mv(hook)) {}
 
 private:
-  kj::Own<ResponseHook> hook;
+  kj::Rc<ResponseHook> hook;
 
   template <typename, typename>
   friend class Request;
@@ -223,7 +223,7 @@ public:
   Client& operator=(Client&&) = default;
   // Move constructor avoids reference counting.
 
-  explicit Client(kj::Own<ClientHook>&& hook);
+  explicit Client(kj::Rc<ClientHook>&& hook);
   // For use by the RPC implementation:  Wrap a ClientHook.
 
   template <typename T>
@@ -294,10 +294,10 @@ protected:
                                             kj::Maybe<MessageSize> sizeHint, CallHints hints);
 
 private:
-  kj::Own<ClientHook> hook;
+  kj::Rc<ClientHook> hook;
 
-  static kj::Own<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
-  static kj::Own<ClientHook> makeRevocableLocalClient(Capability::Server& server);
+  static kj::Rc<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
+  static kj::Rc<ClientHook> makeRevocableLocalClient(Capability::Server& server);
   static void revokeLocalClient(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook, kj::Exception&& reason);
 
@@ -328,9 +328,10 @@ class CallContext: public kj::DisallowConstCopy {
   // threads.
   //
   // The CallContext becomes invalid as soon as the call reports completion.
+  explicit CallContext(CallContextHook* hook) : hook(hook) { }
 
 public:
-  explicit CallContext(CallContextHook& hook);
+  explicit CallContext(kj::Rc<CallContextHook>&& hook);
 
   typename Params::Reader getParams();
   // Get the params payload.
@@ -446,9 +447,10 @@ private:
 template <typename Params>
 class StreamingCallContext: public kj::DisallowConstCopy {
   // Like CallContext but for streaming calls.
+  explicit StreamingCallContext(CallContextHook* hook) : hook(hook) {}
 
 public:
-  explicit StreamingCallContext(CallContextHook& hook);
+  explicit StreamingCallContext(kj::Rc<CallContextHook>&& hook);
 
   typename Params::Reader getParams();
   void releaseParams();
@@ -545,10 +547,10 @@ protected:
 
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
-      CallContext<AnyPointer, AnyPointer> typeless);
+      CallContext<AnyPointer, AnyPointer>& typeless);
   template <typename Params>
   StreamingCallContext<Params> internalGetTypedStreamingContext(
-      CallContext<AnyPointer, AnyPointer> typeless);
+      CallContext<AnyPointer, AnyPointer>& typeless);
   DispatchCallResult internalUnimplemented(const char* actualInterfaceName,
                                            uint64_t requestedTypeId);
   DispatchCallResult internalUnimplemented(const char* interfaceName,
@@ -557,7 +559,7 @@ protected:
                                           uint64_t typeId, uint16_t methodId);
 
 private:
-  ClientHook* thisHook = nullptr;
+  kj::Rc<ClientHook> thisHook;
   friend class LocalClient;
 };
 
@@ -591,7 +593,7 @@ public:
   // be used to specify a custom exception to use when revoking.
 
 private:
-  kj::Own<ClientHook> hook;
+  kj::Rc<ClientHook> hook;
 };
 
 // =======================================================================================
@@ -617,7 +619,7 @@ public:
   // consumes the `PipelineBuilder`; no further methods can be invoked.
 
 private:
-  kj::Own<PipelineHook> hook;
+  kj::Rc<PipelineHook> hook;
 
   PipelineBuilder(_::PipelineBuilderPair pair);
 };
@@ -639,7 +641,7 @@ class ReaderCapabilityTable: private _::CapTableReader {
   // Note that when using Cap'n Proto's RPC system, this is handled automatically.
 
 public:
-  explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> table);
+  explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Rc<ClientHook>>> table);
   KJ_DISALLOW_COPY_AND_MOVE(ReaderCapabilityTable);
 
   template <typename T>
@@ -648,9 +650,9 @@ public:
   // the capabilities are looked up in this table.
 
 private:
-  kj::Array<kj::Maybe<kj::Own<ClientHook>>> table;
+  kj::Array<kj::Maybe<kj::Rc<ClientHook>>> table;
 
-  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
+  kj::Maybe<kj::Rc<ClientHook>> extractCap(uint index) override;
 };
 
 class BuilderCapabilityTable: private _::CapTableBuilder {
@@ -663,7 +665,7 @@ public:
   BuilderCapabilityTable();
   KJ_DISALLOW_COPY_AND_MOVE(BuilderCapabilityTable);
 
-  inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getTable() { return table; }
+  inline kj::ArrayPtr<kj::Maybe<kj::Rc<ClientHook>>> getTable() { return table; }
 
   template <typename T>
   T imbue(T builder);
@@ -671,10 +673,10 @@ public:
   // the capabilities are looked up in this table.
 
 private:
-  kj::Vector<kj::Maybe<kj::Own<ClientHook>>> table;
+  kj::Vector<kj::Maybe<kj::Rc<ClientHook>>> table;
 
-  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
-  uint injectCap(kj::Own<ClientHook>&& cap) override;
+  kj::Maybe<kj::Rc<ClientHook>> extractCap(uint index) override;
+  uint injectCap(kj::Rc<ClientHook>&& cap) override;
   void dropCap(uint index) override;
 };
 
@@ -747,7 +749,7 @@ public:
   }
 };
 
-class ResponseHook {
+class ResponseHook: virtual public kj::Refcounted {
   // Hook interface implemented by RPC system representing a response.
   //
   // At present this class has no methods.  It exists only for garbage collection -- when the
@@ -758,14 +760,14 @@ public:
   // Just here to make sure the type is dynamic.
 
   template <typename T>
-  inline static kj::Own<ResponseHook> from(Response<T>&& response) {
+  inline static kj::Rc<ResponseHook> from(Response<T>&& response) {
     return kj::mv(response.hook);
   }
 };
 
 // class PipelineHook is declared in any.h because it is needed there.
 
-class ClientHook {
+class ClientHook: public kj::Refcounted {
 public:
   ClientHook();
 
@@ -779,11 +781,11 @@ public:
 
   struct VoidPromiseAndPipeline {
     kj::Promise<void> promise;
-    kj::Own<PipelineHook> pipeline;
+    kj::Rc<PipelineHook> pipeline;
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                      kj::Own<CallContextHook>&& context, CallHints hints) = 0;
+                                      kj::Rc<CallContextHook>&& context, CallHints hints) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating these objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  Note that even if the returned
@@ -794,7 +796,7 @@ public:
   // later turn of the event loop. Otherwise, application code may call back and affect the
   // callee's state in an unexpected way.
 
-  virtual kj::Maybe<ClientHook&> getResolved() = 0;
+  virtual kj::Maybe<kj::Rc<ClientHook>> getResolved() = 0;
   // If this ClientHook is a promise that has already resolved, returns the inner, resolved version
   // of the capability.  The caller may permanently replace this client with the resolved one if
   // desired.  Returns null if the client isn't a promise or hasn't resolved yet -- use
@@ -807,7 +809,7 @@ public:
   // This "only one resolution" policy is necessary for the RPC system to implement embargoes
   // properly.
 
-  virtual kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() = 0;
+  virtual kj::Maybe<kj::Promise<kj::Rc<ClientHook>>> whenMoreResolved() = 0;
   // If this client is a settled reference (not a promise), return nullptr.  Otherwise, return a
   // promise that eventually resolves to a new client that is closer to being the final, settled
   // client (i.e. the value eventually returned by `getResolved()`).  Calling this repeatedly
@@ -818,9 +820,6 @@ public:
 
   kj::Promise<void> whenResolved();
   // Repeatedly calls whenMoreResolved() until it returns nullptr.
-
-  virtual kj::Own<ClientHook> addRef() = 0;
-  // Return a new reference to the same capability.
 
   virtual const void* getBrand() = 0;
   // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
@@ -842,7 +841,7 @@ public:
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
-  static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
+  static kj::Rc<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
 };
 
 class RevocableClientHook: public ClientHook {
@@ -851,7 +850,7 @@ public:
   virtual void revoke(kj::Exception&& reason) = 0;
 };
 
-class CallContextHook {
+class CallContextHook: virtual public kj::Refcounted {
   // Hook interface implemented by RPC system to manage a call on the server side.  See
   // CallContext<T>.
 
@@ -861,7 +860,7 @@ public:
   virtual AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
 
-  virtual void setPipeline(kj::Own<PipelineHook>&& pipeline) = 0;
+  virtual void setPipeline(kj::Rc<PipelineHook>&& pipeline) = 0;
 
   virtual kj::Promise<AnyPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
@@ -872,28 +871,26 @@ public:
   // Implementations of tailCall() should typically call directTailCall() and then fulfill the
   // promise fulfiller for onTailCall() with the returned pipeline.
 
-  virtual kj::Own<CallContextHook> addRef() = 0;
-
   template <typename Params, typename Results>
   static CallContextHook& from(CallContext<Params, Results>& context) { return *context.hook; }
   template <typename Params>
   static CallContextHook& from(StreamingCallContext<Params>& context) { return *context.hook; }
 };
 
-kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& promise);
+kj::Rc<ClientHook> newLocalPromiseClient(kj::Promise<kj::Rc<ClientHook>>&& promise);
 // Returns a ClientHook that queues up calls until `promise` resolves, then forwards them to
 // the new client.  This hook's `getResolved()` and `whenMoreResolved()` methods will reflect the
 // redirection to the eventual replacement client.
 
-kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise);
+kj::Rc<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Rc<PipelineHook>>&& promise);
 // Returns a PipelineHook that queues up calls until `promise` resolves, then forwards them to
 // the new pipeline.
 
-kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
-kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
+kj::Rc<ClientHook> newBrokenCap(kj::StringPtr reason);
+kj::Rc<ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 
-kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
+kj::Rc<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
 // Helper function that creates a pipeline which simply throws exceptions when called.
 
 Request<AnyPointer, AnyPointer> newBrokenRequest(
@@ -922,7 +919,7 @@ struct PointerHelpers<T, Kind::INTERFACE> {
     builder.setCapability(kj::mv(value.Capability::Client::hook));
   }
   static inline void set(PointerBuilder builder, typename T::Client& value) {
-    builder.setCapability(value.Capability::Client::hook->addRef());
+    builder.setCapability(value.Capability::Client::hook.addRef());
   }
   static inline void adopt(PointerBuilder builder, Orphan<T>&& value) {
     builder.adopt(kj::mv(value.builder));
@@ -1038,7 +1035,7 @@ private:
 
 template <typename T>
 RemotePromise<T> RemotePromise<T>::reducePromise(kj::Promise<RemotePromise>&& promise) {
-  kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Own<PipelineHook>>> splitPromise =
+  kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Rc<PipelineHook>>> splitPromise =
       promise.then([](RemotePromise&& inner) {
     // `inner` is multiply-inherited, and we want to move away each superclass separately.
     // Let's create two references to make clear what we're doing (though this is not strictly
@@ -1087,21 +1084,21 @@ kj::Promise<void> StreamingRequest<Params>::send() {
   return promise;
 }
 
-inline Capability::Client::Client(kj::Own<ClientHook>&& hook): hook(kj::mv(hook)) {}
+inline Capability::Client::Client(kj::Rc<ClientHook>&& hook): hook(kj::mv(hook)) {}
 template <typename T, typename>
 inline Capability::Client::Client(kj::Own<T>&& server)
     : hook(makeLocalClient(kj::mv(server))) {}
 template <typename T, typename>
 inline Capability::Client::Client(kj::Promise<T>&& promise)
     : hook(newLocalPromiseClient(promise.then([](T&& t) { return kj::mv(t.hook); }))) {}
-inline Capability::Client::Client(Client& other): hook(other.hook->addRef()) {}
+inline Capability::Client::Client(Client& other): hook(other.hook.addRef()) {}
 inline Capability::Client& Capability::Client::operator=(Client& other) {
-  hook = other.hook->addRef();
+  hook = other.hook.addRef();
   return *this;
 }
 template <typename T>
 inline typename T::Client Capability::Client::castAs() {
-  return typename T::Client(hook->addRef());
+  return typename T::Client(hook.addRef());
 }
 inline Request<AnyPointer, AnyPointer> Capability::Client::typelessRequest(
     uint64_t interfaceId, uint16_t methodId,
@@ -1122,9 +1119,9 @@ inline StreamingRequest<Params> Capability::Client::newStreamingCall(
 }
 
 template <typename Params, typename Results>
-inline CallContext<Params, Results>::CallContext(CallContextHook& hook): hook(&hook) {}
+inline CallContext<Params, Results>::CallContext(kj::Rc<CallContextHook>&& hook): hook(kj::mv(hook)) {}
 template <typename Params>
-inline StreamingCallContext<Params>::StreamingCallContext(CallContextHook& hook): hook(&hook) {}
+inline StreamingCallContext<Params>::StreamingCallContext(kj::Rc<CallContextHook>&& hook): hook(kj::mv(hook)) {}
 template <typename Params, typename Results>
 inline typename Params::Reader CallContext<Params, Results>::getParams() {
   return hook->getParams().template getAs<Params>();
@@ -1183,18 +1180,18 @@ inline kj::Promise<void> CallContext<Params, Results>::tailCall(
 
 template <typename Params, typename Results>
 CallContext<Params, Results> Capability::Server::internalGetTypedContext(
-    CallContext<AnyPointer, AnyPointer> typeless) {
-  return CallContext<Params, Results>(*typeless.hook);
+    CallContext<AnyPointer, AnyPointer>& typeless) {
+  return CallContext<Params, Results>(typeless.hook);
 }
 
 template <typename Params>
 StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContext(
-    CallContext<AnyPointer, AnyPointer> typeless) {
-  return StreamingCallContext<Params>(*typeless.hook);
+    CallContext<AnyPointer, AnyPointer>& typeless) {
+  return StreamingCallContext<Params>(typeless.hook);
 }
 
 Capability::Client Capability::Server::thisCap() {
-  return Client(thisHook->addRef());
+  return Client(thisHook.addRef());
 }
 
 template <typename T>
@@ -1210,7 +1207,7 @@ RevocableServer<T>::~RevocableServer() noexcept(false) {
 
 template <typename T>
 typename T::Client RevocableServer<T>::getClient() {
-  return typename T::Client(hook->addRef());
+  return typename T::Client(hook.addRef());
 }
 
 template <typename T>
@@ -1226,7 +1223,7 @@ namespace _ { // private
 
 struct PipelineBuilderPair {
   AnyPointer::Builder root;
-  kj::Own<PipelineHook> hook;
+  kj::Rc<PipelineHook> hook;
 };
 
 PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords);

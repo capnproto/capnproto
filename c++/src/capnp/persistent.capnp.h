@@ -104,7 +104,7 @@ public:
   typedef Persistent Reads;
 
   Client(decltype(nullptr));
-  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);
+  explicit Client(::kj::Rc< ::capnp::ClientHook>&& hook);
   template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>
   Client(::kj::Own<_t>&& server);
   template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Client*>()>>
@@ -353,7 +353,7 @@ inline Persistent<SturdyRef, Owner>::Client::Client(decltype(nullptr))
     : ::capnp::Capability::Client(nullptr) {}
 template <typename SturdyRef, typename Owner>
 inline Persistent<SturdyRef, Owner>::Client::Client(
-    ::kj::Own< ::capnp::ClientHook>&& hook)
+    ::kj::Rc< ::capnp::ClientHook>&& hook)
     : ::capnp::Capability::Client(::kj::mv(hook)) {}
 template <typename SturdyRef, typename Owner>
 template <typename _t, typename>

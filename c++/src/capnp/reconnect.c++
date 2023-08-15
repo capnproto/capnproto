@@ -25,7 +25,7 @@ namespace capnp {
 
 namespace {
 
-class ReconnectHook final: public ClientHook, public kj::Refcounted, public kj::EnableSharedFromThis<ReconnectHook> {
+class ReconnectHook final: public ClientHook, public kj::EnableSharedFromThis<ReconnectHook> {
 public:
   ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
@@ -41,7 +41,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     auto result = getCurrent().call(interfaceId, methodId, kj::mv(context), hints);
     if (hints.onlyPromisePipeline) {
       // Just in case the callee didn't implement the hint, replace its promise.
@@ -55,18 +55,14 @@ public:
     return result;
   }
 
-  kj::Maybe<ClientHook&> getResolved() override {
+  kj::Maybe<kj::Rc<ClientHook>> getResolved() override {
     // We can't let people resolve to the underlying capability because then we wouldn't be able
     // to redirect them later.
     return kj::none;
   }
 
-  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+  kj::Maybe<kj::Promise<kj::Rc<ClientHook>>> whenMoreResolved() override {
     return kj::none;
-  }
-
-  kj::Own<ClientHook> addRef() override {
-    return addRefToThis();
   }
 
   const void* getBrand() override {

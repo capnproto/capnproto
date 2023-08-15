@@ -28,7 +28,7 @@ namespace capnp {
 
 DynamicCapability::Client DynamicCapability::Client::upcast(InterfaceSchema requestedSchema) {
   KJ_REQUIRE(schema.extends(requestedSchema), "Can't upcast to non-superclass.") {}
-  return DynamicCapability::Client(requestedSchema, hook->addRef());
+  return DynamicCapability::Client(requestedSchema, hook.addRef());
 }
 
 Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(

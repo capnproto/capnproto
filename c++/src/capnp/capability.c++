@@ -42,14 +42,14 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory);
 
 namespace {
 
-static kj::Own<ClientHook> newNullCap();
+static kj::Rc<ClientHook> newNullCap();
 
 class BrokenCapFactoryImpl: public _::BrokenCapFactory {
 public:
-  kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) override {
+  kj::Rc<ClientHook> newBrokenCap(kj::StringPtr description) override {
     return capnp::newBrokenCap(description);
   }
-  kj::Own<ClientHook> newNullCap() override {
+  kj::Rc<ClientHook> newNullCap() override {
     return capnp::newNullCap();
   }
 };
@@ -75,7 +75,7 @@ kj::Promise<kj::Maybe<int>> Capability::Client::getFd() {
   if (fd != kj::none) {
     return fd;
   } else KJ_IF_SOME(promise, hook->whenMoreResolved()) {
-    return promise.attach(hook->addRef()).then([](kj::Own<ClientHook> newHook) {
+    return promise.attach(hook.addRef()).then([](kj::Rc<ClientHook> newHook) {
       return Client(kj::mv(newHook)).getFd();
     });
   } else {
@@ -123,7 +123,7 @@ kj::Promise<void> ClientHook::whenResolved() {
 }
 
 kj::Promise<void> Capability::Client::whenResolved() {
-  return hook->whenResolved().attach(hook->addRef());
+  return hook->whenResolved().attach(hook.addRef());
 }
 
 // =======================================================================================
@@ -144,7 +144,7 @@ public:
   MallocMessageBuilder message;
 };
 
-class LocalCallContext final: public CallContextHook, public ResponseHook, public kj::Refcounted, public kj::EnableSharedFromThis<LocalCallContext> {
+class LocalCallContext final: public CallContextHook, public ResponseHook, public kj::EnableSharedFromThis<LocalCallContext> {
 public:
   LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef,
                    ClientHook::CallHints hints, bool isStreaming)
@@ -163,13 +163,13 @@ public:
   }
   AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
     if (response == kj::none) {
-      auto localResponse = kj::heap<LocalResponse>(sizeHint);
+      auto localResponse = kj::refcounted<LocalResponse>(sizeHint);
       responseBuilder = localResponse->message.getRoot<AnyPointer>();
       response = Response<AnyPointer>(responseBuilder.asReader(), kj::mv(localResponse));
     }
     return responseBuilder;
   }
-  void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+  void setPipeline(kj::Rc<PipelineHook>&& pipeline) override {
     KJ_IF_SOME(f, tailCallPipelineFulfiller) {
       f->fulfill(AnyPointer::Pipeline(kj::mv(pipeline)));
     }
@@ -209,9 +209,6 @@ public:
     tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
   }
-  kj::Own<CallContextHook> addRef() override {
-    return addRefToThis();
-  }
 
   kj::Maybe<kj::Own<MallocMessageBuilder>> request;
   kj::Maybe<Response<AnyPointer>> response;
@@ -226,7 +223,7 @@ class LocalRequest final: public RequestHook {
 public:
   inline LocalRequest(uint64_t interfaceId, uint16_t methodId,
                       kj::Maybe<MessageSize> sizeHint, ClientHook::CallHints hints,
-                      kj::Own<ClientHook> client)
+                      kj::Rc<ClientHook> client)
       : message(kj::heap<MallocMessageBuilder>(firstSegmentSize(sizeHint))),
         interfaceId(interfaceId), methodId(methodId), hints(hints), client(kj::mv(client)) {}
 
@@ -250,7 +247,7 @@ public:
     hints.onlyPromisePipeline = true;
     bool isStreaming = false;
     auto context = kj::refcounted<LocalCallContext>(
-        kj::mv(message), client->addRef(), hints, isStreaming);
+        kj::mv(message), client.addRef(), hints, isStreaming);
     auto vpap = client->call(interfaceId, methodId, context.addRef(), hints);
     return AnyPointer::Pipeline(kj::mv(vpap.pipeline));
   }
@@ -265,12 +262,12 @@ private:
   uint64_t interfaceId;
   uint16_t methodId;
   ClientHook::CallHints hints;
-  kj::Own<ClientHook> client;
+  kj::Rc<ClientHook> client;
 
   RemotePromise<AnyPointer> sendImpl(bool isStreaming) {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
-    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef(), hints, isStreaming);
+    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client.addRef(), hints, isStreaming);
     auto promiseAndPipeline = client->call(interfaceId, methodId, context.addRef(), hints);
 
     // Now the other branch returns the response from the context.
@@ -306,24 +303,20 @@ private:
 // These classes handle pipelining in the case where calls need to be queued in-memory until some
 // local operation completes.
 
-class QueuedPipeline final: public PipelineHook, public kj::Refcounted, public kj::EnableSharedFromThis<QueuedPipeline> {
+class QueuedPipeline final: public PipelineHook {
   // A PipelineHook which simply queues calls while waiting for a PipelineHook to which to forward
   // them.
 
 public:
-  QueuedPipeline(kj::Promise<kj::Own<PipelineHook>>&& promiseParam)
+  QueuedPipeline(kj::Promise<kj::Rc<PipelineHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        selfResolutionOp(promise.addBranch().then([this](kj::Own<PipelineHook>&& inner) {
+        selfResolutionOp(promise.addBranch().then([this](kj::Rc<PipelineHook>&& inner) {
           redirect = kj::mv(inner);
         }, [this](kj::Exception&& exception) {
           redirect = newBrokenPipeline(kj::mv(exception));
         }).eagerlyEvaluate(nullptr)) {}
 
-  kj::Rc<PipelineHook> addRef() override {
-    return addRefToThis();
-  }
-
-  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+  kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     auto copy = kj::heapArrayBuilder<PipelineOp>(ops.size());
     for (auto& op: ops) {
       copy.add(op);
@@ -331,18 +324,18 @@ public:
     return getPipelinedCap(copy.finish());
   }
 
-  kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override;
+  kj::Rc<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override;
 
 private:
-  kj::ForkedPromise<kj::Own<PipelineHook>> promise;
+  kj::ForkedPromise<kj::Rc<PipelineHook>> promise;
 
-  kj::Maybe<kj::Own<PipelineHook>> redirect;
+  kj::Maybe<kj::Rc<PipelineHook>> redirect;
   // Once the promise resolves, this will become non-null and point to the underlying object.
 
   kj::Promise<void> selfResolutionOp;
   // Represents the operation which will set `redirect` when possible.
 
-  kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>> clientMap;
+  kj::HashMap<kj::Array<PipelineOp>, kj::Rc<ClientHook>> clientMap;
   // If the same pipelined cap is requested twice, we have to return the same object. This is
   // necessary because each ClientHook we create is a QueuedClient which queues up calls. If we
   // return a new one each time, there will be several queues, and ordering of calls will be lost
@@ -386,14 +379,14 @@ private:
   // enqueued on QR1, and so the method calls are delivered in the correct order.
 };
 
-class QueuedClient final: public ClientHook, public kj::Refcounted, public kj::EnableSharedFromThis<QueuedClient> {
+class QueuedClient final: public ClientHook, public kj::EnableSharedFromThis<QueuedClient> {
   // A ClientHook which simply queues calls while waiting for a ClientHook to which to forward
   // them.
 
 public:
-  QueuedClient(kj::Promise<kj::Own<ClientHook>>&& promiseParam)
+  QueuedClient(kj::Promise<kj::Rc<ClientHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        selfResolutionOp(promise.addBranch().then([this](kj::Own<ClientHook>&& inner) {
+        selfResolutionOp(promise.addBranch().then([this](kj::Rc<ClientHook>&& inner) {
           redirect = kj::mv(inner);
         }, [this](kj::Exception&& exception) {
           redirect = newBrokenCap(kj::mv(exception));
@@ -411,7 +404,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     if (hints.noPromisePipelining) {
       // Optimize for no pipelining.
       auto promise = promiseForCallForwarding.addBranch()
@@ -436,7 +429,7 @@ public:
       }).split();
 
       kj::Promise<void> completionPromise = kj::mv(kj::get<0>(split));
-      kj::Promise<kj::Own<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
+      kj::Promise<kj::Rc<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
 
       auto pipeline = kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise));
 
@@ -445,21 +438,19 @@ public:
     }
   }
 
-  kj::Maybe<ClientHook&> getResolved() override {
+  kj::Maybe<kj::Rc<ClientHook>> getResolved() override {
     KJ_IF_SOME(inner, redirect) {
-      return *inner;
+      return inner.addRef();
     } else {
       return kj::none;
     }
   }
 
-  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+  kj::Maybe<kj::Promise<kj::Rc<ClientHook>>> whenMoreResolved() override {
     return promiseForClientResolution.addBranch();
   }
 
-  kj::Own<ClientHook> addRef() override {
-    return addRefToThis();
-  }
+
 
   const void* getBrand() override {
     return nullptr;
@@ -474,9 +465,9 @@ public:
   }
 
 private:
-  typedef kj::ForkedPromise<kj::Own<ClientHook>> ClientHookPromiseFork;
+  typedef kj::ForkedPromise<kj::Rc<ClientHook>> ClientHookPromiseFork;
 
-  kj::Maybe<kj::Own<ClientHook>> redirect;
+  kj::Maybe<kj::Rc<ClientHook>> redirect;
   // Once the promise resolves, this will become non-null and point to the underlying object.
 
   ClientHookPromiseFork promise;
@@ -502,25 +493,25 @@ private:
   // eventLoop.evalLater.
 };
 
-kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
+kj::Rc<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
   KJ_IF_SOME(r, redirect) {
     return r->getPipelinedCap(kj::mv(ops));
   } else {
     return clientMap.findOrCreate(ops.asPtr(), [&]() {
       auto clientPromise = promise.addBranch()
-          .then([ops = KJ_MAP(op, ops) { return op; }](kj::Own<PipelineHook> pipeline) {
+          .then([ops = KJ_MAP(op, ops) { return op; }](kj::Rc<PipelineHook> pipeline) {
         return pipeline->getPipelinedCap(kj::mv(ops));
       });
-      return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
+      return kj::HashMap<kj::Array<PipelineOp>, kj::Rc<ClientHook>>::Entry {
         kj::mv(ops), kj::refcounted<QueuedClient>(kj::mv(clientPromise))
       };
-    })->addRef();
+    }).addRef();
   }
 }
 
 // =======================================================================================
 
-class LocalPipeline final: public PipelineHook, public kj::Refcounted, public kj::EnableSharedFromThis<LocalPipeline> {
+class LocalPipeline final: public PipelineHook, public kj::EnableSharedFromThis<LocalPipeline> {
 public:
   inline LocalPipeline(kj::Own<CallContextHook>&& contextParam)
       : context(kj::mv(contextParam)),
@@ -530,7 +521,7 @@ public:
     return addRefToThis();
   }
 
-  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
+  kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
     return results.getPipelinedCap(ops);
   }
 
@@ -539,11 +530,11 @@ private:
   AnyPointer::Reader results;
 };
 
-class LocalClient final: public ClientHook, public kj::Refcounted, public kj::EnableSharedFromThis<LocalClient> {
+class LocalClient final: public ClientHook, public kj::EnableSharedFromThis<LocalClient> {
 public:
   LocalClient(kj::Own<Capability::Server>&& serverParam, bool revocable = false) {
     auto& serverRef = *server.emplace(kj::mv(serverParam));
-    serverRef.thisHook = this;
+    serverRef.thisHook = addRefToThis();
     if (revocable) revoker.emplace();
     startResolveTask(serverRef);
   }
@@ -552,7 +543,7 @@ public:
               bool revocable = false)
       : capServerSet(&capServerSet), ptr(ptr) {
     auto& serverRef = *server.emplace(kj::mv(serverParam));
-    serverRef.thisHook = this;
+    serverRef.thisHook = addRefToThis();
     if (revocable) revoker.emplace();
     startResolveTask(serverRef);
   }
@@ -590,7 +581,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     KJ_IF_SOME(r, resolved) {
       // We resolved to a shortened path. New calls MUST go directly to the replacement capability
       // so that their ordering is consistent with callers who call getResolved() to get direct
@@ -598,8 +589,6 @@ public:
       // in our streaming queue.
       return r->call(interfaceId, methodId, kj::mv(context), hints);
     }
-
-    auto contextPtr = context.get();
 
     // We don't want to actually dispatch the call synchronously, because we don't want the callee
     // to have any side effects before the promise is returned to the caller.  This helps avoid
@@ -609,12 +598,12 @@ public:
     //
     // Note also that QueuedClient depends on this evalLater() to ensure that pipelined calls don't
     // complete before 'whenMoreResolved()' promises resolve.
-    auto promise = kj::evalLater([this,interfaceId,methodId,contextPtr]() {
+    auto promise = kj::evalLater([this,interfaceId,methodId, context = context.addRef()]() mutable {
       if (blocked) {
         return kj::newAdaptedPromise<kj::Promise<void>, BlockedCall>(
-            *this, interfaceId, methodId, *contextPtr);
+            *this, interfaceId, methodId, context.addRef());
       } else {
-        return callInternal(interfaceId, methodId, *contextPtr);
+        return callInternal(interfaceId, methodId, context.addRef());
       }
     }).attach(addRefToThis());
 
@@ -646,17 +635,17 @@ public:
       // We have to fork this promise for the pipeline to receive a copy of the answer.
       auto forked = promise.fork();
       pipelineBranch = forked.addBranch();
-      completionPromise = forked.addBranch().attach(context->addRef());
+      completionPromise = forked.addBranch().attach(context.addRef());
     }
 
     auto pipelinePromise = pipelineBranch
-        .then([=,context=context->addRef()]() mutable -> kj::Own<PipelineHook> {
+        .then([=,context=context.addRef()]() mutable -> kj::Rc<PipelineHook> {
           context->releaseParams();
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         });
 
     auto tailPipelinePromise = context->onTailCall()
-        .then([context = context->addRef()](AnyPointer::Pipeline&& pipeline) {
+        .then([context = context.addRef()](AnyPointer::Pipeline&& pipeline) {
       return kj::mv(pipeline.hook);
     });
 
@@ -666,24 +655,20 @@ public:
         kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise)) };
   }
 
-  kj::Maybe<ClientHook&> getResolved() override {
-    return resolved.map([](kj::Own<ClientHook>& hook) -> ClientHook& { return *hook; });
+  kj::Maybe<kj::Rc<ClientHook>> getResolved() override {
+    return resolved.map([](kj::Rc<ClientHook>& hook) -> kj::Rc<ClientHook> { return hook.addRef(); });
   }
 
-  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+  kj::Maybe<kj::Promise<kj::Rc<ClientHook>>> whenMoreResolved() override {
     KJ_IF_SOME(r, resolved) {
-      return kj::Promise<kj::Own<ClientHook>>(r->addRef());
+      return kj::Promise<kj::Rc<ClientHook>>(r.addRef());
     } else KJ_IF_SOME(t, resolveTask) {
       return t.addBranch().then([this]() {
-        return KJ_ASSERT_NONNULL(resolved)->addRef();
+        return KJ_ASSERT_NONNULL(resolved).addRef();
       });
     } else {
       return kj::none;
     }
-  }
-
-  kj::Own<ClientHook> addRef() override {
-    return addRefToThis();
   }
 
   static const uint BRAND;
@@ -743,7 +728,7 @@ private:
   void* ptr = nullptr;
 
   kj::Maybe<kj::ForkedPromise<void>> resolveTask;
-  kj::Maybe<kj::Own<ClientHook>> resolved;
+  kj::Maybe<kj::Rc<ClientHook>> resolved;
 
   kj::Maybe<kj::Canceler> revoker;
   // If non-null, all promises must be wrapped in this revoker.
@@ -774,9 +759,9 @@ private:
   class BlockedCall {
   public:
     BlockedCall(kj::PromiseFulfiller<kj::Promise<void>>& fulfiller, LocalClient& client,
-                uint64_t interfaceId, uint16_t methodId, CallContextHook& context)
+                uint64_t interfaceId, uint16_t methodId, kj::Rc<CallContextHook>&& context)
         : fulfiller(fulfiller), client(client),
-          interfaceId(interfaceId), methodId(methodId), context(context),
+          interfaceId(interfaceId), methodId(methodId), context(kj::mv(context)),
           prev(client.blockedCallsEnd) {
       *prev = *this;
       client.blockedCallsEnd = &next;
@@ -796,7 +781,7 @@ private:
       unlink();
       KJ_IF_SOME(c, context) {
         fulfiller.fulfill(kj::evalNow([&]() {
-          return client.callInternal(interfaceId, methodId, c);
+          return client.callInternal(interfaceId, methodId, c.addRef());
         }));
       } else {
         // This is just a barrier.
@@ -809,7 +794,7 @@ private:
     LocalClient& client;
     uint64_t interfaceId;
     uint16_t methodId;
-    kj::Maybe<CallContextHook&> context;
+    kj::Maybe<kj::Rc<CallContextHook>> context;
 
     kj::Maybe<BlockedCall&> next;
     kj::Maybe<BlockedCall&>* prev;
@@ -861,7 +846,7 @@ private:
   }
 
   kj::Promise<void> callInternal(uint64_t interfaceId, uint16_t methodId,
-                                 CallContextHook& context) {
+                                 kj::Rc<CallContextHook> context) {
     KJ_ASSERT(!blocked);
 
     KJ_IF_SOME(e, brokenException) {
@@ -871,7 +856,7 @@ private:
 
     // `server` can't be null here since `brokenException` is null.
     auto result = KJ_ASSERT_NONNULL(server)->dispatchCall(interfaceId, methodId,
-                                       CallContext<AnyPointer, AnyPointer>(context));
+                                       CallContext<AnyPointer, AnyPointer>(context.addRef()));
 
     KJ_IF_SOME(r, revoker) {
       result.promise = r.wrap(kj::mv(result.promise));
@@ -901,11 +886,11 @@ private:
 
 const uint LocalClient::BRAND = 0;
 
-kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
+kj::Rc<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
   return kj::refcounted<LocalClient>(kj::mv(server));
 }
 
-kj::Own<ClientHook> Capability::Client::makeRevocableLocalClient(Capability::Server& server) {
+kj::Rc<ClientHook> Capability::Client::makeRevocableLocalClient(Capability::Server& server) {
   auto result = kj::refcounted<LocalClient>(
       kj::Own<Capability::Server>(&server, kj::NullDisposer::instance), true /* revocable */);
   return result;
@@ -918,11 +903,11 @@ void Capability::Client::revokeLocalClient(ClientHook& hook, kj::Exception&& e) 
   kj::downcast<LocalClient>(hook).revoke(kj::mv(e));
 }
 
-kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& promise) {
+kj::Rc<ClientHook> newLocalPromiseClient(kj::Promise<kj::Rc<ClientHook>>&& promise) {
   return kj::refcounted<QueuedClient>(kj::mv(promise));
 }
 
-kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise) {
+kj::Rc<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Rc<PipelineHook>>&& promise) {
   return kj::refcounted<QueuedPipeline>(kj::mv(promise));
 }
 
@@ -930,17 +915,13 @@ kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>
 
 namespace _ {  // private
 
-class PipelineBuilderHook final: public PipelineHook, public kj::Refcounted, public kj::EnableSharedFromThis<PipelineBuilderHook> {
+class PipelineBuilderHook final: public PipelineHook {
 public:
   PipelineBuilderHook(uint firstSegmentWords)
       : message(firstSegmentWords),
         root(message.getRoot<AnyPointer>()) {}
 
-  kj::Rc<PipelineHook> addRef() override {
-    return addRefToThis();
-  }
-
-  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+  kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     return root.asReader().getPipelinedCap(ops);
   }
 
@@ -960,15 +941,11 @@ PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords) {
 
 namespace {
 
-class BrokenPipeline final: public PipelineHook, public kj::Refcounted, public kj::EnableSharedFromThis<BrokenPipeline> {
+class BrokenPipeline final: public PipelineHook, public kj::EnableSharedFromThis<BrokenPipeline> {
 public:
   BrokenPipeline(const kj::Exception& exception): exception(exception) {}
 
-  kj::Rc<PipelineHook> addRef() override {
-    return addRefToThis();
-  }
-
-  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override;
+  kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override;
 
 private:
   kj::Exception exception;
@@ -1000,7 +977,7 @@ public:
   MallocMessageBuilder message;
 };
 
-class BrokenClient final: public ClientHook, public kj::Refcounted, public kj::EnableSharedFromThis<BrokenClient> {
+class BrokenClient final: public ClientHook {
 public:
   BrokenClient(const kj::Exception& exception, bool resolved, const void* brand)
       : exception(exception), resolved(resolved), brand(brand) {}
@@ -1015,24 +992,20 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     return VoidPromiseAndPipeline { kj::cp(exception), kj::refcounted<BrokenPipeline>(exception) };
   }
 
-  kj::Maybe<ClientHook&> getResolved() override {
+  kj::Maybe<kj::Rc<ClientHook>> getResolved() override {
     return kj::none;
   }
 
-  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+  kj::Maybe<kj::Promise<kj::Rc<ClientHook>>> whenMoreResolved() override {
     if (resolved) {
       return kj::none;
     } else {
-      return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+      return kj::Promise<kj::Rc<ClientHook>>(kj::cp(exception));
     }
-  }
-
-  kj::Own<ClientHook> addRef() override {
-    return addRefToThis();
   }
 
   const void* getBrand() override {
@@ -1049,11 +1022,11 @@ private:
   const void* brand;
 };
 
-kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
+kj::Rc<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
   return kj::refcounted<BrokenClient>(exception, false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
-kj::Own<ClientHook> newNullCap() {
+kj::Rc<ClientHook> newNullCap() {
   // A null capability, unlike other broken capabilities, is considered resolved.
   return kj::refcounted<BrokenClient>("Called null capability.", true,
                                       &ClientHook::NULL_CAPABILITY_BRAND);
@@ -1061,15 +1034,15 @@ kj::Own<ClientHook> newNullCap() {
 
 }  // namespace
 
-kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason) {
+kj::Rc<ClientHook> newBrokenCap(kj::StringPtr reason) {
   return kj::refcounted<BrokenClient>(reason, false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
-kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
+kj::Rc<ClientHook> newBrokenCap(kj::Exception&& reason) {
   return kj::refcounted<BrokenClient>(kj::mv(reason), false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
-kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
+kj::Rc<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
   return kj::refcounted<BrokenPipeline>(kj::mv(reason));
 }
 
@@ -1081,18 +1054,14 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
 }
 
 kj::Rc<PipelineHook> getDisabledPipeline() {
-  class DisabledPipelineHook final: public PipelineHook, public kj::Refcounted, public kj::EnableSharedFromThis<DisabledPipelineHook> {
+  class DisabledPipelineHook final: public PipelineHook {
   public:
-    kj::Rc<PipelineHook> addRef() override {
-      return addRefToThis();
-    }
-
-    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+    kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
       return newBrokenCap(KJ_EXCEPTION(FAILED,
           "caller specified noPromisePipelining hint, but then tried to pipeline"));
     }
 
-    kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
+    kj::Rc<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
       return newBrokenCap(KJ_EXCEPTION(FAILED,
           "caller specified noPromisePipelining hint, but then tried to pipeline"));
     }
@@ -1104,14 +1073,14 @@ kj::Rc<PipelineHook> getDisabledPipeline() {
 // =======================================================================================
 
 ReaderCapabilityTable::ReaderCapabilityTable(
-    kj::Array<kj::Maybe<kj::Own<ClientHook>>> table)
+    kj::Array<kj::Maybe<kj::Rc<ClientHook>>> table)
     : table(kj::mv(table)) {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
 }
 
-kj::Maybe<kj::Own<ClientHook>> ReaderCapabilityTable::extractCap(uint index) {
+kj::Maybe<kj::Rc<ClientHook>> ReaderCapabilityTable::extractCap(uint index) {
   if (index < table.size()) {
-    return table[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+    return table[index].map([](kj::Rc<ClientHook>& cap) { return cap.addRef(); });
   } else {
     return kj::none;
   }
@@ -1121,15 +1090,15 @@ BuilderCapabilityTable::BuilderCapabilityTable() {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
 }
 
-kj::Maybe<kj::Own<ClientHook>> BuilderCapabilityTable::extractCap(uint index) {
+kj::Maybe<kj::Rc<ClientHook>> BuilderCapabilityTable::extractCap(uint index) {
   if (index < table.size()) {
-    return table[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+    return table[index].map([](kj::Rc<ClientHook>& cap) { return cap.addRef(); });
   } else {
     return kj::none;
   }
 }
 
-uint BuilderCapabilityTable::injectCap(kj::Own<ClientHook>&& cap) {
+uint BuilderCapabilityTable::injectCap(kj::Rc<ClientHook>&& cap) {
   uint result = table.size();
   table.add(kj::mv(cap));
   return result;
@@ -1153,12 +1122,12 @@ Capability::Client CapabilityServerSetBase::addInternal(
 }
 
 kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::Client& client) {
-  ClientHook* hook = client.hook.get();
+  kj::Rc<ClientHook> hook = client.hook.addRef();
 
   // Get the most-resolved-so-far version of the hook.
   for (;;) {
     KJ_IF_SOME(h, hook->getResolved()) {
-      hook = &h;
+      hook = h.addRef();
     } else {
       break;
     }
@@ -1177,8 +1146,8 @@ kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::C
   KJ_IF_SOME(p, hook->whenMoreResolved()) {
     // This hook is an unresolved promise. It might resolve eventually to a local server, so wait
     // for it.
-    return p.attach(hook->addRef())
-        .then([this](kj::Own<ClientHook>&& resolved) {
+    return p.attach(hook.addRef())
+        .then([this](kj::Rc<ClientHook>&& resolved) {
       Capability::Client client(kj::mv(resolved));
       return getLocalServerInternal(client);
     });

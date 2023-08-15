@@ -125,7 +125,7 @@ struct AnyPointer {
     // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
 
 #if !CAPNP_LITE
-    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
+    kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
     // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
     // directly.
 #endif  // !CAPNP_LITE
@@ -263,7 +263,7 @@ struct AnyPointer {
     typedef AnyPointer Pipelines;
 
     inline Pipeline(decltype(nullptr)) {}
-    inline explicit Pipeline(kj::Own<PipelineHook>&& hook): hook(kj::mv(hook)) {}
+    inline explicit Pipeline(kj::Rc<PipelineHook>&& hook): hook(kj::mv(hook)) {}
 
     Pipeline noop();
     // Just make a copy.
@@ -273,20 +273,20 @@ struct AnyPointer {
 
     inline AnyStruct::Pipeline asAnyStruct();
 
-    kj::Own<ClientHook> asCap();
+    kj::Rc<ClientHook> asCap();
     // Expect that the result is a capability and construct a pipelined version of it now.
 
-    inline kj::Own<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
+    inline kj::Rc<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
     // For use by RPC implementations.
 
     template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromClient<T>) == Kind::INTERFACE>>
     inline operator T() { return T(asCap()); }
 
   private:
-    kj::Own<PipelineHook> hook;
+    kj::Rc<PipelineHook> hook;
     kj::Array<PipelineOp> ops;
 
-    inline Pipeline(kj::Own<PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
+    inline Pipeline(kj::Rc<PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
         : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
 
     friend class LocalClient;
@@ -735,22 +735,23 @@ inline bool operator==(const PipelineOp& a, const PipelineOp& b) {
   KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
-class PipelineHook {
+inline bool operator!=(const PipelineOp& a, const PipelineOp& b) {
+  return !(a == b);
+}
+
+class PipelineHook: public kj::Refcounted {
   // Represents a currently-running call, and implements pipelined requests on its result.
 
 public:
-  virtual kj::Rc<PipelineHook> addRef() = 0;
-  // Increment this object's reference count.
-
-  virtual kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;
+  virtual kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;
   // Extract a promised Capability from the results.
 
-  virtual kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops);
+  virtual kj::Rc<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops);
   // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
   // Default implementation just calls the other version.
 
   template <typename Pipeline, typename = FromPipeline<Pipeline>>
-  static inline kj::Own<PipelineHook> from(Pipeline&& pipeline);
+  static inline kj::Rc<PipelineHook> from(Pipeline&& pipeline);
 
   template <typename Pipeline, typename = FromPipeline<Pipeline>>
   static inline PipelineHook& from(Pipeline& pipeline);
@@ -1074,7 +1075,7 @@ struct OrphanGetImpl<AnyList, Kind::OTHER> {
 
 template <typename T>
 struct PipelineHook::FromImpl {
-  static inline kj::Own<PipelineHook> apply(typename T::Pipeline&& pipeline) {
+  static inline kj::Rc<PipelineHook> apply(typename T::Pipeline&& pipeline) {
     return from(kj::mv(pipeline._typeless));
   }
   static inline PipelineHook& apply(typename T::Pipeline& pipeline) {
@@ -1084,7 +1085,7 @@ struct PipelineHook::FromImpl {
 
 template <>
 struct PipelineHook::FromImpl<AnyPointer> {
-  static inline kj::Own<PipelineHook> apply(AnyPointer::Pipeline&& pipeline) {
+  static inline kj::Rc<PipelineHook> apply(AnyPointer::Pipeline&& pipeline) {
     return kj::mv(pipeline.hook);
   }
   static inline PipelineHook& apply(AnyPointer::Pipeline& pipeline) {
@@ -1093,7 +1094,7 @@ struct PipelineHook::FromImpl<AnyPointer> {
 };
 
 template <typename Pipeline, typename T>
-inline kj::Own<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
+inline kj::Rc<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
   return FromImpl<T>::apply(kj::fwd<Pipeline>(pipeline));
 }
 

@@ -599,7 +599,7 @@ protected:
   kj::Promise<void> write(WriteContext context) override {
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
-        return prober->whenReady().then([this, context]() mutable {
+        return prober->whenReady().then([this, context=context]() mutable {
           KJ_ASSERT(!state.is<kj::Own<PathProber>>());
           return write(context);
         });
