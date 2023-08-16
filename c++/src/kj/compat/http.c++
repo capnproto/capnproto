@@ -4362,7 +4362,7 @@ public:
         leftoverBackingBuffer = nullptr;
       }
 
-      return bytesToCopy;
+      co_return bytesToCopy;
     } else {
       // We know here that leftover.size() is less than minBytes, but it might not
       // be zero. Copy everything from leftover into the destination buffer then read
@@ -4379,8 +4379,8 @@ public:
         KJ_DASSERT(maxBytes >= minBytes);
       }
 
-      return stream->tryRead(destination + bytesToCopy, minBytes, maxBytes)
-          .then([bytesToCopy](size_t amount) { return amount + bytesToCopy; });
+      auto amount = co_await stream->tryRead(destination + bytesToCopy, minBytes, maxBytes);
+      co_return amount + bytesToCopy;
     }
   }
 
@@ -4418,31 +4418,27 @@ private:
       kj::AsyncOutputStream& output,
       uint64_t remaining,
       uint64_t total) {
-    // If there is any data remaining in the leftover queue, we'll write it out first to output.
-    if (leftover.size() > 0) {
+    // If there is any data remaining in the leftover queue, we'll write it out first to output,
+    while (leftover.size() > 0) {
       auto bytesToWrite = kj::min(leftover.size(), remaining);
-      return output.write(leftover.begin(), bytesToWrite).then(
-          [this, &output, remaining, total, bytesToWrite]() mutable -> kj::Promise<uint64_t> {
-        leftover = leftover.slice(bytesToWrite, leftover.size());
-        // If the leftover buffer has been fully consumed, go ahead and free it now.
-        if (leftover.size() == 0) {
-          leftoverBackingBuffer = nullptr;
-        }
-        remaining -= bytesToWrite;
-        total += bytesToWrite;
+      co_await output.write(leftover.begin(), bytesToWrite);
+      leftover = leftover.slice(bytesToWrite, leftover.size());
+      // If the leftover buffer has been fully consumed, go ahead and free it now.
+      if (leftover.size() == 0) {
+        leftoverBackingBuffer = nullptr;
+      }
+      remaining -= bytesToWrite;
+      total += bytesToWrite;
 
-        if (remaining == 0) {
-          return total;
-        }
-        return pumpLoop(output, remaining, total);
-      });
-    } else {
-      // Otherwise, we are just going to defer to stream's pumpTo, making sure to
-      // account for the total amount we've already written from the leftover queue.
-      return stream->pumpTo(output, remaining).then([total](auto read) {
-        return total + read;
-      });
+      if (remaining == 0) {
+        co_return total;
+      }
     }
+
+    // Now we can just defer to stream's pumpTo, making sure to account for the total amount we've
+    // already written from the leftover queue.
+    auto read = co_await stream->pumpTo(output, remaining);
+    co_return total + read;
   };
 
   kj::Own<kj::AsyncIoStream> stream;
@@ -4473,12 +4469,10 @@ public:
 
   // AsyncInputStream
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    if (readGuardReleased) {
-      return inner->tryRead(buffer, minBytes, maxBytes);
+    if (!readGuardReleased) {
+      co_await readGuard.addBranch();
     }
-    return readGuard.addBranch().then([this, buffer, minBytes, maxBytes] {
-      return inner->tryRead(buffer, minBytes, maxBytes);
-    });
+    co_return co_await inner->tryRead(buffer, minBytes, maxBytes);
   }
 
   Maybe<uint64_t> tryGetLength() override {
@@ -4486,17 +4480,16 @@ public:
   }
 
   kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount = kj::maxValue) override {
-    if (readGuardReleased) {
-      return inner->pumpTo(output, amount);
+    if (!readGuardReleased) {
+      co_await readGuard.addBranch();
     }
-    return readGuard.addBranch().then([this, &output, amount] {
-      return inner->pumpTo(output, amount);
-    });
+    co_return co_await inner->pumpTo(output, amount);
   }
 
   // AsyncOutputStream
 
   void shutdownWrite() override {
+    // TODO(now): Kinda hard to improve this with a coroutine.
     if (writeGuardReleased) {
       inner->shutdownWrite();
     } else {
@@ -4506,49 +4499,37 @@ public:
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input,
                                                uint64_t amount = kj::maxValue) override {
-    if (writeGuardReleased) {
-      return input.pumpTo(*inner, amount);
-    } else {
-      return writeGuard.addBranch().then([this,&input,amount]() {
-        return input.pumpTo(*inner, amount);
-      });
-    }
+    return pumpFrom(input, amount);
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    if (writeGuardReleased) {
-      return inner->write(buffer, size);
-    } else {
-      return writeGuard.addBranch().then([this,buffer,size]() {
-        return inner->write(buffer, size);
-      });
+    if (!writeGuardReleased) {
+      co_await writeGuard.addBranch();
     }
+    co_return co_await inner->write(buffer, size);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    if (writeGuardReleased) {
-      return inner->write(pieces);
-    } else {
-      return writeGuard.addBranch().then([this, pieces]() {
-        return inner->write(pieces);
-      });
+    if (!writeGuardReleased) {
+      co_await writeGuard.addBranch();
     }
+    co_return co_await inner->write(pieces);
   }
 
   Promise<void> whenWriteDisconnected() override {
-    if (writeGuardReleased) {
-      return inner->whenWriteDisconnected();
-    } else {
-      return writeGuard.addBranch().then([this]() {
-        return inner->whenWriteDisconnected();
-      }, [](kj::Exception&& e) mutable -> kj::Promise<void> {
+    if (!writeGuardReleased) {
+      try {
+        co_await writeGuard.addBranch();
+      } catch (...) {
+        auto e = getCaughtExceptionAsKj();
         if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-          return kj::READY_NOW;
+          co_return;
         } else {
-          return kj::mv(e);
+          throwFatalException(kj::mv(e));
         }
-      });
+      }
     }
+    co_return co_await inner->whenWriteDisconnected();
   }
 
 private:
@@ -4569,7 +4550,15 @@ private:
     }
   }
 
+  kj::Promise<uint64_t> pumpFrom(AsyncInputStream& input, uint64_t amount) {
+    if (!writeGuardReleased) {
+      co_await writeGuard.addBranch();
+    }
+    co_return co_await input.pumpTo(*inner, amount);
+  }
+
   kj::ForkedPromise<void> handleWriteGuard(kj::Promise<void> guard) {
+    // TODO(now): Coroutinify?
     return guard.then([this]() {
       writeGuardReleased = true;
     }).fork();
@@ -4577,6 +4566,7 @@ private:
 
   kj::ForkedPromise<void> handleReadGuard(
       kj::Promise<kj::Maybe<HttpInputStreamImpl::ReleasedBuffer>> guard) {
+    // TODO(now): Coroutinify?
     return guard.then([this](kj::Maybe<HttpInputStreamImpl::ReleasedBuffer> buffer) mutable {
       readGuardReleased = true;
       KJ_IF_MAYBE(b, buffer) {
