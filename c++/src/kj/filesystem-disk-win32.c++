@@ -667,7 +667,7 @@ public:
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,
         OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
+        FILE_FLAG_BACKUP_SEMANTICS,  // required if path is a directory
         NULL)) {
       case ERROR_FILE_NOT_FOUND:
       case ERROR_PATH_NOT_FOUND:

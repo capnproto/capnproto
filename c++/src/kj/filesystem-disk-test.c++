@@ -449,6 +449,12 @@ KJ_TEST("DiskDirectory") {
     auto stats = dir->lstat(Path("bar"));
     KJ_EXPECT(stats.type == FsNode::Type::DIRECTORY);
   }
+  
+  {
+    auto subdir = dir->openFile(Path("bar"));
+    auto stats = subdir->stat();
+    KJ_EXPECT(stats.type == FsNode::Type::DIRECTORY);
+  }
 
   {
     auto list = dir->listNames();
