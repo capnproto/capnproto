@@ -810,6 +810,29 @@ public:
   }
 };
 
+template <typename T>
+class ForkBranchForCoAwait final: public ForkBranchBase {
+  // A node for branch co_await-only promise.
+  // Same as ForBranch, but destroy is not necessary since this node is
+  // allocated on the stack.
+
+public:
+  ForkBranchForCoAwait(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
+  void destroy() override { /* do nothing */ }
+
+  void get(ExceptionOrValue& output) noexcept override {
+    ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
+    KJ_IF_MAYBE(value, hubResult.value) {
+      output.as<T>().value = copyOrAddRef(*value);
+    } else {
+      output.as<T>().value = nullptr;
+    }
+    output.exception = hubResult.exception;
+    releaseHub(output);
+  }
+};
+
+
 template <typename T, size_t index>
 class SplitBranch final: public ForkBranchBase {
   // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
@@ -888,6 +911,10 @@ public:
         allocPromise<ForkBranch<T>>(addRef()));
   }
 
+  BranchForCoAwaitPromise<UnfixVoid<T>> addBranchForCoAwait() {
+    return BranchForCoAwaitPromise<UnfixVoid<T>>(addRef());
+  }
+
   _::SplitTuplePromise<T> split(SourceLocation location) {
     return splitImpl(MakeIndexes<tupleSize<T>()>(), location);
   }
@@ -912,6 +939,22 @@ private:
 inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
   return hub->getResultRef();
 }
+
+
+template <typename T>
+class BranchForCoAwaitPromise {
+  // co_await-only promise-like value object for addBranchForCoAwait() implementation
+
+public:
+  KJ_DISALLOW_COPY(BranchForCoAwaitPromise);
+  explicit BranchForCoAwaitPromise(OwnForkHubBase&& hub): branch(kj::mv(hub)) { }
+  BranchForCoAwaitPromise(BranchForCoAwaitPromise&& other) = default;
+
+  inline OwnPromiseNode node() { return OwnPromiseNode(&branch); }
+
+private:
+  ForkBranchForCoAwait<FixVoid<T>> branch;
+};
 
 // -------------------------------------------------------------------
 
@@ -1372,6 +1415,11 @@ ForkedPromise<T> Promise<T>::fork(SourceLocation location) {
 template <typename T>
 Promise<T> ForkedPromise<T>::addBranch() {
   return hub->addBranch();
+}
+
+template <typename T>
+kj::_::BranchForCoAwaitPromise<T> ForkedPromise<T>::addBranchForCoAwait() {
+  return hub->addBranchForCoAwait();
 }
 
 template <typename T>
@@ -2247,6 +2295,9 @@ public:
   // a type-erased `await_suspend(stdcoro::coroutine_handle<void>)` override, and implement
   // suspension and resumption in terms of .then(). Yuck!
 
+  template <typename U>
+  Awaiter<U> await_transform(BranchForCoAwaitPromise<U>&& promise) { return Awaiter<U>(promise); }
+
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
@@ -2288,7 +2339,8 @@ public:
 
 class CoroutineBase::AwaiterBase {
 public:
-  explicit AwaiterBase(OwnPromiseNode node);
+  explicit AwaiterBase(OwnPromiseNode&& node);
+
   AwaiterBase(AwaiterBase&&);
   ~AwaiterBase() noexcept(false);
   KJ_DISALLOW_COPY(AwaiterBase);
@@ -2326,7 +2378,8 @@ class Coroutine<T>::Awaiter: public AwaiterBase {
   // awaited promise result.
 
 public:
-  explicit Awaiter(Promise<U> promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
+  explicit Awaiter(Promise<U>&& promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
+  explicit Awaiter(BranchForCoAwaitPromise<U>& branch): AwaiterBase(branch.node()) {}
 
   KJ_NOINLINE U await_resume() {
     // This is marked noinline in order to ensure __builtin_return_address() is accurate for stack

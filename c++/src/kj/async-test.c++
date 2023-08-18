@@ -603,6 +603,19 @@ TEST(Async, ForkMaybeRef) {
   EXPECT_EQ(789, branch2.wait(waitScope));
 }
 
+KJ_TEST("addBranchForCoAwait") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<int> promise = evalLater([&]() { return 123; });
+
+  auto coro = [&]() -> kj::Promise<int> {
+    auto fork = promise.fork();
+    co_return co_await fork.addBranchForCoAwait();
+  };
+
+  KJ_EXPECT(coro().wait(waitScope) == 123);
+}
 
 TEST(Async, Split) {
   EventLoop loop;

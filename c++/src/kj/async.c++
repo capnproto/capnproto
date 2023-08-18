@@ -3067,7 +3067,7 @@ void CoroutineBase::destroy() {
   }
 }
 
-CoroutineBase::AwaiterBase::AwaiterBase(OwnPromiseNode node): node(kj::mv(node)) {}
+CoroutineBase::AwaiterBase::AwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
 CoroutineBase::AwaiterBase::AwaiterBase(AwaiterBase&&) = default;
 CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
