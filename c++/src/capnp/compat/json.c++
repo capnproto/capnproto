@@ -132,6 +132,8 @@ struct JsonCodec::Impl {
     escaped.add('\0');
 
     return kj::String(escaped.releaseAsArray());
+    // optimization: If there are no escaped characters, the allocated buffer is exactly the right
+    // size and releaseAsArray does not need to allocate.
   }
 
   kj::StringTree encodeList(kj::Array<kj::StringTree> elements,
@@ -190,7 +192,10 @@ void JsonCodec::setHasMode(HasMode mode) { impl->hasMode = mode; }
 void JsonCodec::setRejectUnknownFields(bool enabled) { impl->rejectUnknownFields = enabled; }
 
 kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
-  MallocMessageBuilder message;
+  MallocMessageBuilder message(128);
+  // Use a smaller initial segment size, this significantly improves performance when encoding
+  // short strings.
+
   auto json = message.getRoot<JsonValue>();
   encode(value, type, json);
   return encodeRaw(json);
@@ -745,9 +750,19 @@ public:
 private:
   kj::String consumeQuotedString() {
     input.consume('"');
-    // TODO(perf): Avoid copy / alloc if no escapes encountered.
     // TODO(perf): Get statistics on string size and preallocate?
+
+    auto initalString = input.consumeWhile([](const char chr) {
+        return chr != '"' && chr != '\\';
+    });
+    if (input.nextChar() == '"') {
+      // optimization: Avoid allocating vector if no escapes encountered.
+      input.advance();
+      return kj::heapString(initalString.begin(), initalString.size());
+    }
+
     kj::Vector<char> decoded;
+    decoded.addAll(initalString);
 
     do {
       auto stringValue = input.consumeWhile([](const char chr) {
@@ -804,11 +819,8 @@ private:
 
     KJ_REQUIRE(numArrayPtr.size() > 0, "Expected number in JSON input.");
 
-    kj::Vector<char> number;
-    number.addAll(numArrayPtr);
-    number.add('\0');
-
-    return kj::String(number.releaseAsArray());
+    return kj::heapString(numArrayPtr.begin(), numArrayPtr.size());
+    // TODO(perf): parse double here directly to avoid memory allocation
   }
 
   // TODO(someday): This "interface" is ugly, and won't work if/when surrogates are handled.
