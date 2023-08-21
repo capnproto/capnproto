@@ -283,7 +283,7 @@ static ChangeInfo structPermuteFields(
   auto oldOrphan = decl.disownNestedDecls();
   auto old = oldOrphan.get();
 
-  KJ_STACK_ARRAY(uint, mapping, old.size(), 16, 64);
+  kj::SmallArray<uint, 16> mapping(old.size());
 
   for (uint i = 0; i < mapping.size(); i++) {
     mapping[i] = i;

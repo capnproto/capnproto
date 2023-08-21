@@ -302,7 +302,7 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
       auto structValue = input.as<capnp::DynamicStruct>();
       auto nonUnionFields = structValue.getSchema().getNonUnionFields();
 
-      KJ_STACK_ARRAY(bool, hasField, nonUnionFields.size(), 32, 128);
+      kj::SmallArray<bool, 32> hasField(nonUnionFields.size());
 
       uint fieldCount = 0;
       for (auto i: kj::indices(nonUnionFields)) {
