@@ -1281,7 +1281,7 @@ kj::Promise<kj::Maybe<typename T::Server&>> CapabilityServerSet<T>::getLocalServ
 
 template <typename T>
 struct Orphanage::GetInnerReader<T, Kind::INTERFACE> {
-  static inline kj::Own<ClientHook> apply(typename T::Client t) {
+  static inline kj::Rc<ClientHook> apply(typename T::Client t) {
     return ClientHook::from(kj::mv(t));
   }
 };

@@ -308,6 +308,8 @@ public:
     return Rc<U>(kj::mv(own));
   }
 
+  inline bool operator!=(decltype(nullptr)) { return this->get() != nullptr; }
+
 private:
   Rc(T* t) : Own<T>(t, *t) { }
   Rc(Own<T>&& t) : Own<T>(kj::mv(t)) { }
@@ -361,6 +363,7 @@ public:
   Arc<U> downcast() {
     KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
   }
+
 
 private:
   Arc(T* t) : Own<T>(t, *t) { }
@@ -437,6 +440,25 @@ protected:
     return kj::mv(result);
   }
 };
+
+template<typename Self>
+class ArcAddRefToThis {
+protected:
+  kj::Arc<const Self> addRefToThis() const {
+    const Self* self = static_cast<const Self*>(this);
+    self->addRefInternal();
+    kj::Rc<const Self> result(self);
+    return kj::mv(result);
+  }
+
+  kj::Arc<Self> addRefToThis() {
+    Self* self = static_cast<Self*>(this);
+    self->addRefInternal();
+    kj::Rc<Self> result(self);
+    return kj::mv(result);
+  }
+};
+
 
 
 }  // namespace kj
