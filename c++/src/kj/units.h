@@ -55,7 +55,6 @@ struct Id {
   inline constexpr explicit Id(int value): value(value) {}
 
   inline constexpr bool operator==(const Id& other) const { return value == other.value; }
-  inline constexpr bool operator!=(const Id& other) const { return value != other.value; }
   inline constexpr bool operator<=(const Id& other) const { return value <= other.value; }
   inline constexpr bool operator>=(const Id& other) const { return value >= other.value; }
   inline constexpr bool operator< (const Id& other) const { return value <  other.value; }
@@ -158,10 +157,6 @@ public:
   template <typename OtherNumber>
   inline constexpr bool operator==(const UnitRatio<OtherNumber, Unit1, Unit2>& other) const {
     return unit1PerUnit2 == other.unit1PerUnit2;
-  }
-  template <typename OtherNumber>
-  inline constexpr bool operator!=(const UnitRatio<OtherNumber, Unit1, Unit2>& other) const {
-    return unit1PerUnit2 != other.unit1PerUnit2;
   }
 
 private:
@@ -316,10 +311,6 @@ public:
     return value == other.value;
   }
   template <typename OtherNumber>
-  inline constexpr bool operator!=(const Quantity<OtherNumber, Unit>& other) const {
-    return value != other.value;
-  }
-  template <typename OtherNumber>
   inline constexpr bool operator<=(const Quantity<OtherNumber, Unit>& other) const {
     return value <= other.value;
   }
@@ -430,7 +421,6 @@ public:
   inline Absolute& operator-=(const T& other) { value -= other; return *this; }
 
   inline constexpr bool operator==(const Absolute& other) const { return value == other.value; }
-  inline constexpr bool operator!=(const Absolute& other) const { return value != other.value; }
   inline constexpr bool operator<=(const Absolute& other) const { return value <= other.value; }
   inline constexpr bool operator>=(const Absolute& other) const { return value >= other.value; }
   inline constexpr bool operator< (const Absolute& other) const { return value <  other.value; }
@@ -1111,7 +1101,6 @@ public:
     inline Iterator& operator++() { ++inner; return *this; }
 
     inline bool operator==(const Iterator& other) const { return inner == other.inner; }
-    inline bool operator!=(const Iterator& other) const { return inner != other.inner; }
 
   private:
     typename Range<T>::Iterator inner;
@@ -1141,7 +1130,6 @@ public:
     inline Iterator& operator++() { ++inner; return *this; }
 
     inline bool operator==(const Iterator& other) const { return inner == other.inner; }
-    inline bool operator!=(const Iterator& other) const { return inner != other.inner; }
 
   private:
     typename Range<T>::Iterator inner;

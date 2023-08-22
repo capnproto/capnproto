@@ -271,7 +271,6 @@ public:
   // to the importing file.
 
   virtual bool operator==(const SchemaFile& other) const = 0;
-  virtual bool operator!=(const SchemaFile& other) const = 0;
   virtual size_t hashCode() const = 0;
   // Compare two SchemaFiles to see if they refer to the same underlying file.  This is an
   // optimization used to avoid the need to re-parse a file to check its ID.

@@ -413,9 +413,7 @@ public:
     auto& other2 = kj::downcast<const DiskSchemaFile>(other);
     return &baseDir == &other2.baseDir && path == other2.path;
   }
-  bool operator!=(const SchemaFile& other) const override {
-    return !operator==(other);
-  }
+
   size_t hashCode() const override {
     // djb hash with xor
     // TODO(someday):  Add hashing library to KJ.

@@ -80,7 +80,6 @@ public:
   // STL says comparing iterators of different containers is not allowed, so we only compare
   // indices here.
   inline bool operator==(const IndexingIterator& other) const { return index == other.index; }
-  inline bool operator!=(const IndexingIterator& other) const { return index != other.index; }
   inline bool operator<=(const IndexingIterator& other) const { return index <= other.index; }
   inline bool operator>=(const IndexingIterator& other) const { return index >= other.index; }
   inline bool operator< (const IndexingIterator& other) const { return index <  other.index; }

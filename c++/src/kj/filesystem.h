@@ -152,7 +152,6 @@ public:
   // A Path can be accessed as an array of strings.
 
   bool operator==(PathPtr other) const;
-  bool operator!=(PathPtr other) const;
   bool operator< (PathPtr other) const;
   bool operator> (PathPtr other) const;
   bool operator<=(PathPtr other) const;
@@ -160,7 +159,6 @@ public:
   // Compare path components lexically.
 
   bool operator==(const Path& other) const;
-  bool operator!=(const Path& other) const;
   bool operator< (const Path& other) const;
   bool operator> (const Path& other) const;
   bool operator<=(const Path& other) const;
@@ -272,7 +270,6 @@ public:
   const String* end() const;
   PathPtr slice(size_t start, size_t end) const;
   bool operator==(PathPtr other) const;
-  bool operator!=(PathPtr other) const;
   bool operator< (PathPtr other) const;
   bool operator> (PathPtr other) const;
   bool operator<=(PathPtr other) const;
@@ -1003,13 +1000,11 @@ inline PathPtr Path::slice(size_t start, size_t end) const& {
   return PathPtr(*this).slice(start, end);
 }
 inline bool Path::operator==(PathPtr other) const { return PathPtr(*this) == other; }
-inline bool Path::operator!=(PathPtr other) const { return PathPtr(*this) != other; }
 inline bool Path::operator< (PathPtr other) const { return PathPtr(*this) <  other; }
 inline bool Path::operator> (PathPtr other) const { return PathPtr(*this) >  other; }
 inline bool Path::operator<=(PathPtr other) const { return PathPtr(*this) <= other; }
 inline bool Path::operator>=(PathPtr other) const { return PathPtr(*this) >= other; }
 inline bool Path::operator==(const Path& other) const { return PathPtr(*this) == PathPtr(other); }
-inline bool Path::operator!=(const Path& other) const { return PathPtr(*this) != PathPtr(other); }
 inline bool Path::operator< (const Path& other) const { return PathPtr(*this) <  PathPtr(other); }
 inline bool Path::operator> (const Path& other) const { return PathPtr(*this) >  PathPtr(other); }
 inline bool Path::operator<=(const Path& other) const { return PathPtr(*this) <= PathPtr(other); }
@@ -1040,7 +1035,6 @@ inline const String* PathPtr::end() const { return parts.end(); }
 inline PathPtr PathPtr::slice(size_t start, size_t end) const {
   return PathPtr(parts.slice(start, end));
 }
-inline bool PathPtr::operator!=(PathPtr other) const { return !(*this == other); }
 inline bool PathPtr::operator> (PathPtr other) const { return other < *this; }
 inline bool PathPtr::operator<=(PathPtr other) const { return !(other < *this); }
 inline bool PathPtr::operator>=(PathPtr other) const { return !(*this < other); }

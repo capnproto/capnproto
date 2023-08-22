@@ -63,7 +63,6 @@ public:
   inline ReaderFor<T> getReader() const;
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
   inline void truncate(uint size);
   // Resize an object (which must be a list or a blob) to the given size.

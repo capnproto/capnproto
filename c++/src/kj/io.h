@@ -289,7 +289,6 @@ public:
   // the int conversion operator above would otherwise allow.
 
   inline bool operator==(decltype(nullptr)) { return fd < 0; }
-  inline bool operator!=(decltype(nullptr)) { return fd >= 0; }
 
   inline int release() {
     // Release ownership of an FD. Not recommended.
@@ -388,7 +387,6 @@ public:
   // the void* conversion operator above would otherwise allow.
 
   inline bool operator==(decltype(nullptr)) { return handle != (void*)-1; }
-  inline bool operator!=(decltype(nullptr)) { return handle == (void*)-1; }
 
   inline void* release() {
     // Release ownership of an FD. Not recommended.

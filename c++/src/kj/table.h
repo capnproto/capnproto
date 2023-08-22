@@ -1170,9 +1170,6 @@ public:
   inline bool operator==(decltype(nullptr)) const { return i == 0; }
   inline bool operator==(uint j) const { return i == j + 1; }
   inline bool operator==(const MaybeUint& other) const { return i == other.i; }
-  inline bool operator!=(decltype(nullptr)) const { return i != 0; }
-  inline bool operator!=(uint j) const { return i != j + 1; }
-  inline bool operator!=(const MaybeUint& other) const { return i != other.i; }
 
   inline MaybeUint& operator=(decltype(nullptr)) { i = 0; return *this; }
   inline MaybeUint& operator=(uint j) { i = j + 1; return *this; }
@@ -1407,9 +1404,6 @@ public:
   inline bool operator==(const Iterator& other) const {
     return leaf == other.leaf && row == other.row;
   }
-  inline bool operator!=(const Iterator& other) const {
-    return leaf != other.leaf || row != other.row;
-  }
 
   bool isEnd() {
     return row == Leaf::NROWS || leaf->rows[row] == nullptr;
@@ -1596,9 +1590,6 @@ public:
 
     inline bool operator==(const Iterator& other) const {
       return pos == other.pos;
-    }
-    inline bool operator!=(const Iterator& other) const {
-      return pos != other.pos;
     }
 
   private:

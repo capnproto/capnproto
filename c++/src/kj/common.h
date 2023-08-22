@@ -850,7 +850,6 @@ public:
     inline ptrdiff_t operator- (const Iterator& other) const { return value - other.value; }
 
     inline bool operator==(const Iterator& other) const { return value == other.value; }
-    inline bool operator!=(const Iterator& other) const { return value != other.value; }
     inline bool operator<=(const Iterator& other) const { return value <= other.value; }
     inline bool operator>=(const Iterator& other) const { return value >= other.value; }
     inline bool operator< (const Iterator& other) const { return value <  other.value; }
@@ -923,7 +922,6 @@ public:
     inline ptrdiff_t operator- (const Iterator& other) const { return index - other.index; }
 
     inline bool operator==(const Iterator& other) const { return index == other.index; }
-    inline bool operator!=(const Iterator& other) const { return index != other.index; }
     inline bool operator<=(const Iterator& other) const { return index <= other.index; }
     inline bool operator>=(const Iterator& other) const { return index >= other.index; }
     inline bool operator< (const Iterator& other) const { return index <  other.index; }
@@ -981,7 +979,6 @@ public:
   inline ptrdiff_t operator- (const MappedIterator& other) const { return inner - other.inner; }
 
   inline bool operator==(const MappedIterator& other) const { return inner == other.inner; }
-  inline bool operator!=(const MappedIterator& other) const { return inner != other.inner; }
   inline bool operator<=(const MappedIterator& other) const { return inner <= other.inner; }
   inline bool operator>=(const MappedIterator& other) const { return inner >= other.inner; }
   inline bool operator< (const MappedIterator& other) const { return inner <  other.inner; }
@@ -1253,7 +1250,6 @@ public:
   }
 
   inline bool operator==(decltype(nullptr)) const { return !isSet; }
-  inline bool operator!=(decltype(nullptr)) const { return isSet; }
 
   NullableValue(const T* t) = delete;
   NullableValue& operator=(const T* other) = delete;
@@ -1437,7 +1433,6 @@ public:
   inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
   inline bool operator==(const Maybe<T>& other) const {
     if (ptr == nullptr) {
@@ -1446,7 +1441,6 @@ public:
       return other.ptr != nullptr && *ptr == *other.ptr;
     }
   }
-  inline bool operator!=(const Maybe<T>& other) const { return !(*this == other); }
 
   Maybe(const T* t) = delete;
   Maybe& operator=(const T* other) = delete;
@@ -1619,7 +1613,6 @@ public:
   inline Maybe& operator=(const Maybe<U&>&& other) = delete;
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
   T& orDefault(T& defaultValue) {
     if (ptr == nullptr) {
@@ -1818,7 +1811,6 @@ public:
   }
 
   inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
-  inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;

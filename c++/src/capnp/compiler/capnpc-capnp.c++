@@ -73,7 +73,6 @@ struct Indent {
     inline Iterator& operator++() { ++i; return *this; }
     inline Iterator operator++(int) { Iterator result = *this; ++i; return result; }
     inline bool operator==(const Iterator& other) const { return i == other.i; }
-    inline bool operator!=(const Iterator& other) const { return i != other.i; }
   };
 
   inline size_t size() const { return amount; }

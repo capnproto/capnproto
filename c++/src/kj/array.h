@@ -180,8 +180,6 @@ public:
 
   template <typename U>
   inline bool operator==(const U& other) const { return asPtr() == other; }
-  template <typename U>
-  inline bool operator!=(const U& other) const { return asPtr() != other; }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
@@ -219,7 +217,6 @@ public:
   }
 
   inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
-  inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
 
   inline Array& operator=(decltype(nullptr)) {
     dispose();

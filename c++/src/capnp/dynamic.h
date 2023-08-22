@@ -863,7 +863,6 @@ public:
   // transferred to the returned Orphan<T>.
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   StructSchema schema;
@@ -904,7 +903,6 @@ public:
   // TODO(someday): Support truncate().
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   ListSchema schema;
@@ -942,7 +940,6 @@ public:
   // transferred to the returned Orphan<T>.
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   InterfaceSchema schema;
