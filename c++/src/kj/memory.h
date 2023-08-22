@@ -272,7 +272,6 @@ private:
   inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr) {}
 
   inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
-  inline bool operator!=(decltype(nullptr)) { return ptr != nullptr; }
   // Only called by Maybe<Own<T>>.
 
   inline void dispose() {
@@ -386,7 +385,6 @@ private:
   inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
 
   inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
-  inline bool operator!=(decltype(nullptr)) { return ptr != nullptr; }
   // Only called by Maybe<Own<T>>.
 
   inline void dispose() {
@@ -473,7 +471,6 @@ public:
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
   Own<T, D>& orDefault(Own<T, D>& defaultValue) {
     if (ptr == nullptr) {

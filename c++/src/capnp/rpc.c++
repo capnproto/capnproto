@@ -584,7 +584,6 @@ private:
     inline bool operator==(decltype(nullptr)) const {
       return !isAwaitingReturn && selfRef == nullptr;
     }
-    inline bool operator!=(decltype(nullptr)) const { return !operator==(nullptr); }
   };
 
   struct Answer {
@@ -635,7 +634,6 @@ private:
     // ongoing operation to wait for that promise to resolve and then send a `Resolve` message.
 
     inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
-    inline bool operator!=(decltype(nullptr)) const { return refcount != 0; }
   };
 
   struct Import {
@@ -666,7 +664,6 @@ private:
     // Fulfill this when the Disembargo arrives.
 
     inline bool operator==(decltype(nullptr)) const { return fulfiller == nullptr; }
-    inline bool operator!=(decltype(nullptr)) const { return fulfiller != nullptr; }
   };
 
   // =======================================================================================

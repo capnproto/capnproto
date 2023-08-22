@@ -122,7 +122,6 @@ public:
   HttpHeaderId() = default;
 
   inline bool operator==(const HttpHeaderId& other) const { return id == other.id; }
-  inline bool operator!=(const HttpHeaderId& other) const { return id != other.id; }
   inline bool operator< (const HttpHeaderId& other) const { return id <  other.id; }
   inline bool operator> (const HttpHeaderId& other) const { return id >  other.id; }
   inline bool operator<=(const HttpHeaderId& other) const { return id <= other.id; }
@@ -502,9 +501,6 @@ struct HttpByteRange {
 
   inline bool operator==(const HttpByteRange& other) const {
     return start == other.start && end == other.end;
-  }
-  inline bool operator!=(const HttpByteRange& other) const {
-    return !operator==(other);
   }
 };
 

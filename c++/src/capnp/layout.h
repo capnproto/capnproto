@@ -878,7 +878,6 @@ public:
   inline OrphanBuilder& operator=(OrphanBuilder&& other);
 
   inline bool operator==(decltype(nullptr)) const { return location == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return location != nullptr; }
 
   StructBuilder asStruct(StructSize size);
   // Interpret as a struct, or throw an exception if not a struct.

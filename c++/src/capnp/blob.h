@@ -145,10 +145,8 @@ public:
   inline const char* end() const { return content.end() - 1; }
 
   inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
-  inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
   inline bool operator==(Builder other) const { return asString() == other.asString(); }
-  inline bool operator!=(Builder other) const { return asString() != other.asString(); }
   inline bool operator< (Builder other) const { return asString() <  other.asString(); }
   inline bool operator> (Builder other) const { return asString() >  other.asString(); }
   inline bool operator<=(Builder other) const { return asString() <= other.asString(); }
@@ -174,7 +172,6 @@ inline kj::StringPtr KJ_STRINGIFY(Text::Builder builder) {
 }
 
 inline bool operator==(const char* a, const Text::Builder& b) { return a == b.asString(); }
-inline bool operator!=(const char* a, const Text::Builder& b) { return a != b.asString(); }
 
 inline Text::Builder::operator kj::StringPtr() const {
   return kj::StringPtr(content.begin(), content.size() - 1);

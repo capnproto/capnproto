@@ -205,9 +205,6 @@ public:
   inline bool operator==(const ListIterator& other) const {
     return _::readMaybe(current) == _::readMaybe(other.current);
   }
-  inline bool operator!=(const ListIterator& other) const {
-    return _::readMaybe(current) != _::readMaybe(other.current);
-  }
 
 private:
   Maybe<MaybeConstT&> current;

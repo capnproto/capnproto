@@ -72,8 +72,6 @@ public:
 
   template <typename U>
   inline bool operator==(const U& other) const { return asPtr() == other; }
-  template <typename U>
-  inline bool operator!=(const U& other) const { return asPtr() != other; }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) KJ_LIFETIMEBOUND {
     return asPtr().slice(start, end);

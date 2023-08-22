@@ -5532,7 +5532,6 @@ KJ_TEST("HttpClient concurrency limiting") {
     bool operator==(const CallbackEvent& other) const {
       return runningCount == other.runningCount && pendingCount == other.pendingCount;
     }
-    bool operator!=(const CallbackEvent& other) const { return !(*this == other); }
     // TODO(someday): Can use default spaceship operator in C++20:
     //auto operator<=>(const CallbackEvent&) const = default;
   };

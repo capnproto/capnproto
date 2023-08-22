@@ -388,7 +388,6 @@ public:
   OneOf& operator=(OneOf&& other) { if (tag != 0) destroy(); moveFrom(other); return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return tag == 0; }
-  inline bool operator!=(decltype(nullptr)) const { return tag != 0; }
 
   template <typename T>
   bool is() const {

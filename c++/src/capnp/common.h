@@ -70,7 +70,6 @@ struct Void {
   // differently from other types.
 
   inline constexpr bool operator==(Void other) const { return true; }
-  inline constexpr bool operator!=(Void other) const { return false; }
 };
 
 static constexpr Void VOID = Void();
