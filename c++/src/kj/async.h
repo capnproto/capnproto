@@ -96,6 +96,8 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(DisallowAsyncDestructorsScope);
 
 private:
+  KJ_DISALLOW_NEW_AND_DELETE();
+
   kj::StringPtr reason;
   DisallowAsyncDestructorsScope* previousValue;
 
@@ -111,6 +113,8 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(AllowAsyncDestructorsScope);
 
 private:
+  KJ_DISALLOW_NEW_AND_DELETE();
+
   DisallowAsyncDestructorsScope* previousValue;
 };
 

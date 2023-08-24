@@ -140,7 +140,6 @@ void AsyncObject::failed() noexcept {
 
 DisallowAsyncDestructorsScope::DisallowAsyncDestructorsScope(kj::StringPtr reason)
     : reason(reason), previousValue(disallowAsyncDestructorsScope) {
-  requireOnStack(this, "DisallowAsyncDestructorsScope must be allocated on the stack.");
   disallowAsyncDestructorsScope = this;
 }
 
@@ -150,7 +149,6 @@ DisallowAsyncDestructorsScope::~DisallowAsyncDestructorsScope() {
 
 AllowAsyncDestructorsScope::AllowAsyncDestructorsScope()
     : previousValue(disallowAsyncDestructorsScope) {
-  requireOnStack(this, "AllowAsyncDestructorsScope must be allocated on the stack.");
   disallowAsyncDestructorsScope = nullptr;
 }
 AllowAsyncDestructorsScope::~AllowAsyncDestructorsScope() {

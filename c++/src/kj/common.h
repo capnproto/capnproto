@@ -182,26 +182,6 @@ typedef unsigned char byte;
 #endif
 #endif
 
-#define KJ_DISALLOW_COPY(classname) \
-  classname(const classname&) = delete; \
-  classname& operator=(const classname&) = delete
-// Deletes the implicit copy constructor and assignment operator. This inhibits the compiler from
-// generating the implicit move constructor and assignment operator for this class, but allows the
-// code author to supply them, if they make sense to implement.
-//
-// This macro should not be your first choice. Instead, prefer using KJ_DISALLOW_COPY_AND_MOVE, and only use
-// this macro when you have determined that you must implement move semantics for your type.
-
-#define KJ_DISALLOW_COPY_AND_MOVE(classname) \
-  classname(const classname&) = delete; \
-  classname& operator=(const classname&) = delete; \
-  classname(classname&&) = delete; \
-  classname& operator=(classname&&) = delete
-// Deletes the implicit copy and move constructors and assignment operators. This is useful in cases
-// where the code author wants to provide an additional compile-time guard against subsequent
-// maintainers casually adding move operations. This is particularly useful when implementing RAII
-// classes that are intended to be completely immobile.
-
 #ifdef __GNUC__
 #define KJ_LIKELY(condition) __builtin_expect(condition, true)
 #define KJ_UNLIKELY(condition) __builtin_expect(condition, false)
@@ -312,6 +292,35 @@ typedef unsigned char byte;
 #undef KJ_DEPRECATED
 #define KJ_DEPRECATED(reason)
 #endif
+
+#define KJ_DISALLOW_COPY(classname) \
+  classname(const classname&) = delete; \
+  classname& operator=(const classname&) = delete
+// Deletes the implicit copy constructor and assignment operator. This inhibits the compiler from
+// generating the implicit move constructor and assignment operator for this class, but allows the
+// code author to supply them, if they make sense to implement.
+//
+// This macro should not be your first choice. Instead, prefer using KJ_DISALLOW_COPY_AND_MOVE, and only use
+// this macro when you have determined that you must implement move semantics for your type.
+
+#define KJ_DISALLOW_COPY_AND_MOVE(classname) \
+  classname(const classname&) = delete; \
+  classname& operator=(const classname&) = delete; \
+  classname(classname&&) = delete; \
+  classname& operator=(classname&&) = delete
+// Deletes the implicit copy and move constructors and assignment operators. This is useful in cases
+// where the code author wants to provide an additional compile-time guard against subsequent
+// maintainers casually adding move operations. This is particularly useful when implementing RAII
+// classes that are intended to be completely immobile.
+
+#define KJ_DISALLOW_NEW_AND_DELETE() \
+  private: \
+    KJ_NORETURN(KJ_ALWAYS_INLINE(void operator delete(void*, size_t))) { KJ_UNREACHABLE; } \
+    KJ_NORETURN(KJ_ALWAYS_INLINE(void* operator new(size_t, void* ptr))) { KJ_UNREACHABLE; } \
+    KJ_NORETURN(KJ_ALWAYS_INLINE(void* operator new(size_t)) { KJ_UNREACHABLE; } \
+    KJ_NORETURN(KJ_ALWAYS_INLINE(void operator delete(void*, void*))) { KJ_UNREACHABLE; }
+// A macro to only permit stack allocated class instances. The macro should be placed within
+// the private section of a class declaration, failure to do so may break compilation.
 
 namespace _ {  // private
 
