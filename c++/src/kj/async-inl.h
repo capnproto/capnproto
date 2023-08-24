@@ -789,16 +789,13 @@ template <typename T> Maybe<Own<T>> copyOrAddRef(Maybe<Own<T>>& t) {
   });
 }
 
+
 template <typename T>
-class ForkBranch final: public ForkBranchBase {
-  // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
-  // a const reference.
-
+class  ForkBranchBaseT: public ForkBranchBase {
 public:
-  ForkBranch(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
-  void destroy() override { freePromise(this); }
+  ForkBranchBaseT(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
 
-  void get(ExceptionOrValue& output) noexcept override {
+ void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
       output.as<T>().value = copyOrAddRef(*value);
@@ -811,25 +808,26 @@ public:
 };
 
 template <typename T>
-class ForkBranchForCoAwait final: public ForkBranchBase {
-  // A node for branch co_await-only promise.
-  // Same as ForBranch, but destroy is not necessary since this node is
+class ForkBranch final: public ForkBranchBaseT<T> {
+  // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
+  // a const reference.
+
+public:
+  ForkBranch(OwnForkHubBase&& hub): ForkBranchBaseT<T>(kj::mv(hub)) {}
+  void destroy() override { freePromise(this); }
+};
+
+template <typename T>
+class ForkedPromiseNode final: public ForkBranchBaseT<T> {
+  // A node to co_await on the fork itself.
+  // Same as ForkBranch, but destroy is not necessary since this node is
   // allocated on the stack.
 
 public:
-  ForkBranchForCoAwait(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
-  void destroy() override { /* do nothing */ }
+  ForkedPromiseNode(ForkedPromise<UnfixVoid<T>>&& promise)
+  : ForkBranchBaseT<T>(promise.hub->addRef()) {}
 
-  void get(ExceptionOrValue& output) noexcept override {
-    ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
-    KJ_IF_MAYBE(value, hubResult.value) {
-      output.as<T>().value = copyOrAddRef(*value);
-    } else {
-      output.as<T>().value = nullptr;
-    }
-    output.exception = hubResult.exception;
-    releaseHub(output);
-  }
+  void destroy() override { /* do nothing */ }
 };
 
 
@@ -911,10 +909,6 @@ public:
         allocPromise<ForkBranch<T>>(addRef()));
   }
 
-  BranchForCoAwaitPromise<UnfixVoid<T>> addBranchForCoAwait() {
-    return BranchForCoAwaitPromise<UnfixVoid<T>>(addRef());
-  }
-
   _::SplitTuplePromise<T> split(SourceLocation location) {
     return splitImpl(MakeIndexes<tupleSize<T>()>(), location);
   }
@@ -939,22 +933,6 @@ private:
 inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
   return hub->getResultRef();
 }
-
-
-template <typename T>
-class BranchForCoAwaitPromise {
-  // co_await-only promise-like value object for addBranchForCoAwait() implementation
-
-public:
-  KJ_DISALLOW_COPY(BranchForCoAwaitPromise);
-  explicit BranchForCoAwaitPromise(OwnForkHubBase&& hub): branch(kj::mv(hub)) { }
-  BranchForCoAwaitPromise(BranchForCoAwaitPromise&& other) = default;
-
-  inline OwnPromiseNode node() { return OwnPromiseNode(&branch); }
-
-private:
-  ForkBranchForCoAwait<FixVoid<T>> branch;
-};
 
 // -------------------------------------------------------------------
 
@@ -1415,11 +1393,6 @@ ForkedPromise<T> Promise<T>::fork(SourceLocation location) {
 template <typename T>
 Promise<T> ForkedPromise<T>::addBranch() {
   return hub->addBranch();
-}
-
-template <typename T>
-kj::_::BranchForCoAwaitPromise<T> ForkedPromise<T>::addBranchForCoAwait() {
-  return hub->addBranchForCoAwait();
 }
 
 template <typename T>
@@ -2280,9 +2253,13 @@ public:
   class Awaiter;
 
   template <typename U>
-  Awaiter<U> await_transform(kj::Promise<U>& promise) { return Awaiter<U>(kj::mv(promise)); }
+  Awaiter<U> await_transform(kj::Promise<U>& promise) { 
+    return Awaiter<U>(PromiseNode::from(kj::mv(promise))); 
+  }
   template <typename U>
-  Awaiter<U> await_transform(kj::Promise<U>&& promise) { return Awaiter<U>(kj::mv(promise)); }
+  Awaiter<U> await_transform(kj::Promise<U>&& promise) { 
+    return Awaiter<U>(PromiseNode::from(kj::mv(promise))); 
+  }
   // Called when someone writes `co_await promise`, where `promise` is a kj::Promise<U>. We return
   // an Awaiter<U>, which implements coroutine suspension and resumption in terms of the KJ async
   // event system.
@@ -2296,7 +2273,13 @@ public:
   // suspension and resumption in terms of .then(). Yuck!
 
   template <typename U>
-  Awaiter<U> await_transform(BranchForCoAwaitPromise<U>&& promise) { return Awaiter<U>(promise); }
+  class ForkedPromiseAwaiter;
+
+  // called by co_awaiting on a forked promise.
+  template <typename U>
+  ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>&& promise) { 
+    return ForkedPromiseAwaiter<U>(kj::mv(promise)); 
+  }
 
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
@@ -2378,8 +2361,7 @@ class Coroutine<T>::Awaiter: public AwaiterBase {
   // awaited promise result.
 
 public:
-  explicit Awaiter(Promise<U>&& promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
-  explicit Awaiter(BranchForCoAwaitPromise<U>& branch): AwaiterBase(branch.node()) {}
+  explicit Awaiter(OwnPromiseNode&& node): AwaiterBase(kj::mv(node)) {}
 
   KJ_NOINLINE U await_resume() {
     // This is marked noinline in order to ensure __builtin_return_address() is accurate for stack
@@ -2406,6 +2388,29 @@ public:
 
 private:
   ExceptionOr<FixVoid<U>> result;
+};
+
+// Wait for forked promise.
+// Delegate all the work to usual awaiter on a special node.
+template <typename T>
+template <typename U>
+class Coroutine<T>::ForkedPromiseAwaiter {
+public:
+  ForkedPromiseAwaiter(ForkedPromise<U>&& promise) 
+  : node(kj::mv(promise)), awaiter(OwnPromiseNode(&node)) { }
+
+  template <typename V>
+  inline bool await_suspend(stdcoro::coroutine_handle<V> coroutine) {
+    return awaiter.await_suspend(coroutine);
+  }
+
+  inline U await_resume() { return awaiter.await_resume(); }
+
+  inline bool await_ready() const { return awaiter.await_ready(); }
+
+private:
+  ForkedPromiseNode<_::FixVoid<U>> node;
+  Awaiter<U> awaiter;
 };
 
 // ---------------------------------------------------------

@@ -53,11 +53,6 @@ struct PromiseFulfillerPair;
 template <typename Func>
 class FunctionParam;
 
-namespace _ {
-template <typename T>
-class BranchForCoAwaitPromise;
-}
-
 template <typename Func, typename T>
 using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
@@ -393,12 +388,6 @@ public:
   Promise<T> addBranch();
   // Add a new branch to the fork.  The branch is equivalent to the original promise.
 
-  _::BranchForCoAwaitPromise<T> addBranchForCoAwait();
-  // Add a new branch to the fork. 
-  // Like addBranch(), but use this version when you will immediately `co_await` the result.
-  // This version avoids allocation by leveraging the coroutine frame. You must not store the
-  // result, the only thing you may do with it is immediately `co_await` it.
-  
   bool hasBranches();
   // Returns true if there are any branches that haven't been canceled.
 
@@ -409,6 +398,7 @@ private:
 
   friend class Promise<T>;
   friend class EventLoop;
+  template<typename> friend class _::ForkedPromiseNode;
 };
 
 constexpr _::ReadyNow READY_NOW = _::ReadyNow();

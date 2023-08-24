@@ -611,7 +611,8 @@ KJ_TEST("addBranchForCoAwait") {
 
   auto coro = [&]() -> kj::Promise<int> {
     auto fork = promise.fork();
-    co_return co_await fork.addBranchForCoAwait();
+    fork.addBranch();
+    co_return co_await kj::mv(fork);
   };
 
   KJ_EXPECT(coro().wait(waitScope) == 123);
