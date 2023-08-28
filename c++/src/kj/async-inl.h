@@ -825,7 +825,7 @@ class ForkedPromiseNode final: public ForkBranchBaseT<T> {
 
 public:
   ForkedPromiseNode(ForkedPromise<UnfixVoid<T>>& promise)
-  : ForkBranchBaseT<T>(promise.hub->addRef()) {}
+      : ForkBranchBaseT<T>(promise.hub->addRef()) {}
 
   void destroy() override { /* do nothing */ }
 };
