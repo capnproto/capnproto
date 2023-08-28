@@ -381,6 +381,7 @@ template <typename T>
 class ForkedPromise {
   // The result of `Promise::fork()` and `EventLoop::fork()`.  Allows branches to be created.
   // Like `Promise<T>`, this is a pass-by-move type.
+  // Rather than adding branches ForkedPromise can be co_await'ed directly to save on allocations.
 
 public:
   inline ForkedPromise(decltype(nullptr)) {}

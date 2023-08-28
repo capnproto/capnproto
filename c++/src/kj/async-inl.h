@@ -824,7 +824,7 @@ class ForkedPromiseNode final: public ForkBranchBaseT<T> {
   // allocated on the stack.
 
 public:
-  ForkedPromiseNode(ForkedPromise<UnfixVoid<T>>&& promise)
+  ForkedPromiseNode(ForkedPromise<UnfixVoid<T>>& promise)
   : ForkBranchBaseT<T>(promise.hub->addRef()) {}
 
   void destroy() override { /* do nothing */ }
@@ -2277,8 +2277,8 @@ public:
 
   // called by co_awaiting on a forked promise.
   template <typename U>
-  ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>&& promise) { 
-    return ForkedPromiseAwaiter<U>(kj::mv(promise)); 
+  ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>& promise) { 
+    return ForkedPromiseAwaiter<U>(promise); 
   }
 
   void fulfill(FixVoid<T>&& value) {
@@ -2396,8 +2396,8 @@ template <typename T>
 template <typename U>
 class Coroutine<T>::ForkedPromiseAwaiter {
 public:
-  ForkedPromiseAwaiter(ForkedPromise<U>&& promise) 
-  : node(kj::mv(promise)), awaiter(OwnPromiseNode(&node)) { }
+  ForkedPromiseAwaiter(ForkedPromise<U>& promise) 
+  : node(promise), awaiter(OwnPromiseNode(&node)) { }
 
   template <typename V>
   inline bool await_suspend(stdcoro::coroutine_handle<V> coroutine) {

@@ -1499,7 +1499,7 @@ public:
       // We're still working on reading the previous body.
       auto fork = messageReadQueue.fork();
       messageReadQueue = fork.addBranch();
-      co_await kj::mv(fork);
+      co_await fork;
     }
 
     for (;;) {
@@ -2223,7 +2223,7 @@ public:
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    co_await kj::mv(fork);
+    co_await fork;
     co_await inner.write(buffer, size);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2239,7 +2239,7 @@ public:
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    co_await kj::mv(fork);
+    co_await fork;
     co_await inner.write(pieces);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2255,7 +2255,7 @@ public:
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    co_await kj::mv(fork);
+    co_await fork;
     auto actual = co_await input.pumpTo(inner, amount);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
