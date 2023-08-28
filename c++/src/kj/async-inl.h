@@ -795,7 +795,7 @@ class ForkBranchBaseT: public ForkBranchBase {
 public:
   ForkBranchBaseT(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
 
- void get(ExceptionOrValue& output) noexcept override {
+  void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
       output.as<T>().value = copyOrAddRef(*value);
