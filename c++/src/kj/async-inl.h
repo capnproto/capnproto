@@ -791,7 +791,7 @@ template <typename T> Maybe<Own<T>> copyOrAddRef(Maybe<Own<T>>& t) {
 
 
 template <typename T>
-class  ForkBranchBaseT: public ForkBranchBase {
+class ForkBranchBaseT: public ForkBranchBase {
 public:
   ForkBranchBaseT(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
 
