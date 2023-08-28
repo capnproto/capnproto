@@ -2397,7 +2397,7 @@ template <typename U>
 class Coroutine<T>::ForkedPromiseAwaiter {
 public:
   ForkedPromiseAwaiter(ForkedPromise<U>& promise) 
-  : node(promise), awaiter(OwnPromiseNode(&node)) { }
+      : node(promise), awaiter(OwnPromiseNode(&node)) { }
 
   template <typename V>
   inline bool await_suspend(stdcoro::coroutine_handle<V> coroutine) {
