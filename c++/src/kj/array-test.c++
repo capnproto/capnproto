@@ -127,12 +127,92 @@ TEST(Array, ComplexConstructor) {
   }
   EXPECT_EQ(0, TestObject::count);
 }
+
+// SmallArray and SmallArrayBuilder tests largely mirror the regular Array and ArrayBuilder tests, with
+// some minor modifications as required. Several of the SmallArray and SmallArrayBuilder tests have
+// ...OverLimit varieties, which test the SmallArray when it falls back to heapArray(). These are only
+// a few, since heapArray() is already well-tested by itself.
+
+constexpr auto SBO_TEST_SIZE = 32;
+
+TEST(SmallArray, TrivialConstructor) {
+  {
+    SmallArray<char, SBO_TEST_SIZE> chars(SBO_TEST_SIZE);
+    chars[0] = 12;
+    chars[1] = 34;
+  }
+
+  {
+    SmallArray<char, SBO_TEST_SIZE> chars(SBO_TEST_SIZE);
+    // TODO(test): See TEST(Array, TrivialConstructor) for why this ends abruptly.
+  }
+}
+
+TEST(SmallArray, TrivialConstructorOverLimit) {
+  {
+    SmallArray<char, SBO_TEST_SIZE> chars(SBO_TEST_SIZE * 2);
+    chars[0] = 12;
+    chars[1] = 34;
+  }
+
+  {
+    SmallArray<char, SBO_TEST_SIZE> chars(SBO_TEST_SIZE * 2);
+    // TODO(test): See TEST(Array, TrivialConstructor) for why this ends abruptly.
+  }
+}
+
+TEST(SmallArray, ComplexConstructor) {
+  TestObject::count = 0;
+  TestObject::throwAt = -1;
+
+  {
+    SmallArray<TestObject, SBO_TEST_SIZE> array(SBO_TEST_SIZE);
+    EXPECT_EQ(SBO_TEST_SIZE, TestObject::count);
+  }
+  EXPECT_EQ(0, TestObject::count);
+}
+
+TEST(SmallArray, ComplexConstructorOverLimit) {
+  TestObject::count = 0;
+  TestObject::throwAt = -1;
+
+  {
+    SmallArray<TestObject, SBO_TEST_SIZE> array(SBO_TEST_SIZE * 2);
+    EXPECT_EQ(SBO_TEST_SIZE * 2, TestObject::count);
+  }
+  EXPECT_EQ(0, TestObject::count);
+}
+
 TEST(Array, ThrowingConstructor) {
   TestObject::count = 0;
   TestObject::throwAt = 16;
 
   // If a constructor throws, the previous elements should still be destroyed.
   EXPECT_ANY_THROW(heapArray<TestObject>(32));
+  EXPECT_EQ(0, TestObject::count);
+}
+
+TEST(SmallArray, ThrowingConstructor) {
+  TestObject::count = 0;
+  TestObject::throwAt = 16;
+
+  // If a constructor throws, the previous elements should still be destroyed.
+  constexpr auto smallArray = []() {
+    SmallArray<TestObject, SBO_TEST_SIZE> arr(SBO_TEST_SIZE);
+  };
+  EXPECT_ANY_THROW(smallArray());
+  EXPECT_EQ(0, TestObject::count);
+}
+
+TEST(SmallArray, ThrowingConstructorOverLimit) {
+  TestObject::count = 0;
+  TestObject::throwAt = 16;
+
+  // If a constructor throws, the previous elements should still be destroyed.
+  constexpr auto smallArray = []() {
+    SmallArray<TestObject, SBO_TEST_SIZE> arr(SBO_TEST_SIZE * 2);
+  };
+  EXPECT_ANY_THROW(smallArray());
   EXPECT_EQ(0, TestObject::count);
 }
 
@@ -149,7 +229,23 @@ TEST(Array, ThrowingDestructor) {
   EXPECT_EQ(0, TestObject::count);
 }
 
-TEST(Array, AraryBuilder) {
+// TODO(now): Array's destructor is noexcept; the previous test passes because it uses nullptr
+//   assignment, but I'm not sure that makes sense to implement for SmallArray.
+// TEST(SmallArray, ThrowingDestructor) {
+//   TestObject::count = 0;
+//   TestObject::throwAt = -1;
+
+//   SpaceFor<SmallArray<TestObject, SBO_TEST_SIZE>> spaceForArray;
+//   auto array = spaceForArray.construct(SBO_TEST_SIZE);
+//   EXPECT_EQ(SBO_TEST_SIZE, TestObject::count);
+
+//   // If a destructor throws, all elements should still be destroyed.
+//   TestObject::throwAt = 16;
+//   EXPECT_ANY_THROW(array = nullptr);
+//   EXPECT_EQ(0, TestObject::count);
+// }
+
+TEST(Array, ArrayBuilder) {
   TestObject::count = 0;
   TestObject::throwAt = -1;
 
@@ -173,7 +269,43 @@ TEST(Array, AraryBuilder) {
   EXPECT_EQ(0, TestObject::count);
 }
 
-TEST(Array, AraryBuilderAddAll) {
+TEST(SmallArray, SmallArrayBuilder) {
+  TestObject::count = 0;
+  TestObject::throwAt = -1;
+
+  {
+    SmallArrayBuilder<TestObject, SBO_TEST_SIZE> builder(SBO_TEST_SIZE);
+
+    for (int i = 0; i < SBO_TEST_SIZE; i++) {
+      EXPECT_EQ(i, TestObject::count);
+      builder.add();
+    }
+
+    EXPECT_EQ(SBO_TEST_SIZE, TestObject::count);
+  }
+
+  EXPECT_EQ(0, TestObject::count);
+}
+
+TEST(SmallArray, SmallArrayBuilderOverLimit) {
+  TestObject::count = 0;
+  TestObject::throwAt = -1;
+
+  {
+    SmallArrayBuilder<TestObject, SBO_TEST_SIZE> builder(SBO_TEST_SIZE * 2);
+
+    for (int i = 0; i < SBO_TEST_SIZE * 2; i++) {
+      EXPECT_EQ(i, TestObject::count);
+      builder.add();
+    }
+
+    EXPECT_EQ(SBO_TEST_SIZE * 2, TestObject::count);
+  }
+
+  EXPECT_EQ(0, TestObject::count);
+}
+
+TEST(Array, ArrayBuilderAddAll) {
   {
     // Trivial case.
     char text[] = "foo";
@@ -275,6 +407,122 @@ TEST(Array, AraryBuilderAddAll) {
     TestObject::throwAt = 1;
 
     ArrayBuilder<TestObject> builder = heapArrayBuilder<TestObject>(3);
+    EXPECT_EQ(3, TestObject::count);
+    EXPECT_EQ(0, TestObject::copiedCount);
+
+    EXPECT_ANY_THROW(builder.addAll(objs, objs + 3));
+    TestObject::throwAt = -1;
+
+    EXPECT_EQ(3, TestObject::count);
+    EXPECT_EQ(0, TestObject::copiedCount);
+  }
+  EXPECT_EQ(0, TestObject::count);
+  EXPECT_EQ(0, TestObject::copiedCount);
+}
+
+TEST(SmallArray, SmallArrayBuilderAddAll) {
+  {
+    // Trivial case.
+    char text[] = "foo";
+    static_assert(5 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<char, SBO_TEST_SIZE> builder(5);
+    builder.add('<');
+    builder.addAll(text, text + 3);
+    builder.add('>');
+    auto arrayPtr = builder.asPtr();
+    EXPECT_EQ("<foo>", std::string(arrayPtr.begin(), arrayPtr.end()));
+  }
+
+  {
+    // Trivial case, const.
+    const char* text = "foo";
+    static_assert(5 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<char, SBO_TEST_SIZE> builder(5);
+    builder.add('<');
+    builder.addAll(text, text + 3);
+    builder.add('>');
+    auto arrayPtr = builder.asPtr();
+    EXPECT_EQ("<foo>", std::string(arrayPtr.begin(), arrayPtr.end()));
+  }
+
+  {
+    // Trivial case, non-pointer iterator.
+    std::list<char> text = {'f', 'o', 'o'};
+    static_assert(5 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<char, SBO_TEST_SIZE> builder(5);
+    builder.add('<');
+    builder.addAll(text);
+    builder.add('>');
+    auto arrayPtr = builder.asPtr();
+    EXPECT_EQ("<foo>", std::string(arrayPtr.begin(), arrayPtr.end()));
+  }
+
+  {
+    // Complex case.
+    std::string strs[] = {"foo", "bar", "baz"};
+    static_assert(5 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<std::string, SBO_TEST_SIZE> builder(5);
+    builder.add("qux");
+    builder.addAll(strs, strs + 3);
+    builder.add("quux");
+    auto arrayPtr = builder.asPtr();
+    EXPECT_EQ("qux", arrayPtr[0]);
+    EXPECT_EQ("foo", arrayPtr[1]);
+    EXPECT_EQ("bar", arrayPtr[2]);
+    EXPECT_EQ("baz", arrayPtr[3]);
+    EXPECT_EQ("quux", arrayPtr[4]);
+  }
+
+  {
+    // Complex case, noexcept.
+    TestNoexceptObject::count = 0;
+    TestNoexceptObject::copiedCount = 0;
+    TestNoexceptObject objs[3];
+    EXPECT_EQ(3, TestNoexceptObject::count);
+    EXPECT_EQ(0, TestNoexceptObject::copiedCount);
+    static_assert(3 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<TestNoexceptObject, SBO_TEST_SIZE> builder(3);
+    EXPECT_EQ(3, TestNoexceptObject::count);
+    EXPECT_EQ(0, TestNoexceptObject::copiedCount);
+    builder.addAll(objs, objs + 3);
+    EXPECT_EQ(3, TestNoexceptObject::count);
+    EXPECT_EQ(3, TestNoexceptObject::copiedCount);
+  }
+  EXPECT_EQ(0, TestNoexceptObject::count);
+  EXPECT_EQ(0, TestNoexceptObject::copiedCount);
+
+  {
+    // Complex case, exceptions possible.
+    TestObject::count = 0;
+    TestObject::copiedCount = 0;
+    TestObject::throwAt = -1;
+    TestObject objs[3];
+    EXPECT_EQ(3, TestObject::count);
+    EXPECT_EQ(0, TestObject::copiedCount);
+    static_assert(3 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<TestObject, SBO_TEST_SIZE> builder(3);
+    EXPECT_EQ(3, TestObject::count);
+    EXPECT_EQ(0, TestObject::copiedCount);
+    builder.addAll(objs, objs + 3);
+    EXPECT_EQ(3, TestObject::count);
+    EXPECT_EQ(3, TestObject::copiedCount);
+  }
+  EXPECT_EQ(0, TestObject::count);
+  EXPECT_EQ(0, TestObject::copiedCount);
+
+  {
+    // Complex case, exceptions occur.
+    TestObject::count = 0;
+    TestObject::copiedCount = 0;
+    TestObject::throwAt = -1;
+    TestObject objs[3];
+    EXPECT_EQ(3, TestObject::count);
+    EXPECT_EQ(0, TestObject::copiedCount);
+
+    TestObject::throwAt = 1;
+
+    static_assert(3 <= SBO_TEST_SIZE);
+    SmallArrayBuilder<TestObject, SBO_TEST_SIZE> builder(3);
     EXPECT_EQ(3, TestObject::count);
     EXPECT_EQ(0, TestObject::copiedCount);
 

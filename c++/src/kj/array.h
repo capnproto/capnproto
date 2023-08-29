@@ -316,9 +316,26 @@ private:
 
   virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                            size_t capacity, void (*destroyElement)(void*)) const override;
+};
 
+class SmallArrayDisposer: public ArrayDisposer {
+public:
   template <typename T>
-  struct Allocate_;
+  static T* allocate(void* firstElement, size_t count);
+  template <typename T>
+  static T* allocateUninitialized(void* firstElement, size_t count);
+
+  static const SmallArrayDisposer instance;
+
+  static void* allocateImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                     size_t capacity, void (*constructElement)(void*),
+                     void (*destroyElement)(void*));
+  // Allocates and constructs the array.  Both function pointers are null if the constructor is
+  // trivial, otherwise destroyElement is null if the constructor doesn't throw.
+
+private:
+  void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                   size_t capacity, void (*destroyElement)(void*)) const override;
 };
 
 }  // namespace _ (private)
@@ -627,6 +644,102 @@ private:
 };
 
 // =======================================================================================
+// Small-buffer-optimized SmallArray and SmallArrayBuilder
+//
+// SmallArray and SmallArrayBuilder are useful when you need a temporary buffer, whose size you
+// cannot know until runtime but is likely to be small, and whose lifetime can be bounded by either
+// the stack or some immovable parent object.
+//
+// SmallArray and SmallArrayBuilder are not Arrays or ArrayBuilders. In particular, they have
+// following differences:
+//
+// 1. SmallArray/Builder have an inline buffer of `smallSize` elements, where `smallSize` is a
+//    size_t template parameter. If they are constructed with a size less than or equal to
+//    `smallSize`, the inline space is used, and no heap allocation is performed. Otherwise, a
+//    regular heap Array is allocated.
+//
+// 2. SmallArray/Builder are immovable. You must construct them in place wherever you want to use
+//    one. They cannot be "released", "finished", or assigned-to.
+//
+// 3. SmallArray/Builder have no specific constructor functions like `heapArray<T>()` or
+//    `heapArrayBuilder<T>()`. Instead, use their constructors directly, passing a single `size`
+//    parameter.
+
+template <typename T, size_t smallSize>
+class SmallArray final: private Array<T> {
+public:
+  explicit SmallArray(size_t size);
+
+  // We support the full Array<T> API except `releaseAsBytes()`, `releaseAsChars()`, `attach()`,
+  // `operator=()`, and move-construction.
+
+  KJ_DISALLOW_COPY_AND_MOVE(SmallArray);
+
+  using Array<T>::operator ArrayPtr<T>;
+  using Array<T>::operator ArrayPtr<const T>;
+  using Array<T>::asPtr;
+  using Array<T>::size;
+  using Array<T>::operator[];
+  using Array<T>::begin;
+  using Array<T>::end;
+  using Array<T>::front;
+  using Array<T>::back;
+  using Array<T>::operator==;
+  using Array<T>::slice;
+  using Array<T>::asBytes;
+  using Array<T>::asChars;
+
+  ~SmallArray() noexcept(false) {}
+  // We need an explicit destructor because we contain a union, and union member destructors are
+  // never implicitly invoked. However, there's actually nothing for this destructor to do: our
+  // private base class will deinitialize any objects in `space` using an SmallArrayDisposer.
+
+private:
+  union {
+    T space[smallSize];
+  };
+};
+
+template <typename T, size_t smallSize>
+class SmallArrayBuilder final: private ArrayBuilder<T> {
+public:
+  explicit SmallArrayBuilder(size_t size);
+
+  // We support the full ArrayBuilder<T> API except `finish()`, `operator=()`, and move-
+  // construction.
+
+  KJ_DISALLOW_COPY_AND_MOVE(SmallArrayBuilder);
+
+  using ArrayBuilder<T>::operator ArrayPtr<T>;
+  using ArrayBuilder<T>::operator ArrayPtr<const T>;
+  using ArrayBuilder<T>::asPtr;
+  using ArrayBuilder<T>::size;
+  using ArrayBuilder<T>::capacity;
+  using ArrayBuilder<T>::operator[];
+  using ArrayBuilder<T>::begin;
+  using ArrayBuilder<T>::end;
+  using ArrayBuilder<T>::front;
+  using ArrayBuilder<T>::back;
+  using ArrayBuilder<T>::add;
+  using ArrayBuilder<T>::addAll;
+  using ArrayBuilder<T>::removeLast;
+  using ArrayBuilder<T>::truncate;
+  using ArrayBuilder<T>::clear;
+  using ArrayBuilder<T>::resize;
+  using ArrayBuilder<T>::isFull;
+
+  ~SmallArrayBuilder() noexcept(false) {}
+  // We need an explicit destructor because we contain a union, and union member destructors are
+  // never implicitly invoked. However, there's actually nothing for this destructor to do: our
+  // private base class will deinitialize any objects in `space` using an SmallArrayDisposer.
+
+private:
+  union {
+    T space[smallSize];
+  };
+};
+
+// =======================================================================================
 // KJ_MAP
 
 #define KJ_MAP(elementName, array) \
@@ -694,10 +807,28 @@ void ArrayDisposer::dispose(T* firstElement, size_t elementCount, size_t capacit
   }
 }
 
+template <typename T, size_t smallSize>
+SmallArray<T, smallSize>::SmallArray(size_t size)
+    : Array<T>(size <= smallSize
+        ? Array<T>(
+            _::SmallArrayDisposer::allocate<T>(space, size),
+            size,
+            _::SmallArrayDisposer::instance)
+        : heapArray<T>(size)) {}
+
+template <typename T, size_t smallSize>
+SmallArrayBuilder<T, smallSize>::SmallArrayBuilder(size_t size)
+    : ArrayBuilder<T>(size <= smallSize
+        ? ArrayBuilder<T>(
+            _::SmallArrayDisposer::allocateUninitialized<RemoveConst<T>>(space, size),
+            size,
+            _::SmallArrayDisposer::instance)
+        : heapArrayBuilder<T>(size)) {}
+
 namespace _ {  // private
 
 template <typename T>
-struct HeapArrayDisposer::Allocate_ {
+struct Allocate_ {
   static void construct(void* ptr) {
     kj::ctor(*reinterpret_cast<T*>(ptr));
   }
@@ -720,6 +851,24 @@ template <typename T>
 T* HeapArrayDisposer::allocateUninitialized(size_t count) {
   return reinterpret_cast<T*>(allocateImpl(sizeof(T), 0, count, nullptr, nullptr));
 
+}
+
+template <typename T>
+T* SmallArrayDisposer::allocate(void* firstElement, size_t count) {
+  if constexpr (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
+    return reinterpret_cast<T*>(allocateImpl(firstElement, sizeof(T), count, count, nullptr, nullptr));
+  } else if (KJ_HAS_NOTHROW_CONSTRUCTOR(T)) {
+    return reinterpret_cast<T*>(allocateImpl(firstElement,
+      sizeof(T), count, count, &Allocate_<T>::construct, nullptr));
+  } else {
+    return reinterpret_cast<T*>(allocateImpl(firstElement,
+      sizeof(T), count, count, &Allocate_<T>::construct, &Dispose_<T>::destruct));
+  }
+}
+
+template <typename T>
+T* SmallArrayDisposer::allocateUninitialized(void* firstElement, size_t count) {
+  return reinterpret_cast<T*>(allocateImpl(firstElement, sizeof(T), 0, count, nullptr, nullptr));
 }
 
 template <typename Element, typename Iterator, bool move, bool = canMemcpy<Element>()>
