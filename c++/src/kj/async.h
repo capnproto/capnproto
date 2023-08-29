@@ -970,6 +970,8 @@ private:
   Maybe<OwnTask> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
   SourceLocation location;
+
+  void destroyTasks();
 };
 
 // =======================================================================================
