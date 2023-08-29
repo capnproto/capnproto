@@ -68,26 +68,36 @@ struct AutoDeleter {
   inline ~AutoDeleter() { operator delete(ptr); }
 };
 
-void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
-                                      void (*constructElement)(void*),
-                                      void (*destroyElement)(void*)) {
-  AutoDeleter result(operator new(elementSize * capacity));
+namespace {
+
+void allocateImplImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                       void (*constructElement)(void*),
+                       void (*destroyElement)(void*)) {
+  // Shared implementation between HeapArrayDisposer and SmallArrayDisposer.
 
   if (constructElement == nullptr) {
     // Nothing to do.
   } else if (destroyElement == nullptr) {
-    byte* pos = reinterpret_cast<byte*>(result.ptr);
+    byte* pos = reinterpret_cast<byte*>(firstElement);
     while (elementCount > 0) {
       constructElement(pos);
       pos += elementSize;
       --elementCount;
     }
   } else {
-    ExceptionSafeArrayUtil guard(result.ptr, elementSize, 0, destroyElement);
+    ExceptionSafeArrayUtil guard(firstElement, elementSize, 0, destroyElement);
     guard.construct(elementCount, constructElement);
     guard.release();
   }
+}
 
+}  // namespace
+
+void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
+                                      void (*constructElement)(void*),
+                                      void (*destroyElement)(void*)) {
+  AutoDeleter result(operator new(elementSize * capacity));
+  allocateImplImpl(result.ptr, elementSize, elementCount, constructElement, destroyElement);
   return result.release();
 }
 

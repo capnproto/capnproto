@@ -273,14 +273,17 @@ public:
 
   static const HeapArrayDisposer instance;
 
-private:
   static void* allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
                             void (*constructElement)(void*), void (*destroyElement)(void*));
   // Allocates and constructs the array.  Both function pointers are null if the constructor is
   // trivial, otherwise destroyElement is null if the constructor doesn't throw.
+  //
+  // TODO(cleanup): Public so we can pass it as a pointer elsewhere.
 
-  virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
-                           size_t capacity, void (*destroyElement)(void*)) const override;
+private:
+  void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                   size_t capacity, void (*destroyElement)(void*)) const override;
+};
 
   template <typename T, bool hasTrivialConstructor = KJ_HAS_TRIVIAL_CONSTRUCTOR(T),
                         bool hasNothrowConstructor = KJ_HAS_NOTHROW_CONSTRUCTOR(T)>
@@ -648,32 +651,39 @@ void ArrayDisposer::dispose(T* firstElement, size_t elementCount, size_t capacit
 
 namespace _ {  // private
 
+template <typename T, bool hasTrivialConstructor = KJ_HAS_TRIVIAL_CONSTRUCTOR(T),
+                      bool hasNothrowConstructor = KJ_HAS_NOTHROW_CONSTRUCTOR(T)>
+struct Allocate_;
+
 template <typename T>
-struct HeapArrayDisposer::Allocate_<T, true, true> {
-  static T* allocate(size_t elementCount, size_t capacity) {
+struct Allocate_<T, true, true> {
+  template <typename AllocateImpl>
+  static T* allocate(AllocateImpl allocateImpl, size_t elementCount, size_t capacity) {
     return reinterpret_cast<T*>(allocateImpl(
         sizeof(T), elementCount, capacity, nullptr, nullptr));
   }
 };
 template <typename T>
-struct HeapArrayDisposer::Allocate_<T, false, true> {
+struct Allocate_<T, false, true> {
   static void construct(void* ptr) {
     kj::ctor(*reinterpret_cast<T*>(ptr));
   }
-  static T* allocate(size_t elementCount, size_t capacity) {
+  template <typename AllocateImpl>
+  static T* allocate(AllocateImpl allocateImpl, size_t elementCount, size_t capacity) {
     return reinterpret_cast<T*>(allocateImpl(
         sizeof(T), elementCount, capacity, &construct, nullptr));
   }
 };
 template <typename T>
-struct HeapArrayDisposer::Allocate_<T, false, false> {
+struct Allocate_<T, false, false> {
   static void construct(void* ptr) {
     kj::ctor(*reinterpret_cast<T*>(ptr));
   }
   static void destruct(void* ptr) {
     kj::dtor(*reinterpret_cast<T*>(ptr));
   }
-  static T* allocate(size_t elementCount, size_t capacity) {
+  template <typename AllocateImpl>
+  static T* allocate(AllocateImpl allocateImpl, size_t elementCount, size_t capacity) {
     return reinterpret_cast<T*>(allocateImpl(
         sizeof(T), elementCount, capacity, &construct, &destruct));
   }
@@ -681,12 +691,12 @@ struct HeapArrayDisposer::Allocate_<T, false, false> {
 
 template <typename T>
 T* HeapArrayDisposer::allocate(size_t count) {
-  return Allocate_<T>::allocate(count, count);
+  return Allocate_<T>::allocate(allocateImpl, count, count);
 }
 
 template <typename T>
 T* HeapArrayDisposer::allocateUninitialized(size_t count) {
-  return Allocate_<T, true, true>::allocate(0, count);
+  return Allocate_<T, true, true>::allocate(allocateImpl, 0, count);
 }
 
 template <typename Element, typename Iterator, bool move, bool = canMemcpy<Element>()>
