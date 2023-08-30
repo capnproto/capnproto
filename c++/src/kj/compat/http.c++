@@ -2215,6 +2215,22 @@ public:
     queueWrite(kj::mv(content));
   }
 
+  kj::Promise<void> writeBodyData(kj::StringPtr str) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
+
+    writeInProgress = true;
+    auto fork = writeQueue.fork();
+    writeQueue = fork.addBranch();
+
+    co_await fork;
+    co_await inner.write(str.begin(), str.size());
+
+    // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
+    // want to block further writes.
+    writeInProgress = false;
+  }
+
   kj::Promise<void> writeBodyData(const void* buffer, size_t size) {
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
     KJ_REQUIRE(inBody);
@@ -2541,29 +2557,30 @@ public:
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
     KJ_IF_MAYBE(l, input.tryGetLength()) {
-      // Hey, we know exactly how large the input is, so we can write just one chunk.
-
-      uint64_t length = kj::min(amount, *l);
-      auto& inner = getInner();
-      inner.queueBodyData(kj::str(kj::hex(length), "\r\n"));
-      return inner.pumpBodyFrom(input, length)
-          .then([this,length](uint64_t actual) {
-        auto& inner = getInner();
-        if (actual < length) {
-          inner.abortBody();
-          KJ_FAIL_REQUIRE(
-              "value returned by input.tryGetLength() was greater than actual bytes transferred") {
-            break;
-          }
-        }
-
-        inner.queueBodyData(kj::str("\r\n"));
-        return actual;
-      });
+      return pumpImpl(input, kj::min(amount, *l));
     } else {
       // Need to use naive read/write loop.
       return nullptr;
     }
+  }
+
+  Promise<uint64_t> pumpImpl(AsyncInputStream& input, uint64_t length) {
+    // Hey, we know exactly how large the input is, so we can write just one chunk.
+    auto& inner = getInner();
+
+    co_await inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
+    auto actual = co_await inner.pumpBodyFrom(input, length);
+
+    if (actual < length) {
+      inner.abortBody();
+      KJ_FAIL_REQUIRE(
+          "value returned by input.tryGetLength() was greater than actual bytes transferred") {
+        break;
+      }
+    }
+
+    co_await inner.writeBodyData(kj::str("\r\n"));
+    co_return actual;
   }
 
   Promise<void> whenWriteDisconnected() override {
