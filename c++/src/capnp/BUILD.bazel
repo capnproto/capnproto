@@ -212,6 +212,7 @@ cc_library(
         ":capnpc",
         "//src/kj:kj-test",
     ],
+    include_prefix = "capnp",
     visibility = [":__subpackages__" ]
 )
 
