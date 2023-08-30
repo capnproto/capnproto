@@ -1051,18 +1051,17 @@ inline void dtor(T& location) {
 // forces the caller to handle the null case in order to satisfy the compiler, thus reliably
 // preventing null pointer dereferences at runtime.
 //
-// Maybe<T> can be implicitly constructed from T and from nullptr.
+// Maybe<T> can be implicitly constructed from T and from kj::none.
 // To read the value of a Maybe<T>, do:
 //
-//    KJ_IF_MAYBE(value, someFuncReturningMaybe()) {
-//      doSomething(*value);
+//    KJ_IF_SOME(value, someFuncReturningMaybe()) {
+//      doSomething(value);
 //    } else {
-//      maybeWasNull();
+//      maybeWasNone();
 //    }
 //
-// KJ_IF_MAYBE's first parameter is a variable name which will be defined within the following
-// block.  The variable will behave like a (guaranteed non-null) pointer to the Maybe's value,
-// though it may or may not actually be a pointer.
+// KJ_IF_SOME's first parameter is a variable name which will be defined within the following
+// block.  The variable will be a reference to the Maybe's value.
 //
 // Note that Maybe<T&> actually just wraps a pointer, whereas Maybe<T> wraps a T and a boolean
 // indicating nullness.
@@ -1292,11 +1291,68 @@ inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
 template <typename T>
 inline T* readMaybe(T* ptr) { return ptr; }
-// Allow KJ_IF_MAYBE to work on regular pointers.
+// Allow KJ_IF_SOME to work on regular pointers.
+
+#if defined(KJ_DEPRECATE_KJ_IF_MAYBE) && KJ_DEPRECATE_KJ_IF_MAYBE
+[[deprecated("KJ_IF_MAYBE is deprecated and will be removed. Please use KJ_IF_SOME instead.")]]
+constexpr int KJ_IF_MAYBE_IS_DEPRECATED = 0;
+#define KJ_DEPRECATE_KJ_IF_MAYBE_STMT \
+    [[maybe_unused]] int KJ_UNIQUE_NAME(deprecation) = ::kj::_::KJ_IF_MAYBE_IS_DEPRECATED
+#else
+#define KJ_DEPRECATE_KJ_IF_MAYBE_STMT
+#endif
+// Before KJ_IF_SOME, we used KJ_IF_MAYBE, which does exactly the same thing as KJ_IF_SOME, but
+// provides a guaranteed-non-null pointer to the wrapped object instead of a reference. This has a
+// tendency to allow authors to inadvertently use pointers where they mean to use references. For
+// example, in `KJ_IF_MAYBE(obj, maybe) { KJ_LOG(INFO, obj); }` would stringify and log the address
+// of the object living in `maybe`, rather than the object itself as perhaps intended.
+//
+// Due to this footgun, we've deprecated KJ_IF_MAYBE in favor of KJ_IF_SOME. Please use KJ_IF_SOME.
+
+#if defined (KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR) && KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR
+#define KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR \
+    [[deprecated("Using nullptr as an empty Maybe is deprecated and will be removed. " \
+      "Please use kj::none for this purpose instead.")]]
+#else
+#define KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
+#endif
+// Originally, we used `nullptr` to mean "an empty Maybe" in comparisons and initializations. For
+// example, `maybe == nullptr` would be true if `maybe` contained no value, and `Maybe<T>(nullptr)`
+// could be used to explicitly initialize an empty Maybe. This isn't the best design, because
+// `nullptr` could itself be a valid constructor parameter for the wrapped type T.
+//
+// Due to this flaw, we've deprecated using `nullptr` to mean "an empty Maybe" in favor of
+// `kj::none`. Please use `kj::none`.
+
+#if __GNUC__ || __clang__
+// Both clang and GCC understand the GCC set of pragma directives.
+#define KJ_SILENCE_DANGLING_ELSE_BEGIN \
+    _Pragma("GCC diagnostic push") \
+    _Pragma("GCC diagnostic ignored \"-Wdangling-else\"")
+#define KJ_SILENCE_DANGLING_ELSE_END \
+    _Pragma("GCC diagnostic pop")
+#else  // __GNUC__
+// I guess we'll find out if MSVC needs similar warning suppression.
+#define KJ_SILENCE_DANGLING_ELSE_BEGIN
+#define KJ_SILENCE_DANGLING_ELSE_END
+#endif  // __GNUC__
 
 }  // namespace _ (private)
 
-#define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
+#define KJ_IF_MAYBE(name, exp) \
+    if (KJ_DEPRECATE_KJ_IF_MAYBE_STMT; auto name = ::kj::_::readMaybe(exp))
+
+#define KJ_IF_SOME(name, exp) \
+    KJ_SILENCE_DANGLING_ELSE_BEGIN \
+    if (auto KJ_UNIQUE_NAME(_##name) = ::kj::_::readMaybe(exp)) \
+      if (auto& name = *KJ_UNIQUE_NAME(_##name); false) {} else \
+    KJ_SILENCE_DANGLING_ELSE_END
+
+struct None {};
+static constexpr None none;
+// A "none" value solely for use in comparisons with and initializations of Maybes. `kj::none` will
+// compare equal to all empty Maybes, and will compare not-equal to all non-empty Maybes. If you
+// construct or assign to a Maybe from `kj::none`, the constructed/assigned Maybe will be empty.
 
 #if __GNUC__ || __clang__
 // These two macros provide a friendly syntax to extract the value of a Maybe or return early.
@@ -1366,32 +1422,35 @@ public:
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) { other = nullptr; }
+  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) { other = kj::none; }
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
   template <typename U>
   Maybe(Maybe<U>&& other) {
-    KJ_IF_MAYBE(val, kj::mv(other)) {
-      ptr.emplace(kj::mv(*val));
-      other = nullptr;
+    KJ_IF_SOME(val, kj::mv(other)) {
+      ptr.emplace(kj::mv(val));
+      other = kj::none;
     }
   }
   template <typename U>
   Maybe(Maybe<U&>&& other) {
-    KJ_IF_MAYBE(val, other) {
-      ptr.emplace(*val);
-      other = nullptr;
+    KJ_IF_SOME(val, other) {
+      ptr.emplace(val);
+      other = kj::none;
     }
   }
   template <typename U>
   Maybe(const Maybe<U>& other) {
-    KJ_IF_MAYBE(val, other) {
-      ptr.emplace(*val);
+    KJ_IF_SOME(val, other) {
+      ptr.emplace(val);
     }
   }
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   Maybe(decltype(nullptr)): ptr(nullptr) {}
+
+  Maybe(kj::None): ptr(nullptr) {}
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
@@ -1406,15 +1465,15 @@ public:
   inline Maybe& operator=(T& other) { ptr = other; return *this; }
   inline Maybe& operator=(const T& other) { ptr = other; return *this; }
 
-  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); other = nullptr; return *this; }
+  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); other = kj::none; return *this; }
   inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
   template <typename U>
   Maybe& operator=(Maybe<U>&& other) {
-    KJ_IF_MAYBE(val, kj::mv(other)) {
-      ptr.emplace(kj::mv(*val));
-      other = nullptr;
+    KJ_IF_SOME(val, kj::mv(other)) {
+      ptr.emplace(kj::mv(val));
+      other = kj::none;
     } else {
       ptr = nullptr;
     }
@@ -1422,21 +1481,26 @@ public:
   }
   template <typename U>
   Maybe& operator=(const Maybe<U>& other) {
-    KJ_IF_MAYBE(val, other) {
-      ptr.emplace(*val);
+    KJ_IF_SOME(val, other) {
+      ptr.emplace(val);
     } else {
       ptr = nullptr;
     }
     return *this;
   }
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+
+  inline Maybe& operator=(kj::None) { ptr = nullptr; return *this; }
+  inline bool operator==(kj::None) const { return ptr == nullptr; }
 
   inline bool operator==(const Maybe<T>& other) const {
     if (ptr == nullptr) {
-      return other == nullptr;
+      return other == kj::none;
     } else {
       return other.ptr != nullptr && *ptr == *other.ptr;
     }
@@ -1528,7 +1592,7 @@ public:
   template <typename Func>
   auto map(Func&& f) const & -> Maybe<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(*ptr);
     }
@@ -1537,7 +1601,7 @@ public:
   template <typename Func>
   auto map(Func&& f) && -> Maybe<decltype(f(instance<T&&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(kj::mv(*ptr));
     }
@@ -1546,7 +1610,7 @@ public:
   template <typename Func>
   auto map(Func&& f) const && -> Maybe<decltype(f(instance<const T&&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(kj::mv(*ptr));
     }
@@ -1597,7 +1661,11 @@ public:
   constexpr Maybe(Maybe<U>& other): ptr(other.ptr.operator U*()) {}
   template <typename U, typename = EnableIf<canConvert<const U*, T*>()>>
   constexpr Maybe(const Maybe<U>& other): ptr(other.ptr.operator const U*()) {}
+
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline constexpr Maybe(decltype(nullptr)): ptr(nullptr) {}
+
+  inline constexpr Maybe(kj::None): ptr(nullptr) {}
 
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
@@ -1612,7 +1680,10 @@ public:
   template <typename U>
   inline Maybe& operator=(const Maybe<U&>&& other) = delete;
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+
+  inline bool operator==(kj::None) const { return ptr == nullptr; }
 
   T& orDefault(T& defaultValue) {
     if (ptr == nullptr) {
@@ -1632,7 +1703,7 @@ public:
   template <typename Func>
   auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(*ptr);
     }
@@ -1641,7 +1712,7 @@ public:
   template <typename Func>
   auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       const T& ref = *ptr;
       return f(ref);
