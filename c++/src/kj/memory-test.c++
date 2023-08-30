@@ -300,8 +300,8 @@ TEST(Memory, OwnVoid) {
     Maybe<Own<void>> maybe;
     maybe = Own<void>(&maybe, NullDisposer::instance);
     KJ_EXPECT(KJ_ASSERT_NONNULL(maybe).get() == &maybe);
-    maybe = nullptr;
-    KJ_EXPECT(maybe == nullptr);
+    maybe = kj::none;
+    KJ_EXPECT(maybe == kj::none);
   }
 }
 
@@ -362,8 +362,8 @@ TEST(Memory, OwnConstVoid) {
     Maybe<Own<const void>> maybe;
     maybe = Own<const void>(&maybe, NullDisposer::instance);
     KJ_EXPECT(KJ_ASSERT_NONNULL(maybe).get() == &maybe);
-    maybe = nullptr;
-    KJ_EXPECT(maybe == nullptr);
+    maybe = kj::none;
+    KJ_EXPECT(maybe == kj::none);
   }
 }
 
@@ -453,7 +453,7 @@ KJ_TEST("Own with static disposer") {
 
 KJ_TEST("Maybe<Own<T>>") {
   Maybe<Own<int>> m = heap<int>(123);
-  KJ_EXPECT(m != nullptr);
+  KJ_EXPECT(m != kj::none);
   Maybe<int&> mRef = m;
   KJ_EXPECT(KJ_ASSERT_NONNULL(mRef) == 123);
   KJ_EXPECT(&KJ_ASSERT_NONNULL(mRef) == KJ_ASSERT_NONNULL(m).get());
