@@ -50,7 +50,7 @@ struct FileKey {
   kj::Date lastModified;
 
   FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path)
-      : baseDir(baseDir), path(path), file(nullptr),
+      : baseDir(baseDir), path(path), file(kj::none),
         hashCode(0), size(0), lastModified(kj::UNIX_EPOCH) {}
   FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path, const kj::ReadableFile& file)
       : FileKey(baseDir, path, file, file.stat()) {}
@@ -63,7 +63,7 @@ struct FileKey {
   bool operator==(const FileKey& other) const {
     // Allow matching on baseDir and path without a file.
     if (&baseDir == &other.baseDir && path == other.path) return true;
-    if (file == nullptr || other.file == nullptr) return false;
+    if (file == kj::none || other.file == kj::none) return false;
 
     // Try comparing various file metadata to rule out obvious differences.
     if (hashCode != other.hashCode) return false;
@@ -167,7 +167,7 @@ public:
   Orphan<ParsedFile> loadContent(Orphanage orphanage) override {
     kj::Array<const char> content = file->mmap(0, file->stat().size).releaseAsChars();
 
-    lineBreaks = nullptr;  // In case loadContent() is called multiple times.
+    lineBreaks = kj::none;  // In case loadContent() is called multiple times.
     lineBreaks = lineBreaksSpace.construct(content);
 
     MallocMessageBuilder lexedBuilder;
@@ -228,10 +228,10 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
     return *iter->second;
   }
 
-  KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
+  KJ_IF_SOME(file, dir.tryOpenFile(path)) {
     auto pathCopy = path.clone();
-    auto key = FileKey(dir, pathCopy, **file);
-    auto module = kj::heap<ModuleImpl>(*this, kj::mv(*file), dir, kj::mv(pathCopy));
+    auto key = FileKey(dir, pathCopy, *file);
+    auto module = kj::heap<ModuleImpl>(*this, kj::mv(file), dir, kj::mv(pathCopy));
     auto& result = *module;
     auto insertResult = modules.insert(std::make_pair(key, kj::mv(module)));
     if (insertResult.second) {
@@ -242,34 +242,34 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
     }
   } else {
     // No such file.
-    return nullptr;
+    return kj::none;
   }
 }
 
 kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::PathPtr path) {
   for (auto candidate: searchPath) {
-    KJ_IF_MAYBE(module, loadModule(*candidate, path)) {
-      return *module;
+    KJ_IF_SOME(module, loadModule(*candidate, path)) {
+      return module;
     }
   }
-  return nullptr;
+  return kj::none;
 }
 
 kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbed(
     const kj::ReadableDirectory& dir, kj::PathPtr path) {
-  KJ_IF_MAYBE(file, dir.tryOpenFile(path)) {
-    return file->get()->mmap(0, file->get()->stat().size);
+  KJ_IF_SOME(file, dir.tryOpenFile(path)) {
+    return file->mmap(0, file->stat().size);
   }
-  return nullptr;
+  return kj::none;
 }
 
 kj::Maybe<kj::Array<const byte>> ModuleLoader::Impl::readEmbedFromSearchPath(kj::PathPtr path) {
   for (auto candidate: searchPath) {
-    KJ_IF_MAYBE(module, readEmbed(*candidate, path)) {
-      return kj::mv(*module);
+    KJ_IF_SOME(module, readEmbed(*candidate, path)) {
+      return kj::mv(module);
     }
   }
-  return nullptr;
+  return kj::none;
 }
 
 // =======================================================================================

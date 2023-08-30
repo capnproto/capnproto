@@ -93,18 +93,18 @@ public:
   }
 
   kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
-    KJ_IF_MAYBE(importedFile, file->import(importPath)) {
-      return parser.getModuleImpl(kj::mv(*importedFile));
+    KJ_IF_SOME(importedFile, file->import(importPath)) {
+      return parser.getModuleImpl(kj::mv(importedFile));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
   kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) override {
-    KJ_IF_MAYBE(importedFile, file->import(embedPath)) {
-      return importedFile->get()->readContent().releaseAsBytes();
+    KJ_IF_SOME(importedFile, file->import(embedPath)) {
+      return importedFile->readContent().releaseAsBytes();
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -205,8 +205,8 @@ ParsedSchema SchemaParser::parseDiskFile(
     kj::ArrayPtr<const kj::StringPtr> importPath) const {
   auto lock = impl->compat.lockExclusive();
   DiskFileCompat* compat;
-  KJ_IF_MAYBE(c, *lock) {
-    compat = c;
+  KJ_IF_SOME(c, *lock) {
+    compat = &c;
   } else {
     compat = &lock->emplace();
   }
@@ -232,8 +232,8 @@ ParsedSchema SchemaParser::parseDiskFile(
 
         auto parsed = cwd.evalNative(path);
         kj::Own<const kj::ReadableDirectory> dir;
-        KJ_IF_MAYBE(d, root.tryOpenSubdir(parsed)) {
-          dir = kj::mv(*d);
+        KJ_IF_SOME(d, root.tryOpenSubdir(parsed)) {
+          dir = kj::mv(d);
         } else {
           // Ignore paths that don't exist.
           dir = kj::newInMemoryDirectory(kj::nullClock());
@@ -269,9 +269,9 @@ ParsedSchema SchemaParser::parseDiskFile(
       }
     }
 
-    KJ_IF_MAYBE(match, matchedImportDir) {
-      baseDir = match->dir;
-      path = path.slice(match->path.size(), path.size()).clone();
+    KJ_IF_SOME(match, matchedImportDir) {
+      baseDir = match.dir;
+      path = path.slice(match.path.size(), path.size()).clone();
     }
   }
 
@@ -328,8 +328,8 @@ kj::Maybe<ParsedSchema> ParsedSchema::findNested(kj::StringPtr name) const {
 }
 
 ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) const {
-  KJ_IF_MAYBE(nested, findNested(nestedName)) {
-    return *nested;
+  KJ_IF_SOME(nested, findNested(nestedName)) {
+    return nested;
   } else {
     KJ_FAIL_REQUIRE("no such nested declaration", getProto().getDisplayName(), nestedName);
   }
@@ -360,8 +360,8 @@ public:
                  kj::Own<const kj::ReadableFile> file,
                  kj::Maybe<kj::String> displayNameOverride)
       : baseDir(baseDir), path(kj::mv(pathParam)), importPath(importPath), file(kj::mv(file)) {
-    KJ_IF_MAYBE(dn, displayNameOverride) {
-      displayName = kj::mv(*dn);
+    KJ_IF_SOME(dn, displayNameOverride) {
+      displayName = kj::mv(dn);
       displayNameOverridden = true;
     } else {
       displayName = path.toString();
@@ -381,12 +381,12 @@ public:
     if (target.startsWith("/")) {
       auto parsed = kj::Path::parse(target.slice(1));
       for (auto candidate: importPath) {
-        KJ_IF_MAYBE(newFile, candidate->tryOpenFile(parsed)) {
+        KJ_IF_SOME(newFile, candidate->tryOpenFile(parsed)) {
           return kj::implicitCast<kj::Own<SchemaFile>>(kj::heap<DiskSchemaFile>(
-              *candidate, kj::mv(parsed), importPath, kj::mv(*newFile), nullptr));
+              *candidate, kj::mv(parsed), importPath, kj::mv(newFile), nullptr));
         }
       }
-      return nullptr;
+      return kj::none;
     } else {
       auto parsed = path.parent().eval(target);
 
@@ -400,11 +400,11 @@ public:
         });
       }
 
-      KJ_IF_MAYBE(newFile, baseDir.tryOpenFile(parsed)) {
+      KJ_IF_SOME(newFile, baseDir.tryOpenFile(parsed)) {
         return kj::implicitCast<kj::Own<SchemaFile>>(kj::heap<DiskSchemaFile>(
-            baseDir, kj::mv(parsed), importPath, kj::mv(*newFile), kj::mv(displayNameOverride)));
+            baseDir, kj::mv(parsed), importPath, kj::mv(newFile), kj::mv(displayNameOverride)));
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }

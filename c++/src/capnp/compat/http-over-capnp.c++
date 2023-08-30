@@ -38,7 +38,7 @@ public:
 
   template <typename Func>
   auto wrap(Func&& func) -> decltype(func()) {
-    if (tasks == nullptr) {
+    if (tasks == kj::none) {
       return KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request");
     } else {
       return canceler.wrap(func());
@@ -46,24 +46,24 @@ public:
   }
 
   void cancel() {
-    if (tasks != nullptr) {
+    if (tasks != kj::none) {
       if (!canceler.isEmpty()) {
         canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
       }
-      tasks = nullptr;
-      webSocket = nullptr;
+      tasks = kj::none;
+      webSocket = kj::none;
     }
   }
 
   void assertNotCanceled() {
-    if (tasks == nullptr) {
+    if (tasks == kj::none) {
       kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request"));
     }
   }
 
   void addTask(kj::Promise<void> task) {
-    KJ_IF_MAYBE(t, tasks) {
-      t->add(kj::mv(task));
+    KJ_IF_SOME(t, tasks) {
+      t.add(kj::mv(task));
     } else {
       // Just drop the task.
     }
@@ -74,14 +74,14 @@ public:
     // cancellation.
     return KJ_REQUIRE_NONNULL(tasks).onEmpty()
         .then([this]() {
-      KJ_IF_MAYBE(e, error) {
-        kj::throwRecoverableException(kj::mv(*e));
+      KJ_IF_SOME(e, error) {
+        kj::throwRecoverableException(kj::mv(e));
       }
     });
   }
 
   void taskFailed(kj::Exception&& exception) override {
-    if (error == nullptr) {
+    if (error == kj::none) {
       error = kj::mv(exception);
     }
   }
@@ -94,8 +94,8 @@ public:
   }
 
   void disconnectWebSocket() {
-    KJ_IF_MAYBE(t, tasks) {
-      t->add(kj::evalNow([&]() { return KJ_ASSERT_NONNULL(webSocket)->disconnect(); }));
+    KJ_IF_SOME(t, tasks) {
+      t.add(kj::evalNow([&]() { return KJ_ASSERT_NONNULL(webSocket)->disconnect(); }));
     }
   }
 
@@ -183,7 +183,7 @@ public:
   }
 
   kj::Promise<void> disconnect() override {
-    out = nullptr;
+    out = kj::none;
     return kj::READY_NOW;
   }
 
@@ -216,16 +216,16 @@ public:
   }
 
   kj::Promise<void> pumpTo(WebSocket& other) override {
-    KJ_IF_MAYBE(optimized, kj::dynamicDowncastIfAvailable<KjToCapnpWebSocketAdapter>(other)) {
+    KJ_IF_SOME(optimized, kj::dynamicDowncastIfAvailable<KjToCapnpWebSocketAdapter>(other)) {
       shorteningFulfiller->fulfill(
-          kj::cp(KJ_REQUIRE_NONNULL(optimized->out, "already called disconnect()")));
+          kj::cp(KJ_REQUIRE_NONNULL(optimized.out, "already called disconnect()")));
 
       // We expect the `in` pipe will stop receiving messages after the redirect, but we need to
       // pump anything already in-flight.
       return KJ_ASSERT_NONNULL(in)->pumpTo(other);
-    } else KJ_IF_MAYBE(promise, other.tryPumpFrom(*this)) {
+    } else KJ_IF_SOME(promise, other.tryPumpFrom(*this)) {
       // We may have unwrapped some layers around `other` leading to a shorter path.
-      return kj::mv(*promise);
+      return kj::mv(promise);
     } else {
       return KJ_ASSERT_NONNULL(in)->pumpTo(other);
     }
@@ -402,15 +402,15 @@ public:
 
     kj::Maybe<kj::AsyncInputStream&> maybeRequestBody;
 
-    KJ_IF_MAYBE(s, requestBody.tryGetLength()) {
-      metadata.getBodySize().setFixed(*s);
-      if (*s == 0) {
+    KJ_IF_SOME(s, requestBody.tryGetLength()) {
+      metadata.getBodySize().setFixed(s);
+      if (s == 0) {
         maybeRequestBody = nullptr;
       } else {
         maybeRequestBody = requestBody;
       }
     } else if ((method == kj::HttpMethod::GET || method == kj::HttpMethod::HEAD) &&
-               headers.get(kj::HttpHeaderId::TRANSFER_ENCODING) == nullptr) {
+               headers.get(kj::HttpHeaderId::TRANSFER_ENCODING) == kj::none) {
       maybeRequestBody = nullptr;
       metadata.getBodySize().setFixed(0);
     } else {
@@ -430,9 +430,9 @@ public:
 
     // Pump upstream -- unless we don't expect a request body.
     kj::Maybe<kj::Promise<void>> pumpRequestTask;
-    KJ_IF_MAYBE(rb, maybeRequestBody) {
+    KJ_IF_SOME(rb, maybeRequestBody) {
       auto bodyOut = factory.streamFactory.capnpToKjExplicitEnd(pipeline.getRequestBody());
-      pumpRequestTask = rb->pumpTo(*bodyOut)
+      pumpRequestTask = rb.pumpTo(*bodyOut)
           .then([&bodyOut = *bodyOut](uint64_t) mutable {
         return bodyOut.end();
       }).eagerlyEvaluate([state = kj::addRef(*state), bodyOut = kj::mv(bodyOut)]
@@ -503,7 +503,7 @@ public:
     auto up = pipeline.getUp();
 
     // We need to create a tlsStarter callback which sends a startTls request to the capnp server.
-    KJ_IF_MAYBE(tlsStarter, settings.tlsStarter) {
+    KJ_IF_SOME(tlsStarter, settings.tlsStarter) {
       kj::Function<kj::Promise<void>(kj::StringPtr)> cb =
           [upForStartTls = kj::cp(up)]
           (kj::StringPtr expectedServerHostname)
@@ -512,7 +512,7 @@ public:
         startTlsRpcRequest.setExpectedServerHostname(expectedServerHostname);
         return startTlsRpcRequest.send();
       };
-      *tlsStarter = kj::mv(cb);
+      tlsStarter = kj::mv(cb);
     }
 
     auto upStream = factory.streamFactory.capnpToKjExplicitEnd(up);
@@ -601,7 +601,7 @@ public:
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
-      kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+      kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_REQUIRE(replyTask == nullptr, "already called send() or acceptWebSocket()");
 
     auto req = clientContext.startResponseRequest();
@@ -617,9 +617,9 @@ public:
     rpcResponse.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(rpcResponse)));
     bool hasBody = true;
-    KJ_IF_MAYBE(s, expectedBodySize) {
-      rpcResponse.getBodySize().setFixed(*s);
-      hasBody = *s > 0;
+    KJ_IF_SOME(s, expectedBodySize) {
+      rpcResponse.getBodySize().setFixed(s);
+      hasBody = s > 0;
     }
 
     auto logError = [hasBody](kj::Exception&& e) {
@@ -715,7 +715,7 @@ public:
       uint statusCode,
       kj::StringPtr statusText,
       const kj::HttpHeaders& headers,
-      kj::Maybe<uint64_t> expectedBodySize = nullptr) override {
+      kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_REQUIRE(replyTask == nullptr, "already called accept() or reject()");
     auto pipe = kj::newOneWayPipe(expectedBodySize);
 
@@ -728,8 +728,8 @@ public:
 
     auto errorBody = kj::mv(pipe.in);
     // Set the body size if the error body exists.
-    KJ_IF_MAYBE(size, errorBody->tryGetLength()) {
-      rpcResponse.getBodySize().setFixed(*size);
+    KJ_IF_SOME(size, errorBody->tryGetLength()) {
+      rpcResponse.getBodySize().setFixed(size);
     }
 
     replyTask = req.send().then(
@@ -1052,7 +1052,7 @@ kj::HttpHeaders HttpOverCapnpFactory::headersToKj(
           }
           case capnp::HttpHeader::Common::VALUE: {
             auto headerId = nameCapnpToKj[nameInt];
-            if (result.get(headerId) == nullptr) {
+            if (result.get(headerId) == kj::none) {
               result.set(headerId, nv.getValue());
             } else {
               // Unusual: This is a duplicate header, so fall back to add(), which may trigger

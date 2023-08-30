@@ -164,8 +164,8 @@ EzRpcClient::EzRpcClient(int socketFd, ReaderOptions readerOpts)
 EzRpcClient::~EzRpcClient() noexcept(false) {}
 
 Capability::Client EzRpcClient::getMain() {
-  KJ_IF_MAYBE(client, impl->clientContext) {
-    return client->get()->getMain();
+  KJ_IF_SOME(client, impl->clientContext) {
+    return client->getMain();
   } else {
     return impl->setupPromise.addBranch().then([this]() {
       return KJ_ASSERT_NONNULL(impl->clientContext)->getMain();
@@ -174,8 +174,8 @@ Capability::Client EzRpcClient::getMain() {
 }
 
 Capability::Client EzRpcClient::importCap(kj::StringPtr name) {
-  KJ_IF_MAYBE(client, impl->clientContext) {
-    return client->get()->restore(name);
+  KJ_IF_SOME(client, impl->clientContext) {
+    return client->restore(name);
   } else {
     return impl->setupPromise.addBranch().then(
         [this,name=kj::heapString(name)]() {

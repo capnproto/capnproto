@@ -105,7 +105,7 @@ kj::Promise<void> WebSocketMessageStream::writeMessages(
 }
 
 kj::Maybe<int> WebSocketMessageStream::getSendBufferSize() {
-  return nullptr;
+  return kj::none;
 }
 
 kj::Promise<void> WebSocketMessageStream::end() {

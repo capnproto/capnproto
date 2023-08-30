@@ -225,8 +225,8 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
   // TODO(someday): For interfaces, check for handlers on superclasses, per documentation...
   // TODO(someday): For branded types, should we check for handlers on the generic?
   // TODO(someday): Allow registering handlers for "all structs", "all lists", etc?
-  KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
-    (*handler)->encodeBase(*this, input, output);
+  KJ_IF_SOME(handler, impl->typeHandlers.find(type)) {
+    handler->encodeBase(*this, input, output);
     return;
   }
 
@@ -291,8 +291,8 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
     }
     case schema::Type::ENUM: {
       auto e = input.as<DynamicEnum>();
-      KJ_IF_MAYBE(symbol, e.getEnumerant()) {
-        output.setString(symbol->getProto().getName());
+      KJ_IF_SOME(symbol, e.getEnumerant()) {
+        output.setString(symbol.getProto().getName());
       } else {
         output.setNumber(e.getRaw());
       }
@@ -313,14 +313,14 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
       auto which = structValue.which();
       bool unionFieldIsNull = false;
 
-      KJ_IF_MAYBE(field, which) {
+      KJ_IF_SOME(field, which) {
         // Even if the union field is null, if it is not the default field of the union then we
         // have to print it anyway.
-        unionFieldIsNull = !structValue.has(*field, impl->hasMode);
-        if (field->getProto().getDiscriminantValue() != 0 || !unionFieldIsNull) {
+        unionFieldIsNull = !structValue.has(field, impl->hasMode);
+        if (field.getProto().getDiscriminantValue() != 0 || !unionFieldIsNull) {
           ++fieldCount;
         } else {
-          which = nullptr;
+          which = kj::none;
         }
       }
 
@@ -329,16 +329,16 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
       size_t pos = 0;
       for (auto i: kj::indices(nonUnionFields)) {
         auto field = nonUnionFields[i];
-        KJ_IF_MAYBE(unionField, which) {
-          if (unionField->getIndex() < field.getIndex()) {
+        KJ_IF_SOME(unionField, which) {
+          if (unionField.getIndex() < field.getIndex()) {
             auto outField = object[pos++];
-            outField.setName(unionField->getProto().getName());
+            outField.setName(unionField.getProto().getName());
             if (unionFieldIsNull) {
               outField.initValue().setNull();
             } else {
-              encodeField(*unionField, structValue.get(*unionField), outField.initValue());
+              encodeField(unionField, structValue.get(unionField), outField.initValue());
             }
-            which = nullptr;
+            which = kj::none;
           }
         }
         if (hasField[i]) {
@@ -347,7 +347,7 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
           encodeField(field, structValue.get(field), outField.initValue());
         }
       }
-      if (which != nullptr) {
+      if (which != kj::none) {
         // Union field not printed yet; must be last.
         auto unionField = KJ_ASSERT_NONNULL(which);
         auto outField = object[pos++];
@@ -372,8 +372,8 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
 
 void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader input,
                             JsonValue::Builder output) const {
-  KJ_IF_MAYBE(handler, impl->fieldHandlers.find(field)) {
-    (*handler)->encodeBase(*this, input, output);
+  KJ_IF_SOME(handler, impl->fieldHandlers.find(field)) {
+    handler->encodeBase(*this, input, output);
     return;
   }
 
@@ -392,8 +392,8 @@ Orphan<DynamicList> JsonCodec::decodeArray(List<JsonValue>::Reader input, ListSc
 void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const {
   KJ_REQUIRE(input.isObject(), "Expected object value") { return; }
   for (auto field: input.getObject()) {
-    KJ_IF_MAYBE(fieldSchema, type.findFieldByName(field.getName())) {
-      decodeField(*fieldSchema, field.getValue(), orphanage, output);
+    KJ_IF_SOME(fieldSchema, type.findFieldByName(field.getName())) {
+      decodeField(fieldSchema, field.getValue(), orphanage, output);
     } else {
       KJ_REQUIRE(!impl->rejectUnknownFields, "Unknown field", field.getName());
     }
@@ -404,8 +404,8 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
                             Orphanage orphanage, DynamicStruct::Builder output) const {
   auto fieldType = fieldSchema.getType();
 
-  KJ_IF_MAYBE(handler, impl->fieldHandlers.find(fieldSchema)) {
-    output.adopt(fieldSchema, (*handler)->decodeBase(*this, fieldValue, fieldType, orphanage));
+  KJ_IF_SOME(handler, impl->fieldHandlers.find(fieldSchema)) {
+    output.adopt(fieldSchema, handler->decodeBase(*this, fieldValue, fieldType, orphanage));
   } else {
     output.adopt(fieldSchema, decode(fieldValue, fieldType, orphanage));
   }
@@ -414,8 +414,8 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
 void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
   auto type = output.getSchema();
 
-  KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
-    return (*handler)->decodeStructBase(*this, input, output);
+  KJ_IF_SOME(handler, impl->typeHandlers.find(type)) {
+    return handler->decodeStructBase(*this, input, output);
   }
 
   decodeObject(input, type, Orphanage::getForMessageContaining(output), output);
@@ -423,8 +423,8 @@ void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) c
 
 Orphan<DynamicValue> JsonCodec::decode(
     JsonValue::Reader input, Type type, Orphanage orphanage) const {
-  KJ_IF_MAYBE(handler, impl->typeHandlers.find(type)) {
-    return (*handler)->decodeBase(*this, input, type, orphanage);
+  KJ_IF_SOME(handler, impl->typeHandlers.find(type)) {
+    return handler->decodeBase(*this, input, type, orphanage);
   }
 
   switch(type.which()) {
@@ -936,7 +936,7 @@ public:
     auto schemaProto = schema.getProto();
     auto typeName = schemaProto.getDisplayName();
 
-    if (discriminator == nullptr) {
+    if (discriminator == kj::none) {
       // There are two cases of unions:
       // * Named unions, which are special cases of named groups. In this case, the union may be
       //   annotated by annotating the field. In this case, we receive a non-null `discriminator`
@@ -955,20 +955,20 @@ public:
       }
     }
 
-    KJ_IF_MAYBE(d, discriminator) {
-      if (d->hasName()) {
-        unionTagName = d->getName();
+    KJ_IF_SOME(d, discriminator) {
+      if (d.hasName()) {
+        unionTagName = d.getName();
       } else {
         unionTagName = unionDeclName;
       }
-      KJ_IF_MAYBE(u, unionTagName) {
-        fieldsByName.insert(*u, FieldNameInfo {
+      KJ_IF_SOME(u, unionTagName) {
+        fieldsByName.insert(u, FieldNameInfo {
           FieldNameInfo::UNION_TAG, 0, 0, nullptr
         });
       }
 
-      if (d->hasValueName()) {
-        fieldsByName.insert(d->getValueName(), FieldNameInfo {
+      if (d.hasValueName()) {
+        fieldsByName.insert(d.getValueName(), FieldNameInfo {
           FieldNameInfo::UNION_VALUE, 0, 0, nullptr
         });
       }
@@ -1038,15 +1038,15 @@ public:
       } else if (type.isStruct()) {
         if (flattened) {
           info.flattenHandler = codec.loadAnnotatedHandler(
-              type.asStruct(), nullptr, nullptr, dependencies);
+              type.asStruct(), kj::none, kj::none, dependencies);
         }
       }
 
       bool isUnionMember = fieldProto.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
 
-      KJ_IF_MAYBE(fh, info.flattenHandler) {
+      KJ_IF_SOME(fh, info.flattenHandler) {
         // Set up fieldsByName for each of the child's fields.
-        for (auto& entry: fh->fieldsByName) {
+        for (auto& entry: fh.fieldsByName) {
           kj::StringPtr flattenedName;
           kj::String ownName;
           if (info.prefix.size() > 0) {
@@ -1072,9 +1072,9 @@ public:
       if (!flattened) {
         bool isUnionWithValueName = false;
         if (isUnionMember) {
-          KJ_IF_MAYBE(d, discriminator) {
-            if (d->hasValueName()) {
-              info.name = d->getValueName();
+          KJ_IF_SOME(d, discriminator) {
+            if (d.hasValueName()) {
+              info.name = d.getValueName();
               isUnionWithValueName = true;
             }
           }
@@ -1091,7 +1091,7 @@ public:
 
       // Look for dependencies that we need to add.
       while (type.isList()) type = type.asList().getElementType();
-      if (codec.impl->typeHandlers.find(type) == nullptr) {
+      if (codec.impl->typeHandlers.find(type) == kj::none) {
         switch (type.which()) {
           case schema::Type::STRUCT:
             dependencies.add(type.asStruct());
@@ -1247,30 +1247,30 @@ private:
       auto& info = fields[field.getIndex()];
       if (!reader.has(field, codec.impl->hasMode)) {
         // skip
-      } else KJ_IF_MAYBE(handler, info.flattenHandler) {
-        handler->gatherForEncode(codec, reader.get(field), prefix, info.prefix, flattenedFields);
+      } else KJ_IF_SOME(handler, info.flattenHandler) {
+        handler.gatherForEncode(codec, reader.get(field), prefix, info.prefix, flattenedFields);
       } else {
         flattenedFields.add(FlattenedField {
             prefix, info.name, field, reader.get(field) });
       }
     }
 
-    KJ_IF_MAYBE(which, reader.which()) {
-      auto& info = fields[which->getIndex()];
-      KJ_IF_MAYBE(tag, unionTagName) {
+    KJ_IF_SOME(which, reader.which()) {
+      auto& info = fields[which.getIndex()];
+      KJ_IF_SOME(tag, unionTagName) {
         flattenedFields.add(FlattenedField {
-            prefix, *tag, Type(schema::Type::TEXT), Text::Reader(info.nameForDiscriminant) });
+            prefix, tag, Type(schema::Type::TEXT), Text::Reader(info.nameForDiscriminant) });
       }
 
-      KJ_IF_MAYBE(handler, info.flattenHandler) {
-        handler->gatherForEncode(codec, reader.get(*which), prefix, info.prefix, flattenedFields);
+      KJ_IF_SOME(handler, info.flattenHandler) {
+        handler.gatherForEncode(codec, reader.get(which), prefix, info.prefix, flattenedFields);
       } else {
-        auto type = which->getType();
-        if (type.which() == schema::Type::VOID && unionTagName != nullptr) {
+        auto type = which.getType();
+        if (type.which() == schema::Type::VOID && unionTagName != kj::none) {
           // When we have an explicit union discriminant, we don't need to encode void fields.
         } else {
           flattenedFields.add(FlattenedField {
-              prefix, info.name, *which, reader.get(*which) });
+              prefix, info.name, which, reader.get(which) });
         }
       }
     }
@@ -1280,27 +1280,27 @@ private:
                    DynamicStruct::Builder output, kj::HashSet<const void*>& unionsSeen) const {
     KJ_ASSERT(output.getSchema() == schema);
 
-    KJ_IF_MAYBE(info, fieldsByName.find(name)) {
-      switch (info->type) {
+    KJ_IF_SOME(info, fieldsByName.find(name)) {
+      switch (info.type) {
         case FieldNameInfo::NORMAL: {
-          auto field = output.getSchema().getFields()[info->index];
+          auto field = output.getSchema().getFields()[info.index];
           codec.decodeField(field, value, Orphanage::getForMessageContaining(output), output);
           return true;
         }
         case FieldNameInfo::FLATTENED:
-          return KJ_ASSERT_NONNULL(fields[info->index].flattenHandler)
-              .decodeField(codec, name.slice(info->prefixLength), value,
-                  output.get(output.getSchema().getFields()[info->index]).as<DynamicStruct>(),
+          return KJ_ASSERT_NONNULL(fields[info.index].flattenHandler)
+              .decodeField(codec, name.slice(info.prefixLength), value,
+                  output.get(output.getSchema().getFields()[info.index]).as<DynamicStruct>(),
                   unionsSeen);
         case FieldNameInfo::UNION_TAG: {
           KJ_REQUIRE(value.isString(), "Expected string value.");
 
           // Mark that we've seen a union tag for this struct.
           const void* ptr = getUnionInstanceIdentifier(output);
-          KJ_IF_MAYBE(field, unionTagValues.find(value.getString())) {
+          KJ_IF_SOME(field, unionTagValues.find(value.getString())) {
             // clear() has the side-effect of activating this member of the union, without
             // allocating any objects.
-            output.clear(*field);
+            output.clear(field);
             unionsSeen.insert(ptr);
           }
           return true;
@@ -1310,7 +1310,7 @@ private:
           if (unionsSeen.contains(ptr)) {
             auto variant = KJ_ASSERT_NONNULL(output.which());
             return KJ_ASSERT_NONNULL(fields[variant.getIndex()].flattenHandler)
-                .decodeField(codec, name.slice(info->prefixLength), value,
+                .decodeField(codec, name.slice(info.prefixLength), value,
                     output.get(variant).as<DynamicStruct>(), unionsSeen);
           } else {
             // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
@@ -1372,9 +1372,9 @@ public:
   }
 
   void encode(const JsonCodec& codec, DynamicEnum input, JsonValue::Builder output) const override {
-    KJ_IF_MAYBE(e, input.getEnumerant()) {
-      KJ_ASSERT(e->getIndex() < valueToName.size());
-      output.setString(valueToName[e->getIndex()]);
+    KJ_IF_SOME(e, input.getEnumerant()) {
+      KJ_ASSERT(e.getIndex() < valueToName.size());
+      output.setString(valueToName[e.getIndex()]);
     } else {
       output.setNumber(input.getRaw());
     }
@@ -1436,15 +1436,15 @@ private:
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
       StructSchema schema, kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
       kj::Maybe<kj::StringPtr> unionDeclName, kj::Vector<Schema>& dependencies) {
-  auto& entry = impl->annotatedHandlers.upsert(schema, nullptr,
+  auto& entry = impl->annotatedHandlers.upsert(schema, kj::none,
       [&](kj::Maybe<kj::Own<AnnotatedHandler>>& existing, auto dummy) {
-    KJ_ASSERT(existing != nullptr,
+    KJ_ASSERT(existing != kj::none,
         "cyclic JSON flattening detected", schema.getProto().getDisplayName());
   });
 
-  KJ_IF_MAYBE(v, entry.value) {
+  KJ_IF_SOME(v, entry.value) {
     // Already exists.
-    return **v;
+    return *v;
   } else {
     // Not seen before.
     auto newHandler = kj::heap<AnnotatedHandler>(
@@ -1468,7 +1468,7 @@ void JsonCodec::handleByAnnotation(Schema schema) {
         addTypeHandler(schema.asStruct(), GLOBAL_HANDLER);
       } else {
         kj::Vector<Schema> dependencies;
-        loadAnnotatedHandler(schema.asStruct(), nullptr, nullptr, dependencies);
+        loadAnnotatedHandler(schema.asStruct(), kj::none, kj::none, dependencies);
         for (auto dep: dependencies) {
           handleByAnnotation(dep);
         }

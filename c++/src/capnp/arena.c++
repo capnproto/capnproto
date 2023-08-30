@@ -123,11 +123,11 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   auto lock = moreSegments.lockExclusive();
 
   SegmentMap* segments = nullptr;
-  KJ_IF_MAYBE(s, *lock) {
-    KJ_IF_MAYBE(segment, s->find(id.value)) {
-      return *segment;
+  KJ_IF_SOME(s, *lock) {
+    KJ_IF_SOME(segment, s.find(id.value)) {
+      return segment;
     }
-    segments = s;
+    segments = &s;
   }
 
   kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);
@@ -137,7 +137,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 
   SegmentWordCount newSegmentSize = verifySegment(newSegment);
 
-  if (*lock == nullptr) {
+  if (*lock == kj::none) {
     // OK, the segment exists, so allocate the map.
     segments = &lock->emplace();
   }
@@ -192,9 +192,9 @@ BuilderArena::BuilderArena(MessageBuilder* message,
 BuilderArena::~BuilderArena() noexcept(false) {}
 
 size_t BuilderArena::sizeInWords() {
-  KJ_IF_MAYBE(segmentState, moreSegments) {
+  KJ_IF_SOME(segmentState, moreSegments) {
     size_t total = segment0.currentlyAllocated().size();
-    for (auto& builder: segmentState->get()->builders) {
+    for (auto& builder: segmentState.get()->builders) {
       total += builder->currentlyAllocated().size();
     }
     return total;
@@ -214,9 +214,9 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     return &segment0;
   } else {
-    KJ_IF_MAYBE(s, moreSegments) {
-      KJ_REQUIRE(id.value - 1 < s->get()->builders.size(), "invalid segment id", id.value);
-      return const_cast<SegmentBuilder*>(s->get()->builders[id.value - 1].get());
+    KJ_IF_SOME(s, moreSegments) {
+      KJ_REQUIRE(id.value - 1 < s.get()->builders.size(), "invalid segment id", id.value);
+      return const_cast<SegmentBuilder*>(s.get()->builders[id.value - 1].get());
     } else {
       KJ_FAIL_REQUIRE("invalid segment id", id.value);
     }
@@ -276,8 +276,8 @@ SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
   auto contentSize = verifySegmentSize(content.size());
 
   MultiSegmentState* segmentState;
-  KJ_IF_MAYBE(s, moreSegments) {
-    segmentState = *s;
+  KJ_IF_SOME(s, moreSegments) {
+    segmentState = s;
   } else {
     auto newSegmentState = kj::heap<MultiSegmentState>();
     segmentState = newSegmentState;
@@ -303,16 +303,16 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
   // exact same data.  If the number or size of segments is actually changing due to an activity
   // in another thread, then the caller has a problem regardless of locking here.
 
-  KJ_IF_MAYBE(segmentState, moreSegments) {
-    KJ_DASSERT(segmentState->get()->forOutput.size() == segmentState->get()->builders.size() + 1,
-        "segmentState->forOutput wasn't resized correctly when the last builder was added.",
-        segmentState->get()->forOutput.size(), segmentState->get()->builders.size());
+  KJ_IF_SOME(segmentState, moreSegments) {
+    KJ_DASSERT(segmentState.get()->forOutput.size() == segmentState.get()->builders.size() + 1,
+        "segmentState.forOutput wasn't resized correctly when the last builder was added.",
+        segmentState.get()->forOutput.size(), segmentState.get()->builders.size());
 
     kj::ArrayPtr<kj::ArrayPtr<const word>> result(
-        &segmentState->get()->forOutput[0], segmentState->get()->forOutput.size());
+        &segmentState.get()->forOutput[0], segmentState.get()->forOutput.size());
     uint i = 0;
     result[i++] = segment0.currentlyAllocated();
-    for (auto& builder: segmentState->get()->builders) {
+    for (auto& builder: segmentState.get()->builders) {
       result[i++] = builder->currentlyAllocated();
     }
     return result;
@@ -337,12 +337,12 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
       return &segment0;
     }
   } else {
-    KJ_IF_MAYBE(segmentState, moreSegments) {
-      if (id.value <= segmentState->get()->builders.size()) {
+    KJ_IF_SOME(segmentState, moreSegments) {
+      if (id.value <= segmentState.get()->builders.size()) {
         // TODO(cleanup):  Return a const SegmentReader and tediously constify all SegmentBuilder
         //   pointers throughout the codebase.
         return const_cast<SegmentReader*>(kj::implicitCast<const SegmentReader*>(
-            segmentState->get()->builders[id.value - 1].get()));
+            segmentState.get()->builders[id.value - 1].get()));
       }
     }
     return nullptr;
@@ -362,7 +362,7 @@ kj::Maybe<kj::Own<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint inde
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
   } else {
-    return nullptr;
+    return kj::none;
   }
 #endif
 }
@@ -384,7 +384,7 @@ void BuilderArena::LocalCapTable::dropCap(uint index) {
   KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
     return;
   }
-  capTable[index] = nullptr;
+  capTable[index] = kj::none;
 #endif
 }
 

@@ -151,8 +151,8 @@ void JsonRpc::queueError(kj::Maybe<json::Value::Reader> id, int code, kj::String
   MallocMessageBuilder capnpMessage;
   auto jsonResponse = capnpMessage.getRoot<json::RpcMessage>();
   jsonResponse.setJsonrpc("2.0");
-  KJ_IF_MAYBE(i, id) {
-    jsonResponse.setId(*i);
+  KJ_IF_SOME(i, id) {
+    jsonResponse.setId(i);
   } else {
     jsonResponse.initId().setNull();
   }
@@ -169,10 +169,10 @@ kj::Promise<void> JsonRpc::readLoop() {
     MallocMessageBuilder capnpMessage;
     auto rpcMessageBuilder = capnpMessage.getRoot<json::RpcMessage>();
 
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
       codec.decode(message, rpcMessageBuilder);
     })) {
-      queueError(nullptr, -32700, kj::str("Parse error: ", exception->getDescription()));
+      queueError(kj::none, -32700, kj::str("Parse error: ", exception.getDescription()));
       return readLoop();
     }
 
@@ -181,30 +181,30 @@ kj::Promise<void> JsonRpc::readLoop() {
     auto rpcMessage = rpcMessageBuilder.asReader();
 
     if (!rpcMessage.hasJsonrpc()) {
-      queueError(nullptr, -32700, kj::str("Missing 'jsonrpc' field."));
+      queueError(kj::none, -32700, kj::str("Missing 'jsonrpc' field."));
       return readLoop();
     } else if (rpcMessage.getJsonrpc() != "2.0") {
-      queueError(nullptr, -32700,
+      queueError(kj::none, -32700,
           kj::str("Unknown JSON-RPC version. This peer implements version '2.0'."));
       return readLoop();
     }
 
     switch (rpcMessage.which()) {
       case json::RpcMessage::NONE:
-        queueError(nullptr, -32700, kj::str("message has none of params, result, or error"));
+        queueError(kj::none, -32700, kj::str("message has none of params, result, or error"));
         break;
 
       case json::RpcMessage::PARAMS: {
         // a call
-        KJ_IF_MAYBE(method, methodMap.find(rpcMessage.getMethod())) {
-          auto req = interface.newRequest(*method);
-          KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+        KJ_IF_SOME(method, methodMap.find(rpcMessage.getMethod())) {
+          auto req = interface.newRequest(method);
+          KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
             codec.decode(rpcMessage.getParams(), req);
           })) {
             kj::Maybe<JsonValue::Reader> id;
             if (rpcMessage.hasId()) id = rpcMessage.getId();
             queueError(id, -32602,
-                kj::str("Type error in method params: ", exception->getDescription()));
+                kj::str("Type error in method params: ", exception.getDescription()));
             break;
           }
 
@@ -270,14 +270,14 @@ kj::Promise<void> JsonRpc::readLoop() {
         if (!id.isNumber()) {
           // JSON-RPC doesn't define what to do if receiving a response with an invalid id.
           KJ_LOG(ERROR, "JSON-RPC response has invalid ID");
-        } else KJ_IF_MAYBE(awaited, awaitedResponses.find((uint)id.getNumber())) {
-          KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-            codec.decode(rpcMessage.getResult(), awaited->context.getResults());
-            awaited->fulfiller->fulfill();
+        } else KJ_IF_SOME(awaited, awaitedResponses.find((uint)id.getNumber())) {
+          KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+            codec.decode(rpcMessage.getResult(), awaited.context.getResults());
+            awaited.fulfiller->fulfill();
           })) {
             // Errors always propagate from callee to caller, so we don't want to throw this error
             // back to the server.
-            awaited->fulfiller->reject(kj::mv(*exception));
+            awaited.fulfiller->reject(kj::mv(exception));
           }
         } else {
           // Probably, this is the response to a call that was canceled.
@@ -293,13 +293,13 @@ kj::Promise<void> JsonRpc::readLoop() {
         } else if (!id.isNumber()) {
           // JSON-RPC doesn't define what to do if receiving a response with an invalid id.
           KJ_LOG(ERROR, "JSON-RPC response has invalid ID");
-        } else KJ_IF_MAYBE(awaited, awaitedResponses.find((uint)id.getNumber())) {
+        } else KJ_IF_SOME(awaited, awaitedResponses.find((uint)id.getNumber())) {
           auto error = rpcMessage.getError();
           auto code = error.getCode();
           kj::Exception::Type type =
               code == -32601 ? kj::Exception::Type::UNIMPLEMENTED
                              : kj::Exception::Type::FAILED;
-          awaited->fulfiller->reject(kj::Exception(
+          awaited.fulfiller->reject(kj::Exception(
               type, __FILE__, __LINE__, kj::str(error.getMessage())));
         } else {
           // Probably, this is the response to a call that was canceled.

@@ -483,9 +483,9 @@ Orphan<DynamicValue> makeExampleValue(
       auto result = orphanage.newOrphan(structType);
       auto builder = result.get();
 
-      KJ_IF_MAYBE(fieldI, structType.findFieldByName("i")) {
+      KJ_IF_SOME(fieldI, structType.findFieldByName("i")) {
         // Type is "StructType"
-        builder.set(*fieldI, ordinal);
+        builder.set(fieldI, ordinal);
       } else {
         // Type is "Int32Struct" or the like.
         auto field = structType.getFieldByName("f0");
@@ -525,9 +525,9 @@ void checkExampleValue(DynamicValue::Reader value, uint ordinal, schema::Type::R
       auto structValue = value.as<DynamicStruct>();
       auto structType = structValue.getSchema();
 
-      KJ_IF_MAYBE(fieldI, structType.findFieldByName("i")) {
+      KJ_IF_SOME(fieldI, structType.findFieldByName("i")) {
         // Type is "StructType"
-        KJ_ASSERT(structValue.get(*fieldI).as<uint32_t>() == ordinal);
+        KJ_ASSERT(structValue.get(fieldI).as<uint32_t>() == ordinal);
       } else {
         // Type is "Int32Struct" or the like.
         auto field = structType.getFieldByName("f0");
@@ -688,10 +688,10 @@ static kj::Maybe<kj::Exception> loadFile(
     // Eagerly compile and load the whole thing.
     compiler.eagerlyCompile(0x8123456789abcdefllu, Compiler::ALL_RELATED_NODES);
 
-    KJ_IF_MAYBE(m, messageBuilder) {
+    KJ_IF_SOME(m, messageBuilder) {
       // Build an example struct using the compiled schema.
-      m->get()->adoptRoot(makeExampleStruct(
-          m->get()->getOrphanage(), compiler.getLoader().get(0x823456789abcdef1llu).asStruct(),
+      m.get()->adoptRoot(makeExampleStruct(
+          m.get()->getOrphanage(), compiler.getLoader().get(0x823456789abcdef1llu).asStruct(),
           sharedOrdinalCount));
     }
 
@@ -704,9 +704,9 @@ static kj::Maybe<kj::Exception> loadFile(
     // we want.
     compiler.eagerlyCompile(0x8123456789abcdefllu, Compiler::NODE);
 
-    KJ_IF_MAYBE(m, messageBuilder) {
+    KJ_IF_SOME(m, messageBuilder) {
       // Check that the example struct matches the compiled schema.
-      auto root = m->get()->getRoot<DynamicStruct>(
+      auto root = m.get()->getRoot<DynamicStruct>(
           compiler.getLoader().get(0x823456789abcdef1llu).asStruct()).asReader();
       KJ_CONTEXT(root);
       checkExampleStruct(root, sharedOrdinalCount);
@@ -737,8 +737,8 @@ bool checkChange(ParsedFile::Reader file1, ParsedFile::Reader file2, ChangeKind 
   auto exception = loadFile(file2, loader, false, exampleBuilder, sharedOrdinalCount);
 
   if (changeKind == COMPATIBLE) {
-    KJ_IF_MAYBE(e, exception) {
-      kj::getExceptionCallback().onFatalException(kj::mv(*e));
+    KJ_IF_SOME(e, exception) {
+      kj::getExceptionCallback().onFatalException(kj::mv(e));
       return false;
     } else {
       return true;

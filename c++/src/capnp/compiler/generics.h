@@ -245,8 +245,8 @@ private:
       : errorReporter(base.errorReporter),
         leafId(base.leafId), leafParamCount(base.leafParamCount),
         inherited(false), params(kj::mv(params)) {
-    KJ_IF_MAYBE(p, base.parent) {
-      parent = kj::addRef(**p);
+    KJ_IF_SOME(p, base.parent) {
+      parent = kj::addRef(*p);
     }
   }
   BrandScope(ErrorReporter& errorReporter, uint64_t scopeId)
@@ -279,8 +279,8 @@ void BrandScope::compile(InitBrandFunc&& initBrand) {
     if (ptr->params.size() > 0 || (ptr->inherited && ptr->leafParamCount > 0)) {
       levels.add(ptr);
     }
-    KJ_IF_MAYBE(p, ptr->parent) {
-      ptr = *p;
+    KJ_IF_SOME(p, ptr->parent) {
+      ptr = p;
     } else {
       break;
     }

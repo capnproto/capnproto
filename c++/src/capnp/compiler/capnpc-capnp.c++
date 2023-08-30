@@ -383,10 +383,10 @@ private:
     auto value = genValue(schemaLoader.getType(annDecl.getType(), decl),
                           annotation.getValue()).flatten();
     if (value.startsWith("(")) {
-      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getBrand(), nullptr),
+      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getBrand(), kj::none),
                          value, suffix);
     } else {
-      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getBrand(), nullptr),
+      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getBrand(), kj::none),
                          "(", value, ")", suffix);
     }
   }
@@ -465,7 +465,7 @@ private:
         int size = typeSizeBits(slot.getType());
         return kj::strTree(
             indent, proto.getName(), " @", proto.getOrdinal().getExplicit(),
-            " :", genType(slot.getType(), scope, nullptr),
+            " :", genType(slot.getType(), scope, kj::none),
             isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
                 kj::strTree(" = ", genValue(field.getType(), slot.getDefaultValue())),
             genAnnotations(proto.getAnnotations(), scope),
@@ -503,7 +503,7 @@ private:
             auto slot = proto.getSlot();
 
             return kj::strTree(
-                proto.getName(), " :", genType(slot.getType(), interface, nullptr),
+                proto.getName(), " :", genType(slot.getType(), interface, kj::none),
                 isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
                     kj::strTree(" = ", genValue(field.getType(), slot.getDefaultValue())),
                 genAnnotations(proto.getAnnotations(), interface));
@@ -521,7 +521,7 @@ private:
       return kj::strTree(" superclasses(", kj::StringTree(
           KJ_MAP(superclass, superclasses) {
             return nodeName(schemaLoader.get(superclass.getId()), interface,
-                            superclass.getBrand(), nullptr);
+                            superclass.getBrand(), kj::none);
           }, ", "), ")");
     }
   }
@@ -600,7 +600,7 @@ private:
         auto constProto = proto.getConst();
         return kj::strTree(
             indent, "const ", name, " @0x", kj::hex(proto.getId()), " :",
-            genType(constProto.getType(), schema, nullptr), " = ",
+            genType(constProto.getType(), schema, kj::none), " = ",
             genValue(schema.asConst().getType(), constProto.getValue()),
             genAnnotations(schema), ";\n");
       }
@@ -632,7 +632,7 @@ private:
         return kj::strTree(
             indent, "annotation ", name, " @0x", kj::hex(proto.getId()),
             " (", strArray(targets, ", "), ") :",
-            genType(annotationProto.getType(), schema, nullptr), genAnnotations(schema), ";\n");
+            genType(annotationProto.getType(), schema, kj::none), genAnnotations(schema), ";\n");
       }
     }
 

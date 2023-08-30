@@ -107,7 +107,7 @@ kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::asConnection() {
 kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connect(
     rpc::twoparty::VatId::Reader ref) {
   if (ref.getSide() == side) {
-    return nullptr;
+    return kj::none;
   } else {
     return asConnection();
   }
@@ -285,8 +285,8 @@ size_t TwoPartyVatNetwork::getWindow() {
   if (solSndbufUnimplemented) {
     return RpcFlowController::DEFAULT_WINDOW_SIZE;
   } else {
-    KJ_IF_MAYBE(bufSize, getStream().getSendBufferSize()) {
-      return *bufSize;
+    KJ_IF_SOME(bufSize, getStream().getSendBufferSize()) {
+      return bufSize;
     } else {
       solSndbufUnimplemented = true;
       return RpcFlowController::DEFAULT_WINDOW_SIZE;
@@ -304,9 +304,9 @@ kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSeg
 
 kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveIncomingMessage() {
   return kj::evalLater([this]() -> kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> {
-    KJ_IF_MAYBE(e, readCancelReason) {
+    KJ_IF_SOME(e, readCancelReason) {
       // A previous write failed; propagate the failure to reads, too.
-      return kj::cp(*e);
+      return kj::cp(e);
     }
 
     kj::Array<kj::AutoCloseFd> fdSpace = nullptr;
@@ -317,15 +317,15 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
     return promise.then([fdSpace = kj::mv(fdSpace)]
                         (kj::Maybe<MessageReaderAndFds>&& messageAndFds) mutable
                       -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
-      KJ_IF_MAYBE(m, messageAndFds) {
-        if (m->fds.size() > 0) {
+      KJ_IF_SOME(m, messageAndFds) {
+        if (m.fds.size() > 0) {
           return kj::Own<IncomingRpcMessage>(
-              kj::heap<IncomingMessageImpl>(kj::mv(*m), kj::mv(fdSpace)));
+              kj::heap<IncomingMessageImpl>(kj::mv(m), kj::mv(fdSpace)));
         } else {
-          return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(kj::mv(m->reader)));
+          return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(kj::mv(m.reader)));
         }
       } else {
-        return nullptr;
+        return kj::none;
       }
     });
   });
@@ -335,7 +335,7 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
     return getStream().end();
   });
-  previousWrite = nullptr;
+  previousWrite = kj::none;
   return kj::mv(result);
 }
 
@@ -371,8 +371,8 @@ struct TwoPartyServer::AcceptedConnection {
   }
 
   void init(TwoPartyServer& parent) {
-    KJ_IF_MAYBE(t, parent.traceEncoder) {
-      rpcSystem.setTraceEncoder([&func = *t](const kj::Exception& e) {
+    KJ_IF_SOME(func, parent.traceEncoder) {
+      rpcSystem.setTraceEncoder([&func](const kj::Exception& e) {
         return func(e);
       });
     }

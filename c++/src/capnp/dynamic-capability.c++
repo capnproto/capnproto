@@ -58,8 +58,8 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
 Capability::Server::DispatchCallResult DynamicCapability::Server::dispatchCall(
     uint64_t interfaceId, uint16_t methodId,
     CallContext<AnyPointer, AnyPointer> context) {
-  KJ_IF_MAYBE(interface, schema.findSuperclass(interfaceId)) {
-    auto methods = interface->getMethods();
+  KJ_IF_SOME(interface, schema.findSuperclass(interfaceId)) {
+    auto methods = interface.getMethods();
     if (methodId < methods.size()) {
       auto method = methods[methodId];
       auto resultType = method.getResultType();
@@ -71,7 +71,7 @@ Capability::Server::DispatchCallResult DynamicCapability::Server::dispatchCall(
       };
     } else {
       return internalUnimplemented(
-          interface->getProto().getDisplayName().cStr(), interfaceId, methodId);
+          interface.getProto().getDisplayName().cStr(), interfaceId, methodId);
     }
   } else {
     return internalUnimplemented(schema.getProto().getDisplayName().cStr(), interfaceId);

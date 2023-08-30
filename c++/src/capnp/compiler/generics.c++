@@ -45,7 +45,7 @@ BrandedDecl& BrandedDecl::operator=(BrandedDecl& other) {
 kj::Maybe<BrandedDecl> BrandedDecl::applyParams(
     kj::Array<BrandedDecl> params, Expression::Reader subSource) {
   if (body.is<Resolver::ResolvedParameter>()) {
-    return nullptr;
+    return kj::none;
   } else {
     return brand->setParams(kj::mv(params), body.get<Resolver::ResolvedDecl>().kind, subSource)
         .map([&](kj::Own<BrandScope>&& scope) {
@@ -60,17 +60,17 @@ kj::Maybe<BrandedDecl> BrandedDecl::applyParams(
 kj::Maybe<BrandedDecl> BrandedDecl::getMember(
     kj::StringPtr memberName, Expression::Reader subSource) {
   if (body.is<Resolver::ResolvedParameter>()) {
-    return nullptr;
-  } else KJ_IF_MAYBE(r, body.get<Resolver::ResolvedDecl>().resolver->resolveMember(memberName)) {
-    return brand->interpretResolve(*body.get<Resolver::ResolvedDecl>().resolver, *r, subSource);
+    return kj::none;
+  } else KJ_IF_SOME(r, body.get<Resolver::ResolvedDecl>().resolver->resolveMember(memberName)) {
+    return brand->interpretResolve(*body.get<Resolver::ResolvedDecl>().resolver, r, subSource);
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
 kj::Maybe<Declaration::Which> BrandedDecl::getKind() {
   if (body.is<Resolver::ResolvedParameter>()) {
-    return nullptr;
+    return kj::none;
   } else {
     return body.get<Resolver::ResolvedDecl>().kind;
   }
@@ -84,7 +84,7 @@ kj::Maybe<BrandedDecl&> BrandedDecl::getListParam() {
 
   auto params = KJ_ASSERT_NONNULL(brand->getParams(decl.id));
   if (params.size() != 1) {
-    return nullptr;
+    return kj::none;
   } else {
     return params[0];
   }
@@ -98,8 +98,8 @@ Resolver::ResolvedParameter BrandedDecl::asVariable() {
 
 bool BrandedDecl::compileAsType(
     ErrorReporter& errorReporter, schema::Type::Builder target) {
-  KJ_IF_MAYBE(kind, getKind()) {
-    switch (*kind) {
+  KJ_IF_SOME(kind, getKind()) {
+    switch (kind) {
       case Declaration::ENUM: {
         auto enum_ = target.initEnum();
         enum_.setTypeId(getIdAndFillBrand([&]() { return enum_.initBrand(); }));
@@ -121,8 +121,8 @@ bool BrandedDecl::compileAsType(
       case Declaration::BUILTIN_LIST: {
         auto elementType = target.initList().initElementType();
 
-        KJ_IF_MAYBE(param, getListParam()) {
-          if (!param->compileAsType(errorReporter, elementType)) {
+        KJ_IF_SOME(param, getListParam()) {
+          if (!param.compileAsType(errorReporter, elementType)) {
             return false;
           }
         } else {
@@ -247,20 +247,20 @@ kj::String BrandedDecl::toDebugString() {
 
 BrandScope::BrandScope(ErrorReporter& errorReporter, uint64_t startingScopeId,
                        uint startingScopeParamCount, Resolver& startingScope)
-    : errorReporter(errorReporter), parent(nullptr), leafId(startingScopeId),
+    : errorReporter(errorReporter), parent(kj::none), leafId(startingScopeId),
       leafParamCount(startingScopeParamCount), inherited(true) {
   // Create all lexical parent scopes, all with no brand bindings.
-  KJ_IF_MAYBE(p, startingScope.getParent()) {
+  KJ_IF_SOME(p, startingScope.getParent()) {
     parent = kj::refcounted<BrandScope>(
-        errorReporter, p->id, p->genericParamCount, *p->resolver);
+        errorReporter, p.id, p.genericParamCount, *p.resolver);
   }
 }
 
 bool BrandScope::isGeneric() {
   if (leafParamCount > 0) return true;
 
-  KJ_IF_MAYBE(p, parent) {
-    return p->get()->isGeneric();
+  KJ_IF_SOME(p, parent) {
+    return p.get()->isGeneric();
   } else {
     return false;
   }
@@ -274,22 +274,22 @@ kj::Maybe<kj::Own<BrandScope>> BrandScope::setParams(
     kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source) {
   if (this->params.size() != 0) {
     errorReporter.addErrorOn(source, "Double-application of generic parameters.");
-    return nullptr;
+    return kj::none;
   } else if (params.size() > leafParamCount) {
     if (leafParamCount == 0) {
       errorReporter.addErrorOn(source, "Declaration does not accept generic parameters.");
     } else {
       errorReporter.addErrorOn(source, "Too many generic parameters.");
     }
-    return nullptr;
+    return kj::none;
   } else if (params.size() < leafParamCount) {
     errorReporter.addErrorOn(source, "Not enough generic parameters.");
-    return nullptr;
+    return kj::none;
   } else {
     if (genericType != Declaration::BUILTIN_LIST) {
       for (auto& param: params) {
-        KJ_IF_MAYBE(kind, param.getKind()) {
-          switch (*kind) {
+        KJ_IF_SOME(kind, param.getKind()) {
+          switch (kind) {
             case Declaration::BUILTIN_LIST:
             case Declaration::BUILTIN_TEXT:
             case Declaration::BUILTIN_DATA:
@@ -315,8 +315,8 @@ kj::Own<BrandScope> BrandScope::pop(uint64_t newLeafId) {
   if (leafId == newLeafId) {
     return kj::addRef(*this);
   }
-  KJ_IF_MAYBE(p, parent) {
-    return (*p)->pop(newLeafId);
+  KJ_IF_SOME(p, parent) {
+    return p->pop(newLeafId);
   } else {
     // Looks like we're moving into a whole top-level scope.
     return kj::refcounted<BrandScope>(errorReporter, newLeafId);
@@ -331,7 +331,7 @@ kj::Maybe<BrandedDecl> BrandScope::lookupParameter(
     if (index < params.size()) {
       return params[index];
     } else if (inherited) {
-      return nullptr;
+      return kj::none;
     } else {
       // Unbound and not inherited, so return AnyPointer.
       auto decl = resolver.resolveBuiltin(Declaration::BUILTIN_ANY_POINTER);
@@ -339,8 +339,8 @@ kj::Maybe<BrandedDecl> BrandScope::lookupParameter(
           evaluateBrand(resolver, decl, List<schema::Brand::Scope>::Reader()),
           Expression::Reader());
     }
-  } else KJ_IF_MAYBE(p, parent) {
-    return p->get()->lookupParameter(resolver, scopeId, index);
+  } else KJ_IF_SOME(p, parent) {
+    return p.get()->lookupParameter(resolver, scopeId, index);
   } else {
     KJ_FAIL_REQUIRE("scope is not a parent");
   }
@@ -351,12 +351,12 @@ kj::Maybe<kj::ArrayPtr<BrandedDecl>> BrandScope::getParams(uint64_t scopeId) {
 
   if (scopeId == leafId) {
     if (inherited) {
-      return nullptr;
+      return kj::none;
     } else {
       return params.asPtr();
     }
-  } else KJ_IF_MAYBE(p, parent) {
-    return p->get()->getParams(scopeId);
+  } else KJ_IF_SOME(p, parent) {
+    return p.get()->getParams(scopeId);
   } else {
     KJ_FAIL_REQUIRE("scope is not a parent");
   }
@@ -368,8 +368,8 @@ BrandedDecl BrandScope::interpretResolve(
     auto& decl = result.get<Resolver::ResolvedDecl>();
 
     auto scope = pop(decl.scopeId);
-    KJ_IF_MAYBE(brand, decl.brand) {
-      scope = scope->evaluateBrand(resolver, decl, brand->getScopes());
+    KJ_IF_SOME(brand, decl.brand) {
+      scope = scope->evaluateBrand(resolver, decl, brand.getScopes());
     } else {
       scope = scope->push(decl.id, decl.genericParamCount);
     }
@@ -377,8 +377,8 @@ BrandedDecl BrandScope::interpretResolve(
     return BrandedDecl(decl, kj::mv(scope), source);
   } else {
     auto& param = result.get<Resolver::ResolvedParameter>();
-    KJ_IF_MAYBE(p, lookupParameter(resolver, param.id, param.index)) {
-      return *p;
+    KJ_IF_SOME(p, lookupParameter(resolver, param.id, param.index)) {
+      return p;
     } else {
       return BrandedDecl(param, source);
     }
@@ -423,8 +423,8 @@ kj::Own<BrandScope> BrandScope::evaluateBrand(
         }
 
         case schema::Brand::Scope::INHERIT:
-          KJ_IF_MAYBE(p, getParams(decl.id)) {
-            result->params = kj::heapArray(*p);
+          KJ_IF_SOME(p, getParams(decl.id)) {
+            result->params = kj::heapArray(p);
           } else {
             result->inherited = true;
           }
@@ -437,8 +437,8 @@ kj::Own<BrandScope> BrandScope::evaluateBrand(
   }
 
   // Fill in `parent`.
-  KJ_IF_MAYBE(parent, decl.resolver->getParent()) {
-    result->parent = evaluateBrand(resolver, *parent, brand, index);
+  KJ_IF_SOME(parent, decl.resolver->getParent()) {
+    result->parent = evaluateBrand(resolver, parent, brand, index);
   }
 
   return result;
@@ -509,8 +509,8 @@ BrandedDecl BrandScope::decompileType(
           auto param = anyPointer.getParameter();
           auto id = param.getScopeId();
           uint index = param.getParameterIndex();
-          KJ_IF_MAYBE(binding, lookupParameter(resolver, id, index)) {
-            return *binding;
+          KJ_IF_SOME(binding, lookupParameter(resolver, id, index)) {
+            return binding;
           } else {
             return BrandedDecl(Resolver::ResolvedParameter {id, index}, Expression::Reader());
           }
@@ -533,7 +533,7 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
   switch (source.which()) {
     case Expression::UNKNOWN:
       // Error reported earlier.
-      return nullptr;
+      return kj::none;
 
     case Expression::POSITIVE_INT:
     case Expression::NEGATIVE_INT:
@@ -544,7 +544,7 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
     case Expression::TUPLE:
     case Expression::EMBED:
       errorReporter.addErrorOn(source, "Expected name.");
-      return nullptr;
+      return kj::none;
 
     case Expression::RELATIVE_NAME: {
       auto name = source.getRelativeName();
@@ -563,39 +563,39 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
         }
       }
 
-      KJ_IF_MAYBE(r, resolver.resolve(nameValue)) {
-        return interpretResolve(resolver, *r, source);
+      KJ_IF_SOME(r, resolver.resolve(nameValue)) {
+        return interpretResolve(resolver, r, source);
       } else {
         errorReporter.addErrorOn(name, kj::str("Not defined: ", nameValue));
-        return nullptr;
+        return kj::none;
       }
     }
 
     case Expression::ABSOLUTE_NAME: {
       auto name = source.getAbsoluteName();
-      KJ_IF_MAYBE(r, resolver.getTopScope().resolver->resolveMember(name.getValue())) {
-        return interpretResolve(resolver, *r, source);
+      KJ_IF_SOME(r, resolver.getTopScope().resolver->resolveMember(name.getValue())) {
+        return interpretResolve(resolver, r, source);
       } else {
         errorReporter.addErrorOn(name, kj::str("Not defined: ", name.getValue()));
-        return nullptr;
+        return kj::none;
       }
     }
 
     case Expression::IMPORT: {
       auto filename = source.getImport();
-      KJ_IF_MAYBE(decl, resolver.resolveImport(filename.getValue())) {
+      KJ_IF_SOME(decl, resolver.resolveImport(filename.getValue())) {
         // Import is always a root scope, so create a fresh BrandScope.
-        return BrandedDecl(*decl, kj::refcounted<BrandScope>(
-            errorReporter, decl->id, decl->genericParamCount, *decl->resolver), source);
+        return BrandedDecl(decl, kj::refcounted<BrandScope>(
+            errorReporter, decl.id, decl.genericParamCount, *decl.resolver), source);
       } else {
         errorReporter.addErrorOn(filename, kj::str("Import failed: ", filename.getValue()));
-        return nullptr;
+        return kj::none;
       }
     }
 
     case Expression::APPLICATION: {
       auto app = source.getApplication();
-      KJ_IF_MAYBE(decl, compileDeclExpression(app.getFunction(), resolver, implicitMethodParams)) {
+      KJ_IF_SOME(decl, compileDeclExpression(app.getFunction(), resolver, implicitMethodParams)) {
         // Compile all params.
         auto params = app.getParams();
         auto compiledParams = kj::heapArrayBuilder<BrandedDecl>(params.size());
@@ -605,8 +605,8 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
             errorReporter.addErrorOn(param.getNamed(), "Named parameter not allowed here.");
           }
 
-          KJ_IF_MAYBE(d, compileDeclExpression(param.getValue(), resolver, implicitMethodParams)) {
-            compiledParams.add(kj::mv(*d));
+          KJ_IF_SOME(d, compileDeclExpression(param.getValue(), resolver, implicitMethodParams)) {
+            compiledParams.add(kj::mv(d));
           } else {
             // Param failed to compile. Error was already reported.
             paramFailed = true;
@@ -614,37 +614,37 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
         };
 
         if (paramFailed) {
-          return kj::mv(*decl);
+          return kj::mv(decl);
         }
 
         // Add the parameters to the brand.
-        KJ_IF_MAYBE(applied, decl->applyParams(compiledParams.finish(), source)) {
-          return kj::mv(*applied);
+        KJ_IF_SOME(applied, decl.applyParams(compiledParams.finish(), source)) {
+          return kj::mv(applied);
         } else {
           // Error already reported. Ignore parameters.
-          return kj::mv(*decl);
+          return kj::mv(decl);
         }
       } else {
         // error already reported
-        return nullptr;
+        return kj::none;
       }
     }
 
     case Expression::MEMBER: {
       auto member = source.getMember();
-      KJ_IF_MAYBE(decl, compileDeclExpression(member.getParent(), resolver, implicitMethodParams)) {
+      KJ_IF_SOME(decl, compileDeclExpression(member.getParent(), resolver, implicitMethodParams)) {
         auto name = member.getName();
-        KJ_IF_MAYBE(memberDecl, decl->getMember(name.getValue(), source)) {
-          return kj::mv(*memberDecl);
+        KJ_IF_SOME(memberDecl, decl.getMember(name.getValue(), source)) {
+          return kj::mv(memberDecl);
         } else {
           errorReporter.addErrorOn(name, kj::str(
               "'", expressionString(member.getParent()),
               "' has no member named '", name.getValue(), "'"));
-          return nullptr;
+          return kj::none;
         }
       } else {
         // error already reported
-        return nullptr;
+        return kj::none;
       }
     }
   }

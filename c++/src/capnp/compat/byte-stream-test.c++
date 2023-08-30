@@ -116,12 +116,12 @@ public:
 
   void fulfill() {
     KJ_ASSERT_NONNULL(fulfiller)->fulfill();
-    fulfiller = nullptr;
+    fulfiller = kj::none;
     receivedBuffer = nullptr;
   }
 
   kj::Promise<void> write(const void* buffer, size_t size) override {
-    KJ_ASSERT(fulfiller == nullptr);
+    KJ_ASSERT(fulfiller == kj::none);
     receivedBuffer = kj::arrayPtr(reinterpret_cast<const char*>(buffer), size);
     auto paf = kj::newPromiseAndFulfiller<void>();
     fulfiller = kj::mv(paf.fulfiller);

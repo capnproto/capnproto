@@ -46,12 +46,12 @@ KJ_TEST("WebSocketMessageStream") {
   auto writePromise = msgStreamA.writeMessage(nullptr, originalSegments);
   msgStreamB.tryReadMessage(nullptr)
     .then([&](auto maybeResult) -> kj::Promise<void> {
-      KJ_IF_MAYBE(result, maybeResult) {
-        KJ_ASSERT(result->fds.size() == 0);
-        KJ_ASSERT(result->reader->getSegment(originalSegments.size()) == nullptr);
+      KJ_IF_SOME(result, maybeResult) {
+        KJ_ASSERT(result.fds.size() == 0);
+        KJ_ASSERT(result.reader->getSegment(originalSegments.size()) == nullptr);
         for(size_t i = 0; i < originalSegments.size(); i++) {
           auto oldSegment = originalSegments[i];
-          auto newSegment = result->reader->getSegment(i);
+          auto newSegment = result.reader->getSegment(i);
 
           KJ_ASSERT(oldSegment.size() == newSegment.size());
           KJ_ASSERT(memcmp(
@@ -67,11 +67,11 @@ KJ_TEST("WebSocketMessageStream") {
   }).wait(waitScope);
   writePromise.wait(waitScope);
 
-  // Close the websocket, and make sure the other end gets nullptr when reading.
+  // Close the websocket, and make sure the other end gets kj::none when reading.
   auto endPromise = msgStreamA.end();
   msgStreamB.tryReadMessage(nullptr).then([](auto maybe) -> kj::Promise<void> {
-    KJ_IF_MAYBE(segments, maybe) {
-      KJ_FAIL_ASSERT("Should have gotten nullptr after websocket was closed");
+    if (maybe != kj::none) {
+      KJ_FAIL_ASSERT("Should have gotten kj::none after websocket was closed");
     }
     return kj::READY_NOW;
   }).wait(waitScope);

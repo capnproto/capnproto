@@ -37,10 +37,10 @@ bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result,
   Lexer::ParserInput parserInput(input.begin(), input.end());
   kj::Maybe<kj::Array<Orphan<Statement>>> parseOutput = parser(parserInput);
 
-  KJ_IF_MAYBE(output, parseOutput) {
-    auto l = result.initStatements(output->size());
-    for (uint i = 0; i < output->size(); i++) {
-      l.adoptWithCaveats(i, kj::mv((*output)[i]));
+  KJ_IF_SOME(output, parseOutput) {
+    auto l = result.initStatements(output.size());
+    for (uint i = 0; i < output.size(); i++) {
+      l.adoptWithCaveats(i, kj::mv((output)[i]));
     }
     return true;
   } else {
@@ -59,10 +59,10 @@ bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result,
   Lexer::ParserInput parserInput(input.begin(), input.end());
   kj::Maybe<kj::Array<Orphan<Token>>> parseOutput = parser(parserInput);
 
-  KJ_IF_MAYBE(output, parseOutput) {
-    auto l = result.initTokens(output->size());
-    for (uint i = 0; i < output->size(); i++) {
-      l.adoptWithCaveats(i, kj::mv((*output)[i]));
+  KJ_IF_SOME(output, parseOutput) {
+    auto l = result.initTokens(output.size());
+    for (uint i = 0; i < output.size(); i++) {
+      l.adoptWithCaveats(i, kj::mv((output)[i]));
     }
     return true;
   } else {
@@ -248,7 +248,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
           [&errorReporter](Location loc) -> kj::Maybe<Orphan<Token>> {
             errorReporter.addError(loc.begin(), loc.end(),
                 "Non-UTF-8 input detected. Cap'n Proto schema files must be UTF-8 text.");
-            return nullptr;
+            return kj::none;
           }), [](kj::Maybe<Orphan<Token>> param) { return param; })));
   parsers.tokenSequence = arena.copy(p::sequence(
       commentsAndWhitespace, p::many(p::sequence(token, commentsAndWhitespace))));
@@ -260,8 +260,8 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
           [this](kj::Maybe<kj::Array<kj::String>>&& comment) -> Orphan<Statement> {
             auto result = orphanage.newOrphan<Statement>();
             auto builder = result.get();
-            KJ_IF_MAYBE(c, comment) {
-              attachDocComment(builder, kj::mv(*c));
+            KJ_IF_SOME(c, comment) {
+              attachDocComment(builder, kj::mv(c));
             }
             builder.setLine();
             return result;
@@ -275,10 +275,10 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
               -> Orphan<Statement> {
             auto result = orphanage.newOrphan<Statement>();
             auto builder = result.get();
-            KJ_IF_MAYBE(c, comment) {
-              attachDocComment(builder, kj::mv(*c));
-            } else KJ_IF_MAYBE(c, lateComment) {
-              attachDocComment(builder, kj::mv(*c));
+            KJ_IF_SOME(c, comment) {
+              attachDocComment(builder, kj::mv(c));
+            } else KJ_IF_SOME(c, lateComment) {
+              attachDocComment(builder, kj::mv(c));
             }
             auto list = builder.initBlock(statements.size());
             for (uint i = 0; i < statements.size(); i++) {

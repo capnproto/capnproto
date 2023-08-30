@@ -46,8 +46,8 @@ public:
 
 protected:
   kj::Promise<void> foo(FooContext context) override {
-    KJ_IF_MAYBE(e, error) {
-      return kj::cp(*e);
+    KJ_IF_SOME(e, error) {
+      return kj::cp(e);
     }
     auto params = context.getParams();
     context.initResults().setX(kj::str(params.getI(), ' ', params.getJ(), ' ', generation));

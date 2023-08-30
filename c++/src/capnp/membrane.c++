@@ -210,8 +210,8 @@ public:
       return Response<AnyPointer>(reader, kj::mv(newRespHook));
     });
 
-    KJ_IF_MAYBE(r, kj::mv(onRevoked)) {
-      newPromise = newPromise.exclusiveJoin(r->then([]() -> Response<AnyPointer> {
+    KJ_IF_SOME(r, kj::mv(onRevoked)) {
+      newPromise = newPromise.exclusiveJoin(r.then([]() -> Response<AnyPointer> {
         KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
       }));
     }
@@ -222,8 +222,8 @@ public:
   kj::Promise<void> sendStreaming() override {
     auto promise = inner->sendStreaming();
 
-    KJ_IF_MAYBE(r, policy->onRevoked()) {
-      promise = promise.exclusiveJoin(r->then([]() {
+    KJ_IF_SOME(r, policy->onRevoked()) {
+      promise = promise.exclusiveJoin(r.then([]() {
         KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
       }));
     }
@@ -257,8 +257,8 @@ public:
 
   AnyPointer::Reader getParams() override {
     KJ_REQUIRE(!releasedParams);
-    KJ_IF_MAYBE(p, params) {
-      return *p;
+    KJ_IF_SOME(p, params) {
+      return p;
     } else {
       auto result = paramsCapTable.imbue(inner->getParams());
       params = result;
@@ -273,8 +273,8 @@ public:
   }
 
   AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
-    KJ_IF_MAYBE(r, results) {
-      return *r;
+    KJ_IF_SOME(r, results) {
+      return r;
     } else {
       auto result = resultsCapTable.imbue(inner->getResults(sizeHint));
       results = result;
@@ -331,8 +331,8 @@ class MembraneHook final: public ClientHook, public kj::Refcounted {
 public:
   MembraneHook(kj::Own<ClientHook>&& inner, kj::Own<MembranePolicy>&& policyParam, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policyParam)), reverse(reverse) {
-    KJ_IF_MAYBE(r, policy->onRevoked()) {
-      revocationTask = r->eagerlyEvaluate([this](kj::Exception&& exception) {
+    KJ_IF_SOME(r, policy->onRevoked()) {
+      revocationTask = r.eagerlyEvaluate([this](kj::Exception&& exception) {
         this->inner = newBrokenCap(kj::mv(exception));
       });
     }
@@ -406,26 +406,26 @@ public:
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
       CallHints hints) override {
-    KJ_IF_MAYBE(r, resolved) {
-      return r->get()->newCall(interfaceId, methodId, sizeHint, hints);
+    KJ_IF_SOME(r, resolved) {
+      return r->newCall(interfaceId, methodId, sizeHint, hints);
     }
 
     auto redirect = reverse
         ? policy->outboundCall(interfaceId, methodId, Capability::Client(inner->addRef()))
         : policy->inboundCall(interfaceId, methodId, Capability::Client(inner->addRef()));
-    KJ_IF_MAYBE(r, redirect) {
+    KJ_IF_SOME(r, redirect) {
       if (policy->shouldResolveBeforeRedirecting()) {
         // The policy says that *if* this capability points into the membrane, then we want to
         // redirect the call. However, if this capability is a promise, then it could resolve to
         // something outside the membrane later. We have to wait before we actually redirect,
         // otherwise behavior will differ depending on whether the promise is resolved.
-        KJ_IF_MAYBE(p, whenMoreResolved()) {
-          return newLocalPromiseClient(p->attach(addRef()))
+        KJ_IF_SOME(p, whenMoreResolved()) {
+          return newLocalPromiseClient(p.attach(addRef()))
               ->newCall(interfaceId, methodId, sizeHint, hints);
         }
       }
 
-      return ClientHook::from(kj::mv(*r))->newCall(interfaceId, methodId, sizeHint, hints);
+      return ClientHook::from(kj::mv(r))->newCall(interfaceId, methodId, sizeHint, hints);
     } else {
       // For pass-through calls, we don't worry about promises, because if the capability resolves
       // to something outside the membrane, then the call will pass back out of the membrane too.
@@ -437,26 +437,26 @@ public:
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context,
                               CallHints hints) override {
-    KJ_IF_MAYBE(r, resolved) {
-      return r->get()->call(interfaceId, methodId, kj::mv(context), hints);
+    KJ_IF_SOME(r, resolved) {
+      return r->call(interfaceId, methodId, kj::mv(context), hints);
     }
 
     auto redirect = reverse
         ? policy->outboundCall(interfaceId, methodId, Capability::Client(inner->addRef()))
         : policy->inboundCall(interfaceId, methodId, Capability::Client(inner->addRef()));
-    KJ_IF_MAYBE(r, redirect) {
+    KJ_IF_SOME(r, redirect) {
       if (policy->shouldResolveBeforeRedirecting()) {
         // The policy says that *if* this capability points into the membrane, then we want to
         // redirect the call. However, if this capability is a promise, then it could resolve to
         // something outside the membrane later. We have to wait before we actually redirect,
         // otherwise behavior will differ depending on whether the promise is resolved.
-        KJ_IF_MAYBE(p, whenMoreResolved()) {
-          return newLocalPromiseClient(p->attach(addRef()))
+        KJ_IF_SOME(p, whenMoreResolved()) {
+          return newLocalPromiseClient(p.attach(addRef()))
               ->call(interfaceId, methodId, kj::mv(context), hints);
         }
       }
 
-      return ClientHook::from(kj::mv(*r))->call(interfaceId, methodId, kj::mv(context), hints);
+      return ClientHook::from(kj::mv(r))->call(interfaceId, methodId, kj::mv(context), hints);
     } else {
       // !reverse because calls to the CallContext go in the opposite direction.
       auto result = inner->call(interfaceId, methodId,
@@ -466,8 +466,8 @@ public:
       if (hints.onlyPromisePipeline) {
         // Just in case the called capability returned a valid promise, replace it here.
         result.promise = kj::NEVER_DONE;
-      } else KJ_IF_MAYBE(r, policy->onRevoked()) {
-        result.promise = result.promise.exclusiveJoin(kj::mv(*r));
+      } else KJ_IF_SOME(r, policy->onRevoked()) {
+        result.promise = result.promise.exclusiveJoin(kj::mv(r));
       }
 
       return {
@@ -478,44 +478,44 @@ public:
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
-    KJ_IF_MAYBE(r, resolved) {
-      return **r;
+    KJ_IF_SOME(r, resolved) {
+      return *r;
     }
 
-    KJ_IF_MAYBE(newInner, inner->getResolved()) {
-      kj::Own<ClientHook> newResolved = wrap(*newInner, *policy, reverse);
+    KJ_IF_SOME(newInner, inner->getResolved()) {
+      kj::Own<ClientHook> newResolved = wrap(newInner, *policy, reverse);
       ClientHook& result = *newResolved;
       resolved = kj::mv(newResolved);
       return result;
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
   kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-    KJ_IF_MAYBE(r, resolved) {
-      return kj::Promise<kj::Own<ClientHook>>(r->get()->addRef());
+    KJ_IF_SOME(r, resolved) {
+      return kj::Promise<kj::Own<ClientHook>>(r.get()->addRef());
     }
 
-    KJ_IF_MAYBE(promise, inner->whenMoreResolved()) {
-      KJ_IF_MAYBE(r, policy->onRevoked()) {
-        *promise = promise->exclusiveJoin(r->then([]() -> kj::Own<ClientHook> {
+    KJ_IF_SOME(promise, inner->whenMoreResolved()) {
+      KJ_IF_SOME(r, policy->onRevoked()) {
+        promise = promise.exclusiveJoin(r.then([]() -> kj::Own<ClientHook> {
           KJ_FAIL_REQUIRE("onRevoked() promise resolved; it should only reject");
         }));
       }
 
-      return promise->then([this](kj::Own<ClientHook>&& newInner) {
+      return promise.then([this](kj::Own<ClientHook>&& newInner) {
         // There's a chance resolved was set by getResolved() or a concurrent whenMoreResolved()
         // while we yielded the event loop. If the inner ClientHook is maintaining the contract,
         // then resolved would already be set to newInner after wrapping in a MembraneHook.
-        KJ_IF_MAYBE(r, resolved) {
-          return (*r)->addRef();
+        KJ_IF_SOME(r, resolved) {
+          return r->addRef();
         } else {
           return resolved.emplace(wrap(*newInner, *policy, reverse))->addRef();
         }
       });
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -528,12 +528,12 @@ public:
   }
 
   kj::Maybe<int> getFd() override {
-    KJ_IF_MAYBE(f, inner->getFd()) {
+    KJ_IF_SOME(f, inner->getFd()) {
       if (policy->allowFdPassthrough()) {
-        return *f;
+        return f;
       }
     }
-    return nullptr;
+    return kj::none;
   }
 
 private:
