@@ -1029,6 +1029,45 @@ KJ_TEST("base64 union encoded correctly") {
   KJ_EXPECT(json.encode(root) == "{\"foo\": \"AAAAAAA=\"}", json.encode(root));
 }
 
+KJ_TEST("JSON encode bench") {
+  // Example test based on basic json encoding benchmark.
+  capnp::JsonCodec json;
+
+  doBenchmark([&]() {
+    KJ_EXPECT(json.encode(VOID) == "null");
+    KJ_EXPECT(json.encode(true) == "true");
+    KJ_EXPECT(json.encode(false) == "false");
+    KJ_EXPECT(json.encode(123) == "123");
+    KJ_EXPECT(json.encode(-5.5) == "-5.5");
+    KJ_EXPECT(json.encode(Text::Reader("foo")) == "\"foo\"");
+    KJ_EXPECT(json.encode(Text::Reader("ab\"cd\\ef\x03")) == "\"ab\\\"cd\\\\ef\\u0003\"");
+    KJ_EXPECT(json.encode(test::TestEnum::CORGE) == "\"corge\"");
+
+    json.setPrettyPrint(false);
+    kj::byte bytes[] = {12, 34, 56};
+    KJ_EXPECT(json.encode(capnp::Data::Reader(bytes, 3)) == "[12,34,56]");
+
+    json.setPrettyPrint(true);
+    KJ_EXPECT(json.encode(capnp::Data::Reader(bytes, 3)) == "[12, 34, 56]");
+  });
+}
+
+KJ_TEST("JSON parse bench") {
+  MallocMessageBuilder message;
+  auto root = message.getRoot<TestAllTypes>();
+  initTestMessage(root);
+
+  JsonCodec json;
+  auto encoded = json.encode(root);
+
+  doBenchmark([&]() {
+    MallocMessageBuilder decodedMessage;
+    auto decodedRoot = decodedMessage.initRoot<TestAllTypes>();
+    json.decode(encoded, decodedRoot);
+    KJ_EXPECT(root.toString().flatten() == decodedRoot.toString().flatten());
+  });
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
