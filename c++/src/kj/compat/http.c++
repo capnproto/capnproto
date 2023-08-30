@@ -3378,8 +3378,9 @@ private:
   kj::ArrayPtr<const byte> sendParts[2];
 
   kj::Maybe<kj::Array<byte>> queuedPong;
-  // If a Ping is received while currentlySending is true, then queuedPong is set to the body of
-  // a pong message that should be sent once the current send is complete.
+  // queuedPong holds the body of the next pong to write, cleared when the pong is written.  If a
+  // more recent ping arrives before the pong is actually written, we can update this value to
+  // instead respond to the more recent ping.
 
   kj::Maybe<kj::Promise<void>> sendingPong;
   // If a Pong is being sent asynchronously in response to a Ping, this is a promise for the
@@ -3477,42 +3478,58 @@ private:
 
       // Send queued pong if needed.
       KJ_IF_MAYBE(q, queuedPong) {
-        kj::Array<byte> payload = kj::mv(*q);
-        queuedPong = nullptr;
-        queuePong(kj::mv(payload));
+        setUpSendingPong();
       }
       sentBytes += size;
     });
   }
 
   void queuePong(kj::Array<byte> payload) {
+    bool alreadyWaitingForPongWrite = (queuedPong != nullptr);
+
+    // Note: According to spec, if the server receives a second ping before responding to the
+    //   previous one, it can opt to respond only to the last ping. So we don't have to check if
+    //   queuedPong is already non-null.
+    queuedPong = kj::mv(payload);
+
     if (currentlySending) {
-      // There is a message-send in progress, so we cannot write to the stream now.
-      //
-      // Note: According to spec, if the server receives a second ping before responding to the
-      //   previous one, it can opt to respond only to the last ping. So we don't have to check if
-      //   queuedPong is already non-null.
-      queuedPong = kj::mv(payload);
-    } else KJ_IF_MAYBE(promise, sendingPong) {
-      // We're still sending a previous pong. Wait for it to finish before sending ours.
-      sendingPong = promise->then([this,payload=kj::mv(payload)]() mutable {
-        return sendPong(kj::mv(payload));
+      // There is a message-send in progress, so we cannot write to the stream now.  We will set
+      // up the pong write at the end of the message-send.
+      return;
+    }
+    if (alreadyWaitingForPongWrite) {
+      // We were already waiting for a pong to be written; don't need to queue another write.
+      return;
+    }
+    setUpSendingPong();
+  }
+
+  void setUpSendingPong() {
+    KJ_IF_MAYBE(promise, sendingPong) {
+      sendingPong = promise->then([this]() mutable {
+        return writeQueuedPong();
       });
     } else {
-      // We're not sending any pong currently.
-      sendingPong = sendPong(kj::mv(payload));
+      sendingPong = writeQueuedPong();
     }
   }
 
-  kj::Promise<void> sendPong(kj::Array<byte> payload) {
-    if (hasSentClose || disconnected) {
+  kj::Promise<void> writeQueuedPong() {
+    KJ_IF_MAYBE(q, queuedPong) {
+      kj::Array<byte> payload = kj::mv(*q);
+      queuedPong = nullptr;
+
+      if (hasSentClose || disconnected) {
+        return kj::READY_NOW;
+      }
+
+      sendParts[0] = sendHeader.compose(true, false, OPCODE_PONG,
+                                        payload.size(), Mask(maskKeyGenerator));
+      sendParts[1] = payload;
+      return stream->write(sendParts).attach(kj::mv(payload));
+    } else {
       return kj::READY_NOW;
     }
-
-    sendParts[0] = sendHeader.compose(true, false, OPCODE_PONG,
-                                      payload.size(), Mask(maskKeyGenerator));
-    sendParts[1] = payload;
-    return stream->write(sendParts).attach(kj::mv(payload));
   }
 
   kj::Promise<void> optimizedPumpTo(WebSocketImpl& other) {

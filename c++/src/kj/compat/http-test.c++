@@ -2190,6 +2190,51 @@ KJ_TEST("WebSocket double-ping mid-send") {
   serverTask.wait(waitScope);
 }
 
+KJ_TEST("WebSocket multiple ping outside of send") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto upPipe = newOneWayPipe();
+  auto downPipe = newOneWayPipe();
+  InputOutputPair client(kj::mv(downPipe.in), kj::mv(upPipe.out));
+  auto server = newWebSocket(kj::heap<InputOutputPair>(kj::mv(upPipe.in), kj::mv(downPipe.out)),
+                             nullptr);
+
+  byte DATA[] = {
+    0x89, 0x05, 'p', 'i', 'n', 'g', '1',
+    0x89, 0x05, 'p', 'i', 'n', 'g', '2',
+    0x89, 0x05, 'p', 'i', 'n', 'g', '3',
+    0x89, 0x05, 'p', 'i', 'n', 'g', '4',
+    0x81, 0x05, 'o', 't', 'h', 'e', 'r',
+  };
+
+  auto clientTask = client.write(DATA, sizeof(DATA));
+
+  {
+    auto message = server->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "other");
+  }
+
+  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
+
+  // We expect to receive pongs for only the first and last pings, because the server has the
+  // option of only sending pongs for the most recently processed ping, and the last three pings
+  // were processed while waiting for the write of the first pong to complete.
+  byte EXPECTED1[] = {
+    0x8A, 0x05, 'p', 'i', 'n', 'g', '1',
+    0x8A, 0x05, 'p', 'i', 'n', 'g', '4',
+  };
+  expectRead(client, EXPECTED1).wait(waitScope);
+
+  byte EXPECTED2[] = { 0x81, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
+  expectRead(client, EXPECTED2).wait(waitScope);
+  expectRead(client, bigString).wait(waitScope);
+
+  clientTask.wait(waitScope);
+  serverTask.wait(waitScope);
+}
+
 KJ_TEST("WebSocket ping received during pong send") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
