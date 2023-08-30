@@ -2198,7 +2198,7 @@ public:
     return broken;
   }
 
-  void writeHeaders(String content) {
+  void queueHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
@@ -2208,7 +2208,7 @@ public:
     queueWrite(kj::mv(content));
   }
 
-  void writeBodyData(kj::String content) {
+  void queueBodyData(kj::String content) {
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
     KJ_REQUIRE(inBody) { return; }
 
@@ -2501,7 +2501,7 @@ public:
     if (!alreadyDone()) {
       auto& inner = getInner();
       if (inner.canWriteBodyData()) {
-        inner.writeBodyData(kj::str("0\r\n\r\n"));
+        inner.queueBodyData(kj::str("0\r\n\r\n"));
         doneWriting();
       }
     }
@@ -2545,7 +2545,7 @@ public:
 
       uint64_t length = kj::min(amount, *l);
       auto& inner = getInner();
-      inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
+      inner.queueBodyData(kj::str(kj::hex(length), "\r\n"));
       return inner.pumpBodyFrom(input, length)
           .then([this,length](uint64_t actual) {
         auto& inner = getInner();
@@ -2557,7 +2557,7 @@ public:
           }
         }
 
-        inner.writeBodyData(kj::str("\r\n"));
+        inner.queueBodyData(kj::str("\r\n"));
         return actual;
       });
     } else {
@@ -5188,7 +5188,7 @@ public:
       }
     }
 
-    httpOutput.writeHeaders(headers.serializeRequest(method, url, connectionHeaders));
+    httpOutput.queueHeaders(headers.serializeRequest(method, url, connectionHeaders));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
     if (!hasBody) {
@@ -5296,7 +5296,7 @@ public:
           offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
     }
 
-    httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
+    httpOutput.queueHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
 
     // No entity-body.
     httpOutput.finishBody();
@@ -5421,7 +5421,7 @@ public:
 
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
-    httpOutput.writeHeaders(headers.serializeConnectRequest(host, connectionHeaders));
+    httpOutput.queueHeaders(headers.serializeConnectRequest(host, connectionHeaders));
 
     auto id = ++counter;
 
@@ -7673,7 +7673,7 @@ private:
       }
     }
 
-    httpOutput.writeHeaders(headers.serializeResponse(
+    httpOutput.queueHeaders(headers.serializeResponse(
         statusCode, statusText, connectionHeadersArray));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
@@ -7758,7 +7758,7 @@ private:
     // the connection.
     currentMethod = nullptr;
 
-    httpOutput.writeHeaders(headers.serializeResponse(
+    httpOutput.queueHeaders(headers.serializeResponse(
         101, "Switching Protocols", connectionHeaders));
 
     upgraded = true;
@@ -7885,7 +7885,7 @@ private:
     tunnelRejected = nullptr;
 
     auto& fulfiller = KJ_ASSERT_NONNULL(tunnelWriteGuard, "the tunnel stream was not initialized");
-    httpOutput.writeHeaders(headers.serializeResponse(statusCode, statusText));
+    httpOutput.queueHeaders(headers.serializeResponse(statusCode, statusText));
     auto promise = httpOutput.flush().then([&fulfiller]() {
       fulfiller->fulfill();
     }).eagerlyEvaluate(nullptr);
