@@ -223,21 +223,19 @@ TEST(Array, ThrowingDestructor) {
   EXPECT_EQ(0, TestObject::count);
 }
 
-// TODO(now): Array's destructor is noexcept; the previous test passes because it uses nullptr
-//   assignment, but I'm not sure that makes sense to implement for SmallArray.
-// TEST(SmallArray, ThrowingDestructor) {
-//   TestObject::count = 0;
-//   TestObject::throwAt = -1;
+TEST(SmallArray, ThrowingDestructor) {
+  TestObject::count = 0;
+  TestObject::throwAt = -1;
 
-//   SpaceFor<SmallArray<TestObject, SBO_TEST_SIZE>> spaceForArray;
-//   auto array = spaceForArray.construct(SBO_TEST_SIZE);
-//   EXPECT_EQ(SBO_TEST_SIZE, TestObject::count);
+  SpaceFor<SmallArray<TestObject, SBO_TEST_SIZE>> spaceForArray;
+  auto array = spaceForArray.construct(SBO_TEST_SIZE);
+  EXPECT_EQ(SBO_TEST_SIZE, TestObject::count);
 
-//   // If a destructor throws, all elements should still be destroyed.
-//   TestObject::throwAt = 16;
-//   EXPECT_ANY_THROW(array = nullptr);
-//   EXPECT_EQ(0, TestObject::count);
-// }
+  // If a destructor throws, all elements should still be destroyed.
+  TestObject::throwAt = 16;
+  EXPECT_ANY_THROW(array = nullptr);
+  EXPECT_EQ(0, TestObject::count);
+}
 
 TEST(Array, ArrayBuilder) {
   TestObject::count = 0;
