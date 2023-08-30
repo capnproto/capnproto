@@ -2220,10 +2220,7 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    auto fork = writeQueue.fork();
-    writeQueue = fork.addBranch();
-
-    co_await fork;
+    co_await flush();
     co_await inner.write(str.begin(), str.size());
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2236,10 +2233,7 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    auto fork = writeQueue.fork();
-    writeQueue = fork.addBranch();
-
-    co_await fork;
+    co_await flush();
     co_await inner.write(buffer, size);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2252,10 +2246,7 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    auto fork = writeQueue.fork();
-    writeQueue = fork.addBranch();
-
-    co_await fork;
+    co_await flush();
     co_await inner.write(pieces);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2268,10 +2259,7 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    auto fork = writeQueue.fork();
-    writeQueue = fork.addBranch();
-
-    co_await fork;
+    co_await flush();
     auto actual = co_await input.pumpTo(inner, amount);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2309,9 +2297,10 @@ public:
   }
 
   kj::Promise<void> flush() {
-    auto fork = writeQueue.fork();
-    writeQueue = fork.addBranch();
-    return fork.addBranch();
+    KJ_IF_MAYBE(promise, writeQueue) {
+      co_await *promise;
+      writeQueue = nullptr;
+    }
   }
 
   Promise<void> whenWriteDisconnected() {
@@ -2322,7 +2311,7 @@ public:
 
 private:
   AsyncOutputStream& inner;
-  kj::Promise<void> writeQueue = kj::READY_NOW;
+  kj::Maybe<kj::Promise<void>> writeQueue = nullptr;
   bool inBody = false;
   bool broken = false;
 
@@ -2338,11 +2327,14 @@ private:
     // `writeQueue` because this would prevent cancellation. Instead, they wait until `writeQueue`
     // is empty, then they make the write directly, using `writeInProgress` to detect and block
     // concurrent writes.
-
-    writeQueue = writeQueue.then([this,content=kj::mv(content)]() mutable {
-      auto promise = inner.write(content.begin(), content.size());
-      return promise.attach(kj::mv(content));
-    });
+    KJ_IF_MAYBE(promise, writeQueue) {
+      writeQueue = promise->then([this,content=kj::mv(content)]() mutable {
+        auto promise = inner.write(content.begin(), content.size());
+        return promise.attach(kj::mv(content));
+      });
+    } else {
+      writeQueue = inner.write(content.begin(), content.size()).attach(kj::mv(content));
+    }
   }
 };
 
