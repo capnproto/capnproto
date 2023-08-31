@@ -110,8 +110,8 @@ class ReadyOutputStreamWrapper::Cork {
   // An object that, when destructed, will uncork its parent stream.
 public:
   ~Cork() {
-    KJ_IF_MAYBE(p, parent) {
-      p->uncork();
+    KJ_IF_SOME(p, parent) {
+      p.uncork();
     }
   }
   Cork(Cork&& other) : parent(kj::mv(other.parent)) {

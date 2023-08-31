@@ -92,7 +92,7 @@ TEST(StdIoStream, ReadToEndOfFile) {
   });
   buf[6] = '\0';
 
-  ASSERT_FALSE(e == nullptr);
+  ASSERT_FALSE(e == kj::none);
 
   // Ensure that the value is still read up to the EOF.
   EXPECT_STREQ("foobar", buf);

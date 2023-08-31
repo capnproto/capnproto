@@ -2040,8 +2040,8 @@ public:
   void run() {
     // Move `maybeFunc` to the local scope so that even if we throw, we destroy the functor we had.
     auto maybeLocalFunc = kj::mv(maybeFunc);
-    KJ_IF_MAYBE(func, maybeLocalFunc) {
-      (*func)();
+    KJ_IF_SOME(func, maybeLocalFunc) {
+      func();
     }
   }
 

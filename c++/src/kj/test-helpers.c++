@@ -96,15 +96,15 @@ public:
       : type(type), message(message) {}
 
   virtual void onFatalException(Exception&& exception) {
-    KJ_IF_MAYBE(expectedType, type) {
-      if (exception.getType() != *expectedType) {
-        KJ_LOG(ERROR, "threw exception of wrong type", exception, *expectedType);
+    KJ_IF_SOME(expectedType, type) {
+      if (exception.getType() != expectedType) {
+        KJ_LOG(ERROR, "threw exception of wrong type", exception, expectedType);
         _exit(1);
       }
     }
-    KJ_IF_MAYBE(expectedSubstring, message) {
-      if (!hasSubstring(exception.getDescription(), *expectedSubstring)) {
-        KJ_LOG(ERROR, "threw exception with wrong message", exception, *expectedSubstring);
+    KJ_IF_SOME(expectedSubstring, message) {
+      if (!hasSubstring(exception.getDescription(), expectedSubstring)) {
+        KJ_LOG(ERROR, "threw exception with wrong message", exception, expectedSubstring);
         _exit(1);
       }
     }
@@ -129,10 +129,10 @@ bool expectFatalThrow(kj::Maybe<Exception::Type> type, kj::Maybe<StringPtr> mess
   if (child == 0) {
     KJ_DEFER(_exit(1));
     FatalThrowExpectation expectation(type, message);
-    KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+    KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
       code();
     })) {
-      KJ_LOG(ERROR, "a non-fatal exception was thrown, but we expected fatal", *e);
+      KJ_LOG(ERROR, "a non-fatal exception was thrown, but we expected fatal", e);
     } else {
       KJ_LOG(ERROR, "no fatal exception was thrown");
     }
@@ -169,9 +169,9 @@ bool expectExit(Maybe<int> statusCode, FunctionParam<void()> code)  noexcept {
   KJ_SYSCALL(waitpid(child, &status, 0));
 
   if (WIFEXITED(status)) {
-    KJ_IF_MAYBE(s, statusCode) {
-      KJ_EXPECT(WEXITSTATUS(status) == *s);
-      return WEXITSTATUS(status) == *s;
+    KJ_IF_SOME(s, statusCode) {
+      KJ_EXPECT(WEXITSTATUS(status) == s);
+      return WEXITSTATUS(status) == s;
     } else {
       KJ_EXPECT(WEXITSTATUS(status) != 0);
       return WEXITSTATUS(status) != 0;
@@ -205,9 +205,9 @@ bool expectSignal(Maybe<int> signal, FunctionParam<void()> code) noexcept {
   KJ_SYSCALL(waitpid(child, &status, 0));
 
   if (WIFSIGNALED(status)) {
-    KJ_IF_MAYBE(s, signal) {
-      KJ_EXPECT(WTERMSIG(status) == *s);
-      return WTERMSIG(status) == *s;
+    KJ_IF_SOME(s, signal) {
+      KJ_EXPECT(WTERMSIG(status) == s);
+      return WTERMSIG(status) == s;
     }
     return true;
   } else {

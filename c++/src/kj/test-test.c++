@@ -87,7 +87,7 @@ KJ_TEST("GlobFilter") {
 
 KJ_TEST("expect exit from exit") {
   KJ_EXPECT_EXIT(42, _exit(42));
-  KJ_EXPECT_EXIT(nullptr, _exit(42));
+  KJ_EXPECT_EXIT(kj::none, _exit(42));
 }
 
 KJ_TEST("expect exit from thrown exception") {
@@ -100,7 +100,7 @@ KJ_TEST("expect signal from abort") {
 
 KJ_TEST("expect signal from sigint") {
   KJ_EXPECT_SIGNAL(SIGINT, raise(SIGINT));
-  KJ_EXPECT_SIGNAL(nullptr, raise(SIGINT));
+  KJ_EXPECT_SIGNAL(kj::none, raise(SIGINT));
 }
 
 }  // namespace

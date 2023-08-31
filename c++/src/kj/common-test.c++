@@ -577,15 +577,15 @@ TEST(Common, Downcast) {
 #endif
 
 #if KJ_NO_RTTI
-  EXPECT_TRUE(dynamicDowncastIfAvailable<Bar>(foo) == nullptr);
-  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
+  EXPECT_TRUE(dynamicDowncastIfAvailable<Bar>(foo) == kj::none);
+  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == kj::none);
 #else
-  KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar>(foo)) {
-    EXPECT_EQ(&bar, m);
+  KJ_IF_SOME(m, dynamicDowncastIfAvailable<Bar>(foo)) {
+    EXPECT_EQ(&bar, &m);
   } else {
     KJ_FAIL_ASSERT("Dynamic downcast returned null.");
   }
-  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
+  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == kj::none);
 #endif
 }
 

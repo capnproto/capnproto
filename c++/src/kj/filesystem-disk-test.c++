@@ -67,8 +67,8 @@ static auto newTemp(Func&& create)
   static uint counter = 0;
   for (;;) {
     auto path = kj::str(tmpdir, "kj-filesystem-test.", GetCurrentProcessId(), ".", counter++);
-    KJ_IF_MAYBE(result, create(encodeWideString(path, true))) {
-      return kj::mv(*result);
+    KJ_IF_SOME(result, create(encodeWideString(path, true))) {
+      return kj::mv(result);
     }
   }
 }

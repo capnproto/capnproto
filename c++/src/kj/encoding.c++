@@ -356,7 +356,7 @@ static Maybe<uint> tryFromHexDigit(char c) {
   } else if ('A' <= c && c <= 'F') {
     return c - ('A' - 10);
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
@@ -364,7 +364,7 @@ static Maybe<uint> tryFromOctDigit(char c) {
   if ('0' <= c && c <= '7') {
     return c - '0';
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
@@ -382,13 +382,13 @@ EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text) {
 
   for (auto i: kj::indices(result)) {
     byte b = 0;
-    KJ_IF_MAYBE(d1, tryFromHexDigit(text[i*2])) {
-      b = *d1 << 4;
+    KJ_IF_SOME(d1, tryFromHexDigit(text[i*2])) {
+      b = d1 << 4;
     } else {
       hadErrors = true;
     }
-    KJ_IF_MAYBE(d2, tryFromHexDigit(text[i*2+1])) {
-      b |= *d2;
+    KJ_IF_SOME(d2, tryFromHexDigit(text[i*2+1])) {
+      b |= d2;
     } else {
       hadErrors = true;
     }
@@ -507,13 +507,13 @@ EncodingResult<Array<byte>> decodeBinaryUriComponent(
 
       if (ptr == end) {
         hadErrors = true;
-      } else KJ_IF_MAYBE(d1, tryFromHexDigit(*ptr)) {
-        byte b = *d1;
+      } else KJ_IF_SOME(d1, tryFromHexDigit(*ptr)) {
+        byte b = d1;
         ++ptr;
         if (ptr == end) {
           hadErrors = true;
-        } else KJ_IF_MAYBE(d2, tryFromHexDigit(*ptr)) {
-          b = (b << 4) | *d2;
+        } else KJ_IF_SOME(d2, tryFromHexDigit(*ptr)) {
+          b = (b << 4) | d2;
           ++ptr;
         } else {
           hadErrors = true;
@@ -609,9 +609,9 @@ EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool 
         case '7': {
           uint value = c2 - '0';
           for (uint j = 0; j < 2 && i < text.size(); j++) {
-            KJ_IF_MAYBE(d, tryFromOctDigit(text[i])) {
+            KJ_IF_SOME(d, tryFromOctDigit(text[i])) {
               ++i;
-              value = (value << 3) | *d;
+              value = (value << 3) | d;
             } else {
               break;
             }
@@ -624,9 +624,9 @@ EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool 
         case 'x': {
           uint value = 0;
           while (i < text.size()) {
-            KJ_IF_MAYBE(d, tryFromHexDigit(text[i])) {
+            KJ_IF_SOME(d, tryFromHexDigit(text[i])) {
               ++i;
-              value = (value << 4) | *d;
+              value = (value << 4) | d;
             } else {
               break;
             }
@@ -642,9 +642,9 @@ EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool 
             if (i == text.size()) {
               hadErrors = true;
               break;
-            } else KJ_IF_MAYBE(d, tryFromHexDigit(text[i])) {
+            } else KJ_IF_SOME(d, tryFromHexDigit(text[i])) {
               ++i;
-              value = (value << 4) | *d;
+              value = (value << 4) | d;
             } else {
               hadErrors = true;
               break;
@@ -662,9 +662,9 @@ EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool 
             if (i == text.size()) {
               hadErrors = true;
               break;
-            } else KJ_IF_MAYBE(d, tryFromHexDigit(text[i])) {
+            } else KJ_IF_SOME(d, tryFromHexDigit(text[i])) {
               ++i;
-              value = (value << 4) | *d;
+              value = (value << 4) | d;
             } else {
               hadErrors = true;
               break;

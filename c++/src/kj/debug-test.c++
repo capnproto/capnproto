@@ -288,10 +288,10 @@ TEST(Debug, Catch) {
       line = __LINE__; KJ_FAIL_ASSERT("foo") { break; }
     });
 
-    KJ_IF_MAYBE(e, exception) {
-      String what = str(*e);
-      KJ_IF_MAYBE(eol, what.findFirst('\n')) {
-        what = kj::str(what.slice(0, *eol));
+    KJ_IF_SOME(e, exception) {
+      String what = str(e);
+      KJ_IF_SOME(eol, what.findFirst('\n')) {
+        what = kj::str(what.slice(0, eol));
       }
       std::string text(what.cStr());
       EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
@@ -306,10 +306,10 @@ TEST(Debug, Catch) {
       line = __LINE__; KJ_FAIL_ASSERT("foo");
     });
 
-    KJ_IF_MAYBE(e, exception) {
-      String what = str(*e);
-      KJ_IF_MAYBE(eol, what.findFirst('\n')) {
-        what = kj::str(what.slice(0, *eol));
+    KJ_IF_SOME(e, exception) {
+      String what = str(e);
+      KJ_IF_SOME(eol, what.findFirst('\n')) {
+        what = kj::str(what.slice(0, eol));
       }
       std::string text(what.cStr());
       EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
@@ -326,8 +326,8 @@ TEST(Debug, Catch) {
     } catch (const std::exception& e) {
       kj::StringPtr what = e.what();
       std::string text;
-      KJ_IF_MAYBE(eol, what.findFirst('\n')) {
-        text.assign(what.cStr(), *eol);
+      KJ_IF_SOME(eol, what.findFirst('\n')) {
+        text.assign(what.cStr(), eol);
       } else {
         text.assign(what.cStr());
       }

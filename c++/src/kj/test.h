@@ -95,9 +95,9 @@ private:
 #if _MSC_VER && !defined(__clang__)
 #define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
   do { \
-    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
-      KJ_INDIRECT_EXPAND(KJ_EXPECT, (e->getType() == ::kj::Exception::Type::type, \
-          "code threw wrong exception type: " #code, *e, __VA_ARGS__)); \
+    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_INDIRECT_EXPAND(KJ_EXPECT, (e.getType() == ::kj::Exception::Type::type, \
+          "code threw wrong exception type: " #code, e, __VA_ARGS__)); \
     } else { \
       KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
     } \
@@ -105,9 +105,9 @@ private:
 
 #define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
-    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
-      KJ_INDIRECT_EXPAND(KJ_EXPECT, (::kj::_::hasSubstring(e->getDescription(), message), \
-          "exception description didn't contain expected substring", *e, __VA_ARGS__)); \
+    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_INDIRECT_EXPAND(KJ_EXPECT, (::kj::_::hasSubstring(e.getDescription(), message), \
+          "exception description didn't contain expected substring", e, __VA_ARGS__)); \
     } else { \
       KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
     } \
@@ -115,9 +115,9 @@ private:
 #else
 #define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
   do { \
-    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
-      KJ_EXPECT(e->getType() == ::kj::Exception::Type::type, \
-          "code threw wrong exception type: " #code, *e, ##__VA_ARGS__); \
+    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_EXPECT(e.getType() == ::kj::Exception::Type::type, \
+          "code threw wrong exception type: " #code, e, ##__VA_ARGS__); \
     } else { \
       KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
     } \
@@ -125,9 +125,9 @@ private:
 
 #define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
-    KJ_IF_MAYBE(e, ::kj::runCatchingExceptions([&]() { code; })) { \
-      KJ_EXPECT(::kj::_::hasSubstring(e->getDescription(), message), \
-          "exception description didn't contain expected substring", *e, ##__VA_ARGS__); \
+    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+      KJ_EXPECT(::kj::_::hasSubstring(e.getDescription(), message), \
+          "exception description didn't contain expected substring", e, ##__VA_ARGS__); \
     } else { \
       KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
     } \

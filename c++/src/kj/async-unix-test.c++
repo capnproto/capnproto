@@ -874,10 +874,10 @@ struct TestChild {
   }
 
   ~TestChild() noexcept(false) {
-    KJ_IF_MAYBE(p, pid) {
-      KJ_SYSCALL(::kill(*p, SIGKILL)) { return; }
+    KJ_IF_SOME(p, pid) {
+      KJ_SYSCALL(::kill(p, SIGKILL)) { return; }
       int status;
-      KJ_SYSCALL(waitpid(*p, &status, 0)) { return; }
+      KJ_SYSCALL(waitpid(p, &status, 0)) { return; }
     }
   }
 
