@@ -2410,25 +2410,32 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) return kj::READY_NOW;
+    if (size == 0) co_return;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
-    return maybeFinishAfter(getInner().writeBodyData(buffer, size));
+    co_await getInner().writeBodyData(buffer, size);
+    if (length == 0) doneWriting();
   }
+
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     uint64_t size = 0;
     for (auto& piece: pieces) size += piece.size();
 
-    if (size == 0) return kj::READY_NOW;
+    if (size == 0) co_return;
     KJ_REQUIRE(size <= length, "overwrote Content-Length");
     length -= size;
 
-    return maybeFinishAfter(getInner().writeBodyData(pieces));
+    co_await getInner().writeBodyData(pieces);
+    if (length == 0) doneWriting();
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
-    if (amount == 0) return constPromise<uint64_t, 0>();
+    return pumpFrom(input, amount);
+  }
+
+  Promise<uint64_t> pumpFrom(AsyncInputStream& input, uint64_t amount) {
+    if (amount == 0) co_return 0;
 
     bool overshot = amount > length;
     if (overshot) {
@@ -2446,35 +2453,28 @@ public:
 
     amount = kj::min(amount, length);
     length -= amount;
+    uint64_t actual = amount;
 
-    auto promise = amount == 0
-        ? kj::Promise<uint64_t>(amount)
-        : getInner().pumpBodyFrom(input, amount).then([this,amount](uint64_t actual) {
-      // Adjust for bytes not written.
+    if (amount != 0) {
+      actual = co_await getInner().pumpBodyFrom(input, amount);
       length += amount - actual;
       if (length == 0) doneWriting();
-      return actual;
-    });
+    }
 
     if (overshot) {
-      promise = promise.then([amount,&input](uint64_t actual) -> kj::Promise<uint64_t> {
         if (actual == amount) {
           // We read exactly the amount expected. In order to detect an overshoot, we have to
           // try reading one more byte. Ugh.
           static byte junk;
-          return input.tryRead(&junk, 1, 1).then([actual](size_t extra) {
-            KJ_REQUIRE(extra == 0, "overwrote Content-Length");
-            return actual;
-          });
+          auto extra = co_await input.tryRead(&junk, 1, 1);
+          KJ_REQUIRE(extra == 0, "overwrote Content-Length");
         } else {
           // We actually read less data than requested so we couldn't have overshot. In fact, we
           // undershot.
-          return actual;
         }
-      });
     }
 
-    return kj::mv(promise);
+    co_return actual;
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -2483,14 +2483,6 @@ public:
 
 private:
   uint64_t length;
-
-  kj::Promise<void> maybeFinishAfter(kj::Promise<void> promise) {
-    if (length == 0) {
-      return promise.then([this]() { doneWriting(); });
-    } else {
-      return kj::mv(promise);
-    }
-  }
 };
 
 class HttpChunkedEntityWriter final: public HttpEntityBodyWriter {
