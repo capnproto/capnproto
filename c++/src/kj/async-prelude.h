@@ -214,6 +214,8 @@ using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
 // PromiseNode uses a static disposer.
 template<typename T>
 class ForkedPromiseNode;
+template <typename T, size_t Size>
+struct ExclusiveJoin;
 
 class PromiseBase {
 public:
