@@ -7382,242 +7382,253 @@ private:
     }
 
     return receivedHeaders
-        .then([this](HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError)
-            -> kj::Promise<bool> {
-      if (timedOut) {
-        // Client took too long to send anything, so we're going to close the connection. In
-        // theory, we should send back an HTTP 408 error -- it is designed exactly for this
-        // purpose. Alas, in practice, Google Chrome does not have any special handling for 408
-        // errors -- it will assume the error is a response to the next request it tries to send,
-        // and will happily serve the error to the user. OTOH, if we simply close the connection,
-        // Chrome does the "right thing", apparently. (Though I'm not sure what happens if a
-        // request is in-flight when we close... if it's a GET, the browser should retry. But if
-        // it's a POST, retrying may be dangerous. This is why 408 exists -- it unambiguously
-        // tells the client that it should retry.)
-        //
-        // Also note that if we ever decide to send 408 again, we might want to send some other
-        // error in the case that the server is draining, which also sets timedOut = true; see
-        // above.
+        .then([this](HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError) {
+      return onHeaders(kj::mv(requestOrProtocolError));
+    });
+  }
 
-        return httpOutput.flush().then([this]() {
-          return server.draining && httpInput.isCleanDrain();
-        });
+  kj::Promise<bool> onHeaders(HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError) {
+    if (timedOut) {
+      // Client took too long to send anything, so we're going to close the connection. In
+      // theory, we should send back an HTTP 408 error -- it is designed exactly for this
+      // purpose. Alas, in practice, Google Chrome does not have any special handling for 408
+      // errors -- it will assume the error is a response to the next request it tries to send,
+      // and will happily serve the error to the user. OTOH, if we simply close the connection,
+      // Chrome does the "right thing", apparently. (Though I'm not sure what happens if a
+      // request is in-flight when we close... if it's a GET, the browser should retry. But if
+      // it's a POST, retrying may be dangerous. This is why 408 exists -- it unambiguously
+      // tells the client that it should retry.)
+      //
+      // Also note that if we ever decide to send 408 again, we might want to send some other
+      // error in the case that the server is draining, which also sets timedOut = true; see
+      // above.
+
+      return httpOutput.flush().then([this]() {
+        return server.draining && httpInput.isCleanDrain();
+      });
+    }
+
+    if (closed) {
+      // Client closed connection. Close our end too.
+      return httpOutput.flush().then([]() { return false; });
+    }
+
+    KJ_SWITCH_ONEOF(requestOrProtocolError) {
+      KJ_CASE_ONEOF(request, HttpHeaders::ConnectRequest) {
+        return onConnect(request);
+      }
+      KJ_CASE_ONEOF(request, HttpHeaders::Request) {
+        return onRequest(request);
+      }
+      KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+        // Bad request.
+
+        // sendError() uses Response::send(), which requires that we have a currentMethod, but we
+        // never read one. GET seems like the correct choice here.
+        currentMethod = HttpMethod::GET;
+        return sendError(kj::mv(protocolError));
+      }
+    }
+
+    KJ_UNREACHABLE;
+  }
+
+  kj::Promise<bool> onConnect(HttpHeaders::ConnectRequest& request) {
+    auto& headers = httpInput.getHeaders();
+
+    currentMethod = HttpConnectMethod();
+
+    // The HTTP specification says that CONNECT requests have no meaningful payload
+    // but stops short of saying that CONNECT *cannot* have a payload. Implementations
+    // can choose to either accept payloads or reject them. We choose to reject it.
+    // Specifically, if there are Content-Length or Transfer-Encoding headers in the
+    // request headers, we'll automatically reject the CONNECT request.
+    //
+    // The key implication here is that any data that immediately follows the headers
+    // block of the CONNECT request is considered to be part of the tunnel if it is
+    // established.
+
+    KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
+      return sendError(HttpHeaders::ProtocolError {
+        400,
+        "Bad Request"_kj,
+        "Bad Request"_kj,
+        nullptr,
+      });
+    }
+    KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
+      return sendError(HttpHeaders::ProtocolError {
+        400,
+        "Bad Request"_kj,
+        "Bad Request"_kj,
+        nullptr,
+      });
+    }
+
+    SuspendableRequest suspendable(*this, HttpConnectMethod(), request.authority, headers);
+    auto maybeService = factory(suspendable);
+
+    if (suspended) {
+      return false;
+    }
+
+    auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
+        "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
+    auto connectStream = getConnectStream();
+    auto promise = service->connect(
+        request.authority, headers, *connectStream, *this, {})
+        .attach(kj::mv(service), kj::mv(connectStream));
+    return promise.then([this]() mutable -> kj::Promise<bool> {
+      KJ_IF_MAYBE(p, tunnelRejected) {
+        // reject() was called to reject a CONNECT attempt.
+        // Finish sending and close the connection.
+        auto promise = kj::mv(*p);
+        tunnelRejected = nullptr;
+        return kj::mv(promise);
       }
 
-      if (closed) {
-        // Client closed connection. Close our end too.
-        return httpOutput.flush().then([]() { return false; });
+      if (httpOutput.isBroken()) {
+        return false;
       }
 
-      KJ_SWITCH_ONEOF(requestOrProtocolError) {
-        KJ_CASE_ONEOF(request, HttpHeaders::ConnectRequest) {
-          auto& headers = httpInput.getHeaders();
+      return httpOutput.flush().then([]() mutable -> kj::Promise<bool> {
+        // There is really no reasonable path to reusing a CONNECT connection.
+        return false;
+      });
+    });
+  }
 
-          currentMethod = HttpConnectMethod();
+  kj::Promise<bool> onRequest(HttpHeaders::Request& request) {
+    auto& headers = httpInput.getHeaders();
 
-          // The HTTP specification says that CONNECT requests have no meaningful payload
-          // but stops short of saying that CONNECT *cannot* have a payload. Implementations
-          // can choose to either accept payloads or reject them. We choose to reject it.
-          // Specifically, if there are Content-Length or Transfer-Encoding headers in the
-          // request headers, we'll automatically reject the CONNECT request.
+    currentMethod = request.method;
+
+    SuspendableRequest suspendable(*this, request.method, request.url, headers);
+    auto maybeService = factory(suspendable);
+
+    if (suspended) {
+      return false;
+    }
+
+    auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
+        "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
+
+    // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
+    //   prevent permanent deadlock. It's slightly weird in that arguably the client should
+    //   be able to shutdown the upstream but still wait on the downstream, but I believe many
+    //   other HTTP servers do similar things.
+
+    auto body = httpInput.getEntityBody(
+        HttpInputStreamImpl::REQUEST, request.method, 0, headers);
+
+    auto promise = service->request(
+        request.method, request.url, headers, *body, *this).attach(kj::mv(service));
+    return promise.then([this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
+      // Response done. Await next request.
+
+      KJ_IF_MAYBE(p, webSocketError) {
+        // sendWebSocketError() was called. Finish sending and close the connection.
+        auto promise = kj::mv(*p);
+        webSocketError = nullptr;
+        return kj::mv(promise);
+      }
+
+      if (upgraded) {
+        // We've upgraded to WebSocket, and by now we should have closed the WebSocket.
+        if (!webSocketOrConnectClosed) {
+          // This is gonna segfault later so abort now instead.
+          KJ_LOG(FATAL, "Accepted WebSocket object must be destroyed before HttpService "
+                        "request handler completes.");
+          abort();
+        }
+
+        // Once we start a WebSocket there's no going back to HTTP.
+        return false;
+      }
+
+      if (currentMethod != nullptr) {
+        return sendError();
+      }
+
+      if (httpOutput.isBroken()) {
+        // We started a response but didn't finish it. But HttpService returns success?
+        // Perhaps it decided that it doesn't want to finish this response. We'll have to
+        // disconnect here. If the response body is not complete (e.g. Content-Length not
+        // reached), the client should notice. We don't want to log an error because this
+        // condition might be intentional on the service's part.
+        return false;
+      }
+
+      return httpOutput.flush().then(
+          [this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
+        if (httpInput.canReuse()) {
+          // Things look clean. Go ahead and accept the next request.
+
+          if (closeAfterSend) {
+            // We sent Connection: close, so drop the connection now.
+            return false;
+          } else {
+            // Note that we don't have to handle server.draining here because we'll take care
+            // of it the next time around the loop.
+            return loop(false);
+          }
+        } else {
+          // Apparently, the application did not read the request body. Maybe this is a bug,
+          // or maybe not: maybe the client tried to upload too much data and the application
+          // legitimately wants to cancel the upload without reading all it it.
           //
-          // The key implication here is that any data that immediately follows the headers
-          // block of the CONNECT request is considered to be part of the tunnel if it is
-          // established.
+          // We have a problem, though: We did send a response, and we didn't send
+          // `Connection: close`, so the client may expect that it can send another request.
+          // Perhaps the client has even finished sending the previous request's body, in
+          // which case the moment it finishes receiving the response, it could be completely
+          // within its rights to start a new request. If we close the socket now, we might
+          // interrupt that new request.
+          //
+          // Or maybe we did send `Connection: close`, as indicated by `closeAfterSend` being
+          // true. Even in that case, we should still try to read and ignore the request,
+          // otherwise when we close the connection the client may get a "connection reset"
+          // error before they get a chance to actually read the response body that we sent
+          // them.
+          //
+          // There's no way we can get out of this perfectly cleanly. HTTP just isn't good
+          // enough at connection management. The best we can do is give the client some grace
+          // period and then abort the connection.
 
-          KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
-            return sendError(HttpHeaders::ProtocolError {
-              400,
-              "Bad Request"_kj,
-              "Bad Request"_kj,
-              nullptr,
-            });
-          }
-          KJ_IF_MAYBE(te, headers.get(HttpHeaderId::TRANSFER_ENCODING)) {
-            return sendError(HttpHeaders::ProtocolError {
-              400,
-              "Bad Request"_kj,
-              "Bad Request"_kj,
-              nullptr,
-            });
-          }
-
-          SuspendableRequest suspendable(*this, HttpConnectMethod(), request.authority, headers);
-          auto maybeService = factory(suspendable);
-
-          if (suspended) {
-            return false;
-          }
-
-          auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
-              "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
-          auto connectStream = getConnectStream();
-          auto promise = service->connect(
-              request.authority, headers, *connectStream, *this, {})
-              .attach(kj::mv(service), kj::mv(connectStream));
-          return promise.then([this]() mutable -> kj::Promise<bool> {
-            KJ_IF_MAYBE(p, tunnelRejected) {
-              // reject() was called to reject a CONNECT attempt.
-              // Finish sending and close the connection.
-              auto promise = kj::mv(*p);
-              tunnelRejected = nullptr;
-              return kj::mv(promise);
-            }
-
-            if (httpOutput.isBroken()) {
+          auto dummy = kj::heap<HttpDiscardingEntityWriter>();
+          auto lengthGrace = kj::evalNow([&]() {
+            return body->pumpTo(*dummy, server.settings.canceledUploadGraceBytes);
+          }).catch_([](kj::Exception&& e) -> uint64_t {
+            // Reading from the input failed in some way. This may actually be the whole
+            // reason we got here in the first place so don't propagate this error, just
+            // give up on discarding the input.
+            return 0;  // This zero is ignored but `canReuse()` will return false below.
+          }).then([this](uint64_t amount) {
+            if (httpInput.canReuse()) {
+              // Success, we can continue.
+              return true;
+            } else {
+              // Still more data. Give up.
               return false;
             }
+          });
+          lengthGrace = lengthGrace.attach(kj::mv(dummy), kj::mv(body));
 
-            return httpOutput.flush().then([]() mutable -> kj::Promise<bool> {
-              // There is really no reasonable path to reusing a CONNECT connection.
+          auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGracePeriod)
+              .then([]() { return false; });
+
+          return lengthGrace.exclusiveJoin(kj::mv(timeGrace))
+              .then([this](bool clean) -> kj::Promise<bool> {
+            if (clean && !closeAfterSend) {
+              // We recovered. Continue loop.
+              return loop(false);
+            } else {
+              // Client still not done, or we sent Connection: close and so want to drop the
+              // connection anyway. Return broken.
               return false;
-            });
+            }
           });
         }
-        KJ_CASE_ONEOF(request, HttpHeaders::Request) {
-          auto& headers = httpInput.getHeaders();
-
-          currentMethod = request.method;
-
-          SuspendableRequest suspendable(*this, request.method, request.url, headers);
-          auto maybeService = factory(suspendable);
-
-          if (suspended) {
-            return false;
-          }
-
-          auto service = KJ_ASSERT_NONNULL(kj::mv(maybeService),
-              "SuspendableHttpServiceFactory did not suspend, but returned nullptr.");
-
-          // TODO(perf): If the client disconnects, should we cancel the response? Probably, to
-          //   prevent permanent deadlock. It's slightly weird in that arguably the client should
-          //   be able to shutdown the upstream but still wait on the downstream, but I believe many
-          //   other HTTP servers do similar things.
-
-          auto body = httpInput.getEntityBody(
-              HttpInputStreamImpl::REQUEST, request.method, 0, headers);
-
-          auto promise = service->request(
-              request.method, request.url, headers, *body, *this).attach(kj::mv(service));
-          return promise.then([this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
-            // Response done. Await next request.
-
-            KJ_IF_MAYBE(p, webSocketError) {
-              // sendWebSocketError() was called. Finish sending and close the connection.
-              auto promise = kj::mv(*p);
-              webSocketError = nullptr;
-              return kj::mv(promise);
-            }
-
-            if (upgraded) {
-              // We've upgraded to WebSocket, and by now we should have closed the WebSocket.
-              if (!webSocketOrConnectClosed) {
-                // This is gonna segfault later so abort now instead.
-                KJ_LOG(FATAL, "Accepted WebSocket object must be destroyed before HttpService "
-                              "request handler completes.");
-                abort();
-              }
-
-              // Once we start a WebSocket there's no going back to HTTP.
-              return false;
-            }
-
-            if (currentMethod != nullptr) {
-              return sendError();
-            }
-
-            if (httpOutput.isBroken()) {
-              // We started a response but didn't finish it. But HttpService returns success?
-              // Perhaps it decided that it doesn't want to finish this response. We'll have to
-              // disconnect here. If the response body is not complete (e.g. Content-Length not
-              // reached), the client should notice. We don't want to log an error because this
-              // condition might be intentional on the service's part.
-              return false;
-            }
-
-            return httpOutput.flush().then(
-                [this, body = kj::mv(body)]() mutable -> kj::Promise<bool> {
-              if (httpInput.canReuse()) {
-                // Things look clean. Go ahead and accept the next request.
-
-                if (closeAfterSend) {
-                  // We sent Connection: close, so drop the connection now.
-                  return false;
-                } else {
-                  // Note that we don't have to handle server.draining here because we'll take care
-                  // of it the next time around the loop.
-                  return loop(false);
-                }
-              } else {
-                // Apparently, the application did not read the request body. Maybe this is a bug,
-                // or maybe not: maybe the client tried to upload too much data and the application
-                // legitimately wants to cancel the upload without reading all it it.
-                //
-                // We have a problem, though: We did send a response, and we didn't send
-                // `Connection: close`, so the client may expect that it can send another request.
-                // Perhaps the client has even finished sending the previous request's body, in
-                // which case the moment it finishes receiving the response, it could be completely
-                // within its rights to start a new request. If we close the socket now, we might
-                // interrupt that new request.
-                //
-                // Or maybe we did send `Connection: close`, as indicated by `closeAfterSend` being
-                // true. Even in that case, we should still try to read and ignore the request,
-                // otherwise when we close the connection the client may get a "connection reset"
-                // error before they get a chance to actually read the response body that we sent
-                // them.
-                //
-                // There's no way we can get out of this perfectly cleanly. HTTP just isn't good
-                // enough at connection management. The best we can do is give the client some grace
-                // period and then abort the connection.
-
-                auto dummy = kj::heap<HttpDiscardingEntityWriter>();
-                auto lengthGrace = kj::evalNow([&]() {
-                  return body->pumpTo(*dummy, server.settings.canceledUploadGraceBytes);
-                }).catch_([](kj::Exception&& e) -> uint64_t {
-                  // Reading from the input failed in some way. This may actually be the whole
-                  // reason we got here in the first place so don't propagate this error, just
-                  // give up on discarding the input.
-                  return 0;  // This zero is ignored but `canReuse()` will return false below.
-                }).then([this](uint64_t amount) {
-                  if (httpInput.canReuse()) {
-                    // Success, we can continue.
-                    return true;
-                  } else {
-                    // Still more data. Give up.
-                    return false;
-                  }
-                });
-                lengthGrace = lengthGrace.attach(kj::mv(dummy), kj::mv(body));
-
-                auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGracePeriod)
-                    .then([]() { return false; });
-
-                return lengthGrace.exclusiveJoin(kj::mv(timeGrace))
-                    .then([this](bool clean) -> kj::Promise<bool> {
-                  if (clean && !closeAfterSend) {
-                    // We recovered. Continue loop.
-                    return loop(false);
-                  } else {
-                    // Client still not done, or we sent Connection: close and so want to drop the
-                    // connection anyway. Return broken.
-                    return false;
-                  }
-                });
-              }
-            });
-          });
-        }
-        KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
-          // Bad request.
-
-          // sendError() uses Response::send(), which requires that we have a currentMethod, but we
-          // never read one. GET seems like the correct choice here.
-          currentMethod = HttpMethod::GET;
-          return sendError(kj::mv(protocolError));
-        }
-      }
-
-      KJ_UNREACHABLE;
+      });
     });
   }
 
