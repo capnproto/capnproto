@@ -52,7 +52,7 @@ CidrRange::CidrRange(StringPtr pattern) {
   memcpy(addr.begin(), pattern.begin(), slashPos);
   addr[slashPos] = '\0';
 
-  if (pattern.findFirst(':') == nullptr) {
+  if (pattern.findFirst(':') == kj::none) {
     family = AF_INET;
     KJ_REQUIRE(bitCount <= 32, "invalid CIDR", pattern);
   } else {

@@ -393,9 +393,9 @@ private:
 
   static int bioRead(BIO* b, char* out, int outl) {
     BIO_clear_retry_flags(b);
-    KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->readBuffer
+    KJ_IF_SOME(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->readBuffer
         .read(kj::arrayPtr(out, outl).asBytes())) {
-      return *n;
+      return n;
     } else {
       BIO_set_retry_read(b);
       return -1;
@@ -404,9 +404,9 @@ private:
 
   static int bioWrite(BIO* b, const char* in, int inl) {
     BIO_clear_retry_flags(b);
-    KJ_IF_MAYBE(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->writeBuffer
+    KJ_IF_SOME(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->writeBuffer
         .write(kj::arrayPtr(in, inl).asBytes())) {
-      return *n;
+      return n;
     } else {
       BIO_set_retry_write(b);
       return -1;
@@ -494,8 +494,8 @@ public:
         tasks(*this) {}
 
   void taskFailed(Exception&& e) override {
-    KJ_IF_MAYBE(handler, acceptErrorHandler){
-      handler->operator()(kj::mv(e));
+    KJ_IF_SOME(handler, acceptErrorHandler){
+      handler(kj::mv(e));
     } else if (e.getType() != Exception::Type::DISCONNECTED) {
       KJ_LOG(ERROR, "error accepting tls connection", kj::mv(e));
     }
@@ -508,9 +508,9 @@ public:
   }
 
   Promise<AuthenticatedStream> acceptAuthenticated() override {
-    KJ_IF_MAYBE(e, maybeInnerException) {
+    KJ_IF_SOME(e, maybeInnerException) {
       // We've experienced an exception from the inner receiver, we consider this unrecoverable.
-      return Exception(*e);
+      return Exception(e);
     }
 
     return queue.pop();
@@ -638,8 +638,8 @@ public:
 
     if (addr.startsWith("[")) {
       // IPv6, like "[1234:5678::abcd]:123". Take the part between the brackets.
-      KJ_IF_MAYBE(pos, addr.findFirst(']')) {
-        hostname = kj::str(addr.slice(1, *pos));
+      KJ_IF_SOME(pos, addr.findFirst(']')) {
+        hostname = kj::str(addr.slice(1, pos));
       } else {
         // Uhh??? Just take the whole thing, cert will fail later.
         hostname = kj::heapString(addr);
@@ -669,8 +669,8 @@ public:
         // us what the actual parser decided the hostname is. However, when I tried this it proved
         // rather cumbersome and actually broke code in the Workers Runtime that does complicated
         // stacking of kj::Network implementations.
-        KJ_IF_MAYBE(pos, addr.findFirst(':')) {
-          hostname = kj::heapString(addr.slice(0, *pos));
+        KJ_IF_SOME(pos, addr.findFirst(':')) {
+          hostname = kj::heapString(addr.slice(0, pos));
         } else {
           hostname = kj::heapString(addr);
         }
@@ -792,17 +792,17 @@ TlsContext::TlsContext(Options options) {
   }
 
   // honor options.defaultKeypair
-  KJ_IF_MAYBE(kp, options.defaultKeypair) {
-    if (!SSL_CTX_use_PrivateKey(ctx, reinterpret_cast<EVP_PKEY*>(kp->privateKey.pkey))) {
+  KJ_IF_SOME(kp, options.defaultKeypair) {
+    if (!SSL_CTX_use_PrivateKey(ctx, reinterpret_cast<EVP_PKEY*>(kp.privateKey.pkey))) {
       throwOpensslError();
     }
 
-    if (!SSL_CTX_use_certificate(ctx, reinterpret_cast<X509*>(kp->certificate.chain[0]))) {
+    if (!SSL_CTX_use_certificate(ctx, reinterpret_cast<X509*>(kp.certificate.chain[0]))) {
       throwOpensslError();
     }
 
-    for (size_t i = 1; i < kj::size(kp->certificate.chain); i++) {
-      X509* x509 = reinterpret_cast<X509*>(kp->certificate.chain[i]);
+    for (size_t i = 1; i < kj::size(kp.certificate.chain); i++) {
+      X509* x509 = reinterpret_cast<X509*>(kp.certificate.chain[i]);
       if (x509 == nullptr) break;  // end of chain
 
       if (!SSL_CTX_add_extra_chain_cert(ctx, x509)) {
@@ -815,15 +815,15 @@ TlsContext::TlsContext(Options options) {
   }
 
   // honor options.sniCallback
-  KJ_IF_MAYBE(sni, options.sniCallback) {
+  KJ_IF_SOME(sni, options.sniCallback) {
     SSL_CTX_set_tlsext_servername_callback(ctx, &SniCallback::callback);
-    SSL_CTX_set_tlsext_servername_arg(ctx, sni);
+    SSL_CTX_set_tlsext_servername_arg(ctx, &sni);
   }
 
-  KJ_IF_MAYBE(timeout, options.acceptTimeout) {
+  KJ_IF_SOME(timeout, options.acceptTimeout) {
     this->timer = KJ_REQUIRE_NONNULL(options.timer,
         "acceptTimeout option requires that a timer is also provided");
-    this->acceptTimeout = *timeout;
+    this->acceptTimeout = timeout;
   }
 
   this->acceptErrorHandler = kj::mv(options.acceptErrorHandler);
@@ -834,17 +834,17 @@ TlsContext::TlsContext(Options options) {
 int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
   // The third parameter is actually type TlsSniCallback*.
 
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
     TlsSniCallback& sni = *reinterpret_cast<TlsSniCallback*>(arg);
 
     const char* name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
     if (name != nullptr) {
-      KJ_IF_MAYBE(kp, sni.getKey(name)) {
-        if (!SSL_use_PrivateKey(ssl, reinterpret_cast<EVP_PKEY*>(kp->privateKey.pkey))) {
+      KJ_IF_SOME(kp, sni.getKey(name)) {
+        if (!SSL_use_PrivateKey(ssl, reinterpret_cast<EVP_PKEY*>(kp.privateKey.pkey))) {
           throwOpensslError();
         }
 
-        if (!SSL_use_certificate(ssl, reinterpret_cast<X509*>(kp->certificate.chain[0]))) {
+        if (!SSL_use_certificate(ssl, reinterpret_cast<X509*>(kp.certificate.chain[0]))) {
           throwOpensslError();
         }
 
@@ -852,8 +852,8 @@ int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
           throwOpensslError();
         }
 
-        for (size_t i = 1; i < kj::size(kp->certificate.chain); i++) {
-          X509* x509 = reinterpret_cast<X509*>(kp->certificate.chain[i]);
+        for (size_t i = 1; i < kj::size(kp.certificate.chain); i++) {
+          X509* x509 = reinterpret_cast<X509*>(kp.certificate.chain[i]);
           if (x509 == nullptr) break;  // end of chain
 
           if (!SSL_add0_chain_cert(ssl, x509)) {
@@ -866,7 +866,7 @@ int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
       }
     }
   })) {
-    KJ_LOG(ERROR, "exception when invoking SNI callback", *exception);
+    KJ_LOG(ERROR, "exception when invoking SNI callback", exception);
     *ad = SSL_AD_INTERNAL_ERROR;
     return SSL_TLSEXT_ERR_ALERT_FATAL;
   }
@@ -891,8 +891,8 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::AsyncIoStream> stream) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
-  KJ_IF_MAYBE(timeout, acceptTimeout) {
-    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(*timeout).then([]() -> kj::Promise<void> {
+  KJ_IF_SOME(timeout, acceptTimeout) {
+    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(timeout).then([]() -> kj::Promise<void> {
       return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
     }).exclusiveJoin(kj::mv(promise));
   }
@@ -915,8 +915,8 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStream stream) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
   auto promise = conn->accept();
-  KJ_IF_MAYBE(timeout, acceptTimeout) {
-    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(*timeout).then([]() -> kj::Promise<void> {
+  KJ_IF_SOME(timeout, acceptTimeout) {
+    promise = KJ_REQUIRE_NONNULL(timer).afterDelay(timeout).then([]() -> kj::Promise<void> {
       return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
     }).exclusiveJoin(kj::mv(promise));
   }
@@ -989,9 +989,9 @@ TlsPrivateKey::~TlsPrivateKey() noexcept(false) {
 int TlsPrivateKey::passwordCallback(char* buf, int size, int rwflag, void* u) {
   auto& password = *reinterpret_cast<kj::Maybe<kj::StringPtr>*>(u);
 
-  KJ_IF_MAYBE(p, password) {
-    int result = kj::min(p->size(), size);
-    memcpy(buf, p->begin(), result);
+  KJ_IF_SOME(p, password) {
+    int result = kj::min(p.size(), size);
+    memcpy(buf, p.begin(), result);
     return result;
   } else {
     return 0;

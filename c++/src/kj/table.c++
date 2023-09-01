@@ -933,7 +933,7 @@ kj::Maybe<size_t> InsertionOrderIndex::insertImpl(size_t pos) {
   links[links[0].prev].next = pos + 1;
   links[0].prev = pos + 1;
 
-  return nullptr;
+  return kj::none;
 }
 
 void InsertionOrderIndex::eraseImpl(size_t pos) {

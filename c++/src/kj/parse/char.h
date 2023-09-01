@@ -320,10 +320,10 @@ struct ParseHexByte {
 struct ParseOctEscape {
   inline char operator()(char first, Maybe<char> second, Maybe<char> third) const {
     char result = first - '0';
-    KJ_IF_MAYBE(digit1, second) {
-      result = (result << 3) | (*digit1 - '0');
-      KJ_IF_MAYBE(digit2, third) {
-        result = (result << 3) | (*digit2 - '0');
+    KJ_IF_SOME(digit1, second) {
+      result = (result << 3) | (digit1 - '0');
+      KJ_IF_SOME(digit2, third) {
+        result = (result << 3) | (digit2 - '0');
       }
     }
     return result;

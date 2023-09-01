@@ -552,16 +552,16 @@ public:
 
   kj::Maybe<size_t> copy(uint64_t offset, const ReadableFile& from,
                          uint64_t fromOffset, uint64_t size) const {
-    KJ_IF_MAYBE(otherFd, from.getFd()) {
+    KJ_IF_SOME(otherFd, from.getFd()) {
 #ifdef FICLONE
       if (offset == 0 && fromOffset == 0 && size == kj::maxValue && stat().size == 0) {
-        if (ioctl(fd, FICLONE, *otherFd) >= 0) {
+        if (ioctl(fd, FICLONE, otherFd) >= 0) {
           return stat().size;
         }
       } else if (size > 0) {    // src_length = 0 has special meaning for the syscall, so avoid.
         struct file_clone_range range;
         memset(&range, 0, sizeof(range));
-        range.src_fd = *otherFd;
+        range.src_fd = otherFd;
         range.dest_offset = offset;
         range.src_offset = fromOffset;
         range.src_length = size == kj::maxValue ? 0 : size;
@@ -590,7 +590,7 @@ public:
           // Find out how much data there is before the next hole.
           off_t nextHole;
 #ifdef SEEK_HOLE
-          KJ_SYSCALL_HANDLE_ERRORS(nextHole = lseek(*otherFd, fromPos, SEEK_HOLE)) {
+          KJ_SYSCALL_HANDLE_ERRORS(nextHole = lseek(otherFd, fromPos, SEEK_HOLE)) {
             case EINVAL:
               // SEEK_HOLE probably not supported. Assume no holes.
               nextHole = end;
@@ -610,7 +610,7 @@ public:
           off_t copyTo = kj::min(end, nextHole);
           size_t amount = copyTo - fromPos;
           if (amount > 0) {
-            size_t n = copyChunk(toPos, *otherFd, fromPos, amount);
+            size_t n = copyChunk(toPos, otherFd, fromPos, amount);
             fromPos += n;
             toPos += n;
 
@@ -629,7 +629,7 @@ public:
         {
           // Find out how much hole there is before the next data.
           off_t nextData;
-          KJ_SYSCALL_HANDLE_ERRORS(nextData = lseek(*otherFd, fromPos, SEEK_DATA)) {
+          KJ_SYSCALL_HANDLE_ERRORS(nextData = lseek(otherFd, fromPos, SEEK_DATA)) {
             case EINVAL:
               // SEEK_DATA probably not supported. But we should only have gotten here if we
               // were expecting a hole.
@@ -637,7 +637,7 @@ public:
               break;
             case ENXIO:
               // No more data. Set to EOF.
-              KJ_SYSCALL(nextData = lseek(*otherFd, 0, SEEK_END));
+              KJ_SYSCALL(nextData = lseek(otherFd, 0, SEEK_END));
               if (nextData > end) {
                 end = nextData;
               }
@@ -664,7 +664,7 @@ public:
     }
 
     // Indicates caller should call File::copy() default implementation.
-    return nullptr;
+    return kj::none;
   }
 
   // ReadableDirectory ---------------------------------------------------------
@@ -753,9 +753,9 @@ public:
     KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd, path.toString().cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
       case ENOENT:
       case ENOTDIR:
-        return nullptr;
+        return kj::none;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return nullptr; }
+        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return kj::none; }
     }
     return statToMetadata(stats);
   }
@@ -766,9 +766,9 @@ public:
         fd, path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC)) {
       case ENOENT:
       case ENOTDIR:
-        return nullptr;
+        return kj::none;
       default:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_RDONLY)", error, path) { return nullptr; }
+        KJ_FAIL_SYSCALL("openat(fd, path, O_RDONLY)", error, path) { return kj::none; }
     }
 
     kj::AutoCloseFd result(newFd);
@@ -784,17 +784,17 @@ public:
     KJ_SYSCALL_HANDLE_ERRORS(newFd = openat(
         fd, path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
       case ENOENT:
-        return nullptr;
+        return kj::none;
       case ENOTDIR:
         // Could mean that a parent is not a directory, which we treat as "doesn't exist".
         // Could also mean that the specified file is not a directory, which should throw.
         // Check using exists().
         if (!exists(path)) {
-          return nullptr;
+          return kj::none;
         }
         KJ_FALLTHROUGH;
       default:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path) { return nullptr; }
+        KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path) { return kj::none; }
     }
 
     kj::AutoCloseFd result(newFd);
@@ -822,9 +822,9 @@ public:
           case ENOENT:
           case ENOTDIR:
           case EINVAL:    // not a link
-            return nullptr;
+            return kj::none;
           default:
-            KJ_FAIL_SYSCALL("readlinkat(fd, path)", error, path) { return nullptr; }
+            KJ_FAIL_SYSCALL("readlinkat(fd, path)", error, path) { return kj::none; }
         }
       }
 
@@ -1003,7 +1003,7 @@ public:
     if (!has(mode, WriteMode::MODIFY)) {
       if (!has(mode, WriteMode::CREATE)) {
         // Neither CREATE nor MODIFY -- impossible to satisfy preconditions.
-        return nullptr;
+        return kj::none;
       }
       flags |= O_EXCL;
     }
@@ -1038,29 +1038,29 @@ public:
               faccessat(fd, filename.cStr(), F_OK, AT_SYMLINK_NOFOLLOW) >= 0) {
             // Yep. We treat this as already-exists, which means in CREATE-only mode this is a
             // simple failure.
-            return nullptr;
+            return kj::none;
           }
 
-          KJ_FAIL_REQUIRE("parent is not a directory", path) { return nullptr; }
+          KJ_FAIL_REQUIRE("parent is not a directory", path) { return kj::none; }
         } else {
           // MODIFY-only mode. ENOENT = doesn't exist = return null.
-          return nullptr;
+          return kj::none;
         }
       case ENOTDIR:
         if (!has(mode, WriteMode::CREATE)) {
           // MODIFY-only mode. ENOTDIR = parent not a directory = doesn't exist = return null.
-          return nullptr;
+          return kj::none;
         }
         goto failed;
       case EEXIST:
         if (!has(mode, WriteMode::MODIFY)) {
           // CREATE-only mode. EEXIST = already exists = return null.
-          return nullptr;
+          return kj::none;
         }
         goto failed;
       default:
       failed:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_RDWR | ...)", error, path) { return nullptr; }
+        KJ_FAIL_SYSCALL("openat(fd, path, O_RDWR | ...)", error, path) { return kj::none; }
     }
 
     kj::AutoCloseFd result(newFd);
@@ -1382,7 +1382,7 @@ public:
   Maybe<Own<const Directory>> tryOpenSubdir(PathPtr path, WriteMode mode) const {
     // Must create before open.
     if (has(mode, WriteMode::CREATE)) {
-      if (!tryMkdir(path, mode, false)) return nullptr;
+      if (!tryMkdir(path, mode, false)) return kj::none;
     }
 
     return tryOpenSubdirInternal(path).map(newDiskDirectory);
@@ -1423,18 +1423,18 @@ public:
     KJ_REQUIRE(toPath.size() > 0, "can't replace self") { return false; }
 
     if (mode == TransferMode::LINK) {
-      KJ_IF_MAYBE(fromFd, fromDirectory.getFd()) {
+      KJ_IF_SOME(fromFd, fromDirectory.getFd()) {
         // Other is a disk directory, so we can hopefully do an efficient move/link.
         return tryReplaceNode(toPath, toMode, [&](StringPtr candidatePath) {
-          return linkat(*fromFd, fromPath.toString().cStr(), fd, candidatePath.cStr(), 0);
+          return linkat(fromFd, fromPath.toString().cStr(), fd, candidatePath.cStr(), 0);
         });
       };
     } else if (mode == TransferMode::MOVE) {
-      KJ_IF_MAYBE(fromFd, fromDirectory.getFd()) {
+      KJ_IF_SOME(fromFd, fromDirectory.getFd()) {
         KJ_ASSERT(mode == TransferMode::MOVE);
 
         int error = 0;
-        if (tryCommitReplacement(toPath.toString(), *fromFd, fromPath.toString(), toMode,
+        if (tryCommitReplacement(toPath.toString(), fromFd, fromPath.toString(), toMode,
                                  &error)) {
           return true;
         } else switch (error) {
@@ -1552,8 +1552,8 @@ public:
   }
   size_t copy(uint64_t offset, const ReadableFile& from,
               uint64_t fromOffset, uint64_t size) const override {
-    KJ_IF_MAYBE(result, DiskHandle::copy(offset, from, fromOffset, size)) {
-      return *result;
+    KJ_IF_SOME(result, DiskHandle::copy(offset, from, fromOffset, size)) {
+      return result;
     } else {
       return File::copy(offset, from, fromOffset, size);
     }
@@ -1693,14 +1693,14 @@ private:
     if (pwd != nullptr) {
       Path result = nullptr;
       struct stat pwdStat, dotStat;
-      KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+      KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
         KJ_ASSERT(pwd[0] == '/') { return; }
         result = Path::parse(pwd + 1);
         KJ_SYSCALL(lstat(result.toString(true).cStr(), &pwdStat), result) { return; }
         KJ_SYSCALL(lstat(".", &dotStat)) { return; }
       })) {
         // failed, give up on PWD
-        KJ_LOG(WARNING, "PWD environment variable seems invalid", pwd, *e);
+        KJ_LOG(WARNING, "PWD environment variable seems invalid", pwd, e);
       } else {
         if (pwdStat.st_ino == dotStat.st_ino &&
             pwdStat.st_dev == dotStat.st_dev) {

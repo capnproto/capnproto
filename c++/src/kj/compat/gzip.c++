@@ -31,10 +31,10 @@ namespace _ {  // private
 GzipOutputContext::GzipOutputContext(kj::Maybe<int> compressionLevel) {
   int initResult;
 
-  KJ_IF_MAYBE(level, compressionLevel) {
+  KJ_IF_SOME(level, compressionLevel) {
     compressing = true;
     initResult =
-      deflateInit2(&ctx, *level, Z_DEFLATED,
+      deflateInit2(&ctx, level, Z_DEFLATED,
                    15 + 16,  // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
                    8,        // memLevel = 8 (the default)
                    Z_DEFAULT_STRATEGY);
@@ -152,7 +152,7 @@ GzipOutputStream::GzipOutputStream(OutputStream& inner, int compressionLevel)
     : inner(inner), ctx(compressionLevel) {}
 
 GzipOutputStream::GzipOutputStream(OutputStream& inner, decltype(DECOMPRESS))
-    : inner(inner), ctx(nullptr) {}
+    : inner(inner), ctx(kj::none) {}
 
 GzipOutputStream::~GzipOutputStream() noexcept(false) {
   pump(Z_FINISH);
@@ -243,7 +243,7 @@ GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compr
     : inner(inner), ctx(compressionLevel) {}
 
 GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
-    : inner(inner), ctx(nullptr) {}
+    : inner(inner), ctx(kj::none) {}
 
 Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
   ctx.setInput(in, size);

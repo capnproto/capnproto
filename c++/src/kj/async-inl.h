@@ -84,13 +84,13 @@ public:
 
 template <typename T>
 inline T convertToReturn(ExceptionOr<T>&& result) {
-  KJ_IF_MAYBE(value, result.value) {
-    KJ_IF_MAYBE(exception, result.exception) {
-      throwRecoverableException(kj::mv(*exception));
+  KJ_IF_SOME(value, result.value) {
+    KJ_IF_SOME(exception, result.exception) {
+      throwRecoverableException(kj::mv(exception));
     }
-    return _::returnMaybeVoid(kj::mv(*value));
-  } else KJ_IF_MAYBE(exception, result.exception) {
-    throwFatalException(kj::mv(*exception));
+    return _::returnMaybeVoid(kj::mv(value));
+  } else KJ_IF_SOME(exception, result.exception) {
+    throwFatalException(kj::mv(exception));
   } else {
     // Result contained neither a value nor an exception?
     KJ_UNREACHABLE;
@@ -101,11 +101,11 @@ inline void convertToReturn(ExceptionOr<Void>&& result) {
   // Override <void> case to use throwRecoverableException().
 
   if (result.value != nullptr) {
-    KJ_IF_MAYBE(exception, result.exception) {
-      throwRecoverableException(kj::mv(*exception));
+    KJ_IF_SOME(exception, result.exception) {
+      throwRecoverableException(kj::mv(exception));
     }
-  } else KJ_IF_MAYBE(exception, result.exception) {
-    throwRecoverableException(kj::mv(*exception));
+  } else KJ_IF_SOME(exception, result.exception) {
+    throwRecoverableException(kj::mv(exception));
   } else {
     // Result contained neither a value nor an exception?
     KJ_UNREACHABLE;
@@ -731,12 +731,12 @@ private:
   void getImpl(ExceptionOrValue& output) override {
     ExceptionOr<DepT> depResult;
     getDepResult(depResult);
-    KJ_IF_MAYBE(depException, depResult.exception) {
+    KJ_IF_SOME(depException, depResult.exception) {
       output.as<T>() = handle(
           MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
-              errorHandler, kj::mv(*depException)));
-    } else KJ_IF_MAYBE(depValue, depResult.value) {
-      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(*depValue)));
+              errorHandler, kj::mv(depException)));
+    } else KJ_IF_SOME(depValue, depResult.value) {
+      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
     }
   }
 
@@ -797,8 +797,8 @@ public:
 
   void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
-    KJ_IF_MAYBE(value, hubResult.value) {
-      output.as<T>().value = copyOrAddRef(*value);
+    KJ_IF_SOME(value, hubResult.value) {
+      output.as<T>().value = copyOrAddRef(value);
     } else {
       output.as<T>().value = nullptr;
     }
@@ -844,8 +844,8 @@ public:
 
   void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
-    KJ_IF_MAYBE(value, hubResult.value) {
-      output.as<Element>().value = kj::mv(kj::get<index>(*value));
+    KJ_IF_SOME(value, hubResult.value) {
+      output.as<Element>().value = kj::mv(kj::get<index>(value));
     } else {
       output.as<Element>().value = nullptr;
     }
@@ -1457,10 +1457,10 @@ inline PromiseForResult<Func, void> evalLast(Func&& func) {
 template <typename Func>
 inline PromiseForResult<Func, void> evalNow(Func&& func) {
   PromiseForResult<Func, void> result = nullptr;
-  KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+  KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
     result = func();
   })) {
-    result = kj::mv(*e);
+    result = kj::mv(e);
   }
   return result;
 }
@@ -1659,8 +1659,8 @@ private:
 template <typename T>
 template <typename Func>
 bool PromiseFulfiller<T>::rejectIfThrows(Func&& func) {
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions(kj::mv(func))) {
-    reject(kj::mv(*exception));
+  KJ_IF_SOME(exception, kj::runCatchingExceptions(kj::mv(func))) {
+    reject(kj::mv(exception));
     return false;
   } else {
     return true;
@@ -1669,8 +1669,8 @@ bool PromiseFulfiller<T>::rejectIfThrows(Func&& func) {
 
 template <typename Func>
 bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions(kj::mv(func))) {
-    reject(kj::mv(*exception));
+  KJ_IF_SOME(exception, kj::runCatchingExceptions(kj::mv(func))) {
+    reject(kj::mv(exception));
     return false;
   } else {
     return true;
@@ -2015,12 +2015,12 @@ public:
     }
   }
   bool isWaiting() const override {
-    KJ_IF_MAYBE(t, target) {
+    KJ_IF_SOME(t, target) {
 #if _MSC_VER && !__clang__
       // Just assume 1-byte loads are atomic... on what kind of absurd platform would they not be?
-      return t->state == XThreadPaf::WAITING;
+      return t.state == XThreadPaf::WAITING;
 #else
-      return __atomic_load_n(&t->state, __ATOMIC_RELAXED) == XThreadPaf::WAITING;
+      return __atomic_load_n(&t.state, __ATOMIC_RELAXED) == XThreadPaf::WAITING;
 #endif
     } else {
       return false;

@@ -224,9 +224,9 @@ public:
     uint minLine = kj::minValue;
     uint maxLine = kj::maxValue;
 
-    KJ_IF_MAYBE(colonPos, pattern.findLast(':')) {
+    KJ_IF_SOME(colonPos, pattern.findLast(':')) {
       char* end;
-      StringPtr lineStr = pattern.slice(*colonPos + 1);
+      StringPtr lineStr = pattern.slice(colonPos + 1);
 
       bool parsedRange = false;
       minLine = strtoul(lineStr.cStr(), &end, 0);
@@ -246,7 +246,7 @@ public:
 
       if (parsedRange) {
         // We have an exact line number.
-        filePattern = pattern.slice(0, *colonPos);
+        filePattern = pattern.slice(0, colonPos);
       } else {
         // Can't parse as a number. Maybe the colon is part of a Windows path name or something.
         // Let's just keep it as part of the file pattern.
@@ -273,8 +273,8 @@ public:
   }
 
   MainBuilder::Validity setBenchmarkIters(StringPtr param) {
-    KJ_IF_MAYBE(i, param.tryParseAs<size_t>()) {
-      benchmarkIterCount = *i;
+    KJ_IF_SOME(i, param.tryParseAs<size_t>()) {
+      benchmarkIterCount = i;
       return true;
     } else {
       return "expected an integer";
@@ -315,12 +315,12 @@ public:
         if (!listOnly) {
           bool currentFailed = true;
           auto start = readClock();
-          KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
+          KJ_IF_SOME(exception, runCatchingExceptions([&]() {
             TestExceptionCallback exceptionCallback(context);
             testCase->run();
             currentFailed = exceptionCallback.failed();
           })) {
-            context.error(kj::str(*exception));
+            context.error(kj::str(exception));
           }
           auto end = readClock();
 

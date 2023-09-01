@@ -1000,9 +1000,9 @@ public:
         // We must not be in MODIFY mode.
         return false;
       case ERROR_PATH_NOT_FOUND:
-        KJ_IF_MAYBE(p, pathForCreatingParents) {
+        KJ_IF_SOME(p, pathForCreatingParents) {
           if (has(mode, WriteMode::CREATE_PARENT) &&
-              p->size() > 0 && tryMkdir(p->parent(),
+              p.size() > 0 && tryMkdir(p.parent(),
                   WriteMode::CREATE | WriteMode::MODIFY | WriteMode::CREATE_PARENT, true)) {
             // Retry, but make sure we don't try to create the parent again.
             return tryCommitReplacement(toPath, fromPath, mode - WriteMode::CREATE_PARENT);
@@ -1239,10 +1239,10 @@ public:
       rawFromPath = dh->nativePath(fromPath);
     } else
 #endif
-    KJ_IF_MAYBE(h, fromDirectory.getWin32Handle()) {
+    KJ_IF_SOME(h, fromDirectory.getWin32Handle()) {
       // Can't downcast to DiskHandle, but getWin32Handle() returns a handle... maybe RTTI is
       // disabled? Or maybe this is some kind of wrapper?
-      rawFromPath = getPathFromHandle(*h).append(fromPath).forWin32Api(true);
+      rawFromPath = getPathFromHandle(h).append(fromPath).forWin32Api(true);
     } else {
       // Not a disk directory, so fall back to default implementation.
       return self.Directory::tryTransfer(toPath, toMode, fromDirectory, fromPath, mode);

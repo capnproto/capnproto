@@ -49,8 +49,8 @@ TEST(Exception, RunCatchingExceptions) {
 
   EXPECT_FALSE(recovered);
 
-  KJ_IF_MAYBE(ex, e) {
-    EXPECT_EQ("foo", ex->getDescription());
+  KJ_IF_SOME(ex, e) {
+    EXPECT_EQ("foo", ex.getDescription());
   } else {
     ADD_FAILURE() << "Expected exception";
   }
@@ -61,8 +61,8 @@ TEST(Exception, RunCatchingExceptionsStdException) {
     throw std::logic_error("foo");
   });
 
-  KJ_IF_MAYBE(ex, e) {
-    EXPECT_EQ("std::exception: foo", ex->getDescription());
+  KJ_IF_SOME(ex, e) {
+    EXPECT_EQ("std::exception: foo", ex.getDescription());
   } else {
     ADD_FAILURE() << "Expected exception";
   }
@@ -73,11 +73,11 @@ TEST(Exception, RunCatchingExceptionsOtherException) {
     throw 123;
   });
 
-  KJ_IF_MAYBE(ex, e) {
+  KJ_IF_SOME(ex, e) {
 #if __GNUC__ && !KJ_NO_RTTI
-    EXPECT_EQ("unknown non-KJ exception of type: int", ex->getDescription());
+    EXPECT_EQ("unknown non-KJ exception of type: int", ex.getDescription());
 #else
-    EXPECT_EQ("unknown non-KJ exception", ex->getDescription());
+    EXPECT_EQ("unknown non-KJ exception", ex.getDescription());
 #endif
   } else {
     ADD_FAILURE() << "Expected exception";
@@ -99,8 +99,8 @@ TEST(Exception, UnwindDetector) {
     ThrowingDestructor t;
   });
 
-  KJ_IF_MAYBE(ex, e) {
-    EXPECT_EQ("this is a test, not a real bug", ex->getDescription());
+  KJ_IF_SOME(ex, e) {
+    EXPECT_EQ("this is a test, not a real bug", ex.getDescription());
   } else {
     ADD_FAILURE() << "Expected exception";
   }
@@ -113,8 +113,8 @@ TEST(Exception, UnwindDetector) {
     }
   });
 
-  KJ_IF_MAYBE(ex, e) {
-    EXPECT_EQ("baz", ex->getDescription());
+  KJ_IF_SOME(ex, e) {
+    EXPECT_EQ("baz", ex.getDescription());
   } else {
     ADD_FAILURE() << "Expected exception";
   }
@@ -208,14 +208,14 @@ KJ_TEST("InFlightExceptionIterator works") {
         KJ_FAIL_ASSERT("bar");
       } catch (const kj::Exception& e) {
         InFlightExceptionIterator iter;
-        KJ_IF_MAYBE(e2, iter.next()) {
-          KJ_EXPECT(e2 == &e, e2->getDescription());
+        KJ_IF_SOME(e2, iter.next()) {
+          KJ_EXPECT(&e2 == &e, e2.getDescription());
         } else {
           KJ_FAIL_EXPECT("missing first exception");
         }
 
-        KJ_IF_MAYBE(e2, iter.next()) {
-          KJ_EXPECT(e2->getDescription() == "foo", e2->getDescription());
+        KJ_IF_SOME(e2, iter.next()) {
+          KJ_EXPECT(e2.getDescription() == "foo", e2.getDescription());
         } else {
           KJ_FAIL_EXPECT("missing second exception");
         }

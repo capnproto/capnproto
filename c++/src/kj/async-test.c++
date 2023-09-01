@@ -947,7 +947,7 @@ TEST(Async, LargeTaskSetDestructionExceptions) {
       tasksRef.add(kj::Promise<void>(kj::NEVER_DONE).attach(kj::heap<ThrowingDestructor>()));
     }
 
-    KJ_EXPECT_THROW_MESSAGE("ThrowingDestructor_exception", { tasks = nullptr; });
+    KJ_EXPECT_THROW_MESSAGE("ThrowingDestructor_exception", { tasks = kj::none; });
   });
 }
 
@@ -1609,18 +1609,18 @@ KJ_TEST("run event loop on freelisted stacks") {
     bool wait() override {
       char c;
       waitStack = &c;
-      KJ_IF_MAYBE(f, fulfiller) {
-        f->get()->fulfill();
-        fulfiller = nullptr;
+      KJ_IF_SOME(f, fulfiller) {
+        f->fulfill();
+        fulfiller = kj::none;
       }
       return false;
     }
     bool poll() override {
       char c;
       pollStack = &c;
-      KJ_IF_MAYBE(f, fulfiller) {
-        f->get()->fulfill();
-        fulfiller = nullptr;
+      KJ_IF_SOME(f, fulfiller) {
+        f->fulfill();
+        fulfiller = kj::none;
       }
       return false;
     }

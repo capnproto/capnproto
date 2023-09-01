@@ -243,20 +243,20 @@ public:
   Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
 #if __linux__ && !__ANDROID__
-    KJ_IF_MAYBE(sock, kj::dynamicDowncastIfAvailable<AsyncStreamFd>(input)) {
-      return pumpFromOther(*sock, amount);
+    KJ_IF_SOME(sock, kj::dynamicDowncastIfAvailable<AsyncStreamFd>(input)) {
+      return pumpFromOther(sock, amount);
     }
 #endif
 
 #if __linux__
-    KJ_IF_MAYBE(file, kj::dynamicDowncastIfAvailable<FileInputStream>(input)) {
-      KJ_IF_MAYBE(fd, file->getUnderlyingFile().getFd()) {
-        return pumpFromFile(*file, *fd, amount, 0);
+    KJ_IF_SOME(file, kj::dynamicDowncastIfAvailable<FileInputStream>(input)) {
+      KJ_IF_SOME(fd, file.getUnderlyingFile().getFd()) {
+        return pumpFromFile(file, fd, amount, 0);
       }
     }
 #endif
 
-    return nullptr;
+    return kj::none;
   }
 
 #if __linux__
@@ -475,8 +475,8 @@ public:
 #endif  // __linux__ && !__ANDROID__
 
   Promise<void> whenWriteDisconnected() override {
-    KJ_IF_MAYBE(p, writeDisconnectedPromise) {
-      return p->addBranch();
+    KJ_IF_SOME(p, writeDisconnectedPromise) {
+      return p.addBranch();
     } else {
       auto fork = observer.whenWriteDisconnected().fork();
       auto result = fork.addBranch();
@@ -565,7 +565,7 @@ private:
     // be included in the final return value.
 
     ssize_t n;
-    if (maxFds == 0 && ancillaryMsgCallback == nullptr) {
+    if (maxFds == 0 && ancillaryMsgCallback == kj::none) {
       KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
         // Error.
 
@@ -588,7 +588,7 @@ private:
 
       // Allocate space to receive a cmsg.
       size_t msgBytes;
-      if (ancillaryMsgCallback == nullptr) {
+      if (ancillaryMsgCallback == kj::none) {
 #if __APPLE__ || __FreeBSD__
         // Until very recently (late 2018 / early 2019), FreeBSD suffered from a bug in which when
         // an SCM_RIGHTS message was truncated on delivery, it would not close the FDs that weren't
@@ -679,7 +679,7 @@ private:
                 trashFds.add(kj::mv(ownFd));
               }
             }
-          } else if (spaceLeft >= CMSG_LEN(0) && ancillaryMsgCallback != nullptr) {
+          } else if (spaceLeft >= CMSG_LEN(0) && ancillaryMsgCallback != kj::none) {
             auto len = kj::min(cmsg->cmsg_len, spaceLeft);
             auto data = ArrayPtr<const byte>(CMSG_DATA(cmsg), len - CMSG_LEN(0));
             ancillaryMessages.add(cmsg->cmsg_level, cmsg->cmsg_type, data);
@@ -699,8 +699,8 @@ private:
 #endif
 
         if (ancillaryMessages.size() > 0) {
-          KJ_IF_MAYBE(fn, ancillaryMsgCallback) {
-            (*fn)(ancillaryMessages.asPtr());
+          KJ_IF_SOME(fn, ancillaryMsgCallback) {
+            fn(ancillaryMessages.asPtr());
           }
         }
 
@@ -1064,12 +1064,12 @@ public:
         portPart = str.slice(closeBracket + 2);
       }
     } else {
-      KJ_IF_MAYBE(colon, str.findFirst(':')) {
-        if (str.slice(*colon + 1).findFirst(':') == nullptr) {
+      KJ_IF_SOME(colon, str.findFirst(':')) {
+        if (str.slice(colon + 1).findFirst(':') == kj::none) {
           // There is exactly one colon and no brackets, so it must be an ip4 address with port.
           af = AF_INET;
-          addrPart = str.slice(0, *colon);
-          portPart = str.slice(*colon + 1);
+          addrPart = str.slice(0, colon);
+          portPart = str.slice(colon + 1);
         } else {
           // There are two or more colons and no brackets, so the whole thing must be an ip6
           // address with no port.
@@ -1085,12 +1085,12 @@ public:
 
     // Parse the port.
     unsigned long port;
-    KJ_IF_MAYBE(portText, portPart) {
+    KJ_IF_SOME(portText, portPart) {
       char* endptr;
-      port = strtoul(portText->cStr(), &endptr, 0);
-      if (portText->size() == 0 || *endptr != '\0') {
+      port = strtoul(portText.cStr(), &endptr, 0);
+      if (portText.size() == 0 || *endptr != '\0') {
         // Not a number.  Maybe it's a service name.  Fall back to DNS.
-        return lookupHost(lowLevel, kj::heapString(addrPart), kj::heapString(*portText), portHint,
+        return lookupHost(lowLevel, kj::heapString(addrPart), kj::heapString(portText), portHint,
                           filter);
       }
       KJ_REQUIRE(port < 65536, "Port number too large.");
@@ -1232,7 +1232,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     // So we instead resort to de-duping results.
     std::set<SocketAddress> result;
 
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
       struct addrinfo hints;
       memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
@@ -1300,7 +1300,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
         }
       }
     })) {
-      fulfiller->reject(kj::mv(*exception));
+      fulfiller->reject(kj::mv(exception));
     } else {
       fulfiller->fulfill(KJ_MAP(addr, result) { return addr; });
     }
