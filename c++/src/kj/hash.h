@@ -106,6 +106,9 @@ struct HashCoder {
   uint operator*(ArrayPtr<T> arr) const;
   template <typename T, typename = decltype(instance<const HashCoder&>() * instance<const T&>())>
   uint operator*(const Array<T>& arr) const;
+  template <typename T, size_t smallSize,
+      typename = decltype(instance<const HashCoder&>() * instance<const T&>())>
+  uint operator*(const SmallArray<T, smallSize>& arr) const;
   template <typename T, typename = EnableIf<__is_enum(T)>>
   inline uint operator*(T e) const;
 
@@ -182,6 +185,10 @@ inline uint HashCoder::operator*(ArrayPtr<T> arr) const {
 }
 template <typename T, typename>
 inline uint HashCoder::operator*(const Array<T>& arr) const {
+  return operator*(arr.asPtr());
+}
+template <typename T, size_t smallSize, typename>
+inline uint HashCoder::operator*(const SmallArray<T, smallSize>& arr) const {
   return operator*(arr.asPtr());
 }
 

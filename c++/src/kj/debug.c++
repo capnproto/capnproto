@@ -177,7 +177,7 @@ enum DescriptionStyle {
 static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
                                   const char* sysErrorString, const char* macroArgs,
                                   ArrayPtr<String> argValues) {
-  KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
+  SmallArray<ArrayPtr<const char>, 8> argNames(argValues.size());
 
   if (argValues.size() > 0) {
     size_t index = 0;
