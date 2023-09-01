@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "http.h"
+#include "kj/async.h"
 #include "kj/common.h"
 #include "kj/exception.h"
 #include "url.h"
@@ -2298,9 +2299,12 @@ public:
   }
 
   kj::Promise<void> flush() {
-    KJ_IF_MAYBE(promise, writeQueue) {
-      co_await *promise;
+    KJ_IF_SOME(promise, writeQueue) {
+      auto result = kj::mv(promise);
       writeQueue = nullptr;
+      return result;
+    } else {
+      return kj::READY_NOW;
     }
   }
 
