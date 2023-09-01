@@ -279,7 +279,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
 
   HANDLE process = GetCurrentProcess();
 
-  KJ_STACK_ARRAY(String, lines, trace.size(), 32, 32);
+  SmallArray<String, 32> lines(trace.size());
 
   for (auto i: kj::indices(trace)) {
     IMAGEHLP_LINE64 lineInfo;
@@ -833,8 +833,8 @@ void Exception::extendTrace(uint ignoreCount, uint limit) {
     return;
   }
 
-  KJ_STACK_ARRAY(void*, newTraceSpace, kj::min(kj::size(trace), limit) + ignoreCount + 1,
-      sizeof(trace)/sizeof(trace[0]) + 8, 128);
+  SmallArray<void*, sizeof(trace)/sizeof(trace[0]) + 8> newTraceSpace(
+      kj::min(kj::size(trace), limit) + ignoreCount + 1);
 
   auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);
   if (newTrace.size() > ignoreCount + 2) {
@@ -934,7 +934,7 @@ public:
     // No need to copy whatBuffer since it's just to hold the return value of what().
     insertIntoCurrentExceptions();
   }
-  ~ExceptionImpl() {
+  ~ExceptionImpl() noexcept {
     // Look for ourselves in the list.
     for (auto* ptr = &currentException; *ptr != nullptr; ptr = &(*ptr)->nextCurrentException) {
       if (*ptr == this) {

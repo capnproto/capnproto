@@ -372,32 +372,6 @@ KJ_NORETURN(void unreachable());
 #define KJ_FALLTHROUGH
 #endif
 
-// #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack)
-//
-// Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use
-// variable-sized arrays.  For other compilers we could just use a fixed-size array.  `minStack`
-// is the stack array size to use if variable-width arrays are not supported.  `maxStack` is the
-// maximum stack array size if variable-width arrays *are* supported.
-#if __GNUC__ && !__clang__
-#define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
-  size_t name##_size = (size); \
-  bool name##_isOnStack = name##_size <= (maxStack); \
-  type name##_stack[kj::max(1, name##_isOnStack ? name##_size : 0)]; \
-  ::kj::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : kj::heapArray<type>(name##_size); \
-  ::kj::ArrayPtr<type> name = name##_isOnStack ? \
-      kj::arrayPtr(name##_stack, name##_size) : name##_heap
-#else
-#define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
-  size_t name##_size = (size); \
-  bool name##_isOnStack = name##_size <= (minStack); \
-  type name##_stack[minStack]; \
-  ::kj::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : kj::heapArray<type>(name##_size); \
-  ::kj::ArrayPtr<type> name = name##_isOnStack ? \
-      kj::arrayPtr(name##_stack, name##_size) : name##_heap
-#endif
-
 #define KJ_CONCAT_(x, y) x##y
 #define KJ_CONCAT(x, y) KJ_CONCAT_(x, y)
 #define KJ_UNIQUE_NAME(prefix) KJ_CONCAT(prefix, __LINE__)

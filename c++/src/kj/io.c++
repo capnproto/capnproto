@@ -383,7 +383,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
     pieces = pieces.slice(iovmax, pieces.size());
   }
 
-  KJ_STACK_ARRAY(struct iovec, iov, pieces.size(), 16, 128);
+  SmallArray<struct iovec, 16> iov(pieces.size());
 
   for (uint i = 0; i < pieces.size(); i++) {
     // writev() interface is not const-correct.  :(
