@@ -723,7 +723,7 @@ KJ_TEST("TLS SNI") {
 }
 
 void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert,
-                       kj::StringPtr message, kj::Maybe<kj::StringPtr> altMessage = nullptr) {
+                       kj::StringPtr message, kj::Maybe<kj::StringPtr> altMessage = kj::none) {
   TlsKeypair keypair = { TlsPrivateKey(HOST_KEY), kj::mv(cert) };
   TlsContext::Options serverOpts;
   serverOpts.defaultKeypair = keypair;
@@ -742,8 +742,8 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert,
       return;
     }
 
-    KJ_IF_MAYBE(a, altMessage) {
-      if (kj::_::hasSubstring(e.getDescription(), *a)) {
+    KJ_IF_SOME(a, altMessage) {
+      if (kj::_::hasSubstring(e.getDescription(), a)) {
         return;
       }
     }
@@ -974,9 +974,9 @@ private:
     auto request = kj::mv(clientRequests.back());
     clientRequests.removeLast();
 
-    KJ_IF_MAYBE(exception, kj::mv(request.maybeException)) {
+    KJ_IF_SOME(exception, kj::mv(request.maybeException)) {
       request.clientFulfiller = nullptr;  // The other end had an issue, break the promise.
-      return kj::mv(*exception);
+      return kj::mv(exception);
     } else {
       auto pipe = provider.newTwoWayPipe();
       request.clientFulfiller->fulfill(kj::mv(pipe.ends[0]));
@@ -984,7 +984,7 @@ private:
     }
   }
 
-  Promise<Own<AsyncIoStream>> connectImpl(Maybe<Exception> maybeException = nullptr) {
+  Promise<Own<AsyncIoStream>> connectImpl(Maybe<Exception> maybeException = kj::none) {
     auto paf = newPromiseAndFulfiller<Own<AsyncIoStream>>();
     clientRequests.add(ClientRequest{ kj::mv(maybeException), kj::mv(paf.fulfiller) });
 
@@ -1239,7 +1239,7 @@ KJ_TEST("NetworkHttpClient connect with tlsStarter") {
   clientSettings.tlsContext = tls;
   auto client = newHttpClient(clientTimer, headerTable,
       io.provider->getNetwork(), *tlsNetwork, clientSettings);
-  kj::HttpConnectSettings httpConnectSettings = { false, nullptr };
+  kj::HttpConnectSettings httpConnectSettings = { false, kj::none };
   kj::TlsStarterCallback tlsStarter;
   httpConnectSettings.tlsStarter = tlsStarter;
   auto request = client->connect(

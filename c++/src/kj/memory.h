@@ -450,7 +450,10 @@ public:
   template <typename U>
   inline Maybe(Own<U, D>&& other): ptr(mv(other)) {}
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  inline Maybe(kj::None) noexcept: ptr(nullptr) {}
 
   inline Own<T, D>& emplace(Own<T, D> value) {
     // Assign the Maybe to the given value and return the content. This avoids the need to do a
@@ -470,7 +473,10 @@ public:
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+
+  inline bool operator==(kj::None) const { return ptr == nullptr; }
 
   Own<T, D>& orDefault(Own<T, D>& defaultValue) {
     if (ptr == nullptr) {
@@ -500,7 +506,7 @@ public:
   template <typename Func>
   auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T, D>&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(ptr);
     }
@@ -509,7 +515,7 @@ public:
   template <typename Func>
   auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T, D>&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(ptr);
     }
@@ -518,7 +524,7 @@ public:
   template <typename Func>
   auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T, D>&&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(kj::mv(ptr));
     }
@@ -527,7 +533,7 @@ public:
   template <typename Func>
   auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T, D>&&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(kj::mv(ptr));
     }

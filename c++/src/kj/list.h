@@ -106,8 +106,8 @@ public:
     if ((element.*link).prev != nullptr) _::throwDoubleAdd();
     (element.*link).next = head;
     (element.*link).prev = &head;
-    KJ_IF_MAYBE(oldHead, head) {
-      (oldHead->*link).prev = &(element.*link).next;
+    KJ_IF_SOME(oldHead, head) {
+      (oldHead.*link).prev = &(element.*link).next;
     } else {
       tail = &(element.*link).next;
     }
@@ -118,8 +118,8 @@ public:
   void remove(T& element) {
     if ((element.*link).prev == nullptr) _::throwRemovedNotPresent();
     *((element.*link).prev) = (element.*link).next;
-    KJ_IF_MAYBE(n, (element.*link).next) {
-      (n->*link).prev = (element.*link).prev;
+    KJ_IF_SOME(n, (element.*link).next) {
+      (n.*link).prev = (element.*link).prev;
     } else {
       if (tail != &((element.*link).next)) _::throwRemovedWrongList();
       tail = (element.*link).prev;

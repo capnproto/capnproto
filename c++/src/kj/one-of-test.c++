@@ -155,11 +155,11 @@ TEST(OneOf, Maybe) {
   Maybe<OneOf<int, float>> var;
   var = OneOf<int, float>(123);
 
-  KJ_IF_MAYBE(v, var) {
+  KJ_IF_SOME(v, var) {
     // At one time this failed to compile. Note that a Maybe<OneOf<...>> isn't necessarily great
     // style -- you might be better off with an explicit OneOf<Empty, ...>. Nevertheless, it should
     // compile.
-    KJ_SWITCH_ONEOF(*v) {
+    KJ_SWITCH_ONEOF(v) {
       KJ_CASE_ONEOF(i, int) {
         KJ_EXPECT(i == 123);
       }

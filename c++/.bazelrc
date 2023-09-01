@@ -33,4 +33,10 @@ build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-u
 build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 
 # build with ssl, zlib and bazel by default
-build --//src/kj:openssl=True --//src/kj:zlib=True --//src/kj:brotli=True
+build --//src/kj:openssl=True
+build --//src/kj:zlib=True
+build --//src/kj:brotli=True
+
+# Disable deprecation warnings until we have more of the codebase converted.
+build --//src/kj:deprecate_kj_if_maybe=False
+build --//src/kj:deprecate_empty_maybe_from_nullptr=False

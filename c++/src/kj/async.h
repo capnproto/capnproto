@@ -588,11 +588,11 @@ struct CaptureForCoroutine {
 
   template<typename ...Args>
   auto operator()(Args&&... args) {
-    if (maybeFunctor == nullptr) {
+    if (maybeFunctor == kj::none) {
       throwMultipleCoCaptureInvocations();
     }
     auto localFunctor = kj::mv(*kj::_::readMaybe(maybeFunctor));
-    maybeFunctor = nullptr;
+    maybeFunctor = kj::none;
     return coInvoke(kj::mv(localFunctor), kj::fwd<Args>(args)...);
   }
 };
@@ -856,7 +856,7 @@ public:
   // Releases previously-wrapped promises, so that they will not be canceled regardless of what
   // happens to this Canceler.
 
-  bool isEmpty() const { return list == nullptr; }
+  bool isEmpty() const { return list == kj::none; }
   // Indicates if any previously-wrapped promises are still executing. (If this returns true, then
   // cancel() would be a no-op.)
 
@@ -946,7 +946,7 @@ public:
   kj::String trace();
   // Return debug info about all promises currently in the TaskSet.
 
-  bool isEmpty() { return tasks == nullptr; }
+  bool isEmpty() { return tasks == kj::none; }
   // Check if any tasks are running.
 
   Promise<void> onEmpty();
@@ -970,6 +970,8 @@ private:
   Maybe<OwnTask> tasks;
   Maybe<Own<PromiseFulfiller<void>>> emptyFulfiller;
   SourceLocation location;
+
+  void destroyTasks();
 };
 
 // =======================================================================================
@@ -1255,7 +1257,7 @@ class WaitScope {
 
 public:
   inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
-  inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
+  inline ~WaitScope() { if (fiber == kj::none) loop.leaveScope(); }
   KJ_DISALLOW_COPY_AND_MOVE(WaitScope);
 
   uint poll(uint maxTurnCount = maxValue);
@@ -1288,7 +1290,7 @@ public:
   //
   // This has no effect if this WaitScope itself is for a fiber.
   //
-  // Pass `nullptr` as the parameter to go back to running events on the main stack.
+  // Pass `kj::none` as the parameter to go back to running events on the main stack.
 
   void cancelAllDetached();
   // HACK: Immediately cancel all detached promises.
@@ -1312,8 +1314,8 @@ private:
 
   template <typename Func>
   inline void runOnStackPool(Func&& func) {
-    KJ_IF_MAYBE(pool, runningStacksPool) {
-      pool->runSynchronously(kj::fwd<Func>(func));
+    KJ_IF_SOME(pool, runningStacksPool) {
+      pool.runSynchronously(kj::fwd<Func>(func));
     } else {
       func();
     }

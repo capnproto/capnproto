@@ -881,22 +881,12 @@ TEST(Async, TaskSet) {
 }
 
 #if KJ_USE_FIBERS || !_WIN32
-// This test requires either fibers or pthreads in order to limit the stack size. Currently we
-// don't have a version that works on Windows without fibers, so skip the test there.
+// These tests require either fibers or pthreads in order to limit the stack size. Currently we
+// don't have a version that works on Windows without fibers, so skip the tests there.
 
-TEST(Async, LargeTaskSetDestruction) {
-  static constexpr size_t stackSize = 200 * 1024;
-
-  static auto testBody = [] {
-
-    ErrorHandlerImpl errorHandler;
-    TaskSet tasks(errorHandler);
-
-    for (int i = 0; i < stackSize / sizeof(void*); i++) {
-      tasks.add(kj::NEVER_DONE);
-    }
-  };
-
+template <typename Func>
+void runWithStackLimit(size_t stackSize, Func&& func) {
+  // Runs the given function in a context with a limited stack size.
 #if KJ_USE_FIBERS
   if (isLibcContextHandlingKnownBroken()) return;
 
@@ -904,10 +894,9 @@ TEST(Async, LargeTaskSetDestruction) {
   WaitScope waitScope(loop);
 
   startFiber(stackSize,
-      [](WaitScope&) mutable {
-    testBody();
+      [func = kj::mv(func)](WaitScope&) mutable {
+    func();
   }).wait(waitScope);
-
 #else
   pthread_attr_t attr;
   KJ_REQUIRE(0 == pthread_attr_init(&attr));
@@ -915,14 +904,89 @@ TEST(Async, LargeTaskSetDestruction) {
 
   KJ_REQUIRE(0 == pthread_attr_setstacksize(&attr, stackSize));
   pthread_t thread;
-  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [](void*) -> void* {
+  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [func = kj::mv(func)](void*) -> void* {
     EventLoop loop;
     WaitScope waitScope(loop);
-    testBody();
+    func();
     return nullptr;
   }, nullptr));
   KJ_REQUIRE(0 == pthread_join(thread, nullptr));
 #endif
+}
+
+TEST(Async, LargeTaskSetDestruction) {
+  static constexpr size_t stackSize = 16 * 1024;
+
+  runWithStackLimit(stackSize, []() {
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    for (int i = 0; i < stackSize / sizeof(void*); i++) {
+      tasks.add(kj::NEVER_DONE);
+    }
+  });
+}
+
+TEST(Async, LargeTaskSetDestructionExceptions) {
+  static constexpr size_t stackSize = 16 * 1024;
+
+  runWithStackLimit(stackSize, []() {
+    class ThrowingDestructor: public UnwindDetector {
+    public:
+      ~ThrowingDestructor() noexcept(false) {
+        catchExceptionsIfUnwinding([]() {
+          KJ_FAIL_ASSERT("ThrowingDestructor_exception");
+        });
+      }
+    };
+    ErrorHandlerImpl errorHandler;
+    Maybe<TaskSet> tasks;
+    TaskSet& tasksRef = tasks.emplace(errorHandler);
+
+    for (int i = 0; i < stackSize / sizeof(void*); i++) {
+      tasksRef.add(kj::Promise<void>(kj::NEVER_DONE).attach(kj::heap<ThrowingDestructor>()));
+    }
+
+    KJ_EXPECT_THROW_MESSAGE("ThrowingDestructor_exception", { tasks = kj::none; });
+  });
+}
+
+TEST(Async, LargeTaskSetClear) {
+  static constexpr size_t stackSize = 16 * 1024;
+
+  runWithStackLimit(stackSize, []() {
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    for (int i = 0; i < stackSize / sizeof(void*); i++) {
+      tasks.add(kj::NEVER_DONE);
+    }
+
+    tasks.clear();
+  });
+}
+
+TEST(Async, LargeTaskSetClearException) {
+  static constexpr size_t stackSize = 16 * 1024;
+
+  runWithStackLimit(stackSize, []() {
+    class ThrowingDestructor: public UnwindDetector {
+    public:
+      ~ThrowingDestructor() noexcept(false) {
+        catchExceptionsIfUnwinding([]() {
+          KJ_FAIL_ASSERT("ThrowingDestructor_exception");
+        });
+      }
+    };
+    ErrorHandlerImpl errorHandler;
+    TaskSet tasks(errorHandler);
+
+    for (int i = 0; i < stackSize / sizeof(void*); i++) {
+      tasks.add(kj::Promise<void>(kj::NEVER_DONE).attach(kj::heap<ThrowingDestructor>()));
+    }
+
+    KJ_EXPECT_THROW_MESSAGE("ThrowingDestructor_exception", { tasks.clear(); });
+  });
 }
 
 #endif  // KJ_USE_FIBERS || !_WIN32
@@ -1545,18 +1609,18 @@ KJ_TEST("run event loop on freelisted stacks") {
     bool wait() override {
       char c;
       waitStack = &c;
-      KJ_IF_MAYBE(f, fulfiller) {
-        f->get()->fulfill();
-        fulfiller = nullptr;
+      KJ_IF_SOME(f, fulfiller) {
+        f->fulfill();
+        fulfiller = kj::none;
       }
       return false;
     }
     bool poll() override {
       char c;
       pollStack = &c;
-      KJ_IF_MAYBE(f, fulfiller) {
-        f->get()->fulfill();
-        fulfiller = nullptr;
+      KJ_IF_SOME(f, fulfiller) {
+        f->fulfill();
+        fulfiller = kj::none;
       }
       return false;
     }

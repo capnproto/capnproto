@@ -75,8 +75,8 @@ TEST(CharParsers, CharRange) {
     StringPtr text = "a";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ('a', *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ('a', value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -87,8 +87,8 @@ TEST(CharParsers, CharRange) {
     StringPtr text = "n";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ('n', *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ('n', value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -99,8 +99,8 @@ TEST(CharParsers, CharRange) {
     StringPtr text = "z";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ('z', *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ('z', value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -139,8 +139,8 @@ TEST(CharParsers, AnyOfChars) {
     StringPtr text = "a";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ('a', *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ('a', value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -151,8 +151,8 @@ TEST(CharParsers, AnyOfChars) {
     StringPtr text = "n";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ('n', *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ('n', value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -163,8 +163,8 @@ TEST(CharParsers, AnyOfChars) {
     StringPtr text = "B";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ('B', *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ('B', value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -204,8 +204,8 @@ TEST(CharParsers, CharGroupCombo) {
     StringPtr text = "foo1-bar2_baz3@qux";
     Input input(text.begin(), text.end());
     Maybe<Array<char>> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("foo1-bar2_baz3", str(*value));
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("foo1-bar2_baz3", str(value));
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -220,8 +220,8 @@ TEST(CharParsers, Identifier) {
     StringPtr text = "helloWorld123 ";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("helloWorld123", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("helloWorld123", value);
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }
@@ -236,8 +236,8 @@ TEST(CharParsers, Integer) {
     StringPtr text = "12349";
     Input input(text.begin(), text.end());
     Maybe<uint64_t> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(12349u, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(12349u, value);
     } else {
       ADD_FAILURE() << "Expected integer, got null.";
     }
@@ -248,8 +248,8 @@ TEST(CharParsers, Integer) {
     StringPtr text = "0x1aF0";
     Input input(text.begin(), text.end());
     Maybe<uint64_t> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(0x1aF0u, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(0x1aF0u, value);
     } else {
       ADD_FAILURE() << "Expected integer, got null.";
     }
@@ -260,8 +260,8 @@ TEST(CharParsers, Integer) {
     StringPtr text = "064270";
     Input input(text.begin(), text.end());
     Maybe<uint64_t> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(064270u, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(064270u, value);
     } else {
       ADD_FAILURE() << "Expected integer, got null.";
     }
@@ -276,8 +276,8 @@ TEST(CharParsers, Number) {
     StringPtr text = "12345";
     Input input(text.begin(), text.end());
     Maybe<double> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(12345, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(12345, value);
     } else {
       ADD_FAILURE() << "Expected number, got null.";
     }
@@ -288,8 +288,8 @@ TEST(CharParsers, Number) {
     StringPtr text = "123.25";
     Input input(text.begin(), text.end());
     Maybe<double> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123.25, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(123.25, value);
     } else {
       ADD_FAILURE() << "Expected number, got null.";
     }
@@ -300,8 +300,8 @@ TEST(CharParsers, Number) {
     StringPtr text = "123e10";
     Input input(text.begin(), text.end());
     Maybe<double> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123e10, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(123e10, value);
     } else {
       ADD_FAILURE() << "Expected number, got null.";
     }
@@ -312,8 +312,8 @@ TEST(CharParsers, Number) {
     StringPtr text = "123.25E+10";
     Input input(text.begin(), text.end());
     Maybe<double> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123.25E+10, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(123.25E+10, value);
     } else {
       ADD_FAILURE() << "Expected number, got null.";
     }
@@ -324,8 +324,8 @@ TEST(CharParsers, Number) {
     StringPtr text = "25e-2";
     Input input(text.begin(), text.end());
     Maybe<double> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(25e-2, *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(25e-2, value);
     } else {
       ADD_FAILURE() << "Expected number, got null.";
     }
@@ -340,8 +340,8 @@ TEST(CharParsers, DoubleQuotedString) {
     StringPtr text = "\"hello\"";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("hello", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("hello", value);
     } else {
       ADD_FAILURE() << "Expected \"hello\", got null.";
     }
@@ -352,8 +352,8 @@ TEST(CharParsers, DoubleQuotedString) {
     StringPtr text = "\"test\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\?\\x01\\x20\\2\\34\\156\"";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\x20\2\34\156", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\x20\2\34\156", value);
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }
@@ -364,8 +364,8 @@ TEST(CharParsers, DoubleQuotedString) {
     StringPtr text = "\"foo'bar\"";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("foo'bar", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("foo'bar", value);
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }
@@ -380,8 +380,8 @@ TEST(CharParsers, SingleQuotedString) {
     StringPtr text = "\'hello\'";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("hello", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("hello", value);
     } else {
       ADD_FAILURE() << "Expected \"hello\", got null.";
     }
@@ -392,8 +392,8 @@ TEST(CharParsers, SingleQuotedString) {
     StringPtr text = "\'test\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\?\x01\2\34\156\'";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\2\34\156", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\2\34\156", value);
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }
@@ -404,8 +404,8 @@ TEST(CharParsers, SingleQuotedString) {
     StringPtr text = "\'foo\"bar\'";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("foo\"bar", *value);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ("foo\"bar", value);
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }

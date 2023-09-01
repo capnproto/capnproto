@@ -580,12 +580,12 @@ public:
         portPart = str.slice(closeBracket + 2);
       }
     } else {
-      KJ_IF_MAYBE(colon, str.findFirst(':')) {
-        if (str.slice(*colon + 1).findFirst(':') == nullptr) {
+      KJ_IF_SOME(colon, str.findFirst(':')) {
+        if (str.slice(colon + 1).findFirst(':') == kj::none) {
           // There is exactly one colon and no brackets, so it must be an ip4 address with port.
           af = AF_INET;
-          addrPart = str.slice(0, *colon);
-          portPart = str.slice(*colon + 1);
+          addrPart = str.slice(0, colon);
+          portPart = str.slice(colon + 1);
         } else {
           // There are two or more colons and no brackets, so the whole thing must be an ip6
           // address with no port.
@@ -601,12 +601,12 @@ public:
 
     // Parse the port.
     unsigned long port;
-    KJ_IF_MAYBE(portText, portPart) {
+    KJ_IF_SOME(portText, portPart) {
       char* endptr;
-      port = strtoul(portText->cStr(), &endptr, 0);
-      if (portText->size() == 0 || *endptr != '\0') {
+      port = strtoul(portText.cStr(), &endptr, 0);
+      if (portText.size() == 0 || *endptr != '\0') {
         // Not a number.  Maybe it's a service name.  Fall back to DNS.
-        return lookupHost(lowLevel, kj::heapString(addrPart), kj::heapString(*portText), portHint,
+        return lookupHost(lowLevel, kj::heapString(addrPart), kj::heapString(portText), portHint,
                           filter);
       }
       KJ_REQUIRE(port < 65536, "Port number too large.");
@@ -760,7 +760,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     // So we instead resort to de-duping results.
     std::set<SocketAddress> result;
 
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
       addrinfo* list;
       int status = getaddrinfo(
           params.host == "*" ? nullptr : params.host.cStr(),
@@ -815,7 +815,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
         }
       }
     })) {
-      fulfiller->reject(kj::mv(*exception));
+      fulfiller->reject(kj::mv(exception));
     } else {
       fulfiller->fulfill(KJ_MAP(addr, result) { return addr; });
     }

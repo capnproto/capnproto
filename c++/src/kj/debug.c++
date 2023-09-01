@@ -442,8 +442,8 @@ Debug::Context::Context(): logged(false) {}
 Debug::Context::~Context() noexcept(false) {}
 
 Debug::Context::Value Debug::Context::ensureInitialized() {
-  KJ_IF_MAYBE(v, value) {
-    return Value(v->file, v->line, heapString(v->description));
+  KJ_IF_SOME(v, value) {
+    return Value(v.file, v.line, heapString(v.description));
   } else {
     Value result = evaluate();
     value = Value(result.file, result.line, heapString(result.description));

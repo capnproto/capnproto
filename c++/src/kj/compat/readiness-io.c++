@@ -54,7 +54,7 @@ kj::Maybe<size_t> ReadyInputStreamWrapper::read(kj::ArrayPtr<byte> dst) {
       }).fork();
     }
 
-    return nullptr;
+    return kj::none;
   }
 
   return copyInto(dst, content);
@@ -74,7 +74,7 @@ kj::Maybe<size_t> ReadyOutputStreamWrapper::write(kj::ArrayPtr<const byte> data)
 
   if (filled == sizeof(buffer)) {
     // No space.
-    return nullptr;
+    return kj::none;
   }
 
   uint end = start + filled;

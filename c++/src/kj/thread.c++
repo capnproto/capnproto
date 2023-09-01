@@ -48,9 +48,9 @@ Thread::~Thread() noexcept(false) {
 
     KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
 
-    KJ_IF_MAYBE(e, state->exception) {
-      Exception ecopy = kj::mv(*e);
-      state->exception = nullptr;  // don't complain of uncaught exception when deleting
+    KJ_IF_SOME(e, state->exception) {
+      Exception ecopy = kj::mv(e);
+      state->exception = kj::none;  // don't complain of uncaught exception when deleting
       kj::throwRecoverableException(kj::mv(ecopy));
     }
   }
@@ -84,9 +84,9 @@ Thread::~Thread() noexcept(false) {
       KJ_FAIL_SYSCALL("pthread_join", pthreadResult) { break; }
     }
 
-    KJ_IF_MAYBE(e, state->exception) {
-      Exception ecopy = kj::mv(*e);
-      state->exception = nullptr;  // don't complain of uncaught exception when deleting
+    KJ_IF_SOME(e, state->exception) {
+      Exception ecopy = kj::mv(e);
+      state->exception = kj::none;  // don't complain of uncaught exception when deleting
       kj::throwRecoverableException(kj::mv(ecopy));
     }
   }
@@ -113,7 +113,7 @@ void Thread::detach() {
 Thread::ThreadState::ThreadState(Function<void()> func)
     : func(kj::mv(func)),
       initializer(getExceptionCallback().getThreadInitializer()),
-      exception(nullptr),
+      exception(kj::none),
       refcount(2) {}
 
 void Thread::ThreadState::unref() {
@@ -124,14 +124,14 @@ void Thread::ThreadState::unref() {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
 #endif
 
-    KJ_IF_MAYBE(e, exception) {
+    KJ_IF_SOME(e, exception) {
       // If the exception is still present in ThreadState, this must be a detached thread, so
       // the exception will never be rethrown. We should at least log it.
       //
       // We need to run the thread initializer again before we log anything because the main
       // purpose of the thread initializer is to set up a logging callback.
       initializer([&]() {
-        KJ_LOG(ERROR, "uncaught exception thrown by detached thread", *e);
+        KJ_LOG(ERROR, "uncaught exception thrown by detached thread", e);
       });
     }
 
@@ -145,10 +145,10 @@ DWORD Thread::runThread(void* ptr) {
 void* Thread::runThread(void* ptr) {
 #endif
   ThreadState* state = reinterpret_cast<ThreadState*>(ptr);
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
     state->initializer(kj::mv(state->func));
   })) {
-    state->exception = kj::mv(*exception);
+    state->exception = kj::mv(exception);
   }
   state->unref();
   return 0;
