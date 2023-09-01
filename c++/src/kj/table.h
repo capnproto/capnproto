@@ -446,8 +446,8 @@ public:
       return Impl<index + 1>::insert(table, pos, row, skip);
     }
     auto& indexObj = get<index>(table.indexes);
-    KJ_IF_MAYBE(existing, indexObj.insert(table.rows.asPtr(), pos, indexObj.keyForRow(row))) {
-      return *existing;
+    KJ_IF_SOME(existing, indexObj.insert(table.rows.asPtr(), pos, indexObj.keyForRow(row))) {
+      return existing;
     }
 
     bool success = false;
@@ -531,7 +531,7 @@ const Row* Table<Row, Indexes...>::end() const {
 
 template <typename Row, typename... Indexes>
 Row& Table<Row, Indexes...>::insert(Row&& row) {
-  KJ_IF_MAYBE(existing, Impl<>::insert(*this, rows.size(), row, kj::maxValue)) {
+  if (kj::none != Impl<>::insert(*this, rows.size(), row, kj::maxValue)) {
     _::throwDuplicateTableRow();
   } else {
     return rows.add(kj::mv(row));
@@ -563,9 +563,9 @@ void Table<Row, Indexes...>::insertAll(Collection& collection) {
 template <typename Row, typename... Indexes>
 template <typename UpdateFunc>
 Row& Table<Row, Indexes...>::upsert(Row&& row, UpdateFunc&& update) {
-  KJ_IF_MAYBE(existing, Impl<>::insert(*this, rows.size(), row, kj::maxValue)) {
-    update(rows[*existing], kj::mv(row));
-    return rows[*existing];
+  KJ_IF_SOME(existing, Impl<>::insert(*this, rows.size(), row, kj::maxValue)) {
+    update(rows[existing], kj::mv(row));
+    return rows[existing];
   } else {
     return rows.add(kj::mv(row));
   }
@@ -584,8 +584,8 @@ kj::Maybe<Row&> Table<Row, Indexes...>::find(Params&&... params) {
 template <typename Row, typename... Indexes>
 template <size_t index, typename... Params>
 kj::Maybe<Row&> Table<Row, Indexes...>::find(Params&&... params) {
-  KJ_IF_MAYBE(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
-    return rows[*pos];
+  KJ_IF_SOME(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
+    return rows[pos];
   } else {
     return nullptr;
   }
@@ -598,8 +598,8 @@ kj::Maybe<const Row&> Table<Row, Indexes...>::find(Params&&... params) const {
 template <typename Row, typename... Indexes>
 template <size_t index, typename... Params>
 kj::Maybe<const Row&> Table<Row, Indexes...>::find(Params&&... params) const {
-  KJ_IF_MAYBE(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
-    return rows[*pos];
+  KJ_IF_SOME(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
+    return rows[pos];
   } else {
     return nullptr;
   }
@@ -612,8 +612,8 @@ public:
   template <size_t index>
   static Row& apply(Table<Row, Indexes...>& table, Params&&... params, Func&& createFunc) {
     auto pos = table.rows.size();
-    KJ_IF_MAYBE(existing, get<index>(table.indexes).insert(table.rows.asPtr(), pos, params...)) {
-      return table.rows[*existing];
+    KJ_IF_SOME(existing, get<index>(table.indexes).insert(table.rows.asPtr(), pos, params...)) {
+      return table.rows[existing];
     } else {
       bool success = false;
       KJ_DEFER({
@@ -742,8 +742,8 @@ bool Table<Row, Indexes...>::eraseMatch(Params&&... params) {
 template <typename Row, typename... Indexes>
 template <size_t index, typename... Params>
 bool Table<Row, Indexes...>::eraseMatch(Params&&... params) {
-  KJ_IF_MAYBE(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
-    eraseImpl(*pos);
+  KJ_IF_SOME(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
+    eraseImpl(pos);
     return true;
   } else {
     return false;
@@ -942,17 +942,17 @@ public:
       auto& bucket = buckets[i];
       if (bucket.isEmpty()) {
         // no duplicates found
-        KJ_IF_MAYBE(s, erasedSlot) {
+        KJ_IF_SOME(s, erasedSlot) {
           --erasedCount;
-          *s = { hashCode, uint(pos) };
+          s = { hashCode, uint(pos) };
         } else {
           bucket = { hashCode, uint(pos) };
         }
-        return nullptr;
+        return kj::none;
       } else if (bucket.isErased()) {
         // We can fill in the erased slot. However, we have to keep searching to make sure there
         // are no duplicates before we do that.
-        if (erasedSlot == nullptr) {
+        if (erasedSlot == kj::none) {
           erasedSlot = bucket;
         }
       } else if (bucket.hash == hashCode &&

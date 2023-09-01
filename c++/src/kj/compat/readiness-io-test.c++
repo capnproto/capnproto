@@ -49,9 +49,9 @@ KJ_TEST("readiness IO: write many odd") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_MAYBE(n, out.write(kj::StringPtr("bar").asBytes())) {
-      totalWritten += *n;
-      if (*n < 3) {
+    KJ_IF_SOME(n, out.write(kj::StringPtr("bar").asBytes())) {
+      totalWritten += n;
+      if (n < 3) {
         break;
       }
     } else {
@@ -75,9 +75,9 @@ KJ_TEST("readiness IO: write even") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_MAYBE(n, out.write(kj::StringPtr("ba").asBytes())) {
-      totalWritten += *n;
-      if (*n < 2) {
+    KJ_IF_SOME(n, out.write(kj::StringPtr("ba").asBytes())) {
+      totalWritten += n;
+      if (n < 2) {
         KJ_FAIL_ASSERT("pipe buffer is not divisible by 2? really?");
       }
     } else {
@@ -133,9 +133,9 @@ KJ_TEST("readiness IO: write many odd while corked") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_MAYBE(n, out.write(kj::StringPtr("bar").asBytes())) {
-      totalWritten += *n;
-      if (*n < 3) {
+    KJ_IF_SOME(n, out.write(kj::StringPtr("bar").asBytes())) {
+      totalWritten += n;
+      if (n < 3) {
         break;
       }
     } else {
@@ -165,9 +165,9 @@ KJ_TEST("readiness IO: write many even while corked") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_MAYBE(n, out.write(kj::StringPtr("ba").asBytes())) {
-      totalWritten += *n;
-      if (*n < 2) {
+    KJ_IF_SOME(n, out.write(kj::StringPtr("ba").asBytes())) {
+      totalWritten += n;
+      if (n < 2) {
         KJ_FAIL_ASSERT("pipe buffer is not divisible by 2? really?");
       }
     } else {
@@ -208,8 +208,8 @@ KJ_TEST("readiness IO: read small") {
   kj::Maybe<size_t> finalRead;
   for (;;) {
     finalRead = in.read(kj::ArrayPtr<char>(buf).asBytes());
-    KJ_IF_MAYBE(n, finalRead) {
-      KJ_ASSERT(*n == 0);
+    KJ_IF_SOME(n, finalRead) {
+      KJ_ASSERT(n == 0);
       break;
     } else {
       in.whenReady().wait(io.waitScope);
@@ -235,12 +235,12 @@ KJ_TEST("readiness IO: read many odd") {
 
   for (;;) {
     auto result = in.read(kj::ArrayPtr<char>(buf).asBytes());
-    KJ_IF_MAYBE(n, result) {
-      for (size_t i = 0; i < *n; i++) {
+    KJ_IF_SOME(n, result) {
+      for (size_t i = 0; i < n; i++) {
         KJ_ASSERT(buf[i] == "bar"[i]);
       }
-      KJ_ASSERT(*n != 0, "ended at wrong spot");
-      if (*n < 3) {
+      KJ_ASSERT(n != 0, "ended at wrong spot");
+      if (n < 3) {
         break;
       }
     } else {
@@ -251,8 +251,8 @@ KJ_TEST("readiness IO: read many odd") {
   kj::Maybe<size_t> finalRead;
   for (;;) {
     finalRead = in.read(kj::ArrayPtr<char>(buf).asBytes());
-    KJ_IF_MAYBE(n, finalRead) {
-      KJ_ASSERT(*n == 0);
+    KJ_IF_SOME(n, finalRead) {
+      KJ_ASSERT(n == 0);
       break;
     } else {
       in.whenReady().wait(io.waitScope);
@@ -278,14 +278,14 @@ KJ_TEST("readiness IO: read many even") {
 
   for (;;) {
     auto result = in.read(kj::ArrayPtr<char>(buf).asBytes());
-    KJ_IF_MAYBE(n, result) {
-      for (size_t i = 0; i < *n; i++) {
+    KJ_IF_SOME(n, result) {
+      for (size_t i = 0; i < n; i++) {
         KJ_ASSERT(buf[i] == "ba"[i]);
       }
-      if (*n == 0) {
+      if (n == 0) {
         break;
       }
-      KJ_ASSERT(*n == 2, "ended at wrong spot");
+      KJ_ASSERT(n == 2, "ended at wrong spot");
     } else {
       in.whenReady().wait(io.waitScope);
     }
@@ -294,8 +294,8 @@ KJ_TEST("readiness IO: read many even") {
   kj::Maybe<size_t> finalRead;
   for (;;) {
     finalRead = in.read(kj::ArrayPtr<char>(buf).asBytes());
-    KJ_IF_MAYBE(n, finalRead) {
-      KJ_ASSERT(*n == 0);
+    KJ_IF_SOME(n, finalRead) {
+      KJ_ASSERT(n == 0);
       break;
     } else {
       in.whenReady().wait(io.waitScope);

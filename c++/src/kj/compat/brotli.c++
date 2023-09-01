@@ -59,17 +59,17 @@ namespace _ {  // private
 BrotliOutputContext::BrotliOutputContext(kj::Maybe<int> compressionLevel,
                                          kj::Maybe<int> windowBitsParam)
                                          : nextIn(nullptr), availableIn(0) {
-  KJ_IF_MAYBE(level, compressionLevel) {
+  KJ_IF_SOME(level, compressionLevel) {
     // Emulate zlib's behavior of using -1 to signify the default quality
-    if (*level == -1) {*level = KJ_BROTLI_DEFAULT_QUALITY;}
-    KJ_REQUIRE(*level >= BROTLI_MIN_QUALITY && *level <= BROTLI_MAX_QUALITY,
-        "invalid brotli compression level", *level);
+    if (level == -1) {level = KJ_BROTLI_DEFAULT_QUALITY;}
+    KJ_REQUIRE(level >= BROTLI_MIN_QUALITY && level <= BROTLI_MAX_QUALITY,
+        "invalid brotli compression level", level);
     windowBits = windowBitsParam.orDefault(_::KJ_BROTLI_DEFAULT_WBITS);
     KJ_REQUIRE(windowBits >= BROTLI_MIN_WINDOW_BITS && windowBits <= BROTLI_MAX_WINDOW_BITS,
         "invalid brotli window size", windowBits);
     BrotliEncoderState* cctx = BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
     KJ_REQUIRE(cctx, "brotli state allocation failed");
-    KJ_ASSERT(BrotliEncoderSetParameter(cctx, BROTLI_PARAM_QUALITY, *level) == BROTLI_TRUE);
+    KJ_ASSERT(BrotliEncoderSetParameter(cctx, BROTLI_PARAM_QUALITY, level) == BROTLI_TRUE);
     KJ_ASSERT(BrotliEncoderSetParameter(cctx, BROTLI_PARAM_LGWIN, windowBits) == BROTLI_TRUE);
     ctx = cctx;
   } else {
@@ -223,7 +223,7 @@ BrotliOutputStream::BrotliOutputStream(OutputStream& inner, int compressionLevel
     : inner(inner), ctx(compressionLevel, windowBits) {}
 
 BrotliOutputStream::BrotliOutputStream(OutputStream& inner, decltype(DECOMPRESS), int windowBits)
-    : inner(inner), ctx(nullptr, windowBits) {}
+    : inner(inner), ctx(kj::none, windowBits) {}
 
 BrotliOutputStream::~BrotliOutputStream() noexcept(false) {
   pump(BROTLI_OPERATION_FINISH);
@@ -329,7 +329,7 @@ BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, int c
 
 BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS),
                                                  int windowBits)
-    : inner(inner), ctx(nullptr, windowBits) {}
+    : inner(inner), ctx(kj::none, windowBits) {}
 
 Promise<void> BrotliAsyncOutputStream::write(const void* in, size_t size) {
   ctx.setInput(in, size);

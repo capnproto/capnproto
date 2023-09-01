@@ -37,6 +37,16 @@ def kj_configure():
         build_setting_default = False,
     )
 
+    bool_flag(
+        name = "deprecate_kj_if_maybe",
+        build_setting_default = True,
+    )
+
+    bool_flag(
+        name = "deprecate_empty_maybe_from_nullptr",
+        build_setting_default = True,
+    )
+
     # Settings to use in select() expressions
     native.config_setting(
         name = "use_openssl",
@@ -69,6 +79,16 @@ def kj_configure():
         flag_values = {"track_lock_blocking": "True"},
     )
 
+    native.config_setting(
+        name = "use_deprecate_kj_if_maybe",
+        flag_values = {"deprecate_kj_if_maybe": "True"},
+    )
+
+    native.config_setting(
+        name = "use_deprecate_empty_maybe_from_nullptr",
+        flag_values = {"deprecate_empty_maybe_from_nullptr": "True"},
+    )
+
     native.cc_library(
         name = "kj-defines",
         defines = select({
@@ -89,5 +109,11 @@ def kj_configure():
         }) + select({
             "//src/kj:use_track_lock_blocking": ["KJ_TRACK_LOCK_BLOCKING=1"],
             "//conditions:default": ["KJ_TRACK_LOCK_BLOCKING=0"],
+        }) + select({
+            "//src/kj:use_deprecate_kj_if_maybe": ["KJ_DEPRECATE_KJ_IF_MAYBE=1"],
+            "//conditions:default": ["KJ_DEPRECATE_KJ_IF_MAYBE=0"],
+        }) + select({
+            "//src/kj:use_deprecate_empty_maybe_from_nullptr": ["KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR=1"],
+            "//conditions:default": ["KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR=0"],
         }),
     )

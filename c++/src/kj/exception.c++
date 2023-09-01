@@ -749,9 +749,9 @@ String KJ_STRINGIFY(const Exception& e) {
 
   Maybe<const Exception::Context&> contextPtr = e.getContext();
   for (;;) {
-    KJ_IF_MAYBE(c, contextPtr) {
+    KJ_IF_SOME(c, contextPtr) {
       ++contextDepth;
-      contextPtr = c->next;
+      contextPtr = c.next;
     } else {
       break;
     }
@@ -762,10 +762,10 @@ String KJ_STRINGIFY(const Exception& e) {
   contextDepth = 0;
   contextPtr = e.getContext();
   for (;;) {
-    KJ_IF_MAYBE(c, contextPtr) {
+    KJ_IF_SOME(c, contextPtr) {
       contextText[contextDepth++] =
-          str(trimSourceFilename(c->file), ":", c->line, ": context: ", c->description, "\n");
-      contextPtr = c->next;
+          str(trimSourceFilename(c.file), ":", c.line, ": context: ", c.description, "\n");
+      contextPtr = c.next;
     } else {
       break;
     }
@@ -805,8 +805,8 @@ Exception::Exception(const Exception& other) noexcept
 
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
 
-  KJ_IF_MAYBE(c, other.context) {
-    context = heap(**c);
+  KJ_IF_SOME(c, other.context) {
+    context = heap(*c);
   }
 }
 
@@ -814,8 +814,8 @@ Exception::~Exception() noexcept {}
 
 Exception::Context::Context(const Context& other) noexcept
     : file(other.file), line(other.line), description(str(other.description)) {
-  KJ_IF_MAYBE(n, other.next) {
-    next = heap(**n);
+  KJ_IF_SOME(n, other.next) {
+    next = heap(*n);
   }
 }
 
@@ -971,7 +971,7 @@ InFlightExceptionIterator::InFlightExceptionIterator()
     : ptr(currentException) {}
 
 Maybe<const Exception&> InFlightExceptionIterator::next() {
-  if (ptr == nullptr) return nullptr;
+  if (ptr == nullptr) return kj::none;
 
   const ExceptionImpl& result = *static_cast<const ExceptionImpl*>(ptr);
   ptr = result.nextCurrentException;
@@ -981,8 +981,8 @@ Maybe<const Exception&> InFlightExceptionIterator::next() {
 kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
     const char* defaultFile, int defaultLine, kj::StringPtr defaultDescription) {
   InFlightExceptionIterator iter;
-  KJ_IF_MAYBE(e, iter.next()) {
-    auto copy = kj::cp(*e);
+  KJ_IF_SOME(e, iter.next()) {
+    auto copy = kj::cp(e);
     copy.truncateCommonTrace();
     return copy;
   } else {

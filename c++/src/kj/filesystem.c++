@@ -302,7 +302,7 @@ String Path::stripNul(String input) {
 void Path::validatePart(StringPtr part) {
   KJ_REQUIRE(part != "" && part != "." && part != "..", "invalid path component", part);
   KJ_REQUIRE(strlen(part.begin()) == part.size(), "NUL character in path component", part);
-  KJ_REQUIRE(part.findFirst('/') == nullptr,
+  KJ_REQUIRE(part.findFirst('/') == kj::none,
       "'/' character in path component; did you mean to use Path::parse()?", part);
 }
 
@@ -348,7 +348,7 @@ Path Path::evalImpl(Vector<String>&& parts, StringPtr path) {
 Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi) {
   // Convert all forward slashes to backslashes.
   String ownPath;
-  if (!fromApi && path.findFirst('/') != nullptr) {
+  if (!fromApi && path.findFirst('/') != kj::none) {
     ownPath = heapString(path);
     for (char& c: ownPath) {
       if (c == '/') c = '\\';
@@ -536,8 +536,8 @@ size_t File::copy(uint64_t offset, const ReadableFile& from,
 }
 
 FsNode::Metadata ReadableDirectory::lstat(PathPtr path) const {
-  KJ_IF_MAYBE(meta, tryLstat(path)) {
-    return *meta;
+  KJ_IF_SOME(meta, tryLstat(path)) {
+    return meta;
   } else {
     KJ_FAIL_REQUIRE("no such file or directory", path) { break; }
     return FsNode::Metadata();
@@ -545,8 +545,8 @@ FsNode::Metadata ReadableDirectory::lstat(PathPtr path) const {
 }
 
 Own<const ReadableFile> ReadableDirectory::openFile(PathPtr path) const {
-  KJ_IF_MAYBE(file, tryOpenFile(path)) {
-    return kj::mv(*file);
+  KJ_IF_SOME(file, tryOpenFile(path)) {
+    return kj::mv(file);
   } else {
     KJ_FAIL_REQUIRE("no such file", path) { break; }
     return newInMemoryFile(nullClock());
@@ -554,8 +554,8 @@ Own<const ReadableFile> ReadableDirectory::openFile(PathPtr path) const {
 }
 
 Own<const ReadableDirectory> ReadableDirectory::openSubdir(PathPtr path) const {
-  KJ_IF_MAYBE(dir, tryOpenSubdir(path)) {
-    return kj::mv(*dir);
+  KJ_IF_SOME(dir, tryOpenSubdir(path)) {
+    return kj::mv(dir);
   } else {
     KJ_FAIL_REQUIRE("no such directory", path) { break; }
     return newInMemoryDirectory(nullClock());
@@ -563,8 +563,8 @@ Own<const ReadableDirectory> ReadableDirectory::openSubdir(PathPtr path) const {
 }
 
 String ReadableDirectory::readlink(PathPtr path) const {
-  KJ_IF_MAYBE(p, tryReadlink(path)) {
-    return kj::mv(*p);
+  KJ_IF_SOME(p, tryReadlink(path)) {
+    return kj::mv(p);
   } else {
     KJ_FAIL_REQUIRE("not a symlink", path) { break; }
     return kj::str(".");
@@ -572,8 +572,8 @@ String ReadableDirectory::readlink(PathPtr path) const {
 }
 
 Own<const File> Directory::openFile(PathPtr path, WriteMode mode) const {
-  KJ_IF_MAYBE(f, tryOpenFile(path, mode)) {
-    return kj::mv(*f);
+  KJ_IF_SOME(f, tryOpenFile(path, mode)) {
+    return kj::mv(f);
   } else if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
     KJ_FAIL_REQUIRE("file already exists", path) { break; }
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
@@ -588,8 +588,8 @@ Own<const File> Directory::openFile(PathPtr path, WriteMode mode) const {
 }
 
 Own<AppendableFile> Directory::appendFile(PathPtr path, WriteMode mode) const {
-  KJ_IF_MAYBE(f, tryAppendFile(path, mode)) {
-    return kj::mv(*f);
+  KJ_IF_SOME(f, tryAppendFile(path, mode)) {
+    return kj::mv(f);
   } else if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
     KJ_FAIL_REQUIRE("file already exists", path) { break; }
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
@@ -604,8 +604,8 @@ Own<AppendableFile> Directory::appendFile(PathPtr path, WriteMode mode) const {
 }
 
 Own<const Directory> Directory::openSubdir(PathPtr path, WriteMode mode) const {
-  KJ_IF_MAYBE(f, tryOpenSubdir(path, mode)) {
-    return kj::mv(*f);
+  KJ_IF_SOME(f, tryOpenSubdir(path, mode)) {
+    return kj::mv(f);
   } else if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
     KJ_FAIL_REQUIRE("directory already exists", path) { break; }
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
@@ -653,13 +653,13 @@ static bool tryCopyDirectoryEntry(const Directory& to, PathPtr toPath, WriteMode
 
   switch (type) {
     case FsNode::Type::FILE: {
-      KJ_IF_MAYBE(fromFile, from.tryOpenFile(fromPath)) {
+      KJ_IF_SOME(fromFile, from.tryOpenFile(fromPath)) {
         if (atomic) {
           auto replacer = to.replaceFile(toPath, toMode);
-          replacer->get().copy(0, **fromFile, 0, kj::maxValue);
+          replacer->get().copy(0, *fromFile, 0, kj::maxValue);
           return replacer->tryCommit();
-        } else KJ_IF_MAYBE(toFile, to.tryOpenFile(toPath, toMode)) {
-          toFile->get()->copy(0, **fromFile, 0, kj::maxValue);
+        } else KJ_IF_SOME(toFile, to.tryOpenFile(toPath, toMode)) {
+          toFile->copy(0, *fromFile, 0, kj::maxValue);
           return true;
         } else {
           return false;
@@ -670,13 +670,13 @@ static bool tryCopyDirectoryEntry(const Directory& to, PathPtr toPath, WriteMode
       }
     }
     case FsNode::Type::DIRECTORY:
-      KJ_IF_MAYBE(fromSubdir, from.tryOpenSubdir(fromPath)) {
+      KJ_IF_SOME(fromSubdir, from.tryOpenSubdir(fromPath)) {
         if (atomic) {
           auto replacer = to.replaceSubdir(toPath, toMode);
-          copyContents(replacer->get(), **fromSubdir);
+          copyContents(replacer->get(), *fromSubdir);
           return replacer->tryCommit();
-        } else KJ_IF_MAYBE(toSubdir, to.tryOpenSubdir(toPath, toMode)) {
-          copyContents(**toSubdir, **fromSubdir);
+        } else KJ_IF_SOME(toSubdir, to.tryOpenSubdir(toPath, toMode)) {
+          copyContents(*toSubdir, *fromSubdir);
           return true;
         } else {
           return false;
@@ -686,8 +686,8 @@ static bool tryCopyDirectoryEntry(const Directory& to, PathPtr toPath, WriteMode
         return false;
       }
     case FsNode::Type::SYMLINK:
-      KJ_IF_MAYBE(content, from.tryReadlink(fromPath)) {
-        return to.trySymlink(toPath, *content, toMode);
+      KJ_IF_SOME(content, from.tryReadlink(fromPath)) {
+        return to.trySymlink(toPath, content, toMode);
       } else {
         // Apparently disappeared. Treat as source-doesn't-exist.
         return false;
@@ -716,15 +716,15 @@ bool Directory::tryTransfer(PathPtr toPath, WriteMode toMode,
   KJ_REQUIRE(toPath.size() > 0, "can't replace self") { return false; }
 
   // First try reversing.
-  KJ_IF_MAYBE(result, fromDirectory.tryTransferTo(*this, toPath, toMode, fromPath, mode)) {
-    return *result;
+  KJ_IF_SOME(result, fromDirectory.tryTransferTo(*this, toPath, toMode, fromPath, mode)) {
+    return result;
   }
 
   switch (mode) {
     case TransferMode::COPY:
-      KJ_IF_MAYBE(meta, fromDirectory.tryLstat(fromPath)) {
+      KJ_IF_SOME(meta, fromDirectory.tryLstat(fromPath)) {
         return tryCopyDirectoryEntry(*this, toPath, toMode, fromDirectory,
-                                     fromPath, meta->type, true);
+                                     fromPath, meta.type, true);
       } else {
         // Source doesn't exist.
         return false;
@@ -745,7 +745,7 @@ bool Directory::tryTransfer(PathPtr toPath, WriteMode toMode,
 
 Maybe<bool> Directory::tryTransferTo(const Directory& toDirectory, PathPtr toPath, WriteMode toMode,
                                      PathPtr fromPath, TransferMode mode) const {
-  return nullptr;
+  return kj::none;
 }
 
 void Directory::remove(PathPtr path) const {
@@ -779,7 +779,7 @@ public:
   }
 
   Maybe<int> getFd() const override {
-    return nullptr;
+    return kj::none;
   }
 
   Metadata stat() const override {
@@ -985,7 +985,7 @@ public:
   }
 
   Maybe<int> getFd() const override {
-    return nullptr;
+    return kj::none;
   }
 
   Metadata stat() const override {
@@ -1025,14 +1025,14 @@ public:
       return true;
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
-      KJ_IF_MAYBE(entry, lock->tryGetEntry(path[0])) {
-        return exists(lock, *entry);
+      KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
+        return exists(lock, entry);
       } else {
         return false;
       }
     } else {
-      KJ_IF_MAYBE(subdir, tryGetParent(path[0])) {
-        return subdir->get()->exists(path.slice(1, path.size()));
+      KJ_IF_SOME(subdir, tryGetParent(path[0])) {
+        return subdir->exists(path.slice(1, path.size()));
       } else {
         return false;
       }
@@ -1044,45 +1044,45 @@ public:
       return stat();
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
-      KJ_IF_MAYBE(entry, lock->tryGetEntry(path[0])) {
-        if (entry->node.is<FileNode>()) {
-          return entry->node.get<FileNode>().file->stat();
-        } else if (entry->node.is<DirectoryNode>()) {
-          return entry->node.get<DirectoryNode>().directory->stat();
-        } else if (entry->node.is<SymlinkNode>()) {
-          auto& link = entry->node.get<SymlinkNode>();
+      KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
+        if (entry.node.is<FileNode>()) {
+          return entry.node.get<FileNode>().file->stat();
+        } else if (entry.node.is<DirectoryNode>()) {
+          return entry.node.get<DirectoryNode>().directory->stat();
+        } else if (entry.node.is<SymlinkNode>()) {
+          auto& link = entry.node.get<SymlinkNode>();
           uint64_t hash = reinterpret_cast<uintptr_t>(link.content.begin());
           return FsNode::Metadata { FsNode::Type::SYMLINK, 0, 0, link.lastModified, 1, hash };
         } else {
-          KJ_FAIL_ASSERT("unknown node type") { return nullptr; }
+          KJ_FAIL_ASSERT("unknown node type") { return kj::none; }
         }
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(subdir, tryGetParent(path[0])) {
-        return subdir->get()->tryLstat(path.slice(1, path.size()));
+      KJ_IF_SOME(subdir, tryGetParent(path[0])) {
+        return subdir->tryLstat(path.slice(1, path.size()));
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
 
   Maybe<Own<const ReadableFile>> tryOpenFile(PathPtr path) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("not a file") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a file") { return kj::none; }
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
-      KJ_IF_MAYBE(entry, lock->tryGetEntry(path[0])) {
-        return asFile(lock, *entry);
+      KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
+        return asFile(lock, entry);
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(subdir, tryGetParent(path[0])) {
-        return subdir->get()->tryOpenFile(path.slice(1, path.size()));
+      KJ_IF_SOME(subdir, tryGetParent(path[0])) {
+        return subdir->tryOpenFile(path.slice(1, path.size()));
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
@@ -1092,35 +1092,35 @@ public:
       return clone();
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
-      KJ_IF_MAYBE(entry, lock->tryGetEntry(path[0])) {
-        return asDirectory(lock, *entry);
+      KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
+        return asDirectory(lock, entry);
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(subdir, tryGetParent(path[0])) {
-        return subdir->get()->tryOpenSubdir(path.slice(1, path.size()));
+      KJ_IF_SOME(subdir, tryGetParent(path[0])) {
+        return subdir->tryOpenSubdir(path.slice(1, path.size()));
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
 
   Maybe<String> tryReadlink(PathPtr path) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("not a symlink") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a symlink") { return kj::none; }
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
-      KJ_IF_MAYBE(entry, lock->tryGetEntry(path[0])) {
-        return asSymlink(lock, *entry);
+      KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
+        return asSymlink(lock, entry);
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(subdir, tryGetParent(path[0])) {
-        return subdir->get()->tryReadlink(path.slice(1, path.size()));
+      KJ_IF_SOME(subdir, tryGetParent(path[0])) {
+        return subdir->tryReadlink(path.slice(1, path.size()));
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
@@ -1128,24 +1128,24 @@ public:
   Maybe<Own<const File>> tryOpenFile(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
       if (has(mode, WriteMode::MODIFY)) {
-        KJ_FAIL_REQUIRE("not a file") { return nullptr; }
+        KJ_FAIL_REQUIRE("not a file") { return kj::none; }
       } else if (has(mode, WriteMode::CREATE)) {
-        return nullptr;  // already exists (as a directory)
+        return kj::none;  // already exists (as a directory)
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return nullptr; }
+        KJ_FAIL_REQUIRE("can't replace self") { return kj::none; }
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
-      KJ_IF_MAYBE(entry, lock->openEntry(path[0], mode)) {
-        return asFile(lock, *entry, mode);
+      KJ_IF_SOME(entry, lock->openEntry(path[0], mode)) {
+        return asFile(lock, entry, mode);
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], mode)) {
-        return child->get()->tryOpenFile(path.slice(1, path.size()), mode);
+      KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
+        return child->tryOpenFile(path.slice(1, path.size()), mode);
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
@@ -1158,8 +1158,8 @@ public:
       return heap<ReplacerImpl<File>>(*this, path[0],
           newInMemoryFile(impl.getWithoutLock().clock), mode);
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], mode)) {
-        return child->get()->replaceFile(path.slice(1, path.size()), mode);
+      KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
+        return child->replaceFile(path.slice(1, path.size()), mode);
       }
     }
     return heap<BrokenReplacer<File>>(newInMemoryFile(impl.getWithoutLock().clock));
@@ -1170,22 +1170,22 @@ public:
       if (has(mode, WriteMode::MODIFY)) {
         return atomicAddRef(*this);
       } else if (has(mode, WriteMode::CREATE)) {
-        return nullptr;  // already exists
+        return kj::none;  // already exists
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return nullptr; }
+        KJ_FAIL_REQUIRE("can't replace self") { return kj::none; }
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
-      KJ_IF_MAYBE(entry, lock->openEntry(path[0], mode)) {
-        return asDirectory(lock, *entry, mode);
+      KJ_IF_SOME(entry, lock->openEntry(path[0], mode)) {
+        return asDirectory(lock, entry, mode);
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], mode)) {
-        return child->get()->tryOpenSubdir(path.slice(1, path.size()), mode);
+      KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
+        return child->tryOpenSubdir(path.slice(1, path.size()), mode);
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
@@ -1198,8 +1198,8 @@ public:
       return heap<ReplacerImpl<Directory>>(*this, path[0],
           newInMemoryDirectory(impl.getWithoutLock().clock), mode);
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], mode)) {
-        return child->get()->replaceSubdir(path.slice(1, path.size()), mode);
+      KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
+        return child->replaceSubdir(path.slice(1, path.size()), mode);
       }
     }
     return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(impl.getWithoutLock().clock));
@@ -1208,24 +1208,24 @@ public:
   Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
       if (has(mode, WriteMode::MODIFY)) {
-        KJ_FAIL_REQUIRE("not a file") { return nullptr; }
+        KJ_FAIL_REQUIRE("not a file") { return kj::none; }
       } else if (has(mode, WriteMode::CREATE)) {
-        return nullptr;  // already exists (as a directory)
+        return kj::none;  // already exists (as a directory)
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return nullptr; }
+        KJ_FAIL_REQUIRE("can't replace self") { return kj::none; }
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
-      KJ_IF_MAYBE(entry, lock->openEntry(path[0], mode)) {
-        return asFile(lock, *entry, mode).map(newFileAppender);
+      KJ_IF_SOME(entry, lock->openEntry(path[0], mode)) {
+        return asFile(lock, entry, mode).map(newFileAppender);
       } else {
-        return nullptr;
+        return kj::none;
       }
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], mode)) {
-        return child->get()->tryAppendFile(path.slice(1, path.size()), mode);
+      KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
+        return child->tryAppendFile(path.slice(1, path.size()), mode);
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
   }
@@ -1239,16 +1239,16 @@ public:
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
-      KJ_IF_MAYBE(entry, lock->openEntry(path[0], mode)) {
-        entry->init(SymlinkNode { lock->clock.now(), heapString(content) });
+      KJ_IF_SOME(entry, lock->openEntry(path[0], mode)) {
+        entry.init(SymlinkNode { lock->clock.now(), heapString(content) });
         lock->modified();
         return true;
       } else {
         return false;
       }
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], mode)) {
-        return child->get()->trySymlink(path.slice(1, path.size()), content, mode);
+      KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
+        return child->trySymlink(path.slice(1, path.size()), content, mode);
       } else {
         KJ_FAIL_REQUIRE("couldn't create parent directory") { return false; }
       }
@@ -1271,15 +1271,15 @@ public:
       }
     } else if (toPath.size() == 1) {
       // tryTransferChild() needs to at least know the node type, so do an lstat.
-      KJ_IF_MAYBE(meta, fromDirectory.tryLstat(fromPath)) {
+      KJ_IF_SOME(meta, fromDirectory.tryLstat(fromPath)) {
         auto lock = impl.lockExclusive();
-        KJ_IF_MAYBE(entry, lock->openEntry(toPath[0], toMode)) {
+        KJ_IF_SOME(entry, lock->openEntry(toPath[0], toMode)) {
           // Make sure if we just cerated a new entry, and we don't successfully transfer to it, we
           // remove the entry before returning.
-          bool needRollback = entry->node == nullptr;
+          bool needRollback = entry.node == nullptr;
           KJ_DEFER(if (needRollback) { lock->entries.erase(toPath[0]); });
 
-          if (lock->tryTransferChild(*entry, meta->type, meta->lastModified, meta->size,
+          if (lock->tryTransferChild(entry, meta.type, meta.lastModified, meta.size,
                                      fromDirectory, fromPath, mode)) {
             lock->modified();
             needRollback = false;
@@ -1298,8 +1298,8 @@ public:
     } else {
       // TODO(someday): Ideally we wouldn't create parent directories if fromPath doesn't exist.
       //   This requires a different approach to the code here, though.
-      KJ_IF_MAYBE(child, tryGetParent(toPath[0], toMode)) {
-        return child->get()->tryTransfer(
+      KJ_IF_SOME(child, tryGetParent(toPath[0], toMode)) {
+        return child->tryTransfer(
             toPath.slice(1, toPath.size()), toMode, fromDirectory, fromPath, mode);
       } else {
         return false;
@@ -1312,20 +1312,20 @@ public:
     if (fromPath.size() <= 1) {
       // If `fromPath` is in this directory (or *is* this directory) then we don't have any
       // optimizations.
-      return nullptr;
+      return kj::none;
     }
 
     // `fromPath` is in a subdirectory. It could turn out that that subdirectory is not an
     // InMemoryDirectory and is instead something `toDirectory` is friendly with. So let's follow
     // the path.
 
-    KJ_IF_MAYBE(child, tryGetParent(fromPath[0], WriteMode::MODIFY)) {
+    KJ_IF_SOME(child, tryGetParent(fromPath[0], WriteMode::MODIFY)) {
       // OK, switch back to tryTransfer() but use the subdirectory.
       return toDirectory.tryTransfer(toPath, toMode,
-          **child, fromPath.slice(1, fromPath.size()), mode);
+          *child, fromPath.slice(1, fromPath.size()), mode);
     } else {
       // Hmm, doesn't exist. Fall back to standard path.
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -1343,8 +1343,8 @@ public:
         return true;
       }
     } else {
-      KJ_IF_MAYBE(child, tryGetParent(path[0], WriteMode::MODIFY)) {
-        return child->get()->tryRemove(path.slice(1, path.size()));
+      KJ_IF_SOME(child, tryGetParent(path[0], WriteMode::MODIFY)) {
+        return child->tryRemove(path.slice(1, path.size()));
       } else {
         return false;
       }
@@ -1410,8 +1410,8 @@ private:
       KJ_REQUIRE(!committed, "commit() already called") { return true; }
 
       auto lock = directory->impl.lockExclusive();
-      KJ_IF_MAYBE(entry, lock->openEntry(name, Replacer<T>::mode)) {
-        entry->set(inner->clone());
+      KJ_IF_SOME(entry, lock->openEntry(name, Replacer<T>::mode)) {
+        entry.set(inner->clone());
         lock->modified();
         return true;
       } else {
@@ -1467,7 +1467,7 @@ private:
 
         if (!insertResult.second && !has(mode, WriteMode::MODIFY)) {
           // Entry already existed and MODIFY not specified.
-          return nullptr;
+          return kj::none;
         }
 
         return insertResult.first->second;
@@ -1475,14 +1475,14 @@ private:
         return tryGetEntry(name);
       } else {
         // Neither CREATE nor MODIFY specified: precondition always fails.
-        return nullptr;
+        return kj::none;
       }
     }
 
     kj::Maybe<const EntryImpl&> tryGetEntry(kj::StringPtr name) const {
       auto iter = entries.find(name);
       if (iter == entries.end()) {
-        return nullptr;
+        return kj::none;
       } else {
         return iter->second;
       }
@@ -1491,7 +1491,7 @@ private:
     kj::Maybe<EntryImpl&> tryGetEntry(kj::StringPtr name) {
       auto iter = entries.find(name);
       if (iter == entries.end()) {
-        return nullptr;
+        return kj::none;
       } else {
         return iter->second;
       }
@@ -1506,10 +1506,10 @@ private:
                           PathPtr fromPath, TransferMode mode) {
       switch (type) {
         case FsNode::Type::FILE:
-          KJ_IF_MAYBE(file, fromDirectory.tryOpenFile(fromPath, WriteMode::MODIFY)) {
+          KJ_IF_SOME(file, fromDirectory.tryOpenFile(fromPath, WriteMode::MODIFY)) {
             if (mode == TransferMode::COPY) {
               auto copy = newInMemoryFile(clock);
-              copy->copy(0, **file, 0, size.orDefault(kj::maxValue));
+              copy->copy(0, *file, 0, size.orDefault(kj::maxValue));
               entry.set(kj::mv(copy));
             } else {
               if (mode == TransferMode::MOVE) {
@@ -1517,7 +1517,7 @@ private:
                   return false;
                 }
               }
-              entry.set(kj::mv(*file));
+              entry.set(kj::mv(file));
             }
             return true;
           } else {
@@ -1526,14 +1526,14 @@ private:
             }
           }
         case FsNode::Type::DIRECTORY:
-          KJ_IF_MAYBE(subdir, fromDirectory.tryOpenSubdir(fromPath, WriteMode::MODIFY)) {
+          KJ_IF_SOME(subdir, fromDirectory.tryOpenSubdir(fromPath, WriteMode::MODIFY)) {
             if (mode == TransferMode::COPY) {
               auto copy = atomicRefcounted<InMemoryDirectory>(clock);
               auto& cpim = copy->impl.getWithoutLock();  // safe because just-created
-              for (auto& subEntry: subdir->get()->listEntries()) {
+              for (auto& subEntry: subdir->listEntries()) {
                 EntryImpl newEntry(kj::mv(subEntry.name));
                 Path filename(newEntry.name);
-                if (!cpim.tryTransferChild(newEntry, subEntry.type, nullptr, nullptr, **subdir,
+                if (!cpim.tryTransferChild(newEntry, subEntry.type, kj::none, kj::none, *subdir,
                                            filename, TransferMode::COPY)) {
                   KJ_LOG(ERROR, "couldn't copy node of type not supported by InMemoryDirectory",
                          filename);
@@ -1549,7 +1549,7 @@ private:
                   return false;
                 }
               }
-              entry.set(kj::mv(*subdir));
+              entry.set(kj::mv(subdir));
             }
             return true;
           } else {
@@ -1558,9 +1558,9 @@ private:
             }
           }
         case FsNode::Type::SYMLINK:
-          KJ_IF_MAYBE(content, fromDirectory.tryReadlink(fromPath)) {
+          KJ_IF_SOME(content, fromDirectory.tryReadlink(fromPath)) {
             // Since symlinks are immutable, we can implement LINK the same as COPY.
-            entry.init(SymlinkNode { lastModified.orDefault(clock.now()), kj::mv(*content) });
+            entry.init(SymlinkNode { lastModified.orDefault(clock.now()), kj::mv(content) });
             if (mode == TransferMode::MOVE) {
               KJ_ASSERT(fromDirectory.tryRemove(fromPath), "couldn't move node", fromPath) {
                 return false;
@@ -1598,7 +1598,7 @@ private:
       lock.release();
       return tryOpenFile(newPath);
     } else {
-      KJ_FAIL_REQUIRE("not a file") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a file") { return kj::none; }
     }
   }
   Maybe<Own<const ReadableDirectory>> asDirectory(
@@ -1610,14 +1610,14 @@ private:
       lock.release();
       return tryOpenSubdir(newPath);
     } else {
-      KJ_FAIL_REQUIRE("not a directory") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a directory") { return kj::none; }
     }
   }
   Maybe<String> asSymlink(kj::Locked<const Impl>& lock, const EntryImpl& entry) const {
     if (entry.node.is<SymlinkNode>()) {
       return heapString(entry.node.get<SymlinkNode>().content);
     } else {
-      KJ_FAIL_REQUIRE("not a symlink") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a symlink") { return kj::none; }
     }
   }
 
@@ -1635,7 +1635,7 @@ private:
       lock->modified();
       return entry.init(FileNode { newInMemoryFile(lock->clock) });
     } else {
-      KJ_FAIL_REQUIRE("not a file") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a file") { return kj::none; }
     }
   }
   Maybe<Own<const Directory>> asDirectory(
@@ -1653,16 +1653,16 @@ private:
       lock->modified();
       return entry.init(DirectoryNode { newInMemoryDirectory(lock->clock) });
     } else {
-      KJ_FAIL_REQUIRE("not a directory") { return nullptr; }
+      KJ_FAIL_REQUIRE("not a directory") { return kj::none; }
     }
   }
 
   kj::Maybe<Own<const ReadableDirectory>> tryGetParent(kj::StringPtr name) const {
     auto lock = impl.lockShared();
-    KJ_IF_MAYBE(entry, impl.lockShared()->tryGetEntry(name)) {
-      return asDirectory(lock, *entry);
+    KJ_IF_SOME(entry, impl.lockShared()->tryGetEntry(name)) {
+      return asDirectory(lock, entry);
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -1677,12 +1677,12 @@ private:
         : WriteMode::MODIFY;                      // don't create parent
 
     // Possibly create parent.
-    KJ_IF_MAYBE(entry, lock->openEntry(name, parentMode)) {
-      if (entry->node.is<DirectoryNode>()) {
-        return entry->node.get<DirectoryNode>().directory->clone();
-      } else if (entry->node == nullptr) {
+    KJ_IF_SOME(entry, lock->openEntry(name, parentMode)) {
+      if (entry.node.is<DirectoryNode>()) {
+        return entry.node.get<DirectoryNode>().directory->clone();
+      } else if (entry.node == nullptr) {
         lock->modified();
-        return entry->init(DirectoryNode { newInMemoryDirectory(lock->clock) });
+        return entry.init(DirectoryNode { newInMemoryDirectory(lock->clock) });
       }
       // Continue on.
     }
@@ -1690,9 +1690,9 @@ private:
     if (has(mode, WriteMode::CREATE)) {
       // CREATE is documented as returning null when the file already exists. In this case, the
       // file does NOT exist because the parent directory does not exist or is not a directory.
-      KJ_FAIL_REQUIRE("parent is not a directory") { return nullptr; }
+      KJ_FAIL_REQUIRE("parent is not a directory") { return kj::none; }
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 };
@@ -1708,7 +1708,7 @@ public:
   }
 
   Maybe<int> getFd() const override {
-    return nullptr;
+    return kj::none;
   }
 
   Metadata stat() const override {

@@ -32,11 +32,11 @@ double ParseFloat::operator()(const Array<char>& digits,
                               const Maybe<Array<char>>& fraction,
                               const Maybe<Tuple<Maybe<char>, Array<char>>>& exponent) const {
   size_t bufSize = digits.size();
-  KJ_IF_MAYBE(f, fraction) {
-    bufSize += 1 + f->size();
+  KJ_IF_SOME(f, fraction) {
+    bufSize += 1 + f.size();
   }
-  KJ_IF_MAYBE(e, exponent) {
-    bufSize += 1 + (get<0>(*e) != nullptr) + get<1>(*e).size();
+  KJ_IF_SOME(e, exponent) {
+    bufSize += 1 + (get<0>(e) != kj::none) + get<1>(e).size();
   }
 
   KJ_STACK_ARRAY(char, buf, bufSize + 1, 128, 128);
@@ -44,18 +44,18 @@ double ParseFloat::operator()(const Array<char>& digits,
   char* pos = buf.begin();
   memcpy(pos, digits.begin(), digits.size());
   pos += digits.size();
-  KJ_IF_MAYBE(f, fraction) {
+  KJ_IF_SOME(f, fraction) {
     *pos++ = '.';
-    memcpy(pos, f->begin(), f->size());
-    pos += f->size();
+    memcpy(pos, f.begin(), f.size());
+    pos += f.size();
   }
-  KJ_IF_MAYBE(e, exponent) {
+  KJ_IF_SOME(e, exponent) {
     *pos++ = 'e';
-    KJ_IF_MAYBE(sign, get<0>(*e)) {
-      *pos++ = *sign;
+    KJ_IF_SOME(sign, get<0>(e)) {
+      *pos++ = sign;
     }
-    memcpy(pos, get<1>(*e).begin(), get<1>(*e).size());
-    pos += get<1>(*e).size();
+    memcpy(pos, get<1>(e).begin(), get<1>(e).size());
+    pos += get<1>(e).size();
   }
 
   *pos++ = '\0';

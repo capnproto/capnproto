@@ -245,7 +245,7 @@ private:
 #endif
   };
 
-  kj::Maybe<Waiter&> waitersHead = nullptr;
+  kj::Maybe<Waiter&> waitersHead = kj::none;
   kj::Maybe<Waiter&>* waitersTail = &waitersHead;
   // linked list of waiters; can only modify under lock
 
@@ -366,7 +366,7 @@ public:
   inline operator const T*() const { return ptr; }
 
   template <typename Cond>
-  void wait(Cond&& condition, Maybe<Duration> timeout = nullptr,
+  void wait(Cond&& condition, Maybe<Duration> timeout = kj::none,
       LockSourceLocationArg location = {}) {
     // Unlocks the lock until `condition(state)` evaluates true (where `state` is type `const T&`
     // referencing the object protected by the lock).
@@ -465,7 +465,7 @@ public:
   // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
 
   template <typename Cond, typename Func>
-  auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = nullptr,
+  auto when(Cond&& condition, Func&& callback, Maybe<Duration> timeout = kj::none,
       LockSourceLocationArg location = {}) const
       -> decltype(callback(instance<T&>())) {
     // Waits until condition(state) returns true, then calls callback(state) under lock.
@@ -548,7 +548,7 @@ public:
 
   ~ExternalMutexGuarded() noexcept(false) {
     if (mutex != nullptr) {
-      mutex->lock(_::Mutex::EXCLUSIVE, nullptr, location);
+      mutex->lock(_::Mutex::EXCLUSIVE, kj::none, location);
       KJ_DEFER(mutex->unlock(_::Mutex::EXCLUSIVE));
       value = T();
     }
@@ -639,13 +639,13 @@ inline MutexGuarded<T>::MutexGuarded(Params&&... params)
 template <typename T>
 inline Locked<T> MutexGuarded<T>::lockExclusive(LockSourceLocationArg location)
     const {
-  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, location);
+  mutex.lock(_::Mutex::EXCLUSIVE, kj::none, location);
   return Locked<T>(mutex, value);
 }
 
 template <typename T>
 inline Locked<const T> MutexGuarded<T>::lockShared(LockSourceLocationArg location) const {
-  mutex.lock(_::Mutex::SHARED, nullptr, location);
+  mutex.lock(_::Mutex::SHARED, kj::none, location);
   return Locked<const T>(mutex, value);
 }
 
@@ -655,7 +655,7 @@ inline Maybe<Locked<T>> MutexGuarded<T>::lockExclusiveWithTimeout(Duration timeo
   if (mutex.lock(_::Mutex::EXCLUSIVE, timeout, location)) {
     return Locked<T>(mutex, value);
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
@@ -665,7 +665,7 @@ inline Maybe<Locked<const T>> MutexGuarded<T>::lockSharedWithTimeout(Duration ti
   if (mutex.lock(_::Mutex::SHARED, timeout, location)) {
     return Locked<const T>(mutex, value);
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
@@ -757,7 +757,7 @@ using BlockedOnReason = OneOf<BlockedOnMutexAcquisition, BlockedOnCondVarWait, B
 
 Maybe<const BlockedOnReason&> blockedReason() noexcept;
 // Returns the information about the reason the current thread is blocked synchronously on KJ
-// lock primitives. Returns nullptr if the current thread is not currently blocked on such
+// lock primitives. Returns kj::none if the current thread is not currently blocked on such
 // primitives. This is intended to be called from a signal handler to check whether the current
 // thread is blocked. Outside of a signal handler there is little value to this function. In those
 // cases by definition the thread is not blocked. This includes the callable used as part of a

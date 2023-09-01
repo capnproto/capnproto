@@ -216,10 +216,10 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
       params[i - 1] = argv[i];
     }
 
-    KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
+    KJ_IF_SOME(exception, runCatchingExceptions([&]() {
       func(argv[0], params);
     })) {
-      context.error(str("*** Uncaught exception ***\n", *exception));
+      context.error(str("*** Uncaught exception ***\n", exception));
     }
     context.exit();
   } catch (const TopLevelProcessContext::CleanShutdownException& e) {
@@ -422,9 +422,9 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
       // Long option.
       ArrayPtr<const char> name;
       Maybe<StringPtr> maybeArg;
-      KJ_IF_MAYBE(pos, param.findFirst('=')) {
-        name = param.slice(2, *pos);
-        maybeArg = param.slice(*pos + 1);
+      KJ_IF_SOME(pos, param.findFirst('=')) {
+        name = param.slice(2, pos);
+        maybeArg = param.slice(pos + 1);
       } else {
         name = param.slice(2);
       }
@@ -439,26 +439,26 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
         const Impl::Option& option = *iter->second;
         if (option.hasArg) {
           // Argument expected.
-          KJ_IF_MAYBE(arg, maybeArg) {
+          KJ_IF_SOME(arg, maybeArg) {
             // "--foo=blah": "blah" is the argument.
-            KJ_IF_MAYBE(error, (*option.funcWithArg)(*arg).releaseError()) {
-              usageError(programName, str(param, ": ", *error));
+            KJ_IF_SOME(error, (*option.funcWithArg)(arg).releaseError()) {
+              usageError(programName, str(param, ": ", error));
             }
           } else if (i + 1 < params.size() &&
                      !(params[i + 1].startsWith("-") && params[i + 1].size() > 1)) {
             // "--foo blah": "blah" is the argument.
             ++i;
-            KJ_IF_MAYBE(error, (*option.funcWithArg)(params[i]).releaseError()) {
-              usageError(programName, str(param, "=", params[i], ": ", *error));
+            KJ_IF_SOME(error, (*option.funcWithArg)(params[i]).releaseError()) {
+              usageError(programName, str(param, "=", params[i], ": ", error));
             }
           } else {
             usageError(programName, str("--", name, ": missing argument"));
           }
         } else {
           // No argument expected.
-          if (maybeArg == nullptr) {
-            KJ_IF_MAYBE(error, (*option.func)().releaseError()) {
-              usageError(programName, str(param, ": ", *error));
+          if (maybeArg == kj::none) {
+            KJ_IF_SOME(error, (*option.func)().releaseError()) {
+              usageError(programName, str(param, ": ", error));
             }
           } else {
             usageError(programName, str("--", name, ": option does not accept an argument"));
@@ -479,16 +479,16 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
             if (j + 1 < param.size()) {
               // Rest of flag is argument.
               StringPtr arg = param.slice(j + 1);
-              KJ_IF_MAYBE(error, (*option.funcWithArg)(arg).releaseError()) {
-                usageError(programName, str("-", c, " ", arg, ": ", *error));
+              KJ_IF_SOME(error, (*option.funcWithArg)(arg).releaseError()) {
+                usageError(programName, str("-", c, " ", arg, ": ", error));
               }
               break;
             } else if (i + 1 < params.size() &&
                        !(params[i + 1].startsWith("-") && params[i + 1].size() > 1)) {
               // Next parameter is argument.
               ++i;
-              KJ_IF_MAYBE(error, (*option.funcWithArg)(params[i]).releaseError()) {
-                usageError(programName, str("-", c, " ", params[i], ": ", *error));
+              KJ_IF_SOME(error, (*option.funcWithArg)(params[i]).releaseError()) {
+                usageError(programName, str("-", c, " ", params[i], ": ", error));
               }
               break;
             } else {
@@ -496,8 +496,8 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
             }
           } else {
             // No argument expected.
-            KJ_IF_MAYBE(error, (*option.func)().releaseError()) {
-              usageError(programName, str("-", c, ": ", *error));
+            KJ_IF_SOME(error, (*option.func)().releaseError()) {
+              usageError(programName, str("-", c, ": ", error));
             }
           }
         }
@@ -584,8 +584,8 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
       if (argPos == arguments.end()) {
         usageError(programName, str("missing argument ", argSpec.title));
       } else {
-        KJ_IF_MAYBE(error, argSpec.callback(*argPos).releaseError()) {
-          usageError(programName, str(*argPos, ": ", *error));
+        KJ_IF_SOME(error, argSpec.callback(*argPos).releaseError()) {
+          usageError(programName, str(*argPos, ": ", error));
         }
         ++argPos;
         --requiredArgCount;
@@ -595,8 +595,8 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
     // If we have more arguments than we need, and this argument spec will accept extras, give
     // them to it.
     for (; i < argSpec.maxCount && arguments.end() - argPos > requiredArgCount; ++i) {
-      KJ_IF_MAYBE(error, argSpec.callback(*argPos).releaseError()) {
-        usageError(programName, str(*argPos, ": ", *error));
+      KJ_IF_SOME(error, argSpec.callback(*argPos).releaseError()) {
+        usageError(programName, str(*argPos, ": ", error));
       }
       ++argPos;
     }
@@ -608,9 +608,9 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
   }
 
   // Run the final callback, if any.
-  KJ_IF_MAYBE(f, impl->finalCallback) {
-    KJ_IF_MAYBE(error, (*f)().releaseError()) {
-      usageError(programName, *error);
+  KJ_IF_SOME(f, impl->finalCallback) {
+    KJ_IF_SOME(error, f().releaseError()) {
+      usageError(programName, error);
     }
   }
 }
@@ -771,10 +771,10 @@ void MainBuilder::MainImpl::wrapText(Vector<char>& output, StringPtr indent, Str
   while (text.size() > 0) {
     output.addAll(indent);
 
-    KJ_IF_MAYBE(lineEnd, text.findFirst('\n')) {
-      if (*lineEnd <= width) {
-        output.addAll(text.slice(0, *lineEnd + 1));
-        text = text.slice(*lineEnd + 1);
+    KJ_IF_SOME(lineEnd, text.findFirst('\n')) {
+      if (lineEnd <= width) {
+        output.addAll(text.slice(0, lineEnd + 1));
+        text = text.slice(lineEnd + 1);
         continue;
       }
     }

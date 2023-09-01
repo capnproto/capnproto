@@ -35,24 +35,24 @@ TEST(CommonParsers, AnyParser) {
   constexpr auto parser = any;
 
   Maybe<char> result = parser(input);
-  KJ_IF_MAYBE(c, result) {
-    EXPECT_EQ('f', *c);
+  KJ_IF_SOME(c, result) {
+    EXPECT_EQ('f', c);
   } else {
     ADD_FAILURE() << "Expected 'c', got null.";
   }
   EXPECT_FALSE(input.atEnd());
 
   result = parser(input);
-  KJ_IF_MAYBE(c, result) {
-    EXPECT_EQ('o', *c);
+  KJ_IF_SOME(c, result) {
+    EXPECT_EQ('o', c);
   } else {
     ADD_FAILURE() << "Expected 'o', got null.";
   }
   EXPECT_FALSE(input.atEnd());
 
   result = parser(input);
-  KJ_IF_MAYBE(c, result) {
-    EXPECT_EQ('o', *c);
+  KJ_IF_SOME(c, result) {
+    EXPECT_EQ('o', c);
   } else {
     ADD_FAILURE() << "Expected 'o', got null.";
   }
@@ -115,8 +115,8 @@ TEST(CommonParsers, ConstResultParser) {
   StringPtr text = "o";
   Input input(text.begin(), text.end());
   Maybe<int> result = parser(input);
-  KJ_IF_MAYBE(i, result) {
-    EXPECT_EQ(123, *i);
+  KJ_IF_SOME(i, result) {
+    EXPECT_EQ(123, i);
   } else {
     ADD_FAILURE() << "Expected 123, got null.";
   }
@@ -177,8 +177,8 @@ TEST(CommonParsers, SequenceParser) {
     Input input(text.begin(), text.end());
     Maybe<int> result = sequence(transform(exactly('f'), [](){return 123;}),
                                  exactly('o'), exactly('o'))(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(123, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(123, i);
     } else {
       ADD_FAILURE() << "Expected 123, got null.";
     }
@@ -194,8 +194,8 @@ TEST(CommonParsers, ManyParserCountOnly) {
   {
     Input input(text.begin(), text.begin() + 3);
     Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(2, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(2, i);
     } else {
       ADD_FAILURE() << "Expected 2, got null.";
     }
@@ -205,8 +205,8 @@ TEST(CommonParsers, ManyParserCountOnly) {
   {
     Input input(text.begin(), text.begin() + 5);
     Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(4, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(4, i);
     } else {
       ADD_FAILURE() << "Expected 4, got null.";
     }
@@ -216,8 +216,8 @@ TEST(CommonParsers, ManyParserCountOnly) {
   {
     Input input(text.begin(), text.end());
     Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(4, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(4, i);
     } else {
       ADD_FAILURE() << "Expected 4, got null.";
     }
@@ -240,8 +240,8 @@ TEST(CommonParsers, TimesParser) {
   {
     Input input(text.begin(), text.begin() + 5);
     Maybe<Array<char>> result = parser(input);
-    KJ_IF_MAYBE(s, result) {
-      EXPECT_EQ("ooba", heapString(*s));
+    KJ_IF_SOME(s, result) {
+      EXPECT_EQ("ooba", heapString(s));
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }
@@ -251,8 +251,8 @@ TEST(CommonParsers, TimesParser) {
   {
     Input input(text.begin(), text.end());
     Maybe<Array<char>> result = parser(input);
-    KJ_IF_MAYBE(s, result) {
-      EXPECT_EQ("ooba", heapString(*s));
+    KJ_IF_SOME(s, result) {
+      EXPECT_EQ("ooba", heapString(s));
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }
@@ -304,8 +304,8 @@ TEST(CommonParsers, ManyParserSubResult) {
   {
     Input input(text.begin(), text.end());
     Maybe<Array<char>> result = parser(input);
-    KJ_IF_MAYBE(chars, result) {
-      EXPECT_EQ(text, heapString(*chars));
+    KJ_IF_SOME(chars, result) {
+      EXPECT_EQ(text, heapString(chars));
     } else {
       ADD_FAILURE() << "Expected char array, got null.";
     }
@@ -323,14 +323,14 @@ TEST(CommonParsers, OptionalParser) {
     StringPtr text = "bar";
     Input input(text.begin(), text.end());
     Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123u, get<0>(*value));
-      KJ_IF_MAYBE(value2, get<1>(*value)) {
-        EXPECT_EQ(456u, *value2);
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(123u, get<0>(value));
+      KJ_IF_SOME(value2, get<1>(value)) {
+        EXPECT_EQ(456u, value2);
       } else {
         ADD_FAILURE() << "Expected 456, got null.";
       }
-      EXPECT_EQ(789u, get<2>(*value));
+      EXPECT_EQ(789u, get<2>(value));
     } else {
       ADD_FAILURE() << "Expected result tuple, got null.";
     }
@@ -341,10 +341,10 @@ TEST(CommonParsers, OptionalParser) {
     StringPtr text = "br";
     Input input(text.begin(), text.end());
     Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123u, get<0>(*value));
-      EXPECT_TRUE(get<1>(*value) == nullptr);
-      EXPECT_EQ(789u, get<2>(*value));
+    KJ_IF_SOME(value, result) {
+      EXPECT_EQ(123u, get<0>(value));
+      EXPECT_TRUE(get<1>(value) == kj::none);
+      EXPECT_EQ(789u, get<2>(value));
     } else {
       ADD_FAILURE() << "Expected result tuple, got null.";
     }
@@ -370,8 +370,8 @@ TEST(CommonParsers, OneOfParser) {
     StringPtr text = "foo";
     Input input(text.begin(), text.end());
     Maybe<StringPtr> result = parser(input);
-    KJ_IF_MAYBE(s, result) {
-      EXPECT_EQ("foo", *s);
+    KJ_IF_SOME(s, result) {
+      EXPECT_EQ("foo", s);
     } else {
       ADD_FAILURE() << "Expected 'foo', got null.";
     }
@@ -382,8 +382,8 @@ TEST(CommonParsers, OneOfParser) {
     StringPtr text = "bar";
     Input input(text.begin(), text.end());
     Maybe<StringPtr> result = parser(input);
-    KJ_IF_MAYBE(s, result) {
-      EXPECT_EQ("bar", *s);
+    KJ_IF_SOME(s, result) {
+      EXPECT_EQ("bar", s);
     } else {
       ADD_FAILURE() << "Expected 'bar', got null.";
     }
@@ -404,8 +404,8 @@ TEST(CommonParsers, TransformParser) {
   {
     Input input(text.begin(), text.end());
     Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(123, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(123, i);
     } else {
       ADD_FAILURE() << "Expected 123, got null.";
     }
@@ -427,8 +427,8 @@ TEST(CommonParsers, TransformOrRejectParser) {
     StringPtr text = "foo";
     Input input(text.begin(), text.end());
     Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(123, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(123, i);
     } else {
       ADD_FAILURE() << "Expected 123, got null.";
     }
@@ -475,8 +475,8 @@ TEST(CommonParsers, References) {
   {
     Input input(text.begin(), text.end());
     Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(12 + 34 + 56, *i);
+    KJ_IF_SOME(i, result) {
+      EXPECT_EQ(12 + 34 + 56, i);
     } else {
       ADD_FAILURE() << "Expected 12 + 34 + 56, got null.";
     }

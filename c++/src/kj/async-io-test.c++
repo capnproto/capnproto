@@ -195,15 +195,15 @@ TEST(AsyncIo, UnixSocket) {
     return promise.then([&,addr=kj::mv(addr)](AuthenticatedStream result) mutable {
       auto id = result.peerIdentity.downcast<LocalPeerIdentity>();
       auto creds = id->getCredentials();
-      KJ_IF_MAYBE(p, creds.pid) {
-        KJ_EXPECT(*p == getpid());
+      KJ_IF_SOME(p, creds.pid) {
+        KJ_EXPECT(p == getpid());
 #if __linux__ || __APPLE__
       } else {
         KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null PID");
 #endif
       }
-      KJ_IF_MAYBE(u, creds.uid) {
-        KJ_EXPECT(*u == getuid());
+      KJ_IF_SOME(u, creds.uid) {
+        KJ_EXPECT(u == getuid());
       } else {
         KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null UID");
       }
@@ -223,15 +223,15 @@ TEST(AsyncIo, UnixSocket) {
   }).then([&](AuthenticatedStream result) {
     auto id = result.peerIdentity.downcast<LocalPeerIdentity>();
     auto creds = id->getCredentials();
-    KJ_IF_MAYBE(p, creds.pid) {
-      KJ_EXPECT(*p == getpid());
+    KJ_IF_SOME(p, creds.pid) {
+      KJ_EXPECT(p == getpid());
 #if __linux__ || __APPLE__
     } else {
       KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null PID");
 #endif
     }
-    KJ_IF_MAYBE(u, creds.uid) {
-      KJ_EXPECT(*u == getuid());
+    KJ_IF_SOME(u, creds.uid) {
+      KJ_EXPECT(u == getuid());
     } else {
       KJ_FAIL_EXPECT("LocalPeerIdentity for unix socket had null UID");
     }
@@ -2782,10 +2782,10 @@ KJ_TEST("Userland tee pump cancellation implies write cancellation") {
   leftPumpPromise = nullptr;
   // It should cancel its write operations, so it should now be safe to destroy the output stream to
   // which it was pumping.
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
     leftPipe.out = nullptr;
   })) {
-    KJ_FAIL_EXPECT("write promises were not canceled", *exception);
+    KJ_FAIL_EXPECT("write promises were not canceled", exception);
   }
 }
 
@@ -2993,8 +2993,8 @@ KJ_TEST("AggregateConnectionReceiver") {
 
   auto aggregate = newAggregateConnectionReceiver(receiversBuilder.finish());
 
-  CapabilityStreamNetworkAddress connector1(nullptr, *pipe1.ends[1]);
-  CapabilityStreamNetworkAddress connector2(nullptr, *pipe2.ends[1]);
+  CapabilityStreamNetworkAddress connector1(kj::none, *pipe1.ends[1]);
+  CapabilityStreamNetworkAddress connector2(kj::none, *pipe2.ends[1]);
 
   auto connectAndWrite = [&](NetworkAddress& addr, kj::StringPtr text) {
     return addr.connect()
