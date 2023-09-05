@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <compare>
 #include <initializer_list>
 #include "array.h"
 #include "kj/common.h"
@@ -134,6 +135,7 @@ public:
 
   inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
 
+  inline std::strong_ordering operator<=>(const StringPtr& other) const;
   inline bool operator==(const StringPtr& other) const;
   inline bool operator< (const StringPtr& other) const;
   inline bool operator> (const StringPtr& other) const { return other < *this; }
@@ -692,6 +694,20 @@ inline bool StringPtr::operator<(const StringPtr& other) const {
   int cmp = memcmp(content.begin(), other.content.begin(),
                    shorter ? content.size() : other.content.size());
   return cmp < 0 || (cmp == 0 && shorter);
+}
+
+inline std::strong_ordering StringPtr::operator<=>(const StringPtr& other) const {
+  bool shorter = content.size() < other.content.size();
+  int cmp = memcmp(content.begin(), other.content.begin(),
+                   shorter ? content.size() : other.content.size());
+  if (cmp < 0) {
+    return std::strong_ordering::less;
+  } else if (cmp > 0) {
+    return std::strong_ordering::greater;
+  } else {
+    if (content.size() == other.content.size()) return std::strong_ordering::equal;
+    return shorter ? std::strong_ordering::less : std::strong_ordering::greater;
+  }
 }
 
 inline StringPtr StringPtr::slice(size_t start) const {

@@ -261,6 +261,18 @@ TEST(Array, ArrayBuilder) {
   EXPECT_EQ(0, TestObject::count);
 }
 
+KJ_TEST("ArrayBuilder::insert") {
+  TestObject::count = 0;
+
+  ArrayBuilder<int> builder = heapArrayBuilder<int>(64);
+  for (int i = 0; i < 32; i++) { builder.add(i); }
+
+  EXPECT_EQ(16, builder[16]);
+  builder.insert(builder.begin() + 16, 999);
+  EXPECT_EQ(999, builder[16]);
+  EXPECT_EQ(16, builder[17]);
+}
+
 TEST(SmallArray, SmallArrayBuilder) {
   TestObject::count = 0;
   TestObject::throwAt = -1;

@@ -19,7 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/test.h"
 #include "string.h"
+#include <compare>
 #include <kj/compat/gtest.h>
 #include <string>
 #include "vector.h"
@@ -383,6 +385,14 @@ KJ_TEST("float stringification and parsing is not locale-dependent") {
 KJ_TEST("ConstString") {
   kj::ConstString theString = "it's a const string!"_kjc;
   KJ_EXPECT(theString == "it's a const string!");
+}
+
+KJ_TEST("three way comparison") {
+  KJ_EXPECT(("123"_kj <=> "123"_kj) == std::strong_ordering::equivalent);
+  KJ_EXPECT(("123"_kj <=> "124"_kj) == std::strong_ordering::less);
+  KJ_EXPECT(("123"_kj <=> "122"_kj) == std::strong_ordering::greater);
+  KJ_EXPECT(("123"_kj <=> "12"_kj) == std::strong_ordering::greater);
+  KJ_EXPECT(("12"_kj <=> "123"_kj) == std::strong_ordering::less);
 }
 
 }  // namespace

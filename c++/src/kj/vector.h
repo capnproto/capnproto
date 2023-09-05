@@ -86,6 +86,18 @@ public:
     return builder.add(kj::fwd<Params>(params)...);
   }
 
+  template <typename... Params>
+  inline T& insert(T* loc, Params&&... params) KJ_LIFETIMEBOUND {
+    KJ_IREQUIRE(begin() <= loc && loc <= end(), "loc needs to point inside the vector");
+    if (builder.isFull()) {
+      // resizing the array will invalidate the pointer, recompute it.
+      size_t i = loc - begin();
+      grow();
+      loc = begin() + i;
+    }
+    return builder.insert(loc, kj::fwd<Params>(params)...);
+  }
+
   template <typename Iterator>
   inline void addAll(Iterator begin, Iterator end) {
     size_t needed = builder.size() + (end - begin);

@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "kj/common.h"
 #include "memory.h"
 #include <string.h>
 #include <initializer_list>
@@ -449,6 +450,16 @@ public:
         kj::dtor(*--pos);
       }
     }
+  }
+
+  template <typename... Params>
+  T& insert(T* loc, Params&&... params) KJ_LIFETIMEBOUND {
+    KJ_IREQUIRE(begin() <= loc && loc <= end(), "loc needs to point inside the array");
+    KJ_IREQUIRE(pos < endPtr, "Added too many elements to ArrayBuilder.");
+    memmove(loc + 1, loc, sizeof(T) * (pos - loc));
+    pos++;
+    ctor(*loc, kj::fwd<Params>(params)...);
+    return *loc;
   }
 
   void resize(size_t size) {
