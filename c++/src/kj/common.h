@@ -1267,7 +1267,11 @@ template <typename T>
 inline T* readMaybe(T* ptr) { return ptr; }
 // Allow KJ_IF_SOME to work on regular pointers.
 
-#if defined(KJ_DEPRECATE_KJ_IF_MAYBE) && KJ_DEPRECATE_KJ_IF_MAYBE
+#ifndef KJ_DEPRECATE_KJ_IF_MAYBE
+#define KJ_DEPRECATE_KJ_IF_MAYBE 1
+#endif
+
+#if KJ_DEPRECATE_KJ_IF_MAYBE
 [[deprecated("KJ_IF_MAYBE is deprecated and will be removed. Please use KJ_IF_SOME instead.")]]
 constexpr int KJ_IF_MAYBE_IS_DEPRECATED = 0;
 #define KJ_DEPRECATE_KJ_IF_MAYBE_STMT \
@@ -1283,7 +1287,11 @@ constexpr int KJ_IF_MAYBE_IS_DEPRECATED = 0;
 //
 // Due to this footgun, we've deprecated KJ_IF_MAYBE in favor of KJ_IF_SOME. Please use KJ_IF_SOME.
 
-#if defined (KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR) && KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR
+#ifndef KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR
+#define KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR 1
+#endif
+
+#if KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR
 #define KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR \
     [[deprecated("Using nullptr as an empty Maybe is deprecated and will be removed. " \
       "Please use kj::none for this purpose instead.")]]
