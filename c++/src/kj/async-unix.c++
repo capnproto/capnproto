@@ -775,7 +775,7 @@ UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
   if (flags & OBSERVE_READ) {
     EV_SET(&events[nevents++], fd, EVFILT_READ, EV_DELETE, 0, 0, nullptr);
   }
-  if ((flags & OBSERVE_WRITE) || hupFulfiller != nullptr) {
+  if ((flags & OBSERVE_WRITE) || hupFulfiller != kj::none) {
     EV_SET(&events[nevents++], fd, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
   }
 
@@ -805,7 +805,7 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
 
       KJ_IF_SOME(f, readFulfiller) {
         f->fulfill();
-        readFulfiller = nullptr;
+        readFulfiller = kj::none;
       }
       break;
 
@@ -814,7 +814,7 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
         // EOF on write indicates disconnect.
         KJ_IF_SOME(f, hupFulfiller) {
           f->fulfill();
-          hupFulfiller = nullptr;
+          hupFulfiller = kj::none;
           if (!(flags & OBSERVE_WRITE)) {
             // We were only observing writes to get the disconnect event. Stop observing now.
             struct kevent rmEvent;
@@ -834,7 +834,7 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
 
       KJ_IF_SOME(f, writeFulfiller) {
         f->fulfill();
-        writeFulfiller = nullptr;
+        writeFulfiller = kj::none;
       }
       break;
 
@@ -842,7 +842,7 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
     case EVFILT_EXCEPT:
       KJ_IF_SOME(f, urgentFulfiller) {
         f->fulfill();
-        urgentFulfiller = nullptr;
+        urgentFulfiller = kj::none;
       }
       break;
 #endif
@@ -875,7 +875,7 @@ Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
 }
 
 Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
-  if (!(flags & OBSERVE_WRITE) && hupFulfiller == nullptr) {
+  if (!(flags & OBSERVE_WRITE) && hupFulfiller == kj::none) {
     // We aren't observing writes, but we need to if we want to detect disconnects.
     struct kevent event;
     EV_SET(&event, fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, this);
@@ -1040,7 +1040,7 @@ public:
         // NOTE: The proc is automatically unregsitered from the kqueue on exit, so we should NOT
         //   attempt to unregister it here.
 
-        pid = nullptr;
+        pid = kj::none;
         fulfiller.fulfill(kj::mv(status));
       }
     }

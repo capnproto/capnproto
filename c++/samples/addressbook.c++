@@ -222,9 +222,9 @@ void dynamicPrintValue(DynamicValue::Reader value) {
     }
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
-      KJ_IF_MAYBE(enumerant, enumValue.getEnumerant()) {
+      KJ_IF_SOME(enumerant, enumValue.getEnumerant()) {
         std::cout <<
-            enumerant->getProto().getName().cStr();
+            enumerant.getProto().getName().cStr();
       } else {
         // Unknown enum value; output raw number.
         std::cout << enumValue.getRaw();

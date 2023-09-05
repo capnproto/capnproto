@@ -340,11 +340,11 @@ public:
   // requests.  Long-running asynchronous methods should try to call this as early as is
   // convenient.
 
-  typename Results::Builder getResults(kj::Maybe<MessageSize> sizeHint = nullptr);
-  typename Results::Builder initResults(kj::Maybe<MessageSize> sizeHint = nullptr);
+  typename Results::Builder getResults(kj::Maybe<MessageSize> sizeHint = kj::none);
+  typename Results::Builder initResults(kj::Maybe<MessageSize> sizeHint = kj::none);
   void setResults(typename Results::Reader value);
   void adoptResults(Orphan<Results>&& value);
-  Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = nullptr);
+  Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = kj::none);
   // Manipulate the results payload.  The "Return" message (part of the RPC protocol) will
   // typically be allocated the first time one of these is called.  Some RPC systems may
   // allocate these messages in a limited space (such as a shared memory segment), therefore the
@@ -504,7 +504,7 @@ public:
   // is no longer needed.  `context` may be used to allocate the output struct and other call
   // logistics.
 
-  virtual kj::Maybe<int> getFd() { return nullptr; }
+  virtual kj::Maybe<int> getFd() { return kj::none; }
   // If this capability is backed by a file descriptor that is safe to directly expose to clients,
   // returns that FD. When FD passing has been enabled in the RPC layer, this FD may be sent to
   // other processes along with the capability.
@@ -524,7 +524,7 @@ public:
   // all further calls initiated by the client to this capability to immediately fail client-side,
   // sparing the server's bandwidth.
   //
-  // The default implementation always returns nullptr.
+  // The default implementation always returns kj::none.
 
   // TODO(someday):  Method which can optionally be overridden to implement Join when the object is
   //   a proxy.
@@ -1158,7 +1158,7 @@ inline void CallContext<Params, Results>::setResults(typename Results::Reader va
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::adoptResults(Orphan<Results>&& value) {
-  hook->getResults(nullptr).adopt(kj::mv(value));
+  hook->getResults(kj::none).adopt(kj::mv(value));
 }
 template <typename Params, typename Results>
 inline Orphanage CallContext<Params, Results>::getResultsOrphanage(

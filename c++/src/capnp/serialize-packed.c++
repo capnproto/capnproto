@@ -463,8 +463,8 @@ void writePackedMessage(kj::BufferedOutputStream& output,
 
 void writePackedMessage(kj::OutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  KJ_IF_MAYBE(bufferedOutputPtr, kj::dynamicDowncastIfAvailable<kj::BufferedOutputStream>(output)) {
-    writePackedMessage(*bufferedOutputPtr, segments);
+  KJ_IF_SOME(bufferedOutputPtr, kj::dynamicDowncastIfAvailable<kj::BufferedOutputStream>(output)) {
+    writePackedMessage(bufferedOutputPtr, segments);
   } else {
     byte buffer[8192];
     kj::BufferedOutputStreamWrapper bufferedOutput(output, kj::arrayPtr(buffer, sizeof(buffer)));

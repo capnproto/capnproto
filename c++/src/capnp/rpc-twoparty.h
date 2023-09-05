@@ -188,7 +188,7 @@ class TwoPartyServer: private kj::TaskSet::ErrorHandler {
 
 public:
   explicit TwoPartyServer(Capability::Client bootstrapInterface,
-      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder = nullptr);
+      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder = kj::none);
   // `traceEncoder`, if provided, will be passed on to `rpcSystem.setTraceEncoder()`.
 
   void accept(kj::Own<kj::AsyncIoStream>&& connection);

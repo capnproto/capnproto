@@ -320,12 +320,12 @@ public:
   //
   // Under the hood, this will call dup(), so the FD number will not be the same.
 
-  virtual Maybe<int> getFd() const { return nullptr; }
-  // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually isn't
+  virtual Maybe<int> getFd() const { return kj::none; }
+  // Get the underlying Unix file descriptor, if any. Returns kj::none if this object actually isn't
   // wrapping a file descriptor.
 
-  virtual Maybe<void*> getWin32Handle() const { return nullptr; }
-  // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
+  virtual Maybe<void*> getWin32Handle() const { return kj::none; }
+  // Get the underlying Win32 HANDLE, if any. Returns kj::none if this object actually isn't
   // wrapping a handle.
 
   enum class Type {
@@ -859,7 +859,7 @@ public:
   //
   // tryTransferTo() exists to implement double-dispatch. It should be called as a fallback by
   // implementations of tryTransfer() in cases where the target directory would otherwise fail or
-  // perform a pessimal transfer. The default implementation returns nullptr, which the caller
+  // perform a pessimal transfer. The default implementation returns kj::none, which the caller
   // should interpret as: "I don't have any special optimizations; do the obvious thing."
   //
   // `toMode` controls how the target path is created. CREATE_PARENT is honored but EXECUTABLE and

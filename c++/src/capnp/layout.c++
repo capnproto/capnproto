@@ -578,7 +578,7 @@ struct WireHelpers {
       // Look up the segment containing the landing pad.
       segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
       KJ_REQUIRE(segment != nullptr, "Message contains far pointer to unknown segment.") {
-        return nullptr;
+        return kj::none;
       }
 
       // Find the landing pad and check that it is within bounds.
@@ -587,7 +587,7 @@ struct WireHelpers {
       KJ_REQUIRE(boundsCheck(segment, ptr, padWords),
                  "Message contains out-of-bounds far pointer. "
                  OUT_OF_BOUNDS_ERROR_DETAIL) {
-        return nullptr;
+        return kj::none;
       }
 
       const WirePointer* pad = reinterpret_cast<const WirePointer*>(ptr);
@@ -605,11 +605,11 @@ struct WireHelpers {
       SegmentReader* newSegment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
       KJ_REQUIRE(newSegment != nullptr,
           "Message contains double-far pointer to unknown segment.") {
-        return nullptr;
+        return kj::none;
       }
       KJ_REQUIRE(pad->kind() == WirePointer::FAR,
           "Second word of double-far pad must be far pointer.") {
-        return nullptr;
+        return kj::none;
       }
 
       segment = newSegment;
@@ -789,8 +789,8 @@ struct WireHelpers {
     --nestingLimit;
 
     const word* ptr;
-    KJ_IF_MAYBE(p, followFars(ref, ref->target(segment), segment)) {
-      ptr = p;
+    KJ_IF_SOME(p, followFars(ref, ref->target(segment), segment)) {
+      ptr = &p;
     } else {
       return result;
     }
@@ -1689,12 +1689,12 @@ struct WireHelpers {
 
       auto maybeSize = trySubtract(ref->listRef.elementCount() * (ONE * BYTES / ELEMENTS),
                                    ONE * BYTES);
-      KJ_IF_MAYBE(size, maybeSize) {
-        KJ_REQUIRE(*(bptr + *size) == '\0', "Text blob missing NUL terminator.") {
+      KJ_IF_SOME(size, maybeSize) {
+        KJ_REQUIRE(*(bptr + size) == '\0', "Text blob missing NUL terminator.") {
           goto useDefault;
         }
 
-        return Text::Builder(reinterpret_cast<char*>(bptr), unbound(*size / BYTES));
+        return Text::Builder(reinterpret_cast<char*>(bptr), unbound(size / BYTES));
       } else {
         KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)") {
           goto useDefault;
@@ -1968,8 +1968,8 @@ struct WireHelpers {
     }
 
     const word* ptr;
-    KJ_IF_MAYBE(p, WireHelpers::followFars(src, srcTarget, srcSegment)) {
-      ptr = p;
+    KJ_IF_SOME(p, WireHelpers::followFars(src, srcTarget, srcSegment)) {
+      ptr = &p;
     } else {
       goto useDefault;
     }
@@ -2088,8 +2088,8 @@ struct WireHelpers {
           }
         }
 #if !CAPNP_LITE
-        KJ_IF_MAYBE(cap, srcCapTable->extractCap(src->capRef.index.get())) {
-          setCapabilityPointer(dstSegment, dstCapTable, dst, kj::mv(*cap));
+        KJ_IF_SOME(cap, srcCapTable->extractCap(src->capRef.index.get())) {
+          setCapabilityPointer(dstSegment, dstCapTable, dst, kj::mv(cap));
           // Return dummy non-null pointer so OrphanBuilder doesn't end up null.
           return { dstSegment, reinterpret_cast<word*>(1) };
         } else {
@@ -2189,8 +2189,8 @@ struct WireHelpers {
     }
 
     const word* ptr;
-    KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-      ptr = p;
+    KJ_IF_SOME(p, followFars(ref, refTarget, segment)) {
+      ptr = &p;
     } else {
       goto useDefault;
     }
@@ -2238,8 +2238,8 @@ struct WireHelpers {
       }
       return brokenCapFactory->newBrokenCap(
           "Calling capability extracted from a non-capability pointer.");
-    } else KJ_IF_MAYBE(cap, capTable->extractCap(ref->capRef.index.get())) {
-      return kj::mv(*cap);
+    } else KJ_IF_SOME(cap, capTable->extractCap(ref->capRef.index.get())) {
+      return kj::mv(cap);
     } else {
       KJ_FAIL_REQUIRE("Message contains invalid capability pointer.") {
         break;
@@ -2280,8 +2280,8 @@ struct WireHelpers {
     }
 
     const word* ptr;
-    KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-      ptr = p;
+    KJ_IF_SOME(p, followFars(ref, refTarget, segment)) {
+      ptr = &p;
     } else {
       goto useDefault;
     }
@@ -2452,8 +2452,8 @@ struct WireHelpers {
           unbound(defaultSize / BYTES));
     } else {
       const word* ptr;
-      KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-        ptr = p;
+      KJ_IF_SOME(p, followFars(ref, refTarget, segment)) {
+        ptr = &p;
       } else {
         goto useDefault;
       }
@@ -2507,8 +2507,8 @@ struct WireHelpers {
           unbound(defaultSize / BYTES));
     } else {
       const word* ptr;
-      KJ_IF_MAYBE(p, followFars(ref, refTarget, segment)) {
-        ptr = p;
+      KJ_IF_SOME(p, followFars(ref, refTarget, segment)) {
+        ptr = &p;
       } else {
         goto useDefault;
       }
@@ -2767,7 +2767,7 @@ PointerType PointerReader::getPointerType() const {
     const WirePointer* ptr = pointer;
     const word* refTarget = ptr->target(segment);
     SegmentReader* sgmt = segment;
-    if (WireHelpers::followFars(ptr, refTarget, sgmt) == nullptr) return PointerType::NULL_;
+    if (WireHelpers::followFars(ptr, refTarget, sgmt) == kj::none) return PointerType::NULL_;
     switch(ptr->kind()) {
       case WirePointer::FAR:
         KJ_FAIL_ASSERT("far pointer not followed?") { return PointerType::NULL_; }
@@ -3028,15 +3028,15 @@ bool StructReader::isCanonical(const word **readHead,
   auto dataSize = this->getDataSectionSize() / BITS_PER_WORD;
 
   // Mark whether the struct is properly truncated
-  KJ_IF_MAYBE(diff, trySubtract(dataSize, ONE * WORDS)) {
-    *dataTrunc = this->getDataField<uint64_t>(*diff / WORDS * ELEMENTS) != 0;
+  KJ_IF_SOME(diff, trySubtract(dataSize, ONE * WORDS)) {
+    *dataTrunc = this->getDataField<uint64_t>(diff / WORDS * ELEMENTS) != 0;
   } else {
     // Data segment empty.
     *dataTrunc = true;
   }
 
-  KJ_IF_MAYBE(diff, trySubtract(this->pointerCount, ONE * POINTERS)) {
-    *ptrTrunc  = !this->getPointerField(*diff).isNull();
+  KJ_IF_SOME(diff, trySubtract(this->pointerCount, ONE * POINTERS)) {
+    *ptrTrunc  = !this->getPointerField(diff).isNull();
   } else {
     *ptrTrunc = true;
   }
@@ -3884,8 +3884,8 @@ void OrphanBuilder::euthanize() {
     location = nullptr;
   });
 
-  KJ_IF_MAYBE(e, exception) {
-    kj::getExceptionCallback().onRecoverableException(kj::mv(*e));
+  KJ_IF_SOME(e, exception) {
+    kj::getExceptionCallback().onRecoverableException(kj::mv(e));
   }
 }
 

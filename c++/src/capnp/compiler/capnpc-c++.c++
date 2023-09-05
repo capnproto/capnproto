@@ -139,8 +139,8 @@ kj::Array<uint> makeMembersByName(MemberList&& members) {
 }
 
 kj::StringPtr baseName(kj::StringPtr path) {
-  KJ_IF_MAYBE(slashPos, path.findLast('/')) {
-    return path.slice(*slashPos + 1);
+  KJ_IF_SOME(slashPos, path.findLast('/')) {
+    return path.slice(slashPos + 1);
   } else {
     return path;
   }
@@ -382,8 +382,8 @@ private:
       KJ_REQUIRE(node.isFile(),
           "Non-file had scopeId zero; perhaps it's a method param / result struct?");
       usedImports.insert(node.getId());
-      KJ_IF_MAYBE(ns, annotationValue(node, NAMESPACE_ANNOTATION_ID)) {
-        return CppTypeName::makeNamespace(ns->getText());
+      KJ_IF_SOME(ns, annotationValue(node, NAMESPACE_ANNOTATION_ID)) {
+        return CppTypeName::makeNamespace(ns.getText());
       } else {
         return CppTypeName::makeRoot();
       }
@@ -394,9 +394,9 @@ private:
       Schema parent = schemaLoader.get(node.getScopeId());
       kj::StringPtr unqualifiedName;
       kj::String ownUnqualifiedName;
-      KJ_IF_MAYBE(annotatedName, annotationValue(node, NAME_ANNOTATION_ID)) {
+      KJ_IF_SOME(annotatedName, annotationValue(node, NAME_ANNOTATION_ID)) {
         // The node's name has been overridden for C++ by an annotation.
-        unqualifiedName = annotatedName->getText();
+        unqualifiedName = annotatedName.getText();
       } else {
         // Search among the parent's nested nodes to for this node, in order to determine its name.
         auto parentProto = parent.getProto();
@@ -530,14 +530,14 @@ private:
       }
 
       case schema::Type::ANY_POINTER:
-        KJ_IF_MAYBE(param, type.getBrandParameter()) {
-          return CppTypeName::makeTemplateParam(schemaLoader.get(param->scopeId).getProto()
-              .getParameters()[param->index].getName());
-        } else KJ_IF_MAYBE(param, type.getImplicitParameter()) {
-          KJ_IF_MAYBE(m, method) {
-            auto params = m->getProto().getImplicitParameters();
-            KJ_REQUIRE(param->index < params.size());
-            return CppTypeName::makeTemplateParam(params[param->index].getName());
+        KJ_IF_SOME(param, type.getBrandParameter()) {
+          return CppTypeName::makeTemplateParam(schemaLoader.get(param.scopeId).getProto()
+              .getParameters()[param.index].getName());
+        } else KJ_IF_SOME(param, type.getImplicitParameter()) {
+          KJ_IF_SOME(m, method) {
+            auto params = m.getProto().getImplicitParameters();
+            KJ_REQUIRE(param.index < params.size());
+            return CppTypeName::makeTemplateParam(params[param.index].getName());
           } else {
             return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
           }
@@ -569,13 +569,13 @@ private:
         return annotation.getValue();
       }
     }
-    return nullptr;
+    return kj::none;
   }
 
   template <typename P>
   kj::StringPtr protoName(P proto) {
-    KJ_IF_MAYBE(name, annotationValue(proto, NAME_ANNOTATION_ID)) {
-      return name->getText();
+    KJ_IF_SOME(name, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      return name.getText();
     } else {
       return proto.getName();
     }
@@ -595,9 +595,9 @@ private:
       case schema::Value::UINT64: return kj::strTree(value.getUint64(), "llu");
       case schema::Value::FLOAT32: {
         auto text = kj::str(value.getFloat32());
-        if (text.findFirst('.') == nullptr &&
-            text.findFirst('e') == nullptr &&
-            text.findFirst('E') == nullptr) {
+        if (text.findFirst('.') == kj::none &&
+            text.findFirst('e') == kj::none &&
+            text.findFirst('E') == kj::none) {
           text = kj::str(text, ".0");
         }
         return kj::strTree(kj::mv(text), "f");
@@ -607,10 +607,10 @@ private:
         EnumSchema schema = type.asEnum();
         if (value.getEnum() < schema.getEnumerants().size()) {
           return kj::strTree(
-              cppFullName(schema, nullptr), "::",
+              cppFullName(schema, kj::none), "::",
               toUpperCase(protoName(schema.getEnumerants()[value.getEnum()].getProto())));
         } else {
-          return kj::strTree("static_cast<", cppFullName(schema, nullptr),
+          return kj::strTree("static_cast<", cppFullName(schema, kj::none),
                              ">(", value.getEnum(), ")");
         }
       }
@@ -630,9 +630,9 @@ private:
 
   class TemplateContext {
   public:
-    TemplateContext(): parent(nullptr) {}
+    TemplateContext(): parent(kj::none) {}
     explicit TemplateContext(schema::Node::Reader node)
-        : parent(nullptr), node(node) {}
+        : parent(kj::none), node(node) {}
     TemplateContext(const TemplateContext& parent, kj::StringPtr name, schema::Node::Reader node)
         : parent(parent), name(name), node(node) {}
 
@@ -672,8 +672,8 @@ private:
 
     kj::StringTree parentDecls() const {
       // Decls just for the parents.
-      KJ_IF_MAYBE(p, parent) {
-        return p->allDecls();
+      KJ_IF_SOME(p, parent) {
+        return p.allDecls();
       } else {
         return kj::strTree();
       }
@@ -700,8 +700,8 @@ private:
 
       kj::StringTree self(KJ_MAP(p, params) { return kj::strTree(p.getName()); }, ", ");
       kj::StringTree up;
-      KJ_IF_MAYBE(p, parent) {
-        up = p->allArgs();
+      KJ_IF_SOME(p, parent) {
+        up = p.allArgs();
       }
 
       if (self.size() == 0) {
@@ -721,8 +721,8 @@ private:
         if (params.size() > 0) {
           result[current->node.getId()] = params;
         }
-        KJ_IF_MAYBE(p, current->parent) {
-          current = p;
+        KJ_IF_SOME(p, current->parent) {
+          current = &p;
         } else {
           return result;
         }
@@ -789,8 +789,8 @@ private:
     { \
       uint location = _::RawBrandedSchema::makeDepLocation( \
           _::RawBrandedSchema::DepKind::kind, index); \
-      KJ_IF_MAYBE(dep, makeBrandDepInitializer(__VA_ARGS__)) { \
-        depMap[location] = kj::mv(*dep); \
+      KJ_IF_SOME(dep, makeBrandDepInitializer(__VA_ARGS__)) { \
+        depMap[location] = kj::mv(dep); \
       } \
     }
 
@@ -847,9 +847,9 @@ private:
     // add the type's declaring file to `usedImports`. In particular, this causes `stream.capnp.h`
     // to be #included unnecessarily.
     if (type.isBranded()) {
-      return makeBrandDepInitializer(type, cppFullName(type, nullptr));
+      return makeBrandDepInitializer(type, cppFullName(type, kj::none));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -858,7 +858,7 @@ private:
     auto typeProto = type.getProto();
     if (typeProto.getScopeId() == 0) {
       // This is an auto-generated params or results type.
-      auto name = cppFullName(method.getContainingInterface(), nullptr);
+      auto name = cppFullName(method.getContainingInterface(), kj::none);
       auto memberTypeName = kj::str(toTitleCase(protoName(method.getProto())), suffix);
 
       if (typeProto.getParameters().size() == 0) {
@@ -881,7 +881,7 @@ private:
       name.addMemberValue("brand");
       return kj::strTree(name, "()");
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -903,7 +903,7 @@ private:
       case schema::Type::DATA:
       case schema::Type::ENUM:
       case schema::Type::ANY_POINTER:
-        return nullptr;
+        return kj::none;
 
       case schema::Type::STRUCT:
         return makeBrandDepInitializer(type.asStruct());
@@ -1268,7 +1268,7 @@ private:
 
     FieldKind kind = FieldKind::PRIMITIVE;
     kj::String ownedType;
-    CppTypeName type = typeName(typeSchema, nullptr);
+    CppTypeName type = typeName(typeSchema, kj::none);
     kj::StringPtr setterDefault;  // only for void
     kj::String defaultMask;    // primitives only
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
@@ -1363,7 +1363,7 @@ private:
         if (defaultBody.hasAnyPointer()) {
           defaultOffset = field.getDefaultValueSchemaOffset();
         }
-        if (typeSchema.getBrandParameter() != nullptr) {
+        if (typeSchema.getBrandParameter() != kj::none) {
           kind = FieldKind::BRAND_PARAMETER;
         } else {
           kind = FieldKind::ANY_POINTER;
@@ -1626,7 +1626,7 @@ private:
 
           case schema::Type::ANY_POINTER:
             primitiveElement = false;
-            shouldIncludeArrayInitializer = elementType.getBrandParameter() != nullptr;
+            shouldIncludeArrayInitializer = elementType.getBrandParameter() != kj::none;
             break;
 
           case schema::Type::INTERFACE:
@@ -1638,7 +1638,7 @@ private:
             primitiveElement = false;
             break;
         }
-        elementReaderType = typeName(elementType, nullptr);
+        elementReaderType = typeName(elementType, kj::none);
         if (!primitiveElement) {
           if (interface) {
             elementReaderType.addMemberType("Client");
@@ -1857,8 +1857,8 @@ private:
           break;
       }
     }
-    KJ_IF_MAYBE(p, templateContext.getParent()) {
-      up = makeAsGenericDef(role, *p, p->getName(), kj::strTree(
+    KJ_IF_SOME(p, templateContext.getParent()) {
+      up = makeAsGenericDef(role, p, p.getName(), kj::strTree(
           templateContext.hasParams() ? "::template " : "::", type,
           templateContext.args()).flatten());
     }
@@ -2023,8 +2023,8 @@ private:
                             kj::Array<kj::StringTree> nestedTypeDecls,
                             const TemplateContext& templateContext) {
     auto proto = schema.getProto();
-    KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
-      name = annotatedName->getText();
+    KJ_IF_SOME(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      name = annotatedName.getText();
     }
     auto fullName = kj::str(scope, name, templateContext.args());
     auto subScope = kj::str(fullName, "::");
@@ -2073,7 +2073,7 @@ private:
     // Name of the ::Which type, when applicable.
     CppTypeName whichName;
     if (structNode.getDiscriminantCount() != 0) {
-      whichName = cppFullName(schema, nullptr);
+      whichName = cppFullName(schema, kj::none);
       whichName.addMemberType("Which");
     }
 
@@ -2174,7 +2174,7 @@ private:
     }
 
 
-    CppTypeName interfaceTypeName = cppFullName(method.getContainingInterface(), nullptr);
+    CppTypeName interfaceTypeName = cppFullName(method.getContainingInterface(), kj::none);
     CppTypeName paramType;
     CppTypeName genericParamType;
     if (paramProto.getScopeId() == 0) {
@@ -2190,7 +2190,7 @@ private:
       }
     } else {
       paramType = cppFullName(paramSchema, method);
-      genericParamType = cppFullName(paramSchema, nullptr);
+      genericParamType = cppFullName(paramSchema, kj::none);
     }
     CppTypeName resultType;
     CppTypeName genericResultType;
@@ -2210,7 +2210,7 @@ private:
       }
     } else {
       resultType = cppFullName(resultSchema, method);
-      genericResultType = cppFullName(resultSchema, nullptr);
+      genericResultType = cppFullName(resultSchema, kj::none);
     }
 
     kj::String shortParamType = paramProto.getScopeId() == 0 ?
@@ -2250,16 +2250,16 @@ private:
         "}\n");
 
     bool allowCancellation = false;
-    if (annotationValue(proto, ALLOW_CANCELLATION_ANNOTATION_ID) != nullptr) {
+    if (annotationValue(proto, ALLOW_CANCELLATION_ANNOTATION_ID) != kj::none) {
       allowCancellation = true;
-    } else if (annotationValue(interfaceProto, ALLOW_CANCELLATION_ANNOTATION_ID) != nullptr) {
+    } else if (annotationValue(interfaceProto, ALLOW_CANCELLATION_ANNOTATION_ID) != kj::none) {
       allowCancellation = true;
     } else {
       schema::Node::Reader node = interfaceProto;
       while (!node.isFile()) {
         node = schemaLoader.get(node.getScopeId()).getProto();
       }
-      if (annotationValue(node, ALLOW_CANCELLATION_ANNOTATION_ID) != nullptr) {
+      if (annotationValue(node, ALLOW_CANCELLATION_ANNOTATION_ID) != kj::none) {
         allowCancellation = true;
       }
     }
@@ -2272,7 +2272,7 @@ private:
                       : kj::strTree("::capnp::Request<", paramType, ", ", resultType, ">"),
           templateContext.isGeneric() ? ")" : "",
           " ", name, "Request(\n"
-          "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
+          "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = kj::none);\n"),
 
       kj::strTree(
           paramProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
@@ -2359,7 +2359,7 @@ private:
     auto hexId = kj::hex(proto.getId());
 
     auto superclasses = KJ_MAP(superclass, schema.getSuperclasses()) {
-      return ExtendInfo { cppFullName(superclass, nullptr), superclass.getProto().getId() };
+      return ExtendInfo { cppFullName(superclass, kj::none), superclass.getProto().getId() };
     };
 
     kj::Array<ExtendInfo> transitiveSuperclasses;
@@ -2368,11 +2368,11 @@ private:
       getTransitiveSuperclasses(schema, map);
       map.erase(schema.getProto().getId());
       transitiveSuperclasses = KJ_MAP(entry, map) {
-        return ExtendInfo { cppFullName(entry.second, nullptr), entry.second.getProto().getId() };
+        return ExtendInfo { cppFullName(entry.second, kj::none), entry.second.getProto().getId() };
       };
     }
 
-    CppTypeName typeName = cppFullName(schema, nullptr);
+    CppTypeName typeName = cppFullName(schema, kj::none);
 
     CppTypeName clientName = typeName;
     clientName.addMemberType("Client");
@@ -2575,7 +2575,7 @@ private:
     auto proto = schema.getProto();
     auto constProto = proto.getConst();
     auto type = schema.getType();
-    auto typeName_ = typeName(type, nullptr);
+    auto typeName_ = typeName(type, kj::none);
     auto upperCase = toUpperCase(name);
 
     // Linkage qualifier for non-primitive types.
@@ -2650,7 +2650,7 @@ private:
 
       case schema::Type::LIST: {
         kj::String constType = kj::strTree(
-            "::capnp::_::ConstList<", typeName(type.asList().getElementType(), nullptr), ">")
+            "::capnp::_::ConstList<", typeName(type.asList().getElementType(), kj::none), ">")
             .flatten();
         return ConstText {
           true,
@@ -2687,8 +2687,8 @@ private:
     // declaring template parameters for all parent scopes.
 
     auto proto = schema.getProto();
-    KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
-      name = annotatedName->getText();
+    KJ_IF_SOME(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      name = annotatedName.getText();
     }
     auto hexId = kj::hex(proto.getId());
 
@@ -2868,8 +2868,8 @@ private:
                                      kj::Array<kj::StringTree> nestedTypeDecls,
                                      const TemplateContext& templateContext) {
     auto proto = schema.getProto();
-    KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
-      name = annotatedName->getText();
+    KJ_IF_SOME(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      name = annotatedName.getText();
     }
     auto hexId = kj::hex(proto.getId());
 
@@ -3003,9 +3003,9 @@ private:
         namespacePrefix = kj::str("::", ns);
 
         for (;;) {
-          KJ_IF_MAYBE(colonPos, ns.findFirst(':')) {
-            namespaceParts.add(ns.slice(0, *colonPos));
-            ns = ns.slice(*colonPos);
+          KJ_IF_SOME(colonPos, ns.findFirst(':')) {
+            namespaceParts.add(ns.slice(0, colonPos));
+            ns = ns.slice(colonPos);
             if (!ns.startsWith("::")) {
               context.exitError(kj::str(displayName, ": invalid namespace spec: ", ns2));
             }

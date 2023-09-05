@@ -323,8 +323,8 @@ void genericCheckTestMessage(Reader reader) {
 #define as template as
 
 Text::Reader name(DynamicEnum e) {
-  KJ_IF_MAYBE(schema, e.getEnumerant()) {
-    return schema->getProto().getName();
+  KJ_IF_SOME(schema, e.getEnumerant()) {
+    return schema.getProto().getName();
   } else {
     return "(unknown enumerant)";
   }
@@ -1167,9 +1167,9 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
   }));
   promises.add(params.getFdCap2().getFd()
       .then([context](kj::Maybe<int> fd) mutable {
-    context.getResults().setSecondFdPresent(fd != nullptr);
-    KJ_IF_MAYBE(f, fd) {
-      kj::FdOutputStream(*f).write("bar", 3);
+    context.getResults().setSecondFdPresent(fd != kj::none);
+    KJ_IF_SOME(f, fd) {
+      kj::FdOutputStream(f).write("bar", 3);
     }
   }));
 

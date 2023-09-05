@@ -69,7 +69,7 @@ static thread_local const BlockedOnReason* tlsBlockReason __attribute((tls_model
 
 Maybe<const BlockedOnReason&> blockedReason() noexcept {
   if (tlsBlockReason == nullptr) {
-    return nullptr;
+    return kj::none;
   }
   return *tlsBlockReason;
 }
@@ -507,7 +507,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocati
           // transferred to us from another thread. So, we need to lock it ourselves. But, another
           // thread might be in the process of signaling us and transferring ownership. So, we
           // first must atomically take control of our destiny.
-          KJ_ASSERT(timeout != nullptr);
+          KJ_ASSERT(timeout != kj::none);
           uint expected = 0;
           if (__atomic_compare_exchange_n(&waiter.futex, &expected, 1, false,
                                           __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
@@ -650,7 +650,7 @@ Mutex::Mutex() {
 Mutex::~Mutex() {}
 
 bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
-  if (timeout != nullptr) {
+  if (timeout != kj::none) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
   switch (exclusivity) {
@@ -720,7 +720,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
 
 void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocation) {
   // Add waiter to list.
-  Waiter waiter { nullptr, waitersTail, predicate, nullptr, 0 };
+  Waiter waiter { kj::none, waitersTail, predicate, kj::none, 0 };
   static_assert(sizeof(waiter.condvar) == sizeof(CONDITION_VARIABLE),
                 "CONDITION_VARIABLE is not a pointer?");
   InitializeConditionVariable(&coercedCondvar(waiter.condvar));
@@ -882,7 +882,7 @@ Mutex::~Mutex() {
 }
 
 bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLocation) {
-  if (timeout != nullptr) {
+  if (timeout != kj::none) {
     KJ_UNIMPLEMENTED("Locking a mutex with a timeout is only supported on Linux.");
   }
   switch (exclusivity) {
@@ -953,7 +953,7 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
 void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocation) {
   // Add waiter to list.
   Waiter waiter {
-    nullptr, waitersTail, predicate, nullptr,
+    kj::none, waitersTail, predicate, kj::none,
     PTHREAD_COND_INITIALIZER, PTHREAD_MUTEX_INITIALIZER
   };
 
@@ -970,7 +970,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   // currently.
   bool currentlyLocked = true;
   KJ_DEFER({
-    if (!currentlyLocked) lock(EXCLUSIVE, nullptr, NoopSourceLocation{});
+    if (!currentlyLocked) lock(EXCLUSIVE, kj::none, NoopSourceLocation{});
     removeWaiter(waiter);
 
     // Destroy pthread objects.
@@ -979,7 +979,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   });
 
 #if !__APPLE__
-  if (timeout != nullptr) {
+  if (timeout != kj::none) {
     // Oops, the default condvar uses the wall clock, which is dumb... fix it to use the monotonic
     // clock. (Except not on macOS, where pthread_condattr_setclock() is unimplemented, but there's
     // a bizarre pthread_cond_timedwait_relative_np() method we can use instead...)
@@ -1038,7 +1038,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
     // because we've already been signaled.
     KJ_PTHREAD_CALL(pthread_mutex_unlock(&waiter.stupidMutex));
 
-    lock(EXCLUSIVE, nullptr, NoopSourceLocation{});
+    lock(EXCLUSIVE, kj::none, NoopSourceLocation{});
     currentlyLocked = true;
 
     KJ_IF_SOME(exception, waiter.exception) {

@@ -428,7 +428,7 @@ public:
     if (is<T>()) {
       return *reinterpret_cast<T*>(space);
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
   template <typename T>
@@ -436,7 +436,7 @@ public:
     if (is<T>()) {
       return *reinterpret_cast<const T*>(space);
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 

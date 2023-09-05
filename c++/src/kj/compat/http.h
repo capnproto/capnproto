@@ -596,8 +596,8 @@ struct CompressionParameters {
   // `inbound` and `outbound` instead.
   bool outboundNoContextTakeover = false;
   bool inboundNoContextTakeover = false;
-  kj::Maybe<size_t> outboundMaxWindowBits = nullptr;
-  kj::Maybe<size_t> inboundMaxWindowBits = nullptr;
+  kj::Maybe<size_t> outboundMaxWindowBits = kj::none;
+  kj::Maybe<size_t> inboundMaxWindowBits = kj::none;
 };
 
 class WebSocket {
@@ -689,7 +689,7 @@ public:
     REQUEST,
     RESPONSE
   };
-  virtual kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) { return nullptr; }
+  virtual kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) { return kj::none; }
   // If pumpTo() / tryPumpFrom() is able to be optimized only if the other WebSocket is using
   // certain extensions (e.g. compression settings), then this method returns what those extensions
   // are. For example, matching extensions between standard WebSockets allows pumping to be
@@ -706,7 +706,7 @@ struct HttpConnectSettings {
   // will be expected to present a valid certificate matching the requested hostname.
   kj::Maybe<TlsStarterCallback&> tlsStarter;
   // This is an output parameter. It doesn't need to be set. But if it is set, then it may get
-  // filled with a callback function. It will get filled with `nullptr` if any of the following
+  // filled with a callback function. It will get filled with `kj::none` if any of the following
   // are true:
   //
   // * kj is not built with TLS support
@@ -819,7 +819,7 @@ public:
   };
 
   virtual Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                          kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
+                          kj::Maybe<uint64_t> expectedBodySize = kj::none) = 0;
   // Perform an HTTP request.
   //
   // `url` may be a full URL (with protocol and host) or it may be only the path part of the URL,
@@ -866,7 +866,7 @@ public:
       Status(uint statusCode,
              kj::String statusText,
              kj::Own<HttpHeaders> headers,
-             kj::Maybe<kj::Own<kj::AsyncInputStream>> errorBody = nullptr)
+             kj::Maybe<kj::Own<kj::AsyncInputStream>> errorBody = kj::none)
           : statusCode(statusCode),
             statusText(kj::mv(statusText)),
             headers(kj::mv(headers)),
@@ -907,7 +907,7 @@ public:
   public:
     virtual kj::Own<kj::AsyncOutputStream> send(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
-        kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
+        kj::Maybe<uint64_t> expectedBodySize = kj::none) = 0;
     // Begin the response.
     //
     // `statusText` and `headers` need only remain valid until send() returns (they can be
@@ -975,7 +975,7 @@ public:
         uint statusCode,
         kj::StringPtr statusText,
         const HttpHeaders& headers,
-        kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
+        kj::Maybe<uint64_t> expectedBodySize = kj::none) = 0;
     // Signals rejection of the CONNECT tunnel.
   };
 
@@ -1026,7 +1026,7 @@ struct HttpClientSettings {
   // For clients which automatically create new connections, any connection idle for at least this
   // long will be closed. Set this to 0 to prevent connection reuse entirely.
 
-  kj::Maybe<EntropySource&> entropySource = nullptr;
+  kj::Maybe<EntropySource&> entropySource = kj::none;
   // Must be provided in order to use `openWebSocket`. If you don't need WebSockets, this can be
   // omitted. The WebSocket protocol uses random values to avoid triggering flaws (including
   // security flaws) in certain HTTP proxy software. Specifically, entropy is used to generate the
@@ -1035,7 +1035,7 @@ struct HttpClientSettings {
   // doesn't generate real entropy (e.g. returning the same value every time). Otherwise, you must
   // provide a cryptographically-random entropy source.
 
-  kj::Maybe<HttpClientErrorHandler&> errorHandler = nullptr;
+  kj::Maybe<HttpClientErrorHandler&> errorHandler = kj::none;
   // Customize how protocol errors are handled by the HttpClient. If null, HttpClientErrorHandler's
   // default implementation will be used.
 
@@ -1130,8 +1130,8 @@ kj::Own<HttpInputStream> newHttpInputStream(
 
 kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
                                 kj::Maybe<EntropySource&> maskEntropySource,
-                                kj::Maybe<CompressionParameters> compressionConfig = nullptr,
-                                kj::Maybe<WebSocketErrorHandler&> errorHandler = nullptr);
+                                kj::Maybe<CompressionParameters> compressionConfig = kj::none,
+                                kj::Maybe<WebSocketErrorHandler&> errorHandler = kj::none);
 // Create a new WebSocket on top of the given stream. It is assumed that the HTTP -> WebSocket
 // upgrade handshake has already occurred (or is not needed), and messages can immediately be
 // sent and received on the stream. Normally applications would not call this directly.
@@ -1180,14 +1180,14 @@ struct HttpServerSettings {
   // above two values -- if they hit either one, we'll close the socket, but if the request
   // completes, we'll let the connection stay open to handle more requests.
 
-  kj::Maybe<HttpServerErrorHandler&> errorHandler = nullptr;
+  kj::Maybe<HttpServerErrorHandler&> errorHandler = kj::none;
   // Customize how client protocol errors and service application exceptions are handled by the
   // HttpServer. If null, HttpServerErrorHandler's default implementation will be used.
 
-  kj::Maybe<HttpServerCallbacks&> callbacks = nullptr;
+  kj::Maybe<HttpServerCallbacks&> callbacks = kj::none;
   // Additional optional callbacks used to control some server behavior.
 
-  kj::Maybe<WebSocketErrorHandler&> webSocketErrorHandler = nullptr;
+  kj::Maybe<WebSocketErrorHandler&> webSocketErrorHandler = kj::none;
   // Customize exceptions thrown on WebSocket protocol errors.
 
   enum WebSocketCompressionMode {
@@ -1328,14 +1328,14 @@ public:
 
   kj::Promise<bool> listenHttpCleanDrain(kj::AsyncIoStream& connection,
       SuspendableHttpServiceFactory factory,
-      kj::Maybe<SuspendedRequest> suspendedRequest = nullptr);
+      kj::Maybe<SuspendedRequest> suspendedRequest = kj::none);
   // Like listenHttpCleanDrain(), but allows you to suspend requests.
   //
   // When this overload is in use, the HttpServer's default HttpService or HttpServiceFactory is not
   // used. Instead, the HttpServer reads the request method line and headers, then calls `factory`
   // with a SuspendableRequest representing the request parsed so far. The factory may then return
   // a kj::Own<HttpService> for that specific request, or it may call SuspendableRequest::suspend()
-  // and return nullptr. (It is an error for the factory to return nullptr without also calling
+  // and return kj::none. (It is an error for the factory to return kj::none without also calling
   // suspend(); this will result in a rejected listenHttpCleanDrain() promise.)
   //
   // If the factory chooses to suspend, the listenHttpCleanDrain() promise is resolved with false
@@ -1439,7 +1439,7 @@ inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
 inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
   id.requireFrom(*table);
   auto result = indexedHeaders[id.id];
-  return result == nullptr ? kj::Maybe<kj::StringPtr>(nullptr) : result;
+  return result == nullptr ? kj::Maybe<kj::StringPtr>(kj::none) : result;
 }
 
 inline void HttpHeaders::unset(HttpHeaderId id) {
@@ -1495,8 +1495,8 @@ struct UnverifiedConfig {
   // `populateUnverifiedConfig()` for details.
   bool clientNoContextTakeover = false;
   bool serverNoContextTakeover = false;
-  kj::Maybe<ArrayPtr<const char>> clientMaxWindowBits = nullptr;
-  kj::Maybe<ArrayPtr<const char>> serverMaxWindowBits = nullptr;
+  kj::Maybe<ArrayPtr<const char>> clientMaxWindowBits = kj::none;
+  kj::Maybe<ArrayPtr<const char>> serverMaxWindowBits = kj::none;
 };
 
 kj::Maybe<UnverifiedConfig> populateUnverifiedConfig(kj::Array<KeyMaybeVal>& params);

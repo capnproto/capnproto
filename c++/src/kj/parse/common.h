@@ -203,7 +203,7 @@ public:
   template <typename Input>
   Maybe<Decay<decltype(instance<Input>().consume())>> operator()(Input& input) const {
     if (input.atEnd()) {
-      return nullptr;
+      return kj::none;
     } else {
       return input.consume();
     }
@@ -225,7 +225,7 @@ public:
   template <typename Input>
   Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd() || input.current() != expected) {
-      return nullptr;
+      return kj::none;
     } else {
       input.next();
       return Tuple<>();
@@ -256,7 +256,7 @@ public:
   template <typename Input>
   Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd() || input.current() != expected) {
-      return nullptr;
+      return kj::none;
     } else {
       input.next();
       return Tuple<>();
@@ -284,8 +284,8 @@ public:
 
   template <typename Input>
   Maybe<Result> operator()(Input& input) const {
-    if (subParser(input) == nullptr) {
-      return nullptr;
+    if (subParser(input) == kj::none) {
+      return kj::none;
     } else {
       return result;
     }
@@ -360,7 +360,7 @@ public:
       return Maybe<decltype(tuple(
           kj::fwd<InitialParams>(initialParams)...,
           instance<OutputType<FirstSubParser, Input>>(),
-          instance<OutputType<SubParsers, Input>>()...))>{nullptr};
+          instance<OutputType<SubParsers, Input>>()...))>{kj::none};
     }
   }
 
@@ -431,7 +431,7 @@ struct Many_<SubParser, atLeastOne>::Impl {
     }
 
     if (atLeastOne && results.empty()) {
-      return nullptr;
+      return kj::none;
     }
 
     return results.releaseAsArray();
@@ -458,7 +458,7 @@ struct Many_<SubParser, atLeastOne>::Impl<Input, Tuple<>> {
     }
 
     if (atLeastOne && count == 0) {
-      return nullptr;
+      return kj::none;
     }
 
     return count;
@@ -514,11 +514,11 @@ struct Times_<SubParser>::Impl {
 
     while (results.size() < count) {
       if (input.atEnd()) {
-        return nullptr;
+        return kj::none;
       } else KJ_IF_SOME(subResult, subParser(input)) {
         results.add(kj::mv(subResult));
       } else {
-        return nullptr;
+        return kj::none;
       }
     }
 
@@ -580,7 +580,7 @@ public:
       subInput.advanceParent();
       return Result(kj::mv(subResult));
     } else {
-      return Result(nullptr);
+      return Result(kj::none);
     }
   }
 
@@ -615,7 +615,7 @@ public:
       Input subInput(input);
       Maybe<OutputType<FirstSubParser, Input>> firstResult = first(subInput);
 
-      if (firstResult != nullptr) {
+      if (firstResult != kj::none) {
         subInput.advanceParent();
         return kj::mv(firstResult);
       }
@@ -634,8 +634,8 @@ template <>
 class OneOf_<> {
 public:
   template <typename Input>
-  decltype(nullptr) operator()(Input& input) const {
-    return nullptr;
+  decltype(kj::none) operator()(Input& input) const {
+    return kj::none;
   }
 };
 
@@ -684,7 +684,7 @@ public:
     KJ_IF_SOME(subResult, subParser(input)) {
       return kj::apply(transform, kj::mv(subResult));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -705,7 +705,7 @@ public:
     KJ_IF_SOME(subResult, subParser(input)) {
       return kj::apply(transform, kj::mv(subResult));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -730,7 +730,7 @@ public:
       return kj::apply(transform, Span<decltype(start)>(kj::mv(start), input.getPosition()),
                        kj::mv(subResult));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -782,10 +782,10 @@ public:
   Maybe<Tuple<>> operator()(Input& input) const {
     Input subInput(input);
     subInput.forgetParent();
-    if (subParser(subInput) == nullptr) {
+    if (subParser(subInput) == kj::none) {
       return Tuple<>();
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -811,7 +811,7 @@ public:
     if (input.atEnd()) {
       return Tuple<>();
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 };

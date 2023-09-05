@@ -263,7 +263,7 @@ TEST(DynamicApi, DynamicAnyStructs) {
 }
 
 #define EXPECT_MAYBE_EQ(name, exp, expected, actual) \
-  KJ_IF_MAYBE(name, exp) { \
+  KJ_IF_SOME(name, exp) { \
     EXPECT_EQ(expected, actual); \
   } else { \
     KJ_FAIL_EXPECT("Maybe was empty."); \
@@ -282,22 +282,22 @@ TEST(DynamicApi, UnionsRead) {
     auto dynamic = toDynamic(root.asReader());
     {
       auto u = dynamic.get("union0").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u0f1s32", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u0f1s32", w.getProto().getName());
       EXPECT_EQ(1234567, u.get("u0f1s32").as<int32_t>());
     }
     {
       auto u = dynamic.get("union1").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u1f1sp", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u1f1sp", w.getProto().getName());
       EXPECT_EQ("foo", u.get("u1f1sp").as<Text>());
     }
     {
       auto u = dynamic.get("union2").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u2f0s1", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u2f0s1", w.getProto().getName());
       EXPECT_TRUE(u.get("u2f0s1").as<bool>());
     }
     {
       auto u = dynamic.get("union3").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u3f0s64", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u3f0s64", w.getProto().getName());
       EXPECT_EQ(1234567890123456789ll, u.get("u3f0s64").as<int64_t>());
     }
   }
@@ -307,22 +307,22 @@ TEST(DynamicApi, UnionsRead) {
     auto dynamic = toDynamic(root);
     {
       auto u = dynamic.get("union0").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u0f1s32", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u0f1s32", w.getProto().getName());
       EXPECT_EQ(1234567, u.get("u0f1s32").as<int32_t>());
     }
     {
       auto u = dynamic.get("union1").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u1f1sp", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u1f1sp", w.getProto().getName());
       EXPECT_EQ("foo", u.get("u1f1sp").as<Text>());
     }
     {
       auto u = dynamic.get("union2").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u2f0s1", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u2f0s1", w.getProto().getName());
       EXPECT_TRUE(u.get("u2f0s1").as<bool>());
     }
     {
       auto u = dynamic.get("union3").as<DynamicStruct>();
-      EXPECT_MAYBE_EQ(w, u.which(), "u3f0s64", w->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u3f0s64", w.getProto().getName());
       EXPECT_EQ(1234567890123456789ll, u.get("u3f0s64").as<int64_t>());
     }
   }

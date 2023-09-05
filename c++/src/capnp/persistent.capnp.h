@@ -121,7 +121,7 @@ public:
   }
 
   CAPNP_AUTO_IF_MSVC(::capnp::Request<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>) saveRequest(
-      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);
+      ::kj::Maybe< ::capnp::MessageSize> sizeHint = kj::none);
 
 protected:
   Client() = default;

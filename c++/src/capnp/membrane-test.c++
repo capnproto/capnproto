@@ -105,7 +105,7 @@ public:
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
       return Capability::Client(kj::heap<ThingImpl>("inbound"));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -114,7 +114,7 @@ public:
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
       return Capability::Client(kj::heap<ThingImpl>("outbound"));
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -312,7 +312,7 @@ struct TestRpcEnv {
   TwoPartyClient server;
   test::TestMembrane::Client membraned;
 
-  TestRpcEnv(kj::Maybe<kj::Promise<void>> revokePromise = nullptr)
+  TestRpcEnv(kj::Maybe<kj::Promise<void>> revokePromise = kj::none)
       : waitScope(loop),
         pipe(kj::newTwoWayPipe()),
         client(*pipe.ends[0]),

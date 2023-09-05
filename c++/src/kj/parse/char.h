@@ -45,7 +45,7 @@ public:
     const char* ptr = str;
 
     while (*ptr != '\0') {
-      if (input.atEnd() || input.current() != *ptr) return nullptr;
+      if (input.atEnd() || input.current() != *ptr) return kj::none;
       input.next();
       ++ptr;
     }
@@ -117,13 +117,13 @@ public:
 
   template <typename Input>
   Maybe<char> operator()(Input& input) const {
-    if (input.atEnd()) return nullptr;
+    if (input.atEnd()) return kj::none;
     unsigned char c = input.current();
     if (contains(c)) {
       input.next();
       return c;
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 

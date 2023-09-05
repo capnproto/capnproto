@@ -59,7 +59,7 @@ bool hasDiscriminantValue(const schema::Field::Reader& reader) {
 
 class SchemaLoader::InitializerImpl: public _::RawSchema::Initializer {
 public:
-  inline explicit InitializerImpl(const SchemaLoader& loader): loader(loader), callback(nullptr) {}
+  inline explicit InitializerImpl(const SchemaLoader& loader): loader(loader), callback(kj::none) {}
   inline InitializerImpl(const SchemaLoader& loader, const LazyLoadCallback& callback)
       : loader(loader), callback(callback) {}
 
@@ -67,7 +67,7 @@ public:
 
   void init(const _::RawSchema* schema) const override;
 
-  inline bool operator==(decltype(nullptr)) const { return callback == nullptr; }
+  inline bool operator==(decltype(nullptr)) const { return callback == kj::none; }
 
 private:
   const SchemaLoader& loader;
@@ -1022,8 +1022,8 @@ private:
   }
 
   void checkUpgradeToStruct(const schema::Type::Reader& type, uint64_t structTypeId,
-                            kj::Maybe<schema::Node::Reader> matchSize = nullptr,
-                            kj::Maybe<schema::Field::Reader> matchPosition = nullptr) {
+                            kj::Maybe<schema::Node::Reader> matchSize = kj::none,
+                            kj::Maybe<schema::Field::Reader> matchPosition = kj::none) {
     // We can't just look up the target struct and check it because it may not have been loaded
     // yet.  Instead, we contrive a struct that looks like what we want and load() that, which
     // guarantees that any incompatibility will be caught either now or when the real version of
@@ -1086,8 +1086,8 @@ private:
         break;
     }
 
-    KJ_IF_MAYBE(s, matchSize) {
-      auto match = s->getStruct();
+    KJ_IF_SOME(s, matchSize) {
+      auto match = s.getStruct();
       structNode.setDataWordCount(match.getDataWordCount());
       structNode.setPointerCount(match.getPointerCount());
     }
@@ -1098,13 +1098,13 @@ private:
     auto slot = field.initSlot();
     slot.setType(type);
 
-    KJ_IF_MAYBE(p, matchPosition) {
-      if (p->getOrdinal().isExplicit()) {
-        field.getOrdinal().setExplicit(p->getOrdinal().getExplicit());
+    KJ_IF_SOME(p, matchPosition) {
+      if (p.getOrdinal().isExplicit()) {
+        field.getOrdinal().setExplicit(p.getOrdinal().getExplicit());
       } else {
         field.getOrdinal().setImplicit();
       }
-      auto matchSlot = p->getSlot();
+      auto matchSlot = p.getSlot();
       slot.setOffset(matchSlot.getOffset());
       slot.setDefaultValue(matchSlot.getDefaultValue());
     } else {
@@ -1248,10 +1248,10 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
   _::RawSchema* schema;
   bool shouldReplace;
   bool shouldClearInitializer;
-  KJ_IF_MAYBE(match, schemas.find(validatedReader.getId())) {
+  KJ_IF_SOME(match, schemas.find(validatedReader.getId())) {
     // Yes, check if it is compatible and figure out which schema is newer.
 
-    schema = *match;
+    schema = match;
 
     // If the existing schema is a placeholder, but we're upgrading it to a non-placeholder, we
     // need to clear the initializer later.
@@ -1317,8 +1317,8 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
   _::RawSchema* schema;
   bool shouldReplace;
   bool shouldClearInitializer;
-  KJ_IF_MAYBE(match, schemas.find(nativeSchema->id)) {
-    schema = *match;
+  KJ_IF_SOME(match, schemas.find(nativeSchema->id)) {
+    schema = match;
     if (schema->canCastTo != nullptr) {
       // Already loaded natively, or we're currently in the process of loading natively and there
       // was a dependency cycle.
@@ -1373,9 +1373,9 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     schema->defaultBrand.dependencyCount = deps.size();
 
     // If there is a struct size requirement, we need to make sure that it is satisfied.
-    KJ_IF_MAYBE(sizeReq, structSizeRequirements.find(nativeSchema->id)) {
-      applyStructSizeRequirement(schema, sizeReq->dataWordCount,
-                                 sizeReq->pointerCount);
+    KJ_IF_SOME(sizeReq, structSizeRequirements.find(nativeSchema->id)) {
+      applyStructSizeRequirement(schema, sizeReq.dataWordCount,
+                                 sizeReq.pointerCount);
     }
   } else {
     // The existing schema is newer.
@@ -1479,8 +1479,8 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
         auto& dstScope = dstScopesBuilder.add();
         dstScope.typeId = srcScope.getScopeId();
 
-        KJ_IF_MAYBE(b, clientBrand) {
-          for (auto& clientScope: *b) {
+        KJ_IF_SOME(b, clientBrand) {
+          for (auto& clientScope: b) {
             if (clientScope.typeId == dstScope.typeId) {
               // Overwrite the whole thing.
               dstScope = clientScope;
@@ -1513,8 +1513,8 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   }
 
   SchemaBindingsPair key { schema, bindings.begin() };
-  KJ_IF_MAYBE(existing, brands.find(key)) {
-    return *existing;
+  KJ_IF_SOME(existing, brands.find(key)) {
+    return existing;
   } else {
     auto& brand = arena.allocate<_::RawBrandedSchema>();
     memset(&brand, 0, sizeof(brand));
@@ -1572,8 +1572,8 @@ SchemaLoader::Impl::makeBrandedDependencies(
             const _::RawSchema* group = loadEmpty(
                 field.getGroup().getTypeId(),
                 "(unknown group type)", schema::Node::STRUCT, true);
-            KJ_IF_MAYBE(b, bindings) {
-              ADD_ENTRY(FIELD, i, makeBranded(group, *b));
+            KJ_IF_SOME(b, bindings) {
+              ADD_ENTRY(FIELD, i, makeBranded(group, b));
             } else {
               ADD_ENTRY(FIELD, i, getUnbound(group));
             }
@@ -1678,9 +1678,9 @@ void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
           uint64_t id = param.getScopeId();
           uint16_t index = param.getParameterIndex();
 
-          KJ_IF_MAYBE(b, brandBindings) {
+          KJ_IF_SOME(b, brandBindings) {
             // TODO(perf): We could binary search here, but... bleh.
-            for (auto& scope: *b) {
+            for (auto& scope: b) {
               if (scope.typeId == id) {
                 if (scope.isUnbound) {
                   // Unbound brand parameter.
@@ -1764,8 +1764,8 @@ kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<const T> valu
 
   auto bytes = values.asBytes();
 
-  KJ_IF_MAYBE(dupe, dedupTable.find(bytes)) {
-    return kj::arrayPtr(reinterpret_cast<const T*>(dupe->begin()), values.size());
+  KJ_IF_SOME(dupe, dedupTable.find(bytes)) {
+    return kj::arrayPtr(reinterpret_cast<const T*>(dupe.begin()), values.size());
   }
 
   // Need to make a new copy.
@@ -1783,8 +1783,8 @@ kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<T> values) {
 }
 
 SchemaLoader::Impl::TryGetResult SchemaLoader::Impl::tryGet(uint64_t typeId) const {
-  KJ_IF_MAYBE(schema, schemas.find(typeId)) {
-    return {*schema, initializer.getCallback()};
+  KJ_IF_SOME(schema, schemas.find(typeId)) {
+    return {schema, initializer.getCallback()};
   } else {
     return {nullptr, initializer.getCallback()};
   }
@@ -1796,13 +1796,13 @@ const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* sc
     return &schema->defaultBrand;
   }
 
-  KJ_IF_MAYBE(existing, unboundBrands.find(schema)) {
-    return *existing;
+  KJ_IF_SOME(existing, unboundBrands.find(schema)) {
+    return existing;
   } else {
     auto slot = &arena.allocate<_::RawBrandedSchema>();
     memset(slot, 0, sizeof(*slot));
     slot->generic = schema;
-    auto deps = makeBrandedDependencies(schema, nullptr);
+    auto deps = makeBrandedDependencies(schema, kj::none);
     slot->dependencies = deps.begin();
     slot->dependencyCount = deps.size();
     unboundBrands.insert(schema, slot);
@@ -1949,8 +1949,8 @@ void SchemaLoader::Impl::computeOptimizationHints() {
         }
       }
 
-      KJ_IF_MAYBE(d, depId) {
-        _::RawSchema* dep = KJ_ASSERT_NONNULL(schemas.find(*d));
+      KJ_IF_SOME(d, depId) {
+        _::RawSchema* dep = KJ_ASSERT_NONNULL(schemas.find(d));
 
         if (dep->mayContainCapabilities) {
           // Oops, this dependency is already known to have capabilities. So that means the current
@@ -1962,9 +1962,9 @@ void SchemaLoader::Impl::computeOptimizationHints() {
 
           // Might as well end the loop early.
           break;
-        } else KJ_IF_MAYBE(undecidedEntry, undecided.find(dep)) {
+        } else KJ_IF_SOME(undecidedEntry, undecided.find(dep)) {
           // This dependency is in the undecided set. Register interest in it.
-          undecidedEntry->add(schema);
+          undecidedEntry.add(schema);
         } else {
           // This dependency is decided, and the decision is that it has no capabilities. So it
           // has no impact on the dependent.
@@ -2002,8 +2002,8 @@ void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint
     existingValue.pointerCount = kj::max(existingValue.pointerCount, newValue.pointerCount);
   });
 
-  KJ_IF_MAYBE(schema, schemas.find(id)) {
-    applyStructSizeRequirement(*schema, dataWordCount, pointerCount);
+  KJ_IF_SOME(schema, schemas.find(id)) {
+    applyStructSizeRequirement(schema, dataWordCount, pointerCount);
   }
 }
 
@@ -2018,12 +2018,12 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema::Node::Reader no
 kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirements(
     schema::Node::Reader node) {
   if (node.isStruct()) {
-    KJ_IF_MAYBE(requirement, structSizeRequirements.find(node.getId())) {
+    KJ_IF_SOME(requirement, structSizeRequirements.find(node.getId())) {
       auto structNode = node.getStruct();
-      if (structNode.getDataWordCount() < requirement->dataWordCount ||
-          structNode.getPointerCount() < requirement->pointerCount) {
-        return rewriteStructNodeWithSizes(node, requirement->dataWordCount,
-                                          requirement->pointerCount);
+      if (structNode.getDataWordCount() < requirement.dataWordCount ||
+          structNode.getPointerCount() < requirement.pointerCount) {
+        return rewriteStructNodeWithSizes(node, requirement.dataWordCount,
+                                          requirement.pointerCount);
       }
     }
   }
@@ -2062,8 +2062,8 @@ void SchemaLoader::Impl::applyStructSizeRequirement(
 }
 
 void SchemaLoader::InitializerImpl::init(const _::RawSchema* schema) const {
-  KJ_IF_MAYBE(c, callback) {
-    c->load(loader, schema->id);
+  KJ_IF_SOME(c, callback) {
+    c.load(loader, schema->id);
   }
 
   if (schema->lazyInitializer != nullptr) {
@@ -2136,8 +2136,8 @@ SchemaLoader::SchemaLoader(const LazyLoadCallback& callback)
 SchemaLoader::~SchemaLoader() noexcept(false) {}
 
 Schema SchemaLoader::get(uint64_t id, schema::Brand::Reader brand, Schema scope) const {
-  KJ_IF_MAYBE(result, tryGet(id, brand, scope)) {
-    return *result;
+  KJ_IF_SOME(result, tryGet(id, brand, scope)) {
+    return result;
   } else {
     KJ_FAIL_REQUIRE("no schema node loaded for id", kj::hex(id));
   }
@@ -2149,8 +2149,8 @@ kj::Maybe<Schema> SchemaLoader::tryGet(
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
     // This schema couldn't be found or has yet to be lazily loaded. If we have a lazy loader
     // callback, invoke it now to try to get it to load this schema.
-    KJ_IF_MAYBE(c, getResult.callback) {
-      c->load(*this, id);
+    KJ_IF_SOME(c, getResult.callback) {
+      c.load(*this, id);
     }
     getResult = impl.lockShared()->get()->tryGet(id);
   }
@@ -2159,7 +2159,7 @@ kj::Maybe<Schema> SchemaLoader::tryGet(
       auto brandedSchema = impl.lockExclusive()->get()->makeBranded(
           getResult.schema, brand,
           scope.raw->isUnbound()
-              ? kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>>(nullptr)
+              ? kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>>(kj::none)
               : kj::arrayPtr(scope.raw->scopes, scope.raw->scopeCount));
       brandedSchema->ensureInitialized();
       return Schema(brandedSchema);
@@ -2167,7 +2167,7 @@ kj::Maybe<Schema> SchemaLoader::tryGet(
       return Schema(&getResult.schema->defaultBrand);
     }
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 

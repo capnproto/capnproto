@@ -351,7 +351,7 @@ MainBuilder& MainBuilder::addOptionWithArg(std::initializer_list<OptionName> nam
 MainBuilder& MainBuilder::addSubCommand(StringPtr name, Function<MainFunc()> getSubParser,
                                         StringPtr helpText) {
   KJ_REQUIRE(impl->args.size() == 0, "cannot have sub-commands when expecting arguments");
-  KJ_REQUIRE(impl->finalCallback == nullptr,
+  KJ_REQUIRE(impl->finalCallback == kj::none,
              "cannot have a final callback when accepting sub-commands");
   KJ_REQUIRE(
       impl->subCommands.insert(std::make_pair(
@@ -385,7 +385,7 @@ MainBuilder& MainBuilder::expectOneOrMoreArgs(
 }
 
 MainBuilder& MainBuilder::callAfterParsing(Function<Validity()> callback) {
-  KJ_REQUIRE(impl->finalCallback == nullptr, "callAfterParsing() can only be called once");
+  KJ_REQUIRE(impl->finalCallback == kj::none, "callAfterParsing() can only be called once");
   KJ_REQUIRE(impl->subCommands.empty(), "cannot have a final callback when accepting sub-commands");
   impl->finalCallback = kj::mv(callback);
   return *this;

@@ -594,7 +594,7 @@ template <typename VatId, typename ProvisionId,
           typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
 RpcSystem<VatId> makeRpcClient(
     VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network) {
-  return RpcSystem<VatId>(network, nullptr);
+  return RpcSystem<VatId>(network, kj::none);
 }
 
 }  // namespace capnp

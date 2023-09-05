@@ -111,7 +111,7 @@ kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() const {
   if (value < enumerants.size()) {
     return enumerants[value];
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
@@ -487,7 +487,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field, HasMode mode) const {
 kj::Maybe<StructSchema::Field> DynamicStruct::Reader::which() const {
   auto structProto = schema.getProto().getStruct();
   if (structProto.getDiscriminantCount() == 0) {
-    return nullptr;
+    return kj::none;
   }
 
   uint16_t discrim = reader.getDataField<uint16_t>(
@@ -498,7 +498,7 @@ kj::Maybe<StructSchema::Field> DynamicStruct::Reader::which() const {
 kj::Maybe<StructSchema::Field> DynamicStruct::Builder::which() {
   auto structProto = schema.getProto().getStruct();
   if (structProto.getDiscriminantCount() == 0) {
-    return nullptr;
+    return kj::none;
   }
 
   uint16_t discrim = builder.getDataField<uint16_t>(
@@ -652,8 +652,8 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
       auto src = value.as<DynamicStruct>();
       auto dst = init(field).as<DynamicStruct>();
 
-      KJ_IF_MAYBE(unionField, src.which()) {
-        dst.set(*unionField, src.get(*unionField));
+      KJ_IF_SOME(unionField, src.which()) {
+        dst.set(unionField, src.get(unionField));
       }
 
       for (auto field: src.schema.getNonUnionFields()) {
@@ -838,8 +838,8 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
       KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == dst.getSchema(),
                  "Value type mismatch.");
 
-      KJ_IF_MAYBE(unionField, src.which()) {
-        dst.adopt(*unionField, src.disown(*unionField));
+      KJ_IF_SOME(unionField, src.which()) {
+        dst.adopt(unionField, src.disown(unionField));
       }
 
       for (auto field: src.schema.getNonUnionFields()) {
@@ -903,13 +903,13 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
           Orphanage::getForMessageContaining(*this).newOrphan(src.getSchema());
       auto dst = result.get();
 
-      KJ_IF_MAYBE(unionField, src.which()) {
-        dst.adopt(*unionField, src.disown(*unionField));
+      KJ_IF_SOME(unionField, src.which()) {
+        dst.adopt(unionField, src.disown(unionField));
       }
 
       // We need to explicitly reset the union to its default field.
-      KJ_IF_MAYBE(unionField, src.schema.getFieldByDiscriminant(0)) {
-        src.clear(*unionField);
+      KJ_IF_SOME(unionField, src.schema.getFieldByDiscriminant(0)) {
+        src.clear(unionField);
       }
 
       for (auto field: src.schema.getNonUnionFields()) {
@@ -978,8 +978,8 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
 
       // We clear the union field with discriminant 0 rather than the one that is set because
       // we want the union to end up with its default field active.
-      KJ_IF_MAYBE(unionField, group.schema.getFieldByDiscriminant(0)) {
-        group.clear(*unionField);
+      KJ_IF_SOME(unionField, group.schema.getFieldByDiscriminant(0)) {
+        group.clear(unionField);
       }
 
       for (auto subField: group.schema.getNonUnionFields()) {

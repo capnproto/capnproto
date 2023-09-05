@@ -330,7 +330,7 @@ public:
 
   kj::Promise<kj::Own<kj::AsyncIoStream>> connect() override {
     auto result = KJ_ASSERT_NONNULL(kj::mv(stream));
-    stream = nullptr;
+    stream = kj::none;
     return kj::mv(result);
   }
 
@@ -792,7 +792,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
           statusCode,
           kj::str(statusText),
           kj::heap(headers.clone()),
-          nullptr
+          kj::none
         )
       );
     }
@@ -935,12 +935,12 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
     kj::Promise<WebSocketResponse> openWebSocket(
       kj::StringPtr url, const kj::HttpHeaders& headers) override { KJ_UNREACHABLE; }
     Request request(kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = nullptr) override { KJ_UNREACHABLE; }
+                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override { KJ_UNREACHABLE; }
 
     ConnectRequest connect(kj::StringPtr host, const kj::HttpHeaders& headers,
         kj::HttpConnectSettings settings) override {
-      KJ_IF_MAYBE(starter, settings.tlsStarter) {
-        *starter = [](kj::StringPtr) {
+      KJ_IF_SOME(starter, settings.tlsStarter) {
+        starter = [](kj::StringPtr) {
           return kj::READY_NOW;
         };
       }

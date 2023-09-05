@@ -51,7 +51,7 @@ public:
   KJ_DISALLOW_COPY(ExceptionOrValue);
 
   void addException(Exception&& exception) {
-    if (this->exception == nullptr) {
+    if (this->exception == kj::none) {
       this->exception = kj::mv(exception);
     }
   }
@@ -100,7 +100,7 @@ inline T convertToReturn(ExceptionOr<T>&& result) {
 inline void convertToReturn(ExceptionOr<Void>&& result) {
   // Override <void> case to use throwRecoverableException().
 
-  if (result.value != nullptr) {
+  if (result.value != kj::none) {
     KJ_IF_SOME(exception, result.exception) {
       throwRecoverableException(kj::mv(exception));
     }
@@ -800,7 +800,7 @@ public:
     KJ_IF_SOME(value, hubResult.value) {
       output.as<T>().value = copyOrAddRef(value);
     } else {
-      output.as<T>().value = nullptr;
+      output.as<T>().value = kj::none;
     }
     output.exception = hubResult.exception;
     releaseHub(output);
@@ -847,7 +847,7 @@ public:
     KJ_IF_SOME(value, hubResult.value) {
       output.as<Element>().value = kj::mv(kj::get<index>(value));
     } else {
-      output.as<Element>().value = nullptr;
+      output.as<Element>().value = kj::none;
     }
     output.exception = hubResult.exception;
     releaseHub(output);
@@ -1094,7 +1094,7 @@ protected:
   void getNoError(ExceptionOrValue& output) noexcept override {
     auto builder = heapArrayBuilder<T>(resultParts.size());
     for (auto& part: resultParts) {
-      KJ_IASSERT(part.value != nullptr,
+      KJ_IASSERT(part.value != kj::none,
                  "Bug in KJ promise framework:  Promise result had neither value no exception.");
       builder.add(kj::mv(*_::readMaybe(part.value)));
     }
@@ -1820,7 +1820,7 @@ public:
 
   kj::Maybe<_::OwnPromiseNode> execute() override {
     result.value = MaybeVoidCaller<Void, FixVoid<decltype(func())>>::apply(func, Void());
-    return nullptr;
+    return kj::none;
   }
 
   // implements PromiseNode ----------------------------------------------------
@@ -2253,12 +2253,12 @@ public:
   class Awaiter;
 
   template <typename U>
-  Awaiter<U> await_transform(kj::Promise<U>& promise) { 
-    return Awaiter<U>(PromiseNode::from(kj::mv(promise))); 
+  Awaiter<U> await_transform(kj::Promise<U>& promise) {
+    return Awaiter<U>(PromiseNode::from(kj::mv(promise)));
   }
   template <typename U>
-  Awaiter<U> await_transform(kj::Promise<U>&& promise) { 
-    return Awaiter<U>(PromiseNode::from(kj::mv(promise))); 
+  Awaiter<U> await_transform(kj::Promise<U>&& promise) {
+    return Awaiter<U>(PromiseNode::from(kj::mv(promise)));
   }
   // Called when someone writes `co_await promise`, where `promise` is a kj::Promise<U>. We return
   // an Awaiter<U>, which implements coroutine suspension and resumption in terms of the KJ async
@@ -2277,8 +2277,8 @@ public:
 
   // called by co_awaiting on a forked promise.
   template <typename U>
-  ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>& promise) { 
-    return ForkedPromiseAwaiter<U>(promise); 
+  ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>& promise) {
+    return ForkedPromiseAwaiter<U>(promise);
   }
 
   void fulfill(FixVoid<T>&& value) {
@@ -2396,7 +2396,7 @@ template <typename T>
 template <typename U>
 class Coroutine<T>::ForkedPromiseAwaiter {
 public:
-  ForkedPromiseAwaiter(ForkedPromise<U>& promise) 
+  ForkedPromiseAwaiter(ForkedPromise<U>& promise)
       : node(promise), awaiter(OwnPromiseNode(&node)) { }
 
   template <typename V>

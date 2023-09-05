@@ -180,7 +180,7 @@ public:
   kj::Maybe<TestNetworkAdapter&> find(kj::StringPtr name) {
     auto iter = map.find(name);
     if (iter == map.end()) {
-      return nullptr;
+      return kj::none;
     } else {
       return *iter->second;
     }
@@ -274,7 +274,7 @@ public:
       void send() override {
         if (!connection.network.sendCallback(message)) return;
 
-        if (connection.networkException != nullptr) {
+        if (connection.networkException != kj::none) {
           return;
         }
 
@@ -290,14 +290,14 @@ public:
         auto connectionPtr = &connection;
         connection.tasks->add(kj::evalLater(
             [connectionPtr,message=kj::mv(incomingMessage)]() mutable {
-          KJ_IF_MAYBE(p, connectionPtr->partner) {
-            if (p->fulfillers.empty()) {
-              p->messages.push(kj::mv(message));
+          KJ_IF_SOME(p, connectionPtr->partner) {
+            if (p.fulfillers.empty()) {
+              p.messages.push(kj::mv(message));
             } else {
-              ++p->network.received;
-              p->fulfillers.front()->fulfill(
+              ++p.network.received;
+              p.fulfillers.front()->fulfill(
                   kj::Own<IncomingRpcMessage>(kj::mv(message)));
-              p->fulfillers.pop();
+              p.fulfillers.pop();
             }
           }
         }));
@@ -321,14 +321,14 @@ public:
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
-      KJ_IF_MAYBE(e, networkException) {
-        return kj::cp(*e);
+      KJ_IF_SOME(e, networkException) {
+        return kj::cp(e);
       }
 
       if (messages.empty()) {
-        KJ_IF_MAYBE(f, fulfillOnEnd) {
-          f->get()->fulfill();
-          return kj::Maybe<kj::Own<IncomingRpcMessage>>(nullptr);
+        KJ_IF_SOME(f, fulfillOnEnd) {
+          f->fulfill();
+          return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::none);
         } else {
           auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
           fulfillers.push(kj::mv(paf.fulfiller));
@@ -342,9 +342,9 @@ public:
       }
     }
     kj::Promise<void> shutdown() override {
-      KJ_IF_MAYBE(p, partner) {
+      KJ_IF_SOME(p, partner) {
         auto paf = kj::newPromiseAndFulfiller<void>();
-        p->fulfillOnEnd = kj::mv(paf.fulfiller);
+        p.fulfillOnEnd = kj::mv(paf.fulfiller);
         return kj::mv(paf.promise);
       } else {
         return kj::READY_NOW;
@@ -371,7 +371,7 @@ public:
 
   kj::Maybe<kj::Own<Connection>> connect(test::TestSturdyRefHostId::Reader hostId) override {
     if (hostId.getHost() == self) {
-      return nullptr;
+      return kj::none;
     }
 
     TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));

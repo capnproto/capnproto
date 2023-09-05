@@ -496,9 +496,9 @@ public:
   inline InterfaceSchema getSchema() { return schema; }
 
   Request<DynamicStruct, DynamicStruct> newRequest(
-      InterfaceSchema::Method method, kj::Maybe<MessageSize> sizeHint = nullptr);
+      InterfaceSchema::Method method, kj::Maybe<MessageSize> sizeHint = kj::none);
   Request<DynamicStruct, DynamicStruct> newRequest(
-      kj::StringPtr methodName, kj::Maybe<MessageSize> sizeHint = nullptr);
+      kj::StringPtr methodName, kj::Maybe<MessageSize> sizeHint = kj::none);
 
 private:
   InterfaceSchema schema;
@@ -587,11 +587,11 @@ public:
 
   DynamicStruct::Reader getParams();
   void releaseParams();
-  DynamicStruct::Builder getResults(kj::Maybe<MessageSize> sizeHint = nullptr);
-  DynamicStruct::Builder initResults(kj::Maybe<MessageSize> sizeHint = nullptr);
+  DynamicStruct::Builder getResults(kj::Maybe<MessageSize> sizeHint = kj::none);
+  DynamicStruct::Builder initResults(kj::Maybe<MessageSize> sizeHint = kj::none);
   void setResults(DynamicStruct::Reader value);
   void adoptResults(Orphan<DynamicStruct>&& value);
-  Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = nullptr);
+  Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = kj::none);
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
 

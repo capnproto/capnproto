@@ -90,11 +90,11 @@ void lexAndParseExpression(kj::StringPtr input, Function f) {
   capnp::compiler::CapnpParser::ParserInput parserInput(tokens.begin(), tokens.end());
 
   if (parserInput.getPosition() != tokens.end()) {
-    KJ_IF_MAYBE(expression, parser.getParsers().expression(parserInput)) {
+    KJ_IF_SOME(expression, parser.getParsers().expression(parserInput)) {
       // The input is expected to contain a *single* message.
       KJ_REQUIRE(parserInput.getPosition() == tokens.end(), "Extra tokens in input.");
 
-      f(expression->getReader());
+      f(expression.getReader());
     } else {
       auto best = parserInput.getBest();
       if (best == tokens.end()) {
@@ -150,8 +150,8 @@ Orphan<DynamicValue> TextCodec::decode(kj::StringPtr input, Type type, Orphanage
     ExternalResolver nullResolver;
 
     compiler::ValueTranslator translator(nullResolver, errorReporter, orphanage);
-    KJ_IF_MAYBE(value, translator.compileValue(expression, type)) {
-      output = *kj::mv(value);
+    KJ_IF_SOME(value, translator.compileValue(expression, type)) {
+      output = kj::mv(value);
     } else {
       // An error should have already been given to the errorReporter.
     }
