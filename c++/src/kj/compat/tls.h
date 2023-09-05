@@ -173,7 +173,7 @@ public:
   // RSA and DSA keys. Does not accept encrypted keys; it is the caller's responsibility to
   // decrypt.
 
-  TlsPrivateKey(kj::StringPtr pem, kj::Maybe<kj::StringPtr> password = nullptr);
+  TlsPrivateKey(kj::StringPtr pem, kj::Maybe<kj::StringPtr> password = kj::none);
   // Parse a single PEM-encoded private key. Supports PKCS8 keys as well as "traditional format"
   // RSA and DSA keys. A password may optionally be provided and will be used if the key is
   // encrypted.

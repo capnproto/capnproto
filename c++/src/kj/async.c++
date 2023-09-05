@@ -1284,7 +1284,7 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
 
       // If the function returns a promise, we have no way to pump the event loop to wait for it,
       // because the event loop may already be pumping somewhere up the stack.
-      KJ_ASSERT(promiseNode == nullptr,
+      KJ_ASSERT(promiseNode == kj::none,
           "can't call executeSync() on own thread's executor with a promise-returning function");
 
       return;
@@ -1908,7 +1908,7 @@ uint WaitScope::poll(uint maxTurnCount) {
 }
 
 void WaitScope::cancelAllDetached() {
-  KJ_REQUIRE(fiber == nullptr,
+  KJ_REQUIRE(fiber == kj::none,
       "can't call cancelAllDetached() on a fiber WaitScope, only top-level");
 
   while (!loop.daemons->isEmpty()) {
@@ -2005,7 +2005,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
-  KJ_REQUIRE(waitScope.fiber == nullptr, "poll() is not supported in fibers.");
+  KJ_REQUIRE(waitScope.fiber == kj::none, "poll() is not supported in fibers.");
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
   RootEvent doneEvent(&node, reinterpret_cast<void*>(&pollImpl), location);

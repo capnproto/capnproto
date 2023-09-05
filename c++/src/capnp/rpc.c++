@@ -1212,7 +1212,7 @@ private:
 
         {
           auto redirect = connectionState->writeTarget(*cap, disembargo.initTarget());
-          KJ_ASSERT(redirect == nullptr,
+          KJ_ASSERT(redirect == kj::none,
                     "Original promise target should always be from this RPC connection.");
         }
 
@@ -2024,7 +2024,7 @@ private:
       question.isTailCall = false;
 
       // Make the QuentionRef and result promise.
-      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, nullptr);
+      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, kj::none);
       question.selfRef = *questionRef;
 
       // If sending throws, we'll need to fix up the state a little...
@@ -2104,7 +2104,7 @@ private:
             return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
               kj::mv(ops),
               kj::refcounted<PromiseClient>(
-                  *connectionState, kj::mv(pipelineClient), kj::mv(resolutionPromise), nullptr)
+                  *connectionState, kj::mv(pipelineClient), kj::mv(resolutionPromise), kj::none)
             };
           } else {
             // Oh, this pipeline will never get redirected, so just return the PipelineClient.
@@ -2216,7 +2216,7 @@ private:
     }
 
     kj::Maybe<kj::Array<ExportId>> send() {
-      // Send the response and return the export list.  Returns nullptr if there were no caps.
+      // Send the response and return the export list.  Returns kj::none if there were no caps.
       // (Could return a non-null empty array if there were caps but none of them were exports.)
 
       // Build the cap table.
@@ -2563,7 +2563,7 @@ private:
     // implements CallContextHook ------------------------------------
 
     AnyPointer::Reader getParams() override {
-      KJ_REQUIRE(request != nullptr, "Can't call getParams() after releaseParams().");
+      KJ_REQUIRE(request != kj::none, "Can't call getParams() after releaseParams().");
       return params;
     }
     void releaseParams() override {
@@ -2604,7 +2604,7 @@ private:
       return kj::mv(result.promise);
     }
     ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
-      KJ_REQUIRE(response == nullptr,
+      KJ_REQUIRE(response == kj::none,
                  "Can't call tailCall() after initializing the results struct.");
 
       if (request->getBrand() == connectionState.get() &&
@@ -3494,7 +3494,7 @@ private:
             // a PromiseClient.  The code which sends `Resolve` and `Return` should have replaced
             // any promise with a direct node in order to solve the Tribble 4-way race condition.
             // See the documentation of Disembargo in rpc.capnp for more.
-            KJ_REQUIRE(redirect == nullptr,
+            KJ_REQUIRE(redirect == kj::none,
                       "'Disembargo' of type 'senderLoopback' sent to an object that does not "
                       "appear to have been the subject of a previous 'Resolve' message.") {
               return;

@@ -455,7 +455,7 @@ public:
       indexObj.erase(table.rows.asPtr(), pos, indexObj.keyForRow(row));
     });
     auto result = Impl<index + 1>::insert(table, pos, row, skip);
-    success = result == nullptr;
+    success = result == kj::none;
     return result;
   }
 
@@ -479,7 +479,7 @@ public:
   static void reserve(Table<Row, Indexes...>& table, size_t size) {}
   static void clear(Table<Row, Indexes...>& table) {}
   static kj::Maybe<size_t> insert(Table<Row, Indexes...>& table, size_t pos, Row& row, uint skip) {
-    return nullptr;
+    return kj::none;
   }
   static void erase(Table<Row, Indexes...>& table, size_t pos, Row& row) {}
   static void move(Table<Row, Indexes...>& table, size_t oldPos, size_t newPos, Row& row) {}
@@ -587,7 +587,7 @@ kj::Maybe<Row&> Table<Row, Indexes...>::find(Params&&... params) {
   KJ_IF_SOME(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
     return rows[pos];
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 template <typename Row, typename... Indexes>
@@ -601,7 +601,7 @@ kj::Maybe<const Row&> Table<Row, Indexes...>::find(Params&&... params) const {
   KJ_IF_SOME(pos, get<index>(indexes).find(rows.asPtr(), kj::fwd<Params>(params)...)) {
     return rows[pos];
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
@@ -627,7 +627,7 @@ public:
           table.rows.removeLast();
         }
       });
-      if (Table<Row, Indexes...>::template Impl<>::insert(table, pos, newRow, index) == nullptr) {
+      if (Table<Row, Indexes...>::template Impl<>::insert(table, pos, newRow, index) == kj::none) {
         success = true;
       } else {
         _::throwDuplicateTableRow();
@@ -1000,14 +1000,14 @@ public:
 
   template <typename Row, typename... Params>
   Maybe<size_t> find(kj::ArrayPtr<Row> table, Params&&... params) const {
-    if (buckets.size() == 0) return nullptr;
+    if (buckets.size() == 0) return kj::none;
 
     uint hashCode = cb.hashCode(params...);
     for (uint i = _::chooseBucket(hashCode, buckets.size());; i = _::probeHash(buckets, i)) {
       auto& bucket = buckets[i];
       if (bucket.isEmpty()) {
         // not found.
-        return nullptr;
+        return kj::none;
       } else if (bucket.isErased()) {
         // skip, keep searching
       } else if (bucket.hash == hashCode &&
@@ -1472,7 +1472,7 @@ public:
       return *iter;
     } else {
       iter.insert(impl, pos);
-      return nullptr;
+      return kj::none;
     }
   }
 
@@ -1493,7 +1493,7 @@ public:
     if (!iter.isEnd() && cb.matches(table[*iter], params...)) {
       return size_t(*iter);
     } else {
-      return nullptr;
+      return kj::none;
     }
   }
 

@@ -265,7 +265,7 @@ public:
   }
 
   void shutdownWrite() override {
-    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
+    KJ_REQUIRE(shutdownTask == kj::none, "already called shutdownWrite()");
 
     // TODO(2.0): shutdownWrite() is problematic because it doesn't return a promise. It was
     //   designed to assume that it would only be called after all writes are finished and that
@@ -327,7 +327,7 @@ private:
 
   Promise<void> writeInternal(kj::ArrayPtr<const byte> first,
                               kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
-    KJ_REQUIRE(shutdownTask == nullptr, "already called shutdownWrite()");
+    KJ_REQUIRE(shutdownTask == kj::none, "already called shutdownWrite()");
 
     // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
     // an error. So, we need to avoid zero-sized writes entirely.

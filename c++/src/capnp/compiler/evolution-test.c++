@@ -648,10 +648,10 @@ public:
     return orphanage.newOrphanCopy(content);
   }
   kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
-    return nullptr;
+    return kj::none;
   }
   kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) override {
-    return nullptr;
+    return kj::none;
   }
 
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
@@ -698,7 +698,7 @@ static kj::Maybe<kj::Exception> loadFile(
     for (auto schema: compiler.getLoader().getAllLoaded()) {
       loader.load(schema.getProto());
     }
-    return nullptr;
+    return kj::none;
   } else {
     // Compile the file root so that the children are findable, then load the specific child
     // we want.
@@ -744,7 +744,7 @@ bool checkChange(ParsedFile::Reader file1, ParsedFile::Reader file2, ChangeKind 
       return true;
     }
   } else if (changeKind == INCOMPATIBLE) {
-    KJ_ASSERT(exception != nullptr, file1, file2);
+    KJ_ASSERT(exception != kj::none, file1, file2);
     return false;
   } else {
     KJ_ASSERT(changeKind == SUBTLY_COMPATIBLE);

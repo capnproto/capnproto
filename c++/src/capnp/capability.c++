@@ -181,7 +181,7 @@ public:
     return kj::mv(result.promise);
   }
   ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
-    KJ_REQUIRE(response == nullptr, "Can't call tailCall() after initializing the results struct.");
+    KJ_REQUIRE(response == kj::none, "Can't call tailCall() after initializing the results struct.");
 
     if (hints.onlyPromisePipeline) {
       return {

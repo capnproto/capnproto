@@ -281,7 +281,7 @@ ParsedSchema SchemaParser::parseDiskFile(
 
 void SchemaParser::setDiskFilesystem(kj::Filesystem& fs) {
   auto lock = impl->compat.lockExclusive();
-  KJ_REQUIRE(*lock == nullptr, "already called parseDiskFile() or setDiskFilesystem()");
+  KJ_REQUIRE(*lock == kj::none, "already called parseDiskFile() or setDiskFilesystem()");
   lock->emplace(fs);
 }
 
@@ -383,7 +383,7 @@ public:
       for (auto candidate: importPath) {
         KJ_IF_SOME(newFile, candidate->tryOpenFile(parsed)) {
           return kj::implicitCast<kj::Own<SchemaFile>>(kj::heap<DiskSchemaFile>(
-              *candidate, kj::mv(parsed), importPath, kj::mv(newFile), nullptr));
+              *candidate, kj::mv(parsed), importPath, kj::mv(newFile), kj::none));
         }
       }
       return kj::none;

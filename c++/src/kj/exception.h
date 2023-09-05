@@ -337,7 +337,7 @@ template <typename Func>
 Maybe<Exception> runCatchingExceptions(Func&& func) {
   try {
     func();
-    return nullptr;
+    return kj::none;
   } catch (...) {
     return getCaughtExceptionAsKj();
   }

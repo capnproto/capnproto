@@ -245,7 +245,7 @@ public:
   static kj::Own<SchemaFile> newFromDirectory(
       const kj::ReadableDirectory& baseDir, kj::Path path,
       kj::ArrayPtr<const kj::ReadableDirectory* const> importPath,
-      kj::Maybe<kj::String> displayNameOverride = nullptr);
+      kj::Maybe<kj::String> displayNameOverride = kj::none);
   // Construct a SchemaFile representing a file in a kj::ReadableDirectory. This is used to
   // implement SchemaParser::parseFromDirectory(); see there for details.
   //

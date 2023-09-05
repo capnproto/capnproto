@@ -212,7 +212,7 @@ namespace {
 class AsyncPipe final: public AsyncCapabilityStream, public Refcounted {
 public:
   ~AsyncPipe() noexcept(false) {
-    KJ_REQUIRE(state == nullptr || ownState.get() != nullptr,
+    KJ_REQUIRE(state == kj::none || ownState.get() != nullptr,
         "destroying AsyncPipe with operation still in-progress; probably going to segfault") {
       // Don't std::terminate().
       break;
@@ -439,7 +439,7 @@ private:
                  kj::OneOf<ArrayPtr<const int>, Array<Own<AsyncCapabilityStream>>> capBuffer = {})
         : fulfiller(fulfiller), pipe(pipe), writeBuffer(writeBuffer), morePieces(morePieces),
           capBuffer(kj::mv(capBuffer)) {
-      KJ_REQUIRE(pipe.state == nullptr);
+      KJ_REQUIRE(pipe.state == kj::none);
       pipe.state = *this;
     }
 
@@ -724,7 +724,7 @@ private:
     BlockedPumpFrom(PromiseFulfiller<uint64_t>& fulfiller, AsyncPipe& pipe,
                     AsyncInputStream& input, uint64_t amount)
         : fulfiller(fulfiller), pipe(pipe), input(input), amount(amount) {
-      KJ_REQUIRE(pipe.state == nullptr);
+      KJ_REQUIRE(pipe.state == kj::none);
       pipe.state = *this;
     }
 
@@ -873,7 +873,7 @@ private:
         kj::OneOf<ArrayPtr<AutoCloseFd>, ArrayPtr<Own<AsyncCapabilityStream>>> capBuffer = {})
         : fulfiller(fulfiller), pipe(pipe), readBuffer(readBuffer), minBytes(minBytes),
           capBuffer(capBuffer) {
-      KJ_REQUIRE(pipe.state == nullptr);
+      KJ_REQUIRE(pipe.state == kj::none);
       pipe.state = *this;
     }
 
@@ -1163,7 +1163,7 @@ private:
     BlockedPumpTo(PromiseFulfiller<uint64_t>& fulfiller, AsyncPipe& pipe,
                   AsyncOutputStream& output, uint64_t amount)
         : fulfiller(fulfiller), pipe(pipe), output(output), amount(amount) {
-      KJ_REQUIRE(pipe.state == nullptr);
+      KJ_REQUIRE(pipe.state == kj::none);
       pipe.state = *this;
     }
 
@@ -1418,7 +1418,7 @@ private:
         // Yeah a pump would pump nothing.
         return constPromise<uint64_t, 0>();
       } else {
-        // While we *could* just return nullptr here, it would probably then fall back to a normal
+        // While we *could* just return kj::none here, it would probably then fall back to a normal
         // buffered pump, which would allocate a big old buffer just to find there's nothing to
         // read. Let's try reading 1 byte to avoid that allocation.
         static char c;
@@ -1756,7 +1756,7 @@ public:
       }
       tee->branches.remove(*this);
 
-      KJ_REQUIRE(sink == nullptr,
+      KJ_REQUIRE(sink == kj::none,
           "destroying tee branch with operation still in-progress; probably going to segfault") {
         // Don't std::terminate().
         break;
@@ -1805,7 +1805,7 @@ public:
   }
 
   Promise<size_t> tryRead(Branch& branch, void* buffer, size_t minBytes, size_t maxBytes)  {
-    KJ_ASSERT(branch.sink == nullptr);
+    KJ_ASSERT(branch.sink == kj::none);
 
     // If there is excess data in the buffer for us, slurp that up.
     auto readBuffer = arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes);
@@ -1844,7 +1844,7 @@ public:
   }
 
   Promise<uint64_t> pumpTo(Branch& branch, AsyncOutputStream& output, uint64_t amount)  {
-    KJ_ASSERT(branch.sink == nullptr);
+    KJ_ASSERT(branch.sink == kj::none);
 
     if (amount == 0) {
       return amount;
@@ -1907,7 +1907,7 @@ private:
   public:
     explicit SinkBase(PromiseFulfiller<T>& fulfiller, Maybe<Sink&>& sinkLink)
         : fulfiller(fulfiller), sinkLink(sinkLink) {
-      KJ_ASSERT(sinkLink == nullptr, "sink initiated with sink already in flight");
+      KJ_ASSERT(sinkLink == kj::none, "sink initiated with sink already in flight");
       sinkLink = *this;
     }
     KJ_DISALLOW_COPY_AND_MOVE(SinkBase);
@@ -1933,7 +1933,7 @@ private:
     void detach() {
       KJ_IF_SOME(sink, sinkLink) {
         if (&sink == this) {
-          sinkLink = nullptr;
+          sinkLink = kj::none;
         }
       }
     }
@@ -2053,7 +2053,7 @@ private:
   // =====================================================================================
 
   Maybe<Sink::Need> analyzeSinks() {
-    // Return nullptr if there are no sinks at all. Otherwise, return the largest `minBytes` and the
+    // Return kj::none if there are no sinks at all. Otherwise, return the largest `minBytes` and the
     // smallest `maxBytes` requested by any sink. The pull loop will use these values to calculate
     // the optimal buffer size for the next inner read, so that a minimum amount of data is buffered
     // at any given time.

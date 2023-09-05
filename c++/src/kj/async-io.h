@@ -166,8 +166,8 @@ public:
   // be useful. You can't connect() to or listen() on these addresses, obviously, because they are
   // ephemeral addresses for a single connection.
 
-  virtual kj::Maybe<int> getFd() const { return nullptr; }
-  // Get the underlying Unix file descriptor, if any. Returns nullptr if this object actually
+  virtual kj::Maybe<int> getFd() const { return kj::none; }
+  // Get the underlying Unix file descriptor, if any. Returns kj::none if this object actually
   // isn't wrapping a file descriptor.
 };
 
@@ -273,7 +273,7 @@ struct OneWayPipe {
   Own<AsyncOutputStream> out;
 };
 
-OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength = nullptr);
+OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength = kj::none);
 // Constructs a OneWayPipe that operates in-process. The pipe does not do any buffering -- it waits
 // until both a read() and a write() call are pending, then resolves both.
 //
@@ -480,7 +480,7 @@ public:
   template <typename T>
   inline Maybe<const T&> as() const;
   // Interpret the ancillary message as the given struct type. Most ancillary messages are some
-  // sort of struct, so this is a convenient way to access it. Returns nullptr if the message
+  // sort of struct, so this is a convenient way to access it. Returns kj::none if the message
   // is smaller than the struct -- this can happen if the message was truncated due to
   // insufficient ancillary buffer space.
 

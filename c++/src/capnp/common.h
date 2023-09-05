@@ -668,7 +668,7 @@ inline auto subtractChecked(T a, U b, ErrorFunc&& errorFunc = ErrorFunc())
 template <typename T, typename U>
 inline auto trySubtract(T a, U b) -> kj::Maybe<decltype(a - b)> {
   if (b > a) {
-    return nullptr;
+    return kj::none;
   } else {
     return a - b;
   }

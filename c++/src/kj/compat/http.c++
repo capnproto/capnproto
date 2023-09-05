@@ -1310,7 +1310,7 @@ public:
     // before the wrapper, then `weakRef` will be nulled out.
 
     // The API should prevent an app from obtaining multiple wrappers with the same backing stream.
-    KJ_ASSERT(currentWrapper == nullptr,
+    KJ_ASSERT(currentWrapper == kj::none,
         "bug in KJ HTTP: only one HTTP stream wrapper can exist at a time");
 
     currentWrapper = weakRef;
@@ -1321,8 +1321,8 @@ public:
     auto& current = KJ_ASSERT_NONNULL(currentWrapper);
     KJ_ASSERT(&current == &weakRef,
         "bug in KJ HTTP: unsetCurrentWrapper() passed the wrong wrapper");
-    weakRef = nullptr;
-    currentWrapper = nullptr;
+    weakRef = kj::none;
+    currentWrapper = kj::none;
   }
 
 private:
@@ -1539,7 +1539,7 @@ public:
   }
 
   kj::Promise<uint64_t> readChunkHeader() {
-    KJ_REQUIRE(onMessageDone != nullptr);
+    KJ_REQUIRE(onMessageDone != kj::none);
 
     // We use the portion of the header after the end of message headers.
     auto text = co_await readHeader(HeaderType::CHUNK, messageHeaderEnd, messageHeaderEnd);
@@ -1587,7 +1587,7 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
     // Read message body data.
 
-    KJ_REQUIRE(onMessageDone != nullptr);
+    KJ_REQUIRE(onMessageDone != kj::none);
 
     if (leftover == nullptr) {
       // No leftovers. Forward directly to inner stream.
@@ -2585,7 +2585,7 @@ public:
       decompressionContext.emplace(ZlibContext::Mode::DECOMPRESS, config);
     }
 #else
-    KJ_REQUIRE(compressionConfig == nullptr,
+    KJ_REQUIRE(compressionConfig == kj::none,
         "WebSocket compression is only supported if KJ is compiled with Zlib.");
 #endif // KJ_HAS_ZLIB
   }
@@ -3657,7 +3657,7 @@ class WebSocketPipeImpl final: public WebSocket, public kj::Refcounted {
 
 public:
   ~WebSocketPipeImpl() noexcept(false) {
-    KJ_REQUIRE(state == nullptr || ownState.get() != nullptr,
+    KJ_REQUIRE(state == kj::none || ownState.get() != nullptr,
         "destroying WebSocketPipe with operation still in-progress; probably going to segfault") {
       // Don't std::terminate().
       break;

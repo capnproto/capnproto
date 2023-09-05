@@ -1565,7 +1565,7 @@ public:
   template <typename Func>
   auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return f(*ptr);
     }
@@ -1841,7 +1841,7 @@ public:
         return i;
       }
     }
-    return nullptr;
+    return kj::none;
   }
   inline Maybe<size_t> findLast(const T& match) const {
     for (size_t i = size_; i--;) {
@@ -1849,7 +1849,7 @@ public:
         return i;
       }
     }
-    return nullptr;
+    return kj::none;
   }
 
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
@@ -1902,7 +1902,7 @@ template <>
 inline Maybe<size_t> ArrayPtr<const char>::findFirst(const char& c) const {
   const char* pos = reinterpret_cast<const char*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
-    return nullptr;
+    return kj::none;
   } else {
     return pos - ptr;
   }
@@ -1912,7 +1912,7 @@ template <>
 inline Maybe<size_t> ArrayPtr<char>::findFirst(const char& c) const {
   char* pos = reinterpret_cast<char*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
-    return nullptr;
+    return kj::none;
   } else {
     return pos - ptr;
   }
@@ -1922,7 +1922,7 @@ template <>
 inline Maybe<size_t> ArrayPtr<const byte>::findFirst(const byte& c) const {
   const byte* pos = reinterpret_cast<const byte*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
-    return nullptr;
+    return kj::none;
   } else {
     return pos - ptr;
   }
@@ -1932,7 +1932,7 @@ template <>
 inline Maybe<size_t> ArrayPtr<byte>::findFirst(const byte& c) const {
   byte* pos = reinterpret_cast<byte*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
-    return nullptr;
+    return kj::none;
   } else {
     return pos - ptr;
   }
@@ -1965,7 +1965,7 @@ To implicitCast(From&& from) {
 
 template <typename To, typename From>
 Maybe<To&> dynamicDowncastIfAvailable(From& from) {
-  // If RTTI is disabled, always returns nullptr.  Otherwise, works like dynamic_cast.  Useful
+  // If RTTI is disabled, always returns kj::none.  Otherwise, works like dynamic_cast.  Useful
   // in situations where dynamic_cast could allow an optimization, but isn't strictly necessary
   // for correctness.  It is highly recommended that you try to arrange all your dynamic_casts
   // this way, as a dynamic_cast that is necessary for correctness implies a flaw in the interface
@@ -1978,7 +1978,7 @@ Maybe<To&> dynamicDowncastIfAvailable(From& from) {
   }
 
 #if KJ_NO_RTTI
-  return nullptr;
+  return kj::none;
 #else
   return dynamic_cast<To*>(&from);
 #endif
@@ -2028,7 +2028,7 @@ public:
   }
 
   void cancel() {
-    maybeFunc = nullptr;
+    maybeFunc = kj::none;
   }
 
 private:

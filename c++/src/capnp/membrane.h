@@ -107,7 +107,7 @@ public:
   // membrane and then back out (or out and then back in): instead of double-wrapping the object,
   // the wrapping will be removed.
 
-  virtual kj::Maybe<kj::Promise<void>> onRevoked() { return nullptr; }
+  virtual kj::Maybe<kj::Promise<void>> onRevoked() { return kj::none; }
   // If this returns non-null, then it is a promise that will reject (throw an exception) when the
   // membrane should be revoked. On revocation, all capabilities pointing across the membrane will
   // be dropped and all outstanding calls canceled. The exception thrown by the promise will be
