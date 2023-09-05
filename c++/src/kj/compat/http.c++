@@ -2540,12 +2540,11 @@ public:
     auto header = strPreallocated(headerSpace, kj::hex(size), "\r\n"_kj);
 
     auto partCount = pieces.size() + 2;
-    constexpr auto MAX_IN_FRAME = 8;
-    KJ_STACK_ARRAY(ArrayPtr<const byte>, parts, partCount, MAX_IN_FRAME);
+    kj::SmallArrayBuilder<ArrayPtr<const byte>, 8> parts(partCount);
 
-    parts[0] = header.asBytes();
-    std::copy(pieces.begin(), pieces.end(), parts.begin() + 1);
-    parts[parts.size() - 1] = "\r\n"_kj.asBytes();
+    parts.add(header.asBytes());
+    parts.addAll(pieces);
+    parts.add("\r\n"_kj.asBytes());
 
     co_await getInner().writeBodyData(parts);
   }
