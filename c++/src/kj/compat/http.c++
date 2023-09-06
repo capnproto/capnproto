@@ -2555,20 +2555,18 @@ public:
 
   Promise<uint64_t> pumpImpl(AsyncInputStream& input, uint64_t length) {
     // Hey, we know exactly how large the input is, so we can write just one chunk.
-    auto& inner = getInner();
-
-    co_await inner.writeBodyData(kj::str(kj::hex(length), "\r\n"));
-    auto actual = co_await inner.pumpBodyFrom(input, length);
+    co_await getInner().writeBodyData(kj::str(kj::hex(length), "\r\n"));
+    auto actual = co_await getInner().pumpBodyFrom(input, length);
 
     if (actual < length) {
-      inner.abortBody();
+      getInner().abortBody();
       KJ_FAIL_REQUIRE(
           "value returned by input.tryGetLength() was greater than actual bytes transferred") {
         break;
       }
     }
 
-    co_await inner.writeBodyData(kj::str("\r\n"));
+    co_await getInner().writeBodyData(kj::str("\r\n"));
     co_return actual;
   }
 
