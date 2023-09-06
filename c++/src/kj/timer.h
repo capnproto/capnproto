@@ -67,11 +67,21 @@ public:
   // original promise) if it hasn't completed by `time`. The thrown exception is of type
   // "OVERLOADED".
 
+  Promise<void> timeoutAt(TimePoint time) KJ_WARN_UNUSED_RESULT {
+    co_await atTime(time);
+    throw makeTimeoutException();
+  }
+
   template <typename T>
   Promise<T> timeoutAfter(Duration delay, Promise<T>&& promise) KJ_WARN_UNUSED_RESULT;
   // Return a promise equivalent to `promise` but which throws an exception (and cancels the
   // original promise) if it hasn't completed after `delay` from now. The thrown exception is of
   // type "OVERLOADED".
+
+  Promise<void> timeoutAfter(Duration delay) KJ_WARN_UNUSED_RESULT {
+    co_await afterDelay(delay);
+    throw makeTimeoutException();
+  }
 
 private:
   static kj::Exception makeTimeoutException();
@@ -125,16 +135,12 @@ private:
 
 template <typename T>
 Promise<T> Timer::timeoutAt(TimePoint time, Promise<T>&& promise) {
-  return promise.exclusiveJoin(atTime(time).then([]() -> kj::Promise<T> {
-    return makeTimeoutException();
-  }));
+  co_return co_await kj::exclusiveJoin(kj::mv(promise), timeoutAt(time));
 }
 
 template <typename T>
 Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
-  return promise.exclusiveJoin(afterDelay(delay).then([]() -> kj::Promise<T> {
-    return makeTimeoutException();
-  }));
+  co_return co_await kj::exclusiveJoin(kj::mv(promise), timeoutAfter(delay));
 }
 
 inline TimePoint TimerImpl::now() const { return time; }
