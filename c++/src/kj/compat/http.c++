@@ -2301,7 +2301,7 @@ public:
   kj::Promise<void> flush() {
     KJ_IF_SOME(promise, writeQueue) {
       auto result = kj::mv(promise);
-      writeQueue = nullptr;
+      writeQueue = kj::none;
       return result;
     } else {
       return kj::READY_NOW;
@@ -2316,7 +2316,7 @@ public:
 
 private:
   AsyncOutputStream& inner;
-  kj::Maybe<kj::Promise<void>> writeQueue = nullptr;
+  kj::Maybe<kj::Promise<void>> writeQueue = kj::none;
   bool inBody = false;
   bool broken = false;
 
@@ -2332,8 +2332,8 @@ private:
     // `writeQueue` because this would prevent cancellation. Instead, they wait until `writeQueue`
     // is empty, then they make the write directly, using `writeInProgress` to detect and block
     // concurrent writes.
-    KJ_IF_MAYBE(promise, writeQueue) {
-      writeQueue = promise->then([this,content=kj::mv(content)]() mutable {
+    KJ_IF_SOME(promise, writeQueue) {
+      writeQueue = promise.then([this,content=kj::mv(content)]() mutable {
         auto promise = inner.write(content.begin(), content.size());
         return promise.attach(kj::mv(content));
       });
