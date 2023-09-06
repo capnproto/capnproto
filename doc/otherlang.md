@@ -25,7 +25,8 @@ project's documentation for details.
 
 ##### Serialization only
 
-* [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill))
+* [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill)) (no longer maintained)
+    * [Forked and maintained](https://gitlab.com/dkml/ext/c-capnproto) by [@jonahbeckford](https://github.com/jonahbeckford)
 * [D](https://github.com/capnproto/capnproto-dlang) by [@ThomasBrixLarsen](https://github.com/ThomasBrixLarsen)
 * [Java](https://github.com/capnproto/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [JavaScript](https://github.com/capnp-js/plugin/) by [@popham](https://github.com/popham)
