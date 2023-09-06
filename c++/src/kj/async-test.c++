@@ -619,6 +619,19 @@ KJ_TEST("addBranchForCoAwait") {
   KJ_EXPECT(coro().wait(waitScope) == 123);
 }
 
+KJ_TEST("co_return promise") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+
+  auto coro = [&]() -> kj::Promise<int> {
+    auto promise = evalLater([&]() { return 123; });
+    co_return promise;
+  };
+
+  KJ_EXPECT(coro().wait(waitScope) == 123);
+}
+
 TEST(Async, Split) {
   EventLoop loop;
   WaitScope waitScope(loop);

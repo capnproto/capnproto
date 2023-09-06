@@ -2290,6 +2290,10 @@ public:
     }
   }
 
+  void fulfill(kj::Promise<T>&& value) {
+    KJ_IREQUIRE(false, "not implemented");
+  }
+
 private:
   // -------------------------------------------------------
   // PromiseNode implementation
@@ -2305,6 +2309,10 @@ template <typename Self, typename T>
 class CoroutineMixin {
 public:
   void return_value(T value) {
+    static_cast<Self*>(this)->fulfill(kj::mv(value));
+  }
+
+  void return_value(kj::Promise<T>&& value) {
     static_cast<Self*>(this)->fulfill(kj::mv(value));
   }
 };
