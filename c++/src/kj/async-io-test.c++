@@ -3224,7 +3224,7 @@ kj::String fillWriteBuffer(int fd) {
   // Fill up the write buffer of the given FD and return the contents written. We need to use the
   // raw syscalls to do this because KJ doesn't have a way to know how many bytes made it into the
   // socket buffer.
-  auto huge = bigString(2'000'000);
+  auto huge = bigString(4'200'000);
 
   size_t pos = 0;
   for (;;) {
