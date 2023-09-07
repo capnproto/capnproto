@@ -790,10 +790,15 @@ template <typename T> Maybe<Own<T>> copyOrAddRef(Maybe<Own<T>>& t) {
 }
 
 
-template <typename T>
-class ForkBranchBaseT: public ForkBranchBase {
+// A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
+// a const reference.
+template <typename T, bool FreeOnDestroy>
+class ForkBranch final: public ForkBranchBase {
 public:
-  ForkBranchBaseT(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
+  ForkBranch(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
+  ForkBranch(ForkedPromise<UnfixVoid<T>>& promise) : ForkBranchBase(promise.hub->addRef()) {}
+
+  void destroy() override { if (FreeOnDestroy) freePromise(this); }
 
   void get(ExceptionOrValue& output) noexcept override {
     ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
@@ -806,30 +811,6 @@ public:
     releaseHub(output);
   }
 };
-
-template <typename T>
-class ForkBranch final: public ForkBranchBaseT<T> {
-  // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
-  // a const reference.
-
-public:
-  ForkBranch(OwnForkHubBase&& hub): ForkBranchBaseT<T>(kj::mv(hub)) {}
-  void destroy() override { freePromise(this); }
-};
-
-template <typename T>
-class ForkedPromiseNode final: public ForkBranchBaseT<T> {
-  // A node to co_await on the fork itself.
-  // Same as ForkBranch, but destroy is not necessary since this node is
-  // allocated on the stack.
-
-public:
-  ForkedPromiseNode(ForkedPromise<UnfixVoid<T>>& promise)
-      : ForkBranchBaseT<T>(promise.hub->addRef()) {}
-
-  void destroy() override { /* do nothing */ }
-};
-
 
 template <typename T, size_t index>
 class SplitBranch final: public ForkBranchBase {
@@ -906,7 +887,7 @@ public:
 
   Promise<_::UnfixVoid<T>> addBranch() {
     return _::PromiseNode::to<Promise<_::UnfixVoid<T>>>(
-        allocPromise<ForkBranch<T>>(addRef()));
+        allocPromise<ForkBranch<T, true>>(addRef()));
   }
 
   _::SplitTuplePromise<T> split(SourceLocation location) {
@@ -2409,7 +2390,7 @@ public:
   inline bool await_ready() const { return awaiter.await_ready(); }
 
 private:
-  ForkedPromiseNode<_::FixVoid<U>> node;
+  ForkBranch<_::FixVoid<U>, false> node;
   Awaiter<U> awaiter;
 };
 

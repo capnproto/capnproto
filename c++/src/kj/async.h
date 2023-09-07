@@ -399,7 +399,7 @@ private:
 
   friend class Promise<T>;
   friend class EventLoop;
-  template<typename> friend class _::ForkedPromiseNode;
+  template<typename, bool> friend class _::ForkBranch;
 };
 
 constexpr _::ReadyNow READY_NOW = _::ReadyNow();
