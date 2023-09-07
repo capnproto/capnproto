@@ -318,10 +318,10 @@ private:
   ReadyOutputStreamWrapper writeBuffer;
 
   Promise<void> writeInternal(kj::ArrayPtr<const kj::ArrayPtr<const byte>> slices) {
-    KJ_REQUIRE(shutdownTask == kj::none, "already called shutdownWrite()");
-
     auto cork = writeBuffer.cork();
     for (auto slice: slices) {
+      KJ_REQUIRE(shutdownTask == kj::none, "already called shutdownWrite()");
+      
       // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
       // an error. So, we need to avoid zero-sized writes entirely.
       while (slice.size() > 0) {
