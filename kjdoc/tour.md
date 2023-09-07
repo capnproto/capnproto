@@ -435,6 +435,8 @@ These wrappers perform some extra bookkeeping:
 
 ### Supporting `-fno-exceptions`
 
+**WARNING: v2 version of kj/capnp no longer supports `-fno-exceptions` mode. This documentation needs to be updated.** 
+
 KJ strongly recommends using C++ exceptions. However, exceptions are controversial, and many C++ applications are compiled with exceptions disabled. Some KJ-based libraries (especially Cap'n Proto) would like to accommodate such users. To that end, KJ's exception and assertion infrastructure is designed to degrade gracefully when compiled without exception support. In this case, exceptions are split into two types:
 
 * Fatal exceptions, when compiled with `-fno-exceptions`, will terminate the program when thrown.
