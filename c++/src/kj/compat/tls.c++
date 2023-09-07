@@ -212,13 +212,13 @@ public:
     co_await sslCall([this]() { return SSL_connect(ssl); });
 
     X509* cert = SSL_get_peer_certificate(ssl);
-    KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate") { co_return; }
+    KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
     X509_free(cert);
 
     auto result = SSL_get_verify_result(ssl);
     if (result != X509_V_OK) {
       const char* reason = X509_verify_cert_error_string(result);
-      KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason) { break; }
+      KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason);
     }
   }
 
@@ -324,8 +324,6 @@ private:
     for (auto slice: slices) {
       // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
       // an error. So, we need to avoid zero-sized writes entirely.
-      if (slice.size() == 0) continue;
-
       while (slice.size() > 0) {
         auto n = co_await sslCall([this,slice]() { return SSL_write(ssl, slice.begin(), slice.size()); });
         if (n == 0) {
@@ -566,7 +564,6 @@ public:
     //   as soon as connect() returns, and this works with the native network implementation.
     //   So, we make some copies here.
     auto& tlsRef = tls;
-    auto hostnameCopy = kj::str(hostname);
     auto stream = co_await inner->connect();
     co_return co_await tlsRef.wrapClient(kj::mv(stream), hostname);
   }
@@ -576,7 +573,6 @@ public:
     //   as soon as connect() returns, and this works with the native network implementation.
     //   So, we make some copies here.
     auto& tlsRef = tls;
-    auto hostnameCopy = kj::str(hostname);
     auto stream = co_await inner->connectAuthenticated();
     co_return co_await tlsRef.wrapClient(kj::mv(stream), hostname);
   }
