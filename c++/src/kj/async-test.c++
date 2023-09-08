@@ -25,7 +25,7 @@
 #include "mutex.h"
 #include "thread.h"
 
-#if !_WIN32
+#if !KJ_USE_FIBERS && !_WIN32
 #include <pthread.h>
 #endif
 
@@ -884,41 +884,32 @@ TEST(Async, TaskSet) {
 // These tests require either fibers or pthreads in order to limit the stack size. Currently we
 // don't have a version that works on Windows without fibers, so skip the tests there.
 
-// Runs the given function in a context with a limited stack size.
-void runWithStackLimit(size_t stackSize, void (*func)()) {
-  // We have a couple possible ways to test limited stacks.  We exercise all available methods, to
-  // reduce the likelihood of breakage in less frequently tested configurations.
-  //
-  // Prefer testing stack limits with fibers first, because it manifests stack overflow failures
-  // with a segmentation fault and stack, while pthreads just aborts without output.
-
+template <typename Func>
+void runWithStackLimit(size_t stackSize, Func&& func) {
+  // Runs the given function in a context with a limited stack size.
 #if KJ_USE_FIBERS
-  if (!isLibcContextHandlingKnownBroken()) {
-    EventLoop loop;
-    WaitScope waitScope(loop);
+  if (isLibcContextHandlingKnownBroken()) return;
 
-    startFiber(stackSize,
-        [func](WaitScope&) mutable {
-      func();
-    }).wait(waitScope);
-  }
-#endif
+  EventLoop loop;
+  WaitScope waitScope(loop);
 
-#if !_WIN32
+  startFiber(stackSize,
+      [func = kj::mv(func)](WaitScope&) mutable {
+    func();
+  }).wait(waitScope);
+#else
   pthread_attr_t attr;
   KJ_REQUIRE(0 == pthread_attr_init(&attr));
   KJ_DEFER(KJ_REQUIRE(0 == pthread_attr_destroy(&attr)));
 
   KJ_REQUIRE(0 == pthread_attr_setstacksize(&attr, stackSize));
   pthread_t thread;
-  auto start = [](void* startArg) -> void* {
+  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [func = kj::mv(func)](void*) -> void* {
     EventLoop loop;
     WaitScope waitScope(loop);
-    auto startFunc = reinterpret_cast<decltype(func)>(startArg);
-    startFunc();
+    func();
     return nullptr;
-  };
-  KJ_REQUIRE(0 == pthread_create(&thread, &attr, start, reinterpret_cast<void*>(func)));
+  }, nullptr));
   KJ_REQUIRE(0 == pthread_join(thread, nullptr));
 #endif
 }
