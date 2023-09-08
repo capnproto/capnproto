@@ -185,7 +185,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 
   // Read sizes for all segments except the first.  Include padding if necessary.
-  kj::SmallArray<_::WireValue<uint32_t>, 16> moreSizes(segmentCount & ~1);
+  KJ_STACK_ARRAY(_::WireValue<uint32_t>, moreSizes, segmentCount & ~1, 16, 64);
   if (segmentCount > 1) {
     inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]));
     for (uint i = 0; i < segmentCount - 1; i++) {
@@ -276,7 +276,7 @@ void readMessageCopy(kj::InputStream& input, MessageBuilder& target,
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
-  kj::SmallArray<_::WireValue<uint32_t>, 16> table((segments.size() + 2) & ~size_t(1));
+  KJ_STACK_ARRAY(_::WireValue<uint32_t>, table, (segments.size() + 2) & ~size_t(1), 16, 64);
 
   // We write the segment count - 1 because this makes the first word zero for single-segment
   // messages, improving compression.  We don't bother doing this with segment sizes because
@@ -290,7 +290,7 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
     table[segments.size() + 1].set(0);
   }
 
-  kj::SmallArray<kj::ArrayPtr<const byte>, 4> pieces(segments.size() + 1);
+  KJ_STACK_ARRAY(kj::ArrayPtr<const byte>, pieces, segments.size() + 1, 4, 32);
   pieces[0] = table.asBytes();
 
   for (uint i = 0; i < segments.size(); i++) {

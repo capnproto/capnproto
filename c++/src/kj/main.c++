@@ -91,7 +91,7 @@ static void writeLineToFd(int fd, StringPtr message) {
   }
 
 #if _WIN32
-  SmallArray<char, 128> newlineExpansionBuffer(2 * (message.size() + 1));
+  KJ_STACK_ARRAY(char, newlineExpansionBuffer, 2 * (message.size() + 1), 128, 512);
   char* p = newlineExpansionBuffer.begin();
   for(char ch : message) {
     if(ch == '\n') {
@@ -116,7 +116,7 @@ static void writeLineToFd(int fd, StringPtr message) {
   if(redirectedToFile) {
     WriteFile(handle, newlineExpansionBuffer.begin(), newlineExpandedSize, &writtenSize, nullptr);
   } else {
-    SmallArray<wchar_t, 128> buffer(newlineExpandedSize);
+    KJ_STACK_ARRAY(wchar_t, buffer, newlineExpandedSize, 128, 512);
 
     size_t finalSize = MultiByteToWideChar(
       CP_UTF8,
@@ -211,7 +211,7 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
   try {
     KJ_ASSERT(argc > 0);
 
-    SmallArray<StringPtr, 8> params(argc - 1);
+    KJ_STACK_ARRAY(StringPtr, params, argc - 1, 8, 32);
     for (int i = 1; i < argc; i++) {
       params[i - 1] = argv[i];
     }

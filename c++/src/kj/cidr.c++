@@ -48,7 +48,7 @@ CidrRange::CidrRange(StringPtr pattern) {
 
   bitCount = pattern.slice(slashPos + 1).parseAs<uint>();
 
-  SmallArray<char, 128> addr(slashPos + 1);
+  KJ_STACK_ARRAY(char, addr, slashPos + 1, 128, 128);
   memcpy(addr.begin(), pattern.begin(), slashPos);
   addr[slashPos] = '\0';
 
