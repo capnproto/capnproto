@@ -934,7 +934,7 @@ public:
     // No need to copy whatBuffer since it's just to hold the return value of what().
     insertIntoCurrentExceptions();
   }
-  ~ExceptionImpl() noexcept {
+  ~ExceptionImpl() {
     // Look for ourselves in the list.
     for (auto* ptr = &currentException; *ptr != nullptr; ptr = &(*ptr)->nextCurrentException) {
       if (*ptr == this) {

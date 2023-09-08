@@ -144,7 +144,7 @@ public:
       : ptr(firstElement), size_(size), disposer(&disposer) {}
 
   KJ_DISALLOW_COPY(Array);
-  inline ~Array() noexcept(false) { dispose(); }
+  inline ~Array() noexcept { dispose(); }
 
   inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
     return ArrayPtr<T>(ptr, size_);
@@ -609,6 +609,7 @@ private:
 // 3. SmallArray/Builder have no specific constructor functions like `heapArray<T>()` or
 //    `heapArrayBuilder<T>()`. Instead, use their constructors directly, passing a single `size`
 //    parameter.
+
 
 template <typename T, size_t smallSize>
 class SmallArray final: private Array<T> {
