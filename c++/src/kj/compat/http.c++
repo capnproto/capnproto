@@ -7961,7 +7961,7 @@ kj::Promise<void> HttpServer::drain() {
 }
 
 kj::Promise<void> HttpServer::listenHttp(kj::ConnectionReceiver& port) {
-  return listenLoop(port).exclusiveJoin(onDrain.addBranch());
+  co_await kj::exclusiveJoin(listenLoop(port), onDrain.addBranch());
 }
 
 kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {

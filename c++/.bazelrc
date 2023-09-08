@@ -36,3 +36,15 @@ build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 build --//src/kj:openssl=True
 build --//src/kj:zlib=True
 build --//src/kj:brotli=True
+
+# common sanitizers options
+build:sanitizer-common --copt="-fsanitize-link-c++-runtime" --linkopt="-fsanitize-link-c++-runtime"
+build:sanitizer-common --copt="-Og"
+build:sanitizer-common --copt="-g" --strip=never
+build:sanitizer-common --copt="-fno-optimize-sibling-calls"
+build:sanitizer-common --copt="-fno-omit-frame-pointer" --copt="-mno-omit-leaf-frame-pointer"
+
+# address sanitizer (https://github.com/google/sanitizers/wiki/AddressSanitizer)
+build:asan --config=sanitizer-common
+build:asan --copt="-fsanitize=address" --linkopt="-fsanitize=address"
+test:asan --test_env=ASAN_OPTIONS=abort_on_error=true

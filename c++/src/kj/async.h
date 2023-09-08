@@ -547,6 +547,9 @@ private:
   friend class _::FiberBase;
 };
 
+template<typename T, typename... Promises>
+_::ExclusiveJoin<T, sizeof...(Promises) + 1> exclusiveJoin(Promise<T>&& promise, Promises&&...rest, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises, SourceLocation location = {});
 // Join an array of promises into a promise for an array. Trailing continuations on promises are not

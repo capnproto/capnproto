@@ -36,6 +36,7 @@
 #endif
 
 #include <kj/list.h>
+#include <array>
 
 KJ_BEGIN_HEADER
 
@@ -313,6 +314,11 @@ public:
     // Given a Promise, extract the PromiseNode.
     return *promise.node;
   }
+  template <typename...Promises>
+  static std::array<OwnPromiseNode, sizeof...(Promises)> from(Promises&&...promise) {
+    return { kj::mv(promise.node)...};
+  }
+
   template <typename T>
   static T to(OwnPromiseNode&& node) {
     // Construct a Promise from a PromiseNode. (T should be a Promise type.)
@@ -993,28 +999,92 @@ inline Promise<T> maybeReduce(Promise<T>&& promise, ...) {
 
 // -------------------------------------------------------------------
 
+template<size_t Size, bool FreeOnDestroy>
 class ExclusiveJoinPromiseNode final: public PromiseNode {
 public:
-  ExclusiveJoinPromiseNode(OwnPromiseNode left, OwnPromiseNode right, SourceLocation location);
-  ~ExclusiveJoinPromiseNode() noexcept(false);
-  void destroy() override;
+  ExclusiveJoinPromiseNode(std::array<OwnPromiseNode, Size>&& nodes, SourceLocation location) 
+      : branches(createBranches(kj::mv(nodes), location)) {}
 
-  void onReady(Event* event) noexcept override;
-  void get(ExceptionOrValue& output) noexcept override;
-  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  // special version for Promise::exclusiveJoin
+  ExclusiveJoinPromiseNode(OwnPromiseNode&& left, OwnPromiseNode&& right, SourceLocation location)
+    : branches(createBranches({kj::mv(left), kj::mv(right)}, location)){
+    static_assert(Size == 2, "can be used only with size == 2");
+  }
+
+  ~ExclusiveJoinPromiseNode() noexcept(false) { }
+
+  void destroy() override { if (FreeOnDestroy) freePromise(this); }
+
+  void onReady(Event* event) noexcept override { onReadyEvent.init(event); }
+  
+  void get(ExceptionOrValue& output) noexcept override {
+    for (auto& branch: branches) {
+      if (branch.get(output)) return;
+    }
+    KJ_IREQUIRE(false, "get() called before ready.");
+  }
+
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override {
+    // TODO(debug): Maybe use __builtin_return_address to get the locations that called
+    //   exclusiveJoin()?
+
+    if (stopAtNextEvent) return;
+
+    // Trace the leftmost branch I guess.
+    for (auto& branch: branches) {
+      if (branch.dependency.get() != nullptr) {
+        branch.dependency->tracePromise(builder, false);
+        return;
+      }
+    }
+  }
 
 private:
   class Branch: public Event {
   public:
-    Branch(ExclusiveJoinPromiseNode& joinNode, OwnPromiseNode dependency,
-           SourceLocation location);
-    ~Branch() noexcept(false);
+    Branch(ExclusiveJoinPromiseNode& joinNode, 
+           OwnPromiseNode dependencyParam,
+           SourceLocation location)
+        : Event(location), joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
+      dependency->setSelfPointer(&dependency);
+      dependency->onReady(this);
+    }
 
-    bool get(ExceptionOrValue& output);
-    // Returns true if this is the side that finished.
+    ~Branch() noexcept(false) { }
 
-    Maybe<Own<Event>> fire() override;
-    void traceEvent(TraceBuilder& builder) override;
+    bool get(ExceptionOrValue& output) {
+      // Returns true if this is the side that finished.
+      if (dependency) {
+        dependency->get(output);
+        return true;
+      } 
+      return false;
+    }
+
+    Maybe<Own<Event>> fire() override {
+      if (dependency) {
+        // Cancel the branch that didn't return first.  Ignore exceptions caused by cancellation.
+        for (auto& branch: joinNode.branches) {
+          if (this != &branch) {
+            kj::runCatchingExceptions([&]() { branch.dependency = nullptr; });
+          }
+        }
+
+        joinNode.onReadyEvent.arm();
+      } else {
+        // The other branch already fired, and this branch was canceled. It's possible for both
+        // branches to fire if both were armed simultaneously.
+      }
+
+      return kj::none;
+    }
+
+    void traceEvent(TraceBuilder& builder) override {
+      if (dependency.get() != nullptr) {
+        dependency->tracePromise(builder, true);
+      }
+      joinNode.onReadyEvent.traceEvent(builder);
+    }
 
   private:
     ExclusiveJoinPromiseNode& joinNode;
@@ -1023,9 +1093,39 @@ private:
     friend class ExclusiveJoinPromiseNode;
   };
 
-  Branch left;
-  Branch right;
+  template<size_t...Is>
+  std::array<Branch, Size> createBranches(
+      std::array<OwnPromiseNode, Size>&& nodes,
+      SourceLocation location,
+      std::index_sequence<Is...>) {
+    return {{ Branch(*this, kj::mv(nodes[Is]), location)...  }};
+  }
+
+  std::array<Branch, Size> createBranches(
+      std::array<OwnPromiseNode, Size>&& nodes,
+      SourceLocation location) {
+    return createBranches(kj::mv(nodes), location, std::make_index_sequence<Size>());
+  }
+
+  std::array<Branch, Size> branches;
   OnReadyEvent onReadyEvent;
+};
+
+template <typename T, size_t Size>
+class ExclusiveJoin {
+
+public:
+  static constexpr size_t size = Size;
+
+  KJ_DISALLOW_COPY(ExclusiveJoin);
+
+  ExclusiveJoin(std::array<_::OwnPromiseNode, Size>&& nodes, SourceLocation location)
+      : nodes(kj::mv(nodes)), location(location) {}
+
+  std::array<_::OwnPromiseNode, Size> nodes;
+  SourceLocation location;
+
+private:
 };
 
 // -------------------------------------------------------------------
@@ -1408,7 +1508,7 @@ _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
 
 template <typename T>
 Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other, SourceLocation location) {
-  return Promise(false, _::appendPromise<_::ExclusiveJoinPromiseNode>(
+  return Promise(false, _::appendPromise<_::ExclusiveJoinPromiseNode<2, true>>(
       kj::mv(node), kj::mv(other.node), location));
 }
 
@@ -1553,6 +1653,13 @@ Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocat
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size()), location,
       _::ArrayJoinBehavior::EAGER));
+}
+
+template<typename T, typename... Promises>
+_::ExclusiveJoin<T, sizeof...(Promises) + 1> exclusiveJoin(Promise<T>&& promise, Promises&&...rest) KJ_WARN_UNUSED_RESULT {
+  static constexpr size_t Size = sizeof...(Promises) + 1;
+  // todo: source location?
+  return _::ExclusiveJoin<T, Size>( _::PromiseNode::from(kj::mv(promise), kj::mv(rest)...), {});
 }
 
 // =======================================================================================
@@ -2281,6 +2388,14 @@ public:
     return ForkedPromiseAwaiter<U>(promise);
   }
 
+  template <typename U, size_t Size>
+  class ExclusiveJoinAwaiter;
+
+  template <typename U, size_t Size>
+  ExclusiveJoinAwaiter<U, Size> await_transform(ExclusiveJoin<U, Size>&& join) { 
+    return ExclusiveJoinAwaiter<U, Size>(kj::mv(join)); 
+  }
+
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
@@ -2412,6 +2527,28 @@ private:
   ForkedPromiseNode<_::FixVoid<U>> node;
   Awaiter<U> awaiter;
 };
+
+template <typename T>
+template <typename U, size_t Size>
+class Coroutine<T>::ExclusiveJoinAwaiter {
+public:
+  ExclusiveJoinAwaiter(ExclusiveJoin<U, Size>&& promise) 
+      : node(kj::mv(promise.nodes), promise.location), awaiter(OwnPromiseNode(&node)) { }
+
+  template <typename V>
+  inline bool await_suspend(stdcoro::coroutine_handle<V> coroutine) {
+    return awaiter.await_suspend(coroutine);
+  }
+
+  inline U await_resume() { return awaiter.await_resume(); }
+
+  inline bool await_ready() const { return awaiter.await_ready(); }
+
+private:
+  ExclusiveJoinPromiseNode<Size, false> node;
+  Awaiter<U> awaiter;
+};
+
 
 // ---------------------------------------------------------
 // Coroutine Magic

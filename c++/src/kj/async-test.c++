@@ -676,6 +676,20 @@ TEST(Async, ExclusiveJoin) {
   }
 }
 
+KJ_TEST("kj::exclusiveJoin") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto coro = []() -> kj::Promise<int> {
+    co_return co_await kj::exclusiveJoin(
+      evalLater([&]() { return 123; }), 
+      evalLater([&]() { return 456; }), 
+      evalLater([&]() { return 789; }));
+  };
+
+  EXPECT_EQ(123, coro().wait(waitScope));
+}
+
 TEST(Async, ArrayJoin) {
   for (auto specificJoinPromisesOverload: {
     +[](kj::Array<kj::Promise<int>> promises) { return joinPromises(kj::mv(promises)); },
