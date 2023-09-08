@@ -428,7 +428,7 @@ public:
     // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
     size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
     const size_t iovmax = miniposix::iovMax();
-    SmallArray<struct iovec, 16> iov(kj::min(iovmax, count));
+    KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
 
     for (auto& item: iov) {
       item.iov_base = const_cast<byte*>(ZEROS);
@@ -812,7 +812,7 @@ public:
   Maybe<String> tryReadlink(PathPtr path) const {
     size_t trySize = 256;
     for (;;) {
-      SmallArray<char, 256> buf(trySize);
+      KJ_STACK_ARRAY(char, buf, trySize, 256, 4096);
       ssize_t n = readlinkat(fd, path.toString().cStr(), buf.begin(), buf.size());
       if (n < 0) {
         int error = errno;
@@ -1713,7 +1713,7 @@ private:
 
     size_t size = 256;
   retry:
-    SmallArray<char, 256> buf(size);
+    KJ_STACK_ARRAY(char, buf, size, 256, 4096);
     if (getcwd(buf.begin(), size) == nullptr) {
       int error = errno;
       if (error == ERANGE) {
