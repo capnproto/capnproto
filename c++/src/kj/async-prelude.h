@@ -212,8 +212,8 @@ class XThreadPaf;
 class PromiseDisposer;
 using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
 // PromiseNode uses a static disposer.
-template<typename T>
-class ForkedPromiseNode;
+template<typename T, bool FreeOnDestroy>
+class ForkBranch;
 
 class PromiseBase {
 public:
