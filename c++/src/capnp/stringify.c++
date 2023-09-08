@@ -57,7 +57,7 @@ public:
     if (amount == 0 || canPrintAllInline(items, kind)) {
       return kj::StringTree(kj::mv(items), ", ");
     } else {
-      kj::SmallArray<char, 32> delimArrayPtr(amount * 2 + 3);
+      KJ_STACK_ARRAY(char, delimArrayPtr, amount * 2 + 3, 32, 256);
       auto delim = delimArrayPtr.begin();
       delim[0] = ',';
       delim[1] = '\n';

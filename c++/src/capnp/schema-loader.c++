@@ -314,10 +314,10 @@ private:
 
     auto fields = structNode.getFields();
 
-    kj::SmallArray<bool, 32> sawCodeOrder(fields.size());
+    KJ_STACK_ARRAY(bool, sawCodeOrder, fields.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
-    kj::SmallArray<bool, 32> sawDiscriminantValue(structNode.getDiscriminantCount());
+    KJ_STACK_ARRAY(bool, sawDiscriminantValue, structNode.getDiscriminantCount(), 32, 256);
     memset(sawDiscriminantValue.begin(), 0,
            sawDiscriminantValue.size() * sizeof(sawDiscriminantValue[0]));
 
@@ -409,7 +409,7 @@ private:
 
   void validate(const schema::Node::Enum::Reader& enumNode) {
     auto enumerants = enumNode.getEnumerants();
-    kj::SmallArray<bool, 32> sawCodeOrder(enumerants.size());
+    KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
@@ -430,7 +430,7 @@ private:
     }
 
     auto methods = interfaceNode.getMethods();
-    kj::SmallArray<bool, 32> sawCodeOrder(methods.size());
+    KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
@@ -1441,17 +1441,20 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
 
   auto srcScopes = proto.getScopes();
 
-  kj::SmallArrayBuilder<_::RawBrandedSchema::Scope, 16> dstScopesBuilder(srcScopes.size());
+  KJ_STACK_ARRAY(_::RawBrandedSchema::Scope, dstScopes, srcScopes.size(), 16, 32);
+  memset(dstScopes.begin(), 0, dstScopes.size() * sizeof(dstScopes[0]));
 
+  uint dstScopeCount = 0;
   for (auto srcScope: srcScopes) {
     switch (srcScope.which()) {
       case schema::Brand::Scope::BIND: {
         auto srcBindings = srcScope.getBind();
-        kj::SmallArrayBuilder<_::RawBrandedSchema::Binding, 16> dstBindingsBuilder(
-            srcBindings.size());
+        KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
+        memset(dstBindings.begin(), 0, dstBindings.size() * sizeof(dstBindings[0]));
 
-        for (auto srcBinding: srcBindings) {
-          auto& dstBinding = dstBindingsBuilder.add();
+        for (auto j: kj::indices(srcBindings)) {
+          auto srcBinding = srcBindings[j];
+          auto& dstBinding = dstBindings[j];
 
           memset(&dstBinding, 0, sizeof(dstBinding));
           dstBinding.which = schema::Type::ANY_POINTER;
@@ -1466,17 +1469,17 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
           }
         }
 
-        auto& dstScope = dstScopesBuilder.add();
+        auto& dstScope = dstScopes[dstScopeCount++];
         dstScope.typeId = srcScope.getScopeId();
-        dstScope.bindingCount = dstBindingsBuilder.size();
-        dstScope.bindings = copyDeduped(dstBindingsBuilder.asPtr()).begin();
+        dstScope.bindingCount = dstBindings.size();
+        dstScope.bindings = copyDeduped(dstBindings).begin();
         break;
       }
       case schema::Brand::Scope::INHERIT: {
         // Inherit the whole scope from the client -- or if the client doesn't have it, at least
         // include an empty dstScope in the list just to show that this scope was specified as
         // inherited, as opposed to being unspecified (which would be treated as all AnyPointer).
-        auto& dstScope = dstScopesBuilder.add();
+        auto& dstScope = dstScopes[dstScopeCount++];
         dstScope.typeId = srcScope.getScopeId();
 
         KJ_IF_MAYBE(b, clientBrand) {
@@ -1495,7 +1498,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     }
   }
 
-  auto dstScopes = dstScopesBuilder.asPtr();
+  dstScopes = dstScopes.slice(0, dstScopeCount);
 
   std::sort(dstScopes.begin(), dstScopes.end(),
       [](const _::RawBrandedSchema::Scope& a, const _::RawBrandedSchema::Scope& b) {

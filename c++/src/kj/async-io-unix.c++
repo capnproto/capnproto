@@ -624,7 +624,7 @@ private:
       // other platforms), so we want to allocate an array of words (we use void*). So... we use
       // CMSG_SPACE() and then additionally round up to deal with Mac.
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
-      SmallArray<void*, 16> cmsgSpace(msgWords);
+      KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
       memset(cmsgBytes.begin(), 0, cmsgBytes.size());
       msg.msg_control = cmsgBytes.begin();
@@ -755,7 +755,7 @@ private:
     const size_t iovmax = kj::miniposix::iovMax();
     // If there are more than IOV_MAX pieces, we'll only write the first IOV_MAX for now, and
     // then we'll loop later.
-    SmallArray<struct iovec, 16> iov(kj::min(1 + morePieces.size(), iovmax));
+    KJ_STACK_ARRAY(struct iovec, iov, kj::min(1 + morePieces.size(), iovmax), 16, 128);
     size_t iovTotal = 0;
 
     // writev() interface is not const-correct.  :(
@@ -800,7 +800,7 @@ private:
       // other platforms), so we want to allocate an array of words (we use void*). So... we use
       // CMSG_SPACE() and then additionally round up to deal with Mac.
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
-      SmallArray<void*, 16> cmsgSpace(msgWords);
+      KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
       memset(cmsgBytes.begin(), 0, cmsgBytes.size());
       msg.msg_control = cmsgBytes.begin();
@@ -1801,7 +1801,7 @@ Promise<size_t> DatagramPortImpl::send(
   msg.msg_namelen = addr.getRawSize();
 
   const size_t iovmax = kj::miniposix::iovMax();
-  SmallArray<struct iovec, 16> iov(kj::min(pieces.size(), iovmax));
+  KJ_STACK_ARRAY(struct iovec, iov, kj::min(pieces.size(), iovmax), 16, 64);
 
   for (size_t i: kj::indices(pieces)) {
     iov[i].iov_base = const_cast<void*>(implicitCast<const void*>(pieces[i].begin()));
