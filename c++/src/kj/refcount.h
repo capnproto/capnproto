@@ -22,6 +22,7 @@
 #pragma once
 
 #include "memory.h"
+#include "debug.h"
 
 #if _MSC_VER
 #if _MSC_VER < 1910
@@ -37,6 +38,12 @@ namespace kj {
 
 // =======================================================================================
 // Non-atomic (thread-unsafe) refcounting
+
+template<typename T>
+class Rc;
+
+template<typename T>
+class EnableAddRefToThis;
 
 class Refcounted: private Disposer {
   // Subclass this to create a class that contains a reference count. Then, use
@@ -78,8 +85,12 @@ private:
   // "mutable" because disposeImpl() is const.  Bleh.
 
   void disposeImpl(void* pointer) const override;
+
   template <typename T>
   static Own<T> addRefInternal(T* object);
+
+  template <typename T>
+  static Rc<T> addRcRefInternal(T* object);
 
   template <typename T>
   friend Own<T> addRef(T& object);
@@ -88,6 +99,12 @@ private:
 
   template <typename T>
   friend class RefcountedWrapper;
+
+  template <typename T>
+  friend class Rc;
+
+  template <typename T>
+  friend class EnableAddRefToThis;
 };
 
 template <typename T, typename... Params>
@@ -114,6 +131,93 @@ Own<T> Refcounted::addRefInternal(T* object) {
   ++refcounted->refcount;
   return Own<T>(object, *refcounted);
 }
+
+template <typename T>
+Rc<T> Refcounted::addRcRefInternal(T* object) {
+  Refcounted* refcounted = object;
+  ++refcounted->refcount;
+  return Rc<T>(object);
+}
+
+template<typename T>
+class Rc: public Own<T> {
+  // Smart pointer for reference counted objects. 
+  // Can be used everywhere Own<T> is expected.
+  // NOTE: this will become primary way to access reference counted objects.
+
+public:
+  KJ_DISALLOW_COPY(Rc);
+  Rc() { }
+
+  template <typename... Params>
+  static Rc<T> create(Params&&...params) {
+    // Main factory function for Rc<T>. 
+    // NOTE: This will become global refcounted() function once migration is completed.
+    return Refcounted::addRcRefInternal(new T(kj::fwd<Params>(params)...));
+  }
+
+  inline Rc(Rc&& other) noexcept: Own<T>(kj::mv(other)) { }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Rc(Rc<U>&& other) noexcept : Own<T>(kj::mv(other)) { }
+
+
+  kj::Rc<T> addRef() {
+    T* refcounted = this->get();
+    if (refcounted != nullptr) {
+      return Refcounted::addRcRefInternal(refcounted);
+    } else {
+      return kj::Rc<T>();
+    }
+  }
+
+  Rc& operator=(decltype(nullptr)) {
+    Own<T>::operator=(nullptr);
+    return *this;
+  }
+
+  Rc& operator=(Rc&& other) {
+    Own<T>::operator=(kj::mv(other));
+    return *this;
+  }
+
+  template <typename U>
+  Rc<U> downcast() {
+    auto own = Own<T>::template downcast<U>();
+    return Rc<U>(kj::mv(own));
+  }
+
+  // TODO: these shouldn't exist?
+  inline bool operator==(decltype(nullptr)) { return this->get() != nullptr; }
+  inline bool operator!=(decltype(nullptr)) { return this->get() != nullptr; }
+  Rc(decltype(nullptr)) { }
+
+private:
+  Rc(T* t) : Own<T>(t, *t) { }
+  Rc(Own<T>&& t) : Own<T>(kj::mv(t)) { }
+
+  friend class Refcounted;
+
+  template <typename>
+  friend class Rc;
+
+  template <typename>
+  friend class EnableAddRefToThis;
+};
+
+template<typename Self>
+class EnableAddRefToThis {
+protected:
+  kj::Rc<const Self> addRefToThis() const {
+    const Self* self = static_cast<const Self*>(this);
+    return Refcounted::addRcRefInternal(self);
+  }
+
+  kj::Rc<Self> addRefToThis() {
+    Self* self = static_cast<Self*>(this);
+    return Refcounted::addRcRefInternal(self);
+  }
+};
 
 template <typename T>
 class RefcountedWrapper: public Refcounted {

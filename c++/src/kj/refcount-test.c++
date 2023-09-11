@@ -57,6 +57,45 @@ TEST(Refcount, Basic) {
 #endif
 }
 
+KJ_TEST("Rc") {
+  bool b = false;
+
+  Rc<SetTrueInDestructor> ref1 = kj::Rc<SetTrueInDestructor>::create(&b);
+  EXPECT_FALSE(ref1->isShared());
+  
+  // old api still can be used with
+  Own<SetTrueInDestructor> ref2 = kj::addRef(*ref1);
+  EXPECT_TRUE(ref1->isShared());
+  
+  // new api adds references too
+  Rc<SetTrueInDestructor> ref3 = ref1.addRef();
+  EXPECT_TRUE(ref1->isShared());
+
+  {
+    // Rc downgrades to Own
+    Own<SetTrueInDestructor> ref4 = ref3.addRef();
+    EXPECT_TRUE(ref4->isShared());
+    // ref4 is dropped
+  }
+
+  EXPECT_FALSE(b);
+
+  // start dropping references one by one
+
+  ref1 = nullptr;
+  EXPECT_TRUE(ref2->isShared());
+  EXPECT_FALSE(b);
+
+  ref3 = nullptr;
+  EXPECT_FALSE(ref2->isShared());
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+
+  // last reference dropped, SetTrueInDestructor destructor should execute
+  EXPECT_TRUE(b);
+}
+
 struct SetTrueInDestructor2 {
   // Like above but doesn't inherit Refcounted.
 
