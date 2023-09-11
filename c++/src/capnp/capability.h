@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "kj/refcount.h"
 #if CAPNP_LITE
 #error "RPC APIs, including this header, are not available in lite mode."
 #endif
@@ -782,7 +783,7 @@ public:
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                      kj::Own<CallContextHook>&& context, CallHints hints) = 0;
+                                      kj::Rc<CallContextHook>&& context, CallHints hints) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating these objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  Note that even if the returned
@@ -850,7 +851,7 @@ public:
   virtual void revoke(kj::Exception&& reason) = 0;
 };
 
-class CallContextHook {
+class CallContextHook: public kj::Refcounted {
   // Hook interface implemented by RPC system to manage a call on the server side.  See
   // CallContext<T>.
 
@@ -870,8 +871,6 @@ public:
   // Call this when you would otherwise call onTailCall() immediately followed by tailCall().
   // Implementations of tailCall() should typically call directTailCall() and then fulfill the
   // promise fulfiller for onTailCall() with the returned pipeline.
-
-  virtual kj::Own<CallContextHook> addRef() = 0;
 
   template <typename Params, typename Results>
   static CallContextHook& from(CallContext<Params, Results>& context) { return *context.hook; }

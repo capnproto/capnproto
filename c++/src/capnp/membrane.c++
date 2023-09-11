@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "membrane.h"
+#include "kj/refcount.h"
 #include <kj/debug.h>
 
 namespace capnp {
@@ -247,7 +248,8 @@ private:
   MembraneCapTableBuilder capTable;
 };
 
-class MembraneCallContextHook final: public CallContextHook, public kj::Refcounted {
+class MembraneCallContextHook final: public CallContextHook,
+                                     public kj::EnableAddRefToThis<MembraneCallContextHook> {
 public:
   MembraneCallContextHook(kj::Own<CallContextHook>&& inner,
                           kj::Own<MembranePolicy>&& policy, bool reverse)
@@ -306,10 +308,6 @@ public:
       kj::mv(pair.promise),
       kj::refcounted<MembranePipelineHook>(kj::mv(pair.pipeline), policy->addRef(), reverse)
     };
-  }
-
-  kj::Own<CallContextHook> addRef() override {
-    return kj::addRef(*this);
   }
 
 private:
@@ -435,7 +433,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context,
+                              kj::Rc<CallContextHook>&& context,
                               CallHints hints) override {
     KJ_IF_SOME(r, resolved) {
       return r->call(interfaceId, methodId, kj::mv(context), hints);
@@ -460,7 +458,7 @@ public:
     } else {
       // !reverse because calls to the CallContext go in the opposite direction.
       auto result = inner->call(interfaceId, methodId,
-          kj::refcounted<MembraneCallContextHook>(kj::mv(context), policy->addRef(), !reverse),
+          kj::Rc<MembraneCallContextHook>::create(kj::mv(context), policy->addRef(), !reverse),
           hints);
 
       if (hints.onlyPromisePipeline) {

@@ -41,7 +41,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     auto result = getCurrent().call(interfaceId, methodId, kj::mv(context), hints);
     if (hints.onlyPromisePipeline) {
       // Just in case the callee didn't implement the hint, replace its promise.

@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "rpc.h"
+#include "kj/refcount.h"
 #include "message.h"
 #include <kj/debug.h>
 #include <kj/vector.h>
@@ -811,7 +812,7 @@ private:
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+                                kj::Rc<CallContextHook>&& context, CallHints hints) override {
       return callNoIntercept(interfaceId, methodId, kj::mv(context), hints);
     }
 
@@ -1056,7 +1057,7 @@ private:
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+                                kj::Rc<CallContextHook>&& context, CallHints hints) override {
       receivedCall = true;
       return cap->call(interfaceId, methodId, kj::mv(context), hints);
     }
@@ -1544,7 +1545,7 @@ private:
       return inner->newCall(interfaceId, methodId, sizeHint, hints);
     }
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                kj::Own<CallContextHook>&& context, CallHints hints) override {
+                                kj::Rc<CallContextHook>&& context, CallHints hints) override {
       return inner->call(interfaceId, methodId, kj::mv(context), hints);
     }
     kj::Maybe<ClientHook&> getResolved() override {
@@ -2375,7 +2376,7 @@ private:
     }
   };
 
-  class RpcCallContext final: public CallContextHook, public kj::Refcounted {
+  class RpcCallContext final: public CallContextHook, public kj::EnableAddRefToThis<RpcCallContext> {
   public:
     RpcCallContext(RpcConnectionState& connectionState, AnswerId answerId,
                    kj::Own<IncomingRpcMessage>&& request,
@@ -2491,7 +2492,7 @@ private:
           // consistent with whatever the result caps resolved to as of the time the return was sent.
           answer.pipeline = answer.pipeline.map([&](kj::Own<PipelineHook>& inner) {
             return kj::refcounted<PostReturnRpcPipeline>(
-                kj::mv(inner), responseImpl, kj::addRef(*this));
+                kj::mv(inner), responseImpl, addRefToThis());
           });
         }
 
@@ -2662,9 +2663,6 @@ private:
       auto paf = kj::newPromiseAndFulfiller<AnyPointer::Pipeline>();
       tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
       return kj::mv(paf.promise);
-    }
-    kj::Own<CallContextHook> addRef() override {
-      return kj::addRef(*this);
     }
 
   private:
@@ -3025,7 +3023,7 @@ private:
     // useful in practice and would be complicated to handle "correctly".
     if (redirectResults) hints.onlyPromisePipeline = false;
 
-    auto context = kj::refcounted<RpcCallContext>(
+    auto context = kj::Rc<RpcCallContext>::create(
         *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
         redirectResults, call.getInterfaceId(), call.getMethodId(), hints);
 
@@ -3043,7 +3041,7 @@ private:
     }
 
     auto promiseAndPipeline = startCall(
-        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(), hints);
+        call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context.addRef(), hints);
 
     // Things may have changed -- in particular if startCall() immediately called
     // context->directTailCall().
@@ -3083,7 +3081,7 @@ private:
 
   ClientHook::VoidPromiseAndPipeline startCall(
       uint64_t interfaceId, uint64_t methodId,
-      kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context,
+      kj::Own<ClientHook>&& capability, kj::Rc<CallContextHook>&& context,
       ClientHook::CallHints hints) {
     return capability->call(interfaceId, methodId, kj::mv(context), hints);
   }

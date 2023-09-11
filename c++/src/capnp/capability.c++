@@ -143,7 +143,7 @@ public:
   MallocMessageBuilder message;
 };
 
-class LocalCallContext final: public CallContextHook, public ResponseHook, public kj::Refcounted {
+class LocalCallContext final: public CallContextHook, public ResponseHook {
 public:
   LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef,
                    ClientHook::CallHints hints, bool isStreaming)
@@ -208,9 +208,6 @@ public:
     tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
   }
-  kj::Own<CallContextHook> addRef() override {
-    return kj::addRef(*this);
-  }
 
   kj::Maybe<kj::Own<MallocMessageBuilder>> request;
   kj::Maybe<Response<AnyPointer>> response;
@@ -248,9 +245,9 @@ public:
 
     hints.onlyPromisePipeline = true;
     bool isStreaming = false;
-    auto context = kj::refcounted<LocalCallContext>(
+    auto context = kj::Rc<LocalCallContext>::create(
         kj::mv(message), client->addRef(), hints, isStreaming);
-    auto vpap = client->call(interfaceId, methodId, kj::addRef(*context), hints);
+    auto vpap = client->call(interfaceId, methodId, context.addRef(), hints);
     return AnyPointer::Pipeline(kj::mv(vpap.pipeline));
   }
 
@@ -269,8 +266,8 @@ private:
   RemotePromise<AnyPointer> sendImpl(bool isStreaming) {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
-    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef(), hints, isStreaming);
-    auto promiseAndPipeline = client->call(interfaceId, methodId, kj::addRef(*context), hints);
+    auto context = kj::Rc<LocalCallContext>::create(kj::mv(message), client->addRef(), hints, isStreaming);
+    auto promiseAndPipeline = client->call(interfaceId, methodId, context.addRef(), hints);
 
     // Now the other branch returns the response from the context.
     auto promise = promiseAndPipeline.promise.then([context=kj::mv(context)]() mutable {
@@ -410,7 +407,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     if (hints.noPromisePipelining) {
       // Optimize for no pipelining.
       auto promise = promiseForCallForwarding.addBranch()
@@ -589,7 +586,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     KJ_IF_SOME(r, resolved) {
       // We resolved to a shortened path. New calls MUST go directly to the replacement capability
       // so that their ordering is consistent with callers who call getResolved() to get direct
@@ -597,8 +594,6 @@ public:
       // in our streaming queue.
       return r->call(interfaceId, methodId, kj::mv(context), hints);
     }
-
-    auto contextPtr = context.get();
 
     // We don't want to actually dispatch the call synchronously, because we don't want the callee
     // to have any side effects before the promise is returned to the caller.  This helps avoid
@@ -608,12 +603,12 @@ public:
     //
     // Note also that QueuedClient depends on this evalLater() to ensure that pipelined calls don't
     // complete before 'whenMoreResolved()' promises resolve.
-    auto promise = kj::evalLater([this,interfaceId,methodId,contextPtr]() {
+    auto promise = kj::evalLater([this,interfaceId,methodId,context=context.addRef()]() mutable {
       if (blocked) {
         return kj::newAdaptedPromise<kj::Promise<void>, BlockedCall>(
-            *this, interfaceId, methodId, *contextPtr);
+            *this, interfaceId, methodId, kj::mv(context));
       } else {
-        return callInternal(interfaceId, methodId, *contextPtr);
+        return callInternal(interfaceId, methodId, kj::mv(context));
       }
     }).attach(kj::addRef(*this));
 
@@ -645,17 +640,17 @@ public:
       // We have to fork this promise for the pipeline to receive a copy of the answer.
       auto forked = promise.fork();
       pipelineBranch = forked.addBranch();
-      completionPromise = forked.addBranch().attach(context->addRef());
+      completionPromise = forked.addBranch().attach(context.addRef());
     }
 
     auto pipelinePromise = pipelineBranch
-        .then([=,context=context->addRef()]() mutable -> kj::Own<PipelineHook> {
+        .then([=,context=context.addRef()]() mutable -> kj::Own<PipelineHook> {
           context->releaseParams();
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         });
 
     auto tailPipelinePromise = context->onTailCall()
-        .then([context = context->addRef()](AnyPointer::Pipeline&& pipeline) {
+        .then([context = context.addRef()](AnyPointer::Pipeline&& pipeline) {
       return kj::mv(pipeline.hook);
     });
 
@@ -773,9 +768,9 @@ private:
   class BlockedCall {
   public:
     BlockedCall(kj::PromiseFulfiller<kj::Promise<void>>& fulfiller, LocalClient& client,
-                uint64_t interfaceId, uint16_t methodId, CallContextHook& context)
+                uint64_t interfaceId, uint16_t methodId, kj::Rc<CallContextHook>&& context)
         : fulfiller(fulfiller), client(client),
-          interfaceId(interfaceId), methodId(methodId), context(context),
+          interfaceId(interfaceId), methodId(methodId), context(kj::mv(context)),
           prev(client.blockedCallsEnd) {
       *prev = *this;
       client.blockedCallsEnd = &next;
@@ -795,7 +790,7 @@ private:
       unlink();
       KJ_IF_SOME(c, context) {
         fulfiller.fulfill(kj::evalNow([&]() {
-          return client.callInternal(interfaceId, methodId, c);
+          return client.callInternal(interfaceId, methodId, c.addRef());
         }));
       } else {
         // This is just a barrier.
@@ -808,7 +803,7 @@ private:
     LocalClient& client;
     uint64_t interfaceId;
     uint16_t methodId;
-    kj::Maybe<CallContextHook&> context;
+    kj::Maybe<kj::Rc<CallContextHook>> context;
 
     kj::Maybe<BlockedCall&> next;
     kj::Maybe<BlockedCall&>* prev;
@@ -860,7 +855,7 @@ private:
   }
 
   kj::Promise<void> callInternal(uint64_t interfaceId, uint16_t methodId,
-                                 CallContextHook& context) {
+                                 kj::Rc<CallContextHook>&& context) {
     KJ_ASSERT(!blocked);
 
     KJ_IF_SOME(e, brokenException) {
@@ -870,7 +865,7 @@ private:
 
     // `server` can't be null here since `brokenException` is null.
     auto result = KJ_ASSERT_NONNULL(server)->dispatchCall(interfaceId, methodId,
-                                       CallContext<AnyPointer, AnyPointer>(context));
+                                       CallContext<AnyPointer, AnyPointer>(*context));
 
     KJ_IF_SOME(r, revoker) {
       result.promise = r.wrap(kj::mv(result.promise));
@@ -1014,7 +1009,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context, CallHints hints) override {
+                              kj::Rc<CallContextHook>&& context, CallHints hints) override {
     return VoidPromiseAndPipeline { kj::cp(exception), kj::refcounted<BrokenPipeline>(exception) };
   }
 
