@@ -1437,7 +1437,7 @@ Compiler::CompiledType Compiler::ModuleScope::getRoot() {
 
   {
     auto lock = compiler.impl.lockExclusive();
-    auto brandScope = kj::refcounted<BrandScope>(ErrorIgnorer::instance, node.getId(), 0, node);
+    auto brandScope = kj::Rc<BrandScope>::create(ErrorIgnorer::instance, node.getId(), 0, node);
     Resolver::ResolvedDecl decl { node.getId(), 0, 0, node.getKind(), &node, kj::none };
     newDecl.set(lock, BrandedDecl(kj::mv(decl), kj::mv(brandScope), {}));
   }
@@ -1452,7 +1452,7 @@ kj::Maybe<Compiler::CompiledType> Compiler::ModuleScope::evalType(
 
   {
     auto lock = compiler.impl.lockExclusive();
-    auto brandScope = kj::refcounted<BrandScope>(errorReporter, node.getId(), 0, node);
+    auto brandScope = kj::Rc<BrandScope>::create(errorReporter, node.getId(), 0, node);
     KJ_IF_SOME(result, brandScope->compileDeclExpression(
         expression, node, ImplicitParams::none())) {
       newDecl.set(lock, kj::mv(result));

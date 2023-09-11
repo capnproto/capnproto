@@ -585,7 +585,7 @@ NodeTranslator::NodeTranslator(
     : resolver(resolver), errorReporter(errorReporter),
       orphanage(Orphanage::getForMessageContaining(wipNodeParam.get())),
       compileAnnotations(compileAnnotations),
-      localBrand(kj::refcounted<BrandScope>(
+      localBrand(kj::Rc<BrandScope>::create(
           errorReporter, wipNodeParam.getReader().getId(),
           decl.getParameters().size(), resolver)),
       wipNode(kj::mv(wipNodeParam)),
@@ -1720,7 +1720,7 @@ NodeTranslator::compileDeclExpression(
 /* static */ kj::Maybe<Resolver::ResolveResult> NodeTranslator::compileDecl(
     uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
     Expression::Reader expression, schema::Brand::Builder brandBuilder) {
-  auto scope = kj::refcounted<BrandScope>(errorReporter, scopeId, scopeParameterCount, resolver);
+  auto scope = kj::Rc<BrandScope>::create(errorReporter, scopeId, scopeParameterCount, resolver);
   KJ_IF_SOME(decl, scope->compileDeclExpression(expression, resolver, ImplicitParams::none())) {
     return decl.asResolveResult(scope->getScopeId(), brandBuilder);
   } else {
