@@ -48,13 +48,14 @@
 // Mark Miller on membranes: http://www.eros-os.org/pipermail/e-lang/2003-January/008434.html
 
 #include "capability.h"
+#include "kj/refcount.h"
 #include <kj/map.h>
 
 CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
-class MembranePolicy {
+class MembranePolicy: public kj::Refcounted, public kj::EnableAddRefToThis<MembranePolicy> {
   // Applications may implement this interface to define a membrane policy, which allows some
   // calls crossing the membrane to be blocked or redirected.
 
@@ -95,17 +96,6 @@ public:
   //   later resolves to a capability on the other side of the membrane: calls on the promise
   //   will enter and then exit the membrane, but calls on the eventual resolution will not cross
   //   the membrane at all, so it is important that these two cases behave the same.
-
-  virtual kj::Own<MembranePolicy> addRef() = 0;
-  // Return a new owned pointer to the same policy.
-  //
-  // Typically an implementation of MembranePolicy should also inherit kj::Refcounted and implement
-  // `addRef()` as `return kj::addRef(*this);`.
-  //
-  // Note that the membraning system considers two membranes created with the same MembranePolicy
-  // object actually to be the *same* membrane. This is relevant when an object passes into the
-  // membrane and then back out (or out and then back in): instead of double-wrapping the object,
-  // the wrapping will be removed.
 
   virtual kj::Maybe<kj::Promise<void>> onRevoked() { return kj::none; }
   // If this returns non-null, then it is a promise that will reject (throw an exception) when the
