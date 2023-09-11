@@ -4287,10 +4287,10 @@ private:
 }  // namespace
 
 WebSocketPipe newWebSocketPipe() {
-  auto pipe1 = kj::refcounted<WebSocketPipeImpl>();
-  auto pipe2 = kj::refcounted<WebSocketPipeImpl>();
+  auto pipe1 = kj::Rc<WebSocketPipeImpl>::create();
+  auto pipe2 = kj::Rc<WebSocketPipeImpl>::create();
 
-  auto end1 = kj::heap<WebSocketPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto end1 = kj::heap<WebSocketPipeEnd>(pipe1.addRef(), pipe2.addRef());
   auto end2 = kj::heap<WebSocketPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
 
   return { { kj::mv(end1), kj::mv(end2) } };
