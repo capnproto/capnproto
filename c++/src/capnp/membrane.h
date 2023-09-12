@@ -184,8 +184,9 @@ public:
   // The default implementation simply returns `external`.
 
 private:
-  kj::HashMap<ClientHook*, ClientHook*> wrappers;
-  kj::HashMap<ClientHook*, ClientHook*> reverseWrappers;
+// Todo: some of these should be weak
+  kj::HashMap<ClientHook*, kj::Rc<ClientHook>> wrappers;
+  kj::HashMap<ClientHook*, kj::Rc<ClientHook>> reverseWrappers;
   // Tracks capabilities that already have wrappers instantiated. The maps map from pointer to
   // inner capability to pointer to wrapper. When a wrapper is destroyed it removes itself from
   // the map.

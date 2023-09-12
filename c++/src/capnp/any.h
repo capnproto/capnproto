@@ -27,6 +27,7 @@
 #include "list.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 #include <kj/hash.h>
+#include <kj/refcount.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -124,7 +125,7 @@ struct AnyPointer {
     // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
 
 #if !CAPNP_LITE
-    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
+    kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
     // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
     // directly.
 #endif  // !CAPNP_LITE
@@ -272,7 +273,7 @@ struct AnyPointer {
 
     inline AnyStruct::Pipeline asAnyStruct();
 
-    kj::Own<ClientHook> asCap();
+    kj::Rc<ClientHook> asCap();
     // Expect that the result is a capability and construct a pipelined version of it now.
 
     inline kj::Own<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
@@ -741,10 +742,10 @@ public:
   virtual kj::Own<PipelineHook> addRef() = 0;
   // Increment this object's reference count.
 
-  virtual kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;
+  virtual kj::Rc<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;
   // Extract a promised Capability from the results.
 
-  virtual kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops);
+  virtual kj::Rc<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops);
   // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
   // Default implementation just calls the other version.
 

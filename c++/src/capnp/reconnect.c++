@@ -25,7 +25,7 @@ namespace capnp {
 
 namespace {
 
-class ReconnectHook final: public ClientHook, public kj::Refcounted {
+class ReconnectHook final: public ClientHook {
 public:
   ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
@@ -55,18 +55,14 @@ public:
     return result;
   }
 
-  kj::Maybe<ClientHook&> getResolved() override {
+  kj::Maybe<kj::Rc<ClientHook>> getResolved() override {
     // We can't let people resolve to the underlying capability because then we wouldn't be able
     // to redirect them later.
     return kj::none;
   }
 
-  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+  kj::Maybe<kj::Promise<kj::Rc<ClientHook>>> whenMoreResolved() override {
     return kj::none;
-  }
-
-  kj::Own<ClientHook> addRef() override {
-    return kj::addRef(*this);
   }
 
   const void* getBrand() override {
@@ -152,10 +148,10 @@ private:
 }  // namespace
 
 Capability::Client autoReconnect(kj::Function<Capability::Client()> connect) {
-  return Capability::Client(kj::refcounted<ReconnectHook>(kj::mv(connect)));
+  return Capability::Client(kj::Rc<ReconnectHook>::create(kj::mv(connect)));
 }
 
 Capability::Client lazyAutoReconnect(kj::Function<Capability::Client()> connect) {
-  return Capability::Client(kj::refcounted<ReconnectHook>(kj::mv(connect), true));
+  return Capability::Client(kj::Rc<ReconnectHook>::create(kj::mv(connect), true));
 }
 }  // namespace capnp

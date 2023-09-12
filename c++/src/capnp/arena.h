@@ -124,8 +124,8 @@ class BrokenCapFactory {
   // link-time dependency on capability code that lives in libcapnp-rpc.
 
 public:
-  virtual kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
-  virtual kj::Own<ClientHook> newNullCap() = 0;
+  virtual kj::Rc<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
+  virtual kj::Rc<ClientHook> newNullCap() = 0;
 };
 #endif  // !CAPNP_LITE
 
@@ -349,13 +349,13 @@ private:
 
   class LocalCapTable final: public CapTableBuilder {
   public:
-    kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
-    uint injectCap(kj::Own<ClientHook>&& cap) override;
+    kj::Maybe<kj::Rc<ClientHook>> extractCap(uint index) override;
+    uint injectCap(kj::Rc<ClientHook>&& cap) override;
     void dropCap(uint index) override;
 
 #if !CAPNP_LITE
   private:
-    kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
+    kj::Vector<kj::Maybe<kj::Rc<ClientHook>>> capTable;
 #endif // ! CAPNP_LITE
   };
 

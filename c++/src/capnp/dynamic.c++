@@ -1966,7 +1966,7 @@ DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::OTHER>::getDyn
 }
 void PointerHelpers<DynamicCapability, Kind::OTHER>::set(
     PointerBuilder builder, DynamicCapability::Client& value) {
-  builder.setCapability(value.hook->addRef());
+  builder.setCapability(value.hook.addRef());
 }
 void PointerHelpers<DynamicCapability, Kind::OTHER>::set(
     PointerBuilder builder, DynamicCapability::Client&& value) {

@@ -34,6 +34,7 @@
 #include "blob.h"
 #include "endian.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
+#include <kj/refcount.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -310,13 +311,13 @@ inline double unmask<double>(uint64_t value, uint64_t mask) {
 
 class CapTableReader {
 public:
-  virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
+  virtual kj::Maybe<kj::Rc<ClientHook>> extractCap(uint index) = 0;
   // Extract the capability at the given index.  If the index is invalid, returns null.
 };
 
 class CapTableBuilder: public CapTableReader {
 public:
-  virtual uint injectCap(kj::Own<ClientHook>&& cap) = 0;
+  virtual uint injectCap(kj::Rc<ClientHook>&& cap) = 0;
   // Add the capability to the message and return its index.  If the same ClientHook is injected
   // twice, this may return the same index both times, but in this case dropCap() needs to be
   // called an equal number of times to actually remove the cap.
@@ -348,7 +349,7 @@ public:
   template <typename T> typename T::Builder getBlob(
       const void* defaultValue, ByteCount defaultSize);
 #if !CAPNP_LITE
-  kj::Own<ClientHook> getCapability();
+  kj::Rc<ClientHook> getCapability();
 #endif  // !CAPNP_LITE
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
@@ -365,7 +366,7 @@ public:
   void setList(const ListReader& value, bool canonical = false);
   template <typename T> void setBlob(typename T::Reader value);
 #if !CAPNP_LITE
-  void setCapability(kj::Own<ClientHook>&& cap);
+  void setCapability(kj::Rc<ClientHook>&& cap);
 #endif  // !CAPNP_LITE
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
@@ -440,7 +441,7 @@ public:
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
 #if !CAPNP_LITE
-  kj::Own<ClientHook> getCapability() const;
+  kj::Rc<ClientHook> getCapability() const;
 #endif  // !CAPNP_LITE
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
@@ -865,7 +866,7 @@ public:
   static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable, Data::Reader copyFrom);
 #if !CAPNP_LITE
   static OrphanBuilder copy(BuilderArena* arena, CapTableBuilder* capTable,
-                            kj::Own<ClientHook> copyFrom);
+                            kj::Rc<ClientHook>&& copyFrom);
 #endif  // !CAPNP_LITE
 
   static OrphanBuilder concat(BuilderArena* arena, CapTableBuilder* capTable,
@@ -900,7 +901,7 @@ public:
   ListReader asListReader(ElementSize elementSize) const;
   ListReader asListReaderAnySize() const;
 #if !CAPNP_LITE
-  kj::Own<ClientHook> asCapability() const;
+  kj::Rc<ClientHook> asCapability() const;
 #endif  // !CAPNP_LITE
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
