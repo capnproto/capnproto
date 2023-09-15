@@ -39,7 +39,7 @@ struct iterator_traits<capnp::_::IndexingIterator<Container, Element>> {
   using value_type = Element;
   using difference_type	= int;
   using pointer = Element*;
-  using reference = Element&;
+  using reference = Element;
 };
 
 }  // namespace std
