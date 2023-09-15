@@ -75,6 +75,9 @@ KJ_TEST("HttpMethod parse / stringify") {
   KJ_HTTP_FOR_EACH_METHOD(TRY)
 #undef TRY
 
+  // Make sure attempting to stringify an invalid value doesn't segfault
+  KJ_EXPECT_THROW(FAILED, kj::str(HttpMethod{101}));
+
   KJ_EXPECT(tryParseHttpMethod("FOO") == nullptr);
   KJ_EXPECT(tryParseHttpMethod("") == nullptr);
   KJ_EXPECT(tryParseHttpMethod("G") == nullptr);

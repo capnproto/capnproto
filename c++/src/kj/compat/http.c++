@@ -337,7 +337,10 @@ KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 };
 
 kj::StringPtr KJ_STRINGIFY(HttpMethod method) {
-  return METHOD_NAMES[static_cast<uint>(method)];
+  auto index = static_cast<uint>(method);
+  KJ_ASSERT(index < size(METHOD_NAMES), "invalid HTTP method");
+
+  return METHOD_NAMES[index];
 }
 
 kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method) {
