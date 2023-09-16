@@ -546,6 +546,8 @@ struct TestGenerics(Foo, Bar) {
     bar @1 :Bar;
   }
 
+  listFoo @5 :List(Foo);
+
   struct Inner2(Baz) {
     bar @0 :Bar;
     baz @1 :Baz;
@@ -811,6 +813,9 @@ interface TestPipeline {
   struct Box {
     cap @0 :TestInterface;
   }
+  struct ListBox {
+    cap @0 :List(TestInterface);
+  }
   struct AnyBox {
     cap @0 :Capability;
   }
@@ -1039,4 +1044,9 @@ struct TestCycleAWithCaps {
 struct TestCycleBWithCaps {
   foo @0 :List(TestCycleAWithCaps);
   bar @1 :TestInterface;
+}
+
+interface TestGenericParameterPassThroughInterface(T) {
+  getGenericList @0 () -> (listResult :List(T));
+  setGenericList @1 (listResult :List(T)) -> ();
 }

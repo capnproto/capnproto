@@ -48,6 +48,18 @@ struct AnyList {
   class Builder;
 };
 
+template<typename T>
+struct TypedAnyList : AnyList
+{
+  // When we have `interface Outer(T) { foo @0 List(T); }` the protocol normalizes T to an AnyPointer, even
+  // though it will always be of type T. We can't allow List(AnyPointer), so it must be represented as an
+  // AnyList - hence, this is a "typed" AnyList, which is just an AnyList that expects a specific type.
+
+  TypedAnyList() = delete;
+  typedef BuilderFor<List<T>> Builder;
+  typedef ReaderFor<List<T>> Reader;
+};
+
 struct AnyStruct {
   AnyStruct() = delete;
 
@@ -68,6 +80,7 @@ namespace _ {  // private
 template <> struct Kind_<AnyPointer> { static constexpr Kind kind = Kind::OTHER; };
 template <> struct Kind_<AnyStruct> { static constexpr Kind kind = Kind::OTHER; };
 template <> struct Kind_<AnyList> { static constexpr Kind kind = Kind::OTHER; };
+template <class T> struct Kind_<TypedAnyList<T>> { static constexpr Kind kind = Kind::OTHER; };
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -1004,6 +1017,54 @@ struct PointerHelpers<AnyStruct, Kind::OTHER> {
   }
   static Orphan<AnyStruct> disown(PointerBuilder builder) {
     return Orphan<AnyStruct>(builder.disown());
+  }
+};
+
+template <typename T, Kind K>
+struct PointerHelpers<TypedAnyList<T>, K> {
+  static inline typename TypedAnyList<T>::Reader get(PointerReader reader,
+    const word* defaultValue = nullptr) {
+    return typename TypedAnyList<T>::Reader(reader.getListAnySize(defaultValue));
+  }
+  static inline typename TypedAnyList<T>::Builder get(PointerBuilder builder,
+    const word* defaultValue = nullptr) {
+    return typename TypedAnyList<T>::Builder(builder.getListAnySize(defaultValue));
+  }
+  static inline void set(PointerBuilder builder, typename TypedAnyList<T>::Reader value) {
+    builder.setList(value.reader);
+  }
+  static inline void setCanonical(PointerBuilder builder, typename TypedAnyList<T>::Reader value) {
+    builder.setList(value.reader, true);
+  }
+  //static void set(PointerBuilder builder, kj::ArrayPtr<const ReaderFor<T>> value) {
+  //  auto l = init(builder, value.size());
+  //  uint i = 0;
+  //  for (auto& element : value) {
+  //    l.set(i++, element);
+  //  }
+  //}
+  static inline typename TypedAnyList<T>::Builder init(PointerBuilder builder, uint size) {
+    //return typename TypedAnyList<T>::Builder(TypedAnyList<T>::initPointer(builder, size));
+    if (ElementSize::INLINE_COMPOSITE == _::elementSizeForType<T>())
+    {
+      return TypedAnyList<T>::Builder(builder.initStructList(bounded(size) * ELEMENTS, _::structSize<T>()));
+    }
+    else {
+      return TypedAnyList<T>::Builder(builder.initList(
+        _::elementSizeForType<T>(), bounded(size) * ELEMENTS));
+    }
+  }
+  static inline void adopt(PointerBuilder builder, Orphan<TypedAnyList<T>>&& value) {
+    builder.adopt(kj::mv(value.builder));
+  }
+  static inline Orphan<TypedAnyList<T>> disown(PointerBuilder builder) {
+    return Orphan<TypedAnyList<T>>(builder.disown());
+  }
+  static inline _::ListReader getInternalReader(const typename TypedAnyList<T>::Reader& reader) {
+    return reader.reader;
+  }
+  static inline _::ListBuilder getInternalBuilder(typename TypedAnyList<T>::Builder&& builder) {
+    return builder.builder;
   }
 };
 

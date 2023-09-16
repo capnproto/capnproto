@@ -172,7 +172,7 @@ inline constexpr Kind kind() {
   return k;
 }
 
-#if _MSC_VER && !defined(__clang__)
+#if (_MSC_VER < 1900) && !defined(__clang__)
 
 #define CAPNP_KIND(T) ::capnp::_::Kind_<T>::kind
 // Avoid constexpr methods in MSVC (it remains buggy in many situations).

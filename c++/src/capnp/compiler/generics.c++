@@ -130,19 +130,31 @@ bool BrandedDecl::compileAsType(
           return false;
         }
 
+        KJ_CONTEXT(elementType);
         if (elementType.isAnyPointer()) {
-          auto unconstrained = elementType.getAnyPointer().getUnconstrained();
+          auto anyPointer = elementType.getAnyPointer();
+          switch (anyPointer.which()) {
+            case schema::Type::AnyPointer::PARAMETER:
+              return true;
 
-          if (unconstrained.isAnyKind()) {
-            addError(errorReporter, "'List(AnyPointer)' is not supported.");
-            // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
-            elementType.setVoid();
-            return false;
-          } else if (unconstrained.isStruct()) {
-            addError(errorReporter, "'List(AnyStruct)' is not supported.");
-            // Seeing List(AnyStruct) later can mess things up, so change the type to Void.
-            elementType.setVoid();
-            return false;
+            case schema::Type::AnyPointer::UNCONSTRAINED:
+            default: {
+              auto unconstrained = anyPointer.getUnconstrained();
+
+              if (unconstrained.isAnyKind()) {
+                addError(errorReporter, "'List(AnyPointer)' is not supported.");
+                // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
+                elementType.setVoid();
+                return false;
+              }
+              else if (unconstrained.isStruct()) {
+                addError(errorReporter, "'List(AnyStruct)' is not supported.");
+                // Seeing List(AnyStruct) later can mess things up, so change the type to Void.
+                elementType.setVoid();
+                return false;
+              }
+              break;
+            }
           }
         }
 
