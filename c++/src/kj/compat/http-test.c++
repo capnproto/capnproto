@@ -6573,7 +6573,7 @@ KJ_TEST("Simple CONNECT Server works") {
              "\r\n"
              "hello"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 
@@ -6648,7 +6648,7 @@ KJ_TEST("CONNECT Server (201 status)") {
              "\r\n"
              "hello"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 
@@ -6726,7 +6726,7 @@ KJ_TEST("CONNECT Server rejected") {
              "\r\n"
              "boom"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 
@@ -6794,7 +6794,7 @@ KJ_TEST("CONNECT Server cancels read") {
              "HTTP/1.1 200 OK\r\n"
              "\r\n"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 }
@@ -6860,7 +6860,7 @@ KJ_TEST("CONNECT Server cancels write") {
              "HTTP/1.1 200 OK\r\n"
              "\r\n"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 }
@@ -6933,7 +6933,7 @@ KJ_TEST("CONNECT rejects Transfer-Encoding") {
              "\r\n"
              "ERROR: Bad Request"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 }
@@ -6967,7 +6967,7 @@ KJ_TEST("CONNECT rejects Content-Length") {
              "\r\n"
              "ERROR: Bad Request"_kj).wait(waitScope);
 
-  expectEnd(*pipe.ends[1]);
+  expectEnd(*pipe.ends[1]).wait(waitScope);
 
   listenTask.wait(waitScope);
 }

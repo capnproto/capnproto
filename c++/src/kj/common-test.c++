@@ -573,7 +573,7 @@ TEST(Common, Downcast) {
 
   EXPECT_EQ(&bar, &downcast<Bar>(foo));
 #if defined(KJ_DEBUG) && !KJ_NO_RTTI
-  KJ_EXPECT_THROW_MESSAGE("Value cannot be downcast", downcast<Baz>(foo));
+  KJ_EXPECT_THROW_MESSAGE("Value cannot be downcast", (void)downcast<Baz>(foo));
 #endif
 
 #if KJ_NO_RTTI
