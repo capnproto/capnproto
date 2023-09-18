@@ -1577,7 +1577,7 @@ KJ_TEST("Userland pipe pump into zero-limited pipe, no data to pump") {
   auto pipe2 = newOneWayPipe(uint64_t(0));
   auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
 
-  expectRead(*pipe2.in, "");
+  expectRead(*pipe2.in, "").wait(ws);
   pipe.out = nullptr;
   KJ_EXPECT(pumpPromise.wait(ws) == 0);
 }
@@ -1590,7 +1590,7 @@ KJ_TEST("Userland pipe pump into zero-limited pipe, data is pumped") {
   auto pipe2 = newOneWayPipe(uint64_t(0));
   auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
 
-  expectRead(*pipe2.in, "");
+  expectRead(*pipe2.in, "").wait(ws);
   auto writePromise = pipe.out->write("foo", 3);
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("abortRead() has been called", pumpPromise.wait(ws));
 }

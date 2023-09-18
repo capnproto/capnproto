@@ -286,7 +286,7 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destru
   WaitScope waitScope(loop);
 
   auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-    deferredThrowCoroutine(kj::NEVER_DONE);
+    (void)deferredThrowCoroutine(kj::NEVER_DONE);
   }));
 
   KJ_EXPECT(exception.getDescription() == "thrown during unwind");
