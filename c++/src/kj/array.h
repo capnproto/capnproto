@@ -780,7 +780,7 @@ struct CopyConstructArray_<T, Iterator, true, false> {
 
   static T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
     // Verify that T can be *implicitly* constructed from the source values.
-    if (false) { auto ignored = implicitCast<T>(kj::mv(*start)); ignored; }
+    if (false) { [[maybe_unused]] auto ignored = implicitCast<T>(kj::mv(*start)); }
 
     if (noexcept(T(kj::mv(*start)))) {
       while (start != end) {
