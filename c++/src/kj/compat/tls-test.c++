@@ -1037,15 +1037,15 @@ KJ_TEST("TLS receiver experiences pre-TLS error") {
   TlsReceiverTest test;
 
   KJ_LOG(INFO, "Accepting before a bad connect");
-  auto promise = test.receiver->accept();
+  auto acceptPromise = test.receiver->accept();
 
   KJ_LOG(INFO, "Disappointing our server");
-  test.baseReceiver->badConnect();
+  auto connectPromise = test.baseReceiver->badConnect();
 
   // Can't use KJ_EXPECT_THROW_RECOVERABLE_MESSAGE because wait() that returns a value can't throw
   // recoverable exceptions. Can't use KJ_EXPECT_THROW_MESSAGE because non-recoverable exceptions
   // will fork() in -fno-exception which screws up our state.
-  promise.then([](auto) {
+  acceptPromise.then([](auto) {
     KJ_FAIL_EXPECT("expected exception");
   }, [](kj::Exception&& e) {
     KJ_EXPECT(e.getDescription() == "Pipes are leaky");

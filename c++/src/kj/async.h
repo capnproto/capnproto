@@ -118,7 +118,7 @@ private:
 // Promises
 
 template <typename T>
-class Promise: protected _::PromiseBase {
+class [[nodiscard]] Promise: protected _::PromiseBase {
   // The basic primitive of asynchronous computation in KJ.  Similar to "futures", but designed
   // specifically for event loop concurrency.  Similar to E promises and JavaScript Promises/A.
   //
