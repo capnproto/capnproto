@@ -791,6 +791,12 @@ TlsContext::TlsContext(Options options) {
     throwOpensslError();
   }
 
+  KJ_IF_SOME(curves, options.curveList) {
+    if (!SSL_CTX_set1_curves_list(ctx, curves.cStr())){
+      throwOpensslError();
+    }
+  }
+
   // honor options.defaultKeypair
   KJ_IF_SOME(kp, options.defaultKeypair) {
     if (!SSL_CTX_use_PrivateKey(ctx, reinterpret_cast<EVP_PKEY*>(kp.privateKey.pkey))) {
