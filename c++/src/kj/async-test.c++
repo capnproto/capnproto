@@ -25,7 +25,9 @@
 #include "mutex.h"
 #include "thread.h"
 
-#if !KJ_USE_FIBERS && !_WIN32
+#if !_WIN32
+#include <errno.h>
+#include <limits.h>
 #include <pthread.h>
 #endif
 
@@ -884,40 +886,68 @@ TEST(Async, TaskSet) {
 // These tests require either fibers or pthreads in order to limit the stack size. Currently we
 // don't have a version that works on Windows without fibers, so skip the tests there.
 
-template <typename Func>
-void runWithStackLimit(size_t stackSize, Func&& func) {
-  // Runs the given function in a context with a limited stack size.
-#if KJ_USE_FIBERS
-  if (isLibcContextHandlingKnownBroken()) return;
-
-  EventLoop loop;
-  WaitScope waitScope(loop);
-
-  startFiber(stackSize,
-      [func = kj::mv(func)](WaitScope&) mutable {
-    func();
-  }).wait(waitScope);
+inline size_t getSmallStackSize() {
+#if !_WIN32
+  // pthread_attr_setstacksize() requires a stack size of at least PTHREAD_STACK_MIN, which can
+  // vary by platform.  We'll clamp that to a reasonable range for stack overflow tests, and skip
+  // the pthread-based tests if we can't get it.
+  return kj::max(16 * 1024, kj::min(256 * 1024, PTHREAD_STACK_MIN));
 #else
+  return 16 * 1024;
+#endif
+}
+
+// Runs the given function in a context with a limited stack size.
+template<typename Func>
+void runWithStackLimit(size_t stackSize, Func&& func) {
+  // We have a couple possible ways to test limited stacks.  We exercise all available methods, to
+  // reduce the likelihood of breakage in less frequently tested configurations.
+  //
+  // Prefer testing stack limits with fibers first, because it manifests stack overflow failures
+  // with a segmentation fault and stack, while pthreads just aborts without output.
+
+#if KJ_USE_FIBERS
+  if (!isLibcContextHandlingKnownBroken()) {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    startFiber(stackSize,
+        [&](WaitScope&) mutable {
+      func();
+    }).wait(waitScope);
+  }
+#endif
+
+#if !_WIN32
   pthread_attr_t attr;
   KJ_REQUIRE(0 == pthread_attr_init(&attr));
   KJ_DEFER(KJ_REQUIRE(0 == pthread_attr_destroy(&attr)));
 
-  KJ_REQUIRE(0 == pthread_attr_setstacksize(&attr, stackSize));
-  pthread_t thread;
-  KJ_REQUIRE(0 == pthread_create(&thread, &attr, [func = kj::mv(func)](void*) -> void* {
-    EventLoop loop;
-    WaitScope waitScope(loop);
-    func();
-    return nullptr;
-  }, nullptr));
-  KJ_REQUIRE(0 == pthread_join(thread, nullptr));
+  auto setStackSizeRetval = pthread_attr_setstacksize(&attr, stackSize);
+  if (setStackSizeRetval == EINVAL) {
+    KJ_LOG(WARNING,
+        "This platform's pthread implementation does not support setting a small stack size. "
+        "Skipping pthread-based stack overflow test.", stackSize, PTHREAD_STACK_MIN, setStackSizeRetval);
+  } else {
+    KJ_REQUIRE(0 == setStackSizeRetval);
+    pthread_t thread;
+    auto start = [](void* startArg) -> void* {
+      EventLoop loop;
+      WaitScope waitScope(loop);
+      auto startFunc = reinterpret_cast<decltype(&func)>(startArg);
+      (*startFunc)();
+      return nullptr;
+    };
+    KJ_REQUIRE(0 == pthread_create(&thread, &attr, start, reinterpret_cast<void*>(&func)));
+    KJ_REQUIRE(0 == pthread_join(thread, nullptr));
+  }
 #endif
 }
 
 TEST(Async, LargeTaskSetDestruction) {
-  static constexpr size_t stackSize = 16 * 1024;
+  size_t stackSize = getSmallStackSize();
 
-  runWithStackLimit(stackSize, []() {
+  runWithStackLimit(stackSize, [stackSize]() {
     ErrorHandlerImpl errorHandler;
     TaskSet tasks(errorHandler);
 
@@ -928,9 +958,9 @@ TEST(Async, LargeTaskSetDestruction) {
 }
 
 TEST(Async, LargeTaskSetDestructionExceptions) {
-  static constexpr size_t stackSize = 16 * 1024;
+  size_t stackSize = getSmallStackSize();
 
-  runWithStackLimit(stackSize, []() {
+  runWithStackLimit(stackSize, [stackSize]() {
     class ThrowingDestructor: public UnwindDetector {
     public:
       ~ThrowingDestructor() noexcept(false) {
@@ -952,9 +982,9 @@ TEST(Async, LargeTaskSetDestructionExceptions) {
 }
 
 TEST(Async, LargeTaskSetClear) {
-  static constexpr size_t stackSize = 16 * 1024;
+  size_t stackSize = getSmallStackSize();
 
-  runWithStackLimit(stackSize, []() {
+  runWithStackLimit(stackSize, [stackSize]() {
     ErrorHandlerImpl errorHandler;
     TaskSet tasks(errorHandler);
 
@@ -967,9 +997,9 @@ TEST(Async, LargeTaskSetClear) {
 }
 
 TEST(Async, LargeTaskSetClearException) {
-  static constexpr size_t stackSize = 16 * 1024;
+  size_t stackSize = getSmallStackSize();
 
-  runWithStackLimit(stackSize, []() {
+  runWithStackLimit(stackSize, [stackSize]() {
     class ThrowingDestructor: public UnwindDetector {
     public:
       ~ThrowingDestructor() noexcept(false) {
