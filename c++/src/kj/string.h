@@ -601,7 +601,7 @@ _::Delimited<T> delimited(T&& arr, kj::StringPtr delim);
 template <typename T>
 String strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
-  SmallArray<decltype(_::STR * arr[0]), 8> pieces(kj::size(arr));
+  KJ_STACK_ARRAY(decltype(_::STR * arr[0]), pieces, kj::size(arr), 8, 32);
   size_t size = 0;
   for (size_t i = 0; i < kj::size(arr); i++) {
     if (i > 0) size += delimLen;

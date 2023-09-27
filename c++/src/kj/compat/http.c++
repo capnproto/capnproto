@@ -20,8 +20,6 @@
 // THE SOFTWARE.
 
 #include "http.h"
-#include "kj/async.h"
-#include "kj/common.h"
 #include "kj/exception.h"
 #include "url.h"
 #include <kj/debug.h>
@@ -339,7 +337,10 @@ KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 };
 
 kj::StringPtr KJ_STRINGIFY(HttpMethod method) {
-  return METHOD_NAMES[static_cast<uint>(method)];
+  auto index = static_cast<uint>(method);
+  KJ_ASSERT(index < size(METHOD_NAMES), "invalid HTTP method");
+
+  return METHOD_NAMES[index];
 }
 
 kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method) {
@@ -2200,7 +2201,7 @@ public:
     return broken;
   }
 
-  void queueHeaders(String content) {
+  void writeHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
@@ -2210,24 +2211,11 @@ public:
     queueWrite(kj::mv(content));
   }
 
-  void queueBodyData(kj::String content) {
+  void writeBodyData(kj::String content) {
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
     KJ_REQUIRE(inBody) { return; }
 
     queueWrite(kj::mv(content));
-  }
-
-  kj::Promise<void> writeBodyData(kj::StringPtr str) {
-    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
-    KJ_REQUIRE(inBody);
-
-    writeInProgress = true;
-    co_await flush();
-    co_await inner.write(str.begin(), str.size());
-
-    // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
-    // want to block further writes.
-    writeInProgress = false;
   }
 
   kj::Promise<void> writeBodyData(const void* buffer, size_t size) {
@@ -2235,7 +2223,10 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    co_await flush();
+    auto fork = writeQueue.fork();
+    writeQueue = fork.addBranch();
+
+    co_await fork;
     co_await inner.write(buffer, size);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2248,7 +2239,10 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    co_await flush();
+    auto fork = writeQueue.fork();
+    writeQueue = fork.addBranch();
+
+    co_await fork;
     co_await inner.write(pieces);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2261,7 +2255,10 @@ public:
     KJ_REQUIRE(inBody);
 
     writeInProgress = true;
-    co_await flush();
+    auto fork = writeQueue.fork();
+    writeQueue = fork.addBranch();
+
+    co_await fork;
     auto actual = co_await input.pumpTo(inner, amount);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2299,13 +2296,9 @@ public:
   }
 
   kj::Promise<void> flush() {
-    KJ_IF_SOME(promise, writeQueue) {
-      auto result = kj::mv(promise);
-      writeQueue = kj::none;
-      return result;
-    } else {
-      return kj::READY_NOW;
-    }
+    auto fork = writeQueue.fork();
+    writeQueue = fork.addBranch();
+    return fork.addBranch();
   }
 
   Promise<void> whenWriteDisconnected() {
@@ -2316,7 +2309,7 @@ public:
 
 private:
   AsyncOutputStream& inner;
-  kj::Maybe<kj::Promise<void>> writeQueue = kj::none;
+  kj::Promise<void> writeQueue = kj::READY_NOW;
   bool inBody = false;
   bool broken = false;
 
@@ -2332,14 +2325,11 @@ private:
     // `writeQueue` because this would prevent cancellation. Instead, they wait until `writeQueue`
     // is empty, then they make the write directly, using `writeInProgress` to detect and block
     // concurrent writes.
-    KJ_IF_SOME(promise, writeQueue) {
-      writeQueue = promise.then([this,content=kj::mv(content)]() mutable {
-        auto promise = inner.write(content.begin(), content.size());
-        return promise.attach(kj::mv(content));
-      });
-    } else {
-      writeQueue = inner.write(content.begin(), content.size()).attach(kj::mv(content));
-    }
+
+    writeQueue = writeQueue.then([this,content=kj::mv(content)]() mutable {
+      auto promise = inner.write(content.begin(), content.size());
+      return promise.attach(kj::mv(content));
+    });
   }
 };
 
@@ -2506,7 +2496,7 @@ public:
     if (!alreadyDone()) {
       auto& inner = getInner();
       if (inner.canWriteBodyData()) {
-        inner.queueBodyData(kj::str("0\r\n\r\n"));
+        inner.writeBodyData(kj::str("0\r\n\r\n"));
         doneWriting();
       }
     }
@@ -2555,7 +2545,7 @@ public:
 
   Promise<uint64_t> pumpImpl(AsyncInputStream& input, uint64_t length) {
     // Hey, we know exactly how large the input is, so we can write just one chunk.
-    co_await getInner().writeBodyData(kj::str(kj::hex(length), "\r\n"));
+    getInner().writeBodyData(kj::str(kj::hex(length), "\r\n"));
     auto actual = co_await getInner().pumpBodyFrom(input, length);
 
     if (actual < length) {
@@ -2566,7 +2556,7 @@ public:
       }
     }
 
-    co_await getInner().writeBodyData(kj::str("\r\n"));
+    getInner().writeBodyData(kj::str("\r\n"));
     co_return actual;
   }
 
@@ -5209,7 +5199,7 @@ public:
       }
     }
 
-    httpOutput.queueHeaders(headers.serializeRequest(method, url, connectionHeaders));
+    httpOutput.writeHeaders(headers.serializeRequest(method, url, connectionHeaders));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
     if (!hasBody) {
@@ -5317,7 +5307,7 @@ public:
           offeredExtensions.emplace(_::generateExtensionRequest(extensions.asPtr()));
     }
 
-    httpOutput.queueHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
+    httpOutput.writeHeaders(headers.serializeRequest(HttpMethod::GET, url, connectionHeaders));
 
     // No entity-body.
     httpOutput.finishBody();
@@ -5442,7 +5432,7 @@ public:
 
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
-    httpOutput.queueHeaders(headers.serializeConnectRequest(host, connectionHeaders));
+    httpOutput.writeHeaders(headers.serializeConnectRequest(host, connectionHeaders));
 
     auto id = ++counter;
 
@@ -7721,7 +7711,7 @@ private:
       }
     }
 
-    httpOutput.queueHeaders(headers.serializeResponse(
+    httpOutput.writeHeaders(headers.serializeResponse(
         statusCode, statusText, connectionHeadersArray));
 
     kj::Own<kj::AsyncOutputStream> bodyStream;
@@ -7806,7 +7796,7 @@ private:
     // the connection.
     currentMethod = kj::none;
 
-    httpOutput.queueHeaders(headers.serializeResponse(
+    httpOutput.writeHeaders(headers.serializeResponse(
         101, "Switching Protocols", connectionHeaders));
 
     upgraded = true;
@@ -7931,7 +7921,7 @@ private:
     tunnelRejected = kj::none;
 
     auto& fulfiller = KJ_ASSERT_NONNULL(tunnelWriteGuard, "the tunnel stream was not initialized");
-    httpOutput.queueHeaders(headers.serializeResponse(statusCode, statusText));
+    httpOutput.writeHeaders(headers.serializeResponse(statusCode, statusText));
     auto promise = httpOutput.flush().then([&fulfiller]() {
       fulfiller->fulfill();
     }).eagerlyEvaluate(nullptr);

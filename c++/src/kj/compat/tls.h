@@ -97,6 +97,11 @@ public:
     //   algorithms.
     // - You need quickly to disable an algorithm recently discovered to be broken.
 
+    kj::Maybe<kj::StringPtr> curveList;
+    // Sets the preferred curves (Groups in TLS 1.3), by default this is not set. Similar to the
+    // cipher list, this is a colon separated list of human readable names or NIDs.
+    // https://boringssl.googlesource.com/boringssl/+/refs/heads/master/include/openssl/nid.h
+
     kj::Maybe<const TlsKeypair&> defaultKeypair;
     // Default keypair to use for all connections. Required for servers; optional for clients.
 
