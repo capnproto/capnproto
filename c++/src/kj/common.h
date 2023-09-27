@@ -1854,6 +1854,14 @@ public:
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
+  inline ArrayPtr<const T> slice(size_t start) const {
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr<const T>(ptr + start, size_ - start);
+  }
+  inline ArrayPtr slice(size_t start) {
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr(ptr + start, size_ - start);
+  }
   inline bool startsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && slice(0, other.size()) == other;
   }
