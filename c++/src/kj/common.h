@@ -275,7 +275,7 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
-#if __cplusplus > 201703L || (__clang__  && __clang_major__ >= 9 && __cplusplus >= 201103L)
+#if __cplusplus > 201703L || (__clang__  && __clang_major__ >= 9 && __cplusplus >= 201103L) || _MSVC_LANG > 201703L
 // Technically this was only added to C++20 but Clang allows it for >= C++11 and spelunking the
 // attributes manual indicates it first came in with Clang 9.
 #define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]

@@ -604,7 +604,7 @@ void OneOf<Variants...>::allHandled() {
   KJ_UNREACHABLE;
 }
 
-#if __cplusplus > 201402L
+#if __cplusplus > 201402L || _MSVC_LANG > 201402L
 #define KJ_SWITCH_ONEOF(value) \
   switch (auto _kj_switch_subject = (value)._switchSubject(); _kj_switch_subject->which())
 #else

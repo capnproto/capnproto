@@ -571,7 +571,7 @@ template <typename T>
 const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 #endif
 
-#if (__cplusplus >= 202002L)
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
 template <typename T, void(*F)(T*)>
 class CustomDisposer: public Disposer {
 public:
@@ -620,8 +620,8 @@ Own<Decay<T>> heap(T&& orig) {
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
 
-#if __cplusplus > 201402L
-#if __cplusplus < 202002L
+#if __cplusplus > 201402L || _MSVC_LANG > 201402L
+#if (!defined(_MSVC_LANG) && __cplusplus < 202002L) || (defined(_MSVC_LANG) && _MSVC_LANG < 202002L)
 template <auto F, typename T>
 Own<T> disposeWith(T* ptr) {
   // Associate a pre-allocated raw pointer with a corresponding disposal function.
