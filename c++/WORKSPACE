@@ -31,6 +31,7 @@ cc_library(
     name = "zlib",
     srcs = glob(["*.c"]),
     hdrs = glob(["*.h"]),
+    includes = ["."],
     # Workaround for zlib warnings and mac compilation. Some issues were resolved in v1.3, but there are still implicit function declarations.
     copts = [
         "-w",
