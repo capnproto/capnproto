@@ -100,7 +100,7 @@ public:
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
   template <
     typename T,
-    typename = decltype(instance<T>().c_str()),
+    typename = EnableIf<canConvert<decltype(instance<T>().c_str()), const char*>()>,
     typename = decltype(instance<T>().size())>
   inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str(), t.size()) {}
   // Allow implicit conversion from any class that has a c_str() and a size() method (namely, std::string).
@@ -108,7 +108,7 @@ public:
   // those who don't want it.
   template <
     typename T,
-    typename = decltype(instance<T>().c_str()),
+    typename = EnableIf<canConvert<decltype(instance<T>().c_str()), const char*>()>,
     typename = decltype(instance<T>().size())>
   inline operator T() const { return {cStr(), size()}; }
   // Allow implicit conversion to any class that has a c_str() method and a size() method (namely, std::string).
