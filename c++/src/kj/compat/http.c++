@@ -1956,8 +1956,13 @@ public:
       if (length > 0) {
         // We haven't reached the end of the entity body yet.
         if (amount == 0) {
-          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED,
-              "premature EOF in HTTP entity body; did not reach Content-Length"));
+          size_t expectedLength = length + alreadyRead;
+          kj::throwRecoverableException(KJ_EXCEPTION(
+            DISCONNECTED,
+            "premature EOF in HTTP entity body; did not reach Content-Length",
+            expectedLength,
+            alreadyRead
+          ));
         } else if (amount < minBytes) {
           // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
           // which has not yet been reached. Keep trying until we reach it.
