@@ -195,9 +195,9 @@ public:
   void accept(kj::Own<kj::AsyncCapabilityStream>&& connection, uint maxFdsPerMessage);
   // Accepts the connection for servicing.
 
-  kj::Promise<void> accept(kj::AsyncIoStream& connection) KJ_WARN_UNUSED_RESULT;
-  kj::Promise<void> accept(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage)
-      KJ_WARN_UNUSED_RESULT;
+  kj::Promise<void> accept KJ_WARN_UNUSED_RESULT(kj::AsyncIoStream& connection);
+  kj::Promise<void> accept KJ_WARN_UNUSED_RESULT(kj::AsyncCapabilityStream& connection,
+      uint maxFdsPerMessage);
   // Accept connection without taking ownership. The returned promise resolves when the client
   // disconnects. Dropping the promise forcefully cancels the RPC protocol.
   //

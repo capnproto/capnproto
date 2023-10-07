@@ -97,8 +97,8 @@ public:
   Capability::Client bootstrap(typename VatId::Reader vatId);
   // Connect to the given vat and return its bootstrap interface.
 
-  Capability::Client restore(typename VatId::Reader hostId, AnyPointer::Reader objectId)
-      CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.");
+  Capability::Client restore CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.")(
+      typename VatId::Reader hostId, AnyPointer::Reader objectId);
   // ** DEPRECATED **
   //
   // Restores the given SturdyRef from the network and return the capability representing it.
@@ -192,10 +192,9 @@ RpcSystem<VatId> makeRpcServer(
 
 template <typename VatId, typename LocalSturdyRefObjectId,
           typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
-RpcSystem<VatId> makeRpcServer(
+RpcSystem<VatId> makeRpcServer CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.")(
     VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-    SturdyRefRestorer<LocalSturdyRefObjectId>& restorer)
-    CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.");
+    SturdyRefRestorer<LocalSturdyRefObjectId>& restorer);
 // ** DEPRECATED **
 //
 // Create an RPC server which exports multiple main interfaces by object ID. The `restorer` object
@@ -242,8 +241,9 @@ class SturdyRefRestorer: public _::SturdyRefRestorerBase {
   //   string names.
 
 public:
-  virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref) CAPNP_DEPRECATED(
-      "Please transition to using bootstrap interfaces instead of SturdyRefRestorer.") = 0;
+  virtual Capability::Client restore CAPNP_DEPRECATED(
+      "Please transition to using bootstrap interfaces instead of SturdyRefRestorer.")(
+      typename SturdyRefObjectId::Reader ref) = 0;
   // Restore the given object, returning a capability representing it.
 
 private:
@@ -445,7 +445,7 @@ public:
     // WARNING: The RPC system may keep the `IncomingRpcMessage` object alive past the lifetime of
     //   the `Connection` itself.
 
-    virtual kj::Promise<void> shutdown() override KJ_WARN_UNUSED_RESULT = 0;
+    virtual kj::Promise<void> shutdown KJ_WARN_UNUSED_RESULT() override = 0;
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
     // returned promise resolves after shutdown is complete.
 

@@ -41,7 +41,7 @@
 namespace kj {
 namespace {
 
-bool isWine() KJ_UNUSED;
+bool isWine KJ_UNUSED();
 
 #if _WIN32
 

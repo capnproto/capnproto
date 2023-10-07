@@ -98,9 +98,9 @@ public:
   //   In this example, note that any imports in the file will fail, since the in-memory directory
   //   you created contains no files except the specific one you linked in.
 
-  ParsedSchema parseDiskFile(kj::StringPtr displayName, kj::StringPtr diskPath,
-                             kj::ArrayPtr<const kj::StringPtr> importPath) const
-      CAPNP_DEPRECATED("Use parseFromDirectory() instead.");
+  ParsedSchema parseDiskFile CAPNP_DEPRECATED("Use parseFromDirectory() instead.")(
+      kj::StringPtr displayName, kj::StringPtr diskPath,
+      kj::ArrayPtr<const kj::StringPtr> importPath) const;
   // Creates a private kj::Filesystem and uses it to parse files from the real disk.
   //
   // DO NOT USE in new code. Use parseFromDirectory() instead.
@@ -110,8 +110,8 @@ public:
   // using `parseFromDirectory()`, you can arrange so that imports are only allowed within a
   // particular directory, or even set up a dummy filesystem where other files are not visible.
 
-  void setDiskFilesystem(kj::Filesystem& fs)
-      CAPNP_DEPRECATED("Use parseFromDirectory() instead.");
+  void setDiskFilesystem CAPNP_DEPRECATED("Use parseFromDirectory() instead.")(
+      kj::Filesystem& fs);
   // Call before calling parseDiskFile() to choose an alternative disk filesystem implementation.
   // This exists mostly for testing purposes; new code should use parseFromDirectory() instead.
   //

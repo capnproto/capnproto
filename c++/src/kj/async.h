@@ -201,8 +201,9 @@ public:
   inline Promise(decltype(nullptr)) {}
 
   template <typename Func, typename ErrorFunc = _::PropagateException>
-  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException(),
-                                 SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, T> then KJ_WARN_UNUSED_RESULT(
+      Func&& func, ErrorFunc&& errorHandler = _::PropagateException(),
+      SourceLocation location = {});
   // Register a continuation function to be executed when the promise completes.  The continuation
   // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation
   // may return a new value; `then()` itself returns a promise for the continuation's eventual
@@ -257,13 +258,13 @@ public:
   // actual I/O.  To solve this, use `kj::evalLater()` to yield control; this way, all other events
   // in the queue will get a chance to run before your callback is executed.
 
-  Promise<void> ignoreResult() KJ_WARN_UNUSED_RESULT { return then([](T&&) {}); }
+  Promise<void> ignoreResult KJ_WARN_UNUSED_RESULT() { return then([](T&&) {}); }
   // Convenience method to convert the promise to a void promise by ignoring the return value.
   //
   // You must still wait on the returned promise if you want the task to execute.
 
   template <typename ErrorFunc>
-  Promise<T> catch_(ErrorFunc&& errorHandler, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+  Promise<T> catch_ KJ_WARN_UNUSED_RESULT(ErrorFunc&& errorHandler, SourceLocation location = {});
   // Equivalent to `.then(identityFunc, errorHandler)`, where `identifyFunc` is a function that
   // just returns its input.
 
@@ -322,7 +323,7 @@ public:
   //
   // poll() is not supported in fibers; it will throw an exception.
 
-  ForkedPromise<T> fork(SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+  ForkedPromise<T> fork KJ_WARN_UNUSED_RESULT(SourceLocation location = {});
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
@@ -334,7 +335,7 @@ public:
   // E.g. if you have `Promise<kj::Tuple<T, U>>`, `split()` returns
   // `kj::Tuple<Promise<T>, Promise<U>>`.
 
-  Promise<T> exclusiveJoin(Promise<T>&& other, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+  Promise<T> exclusiveJoin KJ_WARN_UNUSED_RESULT(Promise<T>&& other, SourceLocation location = {});
   // Return a new promise that resolves when either the original promise resolves or `other`
   // resolves (whichever comes first).  The promise that didn't resolve first is canceled.
 
@@ -342,16 +343,16 @@ public:
   //   and produces a tuple?
 
   template <typename... Attachments>
-  Promise<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  Promise<T> attach KJ_WARN_UNUSED_RESULT(Attachments&&... attachments);
   // "Attaches" one or more movable objects (often, Own<T>s) to the promise, such that they will
   // be destroyed when the promise resolves.  This is useful when a promise's callback contains
   // pointers into some object and you want to make sure the object still exists when the callback
   // runs -- after calling then(), use attach() to add necessary objects to the result.
 
   template <typename ErrorFunc>
-  Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation location = {})
-      KJ_WARN_UNUSED_RESULT;
-  Promise<T> eagerlyEvaluate(decltype(nullptr), SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+  Promise<T> eagerlyEvaluate KJ_WARN_UNUSED_RESULT(
+      ErrorFunc&& errorHandler, SourceLocation location = {});
+  Promise<T> eagerlyEvaluate KJ_WARN_UNUSED_RESULT(decltype(nullptr), SourceLocation location = {});
   // Force eager evaluation of this promise.  Use this if you are going to hold on to the promise
   // for awhile without consuming the result, but you want to make sure that the system actually
   // processes it.
@@ -424,7 +425,7 @@ Promise<T> constPromise();
 // `Promise<T>(value)` except that it avoids an allocation.
 
 template <typename Func>
-PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
+PromiseForResult<Func, void> evalLater KJ_WARN_UNUSED_RESULT(Func&& func);
 // Schedule for the given zero-parameter function to be executed in the event loop at some
 // point in the near future.  Returns a Promise for its result -- or, if `func()` itself returns
 // a promise, `evalLater()` returns a Promise for the result of resolving that promise.
@@ -442,13 +443,13 @@ PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
 // guaranteed to be executed in order.
 
 template <typename Func>
-PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
+PromiseForResult<Func, void> evalNow KJ_WARN_UNUSED_RESULT(Func&& func);
 // Run `func()` and return a promise for its result. `func()` executes before `evalNow()` returns.
 // If `func()` throws an exception, the exception is caught and wrapped in a promise -- this is the
 // main reason why `evalNow()` is useful.
 
 template <typename Func>
-PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
+PromiseForResult<Func, void> evalLast KJ_WARN_UNUSED_RESULT(Func&& func);
 // Like `evalLater()`, except that the function doesn't run until the event queue is otherwise
 // completely empty and the thread is about to suspend waiting for I/O.
 //
@@ -473,7 +474,7 @@ kj::String getAsyncTrace();
 // from exception.c++.
 
 template <typename Func>
-PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESULT;
+PromiseForResult<Func, void> retryOnDisconnect KJ_WARN_UNUSED_RESULT(Func&& func);
 // Promises to run `func()` asynchronously, retrying once if it fails with a DISCONNECTED exception.
 // If the retry also fails, the exception is passed through.
 //
@@ -481,8 +482,8 @@ PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESUL
 // with the retry logic added.
 
 template <typename Func>
-PromiseForResult<Func, WaitScope&> startFiber(
-    size_t stackSize, Func&& func, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
+PromiseForResult<Func, WaitScope&> startFiber KJ_WARN_UNUSED_RESULT(
+    size_t stackSize, Func&& func, SourceLocation location = {});
 // Executes `func()` in a fiber, returning a promise for the eventual reseult. `func()` will be
 // passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on promises. Thus, `func()`
 // can be written in a synchronous, blocking style, instead of using `.then()`. This is often much
@@ -521,8 +522,8 @@ public:
   //   feature is only supported on Linux (the flag has no effect on other operating systems).
 
   template <typename Func>
-  PromiseForResult<Func, WaitScope&> startFiber(
-      Func&& func, SourceLocation location = {}) const KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, WaitScope&> startFiber KJ_WARN_UNUSED_RESULT(
+      Func&& func, SourceLocation location = {}) const;
   // Executes `func()` in a fiber from this pool, returning a promise for the eventual result.
   // `func()` will be passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on
   // promises. Thus, `func()` can be written in a synchronous, blocking style, instead of
@@ -590,8 +591,8 @@ private:
 };
 
 template <typename Func, typename MovedParam>
-inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func)
-    KJ_DEPRECATED("Use C++14 generalized captures instead.");
+inline CaptureByMove<Func, Decay<MovedParam>> mvCapture
+    KJ_DEPRECATED("Use C++14 generalized captures instead.")(MovedParam&& param, Func&& func);
 
 template <typename Func, typename MovedParam>
 inline CaptureByMove<Func, Decay<MovedParam>> mvCapture(MovedParam&& param, Func&& func) {

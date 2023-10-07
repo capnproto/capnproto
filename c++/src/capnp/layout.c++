@@ -568,9 +568,9 @@ struct WireHelpers {
     return result;
   }
 
-  static KJ_ALWAYS_INLINE(kj::Maybe<const word&> followFars(
+  static KJ_ALWAYS_INLINE(kj::Maybe<const word&> followFars KJ_WARN_UNUSED_RESULT(
       const WirePointer*& ref, const word* refTarget, SegmentReader*& segment))
-      KJ_WARN_UNUSED_RESULT {
+      {
     // Like the other followFars() but operates on readers.
 
     // If the segment is null, this is an unchecked message, so there are no FAR pointers.

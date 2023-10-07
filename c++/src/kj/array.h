@@ -237,7 +237,7 @@ public:
   }
 
   template <typename... Attachments>
-  Array<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  Array<T> attach KJ_WARN_UNUSED_RESULT(Attachments&&... attachments);
   // Like Own<T>::attach(), but attaches to an Array.
 
 private:

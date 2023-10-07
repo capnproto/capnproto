@@ -169,8 +169,8 @@ public:
   // Same as parseAs, but rather than throwing an exception we return NULL.
 
   template <typename... Attachments>
-  ConstString attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
-  ConstString attach() const KJ_WARN_UNUSED_RESULT;
+  ConstString attach KJ_WARN_UNUSED_RESULT(Attachments&&... attachments) const;
+  ConstString attach KJ_WARN_UNUSED_RESULT() const;
   // Like ArrayPtr<T>::attach(), but instead promotes a StringPtr into a ConstString. Generally the
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
 

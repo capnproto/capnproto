@@ -217,7 +217,10 @@ typedef unsigned char byte;
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__
 // Don't force inline in debug mode.
 #else
-#if defined(_MSC_VER) && !defined(__clang__)
+#if KJ_HAS_CPP_ATTRIBUTE(gnu::always_inline)
+// Try not to mix standard (C++11) attribute syntax with GNU attribute syntax.
+#define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ [[gnu::always_inline]]
+#elif defined(_MSC_VER) && !defined(__clang__)
 #define KJ_ALWAYS_INLINE(...) __forceinline __VA_ARGS__
 #else
 #define KJ_ALWAYS_INLINE(...) inline __VA_ARGS__ __attribute__((always_inline))
@@ -225,23 +228,51 @@ typedef unsigned char byte;
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
 
-#if defined(_MSC_VER) && !defined(__clang__)
+#if KJ_HAS_CPP_ATTRIBUTE(gnu::noinline)
+#define KJ_NOINLINE [[gnu::noinline]]
+#elif defined(_MSC_VER) && !defined(__clang__)
 #define KJ_NOINLINE __declspec(noinline)
 #else
 #define KJ_NOINLINE __attribute__((noinline))
 #endif
 
+// Prefer standard attributes, if available.
+#if KJ_HAS_CPP_ATTRIBUTE(noreturn)
+#define KJ_NORETURN(prototype) [[noreturn]] prototype
+#endif
+#if KJ_HAS_CPP_ATTRIBUTE(maybe_unused)
+#define KJ_UNUSED [[maybe_unused]]
+#endif
+#if KJ_HAS_CPP_ATTRIBUTE(nodiscard)
+#define KJ_WARN_UNUSED_RESULT [[nodiscard]]
+#endif
+#if KJ_HAS_CPP_ATTRIBUTE(deprecated)
+#define KJ_DEPRECATED(reason) [[deprecated(reason)]]
+#endif
+
 #if defined(_MSC_VER) && !__clang__
+#if !defined(KJ_NORETURN)
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
+#endif
+#if !defined(KJ_UNUSED)
 #define KJ_UNUSED
+#endif
+#if !defined(KJ_WARN_UNUSED_RESULT)
 #define KJ_WARN_UNUSED_RESULT
 // TODO(msvc): KJ_WARN_UNUSED_RESULT can use _Check_return_ on MSVC, but it's a prefix, so
 //   wrapping the whole prototype is needed. http://msdn.microsoft.com/en-us/library/jj159529.aspx
 //   Similarly, KJ_UNUSED could use __pragma(warning(suppress:...)), but again that's a prefix.
+#endif
 #else
+#if !defined(KJ_NORETURN)
 #define KJ_NORETURN(prototype) prototype __attribute__((noreturn))
+#endif
+#if !defined(KJ_UNUSED)
 #define KJ_UNUSED __attribute__((unused))
+#endif
+#if !defined(KJ_WARN_UNUSED_RESULT)
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+#endif
 #endif
 
 #if KJ_HAS_CPP_ATTRIBUTE(clang::lifetimebound)
@@ -267,10 +298,14 @@ typedef unsigned char byte;
 // by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
 
-#if __clang__
+#if __clang__ || __GNUC__ >= 12
+#if KJ_HAS_CPP_ATTRIBUTE(maybe_unused)
+#define KJ_UNUSED_MEMBER [[maybe_unused]]
+#else
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
 // complains if the attribute is set on members.
+#endif
 #else
 #define KJ_UNUSED_MEMBER
 #endif
@@ -290,21 +325,31 @@ typedef unsigned char byte;
 #endif
 
 #if __clang__
+#if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
-#define KJ_UNAVAILABLE(reason) \
-    __attribute__((unavailable(reason)))
+#endif
+#if KJ_HAS_CPP_ATTRIBUTE(clang::unavailable)
+#define KJ_UNAVAILABLE(reason, ...) [[clang::unavailable(reason)]] __VA_ARGS__
+#else
+#define KJ_UNAVAILABLE(reason, ...) \
+    __attribute__((unavailable(reason))) __VA_ARGS__
+#endif
 #elif __GNUC__
+#if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
-#define KJ_UNAVAILABLE(reason) = delete
+#endif
+#define KJ_UNAVAILABLE(reason, ...) __VA_ARGS__ = delete
 // If the `unavailable` attribute is not supproted, just mark the method deleted, which at least
 // makes it a compile-time error to try to call it. Note that on Clang, marking a method deleted
 // *and* unavailable unfortunately defeats the purpose of the unavailable annotation, as the
 // generic "deleted" error is reported instead.
 #else
+#if !defined(KJ_DEPRECATED)
 #define KJ_DEPRECATED(reason)
-#define KJ_UNAVAILABLE(reason) = delete
+#endif
+#define KJ_UNAVAILABLE(reason, ...) __VA_ARGS__ = delete
 // TODO(msvc): Again, here, MSVC prefers a prefix, __declspec(deprecated).
 #endif
 
@@ -1862,7 +1907,7 @@ public:
 #endif
 
   template <typename... Attachments>
-  Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
+  Array<T> attach KJ_WARN_UNUSED_RESULT(Attachments&&... attachments) const;
   // Like Array<T>::attach(), but also promotes an ArrayPtr to an Array. Generally the attachment
   // should be an object that actually owns the array that the ArrayPtr is pointing at.
   //

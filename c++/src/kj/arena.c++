@@ -66,7 +66,7 @@ void Arena::cleanup() {
 
 namespace {
 
-constexpr bool KJ_UNUSED isPowerOfTwo(size_t value) {
+constexpr bool isPowerOfTwo KJ_UNUSED(size_t value) {
   return (value & (value - 1)) == 0;
 }
 

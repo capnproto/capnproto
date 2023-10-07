@@ -109,9 +109,9 @@ class AsyncOutputStream: private AsyncObject {
   // Asynchronous equivalent of OutputStream (from io.h).
 
 public:
-  virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
-  virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
-      KJ_WARN_UNUSED_RESULT = 0;
+  virtual Promise<void> write KJ_WARN_UNUSED_RESULT(const void* buffer, size_t size) = 0;
+  virtual Promise<void> write KJ_WARN_UNUSED_RESULT(
+      ArrayPtr<const ArrayPtr<const byte>> pieces) = 0;
 
   virtual Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue);
@@ -631,9 +631,9 @@ public:
   virtual Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) = 0;
   // Construct a network address from a legacy struct sockaddr.
 
-  virtual Own<Network> restrictPeers(
+  virtual Own<Network> restrictPeers KJ_WARN_UNUSED_RESULT(
       kj::ArrayPtr<const kj::StringPtr> allow,
-      kj::ArrayPtr<const kj::StringPtr> deny = nullptr) KJ_WARN_UNUSED_RESULT = 0;
+      kj::ArrayPtr<const kj::StringPtr> deny = nullptr) = 0;
   // Constructs a new Network instance wrapping this one which restricts which peer addresses are
   // permitted (both for outgoing and incoming connections).
   //

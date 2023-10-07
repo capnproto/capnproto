@@ -2293,7 +2293,7 @@ class Coroutine<T>::Awaiter: public AwaiterBase {
 public:
   explicit Awaiter(Promise<U> promise): AwaiterBase(PromiseNode::from(kj::mv(promise))) {}
 
-  U await_resume() KJ_NOINLINE {
+  U await_resume KJ_NOINLINE() {
     // This is marked noinline in order to ensure __builtin_return_address() is accurate for stack
     // trace purposes. In my experimentation, this method was not inlined anyway even in opt
     // builds, but I want to make sure it doesn't suddenly start being inlined later causing stack

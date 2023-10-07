@@ -231,7 +231,7 @@ public:
   }
 
   template <typename... Attachments>
-  Own<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  Own<T> attach KJ_WARN_UNUSED_RESULT(Attachments&&... attachments);
   // Returns an Own<T> which points to the same object but which also ensures that all values
   // passed to `attachments` remain alive until after this object is destroyed. Normally
   // `attachments` are other Own<?>s pointing to objects that this one depends on.
