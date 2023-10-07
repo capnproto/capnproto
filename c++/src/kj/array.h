@@ -144,7 +144,7 @@ public:
       : ptr(firstElement), size_(size), disposer(&disposer) {}
 
   KJ_DISALLOW_COPY(Array);
-  inline ~Array() noexcept { dispose(); }
+  inline ~Array() noexcept(false) { dispose(); }
 
   inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
     return ArrayPtr<T>(ptr, size_);
