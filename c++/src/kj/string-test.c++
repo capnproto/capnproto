@@ -332,7 +332,7 @@ KJ_TEST("ArrayPtr == StringPtr") {
   ArrayPtr<const char> a = s;
 
   KJ_EXPECT(a == s);
-#if __cplusplus >= 202000L || _MSVC_LANG >= 202000L
+#if KJ_CPP_STD >= 202000L
   KJ_EXPECT(s == a);
 #endif
 }
