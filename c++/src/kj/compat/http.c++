@@ -6974,8 +6974,6 @@ private:
     }
 
     void handleException(kj::Exception&& ex, kj::Own<kj::AsyncIoStream> connectStream) {
-      // Log the exception...
-      KJ_LOG(ERROR, "Error in HttpClientAdapter connect()", kj::cp(ex));
       // Reject the status promise if it is still pending...
       if (fulfiller->isWaiting()) {
         fulfiller->reject(kj::cp(ex));
