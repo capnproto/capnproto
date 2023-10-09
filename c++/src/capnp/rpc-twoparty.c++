@@ -179,8 +179,8 @@ public:
     }
 
     // On the other hand, if pendingMessages was empty, then we should set up the delayed write.
-    network.previousWrite = previousWrite.then([this, sendTime]() {
-      return kj::evalLast([this, sendTime]() -> kj::Promise<void> {
+    network.previousWrite = previousWrite.then([&network = network, sendTime]() {
+      return kj::evalLast([&network, sendTime]() -> kj::Promise<void> {
         network.currentOutgoingMessageSendTime = sendTime;
         // Swap out the connection's pending messages and write all of them together.
         auto ownMessages = kj::mv(network.queuedMessages);
@@ -192,7 +192,7 @@ public:
           messages[i].fds = ownMessages[i]->fds;
         }
         return network.getStream().writeMessages(messages).attach(kj::mv(ownMessages), kj::mv(messages));
-      }).catch_([this](kj::Exception&& e) {
+      }).catch_([&network](kj::Exception&& e) {
         // Since no one checks write failures, we need to propagate them into read failures,
         // otherwise we might get stuck sending all messages into a black hole and wondering why
         // the peer never replies.
@@ -202,11 +202,7 @@ public:
         }
         kj::throwRecoverableException(kj::mv(e));
       });
-    }).attach(kj::addRef(*this))
-      // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
-      // otherwise the message (and any capabilities in it) will not be released until a new
-      // message is written! (Kenton once spent all afternoon tracking this down...)
-      .eagerlyEvaluate(nullptr);
+    }).eagerlyEvaluate(nullptr);
   }
 
   size_t sizeInWords() override {
