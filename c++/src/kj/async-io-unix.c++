@@ -26,12 +26,6 @@
 #define _GNU_SOURCE
 #endif
 
-#ifndef _FILE_OFFSET_BITS
-#define _FILE_OFFSET_BITS 64
-// Request 64-bit off_t for sendfile(). (The code will still work if we get 32-bit off_t as long
-// as actual files are under 4GB.)
-#endif
-
 #include "async-io.h"
 #include "async-io-internal.h"
 #include "async-unix.h"
