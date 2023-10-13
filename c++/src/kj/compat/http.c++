@@ -1913,13 +1913,15 @@ public:
       : HttpEntityBodyReader(inner) {}
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    if (alreadyDone()) co_return 0;
+    if (alreadyDone()) return constPromise<size_t, 0>();
 
-    auto amount = co_await getInner().tryRead(buffer, minBytes, maxBytes);
-    if (amount < minBytes) {
-      doneReading();
-    }
-    co_return amount;
+    return getInner().tryRead(buffer, minBytes, maxBytes)
+        .then([=](size_t amount) {
+      if (amount < minBytes) {
+        doneReading();
+      }
+      return amount;
+    });
   }
 };
 
@@ -1939,19 +1941,24 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
     clean = false;
+    return tryReadInternal(buffer, minBytes, maxBytes, 0);
+  }
 
-    size_t alreadyRead = 0;
+private:
+  size_t length;
+  bool clean = true;
 
-    for (;;) {
-      if (length == 0) {
-        clean = true;
-        co_return 0;
-      }
+  Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
+                                  size_t alreadyRead) {
+    if (length == 0) {
+      clean = true;
+      return constPromise<size_t, 0>();
+    }
 
-      // We have to set minBytes to 1 here so that if we read any data at all, we update our
-      // counter immediately, so that we still know where we are in case of cancellation.
-      auto amount = co_await getInner().tryRead(buffer, 1, kj::min(maxBytes, length));
-
+    // We have to set minBytes to 1 here so that if we read any data at all, we update our
+    // counter immediately, so that we still know where we are in case of cancellation.
+    return getInner().tryRead(buffer, 1, kj::min(maxBytes, length))
+        .then([=](size_t amount) -> kj::Promise<size_t> {
       length -= amount;
       if (length > 0) {
         // We haven't reached the end of the entity body yet.
@@ -1966,23 +1973,16 @@ public:
         } else if (amount < minBytes) {
           // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
           // which has not yet been reached. Keep trying until we reach it.
-          buffer = reinterpret_cast<byte*>(buffer) + amount;
-          minBytes -= amount;
-          maxBytes -= amount;
-          alreadyRead += amount;
-          continue;
+          return tryReadInternal(reinterpret_cast<byte*>(buffer) + amount,
+                                 minBytes - amount, maxBytes - amount, alreadyRead + amount);
         }
       } else if (length == 0) {
         doneReading();
       }
       clean = true;
-      co_return amount + alreadyRead;
-    }
+      return amount + alreadyRead;
+    });
   }
-
-private:
-  size_t length;
-  bool clean = true;
 };
 
 class HttpChunkedEntityReader final: public HttpEntityBodyReader {
@@ -1995,49 +1995,48 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
     clean = false;
+    return tryReadInternal(buffer, minBytes, maxBytes, 0);
+  }
 
-    size_t alreadyRead = 0;
+private:
+  size_t chunkSize = 0;
+  bool clean = true;
 
-    for (;;) {
-      if (alreadyDone()) {
-        clean = true;
-        co_return alreadyRead;
-      } else if (chunkSize == 0) {
-        // Read next chunk header.
-        auto nextChunkSize = co_await getInner().readChunkHeader();
+  Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
+                                  size_t alreadyRead) {
+    if (alreadyDone()) {
+      clean = true;
+      return alreadyRead;
+    } else if (chunkSize == 0) {
+      // Read next chunk header.
+      return getInner().readChunkHeader().then([=](uint64_t nextChunkSize) {
         if (nextChunkSize == 0) {
           doneReading();
         }
 
         chunkSize = nextChunkSize;
-        continue;
-      } else {
-        // Read current chunk.
-        // We have to set minBytes to 1 here so that if we read any data at all, we update our
-        // counter immediately, so that we still know where we are in case of cancellation.
-        auto amount = co_await getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize));
-
+        return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
+      });
+    } else {
+      // Read current chunk.
+      // We have to set minBytes to 1 here so that if we read any data at all, we update our
+      // counter immediately, so that we still know where we are in case of cancellation.
+      return getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
+          .then([=](size_t amount) -> kj::Promise<size_t> {
         chunkSize -= amount;
         if (amount == 0) {
           kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "premature EOF in HTTP chunk"));
         } else if (amount < minBytes) {
           // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
           // which has not yet been reached. Keep trying until we reach it.
-          buffer = reinterpret_cast<byte*>(buffer) + amount;
-          minBytes -= amount;
-          maxBytes -= amount;
-          alreadyRead += amount;
-          continue;
+          return tryReadInternal(reinterpret_cast<byte*>(buffer) + amount,
+                                 minBytes - amount, maxBytes - amount, alreadyRead + amount);
         }
         clean = true;
-        co_return alreadyRead + amount;
-      }
+        return alreadyRead + amount;
+      });
     }
   }
-
-private:
-  size_t chunkSize = 0;
-  bool clean = true;
 };
 
 template <char...>
