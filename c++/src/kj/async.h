@@ -333,11 +333,17 @@ public:
   //   and produces a tuple?
 
   template <typename... Attachments>
+  requires (Attachable<Attachments...>)
   Promise<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // "Attaches" one or more movable objects (often, Own<T>s) to the promise, such that they will
   // be destroyed when the promise resolves.  This is useful when a promise's callback contains
   // pointers into some object and you want to make sure the object still exists when the callback
   // runs -- after calling then(), use attach() to add necessary objects to the result.
+
+  template <typename... Attachments>
+  requires (!Attachable<Attachments...>)
+  Promise<T> attach(Attachments&&... attachments) = delete;
+  // Let's give a clean failure when something isn't attachable!
 
   template <typename ErrorFunc>
   Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation location = {})

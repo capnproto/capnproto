@@ -234,8 +234,13 @@ public:
   }
 
   template <typename... Attachments>
+  requires (Attachable<Attachments...>)
   Array<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // Like Own<T>::attach(), but attaches to an Array.
+
+  template <typename... Attachments>
+  requires (!Attachable<Attachments...>)
+  Array<T> attach(Attachments&&... attachments) = delete;
 
 private:
   T* ptr;
@@ -870,6 +875,7 @@ struct ArrayDisposableOwnedBundle final: public ArrayDisposer, public OwnedBundl
 
 template <typename T>
 template <typename... Attachments>
+requires (Attachable<Attachments...>)
 Array<T> Array<T>::attach(Attachments&&... attachments) {
   T* ptrCopy = ptr;
   auto sizeCopy = size_;
@@ -888,6 +894,7 @@ Array<T> Array<T>::attach(Attachments&&... attachments) {
 
 template <typename T>
 template <typename... Attachments>
+requires (Attachable<Attachments...>)
 Array<T> ArrayPtr<T>::attach(Attachments&&... attachments) const {
   T* ptrCopy = ptr;
 
