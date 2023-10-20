@@ -1453,7 +1453,9 @@ public:
   }
 
   kj::Promise<Message> readMessage() override {
-    auto text = co_await readMessageHeaders();
+    auto textOrError = co_await readMessageHeaders();
+    KJ_REQUIRE(textOrError.is<kj::ArrayPtr<char>>(), "bad message");
+    auto text = textOrError.get<kj::ArrayPtr<char>>();
     headers.clear();
     KJ_REQUIRE(headers.tryParse(text), "bad message");
     auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, HttpMethod::GET, 0, headers);
@@ -1528,7 +1530,7 @@ public:
     return !lineBreakBeforeNextHeader && leftover == nullptr;
   }
 
-  kj::Promise<kj::ArrayPtr<char>> readMessageHeaders() {
+  kj::Promise<kj::OneOf<kj::ArrayPtr<char>, HttpHeaders::ProtocolError>> readMessageHeaders() {
     ++pendingMessageCount;
     auto paf = kj::newPromiseAndFulfiller<void>();
 
@@ -1541,28 +1543,38 @@ public:
     co_return co_await readHeader(HeaderType::MESSAGE, 0, 0);
   }
 
-  kj::Promise<uint64_t> readChunkHeader() {
+  kj::Promise<kj::OneOf<uint64_t, HttpHeaders::ProtocolError>> readChunkHeader() {
     KJ_REQUIRE(onMessageDone != kj::none);
 
     // We use the portion of the header after the end of message headers.
-    auto text = co_await readHeader(HeaderType::CHUNK, messageHeaderEnd, messageHeaderEnd);
-    KJ_REQUIRE(text.size() > 0) { break; }
+    auto textOrError = co_await readHeader(HeaderType::CHUNK, messageHeaderEnd, messageHeaderEnd);
 
-    uint64_t value = 0;
-    for (char c: text) {
-      if ('0' <= c && c <= '9') {
-        value = value * 16 + (c - '0');
-      } else if ('a' <= c && c <= 'f') {
-        value = value * 16 + (c - 'a' + 10);
-      } else if ('A' <= c && c <= 'F') {
-        value = value * 16 + (c - 'A' + 10);
-      } else {
-        KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) { break; }
+    KJ_SWITCH_ONEOF(textOrError) {
+      KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+        co_return protocolError;
+      }
+      KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
+        KJ_REQUIRE(text.size() > 0) { break; }
+
+        uint64_t value = 0;
+        for (char c: text) {
+          if ('0' <= c && c <= '9') {
+            value = value * 16 + (c - '0');
+          } else if ('a' <= c && c <= 'f') {
+            value = value * 16 + (c - 'a' + 10);
+          } else if ('A' <= c && c <= 'F') {
+            value = value * 16 + (c - 'A' + 10);
+          } else {
+            KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) { break; }
+            co_return value;
+          }
+        }
+
         co_return value;
       }
     }
 
-    co_return value;
+    KJ_UNREACHABLE;
   }
 
   inline kj::Promise<HttpHeaders::RequestConnectOrProtocolError> readRequestHeaders() {
@@ -1571,18 +1583,36 @@ public:
       co_return HttpHeaders::RequestConnectOrProtocolError(resuming);
     }
 
-    auto text = co_await readMessageHeaders();
-    headers.clear();
-    co_return headers.tryParseRequestOrConnect(text);
+    auto textOrError = co_await readMessageHeaders();
+    KJ_SWITCH_ONEOF(textOrError) {
+      KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+        co_return protocolError;
+      }
+      KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
+        headers.clear();
+        co_return headers.tryParseRequestOrConnect(text);
+      }
+    }
+
+    KJ_UNREACHABLE;
   }
 
   inline kj::Promise<HttpHeaders::ResponseOrProtocolError> readResponseHeaders() {
     // Note: readResponseHeaders() could be called multiple times concurrently when pipelining
     //   requests. readMessageHeaders() will serialize these, but it's important not to mess with
     //   state (like calling headers.clear()) before said serialization has taken place.
-    auto text = co_await readMessageHeaders();
-    headers.clear();
-    co_return headers.tryParseResponse(text);
+    auto headersOrError = co_await readMessageHeaders();
+    KJ_SWITCH_ONEOF(headersOrError) {
+      KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+        co_return protocolError;
+      }
+      KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
+        headers.clear();
+        co_return headers.tryParseResponse(text);
+      }
+    }
+
+    KJ_UNREACHABLE;
   }
 
   inline const HttpHeaders& getHeaders() const { return headers; }
@@ -1637,6 +1667,11 @@ public:
     return { headerBuffer.releaseAsBytes(), leftover.asBytes() };
   }
 
+  kj::Promise<void> discard(AsyncOutputStream &output, size_t maxBytes) {
+    // Used to read and discard the input during error handling.
+    return inner.pumpTo(output, maxBytes).ignoreResult();
+  }
+
 private:
   AsyncInputStream& inner;
   kj::Array<char> headerBuffer;
@@ -1676,7 +1711,7 @@ private:
     CHUNK
   };
 
-  kj::Promise<kj::ArrayPtr<char>> readHeader(
+  kj::Promise<kj::OneOf<kj::ArrayPtr<char>, HttpHeaders::ProtocolError>> readHeader(
       HeaderType type, size_t bufferStart, size_t bufferEnd) {
     // Reads the HTTP message header or a chunk header (as in transfer-encoding chunked) and
     // returns the buffer slice containing it.
@@ -1722,7 +1757,12 @@ private:
               // Can't grow because we'd invalidate the HTTP headers.
               kj::throwFatalException(KJ_EXCEPTION(FAILED, "invalid HTTP chunk size"));
             }
-            KJ_REQUIRE(headerBuffer.size() < MAX_BUFFER, "request headers too large");
+            if (headerBuffer.size() >= MAX_BUFFER) {
+              co_return HttpHeaders::ProtocolError {
+                  .statusCode = 431,
+                  .statusMessage = "Request Header Fields Too Large",
+                  .description = "header too large." };
+            }
             auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
             memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
             headerBuffer = kj::mv(newBuffer);
@@ -2004,7 +2044,9 @@ public:
         co_return alreadyRead;
       } else if (chunkSize == 0) {
         // Read next chunk header.
-        auto nextChunkSize = co_await getInner().readChunkHeader();
+        auto nextChunkSizeOrError = co_await getInner().readChunkHeader();
+        KJ_REQUIRE(nextChunkSizeOrError.is<uint64_t>(), "bad header");
+        auto nextChunkSize = nextChunkSizeOrError.get<uint64_t>();
         if (nextChunkSize == 0) {
           doneReading();
         }
@@ -7442,6 +7484,21 @@ private:
       }
       KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
         // Bad request.
+
+        auto needClientGrace = protocolError.statusCode == 431;
+        if (needClientGrace) {
+          // We're going to reply with an error and close the connection.
+          // The client might not be able to read the error back. Read some data and wait
+          // a bit to give client a chance to finish writing.
+
+          auto dummy = kj::heap<HttpDiscardingEntityWriter>();
+          auto lengthGrace = kj::evalNow([&]() {
+            return httpInput.discard(*dummy, server.settings.canceledUploadGraceBytes);
+          }).catch_([](kj::Exception&& e) -> void { })
+            .attach(kj::mv(dummy));
+          auto timeGrace = server.timer.afterDelay(server.settings.canceledUploadGracePeriod);
+          co_await lengthGrace.exclusiveJoin(kj::mv(timeGrace));
+        }
 
         // sendError() uses Response::send(), which requires that we have a currentMethod, but we
         // never read one. GET seems like the correct choice here.
