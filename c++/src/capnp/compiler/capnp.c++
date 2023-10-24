@@ -23,6 +23,12 @@
 #define _GNU_SOURCE
 #endif
 
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+// Request 64-bit off_t. (The code will still work if we get 32-bit off_t as long as actual files
+// are under 4GB.)
+#endif
+
 #if _WIN32
 #include <kj/win32-api-version.h>
 #endif
