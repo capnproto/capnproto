@@ -385,6 +385,31 @@ KJ_TEST("ConstString") {
   KJ_EXPECT(theString == "it's a const string!");
 }
 
+KJ_TEST("StringPtr find") {
+  // Empty string doesn't find anything
+  StringPtr empty("");
+  KJ_EXPECT(empty.find("") == 0);
+  KJ_EXPECT(empty.find("foo") == kj::none);
+
+  StringPtr foobar("foobar"_kj);
+  KJ_EXPECT(foobar.find("") == 0);
+  KJ_EXPECT(foobar.find("baz") == kj::none);
+  KJ_EXPECT(foobar.find("foobar") == 0);
+  KJ_EXPECT(foobar.find("f") == 0);
+  KJ_EXPECT(foobar.find("oobar") == 1);
+  KJ_EXPECT(foobar.find("ar") == 4);
+  KJ_EXPECT(foobar.find("o") == 1);
+  KJ_EXPECT(foobar.find("oo") == 1);
+  KJ_EXPECT(foobar.find("r") == 5);
+  KJ_EXPECT(foobar.find("foobar!") == kj::none);
+
+  // Self pointers shouldn't cause issues, but it's worth testing.
+  KJ_EXPECT(foobar.find(foobar) == 0);
+  KJ_EXPECT(foobar.find(foobar.slice(1)) == 1);
+  KJ_EXPECT(foobar.slice(1).find(foobar.slice(1)) == 0);
+  KJ_EXPECT(foobar.slice(2).find(foobar.slice(1)) == kj::none);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

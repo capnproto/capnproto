@@ -151,6 +151,12 @@ public:
   inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
   inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
 
+  Maybe<size_t> find(const StringPtr& other) const;
+  // Return the index at which other appears in this string.
+  //
+  // In keeping with std::string::find, if other is the empty string, return 0 since the empty
+  // string is a substring of any string.
+
   template <typename T>
   T parseAs() const;
   // Parse string as template number type.
