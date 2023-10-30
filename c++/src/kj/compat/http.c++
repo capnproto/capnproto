@@ -6148,7 +6148,8 @@ public:
 
   kj::Promise<WebSocketResponse> openWebSocket(
       kj::StringPtr url, const HttpHeaders& headers) override {
-    // We need to parse the proxy-style URL to convert it to host-style.
+    // We need to parse the proxy-style URL to convert it to origin-form.
+    // https://www.rfc-editor.org/rfc/rfc9112.html#name-origin-form
     // Use URL parsing options that avoid unnecessary rewrites.
     Url::Options urlOptions;
     urlOptions.allowEmpty = true;
