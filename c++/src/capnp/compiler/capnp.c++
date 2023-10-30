@@ -23,6 +23,11 @@
 #define _GNU_SOURCE
 #endif
 
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+// Request 64-bit off_t and ino_t, otherwise this code will break when either value exceeds 2^32.
+#endif
+
 #if _WIN32
 #include <kj/win32-api-version.h>
 #endif
