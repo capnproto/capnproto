@@ -25,8 +25,7 @@
 
 #ifndef _FILE_OFFSET_BITS
 #define _FILE_OFFSET_BITS 64
-// Request 64-bit off_t. (The code will still work if we get 32-bit off_t as long as actual files
-// are under 4GB.)
+// Request 64-bit off_t and ino_t, otherwise this code will break when either value exceeds 2^32.
 #endif
 
 #if _WIN32
