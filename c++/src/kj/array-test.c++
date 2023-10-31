@@ -378,7 +378,7 @@ TEST(Array, ReleaseAsBytesOrChars) {
   }
 }
 
-#if __cplusplus > 201402L
+#if KJ_CPP_STD > 201402L
 KJ_TEST("kj::arr()") {
   kj::Array<kj::String> array = kj::arr(kj::str("foo"), kj::str(123));
   KJ_EXPECT(array == kj::ArrayPtr<const kj::StringPtr>({"foo", "123"}));

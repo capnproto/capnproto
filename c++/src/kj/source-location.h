@@ -41,7 +41,7 @@ KJ_BEGIN_HEADER
 #define KJ_CALLER_COLUMN() 0
 #endif
 
-#if __cplusplus > 201703L
+#if KJ_CPP_STD > 201703L
 #define KJ_COMPILER_SUPPORTS_SOURCE_LOCATION 1
 #elif defined(__has_builtin)
 // Clang 9 added these builtins: https://releases.llvm.org/9.0.0/tools/clang/docs/LanguageExtensions.html

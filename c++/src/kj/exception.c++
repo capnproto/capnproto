@@ -1204,7 +1204,7 @@ void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
 
 namespace _ {  // private
 
-#if __cplusplus >= 201703L
+#if KJ_CPP_STD >= 201703L
 
 uint uncaughtExceptionCount() {
   return std::uncaught_exceptions();

@@ -848,7 +848,7 @@ inline Array<T> heapArray(std::initializer_list<T> init) {
   return heapArray<T>(init.begin(), init.end());
 }
 
-#if __cplusplus > 201402L
+#if KJ_CPP_STD > 201402L
 template <typename T, typename... Params>
 inline Array<Decay<T>> arr(T&& param1, Params&&... params) {
   ArrayBuilder<Decay<T>> builder = heapArrayBuilder<Decay<T>>(sizeof...(params) + 1);

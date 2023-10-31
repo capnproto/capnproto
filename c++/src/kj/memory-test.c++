@@ -459,7 +459,7 @@ KJ_TEST("Maybe<Own<T>>") {
   KJ_EXPECT(&KJ_ASSERT_NONNULL(mRef) == KJ_ASSERT_NONNULL(m).get());
 }
 
-#if __cplusplus > 201402L
+#if KJ_CPP_STD > 201402L
 int* sawIntPtr = nullptr;
 
 void freeInt(int* ptr) {
