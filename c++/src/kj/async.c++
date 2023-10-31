@@ -2983,7 +2983,12 @@ void CoroutineBase::unhandled_exception() {
     // the event loop.
 
     // final_suspend() has not been called.
+#if _MSC_VER && !defined(__clang__)
+    // See comment at `finalSuspendCalled`'s definition.
+    KJ_IASSERT(!finalSuspendCalled);
+#else
     KJ_IASSERT(!coroutine.done());
+#endif
 
     // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
     // and will see this exception.

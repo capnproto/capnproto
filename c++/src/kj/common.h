@@ -60,12 +60,18 @@
 #define KJ_HAS_COMPILER_FEATURE(x) 0
 #endif
 
+#if defined(_MSVC_LANG) && !defined(__clang__)
+#define KJ_CPP_STD _MSVC_LANG
+#else
+#define KJ_CPP_STD __cplusplus
+#endif
+
 KJ_BEGIN_HEADER
 
 #ifndef KJ_NO_COMPILER_CHECK
 // Technically, __cplusplus should be 201402L for C++14, but GCC 4.9 -- which is supported -- still
 // had it defined to 201300L even with -std=c++14.
-#if __cplusplus < 201300L && !__CDT_PARSER__ && !_MSC_VER
+#if KJ_CPP_STD < 201300L && !__CDT_PARSER__
   #error "This code requires C++14. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
@@ -77,7 +83,7 @@ KJ_BEGIN_HEADER
   #if __clang__
     #if __clang_major__ < 5
       #warning "This library requires at least Clang 5.0."
-    #elif __cplusplus >= 201402L && !__has_include(<initializer_list>)
+    #elif KJ_CPP_STD >= 201402L && !__has_include(<initializer_list>)
       #warning "Your compiler supports C++14 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
@@ -103,7 +109,7 @@ KJ_BEGIN_HEADER
 #include <initializer_list>
 #include <string.h>
 
-#if __linux__ && __cplusplus > 201200L
+#if __linux__ && KJ_CPP_STD > 201200L
 // Hack around stdlib bug with C++14 that exists on some Linux systems.
 // Apparently in this mode the C library decides not to define gets() but the C++ library still
 // tries to import it into the std namespace. This bug has been fixed at the source but is still
@@ -275,7 +281,7 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
-#if __cplusplus > 201703L || (__clang__  && __clang_major__ >= 9 && __cplusplus >= 201103L)
+#if KJ_CPP_STD > 201703L || (__clang__  && __clang_major__ >= 9 && KJ_CPP_STD >= 201103L)
 // Technically this was only added to C++20 but Clang allows it for >= C++11 and spelunking the
 // attributes manual indicates it first came in with Clang 9.
 #define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]

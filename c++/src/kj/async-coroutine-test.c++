@@ -378,7 +378,7 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
       awaitPromise(kj::mv(rejectedThrowyDtorPromise)).wait(waitScope));
 }
 
-#if (!_MSC_VER || defined(__clang__)) && !__aarch64__
+#if !_MSC_VER  && !__aarch64__
 uint countLines(StringPtr s) {
   uint lines = 0;
   for (char c: s) {
