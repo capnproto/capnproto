@@ -157,6 +157,8 @@ public:
   // In keeping with std::string::find, if other is the empty string, return 0 since the empty
   // string is a substring of any string.
 
+  bool contains(const StringPtr& other) const { return find(other) != kj::none; }
+
   template <typename T>
   T parseAs() const;
   // Parse string as template number type.

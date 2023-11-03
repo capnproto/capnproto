@@ -410,6 +410,31 @@ KJ_TEST("StringPtr find") {
   KJ_EXPECT(foobar.slice(2).find(foobar.slice(1)) == kj::none);
 }
 
+KJ_TEST("StringPtr contains") {
+  // Empty string doesn't find anything
+  StringPtr empty("");
+  KJ_EXPECT(empty.contains("") == true);
+  KJ_EXPECT(empty.contains("foo") == false);
+
+  StringPtr foobar("foobar"_kj);
+  KJ_EXPECT(foobar.contains("") == true);
+  KJ_EXPECT(foobar.contains("baz") == false);
+  KJ_EXPECT(foobar.contains("foobar") == true);
+  KJ_EXPECT(foobar.contains("f") == true);
+  KJ_EXPECT(foobar.contains("oobar") == true);
+  KJ_EXPECT(foobar.contains("ar") == true);
+  KJ_EXPECT(foobar.contains("o") == true);
+  KJ_EXPECT(foobar.contains("oo") == true);
+  KJ_EXPECT(foobar.contains("r") == true);
+  KJ_EXPECT(foobar.contains("foobar!") == false);
+
+  // Self pointers shouldn't cause issues, but it's worth testing.
+  KJ_EXPECT(foobar.contains(foobar) == true);
+  KJ_EXPECT(foobar.contains(foobar.slice(1)) == true);
+  KJ_EXPECT(foobar.slice(1).contains(foobar.slice(1)) == true);
+  KJ_EXPECT(foobar.slice(2).contains(foobar.slice(1)) == false);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
