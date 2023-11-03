@@ -102,7 +102,7 @@ public:
   // stubs -- empty schemas of whichever kind is expected.
   //
   // If another schema for the given reader has already been seen, the loader will inspect both
-  // schemas to determine which one is newer, and use that that one.  If the two versions are
+  // schemas to determine which one is newer, and use that one.  If the two versions are
   // found to be incompatible, an exception is thrown.  If the two versions differ but are
   // compatible and the loader cannot determine which is newer (e.g., the only changes are renames),
   // the existing schema will be preferred.  Note that in any case, the loader will end up keeping
