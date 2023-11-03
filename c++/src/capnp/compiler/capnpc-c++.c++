@@ -524,7 +524,7 @@ private:
         const char* listType = "List";
         auto list = type.asList();
         if (list.getElementType().which() == schema::Type::ANY_POINTER) {
-          KJ_IF_MAYBE(param, list.getElementType().getBrandParameter()) {
+          KJ_IF_SOME(param, list.getElementType().getBrandParameter()) {
             listType = "TypedAnyList";
           }
         }
@@ -1694,7 +1694,7 @@ private:
             COND(shouldIncludeArrayInitializer,
               "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
             COND(shouldIncludeCheckedArrayInitializer,
-              "  template<typename U = ", elementReaderType, "> inline void set", titleCase, "(::kj::ArrayPtr<const typename std::enable_if<::capnp::EnableIfReader<U>::value, typename U::Reader>::type> value);\n"),
+              "  template<typename U = ", elementReaderType, ", typename = typename U::Reader> inline void set", titleCase, "(::kj::ArrayPtr<const typename U::Reader> value);\n"),
             COND(shouldIncludeStructInit,
               COND(shouldTemplatizeInit,
                 "  template <typename T_>\n"
@@ -1765,7 +1765,7 @@ private:
               "}\n"),
             COND(shouldIncludeCheckedArrayInitializer,
               templateContext.allDecls(),
-              "template<typename U> inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const typename std::enable_if<::capnp::EnableIfReader<U>::value, typename U::Reader>::type> value) {\n",
+              "template<typename U, typename> inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const typename U::Reader> value) {\n",
               unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), value);\n"

@@ -32,7 +32,6 @@
 #include <kj/string.h>
 #include <kj/string-tree.h>
 #include <kj/hash.h>
-#include <type_traits>
 
 CAPNP_BEGIN_HEADER
 
@@ -313,12 +312,6 @@ inline constexpr uint sizeInWords() {
   return unbound((upgradeBound<uint>(_::structSize<T>().data) +
       _::structSize<T>().pointers * WORDS_PER_POINTER) / WORDS);
 }
-
-template<class, class = void>
-struct EnableIfReader : std::false_type {};
-
-template<class T>
-struct EnableIfReader<T, std::void_t<typename T::Reader>> : std::true_type { };
 
 }  // namespace capnp
 
