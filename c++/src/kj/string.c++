@@ -26,6 +26,9 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
+#if !defined(_WIN32)
+#include <string.h>
+#endif
 
 namespace kj {
 
@@ -647,10 +650,15 @@ Maybe<size_t> StringPtr::find(const StringPtr& other) const {
     return kj::none;
   }
 
+#if !defined(_WIN32)
+  void* found = memmem(begin(), size(), other.begin(), other.size());
+  if (found == nullptr) {
+    return kj::none;
+  } else {
+    return static_cast<char*>(found)-begin();
+  }
+#else
   // TODO(perf) This is O(len(this)*len(other)), which is very slow on big strings.
-  //
-  // On platforms that support memmem, we should use memmem since memmem has all kinds of
-  // performance hacks in addition to linear runtime.
   //
   // On platforms that don't support memem, we should implement the Two-Way String-Matching
   // algorithm with linear performance.  The Two-Way String-Matching algorithm is described in
@@ -672,6 +680,7 @@ Maybe<size_t> StringPtr::find(const StringPtr& other) const {
   }
 
   return kj::none;
+#endif
 }
 
 }  // namespace kj
