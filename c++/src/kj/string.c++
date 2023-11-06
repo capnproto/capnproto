@@ -26,6 +26,9 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
+#if !defined(_WIN32)
+#include <string.h>
+#endif
 
 namespace kj {
 
@@ -634,5 +637,50 @@ template <> float StringPtr::parseAs<float>() const { return _::parseDouble(*thi
 
 template <> Maybe<double> StringPtr::tryParseAs<double>() const { return _::tryParseDouble(*this); }
 template <> Maybe<float> StringPtr::tryParseAs<float>() const { return _::tryParseDouble(*this); }
+
+Maybe<size_t> StringPtr::find(const StringPtr& other) const {
+  if (other.size() == 0) {
+    return size_t(0);
+  }
+  if (size() == 0) {
+    return kj::none;
+  }
+  if (other.size() > size()) {
+    // We won't find the entirety of other if other is longer than this.
+    return kj::none;
+  }
+
+#if !defined(_WIN32)
+  void* found = memmem(begin(), size(), other.begin(), other.size());
+  if (found == nullptr) {
+    return kj::none;
+  } else {
+    return static_cast<char*>(found)-begin();
+  }
+#else
+  // TODO(perf) This is O(len(this)*len(other)), which is very slow on big strings.
+  //
+  // On platforms that don't support memem, we should implement the Two-Way String-Matching
+  // algorithm with linear performance.  The Two-Way String-Matching algorithm is described in
+  // Crochemore and Perrin's CACM paper (Crochemore M., Perrin D., 1991, Two-way
+  // string-matching, Journal of the ACM 38(3):651-675).
+  //
+  // * A scan of the original paper can be found at
+  //   https://monge.univ-mlv.fr/~mac/Articles-PDF/CP-1991-jacm.pdf.
+  //
+  // * I find Python's implementation notes much easier to understand than the original paoer.
+  //   https://github.com/python/cpython/blob/main/Objects/stringlib/stringlib_find_two_way_notes.txt
+  //
+  // * https://www-igm.univ-mlv.fr/~lecroq/string/node26.html#SECTION00260 has a description of
+  //   the algorithm with some C code.
+  for (size_t i = 0; i + other.size() <= size(); ++i) {
+    if (slice(i).startsWith(other)) {
+      return i;
+    }
+  }
+
+  return kj::none;
+#endif
+}
 
 }  // namespace kj

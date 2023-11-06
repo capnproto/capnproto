@@ -385,6 +385,56 @@ KJ_TEST("ConstString") {
   KJ_EXPECT(theString == "it's a const string!");
 }
 
+KJ_TEST("StringPtr find") {
+  // Empty string doesn't find anything
+  StringPtr empty("");
+  KJ_EXPECT(empty.find("") == 0);
+  KJ_EXPECT(empty.find("foo") == kj::none);
+
+  StringPtr foobar("foobar"_kj);
+  KJ_EXPECT(foobar.find("") == 0);
+  KJ_EXPECT(foobar.find("baz") == kj::none);
+  KJ_EXPECT(foobar.find("foobar") == 0);
+  KJ_EXPECT(foobar.find("f") == 0);
+  KJ_EXPECT(foobar.find("oobar") == 1);
+  KJ_EXPECT(foobar.find("ar") == 4);
+  KJ_EXPECT(foobar.find("o") == 1);
+  KJ_EXPECT(foobar.find("oo") == 1);
+  KJ_EXPECT(foobar.find("r") == 5);
+  KJ_EXPECT(foobar.find("foobar!") == kj::none);
+
+  // Self pointers shouldn't cause issues, but it's worth testing.
+  KJ_EXPECT(foobar.find(foobar) == 0);
+  KJ_EXPECT(foobar.find(foobar.slice(1)) == 1);
+  KJ_EXPECT(foobar.slice(1).find(foobar.slice(1)) == 0);
+  KJ_EXPECT(foobar.slice(2).find(foobar.slice(1)) == kj::none);
+}
+
+KJ_TEST("StringPtr contains") {
+  // Empty string doesn't find anything
+  StringPtr empty("");
+  KJ_EXPECT(empty.contains("") == true);
+  KJ_EXPECT(empty.contains("foo") == false);
+
+  StringPtr foobar("foobar"_kj);
+  KJ_EXPECT(foobar.contains("") == true);
+  KJ_EXPECT(foobar.contains("baz") == false);
+  KJ_EXPECT(foobar.contains("foobar") == true);
+  KJ_EXPECT(foobar.contains("f") == true);
+  KJ_EXPECT(foobar.contains("oobar") == true);
+  KJ_EXPECT(foobar.contains("ar") == true);
+  KJ_EXPECT(foobar.contains("o") == true);
+  KJ_EXPECT(foobar.contains("oo") == true);
+  KJ_EXPECT(foobar.contains("r") == true);
+  KJ_EXPECT(foobar.contains("foobar!") == false);
+
+  // Self pointers shouldn't cause issues, but it's worth testing.
+  KJ_EXPECT(foobar.contains(foobar) == true);
+  KJ_EXPECT(foobar.contains(foobar.slice(1)) == true);
+  KJ_EXPECT(foobar.slice(1).contains(foobar.slice(1)) == true);
+  KJ_EXPECT(foobar.slice(2).contains(foobar.slice(1)) == false);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
