@@ -37,31 +37,6 @@
 namespace kj {
 namespace _ {  // private
 
-bool hasSubstring(StringPtr haystack, StringPtr needle) {
-  if (needle.size() <= haystack.size()) {
-    // Boyer Moore Horspool wins https://quick-bench.com/q/RiKdKduhdLb6x_DfS1fHaksqwdQ
-    // https://quick-bench.com/q/KV8irwXrkvsNMbNpP8ENR_tBEPY but libc++ only has default_searcher
-    // which performs *drastically worse* than the naiive algorithm (seriously - why even bother?).
-    // Hell, doing a query for an embedded null & dispatching to strstr is still cheaper & only
-    // marginally slower than the purely naiive implementation.
-
-#if !defined(_WIN32)
-    return memmem(haystack.begin(), haystack.size(), needle.begin(), needle.size()) != nullptr;
-#else
-    // TODO(perf): This is not the best algorithm for substring matching. strstr can't be used
-    //   because this is supposed to be safe to call on strings with embedded nulls.
-    // Amusingly this naiive algorithm some times outperforms std::default_searcher, even if we need
-    // to double-check first if the needle has an embedded null (indicating std::search ).
-    for (size_t i = 0; i <= haystack.size() - needle.size(); i++) {
-      if (haystack.slice(i).startsWith(needle)) {
-        return true;
-      }
-    }
-#endif
-  }
-  return false;
-}
-
 LogExpectation::LogExpectation(LogSeverity severity, StringPtr substring)
     : severity(severity), substring(substring), seen(false) {}
 LogExpectation::~LogExpectation() {
@@ -74,7 +49,7 @@ void LogExpectation::logMessage(
     LogSeverity severity, const char* file, int line, int contextDepth,
     String&& text) {
   if (!seen && severity == this->severity) {
-    if (hasSubstring(text, substring)) {
+    if (text.contains(substring)) {
       // Match. Ignore it.
       seen = true;
       return;
@@ -103,7 +78,7 @@ public:
       }
     }
     KJ_IF_SOME(expectedSubstring, message) {
-      if (!hasSubstring(exception.getDescription(), expectedSubstring)) {
+      if (!exception.getDescription().contains(expectedSubstring)) {
         KJ_LOG(ERROR, "threw exception with wrong message", exception, expectedSubstring);
         _exit(1);
       }

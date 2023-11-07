@@ -862,7 +862,7 @@ KJ_TEST("make sure contended mutex warns") {
     void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                     String&& text) override {
       if (!seen && severity == this->severity) {
-        if (_::hasSubstring(text, substring)) {
+        if (text.contains(substring)) {
           // Match. Ignore it.
           seen = true;
           return;

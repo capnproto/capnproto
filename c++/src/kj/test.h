@@ -107,7 +107,7 @@ private:
 #define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
     KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
-      KJ_INDIRECT_EXPAND(KJ_EXPECT, (::kj::_::hasSubstring(e.getDescription(), message), \
+      KJ_INDIRECT_EXPAND(KJ_EXPECT, (e.getDescription().contains(message), \
           "exception description didn't contain expected substring", e, __VA_ARGS__)); \
     } else { \
       KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
@@ -127,7 +127,7 @@ private:
 #define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
     KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { (void)({code;}); })) { \
-      KJ_EXPECT(::kj::_::hasSubstring(e.getDescription(), message), \
+      KJ_EXPECT(e.getDescription().contains(message), \
           "exception description didn't contain expected substring", e, ##__VA_ARGS__); \
     } else { \
       KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
@@ -159,8 +159,6 @@ private:
 // =======================================================================================
 
 namespace _ {  // private
-
-bool hasSubstring(kj::StringPtr haystack, kj::StringPtr needle);
 
 bool expectExit(Maybe<int> statusCode, FunctionParam<void()> code) noexcept;
 // Expects that the given code will exit with a given statusCode.
