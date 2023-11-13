@@ -738,12 +738,12 @@ void expectInvalidCert(kj::StringPtr hostname, TlsCertificate cert,
   clientPromise.then([](kj::Own<kj::AsyncOutputStream>) {
     KJ_FAIL_EXPECT("expected exception");
   }, [message, altMessage](kj::Exception&& e) {
-    if (kj::_::hasSubstring(e.getDescription(), message)) {
+    if (e.getDescription().contains(message)) {
       return;
     }
 
     KJ_IF_SOME(a, altMessage) {
-      if (kj::_::hasSubstring(e.getDescription(), a)) {
+      if (e.getDescription().contains(a)) {
         return;
       }
     }
