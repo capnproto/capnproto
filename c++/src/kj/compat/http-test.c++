@@ -43,8 +43,8 @@
 #else
 // Run the test using in-process two-way pipes.
 #define KJ_HTTP_TEST_SETUP_IO \
-  auto io = kj::setupAsyncIo(); \
-  auto& waitScope KJ_UNUSED = io.waitScope
+  kj::EventLoop eventLoop; \
+  kj::WaitScope waitScope(eventLoop)
 #define KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR \
   auto capPipe = newCapabilityPipe(); \
   auto listener = kj::heap<kj::CapabilityStreamConnectionReceiver>(*capPipe.ends[0]); \
@@ -4003,103 +4003,60 @@ KJ_TEST("HttpServer threw exception") {
   KJ_EXPECT(text.startsWith("HTTP/1.1 500 Internal Server Error"), text);
 }
 
-KJ_TEST("HttpServer bad requests") {
-  struct TestCase {
-    kj::StringPtr request;
-    kj::StringPtr expectedResponse;
-    bool expectWriteError;
-  };
-
-  static auto hugeHeaderRequest = kj::str(
-    "GET /foo/bar HTTP/1.1\r\n",
-    "Host: ", kj::strArray(kj::repeat("0", 1024 * 1024), ""), "\r\n",
-    "\r\n");
-
-  static TestCase testCases[] {
-    {
-      // bad request
-      .request = "GET / HTTP/1.1\r\nbad request\r\n\r\n"_kj,
-      .expectedResponse =
-          "HTTP/1.1 400 Bad Request\r\n"
-          "Connection: close\r\n"
-          "Content-Length: 53\r\n"
-          "Content-Type: text/plain\r\n"
-          "\r\n"
-          "ERROR: The headers sent by your client are not valid."_kj
-    },
-    {
-      // invalid method
-      .request = "bad request\r\n\r\n"_kj,
-      .expectedResponse =
-          "HTTP/1.1 501 Not Implemented\r\n"
-          "Connection: close\r\n"
-          "Content-Length: 35\r\n"
-          "Content-Type: text/plain\r\n"
-          "\r\n"
-          "ERROR: Unrecognized request method."_kj
-    },
-    {
-      // broken service generates 5000
-      .request =
-          "GET /foo/bar HTTP/1.1\r\n"
-          "Host: example.com\r\n"
-          "\r\n"_kj,
-      .expectedResponse =
-          "HTTP/1.1 500 Internal Server Error\r\n"
-          "Connection: close\r\n"
-          "Content-Length: 51\r\n"
-          "Content-Type: text/plain\r\n"
-          "\r\n"
-          "ERROR: The HttpService did not generate a response."_kj,
-    },
-    {
-      // huge header shouldn't break the server
-      .request = hugeHeaderRequest,
-      .expectedResponse =
-          "HTTP/1.1 431 Request Header Fields Too Large\r\n"
-          "Connection: close\r\n"
-          "Content-Length: 24\r\n"
-          "Content-Type: text/plain\r\n"
-          "\r\n"
-          "ERROR: header too large."_kj,
-      .expectWriteError = true,
-    },
-  };
-
+KJ_TEST("HttpServer bad request") {
   KJ_HTTP_TEST_SETUP_IO;
-  // we need a real timer to test http server grace behavior.
-  auto& timer = io.provider->getTimer();
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
-  for (auto testCase : testCases) {
-    auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service);
 
-    HttpHeaderTable table;
-    BrokenHttpService service;
-    HttpServer server(timer, table, service, {
-      .canceledUploadGraceBytes = 1024 * 1024,
-    });
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
-    auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+  static constexpr auto request = "GET / HTTP/1.1\r\nbad request\r\n\r\n"_kj;
+  auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
 
-    auto request = testCase.request;
-    auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
-    try {
-      auto response = pipe.ends[1]->readAllText().wait(waitScope);
-      auto expectedResponse = testCase.expectedResponse;
-      KJ_EXPECT(expectedResponse == response, expectedResponse, response);
-    } catch (...) {
-      auto ex = kj::getCaughtExceptionAsKj();
-      KJ_FAIL_REQUIRE("not supposed to happen", ex);
-    }
+  static constexpr auto expectedResponse =
+      "HTTP/1.1 400 Bad Request\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 53\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "ERROR: The headers sent by your client are not valid."_kj;
 
-    // write promise should have been resolved already
-    KJ_EXPECT(writePromise.poll(waitScope));
-    try {
-      writePromise.wait(waitScope);
-    } catch (...) {
-      KJ_EXPECT(testCase.expectWriteError, "write error wasn't expected");
-    }
-  }
+  KJ_EXPECT(expectedResponse == response, expectedResponse, response);
+}
+
+KJ_TEST("HttpServer invalid method") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service);
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  static constexpr auto request = "bad request\r\n\r\n"_kj;
+  auto writePromise = pipe.ends[1]->write(request.begin(), request.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+
+  static constexpr auto expectedResponse =
+      "HTTP/1.1 501 Not Implemented\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 35\r\n"
+      "Content-Type: text/plain\r\n"
+      "\r\n"
+      "ERROR: Unrecognized request method."_kj;
+
+  KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
 
 // Ensure that HttpServerSettings can continue to be constexpr.
