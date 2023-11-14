@@ -484,8 +484,8 @@ public:
     main = {};
   }
 
-  void switchToFiber();
-  void switchToMain();
+  KJ_NOINLINE void switchToFiber();
+  KJ_NOINLINE void switchToMain();
 
   void trace(TraceBuilder& builder) {
     // TODO(someday): Trace through fiber stack? Can it be done???
@@ -511,6 +511,7 @@ private:
 #endif
 
   [[noreturn]] void run();
+  KJ_NOINLINE void runOne();
 
   bool isReset() { return main == nullptr; }
 };
@@ -1498,21 +1499,34 @@ struct FiberStack::StartRoutine {
 void FiberStack::run() {
   // Loop forever so that the fiber can be reused.
   for (;;) {
-    KJ_SWITCH_ONEOF(main) {
-      KJ_CASE_ONEOF(event, FiberBase*) {
-        event->run();
-      }
-      KJ_CASE_ONEOF(func, SynchronousFunc*) {
-        KJ_IF_SOME(exception, kj::runCatchingExceptions(func->func)) {
-          func->exception.emplace(kj::mv(exception));
-        }
-      }
-    }
+    // Run one fiber assignment. Note that the fiber remains on a specific thread for the duration
+    // of this call.
+    runOne();
 
     // Wait for the fiber to be used again. Note the fiber might simply be destroyed without this
     // ever returning. That's OK because we don't have any nontrivial destructors on the stack
     // at this point.
     switchToMain();
+
+    // WARNING: We may have switched threads at this point. Clang is known to cache the location
+    // of thread_locals with the assumption that a particular stack frame cannot switch threads.
+    // Therefore, it's important that we do not access any thread_locals in this function nor
+    // anything that could be inlined into this function. Hence why `runOne()` is marked noinline.
+    // (Luckily, we do not need to worry about the caller since this function is marked
+    // [[noreturn]]).
+  }
+}
+
+void FiberStack::runOne() {
+  KJ_SWITCH_ONEOF(main) {
+    KJ_CASE_ONEOF(event, FiberBase*) {
+      event->run();
+    }
+    KJ_CASE_ONEOF(func, SynchronousFunc*) {
+      KJ_IF_SOME(exception, kj::runCatchingExceptions(func->func)) {
+        func->exception.emplace(kj::mv(exception));
+      }
+    }
   }
 }
 
