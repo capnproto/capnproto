@@ -131,11 +131,10 @@ public:
     text += "recoverable exception: ";
     auto what = str(exception);
     // Discard the stack trace.
-    const char* end = strstr(what.cStr(), "\nstack: ");
-    if (end == nullptr) {
-      text += what.cStr();
+    KJ_IF_SOME(end, what.find("\nstack: ")) {
+      text.append(what.cStr(), what.cStr()+end);
     } else {
-      text.append(what.cStr(), end);
+      text += what.cStr();
     }
     text += '\n';
     flush();
@@ -145,11 +144,10 @@ public:
     text += "fatal exception: ";
     auto what = str(exception);
     // Discard the stack trace.
-    const char* end = strstr(what.cStr(), "\nstack: ");
-    if (end == nullptr) {
-      text += what.cStr();
+    KJ_IF_SOME(end, what.find("\nstack: ")) {
+      text.append(what.cStr(), what.cStr()+end);
     } else {
-      text.append(what.cStr(), end);
+      text += what.cStr();
     }
     text += '\n';
     flush();
