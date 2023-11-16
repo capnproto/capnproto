@@ -114,7 +114,7 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
       // `addr` was resolved from `localhost` and may contain multiple addresses, but
       // result.peerIdentity tells us the specific address that was used. So it should be one
       // of the ones on the list, but only one.
-      KJ_EXPECT(strstr(addr->toString().cStr(), id->getAddress().toString().cStr()) != nullptr);
+      KJ_EXPECT(addr->toString().contains(id->getAddress().toString()));
       KJ_EXPECT(id->getAddress().toString().findFirst(',') == nullptr);
 
       client = kj::mv(result.stream);
