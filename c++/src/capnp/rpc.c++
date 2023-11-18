@@ -370,7 +370,7 @@ public:
     paf.promise = paf.promise.attach(kj::addRef(*questionRef));
 
     {
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = connection.get<Connected>().vatConn->newOutgoingMessage(
           objectId.targetSize().wordCount + messageSizeHint<rpc::Bootstrap>());
 
       auto builder = message->getBody().initAs<rpc::Message>().initBootstrap();
@@ -421,9 +421,12 @@ public:
     // all future calls on this connection.
     networkException.addTraceHere();
 
+    // The messageLoop must be canceled here, because the Connected struct is destroyed below.
+    this->connection.get<Connected>().canceler.cancel(networkException);
+
     // Set our connection state to Disconnected now so that no one tries to write any messages to
-    // it in their destructors.
-    auto dyingConnection = kj::mv(connection.get<Connected>());
+    // it in their destructors. The VatNetworkBase::Connection and Canceler will be destroyed.
+    auto dyingVatConn = kj::mv(connection.get<Connected>().vatConn);
     connection.init<Disconnected>(kj::cp(networkException));
 
     KJ_IF_SOME(newException, kj::runCatchingExceptions([&]() {
@@ -493,15 +496,15 @@ public:
 
     // Send an abort message, but ignore failure.
     kj::runCatchingExceptions([&]() {
-      auto message = dyingConnection->newOutgoingMessage(
+      auto message = dyingVatConn->newOutgoingMessage(
           messageSizeHint<void>() + exceptionSizeHint(exception));
       fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
       message->send();
     });
 
     // Indicate disconnect.
-    auto shutdownPromise = dyingConnection->shutdown()
-        .attach(kj::mv(dyingConnection))
+    auto shutdownPromise = dyingVatConn->shutdown()
+        .attach(kj::mv(dyingVatConn))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
               [this, origException = kj::mv(exception)](kj::Exception&& shutdownException) -> kj::Promise<void> {
           // Don't report disconnects as an error.
@@ -522,7 +525,6 @@ public:
           return kj::mv(shutdownException);
         });
     disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
-    canceler.cancel(networkException);
   }
 
   void setFlowLimit(size_t words) {
@@ -672,16 +674,16 @@ private:
   BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
-  typedef kj::Own<VatNetworkBase::Connection> Connected;
+  typedef struct {
+    kj::Own<VatNetworkBase::Connection> vatConn;
+    // Will be canceled if and when `connection` is changed from `Connected` to `Disconnected`.
+    kj::Canceler canceler;
+  } Connected;
+
   typedef kj::Exception Disconnected;
   kj::OneOf<Connected, Disconnected> connection;
   // Once the connection has failed, we drop it and replace it with an exception, which will be
   // thrown from all further calls.
-
-  kj::Canceler canceler;
-  // Will be canceled if and when `connection` is changed from `Connected` to `Disconnected`.
-  // TODO(cleanup): `Connected` should be a struct that contains the connection and the Canceler,
-  //   but that's more refactoring than I want to do right now.
 
   kj::Own<kj::PromiseFulfiller<DisconnectInfo>> disconnectFulfiller;
 
@@ -797,7 +799,7 @@ private:
       }
 
       auto request = kj::heap<RpcRequest>(
-          *connectionState, *connectionState->connection.get<Connected>(),
+          *connectionState, *connectionState->connection.get<Connected>().vatConn,
           sizeHint, kj::addRef(*this));
       auto callBuilder = request->getCall();
 
@@ -862,7 +864,7 @@ private:
 
         // Send a message releasing our remote references.
         if (remoteRefcount > 0 && connectionState->connection.is<Connected>()) {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+          auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
               messageSizeHint<rpc::Release>());
           rpc::Release::Builder builder = message->getBody().initAs<rpc::Message>().initRelease();
           builder.setId(importId);
@@ -1205,7 +1207,7 @@ private:
         // calls to go directly to the local capability, so we need to set a local embargo and send
         // a `Disembargo` to echo through the peer.
 
-        auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+        auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
             messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
 
         auto disembargo = message->getBody().initAs<rpc::Message>().initDisembargo();
@@ -1404,7 +1406,7 @@ private:
       }
 
       // OK, we have to send a `Resolve` message.
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = connection.get<Connected>().vatConn->newOutgoingMessage(
           messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
@@ -1416,7 +1418,7 @@ private:
       return kj::READY_NOW;
     }, [this,exportId](kj::Exception&& exception) {
       // send error resolution
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = connection.get<Connected>().vatConn->newOutgoingMessage(
           messageSizeHint<rpc::Resolve>() + exceptionSizeHint(exception) + 8);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
@@ -1667,7 +1669,7 @@ private:
         // Send the "Finish" message (if the connection is not already broken).
         if (connectionState->connection.is<Connected>() && !question.skipFinish) {
           KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
-            auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+            auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
                 messageSizeHint<rpc::Finish>());
             auto builder = message->getBody().getAs<rpc::Message>().initFinish();
             builder.setQuestionId(id);
@@ -1988,7 +1990,7 @@ private:
           flow = f;
         } else {
           flow = target->flowController.emplace(
-              connectionState->connection.get<Connected>()->newStream());
+              connectionState->connection.get<Connected>().vatConn->newStream());
         }
         flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
       })) {
@@ -2405,7 +2407,7 @@ private:
           // was used (in which case the caller doesn't care to receive a `Return`).
           bool shouldFreePipeline = true;
           if (connectionState->connection.is<Connected>() && !hints.onlyPromisePipeline) {
-            auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+            auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
                 messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
             auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
@@ -2509,7 +2511,7 @@ private:
       KJ_ASSERT(!hints.onlyPromisePipeline);
       if (isFirstResponder()) {
         if (connectionState->connection.is<Connected>()) {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+          auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
               messageSizeHint<rpc::Return>() + exceptionSizeHint(exception));
           auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
@@ -2536,7 +2538,7 @@ private:
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
       if (isFirstResponder()) {
-        auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+        auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
             messageSizeHint<rpc::Return>());
         auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
@@ -2578,7 +2580,7 @@ private:
         if (redirectResults || !connectionState->connection.is<Connected>()) {
           response = kj::refcounted<LocallyRedirectedRpcResponse>(sizeHint);
         } else {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+          auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
               firstSegmentSize(sizeHint, messageSizeHint<rpc::Return>() +
                                sizeInWords<rpc::Payload>()));
           returnMessage = message->getBody().initAs<rpc::Message>().initReturn();
@@ -2618,7 +2620,7 @@ private:
         KJ_IF_SOME(tailInfo, kj::downcast<RpcRequest>(*request).tailSend()) {
           if (isFirstResponder()) {
             if (connectionState->connection.is<Connected>()) {
-              auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+              auto message = connectionState->connection.get<Connected>().vatConn->newOutgoingMessage(
                   messageSizeHint<rpc::Return>());
               auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
@@ -2766,7 +2768,10 @@ private:
       });
     }
 
-    return canceler.wrap(connection.get<Connected>()->receiveIncomingMessage()).then(
+    auto& vatConn = connection.get<Connected>().vatConn;
+    auto& canceler = connection.get<Connected>().canceler;
+
+    return canceler.wrap(vatConn->receiveIncomingMessage()).then(
         [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) {
       KJ_IF_SOME(m, message) {
         handleMessage(kj::mv(m));
@@ -2842,7 +2847,7 @@ private:
 
       default: {
         if (connection.is<Connected>()) {
-          auto message = connection.get<Connected>()->newOutgoingMessage(
+          auto message = connection.get<Connected>().vatConn->newOutgoingMessage(
               firstSegmentSize(reader.totalSize(), messageSizeHint<void>()));
           message->getBody().initAs<rpc::Message>().setUnimplemented(reader);
           message->send();
@@ -2929,7 +2934,7 @@ private:
       return;
     }
 
-    VatNetworkBase::Connection& conn = *connection.get<Connected>();
+    VatNetworkBase::Connection& conn = *connection.get<Connected>().vatConn;
     auto response = conn.newOutgoingMessage(
         messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
 
@@ -3482,7 +3487,7 @@ private:
 
           RpcClient& downcasted = kj::downcast<RpcClient>(*target);
 
-          auto message = connection.get<Connected>()->newOutgoingMessage(
+          auto message = connection.get<Connected>().vatConn->newOutgoingMessage(
               messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
           auto builder = message->getBody().initAs<rpc::Message>().initDisembargo();
 
