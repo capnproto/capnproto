@@ -40,7 +40,7 @@ namespace {
 
 KJ_TEST("getStackTrace() uses symbolizer override") {
   auto trace = getStackTrace();
-  KJ_ASSERT(strstr(trace.cStr(), "TEST_SYMBOLIZER") != nullptr, trace);
+  KJ_ASSERT(trace.contains("TEST_SYMBOLIZER"), trace);
 }
 
 }  // namespace

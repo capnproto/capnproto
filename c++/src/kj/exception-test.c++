@@ -197,7 +197,7 @@ KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   auto trace = testStackTrace();
   auto wrong = kj::str("exception-test.c++:", __LINE__);
 
-  KJ_ASSERT(strstr(trace.cStr(), wrong.cStr()) == nullptr, trace, wrong);
+  KJ_ASSERT(!trace.contains(wrong), trace, wrong);
 }
 
 KJ_TEST("InFlightExceptionIterator works") {
