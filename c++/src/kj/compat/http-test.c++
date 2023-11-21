@@ -2530,6 +2530,8 @@ const byte WEBSOCKET_SEND_MESSAGE[] =
     { 0x81, 0x83, 12, 34, 56, 78, 'b'^12, 'a'^34, 'r'^56 };
 const byte WEBSOCKET_REPLY_MESSAGE[] =
     { 0x81, 0x09, 'r','e','p','l','y',':','b','a','r' };
+const byte WEBSOCKET_SEND_HI[] =
+    { 0x81, 0x82, 12, 34, 56, 78, 'H'^12, 'i'^34 };
 const byte WEBSOCKET_SEND_CLOSE[] =
     { 0x88, 0x85, 12, 34, 56, 78, 0x12^12, 0x34^34, 'q'^56, 'u'^78, 'x'^12 };
 const byte WEBSOCKET_REPLY_CLOSE[] =
@@ -2543,6 +2545,8 @@ const byte WEBSOCKET_SEND_COMPRESSED_MESSAGE[] =
     { 0xc1, 0x87, 12, 34, 56, 78, 0xf2^12, 0x48^34, 0xcd^56, 0xc9^78, 0xc9^12, 0x07^34, 0x00^56 };
 const byte WEBSOCKET_SEND_COMPRESSED_MESSAGE_REUSE_CTX[] =
     { 0xc1, 0x85, 12, 34, 56, 78, 0xf2^12, 0x00^34, 0x11^56, 0x00^78, 0x00^12};
+const byte WEBSOCKET_COMPRESSED_HI[] =
+    { 0xc1, 0x84, 12, 34, 56, 78, 0xf2^12, 0xc8^34, 0x04^56, 0x00^78 };
 // See same compression example, but where `client_no_context_takeover` is used (saves 2 bytes).
 const byte WEBSOCKET_DEFLATE_NO_COMPRESSION_MESSAGE[] =
     { 0xc1, 0x0b, 0x00, 0x05, 0x00, 0xfa, 0xff, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x00 };
@@ -2560,6 +2564,8 @@ const byte WEBSOCKET_EMPTY_COMPRESSED_MESSAGE[] =
     { 0xc1, 0x01, 0x00 };
 const byte WEBSOCKET_EMPTY_SEND_COMPRESSED_MESSAGE[] =
     { 0xc1, 0x81, 12, 34, 56, 78, 0x00^12 };
+const byte WEBSOCKET_SEND_COMPRESSED_HELLO_REUSE_CTX[] =
+    { 0xc1, 0x85, 12, 34, 56, 78, 0xf2^12, 0x00^34, 0x51^56, 0x00^78, 0x00^12};
 #endif // KJ_HAS_ZLIB
 
 template <size_t s>
@@ -2626,6 +2632,58 @@ void testWebSocketTwoMessageCompression(kj::WaitScope& waitScope, HttpHeaderTabl
   }
   ws->send(kj::StringPtr("Hello")).wait(waitScope);
 
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "Hello");
+  }
+  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+
+  ws->close(0x1234, "qux").wait(waitScope);
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<WebSocket::Close>());
+    KJ_EXPECT(message.get<WebSocket::Close>().code == 0x1235);
+    KJ_EXPECT(message.get<WebSocket::Close>().reason == "close-reply:qux");
+  }
+}
+#endif // KJ_HAS_ZLIB
+
+#if KJ_HAS_ZLIB
+void testWebSocketThreeMessageCompression(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
+                                          kj::HttpHeaderId extHeader, kj::StringPtr extensions,
+                                          HttpClient& client) {
+  // The first message we receive is compressed, and so it our reply.
+  // The second message we receive is not compressed, but our response to it is.
+  // The third message is the same as the first (from the application code's perspective).
+
+  kj::HttpHeaders headers(headerTable);
+  headers.set(extHeader, extensions);
+  auto response = client.openWebSocket("/websocket", headers).wait(waitScope);
+
+  KJ_EXPECT(response.statusCode == 101);
+  KJ_EXPECT(response.statusText == "Switching Protocols", response.statusText);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers->get(extHeader)).startsWith("permessage-deflate"));
+  KJ_ASSERT(response.webSocketOrBody.is<kj::Own<WebSocket>>());
+  auto ws = kj::mv(response.webSocketOrBody.get<kj::Own<WebSocket>>());
+
+  // Compressed message.
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "Hello");
+  }
+  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+
+  // The message we receive is not compressed, but the one we send is.
+  {
+    auto message = ws->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "Hi");
+  }
+  ws->send(kj::StringPtr("Hi")).wait(waitScope);
+
+  // Compressed message.
   {
     auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
@@ -3447,6 +3505,47 @@ KJ_TEST("HttpClient WebSocket Default Compression") {
   serverTask.wait(waitScope);
 }
 #endif // KJ_HAS_ZLIB
+
+#if KJ_HAS_ZLIB
+KJ_TEST("HttpClient WebSocket negotiate compression and interleave it") {
+  // We will tell the server we
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
+
+  auto serverTask = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
+      // Server sends uncompressed "Hi" -- client responds with compressed "Hi".
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_SEND_HI); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_COMPRESSED_HI); })
+      // Back to compressed messages.
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_HELLO_REUSE_CTX); })
+      .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  HttpHeaderTable::Builder tableBuilder;
+  HttpHeaderId extHeader = tableBuilder.add("Sec-WebSocket-Extensions");
+  auto headerTable = tableBuilder.build();
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.webSocketCompressionMode = HttpClientSettings::MANUAL_COMPRESSION;
+
+  auto client = newHttpClient(*headerTable, *pipe.ends[0], clientSettings);
+
+  constexpr auto extensions = "permessage-deflate; server_no_context_takeover"_kj;
+  testWebSocketThreeMessageCompression(waitScope, *headerTable, extHeader, extensions, *client);
+
+  serverTask.wait(waitScope);
+}
+#endif // KJ_HAS_ZLIB
+
 
 #if KJ_HAS_ZLIB
 KJ_TEST("HttpClient WebSocket Extract Extensions") {
