@@ -3115,7 +3115,9 @@ void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaited
 
   KJ_IF_SOME(exception, result.exception) {
     // Manually extend the stack trace with the instruction address where the co_await occurred.
-    exception.addTrace(awaitedAt);
+    // Subtract 1 from the address to be consistent with `getStackTrace()` in `exception.c++` (see
+    // comment there).
+    exception.addTrace(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(awaitedAt) - 1));
 
     // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` dosen't try to
     // extend the stack trace. There's no point in extending the trace beyond the single frame we
