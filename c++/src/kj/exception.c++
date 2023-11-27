@@ -885,10 +885,8 @@ void Exception::truncateCommonTrace() {
             // If we matched more than half of the reference trace, guess that this is in fact
             // the prefix we're looking for.
             if (j > refTrace.size() / 2) {
-              // Delete the matching suffix. Also delete one non-matched entry on the assumption
-              // that both traces contain that stack frame but are simply at different points in
-              // the function.
-              traceCount -= j + 1;
+              // Delete the matching suffix.
+              traceCount -= j;
               return;
             }
           }
