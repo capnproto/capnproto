@@ -420,10 +420,18 @@ private:
     };
   }
   template <typename T, typename F>
-  static auto teeExceptionPromise(F& fulfiller) {
+  static auto teeExceptionPromise(F& fulfiller, Canceler& canceler) {
     // Returns a functor that can be passed as the second parameter to .then() to propagate the
     // exception to a given fulfiller. The functor's return type is Promise<T>.
-    return [&fulfiller](kj::Exception&& e) -> kj::Promise<T> {
+    //
+    // All use cases of this helper below are also wrapped in `canceler.wrap()`, and fulfilling
+    // `fulfiller` may cause the canceler to be canceled. It's possible the canceler will be
+    // canceled before the exception even gets a chance to propagate out of the wrapped promise,
+    // which would have the effet of replacing the original exception with a non-useful
+    // "operation canceled" exception. To avoid this, we must release the canceler before
+    // fulfilling the fulfiller.
+    return [&fulfiller, &canceler](kj::Exception&& e) -> kj::Promise<T> {
+      canceler.release();
       fulfiller.reject(kj::cp(e));
       return kj::mv(e);
     };
@@ -602,7 +610,7 @@ private:
             return pipe.pumpTo(output, amount - actual)
                 .then([actual](uint64_t actual2) { return actual + actual2; });
           }
-        }, teeExceptionPromise<uint64_t>(fulfiller)));
+        }, teeExceptionPromise<uint64_t>(fulfiller, canceler)));
       } else {
         // Pump ends mid-piece. Write the last, partial piece.
         auto n = amount - actual;
@@ -757,7 +765,9 @@ private:
                               minBytes - actual, maxBytes - actual)
               .then([actual](size_t actual2) { return actual + actual2; });
         }
-      }, teeExceptionPromise<size_t>(fulfiller)));
+        // This teeExceptionPromise can mask the original exception because it causes BlockedPumpFrom
+        // to be resolved and then destroyed which causes canceler to cancel.
+      }, teeExceptionPromise<size_t>(fulfiller, canceler)));
     }
 
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
@@ -1087,7 +1097,7 @@ private:
           // place waiting for more data.
           return actual;
         }
-      }, teeExceptionPromise<uint64_t>(fulfiller)));
+      }, teeExceptionPromise<uint64_t>(fulfiller, canceler)));
     }
 
     void shutdownWrite() override {
@@ -1218,7 +1228,7 @@ private:
           KJ_ASSERT(pumpedSoFar == amount);
           return pipe.write(reinterpret_cast<const byte*>(writeBuffer) + actual, size - actual);
         }
-      }, teeExceptionPromise<void>(fulfiller)));
+      }, teeExceptionPromise<void>(fulfiller, canceler)));
     }
 
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -1245,7 +1255,7 @@ private:
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
               return pipe.write(partial2.begin(), partial2.size());
-            }, teeExceptionPromise<void>(fulfiller)));
+            }, teeExceptionPromise<void>(fulfiller, canceler)));
             ++i;
           } else {
             // The pump ends exactly at the end of a piece, how nice.
@@ -1347,7 +1357,7 @@ private:
             KJ_ASSERT(pumpedSoFar == amount);
             return input.pumpTo(pipe, amount2 - actual);
           }
-        }, teeExceptionPromise<uint64_t>(fulfiller)));
+        }, teeExceptionPromise<uint64_t>(fulfiller, canceler)));
       });
     }
 

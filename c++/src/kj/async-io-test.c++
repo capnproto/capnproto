@@ -1473,6 +1473,33 @@ KJ_TEST("Userland pipe tryPumpFrom") {
   KJ_EXPECT(pumpPromise.wait(ws) == 3);
 }
 
+KJ_TEST("Userland pipe tryPumpFrom exception") {
+  // Check for a bug where exceptions don't propagate through tryPumpFrom() correctly.
+
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto [promise, fulfiller] = newPromiseAndFulfiller<Own<AsyncIoStream>>();
+  auto promiseStream = newPromisedStream(kj::mv(promise));
+
+  auto pipe = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe.out->tryPumpFrom(*promiseStream));
+
+  char buffer;
+  auto readPromise = pipe.in->tryRead(&buffer, 1, 1);
+
+  KJ_EXPECT(!pumpPromise.poll(ws));
+  KJ_EXPECT(!readPromise.poll(ws));
+
+  fulfiller->reject(KJ_EXCEPTION(FAILED, "foobar"));
+
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpPromise.wait(ws));
+
+  // Before the bugfix, `readPromise` would reject with the exception "disconnected: operation
+  // canceled" rather than propagate the original exception.
+  KJ_EXPECT_THROW_MESSAGE("foobar", readPromise.wait(ws));
+}
+
 KJ_TEST("Userland pipe pumpTo cancel") {
   kj::EventLoop loop;
   WaitScope ws(loop);
