@@ -520,7 +520,7 @@ public:
   //
   // `shortenPath()` can also be used as a hack to shut up the client. If shortenPath() returns
   // a promise that resolves to an exception, then the client will be notified that the capability
-  // is now broken. Assuming the client is using a correct RPC implemnetation, this should cause
+  // is now broken. Assuming the client is using a correct RPC implementation, this should cause
   // all further calls initiated by the client to this capability to immediately fail client-side,
   // sparing the server's bandwidth.
   //
