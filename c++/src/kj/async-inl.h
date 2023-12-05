@@ -150,7 +150,7 @@ class Event: private AsyncObject {
 public:
   Event(SourceLocation location);
   Event(kj::EventLoop& loop, SourceLocation location);
-  ~Event() noexcept(false);
+  ~Event() noexcept;
   KJ_DISALLOW_COPY_AND_MOVE(Event);
 
   void armDepthFirst();

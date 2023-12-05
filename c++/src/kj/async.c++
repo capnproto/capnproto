@@ -2146,7 +2146,7 @@ Event::Event(SourceLocation location)
 Event::Event(kj::EventLoop& loop, SourceLocation location)
     : loop(loop), next(nullptr), prev(nullptr), location(location) {}
 
-Event::~Event() noexcept(false) {
+Event::~Event() noexcept {  // intentionally noexcept
   live = 0;
 
   // Prevent compiler from eliding this store above. This line probably isn't needed because there
@@ -2159,6 +2159,8 @@ Event::~Event() noexcept(false) {
 
   disarm();
 
+  // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
+  // be in a use-after-free situation.
   KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
 }
 
