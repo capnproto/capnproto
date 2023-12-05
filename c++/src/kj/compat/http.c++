@@ -1665,11 +1665,20 @@ private:
   uint pendingMessageCount = 0;
   // Number of reads we have queued up.
 
-  kj::Promise<void> messageReadQueue = kj::READY_NOW;
-
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> onMessageDone;
   // Fulfill once the current message has been completely read. Unblocks reading of the next
   // message headers.
+  //
+  // Note this should be declared before `messageReadQueue`, because the promise in
+  // `messageReadQueue` may be waiting for `onMessageDone` to be fulfilled. If the whole object
+  // is torn down early, then the fulfiller ends up being deleted while a listener still exists,
+  // which causes various stack tracing for exception-handling purposes to be performed, only to
+  // be thrown away as the listener is immediately canceled thereafter. To avoid this wasted work,
+  // we want the listener to be canceled first.
+
+  kj::Promise<void> messageReadQueue = kj::READY_NOW;
+  // Resolves when all previous HTTP messages have completed, allowing the next pipelined message
+  // to be read.
 
   enum class HeaderType {
     MESSAGE,
