@@ -921,6 +921,13 @@ namespace {
 
 KJ_THREADLOCAL_PTR(ExceptionImpl) currentException = nullptr;
 
+void validateExceptionPointer(const ExceptionImpl* e) noexcept {
+  // Occasionally in production we are seeing `currentException` have the value 1. Try to figure
+  // this out...
+  KJ_ASSERT(e == nullptr || reinterpret_cast<uintptr_t>(e) >= 4096,
+      "detected bogus ExceptionImpl pointer", e);
+}
+
 }  // namespace
 
 class ExceptionImpl: public Exception, public std::exception {
@@ -932,8 +939,9 @@ public:
     // No need to copy whatBuffer since it's just to hold the return value of what().
     insertIntoCurrentExceptions();
   }
-  ~ExceptionImpl() {
+  ~ExceptionImpl() noexcept {
     // Look for ourselves in the list.
+    validateExceptionPointer(nextCurrentException);
     for (auto* ptr = &currentException; *ptr != nullptr; ptr = &(*ptr)->nextCurrentException) {
       if (*ptr == this) {
         *ptr = nextCurrentException;
@@ -943,7 +951,7 @@ public:
 
     // Possibly the ExceptionImpl was destroyed on a different thread than created it? That's
     // pretty bad, we'd better abort.
-    abort();
+    KJ_FAIL_ASSERT("ExceptionImpl not found on currentException list?");
   }
 
   const char* what() const noexcept override;
@@ -954,7 +962,9 @@ private:
 
   void insertIntoCurrentExceptions() {
     nextCurrentException = currentException;
+    validateExceptionPointer(nextCurrentException);
     currentException = this;
+    validateExceptionPointer(currentException);
   }
 
   friend class InFlightExceptionIterator;
@@ -971,9 +981,10 @@ InFlightExceptionIterator::InFlightExceptionIterator()
 Maybe<const Exception&> InFlightExceptionIterator::next() {
   if (ptr == nullptr) return kj::none;
 
-  const ExceptionImpl& result = *static_cast<const ExceptionImpl*>(ptr);
-  ptr = result.nextCurrentException;
-  return result;
+  const ExceptionImpl* result = static_cast<const ExceptionImpl*>(ptr);
+  validateExceptionPointer(result);
+  ptr = result->nextCurrentException;
+  return *result;
 }
 
 kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
