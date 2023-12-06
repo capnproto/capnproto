@@ -150,7 +150,7 @@ class Event: private AsyncObject {
 public:
   Event(SourceLocation location);
   Event(kj::EventLoop& loop, SourceLocation location);
-  ~Event() noexcept(false);
+  ~Event() noexcept;
   KJ_DISALLOW_COPY_AND_MOVE(Event);
 
   void armDepthFirst();
@@ -187,7 +187,7 @@ public:
   // Returns false if the event loop is not currently running. This ensures that promise
   // continuations don't execute except under a call to .wait().
 
-  void disarm();
+  void disarm() noexcept;
   // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
   // implicitly.)
 
@@ -1762,7 +1762,7 @@ private:
   // Sets the state to `DONE` and notifies the originating thread that this event is done. Do NOT
   // call under lock.
 
-  void sendReply();
+  void sendReply() noexcept;
   // Notifies the originating thread that this event is done, but doesn't set the state to DONE
   // yet. Do NOT call under lock.
 
@@ -1960,7 +1960,7 @@ public:
   FulfillScope(XThreadPaf** pointer);
   // Atomically nulls out *pointer and takes ownership of the pointer.
 
-  ~FulfillScope() noexcept(false);
+  ~FulfillScope() noexcept;
 
   KJ_DISALLOW_COPY_AND_MOVE(FulfillScope);
 

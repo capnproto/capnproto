@@ -1042,7 +1042,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
   }
 }
 
-void XThreadEvent::sendReply() {
+void XThreadEvent::sendReply() noexcept {
   KJ_IF_SOME(e, replyExecutor) {
     // Queue the reply.
     const EventLoop* replyLoop;
@@ -1054,12 +1054,11 @@ void XThreadEvent::sendReply() {
       } else {
         // Calling thread exited without cancelling the promise. This is UB. In fact,
         // `replyExecutor` is probably already destroyed and we are in use-after-free territory
-        // already. Better abort.
-        KJ_LOG(FATAL,
+        // already. Better abort. (sendReply() is noexcept so that this aborts.)
+        KJ_FAIL_ASSERT(
             "the thread which called kj::Executor::executeAsync() apparently exited its own "
             "event loop without canceling the cross-thread promise first; this is undefined "
             "behavior so I will crash now");
-        abort();
       }
     }
 
@@ -1227,7 +1226,7 @@ XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
     obj = nullptr;
   }
 }
-XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
+XThreadPaf::FulfillScope::~FulfillScope() noexcept {  // intentionally noexcept
   if (obj != nullptr) {
     auto lock = obj->executor.impl->state.lockExclusive();
     KJ_IF_SOME(l, lock->loop) {
@@ -1239,11 +1238,12 @@ XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
         p.wake();
       }
     } else {
-      KJ_LOG(FATAL,
+      // This will abort due to the method being `noexcept`, which is what we want because this
+      // is UB.
+      KJ_FAIL_REQUIRE(
           "the thread which called kj::newPromiseAndCrossThreadFulfiller<T>() apparently exited "
           "its own event loop without canceling the cross-thread promise first; this is "
           "undefined behavior so I will crash now");
-      abort();
     }
   }
 }
@@ -1626,8 +1626,9 @@ void FiberBase::cancel() {
     case RUNNING:
     case CANCELED:
       // Bad news.
-      KJ_LOG(FATAL, "fiber tried to cancel itself");
-      ::abort();
+      []() noexcept {
+        KJ_FAIL_ASSERT("fiber tried to cancel itself");
+      }();
       break;
 
     case FINISHED:
@@ -2146,7 +2147,7 @@ Event::Event(SourceLocation location)
 Event::Event(kj::EventLoop& loop, SourceLocation location)
     : loop(loop), next(nullptr), prev(nullptr), location(location) {}
 
-Event::~Event() noexcept(false) {
+Event::~Event() noexcept {  // intentionally noexcept
   live = 0;
 
   // Prevent compiler from eliding this store above. This line probably isn't needed because there
@@ -2159,6 +2160,8 @@ Event::~Event() noexcept(false) {
 
   disarm();
 
+  // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
+  // be in a use-after-free situation.
   KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
 }
 
@@ -2254,12 +2257,12 @@ bool Event::isNext() {
   return loop.running && loop.head == this;
 }
 
-void Event::disarm() {
+void Event::disarm() noexcept {
   if (prev != nullptr) {
     if (threadLocalEventLoop != &loop && threadLocalEventLoop != nullptr) {
-      KJ_LOG(FATAL, "Promise destroyed from a different thread than it was created in.");
-      // There's no way out of this place without UB, so abort now.
-      abort();
+      // This will crash because the method is `noexcept`. That's good because otherwise we're
+      // likely going to segfault later.
+      KJ_FAIL_ASSERT("Promise destroyed from a different thread than it was created in.");
     }
 
     if (loop.tail == &next) {
