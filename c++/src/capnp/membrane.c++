@@ -333,14 +333,19 @@ public:
       : inner(kj::mv(inner)), policy(kj::mv(policyParam)), reverse(reverse) {
     KJ_IF_SOME(r, policy->onRevoked()) {
       revocationTask = r.eagerlyEvaluate([this](kj::Exception&& exception) {
+        // Since `inner` will be overwritten here and could even be destroyed, it's important that
+        // we clear our map entry, which is keyed by `inner`'s address.
+        removeFromMap();
+        revoked = true;
         this->inner = newBrokenCap(kj::mv(exception));
       });
     }
   }
 
   ~MembraneHook() noexcept(false) {
-    auto& map = reverse ? policy->reverseWrappers : policy->wrappers;
-    map.erase(inner.get());
+    if (!revoked) {
+      removeFromMap();
+    }
   }
 
   static kj::Own<ClientHook> wrap(ClientHook& cap, MembranePolicy& policy, bool reverse) {
@@ -540,8 +545,19 @@ private:
   kj::Own<ClientHook> inner;
   kj::Own<MembranePolicy> policy;
   bool reverse;
+  bool revoked = false;
   kj::Maybe<kj::Own<ClientHook>> resolved;
   kj::Promise<void> revocationTask = nullptr;
+
+  void removeFromMap() noexcept {
+    // Remove this object from the policy's wrapper map.
+
+    auto& map = reverse ? policy->reverseWrappers : policy->wrappers;
+
+    // If this map.erase() fails, there's a good chance we have left a dangling pointer somewhere,
+    // hence this method is declared `noexcept` so that we end up crashing promptly.
+    KJ_ASSERT(map.erase(inner.get()));
+  }
 };
 
 namespace {
