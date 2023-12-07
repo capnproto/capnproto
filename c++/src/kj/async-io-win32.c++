@@ -985,7 +985,8 @@ public:
         // We always enable SO_REUSEADDR because having to take your server down for five minutes
         // before it can restart really sucks.
         int optval = 1;
-        KJ_WINSOCK(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<char*>(&optval), sizeof(optval)));
+        KJ_WINSOCK(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                              reinterpret_cast<char*>(&optval), sizeof(optval)));
 
         addr.bind(fd);
 
