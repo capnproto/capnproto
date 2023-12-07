@@ -2530,8 +2530,10 @@ const byte WEBSOCKET_SEND_MESSAGE[] =
     { 0x81, 0x83, 12, 34, 56, 78, 'b'^12, 'a'^34, 'r'^56 };
 const byte WEBSOCKET_REPLY_MESSAGE[] =
     { 0x81, 0x09, 'r','e','p','l','y',':','b','a','r' };
+#if KJ_HAS_ZLIB
 const byte WEBSOCKET_SEND_HI[] =
     { 0x81, 0x82, 12, 34, 56, 78, 'H'^12, 'i'^34 };
+#endif  // KJ_HAS_ZLIB
 const byte WEBSOCKET_SEND_CLOSE[] =
     { 0x88, 0x85, 12, 34, 56, 78, 0x12^12, 0x34^34, 'q'^56, 'u'^78, 'x'^12 };
 const byte WEBSOCKET_REPLY_CLOSE[] =
