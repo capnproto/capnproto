@@ -2648,6 +2648,15 @@ public:
         return receive(newMax);
       }
 
+      // Provide a reasonable error if a compressed frame is received without compression enabled.
+      if (isCompressed && compressionConfig == nullptr) {
+        return errorHandler.handleWebSocketProtocolError({
+          1002, kj::str(
+              "Received a WebSocket frame whose compression bit was set, but the compression "
+              "extension was not negotiated for this connection.")
+        });
+      }
+
       switch (opcode) {
         case OPCODE_CONTINUATION:
           // Shouldn't get here; handled above.
