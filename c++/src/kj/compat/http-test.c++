@@ -5643,6 +5643,44 @@ KJ_TEST("HttpClient concurrency limiting") {
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
 }
 
+KJ_TEST("HttpClientImpl connect()") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable headerTable;
+  auto client = newHttpClient(headerTable, *pipe.ends[0]);
+
+  auto req = client->connect("foo:123", HttpHeaders(headerTable), {});
+
+  char buffer[16];
+  auto readPromise = req.connection->tryRead(buffer, 16, 16);
+
+  expectRead(*pipe.ends[1], "CONNECT foo:123 HTTP/1.1\r\n\r\n").wait(waitScope);
+
+  {
+    kj::StringPtr msg = "HTTP/1.1 200 OK\r\n\r\nthis is the"_kj;
+    pipe.ends[1]->write(msg.begin(), msg.size()).wait(waitScope);
+  }
+
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  kj::Promise<void> writePromise = nullptr;
+  {
+    kj::StringPtr msg = " connection content!!"_kj;
+    writePromise = pipe.ends[1]->write(msg.begin(), msg.size());
+  }
+
+  KJ_ASSERT(readPromise.poll(waitScope));
+  KJ_ASSERT(readPromise.wait(waitScope) == 16);
+  KJ_EXPECT(kj::str(kj::ArrayPtr<char>(buffer)) == "this is the conn"_kj);
+
+  KJ_EXPECT(req.connection->tryRead(buffer, 16, 16).wait(waitScope) == 16);
+  KJ_EXPECT(kj::str(kj::ArrayPtr<char>(buffer)) == "ection content!!"_kj);
+
+  KJ_ASSERT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+}
+
 #if KJ_HTTP_TEST_USE_OS_PIPE
 // This test relies on access to the network.
 KJ_TEST("NetworkHttpClient connect impl") {
@@ -7154,9 +7192,9 @@ struct HttpRangeTestCase {
   kj::OneOf<InitializeableArray<HttpByteRange>, HttpEverythingRange, HttpUnsatisfiableRange> expected;
 
   HttpRangeTestCase(kj::StringPtr value, uint64_t contentLength) :
-    value(value), contentLength(contentLength), expected(HttpUnsatisfiableRange {}) {} 
+    value(value), contentLength(contentLength), expected(HttpUnsatisfiableRange {}) {}
   HttpRangeTestCase(kj::StringPtr value, uint64_t contentLength, HttpEverythingRange expected) :
-    value(value), contentLength(contentLength), expected(expected) {}  
+    value(value), contentLength(contentLength), expected(expected) {}
   HttpRangeTestCase(kj::StringPtr value, uint64_t contentLength, InitializeableArray<HttpByteRange> expected) :
     value(value), contentLength(contentLength), expected(kj::mv(expected)) {}
 };
@@ -7171,7 +7209,7 @@ KJ_TEST("Range header parsing") {
     {"    Bytes        =0-1"_kjc,     2, HttpEverythingRange {}},
     // Check fails with other units
     {"nibbles=0-1"_kjc,               2},
-    
+
     // ===== Interval =====
     // Check valid ranges accepted
     {"bytes=0-1"_kjc,                 8, {{0,1}}},
@@ -7191,7 +7229,7 @@ KJ_TEST("Range header parsing") {
     {"bytes=0-2,1-3"_kjc,             5, {{0,2},{1,3}}},
     // Check unsatisfiable ranges ignored
     {"bytes=1-2,7-8"_kjc,             5, {{1,2}}},
-    
+
     // ===== Prefix =====
     // Check valid ranges accepted
     {"bytes=2-"_kjc,                  8, {{2,7}}},
@@ -7201,7 +7239,7 @@ KJ_TEST("Range header parsing") {
     {"bytes=5-"_kjc,                  2},
     // Check multiple valid ranges accepted
     {"bytes=  1-  ,6-, 10-11 "_kjc,  12, {{1,11},{6,11},{10,11}}},
-    
+
     // ===== Suffix =====
     // Check valid ranges accepted
     {"bytes=-2"_kjc,                  8, {{6,7}}},
@@ -7214,7 +7252,7 @@ KJ_TEST("Range header parsing") {
     // Check unsatisfiable empty range ignored
     {"bytes=-0"_kjc,                  2},
     {"bytes=0-1,-0,2-3"_kjc,          4, {{0,1},{2,3}}},
-    
+
     // ===== Invalid =====
     // Check range with no start or end rejected
     {"bytes=-"_kjc,                   2},
@@ -7226,7 +7264,7 @@ KJ_TEST("Range header parsing") {
     {"bytes="_kjc,                    2},
     {"bytes"_kjc,                     2},
   };
-  
+
   for (auto& testCase : RANGE_TEST_CASES) {
     auto ranges = tryParseHttpRangeHeader(testCase.value, testCase.contentLength);
     KJ_SWITCH_ONEOF(testCase.expected) {
@@ -7255,7 +7293,7 @@ KJ_TEST("Range header parsing") {
             KJ_FAIL_ASSERT("Expected ", testCase.value, testCase.contentLength, "to be unsatisfiable");
           }
         }
-      } 
+      }
     }
   }
 }

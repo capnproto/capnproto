@@ -4337,6 +4337,7 @@ public:
 
       if (bytesToCopy > 0) {
         memcpy(destination, leftover.begin(), bytesToCopy);
+        leftover = nullptr;
         leftoverBackingBuffer = nullptr;
         minBytes -= bytesToCopy;
         maxBytes -= bytesToCopy;
