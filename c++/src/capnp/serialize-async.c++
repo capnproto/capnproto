@@ -34,6 +34,7 @@
 #include "serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
+#include <kj/encoding.h>
 
 namespace capnp {
 
@@ -82,6 +83,22 @@ private:
 
 kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
                                            kj::ArrayPtr<word> scratchSpace) {
+  [&]() noexcept {
+    try {
+      KJ_ASSERT(moreSizes.begin() == nullptr);
+      KJ_ASSERT(moreSizes.size() == 0);
+      KJ_ASSERT(segmentStarts.begin() == nullptr);
+      KJ_ASSERT(segmentStarts.size() == 0);
+      KJ_ASSERT(ownedSpace.begin() == nullptr);
+      KJ_ASSERT(ownedSpace.size() == 0);
+    } catch (kj::Exception& e) {
+      e.setDescription(kj::str(e.getDescription(),
+          "; already corrupted before read; raw this = ",
+          kj::encodeHex(kj::arrayPtr(this, 1).asBytes())));
+      throw;
+    }
+  }();
+
   return inputStream.tryRead(firstWord, sizeof(firstWord), sizeof(firstWord))
       .then([this,&inputStream,KJ_CPCAP(scratchSpace)](size_t n) mutable -> kj::Promise<bool> {
     if (n == 0) {
@@ -91,6 +108,23 @@ kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
       kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
       return false;
     }
+
+    [&]() noexcept {
+      try {
+        KJ_ASSERT(n == sizeof(firstWord));
+        KJ_ASSERT(moreSizes.begin() == nullptr);
+        KJ_ASSERT(moreSizes.size() == 0);
+        KJ_ASSERT(segmentStarts.begin() == nullptr);
+        KJ_ASSERT(segmentStarts.size() == 0);
+        KJ_ASSERT(ownedSpace.begin() == nullptr);
+        KJ_ASSERT(ownedSpace.size() == 0);
+      } catch (kj::Exception& e) {
+        e.setDescription(kj::str(e.getDescription(),
+            "; corrupted after read; raw this = ",
+            kj::encodeHex(kj::arrayPtr(this, 1).asBytes())));
+        throw;
+      }
+    }();
 
     return readAfterFirstWord(inputStream, scratchSpace).then([]() { return true; });
   });
