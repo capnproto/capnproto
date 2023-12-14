@@ -38,6 +38,7 @@ cc_library(
         "-Dverbose=-1",
     ] + select({
         "@platforms//os:macos": [ "-Wno-implicit-function-declaration" ],
+        "@platforms//os:linux": [ "-Wno-implicit-function-declaration" ],
         "//conditions:default": [],
     }),
     visibility = ["//visibility:public"],
