@@ -1674,7 +1674,7 @@ private:
             kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
-            "  inline ", readerType, " get", titleCase, "() const;\n",
+            "  inline ", readerType, " get", titleCase, "() const KJ_LIFETIMEBOUND;\n",
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
@@ -1723,7 +1723,7 @@ private:
             "}\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
             templateContext.allDecls(),
-            "inline ", readerType, " ", scope, "Reader::get", titleCase, "() const {\n",
+            "inline ", readerType, " ", scope, "Reader::get", titleCase, "() const KJ_LIFETIMEBOUND {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(_reader.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS)", defaultParam, ");\n"
