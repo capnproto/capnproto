@@ -1927,6 +1927,11 @@ public:
   //
   // You must include kj/array.h to call this.
 
+  template <typename U>
+  inline auto as() { return U::from(this); }
+  // Syntax sugar for invoking U::from.
+  // Used to chain conversion calls rather than wrap with function.
+
 private:
   T* ptr;
   size_t size_;
