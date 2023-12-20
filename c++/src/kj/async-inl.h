@@ -1395,6 +1395,7 @@ Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other, SourceLocation location
 
 template <typename T>
 template <typename... Attachments>
+requires (Attachable<Attachments...>)
 Promise<T> Promise<T>::attach(Attachments&&... attachments) {
   return Promise(false, _::appendPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
       kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));

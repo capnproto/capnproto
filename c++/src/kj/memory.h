@@ -231,6 +231,7 @@ public:
   }
 
   template <typename... Attachments>
+  requires (Attachable<Attachments...>)
   Own<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // Returns an Own<T> which points to the same object but which also ensures that all values
   // passed to `attachments` remain alive until after this object is destroyed. Normally
@@ -238,6 +239,12 @@ public:
   //
   // Note that attachments will eventually be destroyed in the order they are listed. Hence,
   // foo.attach(bar, baz) is equivalent to (but more efficient than) foo.attach(bar).attach(baz).
+
+
+  template <typename... Attachments>
+  requires (!Attachable<Attachments...>)
+  Own<T> attach(Attachments&&... attachments) = delete;
+  // Let's give a clean failure when something isn't attachable!
 
   template <typename U>
   Own<U> downcast() {
@@ -724,6 +731,7 @@ const StaticDisposerAdapter<T, D> StaticDisposerAdapter<T, D>::instance =
 
 template <typename T>
 template <typename... Attachments>
+requires (Attachable<Attachments...>)
 Own<T> Own<T>::attach(Attachments&&... attachments) {
   T* ptrCopy = ptr;
 

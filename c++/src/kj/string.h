@@ -171,10 +171,16 @@ public:
   // Same as parseAs, but rather than throwing an exception we return NULL.
 
   template <typename... Attachments>
+  requires (Attachable<Attachments...>)
   ConstString attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
   ConstString attach() const KJ_WARN_UNUSED_RESULT;
   // Like ArrayPtr<T>::attach(), but instead promotes a StringPtr into a ConstString. Generally the
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
+
+  template <typename... Attachments>
+  requires (!Attachable<Attachments...>)
+  ConstString attach(Attachments&&... attachments) const = delete;
+  // Let's give a clean failure when something isn't attachable!
 
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
@@ -735,6 +741,7 @@ inline ConstString StringPtr::attach() const {
 }
 
 template <typename... Attachments>
+requires (Attachable<Attachments...>)
 inline ConstString StringPtr::attach(Attachments&&... attachments) const {
   return ConstString { .content = content.attach(kj::fwd<Attachments>(attachments)...) };
 }

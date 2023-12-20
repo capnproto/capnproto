@@ -99,9 +99,11 @@ KJ_BEGIN_HEADER
 #endif
 
 #include <stddef.h>
+#include <string.h>
+
 #include <cstring>
 #include <initializer_list>
-#include <string.h>
+#include <type_traits>
 
 #if _WIN32
 // Windows likes to define macros for min() and max(). We just can't deal with this.
@@ -1743,6 +1745,11 @@ private:
 //
 // So common that we put it in common.h rather than array.h.
 
+template<typename ... Attachments>
+concept Attachable = (... && !std::is_invocable_v<Attachments>);
+// Is this a type we want to allow to be attached to others on the heap? Specifically, we don't
+// allow functors because it's easy to fail to wrap in a kj::_::Deferred.
+
 template <typename T>
 class Array;
 
@@ -1921,11 +1928,17 @@ public:
   }
 
   template <typename... Attachments>
+  requires (Attachable<Attachments...>)
   Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
   // Like Array<T>::attach(), but also promotes an ArrayPtr to an Array. Generally the attachment
   // should be an object that actually owns the array that the ArrayPtr is pointing at.
   //
   // You must include kj/array.h to call this.
+
+  template <typename... Attachments>
+  requires (!Attachable<Attachments...>)
+  Array<T> attach(Attachments&&... attachments) const = delete;
+  // Let's give a clean failure when something isn't attachable!
 
 private:
   T* ptr;
