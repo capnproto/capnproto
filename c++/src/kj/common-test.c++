@@ -23,6 +23,7 @@
 #include "test.h"
 #include <inttypes.h>
 #include <kj/compat/gtest.h>
+#include <span>
 
 namespace kj {
 namespace {
@@ -923,6 +924,20 @@ KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {
   KJ_EXPECT(arr.findLast(34).orDefault(100) == 3);
   KJ_EXPECT(arr.findLast(56).orDefault(100) == 2);
   KJ_EXPECT(arr.findLast(78).orDefault(100) == 100);
+}
+
+struct Std {
+  template<typename T>
+  static std::span<T> from(ArrayPtr<T>* arr) {
+    return std::span<T>(arr->begin(), arr->size());
+  }
+};
+
+KJ_TEST("ArrayPtr::as<Std>") {
+  int rawArray[] = {12, 34, 56, 34, 12};
+  ArrayPtr<int> arr(rawArray);
+  std::span<int> stdPtr = arr.as<Std>();
+  KJ_EXPECT(stdPtr.size() == 5);
 }
 
 }  // namespace

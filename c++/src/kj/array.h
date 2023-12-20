@@ -237,6 +237,11 @@ public:
   Array<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // Like Own<T>::attach(), but attaches to an Array.
 
+  template <typename U>
+  inline auto as() { return U::from(this); }
+  // Syntax sugar for invoking U::from.
+  // Used to chain conversion calls rather than wrap with function.
+
 private:
   T* ptr;
   size_t size_;

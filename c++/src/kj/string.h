@@ -176,6 +176,11 @@ public:
   // Like ArrayPtr<T>::attach(), but instead promotes a StringPtr into a ConstString. Generally the
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
 
+  template <typename T>
+  inline auto as() { return T::from(this); }
+  // Syntax sugar for invoking T::from.
+  // Used to chain conversion calls rather than wrap with function.
+
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
   friend constexpr StringPtr (::operator "" _kj)(const char* str, size_t n);
@@ -321,6 +326,11 @@ public:
 
   template <typename T>
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
+
+  template <typename T>
+  inline auto as() { return T::from(this); }
+  // Syntax sugar for invoking T::from.
+  // Used to chain conversion calls rather than wrap with function.
 
 private:
   Array<char> content;

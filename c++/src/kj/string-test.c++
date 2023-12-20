@@ -435,6 +435,26 @@ KJ_TEST("StringPtr contains") {
   KJ_EXPECT(foobar.slice(2).contains(foobar.slice(1)) == false);
 }
 
+struct Std {
+  static std::string from(const String* str) {
+    return std::string(str->cStr());
+  }
+
+  static std::string from(const StringPtr* str) {
+    return std::string(str->cStr());
+  }
+};
+
+KJ_TEST("as<Std>") {
+  String str = kj::str("foo"_kj);
+  std::string stdStr = str.as<Std>();
+  KJ_EXPECT(stdStr == "foo");
+
+  StringPtr ptr = "bar"_kj; 
+  std::string stdPtr = ptr.as<Std>();
+  KJ_EXPECT(stdPtr == "bar");
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

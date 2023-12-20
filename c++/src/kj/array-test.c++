@@ -24,6 +24,7 @@
 #include <string>
 #include <list>
 #include <kj/compat/gtest.h>
+#include <span>
 
 namespace kj {
 namespace {
@@ -507,6 +508,19 @@ TEST(Array, AttachFromArrayPtr) {
   arr = nullptr;
 
   KJ_EXPECT(destroyed1 == 3, destroyed1);
+}
+
+struct Std {
+  template<typename T>
+  static std::span<T> from(Array<T>* arr) {
+    return std::span<T>(arr->begin(), arr->size());
+  }
+};
+
+KJ_TEST("Array::as<Std>") {
+  kj::Array<int> arr = kj::arr(1, 2, 4);
+  std::span<int> stdArr = arr.as<Std>();
+  KJ_EXPECT(stdArr.size() == 3);
 }
 
 }  // namespace
