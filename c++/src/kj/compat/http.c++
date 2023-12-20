@@ -3435,14 +3435,18 @@ private:
 
     currentlySending = true;
 
-    KJ_IF_SOME(p, sendingPong) {
-      // We recently sent a pong, make sure it's finished before proceeding.
-      auto promise = p.then([this, opcode, message]() {
-        currentlySending = false;
-        return sendImpl(opcode, message);
-      });
-      sendingPong = kj::none;
-      return promise;
+    while (sendingPong != kj::none) {
+      KJ_IF_SOME(p, sendingPong) {
+	// Re-check in case of disconnect on a previous loop iteration.
+	KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
+
+        // We recently sent a control message; make sure it's finished before proceeding.
+	//
+	// 
+        auto localPromise = kj::mv(p);
+        sendingPong = kj::none;
+        co_await localPromise;
+      }
     }
 
     // We don't stop the application from sending further messages after close() -- this is the
@@ -3491,21 +3495,16 @@ private:
     sendParts[0] = sendHeader.compose(true, useCompression, opcode, message.size(), mask);
     sendParts[1] = message;
     KJ_ASSERT(!sendHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
-        "support an extension that would set these bits");
+	      "support an extension that would set these bits");
 
-    auto promise = stream->write(sendParts).attach(kj::mv(compressedMessage));
-    if (!mask.isZero()) {
-      promise = promise.attach(kj::mv(ownMessage));
-    }
-    return promise.then([this, size = sendParts[0].size() + sendParts[1].size()]() {
-      currentlySending = false;
+    co_await stream->write(sendParts);
+    currentlySending = false;
 
-      // Send queued pong if needed.
-      if (queuedPong != kj::none) {
-        setUpSendingPong();
-      }
-      sentBytes += size;
-    });
+    // Send queued pong if needed.
+    if (queuedPong != kj::none) {
+      setUpSendingPong();
+    };
+    sentBytes += sendParts[0].size() + sendParts[1].size();;
   }
 
   void queuePong(kj::Array<byte> payload) {
