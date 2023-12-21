@@ -21,10 +21,10 @@
 
 #pragma once
 
-#include "debug.h"
-#include "vector.h"
-#include "function.h"
-#include "windows-sanity.h"  // work-around macro conflict with `ERROR`
+#include <kj/debug.h>
+#include <kj/vector.h>
+#include <kj/function.h>
+#include <kj/windows-sanity.h>  // work-around macro conflict with `ERROR`
 
 KJ_BEGIN_HEADER
 
