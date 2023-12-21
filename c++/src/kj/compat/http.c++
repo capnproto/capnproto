@@ -2593,7 +2593,7 @@ public:
       : stream(kj::mv(stream)), maskKeyGenerator(maskKeyGenerator),
         compressionConfig(kj::mv(compressionConfigParam)),
         errorHandler(errorHandler.orDefault(*this)),
-        sendingPong(kj::mv(waitBeforeSend)),
+        sendingControlMessage(kj::mv(waitBeforeSend)),
         recvBuffer(kj::mv(buffer)), recvData(leftover) {
 #if KJ_HAS_ZLIB
     KJ_IF_SOME(config, compressionConfig) {
@@ -2634,14 +2634,14 @@ public:
   kj::Promise<void> disconnect() override {
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
-    KJ_IF_SOME(p, sendingPong) {
-      // We recently sent a pong, make sure it's finished before proceeding.
+    KJ_IF_SOME(p, sendingControlMessage) {
+      // We recently sent a control message; make sure it's finished before proceeding.
       currentlySending = true;
       auto promise = p.then([this]() {
         currentlySending = false;
         return disconnect();
       });
-      sendingPong = kj::none;
+      sendingControlMessage = kj::none;
       return promise;
     }
 
@@ -2652,8 +2652,8 @@ public:
   }
 
   void abort() override {
-    queuedPong = kj::none;
-    sendingPong = kj::none;
+    queuedControlMessage = kj::none;
+    sendingControlMessage = kj::none;
     disconnected = true;
     stream->abortRead();
     stream->shutdownWrite();
@@ -3383,6 +3383,7 @@ private:
   static constexpr byte OPCODE_PONG         = 10;
 
   static constexpr byte OPCODE_FIRST_CONTROL = 8;
+  static constexpr byte OPCODE_MAX = 15;
 
   // ---------------------------------------------------------------------------
 
@@ -3401,18 +3402,32 @@ private:
   Header sendHeader;
   kj::ArrayPtr<const byte> sendParts[2];
 
-  kj::Maybe<kj::Array<byte>> queuedPong;
-  // queuedPong holds the body of the next pong to write, cleared when the pong is written.  If a
-  // more recent ping arrives before the pong is actually written, we can update this value to
-  // instead respond to the more recent ping.
+  struct ControlMessage {
+    byte opcode;
+    kj::Array<byte> payload;
 
-  kj::Maybe<kj::Promise<void>> sendingPong;
-  // If a Pong is being sent asynchronously in response to a Ping, this is a promise for the
-  // completion of that send.
+    ControlMessage(byte opcode, kj::Array<byte> payload) : opcode(opcode), payload(kj::mv(payload)) {
+      KJ_REQUIRE(opcode <= OPCODE_MAX);
+    }
+  };
+
+  kj::Maybe<ControlMessage> queuedControlMessage;
+  // queuedControlMessage holds the body of the next control message to write; it is cleared when the message is
+  // written.
+  //
+  // It may be overwritten; for example, if a more recent ping arrives before the pong is actually written, we can
+  // update this value to instead respond to the more recent ping. If a bad frame shows up, we can overwrite any
+  // queued pong with a Close message.
+  //
+  // Currently, this holds either a Close or a Pong.
+
+  kj::Maybe<kj::Promise<void>> sendingControlMessage;
+  // If a control message is being sent asynchronously (e.g., a Pong in response to a Ping), this is a
+  // promise for the completion of that send.
   //
   // Additionally, this member is used if we need to block our first send on WebSocket startup,
   // e.g. because we need to wait for HTTP handshake writes to flush before we can start sending
-  // WebSocket data. `sendingPong` was overloaded for this use case because the logic is the same.
+  // WebSocket data. `sendingControlMessage` was overloaded for this use case because the logic is the same.
   // Perhaps it should be renamed to `blockSend` or `writeQueue`.
 
   uint fragmentOpcode = 0;
@@ -3435,8 +3450,8 @@ private:
 
     currentlySending = true;
 
-    while (sendingPong != kj::none) {
-      KJ_IF_SOME(p, sendingPong) {
+    while (sendingControlMessage != kj::none) {
+      KJ_IF_SOME(p, sendingControlMessage) {
 	// Re-check in case of disconnect on a previous loop iteration.
 	KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
 
@@ -3444,7 +3459,7 @@ private:
 	//
 	// 
         auto localPromise = kj::mv(p);
-        sendingPong = kj::none;
+        sendingControlMessage = kj::none;
         co_await localPromise;
       }
     }
@@ -3500,53 +3515,64 @@ private:
     co_await stream->write(sendParts);
     currentlySending = false;
 
-    // Send queued pong if needed.
-    if (queuedPong != kj::none) {
-      setUpSendingPong();
+    // Send queued control message if needed.
+    if (queuedControlMessage != kj::none) {
+      setUpSendingControlMessage();
     };
     sentBytes += sendParts[0].size() + sendParts[1].size();;
   }
 
   void queuePong(kj::Array<byte> payload) {
-    bool alreadyWaitingForPongWrite = (queuedPong != kj::none);
+    bool alreadyWaitingForPongWrite = false;
+
+    KJ_IF_SOME(controlMessage, queuedControlMessage) {
+      if (controlMessage.opcode == OPCODE_CLOSE) {
+	// We're currently sending a Close message, which we only do (at least via queuedControlMessage) when we're
+	// closing the connection due to error. There's no point queueing a Pong that'll never be sent.
+	return;
+      } else {
+	alreadyWaitingForPongWrite = true;
+      }
+    }
 
     // Note: According to spec, if the server receives a second ping before responding to the
     //   previous one, it can opt to respond only to the last ping. So we don't have to check if
-    //   queuedPong is already non-null.
-    queuedPong = kj::mv(payload);
+    //   queuedControlMessage is already non-null.
+    queuedControlMessage = ControlMessage(OPCODE_PONG, kj::mv(payload));
 
     if (currentlySending) {
       // There is a message-send in progress, so we cannot write to the stream now.  We will set
-      // up the pong write at the end of the message-send.
+      // up the control message write at the end of the message-send.
       return;
     }
     if (alreadyWaitingForPongWrite) {
       // We were already waiting for a pong to be written; don't need to queue another write.
       return;
     }
-    setUpSendingPong();
+    setUpSendingControlMessage();
   }
 
-  void setUpSendingPong() {
-    KJ_IF_SOME(promise, sendingPong) {
-      sendingPong = promise.then([this]() mutable {
-        return writeQueuedPong();
+  void setUpSendingControlMessage() {
+    KJ_IF_SOME(promise, sendingControlMessage) {
+      sendingControlMessage = promise.then([this]() mutable {
+        return writeQueuedControlMessage();
       });
     } else {
-      sendingPong = writeQueuedPong();
+      sendingControlMessage = writeQueuedControlMessage();
     }
   }
 
-  kj::Promise<void> writeQueuedPong() {
-    KJ_IF_SOME(q, queuedPong) {
-      kj::Array<byte> payload = kj::mv(q);
-      queuedPong = kj::none;
+  kj::Promise<void> writeQueuedControlMessage() {
+    KJ_IF_SOME(q, queuedControlMessage) {
+      byte opcode = q.opcode;
+      kj::Array<byte> payload = kj::mv(q.payload);
+      queuedControlMessage = kj::none;
 
       if (hasSentClose || disconnected) {
         return kj::READY_NOW;
       }
 
-      sendParts[0] = sendHeader.compose(true, false, OPCODE_PONG,
+      sendParts[0] = sendHeader.compose(true, false, opcode,
                                         payload.size(), Mask(maskKeyGenerator));
       sendParts[1] = payload;
       return stream->write(sendParts).attach(kj::mv(payload));
@@ -3556,12 +3582,12 @@ private:
   }
 
   kj::Promise<void> optimizedPumpTo(WebSocketImpl& other) {
-    KJ_IF_SOME(p, other.sendingPong) {
-      // We recently sent a pong, make sure it's finished before proceeding.
+    KJ_IF_SOME(p, other.sendingControlMessage) {
+      // We recently sent a control message; make sure it's finished before proceeding.
       auto promise = p.then([this, &other]() {
         return optimizedPumpTo(other);
       });
-      other.sendingPong = kj::none;
+      other.sendingControlMessage = kj::none;
       return promise;
     }
 
