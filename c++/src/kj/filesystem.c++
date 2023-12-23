@@ -28,6 +28,10 @@
 #include "mutex.h"
 #include <map>
 
+#if __linux__
+#include <sys/mman.h>    // for memfd_create()
+#endif  // __linux__
+
 namespace kj {
 
 Path::Path(StringPtr name): Path(heapString(name)) {}
@@ -978,7 +982,8 @@ private:
 
 class InMemoryDirectory final: public Directory, public AtomicRefcounted {
 public:
-  InMemoryDirectory(const Clock& clock): impl(clock) {}
+  InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory)
+      : impl(clock, fileFactory) {}
 
   Own<const FsNode> cloneFsNode() const override {
     return atomicAddRef(*this);
@@ -1154,15 +1159,15 @@ public:
     if (path.size() == 0) {
       KJ_FAIL_REQUIRE("can't replace self") { break; }
     } else if (path.size() == 1) {
-      // don't need lock just to read the clock ref
+      // don't need lock just to construct a file
       return heap<ReplacerImpl<File>>(*this, path[0],
-          newInMemoryFile(impl.getWithoutLock().clock), mode);
+          impl.getWithoutLock().newFile(), mode);
     } else {
       KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
         return child->replaceFile(path.slice(1, path.size()), mode);
       }
     }
-    return heap<BrokenReplacer<File>>(newInMemoryFile(impl.getWithoutLock().clock));
+    return heap<BrokenReplacer<File>>(impl.getWithoutLock().newFile());
   }
 
   Maybe<Own<const Directory>> tryOpenSubdir(PathPtr path, WriteMode mode) const override {
@@ -1194,15 +1199,15 @@ public:
     if (path.size() == 0) {
       KJ_FAIL_REQUIRE("can't replace self") { break; }
     } else if (path.size() == 1) {
-      // don't need lock just to read the clock ref
+      // don't need lock just to construct a directory
       return heap<ReplacerImpl<Directory>>(*this, path[0],
-          newInMemoryDirectory(impl.getWithoutLock().clock), mode);
+          impl.getWithoutLock().newDirectory(), mode);
     } else {
       KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
         return child->replaceSubdir(path.slice(1, path.size()), mode);
       }
     }
-    return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(impl.getWithoutLock().clock));
+    return heap<BrokenReplacer<Directory>>(impl.getWithoutLock().newDirectory());
   }
 
   Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) const override {
@@ -1256,8 +1261,8 @@ public:
   }
 
   Own<const File> createTemporary() const override {
-    // Don't need lock just to read the clock ref.
-    return newInMemoryFile(impl.getWithoutLock().clock);
+    // Don't need lock just to construct a file.
+    return impl.getWithoutLock().newFile();
   }
 
   bool tryTransfer(PathPtr toPath, WriteMode toMode,
@@ -1444,6 +1449,7 @@ private:
 
   struct Impl {
     const Clock& clock;
+    const InMemoryFileFactory& fileFactory;
 
     std::map<StringPtr, EntryImpl> entries;
     // Note: If this changes to a non-sorted map, listNames() and listEntries() must be updated to
@@ -1451,7 +1457,18 @@ private:
 
     Date lastModified;
 
-    Impl(const Clock& clock): clock(clock), lastModified(clock.now()) {}
+    Impl(const Clock& clock, const InMemoryFileFactory& fileFactory)
+        : clock(clock), fileFactory(fileFactory), lastModified(clock.now()) {}
+
+    Own<const File> newFile() const {
+      // Consturct a new empty file. Note: This function is expected to work without the lock held.
+      return fileFactory.create(clock);
+    }
+    Own<const Directory> newDirectory() const {
+      // Consturct a new empty directory. Note: This function is expected to work without the lock
+      // held.
+      return newInMemoryDirectory(clock, fileFactory);
+    }
 
     Maybe<EntryImpl&> openEntry(kj::StringPtr name, WriteMode mode) {
       // TODO(perf): We could avoid a copy if the entry exists, at the expense of a double-lookup
@@ -1508,7 +1525,7 @@ private:
         case FsNode::Type::FILE:
           KJ_IF_SOME(file, fromDirectory.tryOpenFile(fromPath, WriteMode::MODIFY)) {
             if (mode == TransferMode::COPY) {
-              auto copy = newInMemoryFile(clock);
+              auto copy = newFile();
               copy->copy(0, *file, 0, size.orDefault(kj::maxValue));
               entry.set(kj::mv(copy));
             } else {
@@ -1528,7 +1545,7 @@ private:
         case FsNode::Type::DIRECTORY:
           KJ_IF_SOME(subdir, fromDirectory.tryOpenSubdir(fromPath, WriteMode::MODIFY)) {
             if (mode == TransferMode::COPY) {
-              auto copy = atomicRefcounted<InMemoryDirectory>(clock);
+              auto copy = atomicRefcounted<InMemoryDirectory>(clock, fileFactory);
               auto& cpim = copy->impl.getWithoutLock();  // safe because just-created
               for (auto& subEntry: subdir->listEntries()) {
                 EntryImpl newEntry(kj::mv(subEntry.name));
@@ -1633,7 +1650,7 @@ private:
     } else if (entry.node == nullptr) {
       KJ_ASSERT(has(mode, WriteMode::CREATE));
       lock->modified();
-      return entry.init(FileNode { newInMemoryFile(lock->clock) });
+      return entry.init(FileNode { lock->newFile() });
     } else {
       KJ_FAIL_REQUIRE("not a file") { return kj::none; }
     }
@@ -1651,7 +1668,7 @@ private:
     } else if (entry.node == nullptr) {
       KJ_ASSERT(has(mode, WriteMode::CREATE));
       lock->modified();
-      return entry.init(DirectoryNode { newInMemoryDirectory(lock->clock) });
+      return entry.init(DirectoryNode { lock->newDirectory() });
     } else {
       KJ_FAIL_REQUIRE("not a directory") { return kj::none; }
     }
@@ -1682,7 +1699,7 @@ private:
         return entry.node.get<DirectoryNode>().directory->clone();
       } else if (entry.node == nullptr) {
         lock->modified();
-        return entry.init(DirectoryNode { newInMemoryDirectory(lock->clock) });
+        return entry.init(DirectoryNode { lock->newDirectory() });
       }
       // Continue on.
     }
@@ -1733,11 +1750,43 @@ private:
 Own<File> newInMemoryFile(const Clock& clock) {
   return atomicRefcounted<InMemoryFile>(clock);
 }
-Own<Directory> newInMemoryDirectory(const Clock& clock) {
-  return atomicRefcounted<InMemoryDirectory>(clock);
+Own<Directory> newInMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory) {
+  return atomicRefcounted<InMemoryDirectory>(clock, fileFactory);
 }
 Own<AppendableFile> newFileAppender(Own<const File> inner) {
   return heap<AppendableFileImpl>(kj::mv(inner));
 }
+
+const InMemoryFileFactory& defaultInMemoryFileFactory() {
+  class FactoryImpl: public InMemoryFileFactory {
+  public:
+    kj::Own<const File> create(const Clock& clock) const override {
+      return newInMemoryFile(clock);
+    }
+  };
+  static const FactoryImpl instance;
+  return instance;
+}
+
+#if __linux__
+
+Own<File> newMemfdFile(uint flags) {
+  int fd;
+  KJ_SYSCALL(fd = memfd_create("kj-memfd", flags | MFD_CLOEXEC));
+  return newDiskFile(AutoCloseFd(fd));
+}
+
+const InMemoryFileFactory& memfdInMemoryFileFactory() {
+  class FactoryImpl: public InMemoryFileFactory {
+  public:
+    kj::Own<const File> create(const Clock& clock) const override {
+      return newMemfdFile(0);
+    }
+  };
+  static const FactoryImpl instance;
+  return instance;
+}
+
+#endif  // __linux__
 
 } // namespace kj

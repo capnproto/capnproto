@@ -927,8 +927,32 @@ public:
 
 // =======================================================================================
 
+class InMemoryFileFactory {
+  // Used to customize the File implementation used by InMemoryDirectory.
+public:
+  virtual kj::Own<const File> create(const Clock& clock) const = 0;
+};
+
+const InMemoryFileFactory& defaultInMemoryFileFactory();
+// Creates files using `newInMemoryFile()`.
+
+#if __linux__
+
+Own<File> newMemfdFile(uint flags = 0);
+// Creates a `File` backed by a Linux memfd. This creates an in-memory file which behaves more
+// closely to a disk file, compared to newInMemoryFile(). In particular, the file has a backing
+// FD, and memory mapping doesn't have weird quirks.
+//
+// `flags` will be passed to `memfd_create()`. (The MFD_CLOEXEC flag is always added.)
+
+const InMemoryFileFactory& memfdInMemoryFileFactory();
+// Creates files using `newMemfdFile()`.
+
+#endif  // __linux__
+
 Own<File> newInMemoryFile(const Clock& clock);
-Own<Directory> newInMemoryDirectory(const Clock& clock);
+Own<Directory> newInMemoryDirectory(const Clock& clock,
+    const InMemoryFileFactory& fileFactory = defaultInMemoryFileFactory());
 // Construct file and directory objects which reside in-memory.
 //
 // InMemoryFile has the following special properties:
@@ -942,6 +966,11 @@ Own<Directory> newInMemoryDirectory(const Clock& clock);
 // - link() can link directory nodes in addition to files.
 // - link() and rename() accept any kind of Directory as `fromDirectory` -- it doesn't need to be
 //   another InMemoryDirectory. However, for rename(), the from path must be a directory.
+//
+// `fileFactory` can be customized in order to control the implementation of `File` objects created
+// using this `InMemoryDirectory`. This is particularly useful for testing where the application
+// expects files to have backing file descriptors or implement memory mapping fully correctly, but
+// doesn't care as much about directory behavior.
 
 Own<AppendableFile> newFileAppender(Own<const File> inner);
 // Creates an AppendableFile by wrapping a File. Note that this implementation assumes it is the

@@ -23,6 +23,10 @@
 #include "test.h"
 #include <wchar.h>
 
+#if __linux__
+#include <unistd.h>
+#endif  // __linux__
+
 namespace kj {
 namespace {
 
@@ -454,6 +458,7 @@ KJ_TEST("InMemoryDirectory") {
 
   {
     auto file = dir->openFile(Path("foo"), WriteMode::CREATE);
+    KJ_EXPECT(file->getFd() == kj::none);
     clock.expectChanged(*dir);
     file->writeAll("foobar");
     clock.expectUnchanged(*dir);
@@ -755,7 +760,39 @@ KJ_TEST("InMemoryDirectory createTemporary") {
   file->writeAll("foobar");
   KJ_EXPECT(file->readAllText() == "foobar");
   KJ_EXPECT(dir->listNames() == nullptr);
+  KJ_EXPECT(file->getFd() == kj::none);
 }
+
+#if __linux__
+
+KJ_TEST("InMemoryDirectory backed my memfd") {
+  // Test memfd-backed in-memory directory. We're not going to test all functionality here, since
+  // we assume filesystem-disk-test covers fd-backed files in depth.
+
+  TestClock clock;
+  auto dir = newInMemoryDirectory(clock, memfdInMemoryFileFactory());
+  auto file = dir->openFile(Path({"foo", "bar"}), WriteMode::CREATE | WriteMode::CREATE_PARENT);
+
+  // Write directly to the FD, verify it is reflected in the file object.
+  int fd = KJ_ASSERT_NONNULL(file->getFd());
+  ssize_t n;
+  KJ_SYSCALL(n = write(fd, "foo", 3));
+  KJ_EXPECT(n == 3);
+
+  KJ_EXPECT(file->readAllText() == "foo"_kj);
+
+  // Re-opening the same file produces an alias of the same memfd.
+  auto file2 = dir->openFile(Path({"foo", "bar"}));
+  KJ_EXPECT(file2->readAllText() == "foo"_kj);
+  file->writeAll("bar"_kj);
+  KJ_EXPECT(file2->readAllText() == "bar"_kj);
+  KJ_EXPECT(file2->getFd() != kj::none);
+  KJ_EXPECT(file->stat().hashCode == file2->stat().hashCode);
+
+  KJ_EXPECT(dir->createTemporary()->getFd() != kj::none);
+}
+
+#endif  // __linux__
 
 }  // namespace
 }  // namespace kj
