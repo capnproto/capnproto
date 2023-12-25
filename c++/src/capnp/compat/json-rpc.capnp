@@ -2,7 +2,7 @@
 
 $import "/capnp/c++.capnp".namespace("capnp::json");
 
-using Json = import "json.capnp";
+using Json = import "/capnp/compat/json.capnp";
 
 struct RpcMessage {
   jsonrpc @0 :Text;
