@@ -23,6 +23,32 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "json-rpc",
+    srcs = [
+        "json-rpc.c++",
+    ],
+    hdrs = [
+        "json-rpc.h",
+    ],
+    include_prefix = "capnp/compat",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":json-rpc_capnp",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+cc_capnp_library(
+    name = "json-rpc_capnp",
+    srcs = [
+        "json-rpc.capnp",
+    ],
+    include_prefix = "capnp/compat",
+    src_prefix = "src",
+    visibility = ["//visibility:public"],
+)
+
 cc_capnp_library(
     name = "json-test_capnp",
     srcs = [
@@ -94,12 +120,21 @@ cc_library(
 ]]
 
 cc_test(
+    name = "json-rpc-test",
+    srcs = ["json-rpc-test.c++"],
+    deps = [
+        ":json-rpc",
+        "//src/capnp:capnp-test",
+    ],
+)
+
+cc_test(
     name = "json-test",
     srcs = ["json-test.c++"],
     deps = [
-        "//src/capnp:capnp-test",
         ":json",
-        ":json-test_capnp"
+        ":json-test_capnp",
+        "//src/capnp:capnp-test",
     ],
 )
 

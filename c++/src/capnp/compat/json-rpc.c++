@@ -161,7 +161,7 @@ void JsonRpc::queueError(kj::Maybe<json::Value::Reader> id, int code, kj::String
   error.setMessage(message);
 
   // OK to discard result of queueWrite() since it's just one branch of a fork.
-  queueWrite(codec.encode(jsonResponse));
+  (void)queueWrite(codec.encode(jsonResponse));
 }
 
 kj::Promise<void> JsonRpc::readLoop() {
