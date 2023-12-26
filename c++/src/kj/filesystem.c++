@@ -984,6 +984,9 @@ class InMemoryDirectory final: public Directory, public AtomicRefcounted {
 public:
   InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory)
       : impl(clock, fileFactory) {}
+  InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory,
+                    const  Directory& copyFrom, bool copyFiles)
+      : impl(clock, fileFactory, copyFrom, copyFiles) {}
 
   Own<const FsNode> cloneFsNode() const override {
     return atomicAddRef(*this);
@@ -1275,31 +1278,104 @@ public:
         KJ_FAIL_REQUIRE("can't replace self") { return false; }
       }
     } else if (toPath.size() == 1) {
-      // tryTransferChild() needs to at least know the node type, so do an lstat.
-      KJ_IF_SOME(meta, fromDirectory.tryLstat(fromPath)) {
-        auto lock = impl.lockExclusive();
-        KJ_IF_SOME(entry, lock->openEntry(toPath[0], toMode)) {
-          // Make sure if we just cerated a new entry, and we don't successfully transfer to it, we
-          // remove the entry before returning.
-          bool needRollback = entry.node == nullptr;
-          KJ_DEFER(if (needRollback) { lock->entries.erase(toPath[0]); });
-
-          if (lock->tryTransferChild(entry, meta.type, meta.lastModified, meta.size,
-                                     fromDirectory, fromPath, mode)) {
-            lock->modified();
-            needRollback = false;
-            return true;
-          } else {
-            KJ_FAIL_REQUIRE("InMemoryDirectory can't link an inode of this type", fromPath) {
-              return false;
-            }
-          }
-        } else {
+      if (!has(toMode, WriteMode::MODIFY)) {
+        // Replacement is not allowed, so we'll have to check upfront if the target path exists.
+        // Unfortuantely we have to take a lock and then drop it immediately since we can't keep
+        // the lock held while accessing `fromDirectory`.
+        if (impl.lockShared()->tryGetEntry(toPath[0]) != kj::none) {
           return false;
         }
+      }
+
+      OneOf<FileNode, DirectoryNode, SymlinkNode> newNode;
+      FsNode::Metadata meta;
+      KJ_IF_SOME(m, fromDirectory.tryLstat(fromPath)) {
+        meta = m;
       } else {
         return false;
       }
+
+      switch (meta.type) {
+        case FsNode::Type::FILE: {
+          auto file = KJ_ASSERT_NONNULL(
+              fromDirectory.tryOpenFile(fromPath, WriteMode::MODIFY),
+              "source node deleted concurrently during transfer", fromPath);
+
+          if (mode == TransferMode::COPY) {
+            auto copy = impl.getWithoutLock().newFile();
+            copy->copy(0, *file, 0, meta.size);
+            file = kj::mv(copy);
+          }
+
+          newNode = FileNode { kj::mv(file) };
+          break;
+        }
+        case FsNode::Type::DIRECTORY: {
+          auto subdir = KJ_ASSERT_NONNULL(
+              fromDirectory.tryOpenSubdir(fromPath, WriteMode::MODIFY),
+              "source node deleted concurrently during transfer", fromPath);
+
+          switch (mode) {
+            case TransferMode::COPY:
+              // Copying is straightforward: Make a deep copy of the entire directory tree,
+              // including file contents.
+              subdir = impl.getWithoutLock().copyDirectory(*subdir, /* copyFiles = */ true);
+              break;
+
+            case TransferMode::LINK:
+              // To "link", we can safely just place `subdir` directly into our own tree.
+              break;
+
+            case TransferMode::MOVE:
+              // Moving may be tricky:
+              //
+              // If `fromDirectory` is an `InMemoryDirectory`, then we know that removing the
+              // subdir just unlinks the object without modifying it, so we can safely just link it
+              // into our own tree.
+              //
+              // However, if `fromDirectory` is a disk directory, then remvoing the subdir will
+              // likely perform a recursive delete, thus leaving `subdir` pointing to an empty
+              // directory. If we link that into our tree, it's useless. So, instead, perform a
+              // deep copy of the directory tree upfront, into an InMemoryDirectory. However, file
+              // content need not be copied, since unliked files keep their contents until closed.
+              if (kj::dynamicDowncastIfAvailable<const InMemoryDirectory>(fromDirectory) ==
+                  kj::none) {
+                subdir = impl.getWithoutLock().copyDirectory(*subdir, /* copyFiles = */ false);
+              }
+              break;
+          }
+
+          newNode = DirectoryNode { kj::mv(subdir) };
+          break;
+        }
+        case FsNode::Type::SYMLINK: {
+          auto link = KJ_ASSERT_NONNULL(fromDirectory.tryReadlink(fromPath),
+              "source node deleted concurrently during transfer", fromPath);
+
+          newNode = SymlinkNode {meta.lastModified, kj::mv(link)};
+          break;
+        }
+        default:
+          KJ_FAIL_REQUIRE("InMemoryDirectory can't link an inode of this type", fromPath);
+      }
+
+      if (mode == TransferMode::MOVE) {
+        KJ_ASSERT(fromDirectory.tryRemove(fromPath), "couldn't move node", fromPath);
+      }
+
+      // Take the lock to insert the entry into our map. Remember that it's important we do not
+      // manipulate `fromDirectory` while the lock is held, since it could be the same directory.
+      {
+        auto lock = impl.lockExclusive();
+        KJ_IF_SOME(targetEntry, lock->openEntry(toPath[0], toMode)) {
+          targetEntry.init(kj::mv(newNode));;
+        } else {
+          return false;
+        }
+        lock->modified();
+      }
+
+      return true;
     } else {
       // TODO(someday): Ideally we wouldn't create parent directories if fromPath doesn't exist.
       //   This requires a different approach to the code here, though.
@@ -1460,6 +1536,67 @@ private:
     Impl(const Clock& clock, const InMemoryFileFactory& fileFactory)
         : clock(clock), fileFactory(fileFactory), lastModified(clock.now()) {}
 
+    Impl(const Clock& clock, const InMemoryFileFactory& fileFactory,
+         const Directory& copyFrom, bool copyFiles)
+        : clock(clock), fileFactory(fileFactory), lastModified(clock.now()) {
+      // Implements copyDirectory() (see below).
+      for (auto& fromEntry: copyFrom.listEntries()) {
+        kj::Path filename({kj::mv(fromEntry.name)});
+        OneOf<FileNode, DirectoryNode, SymlinkNode> newNode;
+        switch (fromEntry.type) {
+          case FsNode::Type::FILE: {
+            KJ_IF_SOME(file, copyFrom.tryOpenFile(filename, WriteMode::MODIFY)) {
+              if (copyFiles) {
+                auto copy = newFile();
+                copy->copy(0, *file, 0, kj::maxValue);
+                file = kj::mv(copy);
+              }
+
+              newNode = FileNode { kj::mv(file) };
+              break;
+            } else {
+              continue;
+            }
+          }
+
+          case FsNode::Type::DIRECTORY: {
+            KJ_IF_SOME(subdir, copyFrom.tryOpenSubdir(filename, WriteMode::MODIFY)) {
+              subdir = copyDirectory(*subdir, copyFiles);
+              newNode = DirectoryNode { kj::mv(subdir) };
+              break;
+            } else {
+              continue;
+            }
+          }
+
+          case FsNode::Type::SYMLINK: {
+            KJ_IF_SOME(link, copyFrom.tryReadlink(filename)) {
+              KJ_IF_SOME(metadata, copyFrom.tryLstat(filename)) {
+                newNode = SymlinkNode { metadata.lastModified, kj::mv(link) };
+                break;
+              } else {
+                continue;
+              }
+            } else {
+              continue;
+            }
+          }
+
+          default:
+            KJ_LOG(ERROR, "couldn't copy node of type not supported by InMemoryDirectory",
+                filename);
+            continue;
+        }
+
+        KJ_ASSERT(newNode != nullptr);
+
+        EntryImpl entry(kj::mv(filename)[0]);
+        StringPtr nameRef = entry.name;
+        entry.init(kj::mv(newNode));
+        KJ_ASSERT(entries.insert(std::make_pair(nameRef, kj::mv(entry))).second);
+      }
+    }
+
     Own<const File> newFile() const {
       // Consturct a new empty file. Note: This function is expected to work without the lock held.
       return fileFactory.create(clock);
@@ -1468,6 +1605,12 @@ private:
       // Consturct a new empty directory. Note: This function is expected to work without the lock
       // held.
       return newInMemoryDirectory(clock, fileFactory);
+    }
+
+    Own<const Directory> copyDirectory(const Directory& other, bool copyFiles) const {
+      // Creates an in-memory deep copy of the given directory object. If `copyFiles` is true, then
+      // file contents are copied too, otherwise they are just linked.
+      return kj::atomicRefcounted<InMemoryDirectory>(clock, fileFactory, other, copyFiles);
     }
 
     Maybe<EntryImpl&> openEntry(kj::StringPtr name, WriteMode mode) {
@@ -1516,82 +1659,6 @@ private:
 
     void modified() {
       lastModified = clock.now();
-    }
-
-    bool tryTransferChild(EntryImpl& entry, const FsNode::Type type, kj::Maybe<Date> lastModified,
-                          kj::Maybe<uint64_t> size, const Directory& fromDirectory,
-                          PathPtr fromPath, TransferMode mode) {
-      switch (type) {
-        case FsNode::Type::FILE:
-          KJ_IF_SOME(file, fromDirectory.tryOpenFile(fromPath, WriteMode::MODIFY)) {
-            if (mode == TransferMode::COPY) {
-              auto copy = newFile();
-              copy->copy(0, *file, 0, size.orDefault(kj::maxValue));
-              entry.set(kj::mv(copy));
-            } else {
-              if (mode == TransferMode::MOVE) {
-                KJ_ASSERT(fromDirectory.tryRemove(fromPath), "couldn't move node", fromPath) {
-                  return false;
-                }
-              }
-              entry.set(kj::mv(file));
-            }
-            return true;
-          } else {
-            KJ_FAIL_ASSERT("source node deleted concurrently during transfer", fromPath) {
-              return false;
-            }
-          }
-        case FsNode::Type::DIRECTORY:
-          KJ_IF_SOME(subdir, fromDirectory.tryOpenSubdir(fromPath, WriteMode::MODIFY)) {
-            if (mode == TransferMode::COPY) {
-              auto copy = atomicRefcounted<InMemoryDirectory>(clock, fileFactory);
-              auto& cpim = copy->impl.getWithoutLock();  // safe because just-created
-              for (auto& subEntry: subdir->listEntries()) {
-                EntryImpl newEntry(kj::mv(subEntry.name));
-                Path filename(newEntry.name);
-                if (!cpim.tryTransferChild(newEntry, subEntry.type, kj::none, kj::none, *subdir,
-                                           filename, TransferMode::COPY)) {
-                  KJ_LOG(ERROR, "couldn't copy node of type not supported by InMemoryDirectory",
-                         filename);
-                } else {
-                  StringPtr nameRef = newEntry.name;
-                  cpim.entries.insert(std::make_pair(nameRef, kj::mv(newEntry)));
-                }
-              }
-              entry.set(kj::mv(copy));
-            } else {
-              if (mode == TransferMode::MOVE) {
-                KJ_ASSERT(fromDirectory.tryRemove(fromPath), "couldn't move node", fromPath) {
-                  return false;
-                }
-              }
-              entry.set(kj::mv(subdir));
-            }
-            return true;
-          } else {
-            KJ_FAIL_ASSERT("source node deleted concurrently during transfer", fromPath) {
-              return false;
-            }
-          }
-        case FsNode::Type::SYMLINK:
-          KJ_IF_SOME(content, fromDirectory.tryReadlink(fromPath)) {
-            // Since symlinks are immutable, we can implement LINK the same as COPY.
-            entry.init(SymlinkNode { lastModified.orDefault(clock.now()), kj::mv(content) });
-            if (mode == TransferMode::MOVE) {
-              KJ_ASSERT(fromDirectory.tryRemove(fromPath), "couldn't move node", fromPath) {
-                return false;
-              }
-            }
-            return true;
-          } else {
-            KJ_FAIL_ASSERT("source node deleted concurrently during transfer", fromPath) {
-              return false;
-            }
-          }
-        default:
-          return false;
-      }
     }
   };
 

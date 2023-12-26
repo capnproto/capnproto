@@ -752,6 +752,23 @@ KJ_TEST("InMemoryDirectory move") {
   KJ_EXPECT(dst->openFile(Path({"link", "baz", "qux"}))->readAllText() == "bazqux");
 }
 
+KJ_TEST("InMemoryDirectory transfer from self") {
+  TestClock clock;
+
+  auto dir = newInMemoryDirectory(clock);
+
+  auto file = dir->openFile(Path({"foo"}), WriteMode::CREATE);
+
+  dir->transfer(Path({"bar"}), WriteMode::CREATE, Path({"foo"}), TransferMode::MOVE);
+
+  auto list = dir->listNames();
+  KJ_EXPECT(list.size() == 1);
+  KJ_EXPECT(list[0] == "bar");
+
+  auto file2 = dir->openFile(Path({"bar"}));
+  KJ_EXPECT(file.get() == file2.get());
+}
+
 KJ_TEST("InMemoryDirectory createTemporary") {
   TestClock clock;
 
