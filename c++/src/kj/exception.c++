@@ -37,7 +37,6 @@
 #include "exception.h"
 #include "string.h"
 #include "debug.h"
-#include "threadlocal.h"
 #include "miniposix.h"
 #include "function.h"
 #include "main.h"
@@ -919,7 +918,7 @@ void Exception::addTraceHere() {
 
 namespace {
 
-KJ_THREADLOCAL_PTR(ExceptionImpl) currentException = nullptr;
+thread_local ExceptionImpl* currentException = nullptr;
 
 void validateExceptionPointer(const ExceptionImpl* e) noexcept {
   // Occasionally in production we are seeing `currentException` have the value 1. Try to figure
@@ -1013,7 +1012,7 @@ kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type def
 
 namespace {
 
-KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
+thread_local ExceptionCallback* threadLocalCallback = nullptr;
 
 }  // namespace
 

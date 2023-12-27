@@ -42,7 +42,6 @@
 #include "async.h"
 #include "debug.h"
 #include "vector.h"
-#include "threadlocal.h"
 #include "mutex.h"
 #include "one-of.h"
 #include "function.h"
@@ -116,7 +115,7 @@ namespace kj {
 
 namespace {
 
-KJ_THREADLOCAL_PTR(DisallowAsyncDestructorsScope) disallowAsyncDestructorsScope = nullptr;
+thread_local DisallowAsyncDestructorsScope* disallowAsyncDestructorsScope = nullptr;
 
 }  // namespace
 
@@ -161,7 +160,7 @@ AllowAsyncDestructorsScope::~AllowAsyncDestructorsScope() {
 
 namespace {
 
-KJ_THREADLOCAL_PTR(EventLoop) threadLocalEventLoop = nullptr;
+thread_local EventLoop* threadLocalEventLoop = nullptr;
 
 #define _kJ_ALREADY_READY reinterpret_cast< ::kj::_::Event*>(1)
 

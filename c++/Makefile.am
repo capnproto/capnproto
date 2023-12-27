@@ -165,7 +165,6 @@ includekj_HEADERS =                                            \
   src/kj/mutex.h                                               \
   src/kj/source-location.h                                     \
   src/kj/thread.h                                              \
-  src/kj/threadlocal.h                                         \
   src/kj/filesystem.h                                          \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
@@ -584,7 +583,6 @@ capnp_test_SOURCES =                                           \
   src/kj/io-test.c++                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/time-test.c++                                         \
-  src/kj/threadlocal-test.c++                                  \
   src/kj/filesystem-test.c++                                   \
   src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \

@@ -23,7 +23,6 @@
 
 #include "async-unix.h"
 #include "debug.h"
-#include "threadlocal.h"
 #include <setjmp.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -70,7 +69,7 @@ bool threadClaimedChildExits = false;
 
 namespace {
 
-KJ_THREADLOCAL_PTR(UnixEventPort) threadEventPort = nullptr;
+thread_local UnixEventPort* threadEventPort = nullptr;
 // This is set to the current UnixEventPort just before epoll_pwait(), then back to null after it
 // returns.
 
@@ -100,7 +99,7 @@ void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
 #elif KJ_USE_KQUEUE
 
 #if !KJ_HAS_SIGTIMEDWAIT
-KJ_THREADLOCAL_PTR(siginfo_t) threadCapture = nullptr;
+static thread_local siginfo_t* threadCapture = nullptr;
 #endif
 
 void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
@@ -152,7 +151,7 @@ struct SignalCapture {
 #endif
 };
 
-KJ_THREADLOCAL_PTR(SignalCapture) threadCapture = nullptr;
+thread_local SignalCapture* threadCapture = nullptr;
 
 }  // namespace
 

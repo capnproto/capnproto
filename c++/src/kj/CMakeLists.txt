@@ -62,7 +62,6 @@ set(kj_headers
   function.h
   mutex.h
   thread.h
-  threadlocal.h
   filesystem.h
   time.h
   main.h
@@ -252,7 +251,6 @@ if(BUILD_TESTING)
     io-test.c++
     mutex-test.c++
     time-test.c++
-    threadlocal-test.c++
     test-test.c++
     std/iostream-test.c++
   )
