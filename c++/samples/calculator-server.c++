@@ -20,8 +20,9 @@
 // THE SOFTWARE.
 
 #include "calculator.capnp.h"
+#include <kj/async-io.h>
+#include <capnp/rpc-twoparty.h>
 #include <kj/debug.h>
-#include <capnp/ez-rpc.h>
 #include <capnp/message.h>
 #include <iostream>
 
@@ -196,12 +197,17 @@ int main(int argc, const char* argv[]) {
     return 1;
   }
 
-  // Set up a server.
-  capnp::EzRpcServer server(kj::heap<CalculatorImpl>(), argv[1]);
+  // First we need to set up the KJ async event loop. This should happen one
+  // per thread that needs to perform RPC.
+  auto io = kj::setupAsyncIo();
+
+  // Using KJ APIs, let's parse our network address and listen on it.
+  kj::Network& network = io.provider->getNetwork();
+  kj::Own<kj::NetworkAddress> addr = network.parseAddress(argv[1]).wait(io.waitScope);
+  kj::Own<kj::ConnectionReceiver> listener = addr->listen();
 
   // Write the port number to stdout, in case it was chosen automatically.
-  auto& waitScope = server.getWaitScope();
-  uint port = server.getPort().wait(waitScope);
+  uint port = listener->getPort();
   if (port == 0) {
     // The address format "unix:/path/to/socket" opens a unix domain socket,
     // in which case the port will be zero.
@@ -210,6 +216,9 @@ int main(int argc, const char* argv[]) {
     std::cout << "Listening on port " << port << "..." << std::endl;
   }
 
+  // Start the RPC server.
+  capnp::TwoPartyServer server(kj::heap<CalculatorImpl>());
+
   // Run forever, accepting connections and handling requests.
-  kj::NEVER_DONE.wait(waitScope);
+  server.listen(*listener).wait(io.waitScope);
 }

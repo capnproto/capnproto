@@ -20,7 +20,8 @@
 // THE SOFTWARE.
 
 #include "calculator.capnp.h"
-#include <capnp/ez-rpc.h>
+#include <kj/async-io.h>
+#include <capnp/rpc-twoparty.h>
 #include <kj/debug.h>
 #include <math.h>
 #include <iostream>
@@ -47,13 +48,26 @@ int main(int argc, const char* argv[]) {
     return 1;
   }
 
-  capnp::EzRpcClient client(argv[1]);
-  Calculator::Client calculator = client.getMain<Calculator>();
+  // First we need to set up the KJ async event loop. This should happen one
+  // per thread that needs to perform RPC.
+  auto io = kj::setupAsyncIo();
 
   // Keep an eye on `waitScope`.  Whenever you see it used is a place where we
   // stop and wait for the server to respond.  If a line of code does not use
   // `waitScope`, then it does not block!
-  auto& waitScope = client.getWaitScope();
+  auto& waitScope = io.waitScope;
+
+  // Using KJ APIs, let's parse our network address and connect to it.
+  kj::Network& network = io.provider->getNetwork();
+  kj::Own<kj::NetworkAddress> addr = network.parseAddress(argv[1]).wait(waitScope);
+  kj::Own<kj::AsyncIoStream> conn = addr->connect().wait(waitScope);
+
+  // Now we can start the Cap'n Proto RPC system on this connection.
+  capnp::TwoPartyClient client(*conn);
+
+  // The server exports a "bootstrap" capability implementing the
+  // `Calculator` interface.
+  Calculator::Client calculator = client.bootstrap().castAs<Calculator>();
 
   {
     // Make a request that just evaluates the literal value 123.
