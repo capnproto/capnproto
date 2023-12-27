@@ -60,7 +60,6 @@ cc_library(
     srcs = [
         "capability.c++",
         "dynamic-capability.c++",
-        "ez-rpc.c++",
         "membrane.c++",
         "persistent.capnp.c++",
         "reconnect.c++",
@@ -71,7 +70,6 @@ cc_library(
         "serialize-async.c++",
     ],
     hdrs = [
-        "ez-rpc.h",
         "persistent.capnp.h",
         "reconnect.h",
         "rpc.capnp.h",
@@ -231,7 +229,6 @@ cc_library(
     "dynamic-test.c++",
     "encoding-test.c++",
     "endian-test.c++",
-    "ez-rpc-test.c++",
     "layout-test.c++",
     "membrane-test.c++",
     "message-test.c++",
