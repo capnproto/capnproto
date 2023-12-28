@@ -903,6 +903,14 @@ public:
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
 // Make a new AsyncIoProvider wrapping a `LowLevelAsyncIoProvider`.
 
+#if _WIN32
+Own<LowLevelAsyncIoProvider> newLowLevelAsyncIoProvider(Win32EventPort& eventPort);
+// Make a new `LowLevelAsyncIoProvider` backed by a `Win32EventPort`.
+#else
+Own<LowLevelAsyncIoProvider> newLowLevelAsyncIoProvider(UnixEventPort& eventPort);
+// Make a new `LowLevelAsyncIoProvider` backed by a `UnixEventPort`.
+#endif
+
 struct AsyncIoContext {
   Own<LowLevelAsyncIoProvider> lowLevelProvider;
   Own<AsyncIoProvider> provider;
