@@ -39,6 +39,7 @@
 #include <errno.h>
 #include <atomic>
 #include "mutex.h"
+#include <poll.h>
 
 #if KJ_USE_EPOLL
 #include <sys/epoll.h>
@@ -1115,6 +1116,132 @@ KJ_TEST("UnixEventPort thread-specific signals") {
     threads[i] = nullptr;  // wait for that one thread to exit
     usleep(1000);
     KJ_ASSERT(doneCount.load(std::memory_order_relaxed) == ++count);
+  }
+}
+#endif
+
+#if KJ_USE_EPOLL
+KJ_TEST("UnixEventPoll::getFd() for external waiting") {
+  kj::UnixEventPort port;
+  kj::EventLoop loop(port);
+  kj::WaitScope ws(loop);
+
+  auto portIsReady = [&port](int timout = 0) {
+    struct pollfd pfd;
+    memset(&pfd, 0, sizeof(pfd));
+    pfd.events = POLLIN;
+    pfd.fd = port.getPollableFd();
+
+    int n;
+    KJ_SYSCALL(n = poll(&pfd, 1, timout));
+    return n > 0;
+  };
+
+  // Test wakeup on observed FD.
+  {
+    int pair[2];
+    KJ_SYSCALL(pipe(pair));
+    kj::AutoCloseFd in(pair[0]);
+    kj::AutoCloseFd out(pair[1]);
+
+    kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
+    auto promise = observer.whenBecomesReadable();
+
+    KJ_EXPECT(!promise.poll(ws));
+    ws.poll();
+    port.preparePollableFdForSleep();
+
+    KJ_EXPECT(!portIsReady());
+
+    KJ_SYSCALL(write(out, "a", 1));
+
+    KJ_EXPECT(portIsReady());
+
+    KJ_ASSERT(promise.poll(ws));
+    promise.wait(ws);
+  }
+
+  // Test wakeup due to queuing work to the event loop in-process.
+  {
+    ws.poll();
+    port.preparePollableFdForSleep();
+
+    KJ_EXPECT(!portIsReady());
+
+    auto promise = kj::evalLater([]() {}).eagerlyEvaluate(nullptr);
+
+    KJ_EXPECT(portIsReady());
+    KJ_ASSERT(promise.poll(ws));
+    promise.wait(ws);
+  }
+
+  // Test wakeup on timeout.
+  {
+    auto promise = port.getTimer().afterDelay(50 * kj::MILLISECONDS);
+
+    KJ_EXPECT(!promise.poll(ws));
+    ws.poll();
+    port.preparePollableFdForSleep();
+
+    KJ_EXPECT(!portIsReady());
+
+    usleep(50'000);
+
+    KJ_EXPECT(portIsReady());
+
+    KJ_ASSERT(promise.poll(ws));
+    promise.wait(ws);
+  }
+
+  // Test wakeup on time in past. This verifies timerfd_settime() won't just silently fail if the
+  // time is already past.
+  {
+    ws.poll();
+
+    // Schedule time event in the past.
+    auto promise = port.getTimer().atTime(kj::origin<TimePoint>() + 1 * SECONDS);
+
+    // As of this writing, atTime() doesn't do any special handling of times in the past, e.g. to
+    // immediately resolve the promise. It goes ahead and schedules them like any other I/O. So
+    // scheduling such a promise will not immediately schedule work on the event loop, and
+    // preparePollableFdForSleep() will in fact go and timerfd_settime() to a time in the past. (If
+    // this changes, we'll need to structure this test differently I guess.)
+    KJ_EXPECT(!loop.isRunnable());
+
+    port.preparePollableFdForSleep();
+
+    // Uhhhh... Apparently when timerfd_settime() sets a time in the past, the timerfd does NOT
+    // immediately become readable. The kernel still needs to process the timer in the background
+    // before it raises the event. So we will need to give it some time... we give it 10ms here.
+    KJ_EXPECT(portIsReady(10));
+
+    KJ_ASSERT(promise.poll(ws));
+    promise.wait(ws);
+  }
+
+  // Test wakeup when a timer event is created during sleep.
+  {
+    ws.poll();
+    auto startTime = port.getTimer().now();
+    port.preparePollableFdForSleep();
+
+    KJ_EXPECT(!portIsReady());
+
+    // When sleeping, passage of real time updates `timer.now()`.
+    usleep(50'000);
+    KJ_EXPECT(port.getTimer().now() - startTime >= 50 * MILLISECONDS);
+
+    // We can set a timer now, and the epoll FD will wake up when it expires, even though no timer
+    // was set when `preparePollableFdForSleep()` was called.
+    auto promise = port.getTimer().afterDelay(50 * MILLISECONDS);
+
+    // It won't expire too early: the delay was added to the real time, not the last time the
+    // timer was advanced to.
+    KJ_EXPECT(!portIsReady(10));
+    KJ_EXPECT(portIsReady(40));
+
+    KJ_ASSERT(promise.poll(ws));
+    promise.wait(ws);
   }
 }
 #endif

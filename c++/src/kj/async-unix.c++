@@ -36,6 +36,7 @@
 #if KJ_USE_EPOLL
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/timerfd.h>
 #elif KJ_USE_KQUEUE
 #include <sys/event.h>
 #include <fcntl.h>
@@ -542,6 +543,8 @@ void UnixEventPort::wake() const {
 }
 
 bool UnixEventPort::wait() {
+  sleeping = false;
+
 #ifdef KJ_DEBUG
   // In debug mode, verify the current signal mask matches the original.
   {
@@ -647,6 +650,19 @@ bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
 
       // We were woken. Need to return true.
       woken = true;
+    } else if (events[i].data.u64 == 1) {
+      // timerfd fired. We need to clear it by reading it.
+      int tfd = KJ_ASSERT_NONNULL(timerFd).get();
+      char buffer[16];
+      ssize_t n;
+      KJ_NONBLOCKING_SYSCALL(n = read(tfd, buffer, sizeof(buffer)));
+      KJ_ASSERT(n == 8 || n < 0);
+
+      timerfdIsArmed = false;
+
+      // The purpose of this event is just to wake up the event loop when needed. We'll check the
+      // timer queue separately, so we don't need to do anything special it response to this event
+      // here.
     } else {
       FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].data.ptr);
       observer->fire(events[i].events);
@@ -662,6 +678,8 @@ bool UnixEventPort::poll() {
   // Unfortunately, epoll_pwait() with a timeout of zero will never deliver actually deliver any
   // pending signals. Therefore, we need a completely different approach to poll for signals. We
   // might as well use regular epoll_wait() in this case, too, to save the kernel some effort.
+
+  sleeping = false;
 
   if (signalHead != nullptr || childSet != kj::none) {
     // Use sigtimedwait() to poll for signals.
@@ -710,6 +728,85 @@ bool UnixEventPort::poll() {
   KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), 0));
 
   return processEpollEvents(events, n);
+}
+
+int UnixEventPort::getPollableFd() {
+  return epollFd.get();
+}
+
+void UnixEventPort::preparePollableFdForSleep() {
+  KJ_ASSERT(signalHead == nullptr,
+      "preparePollableFdForSleep() cannot be used when waiting for signals");
+
+  if (runnable) {
+    // There is still immediate work in the queue, so force the epoll to be ready immediately. (See
+    // comments in setRunnable() regarding using wake() for this.)
+    wake();
+  } else {
+    updateNextTimerEvent(timerImpl.nextEvent());
+
+    // Flag that we're sleeping, so setRunnable() knows to use wake() if needed.
+    sleeping = true;
+
+    // Tell the timer we're sleeping, so that it notifies us if anyone tries to create a new time
+    // event.
+    timerImpl.setSleeping(*this);
+  }
+}
+
+void UnixEventPort::setRunnable(bool runnable) {
+  this->runnable = runnable;
+  if (runnable && sleeping) {
+    // A meta event loop is waiting for the epoll to become readable, and an event was queued
+    // directly to the event loop in the meantime (e.g. due to a promise fulfiller being
+    // fulfilled). So, we need to cause the epoll to signal readability, to wake the event loop. We
+    // can use the cross-thread wake mechanism for this. It'll cause the event loop to spuriously
+    // check for cross-thread events, incurring a mutex lock, but that's not a big deal, and that's
+    // much better than creating a whole second event FD for this purpose.
+    wake();
+    sleeping = false;
+  }
+}
+
+void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
+  if (time == kj::none && !timerfdIsArmed) {
+    // No change needed.
+    return;
+  }
+
+  // Create the timerfd if needed.
+  int tfd;
+  KJ_IF_SOME(f, timerFd) {
+    tfd = f;
+  } else {
+    KJ_SYSCALL(tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
+    timerFd = kj::AutoCloseFd(tfd);
+
+    struct epoll_event event;
+    memset(&event, 0, sizeof(event));
+    event.events = EPOLLIN;
+    event.data.u64 = 1;
+    KJ_SYSCALL(epoll_ctl(epollFd, EPOLL_CTL_ADD, tfd, &event));
+  }
+
+  // Update timerfd's expiration time.
+  struct itimerspec ts;
+  memset(&ts, 0, sizeof(ts));
+  KJ_IF_SOME(t, time) {
+    auto t2 = t - origin<TimePoint>();
+    ts.it_value.tv_sec  = t2 / SECONDS;
+    ts.it_value.tv_nsec = (t2 % SECONDS) / NANOSECONDS;
+    timerfdIsArmed = true;
+  } else {
+    // setting the time to zero will disarm it
+    timerfdIsArmed = false;
+  }
+
+  KJ_SYSCALL(timerfd_settime(tfd, TFD_TIMER_ABSTIME, &ts, nullptr));
+}
+
+kj::TimePoint UnixEventPort::getTimeWhileSleeping() {
+  return clock.now();
 }
 
 #elif KJ_USE_KQUEUE
@@ -1582,6 +1679,16 @@ void UnixEventPort::wake() const {
 }
 
 #endif  // KJ_USE_EPOLL, else KJ_USE_KQUEUE, else
+
+#if !KJ_USE_EPOLL
+void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
+  KJ_UNIMPLEMENTED("SleepHooks not used on this platform, this shouldn't be called");
+}
+
+kj::TimePoint UnixEventPort::getTimeWhileSleeping() {
+  KJ_UNIMPLEMENTED("SleepHooks not used on this platform, this shouldn't be called");
+}
+#endif
 
 }  // namespace kj
 
