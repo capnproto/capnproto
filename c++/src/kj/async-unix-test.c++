@@ -1244,6 +1244,62 @@ KJ_TEST("UnixEventPoll::getFd() for external waiting") {
     promise.wait(ws);
   }
 }
+
+KJ_TEST("m:n threads:EventLoops") {
+  // This test shows that it's possible for an EventLoop to switch threads, and for a thread to
+  // switch event loops.
+
+  UnixEventPort port1;
+  EventLoop loop1(port1);
+
+  UnixEventPort port2;
+  EventLoop loop2(port2);
+
+  kj::TimePoint startTime = kj::origin<TimePoint>();
+  kj::Promise<void> promise1 = nullptr;
+  PromiseCrossThreadFulfillerPair<void> xpaf { nullptr, {} };
+  const Executor* executor;
+
+  {
+    WaitScope ws1(loop1);
+    ws1.poll();
+    startTime = port1.getTimer().now();
+    promise1 = port1.getTimer().afterDelay(10 * kj::MILLISECONDS);
+    xpaf = kj::newPromiseAndCrossThreadFulfiller<void>();
+    executor = &getCurrentThreadExecutor();
+  }
+
+  static thread_local uint threadId = 0;
+
+  threadId = 1;
+  bool executorDone = false;
+
+  kj::Thread thread([&]() noexcept {
+    threadId = 2;
+
+    WaitScope ws1(loop1);
+    promise1.wait(ws1);
+    KJ_EXPECT(port1.getTimer().now() - startTime >= 10 * kj::MILLISECONDS);
+    KJ_EXPECT(executorDone);
+
+    xpaf.promise.wait(ws1);
+  });
+
+  [&]() noexcept {
+    WaitScope ws2(loop2);
+
+    // The `executor` we captured earlier is tied to loop1, which has changed threads, so code we
+    // schedule on it will run there.
+    uint remoteThreadId = executor->executeAsync([&]() {
+      return threadId;
+    }).wait(ws2);
+    executorDone = true;
+    KJ_EXPECT(remoteThreadId == 2);
+    KJ_EXPECT(threadId == 1);
+
+    xpaf.fulfiller->fulfill();
+  }();
+}
 #endif
 
 }  // namespace
