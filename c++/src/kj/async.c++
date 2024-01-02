@@ -888,7 +888,8 @@ struct Executor::Impl {
         event.state = _::XThreadPaf::DISPATCHED;
       }
     }
-  }};
+  }
+};
 
 namespace _ {  // (private)
 
@@ -914,7 +915,6 @@ void XThreadEvent::ensureDoneOrCanceled() {
       // Target event loop is already dead, so we know it's already working on transitioning all
       // events to the DONE state. We can just wait.
       lock.wait([&](auto&) { return state == DONE; });
-      return;
     }
 
     switch (state) {
@@ -1039,6 +1039,9 @@ void XThreadEvent::ensureDoneOrCanceled() {
       auto lock = e.impl->state.lockExclusive();
       lock->replies.remove(*this);
     }
+
+    // const_cast OK because this is always called in the executor's home thread.
+    --const_cast<Executor&>(e).waiterCount;
   }
 }
 
@@ -1166,8 +1169,12 @@ void XThreadEvent::onReady(Event* event) noexcept {
 }
 
 XThreadPaf::XThreadPaf()
-    : state(WAITING), executor(getCurrentThreadExecutor()) {}
-XThreadPaf::~XThreadPaf() noexcept(false) {}
+    : state(WAITING), executor(getCurrentThreadExecutor()) {
+  ++const_cast<Executor&>(executor).waiterCount;
+}
+XThreadPaf::~XThreadPaf() noexcept(false) {
+  --const_cast<Executor&>(executor).waiterCount;
+}
 
 void XThreadPaf::destroy() {
   auto oldState = WAITING;
@@ -1266,7 +1273,12 @@ public:
 }  // namespace _
 
 Executor::Executor(EventLoop& loop, Badge<EventLoop>): impl(kj::heap<Impl>(loop)) {}
-Executor::~Executor() noexcept(false) {}
+Executor::~Executor() noexcept(false) {
+  // If there are still outstanding waiters, we're likely to hit UB later, so crash now.
+  [&]() noexcept {
+    KJ_ASSERT(waiterCount == 0, "EventLoop destroyed while cross-thread promises still exist");
+  }();
+}
 
 bool Executor::isLive() const {
   return impl->state.lockShared()->loop != kj::none;
@@ -1291,7 +1303,9 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
       return;
     }
   } else {
-    event.replyExecutor = getCurrentThreadExecutor();
+    auto& replyExecutor = getCurrentThreadExecutor();
+    ++const_cast<Executor&>(replyExecutor).waiterCount;
+    event.replyExecutor = replyExecutor;
 
     // Note that async requests will "just work" even if the target executor is our own thread's
     // executor. In theory we could detect this case to avoid some locking and signals but that

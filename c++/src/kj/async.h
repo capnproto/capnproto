@@ -1073,6 +1073,11 @@ private:
   Own<Impl> impl;
   // To avoid including mutex.h...
 
+  uint waiterCount = 0;
+  // How many cross-thread events is the owning thread of this Executor currently waiting on.
+  // This includes promises to be fulfilled by cross-thread fulfillers as well as the number of
+  // outstanding calls to executeAsync() (made on *other* executors) made from this thread.
+
   friend class EventLoop;
   friend class _::XThreadEvent;
   friend class _::XThreadPaf;
