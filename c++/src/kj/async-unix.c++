@@ -406,6 +406,98 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
 
 #endif  // !KJ_USE_KQUEUE
 
+namespace _ {  // (private)
+
+void END_CANCELER_STACK_START_WAITER_STACK() {}
+
+}  // namespace _ (private)
+
+// =======================================================================================
+// FD observer code common to multiple implementations
+
+class UnixEventPort::FdObserver::Waiter {
+public:
+  Waiter(PromiseFulfiller<void>& fulfiller, UnixEventPort& eventPort,
+         kj::Maybe<Waiter&>& registration)
+      : fulfiller(fulfiller), eventPort(eventPort), registration(registration) {
+    KJ_IF_SOME(r, registration) {
+      r.cancel("FD listener was replaced by a new listener for the same event");
+      KJ_DASSERT(registration == kj::none);
+    }
+
+    registration = *this;
+    ++eventPort.fdWaiterCount;
+  }
+
+  ~Waiter() noexcept(false) {
+    unregister();
+  }
+
+  void fulfill() {
+    fulfiller.fulfill();
+    unregister();
+  }
+
+  void cancel(StringPtr reason, SourceLocation sloc = {}) {
+    if (fulfiller.isWaiting()) {
+      fulfiller.reject(getDestructionReason(
+          reinterpret_cast<void*>(&_::END_CANCELER_STACK_START_WAITER_STACK),
+          Exception::Type::FAILED, sloc.fileName, sloc.lineNumber, reason));
+    }
+    unregister();
+  }
+
+private:
+  PromiseFulfiller<void>& fulfiller;
+  UnixEventPort& eventPort;
+  kj::Maybe<kj::Maybe<Waiter&>&> registration;
+
+  void unregister() {
+    KJ_IF_SOME(r, registration) {
+      KJ_IF_SOME(ref, r) {
+        if (&ref == this) {
+          r = kj::none;
+        }
+      }
+      --eventPort.fdWaiterCount;
+      registration = kj::none;
+    }
+  }
+};
+
+inline void UnixEventPort::FdObserver::cancelAllWaitersForDestructor() {
+  // Called by destructor.
+
+  // People shouldn't be destroying the FdObserver while events are outstanding but we can easily
+  // check for this and give them a nice error instead of a segfault.
+  KJ_IF_SOME(f, readFulfiller) {
+    f.cancel("FdObserver was destroyed while waiting for readability");
+  }
+  KJ_IF_SOME(f, writeFulfiller) {
+    f.cancel("FdObserver was destroyed while waiting for writability");
+  }
+  KJ_IF_SOME(f, urgentFulfiller) {
+    f.cancel("FdObserver was destroyed while waiting for urgent data");
+  }
+  KJ_IF_SOME(f, hupFulfiller) {
+    f.cancel("FdObserver was destroyed while waiting for write disconnected");
+  }
+}
+
+UnixEventPort::~UnixEventPort() noexcept(false) {
+#if !KJ_USE_KQUEUE
+  if (childSet != kj::none) {
+    // We had claimed the exclusive right to call onChildExit(). Release that right.
+    threadClaimedChildExits = false;
+  }
+#endif
+
+  // If there are still outstanding waiters, we're likely to hit UB later, so crash now.
+  [&]() noexcept {
+    KJ_ASSERT(fdWaiterCount == 0, "UnixEventPort destroyed while FdObservers still exist");
+  }();
+}
+
 #if KJ_USE_EPOLL
 // =======================================================================================
 // epoll FdObserver implementation
@@ -435,13 +527,6 @@ UnixEventPort::UnixEventPort()
   KJ_SYSCALL(sigprocmask(0, nullptr, &originalMask));
 }
 
-UnixEventPort::~UnixEventPort() noexcept(false) {
-  if (childSet != kj::none) {
-    // We had claimed the exclusive right to call onChildExit(). Release that right.
-    threadClaimedChildExits = false;
-  }
-}
-
 UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
     : eventPort(eventPort), fd(fd), flags(flags) {
   struct epoll_event event;
@@ -465,6 +550,7 @@ UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint fla
 
 UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
   KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr)) { break; }
+  cancelAllWaitersForDestructor();
 }
 
 void UnixEventPort::FdObserver::fire(short events) {
@@ -477,62 +563,51 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
 
     KJ_IF_SOME(f, readFulfiller) {
-      f->fulfill();
-      readFulfiller = kj::none;
+      f.fulfill();
+      KJ_DASSERT(readFulfiller == kj::none);
     }
   }
 
   if (events & (EPOLLOUT | EPOLLHUP | EPOLLERR)) {
     KJ_IF_SOME(f, writeFulfiller) {
-      f->fulfill();
-      writeFulfiller = kj::none;
+      f.fulfill();
+      KJ_DASSERT(writeFulfiller == kj::none);
     }
   }
 
   if (events & (EPOLLHUP | EPOLLERR)) {
     KJ_IF_SOME(f, hupFulfiller) {
-      f->fulfill();
-      hupFulfiller = kj::none;
+      f.fulfill();
+      KJ_DASSERT(hupFulfiller == kj::none);
     }
   }
 
   if (events & EPOLLPRI) {
     KJ_IF_SOME(f, urgentFulfiller) {
-      f->fulfill();
-      urgentFulfiller = kj::none;
+      f.fulfill();
+      KJ_DASSERT(urgentFulfiller == kj::none);
     }
   }
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
   KJ_REQUIRE(flags & OBSERVE_READ, "FdObserver was not set to observe reads.");
-
-  auto paf = newPromiseAndFulfiller<void>();
-  readFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, readFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
   KJ_REQUIRE(flags & OBSERVE_WRITE, "FdObserver was not set to observe writes.");
-
-  auto paf = newPromiseAndFulfiller<void>();
-  writeFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, writeFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
   KJ_REQUIRE(flags & OBSERVE_URGENT,
       "FdObserver was not set to observe availability of urgent data.");
-
-  auto paf = newPromiseAndFulfiller<void>();
-  urgentFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, urgentFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
-  auto paf = newPromiseAndFulfiller<void>();
-  hupFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, hupFulfiller);
 }
 
 void UnixEventPort::wake() const {
@@ -832,8 +907,6 @@ UnixEventPort::UnixEventPort()
   KJ_SYSCALL(kevent(kqueueFd, &event, 1, nullptr, 0, nullptr));
 }
 
-UnixEventPort::~UnixEventPort() noexcept(false) {}
-
 UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
     : eventPort(eventPort), fd(fd), flags(flags) {
   struct kevent events[3];
@@ -889,6 +962,8 @@ UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
     default:
       KJ_FAIL_SYSCALL("kevent(remove events)", error);
   }
+
+  cancelAllWaitersForDestructor();
 }
 
 void UnixEventPort::FdObserver::fire(struct kevent event) {
@@ -901,8 +976,8 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
       }
 
       KJ_IF_SOME(f, readFulfiller) {
-        f->fulfill();
-        readFulfiller = kj::none;
+        f.fulfill();
+        KJ_DASSERT(readFulfiller == kj::none);
       }
       break;
 
@@ -910,8 +985,8 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
       if (event.flags & EV_EOF) {
         // EOF on write indicates disconnect.
         KJ_IF_SOME(f, hupFulfiller) {
-          f->fulfill();
-          hupFulfiller = kj::none;
+          f.fulfill();
+          KJ_DASSERT(hupFulfiller == kj::none);
           if (!(flags & OBSERVE_WRITE)) {
             // We were only observing writes to get the disconnect event. Stop observing now.
             struct kevent rmEvent;
@@ -930,16 +1005,16 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
       }
 
       KJ_IF_SOME(f, writeFulfiller) {
-        f->fulfill();
-        writeFulfiller = kj::none;
+        f.fulfill();
+        KJ_DASSERT(writeFulfiller == kj::none);
       }
       break;
 
 #ifdef EVFILT_EXCEPT
     case EVFILT_EXCEPT:
       KJ_IF_SOME(f, urgentFulfiller) {
-        f->fulfill();
-        urgentFulfiller = kj::none;
+        f.fulfill();
+        KJ_DASSERT(urgentFulfiller == kj::none);
       }
       break;
 #endif
@@ -949,26 +1024,20 @@ void UnixEventPort::FdObserver::fire(struct kevent event) {
 Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
   KJ_REQUIRE(flags & OBSERVE_READ, "FdObserver was not set to observe reads.");
 
-  auto paf = newPromiseAndFulfiller<void>();
-  readFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, readFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
   KJ_REQUIRE(flags & OBSERVE_WRITE, "FdObserver was not set to observe writes.");
 
-  auto paf = newPromiseAndFulfiller<void>();
-  writeFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, writeFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
   KJ_REQUIRE(flags & OBSERVE_URGENT,
       "FdObserver was not set to observe availability of urgent data.");
 
-  auto paf = newPromiseAndFulfiller<void>();
-  urgentFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, urgentFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
@@ -979,9 +1048,7 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
     KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
   }
 
-  auto paf = newPromiseAndFulfiller<void>();
-  hupFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, hupFulfiller);
 }
 
 class UnixEventPort::SignalPromiseAdapter {
@@ -1280,8 +1347,6 @@ UnixEventPort::UnixEventPort()
   ignoreSigpipe();
 }
 
-UnixEventPort::~UnixEventPort() noexcept(false) {}
-
 UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
     : eventPort(eventPort), fd(fd), flags(flags), next(nullptr), prev(nullptr) {}
 
@@ -1294,6 +1359,8 @@ UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
     }
     *prev = next;
   }
+
+  cancelAllWaitersForDestructor();
 }
 
 void UnixEventPort::FdObserver::fire(short events) {
@@ -1309,29 +1376,29 @@ void UnixEventPort::FdObserver::fire(short events) {
     }
 
     KJ_IF_SOME(f, readFulfiller) {
-      f->fulfill();
-      readFulfiller = nullptr;
+      f.fulfill();
+      KJ_DASSERT(readFulfiller == kj::none);
     }
   }
 
   if (events & (POLLOUT | POLLHUP | POLLERR | POLLNVAL)) {
     KJ_IF_SOME(f, writeFulfiller) {
-      f->fulfill();
-      writeFulfiller = nullptr;
+      f.fulfill();
+      KJ_DASSERT(writeFulfiller == kj::none);
     }
   }
 
   if (events & (POLLHUP | POLLERR | POLLNVAL)) {
     KJ_IF_SOME(f, hupFulfiller) {
-      f->fulfill();
-      hupFulfiller = nullptr;
+      f.fulfill();
+      KJ_DASSERT(hupFulfiller == kj::none);
     }
   }
 
   if (events & POLLPRI) {
     KJ_IF_SOME(f, urgentFulfiller) {
-      f->fulfill();
-      urgentFulfiller = nullptr;
+      f.fulfill();
+      KJ_DASSERT(urgentFulfiller == kj::none);
     }
   }
 
@@ -1374,9 +1441,7 @@ Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
     eventPort.observersTail = &next;
   }
 
-  auto paf = newPromiseAndFulfiller<void>();
-  readFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, readFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
@@ -1389,9 +1454,7 @@ Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
     eventPort.observersTail = &next;
   }
 
-  auto paf = newPromiseAndFulfiller<void>();
-  writeFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, writeFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
@@ -1405,9 +1468,7 @@ Promise<void> UnixEventPort::FdObserver::whenUrgentDataAvailable() {
     eventPort.observersTail = &next;
   }
 
-  auto paf = newPromiseAndFulfiller<void>();
-  urgentFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, urgentFulfiller);
 }
 
 Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
@@ -1418,9 +1479,7 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
     eventPort.observersTail = &next;
   }
 
-  auto paf = newPromiseAndFulfiller<void>();
-  hupFulfiller = kj::mv(paf.fulfiller);
-  return kj::mv(paf.promise);
+  return newAdaptedPromise<void, Waiter>(eventPort, hupFulfiller);
 }
 
 class UnixEventPort::PollContext {

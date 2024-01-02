@@ -292,6 +292,10 @@ private:
   Maybe<Own<ChildSet>> childSet;
 #endif
 
+  uint fdWaiterCount = 0;
+  // How many Promises are waiting on FD poll events? Note this is not the number of FdObservers,
+  // but rather the number of unresolved calls to e.g. `whenBecomesReadable()`.
+
   static void signalHandler(int, siginfo_t* siginfo, void*) noexcept;
   static void registerSignalHandler(int signum);
 #if !KJ_USE_EPOLL && !KJ_USE_KQUEUE && !KJ_USE_PIPE_FOR_WAKEUP
@@ -414,10 +418,12 @@ private:
   int fd;
   uint flags;
 
-  kj::Maybe<Own<PromiseFulfiller<void>>> readFulfiller;
-  kj::Maybe<Own<PromiseFulfiller<void>>> writeFulfiller;
-  kj::Maybe<Own<PromiseFulfiller<void>>> urgentFulfiller;
-  kj::Maybe<Own<PromiseFulfiller<void>>> hupFulfiller;
+  class Waiter;
+
+  kj::Maybe<Waiter&> readFulfiller;
+  kj::Maybe<Waiter&> writeFulfiller;
+  kj::Maybe<Waiter&> urgentFulfiller;
+  kj::Maybe<Waiter&> hupFulfiller;
   // Replaced each time `whenBecomesReadable()` or `whenBecomesWritable()` is called. Reverted to
   // null every time an event is fired.
 
@@ -437,6 +443,8 @@ private:
 
   short getEventMask();
 #endif
+
+  void cancelAllWaitersForDestructor();
 
   friend class UnixEventPort;
 };
