@@ -13,6 +13,7 @@ set(kj_sources_lite
   mutex.c++
   string.c++
   source-location.c++
+  glob-filter.c++
   hash.c++
   table.c++
   thread.c++
@@ -49,6 +50,7 @@ set(kj_headers
   string.h
   string-tree.h
   source-location.h
+  glob-filter.h
   hash.h
   table.h
   map.h

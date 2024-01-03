@@ -151,6 +151,7 @@ includekj_HEADERS =                                            \
   src/kj/vector.h                                              \
   src/kj/string.h                                              \
   src/kj/string-tree.h                                         \
+  src/kj/glob-filter.h                                         \
   src/kj/hash.h                                                \
   src/kj/table.h                                               \
   src/kj/map.h                                                 \
@@ -274,6 +275,7 @@ libkj_la_SOURCES=                                              \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
   src/kj/source-location.c++                                   \
+  src/kj/glob-filter.c++
   src/kj/hash.c++                                              \
   src/kj/table.c++                                             \
   src/kj/encoding.c++                                          \

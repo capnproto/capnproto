@@ -21,6 +21,7 @@
 
 #include "common.h"
 #include "test.h"
+#include "glob-filter.h"
 #include <cstdlib>
 #include <stdexcept>
 #include <signal.h>
