@@ -154,7 +154,12 @@ TEST(AsyncUnixTest, Signals) {
 
   kill(getpid(), SIGURG);
 
-  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+  KJ_EXPECT(!loop.isAnyoneListening());
+  auto promise = port.onSignal(SIGURG);
+  KJ_EXPECT(loop.isAnyoneListening());
+  siginfo_t info = promise.wait(waitScope);
+  KJ_EXPECT(!loop.isAnyoneListening());
+
   EXPECT_EQ(SIGURG, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
@@ -371,11 +376,18 @@ TEST(AsyncUnixTest, ReadObserver) {
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
+  KJ_EXPECT(!loop.isAnyoneListening());
   UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
 
   KJ_SYSCALL(write(outfd, "foo", 3));
 
-  observer.whenBecomesReadable().wait(waitScope);
+  {
+    KJ_EXPECT(!loop.isAnyoneListening());
+    auto promise =observer.whenBecomesReadable();
+    KJ_EXPECT(loop.isAnyoneListening());
+    promise.wait(waitScope);
+    KJ_EXPECT(!loop.isAnyoneListening());
+  }
 
 #if __linux__  // platform known to support POLLRDHUP
   EXPECT_FALSE(KJ_ASSERT_NONNULL(observer.atEndHint()));
@@ -723,7 +735,9 @@ TEST(AsyncUnixTest, SteadyTimers) {
     }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   };
 
+  KJ_EXPECT(!loop.isAnyoneListening())
   addTimer(30 * MILLISECONDS);
+  KJ_EXPECT(loop.isAnyoneListening())
   addTimer(40 * MILLISECONDS);
   addTimer(20350 * MICROSECONDS);
   addTimer(30 * MILLISECONDS);
@@ -731,6 +745,7 @@ TEST(AsyncUnixTest, SteadyTimers) {
 
   std::sort(expected.begin(), expected.end());
   timer.atTime(expected.back() + MILLISECONDS).wait(waitScope);
+  KJ_EXPECT(!loop.isAnyoneListening());
 
   ASSERT_EQ(expected.size(), actual.size());
   for (int i = 0; i < expected.size(); ++i) {

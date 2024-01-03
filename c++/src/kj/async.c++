@@ -1756,6 +1756,12 @@ void EventPort::wake() const {
       "cross-thread wake() not implemented by this EventPort implementation"));
 }
 
+bool EventPort::isAnyoneListening() {
+  kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
+      "isAnyoneListening() not implemented by this EventPort implementation"));
+  return true;
+}
+
 EventLoop::EventLoop()
     : daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {}
 
@@ -1858,6 +1864,22 @@ const Executor& EventLoop::getExecutor() {
   } else {
     return *executor.emplace(kj::atomicRefcounted<_::ExecutorImpl>(*this, Badge<EventLoop>()));
   }
+}
+
+bool EventLoop::isAnyoneListening() {
+  KJ_IF_SOME(e, executor) {
+    if (e->waiterCount > 0) {
+      return true;
+    }
+  }
+
+  KJ_IF_SOME(p, port) {
+    if (p.isAnyoneListening()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void EventLoop::setRunnable(bool runnable) {

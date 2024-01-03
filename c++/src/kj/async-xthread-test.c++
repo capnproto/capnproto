@@ -140,12 +140,15 @@ KJ_TEST("asynchronous simple cross-thread events") {
       KJ_FAIL_ASSERT("test exception") { break; }
     }).wait(waitScope));
 
+    KJ_EXPECT(!loop.isAnyoneListening());
     Promise<uint> promise = exec->executeAsync([&]() {
       KJ_ASSERT(isChild);
       fulfiller->fulfill(123);
       return 456u;
     });
+    KJ_EXPECT(loop.isAnyoneListening());
     KJ_EXPECT(promise.wait(waitScope) == 456);
+    KJ_EXPECT(!loop.isAnyoneListening());
 
     *executor.lockExclusive() = kj::none;
   })();
@@ -889,10 +892,13 @@ KJ_TEST("cross-thread fulfiller") {
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
+    KJ_EXPECT(!loop.isAnyoneListening());
     auto paf = kj::newPromiseAndCrossThreadFulfiller<int>();
+    KJ_EXPECT(loop.isAnyoneListening());
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
     int result = paf.promise.wait(waitScope);
+    KJ_EXPECT(!loop.isAnyoneListening());
     KJ_EXPECT(result == 123);
   });
 

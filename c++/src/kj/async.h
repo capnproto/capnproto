@@ -1146,6 +1146,12 @@ public:
   // again until `wait()` or `poll()` has returned true at least once.
   //
   // The default implementation throws an UNIMPLEMENTED exception.
+
+  virtual bool isAnyoneListening();
+  // Returns true if any Promises currently exist which are waiting for some sort of event through
+  // this EventPort.
+  //
+  // The default implementation throws an UNIMPLEMENTED exception.
 };
 
 class EventLoop {
@@ -1205,6 +1211,13 @@ public:
   //
   // Note that this is only needed for cross-thread scheduling. To schedule code to run later in
   // the current thread, use `kj::evalLater()`, which will be more efficient.
+
+  bool isAnyoneListening();
+  // Returns true if any Promises exist in this EventLoop which are waiting for some external
+  // event -- either I/O via the EventPort, or a cross-thread event.
+  //
+  // If this returns false, AND no other thread has access to this thread's Executor, then it can
+  // be assumed that calling `wait()` on any promise would hang forever.
 
 private:
   kj::Maybe<EventPort&> port;

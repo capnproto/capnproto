@@ -498,6 +498,13 @@ UnixEventPort::~UnixEventPort() noexcept(false) {
   }();
 }
 
+bool UnixEventPort::isAnyoneListening() {
+  return fdWaiterCount > 0
+      || signalHead != nullptr
+      || childSet != kj::none
+      || timerImpl.nextEvent() != kj::none;
+}
+
 #if KJ_USE_EPOLL
 // =======================================================================================
 // epoll FdObserver implementation

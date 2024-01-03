@@ -237,6 +237,7 @@ public:
   bool wait() override;
   bool poll() override;
   void wake() const override;
+  bool isAnyoneListening() override;
 
 #if KJ_USE_EPOLL
   void setRunnable(bool runnable) override;
