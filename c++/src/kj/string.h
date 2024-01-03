@@ -748,7 +748,7 @@ inline ConstString StringPtr::attach() const {
 
 template <typename... Attachments>
 inline ConstString StringPtr::attach(Attachments&&... attachments) const {
-  return ConstString { .content = content.attach(kj::fwd<Attachments>(attachments)...) };
+  return ConstString { content = content.attach(kj::fwd<Attachments>(attachments)...) };
 }
 
 inline String::operator ArrayPtr<char>() {
