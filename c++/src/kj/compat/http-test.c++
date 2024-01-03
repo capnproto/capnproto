@@ -1879,34 +1879,6 @@ public:
   }
 };
 
-KJ_TEST("WebSocket unexpected RSV bits") {
-  KJ_HTTP_TEST_SETUP_IO;
-  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
-
-  WebSocketErrorCatcher errorCatcher;
-  auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, kj::none, errorCatcher);
-
-  byte DATA[] = {
-    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
-
-    0xF0, 0x05, 'w', 'o', 'r', 'l', 'd'  // all RSV bits set, plus FIN
-  };
-
-  auto clientTask = client->write(DATA, sizeof(DATA));
-
-  {
-    bool gotException = false;
-    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
-    serverTask.wait(waitScope);
-    KJ_ASSERT(gotException);
-    KJ_ASSERT(errorCatcher.errors.size() == 1);
-    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
-  }
-
-  clientTask.wait(waitScope);
-}
-
 void assertContainsWebSocketClose(kj::ArrayPtr<kj::byte> data, uint16_t code, kj::Maybe<kj::StringPtr> messageSubstr) {
   KJ_ASSERT(data.size() >= 2);  // The smallest possible Close frame has size 2.
   KJ_ASSERT(data.size() <= 127);  // Maximum size for control frames.
@@ -1934,6 +1906,38 @@ void assertContainsWebSocketClose(kj::ArrayPtr<kj::byte> data, uint16_t code, kj
   }
 }
 
+KJ_TEST("WebSocket unexpected RSV bits") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, kj::none, errorCatcher);
+
+  byte DATA[] = {
+    0x01, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',
+
+    0xF0, 0x05, 'w', 'o', 'r', 'l', 'd'  // all RSV bits set, plus FIN
+  };
+
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
+  auto clientTask = client->write(DATA, sizeof(DATA)).then([&]() {
+    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+  });
+
+  {
+    bool gotException = false;
+    auto serverTask = server->receive().then([](auto&& m) {}, [&gotException](kj::Exception&& ex) { gotException = true; });
+    serverTask.wait(waitScope);
+    KJ_ASSERT(gotException);
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
+  }
+
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "RSV bits"_kjc);
+}
+
 KJ_TEST("WebSocket unexpected continuation frame") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
@@ -1947,7 +1951,6 @@ KJ_TEST("WebSocket unexpected continuation frame") {
   };
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
-
   auto clientTask = client->write(DATA, sizeof(DATA)).then([&]() {
     return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
   });
@@ -1978,7 +1981,10 @@ KJ_TEST("WebSocket missing continuation frame") {
     0x01, 0x06, 'w', 'o', 'r', 'l', 'd', '!',  // Another start frame
   };
 
-  auto clientTask = client->write(DATA, sizeof(DATA));
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
+  auto clientTask = client->write(DATA, sizeof(DATA)).then([&]() {
+    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+  });
 
   {
     bool gotException = false;
@@ -1988,7 +1994,8 @@ KJ_TEST("WebSocket missing continuation frame") {
     KJ_ASSERT(errorCatcher.errors.size() == 1);
   }
 
-  clientTask.wait(waitScope);
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Missing continuation frame"_kjc);
 }
 
 KJ_TEST("WebSocket fragmented control frame") {
@@ -2003,7 +2010,10 @@ KJ_TEST("WebSocket fragmented control frame") {
     0x09, 0x04, 'd', 'a', 't', 'a'  // Fragmented ping frame
   };
 
-  auto clientTask = client->write(DATA, sizeof(DATA));
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
+  auto clientTask = client->write(DATA, sizeof(DATA)).then([&]() {
+    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+  });
 
   {
     bool gotException = false;
@@ -2014,7 +2024,8 @@ KJ_TEST("WebSocket fragmented control frame") {
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
   }
 
-  clientTask.wait(waitScope);
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Received fragmented control frame"_kjc);
 }
 
 KJ_TEST("WebSocket unknown opcode") {
@@ -2029,7 +2040,10 @@ KJ_TEST("WebSocket unknown opcode") {
     0x85, 0x04, 'd', 'a', 't', 'a'  // 5 is a reserved opcode
   };
 
-  auto clientTask = client->write(DATA, sizeof(DATA));
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
+  auto clientTask = client->write(DATA, sizeof(DATA)).then([&]() {
+    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+  });
 
   {
     bool gotException = false;
@@ -2040,7 +2054,8 @@ KJ_TEST("WebSocket unknown opcode") {
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
   }
 
-  clientTask.wait(waitScope);
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Unknown opcode 5"_kjc);
 }
 
 KJ_TEST("WebSocket unsolicited pong") {
@@ -2419,6 +2434,7 @@ KJ_TEST("WebSocket maximum message size") {
 
   WebSocketErrorCatcher errorCatcher;
   FakeEntropySource maskGenerator;
+  auto* rawClient = pipe.ends[0].get();
   auto client = newWebSocket(kj::mv(pipe.ends[0]), maskGenerator);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, kj::none, errorCatcher);
 
@@ -2426,9 +2442,12 @@ KJ_TEST("WebSocket maximum message size") {
   auto biggestAllowedString = kj::strArray(kj::repeat(kj::StringPtr("A"), maxSize), "");
   auto tooBigString = kj::strArray(kj::repeat(kj::StringPtr("B"), maxSize + 1), "");
 
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->send(biggestAllowedString)
       .then([&]() { return client->send(tooBigString); })
-      .then([&]() { return client->close(1234, "done"); });
+      .then([&]() {
+	return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+      });
 
   {
     auto message = server->receive(maxSize).wait(waitScope);
@@ -2442,6 +2461,9 @@ KJ_TEST("WebSocket maximum message size") {
     KJ_ASSERT(errorCatcher.errors.size() == 1);
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1009);
   }
+
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1009, "too large"_kjc);
 }
 
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {

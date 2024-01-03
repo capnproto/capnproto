@@ -2688,40 +2688,28 @@ public:
 
     auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
     if (recvHeader.hasRsv2or3()) {
-      return errorHandler.handleWebSocketProtocolError({
-        1002, "Received frame had RSV bits 2 or 3 set",
-      });
+      return sendCloseDueToError(1002, "Received frame had RSV bits 2 or 3 set");
     }
 
     recvData = recvData.slice(headerSize, recvData.size());
 
     size_t payloadLen = recvHeader.getPayloadLen();
     if (payloadLen > maxSize) {
-      return errorHandler.handleWebSocketProtocolError({
-        1009, kj::str("Message is too large: ", payloadLen, " > ", maxSize)
-      });
+      auto description = kj::str("Message is too large: ", payloadLen, " > ", maxSize);
+      return sendCloseDueToError(1009, description.asPtr()).attach(kj::mv(description));
     }
 
     auto opcode = recvHeader.getOpcode();
     bool isData = opcode < OPCODE_FIRST_CONTROL;
     if (opcode == OPCODE_CONTINUATION) {
       if (fragments.empty()) {
-	auto paf = newPromiseAndFulfiller<void>();
-	queueClose(1002, "Unexpected continuation frame", kj::mv(paf.fulfiller));
-
-	return paf.promise.then([this]() -> kj::Promise<Message> {
-	    return errorHandler.handleWebSocketProtocolError({
-		1002, "Unexpected continuation frame"
-	      });
-	  });
+	return sendCloseDueToError(1002, "Unexpected continuation frame");
       }
 
       opcode = fragmentOpcode;
     } else if (isData) {
       if (!fragments.empty()) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, "Missing continuation frame"
-        });
+	return sendCloseDueToError(1002, "Missing continuation frame");
       }
     }
 
@@ -2769,9 +2757,7 @@ public:
     } else {
       // Fragmented message, and this isn't the final fragment.
       if (!isData) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, "Received fragmented control frame"
-        });
+	return sendCloseDueToError(1002, "Received fragmented control frame");
       }
 
       message = kj::heapArray<byte>(payloadLen);
@@ -2802,11 +2788,10 @@ public:
 
       // Provide a reasonable error if a compressed frame is received without compression enabled.
       if (isCompressed && compressionConfig == kj::none) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, kj::str(
-              "Received a WebSocket frame whose compression bit was set, but the compression "
-              "extension was not negotiated for this connection.")
-        });
+	return sendCloseDueToError(
+	    1002,
+	    "Received a WebSocket frame whose compression bit was set, but the compression "
+	    "extension was not negotiated for this connection.");
       }
 
       switch (opcode) {
@@ -2879,9 +2864,10 @@ public:
           // Unsolicited pong. Ignore.
           return receive(maxSize);
         default:
-          return errorHandler.handleWebSocketProtocolError({
-            1002, kj::str("Unknown opcode ", opcode)
-          });
+	  {
+	    auto description = kj::str("Unknown opcode ", opcode);
+	    return sendCloseDueToError(1002, description.asPtr()).attach(kj::mv(description));
+	  }
       }
     };
 
@@ -3398,7 +3384,6 @@ private:
   bool disconnected = false;
   bool currentlySending = false;
   Header sendHeader;
-  kj::ArrayPtr<const byte> sendParts[2];
 
   struct ControlMessage {
     byte opcode;
@@ -3462,8 +3447,6 @@ private:
 	KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
 
         // We recently sent a control message; make sure it's finished before proceeding.
-	//
-	// 
         auto localPromise = kj::mv(p);
         sendingControlMessage = kj::none;
         co_await localPromise;
@@ -3515,6 +3498,7 @@ private:
       message = ownMessage;
     }
 
+    kj::ArrayPtr<const byte> sendParts[2];
     sendParts[0] = sendHeader.compose(true, useCompression, opcode, message.size(), mask);
     sendParts[1] = message;
     KJ_ASSERT(!sendHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
@@ -3555,6 +3539,17 @@ private:
       memcpy(payload.begin() + 2, reason.begin(), reason.size());
     }
     return kj::mv(payload);
+  }
+
+  kj::Promise<Message> sendCloseDueToError(uint16_t code, kj::StringPtr reason){
+    auto paf = newPromiseAndFulfiller<void>();
+    queueClose(code, reason, kj::mv(paf.fulfiller));
+
+    return paf.promise.then([this, code, reason]() -> kj::Promise<Message> {
+	return errorHandler.handleWebSocketProtocolError({
+	    code, reason
+	  });
+      });
   }
 
   void queuePong(kj::Array<byte> payload) {
@@ -3612,6 +3607,7 @@ private:
         co_return;
       }
 
+      kj::ArrayPtr<const byte> sendParts[2];
       sendParts[0] = sendHeader.compose(true, false, opcode,
                                         payload.size(), Mask(maskKeyGenerator));
       sendParts[1] = payload;
