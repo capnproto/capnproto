@@ -2615,18 +2615,7 @@ public:
   }
 
   kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
-    kj::Array<byte> payload;
-    if (code == 1005) {
-      KJ_REQUIRE(reason.size() == 0, "WebSocket close code 1005 cannot have a reason");
-
-      // code 1005 -- leave payload empty
-    } else {
-      payload = heapArray<byte>(reason.size() + 2);
-      payload[0] = code >> 8;
-      payload[1] = code;
-      memcpy(payload.begin() + 2, reason.begin(), reason.size());
-    }
-
+    kj::Array<byte> payload = serializeClose(code, reason);
     auto promise = sendImpl(OPCODE_CLOSE, payload);
     return promise.attach(kj::mv(payload));
   }
@@ -2664,6 +2653,10 @@ public:
   }
 
   kj::Promise<Message> receive(size_t maxSize) override {
+    KJ_IF_SOME(ex, receiveException) {
+      return kj::cp(ex);
+    }
+
     size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
 
     if (headerSize > recvData.size()) {
@@ -2713,9 +2706,14 @@ public:
     bool isData = opcode < OPCODE_FIRST_CONTROL;
     if (opcode == OPCODE_CONTINUATION) {
       if (fragments.empty()) {
-        return errorHandler.handleWebSocketProtocolError({
-          1002, "Unexpected continuation frame"
-        });
+	auto paf = newPromiseAndFulfiller<void>();
+	queueClose(1002, "Unexpected continuation frame", kj::mv(paf.fulfiller));
+
+	return paf.promise.then([this]() -> kj::Promise<Message> {
+	    return errorHandler.handleWebSocketProtocolError({
+		1002, "Unexpected continuation frame"
+	      });
+	  });
       }
 
       opcode = fragmentOpcode;
@@ -3405,11 +3403,19 @@ private:
   struct ControlMessage {
     byte opcode;
     kj::Array<byte> payload;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 
-    ControlMessage(byte opcode, kj::Array<byte> payload) : opcode(opcode), payload(kj::mv(payload)) {
+    ControlMessage(
+	byte opcodeParam,
+	kj::Array<byte> payloadParam,
+	kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillerParam)
+        : opcode(opcodeParam), payload(kj::mv(payloadParam)), fulfiller(kj::mv(fulfillerParam)) {
       KJ_REQUIRE(opcode <= OPCODE_MAX);
     }
   };
+
+  kj::Maybe<kj::Exception> receiveException;
+  // If set, all future calls to receive() will throw this exception.
 
   kj::Maybe<ControlMessage> queuedControlMessage;
   // queuedControlMessage holds the body of the next control message to write; it is cleared when the message is
@@ -3450,7 +3456,7 @@ private:
 
     currentlySending = true;
 
-    while (sendingControlMessage != kj::none) {
+    for (;;) {
       KJ_IF_SOME(p, sendingControlMessage) {
 	// Re-check in case of disconnect on a previous loop iteration.
 	KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
@@ -3461,6 +3467,8 @@ private:
         auto localPromise = kj::mv(p);
         sendingControlMessage = kj::none;
         co_await localPromise;
+      } else {
+        break;
       }
     }
 
@@ -3522,6 +3530,33 @@ private:
     sentBytes += sendParts[0].size() + sendParts[1].size();;
   }
 
+  void queueClose(uint16_t code, kj::StringPtr reason, kj::Own<kj::PromiseFulfiller<void>> fulfiller) {
+    bool alreadyWaiting = (queuedControlMessage != kj::none);
+
+    // Overwrite any previously-queued message. If there is one, it's just a Pong, and this Close supersedes it.
+    auto payload = serializeClose(code, reason);
+    queuedControlMessage = ControlMessage(OPCODE_CLOSE, kj::mv(payload), kj::mv(fulfiller));
+
+    if (!alreadyWaiting) {
+      setUpSendingControlMessage();
+    }
+  }
+
+  kj::Array<byte> serializeClose(uint16_t code, kj::StringPtr reason) {
+    kj::Array<byte> payload;
+    if (code == 1005) {
+      KJ_REQUIRE(reason.size() == 0, "WebSocket close code 1005 cannot have a reason");
+
+      // code 1005 -- leave payload empty
+    } else {
+      payload = heapArray<byte>(reason.size() + 2);
+      payload[0] = code >> 8;
+      payload[1] = code;
+      memcpy(payload.begin() + 2, reason.begin(), reason.size());
+    }
+    return kj::mv(payload);
+  }
+
   void queuePong(kj::Array<byte> payload) {
     bool alreadyWaitingForPongWrite = false;
 
@@ -3531,6 +3566,7 @@ private:
 	// closing the connection due to error. There's no point queueing a Pong that'll never be sent.
 	return;
       } else {
+	KJ_ASSERT(controlMessage.opcode == OPCODE_PONG);
 	alreadyWaitingForPongWrite = true;
       }
     }
@@ -3538,7 +3574,7 @@ private:
     // Note: According to spec, if the server receives a second ping before responding to the
     //   previous one, it can opt to respond only to the last ping. So we don't have to check if
     //   queuedControlMessage is already non-null.
-    queuedControlMessage = ControlMessage(OPCODE_PONG, kj::mv(payload));
+    queuedControlMessage = ControlMessage(OPCODE_PONG, kj::mv(payload), kj::none);
 
     if (currentlySending) {
       // There is a message-send in progress, so we cannot write to the stream now.  We will set
@@ -3566,18 +3602,23 @@ private:
     KJ_IF_SOME(q, queuedControlMessage) {
       byte opcode = q.opcode;
       kj::Array<byte> payload = kj::mv(q.payload);
+      auto maybeFulfiller = kj::mv(q.fulfiller);
       queuedControlMessage = kj::none;
 
       if (hasSentClose || disconnected) {
-        return kj::READY_NOW;
+	KJ_IF_SOME(fulfiller, maybeFulfiller) {
+	  fulfiller->fulfill();
+	}
+        co_return;
       }
 
       sendParts[0] = sendHeader.compose(true, false, opcode,
                                         payload.size(), Mask(maskKeyGenerator));
       sendParts[1] = payload;
-      return stream->write(sendParts).attach(kj::mv(payload));
-    } else {
-      return kj::READY_NOW;
+      co_await stream->write(sendParts);
+      KJ_IF_SOME(fulfiller, maybeFulfiller) {
+	fulfiller->fulfill();
+      }
     }
   }
 

@@ -1907,6 +1907,33 @@ KJ_TEST("WebSocket unexpected RSV bits") {
   clientTask.wait(waitScope);
 }
 
+void assertContainsWebSocketClose(kj::ArrayPtr<kj::byte> data, uint16_t code, kj::Maybe<kj::StringPtr> messageSubstr) {
+  KJ_ASSERT(data.size() >= 2);  // The smallest possible Close frame has size 2.
+  KJ_ASSERT(data.size() <= 127);  // Maximum size for control frames.
+  KJ_ASSERT((data[0] & 0xf0) == 0x80);  // Only the FIN flag is set.
+  KJ_ASSERT((data[0] & 0x0f) == 8);  // OPCODE_CLOSE
+
+  size_t payloadSize = data[1] & 0x7f;
+
+  if (payloadSize == 0) {
+    // A Close frame with no body has no status code and no reason.
+    KJ_ASSERT(code == 1005);
+    KJ_ASSERT(messageSubstr == kj::none);
+  } else {
+    KJ_ASSERT(code != 1005);
+  }
+  auto payload = data.slice(2);
+
+  KJ_ASSERT(payload.size() >= 2);  // The first two bytes are the status code, so we better have at least two bytes.
+  uint16_t gotCode = (payload[0] << 8) | payload[1];
+  KJ_ASSERT(gotCode == code);
+
+  KJ_IF_SOME(needle, messageSubstr) {
+    auto reason = kj::str(payload.asChars().slice(2));
+    KJ_ASSERT(reason.contains(needle), reason, needle);
+  }
+}
+
 KJ_TEST("WebSocket unexpected continuation frame") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
@@ -1919,7 +1946,11 @@ KJ_TEST("WebSocket unexpected continuation frame") {
     0x80, 0x06, 'h', 'e', 'l', 'l', 'o', ' ',  // Continuation frame with no start frame, plus FIN
   };
 
-  auto clientTask = client->write(DATA, sizeof(DATA));
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
+
+  auto clientTask = client->write(DATA, sizeof(DATA)).then([&]() {
+    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+  });
 
   {
     bool gotException = false;
@@ -1930,7 +1961,8 @@ KJ_TEST("WebSocket unexpected continuation frame") {
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1002);
   }
 
-  clientTask.wait(waitScope);
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Unexpected continuation frame"_kjc);
 }
 
 KJ_TEST("WebSocket missing continuation frame") {
