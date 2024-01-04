@@ -275,7 +275,7 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
         // False alarm: this is the drive letter.
       } else {
         KJ_FAIL_REQUIRE(
-            "colons are prohibited in win32 paths to avoid triggering alterante data streams",
+            "colons are prohibited in win32 paths to avoid triggering alternate data streams",
             result) {
           // Recover by using a different character which we know Win32 syscalls will reject.
           result[i] = '|';
@@ -985,7 +985,7 @@ public:
   InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory)
       : impl(clock, fileFactory) {}
   InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory,
-                    const  Directory& copyFrom, bool copyFiles)
+                    const Directory& copyFrom, bool copyFiles)
       : impl(clock, fileFactory, copyFrom, copyFiles) {}
 
   Own<const FsNode> cloneFsNode() const override {
@@ -1280,7 +1280,7 @@ public:
     } else if (toPath.size() == 1) {
       if (!has(toMode, WriteMode::MODIFY)) {
         // Replacement is not allowed, so we'll have to check upfront if the target path exists.
-        // Unfortuantely we have to take a lock and then drop it immediately since we can't keep
+        // Unfortunately we have to take a lock and then drop it immediately since we can't keep
         // the lock held while accessing `fromDirectory`.
         if (impl.lockShared()->tryGetEntry(toPath[0]) != kj::none) {
           return false;
@@ -1333,11 +1333,11 @@ public:
               // subdir just unlinks the object without modifying it, so we can safely just link it
               // into our own tree.
               //
-              // However, if `fromDirectory` is a disk directory, then remvoing the subdir will
+              // However, if `fromDirectory` is a disk directory, then removing the subdir will
               // likely perform a recursive delete, thus leaving `subdir` pointing to an empty
               // directory. If we link that into our tree, it's useless. So, instead, perform a
               // deep copy of the directory tree upfront, into an InMemoryDirectory. However, file
-              // content need not be copied, since unliked files keep their contents until closed.
+              // content need not be copied, since unlinked files keep their contents until closed.
               if (kj::dynamicDowncastIfAvailable<const InMemoryDirectory>(fromDirectory) ==
                   kj::none) {
                 subdir = impl.getWithoutLock().copyDirectory(*subdir, /* copyFiles = */ false);
@@ -1598,11 +1598,11 @@ private:
     }
 
     Own<const File> newFile() const {
-      // Consturct a new empty file. Note: This function is expected to work without the lock held.
+      // Construct a new empty file. Note: This function is expected to work without the lock held.
       return fileFactory.create(clock);
     }
     Own<const Directory> newDirectory() const {
-      // Consturct a new empty directory. Note: This function is expected to work without the lock
+      // Construct a new empty directory. Note: This function is expected to work without the lock
       // held.
       return newInMemoryDirectory(clock, fileFactory);
     }
