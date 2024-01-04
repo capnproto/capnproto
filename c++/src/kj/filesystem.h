@@ -796,7 +796,7 @@ public:
 
   virtual Own<Replacer<File>> replaceFile(PathPtr path, WriteMode mode) const = 0;
   // Construct a file which, when ready, will be atomically moved to `path`, replacing whatever
-  // is there already. See `Replacer<T>` for detalis.
+  // is there already. See `Replacer<T>` for details.
   //
   // The `CREATE` and `MODIFY` bits of `mode` are not enforced until commit time, hence
   // `replaceFile()` has no "try" variant.
@@ -819,7 +819,7 @@ public:
 
   virtual Own<Replacer<Directory>> replaceSubdir(PathPtr path, WriteMode mode) const = 0;
   // Construct a directory which, when ready, will be atomically moved to `path`, replacing
-  // whatever is there already. See `Replacer<T>` for detalis.
+  // whatever is there already. See `Replacer<T>` for details.
   //
   // The `CREATE` and `MODIFY` bits of `mode` are not enforced until commit time, hence
   // `replaceSubdir()` has no "try" variant.
