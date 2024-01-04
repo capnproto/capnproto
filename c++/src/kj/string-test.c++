@@ -380,9 +380,57 @@ KJ_TEST("float stringification and parsing is not locale-dependent") {
   }
 }
 
-KJ_TEST("ConstString") {
+KJ_TEST("ConstString literal operator") {
   kj::ConstString theString = "it's a const string!"_kjc;
   KJ_EXPECT(theString == "it's a const string!");
+}
+
+KJ_TEST("ConstString promotion") {
+    kj::StringPtr theString = "it's a const string!";
+    kj::ConstString constString = theString.attach();
+    KJ_EXPECT(constString == "it's a const string!");
+}
+
+struct DestructionOrderRecorder {
+    DestructionOrderRecorder(uint& counter, uint& recordTo)
+        : counter(counter), recordTo(recordTo) {}
+    ~DestructionOrderRecorder() {
+        recordTo = ++counter;
+    }
+
+    uint& counter;
+    uint& recordTo;
+};
+
+KJ_TEST("ConstString attachment lifetimes") {
+    uint counter = 0;
+    uint destroyed1 = 0;
+    uint destroyed2 = 0;
+    uint destroyed3 = 0;
+
+    auto obj1 = kj::heap<DestructionOrderRecorder>(counter, destroyed1);
+    auto obj2 = kj::heap<DestructionOrderRecorder>(counter, destroyed2);
+    auto obj3 = kj::heap<DestructionOrderRecorder>(counter, destroyed3);
+
+    StringPtr theString = "it's a string!";
+    const char* ptr = theString.begin();
+
+    ConstString combined = theString.attach(kj::mv(obj1), kj::mv(obj2), kj::mv(obj3));
+
+    KJ_EXPECT(combined.begin() == ptr);
+
+    KJ_EXPECT(obj1.get() == nullptr);
+    KJ_EXPECT(obj2.get() == nullptr);
+    KJ_EXPECT(obj3.get() == nullptr);
+    KJ_EXPECT(destroyed1 == 0);
+    KJ_EXPECT(destroyed2 == 0);
+    KJ_EXPECT(destroyed3 == 0);
+
+    combined = nullptr;
+
+    KJ_EXPECT(destroyed1 == 1, destroyed1);
+    KJ_EXPECT(destroyed2 == 2, destroyed2);
+    KJ_EXPECT(destroyed3 == 3, destroyed3);
 }
 
 }  // namespace
