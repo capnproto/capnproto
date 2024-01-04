@@ -985,7 +985,7 @@ public:
   InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory)
       : impl(clock, fileFactory) {}
   InMemoryDirectory(const Clock& clock, const InMemoryFileFactory& fileFactory,
-                    const  Directory& copyFrom, bool copyFiles)
+                    const Directory& copyFrom, bool copyFiles)
       : impl(clock, fileFactory, copyFrom, copyFiles) {}
 
   Own<const FsNode> cloneFsNode() const override {
