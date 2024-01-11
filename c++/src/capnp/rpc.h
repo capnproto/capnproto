@@ -68,9 +68,6 @@ class RpcSystem: public _::RpcSystemBase {
   //
   // See `makeRpcServer()` and `makeRpcClient()` below for convenient syntax for setting up an
   // `RpcSystem` given a `VatNetwork`.
-  //
-  // See `ez-rpc.h` for an even simpler interface for setting up RPC in a typical two-party
-  // client/server scenario.
 
 public:
   template <typename ProvisionId, typename RecipientId,
@@ -178,9 +175,6 @@ RpcSystem<VatId> makeRpcServer(
 //    MyMainInterface::Client bootstrap = makeMain();
 //    auto server = makeRpcServer(network, bootstrap);
 //    kj::NEVER_DONE.wait(waitScope);  // run forever
-//
-// See also ez-rpc.h, which has simpler instructions for the common case of a two-party
-// client-server RPC connection.
 
 template <typename VatId, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
@@ -221,9 +215,6 @@ RpcSystem<VatId> makeRpcClient(
 //    MyCapability::Client cap = client.restore(hostId, objId).castAs<MyCapability>();
 //    auto response = cap.fooRequest().send().wait(waitScope);
 //    handleMyResponse(response);
-//
-// See also ez-rpc.h, which has simpler instructions for the common case of a two-party
-// client-server RPC connection.
 
 template <typename SturdyRefObjectId>
 class SturdyRefRestorer: public _::SturdyRefRestorerBase {
@@ -372,8 +363,7 @@ class VatNetwork: public _::VatNetworkBase {
   // to manage object references and make method calls.
   //
   // The most common implementation of VatNetwork is TwoPartyVatNetwork (rpc-twoparty.h).  Most
-  // simple client-server apps will want to use it.  (You may even want to use the EZ RPC
-  // interfaces in `ez-rpc.h` and avoid all of this.)
+  // simple client-server apps will want to use it.
   //
   // TODO(someday):  Provide a standard implementation for the public internet.
 

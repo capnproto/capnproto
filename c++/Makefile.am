@@ -165,7 +165,6 @@ includekj_HEADERS =                                            \
   src/kj/mutex.h                                               \
   src/kj/source-location.h                                     \
   src/kj/thread.h                                              \
-  src/kj/threadlocal.h                                         \
   src/kj/filesystem.h                                          \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
@@ -229,8 +228,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/rpc-twoparty.h                                     \
   src/capnp/rpc.capnp.h                                        \
   src/capnp/rpc-twoparty.capnp.h                               \
-  src/capnp/persistent.capnp.h                                 \
-  src/capnp/ez-rpc.h
+  src/capnp/persistent.capnp.h
 
 includecapnpcompat_HEADERS =                                   \
   src/capnp/compat/json.h                                      \
@@ -374,8 +372,7 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/rpc.capnp.c++                                      \
   src/capnp/rpc-twoparty.c++                                   \
   src/capnp/rpc-twoparty.capnp.c++                             \
-  src/capnp/persistent.capnp.c++                               \
-  src/capnp/ez-rpc.c++
+  src/capnp/persistent.capnp.c++
 
 libcapnp_json_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnp_json_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
@@ -542,7 +539,6 @@ heavy_tests =                                                  \
   src/capnp/serialize-text-test.c++                            \
   src/capnp/rpc-test.c++                                       \
   src/capnp/rpc-twoparty-test.c++                              \
-  src/capnp/ez-rpc-test.c++                                    \
   src/capnp/compat/json-test.c++                               \
   src/capnp/compat/websocket-rpc-test.c++                      \
   src/capnp/compiler/lexer-test.c++                            \
@@ -587,7 +583,6 @@ capnp_test_SOURCES =                                           \
   src/kj/io-test.c++                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/time-test.c++                                         \
-  src/kj/threadlocal-test.c++                                  \
   src/kj/filesystem-test.c++                                   \
   src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \

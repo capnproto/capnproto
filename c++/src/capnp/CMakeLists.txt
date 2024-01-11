@@ -87,7 +87,6 @@ set(capnp-rpc_sources
   rpc-twoparty.c++
   rpc-twoparty.capnp.c++
   persistent.capnp.c++
-  ez-rpc.c++
 )
 set(capnp-rpc_headers
   rpc-prelude.h
@@ -96,7 +95,6 @@ set(capnp-rpc_headers
   rpc.capnp.h
   rpc-twoparty.capnp.h
   persistent.capnp.h
-  ez-rpc.h
 )
 set(capnp-rpc_schemas
   rpc.capnp
@@ -292,7 +290,6 @@ if(BUILD_TESTING)
       serialize-text-test.c++
       rpc-test.c++
       rpc-twoparty-test.c++
-      ez-rpc-test.c++
       compiler/lexer-test.c++
       compiler/type-id-test.c++
       test-util.c++

@@ -47,9 +47,6 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
                           private RpcFlowController::WindowGetter {
   // A `VatNetwork` that consists of exactly two parties communicating over an arbitrary byte
   // stream.  This is used to implement the common case of a client/server network.
-  //
-  // See `ez-rpc.h` for a simple interface for setting up two-party clients and servers.
-  // Use `TwoPartyVatNetwork` only if you need the advanced features.
 
 public:
   TwoPartyVatNetwork(MessageStream& msgStream,
