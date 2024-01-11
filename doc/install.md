@@ -83,7 +83,7 @@ If you download directly from Git, you will need to have the GNU autotools --
 [automake](http://www.gnu.org/software/automake/), and
 [libtool](http://www.gnu.org/software/libtool/) -- installed.
 
-    git clone https://github.com/capnproto/capnproto.git
+    git clone -b master https://github.com/capnproto/capnproto.git
     cd capnproto/c++
     autoreconf -i
     ./configure
