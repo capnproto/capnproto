@@ -40,28 +40,48 @@ struct TimerImpl::Impl {
 
 class TimerImpl::TimerPromiseAdapter {
 public:
-  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, TimerImpl::Impl& impl, TimePoint time)
-      : time(time), fulfiller(fulfiller), impl(impl) {
-    pos = impl.timers.insert(this);
+  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, TimerImpl& parent, TimePoint time)
+      : time(time), fulfiller(fulfiller), parent(parent) {
+    pos = parent.impl->timers.insert(this);
+
+    KJ_IF_SOME(h, parent.sleepHooks) {
+      if (pos == parent.impl->timers.begin()) {
+        h.updateNextTimerEvent(time);
+      }
+    }
   }
 
   ~TimerPromiseAdapter() {
-    if (pos != impl.timers.end()) {
-      impl.timers.erase(pos);
+    if (pos != parent.impl->timers.end()) {
+      KJ_IF_SOME(h, parent.sleepHooks) {
+        bool isFirst = pos == parent.impl->timers.begin();
+
+        parent.impl->timers.erase(pos);
+
+        if (isFirst) {
+          if (parent.impl->timers.empty()) {
+            h.updateNextTimerEvent(kj::none);
+          } else {
+            h.updateNextTimerEvent((*parent.impl->timers.begin())->time);
+          }
+        }
+      } else {
+        parent.impl->timers.erase(pos);
+      }
     }
   }
 
   void fulfill() {
     fulfiller.fulfill();
-    impl.timers.erase(pos);
-    pos = impl.timers.end();
+    parent.impl->timers.erase(pos);
+    pos = parent.impl->timers.end();
   }
 
   const TimePoint time;
 
 private:
   PromiseFulfiller<void>& fulfiller;
-  TimerImpl::Impl& impl;
+  TimerImpl& parent;
   Impl::Timers::const_iterator pos;
 };
 
@@ -70,12 +90,21 @@ inline bool TimerImpl::Impl::TimerBefore::operator()(
   return lhs->time < rhs->time;
 }
 
+TimePoint TimerImpl::now() const {
+  KJ_IF_SOME(h, sleepHooks) {
+    return h.getTimeWhileSleeping();
+  } else {
+    return time;
+  }
+}
+
 Promise<void> TimerImpl::atTime(TimePoint time) {
-  return newAdaptedPromise<void, TimerPromiseAdapter>(*impl, time);
+  auto result = newAdaptedPromise<void, TimerPromiseAdapter>(*this, time);
+  return result;
 }
 
 Promise<void> TimerImpl::afterDelay(Duration delay) {
-  return newAdaptedPromise<void, TimerPromiseAdapter>(*impl, time + delay);
+  return newAdaptedPromise<void, TimerPromiseAdapter>(*this, now() + delay);
 }
 
 TimerImpl::TimerImpl(TimePoint startTime)
@@ -110,6 +139,8 @@ Maybe<uint64_t> TimerImpl::timeoutToNextEvent(TimePoint start, Duration unit, ui
 }
 
 void TimerImpl::advanceTo(TimePoint newTime) {
+  sleepHooks = nullptr;
+
   // On Macs running an Intel processor, it has been observed that clock_gettime
   // may return non monotonic time, even when CLOCK_MONOTONIC is used.
   // This workaround is to avoid the assert triggering on these machines.

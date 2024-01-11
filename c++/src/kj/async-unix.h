@@ -64,7 +64,7 @@ struct timespec;
 
 namespace kj {
 
-class UnixEventPort: public EventPort {
+class UnixEventPort: public EventPort, private TimerImpl::SleepHooks {
   // An EventPort implementation which can wait for events on file descriptors as well as signals.
   // This API only makes sense on Unix.
   //
@@ -178,10 +178,69 @@ public:
   // This method may capture the `SIGCHLD` signal. You must not use `captureSignal(SIGCHLD)` nor
   // `onSignal(SIGCHLD)` in your own code if you use `captureChildExit()`.
 
+#if KJ_USE_EPOLL
+  int getPollableFd();
+  // Get a file descriptor which represents the EventPort's backing OS event queue, and becomes
+  // readable when there are events to process. This may be an epoll FD or a kqueue FD depending on
+  // the OS.
+  //
+  // You MUST use preparePollableFdForSleep() before waiting on this FD.
+  //
+  // The caller should not perform operations on this FD. It should only be used for polling in
+  // some other event loop. This can be useful for allowing UnixEventPort to operate embedded in
+  // an application that uses some other event loop as its main loop. Whenever this FD becomes
+  // readable, call waitScope.poll() to handle all available events, then
+  // `preparePollableFdForSleep()`.
+  //
+  // It's also possible to use this to drive multiple event loops from the same thread, or even
+  // multiple threads in an m:n mapping. When an event loop becomes ready, create a temporary
+  // WaitScope on the thread where you want to run it, pump the loop, and then destroy the
+  // WaitScope. A WaitScope binds a loop to a thread while it exists, but an event loop is allowed
+  // to change threads and a thread is allowed to change event loops as long as no WaitScope is
+  // currently binding them.
+  //
+  // TODO(someday): Currently this is only implemented for epoll, NOT for kqueue. But in principle
+  //   it should be possible to implement for kqueue as well.
+
+  void preparePollableFdForSleep();
+  // If you plan to monitor the FD return by getPollableFd() for notifications that this queue is ready,
+  // you must call preparePollableFdForSleep() after each run of this port's event loop in order to
+  // ensure that all event types will in fact wake up the queue.
+  //
+  // This call is needed in particular to arrange for timer events. Normally, timer events are not
+  // implemented via the epoll/kqueue at all, but instead the call to epoll_wait() / kevent() is
+  // given a timeout that causes it to return early when the next timer event is scheduled. This
+  // doesn't work when the wait is being performed on an external event loop, so instead the
+  // implementation must arrange to use timerfd (for epoll) of EVFILT_TIMER (for kqueue) so that
+  // the queue FD actually becomes ready when the next timer event is ready to run. This requires
+  // some extra syscalls, unfortunately.
+  //
+  // A second reason this call is needed is to wake up the event queue if any work is queued
+  // directly to the event loop via function calls rather than OS events. For example, if anyone
+  // calls `fulfill()` on a `PromiseFulfiller`, thus queuing work to this event loop, it needs
+  // to wake up. The EventPort achieves this by implicitly calling `wake()` if any work is queued
+  // while sleeping -- similar to a cross-thread wakup. NOTE: Queuing work like this while the
+  // event loop is asleep is only safe if the EventLoop is still bound to the thread by the
+  // existence of a WaitScope. If you are destroying the WaitScope while sleeping, then you cannot
+  // manipulate promises attached to this loop at all while it is asleep. (Cross-thread events,
+  // e.g. queued via newPromiseAndCrossThreadFulfiller(), or via kj::Executor, are always safe.
+  // These will cause the queue fd to become ready so that the loop can wake up and respond to the
+  // events.)
+  //
+  // This method will throw an exception if the port is currently waiting on any signals via
+  // onSignal() or onChildExit(). Although it might theoretically be possible to support signals in
+  // this mode, deep flaws in the relevant APIs across multiple OSs make it likely not worth
+  // attempting.
+#endif
+
   // implements EventPort ------------------------------------------------------
   bool wait() override;
   bool poll() override;
   void wake() const override;
+
+#if KJ_USE_EPOLL
+  void setRunnable(bool runnable) override;
+#endif
 
 private:
   class SignalPromiseAdapter;
@@ -203,6 +262,11 @@ private:
   sigset_t originalMask;
   AutoCloseFd epollFd;
   AutoCloseFd eventFd;   // Used for cross-thread wakeups.
+  kj::Maybe<AutoCloseFd> timerFd;   // Used if preparePollableFdForSleep() is ever called.
+
+  bool sleeping = false;  // Was preparePollableFdForSleep() called?
+  bool runnable = false;  // Last value passed to setRunnable().
+  bool timerfdIsArmed = false;
 
   bool processEpollEvents(struct epoll_event events[], int n);
 #elif KJ_USE_KQUEUE
@@ -234,6 +298,10 @@ private:
   static void registerReservedSignal();
 #endif
   static void ignoreSigpipe();
+
+  // Implements TimerImpl::SleepHooks.
+  void updateNextTimerEvent(kj::Maybe<TimePoint> time) override;
+  kj::TimePoint getTimeWhileSleeping() override;
 };
 
 class UnixEventPort::FdObserver: private AsyncObject {
