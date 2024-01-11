@@ -661,7 +661,7 @@ bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
       timerfdIsArmed = false;
 
       // The purpose of this event is just to wake up the event loop when needed. We'll check the
-      // timer queue separately, so we don't need to do anything special it response to this event
+      // timer queue separately, so we don't need to do anything special in response to this event
       // here.
     } else {
       FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].data.ptr);

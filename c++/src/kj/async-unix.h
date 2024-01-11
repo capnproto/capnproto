@@ -203,7 +203,7 @@ public:
   //   it should be possible to implement for kqueue as well.
 
   void preparePollableFdForSleep();
-  // If you plan to monitor the FD return by getFd() for notifications that this queue is ready,
+  // If you plan to monitor the FD return by getPollableFd() for notifications that this queue is ready,
   // you must call preparePollableFdForSleep() after each run of this port's event loop in order to
   // ensure that all event types will in fact wake up the queue.
   //

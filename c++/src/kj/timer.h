@@ -115,7 +115,7 @@ public:
 
     virtual kj::TimePoint getTimeWhileSleeping() = 0;
     // Get the current time. While sleeping, we can't lock time in place and advance it on each
-    // poll of the event queue, because aribtrary time might have passed outside the control of
+    // poll of the event queue, because arbitrary time might have passed outside the control of
     // the KJ event loop.
   };
 

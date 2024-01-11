@@ -1121,7 +1121,7 @@ KJ_TEST("UnixEventPort thread-specific signals") {
 #endif
 
 #if KJ_USE_EPOLL
-KJ_TEST("UnixEventPoll::getFd() for external waiting") {
+KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
   kj::UnixEventPort port;
   kj::EventLoop loop(port);
   kj::WaitScope ws(loop);
