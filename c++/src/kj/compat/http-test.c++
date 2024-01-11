@@ -5791,6 +5791,44 @@ KJ_TEST("HttpClient concurrency limiting") {
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
 }
 
+KJ_TEST("HttpClientImpl connect()") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable headerTable;
+  auto client = newHttpClient(headerTable, *pipe.ends[0]);
+
+  auto req = client->connect("foo:123", HttpHeaders(headerTable), {});
+
+  char buffer[16];
+  auto readPromise = req.connection->tryRead(buffer, 16, 16);
+
+  expectRead(*pipe.ends[1], "CONNECT foo:123 HTTP/1.1\r\n\r\n").wait(waitScope);
+
+  {
+    kj::StringPtr msg = "HTTP/1.1 200 OK\r\n\r\nthis is the"_kj;
+    pipe.ends[1]->write(msg.begin(), msg.size()).wait(waitScope);
+  }
+
+  KJ_EXPECT(!readPromise.poll(waitScope));
+
+  kj::Promise<void> writePromise = nullptr;
+  {
+    kj::StringPtr msg = " connection content!!"_kj;
+    writePromise = pipe.ends[1]->write(msg.begin(), msg.size());
+  }
+
+  KJ_ASSERT(readPromise.poll(waitScope));
+  KJ_ASSERT(readPromise.wait(waitScope) == 16);
+  KJ_EXPECT(kj::str(kj::ArrayPtr<char>(buffer)) == "this is the conn"_kj);
+
+  KJ_EXPECT(req.connection->tryRead(buffer, 16, 16).wait(waitScope) == 16);
+  KJ_EXPECT(kj::str(kj::ArrayPtr<char>(buffer)) == "ection content!!"_kj);
+
+  KJ_ASSERT(writePromise.poll(waitScope));
+  writePromise.wait(waitScope);
+}
+
 #if KJ_HTTP_TEST_USE_OS_PIPE
 // This test relies on access to the network.
 KJ_TEST("NetworkHttpClient connect impl") {
