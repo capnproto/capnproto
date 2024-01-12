@@ -2916,7 +2916,7 @@ KJ_TEST("WebSocket Compression String Parsing (splitParts)") {
   const auto extTwo = "permessage-deflate;  ;"_kj;
   const auto extThree = "permessage-deflate"_kj;
 
-  auto actualExtensions = kj::_::splitParts(s, ',');
+  auto actualExtensions = kj::splitParts(s, ',');
   KJ_ASSERT(actualExtensions.size() == 3);
   KJ_ASSERT(actualExtensions[0] == extOne);
   KJ_ASSERT(actualExtensions[1] == extTwo);
@@ -2926,18 +2926,18 @@ KJ_TEST("WebSocket Compression String Parsing (splitParts)") {
   const auto paramOne = "client_max_window_bits=10"_kj;
   const auto paramTwo = "server_no_context_takeover"_kj;
 
-  auto actualParamsFirstExt = kj::_::splitParts(actualExtensions[0], ';');
+  auto actualParamsFirstExt = kj::splitParts(actualExtensions[0], ';');
   KJ_ASSERT(actualParamsFirstExt.size() == 3);
   KJ_ASSERT(actualParamsFirstExt[0] == permitted);
   KJ_ASSERT(actualParamsFirstExt[1] == paramOne);
   KJ_ASSERT(actualParamsFirstExt[2] == paramTwo);
 
-  auto actualParamsSecondExt = kj::_::splitParts(actualExtensions[1], ';');
+  auto actualParamsSecondExt = kj::splitParts(actualExtensions[1], ';');
   KJ_ASSERT(actualParamsSecondExt.size() == 2);
   KJ_ASSERT(actualParamsSecondExt[0] == permitted);
   KJ_ASSERT(actualParamsSecondExt[1] == ""_kj); // Note that the whitespace was stripped.
 
-  auto actualParamsThirdExt = kj::_::splitParts(actualExtensions[2], ';');
+  auto actualParamsThirdExt = kj::splitParts(actualExtensions[2], ';');
   // No parameters supplied in the third offer. We expect to only see the extension name.
   KJ_ASSERT(actualParamsThirdExt.size() == 1);
   KJ_ASSERT(actualParamsThirdExt[0] == permitted);
@@ -2948,8 +2948,8 @@ KJ_TEST("WebSocket Compression String Parsing (toKeysAndVals)") {
   // into the `Value`. Otherwise, everything goes into the `Key` and the `Value` remains null.
   const auto cleanParameters =  "client_no_context_takeover; client_max_window_bits; "
                                 "server_max_window_bits=10"_kj;
-  auto parts = _::splitParts(cleanParameters, ';');
-  auto keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  auto parts = splitParts(cleanParameters, ';');
+  auto keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(keysMaybeValues.size() == 3);
 
   auto firstKey = "client_no_context_takeover"_kj;
@@ -2973,8 +2973,8 @@ KJ_TEST("WebSocket Compression String Parsing (toKeysAndVals)") {
   // That said, we don't mind if the parameters are weird when calling this function. The point
   // is to create KeyMaybeVal pairs and process them later.
 
-  parts = _::splitParts(weirdParameters, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(weirdParameters, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(keysMaybeValues.size() == 3);
 
   firstKey = ""_kj;
@@ -2999,8 +2999,8 @@ KJ_TEST("WebSocket Compression String Parsing (populateUnverifiedConfig)") {
   // offer is structured incorrectly.
   const auto cleanParameters =  "client_no_context_takeover; client_max_window_bits; "
                                 "server_max_window_bits=10"_kj;
-  auto parts = _::splitParts(cleanParameters, ';');
-  auto keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  auto parts = splitParts(cleanParameters, ';');
+  auto keysMaybeValues = toKeysAndVals(parts.asPtr());
 
   auto unverified = _::populateUnverifiedConfig(keysMaybeValues);
   auto config = KJ_ASSERT_NONNULL(unverified);
@@ -3015,8 +3015,8 @@ KJ_TEST("WebSocket Compression String Parsing (populateUnverifiedConfig)") {
 
   const auto weirdButValidParameters =  "client_no_context_takeover; client_max_window_bits; "
                                         "server_max_window_bits=this_should_be_a_number"_kj;
-  parts = _::splitParts(weirdButValidParameters, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(weirdButValidParameters, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
 
   unverified = _::populateUnverifiedConfig(keysMaybeValues);
   config = KJ_ASSERT_NONNULL(unverified);
@@ -3033,45 +3033,45 @@ KJ_TEST("WebSocket Compression String Parsing (populateUnverifiedConfig)") {
 
   // --- HANDLE INCORRECTLY STRUCTURED OFFERS ---
   auto invalidKey = "somethingKey; client_max_window_bits;"_kj;
-  parts = _::splitParts(invalidKey, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(invalidKey, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to invalid key name
 
   auto invalidKeyTwo = "client_max_window_bitsJUNK; server_no_context_takeover"_kj;
-  parts = _::splitParts(invalidKeyTwo, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(invalidKeyTwo, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to invalid key name (invalid characters after valid parameter name).
 
   auto repeatedKey = "client_no_context_takeover; client_no_context_takeover"_kj;
-  parts = _::splitParts(repeatedKey, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(repeatedKey, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to repeated key name.
 
   auto unexpectedValue = "client_no_context_takeover="_kj;
-  parts = _::splitParts(unexpectedValue, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(unexpectedValue, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to value in `x_no_context_takeover` parameter (unexpected value).
 
   auto unexpectedValueTwo = "client_no_context_takeover=   "_kj;
-  parts = _::splitParts(unexpectedValueTwo, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(unexpectedValueTwo, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to value in `x_no_context_takeover` parameter.
 
   auto emptyValue = "client_max_window_bits="_kj;
-  parts = _::splitParts(emptyValue, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(emptyValue, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to empty value in `x_max_window_bits` parameter.
   // "Empty" in this case means an "=" was provided, but no subsequent value was provided.
 
   auto emptyValueTwo = "client_max_window_bits=   "_kj;
-  parts = _::splitParts(emptyValueTwo, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(emptyValueTwo, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
   // Fail to populate due to empty value in `x_max_window_bits` parameter.
   // "Empty" in this case means an "=" was provided, but no subsequent value was provided.
@@ -3082,8 +3082,8 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
   // correctly structured offers/agreements here.
   const auto cleanParameters =  "client_no_context_takeover; client_max_window_bits; "
                                 "server_max_window_bits=10"_kj;
-  auto parts = _::splitParts(cleanParameters, ';');
-  auto keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  auto parts = splitParts(cleanParameters, ';');
+  auto keysMaybeValues = toKeysAndVals(parts.asPtr());
   auto maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   auto unverified = KJ_ASSERT_NONNULL(maybeUnverified);
   auto maybeValid = _::validateCompressionConfig(kj::mv(unverified), false); // Validate as Server.
@@ -3098,8 +3098,8 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
 
   const auto correctStructureButInvalid = "client_no_context_takeover; client_max_window_bits; "
                                           "server_max_window_bits=this_should_be_a_number"_kj;
-  parts = _::splitParts(correctStructureButInvalid, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(correctStructureButInvalid, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
 
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   unverified = KJ_ASSERT_NONNULL(maybeUnverified);
@@ -3109,32 +3109,32 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
 
   const auto invalidRange = "client_max_window_bits; server_max_window_bits=18;"_kj;
   // `server_max_window_bits` is out of range, decline.
-  parts = _::splitParts(invalidRange, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(invalidRange, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
   KJ_ASSERT(maybeValid == nullptr);
 
   const auto invalidRangeTwo = "client_max_window_bits=4"_kj;
   // `server_max_window_bits` is out of range, decline.
-  parts = _::splitParts(invalidRangeTwo, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(invalidRangeTwo, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
   KJ_ASSERT(maybeValid == nullptr);
 
   const auto invalidRequest = "server_max_window_bits"_kj;
   // `sever_max_window_bits` must have a value in a request AND a response.
-  parts = _::splitParts(invalidRequest, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(invalidRequest, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
   KJ_ASSERT(maybeValid == nullptr);
 
   const auto invalidResponse = "client_max_window_bits"_kj;
   // `client_max_window_bits` must have a value in a response.
-  parts = _::splitParts(invalidResponse, ';');
-  keysMaybeValues = _::toKeysAndVals(parts.asPtr());
+  parts = splitParts(invalidResponse, ';');
+  keysMaybeValues = toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), true);
   KJ_ASSERT(maybeValid == nullptr);

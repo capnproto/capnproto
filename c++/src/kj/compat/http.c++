@@ -4599,6 +4599,51 @@ private:
   }
 };
 
+
+kj::Vector<kj::ArrayPtr<const char>> splitParts(kj::ArrayPtr<const char> input, char delim) {
+  // Given a string `input` and a delimiter `delim`, split the string into a vector of substrings,
+  // separated by the delimiter. Note that leading/trailing whitespace is stripped from each element.
+  kj::Vector<kj::ArrayPtr<const char>> parts;
+
+  while (input.size() != 0) {
+    auto part = _::splitNext(input, delim);
+    _::stripLeadingAndTrailingSpace(part);
+    parts.add(kj::mv(part));
+  }
+
+  return parts;
+}
+
+kj::Array<KeyMaybeVal> toKeysAndVals(const kj::ArrayPtr<kj::ArrayPtr<const char>>& params) {
+  // Given a collection of parameters (a single offer), parse the parameters into <key, MaybeValue>
+  // pairs. If the parameter contains an `=`, we set the `key` to everything before, and the `value`
+  // to everything after. Otherwise, we set the `key` to be the entire parameter.
+  // Either way, both the key and value (if it exists) are stripped of leading & trailing whitespace.
+  auto result = kj::heapArray<KeyMaybeVal>(params.size());
+  size_t count = 0;
+  for (const auto& param : params) {
+    kj::ArrayPtr<const char> key;
+    kj::Maybe<kj::ArrayPtr<const char>> value;
+
+    KJ_IF_SOME(index, param.findFirst('=')) {
+      // Found '=' so we have a value.
+      key = param.slice(0, index);
+      _::stripLeadingAndTrailingSpace(key);
+      value = param.slice(index + 1, param.size());
+      KJ_IF_SOME(v, value) {
+        _::stripLeadingAndTrailingSpace(v);
+      }
+    } else {
+      key = kj::mv(param);
+    }
+
+    result[count].key = kj::mv(key);
+    result[count].val = kj::mv(value);
+    ++count;
+  }
+  return kj::mv(result);
+}
+
 // =======================================================================================
 
 namespace _ { // private implementation details
@@ -4633,50 +4678,6 @@ void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str) {
   while (str.size() > 0 && (str.back() == ' ' || str.back() == '\t')) {
     str = str.slice(0, str.size() - 1);
   }
-}
-
-kj::Vector<kj::ArrayPtr<const char>> splitParts(kj::ArrayPtr<const char> input, char delim) {
-  // Given a string `input` and a delimiter `delim`, split the string into a vector of substrings,
-  // separated by the delimiter. Note that leading/trailing whitespace is stripped from each element.
-  kj::Vector<kj::ArrayPtr<const char>> parts;
-
-  while (input.size() != 0) {
-    auto part = splitNext(input, delim);
-    stripLeadingAndTrailingSpace(part);
-    parts.add(kj::mv(part));
-  }
-
-  return parts;
-}
-
-kj::Array<KeyMaybeVal> toKeysAndVals(const kj::ArrayPtr<kj::ArrayPtr<const char>>& params) {
-  // Given a collection of parameters (a single offer), parse the parameters into <key, MaybeValue>
-  // pairs. If the parameter contains an `=`, we set the `key` to everything before, and the `value`
-  // to everything after. Otherwise, we set the `key` to be the entire parameter.
-  // Either way, both the key and value (if it exists) are stripped of leading & trailing whitespace.
-  auto result = kj::heapArray<KeyMaybeVal>(params.size());
-  size_t count = 0;
-  for (const auto& param : params) {
-    kj::ArrayPtr<const char> key;
-    kj::Maybe<kj::ArrayPtr<const char>> value;
-
-    KJ_IF_SOME(index, param.findFirst('=')) {
-      // Found '=' so we have a value.
-      key = param.slice(0, index);
-      stripLeadingAndTrailingSpace(key);
-      value = param.slice(index + 1, param.size());
-      KJ_IF_SOME(v, value) {
-        stripLeadingAndTrailingSpace(v);
-      }
-    } else {
-      key = kj::mv(param);
-    }
-
-    result[count].key = kj::mv(key);
-    result[count].val = kj::mv(value);
-    ++count;
-  }
-  return kj::mv(result);
 }
 
 struct ParamType {

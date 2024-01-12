@@ -1473,13 +1473,6 @@ inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
   }
 }
 
-// =======================================================================================
-namespace _ { // private implementation details for WebSocket compression
-
-kj::ArrayPtr<const char> splitNext(kj::ArrayPtr<const char>& cursor, char delimiter);
-
-void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str);
-
 kj::Vector<kj::ArrayPtr<const char>> splitParts(kj::ArrayPtr<const char> input, char delim);
 
 struct KeyMaybeVal {
@@ -1488,6 +1481,13 @@ struct KeyMaybeVal {
 };
 
 kj::Array<KeyMaybeVal> toKeysAndVals(const kj::ArrayPtr<kj::ArrayPtr<const char>>& params);
+
+// =======================================================================================
+namespace _ { // private implementation details for WebSocket compression
+
+kj::ArrayPtr<const char> splitNext(kj::ArrayPtr<const char>& cursor, char delimiter);
+
+void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str);
 
 struct UnverifiedConfig {
   // An intermediate representation of the final `CompressionParameters` struct; used during parsing.
