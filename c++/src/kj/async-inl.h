@@ -2062,6 +2062,7 @@ template <typename T>
 concept NoWaitScope = !isSameType<Decay<T>, WaitScope>();
 // Define a Concept to use in our `coroutine_traits` specialization to validate allowable coroutine
 // parameter types.
+// TODO(cleanup): This can be removed by adding KJ_DISALLOW_AS_COROUTINE_PARAM to WaitScope.
 
 }  // namespace kj::_
 
@@ -2072,6 +2073,9 @@ namespace KJ_COROUTINE_STD_NAMESPACE {
 template <class T, class... Args>
 struct coroutine_traits<kj::Promise<T>, Args...> {
   // `Args...` are the coroutine's parameter types.
+
+  static_assert((!kj::_::isDisallowedInCoroutine<Args>() && ...),
+      "Disallowed type in coroutine");
 
   static_assert((::kj::_::NoWaitScope<Args> && ...),
       "Coroutines are not allowed to accept `WaitScope` parameters.");

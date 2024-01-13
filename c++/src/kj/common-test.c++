@@ -940,5 +940,33 @@ KJ_TEST("ArrayPtr::as<Std>") {
   KJ_EXPECT(stdPtr.size() == 5);
 }
 
+// Verifies the expected values of kj::isDisallowedInCoroutine<T>
+
+struct DisallowedInCoroutineStruct {
+  KJ_DISALLOW_AS_COROUTINE_PARAM;
+};
+class DisallowedInCoroutinePublic {
+public:
+  KJ_DISALLOW_AS_COROUTINE_PARAM;
+};
+class DisallowedInCoroutinePrivate {
+private:
+  KJ_DISALLOW_AS_COROUTINE_PARAM;
+};
+struct AllowedInCoroutine {};
+
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutineStruct>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutineStruct&>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutineStruct*>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutinePublic>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutinePublic&>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutinePublic*>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutinePrivate>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutinePrivate&>());
+static_assert(_::isDisallowedInCoroutine<DisallowedInCoroutinePrivate*>());
+static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine>());
+static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine&>());
+static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine*>());
+
 }  // namespace
 }  // namespace kj
