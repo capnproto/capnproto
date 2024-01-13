@@ -254,6 +254,7 @@ if(BUILD_TESTING)
     mutex-test.c++
     time-test.c++
     test-test.c++
+    glob-filter-test.c++
     std/iostream-test.c++
   )
   # TODO: Link with librt on Solaris for sched_yield

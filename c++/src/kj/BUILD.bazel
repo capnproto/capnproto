@@ -175,6 +175,7 @@ cc_library(
     "string-tree-test.c++",
     "table-test.c++",
     "test-test.c++",
+    "glob-filter-test.c++",
     "thread-test.c++",
     "time-test.c++",
     "tuple-test.c++",

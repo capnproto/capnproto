@@ -21,7 +21,6 @@
 
 #include "common.h"
 #include "test.h"
-#include "glob-filter.h"
 #include <cstdlib>
 #include <stdexcept>
 #include <signal.h>
@@ -33,58 +32,6 @@
 namespace kj {
 namespace _ {
 namespace {
-
-KJ_TEST("GlobFilter") {
-  {
-    GlobFilter filter("foo");
-
-    KJ_EXPECT(filter.matches("foo"));
-    KJ_EXPECT(!filter.matches("bar"));
-    KJ_EXPECT(!filter.matches("foob"));
-    KJ_EXPECT(!filter.matches("foobbb"));
-    KJ_EXPECT(!filter.matches("fobbbb"));
-    KJ_EXPECT(!filter.matches("bfoo"));
-    KJ_EXPECT(!filter.matches("bbbbbfoo"));
-    KJ_EXPECT(filter.matches("bbbbb/foo"));
-    KJ_EXPECT(filter.matches("bar/baz/foo"));
-  }
-
-  {
-    GlobFilter filter("foo*");
-
-    KJ_EXPECT(filter.matches("foo"));
-    KJ_EXPECT(!filter.matches("bar"));
-    KJ_EXPECT(filter.matches("foob"));
-    KJ_EXPECT(filter.matches("foobbb"));
-    KJ_EXPECT(!filter.matches("fobbbb"));
-    KJ_EXPECT(!filter.matches("bfoo"));
-    KJ_EXPECT(!filter.matches("bbbbbfoo"));
-    KJ_EXPECT(filter.matches("bbbbb/foo"));
-    KJ_EXPECT(filter.matches("bar/baz/foo"));
-  }
-
-  {
-    GlobFilter filter("foo*bar");
-
-    KJ_EXPECT(filter.matches("foobar"));
-    KJ_EXPECT(filter.matches("fooxbar"));
-    KJ_EXPECT(filter.matches("fooxxxbar"));
-    KJ_EXPECT(!filter.matches("foo/bar"));
-    KJ_EXPECT(filter.matches("blah/fooxxxbar"));
-    KJ_EXPECT(!filter.matches("blah/xxfooxxxbar"));
-  }
-
-  {
-    GlobFilter filter("foo?bar");
-
-    KJ_EXPECT(!filter.matches("foobar"));
-    KJ_EXPECT(filter.matches("fooxbar"));
-    KJ_EXPECT(!filter.matches("fooxxxbar"));
-    KJ_EXPECT(!filter.matches("foo/bar"));
-    KJ_EXPECT(filter.matches("blah/fooxbar"));
-    KJ_EXPECT(!filter.matches("blah/xxfooxbar"));
-  }
-}
 
 KJ_TEST("expect exit from exit") {
   KJ_EXPECT_EXIT(42, _exit(42));

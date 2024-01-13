@@ -275,7 +275,7 @@ libkj_la_SOURCES=                                              \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
   src/kj/source-location.c++                                   \
-  src/kj/glob-filter.c++
+  src/kj/glob-filter.c++                                       \
   src/kj/hash.c++                                              \
   src/kj/table.c++                                             \
   src/kj/encoding.c++                                          \
@@ -588,6 +588,7 @@ capnp_test_SOURCES =                                           \
   src/kj/filesystem-test.c++                                   \
   src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \
+  src/kj/glob-filter-test.c++                                  \
   src/capnp/common-test.c++                                    \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \
