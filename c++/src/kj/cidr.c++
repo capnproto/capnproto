@@ -41,7 +41,7 @@
 #include <arpa/inet.h>
 #endif
 
-#if __FreeBSD__
+#if __FreeBSD__ || __OpenBSD__
 #include <netinet/in.h>
 #endif
 

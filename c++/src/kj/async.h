@@ -40,6 +40,11 @@ KJ_BEGIN_HEADER
   #endif
 #endif
 
+#if __OpenBSD__
+// OpenBSD doesn't have full dual-stack IPv6.
+#define AI_V4MAPPED 0
+#endif
+
 namespace kj {
 
 class EventLoop;

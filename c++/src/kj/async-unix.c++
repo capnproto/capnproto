@@ -730,9 +730,11 @@ UnixEventPort::UnixEventPort()
   KJ_SYSCALL(fcntl(kqueueFd, F_SETFD, FD_CLOEXEC));
 
   // Register the EVFILT_USER event used by wake().
+#if !__OpenBSD__
   struct kevent event;
   EV_SET(&event, 0, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, nullptr);
   KJ_SYSCALL(kevent(kqueueFd, &event, 1, nullptr, 0, nullptr));
+#endif
 }
 
 UnixEventPort::~UnixEventPort() noexcept(false) {}
@@ -1063,10 +1065,12 @@ void UnixEventPort::captureChildExit() {
 }
 
 void UnixEventPort::wake() const {
+#if !__OpenBSD__
   // Trigger our user event.
   struct kevent event;
   EV_SET(&event, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, nullptr);
   KJ_SYSCALL(kevent(kqueueFd, &event, 1, nullptr, 0, nullptr));
+#endif
 }
 
 bool UnixEventPort::doKqueueWait(struct timespec* timeout) {
@@ -1113,10 +1117,12 @@ bool UnixEventPort::doKqueueWait(struct timespec* timeout) {
         break;
       }
 
+#if !__OpenBSD__
       case EVFILT_USER:
         // Someone called wake() from another thread.
         woken = true;
         break;
+#endif
 
       default:
         KJ_FAIL_ASSERT("unexpected EVFILT", events[i].filter);
