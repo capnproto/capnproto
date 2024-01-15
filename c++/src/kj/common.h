@@ -2098,6 +2098,49 @@ _::Deferred<Func> defer(Func&& func) {
 #define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::defer([&](){code;})
 // Run the given code when the function exits, whether by return or exception.
 
+// =======================================================================================
+// IsDisallowedInCoroutine
+
+namespace _ {
+
+template <typename T, typename = void>
+struct IsDisallowedInCoroutine {
+  static constexpr bool value = false;
+};
+
+template <typename T>
+struct IsDisallowedInCoroutine<T, typename Decay<T>::_kj_DissalowedInCoroutine> {
+  static constexpr bool value = true;
+};
+
+template <typename T>
+struct IsDisallowedInCoroutine<T*, typename T::_kj_DissalowedInCoroutine> {
+  static constexpr bool value = true;
+};
+
+template <typename T>
+constexpr bool isDisallowedInCoroutine() {
+  return IsDisallowedInCoroutine<T>::value;
+}
+
+}  // namespace _
+
+#define KJ_DISALLOW_AS_COROUTINE_PARAM \
+  using _kj_DissalowedInCoroutine = void; \
+  template<typename T> friend constexpr bool kj::_::isDisallowedInCoroutine(); \
+  template<typename T, typename> friend struct kj::_::IsDisallowedInCoroutine
+// Place in the body of a class or struct to indicate that an instance of or reference to this
+// type cannot be passed as the parameter to a KJ coroutine. This makes sense, for example, for
+// mutex locks, or other types which should never be held across a co_await.
+//
+// (Types annotated with this likely also should not be used as local variables inside coroutines,
+// but there is no way for us to enforce that.)
+//
+// struct Foo {
+//    KJ_DISALLOW_AS_COROUTINE_PARAM;
+// }
+//
+
 }  // namespace kj
 
 KJ_END_HEADER
