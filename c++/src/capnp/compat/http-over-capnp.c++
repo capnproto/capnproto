@@ -116,7 +116,9 @@ public:
         shorteningPromise(kj::mv(shorteningPromise)) {}
 
   ~CapnpToKjWebSocketAdapter() noexcept(false) {
-    state->disconnectWebSocket();
+    if (clean) {
+      state->disconnectWebSocket();
+    }
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
@@ -128,20 +130,34 @@ public:
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
-    return state->wrap([&]() { return webSocket.send(context.getParams().getText()); });
+    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
+    clean = false;
+    co_await state->wrap([&]() { return webSocket.send(context.getParams().getText()); });
+    clean = true;
   }
   kj::Promise<void> sendData(SendDataContext context) override {
-    return state->wrap([&]() { return webSocket.send(context.getParams().getData()); });
+    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
+    clean = false;
+    co_await state->wrap([&]() { return webSocket.send(context.getParams().getData()); });
+    clean = true;
   }
   kj::Promise<void> close(CloseContext context) override {
+    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
     auto params = context.getParams();
-    return state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
+    clean = false;
+    co_await state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
+    clean = true;
   }
 
 private:
   kj::Own<RequestState> state;
   kj::WebSocket& webSocket;
   kj::Promise<Capability::Client> shorteningPromise;
+
+  bool clean = true;
+  // It's illegal to call another `send()` or `disconnect()` until the previous `send()` has
+  // completed successfully. We want to send `disconnect()` in the destructor but only if we can
+  // do so cleanly.
 };
 
 class HttpOverCapnpFactory::KjToCapnpWebSocketAdapter final: public kj::WebSocket {
