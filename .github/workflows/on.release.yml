@@ -1,0 +1,32 @@
+---
+name: Release
+
+"on":
+  push:
+    tags:
+      - "v*.*.*"
+
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Pre-release
+        type: boolean
+        default: false
+      artifact:
+        description: Artifact
+        type: string
+        default: "capnp-cpp"
+      dry:
+        description: Dry-run
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: "Release: BCR"
+    uses: bazel-contrib/.github/.github/workflows/release_ruleset.yaml@v2
+    with:
+      release_files: capnp-cpp-*.tar.gz

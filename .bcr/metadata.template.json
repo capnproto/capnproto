@@ -1,0 +1,12 @@
+{
+  "homepage": "https://github.com/capnproto/capnproto",
+  "maintainers": [
+    {
+      "github": "kentonv",
+      "name": "Kenton Varda"
+    }
+  ],
+  "repository": ["github:capnproto/capnproto"],
+  "versions": [],
+  "yanked_versions": {}
+}

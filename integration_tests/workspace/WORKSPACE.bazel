@@ -1,0 +1,10 @@
+"Tests use of Cap'n'Proto via Bazel WORKSPACE projects."
+
+workspace(
+    name = "capnp-cpp-workspace-test"
+)
+
+local_repository(
+    name = "capnp-cpp",
+    path = "../../c++",
+)

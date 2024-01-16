@@ -1,8 +1,9 @@
-# TODO(2.0): Support g++ once they fix coroutines. This also blocks MinGW and ManyLinux builds.
-
+---
+  # TODO(2.0): Support g++ once they fix coroutines. This also blocks MinGW and ManyLinux builds.
 name: Quick Tests
 
-on:
+"on":
+  workflow_dispatch: {}
   pull_request:
     paths-ignore:
     - 'doc/**'

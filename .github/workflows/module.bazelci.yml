@@ -1,0 +1,29 @@
+---
+name: Bazel CI
+
+# Controls when the action will run.
+"on":
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # Cancel previous actions from the same revision
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: bazel-contrib/.github/.github/workflows/bazel.yaml@29e53247c6366e30acbedfc767f58f79fc05836c
+    with:
+      folders: |
+        [
+          "./c++",
+        ]
+      exclude_windows: false
+      exclude: |
+        [
+          {"bazelversion": "7.0.0", "bzlmodEnabled": true},
+          {"bazelversion": "7.0.0", "bzlmodEnabled": false}
+        ]

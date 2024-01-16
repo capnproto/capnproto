@@ -1,0 +1,12 @@
+"Provides library targets for the Cap'n'Proto runtime."
+
+alias(
+    name = "runtime",
+    actual = "@capnp-cpp//src/capnp:capnp_runtime",
+    visibility = ["//visibility:public"],
+)
+alias(
+    name = "lib",
+    actual = ":runtime",
+    visibility = ["//visibility:public"],
+)

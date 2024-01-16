@@ -1,0 +1,21 @@
+# This file contains Bazel settings to apply on CI only.
+# It is referenced with a --bazelrc option in the call to bazel in ci.yaml
+
+# Debug where options came from
+build --announce_rc
+
+# Apply CI configurations
+build --config=ci
+
+# This directory is configured in GitHub actions to be persisted between runs.
+# We do not enable the repository cache to cache downloaded external artifacts
+# as these are generally faster to download again than to fetch them from the
+# GitHub actions cache.
+build --disk_cache=~/.cache/bazel
+
+# Don't rely on test logs being easily accessible from the test runner,
+# though it makes the log noisier.
+test --test_output=errors
+
+# Allows tests to run bazelisk-in-bazel, since this is the cache folder used
+test --test_env=XDG_CACHE_HOME

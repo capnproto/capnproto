@@ -1,5 +1,9 @@
 load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
 
+package(default_visibility = [
+    "@//:__subpackages__",
+])
+
 exports_files([
     "json.capnp",
 ])

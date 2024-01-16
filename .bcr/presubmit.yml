@@ -1,0 +1,11 @@
+---
+bcr_test_module:
+  module_path: "integration_tests/bzlmod"
+  matrix:
+    platform: ["debian10", "macos", "ubuntu2004"]
+  tasks:
+    build_bzlmod_test:
+      name: "Build test module"
+      platform: ${{ platform }}
+      build_targets:
+        - "//:sample-bin"

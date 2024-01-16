@@ -1,0 +1,29 @@
+---
+matrix:
+  bazel_version: ["7.0.0"]
+  platform: ["centos7", "debian10", "macos", "ubuntu2004"]
+
+validate_config: 1
+buildifier: latest
+
+tasks:
+  build:
+    working_directory: c++
+    include_json_profile:
+      - build
+      - test
+    build_targets:
+      - "//..."
+    test_targets:
+      - "//..."
+
+bcr_test_module:
+  module_path: "integration_tests/bzlmod"
+  matrix:
+    platform: ["debian10", "macos", "ubuntu2004", "centos7"]
+  tasks:
+    build_bzlmod_test:
+      name: "Build test module"
+      platform: ${{ platform }}
+      build_targets:
+        - "//:sample-bin"

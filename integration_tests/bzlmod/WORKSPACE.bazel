@@ -1,0 +1,5 @@
+"Tests use of Cap'n'Proto via Bazel WORKSPACE projects."
+
+workspace(
+    name = "capnp-cpp-bzlmod-test"
+)
