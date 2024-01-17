@@ -7941,7 +7941,12 @@ private:
   }
 
   kj::Own<WebSocket> sendWebSocketError(StringPtr errorMessage) {
-    kj::Exception exception = KJ_EXCEPTION(FAILED,
+    // The client committed a protocol error during a WebSocket handshake. We will send an error
+    // response back to them, and throw an exception from `acceptWebSocket()` to our app. We'll
+    // label this as a DISCONNECTED exception, as if the client had simply closed the connection
+    // rather than commiting a protocol error. This is intended to let the server know that it
+    // wasn't an error on the server's part. (This is a big of a hack...)
+    kj::Exception exception = KJ_EXCEPTION(DISCONNECTED,
         "received bad WebSocket handshake", errorMessage);
     webSocketError = sendError(
         HttpHeaders::ProtocolError { 400, "Bad Request", errorMessage, nullptr });
