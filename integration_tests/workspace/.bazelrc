@@ -1,0 +1,2 @@
+import %workspace%/../../tools/bazel/base.bazelrc
+common --noenable_bzlmod

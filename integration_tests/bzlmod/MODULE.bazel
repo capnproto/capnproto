@@ -1,0 +1,12 @@
+"Tests use of Cap'n'Proto from a Bzlmod-based project."
+
+module(
+    name = "capnp-test-bzlmod",
+)
+
+bazel_dep(name = "capnp-cpp", version = "99999")
+
+local_path_override(
+    module_name = "capnp-cpp",
+    path = "../../c++",
+)

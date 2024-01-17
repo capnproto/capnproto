@@ -1,0 +1,22 @@
+
+load("@capnp-cpp//defs:capnp.bzl", "cc_capnp_library")
+
+cc_capnp_library(
+    name = "sample-capnp",
+    srcs = ["src/sample.capnp"],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "sample-bin",
+    srcs = ["src/sample.c++"],
+    deps = [":sample-capnp"],
+    includes = ["src/"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "bzlmod",
+    actual = "sample-bin",
+    visibility = ["//visibility:public"],
+)
