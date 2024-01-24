@@ -398,17 +398,10 @@ public:
   KjToCapnpHttpServiceAdapter(HttpOverCapnpFactory& factory, capnp::HttpService::Client inner)
       : factory(factory), inner(kj::mv(inner)) {}
 
-  template <typename Params, typename Results, typename AwaitCompletionFunc>
-  kj::Promise<void> requestImpl(
-      Request<Params, Results> rpcRequest,
+  kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse,
-      AwaitCompletionFunc&& awaitCompletion) {
-    // Common implementation calling request() or startRequest(). awaitCompletion() waits for
-    // final completion in a method-specific way.
-    //
-    // TODO(cleanup): When we move to C++17 or newer we can use `if constexpr` instead of a
-    //   callback.
+      kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
+    auto rpcRequest = inner.requestRequest();
 
     auto metadata = rpcRequest.initRequest();
     metadata.setMethod(static_cast<capnp::HttpMethod>(method));
@@ -467,7 +460,7 @@ public:
     // Wait for the server to indicate completion. Meanwhile, if the
     // promise is canceled from the client side, we propagate cancellation naturally, and we
     // also call state->cancel().
-    return awaitCompletion(pipeline)
+    return pipeline.ignoreResult()
         // Once the server indicates it is done, then we can cancel pumping the request, because
         // obviously the server won't use it. We should not cancel pumping the response since there
         // could be data in-flight still.
@@ -475,18 +468,6 @@ public:
         // finishTasks() will wait for the respones to complete.
         .then([state = kj::mv(state)]() mutable { return state->finishTasks(); })
         .attach(kj::mv(deferredCancel));
-  }
-
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
-    if (factory.peerOptimizationLevel < LEVEL_2) {
-      return requestImpl(inner.startRequestRequest(), method, url, headers, requestBody, kjResponse,
-          [](auto& pipeline) { return pipeline.getContext().whenResolved(); });
-    } else {
-      return requestImpl(inner.requestRequest(), method, url, headers, requestBody, kjResponse,
-          [](auto& pipeline) { return pipeline.ignoreResult(); });
-    }
   }
 
   kj::Promise<void> connect(
@@ -596,14 +577,9 @@ public:
   // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
 };
 
-class ResolvedServerRequestContext final: public capnp::HttpService::ServerRequestContext::Server {
-public:
-  // Nothing! It's done.
-};
-
 }  // namespace
 
-class HttpOverCapnpFactory::HttpServiceResponseImpl
+class HttpOverCapnpFactory::HttpServiceResponseImpl final
     : public kj::HttpService::Response {
 public:
   HttpServiceResponseImpl(HttpOverCapnpFactory& factory,
@@ -766,50 +742,12 @@ public:
 };
 
 
-class HttpOverCapnpFactory::ServerRequestContextImpl final
-    : public capnp::HttpService::ServerRequestContext::Server,
-      public HttpServiceResponseImpl {
-public:
-  ServerRequestContextImpl(HttpOverCapnpFactory& factory,
-                           HttpService::Client serviceCap,
-                           kj::Own<capnp::HttpRequest::Reader> request,
-                           capnp::HttpService::ClientRequestContext::Client clientContext,
-                           kj::Own<kj::AsyncInputStream> requestBodyIn,
-                           kj::HttpService& kjService)
-      : HttpServiceResponseImpl(factory, *request, kj::mv(clientContext)),
-        request(kj::mv(request)),
-        serviceCap(kj::mv(serviceCap)),
-        // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
-        // the request body as soon as the service returns. This is important in particular when
-        // the request body is not fully consumed, in order to propagate cancellation.
-        task(kjService.request(method, url, headers, *requestBodyIn, *this)
-                      .attach(kj::mv(requestBodyIn))) {}
-
-  kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    return task.then([]() -> Capability::Client {
-      // If all went well, resolve to a settled capability.
-      // TODO(perf): Could save a message by resolving to a capability hosted by the client, or
-      //     some special "null" capability that isn't an error but is still transmitted by value.
-      //     Otherwise we need a Release message from client -> server just to drop this...
-      return kj::heap<ResolvedServerRequestContext>();
-    });
-  }
-
-  KJ_DISALLOW_COPY_AND_MOVE(ServerRequestContextImpl);
-
-private:
-  kj::Own<capnp::HttpRequest::Reader> request;
-  HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
-  kj::Promise<void> task;
-};
-
 class HttpOverCapnpFactory::CapnpToKjHttpServiceAdapter final: public capnp::HttpService::Server {
 public:
   CapnpToKjHttpServiceAdapter(HttpOverCapnpFactory& factory, kj::Own<kj::HttpService> inner)
       : factory(factory), inner(kj::mv(inner)) {}
 
-  template <typename Params, typename Results, typename Callback>
-  kj::Promise<void> requestImpl(CallContext<Params, Results> context, Callback&& callback) {
+  kj::Promise<void> request(RequestContext context) override {
     // Common implementation of request() and startRequest(). callback() performs the
     // method-specific stuff at the end.
     //
@@ -834,14 +772,11 @@ public:
       auto pipe = kj::newOneWayPipe(expectedSize);
       auto requestBodyCap = factory.streamFactory.kjToCapnp(kj::mv(pipe.out));
 
-      if (kj::isSameType<Results, RequestResults>()) {
-        // For request(), use context.setPipeline() to enable pipelined calls to the request body
-        // stream before this RPC completes. (We don't bother when using startRequest() because
-        // it returns immediately anyway, so this would just waste effort.)
-        PipelineBuilder<Results> pipeline;
-        pipeline.setRequestBody(kj::cp(requestBodyCap));
-        context.setPipeline(pipeline.build());
-      }
+      // For request(), use context.setPipeline() to enable pipelined calls to the request body
+      // stream before this RPC completes.
+      PipelineBuilder<RequestResults> pipeline;
+      pipeline.setRequestBody(kj::cp(requestBodyCap));
+      context.setPipeline(pipeline.build());
 
       results.setRequestBody(kj::mv(requestBodyCap));
       requestBody = kj::mv(pipe.in);
@@ -849,31 +784,9 @@ public:
       requestBody = kj::heap<NullInputStream>();
     }
 
-    return callback(results, metadata, params, requestBody);
-  }
-
-  kj::Promise<void> request(RequestContext context) override {
-    return requestImpl(kj::mv(context),
-        [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
-      class FinalHttpServiceResponseImpl final: public HttpServiceResponseImpl {
-      public:
-        using HttpServiceResponseImpl::HttpServiceResponseImpl;
-      };
-      auto impl = kj::heap<FinalHttpServiceResponseImpl>(factory, metadata, params.getContext());
-      auto promise = inner->request(impl->method, impl->url, impl->headers, *requestBody, *impl);
-      return promise.attach(kj::mv(requestBody), kj::mv(impl));
-    });
-  }
-
-  kj::Promise<void> startRequest(StartRequestContext context) override {
-    return requestImpl(kj::mv(context),
-        [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
-      results.setContext(kj::heap<ServerRequestContextImpl>(
-          factory, thisCap(), capnp::clone(metadata), params.getContext(), kj::mv(requestBody),
-          *inner));
-
-      return kj::READY_NOW;
-    });
+    auto impl = kj::heap<HttpServiceResponseImpl>(factory, metadata, params.getContext());
+    auto promise = inner->request(impl->method, impl->url, impl->headers, *requestBody, *impl);
+    return promise.attach(kj::mv(requestBody), kj::mv(impl));
   }
 
   kj::Promise<void> connect(ConnectContext context) override {

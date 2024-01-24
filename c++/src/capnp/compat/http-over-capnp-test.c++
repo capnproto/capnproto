@@ -657,14 +657,13 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
   KJ_EXPECT(!called);
   KJ_EXPECT(!destroyed);
 
-  auto req = service.startRequestRequest();
+  auto req = service.requestRequest();
   auto httpReq = req.initRequest();
   httpReq.setMethod(capnp::HttpMethod::GET);
   httpReq.setUrl("/");
-  auto serverContext = req.send().wait(waitScope).getContext();
+  auto promise = req.send();
   service = nullptr;
 
-  auto promise = serverContext.whenResolved();
   KJ_EXPECT(!promise.poll(waitScope));
 
   KJ_EXPECT(called);
@@ -769,7 +768,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectWriteCloseService service(*table);
   kj::HttpServer server(timer, *table, service);
@@ -844,7 +843,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectRejectService service(*table);
   kj::HttpServer server(timer, *table, service);
@@ -917,7 +916,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectWriteRespService service(*table);
   kj::HttpServer server(timer, *table, service);
