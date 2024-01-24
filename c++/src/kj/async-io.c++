@@ -401,19 +401,35 @@ private:
   }
 
   template <typename F>
-  static auto teeExceptionVoid(F& fulfiller) {
+  static auto teeExceptionVoid(F& fulfiller, Canceler& canceler) {
     // Returns a functor that can be passed as the second parameter to .then() to propagate the
     // exception to a given fulfiller. The functor's return type is void.
-    return [&fulfiller](kj::Exception&& e) {
+    //
+    // All use cases of this helper below are also wrapped in `canceler.wrap()`, and fulfilling
+    // `fulfiller` may cause the canceler to be canceled. It's possible the canceler will be
+    // canceled before the exception even gets a chance to propagate out of the wrapped promise,
+    // which would have the effet of replacing the original exception with a non-useful
+    // "operation canceled" exception. To avoid this, we must release the canceler before
+    // fulfilling the fulfiller.
+    return [&fulfiller, &canceler](kj::Exception&& e) {
+      canceler.release();
       fulfiller.reject(kj::cp(e));
       kj::throwRecoverableException(kj::mv(e));
     };
   }
   template <typename F>
-  static auto teeExceptionSize(F& fulfiller) {
+  static auto teeExceptionSize(F& fulfiller, Canceler& canceler) {
     // Returns a functor that can be passed as the second parameter to .then() to propagate the
     // exception to a given fulfiller. The functor's return type is size_t.
-    return [&fulfiller](kj::Exception&& e) -> size_t {
+    //
+    // All use cases of this helper below are also wrapped in `canceler.wrap()`, and fulfilling
+    // `fulfiller` may cause the canceler to be canceled. It's possible the canceler will be
+    // canceled before the exception even gets a chance to propagate out of the wrapped promise,
+    // which would have the effet of replacing the original exception with a non-useful
+    // "operation canceled" exception. To avoid this, we must release the canceler before
+    // fulfilling the fulfiller.
+    return [&fulfiller, &canceler](kj::Exception&& e) -> size_t {
+      canceler.release();
       fulfiller.reject(kj::cp(e));
       kj::throwRecoverableException(kj::mv(e));
       return 0;
@@ -576,7 +592,7 @@ private:
           writeBuffer = writeBuffer.slice(amount, writeBuffer.size());
           // We pumped the full amount, so we're done pumping.
           return amount;
-        }, teeExceptionSize(fulfiller)));
+        }, teeExceptionSize(fulfiller, canceler)));
       }
 
       // First piece doesn't cover the whole pump. Figure out how many more pieces to add.
@@ -630,7 +646,7 @@ private:
           morePieces = newMorePieces;
           canceler.release();
           return amount;
-        }, teeExceptionSize(fulfiller)));
+        }, teeExceptionSize(fulfiller, canceler)));
       }
     }
 
@@ -807,7 +823,7 @@ private:
         // Completed entire pumpTo amount.
         KJ_ASSERT(actual == amount2);
         return amount2;
-      }, teeExceptionSize(fulfiller)));
+      }, teeExceptionSize(fulfiller, canceler)));
     }
 
     void abortRead() override {
@@ -1263,7 +1279,7 @@ private:
               canceler.release();
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
-            }, teeExceptionVoid(fulfiller)));
+            }, teeExceptionVoid(fulfiller, canceler)));
           }
 
           auto remainder = pieces.slice(i, pieces.size());
@@ -1292,7 +1308,7 @@ private:
           fulfiller.fulfill(kj::cp(amount));
           pipe.endState(*this);
         }
-      }, teeExceptionVoid(fulfiller)));
+      }, teeExceptionVoid(fulfiller, canceler)));
     }
 
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
