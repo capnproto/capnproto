@@ -428,13 +428,14 @@ public:
     { auto drop = kj::mv(rpcRequest); }
 
     // Pump upstream -- unless we don't expect a request body.
+    kj::Maybe<kj::Own<kj::Exception>> pumpRequestFailedReason;
     kj::Maybe<kj::Promise<void>> pumpRequestTask;
     KJ_IF_SOME(rb, maybeRequestBody) {
       auto bodyOut = factory.streamFactory.capnpToKjExplicitEnd(pipeline.getRequestBody());
       pumpRequestTask = rb.pumpTo(*bodyOut)
           .then([&bodyOut = *bodyOut](uint64_t) mutable {
         return bodyOut.end();
-      }).eagerlyEvaluate([state = kj::addRef(*state), bodyOut = kj::mv(bodyOut)]
+      }).eagerlyEvaluate([&pumpRequestFailedReason, bodyOut = kj::mv(bodyOut)]
                          (kj::Exception&& e) mutable {
         // A DISCONNECTED exception probably means the server decided not to read the whole request
         // before responding. In that case we simply want the pump to end, so that on this end it
@@ -442,7 +443,7 @@ public:
         // exception in that case. For any other exception, we want to merge the exception with
         // the final result.
         if (e.getType() != kj::Exception::Type::DISCONNECTED) {
-          state->taskFailed(kj::mv(e));
+          pumpRequestFailedReason = kj::heap(kj::mv(e));
         }
       });
     }
@@ -456,6 +457,12 @@ public:
     // obviously the server won't use it. We should not cancel pumping the response since there
     // could be data in-flight still.
     { auto drop = kj::mv(pumpRequestTask); }
+
+    // If the request pump failed (for a non-disconnect reason) we'd better propagate that
+    // exception.
+    KJ_IF_SOME(e, pumpRequestFailedReason) {
+      kj::throwFatalException(kj::mv(*e));
+    }
 
     // finishTasks() will wait for the respones to complete.
     co_await state->finishTasks();
