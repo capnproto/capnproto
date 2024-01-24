@@ -79,12 +79,6 @@ public:
     this->webSocket = kj::mv(webSocket);
   }
 
-  void disconnectWebSocket() {
-    KJ_IF_SOME(t, tasks) {
-      t.add(kj::evalNow([&]() { return KJ_ASSERT_NONNULL(webSocket)->disconnect(); }));
-    }
-  }
-
 private:
   kj::Maybe<kj::Exception> error;
   kj::Maybe<kj::Own<kj::WebSocket>> webSocket;
@@ -97,13 +91,21 @@ private:
 class HttpOverCapnpFactory::CapnpToKjWebSocketAdapter final: public capnp::WebSocket::Server {
 public:
   CapnpToKjWebSocketAdapter(kj::Own<RequestState> state, kj::WebSocket& webSocket,
-                            kj::Promise<Capability::Client> shorteningPromise)
+                            kj::Promise<Capability::Client> shorteningPromise,
+                            kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd)
       : state(kj::mv(state)), webSocket(webSocket),
-        shorteningPromise(kj::mv(shorteningPromise)) {}
+        shorteningPromise(kj::mv(shorteningPromise)),
+        onEnd(kj::mv(onEnd)) {}
+  // `onEnd` is resolved if and when the stream (in this direction) ends cleanly.
 
   ~CapnpToKjWebSocketAdapter() noexcept(false) {
     if (clean) {
-      state->disconnectWebSocket();
+      onEnd->fulfill(state->wrap([&]() {
+        return webSocket.disconnect();
+      }));
+    } else {
+      // TODO(now): Capture actual exception?
+      onEnd->reject(KJ_EXCEPTION(FAILED, "WebSocket-over-capnp downstream failed"));
     }
   }
 
@@ -139,6 +141,7 @@ private:
   kj::Own<RequestState> state;
   kj::WebSocket& webSocket;
   kj::Promise<Capability::Client> shorteningPromise;
+  kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd;
 
   bool clean = true;
   // It's illegal to call another `send()` or `disconnect()` until the previous `send()` has
@@ -295,7 +298,7 @@ public:
 
     auto upWrapper = kj::heap<KjToCapnpWebSocketAdapter>(
         nullptr, params.getUpSocket(), kj::mv(shorteningPaf.fulfiller));
-    responsePumpTask = webSocket.pumpTo(*upWrapper).attach(kj::mv(upWrapper))
+    auto upPumpTask = webSocket.pumpTo(*upWrapper).attach(kj::mv(upWrapper))
         .catch_([&webSocket=webSocket](kj::Exception&& e) -> kj::Promise<void> {
       // The pump in the client -> server direction failed. The error may have originated from
       // either the client or the server. In case it came from the server, we want to call .abort()
@@ -306,8 +309,16 @@ public:
     });
 
     auto results = context.getResults(MessageSize { 16, 1 });
-    results.setDownSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::addRef(*state), webSocket, kj::mv(shorteningPaf.promise)));
+    auto downPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    auto downSocket = kj::heap<CapnpToKjWebSocketAdapter>(
+        kj::addRef(*state), webSocket, kj::mv(shorteningPaf.promise), kj::mv(downPaf.fulfiller));
+    results.setDownSocket(kj::mv(downSocket));
+
+    // Note: This intentionally uses joinPromises and not joinPromisesFailFast, because
+    //   finishPump() isn't called to wait on the final promise until we already expect both
+    //   promises to be done anyway, so if we cancel one as a result of the other failing, it
+    //   provides no benefit and possibly creates confusion.
+    responsePumpTask = kj::joinPromises(kj::arr(kj::mv(upPumpTask), kj::mv(downPaf.promise)));
 
     return kj::READY_NOW;
   }
@@ -652,18 +663,21 @@ public:
     auto dummyState = kj::refcounted<RequestState>();
     auto& pipeEnd0Ref = *pipe.ends[0];
     dummyState->holdWebSocket(kj::mv(pipe.ends[0]));
+    auto upPumpPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
     req.setUpSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::mv(dummyState), pipeEnd0Ref, kj::mv(shorteningPaf.promise)));
+        kj::mv(dummyState), pipeEnd0Ref, kj::mv(shorteningPaf.promise),
+        kj::mv(upPumpPaf.fulfiller)));
 
     auto pipeline = req.send();
     auto result = kj::heap<KjToCapnpWebSocketAdapter>(
         kj::mv(pipe.ends[1]), pipeline.getDownSocket(), kj::mv(shorteningPaf.fulfiller));
 
-    // Note we need eagerlyEvaluate() here to force proactively discarding the response object,
-    // since it holds a reference to `downSocket`.
     replyTask = pipeline.ignoreResult()
-        .eagerlyEvaluate([](kj::Exception&& e) {
-      KJ_LOG(INFO, "HTTP-over-RPC startWebSocketRequest() failed", e);
+        .then([upPumpTask = kj::mv(upPumpPaf.promise)]() mutable {
+      return kj::mv(upPumpTask);
+    }).eagerlyEvaluate([](kj::Exception&& e) {
+      // TODO(now): Maybe we should cancel the whole request and propogate this back to the caller?
+      KJ_LOG(INFO, "HTTP-over-RPC WebSocket pump failed on server side", e);
     });
 
     return result;
