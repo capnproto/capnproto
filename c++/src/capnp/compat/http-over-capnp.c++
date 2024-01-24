@@ -55,14 +55,6 @@ public:
     }
   }
 
-  void addTask(kj::Promise<void> task) {
-    KJ_IF_SOME(t, tasks) {
-      t.add(kj::mv(task));
-    } else {
-      // Just drop the task.
-    }
-  }
-
   kj::Promise<void> finishTasks() {
     // This is merged into the final promise, so we don't need to worry about wrapping it for
     // cancellation.
@@ -262,8 +254,7 @@ public:
       : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
 
   kj::Promise<void> startResponse(StartResponseContext context) override {
-    KJ_REQUIRE(!sent, "already called startResponse() or startWebSocket()");
-    sent = true;
+    KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
 
     auto params = context.getParams();
     auto rpcResponse = params.getResponse();
@@ -284,16 +275,15 @@ public:
     if (hasBody) {
       auto pipe = kj::newOneWayPipe();
       results.setBody(factory.streamFactory.kjToCapnp(kj::mv(pipe.out)));
-      state->addTask(pipe.in->pumpTo(*bodyStream)
+      responsePumpTask = pipe.in->pumpTo(*bodyStream)
           .ignoreResult()
-          .attach(kj::mv(bodyStream), kj::mv(pipe.in)));
+          .attach(kj::mv(bodyStream), kj::mv(pipe.in));
     }
     return kj::READY_NOW;
   }
 
   kj::Promise<void> startWebSocket(StartWebSocketContext context) override {
-    KJ_REQUIRE(!sent, "already called startResponse() or startWebSocket()");
-    sent = true;
+    KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
 
     auto params = context.getParams();
 
@@ -305,7 +295,7 @@ public:
 
     auto upWrapper = kj::heap<KjToCapnpWebSocketAdapter>(
         nullptr, params.getUpSocket(), kj::mv(shorteningPaf.fulfiller));
-    state->addTask(webSocket.pumpTo(*upWrapper).attach(kj::mv(upWrapper))
+    responsePumpTask = webSocket.pumpTo(*upWrapper).attach(kj::mv(upWrapper))
         .catch_([&webSocket=webSocket](kj::Exception&& e) -> kj::Promise<void> {
       // The pump in the client -> server direction failed. The error may have originated from
       // either the client or the server. In case it came from the server, we want to call .abort()
@@ -313,7 +303,7 @@ public:
       // .abort() probably is a noop.
       webSocket.abort();
       return kj::mv(e);
-    }));
+    });
 
     auto results = context.getResults(MessageSize { 16, 1 });
     results.setDownSocket(kj::heap<CapnpToKjWebSocketAdapter>(
@@ -322,10 +312,18 @@ public:
     return kj::READY_NOW;
   }
 
+  kj::Promise<void> finishPump() {
+    KJ_IF_SOME(r, responsePumpTask) {
+      return kj::mv(r);
+    } else {
+      return kj::READY_NOW;
+    }
+  }
+
 private:
   HttpOverCapnpFactory& factory;
   kj::Own<RequestState> state;
-  bool sent = false;
+  kj::Maybe<kj::Promise<void>> responsePumpTask;
 
   kj::HttpService::Response& kjResponse;
 };
@@ -464,7 +462,11 @@ public:
       kj::throwFatalException(kj::mv(*e));
     }
 
+    // Finish pumping the response or WebSocket. (Probably it's already finished.)
+    co_await context.finishPump();
+
     // finishTasks() will wait for the respones to complete.
+    // TODO(now): Eliminate this.
     co_await state->finishTasks();
   }
 
