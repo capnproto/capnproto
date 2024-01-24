@@ -415,17 +415,17 @@ public:
     }
 
     auto state = kj::refcounted<RequestState>();
-    auto deferredCancel = kj::defer([state = kj::addRef(*state)]() mutable {
-      state->cancel();
-    });
+    KJ_DEFER(state->cancel());
 
-    auto context = kj::heap<ClientRequestContextImpl>(
-        factory, kj::addRef(*state), kjResponse);
-    RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(*context);
+    ClientRequestContextImpl context(factory, kj::addRef(*state), kjResponse);
+    RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(context);
 
     rpcRequest.setContext(revocableContext.getClient());
 
     auto pipeline = rpcRequest.send();
+
+    // Make sure the request message isn't pinned into memory through the co_await below.
+    { auto drop = kj::mv(rpcRequest); }
 
     // Pump upstream -- unless we don't expect a request body.
     kj::Maybe<kj::Promise<void>> pumpRequestTask;
@@ -450,14 +450,15 @@ public:
     // Wait for the server to indicate completion. Meanwhile, if the
     // promise is canceled from the client side, we propagate cancellation naturally, and we
     // also call state->cancel().
-    return pipeline.ignoreResult()
-        // Once the server indicates it is done, then we can cancel pumping the request, because
-        // obviously the server won't use it. We should not cancel pumping the response since there
-        // could be data in-flight still.
-        .attach(kj::mv(pumpRequestTask))
-        // finishTasks() will wait for the respones to complete.
-        .then([state = kj::mv(state)]() mutable { return state->finishTasks(); })
-        .attach(kj::mv(deferredCancel), kj::mv(revocableContext), kj::mv(context));
+    co_await pipeline.ignoreResult();
+
+    // Once the server indicates it is done, then we can cancel pumping the request, because
+    // obviously the server won't use it. We should not cancel pumping the response since there
+    // could be data in-flight still.
+    { auto drop = kj::mv(pumpRequestTask); }
+
+    // finishTasks() will wait for the respones to complete.
+    co_await state->finishTasks();
   }
 
   kj::Promise<void> connect(
@@ -469,8 +470,8 @@ public:
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
     rpcRequest.initSettings().setUseTls(settings.useTls);
 
-    auto context = kj::heap<ConnectClientRequestContextImpl>(factory, tunnel);
-    RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(*context);
+    ConnectClientRequestContextImpl context(factory, tunnel);
+    RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(context);
 
     auto builder = capnp::Request<
         capnp::HttpService::ConnectParams,
@@ -479,6 +480,9 @@ public:
         Orphanage::getForMessageContaining(builder)));
     rpcRequest.setContext(revocableContext.getClient());
     RemotePromise<capnp::HttpService::ConnectResults> pipeline = rpcRequest.send();
+
+    // Make sure the request message isn't pinned into memory through the co_await below.
+    { auto drop = kj::mv(rpcRequest); }
 
     // We read from `downPipe` (the other side writes into it.)
     auto downPumpTask = downPipe.in->pumpTo(connection)
@@ -511,10 +515,7 @@ public:
       return kj::NEVER_DONE;
     });
 
-    return pipeline.ignoreResult()
-        .attach(kj::mv(downPumpTask), kj::mv(upPumpTask), kj::mv(revocableContext))
-        // Separate attach to make sure `revocableContext` is destroyed before `context`.
-        .attach(kj::mv(context));
+    co_await pipeline.ignoreResult();
   }
 
 
