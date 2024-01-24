@@ -88,8 +88,6 @@ private:
   kj::Array<kj::StringPtr> valueCapnpToKj;
   kj::HashMap<kj::StringPtr, capnp::CommonHeaderValue> valueKjToCapnp;
 
-  class RequestState;
-
   class CapnpToKjWebSocketAdapter;
   class KjToCapnpWebSocketAdapter;
 
