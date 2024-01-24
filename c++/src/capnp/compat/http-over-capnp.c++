@@ -55,12 +55,6 @@ public:
     }
   }
 
-  void assertNotCanceled() {
-    if (tasks == kj::none) {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request"));
-    }
-  }
-
   void addTask(kj::Promise<void> task) {
     KJ_IF_SOME(t, tasks) {
       t.add(kj::mv(task));
@@ -267,14 +261,9 @@ public:
                            kj::HttpService::Response& kjResponse)
       : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
 
-  ~ClientRequestContextImpl() noexcept(false) {
-    // Note this implicitly cancels the upstream pump task.
-  }
-
   kj::Promise<void> startResponse(StartResponseContext context) override {
     KJ_REQUIRE(!sent, "already called startResponse() or startWebSocket()");
     sent = true;
-    state->assertNotCanceled();
 
     auto params = context.getParams();
     auto rpcResponse = params.getResponse();
@@ -305,7 +294,6 @@ public:
   kj::Promise<void> startWebSocket(StartWebSocketContext context) override {
     KJ_REQUIRE(!sent, "already called startResponse() or startWebSocket()");
     sent = true;
-    state->assertNotCanceled();
 
     auto params = context.getParams();
 
@@ -340,7 +328,6 @@ private:
   bool sent = false;
 
   kj::HttpService::Response& kjResponse;
-  // Must check state->assertNotCanceled() before using this.
 };
 
 class HttpOverCapnpFactory::ConnectClientRequestContextImpl final
@@ -432,8 +419,11 @@ public:
       state->cancel();
     });
 
-    rpcRequest.setContext(
-        kj::heap<ClientRequestContextImpl>(factory, kj::addRef(*state), kjResponse));
+    auto context = kj::heap<ClientRequestContextImpl>(
+        factory, kj::addRef(*state), kjResponse);
+    RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(*context);
+
+    rpcRequest.setContext(revocableContext.getClient());
 
     auto pipeline = rpcRequest.send();
 
@@ -467,7 +457,7 @@ public:
         .attach(kj::mv(pumpRequestTask))
         // finishTasks() will wait for the respones to complete.
         .then([state = kj::mv(state)]() mutable { return state->finishTasks(); })
-        .attach(kj::mv(deferredCancel));
+        .attach(kj::mv(deferredCancel), kj::mv(revocableContext), kj::mv(context));
   }
 
   kj::Promise<void> connect(
