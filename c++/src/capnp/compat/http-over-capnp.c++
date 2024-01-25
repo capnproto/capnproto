@@ -825,9 +825,8 @@ public:
       requestBody = kj::heap<NullInputStream>();
     }
 
-    auto impl = kj::heap<HttpServiceResponseImpl>(factory, metadata, params.getContext());
-    auto promise = inner->request(impl->method, impl->url, impl->headers, *requestBody, *impl);
-    return promise.attach(kj::mv(requestBody), kj::mv(impl));
+    HttpServiceResponseImpl impl(factory, metadata, params.getContext());
+    co_await inner->request(impl.method, impl.url, impl.headers, *requestBody, impl);
   }
 
   kj::Promise<void> connect(ConnectContext context) override {
@@ -884,19 +883,20 @@ public:
       return kj::NEVER_DONE;
     });
 
-    PipelineBuilder<ConnectResults> pb;
-    auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
-    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
-    pb.setUp(kj::cp(up));
+    {
+      PipelineBuilder<ConnectResults> pb;
+      auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
+      auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
+      pb.setUp(kj::cp(up));
 
-    context.setPipeline(pb.build());
-    context.initResults(capnp::MessageSize { 4, 1 }).setUp(kj::mv(up));
+      context.setPipeline(pb.build());
+      context.initResults(capnp::MessageSize { 4, 1 }).setUp(kj::mv(up));
+    }
 
-    auto response = kj::heap<HttpOverCapnpConnectResponseImpl>(
-        factory, context.getParams().getContext());
+    { auto drop = kj::mv(refcounted); }
 
-    return inner->connect(host, headers, *pipe.ends[0], *response, settings).attach(
-        kj::mv(host), kj::mv(headers), kj::mv(response), kj::mv(pipe))
+    HttpOverCapnpConnectResponseImpl response(factory, context.getParams().getContext());
+    co_await inner->connect(host, headers, *pipe.ends[0], response, settings)
         .exclusiveJoin(kj::mv(pumpTask));
   }
 
