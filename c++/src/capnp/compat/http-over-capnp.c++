@@ -83,33 +83,87 @@ private:
 
 class HttpOverCapnpFactory::CapnpToKjWebSocketAdapter final: public capnp::WebSocket::Server {
 public:
-  CapnpToKjWebSocketAdapter(kj::Own<RequestState> state, kj::WebSocket& webSocket,
+  CapnpToKjWebSocketAdapter(kj::WebSocket& webSocket,
                             kj::Promise<Capability::Client> shorteningPromise,
-                            kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd)
-      : state(kj::mv(state)), webSocket(webSocket),
+                            kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd,
+                            kj::Maybe<kj::Maybe<CapnpToKjWebSocketAdapter&>&> selfRef)
+      : webSocket(webSocket),
         shorteningPromise(kj::mv(shorteningPromise)),
-        onEnd(kj::mv(onEnd)) {}
-  CapnpToKjWebSocketAdapter(kj::Own<RequestState> state, kj::Own<kj::WebSocket> webSocket,
+        onEnd(kj::mv(onEnd)), selfRef(selfRef) {
+    KJ_IF_SOME(s, selfRef) {
+      s = *this;
+    }
+  }
+  CapnpToKjWebSocketAdapter(kj::Own<kj::WebSocket> webSocket,
                             kj::Promise<Capability::Client> shorteningPromise,
                             kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd)
-      : state(kj::mv(state)), webSocket(*webSocket), ownWebSocket(kj::mv(webSocket)),
+      : webSocket(*webSocket), ownWebSocket(kj::mv(webSocket)),
         shorteningPromise(kj::mv(shorteningPromise)),
         onEnd(kj::mv(onEnd)) {}
   // `onEnd` is resolved if and when the stream (in this direction) ends cleanly.
+  //
+  // `selfRef`, if given, will be initialized to point back to this object, and will be nulled
+  // out in the destructor. This is intended to allow the caller to arrange to call cancel() if
+  // the capability still exists when the underlying `webSocket` is about to go away.
+  //
+  // The second version of the constructor takes ownership of the underlying `webSocket`. In
+  // this case, a `selfRef` isn't needed since there's no need to call `cancel()`.
 
   ~CapnpToKjWebSocketAdapter() noexcept(false) {
-    if (clean) {
-      onEnd->fulfill(state->wrap([&]() {
-        return webSocket.disconnect();
+    // The peer dropped the capability, which means the WebSocket stream has ended. We want to
+    // tanslate this to a `disconnect()` call on the `kj::WebSocket`, if it is still around.
+
+    // Null out our self-ref, if any.
+    KJ_IF_SOME(s, selfRef) {
+      s = nullptr;
+    }
+
+    // Arrange to call disconnect() and then notify the observer that the stream has finished.
+    // If an error has occurred, this will also propagate that.
+    //
+    // Note that we can't just use `wrap()` here because the canceler is about to be destroyed,
+    // which would immediately cancel the operation. Luckily, we don't actually need to wrap this
+    // promise in the canceler because we can assume that the observer listening on this fulfiller
+    // will cancel the promise themselves at the same time as calling cancel() on this object.
+    KJ_IF_SOME(e, error) {
+      onEnd->reject(kj::mv(*e));
+    } else KJ_IF_SOME(ws, webSocket) {
+      onEnd->fulfill(kj::evalNow([&]() {
+        return ws.disconnect().attach(kj::mv(ownWebSocket));
       }));
     } else {
-      // TODO(now): Capture actual exception?
-      onEnd->reject(KJ_EXCEPTION(FAILED, "WebSocket-over-capnp downstream failed"));
+      // cancel() was called -- we assume no one is waiting on the fulfiller
+    }
+  }
+
+  void cancel() {
+    // Called when the overall HTTP request completes or is canceled while this capability still
+    // exists. Since we can't force the peer to drop the capability, we have to disable it.
+    // Further access to `webSocket` must be blocked since it is no longer valid.
+    //
+    // Arguably we could instead use capnp::RevocableServer to accomplish something similar. The
+    // problem is, we also do actually want to know when the peer drops this capability. With
+    // RevocableServer, we no longer get notification of that -- the destructor runs when we tell
+    // it to, rather than when the peer drops the cap.
+    //
+    // TODO(cleanup): Could RevocableServer be improved to allow us to notice the drop?
+    //   Alternatively, maybe it's not really that important for us to call disconnect()
+    //   proactively, considering:
+    //   - The application can send a close message for explicit end.
+    //   - A client->server disconnect will presumably cancel the whole request anyway.
+    //   - A server->client disconnect will presumably be followed by the server returning from
+    //     the request() RPC.
+
+    selfRef = kj::none;
+    webSocket = kj::none;
+    { auto drop = kj::mv(ownWebSocket); }
+    if (!canceler.isEmpty()) {
+      canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
     }
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    auto onAbort = webSocket.whenAborted()
+    auto onAbort = canceler.wrap(KJ_ASSERT_NONNULL(webSocket).whenAborted())
         .then([]() -> kj::Promise<Capability::Client> {
       return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
     });
@@ -117,36 +171,60 @@ public:
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
-    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
-    clean = false;
-    co_await state->wrap([&]() { return webSocket.send(context.getParams().getText()); });
-    clean = true;
+    return wrap([&](kj::WebSocket& ws) { return ws.send(context.getParams().getText()); });
   }
   kj::Promise<void> sendData(SendDataContext context) override {
-    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
-    clean = false;
-    co_await state->wrap([&]() { return webSocket.send(context.getParams().getData()); });
-    clean = true;
+    return wrap([&](kj::WebSocket& ws) { return ws.send(context.getParams().getData()); });
   }
   kj::Promise<void> close(CloseContext context) override {
-    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
     auto params = context.getParams();
-    clean = false;
-    co_await state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
-    clean = true;
+    return wrap([&](kj::WebSocket& ws) { return ws.close(params.getCode(), params.getReason()); });
   }
 
 private:
-  kj::Own<RequestState> state;
-  kj::WebSocket& webSocket;
+  kj::Maybe<kj::WebSocket&> webSocket;  // becomes none when canceled
   kj::Own<kj::WebSocket> ownWebSocket;
   kj::Promise<Capability::Client> shorteningPromise;
   kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd;
+  kj::Maybe<kj::Maybe<CapnpToKjWebSocketAdapter&>&> selfRef;
 
-  bool clean = true;
-  // It's illegal to call another `send()` or `disconnect()` until the previous `send()` has
-  // completed successfully. We want to send `disconnect()` in the destructor but only if we can
-  // do so cleanly.
+  kj::Canceler canceler;
+
+  kj::Maybe<kj::Own<kj::Exception>> error;
+
+  kj::WebSocket& getWebSocket() {
+    return KJ_REQUIRE_NONNULL(webSocket, "request canceled");
+  }
+
+  template <typename Func>
+  kj::Promise<void> wrap(Func&& func) {
+    KJ_IF_SOME(e, error) {
+      kj::throwFatalException(kj::cp(*e));
+    }
+
+    // Detect cancellation (of the operation) and mark the object broken in this case.
+    bool done = false;
+    KJ_DEFER({
+      if (!done && error == kj::none) {
+        error = kj::heap(KJ_EXCEPTION(FAILED,
+            "a write was canceled before completing, breaking the WebSocket"));
+      }
+    });
+
+    try {
+      KJ_IF_SOME(ws, webSocket) {
+        co_await canceler.wrap(func(ws));
+      } else {
+        kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
+      }
+    } catch (...) {
+      auto e = kj::getCaughtExceptionAsKj();
+      error = kj::heap(kj::cp(e));
+      kj::throwFatalException(kj::mv(e));
+    }
+
+    done = true;
+  }
 };
 
 class HttpOverCapnpFactory::KjToCapnpWebSocketAdapter final: public kj::WebSocket {
@@ -256,6 +334,12 @@ public:
                            kj::HttpService::Response& kjResponse)
       : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
 
+  ~ClientRequestContextImpl() noexcept(false) {
+    KJ_IF_SOME(ws, maybeWebSocket) {
+      ws.cancel();
+    }
+  }
+
   kj::Promise<void> startResponse(StartResponseContext context) override {
     KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
 
@@ -309,7 +393,7 @@ public:
     auto results = context.getResults(MessageSize { 16, 1 });
     auto downPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
     auto downSocket = kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::addRef(*state), *webSocket, kj::mv(shorteningPaf.promise), kj::mv(downPaf.fulfiller));
+        *webSocket, kj::mv(shorteningPaf.promise), kj::mv(downPaf.fulfiller), maybeWebSocket);
     results.setDownSocket(kj::mv(downSocket));
 
     // Note: This intentionally uses joinPromises and not joinPromisesFailFast, because
@@ -344,6 +428,7 @@ private:
   kj::Own<RequestState> state;
   kj::Maybe<kj::Own<kj::WebSocket>> ownWebSocket;
   kj::Maybe<kj::Promise<void>> responsePumpTask;
+  kj::Maybe<CapnpToKjWebSocketAdapter&> maybeWebSocket;
 
   kj::HttpService::Response& kjResponse;
 };
@@ -664,16 +749,11 @@ public:
     auto pipe = kj::newWebSocketPipe();
     auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
 
-    // We don't need the RequestState mechanism on the server side because
-    // CapnpToKjWebSocketAdapter wraps a pipe end, and that pipe end can continue to exist beyond
-    // the lifetime of the request, because the other end will have been dropped. We only create
-    // a RequestState here so that we can reuse the implementation of CapnpToKjWebSocketAdapter
-    // that needs this for the client side.
-    auto dummyState = kj::refcounted<RequestState>();
+    // Note that since CapnpToKjWebSocketAdapter takes ownership of the pipe end, we don't need
+    // to cancel it later. Dropping the other end of the pipe will have the same effect.
     auto upPumpPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
     req.setUpSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::mv(dummyState), kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise),
-        kj::mv(upPumpPaf.fulfiller)));
+        kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise), kj::mv(upPumpPaf.fulfiller)));
 
     auto pipeline = req.send();
     auto result = kj::heap<KjToCapnpWebSocketAdapter>(
