@@ -19,38 +19,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "common.h"
-#include "test.h"
-#include <cstdlib>
-#include <stdexcept>
-#include <signal.h>
+#pragma once
 
-#ifndef _WIN32
-#include <unistd.h>
-#endif
+#include <kj/string.h>
+#include <kj/vector.h>
 
 namespace kj {
-namespace _ {
-namespace {
 
-KJ_TEST("expect exit from exit") {
-  KJ_EXPECT_EXIT(42, _exit(42));
-  KJ_EXPECT_EXIT(kj::none, _exit(42));
-}
+class GlobFilter {
+  // Implements glob filters for the --filter flag.
 
-KJ_TEST("expect exit from thrown exception") {
-  KJ_EXPECT_EXIT(1, throw std::logic_error("test error"));
-}
+public:
+  explicit GlobFilter(const char* pattern);
+  explicit GlobFilter(ArrayPtr<const char> pattern);
 
-KJ_TEST("expect signal from abort") {
-  KJ_EXPECT_SIGNAL(SIGABRT, abort());
-}
+  bool matches(StringPtr name);
 
-KJ_TEST("expect signal from sigint") {
-  KJ_EXPECT_SIGNAL(SIGINT, raise(SIGINT));
-  KJ_EXPECT_SIGNAL(kj::none, raise(SIGINT));
-}
+private:
+  String pattern;
+  Vector<uint> states;
 
-}  // namespace
-}  // namespace _
+  void applyState(char c, int state);
+};
+
 }  // namespace kj

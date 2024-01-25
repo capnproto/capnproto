@@ -22,6 +22,7 @@
 #pragma once
 
 #include <kj/debug.h>
+#include <kj/glob-filter.h>
 #include <kj/vector.h>
 #include <kj/function.h>
 #include <kj/windows-sanity.h>  // work-around macro conflict with `ERROR`
@@ -184,24 +185,6 @@ private:
   StringPtr substring;
   bool seen;
   UnwindDetector unwindDetector;
-};
-
-class GlobFilter {
-  // Implements glob filters for the --filter flag.
-  //
-  // Exposed in header only for testing.
-
-public:
-  explicit GlobFilter(const char* pattern);
-  explicit GlobFilter(ArrayPtr<const char> pattern);
-
-  bool matches(StringPtr name);
-
-private:
-  String pattern;
-  Vector<uint> states;
-
-  void applyState(char c, int state);
 };
 
 }  // namespace _ (private)
