@@ -584,46 +584,6 @@ kj::Own<kj::HttpService> HttpOverCapnpFactory::capnpToKj(capnp::HttpService::Cli
 
 // =======================================================================================
 
-namespace {
-
-class NullInputStream final: public kj::AsyncInputStream {
-  // TODO(cleanup): This class has been replicated in a bunch of places now, make it public
-  //   somewhere.
-
-public:
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return kj::constPromise<size_t, 0>();
-  }
-
-  kj::Maybe<uint64_t> tryGetLength() override {
-    return uint64_t(0);
-  }
-
-  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
-    return kj::constPromise<uint64_t, 0>();
-  }
-};
-
-class NullOutputStream final: public kj::AsyncOutputStream {
-  // TODO(cleanup): This class has been replicated in a bunch of places now, make it public
-  //   somewhere.
-
-public:
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    return kj::READY_NOW;
-  }
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
-    return kj::READY_NOW;
-  }
-  kj::Promise<void> whenWriteDisconnected() override {
-    return kj::NEVER_DONE;
-  }
-
-  // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
-};
-
-}  // namespace
-
 class HttpOverCapnpFactory::HttpServiceResponseImpl final
     : public kj::HttpService::Response {
 public:
@@ -670,7 +630,7 @@ public:
       return result;
     } else {
       replyFulfiller->fulfill(req.send().ignoreResult());
-      return kj::heap<NullOutputStream>();
+      return kj::heap<kj::NullStream>();
     }
   }
 
@@ -818,7 +778,7 @@ public:
       results.setRequestBody(kj::mv(requestBodyCap));
       requestBody = kj::mv(pipe.in);
     } else {
-      requestBody = kj::heap<NullInputStream>();
+      requestBody = kj::heap<kj::NullStream>();
     }
 
     auto replyPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
