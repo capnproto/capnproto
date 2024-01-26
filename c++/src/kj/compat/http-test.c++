@@ -2446,7 +2446,7 @@ KJ_TEST("WebSocket maximum message size") {
   auto clientTask = client->send(biggestAllowedString)
       .then([&]() { return client->send(tooBigString); })
       .then([&]() {
-	return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+        return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
       });
 
   {
