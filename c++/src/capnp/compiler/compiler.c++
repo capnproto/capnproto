@@ -256,7 +256,7 @@ private:
   Node rootNode;
 };
 
-class Compiler::Impl: public SchemaLoader::LazyLoadCallback {
+class Compiler::Impl final : public SchemaLoader::LazyLoadCallback {
 public:
   explicit Impl(AnnotationFlag annotationFlag);
   virtual ~Impl() noexcept(false);

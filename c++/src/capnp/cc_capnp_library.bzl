@@ -87,6 +87,7 @@ def cc_capnp_library(
         data = [],
         deps = [],
         src_prefix = "",
+        tags = ["off-by-default"],
         visibility = None,
         target_compatible_with = None,
         **kwargs):
@@ -122,6 +123,8 @@ def cc_capnp_library(
         srcs = srcs_cpp,
         hdrs = hdrs,
         deps = deps + ["@capnp-cpp//src/capnp:capnp_runtime"],
+        # Allows us to avoid building the library archive when using start_end_lib
+        tags = tags,
         visibility = visibility,
         target_compatible_with = target_compatible_with,
         **kwargs
