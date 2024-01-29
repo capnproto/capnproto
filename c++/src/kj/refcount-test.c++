@@ -24,7 +24,7 @@
 
 namespace kj {
 
-struct SetTrueInDestructor: public Refcounted {
+struct SetTrueInDestructor: public Refcounted, EnableAddRefToThis<SetTrueInDestructor> {
   SetTrueInDestructor(bool* ptr): ptr(ptr) {}
   ~SetTrueInDestructor() { *ptr = true; }
 
@@ -55,6 +55,99 @@ TEST(Refcount, Basic) {
   SetTrueInDestructor obj(&b);
   EXPECT_ANY_THROW(addRef(obj));
 #endif
+}
+
+KJ_TEST("Rc") {
+  bool b = false;
+
+  Rc<SetTrueInDestructor> ref1 = kj::rc<SetTrueInDestructor>(&b);
+  EXPECT_FALSE(ref1->isShared());
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_FALSE(ref1 == nullptr);
+
+  Rc<SetTrueInDestructor> ref2 = ref1.addRef();
+  EXPECT_TRUE(ref1->isShared());
+  EXPECT_TRUE(ref1 == ref2);
+
+  {
+    Rc<SetTrueInDestructor> ref3 = ref2.addRef();
+    EXPECT_TRUE(ref3->isShared());
+    // ref3 is dropped
+  }
+
+  EXPECT_FALSE(b);
+
+  // start dropping references one by one
+
+  EXPECT_TRUE(ref2->isShared());
+  ref1 = nullptr;
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_FALSE(ref2->isShared());
+  EXPECT_FALSE(b);
+  EXPECT_FALSE(ref1 == ref2);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(ref1 == ref2);
+
+  // last reference dropped, SetTrueInDestructor destructor should execute
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc Own interop") {
+    bool b = false;
+
+    Rc<SetTrueInDestructor> ref1 = kj::rc<SetTrueInDestructor>(&b);
+
+    EXPECT_FALSE(b);
+    auto own = ref1.toOwn();
+    EXPECT_TRUE(ref1 == nullptr);
+    EXPECT_TRUE(own.get() != nullptr);
+
+    EXPECT_FALSE(b);
+    own = nullptr;
+    EXPECT_TRUE(b);
+}
+
+struct Child: public SetTrueInDestructor {
+  Child(bool* ptr): SetTrueInDestructor(ptr) {}
+};
+
+KJ_TEST("Rc inheritance") {
+  bool b = false;
+
+  auto child = kj::rc<Child>(&b);
+
+  // up casting works automatically
+  kj::Rc<SetTrueInDestructor> parent = child.addRef();
+  
+  auto down = parent.downcast<Child>();
+  EXPECT_TRUE(parent == nullptr);
+  EXPECT_TRUE(down != nullptr);
+
+  EXPECT_FALSE(b);
+  child = nullptr;
+  EXPECT_FALSE(b);
+  down = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("EnableAddRefToThis") {
+  bool b = false;
+
+  auto ref1 = kj::rc<SetTrueInDestructor>(&b);
+  EXPECT_FALSE(ref1->isShared());
+
+  auto ref2 = ref1.addRef();
+  EXPECT_TRUE(ref2->isShared());
+  EXPECT_TRUE(ref1->isShared());
+  EXPECT_FALSE(b);
+
+  ref1 = nullptr;
+  EXPECT_FALSE(ref2->isShared());
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
 }
 
 struct SetTrueInDestructor2 {
