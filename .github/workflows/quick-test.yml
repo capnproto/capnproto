@@ -42,7 +42,6 @@ jobs:
             libunwind: libunwind-12-dev
     steps:
       - uses: actions/checkout@v2
-      - uses: bazelbuild/setup-bazelisk@v2
       - name: install dependencies
         # I observed 404s for some packages and added an `apt-get update`. Then, I observed package
         # conflicts between LLVM 14 and 15, and added the line which removes LLVM 14, the default on

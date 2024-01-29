@@ -39,7 +39,6 @@
 #include <kj/miniposix.h>
 #include <kj/debug.h>
 #include "../message.h"
-#include <iostream>
 #include <kj/main.h>
 #include <kj/parse/char.h>
 #include <sys/stat.h>

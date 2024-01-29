@@ -557,7 +557,7 @@ kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
 
 // =======================================================================================
 
-class BufferedMessageStream::MessageReaderImpl: public FlatArrayMessageReader {
+class BufferedMessageStream::MessageReaderImpl final : public FlatArrayMessageReader {
 public:
   MessageReaderImpl(BufferedMessageStream& parent, kj::ArrayPtr<const word> data,
                     ReaderOptions options)

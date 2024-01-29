@@ -1,4 +1,4 @@
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "int_flag")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 
 def kj_configure():
     """Generates set of flag, settings for kj configuration.
