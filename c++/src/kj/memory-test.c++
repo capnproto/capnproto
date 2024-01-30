@@ -619,6 +619,98 @@ KJ_TEST("kj::Pin<T> moved with active ptrs crashes") {
 }
 #endif  
 
+
+KJ_TEST("kj::Own<T>/kj::Ptr<T> interop") {
+  // kj::Own<T> always points to the heap and can'be moved around
+  kj::Own<Obj> own = kj::heap<Obj>("c");
+
+  // pointers can be obtained by a cast
+  kj::Ptr<Obj> ptr1 = own;
+  KJ_EXPECT(ptr1->name == "c"_kj);
+
+  // pointers can be created by calling asPtr() too
+  kj::Ptr<Obj> ptr2 = own.asPtr();
+  KJ_EXPECT(ptr1 == ptr2);
+  KJ_EXPECT(ptr2->name == "c"_kj);
+
+  // you can move the kj::Own itself, it doesn't move the underlying object
+  kj::Own<Obj> own2 = kj::mv(own);
+  
+  // pins are still valid
+  KJ_EXPECT(ptr1->name == "c"_kj);
+  KJ_EXPECT(ptr2->name == "c"_kj);
+
+  // unless we clear pointers, we can't destroy own2
+  ptr1 = nullptr;
+  ptr2 = nullptr;
+}
+
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+KJ_TEST("kj::Own<T> destroyed with active ptrs") {
+  PtrHolder* holder = nullptr;
+  
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Own<Obj> obj = kj::heap<Obj>("d");
+    // create a pointer and leak it
+    holder = new PtrHolder { obj };
+    // destroying own when exiting the scope crashes
+  });
+}
+#endif
+
+KJ_TEST("kj::Own<T, Disposer>/kj::Ptr<T> interop") {
+  static int* disposedPtr = nullptr;
+  struct MyDisposer {
+    static void dispose(int* value) {
+      KJ_EXPECT(disposedPtr == nullptr);
+      disposedPtr = value;
+    };
+  };
+
+  int i = 42;
+
+  {
+    kj::Own<int, MyDisposer> own(&i);
+    KJ_EXPECT(disposedPtr == nullptr);
+
+    kj::Ptr<int> ptr1 = own;
+    KJ_EXPECT(ptr1 == &i);
+  }
+
+  KJ_EXPECT(disposedPtr == &i);
+  disposedPtr = nullptr;
+}
+
+KJ_TEST("kj::Own<T, Disposer>/kj::Own<T> conversion with kj::Ptr<T> interop") {
+  // converting static disposer to dynamic requires polymorphic target
+  struct Obj {
+    virtual void foo() { };
+  };
+
+  static Obj* disposedPtr = nullptr;
+  struct MyDisposer {
+    static void dispose(Obj* obj) {
+      KJ_EXPECT(disposedPtr == nullptr);
+      disposedPtr = obj;
+    };
+  };
+
+  Obj obj;
+
+  {
+    kj::Own<Obj, MyDisposer> own(&obj);
+    KJ_EXPECT(disposedPtr == nullptr);
+
+    kj::Own<Obj> own2 = kj::mv(own);
+
+    kj::Ptr<Obj> ptr1 = own2;
+    KJ_EXPECT(ptr1 == &obj);
+  }
+
+  KJ_EXPECT(disposedPtr == &obj);
+  disposedPtr = nullptr;
+}
+
 } // namespace 
 
 }  // namespace kj

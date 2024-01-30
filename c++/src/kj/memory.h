@@ -24,6 +24,8 @@
 #include "common.h"
 #include <atomic>
 #include <cstddef>
+#include <stdio.h>
+
 
 KJ_BEGIN_HEADER
 
@@ -108,6 +110,26 @@ const void* castToConstVoid(T* ptr) {
 
 }  // namespace _ (private)
 
+
+
+// =======================================================================================
+// Ptr Counters
+
+#ifdef KJ_DEBUG
+#define KJ_ASSERT_PTR_COUNTERS
+// When defined, keeps track of active Ptr<T> instances and asserts validity of their ownership
+#endif
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
+namespace _ { 
+  class AtomicPtrCounter;
+  using PtrCounter = AtomicPtrCounter;
+  // Default ptr counter to use
+  template<typename>  
+  class OwnCell;
+}
+#endif
+
 // =======================================================================================
 // Disposer -- Implementation details.
 
@@ -128,6 +150,15 @@ protected:
   // polymorphic, this pointer is determined by dynamic_cast<void*>().  For non-polymorphic types,
   // Own<T> does not allow any casting, so the pointer exactly matches the original one given to
   // Own<T>.
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  inline virtual _::PtrCounter* createPtrCounter(void* ptr) const;
+  inline virtual void disposePtrCounter(_::PtrCounter* counter) const;
+  
+  friend class _::AtomicPtrCounter;
+  template<typename>
+  friend class _::OwnCell;
+#endif
 
 public:
 
@@ -170,14 +201,8 @@ public:
   void disposeImpl(void* pointer) const override {}
 };
 
-
 // =======================================================================================
-// Ptr Counters
-
-#ifdef KJ_DEBUG
-#define KJ_ASSERT_PTR_COUNTERS
-// When defined, keeps track of active Ptr<T> instances and asserts validity of their ownership
-#endif
+// Ptr Counters Implementation Details
 
 namespace _ {
 #ifdef KJ_ASSERT_PTR_COUNTERS
@@ -185,6 +210,12 @@ class AtomicPtrCounter {
 // AtomicPtrCounter uses atomic operations to keep track of active pointers.
 
 public:
+  AtomicPtrCounter() {
+  }
+
+  ~AtomicPtrCounter() {
+  }
+
   void dec() {
     size_t c = count.load(std::memory_order_consume);
     KJ_IREQUIRE(c > 0, "unbalanced dec");
@@ -197,24 +228,238 @@ public:
 
   void assertEmpty() {
     size_t c = count.load(std::memory_order_consume);
+    if (c != 0) {
+      KJ_IREQUIRE(c == 0, "active pointers not empty");
+    }
     KJ_IREQUIRE(c == 0, "active pointers not empty");
+  }
+
+  inline void dispose(const Disposer* disposer) {
+    disposer->disposePtrCounter(this);
+  }
+
+  template<typename StaticDisposer>
+  inline void dispose() {
+    this->assertEmpty();
+    delete this;
   }
 
 private:
   std::atomic<size_t> count = 0;
 };
 
-using PtrCounter = AtomicPtrCounter;
-// Default counter type to use
-
 #endif
 }
 
 // =======================================================================================
-// Own<T> -- An owned pointer.
+// Own<T> implementation details
+
+template <typename>
+class Ptr;
 
 template <typename T, typename StaticDisposer = decltype(nullptr)>
 class Own;
+
+namespace _ {
+
+template<typename T>
+class OwnCell {
+// Common functionality between Own implementation.
+// Stores Own's T* and (optionally) pointer to ptrCounter that protects it.
+// Does not manage T* (just passes around), but manages ptrCounter.
+
+public:
+  inline explicit OwnCell(std::nullptr_t other) noexcept : ptr(nullptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  , ptrCounter(nullptr) 
+#endif
+  {}
+
+  inline OwnCell(OwnCell&& other) noexcept : ptr(other.ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  , ptrCounter(other.ptrCounter) 
+#endif
+  {
+    other.ptr = nullptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+    other.ptrCounter = nullptr;
+#endif
+  }
+
+  inline explicit OwnCell(OwnCell<RemoveConstOrDisable<T>>&& other) noexcept
+    : ptr(other.ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+    , ptrCounter(other.ptrCounter) 
+#endif
+  {  
+    other.ptr = nullptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+    other.ptrCounter = nullptr;
+#endif
+  }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline explicit OwnCell(OwnCell<U>&& other) noexcept
+      : ptr(cast(other.ptr))
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+      , ptrCounter(other.ptrCounter) 
+#endif
+  {
+    other.ptr = nullptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+    other.ptrCounter = nullptr;
+#endif
+  }
+
+  // template<typename StaticDisposer>
+  explicit OwnCell(T* ptr) noexcept : ptr(ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  , ptrCounter(new _::PtrCounter()) 
+#endif
+  {
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+#endif
+  }
+
+  explicit OwnCell(T* ptr, const Disposer& disposer) noexcept : ptr(ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  , ptrCounter(disposer.createPtrCounter((void*)ptr)) 
+#endif
+  {
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+#endif
+
+  }
+
+  template <typename U>
+  static inline T* cast(U* ptr) {
+    static_assert(_kj_internal_isPolymorphic((T*)nullptr),
+        "Casting owned pointers requires that the target type is polymorphic.");
+    return ptr;
+  }
+
+  inline T* dispose(const Disposer* disposer) {
+    // Disposes of ptrCounter (if any), replaces T* with null and returns the old value.
+    // Called as part of kj::Own dispose process.
+
+    T* ptrCopy = ptr;
+    ptr = nullptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    if (ptrCounter != nullptr) {
+      ptrCounter->dispose(disposer);
+      ptrCounter = nullptr;
+    }
+#endif
+    return ptrCopy;
+  }
+
+  template<typename StaticDisposer>  
+  inline T* dispose() {
+    // Disposes of ptrCounter (if any), replaces T* with null and returns the old value.
+    // Called as part of kj::Own dispose process.
+
+    T* ptrCopy = ptr;
+    ptr = nullptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    if (ptrCounter != nullptr) {
+      ptrCounter->template dispose<StaticDisposer>();
+      ptrCounter = nullptr;
+    }
+#endif
+    return ptrCopy;
+  }
+
+  inline T* get() { return ptr; }
+  inline const T* get() const { return ptr; }
+
+  inline T* swap(OwnCell&& other, const Disposer* disposer) {
+    // Disposes of ptrCounter (if any), replaces T* with other and their respective ptrCounters.
+    // Returns previous T* value.
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    if (ptrCounter != nullptr) {
+      ptrCounter->dispose(disposer);
+    }
+    ptrCounter = other.ptrCounter;
+    other.ptrCounter = nullptr;
+#endif
+    T* ptrCopy = ptr;
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    return ptrCopy;
+  }
+
+  template<typename StaticDisposer>  
+  inline T* swap(OwnCell&& other) {
+    // Disposes of ptrCounter (if any), replaces T* with other and their respective ptrCounters.
+    // Returns previous T* value.
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    if (ptrCounter != nullptr) {
+      ptrCounter->template dispose<StaticDisposer>();
+    }
+    ptrCounter = other.ptrCounter;
+    other.ptrCounter = nullptr;
+#endif
+    T* ptrCopy = ptr;
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    return ptrCopy;
+  }
+
+
+  template <typename U>
+  OwnCell<U> downcast() {
+    OwnCell<U> result(nullptr);
+    result.ptr = &kj::downcast<U>(*ptr);
+    ptr = nullptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    result.ptrCounter = ptrCounter;
+    ptrCounter = nullptr;
+#endif
+    return result;
+  }
+
+  OwnCell copyForAttach() {
+    auto ptrCopy = ptr;
+    KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
+
+    // HACK: If someone accidentally calls .attach() on a null pointer in opt mode, try our best to
+    //   accomplish reasonable behavior: We turn the pointer non-null but still invalid, so that the
+    //   disposer will still be called when the pointer goes out of scope.
+    if (ptrCopy == nullptr) ptrCopy = reinterpret_cast<T*>(1);
+
+    return OwnCell(ptrCopy
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+      , ptrCounter
+#endif
+    );
+  }
+
+public:
+  KJ_DISALLOW_COPY(OwnCell);
+
+  T* ptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  _::PtrCounter* ptrCounter;
+#endif
+
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  explicit OwnCell(T* ptr, _::PtrCounter* ptrCounter) noexcept : ptr(ptr) , ptrCounter(ptrCounter) {}
+#endif
+
+  template<typename>
+  friend class OwnCell;
+
+  template<typename>
+  friend class kj::Ptr;
+
+  template<typename, typename>
+  friend class Own;
+};
+
+} // namespace _
+
+// =======================================================================================
+// Own<T> -- An owned pointer.
 
 template <typename T>
 class Own<T, decltype(nullptr)> {
@@ -234,35 +479,34 @@ class Own<T, decltype(nullptr)> {
 
 public:
   KJ_DISALLOW_COPY(Own);
-  inline Own(): disposer(nullptr), ptr(nullptr) {}
+  inline Own(): disposer(nullptr), cell(nullptr) {}
   inline Own(Own&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+      : disposer(other.disposer), cell(kj::mv(other.cell)) {}
   inline Own(Own<RemoveConstOrDisable<T>>&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+      : disposer(other.disposer), cell(kj::mv(other.cell)) {}
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U>&& other) noexcept
-      : disposer(other.disposer), ptr(cast(other.ptr)) {
-    other.ptr = nullptr;
-  }
+      : disposer(other.disposer), cell(kj::mv(other.cell)) { }
   template <typename U, typename StaticDisposer, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U, StaticDisposer>&& other) noexcept;
+
   // Convert statically-disposed Own to dynamically-disposed Own.
-  inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
+  inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), cell(ptr, disposer) {}
+
+  // Convert statically-disposed Own to dynamically-disposed Own.
+  inline Own(_::OwnCell<T>&& cell, const Disposer& disposer) noexcept: disposer(&disposer), cell(kj::mv(cell)) {}
 
   ~Own() noexcept(false) { dispose(); }
 
   inline Own& operator=(Own&& other) {
     // Move-assignnment operator.
-
     // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
     // dispose.
+    T* ptr = cell.swap(kj::mv(other.cell), disposer);
     const Disposer* disposerCopy = disposer;
-    T* ptrCopy = ptr;
     disposer = other.disposer;
-    ptr = other.ptr;
-    other.ptr = nullptr;
-    if (ptrCopy != nullptr) {
-      disposerCopy->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
+    if (ptr != nullptr) {
+      disposerCopy->dispose(const_cast<RemoveConst<T>*>(ptr));
     }
     return *this;
   }
@@ -287,66 +531,63 @@ public:
     // actually point at an instance of U, the results are undefined (throws an exception in debug
     // mode if RTTI is enabled, otherwise you're on your own).
 
-    Own<U> result;
-    if (ptr != nullptr) {
-      result.ptr = &kj::downcast<U>(*ptr);
-      result.disposer = disposer;
-      ptr = nullptr;
+    if (cell.get() != nullptr) {
+      return Own<U>(cell.template downcast<U>(), *disposer);
     }
-    return result;
+    return Own<U>();
   }
 
-#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Own<> dereference")
-  inline T* operator->() { NULLCHECK; return ptr; }
-  inline const T* operator->() const { NULLCHECK; return ptr; }
-  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *ptr; }
-  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *ptr; }
+#define NULLCHECK KJ_IREQUIRE(cell.get() != nullptr, "null Own<> dereference")
+  inline T* operator->() { NULLCHECK; return cell.get(); }
+  inline const T* operator->() const { NULLCHECK; return cell.get(); }
+  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *cell.get(); }
+  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *cell.get(); }
 #undef NULLCHECK
-  inline T* get() { return ptr; }
-  inline const T* get() const { return ptr; }
-  inline operator T*() { return ptr; }
-  inline operator const T*() const { return ptr; }
+  inline T* get() { return cell.get(); }
+  inline const T* get() const { return cell.get(); }
+  inline operator T*() { return cell.get(); }
+  inline operator const T*() const { return cell.get(); }
+
+  inline operator Ptr<T>() { return Ptr<T>(this); }
+  inline Ptr<T> asPtr() { return Ptr<T>(this); }
 
 private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
-  T* ptr;
+  _::OwnCell<T> cell;
 
-  inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr) {}
+  inline explicit Own(decltype(nullptr)): disposer(nullptr), cell(nullptr)
+  {}
 
-  inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
+  inline bool operator==(decltype(nullptr)) { return cell.get() == nullptr; }
   // Only called by Maybe<Own<T>>.
 
   inline void dispose() {
-    // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
-    // dispose again.
-    T* ptrCopy = ptr;
-    if (ptrCopy != nullptr) {
-      ptr = nullptr;
-      disposer->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
+    T* ptr = cell.dispose(disposer);
+    if (ptr != nullptr) {
+      // If an exception is thrown, we are left with a null ptr, so we won't possibly
+      // dispose again.
+      disposer->dispose(const_cast<RemoveConst<T>*>(ptr));
     }
   }
 
-  template <typename U>
-  static inline T* cast(U* ptr) {
-    static_assert(_kj_internal_isPolymorphic((T*)nullptr),
-        "Casting owned pointers requires that the target type is polymorphic.");
-    return ptr;
-  }
 
   template <typename, typename>
   friend class Own;
   friend class Maybe<Own<T>>;
+
+  template<typename>
+  friend class Ptr;
 };
 
 template <>
 template <typename U>
-inline void* Own<void>::cast(U* ptr) {
+inline void* _::OwnCell<void>::cast(U* ptr) {
   return _::castToVoid(ptr);
 }
 
 template <>
 template <typename U>
-inline const void* Own<const void>::cast(U* ptr) {
+inline const void* _::OwnCell<const void>::cast(U* ptr) {
   return _::castToConstVoid(ptr);
 }
 
@@ -363,17 +604,17 @@ class Own {
 
 public:
   KJ_DISALLOW_COPY(Own);
-  inline Own(): ptr(nullptr) {}
-  inline Own(Own&& other) noexcept
-      : ptr(other.ptr) { other.ptr = nullptr; }
+  inline Own(): cell(nullptr) {}
+  inline Own(Own&& other) noexcept : cell(kj::mv(other.cell)) {}
   inline Own(Own<RemoveConstOrDisable<T>, StaticDisposer>&& other) noexcept
-      : ptr(other.ptr) { other.ptr = nullptr; }
+      : cell(kj::mv(other.cell)) { }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U, StaticDisposer>&& other) noexcept
-      : ptr(cast(other.ptr)) {
-    other.ptr = nullptr;
-  }
-  inline explicit Own(T* ptr) noexcept: ptr(ptr) {}
+      : cell(kj::mv(other.cell)) { }
+
+  inline Own(_::OwnCell<T>&& other) noexcept : cell(kj::mv(cell)) {}
+
+  inline explicit Own(T* ptr) noexcept: cell(ptr) {}
 
   ~Own() noexcept(false) { dispose(); }
 
@@ -382,11 +623,9 @@ public:
 
     // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
     // dispose.
-    T* ptrCopy = ptr;
-    ptr = other.ptr;
-    other.ptr = nullptr;
-    if (ptrCopy != nullptr) {
-      StaticDisposer::dispose(ptrCopy);
+    T* ptr = cell.template swap<StaticDisposer>(kj::mv(other.cell));
+    if (ptr != nullptr) {
+      StaticDisposer::dispose(ptr);
     }
     return *this;
   }
@@ -402,40 +641,40 @@ public:
     // actually point at an instance of U, the results are undefined (throws an exception in debug
     // mode if RTTI is enabled, otherwise you're on your own).
 
-    Own<U, StaticDisposer> result;
-    if (ptr != nullptr) {
-      result.ptr = &kj::downcast<U>(*ptr);
-      ptr = nullptr;
+    if (cell.get() != nullptr) {
+      return Own<U, StaticDisposer>(cell.template downcast<U>());
     }
-    return result;
+    return Own<U, StaticDisposer>();
   }
 
-#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Own<> dereference")
-  inline T* operator->() { NULLCHECK; return ptr; }
-  inline const T* operator->() const { NULLCHECK; return ptr; }
-  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *ptr; }
-  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *ptr; }
+#define NULLCHECK KJ_IREQUIRE(cell.get() != nullptr, "null Own<> dereference")
+  inline T* operator->() { NULLCHECK; return cell.get(); }
+  inline const T* operator->() const { NULLCHECK; return cell.get(); }
+  inline _::RefOrVoid<T> operator*() { NULLCHECK; return *cell.get(); }
+  inline _::RefOrVoid<const T> operator*() const { NULLCHECK; return *cell.get(); }
 #undef NULLCHECK
-  inline T* get() { return ptr; }
-  inline const T* get() const { return ptr; }
-  inline operator T*() { return ptr; }
-  inline operator const T*() const { return ptr; }
+  inline T* get() { return cell.get(); }
+  inline const T* get() const { return cell.get(); }
+  inline operator T*() { return cell.get(); }
+  inline operator const T*() const { return cell.get(); }
+
+  inline operator Ptr<T>() { return Ptr<T>(this); }
+  inline Ptr<T> asPtr() { return Ptr<T>(this); }
 
 private:
-  T* ptr;
+  _::OwnCell<T> cell;
 
-  inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
+  inline explicit Own(decltype(nullptr)): cell(nullptr) {}
 
-  inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
+  inline bool operator==(decltype(nullptr)) { return cell.get() == nullptr; }
   // Only called by Maybe<Own<T>>.
 
   inline void dispose() {
-    // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
+    T* ptr = cell.template dispose<StaticDisposer>();
+    if (ptr != nullptr) {
+    // If an exception is thrown, we are left with a null ptr, so we won't possibly
     // dispose again.
-    T* ptrCopy = ptr;
-    if (ptrCopy != nullptr) {
-      ptr = nullptr;
-      StaticDisposer::dispose(ptrCopy);
+      StaticDisposer::dispose(ptr);
     }
   }
 
@@ -447,6 +686,9 @@ private:
   template <typename, typename>
   friend class Own;
   friend class Maybe<Own<T, StaticDisposer>>;
+
+  template <typename>
+  friend class Ptr;
 };
 
 namespace _ {  // private
@@ -597,9 +839,39 @@ private:
 namespace _ {  // private
 
 template <typename T>
+struct HeapStorage {
+  template <typename... Params>
+  inline HeapStorage(Params&&... params): t(kj::fwd<Params>(params)...) {
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+#endif 
+  }
+
+  T t;
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+  PtrCounter ptrCounter;
+#endif 
+};
+
+template <typename T>
 class HeapDisposer final: public Disposer {
 public:
-  virtual void disposeImpl(void* pointer) const override { delete reinterpret_cast<T*>(pointer); }
+  virtual void disposeImpl(void* pointer) const override {
+    // casting pointer to the first field to the pointer of the storage
+    delete reinterpret_cast<HeapStorage<T>*>(pointer); 
+  }
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  PtrCounter* createPtrCounter(void* pointer) const override {
+    auto result = &reinterpret_cast<HeapStorage<T>*>(pointer)->ptrCounter;
+    result->assertEmpty();
+    return result;
+  }
+
+  void disposePtrCounter(PtrCounter* counter) const override {
+    // we will dispose of counters as part of HeapStorage, just assert they are empty now.
+    counter->assertEmpty();
+  }
+#endif
 
   static const HeapDisposer instance;
 };
@@ -636,7 +908,8 @@ Own<T> heap(Params&&... params) {
   // assume this.  (Since we know the object size at delete time, we could actually implement an
   // allocator that is more efficient than operator new.)
 
-  return Own<T>(new T(kj::fwd<Params>(params)...), _::HeapDisposer<T>::instance);
+  auto storage = new _::HeapStorage<T>(kj::fwd<Params>(params)...);
+  return Own<T>(&storage->t, _::HeapDisposer<T>::instance);
 }
 
 template <typename T>
@@ -647,7 +920,8 @@ Own<Decay<T>> heap(T&& orig) {
   // one argument and the purpose is to copy it.
 
   typedef Decay<T> T2;
-  return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
+  auto storage = new _::HeapStorage<T2>(kj::fwd<T>(orig));
+  return Own<T2>(&storage->t, _::HeapDisposer<T2>::instance);
 }
 
 template <auto F, typename T>
@@ -861,10 +1135,9 @@ private:
 #endif
   }
 
-
-  inline Ptr(Own<T>* own) : ptr(own->storage.ptr)
+  inline Ptr(Own<T>* own) : ptr(own->cell.ptr)
 #ifdef KJ_ASSERT_PTR_COUNTERS
-  , counter(own->storage.ptrCounter) 
+  , counter(own->cell.ptrCounter) 
 #endif
   { 
 #ifdef KJ_ASSERT_PTR_COUNTERS
@@ -873,9 +1146,9 @@ private:
   }
 
   template<typename D>
-  inline Ptr(Own<T, D>* own) : ptr(own->storage.ptr)
+  inline Ptr(Own<T, D>* own) : ptr(own->cell.ptr)
 #ifdef KJ_ASSERT_PTR_COUNTERS
-  , counter(own->storage.ptrCounter) 
+  , counter(own->cell.ptrCounter) 
 #endif
   { 
 #ifdef KJ_ASSERT_PTR_COUNTERS
@@ -895,6 +1168,8 @@ private:
   friend class Ptr;
   template <typename>
   friend class Pin;
+  template <typename, typename>
+  friend class Own;
 };
 
 // =======================================================================================
@@ -942,8 +1217,29 @@ struct OwnedBundle<First, Rest...>: public OwnedBundle<Rest...> {
 
 template <typename... T>
 struct DisposableOwnedBundle final: public Disposer, public OwnedBundle<T...> {
-  DisposableOwnedBundle(T&&... values): OwnedBundle<T...>(kj::fwd<T>(values)...) {}
+  DisposableOwnedBundle(
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    PtrCounter* counter,
+#endif    
+    T&&... values): OwnedBundle<T...>(kj::fwd<T>(values)...) 
+#ifdef KJ_ASSERT_PTR_COUNTERS
+      , counter(counter)
+#endif    
+  {}
+  
   void disposeImpl(void* pointer) const override { delete this; }
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  PtrCounter* counter;
+  
+  PtrCounter* createPtrCounter(void* ptr) const override {
+    return counter;
+  }
+
+  void disposePtrCounter(PtrCounter* counter) const override {
+    // original Own<T> will take care of a counter
+  }
+#endif
 };
 
 template <typename T, typename StaticDisposer>
@@ -966,29 +1262,31 @@ const StaticDisposerAdapter<T, D> StaticDisposerAdapter<T, D>::instance =
 template <typename T>
 template <typename... Attachments>
 Own<T> Own<T>::attach(Attachments&&... attachments) {
-  T* ptrCopy = ptr;
-
-  KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
-
-  // HACK: If someone accidentally calls .attach() on a null pointer in opt mode, try our best to
-  //   accomplish reasonable behavior: We turn the pointer non-null but still invalid, so that the
-  //   disposer will still be called when the pointer goes out of scope.
-  if (ptrCopy == nullptr) ptrCopy = reinterpret_cast<T*>(1);
-
+  auto cellCopy = cell.copyForAttach();
   auto bundle = new _::DisposableOwnedBundle<Own<T>, Attachments...>(
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+      cellCopy.ptrCounter, 
+#endif
       kj::mv(*this), kj::fwd<Attachments>(attachments)...);
-  return Own<T>(ptrCopy, *bundle);
+  return Own<T>(kj::mv(cellCopy), *bundle);
 }
 
 template <typename T, typename... Attachments>
 Own<T> attachRef(T& value, Attachments&&... attachments) {
-  auto bundle = new _::DisposableOwnedBundle<Attachments...>(kj::fwd<Attachments>(attachments)...);
+  auto bundle = new _::DisposableOwnedBundle<Attachments...>(
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+    new _::PtrCounter(), 
+#endif
+    kj::fwd<Attachments>(attachments)...);
   return Own<T>(&value, *bundle);
 }
 
 template <typename T, typename... Attachments>
 Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
   auto bundle = new _::DisposableOwnedBundle<T, Attachments...>(
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+      new _::PtrCounter(), 
+#endif
       kj::fwd<T>(value), kj::fwd<Attachments>(attachments)...);
   return Own<Decay<T>>(&bundle->first, *bundle);
 }
@@ -996,18 +1294,33 @@ Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
 template <typename T>
 template <typename U, typename StaticDisposer, typename>
 inline Own<T>::Own(Own<U, StaticDisposer>&& other) noexcept
-    : ptr(cast(other.ptr)) {
-  if (_::castToVoid(other.ptr) != reinterpret_cast<void*>(other.ptr)) {
+    : cell(kj::mv(other.cell))
+{
+  if (_::castToVoid(cell.get()) != reinterpret_cast<void*>(cell.get())) {
     // Oh dangit, there's some sort of multiple inheritance going on and `StaticDisposerAdapter`
     // won't actually work because it'll receive a pointer pointing to the top of the object, which
     // isn't exactly the same as the `U*` pointer it wants. We have no choice but to allocate
     // a dynamic disposer here.
-    disposer = new _::DisposableOwnedBundle<Own<U, StaticDisposer>>(kj::mv(other));
+    disposer = new _::DisposableOwnedBundle<Own<U, StaticDisposer>>(
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+      cell.ptrCounter, 
+#endif
+      kj::mv(other));
   } else {
     disposer = &_::StaticDisposerAdapter<U, StaticDisposer>::instance;
-    other.ptr = nullptr;
   }
 }
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
+_::PtrCounter* Disposer::createPtrCounter(void* ptr) const {
+  return new _::PtrCounter();
+}
+
+void Disposer::disposePtrCounter(_::PtrCounter* counter) const {
+  counter->assertEmpty();
+  delete counter;
+}
+#endif
 
 }  // namespace kj
 
