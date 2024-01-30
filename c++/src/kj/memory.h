@@ -22,6 +22,10 @@
 #pragma once
 
 #include "common.h"
+#include <cstddef>
+#include <cstdint>
+#include <atomic>
+#include <cstdio>
 
 KJ_BEGIN_HEADER
 
@@ -169,6 +173,51 @@ public:
 };
 
 // =======================================================================================
+class AtomicPtrCounter {
+public:
+  typedef AtomicPtrCounter* Ptr;
+  
+  static void assertEmpty(Ptr ptr) {
+    KJ_IREQUIRE(ptr != nullptr);
+    size_t c = ptr->count.load(std::memory_order_consume);
+    KJ_IREQUIRE(c == 0, "active pointers not empty");
+  }
+
+  void dec() {
+    size_t c = count.load(std::memory_order_consume);
+    KJ_IREQUIRE(c > 0);
+    count.fetch_sub(1, std::memory_order_release);
+  }
+
+  void inc() {
+    count.fetch_add(1, std::memory_order_release);
+  }
+
+  static AtomicPtrCounter* create() {
+    return new AtomicPtrCounter();
+  }
+
+  static void destroy(Ptr ptr) {
+    assertEmpty(ptr);
+    delete ptr;
+  }
+
+private:
+  std::atomic<size_t> count = 0;
+};
+
+// #ifdef NDEBUG
+
+// #else
+#define KJ_ASSERT_PIN_PTRS
+using DefaultPtrCounter = AtomicPtrCounter;
+
+// #endif
+
+template <typename T>
+class Ptr;
+
+// =======================================================================================
 // Own<T> -- An owned pointer.
 
 template <typename T, typename StaticDisposer = decltype(nullptr)>
@@ -192,20 +241,20 @@ class Own<T, decltype(nullptr)> {
 
 public:
   KJ_DISALLOW_COPY(Own);
-  inline Own(): disposer(nullptr), ptr(nullptr) {}
+  inline Own(): disposer(nullptr), ptr(nullptr), ptrCounter(nullptr) {}
   inline Own(Own&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+      : disposer(other.disposer), ptr(other.ptr), ptrCounter(other.ptrCounter) { other.ptr = nullptr; }
   inline Own(Own<RemoveConstOrDisable<T>>&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+      : disposer(other.disposer), ptr(other.ptr), ptrCounter(other.ptrCounter) { other.ptr = nullptr; }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U>&& other) noexcept
-      : disposer(other.disposer), ptr(cast(other.ptr)) {
+      : disposer(other.disposer), ptr(cast(other.ptr)), ptrCounter(other.ptrCounter) {
     other.ptr = nullptr;
   }
   template <typename U, typename StaticDisposer, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U, StaticDisposer>&& other) noexcept;
   // Convert statically-disposed Own to dynamically-disposed Own.
-  inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
+  inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr), ptrCounter(DefaultPtrCounter::create()) {}
 
   ~Own() noexcept(false) { dispose(); }
 
@@ -216,10 +265,14 @@ public:
     // dispose.
     const Disposer* disposerCopy = disposer;
     T* ptrCopy = ptr;
+    auto ptrCounterCopy = ptrCounter;
     disposer = other.disposer;
     ptr = other.ptr;
+    ptrCounter = other.ptrCounter;
     other.ptr = nullptr;
     if (ptrCopy != nullptr) {
+      KJ_IREQUIRE(ptrCounterCopy != nullptr);
+      DefaultPtrCounter::assertEmpty(ptrCounterCopy);
       disposerCopy->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
     }
     return *this;
@@ -249,6 +302,7 @@ public:
     if (ptr != nullptr) {
       result.ptr = &kj::downcast<U>(*ptr);
       result.disposer = disposer;
+      result.ptrCounter = ptrCounter;
       ptr = nullptr;
     }
     return result;
@@ -265,11 +319,15 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
+  inline operator Ptr<T>() { return Ptr<T>(this); }
+  inline Ptr<T> asPtr() { return Ptr<T>(this); }
+
 private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
+  DefaultPtrCounter::Ptr ptrCounter = nullptr;
 
-  inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr) {}
+  inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr), ptrCounter(nullptr) {}
 
   inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
   // Only called by Maybe<Own<T>>.
@@ -280,6 +338,8 @@ private:
     T* ptrCopy = ptr;
     if (ptrCopy != nullptr) {
       ptr = nullptr;
+      DefaultPtrCounter::assertEmpty(ptrCounter);
+      DefaultPtrCounter::destroy(ptrCounter);
       disposer->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
     }
   }
@@ -294,6 +354,9 @@ private:
   template <typename, typename>
   friend class Own;
   friend class Maybe<Own<T>>;
+
+  template<typename>
+  friend class Ptr;
 };
 
 template <>
@@ -323,15 +386,15 @@ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): ptr(nullptr) {}
   inline Own(Own&& other) noexcept
-      : ptr(other.ptr) { other.ptr = nullptr; }
+      : ptr(other.ptr), ptrCounter(other.ptrCounter) { other.ptr = nullptr; }
   inline Own(Own<RemoveConstOrDisable<T>, StaticDisposer>&& other) noexcept
-      : ptr(other.ptr) { other.ptr = nullptr; }
+      : ptr(other.ptr), ptrCounter(other.ptrCounter) { other.ptr = nullptr; }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U, StaticDisposer>&& other) noexcept
-      : ptr(cast(other.ptr)) {
+      : ptr(cast(other.ptr)), ptrCounter(other.ptrCounter) {
     other.ptr = nullptr;
   }
-  inline explicit Own(T* ptr) noexcept: ptr(ptr) {}
+  inline explicit Own(T* ptr) noexcept: ptr(ptr), ptrCounter(DefaultPtrCounter::create()) {}
 
   ~Own() noexcept(false) { dispose(); }
 
@@ -341,9 +404,12 @@ public:
     // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
     // dispose.
     T* ptrCopy = ptr;
+    DefaultPtrCounter::Ptr ptrCounterCopy = ptrCounter;
     ptr = other.ptr;
+    ptrCounter = other.ptrCounter;
     other.ptr = nullptr;
     if (ptrCopy != nullptr) {
+      DefaultPtrCounter::destroy(ptrCounterCopy);
       StaticDisposer::dispose(ptrCopy);
     }
     return *this;
@@ -363,6 +429,7 @@ public:
     Own<U, StaticDisposer> result;
     if (ptr != nullptr) {
       result.ptr = &kj::downcast<U>(*ptr);
+      result.ptrCounter = ptrCounter;
       ptr = nullptr;
     }
     return result;
@@ -379,8 +446,12 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
+  inline operator Ptr<T>() { return Ptr<T>(this); }
+  inline Ptr<T> asPtr() { return Ptr<T>(this); }
+
 private:
   T* ptr;
+  DefaultPtrCounter::Ptr ptrCounter;
 
   inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
 
@@ -393,6 +464,7 @@ private:
     T* ptrCopy = ptr;
     if (ptrCopy != nullptr) {
       ptr = nullptr;
+      DefaultPtrCounter::destroy(ptrCounter);
       StaticDisposer::dispose(ptrCopy);
     }
   }
@@ -405,6 +477,9 @@ private:
   template <typename, typename>
   friend class Own;
   friend class Maybe<Own<T, StaticDisposer>>;
+
+  template <typename>
+  friend class Ptr;
 };
 
 namespace _ {  // private
@@ -657,6 +732,123 @@ private:
 };
 
 // =======================================================================================
+// Pin<T>
+
+template <typename T>
+class Pin {
+
+public:
+  template <typename... Params>
+  inline Pin(Params&&... params) : t(kj::fwd<Params>(params)...) {  }
+
+  inline Pin(Pin<T>&& other): t(kj::mv(other.t)) {
+    DefaultPtrCounter::assertEmpty(&other.ptrCounter);
+  }
+
+  inline ~Pin() {
+    DefaultPtrCounter::assertEmpty(&ptrCounter);
+  }
+
+  inline T* operator->() { return get(); }
+  inline const T* operator->() const { return get(); }
+
+  inline operator Ptr<T>() { return Ptr<T>(this); }
+  inline Ptr<T> asPtr() { return Ptr<T>(this); }
+
+private:
+  KJ_DISALLOW_COPY(Pin);
+
+  inline Pin(T&& t): t(kj::mv(t)) {}
+
+  T t;
+  DefaultPtrCounter ptrCounter;
+
+  inline T* get() { return &t; }
+  inline const T* get() const { return &t; }
+
+  template <typename>
+  friend class Ptr;
+};
+
+template <typename T>
+class Pin<kj::Own<T>>;
+
+template <typename T, typename... Params>
+inline Pin<T> pin(Params&&... params) {
+  return Pin<T>(T(kj::fwd<Params>(params)...));
+}
+
+// =======================================================================================
+// Ptr<T>
+
+template <typename T>
+class Ptr {
+public:
+  inline ~Ptr() {
+    if (ptr == nullptr) {
+      // the value was moved out
+      return;
+    }
+    if (counter == nullptr) {
+      // this is a pointer to kj::Own<T> that already guarantees that T doesn't move.
+      return;
+    }
+
+    counter->dec();
+  }
+
+  Ptr(Ptr&& other) : ptr(other.ptr), counter(other.counter) {
+    other.ptr = nullptr;
+  }
+
+  Ptr(const Ptr& other) : ptr(other.ptr), counter(other.counter) {
+    counter->inc();
+   }
+
+  inline T* operator->() { return get(); }
+  inline const T* operator->() const { return get(); }
+
+  inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const Pin<kj::Own<T>>& other) const { return get() == other.get(); }
+  inline bool operator==(const Ptr<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const T* const other) const { return get() == other; }
+
+  inline void operator=(std::nullptr_t other) { 
+    if (ptr != nullptr && counter != nullptr) {
+      counter->dec();
+      counter = nullptr;
+      ptr = nullptr;
+    }
+  }
+
+private:
+  inline Ptr(Pin<T>* pin) : ptr(pin->get()), counter(&pin->ptrCounter) {
+    counter->inc();
+  }
+
+  inline Ptr(Own<T>* own) : ptr(own->get()), counter(own->ptrCounter) { 
+    counter->inc();
+  }
+
+  template<typename D>
+  inline Ptr(Own<T, D>* own) : ptr(own->get()), counter(own->ptrCounter) { 
+    counter->inc();
+  }
+
+  T *ptr;
+  DefaultPtrCounter* counter;
+
+  inline T* get() { return ptr; }
+  inline const T* get() const { return ptr; }
+
+  template <typename X>
+  friend class Pin;
+
+  template <typename, typename>
+  friend class Own;
+};
+
+// =======================================================================================
 // Inline implementation details
 
 template <typename T>
@@ -755,7 +947,7 @@ Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
 template <typename T>
 template <typename U, typename StaticDisposer, typename>
 inline Own<T>::Own(Own<U, StaticDisposer>&& other) noexcept
-    : ptr(cast(other.ptr)) {
+    : ptr(cast(other.ptr)), ptrCounter(other.ptrCounter) {
   if (_::castToVoid(other.ptr) != reinterpret_cast<void*>(other.ptr)) {
     // Oh dangit, there's some sort of multiple inheritance going on and `StaticDisposerAdapter`
     // won't actually work because it'll receive a pointer pointing to the top of the object, which
