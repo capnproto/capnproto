@@ -20,9 +20,24 @@
 // THE SOFTWARE.
 
 #include "memory.h"
+#include "debug.h"
+#include <stdlib.h>
 
 namespace kj {
 
 const NullDisposer NullDisposer::instance = NullDisposer();
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
+namespace _ {
+
+void atomicPtrCounterAssertionFailed(char const* reason) {
+  KJ_FAIL_ASSERT("ptr counter contract violated", reason);
+
+  // Really make sure we abort.
+  KJ_KNOWN_UNREACHABLE(abort());
+}
+
+}
+#endif
 
 }  // namespace kj
