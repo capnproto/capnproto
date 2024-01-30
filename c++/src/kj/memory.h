@@ -22,6 +22,8 @@
 #pragma once
 
 #include "common.h"
+#include <atomic>
+#include <cstddef>
 
 KJ_BEGIN_HEADER
 
@@ -167,6 +169,46 @@ public:
 
   void disposeImpl(void* pointer) const override {}
 };
+
+
+// =======================================================================================
+// Ptr Counters
+
+#ifdef KJ_DEBUG
+#define KJ_ASSERT_PTR_COUNTERS
+// When defined, keeps track of active Ptr<T> instances and asserts validity of their ownership
+#endif
+
+namespace _ {
+#ifdef KJ_ASSERT_PTR_COUNTERS
+class AtomicPtrCounter {
+// AtomicPtrCounter uses atomic operations to keep track of active pointers.
+
+public:
+  void dec() {
+    size_t c = count.load(std::memory_order_consume);
+    KJ_IREQUIRE(c > 0, "unbalanced dec");
+    count.fetch_sub(1, std::memory_order_release);
+  }
+
+  void inc() {
+    count.fetch_add(1, std::memory_order_release);
+  }
+
+  void assertEmpty() {
+    size_t c = count.load(std::memory_order_consume);
+    KJ_IREQUIRE(c == 0, "active pointers not empty");
+  }
+
+private:
+  std::atomic<size_t> count = 0;
+};
+
+using PtrCounter = AtomicPtrCounter;
+// Default counter type to use
+
+#endif
+}
 
 // =======================================================================================
 // Own<T> -- An owned pointer.
@@ -654,6 +696,205 @@ private:
   union {
     T value;
   };
+};
+
+// =======================================================================================
+// Pin<T>
+
+template <typename T>
+class Ptr;
+
+template <typename T>
+class Pin {
+// Pin<T> is a smart, in-place storage for T. 
+//
+// Pin<T> should be created on the stack or used as a data member. It should not be 
+// allocated on the heap.
+// Pin<T> is integrated with Ptr<T>, and is legal to move/destroy only when there are no active
+// pointers. 
+// When KJ_ASSERT_PTR_COUNTERS is defined, pointers are tracked and validity of these 
+// operations are asserted.
+// Zero-overhead replacement for T if KJ_ASSERT_PTR_COUNTERS is not defined.
+
+public:
+  template <typename... Params>
+  inline Pin(Params&&... params) : t(kj::fwd<Params>(params)...) {  }
+  // Create new Pin<T> using corresponding T constructor.
+
+  inline Pin(Pin<T>&& other): t(kj::mv(other.t)) {
+  // Move T's ownership.
+  // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    other.ptrCounter.assertEmpty();
+#endif
+  }
+
+  inline ~Pin() {
+  // Destroy a Pin with underlying object. 
+  // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    ptrCounter.assertEmpty();
+#endif
+  }
+
+  inline T* operator->() { return get(); }
+  inline const T* operator->() const { return get(); }
+
+  inline operator Ptr<T>() { return Ptr<T>(this); }
+  // Pin<T> can be implicitly converted to Ptr<T> to obtain new pointers.
+
+  inline Ptr<T> asPtr() { return Ptr<T>(this); }
+  // Explicit convenience method to create new pointers.
+
+  template <typename U, typename = EnableIf<canConvert<T*, U*>()>>
+  inline operator Ptr<U>() { return Ptr<U>(this); }
+  // Pin<T> can be implicitly converted to pointers of compatible types.
+
+  template <typename U, typename = EnableIf<canConvert<T*, U*>()>>
+  inline Ptr<U> asPtr() { return Ptr<U>(this); }
+  // Explicit convenience method to create new pointers of compatible types.
+
+  void* operator new(size_t count) = delete;
+  void* operator new[](size_t count) = delete;
+  // Pin<T> can't be heap allocated, only local or data field usage is ok.
+
+private:
+  KJ_DISALLOW_COPY(Pin);
+
+  inline Pin(T&& t): t(kj::mv(t)) {}
+
+  T t;
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  _::PtrCounter ptrCounter;
+#endif
+
+  inline T* get() { return &t; }
+  inline const T* get() const { return &t; }
+
+  template <typename>
+  friend class Ptr;
+};
+
+// =======================================================================================
+// Ptr<T>
+
+template <typename T>
+class Ptr {
+// Ptr<T> is a smart alternative to T&.
+// 
+// When used together with Pin<T> it keeps track of active pointers.
+// Asserts lifetime constraints when KJ_ASSERT_PTR_COUNTERS is defined.
+// Zero-overhead alternative for T& if KJ_ASSERT_PTR_COUNTERS is not defined.
+
+public:
+  inline ~Ptr() {
+    if (ptr == nullptr) {
+      // the value was moved out
+      return;
+    }
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    counter->dec();
+#endif
+  }
+
+  Ptr(Ptr&& other) : ptr(other.ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  , counter(other.counter) 
+#endif
+  {
+    other.ptr = nullptr;
+  }
+
+  Ptr(const Ptr& other) : ptr(other.ptr)
+  // Ptr<T> can be freely copied.
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  , counter(other.counter) 
+#endif
+  {
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    counter->inc();
+#endif
+   }
+
+  inline void operator=(std::nullptr_t other) { 
+    if (ptr != nullptr) {
+#ifdef KJ_ASSERT_PTR_COUNTERS
+      counter->dec();
+      counter = nullptr;
+#endif
+      ptr = nullptr;
+    }
+  }
+
+  inline T* operator->() { return get(); }
+  inline const T* operator->() const { return get(); }
+
+  inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const Ptr<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const T* const other) const { return get() == other; }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline bool operator==(const Pin<U>& other) const { return get() == other.get(); }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline bool operator==(const Ptr<U>& other) const { return get() == other.get(); }
+
+private:
+  inline Ptr(Pin<T>* pin) : ptr(pin->get())
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  , counter(&pin->ptrCounter) 
+#endif
+  {
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    counter->inc();
+#endif
+  }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Ptr(Pin<U>* pin) : ptr(pin->get())
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  , counter(&pin->ptrCounter) 
+#endif
+  {
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    counter->inc();
+#endif
+  }
+
+
+  inline Ptr(Own<T>* own) : ptr(own->storage.ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  , counter(own->storage.ptrCounter) 
+#endif
+  { 
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    counter->inc();
+#endif
+  }
+
+  template<typename D>
+  inline Ptr(Own<T, D>* own) : ptr(own->storage.ptr)
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  , counter(own->storage.ptrCounter) 
+#endif
+  { 
+#ifdef KJ_ASSERT_PTR_COUNTERS
+    counter->inc();
+#endif
+  }
+
+  T *ptr;
+#ifdef KJ_ASSERT_PTR_COUNTERS
+  _::PtrCounter* counter;
+#endif
+
+  inline T* get() { return ptr; }
+  inline const T* get() const { return ptr; }
+
+  template <typename>
+  friend class Ptr;
+  template <typename>
+  friend class Pin;
 };
 
 // =======================================================================================
