@@ -3901,6 +3901,19 @@ public:
     return transferredBytes;
   }
 
+  kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+    KJ_UNREACHABLE;
+  };
+
+  kj::Maybe<WebSocket&> destinationPumpingTo;
+  kj::Maybe<WebSocket&> destinationPumpingFrom;
+  // Tracks the outstanding pumpTo() and tryPumpFrom() calls currently running on the
+  // WebSocketPipeEnd, which is the destination side of this WebSocketPipeImpl. This is used by
+  // the source end to implement getPreferredExtensions().
+  //
+  // getPreferredExtensions() does not fit into the model used by all the other methods because it
+  // is not directional (not a read nor a write call).
+
 private:
   kj::Maybe<WebSocket&> state;
   // Object-oriented state! If any method call is blocked waiting on activity from the other end,
@@ -4019,6 +4032,10 @@ private:
     KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
    }
 
+  kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+    KJ_UNREACHABLE;
+  };
+
   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
@@ -4104,6 +4121,10 @@ private:
       KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
 
+    kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+      KJ_UNREACHABLE;
+    };
+
   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
@@ -4187,6 +4208,10 @@ private:
     uint64_t receivedByteCount() override {
       KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
+
+    kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+      KJ_UNREACHABLE;
+    };
 
   private:
     kj::PromiseFulfiller<Message>& fulfiller;
@@ -4284,6 +4309,10 @@ private:
       KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
 
+    kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+      KJ_UNREACHABLE;
+    };
+
   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
@@ -4330,6 +4359,9 @@ private:
       KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
 
+    kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+      KJ_UNREACHABLE;
+    };
   };
 
   class Aborted final: public WebSocket {
@@ -4371,6 +4403,9 @@ private:
     uint64_t receivedByteCount() override {
       KJ_FAIL_ASSERT("Bytes are not counted for the individual states of WebSocketPipeImpl.");
     }
+    kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+      KJ_UNREACHABLE;
+    };
   };
 };
 
@@ -4403,18 +4438,49 @@ public:
     return out->whenAborted();
   }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
-    return out->tryPumpFrom(other);
+    KJ_REQUIRE(in->destinationPumpingFrom == kj::none, "can only call tryPumpFrom() once at a time");
+    // By convention, we store the WebSocket reference on `in`.
+    in->destinationPumpingFrom = other;
+    auto deferredUnregister = kj::defer([this]() { in->destinationPumpingFrom = kj::none; });
+    KJ_IF_SOME(p, out->tryPumpFrom(other)) {
+      return p.attach(kj::mv(deferredUnregister));
+    } else {
+      return kj::none;
+    }
   }
 
   kj::Promise<Message> receive(size_t maxSize) override {
     return in->receive(maxSize);
   }
   kj::Promise<void> pumpTo(WebSocket& other) override {
-    return in->pumpTo(other);
+    KJ_REQUIRE(in->destinationPumpingTo == kj::none, "can only call pumpTo() once at a time");
+    // By convention, we store the WebSocket reference on `in`.
+    in->destinationPumpingTo = other;
+    auto deferredUnregister = kj::defer([this]() { in->destinationPumpingTo = kj::none; });
+    return in->pumpTo(other).attach(kj::mv(deferredUnregister));
   }
 
   uint64_t sentByteCount() override { return out->sentByteCount(); }
   uint64_t receivedByteCount() override { return in->sentByteCount(); }
+
+  kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+    // We want to forward this call to whatever WebSocket the other end of the pipe is pumping
+    // to/from, if any. We'll check them in an arbitrary order and take the first one we see.
+    // But really, the hope is that both destinationPumpingTo and destinationPumpingFrom are in fact
+    // the same object. If they aren't the same, then it's not really clear whose extensions we
+    // should prefer; the choice here is arbitrary.
+    KJ_IF_SOME(ws, out->destinationPumpingTo) {
+      KJ_IF_SOME(result, ws.getPreferredExtensions(ctx)) {
+        return kj::mv(result);
+      }
+    }
+    KJ_IF_SOME(ws, out->destinationPumpingFrom) {
+      KJ_IF_SOME(result, ws.getPreferredExtensions(ctx)) {
+        return kj::mv(result);
+      }
+    }
+    return kj::none;
+  };
 
 private:
   kj::Rc<WebSocketPipeImpl> in;
@@ -6931,6 +6997,10 @@ private:
     uint64_t sentByteCount() override { return inner->sentByteCount(); }
     uint64_t receivedByteCount() override { return inner->receivedByteCount(); }
 
+    kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+      return inner->getPreferredExtensions(ctx);
+    };
+
   private:
     kj::Own<kj::WebSocket> inner;
     kj::Maybe<kj::Promise<void>> completionTask;
@@ -8038,6 +8108,10 @@ private:
 
       uint64_t sentByteCount() override { KJ_FAIL_ASSERT("received bad WebSocket handshake"); }
       uint64_t receivedByteCount() override { KJ_FAIL_ASSERT("received bad WebSocket handshake"); }
+
+      kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+        KJ_FAIL_ASSERT(kj::cp(exception));
+      };
 
     private:
       kj::Exception exception;

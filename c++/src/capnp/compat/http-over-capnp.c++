@@ -250,6 +250,12 @@ public:
   uint64_t sentByteCount() override { return sentBytes; }
   uint64_t receivedByteCount() override { return KJ_ASSERT_NONNULL(in)->receivedByteCount(); }
 
+  kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
+    // TODO(someday): Optimzed pump is tricky with HttpOverCapnp, we may want to revist
+    // this but for now we always return none (indicating no preference).
+    return kj::none;
+  };
+
 private:
   kj::Maybe<kj::Own<kj::WebSocket>> in;   // One end of a WebSocketPipe, used only for receiving.
   kj::Maybe<capnp::WebSocket::Client> out;  // Used only for sending.
