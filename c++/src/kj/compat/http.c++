@@ -5578,7 +5578,7 @@ public:
               response.statusText,
               &httpInput.getHeaders(),
               upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput, settings.entropySource,
-                  kj::mv(compressionParameters)),
+                  kj::mv(compressionParameters), settings.webSocketErrorHandler),
             };
           } else {
             upgraded = false;
