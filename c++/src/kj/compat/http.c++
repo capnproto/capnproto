@@ -5786,7 +5786,7 @@ HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolErr
 
 kj::Exception WebSocketErrorHandler::handleWebSocketProtocolError(
       WebSocket::ProtocolError protocolError) {
-  return KJ_EXCEPTION(FAILED, "WebSocket protocol error", protocolError.statusCode, protocolError.description);
+  return KJ_EXCEPTION(DISCONNECTED, "WebSocket protocol error", protocolError.statusCode, protocolError.description);
 }
 
 class PausableReadAsyncIoStream::PausableRead {

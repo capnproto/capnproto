@@ -1875,7 +1875,7 @@ public:
 
   kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) {
     errors.add(kj::mv(protocolError));
-    return KJ_EXCEPTION(FAILED, protocolError.description);
+    return KJ_EXCEPTION(DISCONNECTED, protocolError.description);
   }
 };
 
