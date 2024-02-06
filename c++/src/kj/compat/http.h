@@ -1021,6 +1021,19 @@ public:
   // little reason to override this.
 };
 
+class WebSocketErrorHandler {
+public:
+  virtual kj::Exception handleWebSocketProtocolError(WebSocket::ProtocolError protocolError);
+  // Handles low-level protocol errors in received WebSocket data.
+  //
+  // This is called when the WebSocket peer sends us bad data *after* a successful WebSocket
+  // upgrade, e.g. a continuation frame without a preceding start frame, a frame with an unknown
+  // opcode, or similar.
+  //
+  // You would override this method in order to customize the exception. You cannot prevent the
+  // exception from being thrown.
+};
+
 struct HttpClientSettings {
   kj::Duration idleTimeout = 5 * kj::SECONDS;
   // For clients which automatically create new connections, any connection idle for at least this
@@ -1046,21 +1059,11 @@ struct HttpClientSettings {
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
 
+  kj::Maybe<WebSocketErrorHandler&> webSocketErrorHandler = kj::none;
+  // Customize exceptions thrown on WebSocket protocol errors.
+
   kj::Maybe<SecureNetworkWrapper&> tlsContext;
   // A reference to a TLS context that will be used when tlsStarter is invoked.
-};
-
-class WebSocketErrorHandler {
-public:
-  virtual kj::Exception handleWebSocketProtocolError(WebSocket::ProtocolError protocolError);
-  // Handles low-level protocol errors in received WebSocket data.
-  //
-  // This is called when the WebSocket peer sends us bad data *after* a successful WebSocket
-  // upgrade, e.g. a continuation frame without a preceding start frame, a frame with an unknown
-  // opcode, or similar.
-  //
-  // You would override this method in order to customize the exception. You cannot prevent the
-  // exception from being thrown.
 };
 
 kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,

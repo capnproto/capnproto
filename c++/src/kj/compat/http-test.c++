@@ -2446,7 +2446,7 @@ KJ_TEST("WebSocket maximum message size") {
   auto clientTask = client->send(biggestAllowedString)
       .then([&]() { return client->send(tooBigString); })
       .then([&]() {
-	return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+        return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
       });
 
   {
@@ -5097,6 +5097,72 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
   }
 
   writeResponsesPromise.wait(waitScope);
+}
+
+KJ_TEST("HttpClient WebSocket: client can have a custom WebSocket error handler") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  // These are WEBSOCKET_REQUEST_HANDSHAKE and WEBSOCKET_RESPONSE_HANDSHAKE but without the "My-Header" header.
+  // This test isn't about the HTTP handshake, so the headers are just noise.
+  const char wsRequestHandshake[] =
+    " HTTP/1.1\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n";
+  const char wsResponseHandshake[] =
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Connection: Upgrade\r\n"
+    "Upgrade: websocket\r\n"
+    "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
+    "\r\n";
+
+  const byte badFrame[] = {
+    0xF0, 0x02, 'y', 'o'  // all RSV bits set, plus FIN
+  };
+  const byte closeFrame[] = {
+    0x88, 0xa8, 0xC, 0x22, 0x38, 0x4e, 0x3, 0xea, // FIN, opcode=Close, code=1009
+    'R', 'e', 'c', 'e', 'i', 'v', 'e', 'd', ' ',
+    'f', 'r', 'a', 'm', 'e', ' ',
+    'h', 'a', 'd', ' ',
+    'R', 'S', 'V', ' ',
+    'b', 'i', 't', 's', ' ',
+    '2', ' ',
+    'o', 'r', ' ',
+    '3', ' ',
+    's', 'e', 't',
+  };
+
+  auto request = kj::str("GET /websocket", wsRequestHandshake);
+  auto serverPromise = expectRead(*pipe.ends[1], request)
+      .then([&]() { return writeA(*pipe.ends[1], asBytes(wsResponseHandshake)); })
+      .then([&]() { return writeA(*pipe.ends[1], badFrame); })
+      .then([&]() { return expectRead(*pipe.ends[1], closeFrame); })
+      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+
+  {
+    HttpHeaderTable table;
+    FakeEntropySource entropySource;
+    HttpClientSettings clientSettings;
+    WebSocketErrorCatcher errorCatcher;
+    clientSettings.entropySource = entropySource;
+    clientSettings.webSocketErrorHandler = errorCatcher;
+
+    auto clientStream = kj::mv(pipe.ends[0]);
+    auto httpClient = newHttpClient(table, *clientStream, clientSettings);
+    auto wsClientPromise = httpClient->openWebSocket("/websocket", HttpHeaders(table))
+      .then([&](kj::HttpClient::WebSocketResponse resp) { return kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>()); })
+      .then([](kj::Own<kj::WebSocket> webSocket) -> kj::Promise<kj::WebSocket::Message> { return webSocket->receive().attach(kj::mv(webSocket)); })
+      .eagerlyEvaluate([](kj::Exception e) -> kj::WebSocket::Message { return kj::str("irrelevant value"); });
+
+    wsClientPromise.wait(waitScope);
+    KJ_EXPECT(errorCatcher.errors.size() == 1);
+  }
+
+  serverPromise.wait(waitScope);
 }
 
 KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {

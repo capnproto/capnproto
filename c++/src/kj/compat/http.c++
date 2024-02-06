@@ -2745,13 +2745,13 @@ public:
     bool isData = opcode < OPCODE_FIRST_CONTROL;
     if (opcode == OPCODE_CONTINUATION) {
       if (fragments.empty()) {
-	return sendCloseDueToError(1002, "Unexpected continuation frame");
+        return sendCloseDueToError(1002, "Unexpected continuation frame");
       }
 
       opcode = fragmentOpcode;
     } else if (isData) {
       if (!fragments.empty()) {
-	return sendCloseDueToError(1002, "Missing continuation frame");
+        return sendCloseDueToError(1002, "Missing continuation frame");
       }
     }
 
@@ -2799,7 +2799,7 @@ public:
     } else {
       // Fragmented message, and this isn't the final fragment.
       if (!isData) {
-	return sendCloseDueToError(1002, "Received fragmented control frame");
+        return sendCloseDueToError(1002, "Received fragmented control frame");
       }
 
       message = kj::heapArray<byte>(payloadLen);
@@ -2830,10 +2830,10 @@ public:
 
       // Provide a reasonable error if a compressed frame is received without compression enabled.
       if (isCompressed && compressionConfig == kj::none) {
-	return sendCloseDueToError(
-	    1002,
-	    "Received a WebSocket frame whose compression bit was set, but the compression "
-	    "extension was not negotiated for this connection.");
+        return sendCloseDueToError(
+            1002,
+            "Received a WebSocket frame whose compression bit was set, but the compression "
+            "extension was not negotiated for this connection.");
       }
 
       switch (opcode) {
@@ -2906,10 +2906,10 @@ public:
           // Unsolicited pong. Ignore.
           return receive(maxSize);
         default:
-	  {
-	    auto description = kj::str("Unknown opcode ", opcode);
-	    return sendCloseDueToError(1002, description.asPtr()).attach(kj::mv(description));
-	  }
+          {
+            auto description = kj::str("Unknown opcode ", opcode);
+            return sendCloseDueToError(1002, description.asPtr()).attach(kj::mv(description));
+          }
       }
     };
 
@@ -3433,9 +3433,9 @@ private:
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 
     ControlMessage(
-	byte opcodeParam,
-	kj::Array<byte> payloadParam,
-	kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillerParam)
+        byte opcodeParam,
+        kj::Array<byte> payloadParam,
+        kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillerParam)
         : opcode(opcodeParam), payload(kj::mv(payloadParam)), fulfiller(kj::mv(fulfillerParam)) {
       KJ_REQUIRE(opcode <= OPCODE_MAX);
     }
@@ -3485,8 +3485,8 @@ private:
 
     for (;;) {
       KJ_IF_SOME(p, sendingControlMessage) {
-	// Re-check in case of disconnect on a previous loop iteration.
-	KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
+        // Re-check in case of disconnect on a previous loop iteration.
+        KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
 
         // We recently sent a control message; make sure it's finished before proceeding.
         auto localPromise = kj::mv(p);
@@ -3544,7 +3544,7 @@ private:
     sendParts[0] = sendHeader.compose(true, useCompression, opcode, message.size(), mask);
     sendParts[1] = message;
     KJ_ASSERT(!sendHeader.hasRsv2or3(), "RSV bits 2 and 3 must be 0, as we do not currently "
-	      "support an extension that would set these bits");
+              "support an extension that would set these bits");
 
     co_await stream->write(sendParts);
     currentlySending = false;
@@ -3588,9 +3588,9 @@ private:
     queueClose(code, reason, kj::mv(paf.fulfiller));
 
     return paf.promise.then([this, code, reason]() -> kj::Promise<Message> {
-	return errorHandler.handleWebSocketProtocolError({
-	    code, reason
-	  });
+        return errorHandler.handleWebSocketProtocolError({
+            code, reason
+          });
       });
   }
 
@@ -3599,12 +3599,12 @@ private:
 
     KJ_IF_SOME(controlMessage, queuedControlMessage) {
       if (controlMessage.opcode == OPCODE_CLOSE) {
-	// We're currently sending a Close message, which we only do (at least via queuedControlMessage) when we're
-	// closing the connection due to error. There's no point queueing a Pong that'll never be sent.
-	return;
+        // We're currently sending a Close message, which we only do (at least via queuedControlMessage) when we're
+        // closing the connection due to error. There's no point queueing a Pong that'll never be sent.
+        return;
       } else {
-	KJ_ASSERT(controlMessage.opcode == OPCODE_PONG);
-	alreadyWaitingForPongWrite = true;
+        KJ_ASSERT(controlMessage.opcode == OPCODE_PONG);
+        alreadyWaitingForPongWrite = true;
       }
     }
 
@@ -3643,9 +3643,9 @@ private:
       queuedControlMessage = kj::none;
 
       if (hasSentClose || disconnected) {
-	KJ_IF_SOME(fulfiller, maybeFulfiller) {
-	  fulfiller->fulfill();
-	}
+        KJ_IF_SOME(fulfiller, maybeFulfiller) {
+          fulfiller->fulfill();
+        }
         co_return;
       }
 
@@ -3655,7 +3655,7 @@ private:
       sendParts[1] = payload;
       co_await stream->write(sendParts);
       KJ_IF_SOME(fulfiller, maybeFulfiller) {
-	fulfiller->fulfill();
+        fulfiller->fulfill();
       }
     }
   }
@@ -5512,7 +5512,7 @@ public:
               response.statusText,
               &httpInput.getHeaders(),
               upgradeToWebSocket(kj::mv(ownStream), httpInput, httpOutput, settings.entropySource,
-                  kj::mv(compressionParameters)),
+                  kj::mv(compressionParameters), settings.webSocketErrorHandler),
             };
           } else {
             upgraded = false;
