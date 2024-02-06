@@ -119,7 +119,7 @@ KJ_TEST("Rc inheritance") {
 
   // up casting works automatically
   kj::Rc<SetTrueInDestructor> parent = child.addRef();
-  
+
   auto down = parent.downcast<Child>();
   EXPECT_TRUE(parent == nullptr);
   EXPECT_TRUE(down != nullptr);
@@ -225,6 +225,37 @@ KJ_TEST("RefcountedWrapper") {
 
     KJ_EXPECT(*ref2 == 123);
   }
+}
+
+KJ_TEST("Rc copy (for copy-on-write semantics)") {
+  struct Foo : public kj::Refcounted {
+    int m;
+    Foo() : m(0) {}
+    Foo(const Foo& other) : m(other.m) {}
+  };
+
+  kj::Rc<const Foo> foo = kj::rc<Foo>().asConst();
+  KJ_ASSERT(foo->m == 0);
+
+  kj::Rc<const Foo> ref = foo.addRef();
+  KJ_ASSERT(ref->m == 0);
+  KJ_ASSERT(foo.operator->() == ref.operator->());
+
+  kj::Rc<Foo> mut = foo.copy();
+  // The original foo is not consumed.
+  KJ_ASSERT(foo.operator->() == ref.operator->());
+  // But the mut and ref are different instances now.
+  KJ_ASSERT(mut.operator->() != ref.operator->());
+  mut->m = 1;
+
+  // The original ref is still unchanged.
+  KJ_ASSERT(ref->m == 0);
+
+  foo = mut.asConst();
+  mut = foo.copy();
+
+  kj::Own<const Foo> own = mut.asConst().toOwn();
+  KJ_ASSERT(own->m == 1);
 }
 
 }  // namespace kj

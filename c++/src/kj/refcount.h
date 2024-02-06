@@ -151,7 +151,7 @@ Rc<T> Refcounted::addRcRefInternal(T* object) {
 
 template<typename T>
 class Rc {
-  // Smart pointer for reference counted objects. 
+  // Smart pointer for reference counted objects.
   //
   // There are only two ways to obtain new Rc instances:
   // - use kj::rc<T>(...) function to create new T.
@@ -159,15 +159,15 @@ class Rc {
   // - use EnableAddRefToThis to allow T instance to add new references to itself.
   //
   // Suggested usage patterns are:
-  // - return kj::Rc as value from factory functions: 
+  // - return kj::Rc as value from factory functions:
   //     kj::Rc<MyService> createMyService();
   // - pass kj::Rc as rvalue to functions that need to extend T's lifetime:
   //     void setMyService(kj::Rc<MyService>&& service)
   // - store kj::Rc as data member:
   //     struct MyComputation { kj::Rc<MyService> service; };
   // - use toOwn to convert kj::Rc<T> instance to kj::Own<T> and use it
-  //     without being concerned of reference counting behavior. 
-  //     To improve the transparency of the code, kj::Own<T> shouldn't be used 
+  //     without being concerned of reference counting behavior.
+  //     To improve the transparency of the code, kj::Own<T> shouldn't be used
   //     to call addRef() without kj::Rc.
 
 public:
@@ -213,6 +213,8 @@ public:
   inline T* operator->() { return own.get(); }
   inline const T* operator->() const { return own.get(); }
 
+  inline Rc<const T> asConst();
+
   // do not expose * to avoid dangling references
 
 private:
@@ -229,6 +231,76 @@ private:
   template <typename>
   friend class EnableAddRefToThis;
 };
+
+template <typename T>
+class Rc<const T> {
+  // Variation on Rc that enables copy-on-write semantics. The held pointer
+  // is const. When copy() is called, the held T is copied to a mutable instance.
+public:
+  KJ_DISALLOW_COPY(Rc);
+  Rc() { }
+  Rc(decltype(nullptr)) { }
+  inline Rc(Rc&& other) noexcept = default;
+
+  kj::Own<const T> toOwn() {
+    // Convert Rc<const T> to Own<const T>.
+    // Nullifies the original Rc<const T>.
+    return kj::mv(own);
+  }
+
+  Rc<T> copy() {
+    return refcounted<T>(*own);
+  }
+
+  kj::Rc<const T> addRef() {
+    const T* refcounted = own.get();
+    if (refcounted != nullptr) {
+      // TODO(review): Should we add a const version of addRcRefInternal?
+      return Refcounted::addRcRefInternal<T>(
+          const_cast<T*>(refcounted)).asConst();
+    } else {
+      return kj::Rc<const T>();
+    }
+  }
+
+  Rc& operator=(decltype(nullptr)) {
+    own = nullptr;
+    return *this;
+  }
+
+  Rc& operator=(Rc&& other) = default;
+
+  template <typename U>
+  Rc<const U> downcast() {
+    return Rc<const U>(own.template downcast<const U>());
+  }
+
+  inline bool operator==(const Rc<const T>& other) const { return own.get() == other.own.get(); }
+  inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return own.get() != nullptr; }
+
+  inline const T* operator->() const { return own.get(); }
+
+  // do not expose * to avoid dangling references
+
+private:
+  Rc(const T* t) : own(t, *t) { }
+  Rc(Own<const T>&& t) : own(kj::mv(t)) { }
+  Rc(Own<T>&& t) : own(kj::mv(t)) { }
+
+  Own<const T> own;
+
+  template <typename>
+  friend class Rc;
+
+  template <typename>
+  friend class EnableAddRefToThis;
+};
+
+template <typename T>
+Rc<const T> Rc<T>::asConst() {
+  return Rc<const T>(kj::mv(own));
+}
 
 template<typename Self>
 class EnableAddRefToThis {
