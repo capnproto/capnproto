@@ -171,6 +171,23 @@ public:
   // isn't wrapping a file descriptor.
 };
 
+class NullStream final: public AsyncIoStream {
+  // Convenience class that implements an I/O stream that ignores all writes and returns EOF for
+  // all reads.
+  //
+  // Hint: You can also use this class when you just need an input stream or an output stream.
+public:
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Maybe<uint64_t> tryGetLength() override;
+  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
+
+  kj::Promise<void> write(const void* buffer, size_t size) override;
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
+  kj::Promise<void> whenWriteDisconnected() override;
+
+  void shutdownWrite() override;
+};
+
 Promise<uint64_t> unoptimizedPumpTo(
     AsyncInputStream& input, AsyncOutputStream& output, uint64_t amount,
     uint64_t completedSoFar = 0);

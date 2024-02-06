@@ -5211,14 +5211,21 @@ kj::OneOf<CompressionParameters, kj::Exception> tryParseExtensionAgreement(
       "an invalid value."));
   return kj::mv(e);
 }
+
 } // namespace _ (private)
+
 namespace {
-class NullInputStream final: public kj::AsyncInputStream {
+
+class HeadResponseStream final: public kj::AsyncInputStream {
+  // An input stream which returns no data, but `tryGetLength()` returns a specified value. Used
+  // for HEAD responses, where the size is known but the body content is not sent.
 public:
-  NullInputStream(kj::Maybe<size_t> expectedLength = size_t(0))
+  HeadResponseStream(kj::Maybe<size_t> expectedLength)
       : expectedLength(expectedLength) {}
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    // TODO(someday): Maybe this should throw? We should not be trying to read the body of a
+    // HEAD response.
     return constPromise<size_t, 0>();
   }
 
@@ -5232,48 +5239,6 @@ public:
 
 private:
   kj::Maybe<size_t> expectedLength;
-};
-
-class NullOutputStream final: public kj::AsyncOutputStream {
-public:
-  Promise<void> write(const void* buffer, size_t size) override {
-    return kj::READY_NOW;
-  }
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return kj::READY_NOW;
-  }
-  Promise<void> whenWriteDisconnected() override {
-    return kj::NEVER_DONE;
-  }
-
-  // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
-};
-
-class NullIoStream final: public kj::AsyncIoStream {
-public:
-  void shutdownWrite() override {}
-
-  Promise<void> write(const void* buffer, size_t size) override {
-    return kj::READY_NOW;
-  }
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    return kj::READY_NOW;
-  }
-  Promise<void> whenWriteDisconnected() override {
-    return kj::NEVER_DONE;
-  }
-
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return constPromise<size_t, 0>();
-  }
-
-  kj::Maybe<uint64_t> tryGetLength() override {
-    return kj::Maybe<uint64_t>((uint64_t)0);
-  }
-
-  kj::Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    return constPromise<uint64_t, 0>();
-  }
 };
 
 class HttpClientImpl final: public HttpClient,
@@ -6683,7 +6648,7 @@ public:
     auto requestPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
     responder->setPromise(kj::mv(requestPaf.promise));
 
-    auto in = kj::heap<NullInputStream>();
+    auto in = kj::heap<kj::NullStream>();
     auto promise = service.request(HttpMethod::GET, urlCopy, *headersCopy, *in, *responder)
         .attach(kj::mv(in), kj::mv(urlCopy), kj::mv(headersCopy));
     requestPaf.fulfiller->fulfill(kj::mv(promise));
@@ -6847,11 +6812,11 @@ private:
                           headersCopy=kj::mv(headersCopy),expectedBodySize]() mutable {
           fulfiller->fulfill({
             statusCode, statusTextCopy, headersCopy.get(),
-            kj::heap<NullInputStream>(expectedBodySize)
+            kj::heap<HeadResponseStream>(expectedBodySize)
                 .attach(kj::mv(statusTextCopy), kj::mv(headersCopy))
           });
         }).eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
-        return kj::heap<NullOutputStream>();
+        return kj::heap<kj::NullStream>();
       } else {
         auto pipe = newOneWayPipe(expectedBodySize);
 
@@ -6998,11 +6963,11 @@ private:
                           headersCopy=kj::mv(headersCopy),expectedBodySize]() mutable {
           fulfiller->fulfill({
             statusCode, statusTextCopy, headersCopy.get(),
-            kj::Own<AsyncInputStream>(kj::heap<NullInputStream>(expectedBodySize)
+            kj::Own<AsyncInputStream>(kj::heap<HeadResponseStream>(expectedBodySize)
                 .attach(kj::mv(statusTextCopy), kj::mv(headersCopy)))
           });
         }).eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
-        return kj::heap<NullOutputStream>();
+        return kj::heap<kj::NullStream>();
       } else {
         auto pipe = newOneWayPipe(expectedBodySize);
 

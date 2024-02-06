@@ -142,13 +142,3 @@ cc_library(
     name = "http-over-capnp-test-as-header",
     hdrs = ["http-over-capnp-test.c++"],
 )
-
-cc_test(
-    name = "http-over-capnp-old-test",
-    srcs = ["http-over-capnp-old-test.c++"],
-    deps = [
-        ":http-over-capnp-test-as-header",
-        ":http-over-capnp",
-        "//src/capnp:capnp-test"
-    ],
-)

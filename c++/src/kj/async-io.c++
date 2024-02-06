@@ -80,6 +80,28 @@ Maybe<Own<AsyncInputStream>> AsyncInputStream::tryTee(uint64_t) {
   return kj::none;
 }
 
+kj::Promise<size_t> NullStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
+  return kj::constPromise<size_t, 0>();
+}
+kj::Maybe<uint64_t> NullStream::tryGetLength() {
+  return uint64_t(0);
+}
+kj::Promise<uint64_t> NullStream::pumpTo(kj::AsyncOutputStream& output, uint64_t amount) {
+  return kj::constPromise<uint64_t, 0>();
+}
+
+kj::Promise<void> NullStream::write(const void* buffer, size_t size) {
+  return kj::READY_NOW;
+}
+kj::Promise<void> NullStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+  return kj::READY_NOW;
+}
+kj::Promise<void> NullStream::whenWriteDisconnected() {
+  return kj::NEVER_DONE;
+}
+
+void NullStream::shutdownWrite() {}
+
 namespace {
 
 class AsyncPump {

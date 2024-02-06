@@ -29,100 +29,91 @@ namespace capnp {
 using kj::uint;
 using kj::byte;
 
-class HttpOverCapnpFactory::RequestState final
-    : public kj::Refcounted, public kj::TaskSet::ErrorHandler {
-public:
-  RequestState() {
-    tasks.emplace(*this);
-  }
-
-  template <typename Func>
-  auto wrap(Func&& func) -> decltype(func()) {
-    if (tasks == kj::none) {
-      return KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request");
-    } else {
-      return canceler.wrap(func());
-    }
-  }
-
-  void cancel() {
-    if (tasks != kj::none) {
-      if (!canceler.isEmpty()) {
-        canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
-      }
-      tasks = kj::none;
-      webSocket = kj::none;
-    }
-  }
-
-  void assertNotCanceled() {
-    if (tasks == kj::none) {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "client canceled HTTP request"));
-    }
-  }
-
-  void addTask(kj::Promise<void> task) {
-    KJ_IF_SOME(t, tasks) {
-      t.add(kj::mv(task));
-    } else {
-      // Just drop the task.
-    }
-  }
-
-  kj::Promise<void> finishTasks() {
-    // This is merged into the final promise, so we don't need to worry about wrapping it for
-    // cancellation.
-    return KJ_REQUIRE_NONNULL(tasks).onEmpty()
-        .then([this]() {
-      KJ_IF_SOME(e, error) {
-        kj::throwRecoverableException(kj::mv(e));
-      }
-    });
-  }
-
-  void taskFailed(kj::Exception&& exception) override {
-    if (error == kj::none) {
-      error = kj::mv(exception);
-    }
-  }
-
-  void holdWebSocket(kj::Own<kj::WebSocket> webSocket) {
-    // Hold on to this WebSocket until cancellation.
-    KJ_REQUIRE(this->webSocket == nullptr);
-    KJ_REQUIRE(tasks != nullptr);
-    this->webSocket = kj::mv(webSocket);
-  }
-
-  void disconnectWebSocket() {
-    KJ_IF_SOME(t, tasks) {
-      t.add(kj::evalNow([&]() { return KJ_ASSERT_NONNULL(webSocket)->disconnect(); }));
-    }
-  }
-
-private:
-  kj::Maybe<kj::Exception> error;
-  kj::Maybe<kj::Own<kj::WebSocket>> webSocket;
-  kj::Canceler canceler;
-  kj::Maybe<kj::TaskSet> tasks;
-};
-
 // =======================================================================================
 
 class HttpOverCapnpFactory::CapnpToKjWebSocketAdapter final: public capnp::WebSocket::Server {
 public:
-  CapnpToKjWebSocketAdapter(kj::Own<RequestState> state, kj::WebSocket& webSocket,
-                            kj::Promise<Capability::Client> shorteningPromise)
-      : state(kj::mv(state)), webSocket(webSocket),
-        shorteningPromise(kj::mv(shorteningPromise)) {}
+  CapnpToKjWebSocketAdapter(kj::WebSocket& webSocket,
+                            kj::Promise<Capability::Client> shorteningPromise,
+                            kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd,
+                            kj::Maybe<kj::Maybe<CapnpToKjWebSocketAdapter&>&> selfRef)
+      : webSocket(webSocket),
+        shorteningPromise(kj::mv(shorteningPromise)),
+        onEnd(kj::mv(onEnd)), selfRef(selfRef) {
+    KJ_IF_SOME(s, selfRef) {
+      s = *this;
+    }
+  }
+  CapnpToKjWebSocketAdapter(kj::Own<kj::WebSocket> webSocket,
+                            kj::Promise<Capability::Client> shorteningPromise,
+                            kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd)
+      : webSocket(*webSocket), ownWebSocket(kj::mv(webSocket)),
+        shorteningPromise(kj::mv(shorteningPromise)),
+        onEnd(kj::mv(onEnd)) {}
+  // `onEnd` is resolved if and when the stream (in this direction) ends cleanly.
+  //
+  // `selfRef`, if given, will be initialized to point back to this object, and will be nulled
+  // out in the destructor. This is intended to allow the caller to arrange to call cancel() if
+  // the capability still exists when the underlying `webSocket` is about to go away.
+  //
+  // The second version of the constructor takes ownership of the underlying `webSocket`. In
+  // this case, a `selfRef` isn't needed since there's no need to call `cancel()`.
 
   ~CapnpToKjWebSocketAdapter() noexcept(false) {
-    if (clean) {
-      state->disconnectWebSocket();
+    // The peer dropped the capability, which means the WebSocket stream has ended. We want to
+    // tanslate this to a `disconnect()` call on the `kj::WebSocket`, if it is still around.
+
+    // Null out our self-ref, if any.
+    KJ_IF_SOME(s, selfRef) {
+      s = nullptr;
+    }
+
+    // Arrange to call disconnect() and then notify the observer that the stream has finished.
+    // If an error has occurred, this will also propagate that.
+    //
+    // Note that we can't just use `wrap()` here because the canceler is about to be destroyed,
+    // which would immediately cancel the operation. Luckily, we don't actually need to wrap this
+    // promise in the canceler because we can assume that the observer listening on this fulfiller
+    // will cancel the promise themselves at the same time as calling cancel() on this object.
+    KJ_IF_SOME(e, error) {
+      onEnd->reject(kj::mv(*e));
+    } else KJ_IF_SOME(ws, webSocket) {
+      onEnd->fulfill(kj::evalNow([&]() {
+        return ws.disconnect().attach(kj::mv(ownWebSocket));
+      }));
+    } else {
+      // cancel() was called -- we assume no one is waiting on the fulfiller
+    }
+  }
+
+  void cancel() {
+    // Called when the overall HTTP request completes or is canceled while this capability still
+    // exists. Since we can't force the peer to drop the capability, we have to disable it.
+    // Further access to `webSocket` must be blocked since it is no longer valid.
+    //
+    // Arguably we could instead use capnp::RevocableServer to accomplish something similar. The
+    // problem is, we also do actually want to know when the peer drops this capability. With
+    // RevocableServer, we no longer get notification of that -- the destructor runs when we tell
+    // it to, rather than when the peer drops the cap.
+    //
+    // TODO(cleanup): Could RevocableServer be improved to allow us to notice the drop?
+    //   Alternatively, maybe it's not really that important for us to call disconnect()
+    //   proactively, considering:
+    //   - The application can send a close message for explicit end.
+    //   - A client->server disconnect will presumably cancel the whole request anyway.
+    //   - A server->client disconnect will presumably be followed by the server returning from
+    //     the request() RPC.
+
+    selfRef = kj::none;
+    webSocket = kj::none;
+    { auto drop = kj::mv(ownWebSocket); }
+    if (!canceler.isEmpty()) {
+      canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
     }
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    auto onAbort = webSocket.whenAborted()
+    auto onAbort = canceler.wrap(KJ_ASSERT_NONNULL(webSocket).whenAborted())
         .then([]() -> kj::Promise<Capability::Client> {
       return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
     });
@@ -130,34 +121,60 @@ public:
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
-    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
-    clean = false;
-    co_await state->wrap([&]() { return webSocket.send(context.getParams().getText()); });
-    clean = true;
+    return wrap([&](kj::WebSocket& ws) { return ws.send(context.getParams().getText()); });
   }
   kj::Promise<void> sendData(SendDataContext context) override {
-    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
-    clean = false;
-    co_await state->wrap([&]() { return webSocket.send(context.getParams().getData()); });
-    clean = true;
+    return wrap([&](kj::WebSocket& ws) { return ws.send(context.getParams().getData()); });
   }
   kj::Promise<void> close(CloseContext context) override {
-    KJ_ASSERT(clean);  // should be guaranteed by streaming semantics
     auto params = context.getParams();
-    clean = false;
-    co_await state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
-    clean = true;
+    return wrap([&](kj::WebSocket& ws) { return ws.close(params.getCode(), params.getReason()); });
   }
 
 private:
-  kj::Own<RequestState> state;
-  kj::WebSocket& webSocket;
+  kj::Maybe<kj::WebSocket&> webSocket;  // becomes none when canceled
+  kj::Own<kj::WebSocket> ownWebSocket;
   kj::Promise<Capability::Client> shorteningPromise;
+  kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> onEnd;
+  kj::Maybe<kj::Maybe<CapnpToKjWebSocketAdapter&>&> selfRef;
 
-  bool clean = true;
-  // It's illegal to call another `send()` or `disconnect()` until the previous `send()` has
-  // completed successfully. We want to send `disconnect()` in the destructor but only if we can
-  // do so cleanly.
+  kj::Canceler canceler;
+
+  kj::Maybe<kj::Own<kj::Exception>> error;
+
+  kj::WebSocket& getWebSocket() {
+    return KJ_REQUIRE_NONNULL(webSocket, "request canceled");
+  }
+
+  template <typename Func>
+  kj::Promise<void> wrap(Func&& func) {
+    KJ_IF_SOME(e, error) {
+      kj::throwFatalException(kj::cp(*e));
+    }
+
+    // Detect cancellation (of the operation) and mark the object broken in this case.
+    bool done = false;
+    KJ_DEFER({
+      if (!done && error == kj::none) {
+        error = kj::heap(KJ_EXCEPTION(FAILED,
+            "a write was canceled before completing, breaking the WebSocket"));
+      }
+    });
+
+    try {
+      KJ_IF_SOME(ws, webSocket) {
+        co_await canceler.wrap(func(ws));
+      } else {
+        kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
+      }
+    } catch (...) {
+      auto e = kj::getCaughtExceptionAsKj();
+      error = kj::heap(kj::cp(e));
+      kj::throwFatalException(kj::mv(e));
+    }
+
+    done = true;
+  }
 };
 
 class HttpOverCapnpFactory::KjToCapnpWebSocketAdapter final: public kj::WebSocket {
@@ -263,18 +280,17 @@ class HttpOverCapnpFactory::ClientRequestContextImpl final
     : public capnp::HttpService::ClientRequestContext::Server {
 public:
   ClientRequestContextImpl(HttpOverCapnpFactory& factory,
-                           kj::Own<RequestState> state,
                            kj::HttpService::Response& kjResponse)
-      : factory(factory), state(kj::mv(state)), kjResponse(kjResponse) {}
+      : factory(factory), kjResponse(kjResponse) {}
 
   ~ClientRequestContextImpl() noexcept(false) {
-    // Note this implicitly cancels the upstream pump task.
+    KJ_IF_SOME(ws, maybeWebSocket) {
+      ws.cancel();
+    }
   }
 
   kj::Promise<void> startResponse(StartResponseContext context) override {
-    KJ_REQUIRE(!sent, "already called startResponse() or startWebSocket()");
-    sent = true;
-    state->assertNotCanceled();
+    KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
 
     auto params = context.getParams();
     auto rpcResponse = params.getResponse();
@@ -295,52 +311,74 @@ public:
     if (hasBody) {
       auto pipe = kj::newOneWayPipe();
       results.setBody(factory.streamFactory.kjToCapnp(kj::mv(pipe.out)));
-      state->addTask(pipe.in->pumpTo(*bodyStream)
+      responsePumpTask = pipe.in->pumpTo(*bodyStream)
           .ignoreResult()
-          .attach(kj::mv(bodyStream), kj::mv(pipe.in)));
+          .attach(kj::mv(bodyStream), kj::mv(pipe.in));
     }
     return kj::READY_NOW;
   }
 
   kj::Promise<void> startWebSocket(StartWebSocketContext context) override {
-    KJ_REQUIRE(!sent, "already called startResponse() or startWebSocket()");
-    sent = true;
-    state->assertNotCanceled();
+    KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
 
     auto params = context.getParams();
 
     auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
 
-    auto ownWebSocket = kjResponse.acceptWebSocket(factory.headersToKj(params.getHeaders()));
-    auto& webSocket = *ownWebSocket;
-    state->holdWebSocket(kj::mv(ownWebSocket));
+    auto webSocket = kjResponse.acceptWebSocket(factory.headersToKj(params.getHeaders()));
 
     auto upWrapper = kj::heap<KjToCapnpWebSocketAdapter>(
         nullptr, params.getUpSocket(), kj::mv(shorteningPaf.fulfiller));
-    state->addTask(webSocket.pumpTo(*upWrapper).attach(kj::mv(upWrapper))
-        .catch_([&webSocket=webSocket](kj::Exception&& e) -> kj::Promise<void> {
+    auto upPumpTask = webSocket->pumpTo(*upWrapper).attach(kj::mv(upWrapper))
+        .catch_([&webSocket=*webSocket](kj::Exception&& e) -> kj::Promise<void> {
       // The pump in the client -> server direction failed. The error may have originated from
       // either the client or the server. In case it came from the server, we want to call .abort()
       // to propagate the problem back to the client. If the error came from the client, then
       // .abort() probably is a noop.
       webSocket.abort();
       return kj::mv(e);
-    }));
+    });
 
     auto results = context.getResults(MessageSize { 16, 1 });
-    results.setDownSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::addRef(*state), webSocket, kj::mv(shorteningPaf.promise)));
+    auto downPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    auto downSocket = kj::heap<CapnpToKjWebSocketAdapter>(
+        *webSocket, kj::mv(shorteningPaf.promise), kj::mv(downPaf.fulfiller), maybeWebSocket);
+    results.setDownSocket(kj::mv(downSocket));
+
+    // Note: This intentionally uses joinPromises and not joinPromisesFailFast, because
+    //   finishPump() isn't called to wait on the final promise until we already expect both
+    //   promises to be done anyway, so if we cancel one as a result of the other failing, it
+    //   provides no benefit and possibly creates confusion.
+    responsePumpTask = kj::joinPromises(kj::arr(kj::mv(upPumpTask), kj::mv(downPaf.promise)));
+
+    // We need to hold onto this WebSocket until `CapnpToKjWebSocketAdapter` is canceled or
+    // destroyed. If `responsePumpTask`completes successfully, then `CapnpToKjWebSocketAdapter`
+    // has to have been destroyed, since `downPaf.promise` doesn't resolve until that point. But
+    // in the case of request cancellation, it is our own destructor that will call `cancel()`
+    // on the `CapnpToKjWebSocketAdapter`, so we should make sure the `webSocket` outlives that.
+    //
+    // (Additionally, the WebSocket must outlive `responsePumpTask` itself, even when it is
+    // canceled.)
+    ownWebSocket = kj::mv(webSocket);
 
     return kj::READY_NOW;
   }
 
+  kj::Promise<void> finishPump() {
+    KJ_IF_SOME(r, responsePumpTask) {
+      return kj::mv(r);
+    } else {
+      return kj::READY_NOW;
+    }
+  }
+
 private:
   HttpOverCapnpFactory& factory;
-  kj::Own<RequestState> state;
-  bool sent = false;
+  kj::Maybe<kj::Own<kj::WebSocket>> ownWebSocket;
+  kj::Maybe<kj::Promise<void>> responsePumpTask;
+  kj::Maybe<CapnpToKjWebSocketAdapter&> maybeWebSocket;
 
   kj::HttpService::Response& kjResponse;
-  // Must check state->assertNotCanceled() before using this.
 };
 
 class HttpOverCapnpFactory::ConnectClientRequestContextImpl final
@@ -398,17 +436,10 @@ public:
   KjToCapnpHttpServiceAdapter(HttpOverCapnpFactory& factory, capnp::HttpService::Client inner)
       : factory(factory), inner(kj::mv(inner)) {}
 
-  template <typename Params, typename Results, typename AwaitCompletionFunc>
-  kj::Promise<void> requestImpl(
-      Request<Params, Results> rpcRequest,
+  kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse,
-      AwaitCompletionFunc&& awaitCompletion) {
-    // Common implementation calling request() or startRequest(). awaitCompletion() waits for
-    // final completion in a method-specific way.
-    //
-    // TODO(cleanup): When we move to C++17 or newer we can use `if constexpr` instead of a
-    //   callback.
+      kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
+    auto rpcRequest = inner.requestRequest();
 
     auto metadata = rpcRequest.initRequest();
     metadata.setMethod(static_cast<capnp::HttpMethod>(method));
@@ -434,24 +465,25 @@ public:
       maybeRequestBody = requestBody;
     }
 
-    auto state = kj::refcounted<RequestState>();
-    auto deferredCancel = kj::defer([state = kj::addRef(*state)]() mutable {
-      state->cancel();
-    });
+    ClientRequestContextImpl context(factory, kjResponse);
+    RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(context);
 
-    rpcRequest.setContext(
-        kj::heap<ClientRequestContextImpl>(factory, kj::addRef(*state), kjResponse));
+    rpcRequest.setContext(revocableContext.getClient());
 
     auto pipeline = rpcRequest.send();
 
+    // Make sure the request message isn't pinned into memory through the co_await below.
+    { auto drop = kj::mv(rpcRequest); }
+
     // Pump upstream -- unless we don't expect a request body.
+    kj::Maybe<kj::Own<kj::Exception>> pumpRequestFailedReason;
     kj::Maybe<kj::Promise<void>> pumpRequestTask;
     KJ_IF_SOME(rb, maybeRequestBody) {
       auto bodyOut = factory.streamFactory.capnpToKjExplicitEnd(pipeline.getRequestBody());
       pumpRequestTask = rb.pumpTo(*bodyOut)
           .then([&bodyOut = *bodyOut](uint64_t) mutable {
         return bodyOut.end();
-      }).eagerlyEvaluate([state = kj::addRef(*state), bodyOut = kj::mv(bodyOut)]
+      }).eagerlyEvaluate([&pumpRequestFailedReason, bodyOut = kj::mv(bodyOut)]
                          (kj::Exception&& e) mutable {
         // A DISCONNECTED exception probably means the server decided not to read the whole request
         // before responding. In that case we simply want the pump to end, so that on this end it
@@ -459,34 +491,28 @@ public:
         // exception in that case. For any other exception, we want to merge the exception with
         // the final result.
         if (e.getType() != kj::Exception::Type::DISCONNECTED) {
-          state->taskFailed(kj::mv(e));
+          pumpRequestFailedReason = kj::heap(kj::mv(e));
         }
       });
     }
 
     // Wait for the server to indicate completion. Meanwhile, if the
-    // promise is canceled from the client side, we propagate cancellation naturally, and we
-    // also call state->cancel().
-    return awaitCompletion(pipeline)
-        // Once the server indicates it is done, then we can cancel pumping the request, because
-        // obviously the server won't use it. We should not cancel pumping the response since there
-        // could be data in-flight still.
-        .attach(kj::mv(pumpRequestTask))
-        // finishTasks() will wait for the respones to complete.
-        .then([state = kj::mv(state)]() mutable { return state->finishTasks(); })
-        .attach(kj::mv(deferredCancel));
-  }
+    // promise is canceled from the client side, we propagate cancellation naturally.
+    co_await pipeline.ignoreResult();
 
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
-    if (factory.peerOptimizationLevel < LEVEL_2) {
-      return requestImpl(inner.startRequestRequest(), method, url, headers, requestBody, kjResponse,
-          [](auto& pipeline) { return pipeline.getContext().whenResolved(); });
-    } else {
-      return requestImpl(inner.requestRequest(), method, url, headers, requestBody, kjResponse,
-          [](auto& pipeline) { return pipeline.ignoreResult(); });
+    // Once the server indicates it is done, then we can cancel pumping the request, because
+    // obviously the server won't use it. We should not cancel pumping the response since there
+    // could be data in-flight still.
+    { auto drop = kj::mv(pumpRequestTask); }
+
+    // If the request pump failed (for a non-disconnect reason) we'd better propagate that
+    // exception.
+    KJ_IF_SOME(e, pumpRequestFailedReason) {
+      kj::throwFatalException(kj::mv(*e));
     }
+
+    // Finish pumping the response or WebSocket. (Probably it's already finished.)
+    co_await context.finishPump();
   }
 
   kj::Promise<void> connect(
@@ -498,8 +524,8 @@ public:
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
     rpcRequest.initSettings().setUseTls(settings.useTls);
 
-    auto context = kj::heap<ConnectClientRequestContextImpl>(factory, tunnel);
-    RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(*context);
+    ConnectClientRequestContextImpl context(factory, tunnel);
+    RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(context);
 
     auto builder = capnp::Request<
         capnp::HttpService::ConnectParams,
@@ -508,6 +534,9 @@ public:
         Orphanage::getForMessageContaining(builder)));
     rpcRequest.setContext(revocableContext.getClient());
     RemotePromise<capnp::HttpService::ConnectResults> pipeline = rpcRequest.send();
+
+    // Make sure the request message isn't pinned into memory through the co_await below.
+    { auto drop = kj::mv(rpcRequest); }
 
     // We read from `downPipe` (the other side writes into it.)
     auto downPumpTask = downPipe.in->pumpTo(connection)
@@ -540,10 +569,7 @@ public:
       return kj::NEVER_DONE;
     });
 
-    return pipeline.ignoreResult()
-        .attach(kj::mv(downPumpTask), kj::mv(upPumpTask), kj::mv(revocableContext))
-        // Separate attach to make sure `revocableContext` is destroyed before `context`.
-        .attach(kj::mv(context));
+    co_await pipeline.ignoreResult();
   }
 
 
@@ -558,67 +584,26 @@ kj::Own<kj::HttpService> HttpOverCapnpFactory::capnpToKj(capnp::HttpService::Cli
 
 // =======================================================================================
 
-namespace {
-
-class NullInputStream final: public kj::AsyncInputStream {
-  // TODO(cleanup): This class has been replicated in a bunch of places now, make it public
-  //   somewhere.
-
-public:
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return kj::constPromise<size_t, 0>();
-  }
-
-  kj::Maybe<uint64_t> tryGetLength() override {
-    return uint64_t(0);
-  }
-
-  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
-    return kj::constPromise<uint64_t, 0>();
-  }
-};
-
-class NullOutputStream final: public kj::AsyncOutputStream {
-  // TODO(cleanup): This class has been replicated in a bunch of places now, make it public
-  //   somewhere.
-
-public:
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    return kj::READY_NOW;
-  }
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
-    return kj::READY_NOW;
-  }
-  kj::Promise<void> whenWriteDisconnected() override {
-    return kj::NEVER_DONE;
-  }
-
-  // We can't really optimize tryPumpFrom() unless AsyncInputStream grows a skip() method.
-};
-
-class ResolvedServerRequestContext final: public capnp::HttpService::ServerRequestContext::Server {
-public:
-  // Nothing! It's done.
-};
-
-}  // namespace
-
-class HttpOverCapnpFactory::HttpServiceResponseImpl
+class HttpOverCapnpFactory::HttpServiceResponseImpl final
     : public kj::HttpService::Response {
 public:
   HttpServiceResponseImpl(HttpOverCapnpFactory& factory,
                           capnp::HttpRequest::Reader request,
-                          capnp::HttpService::ClientRequestContext::Client clientContext)
+                          capnp::HttpService::ClientRequestContext::Client clientContext,
+                          kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> replyFulfiller)
       : factory(factory),
         method(validateMethod(request.getMethod())),
         url(request.getUrl()),
         headers(factory.headersToKj(request.getHeaders())),
-        clientContext(kj::mv(clientContext)) {}
+        clientContext(kj::mv(clientContext)),
+        replyFulfiller(kj::mv(replyFulfiller)) {}
+  // `replyFulfiller` is eventulaly fulfilled with the task that that sends the reply back to
+  // the client.
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
-    KJ_REQUIRE(replyTask == nullptr, "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(replyFulfiller->isWaiting(), "already called send() or acceptWebSocket()");
 
     auto req = clientContext.startResponseRequest();
 
@@ -638,26 +623,19 @@ public:
       hasBody = s > 0;
     }
 
-    auto logError = [hasBody](kj::Exception&& e) {
-      KJ_LOG(INFO, "HTTP-over-RPC startResponse() failed", hasBody, e);
-    };
     if (hasBody) {
       auto pipeline = req.send();
       auto result = factory.streamFactory.capnpToKj(pipeline.getBody());
-      replyTask = pipeline.ignoreResult().eagerlyEvaluate(kj::mv(logError));
+      replyFulfiller->fulfill(pipeline.ignoreResult());
       return result;
     } else {
-      replyTask = req.send().ignoreResult().eagerlyEvaluate(kj::mv(logError));
-      return kj::heap<NullOutputStream>();
+      replyFulfiller->fulfill(req.send().ignoreResult());
+      return kj::heap<kj::NullStream>();
     }
-
-    // We don't actually wait for replyTask anywhere, because we may be all done with this HTTP
-    // message before the client gets a chance to respond, and we don't want to force an extra
-    // network round trip. If the client fails this call that's the client's problem, really.
   }
 
   kj::Own<kj::WebSocket> acceptWebSocket(const kj::HttpHeaders& headers) override {
-    KJ_REQUIRE(replyTask == nullptr, "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(replyFulfiller->isWaiting(), "already called send() or acceptWebSocket()");
 
     auto req = clientContext.startWebSocketRequest();
 
@@ -668,27 +646,22 @@ public:
     auto pipe = kj::newWebSocketPipe();
     auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
 
-    // We don't need the RequestState mechanism on the server side because
-    // CapnpToKjWebSocketAdapter wraps a pipe end, and that pipe end can continue to exist beyond
-    // the lifetime of the request, because the other end will have been dropped. We only create
-    // a RequestState here so that we can reuse the implementation of CapnpToKjWebSocketAdapter
-    // that needs this for the client side.
-    auto dummyState = kj::refcounted<RequestState>();
-    auto& pipeEnd0Ref = *pipe.ends[0];
-    dummyState->holdWebSocket(kj::mv(pipe.ends[0]));
+    // Note that since CapnpToKjWebSocketAdapter takes ownership of the pipe end, we don't need
+    // to cancel it later. Dropping the other end of the pipe will have the same effect.
+    auto upPumpPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
     req.setUpSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::mv(dummyState), pipeEnd0Ref, kj::mv(shorteningPaf.promise)));
+        kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise), kj::mv(upPumpPaf.fulfiller)));
 
     auto pipeline = req.send();
     auto result = kj::heap<KjToCapnpWebSocketAdapter>(
         kj::mv(pipe.ends[1]), pipeline.getDownSocket(), kj::mv(shorteningPaf.fulfiller));
 
-    // Note we need eagerlyEvaluate() here to force proactively discarding the response object,
-    // since it holds a reference to `downSocket`.
-    replyTask = pipeline.ignoreResult()
-        .eagerlyEvaluate([](kj::Exception&& e) {
-      KJ_LOG(INFO, "HTTP-over-RPC startWebSocketRequest() failed", e);
-    });
+    replyFulfiller->fulfill(pipeline.ignoreResult()
+        .then([upPumpTask = kj::mv(upPumpPaf.promise)]() mutable {
+      // We need to continue pumping the WebSocket in the client->server direction, so let's do
+      // that as part of the reply task.
+      return kj::mv(upPumpTask);
+    }));
 
     return result;
   }
@@ -698,7 +671,7 @@ public:
   kj::StringPtr url;
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
-  kj::Maybe<kj::Promise<void>> replyTask;
+  kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> replyFulfiller;
 
   static kj::HttpMethod validateMethod(capnp::HttpMethod method) {
     KJ_REQUIRE(method <= capnp::HttpMethod::UNSUBSCRIBE, "unknown method", method);
@@ -766,50 +739,12 @@ public:
 };
 
 
-class HttpOverCapnpFactory::ServerRequestContextImpl final
-    : public capnp::HttpService::ServerRequestContext::Server,
-      public HttpServiceResponseImpl {
-public:
-  ServerRequestContextImpl(HttpOverCapnpFactory& factory,
-                           HttpService::Client serviceCap,
-                           kj::Own<capnp::HttpRequest::Reader> request,
-                           capnp::HttpService::ClientRequestContext::Client clientContext,
-                           kj::Own<kj::AsyncInputStream> requestBodyIn,
-                           kj::HttpService& kjService)
-      : HttpServiceResponseImpl(factory, *request, kj::mv(clientContext)),
-        request(kj::mv(request)),
-        serviceCap(kj::mv(serviceCap)),
-        // Note we attach `requestBodyIn` to `task` so that we will implicitly cancel reading
-        // the request body as soon as the service returns. This is important in particular when
-        // the request body is not fully consumed, in order to propagate cancellation.
-        task(kjService.request(method, url, headers, *requestBodyIn, *this)
-                      .attach(kj::mv(requestBodyIn))) {}
-
-  kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
-    return task.then([]() -> Capability::Client {
-      // If all went well, resolve to a settled capability.
-      // TODO(perf): Could save a message by resolving to a capability hosted by the client, or
-      //     some special "null" capability that isn't an error but is still transmitted by value.
-      //     Otherwise we need a Release message from client -> server just to drop this...
-      return kj::heap<ResolvedServerRequestContext>();
-    });
-  }
-
-  KJ_DISALLOW_COPY_AND_MOVE(ServerRequestContextImpl);
-
-private:
-  kj::Own<capnp::HttpRequest::Reader> request;
-  HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
-  kj::Promise<void> task;
-};
-
 class HttpOverCapnpFactory::CapnpToKjHttpServiceAdapter final: public capnp::HttpService::Server {
 public:
   CapnpToKjHttpServiceAdapter(HttpOverCapnpFactory& factory, kj::Own<kj::HttpService> inner)
       : factory(factory), inner(kj::mv(inner)) {}
 
-  template <typename Params, typename Results, typename Callback>
-  kj::Promise<void> requestImpl(CallContext<Params, Results> context, Callback&& callback) {
+  kj::Promise<void> request(RequestContext context) override {
     // Common implementation of request() and startRequest(). callback() performs the
     // method-specific stuff at the end.
     //
@@ -834,46 +769,33 @@ public:
       auto pipe = kj::newOneWayPipe(expectedSize);
       auto requestBodyCap = factory.streamFactory.kjToCapnp(kj::mv(pipe.out));
 
-      if (kj::isSameType<Results, RequestResults>()) {
-        // For request(), use context.setPipeline() to enable pipelined calls to the request body
-        // stream before this RPC completes. (We don't bother when using startRequest() because
-        // it returns immediately anyway, so this would just waste effort.)
-        PipelineBuilder<Results> pipeline;
-        pipeline.setRequestBody(kj::cp(requestBodyCap));
-        context.setPipeline(pipeline.build());
-      }
+      // For request(), use context.setPipeline() to enable pipelined calls to the request body
+      // stream before this RPC completes.
+      PipelineBuilder<RequestResults> pipeline;
+      pipeline.setRequestBody(kj::cp(requestBodyCap));
+      context.setPipeline(pipeline.build());
 
       results.setRequestBody(kj::mv(requestBodyCap));
       requestBody = kj::mv(pipe.in);
     } else {
-      requestBody = kj::heap<NullInputStream>();
+      requestBody = kj::heap<kj::NullStream>();
     }
 
-    return callback(results, metadata, params, requestBody);
-  }
-
-  kj::Promise<void> request(RequestContext context) override {
-    return requestImpl(kj::mv(context),
-        [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
-      class FinalHttpServiceResponseImpl final: public HttpServiceResponseImpl {
-      public:
-        using HttpServiceResponseImpl::HttpServiceResponseImpl;
-      };
-      auto impl = kj::heap<FinalHttpServiceResponseImpl>(factory, metadata, params.getContext());
-      auto promise = inner->request(impl->method, impl->url, impl->headers, *requestBody, *impl);
-      return promise.attach(kj::mv(requestBody), kj::mv(impl));
+    auto replyPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+    auto replyPromise = replyPaf.promise.then([]() -> kj::Promise<void> {
+      // The reply may complete before the request promise does. We don't want to cancel the
+      // request if the reply completed successfully, so return NEVER_DONE here so that the
+      // exclusiveJoin() below becomes a no-op.
+      //
+      // On the other hand, if the reply throws an exception, we want to cancel the request and
+      // propagate that exception immediately!
+      return kj::NEVER_DONE;
     });
-  }
 
-  kj::Promise<void> startRequest(StartRequestContext context) override {
-    return requestImpl(kj::mv(context),
-        [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
-      results.setContext(kj::heap<ServerRequestContextImpl>(
-          factory, thisCap(), capnp::clone(metadata), params.getContext(), kj::mv(requestBody),
-          *inner));
-
-      return kj::READY_NOW;
-    });
+    HttpServiceResponseImpl impl(
+        factory, metadata, params.getContext(), kj::mv(replyPaf.fulfiller));
+    co_await inner->request(impl.method, impl.url, impl.headers, *requestBody, impl)
+        .exclusiveJoin(kj::mv(replyPromise));
   }
 
   kj::Promise<void> connect(ConnectContext context) override {
@@ -930,19 +852,20 @@ public:
       return kj::NEVER_DONE;
     });
 
-    PipelineBuilder<ConnectResults> pb;
-    auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
-    auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
-    pb.setUp(kj::cp(up));
+    {
+      PipelineBuilder<ConnectResults> pb;
+      auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
+      auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
+      pb.setUp(kj::cp(up));
 
-    context.setPipeline(pb.build());
-    context.initResults(capnp::MessageSize { 4, 1 }).setUp(kj::mv(up));
+      context.setPipeline(pb.build());
+      context.initResults(capnp::MessageSize { 4, 1 }).setUp(kj::mv(up));
+    }
 
-    auto response = kj::heap<HttpOverCapnpConnectResponseImpl>(
-        factory, context.getParams().getContext());
+    { auto drop = kj::mv(refcounted); }
 
-    return inner->connect(host, headers, *pipe.ends[0], *response, settings).attach(
-        kj::mv(host), kj::mv(headers), kj::mv(response), kj::mv(pipe))
+    HttpOverCapnpConnectResponseImpl response(factory, context.getParams().getContext());
+    co_await inner->connect(host, headers, *pipe.ends[0], response, settings)
         .exclusiveJoin(kj::mv(pumpTask));
   }
 
