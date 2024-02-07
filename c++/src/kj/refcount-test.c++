@@ -28,6 +28,8 @@ struct SetTrueInDestructor: public Refcounted, EnableAddRefToThis<SetTrueInDestr
   SetTrueInDestructor(bool* ptr): ptr(ptr) {}
   ~SetTrueInDestructor() { *ptr = true; }
 
+  kj::Rc<SetTrueInDestructor> newRef() { return addRefToThis(); }
+
   bool* ptr;
 };
 
@@ -131,13 +133,13 @@ KJ_TEST("Rc inheritance") {
   EXPECT_TRUE(b);
 }
 
-KJ_TEST("EnableAddRefToThis") {
+KJ_TEST("Refcounted::EnableAddRefToThis") {
   bool b = false;
 
   auto ref1 = kj::rc<SetTrueInDestructor>(&b);
   EXPECT_FALSE(ref1->isShared());
 
-  auto ref2 = ref1.addRef();
+  auto ref2 = ref1->newRef();
   EXPECT_TRUE(ref2->isShared());
   EXPECT_TRUE(ref1->isShared());
   EXPECT_FALSE(b);
@@ -225,6 +227,80 @@ KJ_TEST("RefcountedWrapper") {
 
     KJ_EXPECT(*ref2 == 123);
   }
+}
+
+
+struct AtomicSetTrueInDestructor: public AtomicRefcounted, 
+    EnableAddRefToThis<AtomicSetTrueInDestructor> {
+
+  AtomicSetTrueInDestructor(bool* ptr): ptr(ptr) {}
+  ~AtomicSetTrueInDestructor() { *ptr = true; }
+
+  kj::Arc<AtomicSetTrueInDestructor> newRef() { return addRefToThis(); }
+
+  bool* ptr;
+};
+
+KJ_TEST("Arc") {
+  bool b = false;
+
+  kj::Arc<AtomicSetTrueInDestructor> ref1 = kj::arc<AtomicSetTrueInDestructor>(&b);
+  EXPECT_FALSE(ref1->isShared());
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_FALSE(ref1 == nullptr);
+
+  kj::Arc<AtomicSetTrueInDestructor> ref2 = ref1.addRef();
+
+  // can be always cast to Arc<const T>
+  kj::Arc<const AtomicSetTrueInDestructor> ref3 = ref1.addRef();
+
+  // addRef works for const references too
+  kj::Arc<const AtomicSetTrueInDestructor> ref4 = ref3.addRef();
+
+  ref1 = nullptr;
+  EXPECT_TRUE(ref1 == nullptr);
+  ref2 = nullptr;
+  EXPECT_TRUE(ref2 == nullptr);
+  ref3 = nullptr;
+  EXPECT_TRUE(ref3 == nullptr);
+
+  EXPECT_FALSE(b);
+  ref4 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("AtomicRefcounted::EnableAddRefToThis") {
+  bool b = false;
+
+  kj::Arc<AtomicSetTrueInDestructor> ref1 = kj::arc<AtomicSetTrueInDestructor>(&b);
+  EXPECT_FALSE(ref1->isShared());
+
+  kj::Arc<AtomicSetTrueInDestructor> ref2 = ref1->newRef();
+  EXPECT_TRUE(ref2->isShared());
+  EXPECT_TRUE(ref1->isShared());
+  EXPECT_FALSE(b);
+
+  ref1 = nullptr;
+  EXPECT_FALSE(ref2->isShared());
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc Own interop") {
+  bool b = false;
+
+  kj::Arc<AtomicSetTrueInDestructor> ref1 = kj::arc<AtomicSetTrueInDestructor>(&b);
+
+  EXPECT_FALSE(b);
+  auto own = ref1.toOwn();
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_TRUE(own.get() != nullptr);
+
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_TRUE(b);
 }
 
 }  // namespace kj
