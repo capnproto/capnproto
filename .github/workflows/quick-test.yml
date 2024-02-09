@@ -20,7 +20,7 @@ jobs:
     # Clang 16 appears to be the earliest Clang version we can run easily on Alpine Linux.
     container: alpine:3.18.2
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: install dependencies
         run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang16 libc++-dev
       - name: super-test
@@ -41,7 +41,7 @@ jobs:
             # clang-12 on Ubuntu requires libunwind to be installed explicitly
             libunwind: libunwind-12-dev
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: install dependencies
         # I observed 404s for some packages and added an `apt-get update`. Then, I observed package
         # conflicts between LLVM 14 and 15, and added the line which removes LLVM 14, the default on
@@ -64,7 +64,7 @@ jobs:
         compiler: [clang-14]
         features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1 -DKJ_CONTENTION_WARNING_THRESHOLD=200"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: install dependencies
         run: |
             brew install autoconf automake libtool pkg-config
@@ -96,7 +96,7 @@ jobs:
             target: 'Visual Studio 17 2022'
             arch: -A x64
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Include $CONDA in $PATH
         run: |
           echo "$Env:CONDA\condabin" >> $env:GITHUB_PATH
