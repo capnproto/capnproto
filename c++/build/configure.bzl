@@ -28,16 +28,6 @@ def kj_configure():
     )
 
     bool_flag(
-        name = "save_acquired_lock_info",
-        build_setting_default = False,
-    )
-
-    bool_flag(
-        name = "track_lock_blocking",
-        build_setting_default = False,
-    )
-
-    bool_flag(
         name = "deprecate_kj_if_maybe",
         build_setting_default = True,
     )
@@ -103,12 +93,6 @@ def kj_configure():
         }) + select({
             "//src/kj:use_libdl": ["KJ_HAS_LIBDL"],
             "//conditions:default": [],
-        }) + select({
-            "//src/kj:use_save_acquired_lock_info": ["KJ_SAVE_ACQUIRED_LOCK_INFO=1"],
-            "//conditions:default": ["KJ_SAVE_ACQUIRED_LOCK_INFO=0"],
-        }) + select({
-            "//src/kj:use_track_lock_blocking": ["KJ_TRACK_LOCK_BLOCKING=1"],
-            "//conditions:default": ["KJ_TRACK_LOCK_BLOCKING=0"],
         }) + select({
             "//src/kj:use_deprecate_kj_if_maybe": ["KJ_DEPRECATE_KJ_IF_MAYBE=1"],
             "//conditions:default": ["KJ_DEPRECATE_KJ_IF_MAYBE=0"],
