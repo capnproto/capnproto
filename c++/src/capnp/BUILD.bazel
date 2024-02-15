@@ -7,7 +7,9 @@ cc_library(
         "arena.c++",
         "blob.c++",
         "c++.capnp.c++",
+        "capability.c++",
         "dynamic.c++",
+        "dynamic-capability.c++",
         "layout.c++",
         "list.c++",
         "message.c++",
@@ -31,7 +33,6 @@ cc_library(
         "generated-header-support.h",
         "layout.h",
         "list.h",
-        "membrane.h",
         "message.h",
         "orphan.h",
         "pointer-helpers.h",
@@ -41,11 +42,8 @@ cc_library(
         "schema.h",
         "schema-lite.h",
         "schema-loader.h",
-        "schema-parser.h",
         "serialize.h",
-        "serialize-async.h",
         "serialize-packed.h",
-        "serialize-text.h",
         "stream.capnp.h",
     ],
     include_prefix = "capnp",
@@ -58,8 +56,6 @@ cc_library(
 cc_library(
     name = "capnp-rpc",
     srcs = [
-        "capability.c++",
-        "dynamic-capability.c++",
         "membrane.c++",
         "persistent.capnp.c++",
         "reconnect.c++",
@@ -70,6 +66,7 @@ cc_library(
         "serialize-async.c++",
     ],
     hdrs = [
+        "membrane.h",
         "persistent.capnp.h",
         "reconnect.h",
         "rpc.capnp.h",
@@ -77,6 +74,7 @@ cc_library(
         "rpc-prelude.h",
         "rpc-twoparty.capnp.h",
         "rpc-twoparty.h",
+        "serialize-async.h",
     ],
     include_prefix = "capnp",
     visibility = ["//visibility:public"],
@@ -107,11 +105,12 @@ cc_library(
         "compiler/grammar.capnp.h",
         "compiler/lexer.capnp.h",
         "compiler/lexer.h",
-        "compiler/module-loader.h",
         "compiler/node-translator.h",
         "compiler/parser.h",
         "compiler/resolver.h",
         "compiler/type-id.h",
+        "schema-parser.h",
+        "serialize-text.h",
     ],
     include_prefix = "capnp",
     visibility = ["//visibility:public"],
@@ -125,6 +124,7 @@ cc_binary(
     srcs = [
         "compiler/capnp.c++",
         "compiler/module-loader.c++",
+        "compiler/module-loader.h",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -204,14 +204,12 @@ cc_library(
     name = "capnp-test",
     srcs = ["test-util.c++"],
     hdrs = ["test-util.h"],
+    include_prefix = "capnp",
+    visibility = [":__subpackages__"],
     deps = [
-        ":capnp-rpc",
         ":capnp_test",
-        ":capnpc",
         "//src/kj:kj-test",
     ],
-    include_prefix = "capnp",
-    visibility = [":__subpackages__" ]
 )
 
 [cc_test(
@@ -224,36 +222,57 @@ cc_library(
     "canonicalize-test.c++",
     "common-test.c++",
     "capability-test.c++",
-    "compiler/lexer-test.c++",
-    "compiler/type-id-test.c++",
     "dynamic-test.c++",
     "encoding-test.c++",
     "endian-test.c++",
     "layout-test.c++",
-    "membrane-test.c++",
     "message-test.c++",
     "orphan-test.c++",
+    "schema-test.c++",
+    "schema-loader-test.c++",
+    "serialize-packed-test.c++",
+    "serialize-test.c++",
+    "stringify-test.c++",
+]]
+
+# test targets requiring capnp-rpc or capnpc
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [
+        ":capnp-rpc",
+        ":capnp-test",
+    ],
+) for f in [
+    "membrane-test.c++",
     "reconnect-test.c++",
     "rpc-test.c++",
     "rpc-twoparty-test.c++",
-    "schema-test.c++",
-    "schema-loader-test.c++",
-    "schema-parser-test.c++",
     "serialize-async-test.c++",
-    "serialize-packed-test.c++",
-    "serialize-test.c++",
+]]
+
+[cc_test(
+    name = f.removesuffix(".c++"),
+    srcs = [f],
+    deps = [
+        ":capnp-test",
+        ":capnpc",
+    ],
+) for f in [
+    "compiler/lexer-test.c++",
+    "compiler/type-id-test.c++",
+    "schema-parser-test.c++",
     "serialize-text-test.c++",
-    "stringify-test.c++",
 ]]
 
 cc_test(
     name = "endian-reverse-test",
     srcs = ["endian-reverse-test.c++"],
-    deps = [":capnp-test"],
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+    deps = [":capnp-test"],
 )
 
 cc_library(
@@ -272,6 +291,6 @@ cc_test(
     name = "fuzz-test",
     size = "large",
     srcs = ["fuzz-test.c++"],
-    deps = [":capnp-test"],
     tags = ["manual"],
+    deps = [":capnp-test"],
 )

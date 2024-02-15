@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "schema-loader.h"
+#include <capnp/schema-loader.h>
 #include <kj/string.h>
 #include <kj/filesystem.h>
 

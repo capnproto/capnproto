@@ -47,7 +47,7 @@
 //
 // Mark Miller on membranes: http://www.eros-os.org/pipermail/e-lang/2003-January/008434.html
 
-#include "capability.h"
+#include <capnp/capability.h>
 #include <kj/map.h>
 
 CAPNP_BEGIN_HEADER

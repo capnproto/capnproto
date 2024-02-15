@@ -21,10 +21,10 @@
 
 #pragma once
 
+#include <capnp/dynamic.h>
+#include <capnp/orphan.h>
+#include <capnp/schema.h>
 #include <kj/string.h>
-#include "dynamic.h"
-#include "orphan.h"
-#include "schema.h"
 
 CAPNP_BEGIN_HEADER
 

@@ -21,9 +21,9 @@
 
 #pragma once
 
+#include <capnp/message.h>
 #include <kj/async-io.h>
 #include <kj/io.h>
-#include "message.h"
 
 CAPNP_BEGIN_HEADER
 
