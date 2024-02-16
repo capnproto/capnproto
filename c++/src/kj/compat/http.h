@@ -689,7 +689,7 @@ public:
     REQUEST,
     RESPONSE
   };
-  virtual kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) { return kj::none; }
+  virtual kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) = 0;
   // If pumpTo() / tryPumpFrom() is able to be optimized only if the other WebSocket is using
   // certain extensions (e.g. compression settings), then this method returns what those extensions
   // are. For example, matching extensions between standard WebSockets allows pumping to be
