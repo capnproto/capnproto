@@ -249,8 +249,8 @@ public:
     bool created = false;
     T* slot;
     while (!created) {
-      highCounter += 2; // the high ID space is split in two, based on the low bit
       id = highCounter | highBit<Id>();
+      highCounter += 2; // the high ID space is split in two, based on the low bit
 
       if (setLowBit) {
         id = id | lowBit<Id>();
