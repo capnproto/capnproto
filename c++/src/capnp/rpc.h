@@ -270,9 +270,8 @@ public:
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
 
   virtual void sendRealtime() = 0;
-  // Send as a 'realtime' message, meaning that the caller does not expect to receive a `Return`
-  // message.  Note that the callee can still send a `Return`, to which the caller must answer
-  // with a `Finish` (this is for backward compatibility).
+  // Send as a 'realtime' message, meaning that the network should silently discard the message if
+  // congestion will prevent it from being delivered immediately.
 
   virtual size_t sizeInWords() = 0;
   // Get the total size of the message, for flow control purposes. Although the caller could

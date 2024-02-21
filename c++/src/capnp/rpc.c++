@@ -2025,6 +2025,9 @@ private:
     }
 
     kj::Promise<void> sendRealtimeInternal(bool isTailCall) {
+      // We don't use setupSend() here because we don't actually allocate a question table entry
+      // for realtime messages, because we don't expect a response.
+
       // Build the cap table.
       kj::Vector<int> fds;
       auto exports = connectionState->writeDescriptors(
@@ -2462,7 +2465,8 @@ private:
             builder.setReleaseParamCaps(false);
 
             if (redirectResults) {
-              // The reason we haven't sent a return is that the results were sent somewhere else.
+              // The reason we haven't sent a return is because the results were sent somewhere
+              // else.
               builder.setResultsSentElsewhere();
 
               // The pipeline could still be valid and in-use in this case.
