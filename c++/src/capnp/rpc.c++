@@ -181,11 +181,6 @@ static constexpr Id highBit() {
   return 1u << (sizeof(Id) * 8 - 1);
 }
 
-template <typename Id>
-static constexpr Id lowBit() {
-  return 1;
-}
-
 template <typename Id, typename T>
 class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
@@ -193,10 +188,6 @@ class ExportTable {
 public:
   bool isHigh(Id& id) {
     return (id & highBit<Id>()) != 0;
-  }
-
-  bool isLow(Id& id) {
-    return (id & lowBit<Id>()) != 0;
   }
 
   kj::Maybe<T&> find(Id id) {
@@ -253,7 +244,7 @@ public:
       highCounter += 2; // the high ID space is split in two, based on the low bit
 
       if (setLowBit) {
-        id = id | lowBit<Id>();
+        id = id | 1;
       }
 
       slot = &highSlots.findOrCreate(id, [&]() {
@@ -3210,7 +3201,7 @@ private:
       // that we already removed it and re-allocated the ID to something else. So, we should ignore
       // the `Return`. But we might want to make note to stop using these hints, to protect against
       // the (again, remote) possibility of our ID space wrapping around and leading to confusion.
-      if (questions.isLow(questionId)) {
+      if (questionId & 1) {
         // The low bit of the questionId is set, meaning that it is a realtime message. In this case,
         // we must send a Finish message.
         KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
