@@ -335,6 +335,18 @@ public:
   // Dropping the returned promise does not cancel the send. Once send() is called, there's no way
   // to stop it.
 
+  virtual kj::Promise<void> sendRealtime(kj::Own<OutgoingRpcMessage> message) = 0;
+  // Like calling message->sendRealtime(), but the promise resolves when it's a good time to send
+  // the next message.
+  //
+  // In case of a detected congestion that will prevent the message from being delivered
+  // immediately, the message is silently discarded. Note that the congestion detection is based
+  // on the acknowledgement of non-realtime messages (because realtime messages are not
+  // acknowledged) and therefore it may not always be detected depending on the situation.
+  //
+  // Dropping the returned promise does not cancel the send. Once sendRealtime() is called,
+  // there's no way to stop it.
+
   virtual kj::Promise<void> waitAllAcked() = 0;
   // Wait for all `ack`s previously passed to send() to finish. It is an error to call send() again
   // after this.

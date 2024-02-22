@@ -2027,16 +2027,24 @@ private:
       connectionState->questions.nextHigh(questionId, true);
       callBuilder.setQuestionId(questionId);
       callBuilder.setIsRealtime(true);
+      kj::Promise<void> flowPromise = nullptr;
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
-        KJ_CONTEXT("sending RPC call", callBuilder.getInterfaceId(),
-                   callBuilder.getMethodId());
-        message->sendRealtime();
+        KJ_CONTEXT("sending RPC call",
+            callBuilder.getInterfaceId(), callBuilder.getMethodId());
+        RpcFlowController* flow;
+        KJ_IF_MAYBE(f, target->flowController) {
+          flow = *f;
+        } else {
+          flow = target->flowController.emplace(
+              connectionState->connection.get<Connected>()->newStream());
+        }
+        flowPromise = flow->sendRealtime(kj::mv(message));
       })) {
         connectionState->releaseExports(exports);
         return kj::mv(*exception);
       }
 
-      return kj::READY_NOW;
+      return kj::mv(flowPromise);
     }
 
     kj::Own<QuestionRef> sendForPipelineInternal() {
@@ -3759,7 +3767,6 @@ public:
               fulfiller->fulfill();
             }
             blockedSends.clear();
-
           }
 
           KJ_IF_MAYBE(f, emptyFulfiller) {
@@ -3789,6 +3796,25 @@ public:
       KJ_CASE_ONEOF(exception, kj::Exception) {
         return kj::cp(exception);
       }
+    }
+    KJ_UNREACHABLE;
+  }
+
+  kj::Promise<void> sendRealtime(kj::Own<OutgoingRpcMessage> message) override {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedSends, Running) {
+          if (isReady()) {
+            message->sendRealtime();
+            return kj::READY_NOW;
+          } else {
+            auto paf = kj::newPromiseAndFulfiller<void>();
+            blockedSends.add(kj::mv(paf.fulfiller));
+            return kj::mv(paf.promise);
+          }
+        }
+        KJ_CASE_ONEOF(exception, kj::Exception) {
+          return kj::cp(exception);
+        }
     }
     KJ_UNREACHABLE;
   }
@@ -3849,6 +3875,10 @@ public:
 
   kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
     return inner.send(kj::mv(message), kj::mv(ack));
+  }
+
+  kj::Promise<void> sendRealtime(kj::Own<OutgoingRpcMessage> message) override {
+    return inner.sendRealtime(kj::mv(message));
   }
 
   kj::Promise<void> waitAllAcked() override {
