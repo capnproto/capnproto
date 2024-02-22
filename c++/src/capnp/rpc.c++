@@ -1825,7 +1825,7 @@ private:
         if (callBuilder.getIsRealtime()) {
           return sendRealtimeInternal();
         } else {
-          return sendStreamingInternal(false);
+          return sendStreamingInternal();
         }
       }
     }
@@ -1983,14 +1983,11 @@ private:
       return kj::mv(result);
     }
 
-    kj::Promise<void> sendStreamingInternal(bool isTailCall) {
-      auto setup = setupSend(isTailCall);
+    kj::Promise<void> sendStreamingInternal() {
+      auto setup = setupSend(false);
 
       // Finish and send.
       callBuilder.setQuestionId(setup.questionId);
-      if (isTailCall) {
-        callBuilder.getSendResultsTo().setYourself();
-      }
       kj::Promise<void> flowPromise = nullptr;
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
         KJ_CONTEXT("sending RPC call",
