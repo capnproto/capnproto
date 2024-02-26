@@ -490,7 +490,9 @@ private:
 
 class StructBuilder: public kj::DisallowConstCopy {
 public:
-  inline StructBuilder(): segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr) {}
+  inline StructBuilder()
+      : segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr),
+	    dataSize(0), pointerCount(0) {}
 
   inline word* getLocation() { return reinterpret_cast<word*>(data); }
   // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
