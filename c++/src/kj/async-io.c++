@@ -2893,9 +2893,10 @@ public:
   }
 
   uint getPort() override {
-    return receivers[0]->getPort();
+    return receivers.size() > 0 ? receivers[0]->getPort() : 0u;
   }
   void getsockopt(int level, int option, void* value, uint* length) override {
+    KJ_REQUIRE(receivers.size() > 0);
     return receivers[0]->getsockopt(level, option, value, length);
   }
   void setsockopt(int level, int option, const void* value, uint length) override {
@@ -2905,6 +2906,7 @@ public:
     }
   }
   void getsockname(struct sockaddr* addr, uint* length) override {
+    KJ_REQUIRE(receivers.size() > 0);
     return receivers[0]->getsockname(addr, length);
   }
 
