@@ -60,6 +60,7 @@
 
 #if __linux__
 #include <sys/sendfile.h>
+#include <linux/vm_sockets.h>
 #endif
 
 #if !defined(SO_PEERCRED) && defined(LOCAL_PEERCRED)
@@ -985,6 +986,11 @@ public:
           return str("unix:", path);
         }
       }
+#if __linux__
+      case AF_VSOCK: {
+        return str("vsock:", addr.vsock.svm_cid, ":", addr.vsock.svm_port);
+      }
+#endif
       default:
         return str("(unknown address family ", addr.generic.sa_family, ")");
     }
@@ -1042,6 +1048,33 @@ public:
       array.add(result);
       return array.finish();
     }
+
+#if __linux__
+    if (str.startsWith("vsock:")) {
+      StringPtr path = str.slice(strlen("vsock:"));
+
+      char* endptr;
+      unsigned int cid = strtoul(path.cStr(), &endptr, 0);
+      KJ_REQUIRE(*endptr == ':', "missing vsock port");
+      unsigned int port = strtoul(endptr + 1, &endptr, 0);
+      KJ_REQUIRE(*endptr == '\0', "invalid vsock addr");
+
+      memset(&result.addr.vsock, 0, sizeof(result.addr.vsock));
+      result.addr.vsock.svm_family = AF_VSOCK;
+      result.addr.vsock.svm_cid = cid;
+      result.addr.vsock.svm_port = port;
+      result.addrlen = sizeof(struct sockaddr_vm);
+
+      if (!result.parseAllowedBy(filter)) {
+        KJ_FAIL_REQUIRE("VM sockets blocked by restrictPeers()");
+        return Array<SocketAddress>();
+      }
+
+      auto array = kj::heapArrayBuilder<SocketAddress>(1);
+      array.add(result);
+      return array.finish();
+    }
+#endif
 
     // Try to separate the address and port.
     ArrayPtr<const char> addrPart;
@@ -1195,6 +1228,9 @@ private:
     struct sockaddr_in inet4;
     struct sockaddr_in6 inet6;
     struct sockaddr_un unixDomain;
+#if __linux__
+    struct sockaddr_vm vsock;
+#endif
     struct sockaddr_storage storage;
   } addr;
 
