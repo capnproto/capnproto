@@ -721,7 +721,7 @@ private:
 
   kj::TaskSet tasks;
 
-  bool gotReturnForHighQuestionId = false;
+  bool gotReturnForPipelineOnlyCall = false;
   // Becomes true if we ever get a `Return` message for a high question ID (with top bit set),
   // which we use in cases where we've hinted to the peer that we don't want a `Return`. If the
   // peer sends us one anyway then it seemingly does not implement our hints. We need to stop
@@ -1847,7 +1847,7 @@ private:
             callHintsFromReader(callBuilder));
         replacement.set(paramsBuilder);
         return replacement.sendForPipeline();
-      } else if (connectionState->gotReturnForHighQuestionId) {
+      } else if (connectionState->gotReturnForPipelineOnlyCall) {
         // Peer doesn't implement our hints. Fall back to a regular send().
         return send();
       } else {
@@ -3205,40 +3205,46 @@ private:
       // the `Return`. But we might want to make note to stop using these hints, to protect against
       // the (again, remote) possibility of our ID space wrapping around and leading to confusion.
       if (questionId & 1) {
-        // The low bit of the questionId is set, meaning that it is a realtime message. In this case,
-        // we must send a Finish message.
-        KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
-                      auto message = connection.get<Connected>()->newOutgoingMessage(
-                          messageSizeHint<rpc::Finish>());
-                      auto builder = message->getBody().getAs<rpc::Message>().initFinish();
-                      builder.setQuestionId(questionId);
-                      message->send();
-                    })) {
-          disconnect(kj::mv(*e));
+        // The low bit of the questionId is set, meaning that it is a realtime message.
+        if (!ret.getNoFinishNeeded()) {
+          // It is likely that the `noFinishNeeded` flag is set (it is common for return messages
+          // that do not contain any capabilities, which is the case for realtime streams). But if
+          // the flag is not set, we must send a Finish message.
+          KJ_IF_MAYBE(e, kj::runCatchingExceptions([&]() {
+            auto message = connection.get<Connected>()->newOutgoingMessage(
+                messageSizeHint<rpc::Finish>());
+            auto builder = message->getBody().getAs<rpc::Message>().initFinish();
+            builder.setQuestionId(questionId);
+            message->send();
+          })) {
+            disconnect(kj::mv(*e));
+          }
         }
-      }
-      if (ret.getReleaseParamCaps() && sentCapabilitiesInPipelineOnlyCall) {
-        // Oh no, it appears the peer wants us to release any capabilities in the params, something
-        // which only a level 0 peer would request (no version of the C++ RPC system has ever done
-        // this). And it appears we did send capabilities in at least one pipeline-only call
-        // previously. But we have no record of which capabilities were sent in *this* call, so
-        // we cannot release them. Log an error about the leak.
-        //
-        // This scenario is unlikely to happen in practice, because sendForPipeline() is not useful
-        // when talking to a peer that doesn't support capability-passing -- they couldn't possibly
-        // return a capability to pipeline on! So, I'm not going to spend time to find a solution
-        // for this corner case. We will log an error, though, just in case someone hits this
-        // somehow.
-        KJ_LOG(ERROR,
-            "sendForPipeline() was used when sending an RPC to a peer, the parameters of that "
-            "RPC included capabilities, but the peer seems to implement Cap'n Proto at level 0, "
-            "meaning it does not support capability passing (or, at least, it sent a `Return` "
-            "with `releaseParamCaps = true`). The capabilities that were sent may have been "
-            "leaked (they won't be dropped until the connection closes).");
+      } else {
+        // The low bit of the questionId is NOT set, meaning that it is a pipeline-only message.
+        if (ret.getReleaseParamCaps() && sentCapabilitiesInPipelineOnlyCall) {
+          // Oh no, it appears the peer wants us to release any capabilities in the params, something
+          // which only a level 0 peer would request (no version of the C++ RPC system has ever done
+          // this). And it appears we did send capabilities in at least one pipeline-only call
+          // previously. But we have no record of which capabilities were sent in *this* call, so
+          // we cannot release them. Log an error about the leak.
+          //
+          // This scenario is unlikely to happen in practice, because sendForPipeline() is not useful
+          // when talking to a peer that doesn't support capability-passing -- they couldn't possibly
+          // return a capability to pipeline on! So, I'm not going to spend time to find a solution
+          // for this corner case. We will log an error, though, just in case someone hits this
+          // somehow.
+          KJ_LOG(ERROR,
+                 "sendForPipeline() was used when sending an RPC to a peer, the parameters of that "
+                 "RPC included capabilities, but the peer seems to implement Cap'n Proto at level 0, "
+                 "meaning it does not support capability passing (or, at least, it sent a `Return` "
+                 "with `releaseParamCaps = true`). The capabilities that were sent may have been "
+                 "leaked (they won't be dropped until the connection closes).");
 
-        sentCapabilitiesInPipelineOnlyCall = false;  // don't log again
+          sentCapabilitiesInPipelineOnlyCall = false;  // don't log again
+        }
+        gotReturnForPipelineOnlyCall = true;
       }
-      gotReturnForHighQuestionId = true;
       return;
     }
 
