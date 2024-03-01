@@ -3080,6 +3080,22 @@ KJ_TEST("AggregateConnectionReceiver") {
   acceptPromise3.wait(ws);
 }
 
+KJ_TEST("AggregateConnectionReceiver empty") {
+  auto aggregate = newAggregateConnectionReceiver({});
+  KJ_EXPECT(aggregate->getPort() == 0);
+
+  int value;
+  uint length = sizeof(value);
+
+  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    aggregate->getsockopt(0, 0, &value, &length);
+  })) {
+    (void)exception;
+  } else {
+    KJ_FAIL_EXPECT("Expected an exception");
+  }
+}
+
 // =======================================================================================
 // Tests for optimized pumpTo() between OS handles. Note that this is only even optimized on
 // some OSes (only Linux as of this writing), but the behavior should still be the same on all
