@@ -2016,11 +2016,12 @@ private:
       // We don't use setupSend() here because we don't actually allocate a question table entry
       // for realtime messages, because we don't expect a response.
 
-      // Build the cap table.
-      kj::Vector<int> fds;
-      auto exports = connectionState->writeDescriptors(
-          capTable.getTable(), callBuilder.getParams(), fds);
-      message->setFds(fds.releaseAsArray());
+      // Realtime streams do not allow capabilities. We check that there are none and throw
+      // an exception otherwise.
+      if (capTable.getTable().size() != 0) {
+        kj::Exception e = KJ_EXCEPTION(FAILED, "Realtime streams do not allow capabilities!");
+        kj::throwRecoverableException(kj::mv(e));
+      }
 
       // Finish and send.
       QuestionId questionId;
@@ -2040,7 +2041,6 @@ private:
         }
         flowPromise = flow->sendRealtime(kj::mv(message));
       })) {
-        connectionState->releaseExports(exports);
         return kj::mv(*exception);
       }
 
