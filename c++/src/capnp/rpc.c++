@@ -538,6 +538,14 @@ public:
     maybeUnblockFlow();
   }
 
+  int countQuestionsForTest() {
+    int count = 0;
+    questions.forEach([&](QuestionId id, Question& question) {
+      count++;
+    });
+    return count;
+  }
+
 private:
   class RpcClient;
   class ImportClient;
@@ -1757,6 +1765,13 @@ private:
     }
 
     RemotePromise<AnyPointer> send() override {
+      //if (callBuilder.getIsRealtime()) {
+      //  // In a situation involving a call being proxied over another connection, it could
+      //  // happen that send() is called for a realtime stream. In that case, redirect to
+      //  // sendStreaming() directly.
+      //  return RemotePromise<AnyPointer>(sendStreaming(), getDisabledPipeline());
+      //}
+
       if (!connectionState->connection.is<Connected>()) {
         // Connection is broken.
         // TODO(bug): Seems like we should check for redirect before this?
@@ -2025,7 +2040,10 @@ private:
 
       // Finish and send.
       QuestionId questionId;
-      connectionState->questions.nextHigh(questionId, true);
+      auto& question = connectionState->questions.nextHigh(questionId, true);
+      // We don't keep the question for realtime messages. Let's erase it right
+      // away so that it doesn't leak.
+      connectionState->questions.erase(questionId, question);
       callBuilder.setQuestionId(questionId);
       callBuilder.setIsRealtime(true);
       kj::Promise<void> flowPromise = nullptr;
@@ -3645,6 +3663,14 @@ public:
     traceEncoder = kj::mv(func);
   }
 
+  int countQuestionsForTest() {
+    int count = 0;
+    for (auto& connectionPair : connections) {
+      count += connectionPair.second->countQuestionsForTest();
+    }
+    return count;
+  }
+
   kj::Promise<void> run() { return kj::mv(acceptLoopPromise); }
 
 private:
@@ -3736,6 +3762,10 @@ void RpcSystemBase::baseSetFlowLimit(size_t words) {
 
 void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
   impl->setTraceEncoder(kj::mv(func));
+}
+
+int RpcSystemBase::countQuestionsForTest() {
+  return impl->countQuestionsForTest();
 }
 
 kj::Promise<void> RpcSystemBase::run() {

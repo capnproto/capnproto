@@ -842,6 +842,10 @@ interface TestStreaming $Cxx.allowCancellation {
   # Test streaming. finishStream() returns the totals of the values streamed to the other calls.
 }
 
+interface TestCapabilityProxy {
+  getCap @0 () -> (cap :Capability);
+}
+
 interface TestRealtimeStreaming $Cxx.allowCancellation {
   doStream @0 (i :UInt32) -> stream;
   doRealtimeStream @1 (j :UInt32) -> stream $Cxx.realtime;

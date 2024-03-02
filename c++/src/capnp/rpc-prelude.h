@@ -86,6 +86,7 @@ public:
   ~RpcSystemBase() noexcept(false);
 
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
+  int countQuestionsForTest();
 
   kj::Promise<void> run();
 

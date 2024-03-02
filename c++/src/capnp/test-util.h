@@ -358,6 +358,20 @@ public:
   }
 };
 
+class TestCapabilityProxyImpl final: public test::TestCapabilityProxy::Server {
+public:
+  kj::Maybe<Capability::Client> cap;
+
+  kj::Promise<void> getCap(GetCapContext context) override {
+    KJ_IF_MAYBE(c, cap) {
+      context.getResults().setCap(*c);
+    } else {
+      KJ_FAIL_ASSERT("Capability has to be set first!");
+    }
+
+    return kj::READY_NOW;
+  }
+};
 
 class TestRealtimeStreamingImpl final: public test::TestRealtimeStreaming::Server {
 public:
