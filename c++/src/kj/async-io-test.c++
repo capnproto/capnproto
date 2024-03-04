@@ -3087,13 +3087,7 @@ KJ_TEST("AggregateConnectionReceiver empty") {
   int value;
   uint length = sizeof(value);
 
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
-    aggregate->getsockopt(0, 0, &value, &length);
-  })) {
-    (void)exception;
-  } else {
-    KJ_FAIL_EXPECT("Expected an exception");
-  }
+  KJ_EXPECT_THROW_MESSAGE("receivers.size() > 0", aggregate->getsockopt(0, 0, &value, &length));
 }
 
 // =======================================================================================
