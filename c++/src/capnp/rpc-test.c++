@@ -342,6 +342,9 @@ public:
       }
     }
     kj::Promise<void> shutdown() override {
+      KJ_IF_MAYBE(e, network.shutdownExceptionToThrow) {
+        return kj::cp(*e);
+      }
       KJ_IF_MAYBE(p, partner) {
         auto paf = kj::newPromiseAndFulfiller<void>();
         p->fulfillOnEnd = kj::mv(paf.fulfiller);
@@ -410,11 +413,16 @@ public:
     }
   }
 
+  void setShutdownExceptionToThrow(kj::Exception&& e) {
+    shutdownExceptionToThrow = kj::mv(e);
+  }
+
 private:
   TestNetwork& network;
   kj::StringPtr self;
   uint sent = 0;
   uint received = 0;
+  kj::Maybe<kj::Exception> shutdownExceptionToThrow = nullptr;
 
   std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
   std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
@@ -1301,6 +1309,46 @@ TEST(Rpc, Abort) {
   EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
 
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
+}
+
+KJ_TEST("handles exceptions thrown during disconnect") {
+  // This is similar to the earlier "abort" test, but throws an exception on
+  // connection shutdown, to exercise the RpcConnectionState error handler.
+
+  TestContext context;
+
+  MallocMessageBuilder refMessage(128);
+  auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+
+  context.serverNetwork.setShutdownExceptionToThrow(
+      KJ_EXCEPTION(FAILED, "a_disconnect_exception"));
+
+  auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+
+  {
+    // Send an invalid message (Return to non-existent question).
+    auto msg = conn->newOutgoingMessage(128);
+    auto body = msg->getBody().initAs<rpc::Message>().initReturn();
+    body.setAnswerId(1234);
+    body.setCanceled();
+    msg->send();
+  }
+
+  {
+    // The internal exception handler of RpcSystemBase logs exceptions thrown
+    // during disconnect, which the test framework will flag as a failure if we
+    // don't explicitly tell it to expect the logged output.
+    KJ_EXPECT_LOG(ERROR, "a_disconnect_exception");
+
+    // Force outstanding promises to completion.  The server should detect the
+    // invalid message and disconnect, which should cause the connection's
+    // disconnect() to throw an exception that will then be handled by a
+    // RpcConnectionState handler.  Since other state instances were freed prior
+    // to the handler invocation, this caused failures in earlier versions of
+    // the code when run under asan.
+    kj::Promise<void>(kj::NEVER_DONE).poll(context.waitScope);
+  }
 }
 
 KJ_TEST("loopback bootstrap()") {
