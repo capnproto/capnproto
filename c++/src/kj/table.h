@@ -1164,7 +1164,7 @@ class BTreeImpl::MaybeUint {
   // A nullable uint, using the value zero to mean null and shifting all other values up by 1.
 public:
   MaybeUint() = default;
-  inline MaybeUint(uint i): i(i - 1) {}
+  inline MaybeUint(uint i): i(i + 1) {}
   inline MaybeUint(decltype(nullptr)): i(0) {}
 
   inline bool operator==(decltype(nullptr)) const { return i == 0; }
