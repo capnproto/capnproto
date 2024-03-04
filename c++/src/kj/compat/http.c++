@@ -6456,7 +6456,7 @@ public:
     if (concurrentRequests > 0) {
       static bool logOnce KJ_UNUSED = ([&] {
         KJ_LOG(ERROR, "ConcurrencyLimitingHttpClient getting destroyed when concurrent requests "
-            "are still active", concurrentRequests);
+            "are still active", concurrentRequests, kj::getStackTrace());
         return true;
       })();
     }
