@@ -910,6 +910,99 @@ KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
   promise.wait(waitScope);
 }
 
+KJ_TEST("Realtime streaming goes through") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestRealtimeStreaming>();
+
+  // Send a few realtime requests
+  kj::Promise<void> promise = kj::READY_NOW;
+  for (uint i = 0; i < 5; i++) {
+    auto req = cap.doRealtimeStreamRequest();
+    req.setJ(i + 1);
+    promise = req.send();
+    KJ_ASSERT(promise.poll(waitScope));
+  }
+
+  // Send finishStream request
+  auto finishReq = cap.finishStreamRequest();
+  auto result = finishReq.send().wait(waitScope);
+  KJ_ASSERT(result.getTotalJ() == 15);
+}
+
+KJ_TEST("Realtime streaming is stopped by flow control") {
+  // This tests that realtime streaming is stopped by the flow controller when
+  // congestion is detected. Realtime messages are dropped in that case.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  size_t window = 1024;
+  size_t clientWritten = 0;
+  size_t serverWritten = 0;
+
+  pipe.ends[0] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[0]), window, clientWritten);
+  pipe.ends[1] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[1]), window, serverWritten);
+
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestRealtimeStreaming>();
+
+  // Send normal streaming requests until flow control kicks in
+  kj::Promise<void> promise = kj::READY_NOW;
+  uint count = 0;
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = cap.doStreamRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // Send a realtime request and check that its promise hangs
+  auto req = cap.doRealtimeStreamRequest();
+  req.setJ(100);
+  kj::Promise<void> realtimePromise = req.send();
+  KJ_ASSERT(!realtimePromise.poll(waitScope));
+
+  // Cause the last stream to finish on the server side, unlocking the flow
+  server.fulfillLast();
+  realtimePromise.wait(waitScope);
+
+  // Check that a realtime request now goes through
+  req = cap.doRealtimeStreamRequest();
+  req.setJ(3);
+  realtimePromise = req.send();
+  KJ_ASSERT(realtimePromise.poll(waitScope));
+
+  // Fulfill the remaining requests
+  server.setAutoFulfill(true);
+
+  // Send finishStream request
+  auto finishReq = cap.finishStreamRequest();
+  auto result = finishReq.send().wait(waitScope);
+
+  // Make sure that only the second realtime stream was sent (the first one
+  // should be dropped because of the congestion)
+  KJ_ASSERT(result.getTotalJ() == 3);
+}
+
 KJ_TEST("promise cap resolves between starting request and sending it") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
