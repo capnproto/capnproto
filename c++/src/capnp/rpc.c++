@@ -503,7 +503,8 @@ public:
     auto shutdownPromise = dyingConnection->shutdown()
         .attach(kj::mv(dyingConnection))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
-              [this, origException = kj::mv(exception)](kj::Exception&& shutdownException) -> kj::Promise<void> {
+              [self = kj::addRef(*this), origException = kj::mv(exception)](
+                  kj::Exception&& shutdownException) -> kj::Promise<void> {
           // Don't report disconnects as an error.
           if (shutdownException.getType() == kj::Exception::Type::DISCONNECTED) {
             return kj::READY_NOW;
@@ -516,7 +517,7 @@ public:
           }
           // We are shutting down after receive error, ignore shutdown exception since underlying
           // transport is probably broken.
-          if (receiveIncomingMessageError) {
+          if (self->receiveIncomingMessageError) {
             return kj::READY_NOW;
           }
           return kj::mv(shutdownException);
