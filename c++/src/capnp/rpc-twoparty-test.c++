@@ -939,6 +939,35 @@ KJ_TEST("Realtime streaming goes through") {
   KJ_ASSERT(result.getTotalJ() == 15);
 }
 
+KJ_TEST("Realtime streaming throws instead of sending capabilities") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestRealtimeStreaming>();
+
+  // Try to stream a capability and check that it throws
+  auto req = cap.doFailRealtimeStreamRequest();
+  req.setCap(cap);
+
+  kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
+    auto ignored = req.send();
+  });
+
+  KJ_IF_MAYBE(e, maybeException) {
+    KJ_EXPECT(e->getType() == kj::Exception::Type::FAILED);
+  } else {
+    KJ_FAIL_EXPECT("should have thrown");
+  }
+}
+
 KJ_TEST("Realtime streaming is stopped by flow control") {
   // This tests that realtime streaming is stopped by the flow controller when
   // congestion is detected. Realtime messages are dropped in that case.

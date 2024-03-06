@@ -850,8 +850,10 @@ interface TestCapabilityProxy {
 interface TestRealtimeStreaming $Cxx.allowCancellation {
   doStream @0 (i :UInt32) -> stream;
   doRealtimeStream @1 (j :UInt32) -> stream $Stream.realtime;
+  doFailRealtimeStream @3 (cap :Capability) -> stream $Stream.realtime;
+  # This tests that realtime streams do not accept capabilities
   finishStream @2 () -> (totalI :UInt32, totalJ :UInt32);
-  # Test streaming. finishStream() returns the totals of the values streamed to the other calls.
+  # finishStream() returns the totals of the values streamed to the other calls.
 }
 
 interface TestHandle {}

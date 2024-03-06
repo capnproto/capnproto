@@ -397,6 +397,12 @@ public:
     return kj::READY_NOW;
   }
 
+  kj::Promise<void> doFailRealtimeStream(DoFailRealtimeStreamContext context) override {
+    // This should never be reached because a realtime stream should throw
+    // instead of sending a capability.
+    return kj::READY_NOW;
+  }
+
   kj::Promise<void> finishStream(FinishStreamContext context) override {
     auto results = context.getResults();
     results.setTotalI(streamSum);
