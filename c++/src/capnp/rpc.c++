@@ -731,7 +731,7 @@ private:
   bool gotReturnForPipelineOnlyCall = false;
   // Becomes true if we ever get a `Return` message for a high question ID (with top bit set),
   // which we use in cases where we've hinted to the peer that we don't want a `Return`. If the
-  // peer sends us one anyway then it seemingly does not implement our hints. We need to stop
+  // peer sends us one anyway then it seemingly doesn't not implement our hints. We need to stop
   // using the hints in this case before the high question ID space wraps around since otherwise
   // we might reuse an ID that the peer thinks is still in use.
 
@@ -1958,7 +1958,7 @@ private:
       question.paramExports = kj::mv(exports);
       question.isTailCall = isTailCall;
 
-      // Make the QuestionRef and result promise.
+      // Make the QuentionRef and result promise.
       SendInternalResult result;
       auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
       result.questionRef = kj::refcounted<QuestionRef>(
@@ -2084,7 +2084,7 @@ private:
       question.paramExports = kj::mv(exports);
       question.isTailCall = false;
 
-      // Make the QuestionRef and result promise.
+      // Make the QuentionRef and result promise.
       auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, nullptr);
       question.selfRef = *questionRef;
 
@@ -3368,6 +3368,7 @@ private:
         // ahead and delete it from the table.
         questions.erase(ret.getAnswerId(), *question);
       }
+
     } else {
       KJ_FAIL_REQUIRE("Invalid question ID in Return message.") { return; }
     }
@@ -3802,6 +3803,7 @@ public:
               fulfiller->fulfill();
             }
             blockedSends.clear();
+
           }
 
           KJ_IF_MAYBE(f, emptyFulfiller) {
