@@ -65,7 +65,7 @@ namespace {
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
 static constexpr uint64_t ALLOW_CANCELLATION_ANNOTATION_ID = 0xac7096ff8cfc9dceull;
-static constexpr uint64_t REALTIME_ANNOTATION_ID = 0xd5dc6651584b640full;
+static constexpr uint64_t REALTIME_ANNOTATION_ID = 0xbbedf146e910b948ull;
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;

@@ -22,6 +22,7 @@
 @0xd508eebdc2dc42b8;
 
 using Cxx = import "c++.capnp";
+using Stream = import "stream.capnp";
 
 # Use a namespace likely to cause trouble if the generated code doesn't use fully-qualified
 # names for stuff in the capnproto namespace.
@@ -848,7 +849,7 @@ interface TestCapabilityProxy {
 
 interface TestRealtimeStreaming $Cxx.allowCancellation {
   doStream @0 (i :UInt32) -> stream;
-  doRealtimeStream @1 (j :UInt32) -> stream $Cxx.realtime;
+  doRealtimeStream @1 (j :UInt32) -> stream $Stream.realtime;
   finishStream @2 () -> (totalI :UInt32, totalJ :UInt32);
   # Test streaming. finishStream() returns the totals of the values streamed to the other calls.
 }

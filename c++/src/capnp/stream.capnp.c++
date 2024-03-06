@@ -31,6 +31,36 @@ const ::capnp::_::RawSchema s_995f9a3377c0b16e = {
   0, 0, nullptr, nullptr, nullptr, { &s_995f9a3377c0b16e, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
+static const ::capnp::_::AlignedData<21> b_bbedf146e910b948 = {
+  {   0,   0,   0,   0,   5,   0,   6,   0,
+     72, 185,  16, 233,  70, 241, 237, 187,
+     19,   0,   0,   0,   5,   0,   0,   2,
+    248, 243, 147,  19, 169, 102, 195, 134,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     21,   0,   0,   0, 226,   0,   0,   0,
+     33,   0,   0,   0,   7,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     28,   0,   0,   0,   3,   0,   1,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+     99,  97, 112, 110, 112,  47, 115, 116,
+    114, 101,  97, 109,  46,  99,  97, 112,
+    110, 112,  58, 114, 101,  97, 108, 116,
+    105, 109, 101,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   1,   0,   1,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0, }
+};
+::capnp::word const* const bp_bbedf146e910b948 = b_bbedf146e910b948.words;
+#if !CAPNP_LITE
+const ::capnp::_::RawSchema s_bbedf146e910b948 = {
+  0xbbedf146e910b948, b_bbedf146e910b948.words, 21, nullptr, nullptr,
+  0, 0, nullptr, nullptr, nullptr, { &s_bbedf146e910b948, nullptr, nullptr, 0, 0, nullptr }, false
+};
+#endif  // !CAPNP_LITE
 }  // namespace schemas
 }  // namespace capnp
 

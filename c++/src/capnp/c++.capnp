@@ -46,23 +46,3 @@ annotation allowCancellation(interface, method, file) :Void;
 # If your code is not cancellation-safe, then allowing cancellation might give a malicious client
 # an easy way to induce use-after-free or other bugs in your server, by requesting cancellation
 # when not expected.
-
-annotation realtime(method) :Void;
-# Annotate a streaming method with `$realtime` to indicate that it should use realtime streaming.
-#
-# This indicates that it is better not to deliver this message at all, than to deliver it late.
-# The semantics are similar to UDP. Implementations are encouraged to discard realtime messages
-# when there is not enough bandwidth to send them immediately (e.g. when they would otherwise
-# have to buffer the message to send later). Realtime messages can also be delivered out-of-order.
-#
-# Like regular streaming methods, realtime streaming methods return a promise which resolves when
-# the system thinks it would be a good time to send the next message, i.e. once there is "space in
-# the buffer". For realtime messages (unlike non-realtime streaming), if an attempt is made to send
-# a new message before the previous promise resolves, the new message will likely be discarded.
-# However, waiting for the promise to resolve first does not guarantee delivery of the new message.
-#
-# A realtime method cannot contain capabilities in its parameters, because there would be no way to
-# know whether the capability was received, and thus no way to know whether it is still in use.
-#
-# Not all implementations support realtime streaming. If the implementation does not support it,
-# realtime streaming methods will behave like normal streaming.
