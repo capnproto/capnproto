@@ -255,7 +255,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 
 #if (__GNUC__ && !_WIN32) || __clang__
 // Allow dependents to override the implementation of stack symbolication by making it a weak
-// symbol. We prefer weak symbols over some sort of callback registration mechanism becasue this
+// symbol. We prefer weak symbols over some sort of callback registration mechanism because this
 // allows an alternate symbolication library to be easily linked into tests without changing the
 // code of the test.
 __attribute__((weak))

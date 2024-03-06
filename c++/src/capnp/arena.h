@@ -330,7 +330,7 @@ public:
 
   SegmentBuilder* addExternalSegment(kj::ArrayPtr<const word> content);
   // Add a new segment to the arena which points to some existing memory region.  The segment is
-  // assumed to be completley full; the arena will never allocate from it.  In fact, the segment
+  // assumed to be completely full; the arena will never allocate from it.  In fact, the segment
   // is considered read-only.  Any attempt to get a Builder pointing into this segment will throw
   // an exception.  Readers are allowed, however.
   //

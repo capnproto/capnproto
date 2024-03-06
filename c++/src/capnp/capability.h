@@ -133,7 +133,7 @@ public:
   //   to complete (and possibly other things, if that RPC itself returned a promise capability),
   //   but when using `sendPipelineOnly()`, `whenResolved()` may complete immediately, or never, or
   //   at an arbitrary time. Do not rely on it.
-  // - Normal path shortening may not work with these capabilities. For exmaple, if the caller
+  // - Normal path shortening may not work with these capabilities. For example, if the caller
   //   forwards a pipelined capability back to the callee's vat, calls made by the callee to that
   //   capability may continue to proxy through the caller. Conversely, if the callee ends up
   //   returning a capability that points back to the caller's vat, calls on the pipelined
