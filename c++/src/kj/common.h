@@ -290,7 +290,7 @@ typedef unsigned char byte;
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated))
 #define KJ_UNAVAILABLE(reason) = delete
-// If the `unavailable` attribute is not supproted, just mark the method deleted, which at least
+// If the `unavailable` attribute is not supported, just mark the method deleted, which at least
 // makes it a compile-time error to try to call it. Note that on Clang, marking a method deleted
 // *and* unavailable unfortunately defeats the purpose of the unavailable annotation, as the
 // generic "deleted" error is reported instead.
@@ -1771,7 +1771,7 @@ public:
 //     ArrayPtr<const int> ptr = { 1, 2, 3 };
 //     foo(ptr[1]); // undefined behavior!
 // Any KJ programmer should be able to recognize that this is UB, because an ArrayPtr does not own
-// its content. That's not what this constructor is for, tohugh. This constructor is meant to allow
+// its content. That's not what this constructor is for, though. This constructor is meant to allow
 // code like this:
 //     int foo(ArrayPtr<const int> p);
 //     // ... later ...

@@ -125,7 +125,7 @@ class [[nodiscard]] Promise: protected _::PromiseBase {
   // `kj::READY_NOW` to an already-fulfilled Promise<void>.  You may also implicitly convert a
   // `kj::Exception` to an already-broken promise of any type.
   //
-  // Promises are linear types -- they are moveable but not copyable.  If a Promise is destroyed
+  // Promises are linear types -- they are movable but not copyable.  If a Promise is destroyed
   // or goes out of scope (without being moved elsewhere), any ongoing asynchronous operations
   // meant to fulfill the promise will be canceled if possible.  All methods of `Promise` (unless
   // otherwise noted) actually consume the promise in the sense of move semantics.  (Arguably they
@@ -476,7 +476,7 @@ PromiseForResult<Func, void> retryOnDisconnect(Func&& func) KJ_WARN_UNUSED_RESUL
 template <typename Func>
 PromiseForResult<Func, WaitScope&> startFiber(
     size_t stackSize, Func&& func, SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
-// Executes `func()` in a fiber, returning a promise for the eventual reseult. `func()` will be
+// Executes `func()` in a fiber, returning a promise for the eventual result. `func()` will be
 // passed a `WaitScope&` as its parameter, allowing it to call `.wait()` on promises. Thus, `func()`
 // can be written in a synchronous, blocking style, instead of using `.then()`. This is often much
 // easier to write and read, and may even be significantly faster if it allows the use of stack

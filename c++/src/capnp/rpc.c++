@@ -714,7 +714,7 @@ private:
   bool gotReturnForHighQuestionId = false;
   // Becomes true if we ever get a `Return` message for a high question ID (with top bit set),
   // which we use in cases where we've hinted to the peer that we don't want a `Return`. If the
-  // peer sends us one anyway then it seemingly doesn't not implement our hints. We need to stop
+  // peer sends us one anyway then it seemingly does not implement our hints. We need to stop
   // using the hints in this case before the high question ID space wraps around since otherwise
   // we might reuse an ID that the peer thinks is still in use.
 
@@ -1933,7 +1933,7 @@ private:
       question.paramExports = kj::mv(exports);
       question.isTailCall = isTailCall;
 
-      // Make the QuentionRef and result promise.
+      // Make the QuestionRef and result promise.
       SendInternalResult result;
       auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
       result.questionRef = kj::refcounted<QuestionRef>(
@@ -2024,7 +2024,7 @@ private:
       question.paramExports = kj::mv(exports);
       question.isTailCall = false;
 
-      // Make the QuentionRef and result promise.
+      // Make the QuestionRef and result promise.
       auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, kj::none);
       question.selfRef = *questionRef;
 
@@ -2249,7 +2249,7 @@ private:
 
     struct Resolution {
       kj::Own<ClientHook> returnedCap;
-      // The capabiilty that appeared in the response message in this slot.
+      // The capability that appeared in the response message in this slot.
 
       kj::Own<ClientHook> unwrapped;
       // Exactly what `getInnermostClient(returnedCap)` produced at the time that the return
@@ -2463,7 +2463,7 @@ private:
         if (!responseImpl.hasCapabilities()) {
           returnMessage.setNoFinishNeeded(true);
 
-          // Tell ourselves that a finsih was already received, so that `cleanupAnswerTable()`
+          // Tell ourselves that a finish was already received, so that `cleanupAnswerTable()`
           // removes the answer table entry.
           receivedFinish = true;
 
@@ -2696,7 +2696,7 @@ private:
     // Cancellation state ----------------------------------
 
     bool receivedFinish = false;
-    // True if a `Finish` message has been recevied OR we sent a `Return` with `noFinishNedeed`.
+    // True if a `Finish` message has been received OR we sent a `Return` with `noFinishNeeded`.
     // In either case, it is our responsibility to clean up the answer table.
 
     kj::UnwindDetector unwindDetector;
@@ -3451,7 +3451,7 @@ private:
         // Carol returns a capability from this call that points all the way back though Bob to
         // Alice. When this return capability passes through Bob, Bob will resolve the previous
         // promise-pipeline capability to it. However, Bob has to send a Disembargo to Carol before
-        // completing this resolution. In the meantime, though, Bob returns the final repsonse to
+        // completing this resolution. In the meantime, though, Bob returns the final response to
         // Alice. Alice then *also* sends a Disembargo to Bob. The Alice -> Bob Disembargo might
         // arrive at Bob before the Bob -> Carol Disembargo has resolved, in which case the
         // Disembargo is delivered to a promise capability.
