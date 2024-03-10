@@ -705,6 +705,131 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ promise stream -> ByteStream -> KJ") {
   waitScope.cancelAllDetached();
 }
 
+class ExplicitEndTest final: public ExplicitEndOutputStream {
+public:
+  kj::Vector<byte> bytes;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> endFulfiller;
+
+  void clear() {
+    bytes.clear();
+    endFulfiller = kj::none;
+  }
+
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    bytes.addAll(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+    return kj::READY_NOW;
+  }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    for (auto piece: pieces) {
+      bytes.addAll(piece);
+    }
+    return kj::READY_NOW;
+  }
+  kj::Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
+
+  kj::Promise<void> end() override {
+    KJ_REQUIRE(endFulfiller == kj::none);
+
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    endFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+};
+
+class PathProbeBlocker final: public ExplicitEndOutputStream {
+public:
+  PathProbeBlocker(kj::Own<ExplicitEndOutputStream> inner): inner(kj::mv(inner)) {}
+  PathProbeBlocker(kj::Own<kj::AsyncOutputStream> inner)
+      : inner(inner.downcast<ExplicitEndOutputStream>()) {}
+
+  kj::Promise<void> write(const void* buffer, size_t size) override {
+    return inner->write(buffer, size);
+  }
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    return inner->write(pieces);
+  }
+  kj::Promise<void> whenWriteDisconnected() override {
+    return inner->whenWriteDisconnected();
+  }
+
+  kj::Promise<void> end() override {
+    return inner->end();
+  }
+
+  // Don't implement tryPumpFrom(), to block path shortening through this wrapper.
+
+private:
+  kj::Own<ExplicitEndOutputStream> inner;
+};
+
+KJ_TEST("ExplicitEndOutputStream round trip") {
+  // Test what happens if we queue up several requests on a ByteStream and then it resolves to
+  // a shorter path.
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory factories[4];
+  ExplicitEndTest endpoint;
+
+  auto doTest = [&](kj::StringPtr context, kj::Own<ExplicitEndOutputStream> outer) {
+    KJ_CONTEXT(context);
+
+    // Poll to let all path shortening settle.
+    waitScope.poll();
+
+    outer->write("foobar", 6).wait(waitScope);
+
+    KJ_EXPECT(kj::str(endpoint.bytes.asPtr().asChars()) == "foobar");
+    KJ_EXPECT(endpoint.endFulfiller == kj::none);
+
+    auto promise = outer->end();
+    if (promise.poll(waitScope)) {
+      // Maybe it threw, if so propagate that.
+      promise.wait(waitScope);
+      KJ_FAIL_ASSERT("end() returned too soon");
+    }
+
+    KJ_ASSERT_NONNULL(endpoint.endFulfiller)->fulfill();
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+
+    endpoint.clear();
+  };
+
+  // Run blocking path shortening by using lots of different factoires and a PathProbeBlocker.
+  doTest("no path shortening",
+      factories[3].capnpToKjExplicitEnd(
+          factories[2].kjToCapnp(
+              kj::heap<PathProbeBlocker>(
+                  factories[1].capnpToKj(
+                      factories[0].kjToCapnp(kj::attachRef(endpoint)))))));
+
+  // Run allowing shortening of capnp layers, by using the same factory in all cases.
+  doTest("capnp path shortening",
+      factories[0].capnpToKjExplicitEnd(
+          factories[0].kjToCapnp(
+              kj::heap<PathProbeBlocker>(
+                  factories[0].capnpToKj(
+                      factories[0].kjToCapnp(kj::attachRef(endpoint)))))));
+
+  // Run allowing shortening of KJ layers, by not inserting PathProbeBlocker.
+  doTest("kj path shortening",
+      factories[3].capnpToKjExplicitEnd(
+          factories[2].kjToCapnp(
+              factories[1].capnpToKj(
+                  factories[0].kjToCapnp(kj::attachRef(endpoint))))));
+
+  // Run with full path shortening.
+  doTest("full path shortening",
+      factories[0].capnpToKjExplicitEnd(
+          factories[0].kjToCapnp(
+              factories[0].capnpToKj(
+                  factories[0].kjToCapnp(kj::attachRef(endpoint))))));
+}
+
 // TODO:
 // - Parallel writes (requires streaming)
 // - Write to KJ -> capnp -> RPC -> capnp -> KJ loopback without shortening, verify we can write

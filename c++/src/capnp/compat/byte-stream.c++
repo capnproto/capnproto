@@ -394,6 +394,13 @@ public:
         state = Ended();
       }
       KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
+        KJ_IF_SOME(expEnd, kj::dynamicDowncastIfAvailable<ExplicitEndOutputStream>(*kjStream)) {
+          // Ugh, we somehow ended up with a non-explicit-end stream forwarding to an explicit-end
+          // stream, so we have to detach the end() call.
+          auto promise = expEnd.end();
+          promise.detach([steram = kj::mv(kjStream)](kj::Exception&&){});
+        }
+
         state = Ended();
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
@@ -412,12 +419,21 @@ public:
   kj::Promise<void> directExplicitEnd() override {
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
-        state = Ended();
-        return kj::READY_NOW;
+        return prober->whenReady().then([this]() mutable {
+          KJ_ASSERT(!state.is<kj::Own<PathProber>>());
+          return directExplicitEnd();
+        });
       }
       KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
-        state = Ended();
-        return kj::READY_NOW;
+        KJ_IF_SOME(expEnd, kj::dynamicDowncastIfAvailable<ExplicitEndOutputStream>(*kjStream)) {
+          auto promise = expEnd.end();
+          promise = promise.attach(kj::mv(kjStream));
+          state = Ended();
+          return promise;
+        } else {
+          state = Ended();
+          return kj::READY_NOW;
+        }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
         // Ugh I guess we need to send a real end() request here.
@@ -639,10 +655,17 @@ protected:
         });
       }
       KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
-        // TODO(someday): When KJ adds a proper .end() call, use it here. For now, we must
-        //   drop the stream to close it.
-        state = Ended();
-        return kj::READY_NOW;
+        KJ_IF_SOME(expEnd, kj::dynamicDowncastIfAvailable<ExplicitEndOutputStream>(*kjStream)) {
+          auto promise = expEnd.end();
+          promise = promise.attach(kj::mv(kjStream));
+          state = Ended();
+          return promise;
+        } else {
+          // TODO(someday): When KJ adds a proper .end() call, use it here. For now, we must
+          //   drop the stream to close it.
+          state = Ended();
+          return kj::READY_NOW;
+        }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
         auto params = context.getParams();
@@ -764,7 +787,13 @@ private:
       originalPumpfulfiller->fulfill(context.getParams().getByteCount());
 
       // Give the original pump task a chance to finish up.
-      return pathProber->task.attach(kj::mv(pathProber));
+      co_await pathProber->task;
+
+      // If the PathProber originally wrapped a stream with an end() method, we need to call that
+      // now.
+      KJ_IF_SOME(ee, kj::dynamicDowncastIfAvailable<ExplicitEndOutputStream>(*pathProber->inner)) {
+        co_await ee.end();
+      }
     }
 
     kj::Promise<void> reachedLimit(ReachedLimitContext context) override {
@@ -819,7 +848,12 @@ public:
   }
 
   kj::Promise<void> end() override {
-    KJ_REQUIRE(explicitEnd, "not expecting explicit end");
+    if (!explicitEnd) {
+      // It would seem someone calling us did a dynamic downcast and discovered that we are an
+      // ExplicitEndOutputStream, and then they decided to call end(). That's cool! We'll allow
+      // it.
+      explicitEnd = true;
+    }
 
     KJ_IF_SOME(o, optimized) {
       return o.directExplicitEnd();

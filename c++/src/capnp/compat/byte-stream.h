@@ -45,6 +45,9 @@ class ExplicitEndOutputStream: public kj::AsyncOutputStream {
   //   capnpToKjExplicitEnd() returns an ExplicitEndOutputStream, which expect to receive an
   //   `end()` call on clean EOF, and treats destruction without `end()` as an abort. This is used
   //   in particular within http-over-capnp to improve behavior somewhat.
+  //
+  //   Additionally, if `kjToCapnp()` is given an `ExplicitEndOutputStream`, and the application
+  //   is built with RTTI enabled, then its `end()` method will be used when appropriate.
 public:
   virtual kj::Promise<void> end() = 0;
 };
