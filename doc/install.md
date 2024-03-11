@@ -94,6 +94,13 @@ If you download directly from Git, you will need to have the GNU autotools --
 
 ## Installation: Windows
 
+**Using scoop**
+
+Make sure you have [scoop](https://scoop.sh/) installed with the Main bucket available.
+1. `scoop install capnp`
+
+The command will install the latest version of Cap'n Proto and add the `capnp`, `capnpc-capnp` and `capnpc-c++` compilers and add them to your path.
+
 **From Release Zip**
 
 1. Download Cap'n Proto Win32 build:
