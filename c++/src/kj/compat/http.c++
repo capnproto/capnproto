@@ -6452,14 +6452,11 @@ public:
         maxConcurrentRequests(maxConcurrentRequests),
         countChangedCallback(kj::mv(countChangedCallback)) {}
 
-  ~ConcurrencyLimitingHttpClient() noexcept(false) {
-    if (concurrentRequests > 0) {
-      static bool logOnce KJ_UNUSED = ([&] {
-        KJ_LOG(ERROR, "ConcurrencyLimitingHttpClient getting destroyed when concurrent requests "
-            "are still active", concurrentRequests);
-        return true;
-      })();
-    }
+  ~ConcurrencyLimitingHttpClient() noexcept {
+    // Crash in this case because otherwise we'll have UAF later on.
+    KJ_ASSERT(concurrentRequests == 0,
+        "ConcurrencyLimitingHttpClient getting destroyed when concurrent requests "
+        "are still active");
   }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
