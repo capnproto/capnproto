@@ -562,6 +562,10 @@ public:
     }
   }
 
+  bool isRevocable() {
+    return revoker != kj::none;
+  }
+
   void revoke(kj::Exception&& e) {
     KJ_IF_SOME(s, server) {
       KJ_ASSERT_NONNULL(revoker).cancel(e);
@@ -900,11 +904,31 @@ private:
 
 const uint LocalClient::BRAND = 0;
 
+Capability::Client Capability::Server::thisCap() {
+  auto& hook = KJ_REQUIRE_NONNULL(thisHook,
+      "can't call thisCap() when no Clients are currently pointing at the object");
+  return Client(hook.addRef());
+}
+
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
-  return kj::refcounted<LocalClient>(kj::mv(server));
+  KJ_IF_SOME(hook, server->thisHook) {
+    // Use the existing hook. This is possible when the Server object is refcounted, hence allowing
+    // `makeLocalClient()` to be called multiple times for the same Server.
+    //
+    // It's expected that the returned capability is a strong reference to the server. Therefore,
+    // we should refuse to clone a revocable Client.
+    KJ_REQUIRE(!kj::downcast<LocalClient>(hook).isRevocable(),
+        "can't create additional Clients for a Server whose existing Client is revocable");
+    return hook.addRef();
+  } else {
+    return kj::refcounted<LocalClient>(kj::mv(server));
+  }
 }
 
 kj::Own<ClientHook> Capability::Client::makeRevocableLocalClient(Capability::Server& server) {
+  KJ_REQUIRE(server.thisHook == kj::none,
+      "can't create revocable Client for Server that already has Clients pointing at it");
+
   auto result = kj::refcounted<LocalClient>(
       kj::Own<Capability::Server>(&server, kj::NullDisposer::instance), true /* revocable */);
   return result;
@@ -1148,6 +1172,9 @@ namespace _ {  // private
 
 Capability::Client CapabilityServerSetBase::addInternal(
     kj::Own<Capability::Server>&& server, void* ptr) {
+  KJ_REQUIRE(server->thisHook == kj::none,
+      "can't add Server to CapabilityServerSet when it already has Clients pointing to it");
+
   return Capability::Client(kj::refcounted<LocalClient>(kj::mv(server), *this, ptr));
 }
 
