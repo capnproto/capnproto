@@ -530,17 +530,16 @@ public:
   //   a proxy.
 
 protected:
-  inline Capability::Client thisCap();
+  Capability::Client thisCap();
   // Get a capability pointing to this object, much like the `this` keyword.
   //
-  // The effect of this method is undefined if:
-  // - No capability client has been created pointing to this object. (This is always the case in
-  //   the server's constructor.)
-  // - The capability client pointing at this object has been destroyed. (This is always the case
-  //   in the server's destructor.)
-  // - The capability client pointing at this object has been revoked using RevocableServer.
-  // - Multiple capability clients have been created around the same server (possible if the server
-  //   is refcounted, which is not recommended since the client itself provides refcounting).
+  // This method can only be called when a Client currently exists pointing at this object. In
+  // general, you can safely assume this inside of an RPC method implementation. If the Server
+  // object is not itself refcounted and a Client is always created immediately after construction,
+  // then `thisCap()` should work in any method except for the constructor and destructor.
+  //
+  // Note that if RevocableServer is in use, `thisCap()` returns a copy of the revocable Client
+  // object; it does not attempt to create a non-revocable reference.
 
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
@@ -556,8 +555,10 @@ protected:
                                           uint64_t typeId, uint16_t methodId);
 
 private:
-  ClientHook* thisHook = nullptr;
+  kj::Maybe<ClientHook&> thisHook;
   friend class LocalClient;
+  friend class Capability::Client;
+  friend class _::CapabilityServerSetBase;
 };
 
 template <typename T>
@@ -1190,10 +1191,6 @@ template <typename Params>
 StreamingCallContext<Params> Capability::Server::internalGetTypedStreamingContext(
     CallContext<AnyPointer, AnyPointer> typeless) {
   return StreamingCallContext<Params>(*typeless.hook);
-}
-
-Capability::Client Capability::Server::thisCap() {
-  return Client(thisHook->addRef());
 }
 
 template <typename T>

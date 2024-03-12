@@ -1419,6 +1419,60 @@ KJ_TEST("RevocableServer") {
       revocable.getClient().waitForeverRequest().send().ignoreResult().wait(waitScope));
 }
 
+KJ_TEST("servers can be refcounted") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class ServerImpl final: public test::TestInterface::Server, public kj::Refcounted {
+  public:
+    uint callCount = 0;
+    ClientHook* lastThisCap = nullptr;
+
+    kj::Promise<void> foo(FooContext context) override {
+      ++callCount;
+      lastThisCap = ClientHook::from(thisCap());
+      return kj::READY_NOW;
+    }
+  };
+
+  auto server = kj::refcounted<ServerImpl>();
+
+  {
+    test::TestInterface::Client client1(kj::addRef(*server));
+    test::TestInterface::Client client2(kj::addRef(*server));
+
+    KJ_EXPECT(ClientHook::from(client1).get() == ClientHook::from(client2).get());
+
+    client1.fooRequest().send().wait(waitScope);
+    client2.fooRequest().send().wait(waitScope);
+
+    KJ_EXPECT(server->callCount == 2);
+    KJ_EXPECT(server->lastThisCap == ClientHook::from(client2).get());
+
+    KJ_EXPECT_THROW_MESSAGE(
+        "can't create revocable Client for Server that already has Clients pointing at it", {
+      RevocableServer<test::TestInterface> revocable(*server);
+    });
+  }
+
+  {
+    RevocableServer<test::TestInterface> revocable(*server);
+
+    auto client = revocable.getClient();
+
+    server->lastThisCap = nullptr;
+    client.fooRequest().send().wait(waitScope);
+
+    KJ_EXPECT(server->callCount == 3);
+    KJ_EXPECT(server->lastThisCap == ClientHook::from(client).get());
+
+    KJ_EXPECT_THROW_MESSAGE(
+        "can't create additional Clients for a Server whose existing Client is revocable", {
+      test::TestInterface::Client strongClient(kj::addRef(*server));
+    });
+  }
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp
