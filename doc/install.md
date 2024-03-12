@@ -77,6 +77,7 @@ Note: These packages are not maintained by us and are sometimes not up to date w
 * Debian / Ubuntu: `apt-get install capnproto`
 * Arch Linux: `sudo pacman -S capnproto`
 * Homebrew (OSX): `brew install capnp`
+* Windows: `scoop install capnp`
 
 **From Git**
 
@@ -93,13 +94,6 @@ If you download directly from Git, you will need to have the GNU autotools --
     sudo make install
 
 ## Installation: Windows
-
-**Using scoop**
-
-Make sure you have [scoop](https://scoop.sh/) installed with the Main bucket available.
-1. `scoop install capnp`
-
-The command will install the latest version of Cap'n Proto and add the `capnp`, `capnpc-capnp` and `capnpc-c++` compilers and add them to your path.
 
 **From Release Zip**
 
