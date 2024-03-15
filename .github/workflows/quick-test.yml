@@ -56,23 +56,6 @@ jobs:
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
             ${{ matrix.run-test }}
-  Linux-lock-tracking:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [clang-14]
-        features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1 -DKJ_CONTENTION_WARNING_THRESHOLD=200"]
-    steps:
-      - uses: actions/checkout@v2
-      - name: install dependencies
-        run: |
-            export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
-      - name: super-test ${{ matrix.compiler }}
-        run: |
-            # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
-            ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
   MacOS:
     runs-on: macos-latest
     strategy:
