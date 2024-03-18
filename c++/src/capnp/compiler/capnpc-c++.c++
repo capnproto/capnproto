@@ -2445,6 +2445,8 @@ private:
           "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
           "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>\n"
           "  Client(::kj::Own<_t>&& server);\n"
+          "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>\n"
+          "  Client(::kj::Rc<_t>&& server);\n"
           "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Client*>()>>\n"
           "  Client(::kj::Promise<_t>&& promise);\n"
           "  Client(::kj::Exception&& exception);\n"
@@ -2502,6 +2504,10 @@ private:
           "template <typename _t, typename>\n"
           "inline ", fullName, "::Client::Client(::kj::Own<_t>&& server)\n"
           "    : ::capnp::Capability::Client(::kj::mv(server)) {}\n",
+          templateContext.allDecls(),
+          "template <typename _t, typename>\n"
+          "inline ", fullName, "::Client::Client(::kj::Rc<_t>&& server)\n"
+          "    : ::capnp::Capability::Client(server.toOwn()) {}\n",
           templateContext.allDecls(),
           "template <typename _t, typename>\n"
           "inline ", fullName, "::Client::Client(::kj::Promise<_t>&& promise)\n"

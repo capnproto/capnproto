@@ -205,6 +205,11 @@ public:
   // Make a client capability that wraps the given server capability.  The server's methods will
   // only be executed in the given EventLoop, regardless of what thread calls the client's methods.
 
+  template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Capability::Server*>()>>
+  Client(kj::Rc<T>&& server);
+  // Make a client capability that wraps the given server capability.  The server's methods will
+  // only be executed in the given EventLoop, regardless of what thread calls the client's methods.
+
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Client*>()>>
   Client(kj::Promise<T>&& promise);
   // Make a client from a promise for a future client.  The resulting client queues calls until the
@@ -1091,6 +1096,9 @@ inline Capability::Client::Client(kj::Own<ClientHook>&& hook): hook(kj::mv(hook)
 template <typename T, typename>
 inline Capability::Client::Client(kj::Own<T>&& server)
     : hook(makeLocalClient(kj::mv(server))) {}
+template <typename T, typename>
+inline Capability::Client::Client(kj::Rc<T>&& server)
+    : hook(makeLocalClient(server.toOwn())) {}
 template <typename T, typename>
 inline Capability::Client::Client(kj::Promise<T>&& promise)
     : hook(newLocalPromiseClient(promise.then([](T&& t) { return kj::mv(t.hook); }))) {}

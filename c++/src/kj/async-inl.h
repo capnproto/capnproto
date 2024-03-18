@@ -783,12 +783,19 @@ private:
 
 template <typename T> T copyOrAddRef(T& t) { return t; }
 template <typename T> Own<T> copyOrAddRef(Own<T>& t) { return t->addRef(); }
+template <typename T> Rc<T> copyOrAddRef(Rc<T>& t) { return t.addRef(); }
+template <typename T> Arc<T> copyOrAddRef(Arc<T>& t) { return t.addRef(); }
 template <typename T> Maybe<Own<T>> copyOrAddRef(Maybe<Own<T>>& t) {
   return t.map([](Own<T>& ptr) {
     return ptr->addRef();
   });
 }
-
+template <typename T> Maybe<Rc<T>> copyOrAddRef(Maybe<Rc<T>>& t) {
+  return t.map([](Rc<T>& ptr) { return ptr.addRef(); });
+}
+template <typename T> Maybe<Arc<T>> copyOrAddRef(Maybe<Arc<T>>& t) {
+  return t.map([](Arc<T>& ptr) { return ptr.addRef(); });
+}
 
 // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
 // a const reference.
