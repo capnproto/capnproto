@@ -35,6 +35,11 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
+#ifndef KJ_ENABLE_UNTYPED_REFCOUNT
+#define KJ_ENABLE_UNTYPED_REFCOUNT 1
+// when defined to 0 disables untyped refcounted operations
+#endif
+
 // =======================================================================================
 // Non-atomic (thread-unsafe) refcounting
 
@@ -109,6 +114,7 @@ private:
   friend class EnableAddRefToThis;
 };
 
+#if KJ_ENABLE_UNTYPED_REFCOUNT != 0
 template <typename T, typename... Params>
 inline Own<T> refcounted(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.  Returns an
@@ -116,6 +122,7 @@ inline Own<T> refcounted(Params&&... params) {
 
   return Refcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
 }
+#endif
 
 template <typename T, typename... Params>
 inline Rc<T> rc(Params&&... params) {
@@ -125,6 +132,7 @@ inline Rc<T> rc(Params&&... params) {
   return Refcounted::addRcRefInternal(new T(kj::fwd<Params>(params)...));
 }
 
+#if KJ_ENABLE_UNTYPED_REFCOUNT != 0
 template <typename T>
 Own<T> addRef(T& object) {
   // Return a new reference to `object`, which must subclass Refcounted and have been allocated
@@ -134,6 +142,7 @@ Own<T> addRef(T& object) {
   KJ_IREQUIRE(object.Refcounted::refcount > 0, "Object not allocated with kj::refcounted().");
   return Refcounted::addRefInternal(&object);
 }
+#endif
 
 template <typename T>
 Own<T> Refcounted::addRefInternal(T* object) {
@@ -370,16 +379,19 @@ private:
   friend class EnableAddRefToThis;
 };
 
+#if KJ_ENABLE_UNTYPED_REFCOUNT != 0
 template <typename T, typename... Params>
 inline kj::Own<T> atomicRefcounted(Params&&... params) {
   return AtomicRefcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
 }
+#endif
 
 template <typename T, typename... Params>
 inline kj::Arc<T> arc(Params&&... params) {
   return AtomicRefcounted::addRcRefInternal(new T(kj::fwd<Params>(params)...));
 }
 
+#if KJ_ENABLE_UNTYPED_REFCOUNT != 0
 template <typename T>
 kj::Own<T> atomicAddRef(T& object) {
   KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
@@ -410,6 +422,7 @@ kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
     return nullptr;
   }
 }
+#endif
 
 template <typename T>
 kj::Own<T> AtomicRefcounted::addRefInternal(T* object) {
