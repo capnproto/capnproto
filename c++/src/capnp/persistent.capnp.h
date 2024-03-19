@@ -107,6 +107,8 @@ public:
   explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);
   template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>
   Client(::kj::Own<_t>&& server);
+  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>
+  Client(::kj::Rc<_t>&& server);
   template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Client*>()>>
   Client(::kj::Promise<_t>&& promise);
   Client(::kj::Exception&& exception);
@@ -359,6 +361,10 @@ template <typename SturdyRef, typename Owner>
 template <typename _t, typename>
 inline Persistent<SturdyRef, Owner>::Client::Client(::kj::Own<_t>&& server)
     : ::capnp::Capability::Client(::kj::mv(server)) {}
+template <typename SturdyRef, typename Owner>
+template <typename _t, typename>
+inline Persistent<SturdyRef, Owner>::Client::Client(::kj::Rc<_t>&& server)
+    : ::capnp::Capability::Client(server.toOwn()) {}
 template <typename SturdyRef, typename Owner>
 template <typename _t, typename>
 inline Persistent<SturdyRef, Owner>::Client::Client(::kj::Promise<_t>&& promise)
