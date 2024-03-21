@@ -3082,7 +3082,7 @@ bool matchesAny(ArrayPtr<const CidrRange> cidrs, const struct sockaddr* addr) {
 }
 
 NetworkFilter::NetworkFilter()
-    : allowUnix(true), allowAbstractUnix(true) {
+    : allowUnix(true), allowAbstractUnix(true), allowVsock(true) {
   allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
   allowCidrs.add(CidrRange::inet6({}, {}, 0));
   denyCidrs.addAll(reservedCidrs());
@@ -3090,7 +3090,7 @@ NetworkFilter::NetworkFilter()
 
 NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
                              NetworkFilter& next)
-    : allowUnix(false), allowAbstractUnix(false), next(next) {
+    : allowUnix(false), allowAbstractUnix(false), allowVsock(false), next(next) {
   for (auto rule: allow) {
     if (rule == "local") {
       allowCidrs.addAll(localCidrs());
@@ -3107,6 +3107,8 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
       allowUnix = true;
     } else if (rule == "unix-abstract") {
       allowAbstractUnix = true;
+    } else if (rule == "vsock") {
+      allowVsock = true;
     } else {
       allowCidrs.add(CidrRange(rule));
     }
@@ -3126,6 +3128,8 @@ NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const Str
       allowUnix = false;
     } else if (rule == "unix-abstract") {
       allowAbstractUnix = false;
+    } else if (rule == "vsock") {
+      allowVsock = false;
     } else {
       denyCidrs.add(CidrRange(rule));
     }
@@ -3144,6 +3148,10 @@ bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
       return allowUnix;
     }
   }
+#endif
+
+#if __linux__
+  if (addr->sa_family == AF_VSOCK) return allowVsock;
 #endif
 
   bool allowed = false;
@@ -3197,15 +3205,23 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr, uint addrlen) 
     }
   } else {
 #endif
-    if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
-        (allowPublic || allowNetwork)) {
-      matched = true;
-    }
-    for (auto& cidr: allowCidrs) {
-      if (cidr.matchesFamily(addr->sa_family)) {
+#if __linux__
+    if (addr->sa_family == AF_VSOCK) {
+      if (allowVsock) matched = true;
+    } else {
+#endif
+      if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
+          (allowPublic || allowNetwork)) {
         matched = true;
       }
+      for (auto& cidr: allowCidrs) {
+        if (cidr.matchesFamily(addr->sa_family)) {
+          matched = true;
+        }
+      }
+#if __linux__
     }
+#endif
 #if !_WIN32
   }
 #endif
