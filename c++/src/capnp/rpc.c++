@@ -125,6 +125,14 @@ kj::Exception toException(const rpc::Exception::Reader& exception) {
   if (exception.hasTrace()) {
     result.setRemoteTrace(kj::str(exception.getTrace()));
   }
+
+  if (exception.hasDetails()) {
+    auto details = exception.getDetails();
+    for (auto detail: details) {
+      result.setDetail(detail.getId(), kj::heapArray<byte>(detail.getData()));
+    }
+  }
+
   return result;
 }
 
@@ -159,6 +167,16 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
       !exception.getDescription().startsWith("remote exception:")) {
     KJ_LOG(INFO, "returning failure over rpc", exception);
   }
+
+  kj::Maybe<capnp::List<rpc::ExceptionDetail, capnp::Kind::STRUCT>::Builder> maybeDetails;
+  size_t currentDetail = 0;
+  exception.serializeDetail([&](uint64_t id, kj::ArrayPtr<const kj::byte> data, size_t size) {
+    if (maybeDetails == kj::none) maybeDetails = builder.initDetails(size);
+    auto& details = KJ_ASSERT_NONNULL(maybeDetails);
+    details[currentDetail].setId(id);
+    details[currentDetail].setData(data);
+    currentDetail++;
+  });
 }
 
 uint exceptionSizeHint(const kj::Exception& exception) {

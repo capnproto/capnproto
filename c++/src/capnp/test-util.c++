@@ -1184,8 +1184,18 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
   return kj::joinPromises(promises.finish());
 }
 
+struct TestExceptionDetail {
+  static constexpr uint64_t EXCEPTION_DETAIL_TYPE_ID = 1;
+  kj::Maybe<kj::Array<kj::byte>> trySerializeForKjException() const {
+    static constexpr kj::byte data[] = {0x01, 0x02, 0x03};
+    return kj::heapArray<kj::byte>(data);
+  }
+};
+
 kj::Promise<void> TestMoreStuffImpl::throwException(ThrowExceptionContext context) {
-  return KJ_EXCEPTION(FAILED, "test exception");
+  auto ex = KJ_EXCEPTION(FAILED, "test exception");
+  ex.setDetail(TestExceptionDetail {});
+  return kj::mv(ex);
 }
 
 kj::Promise<void> TestMoreStuffImpl::throwRemoteException(ThrowRemoteExceptionContext context) {
