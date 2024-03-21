@@ -19,7 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/common.h"
+#include "kj/string.h"
+#include "kj/test.h"
 #include "memory.h"
+#include <csignal>
+#include <cstdint>
 #include <kj/compat/gtest.h>
 #include "debug.h"
 
@@ -500,5 +505,212 @@ KJ_TEST("disposeWith") {
 
 // TODO(test):  More tests.
 
-}  // namespace
+struct Obj {
+  Obj(kj::StringPtr name) : name(kj::str(name)) { }
+  Obj(Obj&&) = default;
+
+  kj::String name;
+
+  KJ_DISALLOW_COPY(Obj);
+};
+
+struct PtrHolder {
+  kj::Ptr<Obj> ptr;
+};
+
+KJ_TEST("kj::Pin<T> basic properties") {
+  // kj::Pin<T> guarantees that T won't move or disappear while there are active pointers.
+  
+  // pin constructor is a simple argument pass through
+  kj::Pin<Obj> pin("a");
+
+  // pin is a smart pointer and can be used so
+  KJ_EXPECT(pin->name == "a"_kj);
+
+  // pin can be auto converted to Ptr<T>
+  kj::Ptr<Obj> ptr1 = pin;
+  KJ_EXPECT(ptr1 == pin);
+  KJ_EXPECT(pin == ptr1);
+
+  // Ptr<T> is a smart pointer too
+  KJ_EXPECT(ptr1->name == "a"_kj);
+
+  // you can have more than one Ptr<T> pointing to the same object
+  kj::Ptr<Obj> ptr2 = pin;
+  KJ_EXPECT(ptr1 == ptr2);
+  KJ_EXPECT(ptr2->name == "a"_kj);
+
+  // when leaving the scope ptrs will be destroyed first,
+  // so pin will be destroyed without problems
+}
+
+KJ_TEST("moving kj::Pin<T>") {
+  kj::Pin<Obj> pin("a");
+
+  // you can move pin around as long as there are no pointers to it
+  kj::Pin<Obj> pin2(kj::mv(pin));
+  
+  // data belongs to a new pin now
+  KJ_EXPECT(pin2->name == "a"_kj);
+
+  // it is C++ and old pin still points to a valid object
+  KJ_EXPECT(pin->name == ""_kj);
+
+  // you can add new pointers to the pin with asPtr() method as well
+  kj::Ptr<Obj> ptr1 = pin2.asPtr();
+  KJ_EXPECT(ptr1 == pin2);
+  KJ_EXPECT(ptr1->name == "a"_kj);
+
+  {
+    // you can copy pointers
+    kj::Ptr<Obj> ptr2 = ptr1;
+    KJ_EXPECT(ptr2 == ptr1);
+    KJ_EXPECT(ptr2->name == "a"_kj);
+
+    // ptr2 will be auto-destroyed
+  }
+
+  // you can move the pin again if all pointers are destroyed
+  ptr1 = nullptr;
+  kj::Pin<Obj> pin3(kj::mv(pin2));
+  KJ_EXPECT(pin3->name == "a"_kj);
+}
+
+struct Obj2 : public Obj {
+  Obj2(kj::StringPtr name, int size) : Obj(name), size(size) {}
+  int size;
+};
+
+KJ_TEST("kj::Ptr<T> subtyping") {
+  // pin the child
+  kj::Pin<Obj2> pin("obj2", 42);
+
+  // pointer to the child
+  kj::Ptr<Obj2> ptr1 = pin;
+  KJ_EXPECT(ptr1->name == "obj2"_kj);
+  KJ_EXPECT(ptr1->size == 42);
+
+  // pointer to the base
+  kj::Ptr<Obj> ptr2 = pin;
+  KJ_EXPECT(ptr2->name == "obj2"_kj);
+  KJ_EXPECT(ptr2 == pin);
+  KJ_EXPECT(ptr1 == ptr2);
+}
+
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+KJ_TEST("kj::Pin<T> destroyed with active ptrs crashed") {
+  PtrHolder* holder = nullptr;
+  
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Pin<Obj> obj("b");
+    // create a pointer and leak it
+    holder = new PtrHolder { obj };
+    // destroying a pin when exiting scope crashes
+  });
+}
+
+KJ_TEST("kj::Pin<T> moved with active ptrs crashes") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Pin<Obj> obj("b");
+    auto ptr = obj.asPtr();
+    // moving a pin with active reference crashes
+    kj::Pin<Obj> obj2(kj::mv(obj));
+  });
+}
+#endif  
+
+
+KJ_TEST("kj::Own<T>/kj::Ptr<T> interop") {
+  // kj::Own<T> always points to the heap and can'be moved around
+  kj::Own<Obj> own = kj::heap<Obj>("c");
+
+  // pointers can be obtained by a cast
+  kj::Ptr<Obj> ptr1 = own;
+  KJ_EXPECT(ptr1->name == "c"_kj);
+
+  // pointers can be created by calling asPtr() too
+  kj::Ptr<Obj> ptr2 = own.asPtr();
+  KJ_EXPECT(ptr1 == ptr2);
+  KJ_EXPECT(ptr2->name == "c"_kj);
+
+  // you can move the kj::Own itself, it doesn't move the underlying object
+  kj::Own<Obj> own2 = kj::mv(own);
+  
+  // pins are still valid
+  KJ_EXPECT(ptr1->name == "c"_kj);
+  KJ_EXPECT(ptr2->name == "c"_kj);
+
+  // unless we clear pointers, we can't destroy own2
+  ptr1 = nullptr;
+  ptr2 = nullptr;
+}
+
+#ifdef KJ_ASSERT_PTR_COUNTERS  
+KJ_TEST("kj::Own<T> destroyed with active ptrs") {
+  PtrHolder* holder = nullptr;
+  
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Own<Obj> obj = kj::heap<Obj>("d");
+    // create a pointer and leak it
+    holder = new PtrHolder { obj };
+    // destroying own when exiting the scope crashes
+  });
+}
+#endif
+
+KJ_TEST("kj::Own<T, Disposer>/kj::Ptr<T> interop") {
+  static int* disposedPtr = nullptr;
+  struct MyDisposer {
+    static void dispose(int* value) {
+      KJ_EXPECT(disposedPtr == nullptr);
+      disposedPtr = value;
+    };
+  };
+
+  int i = 42;
+
+  {
+    kj::Own<int, MyDisposer> own(&i);
+    KJ_EXPECT(disposedPtr == nullptr);
+
+    kj::Ptr<int> ptr1 = own;
+    KJ_EXPECT(ptr1 == &i);
+  }
+
+  KJ_EXPECT(disposedPtr == &i);
+  disposedPtr = nullptr;
+}
+
+KJ_TEST("kj::Own<T, Disposer>/kj::Own<T> conversion with kj::Ptr<T> interop") {
+  // converting static disposer to dynamic requires polymorphic target
+  struct Obj {
+    virtual void foo() { };
+  };
+
+  static Obj* disposedPtr = nullptr;
+  struct MyDisposer {
+    static void dispose(Obj* obj) {
+      KJ_EXPECT(disposedPtr == nullptr);
+      disposedPtr = obj;
+    };
+  };
+
+  Obj obj;
+
+  {
+    kj::Own<Obj, MyDisposer> own(&obj);
+    KJ_EXPECT(disposedPtr == nullptr);
+
+    kj::Own<Obj> own2 = kj::mv(own);
+
+    kj::Ptr<Obj> ptr1 = own2;
+    KJ_EXPECT(ptr1 == &obj);
+  }
+
+  KJ_EXPECT(disposedPtr == &obj);
+  disposedPtr = nullptr;
+}
+
+} // namespace 
+
 }  // namespace kj
