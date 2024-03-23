@@ -40,6 +40,7 @@
 #include "miniposix.h"
 #include "function.h"
 #include "main.h"
+#include "mutex.h"
 #include <stdlib.h>
 #include <exception>
 #include <new>
@@ -782,17 +783,44 @@ String KJ_STRINGIFY(const Exception& e) {
              stringifyStackTrace(e.getStackTrace()));
 }
 
+namespace _ {
+class DetailMapImpl final: public Exception::DetailMap {
+public:
+  Maybe<const Value&> find(uint64_t id) const override {
+    return inner.lockShared()->find(id);
+  }
+
+  void set(uint64_t id, Value value) const override {
+    inner.lockExclusive()->upsert(id, kj::mv(value));
+  }
+
+  size_t size() const override { return inner.lockShared()->size(); }
+
+  void forEach(Function<void(uint64_t, const Value&, size_t)> callback) const override {
+    auto lock = inner.lockShared();
+    for (auto& entry: *lock) {
+      callback(entry.key, entry.value, lock->size());
+    }
+  }
+
+private:
+  MutexGuarded<HashMap<uint64_t, Value>> inner;
+};
+}  // namespace _
+
 Exception::Exception(Type type, const char* file, int line, String description) noexcept
     : file(trimSourceFilename(file).cStr()), line(line), type(type), description(mv(description)),
-      traceCount(0) {}
+      traceCount(0), detailMap(kj::arc<_::DetailMapImpl>()) {}
 
 Exception::Exception(Type type, String file, int line, String description) noexcept
     : ownFile(kj::mv(file)), file(trimSourceFilename(ownFile).cStr()), line(line), type(type),
-      description(mv(description)), traceCount(0) {}
+      description(mv(description)), traceCount(0),
+      detailMap(kj::arc<_::DetailMapImpl>()) {}
 
 Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), type(other.type),
-      description(heapString(other.description)), traceCount(other.traceCount) {
+      description(heapString(other.description)), traceCount(other.traceCount),
+      detailMap(const_cast<Arc<DetailMap>&>(other.detailMap).addRef()) {
   if (file == other.ownFile.cStr()) {
     ownFile = heapString(other.ownFile);
     file = ownFile.cStr();

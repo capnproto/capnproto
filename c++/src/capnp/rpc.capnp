@@ -1166,6 +1166,11 @@ struct ThirdPartyCapDescriptor {
   # it receives either a `Call` or a `Release` message directed at the vine.
 }
 
+struct ExceptionDetail {
+  id @0 :UInt64;
+  data @1 :Data;
+}
+
 struct Exception {
   # **(level 0)**
   #
@@ -1255,6 +1260,9 @@ struct Exception {
   # Stack trace text from the remote server. The format is not specified. By default,
   # implementations do not provide stack traces; the application must explicitly enable them
   # when desired.
+
+  details @5 :List(ExceptionDetail);
+  # Additional application-specific structured data that is attached to the exception.
 }
 
 # ========================================================================================

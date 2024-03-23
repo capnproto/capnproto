@@ -21,9 +21,14 @@
 
 #pragma once
 
+#include <inttypes.h>
+#include <type_traits>
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+#include "map.h"
+#include "one-of.h"
+#include "refcount.h"
 #include "windows-sanity.h"  // work-around macro conflict with `ERROR`
 
 KJ_BEGIN_HEADER
@@ -32,6 +37,32 @@ namespace kj {
 
 class ExceptionImpl;
 template <typename T> class Function;
+
+namespace _ {
+template <typename T, typename F = decltype(&T::tryDeserializeForKjException)>
+constexpr bool hasDeserializeForKjException(T*) {
+  static_assert(!std::is_member_function_pointer_v<F>);
+  return true;
+}
+constexpr bool hasDeserializeForKjException(...) { return false; }
+
+template <typename T, typename F = decltype(&T::trySerializeForKjException)>
+constexpr bool hasSerializeForKjException(T*) {
+  static_assert(std::is_member_function_pointer_v<F>);
+  return true;
+}
+constexpr bool hasSerializeForKjException(...) { return false; }
+
+template <typename T, typename F = decltype(&T::EXCEPTION_DETAIL_TYPE_ID)>
+constexpr bool hasExceptionDetailTypeId(T*) {
+  static_assert(std::is_same_v<decltype(T::EXCEPTION_DETAIL_TYPE_ID), const uint64_t>);
+  return true;
+}
+
+constexpr bool hasExceptionDetailTypeId(...) { return false; }
+
+class DetailMapImpl;
+}  //namespace _
 
 class Exception {
   // Exception thrown in case of fatal errors.
@@ -133,6 +164,98 @@ public:
   KJ_NOINLINE void addTraceHere();
   // Adds the location that called this method to the stack trace.
 
+  template <typename T>
+  void setDetail(T&& detail) {
+    static_assert(_::hasExceptionDetailTypeId((T*)nullptr));
+    Own<Detail> entry = kj::heap<DetailImpl<T>>(kj::mv(detail));
+    detailMap->set(T::EXCEPTION_DETAIL_TYPE_ID, kj::mv(entry));
+  }
+
+  template <typename T>
+  Maybe<const T&> getDetail() const {
+    static_assert(_::hasExceptionDetailTypeId((T*)nullptr));
+    KJ_IF_SOME(found, detailMap->find(T::EXCEPTION_DETAIL_TYPE_ID)) {
+      KJ_SWITCH_ONEOF(found) {
+        KJ_CASE_ONEOF(raw, kj::Array<kj::byte>) {
+          if constexpr (_::hasDeserializeForKjException((T*)nullptr)) {
+            // In this case, we want to try deserializing the bytes into a T.
+            // If successful, we'll replace the value in the detailMap to avoid
+            // having to deserialize again. If unsuccessful, we'll return none
+            // and leave the stored bytes as is.
+            KJ_IF_SOME(instance, T::tryDeserializeForKjException(raw.asPtr())) {
+              Own<Detail> holder = kj::heap<DetailImpl<T>>(kj::mv(instance));
+              auto& value = static_cast<const DetailImpl<T>&>(*holder).getValue();
+              detailMap->set(T::EXCEPTION_DETAIL_TYPE_ID, kj::mv(holder));
+              return value;
+            }
+          } else {
+            return kj::none;
+          }
+        }
+        KJ_CASE_ONEOF(detail, Own<Detail>) {
+          KJ_IF_SOME(holder, kj::dynamicDowncastIfAvailable<const DetailImpl<T>>(*detail)) {
+            return holder.getValue();
+          }
+        }
+      }
+    }
+    return kj::none;
+  }
+
+  template <typename T>
+  bool hasDetail() const {
+    static_assert(_::hasExceptionDetailTypeId((T*)nullptr));
+    return detailMap->find(T::EXCEPTION_DETAIL_TYPE_ID) != kj::none;
+  }
+
+  // The set/getDetail methods are used to attach arbitrary additional structured data to
+  // the Exception. The detail data must be a struct or class that defines a static uint64_t
+  // identifier field named `EXCEPTION_DETAIL_TYPE_ID`.
+  // To include the detail data in a capnp RPC serialization, the detail type must implement
+  // a regular member method `kj::Maybe<kj::Array<kj::byte>> trySerializeForKjException()`.
+  // To deserialize, the detail type must implement a static
+  // `kj::Maybe<T> tryDeserializeForException(kj::ArrayPtr<const kj::byte>)`.
+  // The trySerialize... and tryDeserialize... methods are optional, however.
+  // The detail struct must be movable.
+  // The exception will take ownership of the detail struct.
+  // Calling setDetail<T>(...) multiple times will overwrite the previous value.
+  // The hasDetail<T>() method can be used to check if a detail of a given type is present without
+  // deserializing it.
+  // The first time getDetail<T>() is called, if the value is deserializable, it will be and
+  // the internal storage will be replaced with the deserialized value. Subsequent calls will
+  // return the deserialized value directly.
+  // The `trySerializeForKjException()` method may be called multiple times if the exception is
+  // serialized multiple times.
+  //
+  // Note that it is important that the EXCEPTION_DETAIL_TYPE_ID be relatively unique within
+  // a scope. It is ok for different structs to use the same id value (particular if one struct
+  // is used for serialization and another for deserialization), but given that the ID is used
+  // as the key, duplicating the ID can result in type confusion.
+
+  template <typename Func>
+  void serializeDetail(Func callback) const {
+    detailMap->forEach([&](uint64_t id, const DetailMap::Value& value, size_t size) {
+      KJ_SWITCH_ONEOF(value) {
+        KJ_CASE_ONEOF(raw, kj::Array<kj::byte>) {
+          callback(id, raw.asPtr(), size);
+        }
+        KJ_CASE_ONEOF(detail, Own<Detail>) {
+          // If the detail entry does not return a serialized value, then we skip it.
+          KJ_IF_SOME(raw, detail->trySerializeForException()) {
+            callback(id, raw.asPtr(), size);
+          }
+        }
+      }
+    });
+  }
+
+  void setDetail(uint64_t id, Array<byte>&& value) {
+    detailMap->set(id, kj::mv(value));
+  }
+
+  // The serializeDetail and non-templated setDetail are used by rpc.c++ when serializing and
+  // deserializing the Exception.
+
 private:
   String ownFile;
   const char* file;
@@ -143,6 +266,45 @@ private:
   String remoteTrace;
   void* trace[32];
   uint traceCount;
+
+  class Detail {
+    // Type-erased holder for exception detail data.
+  public:
+    virtual ~Detail() noexcept(false) {}
+    virtual kj::Maybe<kj::Array<kj::byte>> trySerializeForException() const = 0;
+  };
+
+  template <typename T>
+  class DetailImpl: public Detail {
+  public:
+    DetailImpl(T&& value): value(kj::mv(value)) {}
+    kj::Maybe<kj::Array<kj::byte>> trySerializeForException() const override {
+      if constexpr (_::hasSerializeForKjException((T*)nullptr)) {
+        return value.trySerializeForKjException();
+      } else {
+        return kj::none;
+      }
+    }
+    const T& getValue() const { return value; }
+  private:
+    T value;
+  };
+
+  class DetailMap : public AtomicRefcounted {
+    // We don't use a HashMap directly here because we need it to be thread-safe
+    // using a MutexGuarded under the covers. We can't use a MutexGuarded directly
+    // in this header, however, because it would require including mutex.h, which
+    // would introduce a circular dependency. So, we use a virtual interface instead.
+  public:
+    using Value = OneOf<Own<Detail>, Array<byte>>;
+    virtual Maybe<const Value&> find(uint64_t id) const = 0;
+    virtual void set(uint64_t id, Value value) const = 0;
+    virtual size_t size() const = 0;
+    virtual void forEach(
+        Function<void(uint64_t, const Value&, size_t)> callback) const = 0;
+  };
+
+  Arc<DetailMap> detailMap;
 
   bool isFullTrace = false;
   // Is `trace` a full trace to the top of the stack (or as close as we could get before we ran
@@ -158,6 +320,7 @@ private:
   // remain false.
 
   friend class ExceptionImpl;
+  friend class _::DetailMapImpl;
 };
 
 struct CanceledException { };

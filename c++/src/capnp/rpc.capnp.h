@@ -37,6 +37,7 @@ CAPNP_DECLARE_SCHEMA(8523ddc40b86b8b0);
 CAPNP_DECLARE_SCHEMA(d800b1d6cd6f1ca0);
 CAPNP_DECLARE_SCHEMA(f316944415569081);
 CAPNP_DECLARE_SCHEMA(d37007fde1f0027d);
+CAPNP_DECLARE_SCHEMA(e5a8fb5e593c21b3);
 CAPNP_DECLARE_SCHEMA(d625b7063acf691a);
 CAPNP_DECLARE_SCHEMA(b28c96e23f4cbd58);
 enum class Type_b28c96e23f4cbd58: uint16_t {
@@ -396,6 +397,21 @@ struct ThirdPartyCapDescriptor {
   };
 };
 
+struct ExceptionDetail {
+  ExceptionDetail() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(e5a8fb5e593c21b3, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
 struct Exception {
   Exception() = delete;
 
@@ -406,7 +422,7 @@ struct Exception {
 
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d625b7063acf691a, 1, 2)
+    CAPNP_DECLARE_STRUCT_HEADER(d625b7063acf691a, 1, 3)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -2400,6 +2416,92 @@ private:
 };
 #endif  // !CAPNP_LITE
 
+class ExceptionDetail::Reader {
+public:
+  typedef ExceptionDetail Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint64_t getId() const;
+
+  inline bool hasData() const;
+  inline  ::capnp::Data::Reader getData() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class ExceptionDetail::Builder {
+public:
+  typedef ExceptionDetail Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint64_t getId();
+  inline void setId( ::uint64_t value);
+
+  inline bool hasData();
+  inline  ::capnp::Data::Builder getData();
+  inline void setData( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initData(unsigned int size);
+  inline void adoptData(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownData();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class ExceptionDetail::Pipeline {
+public:
+  typedef ExceptionDetail Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
 class Exception::Reader {
 public:
   typedef Exception Reads;
@@ -2428,6 +2530,9 @@ public:
 
   inline bool hasTrace() const;
   inline  ::capnp::Text::Reader getTrace() const;
+
+  inline bool hasDetails() const;
+  inline  ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Reader getDetails() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2479,6 +2584,13 @@ public:
   inline  ::capnp::Text::Builder initTrace(unsigned int size);
   inline void adoptTrace(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownTrace();
+
+  inline bool hasDetails();
+  inline  ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Builder getDetails();
+  inline void setDetails( ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Reader value);
+  inline  ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Builder initDetails(unsigned int size);
+  inline void adoptDetails(::capnp::Orphan< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>> disownDetails();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4925,6 +5037,54 @@ inline void ThirdPartyCapDescriptor::Builder::setVineId( ::uint32_t value) {
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
+inline  ::uint64_t ExceptionDetail::Reader::getId() const {
+  return _reader.getDataField< ::uint64_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t ExceptionDetail::Builder::getId() {
+  return _builder.getDataField< ::uint64_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void ExceptionDetail::Builder::setId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool ExceptionDetail::Reader::hasData() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool ExceptionDetail::Builder::hasData() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Data::Reader ExceptionDetail::Reader::getData() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Data::Builder ExceptionDetail::Builder::getData() {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void ExceptionDetail::Builder::setData( ::capnp::Data::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Data::Builder ExceptionDetail::Builder::initData(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), size);
+}
+inline void ExceptionDetail::Builder::adoptData(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> ExceptionDetail::Builder::disownData() {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
 inline bool Exception::Reader::hasReason() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
@@ -5033,6 +5193,40 @@ inline void Exception::Builder::adoptTrace(
 inline ::capnp::Orphan< ::capnp::Text> Exception::Builder::disownTrace() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+
+inline bool Exception::Reader::hasDetails() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
+}
+inline bool Exception::Builder::hasDetails() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Reader Exception::Reader::getDetails() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>::get(_reader.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Builder Exception::Builder::getDetails() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>::get(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
+}
+inline void Exception::Builder::setDetails( ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>::set(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>::Builder Exception::Builder::initDetails(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>::init(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS), size);
+}
+inline void Exception::Builder::adoptDetails(
+    ::capnp::Orphan< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>::adopt(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>> Exception::Builder::disownDetails() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::rpc::ExceptionDetail,  ::capnp::Kind::STRUCT>>::disown(_builder.getPointerField(
+      ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
 }  // namespace

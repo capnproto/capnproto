@@ -1371,6 +1371,19 @@ KJ_TEST("loopback bootstrap()") {
   KJ_EXPECT(callCount == 1);
 }
 
+struct TestExceptionDetail {
+  static constexpr uint64_t EXCEPTION_DETAIL_TYPE_ID = 1;
+
+  static kj::Maybe<TestExceptionDetail> tryDeserializeForKjException(
+      kj::ArrayPtr<const kj::byte> data) {
+    KJ_ASSERT(data.size() == 3);
+    KJ_ASSERT(data[0] == 0x01);
+    KJ_ASSERT(data[1] == 0x02);
+    KJ_ASSERT(data[2] == 0x03);
+    return TestExceptionDetail {};
+  }
+};
+
 KJ_TEST("method throws exception") {
   TestContext context;
 
@@ -1386,6 +1399,20 @@ KJ_TEST("method throws exception") {
   auto exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == nullptr);
+
+  // Test that we have the expected additional detail
+  KJ_ASSERT(exception.hasDetail<TestExceptionDetail>());
+
+  // The exception can be copied, and the copy will have the same detail.
+  auto ex2 = kj::cp(exception);
+  KJ_ASSERT(ex2.hasDetail<TestExceptionDetail>());
+
+  auto& t1 = KJ_ASSERT_NONNULL(exception.getDetail<TestExceptionDetail>());
+  auto& t2 = KJ_ASSERT_NONNULL(exception.getDetail<TestExceptionDetail>());
+  KJ_ASSERT(&t1 == &t2);
+
+  auto& t3 = KJ_ASSERT_NONNULL(ex2.getDetail<TestExceptionDetail>());
+  KJ_ASSERT(&t1 == &t3);
 }
 
 KJ_TEST("method throws exception won't redundantly add remote exception prefix") {

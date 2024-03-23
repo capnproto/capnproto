@@ -278,6 +278,61 @@ KJ_TEST("computeRelativeTrace") {
       {8, 7, 6, 5, 6, 7, 8, 7, 8});
 }
 
+// ============================================================================
+// Testing additional detail attached to an exception.
+
+struct Detail {
+  static constexpr uint64_t EXCEPTION_DETAIL_TYPE_ID = 0;
+  // This detail type does not serialize or deserialize anything, so it
+  // does not need to trySerialize... or tryDeserialize... methods.
+  int foo;
+};
+
+struct SerializableDetail {
+  static constexpr uint64_t EXCEPTION_DETAIL_TYPE_ID = 0;
+  kj::Maybe<kj::Array<kj::byte>> trySerializeForKjException() const {
+    return kj::none;
+  }
+  static kj::Maybe<SerializableDetail> tryDeserializeForKjException(kj::ArrayPtr<const kj::byte>) {
+    return kj::none;
+  }
+};
+
+static_assert(!_::hasDeserializeForKjException((Detail*)nullptr));
+static_assert(!_::hasSerializeForKjException((Detail*)nullptr));
+
+static_assert(_::hasDeserializeForKjException((SerializableDetail*)nullptr));
+static_assert(_::hasSerializeForKjException((SerializableDetail*)nullptr));
+
+static_assert(_::hasExceptionDetailTypeId((Detail*)nullptr));
+static_assert(_::hasExceptionDetailTypeId((SerializableDetail*)nullptr));
+
+KJ_TEST("get/set detail") {
+  auto ex = KJ_EXCEPTION(FAILED, "foo");
+
+  // We haven't set it yet, so nothing should be returned.
+  KJ_ASSERT(ex.getDetail<Detail>() == kj::none);
+
+  // In this case, the detail is set on the exception but never serialized.
+  // We can still retrieve it and be sure that we get the same thing every time.
+
+  ex.setDetail(Detail { 1 });
+
+  auto& d1 = KJ_ASSERT_NONNULL(ex.getDetail<Detail>());
+  auto& d2 = KJ_ASSERT_NONNULL(ex.getDetail<Detail>());
+  KJ_ASSERT(d1.foo == 1);
+  KJ_ASSERT(&d1 == &d2);
+
+  // The exception can be copied and the detail will be copied as well.
+  auto ex2 = kj::cp(ex);
+  auto& d3 = KJ_ASSERT_NONNULL(ex2.getDetail<Detail>());
+  KJ_ASSERT(d3.foo == 1);
+  KJ_ASSERT(&d3 == &d1);
+
+  // The ID is the same but the deserialized type is different, should be kj::none!
+  KJ_ASSERT(ex.getDetail<SerializableDetail>() == kj::none);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
