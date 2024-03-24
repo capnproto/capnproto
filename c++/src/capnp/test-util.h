@@ -358,6 +358,83 @@ public:
   }
 };
 
+class TestCapabilityProxyImpl final: public test::TestCapabilityProxy::Server {
+public:
+  kj::Maybe<Capability::Client> cap;
+
+  kj::Promise<void> getCap(GetCapContext context) override {
+    KJ_IF_MAYBE(c, cap) {
+      context.getResults().setCap(*c);
+    } else {
+      KJ_FAIL_ASSERT("Capability has to be set first!");
+    }
+
+    return kj::READY_NOW;
+  }
+};
+
+class TestRealtimeStreamingImpl final: public test::TestRealtimeStreaming::Server {
+public:
+  uint streamSum = 0;
+  uint realtimeStreamSum = 0;
+  kj::Vector<kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>> fulfillers;
+  bool autoFulfill = false;
+
+  kj::Promise<void> doStream(DoStreamContext context) override {
+    streamSum += context.getParams().getI();
+
+    if (autoFulfill) {
+      return kj::READY_NOW;
+    } else {
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      fulfillers.add(kj::mv(paf.fulfiller));
+      return kj::mv(paf.promise);
+    }
+  }
+
+  kj::Promise<void> doRealtimeStream(DoRealtimeStreamContext context) override {
+    realtimeStreamSum += context.getParams().getJ();
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> doFailRealtimeStream(DoFailRealtimeStreamContext context) override {
+    // This should never be reached because a realtime stream should throw
+    // instead of sending a capability.
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> finishStream(FinishStreamContext context) override {
+    auto results = context.getResults();
+    results.setTotalI(streamSum);
+    results.setTotalJ(realtimeStreamSum);
+    return kj::READY_NOW;
+  }
+
+  void fulfillLast() {
+    KJ_IF_MAYBE(fulfiller, fulfillers.back()) {
+      (*fulfiller)->fulfill();
+      fulfillers.removeLast();
+    }
+  }
+
+  void fulfillAll() {
+    for (uint i = 0; i < fulfillers.size(); i++) {
+      KJ_IF_MAYBE(fulfiller, fulfillers[i]) {
+        (*fulfiller)->fulfill();
+      }
+    }
+    fulfillers.clear();
+  }
+
+  void setAutoFulfill(bool autoFulfill) {
+    this->autoFulfill = autoFulfill;
+
+    if (this->autoFulfill) {
+      fulfillAll();
+    }
+  }
+};
+
 #endif  // !CAPNP_LITE
 
 }  // namespace _ (private)

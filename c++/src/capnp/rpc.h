@@ -269,6 +269,10 @@ public:
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
   // returned by `getBody()` remains valid at least until the `OutgoingRpcMessage` is destroyed.
 
+  virtual void sendRealtime() = 0;
+  // Send as a 'realtime' message, meaning that the network should silently discard the message if
+  // congestion will prevent it from being delivered immediately.
+
   virtual size_t sizeInWords() = 0;
   // Get the total size of the message, for flow control purposes. Although the caller could
   // also call getBody().targetSize(), doing that would walk the message tree, whereas typical
@@ -330,6 +334,18 @@ public:
   //
   // Dropping the returned promise does not cancel the send. Once send() is called, there's no way
   // to stop it.
+
+  virtual kj::Promise<void> sendRealtime(kj::Own<OutgoingRpcMessage> message) = 0;
+  // Like calling message->sendRealtime(), but the promise resolves when it's a good time to send
+  // the next message.
+  //
+  // In case of a detected congestion that will prevent the message from being delivered
+  // immediately, the message is silently discarded. Note that the congestion detection is based
+  // on the acknowledgement of non-realtime messages (because realtime messages are not
+  // acknowledged) and therefore it may not always be detected depending on the situation.
+  //
+  // Dropping the returned promise does not cancel the send. Once sendRealtime() is called,
+  // there's no way to stop it.
 
   virtual kj::Promise<void> waitAllAcked() = 0;
   // Wait for all `ack`s previously passed to send() to finish. It is an error to call send() again

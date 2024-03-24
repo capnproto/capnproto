@@ -19,6 +19,7 @@ namespace capnp {
 namespace schemas {
 
 CAPNP_DECLARE_SCHEMA(995f9a3377c0b16e);
+CAPNP_DECLARE_SCHEMA(bbedf146e910b948);
 
 }  // namespace schemas
 }  // namespace capnp

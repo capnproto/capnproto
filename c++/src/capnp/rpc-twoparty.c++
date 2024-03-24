@@ -209,6 +209,12 @@ public:
       .eagerlyEvaluate(nullptr);
   }
 
+  void sendRealtime() override {
+    // This implementation does exactly the same as `send`, but we could imagine
+    // a VatNetwork implementation treating realtime messages differently.
+    send();
+  }
+
   size_t sizeInWords() override {
     return message.sizeInWords();
   }

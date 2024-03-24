@@ -910,6 +910,206 @@ KJ_TEST("Streaming over RPC then unwrap with CapabilitySet") {
   promise.wait(waitScope);
 }
 
+KJ_TEST("Realtime streaming goes through") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestRealtimeStreaming>();
+
+  // Send a few realtime requests
+  kj::Promise<void> promise = kj::READY_NOW;
+  for (uint i = 0; i < 5; i++) {
+    auto req = cap.doRealtimeStreamRequest();
+    req.setJ(i + 1);
+    promise = req.send();
+    KJ_ASSERT(promise.poll(waitScope));
+  }
+
+  // Send finishStream request
+  auto finishReq = cap.finishStreamRequest();
+  auto result = finishReq.send().wait(waitScope);
+  KJ_ASSERT(result.getTotalJ() == 15);
+}
+
+KJ_TEST("Realtime streaming throws instead of sending capabilities") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestRealtimeStreaming>();
+
+  // Try to stream a capability and check that it throws
+  auto req = cap.doFailRealtimeStreamRequest();
+  req.setCap(cap);
+
+  kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
+    auto ignored = req.send();
+  });
+
+  KJ_IF_MAYBE(e, maybeException) {
+    KJ_EXPECT(e->getType() == kj::Exception::Type::FAILED);
+  } else {
+    KJ_FAIL_EXPECT("should have thrown");
+  }
+}
+
+KJ_TEST("Realtime streaming is stopped by flow control") {
+  // This tests that realtime streaming is stopped by the flow controller when
+  // congestion is detected. Realtime messages are dropped in that case.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto pipe = kj::newTwoWayPipe();
+
+  size_t window = 1024;
+  size_t clientWritten = 0;
+  size_t serverWritten = 0;
+
+  pipe.ends[0] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[0]), window, clientWritten);
+  pipe.ends[1] = kj::heap<MockSndbufStream>(kj::mv(pipe.ends[1]), window, serverWritten);
+
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  auto& server = *ownServer;
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+
+  TwoPartyClient tpClient(*pipe.ends[0]);
+  TwoPartyClient tpServer(*pipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  auto cap = tpClient.bootstrap().castAs<test::TestRealtimeStreaming>();
+
+  // Send normal streaming requests until flow control kicks in
+  kj::Promise<void> promise = kj::READY_NOW;
+  uint count = 0;
+  while (promise.poll(waitScope)) {
+    promise.wait(waitScope);
+
+    auto req = cap.doStreamRequest();
+    req.setI(++count);
+    promise = req.send();
+  }
+
+  // Send a realtime request and check that its promise hangs
+  auto req = cap.doRealtimeStreamRequest();
+  req.setJ(100);
+  kj::Promise<void> realtimePromise = req.send();
+  KJ_ASSERT(!realtimePromise.poll(waitScope));
+
+  // Cause the last stream to finish on the server side, unlocking the flow
+  server.fulfillLast();
+  realtimePromise.wait(waitScope);
+
+  // Check that a realtime request now goes through
+  req = cap.doRealtimeStreamRequest();
+  req.setJ(3);
+  realtimePromise = req.send();
+  KJ_ASSERT(realtimePromise.poll(waitScope));
+
+  // Fulfill the remaining requests
+  server.setAutoFulfill(true);
+
+  // Send finishStream request
+  auto finishReq = cap.finishStreamRequest();
+  auto result = finishReq.send().wait(waitScope);
+
+  // Make sure that only the second realtime stream was sent (the first one
+  // should be dropped because of the congestion)
+  KJ_ASSERT(result.getTotalJ() == 3);
+}
+
+rpc::twoparty::VatId::Builder generateServerVatId() {
+  capnp::word scratch[4];
+  memset(&scratch, 0, sizeof(scratch));
+  capnp::MallocMessageBuilder message(scratch);
+  auto vatId = message.getRoot<rpc::twoparty::VatId>();
+  vatId.setSide(rpc::twoparty::Side::SERVER);
+
+  return vatId;
+}
+
+KJ_TEST("Realtime streaming does not leak question IDs when proxied") {
+  // Realtime calls are marked with an "isRealtime" hint. But if the capability
+  // is proxied, this information is lost and startCall() may end up just
+  // calling the normal "send()", which will leak question IDs. The
+  // RPC implementation needs to deal with that properly. This test checks that
+  // the question IDs are not being leaked in this situation.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  // Set up two two-party RPC connections in series. The middle node just proxies requests through.
+  auto frontPipe = kj::newTwoWayPipe();
+  auto backPipe = kj::newTwoWayPipe();
+
+  // Prepare the server S
+  auto ownServer = kj::heap<TestRealtimeStreamingImpl>();
+  test::TestRealtimeStreaming::Client serverCap(kj::mv(ownServer));
+  TwoPartyClient tpServer(*backPipe.ends[1], serverCap, rpc::twoparty::Side::SERVER);
+
+  // Prepare the internal client iC that connects to S
+  TwoPartyVatNetwork internalClientNetwork(*backPipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto rpcInternalClient = makeRpcClient(internalClientNetwork);
+  auto internalClient = rpcInternalClient.bootstrap(generateServerVatId());
+  auto internalCap = internalClient.castAs<test::TestRealtimeStreaming>();
+
+  // Prepare the proxy P
+  auto ownProxy = kj::heap<TestCapabilityProxyImpl>();
+  auto& proxy = *ownProxy;
+  test::TestCapabilityProxy::Client proxyCap(kj::mv(ownProxy));
+  TwoPartyClient tpProxy(*frontPipe.ends[1], proxyCap, rpc::twoparty::Side::SERVER);
+
+  // Prepare the client C that connects to P
+  TwoPartyVatNetwork clientNetwork(*frontPipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto rpcClient = makeRpcClient(clientNetwork);
+  auto client = rpcClient.bootstrap(generateServerVatId());
+  auto cap = client.castAs<test::TestCapabilityProxy>();
+
+  // Set iC into P, such that C can fetch it and start talking to S through P
+  proxy.cap = internalCap;
+
+  // Now we have a setup with [C <---> P <---> S] that we can use
+
+  // Have C fetch the capability of S through P
+  auto proxyReq = cap.getCapRequest();
+  auto proxiedCap = proxyReq
+      .send()
+      .wait(waitScope)
+      .getCap()
+      .castAs<test::TestRealtimeStreaming>();
+
+  // Send a few realtime requests
+  for (uint i = 0; i < 10; i++) {
+    auto req = proxiedCap.doRealtimeStreamRequest();
+    req.setJ(42);
+    req.send().wait(waitScope);
+  }
+
+  // Finish streaming
+  auto finishReq = proxiedCap
+      .finishStreamRequest()
+      .send()
+      .wait(waitScope);
+
+  // Check that the question IDs were not leaked
+  KJ_ASSERT(1 == rpcClient.countQuestionsForTest());
+  KJ_ASSERT(1 == rpcInternalClient.countQuestionsForTest());
+}
+
 KJ_TEST("promise cap resolves between starting request and sending it") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);

@@ -439,6 +439,26 @@ struct Call {
   # allowed to loop around. If a `Return` is ever seen when `onlyPromisePipeline` was set, then
   # the implementation stops using this hint.
 
+  isRealtime @11 :Bool = false;
+  # Indicates that it is better not to deliver this message at all, than to deliver it late.
+  # The semantics are similar to UDP. Implementations are encouraged to discard realtime messages
+  # when there is not enough bandwidth to send them immediately (e.g. when they would otherwise
+  # have to buffer the message to send later). Realtime messages can also be delivered out-of-order.
+  #
+  # Moreover, since the caller is expected to have some other means of detecting whether messages
+  # were received, the callee should not bother sending a Return message. For backwards compatibility
+  # with implementations that don't understand this flag, if the callee does send a Return, the caller
+  # must send a Finish; otherwise, the caller must NOT send a Finish. Callers generally won't keep
+  # any record of what messages were sent in the past, so to handle this backwards-compatibility
+  # scenario, callers should choose question IDs cleverly such that they can recognize based on the ID
+  # alone that a Return was for a realtime stream.
+  #
+  # A realtime message cannot contain capabilities, because there would be no way to know whether the
+  # capability was received, and thus no way to know whether it is still in use.
+  #
+  # An elaborate transport implementation could implement realtime calls using UDP. However, even TCP
+  # transports can take advantage of this flag to avoid excess buffering and unnecessary messages.
+
   params @4 :Payload;
   # The call parameters.  `params.content` is a struct whose fields correspond to the parameters of
   # the method.
