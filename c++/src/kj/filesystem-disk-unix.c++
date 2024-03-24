@@ -1731,7 +1731,14 @@ private:
             pwdStat.st_dev == dotStat.st_dev) {
           return kj::mv(result);
         } else {
-          KJ_LOG(WARNING, "PWD environment variable doesn't match current directory", pwd);
+          // It appears PWD doesn't actually point at the current directory. In practice, only
+          // shells tend to update PWD. Other programs, like build tools, may do `chdir()` without
+          // actually updating PWD to match. Arguably they are buggy, but realistically we have to
+          // live with them. So, we will treat an incorrect PWD the same as an absent PWD, and fall
+          // back to using the current directory's canonical path.
+          //
+          // We used to log a WARNING here but it was deemed too noisy, so we changed it to INFO.
+          KJ_LOG(INFO, "PWD environment variable doesn't match current directory", pwd);
         }
       }
     }
