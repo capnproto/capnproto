@@ -1731,7 +1731,11 @@ private:
             pwdStat.st_dev == dotStat.st_dev) {
           return kj::mv(result);
         } else {
-          KJ_LOG(WARNING, "PWD environment variable doesn't match current directory", pwd);
+          // This was set to INFO to avoid logging it unless specifically asking
+          // for INFO level debugging. In some docker containers and CICD pipelines
+          // this log message was printed when set to WARNING which was not really
+          // abnormal except that it caused issues for code that was monitoring stderr.
+          KJ_LOG(INFO, "PWD environment variable doesn't match current directory", pwd);
         }
       }
     }
