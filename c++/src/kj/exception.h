@@ -24,6 +24,7 @@
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+#include "vector.h"
 #include "windows-sanity.h"  // work-around macro conflict with `ERROR`
 
 KJ_BEGIN_HEADER
@@ -133,6 +134,25 @@ public:
   KJ_NOINLINE void addTraceHere();
   // Adds the location that called this method to the stack trace.
 
+  using DetailTypeId = unsigned long long;
+
+  kj::Maybe<kj::ArrayPtr<const byte>> getDetail(DetailTypeId typeId) const;
+  void setDetail(DetailTypeId typeId, kj::Array<byte> value);
+  kj::Maybe<kj::Array<byte>> releaseDetail(DetailTypeId typeId);
+  // Details: Arbitrary extra information can be added to an exception. Applications can define
+  // any kind of detail they want, but it must be serializable to bytes so that it can be logged
+  // and transmitted over RPC.
+  //
+  // Every type of detail must have a unique ID, which is a 64-bit integer. It's suggested that
+  // you use `capnp id` to generate these.
+  //
+  // It is expected that exceptions will rarely have more than one or two details, so the
+  // implementation uses a flat array with O(n) lookup.
+  //
+  // The main use case for details is to be able to tunnel exceptions of a different type through
+  // KJ / Cap'n Proto. In particular, Cloudflare Workers commonly has to convert a JavaScript
+  // exception to KJ and back. The exception is serialized using V8 serialization.
+
 private:
   String ownFile;
   const char* file;
@@ -156,6 +176,13 @@ private:
   // and truncateCommonTrace() after it is caught. Note that when exceptions propagate through
   // async promises, the trace is extended one frame at a time instead, so isFullTrace should
   // remain false.
+
+  struct Detail {
+    DetailTypeId id;
+    kj::Array<byte> value;
+  };
+
+  kj::Vector<Detail> details;
 
   friend class ExceptionImpl;
 };

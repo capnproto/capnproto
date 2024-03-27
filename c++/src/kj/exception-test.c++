@@ -278,6 +278,26 @@ KJ_TEST("computeRelativeTrace") {
       {8, 7, 6, 5, 6, 7, 8, 7, 8});
 }
 
+KJ_TEST("exception details") {
+  kj::Exception e = KJ_EXCEPTION(FAILED, "foo");
+
+  e.setDetail(123, kj::heapArray("foo"_kj.asBytes()));
+  e.setDetail(456, kj::heapArray("bar"_kj.asBytes()));
+
+  KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e.getDetail(123)).asChars()) == "foo");
+  KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e.getDetail(456)).asChars()) == "bar");
+  KJ_EXPECT(e.getDetail(789) == kj::none);
+
+  kj::Exception e2 = kj::cp(e);
+  KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e2.getDetail(123)).asChars()) == "foo");
+  KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e2.getDetail(456)).asChars()) == "bar");
+  KJ_EXPECT(e2.getDetail(789) == kj::none);
+
+  KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e2.releaseDetail(123)).asChars()) == "foo");
+  KJ_EXPECT(e2.getDetail(123) == kj::none);
+  KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e2.getDetail(456)).asChars()) == "bar");
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
