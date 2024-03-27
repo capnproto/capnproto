@@ -807,6 +807,13 @@ Exception::Exception(const Exception& other) noexcept
   KJ_IF_SOME(c, other.context) {
     context = heap(*c);
   }
+
+  for (auto& detail: other.details) {
+    details.add(Detail {
+      .id = detail.id,
+      .value = kj::heapArray(detail.value.asPtr()),
+    });
+  }
 }
 
 Exception::~Exception() noexcept {}
@@ -914,6 +921,42 @@ void Exception::addTraceHere() {
 #else
   #error "please implement for your compiler"
 #endif
+}
+
+kj::Maybe<kj::ArrayPtr<const byte>> Exception::getDetail(DetailTypeId typeId) const {
+  for (auto& detail: details) {
+    if (detail.id == typeId) {
+      return detail.value.asPtr();
+    }
+  }
+  return kj::none;
+}
+
+kj::Maybe<kj::Array<byte>> Exception::releaseDetail(DetailTypeId typeId) {
+  for (auto& detail: details) {
+    if (detail.id == typeId) {
+      kj::Array<byte> result = kj::mv(detail.value);
+      if (&detail != &details.back()) {
+        detail = kj::mv(details.back());
+      }
+      details.removeLast();
+      return kj::mv(result);
+    }
+  }
+  return kj::none;
+}
+
+void Exception::setDetail(DetailTypeId typeId, kj::Array<byte> value) {
+  for (auto& detail: details) {
+    if (detail.id == typeId) {
+      detail.value = kj::mv(value);
+      return;
+    }
+  }
+  details.add(Detail {
+    .id = typeId,
+    .value = kj::mv(value),
+  });
 }
 
 namespace {
