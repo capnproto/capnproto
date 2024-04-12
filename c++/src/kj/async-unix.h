@@ -429,7 +429,7 @@ private:
   void fire(short events);
 #endif
 
-#if !KJ_USE_EPOLL
+#if !KJ_USE_EPOLL && !KJ_USE_KQUEUE
   FdObserver* next;
   FdObserver** prev;
   // Linked list of observers which currently have a non-null readFulfiller or writeFulfiller.
