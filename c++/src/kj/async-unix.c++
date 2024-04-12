@@ -1309,33 +1309,33 @@ void UnixEventPort::FdObserver::fire(short events) {
 
     KJ_IF_SOME(f, readFulfiller) {
       f->fulfill();
-      readFulfiller = nullptr;
+      readFulfiller = kj::none;
     }
   }
 
   if (events & (POLLOUT | POLLHUP | POLLERR | POLLNVAL)) {
     KJ_IF_SOME(f, writeFulfiller) {
       f->fulfill();
-      writeFulfiller = nullptr;
+      writeFulfiller = kj::none;
     }
   }
 
   if (events & (POLLHUP | POLLERR | POLLNVAL)) {
     KJ_IF_SOME(f, hupFulfiller) {
       f->fulfill();
-      hupFulfiller = nullptr;
+      hupFulfiller = kj::none;
     }
   }
 
   if (events & POLLPRI) {
     KJ_IF_SOME(f, urgentFulfiller) {
       f->fulfill();
-      urgentFulfiller = nullptr;
+      urgentFulfiller = kj::none;
     }
   }
 
-  if (readFulfiller == nullptr && writeFulfiller == nullptr && urgentFulfiller == nullptr &&
-      hupFulfiller == nullptr) {
+  if (readFulfiller == kj::none && writeFulfiller == kj::none && urgentFulfiller == kj::none &&
+      hupFulfiller == kj::none) {
     // Remove from list.
     if (next == nullptr) {
       eventPort.observersTail = prev;
@@ -1349,9 +1349,9 @@ void UnixEventPort::FdObserver::fire(short events) {
 }
 
 short UnixEventPort::FdObserver::getEventMask() {
-  return (readFulfiller == nullptr ? 0 : (POLLIN | POLLRDHUP)) |
-         (writeFulfiller == nullptr ? 0 : POLLOUT) |
-         (urgentFulfiller == nullptr ? 0 : POLLPRI) |
+  return (readFulfiller == kj::none ? 0 : (POLLIN | POLLRDHUP)) |
+         (writeFulfiller == kj::none ? 0 : POLLOUT) |
+         (urgentFulfiller == kj::none ? 0 : POLLPRI) |
          // The POSIX standard says POLLHUP and POLLERR will be reported even if not requested.
          // But on MacOS, if `events` is 0, then POLLHUP apparently will not be reported:
          //   https://openradar.appspot.com/37537852
@@ -1511,7 +1511,7 @@ bool UnixEventPort::wait() {
       sigaddset(&newMask, ptr->signum);
       ptr = ptr->next;
     }
-    if (childSet != nullptr) {
+    if (childSet != kj::none) {
       sigaddset(&newMask, SIGCHLD);
     }
   }
