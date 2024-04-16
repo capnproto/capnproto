@@ -118,7 +118,7 @@ public:
     }
   }
 
-  kj::Own<MembranePolicy> addRef() override {
+  kj::Rc<MembranePolicy> addRef() override {
     return kj::addRef(*this);
   }
 
