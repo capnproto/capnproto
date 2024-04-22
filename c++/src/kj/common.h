@@ -2158,6 +2158,12 @@ constexpr bool isDisallowedInCoroutine() {
 // }
 //
 
+template<typename T, typename = EnableIf<KJ_HAS_TRIVIAL_CONSTRUCTOR(T)>>
+inline void memzero(T& t) {
+  // Zero-initialize memory region belonging to t. Type-safe wrapper around `memset`.
+  memset(&t, 0, sizeof(T));
+}
+
 }  // namespace kj
 
 constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb(const char* str, size_t n) {
