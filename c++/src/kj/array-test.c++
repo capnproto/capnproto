@@ -523,5 +523,51 @@ KJ_TEST("Array::as<Std>") {
   KJ_EXPECT(stdArr.size() == 3);
 }
 
+KJ_TEST("Array::slice(start, end)") {
+  kj::Array<int> arr = kj::arr(0, 1, 2, 3);
+
+  // full slice
+  KJ_EXPECT(arr.slice(0, 4) == arr);
+  // slice from only start
+  KJ_EXPECT(arr.slice(1, 4) == kj::arr(1, 2, 3));
+  // slice from only end
+  KJ_EXPECT(arr.slice(0, 3) == kj::arr(0, 1, 2));
+  // slice from start and end
+  KJ_EXPECT(arr.slice(1, 3) == kj::arr(1, 2));
+
+  // empty slices
+  for (auto i : kj::zeroTo(arr.size())) {
+    KJ_EXPECT(arr.slice(i, i).size() == 0);
+  }
+
+  // start > end
+  KJ_EXPECT_THROW(FAILED, arr.slice(2, 1));
+  // end > size
+  KJ_EXPECT_THROW(FAILED, arr.slice(2, 5));
+}
+
+KJ_TEST("Array::slice(start, end) const") {
+  const kj::Array<int> arr = kj::arr(0, 1, 2, 3);
+
+  // full slice
+  KJ_EXPECT(arr.slice(0, 4) == arr);
+  // slice from only start
+  KJ_EXPECT(arr.slice(1, 4) == kj::arr(1, 2, 3));
+  // slice from only end
+  KJ_EXPECT(arr.slice(0, 3) == kj::arr(0, 1, 2));
+  // slice from start and end
+  KJ_EXPECT(arr.slice(1, 3) == kj::arr(1, 2));
+
+  // empty slices
+  for (auto i : kj::zeroTo(arr.size())) {
+    KJ_EXPECT(arr.slice(i, i).size() == 0);
+  }
+
+  // start > end
+  KJ_EXPECT_THROW(FAILED, arr.slice(2, 1));
+  // end > size
+  KJ_EXPECT_THROW(FAILED, arr.slice(2, 5));
+}
+
 }  // namespace
 }  // namespace kj
