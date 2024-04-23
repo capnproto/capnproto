@@ -189,6 +189,14 @@ public:
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }
+  inline ArrayPtr<T> slice(size_t start) KJ_LIFETIMEBOUND {
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr<T>(ptr + start, size_ - start);
+  }
+  inline ArrayPtr<const T> slice(size_t start) const KJ_LIFETIMEBOUND {
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr<const T>(ptr + start, size_ - start);
+  }
 
   inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asPtr().asBytes(); }
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() KJ_LIFETIMEBOUND { return asPtr().asBytes(); }

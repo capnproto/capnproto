@@ -569,5 +569,31 @@ KJ_TEST("Array::slice(start, end) const") {
   KJ_EXPECT_THROW(FAILED, arr.slice(2, 5));
 }
 
+KJ_TEST("Array::slice(start)") {
+  kj::Array<int> arr = kj::arr(0, 1, 2, 3);
+
+  KJ_EXPECT(arr.slice(0) == arr);
+  KJ_EXPECT(arr.slice(1) == kj::arr(1, 2, 3));
+  KJ_EXPECT(arr.slice(2) == kj::arr(2, 3));
+  KJ_EXPECT(arr.slice(3) == kj::arr(3));
+  KJ_EXPECT(arr.slice(4).size() == 0);
+
+  // start > size
+  KJ_EXPECT_THROW(FAILED, arr.slice(5));
+}
+
+KJ_TEST("Array::slice(start) const") {
+  const kj::Array<int> arr = kj::arr(0, 1, 2, 3);
+
+  KJ_EXPECT(arr.slice(0) == arr);
+  KJ_EXPECT(arr.slice(1) == kj::arr(1, 2, 3));
+  KJ_EXPECT(arr.slice(2) == kj::arr(2, 3));
+  KJ_EXPECT(arr.slice(3) == kj::arr(3));
+  KJ_EXPECT(arr.slice(4).size() == 0);
+
+  // start > size
+  KJ_EXPECT_THROW(FAILED, arr.slice(5));
+}
+
 }  // namespace
 }  // namespace kj
