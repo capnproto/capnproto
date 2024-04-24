@@ -1519,7 +1519,7 @@ public:
         co_return false;
       }
 
-      leftover = headerBuffer.slice(0, amount);
+      leftover = headerBuffer.first(amount);
     }
   }
 
@@ -2707,7 +2707,7 @@ public:
         if (recvData.size() > 0) {
           memmove(recvBuffer.begin(), recvData.begin(), recvData.size());
         }
-        recvData = recvBuffer.slice(0, recvData.size());
+        recvData = recvBuffer.first(recvData.size());
       }
 
       return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
@@ -2723,7 +2723,7 @@ public:
           }
         }
 
-        recvData = recvBuffer.slice(0, recvData.size() + actual);
+        recvData = recvBuffer.first(recvData.size() + actual);
         return receive(maxSize);
       });
     }
@@ -3520,7 +3520,7 @@ private:
         auto& innerMessage = compressedMessage.emplace(compressor.processMessage(message));
         if (message.size() > 0) {
           KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
-          message = innerMessage.slice(0, innerMessage.size() - 4);
+          message = innerMessage.first(innerMessage.size() - 4);
           // Strip 0x00 0x00 0xFF 0xFF off the tail.
           // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.1
         } else {
@@ -4785,7 +4785,7 @@ kj::ArrayPtr<const char> splitNext(kj::ArrayPtr<const char>& cursor, char delimi
   //
   // (It's up to the caller to stop the loop once `cursor` is empty.)
   KJ_IF_SOME(index, cursor.findFirst(delimiter)) {
-    auto part = cursor.slice(0, index);
+    auto part = cursor.first(index);
     cursor = cursor.slice(index + 1, cursor.size());
     return part;
   }
@@ -4801,7 +4801,7 @@ void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str) {
     str = str.slice(1, str.size());
   }
   while (str.size() > 0 && (str.back() == ' ' || str.back() == '\t')) {
-    str = str.slice(0, str.size() - 1);
+    str = str.first(str.size() - 1);
   }
 }
 
@@ -4832,7 +4832,7 @@ kj::Array<KeyMaybeVal> toKeysAndVals(const kj::ArrayPtr<kj::ArrayPtr<const char>
 
     KJ_IF_SOME(index, param.findFirst('=')) {
       // Found '=' so we have a value.
-      key = param.slice(0, index);
+      key = param.first(index);
       stripLeadingAndTrailingSpace(key);
       value = param.slice(index + 1, param.size());
       KJ_IF_SOME(v, value) {
@@ -7888,7 +7888,7 @@ private:
       if (headers.get(HttpHeaderId::CONTENT_LENGTH) != kj::none ||
           headers.get(HttpHeaderId::TRANSFER_ENCODING) != kj::none) {
         connectionHeadersArray = connectionHeadersArray
-            .slice(0, HttpHeaders::HEAD_RESPONSE_CONNECTION_HEADERS_COUNT);
+            .first(HttpHeaders::HEAD_RESPONSE_CONNECTION_HEADERS_COUNT);
       }
     }
 

@@ -182,19 +182,19 @@ inline kj::StringPtr Text::Builder::asString() const {
 }
 
 inline Text::Builder::operator kj::ArrayPtr<char>() {
-  return content.slice(0, content.size() - 1);
+  return content.first(content.size() - 1);
 }
 
 inline kj::ArrayPtr<char> Text::Builder::asArray() {
-  return content.slice(0, content.size() - 1);
+  return content.first(content.size() - 1);
 }
 
 inline Text::Builder::operator kj::ArrayPtr<const char>() const {
-  return content.slice(0, content.size() - 1);
+  return content.first(content.size() - 1);
 }
 
 inline kj::ArrayPtr<const char> Text::Builder::asArray() const {
-  return content.slice(0, content.size() - 1);
+  return content.first(content.size() - 1);
 }
 
 inline kj::StringPtr Text::Builder::slice(size_t start) const {

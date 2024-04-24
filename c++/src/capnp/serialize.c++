@@ -212,7 +212,7 @@ InputStreamMessageReader::InputStreamMessageReader(
     scratchSpace = ownedSpace;
   }
 
-  segment0 = scratchSpace.slice(0, segment0Size);
+  segment0 = scratchSpace.first(segment0Size);
 
   if (segmentCount > 1) {
     moreSegments = kj::heapArray<kj::ArrayPtr<const word>>(segmentCount - 1);

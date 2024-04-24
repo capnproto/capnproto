@@ -3010,7 +3010,7 @@ private:
 
         for (;;) {
           KJ_IF_SOME(colonPos, ns.findFirst(':')) {
-            namespaceParts.add(ns.slice(0, colonPos));
+            namespaceParts.add(ns.first(colonPos));
             ns = ns.slice(colonPos);
             if (!ns.startsWith("::")) {
               context.exitError(kj::str(displayName, ": invalid namespace spec: ", ns2));

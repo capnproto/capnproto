@@ -160,7 +160,7 @@ KJ_TEST("InputStream::readAllText() / readAllBytes()") {
     for (size_t blockSize: blockSizes) {
       for (uint64_t limit: limits) {
         KJ_CONTEXT(inputSize, blockSize, limit);
-        auto textSlice = bigText.asBytes().slice(0, inputSize);
+        auto textSlice = bigText.asBytes().first(inputSize);
         auto readAllText = [&]() {
           MockInputStream input(textSlice, blockSize);
           return input.readAllText(limit);

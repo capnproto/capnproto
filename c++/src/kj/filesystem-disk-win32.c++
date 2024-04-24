@@ -149,7 +149,7 @@ static Array<wchar_t> join16(ArrayPtr<const wchar_t> path, const wchar_t* file) 
 
 static String dbgStr(ArrayPtr<const wchar_t> wstr) {
   if (wstr.size() > 0 && wstr[wstr.size() - 1] == L'\0') {
-    wstr = wstr.slice(0, wstr.size() - 1);
+    wstr = wstr.first(wstr.size() - 1);
   }
   return decodeWideString(wstr);
 }
@@ -261,7 +261,7 @@ static Path getPathFromHandle(HANDLE handle) {
       KJ_FAIL_WIN32("GetFinalPathNameByHandleW", GetLastError());
     }
     if (len < temp.size()) {
-      return Path::parseWin32Api(temp.slice(0, len));
+      return Path::parseWin32Api(temp.first(len));
     }
     // Try again with new length.
     tryLen = len;
@@ -1543,7 +1543,7 @@ private:
         return Path(".");
       }
       if (len < temp.size()) {
-        return Path::parseWin32Api(temp.slice(0, len));
+        return Path::parseWin32Api(temp.first(len));
       }
       // Try again with new length.
       tryLen = len;

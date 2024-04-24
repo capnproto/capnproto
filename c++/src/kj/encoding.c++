@@ -1021,7 +1021,7 @@ String encodeBase64Url(ArrayPtr<const byte> bytes) {
   // Remove trailing '='s.
   kj::ArrayPtr<const char> slice = base64;
   while (slice.size() > 0 && slice.back() == '=') {
-    slice = slice.slice(0, slice.size() - 1);
+    slice = slice.first(slice.size() - 1);
   }
 
   return kj::str(slice);

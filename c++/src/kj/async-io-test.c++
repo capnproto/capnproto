@@ -1293,7 +1293,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
     }
 
-    auto actual = buffer.slice(0, amount);
+    auto actual = buffer.first(amount);
     if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
     }
@@ -1347,7 +1347,7 @@ KJ_TEST("AsyncInputStream::readAllText() / readAllBytes()") {
     for (size_t blockSize: blockSizes) {
       for (uint64_t limit: limits) {
         KJ_CONTEXT(inputSize, blockSize, limit);
-        auto textSlice = bigText.asBytes().slice(0, inputSize);
+        auto textSlice = bigText.asBytes().first(inputSize);
         auto readAllText = [&]() {
           MockAsyncInputStream input(textSlice, blockSize);
           return input.readAllText(limit).wait(ws);
@@ -2470,7 +2470,7 @@ KJ_TEST("Userland tee read stress test") {
   auto leftBuffer = heapArray<byte>(bigText.size());
 
   {
-    auto leftSlice = leftBuffer.slice(0, leftBuffer.size());
+    auto leftSlice = leftBuffer.first(leftBuffer.size());
     while (leftSlice.size() > 0) {
       for (size_t blockSize: { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59 }) {
         if (leftSlice.size() == 0) break;
@@ -2543,7 +2543,7 @@ KJ_TEST("Userland tee pump slows down reads") {
   KJ_EXPECT(!leftPumpPromise.poll(ws));
 
   // The left pump will cause some data to be buffered on the right branch, which we can read.
-  auto rightExpectation0 = kj::str(bigText.slice(0, TEE_MAX_CHUNK_SIZE));
+  auto rightExpectation0 = kj::str(bigText.first(TEE_MAX_CHUNK_SIZE));
   expectRead(*right, rightExpectation0).wait(ws);
 
   // But the next right branch read is blocked by the left pipe's backpressure.
@@ -2645,7 +2645,7 @@ KJ_TEST("Userland tee pump EOF on chunk boundary") {
   auto bigText = strArray(kj::repeat("foo bar baz"_kj, 12345), ",");
 
   // Conjure an EOF right on the boundary of the tee's internal chunk.
-  auto chunkText = kj::str(bigText.slice(0, TEE_MAX_CHUNK_SIZE));
+  auto chunkText = kj::str(bigText.first(TEE_MAX_CHUNK_SIZE));
   auto tee = newTee(heap<MockAsyncInputStream>(chunkText.asBytes(), chunkText.size()));
   auto left = kj::mv(tee.branches[0]);
   auto right = kj::mv(tee.branches[1]);
@@ -3169,7 +3169,7 @@ KJ_TEST("OS handle pumpTo small limit") {
 
   auto text = bigString(1000);
 
-  auto expected = kj::str(text.slice(0, 500));
+  auto expected = kj::str(text.first(500));
 
   auto readPromise = expectRead(*pipe2.ends[1], expected);
   pipe1.ends[0]->write(text.begin(), text.size()).wait(ws);
@@ -3189,7 +3189,7 @@ KJ_TEST("OS handle pumpTo small limit -- write first then read") {
 
   auto text = bigString(1000);
 
-  auto expected = kj::str(text.slice(0, 500));
+  auto expected = kj::str(text.first(500));
 
   // Initiate the write first and let it put as much in the buffer as possible.
   auto writePromise = pipe1.ends[0]->write(text.begin(), text.size());
@@ -3218,7 +3218,7 @@ KJ_TEST("OS handle pumpTo large limit") {
 
   auto text = bigString(500'000);
 
-  auto expected = kj::str(text, text.slice(0, 250'000));
+  auto expected = kj::str(text, text.first(250'000));
 
   auto readPromise = expectRead(*pipe2.ends[1], expected);
   pipe1.ends[0]->write(text.begin(), text.size()).wait(ws);
@@ -3238,7 +3238,7 @@ KJ_TEST("OS handle pumpTo large limit -- write first then read") {
 
   auto text = bigString(500'000);
 
-  auto expected = kj::str(text, text.slice(0, 250'000));
+  auto expected = kj::str(text, text.first(250'000));
 
   // Initiate the write first and let it put as much in the buffer as possible.
   auto writePromise = pipe1.ends[0]->write(text.begin(), text.size());
@@ -3272,7 +3272,7 @@ kj::String fillWriteBuffer(int fd) {
     pos += n;
   }
 
-  return kj::str(huge.slice(0, pos));
+  return kj::str(huge.first(pos));
 }
 
 KJ_TEST("OS handle pumpTo write buffer is full before pump") {

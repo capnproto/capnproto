@@ -523,7 +523,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
     }
 
-    auto actual = buffer.slice(0, amount);
+    auto actual = buffer.first(amount);
     if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
     }
@@ -543,7 +543,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
       KJ_FAIL_ASSERT("expected data never sent", expected);
     }
 
-    auto actual = buffer.slice(0, amount);
+    auto actual = buffer.first(amount);
     if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
     }
@@ -1935,7 +1935,7 @@ KJ_TEST("WebSocket unexpected RSV bits") {
   }
 
   auto nread = clientTask.wait(waitScope);
-  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "RSV bits"_kjc);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1002, "RSV bits"_kjc);
 }
 
 KJ_TEST("WebSocket unexpected continuation frame") {
@@ -1965,7 +1965,7 @@ KJ_TEST("WebSocket unexpected continuation frame") {
   }
 
   auto nread = clientTask.wait(waitScope);
-  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Unexpected continuation frame"_kjc);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1002, "Unexpected continuation frame"_kjc);
 }
 
 KJ_TEST("WebSocket missing continuation frame") {
@@ -1995,7 +1995,7 @@ KJ_TEST("WebSocket missing continuation frame") {
   }
 
   auto nread = clientTask.wait(waitScope);
-  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Missing continuation frame"_kjc);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1002, "Missing continuation frame"_kjc);
 }
 
 KJ_TEST("WebSocket fragmented control frame") {
@@ -2025,7 +2025,7 @@ KJ_TEST("WebSocket fragmented control frame") {
   }
 
   auto nread = clientTask.wait(waitScope);
-  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Received fragmented control frame"_kjc);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1002, "Received fragmented control frame"_kjc);
 }
 
 KJ_TEST("WebSocket unknown opcode") {
@@ -2055,7 +2055,7 @@ KJ_TEST("WebSocket unknown opcode") {
   }
 
   auto nread = clientTask.wait(waitScope);
-  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1002, "Unknown opcode 5"_kjc);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1002, "Unknown opcode 5"_kjc);
 }
 
 KJ_TEST("WebSocket unsolicited pong") {
@@ -2463,7 +2463,7 @@ KJ_TEST("WebSocket maximum message size") {
   }
 
   auto nread = clientTask.wait(waitScope);
-  assertContainsWebSocketClose(rawCloseMessage.slice(0, nread), 1009, "too large"_kjc);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1009, "too large"_kjc);
 }
 
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {

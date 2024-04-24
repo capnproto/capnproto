@@ -129,7 +129,7 @@ BufferedInputStreamWrapper::~BufferedInputStreamWrapper() noexcept(false) {}
 ArrayPtr<const byte> BufferedInputStreamWrapper::tryGetReadBuffer() {
   if (bufferAvailable.size() == 0) {
     size_t n = inner.tryRead(buffer.begin(), 1, buffer.size());
-    bufferAvailable = buffer.slice(0, n);
+    bufferAvailable = buffer.first(n);
   }
 
   return bufferAvailable;
@@ -379,7 +379,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
 #else
   const size_t iovmax = miniposix::iovMax();
   while (pieces.size() > iovmax) {
-    write(pieces.slice(0, iovmax));
+    write(pieces.first(iovmax));
     pieces = pieces.slice(iovmax, pieces.size());
   }
 

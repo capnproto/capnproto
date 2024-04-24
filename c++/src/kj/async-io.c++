@@ -173,7 +173,7 @@ public:
   Promise<String> readAllText(uint64_t limit) {
     return loop(limit).then([this, limit](uint64_t headroom) {
       auto out = heapArray<char>(limit - headroom + 1);
-      copyInto(out.slice(0, out.size() - 1).asBytes());
+      copyInto(out.first(out.size() - 1).asBytes());
       out.back() = '\0';
       return String(kj::mv(out));
     });
@@ -630,7 +630,7 @@ private:
 
       // Write full pieces as a single gather-write.
       if (i > 0) {
-        auto more = morePieces.slice(0, i);
+        auto more = morePieces.first(i);
         promise = promise.then([&output,more]() { return output.write(more); });
       }
 
@@ -656,7 +656,7 @@ private:
         KJ_ASSERT(n <= splitPiece.size());
         auto newWriteBuffer = splitPiece.slice(n, splitPiece.size());
         auto newMorePieces = morePieces.slice(i + 1, morePieces.size());
-        auto prefix = splitPiece.slice(0, n);
+        auto prefix = splitPiece.first(n);
         if (prefix.size() > 0) {
           promise = promise.then([&output,prefix]() {
             return output.write(prefix.begin(), prefix.size());
@@ -1278,12 +1278,12 @@ private:
         if (pieces[i].size() > needed) {
           // The pump ends in the middle of this write.
 
-          auto promise = output.write(pieces.slice(0, i));
+          auto promise = output.write(pieces.first(i));
 
           if (needed > 0) {
             // The pump includes part of this piece, but not all. Unfortunately we need to split
             // writes.
-            auto partial = pieces[i].slice(0, needed);
+            auto partial = pieces[i].first(needed);
             promise = promise.then([this,partial]() {
               return output.write(partial.begin(), partial.size());
             });
@@ -2237,7 +2237,7 @@ private:
         });
 
         if (amount < heapBuffer.size()) {
-          heapBuffer = heapBuffer.slice(0, amount).attach(mv(heapBuffer));
+          heapBuffer = heapBuffer.first(amount).attach(mv(heapBuffer));
         }
 
         KJ_ASSERT(stoppage == kj::none);
@@ -2319,7 +2319,7 @@ Array<const ArrayPtr<const byte>> AsyncTee::Buffer::asArray(
 
       bufferList.pop_front();
     } else {
-      auto ownBytes = heapArray(bytes.slice(0, maxBytes));
+      auto ownBytes = heapArray(bytes.first(maxBytes));
       buffers.add(ownBytes);
       ownBuffers.add(mv(ownBytes));
 

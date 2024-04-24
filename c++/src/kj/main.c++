@@ -773,7 +773,7 @@ void MainBuilder::MainImpl::wrapText(Vector<char>& output, StringPtr indent, Str
 
     KJ_IF_SOME(lineEnd, text.findFirst('\n')) {
       if (lineEnd <= width) {
-        output.addAll(text.slice(0, lineEnd + 1));
+        output.addAll(text.first(lineEnd + 1));
         text = text.slice(lineEnd + 1);
         continue;
       }
@@ -797,7 +797,7 @@ void MainBuilder::MainImpl::wrapText(Vector<char>& output, StringPtr indent, Str
       }
     }
 
-    output.addAll(text.slice(0, wrapPos));
+    output.addAll(text.first(wrapPos));
     output.add('\n');
 
     // Skip spaces after the text that was printed.

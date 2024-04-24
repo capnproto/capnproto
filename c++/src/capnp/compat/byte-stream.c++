@@ -1147,7 +1147,7 @@ private:
     if (splitByte == 0) {
       // Oh thank god, the split is between two pieces.
       auto rest = pieces.slice(splitPiece, pieces.size());
-      return writeFirstPieces(pieces.slice(0, splitPiece))
+      return writeFirstPieces(pieces.first(splitPiece))
           .then([this,rest]() mutable {
         return write(rest);
       });
@@ -1161,7 +1161,7 @@ private:
       for (auto i: kj::zeroTo(right.size())) {
         right[i] = pieces[splitPiece + i];
       }
-      left.back() = pieces[splitPiece].slice(0, splitByte);
+      left.back() = pieces[splitPiece].first(splitByte);
       right.front() = pieces[splitPiece].slice(splitByte, pieces[splitPiece].size());
 
       return writeFirstPieces(left).attach(kj::mv(left))

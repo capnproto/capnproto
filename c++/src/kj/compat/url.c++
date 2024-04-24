@@ -85,7 +85,7 @@ void toLower(String& text) {
 
 Maybe<ArrayPtr<const char>> trySplit(StringPtr& text, char c) {
   KJ_IF_SOME(pos, text.findFirst(c)) {
-    ArrayPtr<const char> result = text.slice(0, pos);
+    ArrayPtr<const char> result = text.first(pos);
     text = text.slice(pos + 1);
     return result;
   } else {
@@ -96,7 +96,7 @@ Maybe<ArrayPtr<const char>> trySplit(StringPtr& text, char c) {
 Maybe<ArrayPtr<const char>> trySplit(ArrayPtr<const char>& text, char c) {
   for (auto i: kj::indices(text)) {
     if (text[i] == c) {
-      ArrayPtr<const char> result = text.slice(0, i);
+      ArrayPtr<const char> result = text.first(i);
       text = text.slice(i + 1, text.size());
       return result;
     }
@@ -107,7 +107,7 @@ Maybe<ArrayPtr<const char>> trySplit(ArrayPtr<const char>& text, char c) {
 ArrayPtr<const char> split(StringPtr& text, const parse::CharGroup_& chars) {
   for (auto i: kj::indices(text)) {
     if (chars.contains(text[i])) {
-      ArrayPtr<const char> result = text.slice(0, i);
+      ArrayPtr<const char> result = text.first(i);
       text = text.slice(i);
       return result;
     }
@@ -295,7 +295,7 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
     for (auto i: kj::indices(text)) {
       if (text[i] == ':') {
         // found valid scheme
-        result.scheme = kj::str(text.slice(0, i));
+        result.scheme = kj::str(text.first(i));
         text = text.slice(i + 1);
         gotScheme = true;
         break;
@@ -357,7 +357,7 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
     } else if (this->path.size() > 0) {
       // New path is relative, so start from the old path, dropping everything after the last
       // slash.
-      auto slice = this->path.slice(0, this->path.size() - (this->hasTrailingSlash ? 0 : 1));
+      auto slice = this->path.first(this->path.size() - (this->hasTrailingSlash ? 0 : 1));
       result.path = KJ_MAP(part, slice) { return kj::str(part); };
       result.hasTrailingSlash = true;
     }

@@ -237,7 +237,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
   return getStackTrace(space, ignoreCount, GetCurrentThread(), context);
 #elif KJ_HAS_BACKTRACE
   size_t size = backtrace(space.begin(), space.size());
-  for (auto& addr: space.slice(0, size)) {
+  for (auto& addr: space.first(size)) {
     // The addresses produced by backtrace() are return addresses, which means they point to the
     // instruction immediately after the call. Invoking addr2line on these can be confusing because
     // it often points to the next line. If the next instruction is inlined from another function,
@@ -845,7 +845,7 @@ void Exception::extendTrace(uint ignoreCount, uint limit) {
   auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);
   if (newTrace.size() > ignoreCount + 2) {
     // Remove suffix that won't fit into our static-sized trace.
-    newTrace = newTrace.slice(0, kj::min(kj::size(trace) - traceCount, newTrace.size()));
+    newTrace = newTrace.first(kj::min(kj::size(trace) - traceCount, newTrace.size()));
 
     // Copy the rest into our trace.
     memcpy(trace + traceCount, newTrace.begin(), newTrace.asBytes().size());
@@ -1272,8 +1272,8 @@ size_t sharedSuffixLength(kj::ArrayPtr<void* const> a, kj::ArrayPtr<void* const>
   size_t result = 0;
   while (a.size() > 0 && b.size() > 0 && a.back() == b.back())  {
     ++result;
-    a = a.slice(0, a.size() - 1);
-    b = b.slice(0, b.size() - 1);
+    a = a.first(a.size() - 1);
+    b = b.first(b.size() - 1);
   }
   return result;
 }
@@ -1299,14 +1299,14 @@ kj::ArrayPtr<void* const> computeRelativeTrace(
        i <= (ssize_t)(relativeTo.size() - MIN_MATCH_LEN);
        i++) {
     // Negative values truncate `trace`, positive values truncate `relativeTo`.
-    kj::ArrayPtr<void* const> subtrace = trace.slice(0, trace.size() - kj::max<ssize_t>(0, -i));
+    kj::ArrayPtr<void* const> subtrace = trace.first(trace.size() - kj::max<ssize_t>(0, -i));
     kj::ArrayPtr<void* const> subrt = relativeTo
-        .slice(0, relativeTo.size() - kj::max<ssize_t>(0, i));
+        .first(relativeTo.size() - kj::max<ssize_t>(0, i));
 
     uint matchLen = sharedSuffixLength(subtrace, subrt);
     if (matchLen > bestMatchLen) {
       bestMatchLen = matchLen;
-      bestMatch = subtrace.slice(0, subtrace.size() - matchLen + 1);
+      bestMatch = subtrace.first(subtrace.size() - matchLen + 1);
     }
   }
 

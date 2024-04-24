@@ -387,7 +387,7 @@ public:
   kj::MainBuilder::Validity addOutput(kj::StringPtr spec) {
     KJ_IF_SOME(split, spec.findFirst(':')) {
       kj::StringPtr dir = spec.slice(split + 1);
-      auto plugin = spec.slice(0, split);
+      auto plugin = spec.first(split);
 
       if (split == 1 && (dir.startsWith("/") || dir.startsWith("\\"))) {
         // The colon is the second character and is immediately followed by a slash or backslash.
@@ -420,7 +420,7 @@ public:
           // We therefore conclude that the *second* colon is in fact the plugin/location separator.
 
           dir = dir.slice(split2 + 1);
-          plugin = spec.slice(0, split2 + 2);
+          plugin = spec.first(split2 + 2);
 #if _WIN32
         } else {
           // The user wrote something like:
@@ -716,7 +716,7 @@ private:
 public:
   kj::MainBuilder::Validity setConversion(kj::StringPtr conversion) {
     KJ_IF_SOME(colon, conversion.findFirst(':')) {
-      auto from = kj::str(conversion.slice(0, colon));
+      auto from = kj::str(conversion.first(colon));
       auto to = conversion.slice(colon + 1);
 
       KJ_IF_SOME(f, parseFormatName(from)) {
@@ -823,7 +823,7 @@ private:
                 if (depth == 0 && sawClose) {
                   // We already got one complete message. This is the start of the next message.
                   // Stop here.
-                  chars.addAll(buffer.slice(0, i));
+                  chars.addAll(buffer.first(i));
                   chars.add('\0');
                   input.skip(i);
                   return kj::String(chars.releaseAsArray());
@@ -918,7 +918,7 @@ private:
                 if (depth == 0 && sawClose) {
                   // We already got one complete message. This is the start of the next message.
                   // Stop here.
-                  chars.addAll(buffer.slice(0, i));
+                  chars.addAll(buffer.first(i));
                   chars.add('\0');
                   input.skip(i);
                   return kj::String(chars.releaseAsArray());
@@ -1757,12 +1757,12 @@ public:
           if (subscript < listValue.size()) {
             value = listValue[subscript];
           } else {
-            return kj::str("'", partName, "[", kj::strArray(subscripts.slice(0, i + 1), "]["),
+            return kj::str("'", partName, "[", kj::strArray(subscripts.first(i + 1), "]["),
                            "]' is out-of-bounds.");
           }
         } else {
           if (i > 0) {
-            return kj::str("'", partName, "[", kj::strArray(subscripts.slice(0, i), "]["),
+            return kj::str("'", partName, "[", kj::strArray(subscripts.first(i), "]["),
                            "]' is not a list.");
           } else {
             return kj::str("'", partName, "' is not a list.");

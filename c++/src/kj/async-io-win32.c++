@@ -584,7 +584,7 @@ public:
         if (str.slice(colon + 1).findFirst(':') == kj::none) {
           // There is exactly one colon and no brackets, so it must be an ip4 address with port.
           af = AF_INET;
-          addrPart = str.slice(0, colon);
+          addrPart = str.first(colon);
           portPart = str.slice(colon + 1);
         } else {
           // There are two or more colons and no brackets, so the whole thing must be an ip6

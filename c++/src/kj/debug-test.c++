@@ -289,7 +289,7 @@ TEST(Debug, Catch) {
     KJ_IF_SOME(e, exception) {
       String what = str(e);
       KJ_IF_SOME(eol, what.findFirst('\n')) {
-        what = kj::str(what.slice(0, eol));
+        what = kj::str(what.first(eol));
       }
       std::string text(what.cStr());
       EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
@@ -307,7 +307,7 @@ TEST(Debug, Catch) {
     KJ_IF_SOME(e, exception) {
       String what = str(e);
       KJ_IF_SOME(eol, what.findFirst('\n')) {
-        what = kj::str(what.slice(0, eol));
+        what = kj::str(what.first(eol));
       }
       std::string text(what.cStr());
       EXPECT_EQ(fileLine(__FILE__, line) + ": failed: foo", text);
