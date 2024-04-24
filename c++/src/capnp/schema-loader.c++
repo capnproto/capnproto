@@ -1498,7 +1498,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     }
   }
 
-  dstScopes = dstScopes.slice(0, dstScopeCount);
+  dstScopes = dstScopes.first(dstScopeCount);
 
   std::sort(dstScopes.begin(), dstScopes.end(),
       [](const _::RawBrandedSchema::Scope& a, const _::RawBrandedSchema::Scope& b) {

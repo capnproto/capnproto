@@ -145,6 +145,9 @@ public:
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
+  inline ArrayPtr<const char> first(size_t count) const;
+  // Return string prefix.
+
   inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
   inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
@@ -316,6 +319,7 @@ public:
   inline ArrayPtr<const char> slice(size_t start, size_t end) const KJ_LIFETIMEBOUND {
     return StringPtr(*this).slice(start, end);
   }
+  inline ArrayPtr<const char> first(size_t count) const KJ_LIFETIMEBOUND { return slice(0, count); }
 
   inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
   inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
@@ -734,6 +738,7 @@ inline StringPtr StringPtr::slice(size_t start) const {
 inline ArrayPtr<const char> StringPtr::slice(size_t start, size_t end) const {
   return content.slice(start, end);
 }
+inline ArrayPtr<const char> StringPtr::first(size_t count) const { return slice(0, count); }
 
 inline LiteralStringConst::operator ConstString() const {
   return ConstString(begin(), size(), NullArrayDisposer::instance);
@@ -750,23 +755,23 @@ inline ConstString StringPtr::attach(Attachments&&... attachments) const {
 }
 
 inline String::operator ArrayPtr<char>() {
-  return content == nullptr ? ArrayPtr<char>(nullptr) : content.slice(0, content.size() - 1);
+  return content == nullptr ? ArrayPtr<char>(nullptr) : content.first(content.size() - 1);
 }
 inline String::operator ArrayPtr<const char>() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.slice(0, content.size() - 1);
+  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
 inline ConstString::operator ArrayPtr<const char>() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.slice(0, content.size() - 1);
+  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
 
 inline ArrayPtr<char> String::asArray() {
-  return content == nullptr ? ArrayPtr<char>(nullptr) : content.slice(0, content.size() - 1);
+  return content == nullptr ? ArrayPtr<char>(nullptr) : content.first(content.size() - 1);
 }
 inline ArrayPtr<const char> String::asArray() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.slice(0, content.size() - 1);
+  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
 inline ArrayPtr<const char> ConstString::asArray() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.slice(0, content.size() - 1);
+  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
 
 inline const char* String::cStr() const { return content == nullptr ? "" : content.begin(); }

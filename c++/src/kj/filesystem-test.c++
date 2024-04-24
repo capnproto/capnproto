@@ -337,14 +337,14 @@ KJ_TEST("InMemoryFile") {
     KJ_EXPECT(writableMapping->get().begin() == mapping.begin());
     KJ_EXPECT(privateMapping.begin() != mapping.begin());
 
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "foobaz");
-    KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "foobaz");
     clock.expectUnchanged(*file);
 
     file->write(0, StringPtr("qux").asBytes());
     clock.expectChanged(*file);
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "quxbaz");
-    KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "quxbaz");
+    KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "foobaz");
 
     file->write(12, StringPtr("corge").asBytes());
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == "corge");
@@ -361,9 +361,9 @@ KJ_TEST("InMemoryFile") {
     KJ_EXPECT_THROW_MESSAGE("cannot resize the file backing store", file->truncate(100));
 
     clock.expectChanged(*file);
-    writableMapping->changed(writableMapping->get().slice(0, 3));
+    writableMapping->changed(writableMapping->get().first(3));
     clock.expectChanged(*file);
-    writableMapping->sync(writableMapping->get().slice(0, 3));
+    writableMapping->sync(writableMapping->get().first(3));
     clock.expectChanged(*file);
   }
 

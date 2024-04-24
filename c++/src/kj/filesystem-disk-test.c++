@@ -326,25 +326,25 @@ KJ_TEST("DiskFile") {
     KJ_EXPECT(privateMapping.begin() != mapping.begin());
     KJ_EXPECT(writableMapping->get().begin() != privateMapping.begin());
 
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "foobaz");
-    KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "foobaz");
-    KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(writableMapping->get().first(6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "foobaz");
 
     privateMapping[0] = 'F';
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "foobaz");
-    KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "foobaz");
-    KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "Foobaz");
+    KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(writableMapping->get().first(6).asChars()) == "foobaz");
+    KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "Foobaz");
 
     writableMapping->get()[1] = 'D';
     writableMapping->changed(writableMapping->get().slice(1, 2));
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "fDobaz");
-    KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "fDobaz");
-    KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "Foobaz");
+    KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "fDobaz");
+    KJ_EXPECT(kj::str(writableMapping->get().first(6).asChars()) == "fDobaz");
+    KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "Foobaz");
 
     file->write(0, StringPtr("qux").asBytes());
-    KJ_EXPECT(kj::str(mapping.slice(0, 6).asChars()) == "quxbaz");
-    KJ_EXPECT(kj::str(writableMapping->get().slice(0, 6).asChars()) == "quxbaz");
-    KJ_EXPECT(kj::str(privateMapping.slice(0, 6).asChars()) == "Foobaz");
+    KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "quxbaz");
+    KJ_EXPECT(kj::str(writableMapping->get().first(6).asChars()) == "quxbaz");
+    KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "Foobaz");
 
     file->write(12, StringPtr("corge").asBytes());
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == "corge");

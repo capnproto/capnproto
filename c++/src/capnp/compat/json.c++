@@ -576,7 +576,7 @@ public:
   void consume(kj::ArrayPtr<const char> expected) {
     KJ_REQUIRE(wrapped.size() >= expected.size());
 
-    auto prefix = wrapped.slice(0, expected.size());
+    auto prefix = wrapped.first(expected.size());
     KJ_REQUIRE(prefix == expected, "Unexpected input in JSON message.");
 
     advance(expected.size());

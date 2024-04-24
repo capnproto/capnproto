@@ -125,11 +125,11 @@ Path Path::basename() && {
 
 PathPtr PathPtr::parent() const {
   KJ_REQUIRE(parts.size() > 0, "root path has no parent");
-  return PathPtr(parts.slice(0, parts.size() - 1));
+  return PathPtr(parts.first(parts.size() - 1));
 }
 Path Path::parent() && {
   KJ_REQUIRE(parts.size() > 0, "root path has no parent");
-  return Path(KJ_MAP(p, parts.slice(0, parts.size() - 1)) { return kj::mv(p); }, ALREADY_CHECKED);
+  return Path(KJ_MAP(p, parts.first(parts.size() - 1)) { return kj::mv(p); }, ALREADY_CHECKED);
 }
 
 String PathPtr::toString(bool absolute) const {
@@ -175,7 +175,7 @@ bool PathPtr::operator< (PathPtr other) const {
 
 bool PathPtr::startsWith(PathPtr prefix) const {
   return parts.size() >= prefix.parts.size() &&
-         parts.slice(0, prefix.parts.size()) == prefix.parts;
+         parts.first(prefix.parts.size()) == prefix.parts;
 }
 
 bool PathPtr::endsWith(PathPtr suffix) const {
@@ -395,7 +395,7 @@ Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi) {
       }
     }
   } else if ((path.size() == 2 || (path.size() > 2 && path[2] == '\\')) &&
-             isWin32Drive(path.slice(0, 2))) {
+             isWin32Drive(path.first(2))) {
     // Starts with a drive letter.
     parts.clear();
   } else {
@@ -494,7 +494,7 @@ String ReadableFile::readAllText() const {
   size_t n = read(0, result.asBytes());
   if (n < result.size()) {
     // Apparently file was truncated concurrently. Reduce to new size to match.
-    result = heapString(result.slice(0, n));
+    result = heapString(result.first(n));
   }
   return result;
 }
@@ -504,7 +504,7 @@ Array<byte> ReadableFile::readAllBytes() const {
   size_t n = read(0, result.asBytes());
   if (n < result.size()) {
     // Apparently file was truncated concurrently. Reduce to new size to match.
-    result = heapArray(result.slice(0, n));
+    result = heapArray(result.first(n));
   }
   return result;
 }

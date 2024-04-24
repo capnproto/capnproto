@@ -305,13 +305,13 @@ CappedArray<char, _::TIME_STR_LEN> KJ_STRINGIFY(Duration d) {
     *begin++ = '-';
   }
   if (d % unit == 0 * kj::NANOSECONDS) {
-    end = _::fillLimited(begin, result.end(), arr.slice(0, point), suffix);
+    end = _::fillLimited(begin, result.end(), arr.first(point), suffix);
   } else {
     while (arr.back() == '0') {
-      arr = arr.slice(0, arr.size() - 1);
+      arr = arr.first(arr.size() - 1);
     }
     KJ_DASSERT(arr.size() > point);
-    end = _::fillLimited(begin, result.end(), arr.slice(0, point), "."_kj,
+    end = _::fillLimited(begin, result.end(), arr.first(point), "."_kj,
         arr.slice(point, arr.size()), suffix);
   }
   result.setSize(end - result.begin());

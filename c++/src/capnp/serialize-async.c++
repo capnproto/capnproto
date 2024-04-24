@@ -219,7 +219,7 @@ kj::Promise<MessageReaderAndFds> readMessage(
   return promise.then([reader = kj::mv(reader), fdSpace](kj::Maybe<size_t> nfds) mutable
                       -> MessageReaderAndFds {
     KJ_IF_SOME(n, nfds) {
-      return { kj::mv(reader), fdSpace.slice(0, n) };
+      return { kj::mv(reader), fdSpace.first(n) };
     } else {
       kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "Premature EOF."));
       return { kj::mv(reader), nullptr };
@@ -235,7 +235,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
   return promise.then([reader = kj::mv(reader), fdSpace](kj::Maybe<size_t> nfds) mutable
                       -> kj::Maybe<MessageReaderAndFds> {
     KJ_IF_SOME(n, nfds) {
-      return MessageReaderAndFds { kj::mv(reader), fdSpace.slice(0, n) };
+      return MessageReaderAndFds { kj::mv(reader), fdSpace.first(n) };
     } else {
       return kj::none;
     }
@@ -693,7 +693,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessag
 
     return kj::Maybe<MessageReaderAndFds>(MessageReaderAndFds {
       kj::mv(reader),
-      fdSpace.slice(0, fdsSoFar)
+      fdSpace.first(fdsSoFar)
     });
   }
 
@@ -834,7 +834,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::readEntireMes
 
     return kj::Maybe<MessageReaderAndFds>(MessageReaderAndFds {
       kj::heap<MessageReaderImpl>(kj::mv(msgBuffer), options),
-      fdSpace.slice(0, fdsSoFar)
+      fdSpace.first(fdsSoFar)
     });
   });
 }

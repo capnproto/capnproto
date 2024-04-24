@@ -331,7 +331,7 @@ KJ_TEST("URI encoding/decoding") {
     auto bytesWithNul = decodeBinaryUriComponent(encodeUriComponent(bytes), true);
     KJ_ASSERT(bytesWithNul.size() == 4);
     KJ_EXPECT(bytesWithNul[3] == '\0');
-    KJ_EXPECT(bytesWithNul.slice(0, 3) == bytes);
+    KJ_EXPECT(bytesWithNul.first(3) == bytes);
   }
 }
 

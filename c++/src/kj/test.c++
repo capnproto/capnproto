@@ -157,7 +157,7 @@ public:
 
       if (parsedRange) {
         // We have an exact line number.
-        filePattern = pattern.slice(0, colonPos);
+        filePattern = pattern.first(colonPos);
       } else {
         // Can't parse as a number. Maybe the colon is part of a Windows path name or something.
         // Let's just keep it as part of the file pattern.
@@ -202,7 +202,7 @@ public:
     for (TestCase* testCase = testCasesHead; testCase != nullptr; testCase = testCase->next) {
       for (size_t i: kj::indices(commonPrefix)) {
         if (testCase->file[i] != commonPrefix[i]) {
-          commonPrefix = commonPrefix.slice(0, i);
+          commonPrefix = commonPrefix.first(i);
           break;
         }
       }
@@ -210,7 +210,7 @@ public:
 
     // Back off the prefix to the last '/'.
     while (commonPrefix.size() > 0 && commonPrefix.back() != '/' && commonPrefix.back() != '\\') {
-      commonPrefix = commonPrefix.slice(0, commonPrefix.size() - 1);
+      commonPrefix = commonPrefix.first(commonPrefix.size() - 1);
     }
 
     // Run the testts.

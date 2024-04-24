@@ -113,10 +113,10 @@ TEST(Serialize, FlatArray) {
   {
     // Test expectedSizeInWordsFromPrefix(). We pass in a copy of the slice so that valgrind can
     // detect out-of-bounds access.
-    EXPECT_EQ(1, expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, 0))));
+    EXPECT_EQ(1, expectedSizeInWordsFromPrefix(copyWords(serialized.first(0))));
     for (uint i = 1; i <= serialized.size(); i++) {
       EXPECT_EQ(serialized.size(),
-          expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i))));
+          expectedSizeInWordsFromPrefix(copyWords(serialized.first(i))));
     }
   }
 }
@@ -148,14 +148,14 @@ TEST(Serialize, FlatArrayOddSegmentCount) {
 
     // Segment table is 4 words, so with fewer words we'll have incomplete information.
     for (uint i = 0; i < 4; i++) {
-      size_t expectedSize = expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i)));
+      size_t expectedSize = expectedSizeInWordsFromPrefix(copyWords(serialized.first(i)));
       EXPECT_LT(expectedSize, serialized.size());
       EXPECT_GT(expectedSize, i);
     }
     // After that, we get the exact length.
     for (uint i = 4; i <= serialized.size(); i++) {
       EXPECT_EQ(serialized.size(),
-          expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i))));
+          expectedSizeInWordsFromPrefix(copyWords(serialized.first(i))));
     }
   }
 }
@@ -187,14 +187,14 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
 
     // Segment table is 6 words, so with fewer words we'll have incomplete information.
     for (uint i = 0; i < 6; i++) {
-      size_t expectedSize = expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i)));
+      size_t expectedSize = expectedSizeInWordsFromPrefix(copyWords(serialized.first(i)));
       EXPECT_LT(expectedSize, serialized.size());
       EXPECT_GT(expectedSize, i);
     }
     // After that, we get the exact length.
     for (uint i = 6; i <= serialized.size(); i++) {
       EXPECT_EQ(serialized.size(),
-          expectedSizeInWordsFromPrefix(copyWords(serialized.slice(0, i))));
+          expectedSizeInWordsFromPrefix(copyWords(serialized.first(i))));
     }
   }
 }
