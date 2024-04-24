@@ -974,8 +974,6 @@ KJ_TEST("_kjb") {
   KJ_EXPECT(arr[0] == 'a');
   KJ_EXPECT(arr[1] == 'b');
   KJ_EXPECT(arr[2] == 'c');
-
-  KJ_EXPECT("abc"_kj.asBytes().size() == 3);
 }
 
 }  // namespace

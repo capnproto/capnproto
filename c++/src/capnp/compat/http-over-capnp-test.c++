@@ -528,7 +528,7 @@ void runWebSocketBasicTestCase(
   }
 
   {
-    auto promise = serverWs.send("bar"_kj.asBytes());
+    auto promise = serverWs.send("bar"_kjb);
     auto message = clientWs.receive().wait(waitScope);
     promise.wait(waitScope);
     KJ_ASSERT(message.is<kj::Array<kj::byte>>());
