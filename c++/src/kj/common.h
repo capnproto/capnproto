@@ -2143,4 +2143,10 @@ constexpr bool isDisallowedInCoroutine() {
 
 }  // namespace kj
 
+constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb(const char* str, size_t n) {
+  // "string"_kjb creates constexpr byte array pointer to the content of the string
+  // WITHOUT the trailing 0.
+  return kj::ArrayPtr<const char>(str, n).asBytes();
+};
+
 KJ_END_HEADER
