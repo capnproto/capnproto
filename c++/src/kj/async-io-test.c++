@@ -667,7 +667,7 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
     AutoCloseFd fdBuffer[1];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 1).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 1);
-    kj::FdOutputStream(fdBuffer[0].get()).write("bar", 3);
+    kj::FdOutputStream(fdBuffer[0].get()).write("bar"_kjb);
   }
 
   // We want to carefully verify that out1 and out2 were closed, without deadlocking if they
@@ -743,8 +743,8 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
     AutoCloseFd fdBuffer[2];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 2).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 2);
-    kj::FdOutputStream(fdBuffer[0].get()).write("bar", 3);
-    kj::FdOutputStream(fdBuffer[1].get()).write("baz", 3);
+    kj::FdOutputStream(fdBuffer[0].get()).write("bar"_kjb);
+    kj::FdOutputStream(fdBuffer[1].get()).write("baz"_kjb);
   }
 
   // We want to carefully verify that out1, out2, and out3 were closed, without deadlocking if they

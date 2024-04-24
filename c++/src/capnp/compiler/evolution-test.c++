@@ -893,7 +893,7 @@ public:
     {
       kj::String text = kj::str(
           "Randomly testing backwards-compatibility scenarios with seed: ", seed, "\n");
-      kj::FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
+      kj::FdOutputStream(STDOUT_FILENO).write(text.asBytes());
     }
 
     KJ_CONTEXT(seed, "PLEASE REPORT THIS FAILURE AND INCLUDE THE SEED");

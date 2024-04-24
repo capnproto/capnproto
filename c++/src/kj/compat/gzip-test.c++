@@ -41,9 +41,9 @@ public:
   MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     // Clamp max read to blockSize.
-    size_t n = kj::min(blockSize, maxBytes);
+    size_t n = kj::min(blockSize, buffer.size());
 
     // Unless that's less than minBytes -- in which case, use minBytes.
     n = kj::max(n, minBytes);
@@ -51,7 +51,7 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
+    memcpy(buffer.begin(), bytes.begin(), n);
     bytes = bytes.slice(n, bytes.size());
     return n;
   }
@@ -96,14 +96,7 @@ public:
     return gzip.readAllText();
   }
 
-  void write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-  }
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    for (auto& piece: pieces) {
-      bytes.addAll(piece);
-    }
-  }
+  void write(ArrayPtr<const byte> data) override { bytes.addAll(data); }
 };
 
 class MockAsyncOutputStream: public AsyncOutputStream {
@@ -150,13 +143,11 @@ KJ_TEST("gzip decompression") {
     MockInputStream rawInput(kj::arrayPtr(FOOBAR_GZIP, sizeof(FOOBAR_GZIP) / 2), kj::maxValue);
     GzipInputStream gzip(rawInput);
 
-    char text[16]{};
-    size_t n = gzip.tryRead(text, 1, sizeof(text));
-    text[n] = '\0';
-    KJ_EXPECT(StringPtr(text, n) == "fo");
+    byte text[16]{};
+    auto amount = gzip.tryRead(text, 1);
+    KJ_EXPECT(arrayPtr(text).first(amount) == "fo"_kjb);
 
-    KJ_EXPECT_THROW_MESSAGE("gzip compressed stream ended prematurely",
-        gzip.tryRead(text, 1, sizeof(text)));
+    KJ_EXPECT_THROW_MESSAGE("gzip compressed stream ended prematurely", gzip.tryRead(text, 1));
   }
 
   // Read concatenated input.
@@ -237,7 +228,7 @@ KJ_TEST("gzip compression") {
     MockOutputStream rawOutput;
     {
       GzipOutputStream gzip(rawOutput);
-      gzip.write("foobar", 6);
+      gzip.write("foobar"_kjb);
     }
 
     KJ_EXPECT(rawOutput.decompress() == "foobar");
@@ -248,8 +239,8 @@ KJ_TEST("gzip compression") {
     MockOutputStream rawOutput;
     {
       GzipOutputStream gzip(rawOutput);
-      gzip.write("foo", 3);
-      gzip.write("bar", 3);
+      gzip.write("foo"_kjb);
+      gzip.write("bar"_kjb);
     }
 
     KJ_EXPECT(rawOutput.decompress() == "foobar");
@@ -261,11 +252,7 @@ KJ_TEST("gzip compression") {
 
     {
       GzipOutputStream gzip(rawOutput);
-
-      ArrayPtr<const byte> pieces[] = {
-        kj::StringPtr("foo").asBytes(),
-        kj::StringPtr("bar").asBytes(),
-      };
+      ArrayPtr<const byte> pieces[] = { "foo"_kjb, "bar"_kjb, };
       gzip.write(pieces);
     }
 
@@ -282,7 +269,7 @@ KJ_TEST("gzip huge round trip") {
   MockOutputStream rawOutput;
   {
     GzipOutputStream gzipOut(rawOutput);
-    gzipOut.write(bytes.begin(), bytes.size());
+    gzipOut.write(bytes);
   }
 
   MockInputStream rawInput(rawOutput.bytes, kj::maxValue);

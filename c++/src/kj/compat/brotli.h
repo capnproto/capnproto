@@ -82,7 +82,7 @@ public:
   ~BrotliInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliInputStream);
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
 private:
   InputStream& inner;
@@ -96,7 +96,7 @@ private:
   size_t availableIn;
   bool firstInput = true;
 
-  size_t readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
+  size_t readImpl(ArrayPtr<byte> buffer, size_t minBytes, size_t alreadyRead);
 };
 
 class BrotliOutputStream final: public OutputStream {
@@ -112,7 +112,8 @@ public:
   ~BrotliOutputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliOutputStream);
 
-  void write(const void* buffer, size_t size) override;
+  void write(ArrayPtr<const byte> data) override;
+
   using OutputStream::write;
 
   inline void flush() {

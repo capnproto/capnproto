@@ -1802,11 +1802,12 @@ public:
   void sync() const override { file->sync(); }
   void datasync() const override { file->datasync(); }
 
-  void write(const void* buffer, size_t size) override {
-    file->write(file->stat().size, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  void write(ArrayPtr<const byte> data) override {
+    file->write(file->stat().size, data);
   }
 
 private:
+  
   Own<const File> file;
 };
 

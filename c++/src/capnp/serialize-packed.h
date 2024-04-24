@@ -39,7 +39,7 @@ public:
   ~PackedInputStream() noexcept(false);
 
   // implements InputStream ------------------------------------------
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override;
   void skip(size_t bytes) override;
 
 private:
@@ -54,7 +54,7 @@ public:
   ~PackedOutputStream() noexcept(false);
 
   // implements OutputStream -----------------------------------------
-  void write(const void* buffer, size_t bytes) override;
+  void write(kj::ArrayPtr<const byte> data) override;
 
 private:
   kj::BufferedOutputStream& inner;

@@ -1514,8 +1514,8 @@ public:
 
   FSNODE_METHODS(DiskAppendableFile);
 
-  void write(const void* buffer, size_t size) override {
-    FdOutputStream::write(buffer, size);
+  void write(ArrayPtr<const byte> buffer) override {
+    FdOutputStream::write(buffer);
   }
   void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     FdOutputStream::write(pieces);
