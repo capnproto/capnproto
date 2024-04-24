@@ -80,6 +80,9 @@ public:
     return asPtr().slice(start, end);
   }
 
+  inline ArrayPtr<T> first(size_t count) KJ_LIFETIMEBOUND { return slice(0, count); }
+  inline ArrayPtr<const T> first(size_t count) const KJ_LIFETIMEBOUND { return slice(0, count); }
+
   template <typename... Params>
   inline T& add(Params&&... params) KJ_LIFETIMEBOUND {
     if (builder.isFull()) grow();

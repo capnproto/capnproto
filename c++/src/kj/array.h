@@ -198,6 +198,9 @@ public:
     return ArrayPtr<const T>(ptr + start, size_ - start);
   }
 
+  inline ArrayPtr<T> first(size_t count) KJ_LIFETIMEBOUND { return slice(0, count); }
+  inline ArrayPtr<const T> first(size_t count) const KJ_LIFETIMEBOUND { return slice(0, count); }
+
   inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asPtr().asBytes(); }
   inline ArrayPtr<PropagateConst<T, byte>> asBytes() KJ_LIFETIMEBOUND { return asPtr().asBytes(); }
   inline ArrayPtr<const char> asChars() const KJ_LIFETIMEBOUND { return asPtr().asChars(); }

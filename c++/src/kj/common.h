@@ -1869,6 +1869,9 @@ public:
     return other.size() <= size_ && slice(size_ - other.size(), size_) == other;
   }
 
+  inline ArrayPtr first(size_t count) { return slice(0, count); }
+  inline ArrayPtr<const T> first(size_t count) const { return slice(0, count); }
+
   inline Maybe<size_t> findFirst(const T& match) const {
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] == match) {
