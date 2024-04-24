@@ -281,8 +281,8 @@ KJ_TEST("computeRelativeTrace") {
 KJ_TEST("exception details") {
   kj::Exception e = KJ_EXCEPTION(FAILED, "foo");
 
-  e.setDetail(123, kj::heapArray("foo"_kj.asBytes()));
-  e.setDetail(456, kj::heapArray("bar"_kj.asBytes()));
+  e.setDetail(123, kj::heapArray("foo"_kjb));
+  e.setDetail(456, kj::heapArray("bar"_kjb));
 
   KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e.getDetail(123)).asChars()) == "foo");
   KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e.getDetail(456)).asChars()) == "bar");

@@ -968,5 +968,13 @@ static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine>());
 static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine&>());
 static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine*>());
 
+KJ_TEST("_kjb") {
+  ArrayPtr<const byte> arr = "abc"_kjb;
+  KJ_EXPECT(arr.size() == 3);
+  KJ_EXPECT(arr[0] == 'a');
+  KJ_EXPECT(arr[1] == 'b');
+  KJ_EXPECT(arr[2] == 'c');
+}
+
 }  // namespace
 }  // namespace kj

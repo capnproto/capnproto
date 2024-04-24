@@ -616,8 +616,8 @@ TEST(AsyncIo, CapabilityPipeMultiStreamMessage) {
   streams.add(kj::mv(pipe2.ends[0]));
   streams.add(kj::mv(pipe3.ends[0]));
 
-  ArrayPtr<const byte> secondBuf = "bar"_kj.asBytes();
-  pipe.ends[0]->writeWithStreams("foo"_kj.asBytes(), arrayPtr(&secondBuf, 1), streams.finish())
+  ArrayPtr<const byte> secondBuf = "bar"_kjb;
+  pipe.ends[0]->writeWithStreams("foo"_kjb, arrayPtr(&secondBuf, 1), streams.finish())
       .wait(ioContext.waitScope);
 
   char receiveBuffer[7];
@@ -659,7 +659,7 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
 
   {
     AutoCloseFd sendFds[2] = { kj::mv(out1), kj::mv(out2) };
-    capPipe.ends[0]->writeWithFds("foo"_kj.asBytes(), nullptr, sendFds).wait(io.waitScope);
+    capPipe.ends[0]->writeWithFds("foo"_kjb, nullptr, sendFds).wait(io.waitScope);
   }
 
   {
@@ -735,7 +735,7 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
 
   {
     AutoCloseFd sendFds[3] = { kj::mv(out1), kj::mv(out2), kj::mv(out3) };
-    capPipe.ends[0]->writeWithFds("foo"_kj.asBytes(), nullptr, sendFds).wait(io.waitScope);
+    capPipe.ends[0]->writeWithFds("foo"_kjb, nullptr, sendFds).wait(io.waitScope);
   }
 
   {
@@ -1628,7 +1628,7 @@ KJ_TEST("Userland pipe gather write") {
 
   auto pipe = newOneWayPipe();
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe.in, "foobar").wait(ws);
@@ -1647,7 +1647,7 @@ KJ_TEST("Userland pipe gather write split on buffer boundary") {
 
   auto pipe = newOneWayPipe();
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe.in, "foo").wait(ws);
@@ -1667,7 +1667,7 @@ KJ_TEST("Userland pipe gather write split mid-first-buffer") {
 
   auto pipe = newOneWayPipe();
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe.in, "fo").wait(ws);
@@ -1687,7 +1687,7 @@ KJ_TEST("Userland pipe gather write split mid-second-buffer") {
 
   auto pipe = newOneWayPipe();
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe.in, "foob").wait(ws);
@@ -1709,7 +1709,7 @@ KJ_TEST("Userland pipe gather write pump") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1727,7 +1727,7 @@ KJ_TEST("Userland pipe gather write pump split on buffer boundary") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foo").wait(ws);
@@ -1746,7 +1746,7 @@ KJ_TEST("Userland pipe gather write pump split mid-first-buffer") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "fo").wait(ws);
@@ -1765,7 +1765,7 @@ KJ_TEST("Userland pipe gather write pump split mid-second-buffer") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foob").wait(ws);
@@ -1788,7 +1788,7 @@ KJ_TEST("Userland pipe gather write split pump on buffer boundary") {
     return pipe.in->pumpTo(*pipe2.out, 3);
   });
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1810,7 +1810,7 @@ KJ_TEST("Userland pipe gather write split pump mid-first-buffer") {
     return pipe.in->pumpTo(*pipe2.out, 4);
   });
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1832,7 +1832,7 @@ KJ_TEST("Userland pipe gather write split pump mid-second-buffer") {
     return pipe.in->pumpTo(*pipe2.out, 2);
   });
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1850,7 +1850,7 @@ KJ_TEST("Userland pipe gather write pumpFrom") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1873,7 +1873,7 @@ KJ_TEST("Userland pipe gather write pumpFrom split on buffer boundary") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foo").wait(ws);
@@ -1897,7 +1897,7 @@ KJ_TEST("Userland pipe gather write pumpFrom split mid-first-buffer") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "fo").wait(ws);
@@ -1921,7 +1921,7 @@ KJ_TEST("Userland pipe gather write pumpFrom split mid-second-buffer") {
   auto pipe2 = newOneWayPipe();
   auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foob").wait(ws);
@@ -1949,7 +1949,7 @@ KJ_TEST("Userland pipe gather write split pumpFrom on buffer boundary") {
     return KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in, 3));
   });
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1971,7 +1971,7 @@ KJ_TEST("Userland pipe gather write split pumpFrom mid-first-buffer") {
     return KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in, 4));
   });
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -1993,7 +1993,7 @@ KJ_TEST("Userland pipe gather write split pumpFrom mid-second-buffer") {
     return KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in, 2));
   });
 
-  ArrayPtr<const byte> parts[] = { "foo"_kj.asBytes(), "bar"_kj.asBytes() };
+  ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
   auto promise = pipe.out->write(parts);
   KJ_EXPECT(!promise.poll(ws));
   expectRead(*pipe2.in, "foobar").wait(ws);
@@ -2104,7 +2104,7 @@ KJ_TEST("Userland pipe multi-part write doesn't quit early") {
 
   auto readPromise = expectRead(*pipe.in, "foo");
 
-  kj::ArrayPtr<const byte> pieces[2] = { "foobar"_kj.asBytes(), "baz"_kj.asBytes() };
+  kj::ArrayPtr<const byte> pieces[2] = { "foobar"_kjb, "baz"_kjb };
   auto writePromise = pipe.out->write(pieces);
 
   readPromise.wait(ws);
@@ -2408,7 +2408,7 @@ KJ_TEST("Userland tee read into different buffer sizes") {
   kj::EventLoop loop;
   WaitScope ws(loop);
 
-  auto tee = newTee(heap<MockAsyncInputStream>("foo bar baz"_kj.asBytes(), 11));
+  auto tee = newTee(heap<MockAsyncInputStream>("foo bar baz"_kjb, 11));
   auto left = kj::mv(tee.branches[0]);
   auto right = kj::mv(tee.branches[1]);
 
@@ -2426,7 +2426,7 @@ KJ_TEST("Userland tee reads see max(minBytes...) and min(maxBytes...)") {
   kj::EventLoop loop;
   WaitScope ws(loop);
 
-  auto tee = newTee(heap<MockAsyncInputStream>("foo bar baz"_kj.asBytes(), 11));
+  auto tee = newTee(heap<MockAsyncInputStream>("foo bar baz"_kjb, 11));
   auto left = kj::mv(tee.branches[0]);
   auto right = kj::mv(tee.branches[1]);
 
@@ -3404,7 +3404,7 @@ KJ_TEST("pump file to socket") {
   auto& ws = ioContext.waitScope;
 
   auto doTest = [&](kj::Own<const File> file) {
-    file->writeAll("foobar"_kj.asBytes());
+    file->writeAll("foobar"_kjb);
 
     {
       FileInputStream input(*file);

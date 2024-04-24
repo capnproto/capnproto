@@ -981,8 +981,8 @@ KJ_TEST("rename fields") {
 
     root.setCustomFieldHandler("waldo");
 
-    root.setTestBase64("fred"_kj.asBytes());
-    root.setTestHex("plugh"_kj.asBytes());
+    root.setTestBase64("fred"_kjb);
+    root.setTestHex("plugh"_kjb);
 
     root.getBUnion().setBar(678);
 
