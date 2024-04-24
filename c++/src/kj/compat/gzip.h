@@ -99,7 +99,7 @@ public:
   ~GzipAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncInputStream);
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Promise<ArrayPtr<byte>> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override;
 
 private:
   AsyncInputStream& inner;
@@ -108,7 +108,7 @@ private:
 
   byte buffer[_::KJ_GZ_BUF_SIZE];
 
-  Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
+  kj::Promise<ArrayPtr<byte>> readImpl(kj::ArrayPtr<byte> buffer, size_t minBytes, size_t alreadyRead);
 };
 
 class GzipAsyncOutputStream final: public AsyncOutputStream {
@@ -119,8 +119,8 @@ public:
   GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS));
   KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncOutputStream);
 
-  Promise<void> write(const void* buffer, size_t size) override;
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+  kj::Promise<void> write(
+      kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail = nullptr) override;
 
   Promise<void> whenWriteDisconnected() override { return inner.whenWriteDisconnected(); }
 
@@ -137,6 +137,8 @@ public:
   // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
 private:
+  kj::Promise<void> writeImpl(kj::ArrayPtr<const byte> buffer);
+
   AsyncOutputStream& inner;
   _::GzipOutputContext ctx;
 

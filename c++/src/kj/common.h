@@ -1862,6 +1862,10 @@ public:
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, size_ - start);
   }
+
+  inline ArrayPtr first(size_t count) { return slice(0, count); }
+  inline ArrayPtr<const T> first(size_t count) const { return slice(0, count); }
+
   inline bool startsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && slice(0, other.size()) == other;
   }
@@ -1937,6 +1941,16 @@ private:
   size_t size_;
 };
 
+template<size_t Size>
+inline bool operator==(ArrayPtr<const byte> ptr, const char (&arr)[Size]) {
+  return ptr == ArrayPtr<const char>(arr, Size).asBytes();
+}
+
+// template<size_t Size>
+// inline bool operator==(ArrayPtr<char> ptr, const char (&arr)[Size]) {
+//   return ptr == arrayPtr(arr);
+// }
+
 template <>
 inline Maybe<size_t> ArrayPtr<const char>::findFirst(const char& c) const {
   const char* pos = reinterpret_cast<const char*>(memchr(ptr, c, size_));
@@ -1990,6 +2004,12 @@ template <typename T>
 inline constexpr ArrayPtr<T> arrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFETIMEBOUND) {
   // Use this function to construct ArrayPtrs without writing out the type name.
   return ArrayPtr<T>(begin, end);
+}
+
+template <typename T, size_t Size>
+inline constexpr ArrayPtr<T> arrayPtr(T (&arr)[Size]) {
+  // Use this function to construct ArrayPtrs without writing out the type name.
+  return ArrayPtr<T>(arr);
 }
 
 // =======================================================================================
@@ -2142,5 +2162,9 @@ constexpr bool isDisallowedInCoroutine() {
 //
 
 }  // namespace kj
+
+constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb(const char* str, size_t n) {
+  return kj::ArrayPtr<const char>(str, n).asBytes();
+};
 
 KJ_END_HEADER

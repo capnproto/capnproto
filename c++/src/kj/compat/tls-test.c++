@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/common.h"
 #if KJ_HAS_OPENSSL
 
 #if _WIN32
@@ -432,13 +433,13 @@ struct TlsTest {
   }
 
   Promise<void> writeToServer(AsyncIoStream& client) {
-    return client.write("foo", 4);
+    return client.write(arrayPtr("foo").asBytes());
   }
 
   Promise<void> readFromClient(AsyncIoStream& server) {
-    auto buf = heapArray<char>(4);
+    auto buf = heapArray<byte>(4);
 
-    auto readPromise = server.read(buf.begin(), buf.size());
+    auto readPromise = server.read(buf);
 
     auto checkBuffer = [buf = kj::mv(buf)]() {
       KJ_ASSERT(kj::StringPtr(buf.begin(), buf.end()-1) == kj::StringPtr("foo"));

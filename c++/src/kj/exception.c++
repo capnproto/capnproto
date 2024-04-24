@@ -479,7 +479,7 @@ namespace {
                                    stringifyStackTrace(trace), '\n');
   }
 
-  kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  kj::FdOutputStream(STDERR_FILENO).write(message.asBytes());
   _exit(1);
 }
 
@@ -608,7 +608,7 @@ namespace {
                          "\nstack: ", stringifyStackTraceAddresses(trace),
                          stringifyStackTrace(trace), '\n');
 
-  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  FdOutputStream(STDERR_FILENO).write(message.asBytes());
   _exit(1);
 }
 

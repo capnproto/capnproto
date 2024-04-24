@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/common.h"
 #if KJ_HAS_BROTLI
 
 #include "brotli.h"
@@ -71,9 +72,9 @@ public:
   MockAsyncInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  kj::Promise<ArrayPtr<byte>> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
     // Clamp max read to blockSize.
-    size_t n = kj::min(blockSize, maxBytes);
+    size_t n = kj::min(blockSize, buffer.size());
 
     // Unless that's less than minBytes -- in which case, use minBytes.
     n = kj::max(n, minBytes);
@@ -81,9 +82,9 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
+    memcpy(buffer.begin(), bytes.begin(), n);
     bytes = bytes.slice(n, bytes.size());
-    return n;
+    return buffer.slice(0, n);
   }
 
 private:
@@ -121,12 +122,10 @@ public:
     return brotli.readAllText().wait(ws);
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-    return kj::READY_NOW;
-  }
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    for (auto& piece: pieces) {
+  kj::Promise<void> write(
+      kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail = nullptr) override {
+    bytes.addAll(buffer);
+    for (auto& piece: tail) {
       bytes.addAll(piece);
     }
     return kj::READY_NOW;
@@ -219,13 +218,12 @@ KJ_TEST("async brotli decompression") {
     MockAsyncInputStream rawInput(kj::arrayPtr(FOOBAR_BR, sizeof(FOOBAR_BR) / 2), kj::maxValue);
     BrotliAsyncInputStream brotli(rawInput);
 
-    char text[16];
-    size_t n = brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope);
-    text[n] = '\0';
-    KJ_EXPECT(StringPtr(text, n) == "fo");
+    byte text[16];
+    auto read = brotli.tryRead(arrayPtr(text), 1).wait(io.waitScope);
+    KJ_EXPECT(read == "fo");
 
     KJ_EXPECT_THROW_MESSAGE("brotli compressed stream ended prematurely",
-        brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope));
+        brotli.tryRead(text, 1).wait(io.waitScope).size());
   }
 
   // Check that stream with high window size is rejected. Conversely, check that it is accepted if
@@ -260,11 +258,11 @@ KJ_TEST("async brotli decompression") {
     BrotliAsyncOutputStream brotli(rawOutput, BrotliAsyncOutputStream::DECOMPRESS);
 
     auto mid = sizeof(FOOBAR_BR) / 2;
-    brotli.write(FOOBAR_BR, mid).wait(io.waitScope);
+    brotli.write(arrayPtr(FOOBAR_BR).slice(0, mid)).wait(io.waitScope);
     auto str1 = kj::heapString(rawOutput.bytes.asPtr().asChars());
     KJ_EXPECT(str1 == "fo", str1);
 
-    brotli.write(FOOBAR_BR + mid, sizeof(FOOBAR_BR) - mid).wait(io.waitScope);
+    brotli.write(arrayPtr(FOOBAR_BR).slice(mid)).wait(io.waitScope);
     auto str2 = kj::heapString(rawOutput.bytes.asPtr().asChars());
     KJ_EXPECT(str2 == "foobar", str2);
 
@@ -340,7 +338,7 @@ KJ_TEST("async brotli compression") {
   {
     MockAsyncOutputStream rawOutput;
     BrotliAsyncOutputStream brotli(rawOutput);
-    brotli.write("foobar", 6).wait(io.waitScope);
+    brotli.write(arrayPtr("foobar").asBytes()).wait(io.waitScope);
     brotli.end().wait(io.waitScope);
 
     KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");
@@ -351,10 +349,10 @@ KJ_TEST("async brotli compression") {
     MockAsyncOutputStream rawOutput;
     BrotliAsyncOutputStream brotli(rawOutput);
 
-    brotli.write("foo", 3).wait(io.waitScope);
+    brotli.write(arrayPtr("foo").asBytes()).wait(io.waitScope);
     auto prevSize = rawOutput.bytes.size();
 
-    brotli.write("bar", 3).wait(io.waitScope);
+    brotli.write(arrayPtr("bar").asBytes()).wait(io.waitScope);
     auto curSize = rawOutput.bytes.size();
     KJ_EXPECT(prevSize == curSize, prevSize, curSize);
 
@@ -376,7 +374,7 @@ KJ_TEST("async brotli compression") {
       kj::StringPtr("foo").asBytes(),
       kj::StringPtr("bar").asBytes(),
     };
-    brotli.write(pieces).wait(io.waitScope);
+    brotli.write(nullptr, pieces).wait(io.waitScope);
     brotli.end().wait(io.waitScope);
 
     KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");
@@ -393,7 +391,7 @@ KJ_TEST("async brotli huge round trip") {
 
   MockAsyncOutputStream rawOutput;
   BrotliAsyncOutputStream brotliOut(rawOutput);
-  brotliOut.write(bytes.begin(), bytes.size()).wait(io.waitScope);
+  brotliOut.write(bytes).wait(io.waitScope);
   brotliOut.end().wait(io.waitScope);
 
   MockAsyncInputStream rawInput(rawOutput.bytes, kj::maxValue);

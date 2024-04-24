@@ -437,7 +437,7 @@ KJ_TEST("Can trace through coroutines") {
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
   auto address = co_await addressPromise;
   auto client = co_await address->connect();
-  co_await client->write("foo", 3);
+  co_await client->write(arrayPtr("foo"));
 }
 
 Promise<String> receiveDataCoroutine(Own<ConnectionReceiver> listener) {

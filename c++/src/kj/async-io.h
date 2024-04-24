@@ -22,6 +22,7 @@
 #pragma once
 
 #include "async.h"
+#include "kj/common.h"
 #include <kj/function.h>
 #include <kj/thread.h>
 #include <kj/timer.h>
@@ -55,10 +56,10 @@ class AsyncInputStream: private AsyncObject {
   // Asynchronous equivalent of InputStream (from io.h).
 
 public:
-  virtual Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes);
-  virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  virtual Promise<ArrayPtr<byte>> read(ArrayPtr<byte> buffer, size_t minBytes);
+  virtual Promise<ArrayPtr<byte>> tryRead(ArrayPtr<byte> buffer, size_t minBytes) = 0;
 
-  Promise<void> read(void* buffer, size_t bytes);
+  Promise<void> read(ArrayPtr<byte> buffer);
 
   virtual Maybe<uint64_t> tryGetLength();
   // Get the remaining number of bytes that will be produced by this stream, if known.
@@ -109,9 +110,7 @@ class AsyncOutputStream: private AsyncObject {
   // Asynchronous equivalent of OutputStream (from io.h).
 
 public:
-  virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
-  virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
-      KJ_WARN_UNUSED_RESULT = 0;
+  virtual Promise<void> write(ArrayPtr<const byte> buffer, ArrayPtr<const ArrayPtr<const byte>> tail = nullptr) KJ_WARN_UNUSED_RESULT = 0;
 
   virtual Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue);
@@ -177,12 +176,12 @@ class NullStream final: public AsyncIoStream {
   //
   // Hint: You can also use this class when you just need an input stream or an output stream.
 public:
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Promise<ArrayPtr<byte>> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override;
   kj::Maybe<uint64_t> tryGetLength() override;
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
-  kj::Promise<void> write(const void* buffer, size_t size) override;
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
+  kj::Promise<void> write(
+      kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail) override;
   kj::Promise<void> whenWriteDisconnected() override;
 
   void shutdownWrite() override;
@@ -243,12 +242,12 @@ public:
   // probably a bad idea.
 
   struct ReadResult {
-    size_t byteCount;
+    kj::ArrayPtr<byte> read;
     size_t capCount;
   };
 
-  virtual Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                             AutoCloseFd* fdBuffer, size_t maxFds) = 0;
+  virtual Promise<ReadResult> tryReadWithFds(ArrayPtr<byte> buffer, size_t minBytes,
+                                             kj::ArrayPtr<kj::AutoCloseFd> fdBuffer) = 0;
   // Read data from the stream that may have file descriptors attached. Any attached descriptors
   // will be placed in `fdBuffer`. If multiple bundles of FDs are encountered in the course of
   // reading the amount of data requested by minBytes/maxBytes, then they will be concatenated. If
@@ -261,8 +260,8 @@ public:
                                          ArrayPtr<const ArrayPtr<const byte>> moreData,
                                          Array<Own<AsyncCapabilityStream>> streams) = 0;
   virtual Promise<ReadResult> tryReadWithStreams(
-      void* buffer, size_t minBytes, size_t maxBytes,
-      Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) = 0;
+      kj::ArrayPtr<byte> buffer, size_t minBytes,
+      ArrayPtr<Own<AsyncCapabilityStream>> streamBuffer) = 0;
   // Like above, but passes AsyncCapabilityStream objects. The stream implementations must be from
   // the same AsyncIoProvider.
 
@@ -1050,8 +1049,8 @@ public:
   uint64_t getOffset() { return offset; }
   void seek(uint64_t newOffset) { offset = newOffset; }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes);
-  Maybe<uint64_t> tryGetLength();
+  kj::Promise<ArrayPtr<byte>> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override;
+  Maybe<uint64_t> tryGetLength() override;
 
   // (pumpTo() is not actually overridden here, but AsyncStreamFd's tryPumpFrom() will detect when
   // the source is a file.)

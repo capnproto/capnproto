@@ -1514,12 +1514,18 @@ public:
 
   FSNODE_METHODS(DiskAppendableFile);
 
-  void write(const void* buffer, size_t size) override {
-    FdOutputStream::write(buffer, size);
+  void write(
+      kj::ArrayPtr<const byte> data, 
+      kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) override {
+    KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
   }
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    FdOutputStream::write(pieces);
-  }
+
+  // void write(const void* buffer, size_t size) {
+  //   FdOutputStream::write(buffer, size);
+  // }
+  // void write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  //   FdOutputStream::write(pieces);
+  // }
 };
 
 class DiskFile final: public File, public DiskHandle {

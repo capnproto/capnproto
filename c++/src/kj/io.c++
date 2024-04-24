@@ -106,12 +106,6 @@ Array<byte> InputStream::readAllBytes(uint64_t limit) {
   return readAll(*this, limit, false);
 }
 
-void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  for (auto piece: pieces) {
-    write(piece.begin(), piece.size());
-  }
-}
-
 ArrayPtr<const byte> BufferedInputStream::getReadBuffer() {
   auto result = tryGetReadBuffer();
   KJ_REQUIRE(result.size() > 0, "Premature EOF");
@@ -199,43 +193,44 @@ BufferedOutputStreamWrapper::~BufferedOutputStreamWrapper() noexcept(false) {
 
 void BufferedOutputStreamWrapper::flush() {
   if (bufferPos > buffer.begin()) {
-    inner.write(buffer.begin(), bufferPos - buffer.begin());
+    inner.write(buffer.first(bufferPos - buffer.begin()));
     bufferPos = buffer.begin();
   }
 }
 
-ArrayPtr<byte> BufferedOutputStreamWrapper::getWriteBuffer() {
-  return arrayPtr(bufferPos, buffer.end());
+void BufferedOutputStreamWrapper::write(
+    kj::ArrayPtr<const byte> data, 
+    kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) {
+  KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
 }
+// void BufferedOutputStreamWrapper::write(const void* src, size_t size) {
+//   if (src == bufferPos) {
+//     // Oh goody, the caller wrote directly into our buffer.
+//     bufferPos += size;
+//   } else {
+//     size_t available = buffer.end() - bufferPos;
 
-void BufferedOutputStreamWrapper::write(const void* src, size_t size) {
-  if (src == bufferPos) {
-    // Oh goody, the caller wrote directly into our buffer.
-    bufferPos += size;
-  } else {
-    size_t available = buffer.end() - bufferPos;
+//     if (size <= available) {
+//       memcpy(bufferPos, src, size);
+//       bufferPos += size;
+//     } else if (size <= buffer.size()) {
+//       // Too much for this buffer, but not a full buffer's worth, so we'll go ahead and copy.
+//       memcpy(bufferPos, src, available);
+//       inner.write(buffer);
 
-    if (size <= available) {
-      memcpy(bufferPos, src, size);
-      bufferPos += size;
-    } else if (size <= buffer.size()) {
-      // Too much for this buffer, but not a full buffer's worth, so we'll go ahead and copy.
-      memcpy(bufferPos, src, available);
-      inner.write(buffer.begin(), buffer.size());
+//       size -= available;
+//       src = reinterpret_cast<const byte*>(src) + available;
 
-      size -= available;
-      src = reinterpret_cast<const byte*>(src) + available;
-
-      memcpy(buffer.begin(), src, size);
-      bufferPos = buffer.begin() + size;
-    } else {
-      // Writing so much data that we might as well write directly to avoid a copy.
-      inner.write(buffer.begin(), bufferPos - buffer.begin());
-      bufferPos = buffer.begin();
-      inner.write(src, size);
-    }
-  }
-}
+//       memcpy(buffer.begin(), src, size);
+//       bufferPos = buffer.begin() + size;
+//     } else {
+//       // Writing so much data that we might as well write directly to avoid a copy.
+//       inner.write(buffer.begin(), bufferPos - buffer.begin());
+//       bufferPos = buffer.begin();
+//       inner.write(src, size);
+//     }
+//   }
+// }
 
 // =======================================================================================
 
@@ -270,18 +265,24 @@ ArrayPtr<byte> ArrayOutputStream::getWriteBuffer() {
   return arrayPtr(fillPos, array.end());
 }
 
-void ArrayOutputStream::write(const void* src, size_t size) {
-  if (src == fillPos && fillPos != array.end()) {
-    // Oh goody, the caller wrote directly into our buffer.
-    KJ_REQUIRE(size <= array.end() - fillPos, size, fillPos, array.end() - fillPos);
-    fillPos += size;
-  } else {
-    KJ_REQUIRE(size <= (size_t)(array.end() - fillPos),
-            "ArrayOutputStream's backing array was not large enough for the data written.");
-    memcpy(fillPos, src, size);
-    fillPos += size;
-  }
+void OutputStream::write(
+    kj::ArrayPtr<const byte> data, 
+    kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) {
+  KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
 }
+
+// void ArrayOutputStream::write(const void* src, size_t size) {
+//   if (src == fillPos && fillPos != array.end()) {
+//     // Oh goody, the caller wrote directly into our buffer.
+//     KJ_REQUIRE(size <= array.end() - fillPos, size, fillPos, array.end() - fillPos);
+//     fillPos += size;
+//   } else {
+//     KJ_REQUIRE(size <= (size_t)(array.end() - fillPos),
+//             "ArrayOutputStream's backing array was not large enough for the data written.");
+//     memcpy(fillPos, src, size);
+//     fillPos += size;
+//   }
+// }
 
 // -------------------------------------------------------------------
 
@@ -298,20 +299,26 @@ ArrayPtr<byte> VectorOutputStream::getWriteBuffer() {
   return arrayPtr(fillPos, vector.end());
 }
 
-void VectorOutputStream::write(const void* src, size_t size) {
-  if (src == fillPos && fillPos != vector.end()) {
-    // Oh goody, the caller wrote directly into our buffer.
-    KJ_REQUIRE(size <= vector.end() - fillPos, size, fillPos, vector.end() - fillPos);
-    fillPos += size;
-  } else {
-    if (vector.end() - fillPos < size) {
-      grow(fillPos - vector.begin() + size);
-    }
-
-    memcpy(fillPos, src, size);
-    fillPos += size;
-  }
+void VectorOutputStream::write(
+    kj::ArrayPtr<const byte> data, 
+    kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) {
+  KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
 }
+
+// void VectorOutputStream::write(const void* src, size_t size) {
+//   if (src == fillPos && fillPos != vector.end()) {
+//     // Oh goody, the caller wrote directly into our buffer.
+//     KJ_REQUIRE(size <= vector.end() - fillPos, size, fillPos, vector.end() - fillPos);
+//     fillPos += size;
+//   } else {
+//     if (vector.end() - fillPos < size) {
+//       grow(fillPos - vector.begin() + size);
+//     }
+
+//     memcpy(fillPos, src, size);
+//     fillPos += size;
+//   }
+// }
 
 void VectorOutputStream::grow(size_t minSize) {
   size_t newSize = vector.size() * 2;
@@ -357,69 +364,75 @@ size_t FdInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
 
 FdOutputStream::~FdOutputStream() noexcept(false) {}
 
-void FdOutputStream::write(const void* buffer, size_t size) {
-  const char* pos = reinterpret_cast<const char*>(buffer);
-
-  while (size > 0) {
-    miniposix::ssize_t n;
-    KJ_SYSCALL(n = miniposix::write(fd, pos, size), fd);
-    KJ_ASSERT(n > 0, "write() returned zero.");
-    pos += n;
-    size -= n;
-  }
+void FdOutputStream::write(
+    kj::ArrayPtr<const byte> data, 
+    kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) {
+  KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
 }
 
-void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-#if _WIN32
-  // Windows has no reasonable writev(). It has WriteFileGather, but this call has the unreasonable
-  // restriction that each segment must be page-aligned. So, fall back to the default implementation
+// void FdOutputStream::write(const void* buffer, size_t size) {
+//   const char* pos = reinterpret_cast<const char*>(buffer);
 
-  OutputStream::write(pieces);
+//   while (size > 0) {
+//     miniposix::ssize_t n;
+//     KJ_SYSCALL(n = miniposix::write(fd, pos, size), fd);
+//     KJ_ASSERT(n > 0, "write() returned zero.");
+//     pos += n;
+//     size -= n;
+//   }
+// }
 
-#else
-  const size_t iovmax = miniposix::iovMax();
-  while (pieces.size() > iovmax) {
-    write(pieces.slice(0, iovmax));
-    pieces = pieces.slice(iovmax, pieces.size());
-  }
+// void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+// #if _WIN32
+//   // Windows has no reasonable writev(). It has WriteFileGather, but this call has the unreasonable
+//   // restriction that each segment must be page-aligned. So, fall back to the default implementation
 
-  KJ_STACK_ARRAY(struct iovec, iov, pieces.size(), 16, 128);
+//   OutputStream::write(pieces);
 
-  for (uint i = 0; i < pieces.size(); i++) {
-    // writev() interface is not const-correct.  :(
-    iov[i].iov_base = const_cast<byte*>(pieces[i].begin());
-    iov[i].iov_len = pieces[i].size();
-  }
+// #else
+//   const size_t iovmax = miniposix::iovMax();
+//   while (pieces.size() > iovmax) {
+//     write(pieces.slice(0, iovmax));
+//     pieces = pieces.slice(iovmax, pieces.size());
+//   }
 
-  struct iovec* current = iov.begin();
+//   KJ_STACK_ARRAY(struct iovec, iov, pieces.size(), 16, 128);
 
-  // Advance past any leading empty buffers so that a write full of only empty buffers does not
-  // cause a syscall at all.
-  while (current < iov.end() && current->iov_len == 0) {
-    ++current;
-  }
+//   for (uint i = 0; i < pieces.size(); i++) {
+//     // writev() interface is not const-correct.  :(
+//     iov[i].iov_base = const_cast<byte*>(pieces[i].begin());
+//     iov[i].iov_len = pieces[i].size();
+//   }
 
-  while (current < iov.end()) {
-    // Issue the write.
-    ssize_t n = 0;
-    KJ_SYSCALL(n = ::writev(fd, current, iov.end() - current), fd);
-    KJ_ASSERT(n > 0, "writev() returned zero.");
+//   struct iovec* current = iov.begin();
 
-    // Advance past all buffers that were fully-written.
-    while (current < iov.end() && static_cast<size_t>(n) >= current->iov_len) {
-      n -= current->iov_len;
-      ++current;
-    }
+//   // Advance past any leading empty buffers so that a write full of only empty buffers does not
+//   // cause a syscall at all.
+//   while (current < iov.end() && current->iov_len == 0) {
+//     ++current;
+//   }
 
-    // If we only partially-wrote one of the buffers, adjust the pointer and size to include only
-    // the unwritten part.
-    if (n > 0) {
-      current->iov_base = reinterpret_cast<byte*>(current->iov_base) + n;
-      current->iov_len -= n;
-    }
-  }
-#endif
-}
+//   while (current < iov.end()) {
+//     // Issue the write.
+//     ssize_t n = 0;
+//     KJ_SYSCALL(n = ::writev(fd, current, iov.end() - current), fd);
+//     KJ_ASSERT(n > 0, "writev() returned zero.");
+
+//     // Advance past all buffers that were fully-written.
+//     while (current < iov.end() && static_cast<size_t>(n) >= current->iov_len) {
+//       n -= current->iov_len;
+//       ++current;
+//     }
+
+//     // If we only partially-wrote one of the buffers, adjust the pointer and size to include only
+//     // the unwritten part.
+//     if (n > 0) {
+//       current->iov_base = reinterpret_cast<byte*>(current->iov_base) + n;
+//       current->iov_len -= n;
+//     }
+//   }
+// #endif
+// }
 
 // =======================================================================================
 

@@ -1802,9 +1802,14 @@ public:
   void sync() const override { file->sync(); }
   void datasync() const override { file->datasync(); }
 
-  void write(const void* buffer, size_t size) override {
-    file->write(file->stat().size, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  void write(
+      kj::ArrayPtr<const byte> data, 
+      kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData) override {
+    KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
   }
+  // void write(const void* buffer, size_t size) override {
+  //   file->write(file->stat().size, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  // }
 
 private:
   Own<const File> file;

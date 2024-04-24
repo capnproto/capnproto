@@ -262,33 +262,32 @@ BrotliAsyncInputStream::~BrotliAsyncInputStream() noexcept(false) {
   BrotliDecoderDestroyInstance(ctx);
 }
 
-Promise<size_t> BrotliAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return constPromise<size_t, 0>();
-
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+kj::Promise<ArrayPtr<byte>> BrotliAsyncInputStream::tryRead(kj::ArrayPtr<byte> out, size_t minBytes) {
+  if (out.size() == 0) return nullptr;
+  return readImpl(out, minBytes, 0);
 }
 
-Promise<size_t> BrotliAsyncInputStream::readImpl(
-    byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
+kj::Promise<ArrayPtr<byte>> BrotliAsyncInputStream::readImpl(
+    kj::ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   // Ask for more input unless there is pending output
   if (availableIn == 0 && !BrotliDecoderHasMoreOutput(ctx)) {
-    return inner.tryRead(buffer, 1, sizeof(buffer))
-        .then([this,out,minBytes,maxBytes,alreadyRead](size_t amount) -> Promise<size_t> {
-      if (amount == 0) {
+    return inner.tryRead(arrayPtr(buffer), 1)
+        .then([this,out,minBytes,alreadyRead](auto result) mutable -> kj::Promise<ArrayPtr<byte>> {
+      if (result.size() == 0) {
         if (!atValidEndpoint) {
           return KJ_EXCEPTION(DISCONNECTED, "brotli compressed stream ended prematurely");
         }
-        return alreadyRead;
+        return out.slice(0, alreadyRead);
       } else {
         nextIn = buffer;
-        availableIn = amount;
-        return readImpl(out, minBytes, maxBytes, alreadyRead);
+        availableIn = result.size();
+        return readImpl(out, minBytes, alreadyRead);
       }
     });
   }
 
-  byte* nextOut = out;
-  size_t availableOut = maxBytes;
+  byte* nextOut = out.begin();
+  size_t availableOut = out.size();
   // Check window bits
   if (firstInput && availableIn) {
     firstInput = false;
@@ -313,11 +312,11 @@ Promise<size_t> BrotliAsyncInputStream::readImpl(
     firstInput = true;
   }
 
-  size_t n = maxBytes - availableOut;
+  size_t n = out.size() - availableOut;
   if (n >= minBytes) {
-    return n + alreadyRead;
+    return out.slice(0, n + alreadyRead);
   } else {
-    return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+    return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
   }
 }
 
@@ -331,17 +330,20 @@ BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, declt
                                                  int windowBits)
     : inner(inner), ctx(kj::none, windowBits) {}
 
-Promise<void> BrotliAsyncOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
+Promise<void> BrotliAsyncOutputStream::writeImpl(ArrayPtr<const byte> data) {
+  ctx.setInput(data.begin(), data.size());
   return pump(BROTLI_OPERATION_PROCESS);
 }
 
-Promise<void> BrotliAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
-      .then([this,pieces]() {
-    return write(pieces.slice(1, pieces.size()));
-  });
+Promise<void> BrotliAsyncOutputStream::write(kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail) {
+  Promise<void> result = kj::READY_NOW;
+  if (buffer.size() > 0) {
+    result = result.then([this, buffer]() { return writeImpl(buffer); });
+  }
+  for (auto piece: tail) {
+    result = result.then([this, piece]() { return writeImpl(piece); });
+  }
+  return result;
 }
 
 kj::Promise<void> BrotliAsyncOutputStream::pump(BrotliEncoderOperation flush) {
@@ -356,7 +358,7 @@ kj::Promise<void> BrotliAsyncOutputStream::pump(BrotliEncoderOperation flush) {
       return kj::READY_NOW;
     }
   } else {
-    auto promise = inner.write(chunk.begin(), chunk.size());
+    auto promise = inner.write(chunk);
     if (ok) {
       promise = promise.then([this, flush]() { return pump(flush); });
     }

@@ -745,7 +745,7 @@ public:
 
   _::Deferred<kj::Function<void()>> trackWrite();
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Promise<ArrayPtr<byte>> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override;
 
   kj::Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes);
 
@@ -753,9 +753,8 @@ public:
 
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
-  kj::Promise<void> write(const void* buffer, size_t size) override;
-
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
+  kj::Promise<void> write(
+      kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail = nullptr) override;
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override;

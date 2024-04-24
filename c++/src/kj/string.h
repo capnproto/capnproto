@@ -144,6 +144,7 @@ public:
   inline ArrayPtr<const char> slice(size_t start, size_t end) const;
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
+  inline ArrayPtr<const char> first(size_t size) const { return slice(0, size); }
 
   inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
   inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }

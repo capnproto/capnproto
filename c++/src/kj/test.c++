@@ -268,7 +268,7 @@ private:
   };
 
   void write(StringPtr text) {
-    FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
+    FdOutputStream(STDOUT_FILENO).write(text.asBytes());
   }
 
   void write(Color color, StringPtr prefix, StringPtr message) {

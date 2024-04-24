@@ -187,32 +187,31 @@ GzipAsyncInputStream::~GzipAsyncInputStream() noexcept(false) {
   inflateEnd(&ctx);
 }
 
-Promise<size_t> GzipAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return constPromise<size_t, 0>();
-
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+kj::Promise<ArrayPtr<byte>> GzipAsyncInputStream::tryRead(kj::ArrayPtr<byte> out, size_t minBytes) {
+  if (out.size() == 0) return nullptr;
+  return readImpl(out, minBytes, 0);
 }
 
-Promise<size_t> GzipAsyncInputStream::readImpl(
-    byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
+kj::Promise<ArrayPtr<byte>> GzipAsyncInputStream::readImpl(
+    kj::ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
-    return inner.tryRead(buffer, 1, sizeof(buffer))
-        .then([this,out,minBytes,maxBytes,alreadyRead](size_t amount) -> Promise<size_t> {
-      if (amount == 0) {
+    return inner.tryRead(kj::arrayPtr(buffer), 1)
+        .then([this,out,minBytes,alreadyRead](ArrayPtr<byte> result) mutable -> Promise<ArrayPtr<byte>> {
+      if (result.size() == 0) {
         if (!atValidEndpoint) {
           return KJ_EXCEPTION(DISCONNECTED, "gzip compressed stream ended prematurely");
         }
-        return alreadyRead;
+        return out.slice(0, alreadyRead);
       } else {
         ctx.next_in = buffer;
-        ctx.avail_in = amount;
-        return readImpl(out, minBytes, maxBytes, alreadyRead);
+        ctx.avail_in = result.size();
+        return readImpl(out, minBytes, alreadyRead);
       }
     });
   }
 
-  ctx.next_out = out;
-  ctx.avail_out = maxBytes;
+  ctx.next_out = out.begin();
+  ctx.avail_out = out.size();
 
   auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
   atValidEndpoint = inflateResult == Z_STREAM_END;
@@ -222,11 +221,11 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
       KJ_ASSERT(inflateReset(&ctx) == Z_OK);
     }
 
-    size_t n = maxBytes - ctx.avail_out;
+    size_t n = out.size() - ctx.avail_out;
     if (n >= minBytes) {
-      return n + alreadyRead;
+      return out.slice(0, n + alreadyRead);
     } else {
-      return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+      return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
     }
   } else {
     if (ctx.msg == nullptr) {
@@ -245,17 +244,20 @@ GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compr
 GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS))
     : inner(inner), ctx(kj::none) {}
 
-Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
+Promise<void> GzipAsyncOutputStream::writeImpl(kj::ArrayPtr<const byte> buffer) {
+  ctx.setInput(buffer.begin(), buffer.size());
   return pump(Z_NO_FLUSH);
 }
 
-Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
-      .then([this,pieces]() {
-    return write(pieces.slice(1, pieces.size()));
-  });
+Promise<void> GzipAsyncOutputStream::write(kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail) {
+  Promise<void> result = kj::READY_NOW;
+  if (buffer.size() > 0) {
+    result = result.then([this, buffer]() { return writeImpl(buffer); });
+  }
+  for (auto piece: tail) {
+    result = result.then([this, piece]() { return writeImpl(piece); });
+  }
+  return result;
 }
 
 kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
@@ -270,7 +272,7 @@ kj::Promise<void> GzipAsyncOutputStream::pump(int flush) {
       return kj::READY_NOW;
     }
   } else {
-    auto promise = inner.write(chunk.begin(), chunk.size());
+    auto promise = inner.write(chunk);
     if (ok) {
       promise = promise.then([this, flush]() { return pump(flush); });
     }

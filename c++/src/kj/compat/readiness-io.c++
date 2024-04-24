@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "readiness-io.h"
+#include "kj/common.h"
 
 namespace kj {
 
@@ -43,11 +44,11 @@ kj::Maybe<size_t> ReadyInputStreamWrapper::read(kj::ArrayPtr<byte> dst) {
     if (!isPumping) {
       isPumping = true;
       pumpTask = kj::evalNow([&]() {
-        return input.tryRead(buffer, 1, sizeof(buffer)).then([this](size_t n) {
-          if (n == 0) {
+        return input.tryRead(arrayPtr(buffer), 1).then([this](auto result) {
+          if (result.size() == 0) {
             eof = true;
           } else {
-            content = kj::arrayPtr(buffer, n);
+            content = result;
           }
           isPumping = false;
         });
@@ -131,12 +132,12 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
 
   kj::Promise<void> promise = nullptr;
   if (end <= sizeof(buffer)) {
-    promise = output.write(buffer + start, filled);
+    promise = output.write(arrayPtr(buffer + start, filled));
   } else {
     end = end % sizeof(buffer);
     segments[0] = kj::arrayPtr(buffer + start, buffer + sizeof(buffer));
     segments[1] = kj::arrayPtr(buffer, buffer + end);
-    promise = output.write(segments);
+    promise = output.write(nullptr, segments);
   }
 
   return promise.then([this,oldFilled,end]() -> kj::Promise<void> {

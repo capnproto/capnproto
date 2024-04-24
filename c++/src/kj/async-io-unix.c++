@@ -154,14 +154,14 @@ public:
         observer(eventPort, fd, observerFlags) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, nullptr, 0, {0,0})
-        .then([](ReadResult r) { return r.byteCount; });
+  kj::Promise<ArrayPtr<byte>> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
+    return tryReadInternal(buffer, minBytes, nullptr, 0, {0,0})
+        .then([](ReadResult r) { return r.read; });
   }
 
-  Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                     AutoCloseFd* fdBuffer, size_t maxFds) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, {0,0});
+  Promise<ReadResult> tryReadWithFds(kj::ArrayPtr<byte> buffer, size_t minBytes,
+                                     kj::ArrayPtr<AutoCloseFd> fdBuffer) override {
+    return tryReadInternal(buffer, minBytes, fdBuffer, {0,0});
   }
 
   Promise<ReadResult> tryReadWithStreams(
@@ -181,7 +181,12 @@ public:
     });
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
+  kj::Promise<void> write(
+      kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail = nullptr) override {
+      KJ_FAIL_REQUIRE("NOT IMPLEMENTED");
+  }
+
+  Promise<void> write(const void* buffer, size_t size) {
     ssize_t n;
     KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer, size)) {
       // Error.
@@ -216,7 +221,7 @@ public:
     }
   }
 
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
     if (pieces.size() == 0) {
       return writeInternal(nullptr, nullptr, nullptr);
     } else {
@@ -557,7 +562,7 @@ private:
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
   Maybe<Function<void(ArrayPtr<AncillaryMessage>)>> ancillaryMsgCallback;
 
-  Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
+  Promise<ReadResult> tryReadInternal(kj::ArrayPtr<byte> buffer, size_t minBytes,
                                       AutoCloseFd* fdBuffer, size_t maxFds,
                                       ReadResult alreadyRead) {
     // `alreadyRead` is the number of bytes we have already received via previous reads -- minBytes,

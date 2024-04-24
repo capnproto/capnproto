@@ -78,13 +78,9 @@ class OutputStream {
 public:
   virtual ~OutputStream() noexcept(false);
 
-  virtual void write(const void* buffer, size_t size) = 0;
-  // Always writes the full size.  Throws exception on error.
-
-  virtual void write(ArrayPtr<const ArrayPtr<const byte>> pieces);
-  // Equivalent to write()ing each byte array in sequence, which is what the default implementation
-  // does.  Override if you can do something better, e.g. use writev() to do the write in a single
-  // syscall.
+  virtual void write(
+      kj::ArrayPtr<const byte> data, 
+      kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData = nullptr) = 0;
 };
 
 class BufferedInputStream: public InputStream {
@@ -177,7 +173,10 @@ public:
 
   // implements BufferedOutputStream ---------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
-  void write(const void* buffer, size_t size) override;
+
+  void write(
+      kj::ArrayPtr<const byte> data, 
+      kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData = nullptr) override;
 
 private:
   OutputStream& inner;
@@ -218,7 +217,9 @@ public:
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
-  void write(const void* buffer, size_t size) override;
+  void write(
+      kj::ArrayPtr<const byte> data, 
+      kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData = nullptr) override;
 
 private:
   ArrayPtr<byte> array;
@@ -240,7 +241,9 @@ public:
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
-  void write(const void* buffer, size_t size) override;
+  void write(
+      kj::ArrayPtr<const byte> data, 
+      kj::ArrayPtr<const kj::ArrayPtr<const byte>> moreData = nullptr) override;
 
 private:
   Array<byte> vector;
@@ -333,8 +336,8 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(FdOutputStream);
   ~FdOutputStream() noexcept(false);
 
-  void write(const void* buffer, size_t size) override;
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+  void write(
+    kj::ArrayPtr<const byte> buffer, kj::ArrayPtr<const kj::ArrayPtr<const byte>> tail = nullptr) override;
 
   inline int getFd() const { return fd; }
 
