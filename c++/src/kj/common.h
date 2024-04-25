@@ -1995,6 +1995,12 @@ inline constexpr ArrayPtr<T> arrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFET
   return ArrayPtr<T>(begin, end);
 }
 
+template <typename T, size_t Size>
+inline constexpr ArrayPtr<T> arrayPtr(T (&arr)[Size]) {
+  // Use this function to construct ArrayPtrs without writing out the type name.
+  return ArrayPtr<T>(arr);
+}
+
 // =======================================================================================
 // Casts
 
