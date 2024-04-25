@@ -976,5 +976,12 @@ KJ_TEST("_kjb") {
   KJ_EXPECT(arr[2] == 'c');
 }
 
+KJ_TEST("arrayPtr()") {
+  // arrayPtr can be used to create ArrayPtr from a fixed-size array without spelling out types
+  byte buffer[1024]{};
+  auto ptr = arrayPtr(buffer);
+  KJ_EXPECT(ptr.size() == 1024);
+}
+
 }  // namespace
 }  // namespace kj
