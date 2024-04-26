@@ -72,7 +72,7 @@ namespace {
 
 class TestExceptionCallback: public ExceptionCallback {
 public:
-  TestExceptionCallback(ProcessContext& context): context(context) {}
+  TestExceptionCallback(const ProcessContext& context): context(context) {}
 
   bool failed() { return sawError; }
 
@@ -95,8 +95,15 @@ public:
     }
   }
 
+  Function<void(Function<void()>)> getThreadInitializer() override {
+    return [&](Function<void()> func) {
+      TestExceptionCallback exceptionCallback(context);
+      func();
+    };
+  }
+
 private:
-  ProcessContext& context;
+  const ProcessContext& context;
   bool sawError = false;
 };
 
