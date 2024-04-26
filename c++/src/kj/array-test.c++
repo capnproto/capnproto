@@ -540,10 +540,12 @@ KJ_TEST("Array::slice(start, end)") {
     KJ_EXPECT(arr.slice(i, i).size() == 0);
   }
 
+#ifdef KJ_DEBUG
   // start > end
   KJ_EXPECT_THROW(FAILED, arr.slice(2, 1));
   // end > size
   KJ_EXPECT_THROW(FAILED, arr.slice(2, 5));
+#endif
 }
 
 KJ_TEST("Array::slice(start, end) const") {
@@ -563,10 +565,12 @@ KJ_TEST("Array::slice(start, end) const") {
     KJ_EXPECT(arr.slice(i, i).size() == 0);
   }
 
+#ifdef KJ_DEBUG
   // start > end
   KJ_EXPECT_THROW(FAILED, arr.slice(2, 1));
   // end > size
   KJ_EXPECT_THROW(FAILED, arr.slice(2, 5));
+#endif
 }
 
 KJ_TEST("Array::slice(start)") {
@@ -578,8 +582,10 @@ KJ_TEST("Array::slice(start)") {
   KJ_EXPECT(arr.slice(3) == kj::arr(3));
   KJ_EXPECT(arr.slice(4).size() == 0);
 
+#ifdef KJ_DEBUG
   // start > size
   KJ_EXPECT_THROW(FAILED, arr.slice(5));
+#endif
 }
 
 KJ_TEST("Array::slice(start) const") {
@@ -591,8 +597,10 @@ KJ_TEST("Array::slice(start) const") {
   KJ_EXPECT(arr.slice(3) == kj::arr(3));
   KJ_EXPECT(arr.slice(4).size() == 0);
 
+#ifdef KJ_DEBUG
   // start > size
   KJ_EXPECT_THROW(FAILED, arr.slice(5));
+#endif
 }
 
 }  // namespace
