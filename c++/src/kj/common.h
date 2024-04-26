@@ -1935,6 +1935,14 @@ public:
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
 
+  inline void fill(T t) { 
+    // Fill the area by copying t over every element.
+
+    for (size_t i = 0; i < size_; i++) { ptr[i] = t; } 
+    // All modern compilers are smart enough to optimize this loop for simple T's.
+    // libc++ std::fill doesn't have memset specialization either.
+  }
+
 private:
   T* ptr;
   size_t size_;

@@ -926,6 +926,33 @@ KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {
   KJ_EXPECT(arr.findLast(78).orDefault(100) == 100);
 }
 
+KJ_TEST("kj::ArrayPtr fill") {
+  int64_t int64Array[] = {12, 34, 56, 34, 12};
+  arrayPtr(int64Array).fill(42);
+  for (auto i: int64Array) {
+    KJ_EXPECT(i == 42);
+  }
+
+  // test small sizes separately, since compilers do a memset optimization
+  byte byteArray[256];
+  arrayPtr(byteArray).fill(42);
+  for (auto b: byteArray) {
+    KJ_EXPECT(b == 42);
+  }
+
+  // test an object
+  struct SomeObject {
+    int64_t i;
+    double d;
+  };
+  SomeObject objs[256];
+  arrayPtr(objs).fill(SomeObject{42, 3.1415926});
+  for (auto& o: objs) {
+    KJ_EXPECT(o.i == 42);
+    KJ_EXPECT(o.d == 3.1415926);
+  }
+}
+
 struct Std {
   template<typename T>
   static std::span<T> from(ArrayPtr<T>* arr) {
