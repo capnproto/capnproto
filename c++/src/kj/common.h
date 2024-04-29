@@ -1892,7 +1892,7 @@ public:
     return kj::none;
   }
 
-  inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
+  constexpr ArrayPtr<PropagateConst<T, byte>> asBytes() const {
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.
     return { reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T) };
