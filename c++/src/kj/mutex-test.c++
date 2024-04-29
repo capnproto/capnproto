@@ -74,12 +74,12 @@ TEST(Mutex, MutexGuarded) {
     auto timeout = MILLISECONDS * 50;
 
     auto startTime = systemPreciseMonotonicClock().now();
-    EXPECT_TRUE(value.lockExclusiveWithTimeout(timeout) == nullptr);
+    EXPECT_TRUE(value.lockExclusiveWithTimeout(timeout) == kj::none);
     auto duration = startTime - systemPreciseMonotonicClock().now();
     EXPECT_TRUE(duration < timeout);
 
     startTime = systemPreciseMonotonicClock().now();
-    EXPECT_TRUE(value.lockSharedWithTimeout(timeout) == nullptr);
+    EXPECT_TRUE(value.lockSharedWithTimeout(timeout) == kj::none);
     duration = startTime - systemPreciseMonotonicClock().now();
     EXPECT_TRUE(duration < timeout);
 
@@ -89,7 +89,7 @@ TEST(Mutex, MutexGuarded) {
     Thread lockTimeoutThread([&]() {
       // try to timeout during 10 ms delay
       Maybe<Locked<uint>> maybeLock = value.lockExclusiveWithTimeout(MILLISECONDS * 8);
-      EXPECT_TRUE(maybeLock == nullptr);
+      EXPECT_TRUE(maybeLock == kj::none);
     });
 #endif
 
@@ -505,7 +505,7 @@ TEST(Mutex, LazyException) {
           return space.construct(123);
         });
   });
-  EXPECT_TRUE(exception != nullptr);
+  EXPECT_TRUE(exception != kj::none);
 
   uint i = lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
         return space.construct(456);
@@ -687,7 +687,7 @@ KJ_TEST("tracking blocking on mutex acquisition") {
   KJ_REQUIRE(-1 != timer_settime(timer, 0, &spec, nullptr));
 
   kj::SourceLocation expectedBlockLocation;
-  KJ_REQUIRE(foo.lockSharedWithTimeout(100 * MILLISECONDS, expectedBlockLocation) == nullptr);
+  KJ_REQUIRE(foo.lockSharedWithTimeout(100 * MILLISECONDS, expectedBlockLocation) == kj::none);
 
   KJ_EXPECT(blockingInfo.blockedOnMutexAcquisition);
   KJ_EXPECT(blockingInfo.blockLocation == expectedBlockLocation);
@@ -829,7 +829,7 @@ KJ_TEST("tracking blocked on Once::init") {
 KJ_TEST("get location of exclusive mutex") {
   _::Mutex mutex;
   kj::SourceLocation lockAcquisition;
-  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, lockAcquisition);
+  mutex.lock(_::Mutex::EXCLUSIVE, kj::none, lockAcquisition);
   KJ_DEFER(mutex.unlock(_::Mutex::EXCLUSIVE));
 
   const auto& lockedInfo = mutex.lockedInfo();
@@ -841,7 +841,7 @@ KJ_TEST("get location of exclusive mutex") {
 KJ_TEST("get location of shared mutex") {
   _::Mutex mutex;
   kj::SourceLocation lockLocation;
-  mutex.lock(_::Mutex::SHARED, nullptr, lockLocation);
+  mutex.lock(_::Mutex::SHARED, kj::none, lockLocation);
   KJ_DEFER(mutex.unlock(_::Mutex::SHARED));
 
   const auto& lockedInfo = mutex.lockedInfo();
@@ -886,7 +886,7 @@ KJ_TEST("make sure contended mutex warns") {
 
   _::Mutex mutex;
   LockSourceLocation exclusiveLockLocation;
-  mutex.lock(_::Mutex::EXCLUSIVE, nullptr, exclusiveLockLocation);
+  mutex.lock(_::Mutex::EXCLUSIVE, kj::none, exclusiveLockLocation);
 
   bool seenContendedLockLog = false;
 
@@ -896,7 +896,7 @@ KJ_TEST("make sure contended mutex warns") {
     threads.add(kj::heap<kj::Thread>([&mutex, &seenContendedLockLog]() {
       Expectation expectation(LogSeverity::WARNING, "Acquired contended lock");
       LockSourceLocation sharedLockLocation;
-      mutex.lock(_::Mutex::SHARED, nullptr, sharedLockLocation);
+      mutex.lock(_::Mutex::SHARED, kj::none, sharedLockLocation);
       seenContendedLockLog = seenContendedLockLog || expectation.hasSeen();
       mutex.unlock(_::Mutex::SHARED);
     }));
