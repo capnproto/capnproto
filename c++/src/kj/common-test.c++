@@ -1010,5 +1010,31 @@ KJ_TEST("arrayPtr()") {
   KJ_EXPECT(ptr.size() == 1024);
 }
 
+KJ_TEST("memzero<T>()") {
+  // memzero() works for primitive types
+  int64_t x = 42;
+  memzero(x);
+  KJ_EXPECT(x == 0);
+
+  // memzero() works for trivially constructible types
+  struct ZeroTest {
+    int64_t x;
+    double pi;
+  };
+  ZeroTest t1;
+    
+  memzero(t1);
+  KJ_EXPECT(t1.x == 0);
+  KJ_EXPECT(t1.pi == 0.0);
+
+  // memzero works on statically-sized arrays
+  ZeroTest arr[256];
+  memset(arr, 0xff, 256 * sizeof(ZeroTest));
+  memzero(arr);
+  for (auto& t: arr) {
+    KJ_EXPECT(t.pi == 0);
+  }
+}
+
 }  // namespace
 }  // namespace kj
