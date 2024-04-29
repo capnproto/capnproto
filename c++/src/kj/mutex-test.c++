@@ -92,10 +92,14 @@ TEST(Mutex, MutexGuarded) {
     // originally, upon timing out, the exclusive requested flag would be removed
     // from the futex state. if we did remove the exclusive request flag this test
     // would hang.
+    const auto threadStartTime = systemPreciseMonotonicClock().now();
     Thread lockTimeoutThread([&]() {
-      // try to timeout during 10 ms delay
-      Maybe<Locked<uint>> maybeLock = value.lockExclusiveWithTimeout(MILLISECONDS * 8);
-      EXPECT_TRUE(maybeLock == kj::none);
+      // try to timeout during 10 ms delay() call below
+      auto timeout = MILLISECONDS * 8;
+      Maybe<Locked<uint>> maybeLock = value.lockExclusiveWithTimeout(timeout);
+      auto duration = systemPreciseMonotonicClock().now() - threadStartTime;
+      KJ_EXPECT(maybeLock == kj::none, duration);
+      EXPECT_TRUE(duration >= timeout);
     });
 #endif
 
