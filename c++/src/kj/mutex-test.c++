@@ -94,7 +94,7 @@ TEST(Mutex, MutexGuarded) {
     // would hang.
     const auto threadStartTime = systemPreciseMonotonicClock().now();
     Thread lockTimeoutThread([&]() {
-      // try to timeout during 10 ms delay() call below
+      // try to timeout during 2X 10 ms delay() call below
       auto timeout = MILLISECONDS * 8;
       Maybe<Locked<uint>> maybeLock = value.lockExclusiveWithTimeout(timeout);
       auto duration = systemPreciseMonotonicClock().now() - threadStartTime;
@@ -109,6 +109,7 @@ TEST(Mutex, MutexGuarded) {
       *threadLock = 789;
     });
 
+    delay();
     delay();
     EXPECT_EQ(123u, *lock);
     *lock = 456;
