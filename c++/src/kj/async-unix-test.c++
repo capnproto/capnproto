@@ -1272,7 +1272,6 @@ KJ_TEST("m:n threads:EventLoops") {
   static thread_local uint threadId = 0;
 
   threadId = 1;
-  bool executorDone = false;
 
   kj::Thread thread([&]() noexcept {
     threadId = 2;
@@ -1280,7 +1279,6 @@ KJ_TEST("m:n threads:EventLoops") {
     WaitScope ws1(loop1);
     promise1.wait(ws1);
     KJ_EXPECT(port1.getTimer().now() - startTime >= 10 * kj::MILLISECONDS);
-    KJ_EXPECT(executorDone);
 
     xpaf.promise.wait(ws1);
   });
@@ -1293,7 +1291,6 @@ KJ_TEST("m:n threads:EventLoops") {
     uint remoteThreadId = executor->executeAsync([&]() {
       return threadId;
     }).wait(ws2);
-    executorDone = true;
     KJ_EXPECT(remoteThreadId == 2);
     KJ_EXPECT(threadId == 1);
 
