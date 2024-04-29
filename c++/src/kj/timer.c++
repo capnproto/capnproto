@@ -139,7 +139,7 @@ Maybe<uint64_t> TimerImpl::timeoutToNextEvent(TimePoint start, Duration unit, ui
 }
 
 void TimerImpl::advanceTo(TimePoint newTime) {
-  sleepHooks = nullptr;
+  sleepHooks = kj::none;
 
   // On Macs running an Intel processor, it has been observed that clock_gettime
   // may return non monotonic time, even when CLOCK_MONOTONIC is used.

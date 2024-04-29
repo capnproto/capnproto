@@ -1675,6 +1675,9 @@ public:
 
   inline constexpr Maybe(kj::None): ptr(nullptr) {}
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
+  inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
+
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
   inline Maybe& operator=(PropagateConst<T, Maybe>& other) { ptr = other.ptr; return *this; }

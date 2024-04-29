@@ -484,7 +484,7 @@ public:
       // will call this method to provide the shortened path.
 
       KJ_IF_SOME(currentParent, parent) {
-        parent = nullptr;
+        parent = kj::none;
 
         auto self = kj::mv(currentParent.state.get<kj::Own<PathProber>>());
         currentParent.state = Ended();  // temporary, we'll set this properly below
@@ -561,7 +561,7 @@ public:
             //   this task promise, which is an error... let the event loop do it later by
             //   detaching.
             task.attach(kj::mv(prober)).detach([](kj::Exception&&){});
-            parent = nullptr;
+            parent = kj::none;
 
             // OK, now we can change the parent state and signal it to proceed.
             currentParent.state = kj::mv(inner);

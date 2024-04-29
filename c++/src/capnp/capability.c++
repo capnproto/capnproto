@@ -558,7 +558,7 @@ public:
 
   ~LocalClient() noexcept(false) {
     KJ_IF_SOME(s, server) {
-      s->thisHook = nullptr;
+      s->thisHook = kj::none;
     }
   }
 
@@ -570,7 +570,7 @@ public:
     KJ_IF_SOME(s, server) {
       KJ_ASSERT_NONNULL(revoker).cancel(e);
       brokenException = kj::mv(e);
-      s->thisHook = nullptr;
+      s->thisHook = kj::none;
       server = kj::none;
     }
   }

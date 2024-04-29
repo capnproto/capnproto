@@ -115,7 +115,7 @@ public:
     }
   }
   Cork(Cork&& other) : parent(kj::mv(other.parent)) {
-    other.parent = nullptr;
+    other.parent = kj::none;
   }
   KJ_DISALLOW_COPY(Cork);
 
