@@ -73,15 +73,21 @@ TEST(Mutex, MutexGuarded) {
 #if KJ_USE_FUTEX
     auto timeout = MILLISECONDS * 50;
 
-    auto startTime = systemPreciseMonotonicClock().now();
-    EXPECT_TRUE(value.lockExclusiveWithTimeout(timeout) == kj::none);
-    auto duration = startTime - systemPreciseMonotonicClock().now();
-    EXPECT_TRUE(duration < timeout);
+    {
+      auto startTime = systemPreciseMonotonicClock().now();
+      auto lockedValue = value.lockExclusiveWithTimeout(timeout);
+      auto duration = systemPreciseMonotonicClock().now() - startTime;
+      KJ_EXPECT(lockedValue == kj::none, duration);
+      EXPECT_TRUE(duration >= timeout);
+    }
 
-    startTime = systemPreciseMonotonicClock().now();
-    EXPECT_TRUE(value.lockSharedWithTimeout(timeout) == kj::none);
-    duration = startTime - systemPreciseMonotonicClock().now();
-    EXPECT_TRUE(duration < timeout);
+    {
+      auto startTime = systemPreciseMonotonicClock().now();
+      auto lockedValue = value.lockSharedWithTimeout(timeout);
+      auto duration = systemPreciseMonotonicClock().now() - startTime;
+      KJ_EXPECT(lockedValue == kj::none, duration);
+      EXPECT_TRUE(duration >= timeout);
+    }
 
     // originally, upon timing out, the exclusive requested flag would be removed
     // from the futex state. if we did remove the exclusive request flag this test
