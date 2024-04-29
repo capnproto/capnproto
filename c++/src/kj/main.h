@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "array.h"
 #include "string.h"
 #include "vector.h"
@@ -152,7 +154,7 @@ public:
 private:
   StringPtr programName;
   bool cleanShutdown;
-  bool hadErrors = false;
+  std::atomic_bool hadErrors = false;
 };
 
 typedef Function<void(StringPtr programName, ArrayPtr<const StringPtr> params)> MainFunc;

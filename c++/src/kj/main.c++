@@ -59,7 +59,7 @@ StringPtr TopLevelProcessContext::getProgramName() {
 }
 
 void TopLevelProcessContext::exit() {
-  int exitCode = hadErrors ? 1 : 0;
+  int exitCode = hadErrors.load() ? 1 : 0;
   if (cleanShutdown) {
     throw CleanShutdownException { exitCode };
   }
@@ -182,7 +182,7 @@ void TopLevelProcessContext::warning(StringPtr message) {
 }
 
 void TopLevelProcessContext::error(StringPtr message) {
-  hadErrors = true;
+  hadErrors.store(true);
   writeLineToFd(STDERR_FILENO, message);
 }
 
