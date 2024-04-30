@@ -399,7 +399,7 @@ public:
     // After disconnect(), the RpcSystem could be destroyed, making `traceEncoder` a dangling
     // reference, so null it out before we return from here. We don't need it anymore once
     // disconnected anyway.
-    KJ_DEFER(traceEncoder = nullptr);
+    KJ_DEFER(traceEncoder = kj::none);
 
     if (!connection.is<Connected>()) {
       // Already disconnected.
@@ -1692,7 +1692,7 @@ private:
         // the ID is not re-allocated before the `Finish` message can be sent.
         if (question.isAwaitingReturn) {
           // Still waiting for return, so just remove the QuestionRef pointer from the table.
-          question.selfRef = nullptr;
+          question.selfRef = kj::none;
         } else {
           // Call has already returned, so we can now remove it from the table.
           connectionState->questions.erase(id, question);
@@ -2725,7 +2725,7 @@ private:
       } else {
         // We just have to null out callContext and set the exports.
         auto& answer = connectionState->answers[answerId];
-        answer.callContext = nullptr;
+        answer.callContext = kj::none;
         answer.resultExports = kj::mv(resultExports);
 
         if (shouldFreePipeline) {

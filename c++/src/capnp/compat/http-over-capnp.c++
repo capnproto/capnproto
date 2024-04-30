@@ -65,7 +65,7 @@ public:
 
     // Null out our self-ref, if any.
     KJ_IF_SOME(s, selfRef) {
-      s = nullptr;
+      s = kj::none;
     }
 
     // Arrange to call disconnect() and then notify the observer that the stream has finished.
@@ -458,13 +458,13 @@ public:
     KJ_IF_SOME(s, requestBody.tryGetLength()) {
       metadata.getBodySize().setFixed(s);
       if (s == 0) {
-        maybeRequestBody = nullptr;
+        maybeRequestBody = kj::none;
       } else {
         maybeRequestBody = requestBody;
       }
     } else if ((method == kj::HttpMethod::GET || method == kj::HttpMethod::HEAD) &&
                headers.get(kj::HttpHeaderId::TRANSFER_ENCODING) == kj::none) {
-      maybeRequestBody = nullptr;
+      maybeRequestBody = kj::none;
       metadata.getBodySize().setFixed(0);
     } else {
       metadata.getBodySize().setUnknown();

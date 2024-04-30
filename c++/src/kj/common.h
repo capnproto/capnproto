@@ -1675,6 +1675,9 @@ public:
 
   inline constexpr Maybe(kj::None): ptr(nullptr) {}
 
+  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
+  inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
+
   inline Maybe& operator=(T& other) { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
   inline Maybe& operator=(PropagateConst<T, Maybe>& other) { ptr = other.ptr; return *this; }
@@ -1889,7 +1892,7 @@ public:
     return kj::none;
   }
 
-  inline ArrayPtr<PropagateConst<T, byte>> asBytes() const {
+  constexpr ArrayPtr<PropagateConst<T, byte>> asBytes() const {
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.
     return { reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T) };

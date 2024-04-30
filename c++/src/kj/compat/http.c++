@@ -1299,7 +1299,7 @@ public:
     KJ_IF_SOME(w, currentWrapper) {
       KJ_LOG(ERROR, "HTTP connection destroyed while HTTP body streams still exist",
           kj::getStackTrace());
-      w = nullptr;
+      w = kj::none;
     }
   }
 
