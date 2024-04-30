@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "array.h"
 #include "string.h"
 #include "vector.h"
@@ -103,13 +105,17 @@ public:
   //   available for those who really think they need it.  Unfortunately, it is not yet available
   //   on many platforms.
 
-  virtual void warning(StringPtr message) = 0;
+  virtual void warning(StringPtr message) const = 0;
   // Print the given message to standard error.  A newline is printed after the message if it
   // doesn't already have one.
+  //
+  // It is safe to call this method from multiple threads.
 
-  virtual void error(StringPtr message) = 0;
+  virtual void error(StringPtr message) const = 0;
   // Like `warning()`, but also sets a flag indicating that the process has failed, and that when
   // it eventually exits it should indicate an error status.
+  //
+  // It is safe to call this method from multiple threads.
 
   KJ_NORETURN(virtual void exitError(StringPtr message)) = 0;
   // Equivalent to `error(message)` followed by `exit()`.
@@ -143,8 +149,8 @@ public:
 
   StringPtr getProgramName() override;
   KJ_NORETURN(void exit() override);
-  void warning(StringPtr message) override;
-  void error(StringPtr message) override;
+  void warning(StringPtr message) const override;
+  void error(StringPtr message) const override;
   KJ_NORETURN(void exitError(StringPtr message) override);
   KJ_NORETURN(void exitInfo(StringPtr message) override);
   void increaseLoggingVerbosity() override;
@@ -152,7 +158,8 @@ public:
 private:
   StringPtr programName;
   bool cleanShutdown;
-  bool hadErrors = false;
+  // hadErrors is mutable because we need to modify it in const-for-multithreadedness methods.
+  mutable std::atomic_bool hadErrors = false;
 };
 
 typedef Function<void(StringPtr programName, ArrayPtr<const StringPtr> params)> MainFunc;

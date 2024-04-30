@@ -23,6 +23,8 @@
 #define _GNU_SOURCE
 #endif
 
+#include <atomic>
+
 #include "test.h"
 #include "main.h"
 #include "io.h"
@@ -72,9 +74,17 @@ namespace {
 
 class TestExceptionCallback: public ExceptionCallback {
 public:
-  TestExceptionCallback(ProcessContext& context): context(context) {}
+  TestExceptionCallback(const ProcessContext& context)
+      : context(context), mainThreadCallback(kj::none) {}
 
   bool failed() { return sawError; }
+
+  void fail() const {
+    sawError.store(true);
+    KJ_IF_SOME(callback, mainThreadCallback) {
+      callback.fail();
+    }
+  }
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                   String&& text) override {
@@ -88,16 +98,40 @@ public:
     text = kj::str(kj::repeat('_', contextDepth), file, ':', line, ": ", kj::mv(text));
 
     if (severity == LogSeverity::ERROR || severity == LogSeverity::FATAL) {
-      sawError = true;
+      fail();
       context.error(kj::str(text, "\nstack: ", stringifyStackTraceAddresses(trace), stringifyStackTrace(trace)));
     } else {
       context.warning(text);
     }
   }
 
+  Function<void(Function<void()>)> getThreadInitializer() override {
+    return [&](Function<void()> func) {
+      KJ_IF_SOME(callback, mainThreadCallback) {
+        TestExceptionCallback exceptionCallback(context, callback);
+        func();
+      } else {
+        TestExceptionCallback exceptionCallback(context, *this);
+        func();
+      }
+    };
+  }
+
 private:
-  ProcessContext& context;
-  bool sawError = false;
+  const ProcessContext& context;
+  // In the case where a thread spawns a thread, we report failure to the main thread's
+  // TestExceptionCallback, which I assume stays alive as long as all child threads.  If we reported
+  // failures to a thread's parent, we'd have to worry about a child thread spawning a grandchild
+  // thread and then immediately dying, leaving the grandchild thread with a dangling pointer to the
+  // now-dead child's TestExceptionCallback.
+  kj::Maybe<const TestExceptionCallback&> mainThreadCallback;
+  // sawError is mutable because we need to modify it in const-for-multithreadedness methods.
+  mutable std::atomic_bool sawError = false;
+
+  TestExceptionCallback(const ProcessContext& context,
+      const TestExceptionCallback& topLevelCallback)
+      : context(context), mainThreadCallback(topLevelCallback) {}
+
 };
 
 TimePoint readClock() {
