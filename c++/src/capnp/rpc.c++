@@ -2340,7 +2340,7 @@ private:
     RpcServerResponseImpl& response;
     kj::Own<RpcCallContext> context;  // owns `response`
 
-    kj::Own<ClientHook> getResolutionAtReturnTime(
+    static kj::Own<ClientHook> getResolutionAtReturnTime(
         kj::Own<ClientHook> original, RpcServerResponseImpl::Resolution resolution) {
       // Wait for `original` to resolve to `resolution.returnedCap`, then return
       // `resolution.unwrapped`.
@@ -2358,7 +2358,7 @@ private:
 
       KJ_IF_SOME(p, ptr->whenMoreResolved()) {
         return newLocalPromiseClient(p.then(
-            [this, original = kj::mv(original), resolution = kj::mv(resolution)]
+            [original = kj::mv(original), resolution = kj::mv(resolution)]
             (kj::Own<ClientHook> r) mutable {
           return getResolutionAtReturnTime(kj::mv(r), kj::mv(resolution));
         }));
