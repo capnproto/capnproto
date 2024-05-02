@@ -210,6 +210,7 @@ public:
     // Like asBytes() but transfers ownership.
     static_assert(sizeof(T) == sizeof(byte),
         "releaseAsBytes() only possible on arrays with byte-size elements (e.g. chars).");
+    if (disposer == nullptr) return nullptr;
     Array<PropagateConst<T, byte>> result(
         reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_, *disposer);
     ptr = nullptr;
@@ -220,6 +221,7 @@ public:
     // Like asChars() but transfers ownership.
     static_assert(sizeof(T) == sizeof(PropagateConst<T, char>),
         "releaseAsChars() only possible on arrays with char-size elements (e.g. bytes).");
+    if (disposer == nullptr) return nullptr;
     Array<PropagateConst<T, char>> result(
         reinterpret_cast<PropagateConst<T, char>*>(ptr), size_, *disposer);
     ptr = nullptr;
