@@ -259,6 +259,14 @@ typedef unsigned char byte;
 // by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
 
+#if KJ_HAS_CPP_ATTRIBUTE(clang::musttail)
+#define KJ_MUSTTAIL [[clang::musttail]]
+#else
+#define KJ_MUSTTAIL
+#endif
+// Annotation for "return" statements to require that they be compiled as tail calls.
+// https://clang.llvm.org/docs/AttributeReference.html#musttail
+
 #if __clang__
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC

@@ -135,7 +135,7 @@ size_t GzipInputStream::readImpl(
     if (n >= minBytes) {
       return n + alreadyRead;
     } else {
-      return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+      KJ_MUSTTAIL return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
     }
   } else {
     if (ctx.msg == nullptr) {
