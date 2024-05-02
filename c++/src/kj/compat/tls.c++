@@ -64,7 +64,7 @@ kj::Exception getOpensslError() {
     }
 #endif
 
-    char message[1024];
+    char message[1024]{};
     ERR_error_string_n(error, message, sizeof(message));
     lines.add(kj::heapString(message));
   }

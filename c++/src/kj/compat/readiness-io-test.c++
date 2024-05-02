@@ -30,7 +30,7 @@ KJ_TEST("readiness IO: write small") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  char buf[4];
+  char buf[4]{};
   auto readPromise = pipe.in->read(buf, 3, 4);
 
   ReadyOutputStreamWrapper out(*pipe.out);
@@ -97,7 +97,7 @@ KJ_TEST("readiness IO: write while corked") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  char buf[7];
+  char buf[7]{};
   auto readPromise = pipe.in->read(buf, 3, 7);
 
   ReadyOutputStreamWrapper out(*pipe.out);
@@ -193,7 +193,7 @@ KJ_TEST("readiness IO: read small") {
   auto pipe = io.provider->newOneWayPipe();
 
   ReadyInputStreamWrapper in(*pipe.in);
-  char buf[4];
+  char buf[4]{};
   KJ_ASSERT(in.read(kj::ArrayPtr<char>(buf).asBytes()) == nullptr);
 
   pipe.out->write("foo", 3).wait(io.waitScope);
@@ -221,7 +221,7 @@ KJ_TEST("readiness IO: read many odd") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  char dummy[8192];
+  char dummy[8192]{};
   for (auto i: kj::indices(dummy)) {
     dummy[i] = "bar"[i%3];
   }
@@ -231,7 +231,7 @@ KJ_TEST("readiness IO: read many odd") {
   }).eagerlyEvaluate(nullptr);
 
   ReadyInputStreamWrapper in(*pipe.in);
-  char buf[3];
+  char buf[3]{};
 
   for (;;) {
     auto result = in.read(kj::ArrayPtr<char>(buf).asBytes());
@@ -264,7 +264,7 @@ KJ_TEST("readiness IO: read many even") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  char dummy[8192];
+  char dummy[8192]{};
   for (auto i: kj::indices(dummy)) {
     dummy[i] = "ba"[i%2];
   }
@@ -274,7 +274,7 @@ KJ_TEST("readiness IO: read many even") {
   }).eagerlyEvaluate(nullptr);
 
   ReadyInputStreamWrapper in(*pipe.in);
-  char buf[2];
+  char buf[2]{};
 
   for (;;) {
     auto result = in.read(kj::ArrayPtr<char>(buf).asBytes());

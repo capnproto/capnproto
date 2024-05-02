@@ -652,7 +652,7 @@ bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
     } else if (events[i].data.u64 == 1) {
       // timerfd fired. We need to clear it by reading it.
       int tfd = KJ_ASSERT_NONNULL(timerFd).get();
-      char buffer[16];
+      char buffer[16]{};
       ssize_t n;
       KJ_NONBLOCKING_SYSCALL(n = read(tfd, buffer, sizeof(buffer)));
       KJ_ASSERT(n == 8 || n < 0);

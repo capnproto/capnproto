@@ -934,7 +934,7 @@ KJ_TEST("kj::ArrayPtr fill") {
   }
 
   // test small sizes separately, since compilers do a memset optimization
-  byte byteArray[256];
+  byte byteArray[256]{};
   arrayPtr(byteArray).fill(42);
   for (auto b: byteArray) {
     KJ_EXPECT(b == 42);
@@ -1022,7 +1022,7 @@ KJ_TEST("memzero<T>()") {
     double pi;
   };
   ZeroTest t1;
-    
+
   memzero(t1);
   KJ_EXPECT(t1.x == 0);
   KJ_EXPECT(t1.pi == 0.0);

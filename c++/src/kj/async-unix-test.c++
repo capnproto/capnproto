@@ -367,7 +367,7 @@ TEST(AsyncUnixTest, ReadObserver) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
@@ -380,7 +380,7 @@ TEST(AsyncUnixTest, ReadObserver) {
 #if __linux__  // platform known to support POLLRDHUP
   EXPECT_FALSE(KJ_ASSERT_NONNULL(observer.atEndHint()));
 
-  char buffer[4096];
+  char buffer[4096]{};
   ssize_t n;
   KJ_SYSCALL(n = read(infd, &buffer, sizeof(buffer)));
   EXPECT_EQ(3, n);
@@ -400,7 +400,7 @@ TEST(AsyncUnixTest, ReadObserverMultiListen) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int bogusPipefds[2];
+  int bogusPipefds[2]{};
   KJ_SYSCALL(pipe(bogusPipefds));
   KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
 
@@ -413,7 +413,7 @@ TEST(AsyncUnixTest, ReadObserverMultiListen) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
 
@@ -430,7 +430,7 @@ TEST(AsyncUnixTest, ReadObserverMultiReceive) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
 
@@ -438,7 +438,7 @@ TEST(AsyncUnixTest, ReadObserverMultiReceive) {
       UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  int pipefds2[2];
+  int pipefds2[2]{};
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
 
@@ -463,7 +463,7 @@ TEST(AsyncUnixTest, ReadObserverAndSignals) {
 
   auto signalPromise = port.onSignal(SIGIO);
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
@@ -485,7 +485,7 @@ TEST(AsyncUnixTest, ReadObserverAsync) {
   WaitScope waitScope(loop);
 
   // Make a pipe and wait on its read end while another thread writes to it.
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   UnixEventPort::FdObserver observer(port, pipefds[0],
@@ -508,13 +508,13 @@ TEST(AsyncUnixTest, ReadObserverNoWait) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   UnixEventPort::FdObserver observer(port, pipefds[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
 
-  int pipefds2[2];
+  int pipefds2[2]{};
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
   UnixEventPort::FdObserver observer2(port, pipefds2[0],
@@ -560,7 +560,7 @@ TEST(AsyncUnixTest, WriteObserver) {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
   setNonblocking(outfd);
@@ -588,7 +588,7 @@ TEST(AsyncUnixTest, WriteObserver) {
   // high watermark / low watermark heuristic which means that only reading one byte is not
   // sufficient. The amount we have to read is in fact architecture-dependent -- it appears to be
   // 1 page. To be safe, we read everything.
-  char buffer[4096];
+  char buffer[4096]{};
   do {
     KJ_NONBLOCKING_SYSCALL(n = read(infd, &buffer, sizeof(buffer)));
   } while (n > 0);
@@ -628,7 +628,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
   KJ_SYSCALL(listen(serverFd, 1));
 
   // Create a pipe that we'll use to signal if MSG_OOB return EINVAL.
-  int failpipe[2];
+  int failpipe[2]{};
   KJ_SYSCALL(pipe(failpipe));
   KJ_DEFER({
     close(failpipe[0]);
@@ -945,7 +945,7 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int fds_[2];
+  int fds_[2]{};
   KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds_));
   kj::AutoCloseFd fds[2] = { kj::AutoCloseFd(fds_[0]), kj::AutoCloseFd(fds_[1]) };
 
@@ -966,7 +966,7 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
   readablePromise.wait(waitScope);
 
   {
-    char junk[16];
+    char junk[16]{};
     ssize_t n;
     KJ_SYSCALL(n = read(fds[0], junk, 16));
     KJ_EXPECT(n == 3);
@@ -991,7 +991,7 @@ KJ_TEST("UnixEventPort FdObserver(..., flags=0)::whenWriteDisconnected()") {
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
-  int pipefds[2];
+  int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
   kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
@@ -1139,7 +1139,7 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
 
   // Test wakeup on observed FD.
   {
-    int pair[2];
+    int pair[2]{};
     KJ_SYSCALL(pipe(pair));
     kj::AutoCloseFd in(pair[0]);
     kj::AutoCloseFd out(pair[1]);

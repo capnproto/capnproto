@@ -85,7 +85,7 @@ private:
       return false;
     }
 
-    char flat[maxInlineValueSize + 1];
+    char flat[maxInlineValueSize + 1]{};
     text.flattenTo(flat);
     flat[text.size()] = '\0';
     if (strchr(flat, '\n') != nullptr) {

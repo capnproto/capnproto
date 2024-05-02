@@ -350,7 +350,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
     return nullptr;
   }
 
-  char line[512];
+  char line[512]{};
   size_t i = 0;
   while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
     // Don't include exception-handling infrastructure or promise infrastructure in stack trace.
@@ -443,7 +443,7 @@ StringPtr stringifyStackTraceAddresses(ArrayPtr<void* const> trace, ArrayPtr<cha
 }
 
 String getStackTrace() {
-  void* space[32];
+  void* space[32]{};
   auto trace = getStackTrace(space, 2);
   return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
 }
@@ -451,7 +451,7 @@ String getStackTrace() {
 namespace {
 
 [[noreturn]] void terminateHandler() {
-  void* traceSpace[32];
+  void* traceSpace[32]{};
 
   // ignoreCount = 3 to ignore std::terminate entry.
   auto trace = kj::getStackTrace(traceSpace, 3);
@@ -585,7 +585,7 @@ void printStackTraceOnCrash() {
 namespace {
 
 [[noreturn]] void crashHandler(int signo, siginfo_t* info, void* context) {
-  void* traceSpace[32];
+  void* traceSpace[32]{};
 
 #if KJ_USE_WIN32_DBGHELP
   // Win32 backtracing can't trace its way out of a Cygwin signal handler. However, Cygwin gives
@@ -872,7 +872,7 @@ void Exception::truncateCommonTrace() {
 
   if (traceCount > 0) {
     // Create a "reference" stack trace that is a little bit deeper than the one in the exception.
-    void* refTraceSpace[sizeof(this->trace) / sizeof(this->trace[0]) + 4];
+    void* refTraceSpace[sizeof(this->trace) / sizeof(this->trace[0]) + 4]{};
     auto refTrace = kj::getStackTrace(refTraceSpace, 0);
 
     // We expect that the deepest frame in the exception's stack trace should be somewhere in our

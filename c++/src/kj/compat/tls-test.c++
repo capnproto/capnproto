@@ -508,7 +508,7 @@ KJ_TEST("TLS half-duplex") {
   KJ_EXPECT(server->readAllText().wait(test.io.waitScope) == "");
 
   for (uint i = 0; i < 100; i++) {
-    char buffer[7];
+    char buffer[7]{};
     auto writePromise = server->write("foobar", 6);
     auto readPromise = client->read(buffer, 6);
     writePromise.wait(test.io.waitScope);
@@ -576,7 +576,7 @@ KJ_TEST("TLS multiple messages") {
   auto writePromise = client->write("foo", 3)
       .then([&]() { return client->write("bar", 3); });
 
-  char buf[4];
+  char buf[4]{};
   buf[3] = '\0';
 
   server->read(&buf, 3).wait(test.io.waitScope);
@@ -613,7 +613,7 @@ KJ_TEST("TLS zero-sized write") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  char buf[7];
+  char buf[7]{};
   auto readPromise = server->read(&buf, 6);
 
   client->write("", 0).wait(test.io.waitScope);

@@ -304,7 +304,7 @@ PackedOutputStream::~PackedOutputStream() noexcept(false) {}
 
 void PackedOutputStream::write(const void* src, size_t size) {
   kj::ArrayPtr<byte> buffer = inner.getWriteBuffer();
-  byte slowBuffer[20];
+  byte slowBuffer[20]{};
 
   uint8_t* __restrict__ out = reinterpret_cast<uint8_t*>(buffer.begin());
 
@@ -466,7 +466,7 @@ void writePackedMessage(kj::OutputStream& output,
   KJ_IF_SOME(bufferedOutputPtr, kj::dynamicDowncastIfAvailable<kj::BufferedOutputStream>(output)) {
     writePackedMessage(bufferedOutputPtr, segments);
   } else {
-    byte buffer[8192];
+    byte buffer[8192]{};
     kj::BufferedOutputStreamWrapper bufferedOutput(output, kj::arrayPtr(buffer, sizeof(buffer)));
     writePackedMessage(bufferedOutput, segments);
   }

@@ -539,7 +539,7 @@ KJ_TEST("send FD over RPC") {
 
   auto cap = client.bootstrap().castAs<test::TestMoreStuff>();
 
-  int pipeFds[2];
+  int pipeFds[2]{};
   KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
   kj::AutoCloseFd in1(pipeFds[0]);
   kj::AutoCloseFd out1(pipeFds[1]);
@@ -586,7 +586,7 @@ KJ_TEST("FD per message limit") {
 
   auto cap = client.bootstrap().castAs<test::TestMoreStuff>();
 
-  int pipeFds[2];
+  int pipeFds[2]{};
   KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
   kj::AutoCloseFd in1(pipeFds[0]);
   kj::AutoCloseFd out1(pipeFds[1]);

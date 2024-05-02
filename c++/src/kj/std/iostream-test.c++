@@ -46,7 +46,7 @@ TEST(StdIoStream, WriteVec) {
 
   out.write(pieces);
 
-  char buf[7];
+  char buf[7]{};
   in.read(buf, 6);
   buf[6] = '\0';
 
@@ -65,7 +65,7 @@ TEST(StdIoStream, TryReadToEndOfFile) {
 
   out.write(bytes, 6);
 
-  char buf[9];
+  char buf[9]{};
   in.tryRead(buf, 8, 8);
   buf[6] = '\0';
 
@@ -85,7 +85,7 @@ TEST(StdIoStream, ReadToEndOfFile) {
 
   out.write(bytes, 6);
 
-  char buf[9];
+  char buf[9]{};
 
   Maybe<Exception> e = kj::runCatchingExceptions([&]() {
     in.read(buf, 8, 8);

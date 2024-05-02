@@ -59,7 +59,7 @@ size_t InputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
 }
 
 void InputStream::skip(size_t bytes) {
-  char scratch[8192];
+  char scratch[8192]{};
   while (bytes > 0) {
     size_t amount = std::min(bytes, sizeof(scratch));
     read(scratch, amount);

@@ -307,7 +307,7 @@ public:
   Maybe<OwnTask>* prev = nullptr;
 
   kj::String trace() {
-    void* space[32];
+    void* space[32]{};
     _::TraceBuilder builder(space);
     node->tracePromise(builder, false);
     return kj::str("task: ", builder);
@@ -2285,7 +2285,7 @@ void Event::disarm() noexcept {
 }
 
 String Event::traceEvent() {
-  void* space[32];
+  void* space[32]{};
   TraceBuilder builder(space);
   traceEvent(builder);
   return kj::str(builder);
@@ -2310,7 +2310,7 @@ ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space) {
 }
 
 kj::String getAsyncTrace() {
-  void* space[32];
+  void* space[32]{};
   auto trace = getAsyncTrace(space);
   return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
 }
@@ -2320,7 +2320,7 @@ kj::String getAsyncTrace() {
 namespace _ {  // private
 
 kj::String PromiseBase::trace() {
-  void* space[32];
+  void* space[32]{};
   TraceBuilder builder(space);
   node->tracePromise(builder, false);
   return kj::str(builder);

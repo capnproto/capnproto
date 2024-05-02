@@ -35,7 +35,7 @@ TEST(Io, WriteVec) {
   // Check that writing an array of arrays works even when some of the arrays are empty.  (This
   // used to not work in some cases.)
 
-  int fds[2];
+  int fds[2]{};
   KJ_SYSCALL(miniposix::pipe(fds));
 
   FdInputStream in((AutoCloseFd(fds[0])));
@@ -51,7 +51,7 @@ TEST(Io, WriteVec) {
 
   out.write(pieces);
 
-  char buf[7];
+  char buf[7]{};
   in.read(buf, 6);
   buf[6] = '\0';
 
@@ -59,7 +59,7 @@ TEST(Io, WriteVec) {
 }
 
 KJ_TEST("stringify AutoCloseFd") {
-  int fds[2];
+  int fds[2]{};
   KJ_SYSCALL(miniposix::pipe(fds));
   AutoCloseFd in(fds[0]), out(fds[1]);
 
@@ -93,7 +93,7 @@ KJ_TEST("VectorOutputStream") {
   KJ_ASSERT(output.getArray().end() == buf3.begin());
   KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnop");
 
-  byte junk[24];
+  byte junk[24]{};
   for (auto i: kj::indices(junk)) {
     junk[i] = 'A' + i;
   }

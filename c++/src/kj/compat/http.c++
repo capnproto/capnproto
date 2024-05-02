@@ -286,7 +286,7 @@ void SHA1Final(
 {
     unsigned i;
 
-    unsigned char finalcount[8];
+    unsigned char finalcount[8]{};
 
     unsigned char c;
 
@@ -470,7 +470,7 @@ constexpr char WEBSOCKET_GUID[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 static kj::String generateWebSocketAccept(kj::StringPtr key) {
   // WebSocket demands we do a SHA-1 here. ARRGHH WHY SHA-1 WHYYYYYY?
   SHA1_CTX ctx;
-  byte digest[20];
+  byte digest[20]{};
   SHA1Init(&ctx);
   SHA1Update(&ctx, key.asBytes().begin(), key.size());
   SHA1Update(&ctx, reinterpret_cast<const byte*>(WEBSOCKET_GUID), strlen(WEBSOCKET_GUID));
@@ -5431,7 +5431,7 @@ public:
     // requests in the meantime.
     upgraded = true;
 
-    byte keyBytes[16];
+    byte keyBytes[16]{};
     KJ_ASSERT_NONNULL(settings.entropySource,
         "can't use openWebSocket() because no EntropySource was provided when creating the "
         "HttpClient").generate(keyBytes);

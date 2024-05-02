@@ -156,7 +156,7 @@ bool CidrRange::matchesFamily(int family) const {
 }
 
 String CidrRange::toString() const {
-  char result[128];
+  char result[128]{};
   KJ_ASSERT(inet_ntop(family, (void*)bits, result, sizeof(result)) == result);
   return kj::str(result, '/', bitCount);
 }

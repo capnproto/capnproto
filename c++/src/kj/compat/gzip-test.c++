@@ -150,7 +150,7 @@ KJ_TEST("gzip decompression") {
     MockInputStream rawInput(kj::arrayPtr(FOOBAR_GZIP, sizeof(FOOBAR_GZIP) / 2), kj::maxValue);
     GzipInputStream gzip(rawInput);
 
-    char text[16];
+    char text[16]{};
     size_t n = gzip.tryRead(text, 1, sizeof(text));
     text[n] = '\0';
     KJ_EXPECT(StringPtr(text, n) == "fo");
@@ -193,7 +193,7 @@ KJ_TEST("async gzip decompression") {
     MockAsyncInputStream rawInput(kj::arrayPtr(FOOBAR_GZIP, sizeof(FOOBAR_GZIP) / 2), kj::maxValue);
     GzipAsyncInputStream gzip(rawInput);
 
-    char text[16];
+    char text[16]{};
     size_t n = gzip.tryRead(text, 1, sizeof(text)).wait(io.waitScope);
     text[n] = '\0';
     KJ_EXPECT(StringPtr(text, n) == "fo");

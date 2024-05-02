@@ -290,14 +290,14 @@ KJ_TEST("kj::delimited() and kj::strPreallocated()") {
   KJ_EXPECT(str(delimited(array, "::")) == "1::23::456::78");
 
   {
-    char buffer[256];
+    char buffer[256]{};
     KJ_EXPECT(strPreallocated(buffer, delimited(array, "::"), 'x')
         == "1::23::456::78x");
     KJ_EXPECT(strPreallocated(buffer, "foo", 123, true) == "foo123true");
   }
 
   {
-    char buffer[5];
+    char buffer[5]{};
     KJ_EXPECT(strPreallocated(buffer, delimited(array, "::"), 'x') == "1::2");
     KJ_EXPECT(strPreallocated(buffer, "foo", 123, true) == "foo1");
   }
@@ -450,7 +450,7 @@ KJ_TEST("as<Std>") {
   std::string stdStr = str.as<Std>();
   KJ_EXPECT(stdStr == "foo");
 
-  StringPtr ptr = "bar"_kj; 
+  StringPtr ptr = "bar"_kj;
   std::string stdPtr = ptr.as<Std>();
   KJ_EXPECT(stdPtr == "bar");
 }

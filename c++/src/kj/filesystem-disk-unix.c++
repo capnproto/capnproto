@@ -537,7 +537,7 @@ public:
 #endif
     uint64_t total = 0;
     while (size > 0) {
-      byte buffer[4096];
+      byte buffer[4096]{};
       ssize_t n;
       KJ_SYSCALL(n = pread(fromFd, buffer, kj::min(sizeof(buffer), size), fromOffset));
       if (n == 0) break;

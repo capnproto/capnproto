@@ -3245,13 +3245,13 @@ public:
   LocalPeerIdentityImpl(Credentials creds): creds(creds) {}
 
   kj::String toString() override {
-    char pidBuffer[16];
+    char pidBuffer[16]{};
     kj::StringPtr pidStr = nullptr;
     KJ_IF_SOME(p, creds.pid) {
       pidStr = strPreallocated(pidBuffer, " pid:", p);
     }
 
-    char uidBuffer[16];
+    char uidBuffer[16]{};
     kj::StringPtr uidStr = nullptr;
     KJ_IF_SOME(u, creds.uid) {
       uidStr = strPreallocated(uidBuffer, " uid:", u);

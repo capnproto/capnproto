@@ -317,7 +317,7 @@ private:
     // be fully satisfied immediately. This optimizes for the case of small streams, e.g. a short
     // HTTP body.
 
-    byte buffer[4096];
+    byte buffer[4096]{};
     size_t pos = 0;
     size_t initialAmount = kj::min(sizeof(buffer), amount);
 
@@ -408,7 +408,7 @@ private:
     // we allocate here to avoid coming close to the hard limit, but that's a lot of effort so I'm
     // not going to bother!
 
-    int pipeFds[2];
+    int pipeFds[2]{};
     KJ_SYSCALL_HANDLE_ERRORS(pipe2(pipeFds, O_NONBLOCK | O_CLOEXEC)) {
       case ENFILE:
         // Probably hit the limit on pipe buffers, fall back to unoptimized pump.
@@ -960,7 +960,7 @@ public:
 
     switch (addr.generic.sa_family) {
       case AF_INET: {
-        char buffer[INET6_ADDRSTRLEN];
+        char buffer[INET6_ADDRSTRLEN]{};
         if (inet_ntop(addr.inet4.sin_family, &addr.inet4.sin_addr,
                       buffer, sizeof(buffer)) == nullptr) {
           KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
@@ -969,7 +969,7 @@ public:
         return str(buffer, ':', ntohs(addr.inet4.sin_port));
       }
       case AF_INET6: {
-        char buffer[INET6_ADDRSTRLEN];
+        char buffer[INET6_ADDRSTRLEN]{};
         if (inet_ntop(addr.inet6.sin6_family, &addr.inet6.sin6_addr,
                       buffer, sizeof(buffer)) == nullptr) {
           KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
@@ -1134,7 +1134,7 @@ public:
 
     if (addrPart.size() < INET6_ADDRSTRLEN - 1) {
       // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
-      char buffer[INET6_ADDRSTRLEN];
+      char buffer[INET6_ADDRSTRLEN]{};
       memcpy(buffer, addrPart.begin(), addrPart.size());
       buffer[addrPart.size()] = '\0';
 
@@ -1968,7 +1968,7 @@ public:
       : lowLevel(lowLevel), network(lowLevel) {}
 
   OneWayPipe newOneWayPipe() override {
-    int fds[2];
+    int fds[2]{};
 #if __linux__ && !__BIONIC__
     KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
 #else
@@ -1981,7 +1981,7 @@ public:
   }
 
   TwoWayPipe newTwoWayPipe() override {
-    int fds[2];
+    int fds[2]{};
     int type = SOCK_STREAM;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
@@ -1994,7 +1994,7 @@ public:
   }
 
   CapabilityPipe newCapabilityPipe() override {
-    int fds[2];
+    int fds[2]{};
     int type = SOCK_STREAM;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
@@ -2012,7 +2012,7 @@ public:
 
   PipeThread newPipeThread(
       Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
-    int fds[2];
+    int fds[2]{};
     int type = SOCK_STREAM;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
