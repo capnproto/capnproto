@@ -253,7 +253,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
 // On android before marshmallow only the posix version of stderror_r was
 // available, even with __USE_GNU.
 #if __USE_GNU && !(defined(__ANDROID_API__) && __ANDROID_API__ < 23)
-    char buffer[256];
+    char buffer[256]{};
     if (style == SYSCALL) {
       if (sysErrorString == nullptr) {
         sysErrorArray = strerror_r(errorNumber, buffer, sizeof(buffer));

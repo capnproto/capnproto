@@ -504,7 +504,7 @@ public:
         continue;
       }
 
-      int pipeFds[2];
+      int pipeFds[2]{};
       KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
 
       kj::String exeName;

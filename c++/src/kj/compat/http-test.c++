@@ -2369,7 +2369,7 @@ KJ_TEST("WebSocket pump disconnect on send") {
   auto sendTask = client1->send("hello"_kj);
 
   // Endpoint reads three bytes and then disconnects.
-  char buffer[3];
+  char buffer[3]{};
   pipe2.ends[1]->read(buffer, 3).wait(waitScope);
   pipe2.ends[1] = nullptr;
 
@@ -5304,7 +5304,7 @@ void doDelayedCompletionTest(bool exception, kj::Maybe<uint64_t> expectedLength)
   KJ_EXPECT(resp.statusCode == 200);
 
   // Read "foo" from the response body: works
-  char buffer[16];
+  char buffer[16]{};
   KJ_ASSERT(resp.body->tryRead(buffer, 1, sizeof(buffer)).wait(waitScope) == 3);
   buffer[3] = '\0';
   KJ_EXPECT(buffer == "foo"_kj);
@@ -5963,7 +5963,7 @@ KJ_TEST("HttpClientImpl connect()") {
 
   auto req = client->connect("foo:123", HttpHeaders(headerTable), {});
 
-  char buffer[16];
+  char buffer[16]{};
   auto readPromise = req.connection->tryRead(buffer, 16, 16);
 
   expectRead(*pipe.ends[1], "CONNECT foo:123 HTTP/1.1\r\n\r\n").wait(waitScope);

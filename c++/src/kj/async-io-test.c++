@@ -61,7 +61,7 @@ TEST(AsyncIo, SimpleNetwork) {
   Own<AsyncIoStream> server;
   Own<AsyncIoStream> client;
 
-  char receiveBuffer[4];
+  char receiveBuffer[4]{};
 
   auto port = newPromiseAndFulfiller<uint>();
 
@@ -100,7 +100,7 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
   Own<AsyncIoStream> server;
   Own<AsyncIoStream> client;
 
-  char receiveBuffer[4];
+  char receiveBuffer[4]{};
 
   auto port = newPromiseAndFulfiller<uint>();
 
@@ -184,7 +184,7 @@ TEST(AsyncIo, UnixSocket) {
   Own<AsyncIoStream> server;
   Own<AsyncIoStream> client;
 
-  char receiveBuffer[4];
+  char receiveBuffer[4]{};
 
   auto ready = newPromiseAndFulfiller<void>();
 
@@ -254,7 +254,7 @@ TEST(AsyncIo, AncillaryMessageHandlerNoMsg) {
   Own<AsyncIoStream> server;
   Own<AsyncIoStream> client;
 
-  char receiveBuffer[4];
+  char receiveBuffer[4]{};
 
   bool clientHandlerCalled = false;
   kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> clientHandler =
@@ -314,7 +314,7 @@ TEST(AsyncIo, AncillaryMessageHandler) {
   Own<AsyncIoStream> server;
   Own<AsyncIoStream> client;
 
-  char receiveBuffer[4];
+  char receiveBuffer[4]{};
 
   bool clientHandlerCalled = false;
   kj::Function<void(kj::ArrayPtr<AncillaryMessage>)> clientHandler =
@@ -443,7 +443,7 @@ TEST(AsyncIo, OneWayPipe) {
   auto ioContext = setupAsyncIo();
 
   auto pipe = ioContext.provider->newOneWayPipe();
-  char receiveBuffer[4];
+  char receiveBuffer[4]{};
 
   pipe.out->write("foo", 3).detach([](kj::Exception&& exception) {
     KJ_FAIL_EXPECT(exception);
@@ -461,8 +461,8 @@ TEST(AsyncIo, TwoWayPipe) {
   auto ioContext = setupAsyncIo();
 
   auto pipe = ioContext.provider->newTwoWayPipe();
-  char receiveBuffer1[4];
-  char receiveBuffer2[4];
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
 
   auto promise = pipe.ends[0]->write("foo", 3).then([&]() {
     return pipe.ends[0]->tryRead(receiveBuffer1, 3, 4);
@@ -490,8 +490,8 @@ TEST(AsyncIo, InMemoryCapabilityPipe) {
 
   auto pipe = newCapabilityPipe();
   auto pipe2 = newCapabilityPipe();
-  char receiveBuffer1[4];
-  char receiveBuffer2[4];
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
 
   // Expect to receive a stream, then read "foo" from it, then write "bar" to it.
   Own<AsyncCapabilityStream> receivedStream;
@@ -530,8 +530,8 @@ TEST(AsyncIo, CapabilityPipe) {
 
   auto pipe = ioContext.provider->newCapabilityPipe();
   auto pipe2 = ioContext.provider->newCapabilityPipe();
-  char receiveBuffer1[4];
-  char receiveBuffer2[4];
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
 
   // Expect to receive a stream, then write "bar" to it, then receive "foo" from it.
   Own<AsyncCapabilityStream> receivedStream;
@@ -620,7 +620,7 @@ TEST(AsyncIo, CapabilityPipeMultiStreamMessage) {
   pipe.ends[0]->writeWithStreams("foo"_kjb, arrayPtr(&secondBuf, 1), streams.finish())
       .wait(ioContext.waitScope);
 
-  char receiveBuffer[7];
+  char receiveBuffer[7]{};
   Own<AsyncCapabilityStream> receiveStreams[3];
   auto result = pipe.ends[1]->tryReadWithStreams(receiveBuffer, 6, 7, receiveStreams, 3)
       .wait(ioContext.waitScope);
@@ -648,7 +648,7 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
 
   auto capPipe = io.provider->newCapabilityPipe();
 
-  int pipeFds[2];
+  int pipeFds[2]{};
   KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in1(pipeFds[0]);
   kj::AutoCloseFd out1(pipeFds[1]);
@@ -663,7 +663,7 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
   }
 
   {
-    char buffer[4];
+    char buffer[4]{};
     AutoCloseFd fdBuffer[1];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 1).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 1);
@@ -675,7 +675,7 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
   KJ_SYSCALL(fcntl(in1, F_SETFL, O_NONBLOCK));
   KJ_SYSCALL(fcntl(in2, F_SETFL, O_NONBLOCK));
 
-  char buffer[4];
+  char buffer[4]{};
   ssize_t n;
 
   // First we read "bar" from in1.
@@ -720,7 +720,7 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
 
   auto capPipe = io.provider->newCapabilityPipe();
 
-  int pipeFds[2];
+  int pipeFds[2]{};
   KJ_SYSCALL(miniposix::pipe(pipeFds));
   kj::AutoCloseFd in1(pipeFds[0]);
   kj::AutoCloseFd out1(pipeFds[1]);
@@ -739,7 +739,7 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
   }
 
   {
-    char buffer[4];
+    char buffer[4]{};
     AutoCloseFd fdBuffer[2];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 2).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 2);
@@ -753,7 +753,7 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
   KJ_SYSCALL(fcntl(in2, F_SETFL, O_NONBLOCK));
   KJ_SYSCALL(fcntl(in3, F_SETFL, O_NONBLOCK));
 
-  char buffer[4];
+  char buffer[4]{};
   ssize_t n;
 
   // First we read "bar" from in1.
@@ -803,7 +803,7 @@ TEST(AsyncIo, PipeThread) {
 
   auto pipeThread = ioContext.provider->newPipeThread(
       [](AsyncIoProvider& ioProvider, AsyncIoStream& stream, WaitScope& waitScope) {
-    char buf[4];
+    char buf[4]{};
     stream.write("foo", 3).wait(waitScope);
     EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait(waitScope));
     EXPECT_EQ("bar", heapString(buf, 3));
@@ -812,7 +812,7 @@ TEST(AsyncIo, PipeThread) {
     EXPECT_EQ(0, stream.tryRead(buf, 1, 1).wait(waitScope));
   });
 
-  char buf[4];
+  char buf[4]{};
   pipeThread.pipe->write("bar", 3).wait(ioContext.waitScope);
   EXPECT_EQ(3u, pipeThread.pipe->tryRead(buf, 3, 4).wait(ioContext.waitScope));
   EXPECT_EQ("foo", heapString(buf, 3));
@@ -825,13 +825,13 @@ TEST(AsyncIo, PipeThreadDisconnects) {
 
   auto pipeThread = ioContext.provider->newPipeThread(
       [](AsyncIoProvider& ioProvider, AsyncIoStream& stream, WaitScope& waitScope) {
-    char buf[4];
+    char buf[4]{};
     stream.write("foo", 3).wait(waitScope);
     EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait(waitScope));
     EXPECT_EQ("bar", heapString(buf, 3));
   });
 
-  char buf[4];
+  char buf[4]{};
   EXPECT_EQ(3u, pipeThread.pipe->tryRead(buf, 3, 4).wait(ioContext.waitScope));
   EXPECT_EQ("foo", heapString(buf, 3));
 
@@ -879,7 +879,7 @@ bool isMsgTruncBroken() {
   KJ_SYSCALL(sendto(fd, message, strlen(message), 0,
       reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)));
 
-  char buf[4];
+  char buf[4]{};
   struct iovec iov;
   iov.iov_base = buf;
   iov.iov_len = 3;
@@ -1377,7 +1377,7 @@ KJ_TEST("Userland pipe") {
   auto promise = pipe.out->write("foo", 3);
   KJ_EXPECT(!promise.poll(ws));
 
-  char buf[4];
+  char buf[4]{};
   KJ_EXPECT(pipe.in->tryRead(buf, 1, 4).wait(ws) == 3);
   buf[3] = '\0';
   KJ_EXPECT(buf == "foo"_kj);
@@ -2123,7 +2123,7 @@ KJ_TEST("Userland pipe BlockedRead gets empty tryPumpFrom") {
   auto pipe2 = newOneWayPipe();
 
   // First start a read from the back end.
-  char buffer[4];
+  char buffer[4]{};
   auto readPromise = pipe2.in->tryRead(buffer, 1, 4);
 
   // Now arrange a pump between the pipes, using tryPumpFrom().
@@ -2976,7 +2976,7 @@ KJ_TEST("OS TwoWayPipe whenWriteDisconnected()") {
   KJ_ASSERT(abortedPromise.poll(io.waitScope));
   abortedPromise.wait(io.waitScope);
 
-  char buffer[4];
+  char buffer[4]{};
   KJ_ASSERT(pipe.ends[0]->tryRead(&buffer, 3, 3).wait(io.waitScope) == 3);
   buffer[3] = '\0';
   KJ_EXPECT(buffer == "bar"_kj);
@@ -2987,7 +2987,7 @@ KJ_TEST("OS TwoWayPipe whenWriteDisconnected()") {
 KJ_TEST("import socket FD that's already broken") {
   auto io = setupAsyncIo();
 
-  int fds[2];
+  int fds[2]{};
   KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
   KJ_SYSCALL(write(fds[1], "foo", 3));
   KJ_SYSCALL(close(fds[1]));
@@ -2998,7 +2998,7 @@ KJ_TEST("import socket FD that's already broken") {
   KJ_ASSERT(abortedPromise.poll(io.waitScope));
   abortedPromise.wait(io.waitScope);
 
-  char buffer[4];
+  char buffer[4]{};
   KJ_ASSERT(stream->tryRead(&buffer, sizeof(buffer), sizeof(buffer)).wait(io.waitScope) == 3);
   buffer[3] = '\0';
   KJ_EXPECT(buffer == "foo"_kj);

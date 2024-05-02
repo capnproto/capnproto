@@ -157,7 +157,7 @@ template <typename T>
 static CappedArray<char, sizeof(T) * 2 + 1> hexImpl(T i) {
   // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).
   CappedArray<char, sizeof(T) * 2 + 1> result;
-  uint8_t reverse[sizeof(T) * 2];
+  uint8_t reverse[sizeof(T) * 2]{};
   uint8_t* p = reverse;
   if (i == 0) {
     *p++ = 0;
@@ -209,7 +209,7 @@ static CappedArray<char, sizeof(T) * 3 + 2> stringifyImpl(T i) {
   // unsigned first, then negate it, to avoid ubsan complaining.
   Unsigned u = i;
   if (negative) u = -u;
-  uint8_t reverse[sizeof(T) * 3 + 1];
+  uint8_t reverse[sizeof(T) * 3 + 1]{};
   uint8_t* p = reverse;
   if (u == 0) {
     *p++ = 0;
@@ -522,7 +522,7 @@ kj::String LocalizeRadix(const char* input, const char* radix_pos) {
   // tell, this is the only portable, thread-safe way to get the C library
   // to divuldge the locale's radix character.  No, localeconv() is NOT
   // thread-safe.
-  char temp[16];
+  char temp[16]{};
   int size = snprintf(temp, sizeof(temp), "%.1f", 1.5);
   KJ_ASSERT(temp[0] == '1');
   KJ_ASSERT(temp[size-1] == '5');

@@ -442,7 +442,7 @@ Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
 
 Promise<String> receiveDataCoroutine(Own<ConnectionReceiver> listener) {
   auto server = co_await listener->accept();
-  char buffer[4];
+  char buffer[4]{};
   auto n = co_await server->read(buffer, 3, 4);
   KJ_EXPECT(3u == n);
   co_return heapString(buffer, n);

@@ -1173,7 +1173,7 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
     }
   }));
 
-  int pair[2];
+  int pair[2]{};
   KJ_SYSCALL(kj::miniposix::pipe(pair));
   kj::AutoCloseFd in(pair[0]);
   kj::AutoCloseFd out(pair[1]);

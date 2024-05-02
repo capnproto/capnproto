@@ -468,7 +468,7 @@ bool Path::isWin32Special(StringPtr part) {
 
   // OK, this could be a Win32 special filename. We need to match the first three letters against
   // the list of specials, case-insensitively.
-  char tmp[4];
+  char tmp[4]{};
   memcpy(tmp, part.begin(), 3);
   tmp[3] = '\0';
   for (char& c: tmp) {
@@ -520,7 +520,7 @@ void File::writeAll(StringPtr text) const {
 
 size_t File::copy(uint64_t offset, const ReadableFile& from,
                   uint64_t fromOffset, uint64_t size) const {
-  byte buffer[8192];
+  byte buffer[8192]{};
 
   size_t result = 0;
   while (size > 0) {

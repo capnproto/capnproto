@@ -898,7 +898,7 @@ KJ_TEST("DiskFile holes") {
 #endif
   KJ_EXPECT(meta.spaceUsed <= 2 * 65536);
 
-  byte buf[7];
+  byte buf[7]{};
 
 #if !_WIN32  // Win32 CopyFile() does NOT preserve sparseness.
   {

@@ -979,7 +979,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                 errorReporter.addError(target.startByte, target.endByte,
                                        "Not a valid annotation target.");
               } else {
-                char buffer[64];
+                char buffer[64]{};
                 strcpy(buffer, "targets");
                 strcat(buffer, target.value.cStr());
                 buffer[strlen("targets")] += 'A' - 'a';
