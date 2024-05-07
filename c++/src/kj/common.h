@@ -73,8 +73,8 @@ KJ_BEGIN_HEADER
 
 #ifdef __GNUC__
   #if __clang__
-    #if __clang_major__ < 11
-      #warning "This library requires at least Clang 11.0."
+    #if __clang_major__ < 14
+      #warning "This library requires at least Clang 14.0."
     #endif
     #if __cplusplus >= 202002L && !(__has_include(<coroutine>) || __has_include(<experimental/coroutine>))
       #warning "Your compiler supports C++20 but your C++ standard library does not.  If your "\
@@ -275,13 +275,7 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
-#if __cplusplus > 201703L || (__clang__  && __clang_major__ >= 9 && __cplusplus >= 201103L)
-// Technically this was only added to C++20 but Clang allows it for >= C++11 and spelunking the
-// attributes manual indicates it first came in with Clang 9.
 #define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]
-#else
-#define KJ_NO_UNIQUE_ADDRESS
-#endif
 
 #if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
 #define KJ_DISABLE_TSAN __attribute__((no_sanitize("thread"), noinline))

@@ -22,7 +22,7 @@ Cap'n Proto makes extensive use of C++20 language features. As a result, it requ
 new version of a well-supported compiler. The minimum versions are:
 
 * GCC 10.0*
-* Clang 11.0
+* Clang 14.0
 * Visual C++ 2019
 
 *: Cap'n Proto 2.0 and above cannot currently compile with GCC due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051
