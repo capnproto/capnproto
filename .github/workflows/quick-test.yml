@@ -14,7 +14,8 @@ on:
 
 jobs:
   Linux-musl:
-    runs-on: ubuntu-20.04
+    # Docker images are no longer cached on the 24.04 runner, use 22.04 instead
+    runs-on: ubuntu-22.04
     # We depend on both clang and libc++. Alpine Linux 3.17 seems to be the first version to include
     # a libc++ package (based on LLVM 15), but building capnproto failed when I tried it.
     # Alpine Linux 3.18's libc++ package is from LLVM 16, however, and worked out-of-the-box, so
@@ -27,31 +28,25 @@ jobs:
       - name: super-test
         run: ./super-test.sh quick clang-16
   Linux-clang:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        clang: [11, 12, 13, 14, 15]
+        clang: [14, 15, 16, 17, 18]
         driver: [bazel, super-test]
         include:
           - driver: bazel
             run-test: cd c++ && bazel test --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
           - driver: super-test
             run-test: ./super-test.sh quick
-          - clang: 12
-            # clang-12 on Ubuntu requires libunwind to be installed explicitly
-            libunwind: libunwind-12-dev
     steps:
       - uses: actions/checkout@v4
       - name: install dependencies
-        # I observed 404s for some packages and added an `apt-get update`. Then, I observed package
-        # conflicts between LLVM 14 and 15, and added the line which removes LLVM 14, the default on
-        # Ubuntu as of this writing.
+        # I observed 404s for some packages and added an `apt-get update`.
         run: |
             export DEBIAN_FRONTEND=noninteractive
             sudo apt-get update
-            sudo apt-get remove clang-14 libc++1-14 libc++abi1-14 libc++-14-dev libc++abi-14-dev libunwind-14 libunwind-14-dev
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev clang-${{ matrix.clang }} libc++-${{ matrix.clang }}-dev libc++abi-${{ matrix.clang }}-dev ${{ matrix.libunwind }}
+            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev clang-${{ matrix.clang }} libc++-${{ matrix.clang }}-dev libc++abi-${{ matrix.clang }}-dev
       - name: test
         run: |
             export CC=clang-${{ matrix.clang }}
@@ -87,7 +82,7 @@ jobs:
       - name: Install dependencies via Conda
         run: |
           conda update -n base -c defaults -q conda
-          conda install -n base -c defaults -q ninja openssl zlib
+          conda install -n base -c defaults -q openssl zlib
       - name: Build and test
         shell: cmd
         run: |
