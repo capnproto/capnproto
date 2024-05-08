@@ -115,6 +115,12 @@ class GzipAsyncOutputStream final: public AsyncOutputStream {
 public:
   enum { DECOMPRESS };
 
+  struct Options {
+    int compressionLevel = Z_DEFAULT_COMPRESSION;
+    int writeFlush = Z_NO_FLUSH;
+  };
+
+  GzipAsyncOutputStream(AsyncOutputStream& inner, Options options);
   GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
   GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(DECOMPRESS));
   KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncOutputStream);
@@ -138,7 +144,10 @@ public:
 
 private:
   AsyncOutputStream& inner;
+  int writeFlush = Z_NO_FLUSH;
   _::GzipOutputContext ctx;
+
+  Promise<void> writeImpl(const void* buffer, size_t size, int flush);
 
   kj::Promise<void> pump(int flush);
 };
