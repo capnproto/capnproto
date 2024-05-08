@@ -603,5 +603,21 @@ KJ_TEST("Array::slice(start) const") {
 #endif
 }
 
+KJ_TEST("FixedArray::fill") {
+  FixedArray<int64_t, 10> arr;
+  arr.fill(42);
+  for (int64_t x : arr) {
+    KJ_EXPECT(x == 42);
+  }
+}
+
+KJ_TEST("CappedArray::fill") {
+  CappedArray<int64_t, 10> arr;
+  arr.fill(42);
+  for (int64_t x : arr) {
+    KJ_EXPECT(x == 42);
+  }
+}
+
 }  // namespace
 }  // namespace kj
