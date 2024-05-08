@@ -323,6 +323,13 @@ Promise<size_t> BrotliAsyncInputStream::readImpl(
 
 // =======================================================================================
 
+BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, Options options)
+    : inner(inner), ctx(options.compressionLevel, options.windowBits) {
+  if (options.writeFlush) {
+    writeFlush = BROTLI_OPERATION_FLUSH;
+  }
+}
+
 BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel,
                                                  int windowBits)
     : inner(inner), ctx(compressionLevel, windowBits) {}
@@ -332,13 +339,19 @@ BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, declt
     : inner(inner), ctx(kj::none, windowBits) {}
 
 Promise<void> BrotliAsyncOutputStream::write(const void* in, size_t size) {
+  return writeImpl(in, size, writeFlush);
+}
+
+Promise<void> BrotliAsyncOutputStream::writeImpl(const void* in, size_t size,
+                                                BrotliEncoderOperation op) {
   ctx.setInput(in, size);
-  return pump(BROTLI_OPERATION_PROCESS);
+  return pump(op);
 }
 
 Promise<void> BrotliAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
+  BrotliEncoderOperation op = pieces.size() > 1 ? BROTLI_OPERATION_PROCESS : writeFlush;
+  return writeImpl(pieces[0].begin(), pieces[0].size(), op)
       .then([this,pieces]() {
     return write(pieces.slice(1, pieces.size()));
   });

@@ -114,6 +114,7 @@ public:
 class MockAsyncOutputStream: public AsyncOutputStream {
 public:
   kj::Vector<byte> bytes;
+  kj::Vector<size_t> writes;
 
   kj::String decompress(WaitScope& ws) {
     MockAsyncInputStream rawInput(bytes, kj::maxValue);
@@ -122,13 +123,17 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    writes.add(size);
     bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
     return kj::READY_NOW;
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    size_t total = 0;
     for (auto& piece: pieces) {
+      total += piece.size();
       bytes.addAll(piece);
     }
+    writes.add(total);
     return kj::READY_NOW;
   }
 
@@ -402,6 +407,38 @@ KJ_TEST("async brotli huge round trip") {
 
   KJ_ASSERT(decompressed.size() == bytes.size());
   KJ_ASSERT(memcmp(bytes.begin(), decompressed.begin(), bytes.size()) == 0);
+}
+
+KJ_TEST("brotli with write flush option") {
+  auto io = setupAsyncIo();
+
+  MockAsyncOutputStream rawOutput;
+  BrotliAsyncOutputStream brotli(rawOutput, BrotliAsyncOutputStream::Options{
+    .writeFlush = true,
+  });
+
+  auto bytes = heapArray<byte>(100);
+  for (auto& b: bytes) {
+    b = rand();
+  }
+
+  for (int n = 0; n < 10; n++) {
+    brotli.write(bytes.begin(), bytes.size()).wait(io.waitScope);
+  }
+
+  // In this case, we should only flush once once when writing the
+  // last piece.
+  kj::Vector<kj::ArrayPtr<const byte>> pieces;
+  pieces.add("data"_kjb);
+  pieces.add("more"_kjb);
+  brotli.write(pieces.asPtr()).wait(io.waitScope);
+
+  brotli.end().wait(io.waitScope);
+
+  KJ_ASSERT(rawOutput.writes.size() == 12);
+  for (auto& write : rawOutput.writes) {
+    KJ_ASSERT(write > 0);
+  }
 }
 
 }  // namespace

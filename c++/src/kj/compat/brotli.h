@@ -153,6 +153,14 @@ class BrotliAsyncOutputStream final: public AsyncOutputStream {
 public:
   enum { DECOMPRESS };
 
+  struct Options {
+    int compressionLevel = KJ_BROTLI_DEFAULT_QUALITY;
+    int windowBits = _::KJ_BROTLI_DEFAULT_WBITS;
+    bool writeFlush = false;
+  };
+
+  BrotliAsyncOutputStream(AsyncOutputStream& inner, Options options);
+
   BrotliAsyncOutputStream(AsyncOutputStream& inner,
                           int compressionLevel = KJ_BROTLI_DEFAULT_QUALITY,
                           int windowBits = _::KJ_BROTLI_DEFAULT_WBITS);
@@ -181,6 +189,9 @@ public:
 private:
   AsyncOutputStream& inner;
   _::BrotliOutputContext ctx;
+  BrotliEncoderOperation writeFlush = BROTLI_OPERATION_PROCESS;
+
+  Promise<void> writeImpl(const void* buffer, size_t size, BrotliEncoderOperation writeFlush);
 
   kj::Promise<void> pump(BrotliEncoderOperation flush);
 };
