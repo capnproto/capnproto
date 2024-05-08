@@ -539,10 +539,13 @@ public:
   inline constexpr const T* begin() const KJ_LIFETIMEBOUND { return content; }
   inline constexpr const T* end() const KJ_LIFETIMEBOUND { return content + fixedSize; }
 
-  inline constexpr operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
+  inline constexpr operator ArrayPtr<T>() KJ_LIFETIMEBOUND { return asPtr(); }
+  inline constexpr operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND { return asPtr(); }
+
+  inline constexpr ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND {
     return arrayPtr(content, fixedSize);
   }
-  inline constexpr operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
+  inline constexpr ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND {
     return arrayPtr(content, fixedSize);
   }
 
@@ -550,6 +553,8 @@ public:
   inline constexpr const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
     return content[index];
   }
+
+  inline void fill(T t) { asPtr().fill(t); }
 
 private:
   T content[fixedSize];
@@ -573,15 +578,15 @@ public:
   inline const T* begin() const KJ_LIFETIMEBOUND { return content; }
   inline const T* end() const KJ_LIFETIMEBOUND { return content + currentSize; }
 
-  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
-    return arrayPtr(content, currentSize);
-  }
-  inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
-    return arrayPtr(content, currentSize);
-  }
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND { return asPtr(); }
+  inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND { return asPtr(); }
+  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return arrayPtr(content, currentSize); }
+  inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND { return arrayPtr(content, currentSize); }
 
   inline T& operator[](size_t index) KJ_LIFETIMEBOUND { return content[index]; }
   inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND { return content[index]; }
+
+  inline void fill(T t) { asPtr().fill(t); }
 
 private:
   size_t currentSize;
