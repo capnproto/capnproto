@@ -894,6 +894,7 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   throwException @14 ();
   throwRemoteException @15 ();
+  throwExceptionWithDetail @16 ();
 }
 
 interface TestMembrane {

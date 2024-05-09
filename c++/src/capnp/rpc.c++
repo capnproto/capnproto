@@ -125,6 +125,11 @@ kj::Exception toException(const rpc::Exception::Reader& exception) {
   if (exception.hasTrace()) {
     result.setRemoteTrace(kj::str(exception.getTrace()));
   }
+  for (auto detail : exception.getDetails()) {
+    if (detail.hasData()) {
+      result.setDetail(detail.getDetailId(), kj::heapArray(detail.getData()));
+    }
+  }
   return result;
 }
 
@@ -150,6 +155,16 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
 
   builder.setReason(description);
   builder.setType(static_cast<rpc::Exception::Type>(exception.getType()));
+
+  auto details = exception.getDetails();
+  if (details.size()) {
+    auto detailsBuilder = builder.initDetails(details.size());
+    for (auto i : kj::indices(details)) {
+      auto out = detailsBuilder[i];
+      out.setDetailId(details[i].id);
+      out.setData(details[i].value);
+    }
+  }
 
   KJ_IF_SOME(t, traceEncoder) {
     builder.setTrace(t(exception));

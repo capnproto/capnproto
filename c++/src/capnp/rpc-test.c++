@@ -1426,6 +1426,25 @@ KJ_TEST("method throws exception with trace encoder") {
   KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
 }
 
+KJ_TEST("method throws exception with detail") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Maybe<kj::Exception> maybeException;
+  client.throwExceptionWithDetailRequest().send().ignoreResult()
+      .catch_([&](kj::Exception&& e) {
+    maybeException = kj::mv(e);
+  }).wait(context.waitScope);
+
+  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
+  KJ_EXPECT(exception.getRemoteTrace() == nullptr);
+  auto detail = KJ_ASSERT_NONNULL(exception.getDetail(1));
+  KJ_EXPECT(kj::str(detail.asChars()) == "foo");
+}
+
 KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
   // When OutgoingRpcMessage::send() throws an exception on a Call message, we need to clean up
   // anything that had been added to the export table as part of the call. At one point this

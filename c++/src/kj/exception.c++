@@ -932,6 +932,10 @@ kj::Maybe<kj::ArrayPtr<const byte>> Exception::getDetail(DetailTypeId typeId) co
   return kj::none;
 }
 
+kj::ArrayPtr<const Exception::Detail> Exception::getDetails() const {
+  return details.asPtr();
+}
+
 kj::Maybe<kj::Array<byte>> Exception::releaseDetail(DetailTypeId typeId) {
   for (auto& detail: details) {
     if (detail.id == typeId) {

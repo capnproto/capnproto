@@ -282,6 +282,8 @@ public:
 
   kj::Promise<void> throwRemoteException(ThrowRemoteExceptionContext context) override;
 
+  kj::Promise<void> throwExceptionWithDetail(ThrowExceptionWithDetailContext context) override;
+
 private:
   int& callCount;
   int& handleCount;
