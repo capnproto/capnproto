@@ -135,8 +135,13 @@ public:
   // Adds the location that called this method to the stack trace.
 
   using DetailTypeId = unsigned long long;
+  struct Detail {
+    DetailTypeId id;
+    kj::Array<byte> value;
+  };
 
   kj::Maybe<kj::ArrayPtr<const byte>> getDetail(DetailTypeId typeId) const;
+  kj::ArrayPtr<const Detail> getDetails() const;
   void setDetail(DetailTypeId typeId, kj::Array<byte> value);
   kj::Maybe<kj::Array<byte>> releaseDetail(DetailTypeId typeId);
   // Details: Arbitrary extra information can be added to an exception. Applications can define
@@ -176,11 +181,6 @@ private:
   // and truncateCommonTrace() after it is caught. Note that when exceptions propagate through
   // async promises, the trace is extended one frame at a time instead, so isFullTrace should
   // remain false.
-
-  struct Detail {
-    DetailTypeId id;
-    kj::Array<byte> value;
-  };
 
   kj::Vector<Detail> details;
 

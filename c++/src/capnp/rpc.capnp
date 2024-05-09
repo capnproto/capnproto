@@ -1255,6 +1255,23 @@ struct Exception {
   # Stack trace text from the remote server. The format is not specified. By default,
   # implementations do not provide stack traces; the application must explicitly enable them
   # when desired.
+
+  details @5 :List(Detail);
+  # Arbitrary extra information can be added to an exception. Applications can define any kind of
+  # detail they want. It is expected that exceptions will rarely have more than one or two details.
+  #
+  # The main use case for details is to be able to tunnel exceptions of a different type through
+  # KJ / Cap'n Proto. In particular, Cloudflare Workers commonly has to convert a JavaScript
+  # exception to KJ and back. The exception is serialized using V8 serialization.
+
+  struct Detail {
+    detailId @0 :UInt64;
+    # Every type of detail should have a unique ID, which is a 64-bit integer. It's suggested that
+    # you use `capnp id` to generate these.
+
+    data @1 :Data;
+    # The arbitrary extra information.
+  }
 }
 
 # ========================================================================================

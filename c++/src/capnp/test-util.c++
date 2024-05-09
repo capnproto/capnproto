@@ -1192,6 +1192,13 @@ kj::Promise<void> TestMoreStuffImpl::throwRemoteException(ThrowRemoteExceptionCo
   return KJ_EXCEPTION(FAILED, "remote exception: test exception");
 }
 
+kj::Promise<void> TestMoreStuffImpl::throwExceptionWithDetail(
+    ThrowExceptionWithDetailContext context) {
+  auto e = KJ_EXCEPTION(FAILED, "test exception");
+  e.setDetail(1, kj::heapArray<byte>("foo"_kjb));
+  return e;
+}
+
 #endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
