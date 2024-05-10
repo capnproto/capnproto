@@ -1954,9 +1954,28 @@ public:
     // libc++ std::fill doesn't have memset specialization either.
   }
 
+  inline void copyFrom(kj::ArrayPtr<const T> other) {
+    // Copy data from the other array pointer.
+    // Arrays have to be of the same size and memory area MUST NOT overlap.
+    KJ_IREQUIRE(size_ == other.size(), "copy requires arrays of the same size");
+    KJ_IREQUIRE(!intersects(other), "copy memory area must not overlap");
+    T* __restrict__ dst = begin();
+    const T* __restrict__ src = other.begin();
+    for (size_t s = size_, i = 0; i < s; i++) { dst[i] = src[i]; } 
+  }
+
 private:
   T* ptr;
   size_t size_;
+
+  inline bool intersects(kj::ArrayPtr<const T> other) const {
+    // Checks if memory area intersects with another pointer.
+
+    // Memory _does not_ intersect if one of the arrays is completely on one side of the other:
+    //    begin() >= other.end() || other.begin() >= end()
+    // Negating the expression gets the result:
+    return begin() < other.end() && other.begin() < end();
+  }
 };
 
 template <>
