@@ -110,6 +110,11 @@ TEST(Array, TrivialConstructor) {
 //      EXPECT_NE(chars[1], 0);
 //    }
   }
+
+  {
+    Array<char> chars = heapArray<char>(32, 'x');
+    for (char c : chars) EXPECT_EQ('x', c);
+  }
 }
 
 TEST(Array, ComplexConstructor) {
@@ -122,7 +127,6 @@ TEST(Array, ComplexConstructor) {
   }
   EXPECT_EQ(0, TestObject::count);
 }
-
 TEST(Array, ThrowingConstructor) {
   TestObject::count = 0;
   TestObject::throwAt = 16;
