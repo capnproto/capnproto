@@ -1023,6 +1023,22 @@ KJ_TEST("arrayPtr()") {
   KJ_EXPECT(ptr.size() == 1024);
 }
 
+KJ_TEST("single item arrayPtr()") {
+  byte b = 42;
+  KJ_EXPECT(arrayPtr(b).size() == 1);
+  KJ_EXPECT(arrayPtr(b).begin() == &b);
+
+  // test an object
+  struct SomeObject {
+    int64_t i;
+    double d;
+  };
+  SomeObject obj = {42, 3.1415};
+  kj::arrayPtr(obj).asBytes().fill(0);
+  KJ_EXPECT(obj.i == 0);
+  KJ_EXPECT(obj.d == 0);
+}
+
 KJ_TEST("memzero<T>()") {
   // memzero() works for primitive types
   int64_t x = 42;
