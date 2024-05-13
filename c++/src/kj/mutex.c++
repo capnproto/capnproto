@@ -59,29 +59,7 @@
 #endif
 
 namespace kj {
-#if KJ_TRACK_LOCK_BLOCKING
-static thread_local const BlockedOnReason* tlsBlockReason __attribute((tls_model("initial-exec")));
-// The initial-exec model ensures that even if this code is part of a shared library built PIC, then
-// we still place this variable in the appropriate ELF section so that __tls_get_addr is avoided.
-// It's unclear if __tls_get_addr is still not async signal safe in glibc. The only negative
-// downside of this approach is that a shared library built with kj & lock tracking will fail if
-// dlopen'ed which isn't an intended use-case for the initial implementation.
-
-Maybe<const BlockedOnReason&> blockedReason() noexcept {
-  if (tlsBlockReason == nullptr) {
-    return kj::none;
-  }
-  return *tlsBlockReason;
-}
-
-static void setCurrentThreadIsWaitingFor(const BlockedOnReason* meta) {
-  tlsBlockReason = meta;
-}
-
-static void setCurrentThreadIsNoLongerWaiting() {
-  tlsBlockReason = nullptr;
-}
-#elif KJ_USE_FUTEX
+#ifdef KJ_USE_FUTEX
 struct BlockedOnMutexAcquisition {
   constexpr BlockedOnMutexAcquisition(const _::Mutex& mutex, LockSourceLocationArg) {}
 };
@@ -179,33 +157,6 @@ struct timespec toAbsoluteTimespec(TimePoint time) {
 // =======================================================================================
 // Futex-based implementation (Linux-only)
 
-#if KJ_SAVE_ACQUIRED_LOCK_INFO
-#if !__GLIBC_PREREQ(2, 30)
-#ifndef SYS_gettid
-#error SYS_gettid is unavailable on this system
-#endif
-
-#define gettid() ((pid_t)syscall(SYS_gettid))
-#endif
-
-static thread_local pid_t tlsTid = gettid();
-#define TRACK_ACQUIRED_TID() tlsTid
-
-Mutex::AcquiredMetadata Mutex::lockedInfo() const {
-  auto state = __atomic_load_n(&futex, __ATOMIC_RELAXED);
-  auto tid = lockedExclusivelyByThread;
-  auto location = lockAcquiredLocation;
-
-  if (state & EXCLUSIVE_HELD) {
-    return HoldingExclusively{tid, location};
-  } else {
-    return HoldingShared{location};
-  }
-}
-
-#else
-#define TRACK_ACQUIRED_TID() 0
-#endif
 
 Mutex::Mutex(): futex(0) {}
 Mutex::~Mutex() {
@@ -257,7 +208,6 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
           }
         }
       }
-      acquiredExclusive(TRACK_ACQUIRED_TID(), location);
 #if KJ_CONTENTION_WARNING_THRESHOLD
       printContendedReader = false;
 #endif
@@ -323,18 +273,6 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
         }
       }
 #endif
-
-      // We just want to record the lock being acquired somewhere but the specific location doesn't
-      // matter. This does mean that race conditions could occur where a thread might read this
-      // inconsistently (e.g. filename from 1 lock & function from another). This currently is just
-      // meant to be a debugging aid for manual analysis so it's OK for that purpose. If it's ever
-      // required for this to be used for anything else, then this should probably be changed to
-      // use an additional atomic variable that can ensure only one writer updates this. Or use the
-      // futex variable to ensure that this is only done for the first one to acquire the lock,
-      // although there may be thundering herd problems with that whereby there's a long wallclock
-      // time between when the lock is acquired and when the location is updated (since the first
-      // locker isn't really guaranteed to be the first one unlocked).
-      acquiredShared(location);
 
       break;
     }
