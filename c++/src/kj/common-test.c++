@@ -967,6 +967,19 @@ KJ_TEST("ArrayPtr::as<Std>") {
   KJ_EXPECT(stdPtr.size() == 5);
 }
 
+KJ_TEST("ArrayPtr::copyFrom") {
+  int arr1[] = {12, 34, 56, 34, 12};
+  int arr2[] = {98, 67, 9, 22, 107};
+  int arr3[] = {98, 67, 9, 22, 107};
+
+  KJ_EXPECT(arrayPtr(arr1) != arrayPtr(arr2));
+  KJ_EXPECT(arrayPtr(arr2) == arrayPtr(arr3));
+
+  arrayPtr(arr1).copyFrom(arr2);
+  KJ_EXPECT(arrayPtr(arr1) == arrayPtr(arr2));
+  KJ_EXPECT(arrayPtr(arr2) == arrayPtr(arr3));
+}
+
 // Verifies the expected values of kj::isDisallowedInCoroutine<T>
 
 struct DisallowedInCoroutineStruct {
