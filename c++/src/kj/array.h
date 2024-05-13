@@ -322,6 +322,15 @@ template <typename T, typename Iterator> Array<T> heapArray(Iterator begin, Iter
 template <typename T> Array<T> heapArray(std::initializer_list<T> init);
 // Allocate a heap array containing a copy of the given content.
 
+template <typename T, typename = EnableIf<KJ_HAS_TRIVIAL_CONSTRUCTOR(T)>>
+inline Array<T> heapArray(size_t size, T t) {
+  // Allocate array pre-filled with t.
+  // TODO: implement for complex T types without creating `size` instances first.
+  Array<T> array = heapArray<T>(size);
+  array.asPtr().fill(t);
+  return array;
+}
+
 template <typename T, typename Container>
 Array<T> heapArrayFromIterable(Container&& a) { return heapArray<T>(a.begin(), a.end()); }
 template <typename T>
