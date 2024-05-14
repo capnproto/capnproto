@@ -554,15 +554,6 @@ intervalLength(const T* a, const T* b, kj::Quantity<kj::BoundedConst<maxN>, T>) 
   return kj::assumeMax<maxN>(b - a) * kj::unit<kj::Quantity<kj::BoundedConst<1u>, T>>();
 }
 
-template <typename T, typename U>
-inline constexpr kj::ArrayPtr<const U> arrayPtr(const U* ptr, kj::Quantity<T, U> size) {
-  return kj::ArrayPtr<const U>(ptr, unbound(size / kj::unit<kj::Quantity<T, U>>()));
-}
-template <typename T, typename U>
-inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, kj::Quantity<T, U> size) {
-  return kj::ArrayPtr<U>(ptr, unbound(size / kj::unit<kj::Quantity<T, U>>()));
-}
-
 #else
 
 template <uint width, typename T = uint>
@@ -732,15 +723,6 @@ inline KJ_CONSTEXPR() size_t bitsPerElement() { return sizeof(T) * 8; }
 template <typename T>
 inline constexpr ptrdiff_t intervalLength(const T* a, const T* b, uint) {
   return b - a;
-}
-
-template <typename T, typename U>
-inline constexpr kj::ArrayPtr<const U> arrayPtr(const U* ptr, T size) {
-  return kj::arrayPtr(ptr, size);
-}
-template <typename T, typename U>
-inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, T size) {
-  return kj::arrayPtr(ptr, size);
 }
 
 #endif

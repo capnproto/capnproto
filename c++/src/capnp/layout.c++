@@ -3156,7 +3156,7 @@ kj::ArrayPtr<const byte> ListReader::asRawBytes() const {
     return kj::ArrayPtr<const byte>();
   }
 
-  return arrayPtr(reinterpret_cast<const byte*>(ptr),
+  return kj::arrayPtr(reinterpret_cast<const byte*>(ptr),
       WireHelpers::roundBitsUpToBytes(
           upgradeBound<uint64_t>(elementCount) * (structDataSize / ELEMENTS)));
 }
