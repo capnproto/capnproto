@@ -22,7 +22,9 @@
 #pragma once
 
 #include "common.h"
-#include <atomic>
+#ifdef KJ_DEBUG
+#include <atomic>  // std::atomic for KJ_ASSERT_PTR_COUNTERS
+#endif
 
 KJ_BEGIN_HEADER
 

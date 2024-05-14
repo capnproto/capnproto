@@ -27,6 +27,7 @@
 
 #include "test.h"
 #include "main.h"
+#include <kj/glob-filter.h>
 #include "io.h"
 #include "miniposix.h"
 #include <stdlib.h>

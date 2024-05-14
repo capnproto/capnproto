@@ -5,9 +5,6 @@
 
 #include <capnp/generated-header-support.h>
 #include <kj/windows-sanity.h>
-#if !CAPNP_LITE
-#include <capnp/capability.h>
-#endif  // !CAPNP_LITE
 
 #ifndef CAPNP_VERSION
 #error "CAPNP_VERSION is not defined, is capnp/generated-header-support.h missing?"

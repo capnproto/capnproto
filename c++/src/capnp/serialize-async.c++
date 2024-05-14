@@ -34,6 +34,7 @@
 #include "serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
+#include <kj/one-of.h>
 
 namespace capnp {
 

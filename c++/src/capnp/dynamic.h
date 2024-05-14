@@ -34,7 +34,6 @@
 
 #include "schema.h"
 #include "layout.h"
-#include "message.h"
 #include "any.h"
 #include "capability.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`

@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "common.h"
+#include "function.h"
 #include "test.h"
 #include <cstdlib>
 #include <stdexcept>

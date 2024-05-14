@@ -32,7 +32,7 @@
 #endif
 
 #if _MSC_VER
-#include <intrin.h>
+#include <intrin.h>  // _ReturnAddress
 #endif
 
 #include <kj/list.h>

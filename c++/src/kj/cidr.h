@@ -31,6 +31,9 @@ struct sockaddr;
 
 namespace kj {
 
+class String;
+class StringPtr;
+
 class CidrRange {
 public:
   CidrRange(StringPtr pattern);

@@ -23,6 +23,8 @@
 
 #include <kj/debug.h>
 
+#include <capnp/message.h>
+#include "schema.h"
 #include "pretty-print.h"
 #include "compiler/lexer.capnp.h"
 #include "compiler/lexer.h"

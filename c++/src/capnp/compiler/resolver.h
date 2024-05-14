@@ -23,12 +23,14 @@
 
 #include <capnp/compiler/grammar.capnp.h>
 #include <capnp/schema.capnp.h>
-#include <capnp/schema.h>
 #include <kj/one-of.h>
 
 CAPNP_BEGIN_HEADER
 
 namespace capnp {
+class Type;
+class Schema;
+
 namespace compiler {
 
 class Resolver {

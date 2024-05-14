@@ -22,7 +22,6 @@
 #pragma once
 
 #include "layout.h"
-#include "pointer-helpers.h"
 #include "orphan.h"
 #include "list.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
@@ -31,6 +30,9 @@
 CAPNP_BEGIN_HEADER
 
 namespace capnp {
+namespace _ {
+  class PointerBuilder;
+}
 
 class StructSchema;
 class ListSchema;

@@ -23,11 +23,11 @@
 
 #include "memory.h"
 #include "array.h"
-#include "string.h"
 
 KJ_BEGIN_HEADER
 
 namespace kj {
+class StringPtr;
 
 class Arena {
   // A class which allows several objects to be allocated in contiguous chunks of memory, then

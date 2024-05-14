@@ -27,7 +27,6 @@
 
 #include "async.h"
 #include "timer.h"
-#include <kj/vector.h>
 #include <kj/io.h>
 #include <signal.h>
 

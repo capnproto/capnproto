@@ -83,7 +83,7 @@
 #endif
 
 #if _MSC_VER
-#include <intrin.h>
+#include <intrin.h>  // _ReturnAddress
 #endif
 
 #if KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__)

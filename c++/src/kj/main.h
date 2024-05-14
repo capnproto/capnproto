@@ -25,7 +25,6 @@
 
 #include "array.h"
 #include "string.h"
-#include "vector.h"
 #include "function.h"
 
 KJ_BEGIN_HEADER

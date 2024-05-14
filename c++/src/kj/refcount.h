@@ -23,12 +23,8 @@
 
 #include "memory.h"
 
-#if _MSC_VER
-#if _MSC_VER < 1910
-#include <intrin.h>
-#else
-#include <intrin0.h>
-#endif
+#if _MSC_VER && !defined(__clang__)
+#include <intrin0.h> // _InterlockedXX
 #endif
 
 KJ_BEGIN_HEADER
