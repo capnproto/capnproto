@@ -256,7 +256,7 @@ TEST(Arena, TooBig) {
   EXPECT_EQ(arr.end(), &b2);
 
   // Write to the array to make sure it's valid.
-  memset(arr.begin(), 0xbe, arr.size());
+  arr.fill(0xbe);
 }
 
 TEST(Arena, MultiSegment) {

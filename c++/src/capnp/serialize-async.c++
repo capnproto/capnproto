@@ -42,7 +42,7 @@ namespace {
 class AsyncMessageReader: public MessageReader {
 public:
   inline AsyncMessageReader(ReaderOptions options): MessageReader(options) {
-    memset(firstWord, 0, sizeof(firstWord));
+    kj::memzero(firstWord);
   }
   ~AsyncMessageReader() noexcept(false) {}
 

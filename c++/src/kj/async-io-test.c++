@@ -864,8 +864,7 @@ bool isMsgTruncBroken() {
   KJ_SYSCALL(fd = socket(AF_INET, SOCK_DGRAM, 0));
   KJ_DEFER(close(fd));
 
-  struct sockaddr_in addr;
-  memset(&addr, 0, sizeof(addr));
+  struct sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(0x7f000001);
   KJ_SYSCALL(bind(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)));
@@ -883,8 +882,7 @@ bool isMsgTruncBroken() {
   struct iovec iov;
   iov.iov_base = buf;
   iov.iov_len = 3;
-  struct msghdr msg;
-  memset(&msg, 0, sizeof(msg));
+  struct msghdr msg{};
   msg.msg_iov = &iov;
   msg.msg_iovlen = 1;
   ssize_t n;
@@ -1093,9 +1091,8 @@ KJ_TEST("CIDR parsing") {
   union {
     struct sockaddr addr;
     struct sockaddr_in addr4;
-    struct sockaddr_in6 addr6;
+    struct sockaddr_in6 addr6{};
   };
-  memset(&addr6, 0, sizeof(addr6));
 
   {
     addr4.sin_family = AF_INET;
@@ -1135,16 +1132,14 @@ KJ_TEST("CIDR parsing") {
 }
 
 bool allowed4(_::NetworkFilter& filter, StringPtr addrStr) {
-  struct sockaddr_in addr;
-  memset(&addr, 0, sizeof(addr));
+  struct sockaddr_in addr{};
   addr.sin_family = AF_INET;
   inet_pton(AF_INET, addrStr.cStr(), &addr.sin_addr);
   return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
 }
 
 bool allowed6(_::NetworkFilter& filter, StringPtr addrStr) {
-  struct sockaddr_in6 addr;
-  memset(&addr, 0, sizeof(addr));
+  struct sockaddr_in6 addr{};
   addr.sin6_family = AF_INET6;
   inet_pton(AF_INET6, addrStr.cStr(), &addr.sin6_addr);
   return filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));

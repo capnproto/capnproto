@@ -1080,7 +1080,7 @@ KJ_TEST("HttpClient canceled write") {
     auto client = newHttpClient(table, *pipe.ends[0]);
 
     auto body = kj::heapArray<byte>(4096);
-    memset(body.begin(), 0xcf, body.size());
+    body.asPtr().fill(0xcf);
 
     auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table), uint64_t(4096));
 

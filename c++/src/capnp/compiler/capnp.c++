@@ -1092,14 +1092,14 @@ private:
       }
       case Format::FLAT: {
         auto words = kj::heapArray<word>(reader.totalSize().wordCount + 1);
-        memset(words.begin(), 0, words.asBytes().size());
+        words.asBytes().fill(0);
         copyToUnchecked(reader, words);
         output.write(words.begin(), words.asBytes().size());
         return;
       }
       case Format::FLAT_PACKED: {
         auto words = kj::heapArray<word>(reader.totalSize().wordCount + 1);
-        memset(words.begin(), 0, words.asBytes().size());
+        words.asBytes().fill(0);
         copyToUnchecked(reader, words);
         kj::BufferedOutputStreamWrapper buffered(output);
         capnp::_::PackedOutputStream packed(buffered);
@@ -1704,8 +1704,7 @@ public:
 
     // Evaluate this schema to a DynamicValue.
     DynamicValue::Reader value;
-    word zeroWord[1];
-    memset(&zeroWord, 0, sizeof(zeroWord));
+    word zeroWord[1]{};
     kj::ArrayPtr<const word> segments[1] = { kj::arrayPtr(zeroWord, 1) };
     SegmentArrayMessageReader emptyMessage(segments);
     switch (schema.getProto().which()) {

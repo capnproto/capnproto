@@ -1042,7 +1042,7 @@ KJ_TEST("memzero<T>()") {
 
   // memzero works on statically-sized arrays
   ZeroTest arr[256];
-  memset(arr, 0xff, 256 * sizeof(ZeroTest));
+  arrayPtr(arr).asBytes().fill(0xff);
   memzero(arr);
   for (auto& t: arr) {
     KJ_EXPECT(t.pi == 0);

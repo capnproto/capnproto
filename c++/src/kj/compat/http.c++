@@ -223,7 +223,7 @@ void SHA1Transform(
     /* Wipe variables */
     a = b = c = d = e = 0;
 #ifdef SHA1HANDSOFF
-    memset(block, '\0', sizeof(block));
+    kj::memzero(block);
 #endif
 }
 
@@ -323,8 +323,8 @@ void SHA1Final(
             ((context->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
     }
     /* Wipe variables */
-    memset(context, '\0', sizeof(*context));
-    memset(&finalcount, '\0', sizeof(finalcount));
+    kj::memzero(context);
+    kj::memzero(finalcount);
 }
 
 // End SHA-1 implementation.
@@ -3048,7 +3048,7 @@ private:
       KJ_IF_SOME(g, generator) {
         g.generate(maskBytes);
       } else {
-        memset(maskBytes, 0, 4);
+        arrayPtr(maskBytes).fill(0);
       }
     }
 
