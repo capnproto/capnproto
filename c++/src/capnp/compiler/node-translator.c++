@@ -20,12 +20,12 @@
 // THE SOFTWARE.
 
 #include "node-translator.h"
+#include "generics.h"
 #include "parser.h"      // only for generateGroupId() and expressionString()
 #include <capnp/serialize.h>
 #include <kj/debug.h>
 #include <kj/arena.h>
 #include <kj/encoding.h>
-#include <set>
 #include <map>
 #include <stdlib.h>
 #include <capnp/stream.capnp.h>

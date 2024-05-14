@@ -22,7 +22,7 @@
 #pragma once
 
 #include <capnp/test.capnp.h>
-#include <iostream>
+#include <initializer_list>
 #include <capnp/blob.h>
 #include <kj/compat/gtest.h>
 

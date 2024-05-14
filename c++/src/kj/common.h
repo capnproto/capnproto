@@ -115,8 +115,12 @@ KJ_BEGIN_HEADER
 #endif
 #endif
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
+#if _MSC_VER < 1920
 #include <intrin.h>  // __popcnt
+#else
+#include <intrin0.h>  // __popcnt
+#endif
 #endif
 
 // =======================================================================================

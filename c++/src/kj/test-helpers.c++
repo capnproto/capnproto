@@ -23,6 +23,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include "function.h"
 #include "test.h"
 
 #include <string.h>

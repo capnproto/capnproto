@@ -22,7 +22,7 @@
 #pragma once
 
 #include "layout.h"
-#include "list.h"
+#include "orphan.h"
 
 CAPNP_BEGIN_HEADER
 

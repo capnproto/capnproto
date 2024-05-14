@@ -20,8 +20,10 @@
 // THE SOFTWARE.
 
 #include "module-loader.h"
+#include "compiler.h"
 #include "lexer.h"
 #include "parser.h"
+#include <kj/filesystem.h>
 #include <kj/vector.h>
 #include <kj/mutex.h>
 #include <kj/debug.h>

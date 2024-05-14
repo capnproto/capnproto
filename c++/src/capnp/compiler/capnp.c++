@@ -37,6 +37,7 @@
 #include <kj/vector.h>
 #include <kj/io.h>
 #include <kj/miniposix.h>
+#include <kj/filesystem.h>
 #include <kj/debug.h>
 #include "../message.h"
 #include <kj/main.h>

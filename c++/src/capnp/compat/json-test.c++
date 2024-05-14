@@ -21,6 +21,7 @@
 
 #include "json.h"
 #include <capnp/test-util.h>
+#include <capnp/message.h>
 #include <capnp/compat/json.capnp.h>
 #include <capnp/compat/json-test.capnp.h>
 #include <kj/debug.h>

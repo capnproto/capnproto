@@ -31,7 +31,6 @@
 #include "any.h"
 #include <kj/string.h>
 #include <kj/string-tree.h>
-#include <kj/hash.h>
 
 CAPNP_BEGIN_HEADER
 

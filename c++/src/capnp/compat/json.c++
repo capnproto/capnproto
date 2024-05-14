@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "json.h"
+#include <capnp/message.h>
 #include <capnp/orphan.h>
 #include <kj/debug.h>
 #include <kj/function.h>

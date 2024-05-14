@@ -24,6 +24,7 @@
 #include "schema-loader.h"
 #include <kj/compat/gtest.h>
 #include "test-util.h"
+#include <capnp/message.h>
 #include <kj/debug.h>
 
 namespace capnp {

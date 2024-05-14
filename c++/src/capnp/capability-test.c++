@@ -35,6 +35,7 @@
 #include "test-util.h"
 #include <kj/debug.h>
 #include <kj/compat/gtest.h>
+#include <capnp/message.h>
 
 namespace capnp {
 namespace _ {

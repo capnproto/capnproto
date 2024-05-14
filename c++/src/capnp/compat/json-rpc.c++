@@ -22,6 +22,7 @@
 #include "json-rpc.h"
 #include <kj/compat/http.h>
 #include <capnp/compat/json-rpc.capnp.h>
+#include <capnp/message.h>
 
 namespace capnp {
 

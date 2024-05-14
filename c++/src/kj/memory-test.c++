@@ -22,6 +22,7 @@
 #include "kj/common.h"
 #include "kj/string.h"
 #include "kj/test.h"
+#include "function.h"
 #include "memory.h"
 #include <signal.h>
 #include <kj/compat/gtest.h>

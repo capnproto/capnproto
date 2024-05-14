@@ -22,14 +22,16 @@
 #pragma once
 
 #include <kj/debug.h>
-#include <kj/glob-filter.h>
-#include <kj/vector.h>
-#include <kj/function.h>
 #include <kj/windows-sanity.h>  // work-around macro conflict with `ERROR`
 
 KJ_BEGIN_HEADER
 
 namespace kj {
+template<typename T>
+class Function;
+
+template<typename T>
+class FunctionParam;
 
 class TestRunner;
 

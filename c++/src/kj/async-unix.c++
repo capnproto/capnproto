@@ -28,9 +28,12 @@
 #include <inttypes.h>
 #include <limits>
 #include <pthread.h>
-#include <map>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#if !KJ_USE_KQUEUE
+#include <map>
+#endif
 
 #if KJ_USE_EPOLL
 #include <sys/epoll.h>

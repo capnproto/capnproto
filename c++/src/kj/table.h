@@ -28,11 +28,7 @@
 
 #if _MSC_VER
 // Need _ReadWriteBarrier
-#if _MSC_VER < 1910
-#include <intrin.h>
-#else
 #include <intrin0.h>
-#endif
 #endif
 
 #if KJ_DEBUG_TABLE_IMPL
