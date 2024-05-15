@@ -2033,6 +2033,12 @@ inline constexpr ArrayPtr<T> arrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFET
   return ArrayPtr<T>(begin, end);
 }
 
+template <typename T>
+inline constexpr ArrayPtr<T> arrayPtr(T& t KJ_LIFETIMEBOUND) {
+  // Construct ArrayPtr pointing to a single object instance.
+  return arrayPtr(&t, 1);
+}
+
 template <typename T, size_t s>
 inline constexpr ArrayPtr<T> arrayPtr(T (&arr)[s]) {
   // Use this function to construct ArrayPtrs without writing out the type name.
