@@ -1331,9 +1331,8 @@ public:
 
   FSNODE_METHODS
 
-  void write(const void* buffer, size_t size) override { stream.write(buffer, size); }
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    implicitCast<OutputStream&>(stream).write(pieces);
+  void write(ArrayPtr<const byte> data) override {
+    stream.write(data);
   }
 
 private:

@@ -1040,9 +1040,9 @@ private:
         auto words = kj::heapArray<word>(computeUnpackedSizeInWords(allBytes));
         kj::ArrayInputStream input(allBytes);
         capnp::_::PackedInputStream unpacker(input);
-        unpacker.read(words.asBytes().begin(), words.asBytes().size());
+        unpacker.read(words.asBytes());
         word dummy;
-        KJ_ASSERT(unpacker.tryRead(&dummy, sizeof(dummy), sizeof(dummy)) == 0);
+        KJ_ASSERT(unpacker.tryRead(kj::arrayPtr(&dummy, 1).asBytes(), sizeof(dummy)) == 0);
 
         kj::ArrayPtr<const word> segments[1] = { words };
         SegmentArrayMessageReader message(segments, options);
@@ -1094,7 +1094,7 @@ private:
         auto words = kj::heapArray<word>(reader.totalSize().wordCount + 1);
         memset(words.begin(), 0, words.asBytes().size());
         copyToUnchecked(reader, words);
-        output.write(words.begin(), words.asBytes().size());
+        output.write(words.asBytes());
         return;
       }
       case Format::FLAT_PACKED: {
@@ -1103,19 +1103,19 @@ private:
         copyToUnchecked(reader, words);
         kj::BufferedOutputStreamWrapper buffered(output);
         capnp::_::PackedOutputStream packed(buffered);
-        packed.write(words.begin(), words.asBytes().size());
+        packed.write(words.asBytes());
         return;
       }
       case Format::CANONICAL: {
         auto words = reader.canonicalize();
-        output.write(words.begin(), words.asBytes().size());
+        output.write(words.asBytes());
         return;
       }
       case Format::TEXT: {
         TextCodec codec;
         codec.setPrettyPrint(pretty);
         auto text = codec.encode(reader.as<DynamicStruct>(rootType));
-        output.write({text.asBytes(), kj::StringPtr("\n").asBytes()});
+        output.write({text.asBytes(), "\n"_kjb});
         return;
       }
       case Format::JSON: {
@@ -1123,7 +1123,7 @@ private:
         codec.setPrettyPrint(pretty);
         codec.handleByAnnotation(rootType);
         auto text = codec.encode(reader.as<DynamicStruct>(rootType));
-        output.write({text.asBytes(), kj::StringPtr("\n").asBytes()});
+        output.write({text.asBytes(), "\n"_kjb});
         return;
       }
     }

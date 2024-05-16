@@ -46,9 +46,9 @@ public:
   MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     // Clamp max read to blockSize.
-    size_t n = kj::min(blockSize, maxBytes);
+    size_t n = kj::min(blockSize, buffer.size());
 
     // Unless that's less than minBytes -- in which case, use minBytes.
     n = kj::max(n, minBytes);
@@ -56,7 +56,7 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
+    memcpy(buffer.begin(), bytes.begin(), n);
     bytes = bytes.slice(n, bytes.size());
     return n;
   }
@@ -101,14 +101,7 @@ public:
     return brotli.readAllText();
   }
 
-  void write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-  }
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    for (auto& piece: pieces) {
-      bytes.addAll(piece);
-    }
-  }
+  void write(ArrayPtr<const byte> data) override { bytes.addAll(data); }
 };
 
 class MockAsyncOutputStream: public AsyncOutputStream {
@@ -155,13 +148,11 @@ KJ_TEST("brotli decompression") {
     MockInputStream rawInput(kj::arrayPtr(FOOBAR_BR, sizeof(FOOBAR_BR) / 2), kj::maxValue);
     BrotliInputStream brotli(rawInput);
 
-    char text[16]{};
-    size_t n = brotli.tryRead(text, 1, sizeof(text));
-    text[n] = '\0';
-    KJ_EXPECT(StringPtr(text, n) == "fo");
+    byte text[16]{};
+    auto amount = brotli.tryRead(text, 1);
+    KJ_EXPECT(arrayPtr(text).first(amount) == "fo"_kjb);
 
-    KJ_EXPECT_THROW_MESSAGE("brotli compressed stream ended prematurely",
-        brotli.tryRead(text, 1, sizeof(text)));
+    KJ_EXPECT_THROW_MESSAGE("brotli compressed stream ended prematurely", brotli.tryRead(text, 1));
   }
 
   // Check that stream with high window size is rejected. Conversely, check that it is accepted if
@@ -278,7 +269,7 @@ KJ_TEST("brotli compression") {
     MockOutputStream rawOutput;
     {
       BrotliOutputStream brotli(rawOutput);
-      brotli.write("foobar", 6);
+      brotli.write("foobar"_kjb);
     }
 
     KJ_EXPECT(rawOutput.decompress() == "foobar");
@@ -289,8 +280,8 @@ KJ_TEST("brotli compression") {
     MockOutputStream rawOutput;
     {
       BrotliOutputStream brotli(rawOutput);
-      brotli.write("foo", 3);
-      brotli.write("bar", 3);
+      brotli.write("foo"_kjb);
+      brotli.write("bar"_kjb);
     }
 
     KJ_EXPECT(rawOutput.decompress() == "foobar");
@@ -303,10 +294,7 @@ KJ_TEST("brotli compression") {
     {
       BrotliOutputStream brotli(rawOutput);
 
-      ArrayPtr<const byte> pieces[] = {
-        kj::StringPtr("foo").asBytes(),
-        kj::StringPtr("bar").asBytes(),
-      };
+      ArrayPtr<const byte> pieces[] = { "foo"_kjb, "bar"_kjb, };
       brotli.write(pieces);
     }
 
@@ -323,7 +311,7 @@ KJ_TEST("brotli huge round trip") {
   MockOutputStream rawOutput;
   {
     BrotliOutputStream brotliOut(rawOutput);
-    brotliOut.write(bytes.begin(), bytes.size());
+    brotliOut.write(bytes);
   }
 
   MockInputStream rawInput(rawOutput.bytes, kj::maxValue);

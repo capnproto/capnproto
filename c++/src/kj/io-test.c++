@@ -43,19 +43,17 @@ TEST(Io, WriteVec) {
 
   ArrayPtr<const byte> pieces[5] = {
     arrayPtr(implicitCast<const byte*>(nullptr), 0),
-    arrayPtr(reinterpret_cast<const byte*>("foo"), 3),
+    "foo"_kjb,
     arrayPtr(implicitCast<const byte*>(nullptr), 0),
-    arrayPtr(reinterpret_cast<const byte*>("bar"), 3),
+    "bar"_kjb,
     arrayPtr(implicitCast<const byte*>(nullptr), 0)
   };
 
   out.write(pieces);
 
-  char buf[7]{};
-  in.read(buf, 6);
-  buf[6] = '\0';
-
-  EXPECT_STREQ("foobar", buf);
+  byte buf[6]{};
+  in.read(buf);
+  EXPECT_EQ("foobar"_kjb, arrayPtr(buf));
 }
 
 KJ_TEST("stringify AutoCloseFd") {
@@ -75,7 +73,7 @@ KJ_TEST("VectorOutputStream") {
     buf[i] = 'a' + i;
   }
 
-  output.write(buf.begin(), 4);
+  output.write(buf.first(4));
   KJ_ASSERT(output.getArray().begin() == buf.begin());
   KJ_ASSERT(output.getArray().size() == 4);
 
@@ -83,7 +81,7 @@ KJ_TEST("VectorOutputStream") {
   KJ_ASSERT(buf2.end() == buf.end());
   KJ_ASSERT(buf2.size() == 12);
 
-  output.write(buf2.begin(), buf2.size());
+  output.write(buf2);
   KJ_ASSERT(output.getArray().begin() == buf.begin());
   KJ_ASSERT(output.getArray().size() == 16);
 
@@ -98,12 +96,12 @@ KJ_TEST("VectorOutputStream") {
     junk[i] = 'A' + i;
   }
 
-  output.write(junk, 4);
+  output.write(arrayPtr(junk).first(4));
   KJ_ASSERT(output.getArray().begin() != buf.begin());
   KJ_ASSERT(output.getArray().end() == buf3.begin() + 4);
   KJ_ASSERT(kj::str(output.getArray().asChars()) == "abcdefghijklmnopABCD");
 
-  output.write(junk + 4, 20);
+  output.write(arrayPtr(junk).slice(4, 24));
   // (We can't assert output.getArray().begin() != buf.begin() because the memory allocator could
   // legitimately have allocated a new array in the same space.)
   KJ_ASSERT(output.getArray().end() != buf3.begin() + 24);
@@ -123,9 +121,9 @@ public:
   MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     // Clamp max read to blockSize.
-    size_t n = kj::min(blockSize, maxBytes);
+    size_t n = kj::min(blockSize, buffer.size());
 
     // Unless that's less than minBytes -- in which case, use minBytes.
     n = kj::max(n, minBytes);
@@ -133,7 +131,7 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
+    memcpy(buffer.begin(), bytes.begin(), n);
     bytes = bytes.slice(n, bytes.size());
     return n;
   }
@@ -195,12 +193,12 @@ KJ_TEST("ArrayOutputStream::write() does not assume adjacent write buffer is its
   ArrayOutputStream output(arrayPtr(buffer, buffer + 5));
 
   // Succeeds and fills the ArrayOutputStream.
-  output.write(buffer + 5, 5);
+  output.write(arrayPtr(buffer).slice(5, 10));
 
   // Previously this threw an inscrutable "size <= array.end() - fillPos" requirement failure.
   KJ_EXPECT_THROW_MESSAGE(
       "backing array was not large enough for the data written",
-      output.write(buffer + 5, 5));
+      output.write(arrayPtr(buffer).slice(5, 10)));
 }
 
 }  // namespace

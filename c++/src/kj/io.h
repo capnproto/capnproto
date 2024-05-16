@@ -38,27 +38,27 @@ class InputStream {
 public:
   virtual ~InputStream() noexcept(false);
 
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes);
-  // Reads at least minBytes and at most maxBytes, copying them into the given buffer.  Returns
-  // the size read.  Throws an exception on errors.  Implemented in terms of tryRead().
+  size_t read(ArrayPtr<byte> buffer, size_t minBytes);
+  // Reads at least minBytes and at most buffer.size(), copying them into the given buffer.
+  // Returns the size read.  Throws an exception on errors.  Implemented in terms of tryRead().
   //
-  // maxBytes is the number of bytes the caller really wants, but minBytes is the minimum amount
+  // buffer.size() is the number of bytes the caller really wants, but minBytes is the minimum amount
   // needed by the caller before it can start doing useful processing.  If the stream returns less
-  // than maxBytes, the caller will usually call read() again later to get the rest.  Returning
-  // less than maxBytes is useful when it makes sense for the caller to parallelize processing
+  // than buffer.size(), the caller will usually call read() again later to get the rest.  Returning
+  // less than buffer.size() is useful when it makes sense for the caller to parallelize processing
   // with I/O.
   //
-  // Never blocks if minBytes is zero.  If minBytes is zero and maxBytes is non-zero, this may
+  // Never blocks if minBytes is zero.  If minBytes is zero and buffer.size() is non-zero, this may
   // attempt a non-blocking read or may just return zero.  To force a read, use a non-zero minBytes.
   // To detect EOF without throwing an exception, use tryRead().
   //
   // If the InputStream can't produce minBytes, it MUST throw an exception, as the caller is not
   // expected to understand how to deal with partial reads.
 
-  virtual size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  virtual size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) = 0;
   // Like read(), but may return fewer than minBytes on EOF.
 
-  inline void read(void* buffer, size_t bytes) { read(buffer, bytes, bytes); }
+  inline void read(ArrayPtr<byte> buffer) { read(buffer, buffer.size()); }
   // Convenience method for reading an exact number of bytes.
 
   virtual void skip(size_t bytes);
@@ -78,7 +78,7 @@ class OutputStream {
 public:
   virtual ~OutputStream() noexcept(false);
 
-  virtual void write(const void* buffer, size_t size) = 0;
+  virtual void write(ArrayPtr<const byte> data) = 0;
   // Always writes the full size.  Throws exception on error.
 
   virtual void write(ArrayPtr<const ArrayPtr<const byte>> pieces);
@@ -146,14 +146,14 @@ public:
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<const byte> tryGetReadBuffer() override;
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
   void skip(size_t bytes) override;
 
 private:
   InputStream& inner;
   Array<byte> ownedBuffer;
   ArrayPtr<byte> buffer;
-  ArrayPtr<byte> bufferAvailable;
+  ArrayPtr<const byte> bufferAvailable;
 };
 
 class BufferedOutputStreamWrapper: public BufferedOutputStream {
@@ -177,7 +177,8 @@ public:
 
   // implements BufferedOutputStream ---------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
-  void write(const void* buffer, size_t size) override;
+
+  void write(ArrayPtr<const byte> data) override;
 
 private:
   OutputStream& inner;
@@ -185,6 +186,7 @@ private:
   ArrayPtr<byte> buffer;
   byte* bufferPos;
   UnwindDetector unwindDetector;
+
 };
 
 // =======================================================================================
@@ -198,7 +200,7 @@ public:
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<const byte> tryGetReadBuffer() override;
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
   void skip(size_t bytes) override;
 
 private:
@@ -218,11 +220,13 @@ public:
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
-  void write(const void* buffer, size_t size) override;
+
+  void write(ArrayPtr<const byte> data) override;
 
 private:
   ArrayPtr<byte> array;
   byte* fillPos;
+
 };
 
 class VectorOutputStream: public BufferedOutputStream {
@@ -240,7 +244,8 @@ public:
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<byte> getWriteBuffer() override;
-  void write(const void* buffer, size_t size) override;
+
+  void write(ArrayPtr<const byte> data) override;
 
 private:
   Array<byte> vector;
@@ -315,7 +320,7 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(FdInputStream);
   ~FdInputStream() noexcept(false);
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
   inline int getFd() const { return fd; }
 
@@ -333,7 +338,7 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(FdOutputStream);
   ~FdOutputStream() noexcept(false);
 
-  void write(const void* buffer, size_t size) override;
+  void write(ArrayPtr<const byte> data) override;
   void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
   inline int getFd() const { return fd; }
@@ -408,7 +413,7 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(HandleInputStream);
   ~HandleInputStream() noexcept(false);
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
 private:
   void* handle;
@@ -424,7 +429,7 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(HandleOutputStream);
   ~HandleOutputStream() noexcept(false);
 
-  void write(const void* buffer, size_t size) override;
+  void write(ArrayPtr<const byte> data) override;
 
 private:
   void* handle;

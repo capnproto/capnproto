@@ -673,7 +673,7 @@ private:
     for (auto requestedFile: request.getRequestedFiles()) {
       genFile(schemaLoader.get(requestedFile.getId())).visit(
           [&](kj::ArrayPtr<const char> text) {
-            out.write(text.begin(), text.size());
+            out.write(text.asBytes());
           });
     }
 

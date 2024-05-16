@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/common.h"
 #if KJ_HAS_ZLIB
 
 #include "gzip.h"
@@ -93,16 +94,16 @@ GzipInputStream::~GzipInputStream() noexcept(false) {
   inflateEnd(&ctx);
 }
 
-size_t GzipInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return size_t(0);
+size_t GzipInputStream::tryRead(ArrayPtr<byte> out, size_t minBytes) {
+  if (out == nullptr) return size_t(0);
 
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+  return readImpl(out, minBytes, 0);
 }
 
 size_t GzipInputStream::readImpl(
-    byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
+    ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
-    size_t amount = inner.tryRead(buffer, 1, sizeof(buffer));
+    size_t amount = inner.tryRead(buffer, 1);
     // Note: This check would reject valid streams with a high compression ratio if zlib were to
     // read in the entire input data, getting more decompressed data than fits in the out buffer
     // and subsequently fill the output buffer and internally store some pending data. It turns
@@ -120,7 +121,8 @@ size_t GzipInputStream::readImpl(
     }
   }
 
-  ctx.next_out = out;
+  size_t maxBytes = out.size();
+  ctx.next_out = out.begin();
   ctx.avail_out = maxBytes;
 
   auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
@@ -135,7 +137,7 @@ size_t GzipInputStream::readImpl(
     if (n >= minBytes) {
       return n + alreadyRead;
     } else {
-      KJ_MUSTTAIL return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+      KJ_MUSTTAIL return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
     }
   } else {
     if (ctx.msg == nullptr) {
@@ -158,8 +160,8 @@ GzipOutputStream::~GzipOutputStream() noexcept(false) {
   pump(Z_FINISH);
 }
 
-void GzipOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
+void GzipOutputStream::write(ArrayPtr<const byte> data) {
+  ctx.setInput(data.begin(), data.size());
   pump(Z_NO_FLUSH);
 }
 
@@ -170,7 +172,7 @@ void GzipOutputStream::pump(int flush) {
     ok = get<0>(result);
     auto chunk = get<1>(result);
     if (chunk.size() > 0) {
-      inner.write(chunk.begin(), chunk.size());
+      inner.write(chunk);
     }
   } while (ok);
 }

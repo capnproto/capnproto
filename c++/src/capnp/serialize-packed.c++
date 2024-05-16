@@ -31,7 +31,9 @@ namespace _ {  // private
 PackedInputStream::PackedInputStream(kj::BufferedInputStream& inner): inner(inner) {}
 PackedInputStream::~PackedInputStream() noexcept(false) {}
 
-size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
+size_t PackedInputStream::tryRead(kj::ArrayPtr<byte> dstArray, size_t minBytes) {
+  auto maxBytes = dstArray.size();
+  uint8_t* const dst = dstArray.begin();
   if (maxBytes == 0) {
     return 0;
   }
@@ -39,9 +41,9 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
   KJ_DREQUIRE(minBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
   KJ_DREQUIRE(maxBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
-  uint8_t* __restrict__ out = reinterpret_cast<uint8_t*>(dst);
-  uint8_t* const outEnd = reinterpret_cast<uint8_t*>(dst) + maxBytes;
-  uint8_t* const outMin = reinterpret_cast<uint8_t*>(dst) + minBytes;
+  uint8_t* __restrict__ out = dst;
+  uint8_t* const outEnd = dst + maxBytes;
+  uint8_t* const outMin = dst + minBytes;
 
   kj::ArrayPtr<const byte> buffer = inner.tryGetReadBuffer();
   if (buffer.size() == 0) {
@@ -53,7 +55,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
   KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") { \
-    return out - reinterpret_cast<uint8_t*>(dst); \
+    return out - dst; \
   } \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
@@ -63,14 +65,14 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
   for (;;) {
     uint8_t tag;
 
-    KJ_DASSERT((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
+    KJ_DASSERT((out - dst) % sizeof(word) == 0,
            "Output pointer should always be aligned here.");
 
     if (BUFFER_REMAINING < 10) {
       if (out >= outMin) {
         // We read at least the minimum amount, so go ahead and return.
         inner.skip(in - reinterpret_cast<const uint8_t*>(buffer.begin()));
-        return out - reinterpret_cast<uint8_t*>(dst);
+        return out - dst;
       }
 
       if (BUFFER_REMAINING == 0) {
@@ -125,7 +127,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
 
       KJ_REQUIRE(runLength <= outEnd - out,
                  "Packed input did not end cleanly on a segment boundary.") {
-        return out - reinterpret_cast<uint8_t*>(dst);
+        return out - dst;
       }
       memset(out, 0, runLength);
       out += runLength;
@@ -137,7 +139,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
 
       KJ_REQUIRE(runLength <= outEnd - out,
                  "Packed input did not end cleanly on a segment boundary.") {
-        return out - reinterpret_cast<uint8_t*>(dst);
+        return out - dst;
       }
 
       size_t inRemaining = BUFFER_REMAINING;
@@ -153,7 +155,7 @@ size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
         runLength -= inRemaining;
 
         inner.skip(buffer.size());
-        inner.read(out, runLength);
+        inner.read(kj::arrayPtr(out, (size_t)runLength));
         out += runLength;
 
         if (out == outEnd) {
@@ -302,14 +304,14 @@ PackedOutputStream::PackedOutputStream(kj::BufferedOutputStream& inner)
     : inner(inner) {}
 PackedOutputStream::~PackedOutputStream() noexcept(false) {}
 
-void PackedOutputStream::write(const void* src, size_t size) {
+void PackedOutputStream::write(kj::ArrayPtr<const byte> src) {
   kj::ArrayPtr<byte> buffer = inner.getWriteBuffer();
   byte slowBuffer[20]{};
 
   uint8_t* __restrict__ out = reinterpret_cast<uint8_t*>(buffer.begin());
 
-  const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(src);
-  const uint8_t* const inEnd = reinterpret_cast<const uint8_t*>(src) + size;
+  const uint8_t* __restrict__ in = src.begin();
+  const uint8_t* const inEnd = src.end();
 
   while (in < inEnd) {
     if (reinterpret_cast<uint8_t*>(buffer.end()) - out < 10) {
@@ -317,7 +319,7 @@ void PackedOutputStream::write(const void* src, size_t size) {
       // bounds-check on every byte.
 
       // Write what we have so far.
-      inner.write(buffer.begin(), out - reinterpret_cast<uint8_t*>(buffer.begin()));
+      inner.write(buffer.first(out - reinterpret_cast<uint8_t*>(buffer.begin())));
 
       // Use a slow buffer into which we'll encode 10 to 20 bytes.  This should get us past the
       // output stream's buffer boundary.
@@ -416,8 +418,8 @@ void PackedOutputStream::write(const void* src, size_t size) {
       } else {
         // Input overruns the output buffer.  We'll give it to the output stream in one chunk
         // and let it decide what to do.
-        inner.write(buffer.begin(), reinterpret_cast<byte*>(out) - buffer.begin());
-        inner.write(runStart, in - runStart);
+        inner.write(buffer.first(reinterpret_cast<byte*>(out) - buffer.begin()));
+        inner.write(kj::arrayPtr(runStart, in - runStart));
         buffer = inner.getWriteBuffer();
         out = reinterpret_cast<uint8_t*>(buffer.begin());
       }
@@ -425,7 +427,7 @@ void PackedOutputStream::write(const void* src, size_t size) {
   }
 
   // Write whatever is left.
-  inner.write(buffer.begin(), reinterpret_cast<byte*>(out) - buffer.begin());
+  inner.write(buffer.first(reinterpret_cast<byte*>(out) - buffer.begin()));
 }
 
 }  // namespace _ (private)

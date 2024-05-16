@@ -583,8 +583,8 @@ KJ_TEST("InMemoryDirectory") {
 
   {
     auto appender = dir->appendFile(Path({"corge", "grault"}), WriteMode::MODIFY);
-    appender->write("waldo", 5);
-    appender->write("fred", 4);
+    appender->write("waldo"_kjb);
+    appender->write("fred"_kjb);
   }
 
   KJ_EXPECT(dir->openFile(Path({"corge", "grault"}))->readAllText() == "ragwaldofred");

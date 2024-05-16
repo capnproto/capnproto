@@ -165,17 +165,15 @@ BrotliInputStream::~BrotliInputStream() noexcept(false) {
   BrotliDecoderDestroyInstance(ctx);
 }
 
-size_t BrotliInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return size_t(0);
-
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+size_t BrotliInputStream::tryRead(ArrayPtr<byte> out, size_t minBytes) {
+  if (out == nullptr) return 0;
+  return readImpl(out, minBytes, 0);
 }
 
-size_t BrotliInputStream::readImpl(
-    byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
+size_t BrotliInputStream::readImpl(ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   // Ask for more input unless there is pending output
   if (availableIn == 0 && !BrotliDecoderHasMoreOutput(ctx)) {
-    size_t amount = inner.tryRead(buffer, 1, sizeof(buffer));
+    size_t amount = inner.tryRead(buffer, 1);
     if (amount == 0) {
       KJ_REQUIRE(atValidEndpoint, "brotli compressed stream ended prematurely");
       return alreadyRead;
@@ -185,8 +183,8 @@ size_t BrotliInputStream::readImpl(
     }
   }
 
-  byte* nextOut = out;
-  size_t availableOut = maxBytes;
+  byte* nextOut = out.begin();
+  size_t availableOut = out.size();
   // Check window bits
   if (firstInput && availableIn) {
     firstInput = false;
@@ -211,11 +209,11 @@ size_t BrotliInputStream::readImpl(
     firstInput = true;
   }
 
-  size_t n = maxBytes - availableOut;
+  size_t n = out.size() - availableOut;
   if (n >= minBytes) {
     return n + alreadyRead;
   } else {
-    KJ_MUSTTAIL return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+    KJ_MUSTTAIL return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
   }
 }
 
@@ -229,8 +227,8 @@ BrotliOutputStream::~BrotliOutputStream() noexcept(false) {
   pump(BROTLI_OPERATION_FINISH);
 }
 
-void BrotliOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
+void BrotliOutputStream::write(ArrayPtr<const byte> data) {
+  ctx.setInput(data.begin(), data.size());
   pump(BROTLI_OPERATION_PROCESS);
 }
 
@@ -241,7 +239,7 @@ void BrotliOutputStream::pump(BrotliEncoderOperation flush) {
     ok = get<0>(result);
     auto chunk = get<1>(result);
     if (chunk.size() > 0) {
-      inner.write(chunk.begin(), chunk.size());
+      inner.write(chunk);
     }
   } while (ok);
 }

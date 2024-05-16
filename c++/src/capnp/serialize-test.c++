@@ -207,10 +207,11 @@ public:
         lazy(lazy) {}
   ~TestInputStream() {}
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  size_t tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
+    size_t maxBytes = buffer.size();
     KJ_ASSERT(maxBytes <= size_t(end - pos), "Overran end of stream.");
     size_t amount = lazy ? minBytes : maxBytes;
-    memcpy(buffer, pos, amount);
+    memcpy(buffer.begin(), pos, amount);
     pos += amount;
     return amount;
   }
@@ -325,8 +326,8 @@ public:
   TestOutputStream() {}
   ~TestOutputStream() {}
 
-  void write(const void* buffer, size_t size) override {
-    data.append(reinterpret_cast<const char*>(buffer), size);
+  void write(kj::ArrayPtr<const byte> data) override {
+    this->data.append(data.asChars().begin(), data.size());
   }
 
   bool dataEquals(kj::ArrayPtr<const word> other) {

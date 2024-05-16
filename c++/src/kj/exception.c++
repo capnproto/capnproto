@@ -479,7 +479,7 @@ namespace {
                                    stringifyStackTrace(trace), '\n');
   }
 
-  kj::FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  kj::FdOutputStream(STDERR_FILENO).write(message.asBytes());
   _exit(1);
 }
 
@@ -507,7 +507,7 @@ BOOL WINAPI breakHandler(DWORD type) {
             auto message = kj::str("*** Received CTRL+C. stack: ",
                                    stringifyStackTraceAddresses(trace),
                                    stringifyStackTrace(trace), '\n');
-            FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+            FdOutputStream(STDERR_FILENO).write(message.asBytes());
           } else {
             ResumeThread(thread);
           }
@@ -558,7 +558,7 @@ LONG WINAPI sehHandler(EXCEPTION_POINTERS* info) {
                          "; stack: ",
                          stringifyStackTraceAddresses(trace),
                          stringifyStackTrace(trace), '\n');
-  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  FdOutputStream(STDERR_FILENO).write(message.asBytes());
   return EXCEPTION_EXECUTE_HANDLER;  // still crash
 }
 
@@ -608,7 +608,7 @@ namespace {
                          "\nstack: ", stringifyStackTraceAddresses(trace),
                          stringifyStackTrace(trace), '\n');
 
-  FdOutputStream(STDERR_FILENO).write(message.begin(), message.size());
+  FdOutputStream(STDERR_FILENO).write(message.asBytes());
   _exit(1);
 }
 

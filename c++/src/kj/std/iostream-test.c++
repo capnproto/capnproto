@@ -36,21 +36,14 @@ TEST(StdIoStream, WriteVec) {
   StdInputStream in(ss);
   StdOutputStream out(ss);
 
-  ArrayPtr<const byte> pieces[5] = {
-    arrayPtr(implicitCast<const byte*>(nullptr), 0),
-    arrayPtr(reinterpret_cast<const byte*>("foo"), 3),
-    arrayPtr(implicitCast<const byte*>(nullptr), 0),
-    arrayPtr(reinterpret_cast<const byte*>("bar"), 3),
-    arrayPtr(implicitCast<const byte*>(nullptr), 0)
-  };
+  ArrayPtr<const byte> pieces[5] = { nullptr, "foo"_kjb, nullptr, "bar"_kjb, nullptr, };
 
   out.write(pieces);
 
-  char buf[7]{};
-  in.read(buf, 6);
-  buf[6] = '\0';
+  byte buf[6]{};
+  in.read(buf);
 
-  EXPECT_STREQ("foobar", buf);
+  EXPECT_EQ("foobar"_kjb, buf);
 }
 
 TEST(StdIoStream, TryReadToEndOfFile) {
@@ -61,15 +54,11 @@ TEST(StdIoStream, TryReadToEndOfFile) {
   StdInputStream in(ss);
   StdOutputStream out(ss);
 
-  const void* bytes = "foobar";
+  out.write("foobar"_kjb);
 
-  out.write(bytes, 6);
-
-  char buf[9]{};
-  in.tryRead(buf, 8, 8);
-  buf[6] = '\0';
-
-  EXPECT_STREQ("foobar", buf);
+  byte buf[9]{};
+  auto amount = in.tryRead(buf, 8);
+  EXPECT_EQ("foobar"_kjb, arrayPtr(buf).first(amount));
 }
 
 TEST(StdIoStream, ReadToEndOfFile) {
@@ -81,21 +70,18 @@ TEST(StdIoStream, ReadToEndOfFile) {
   StdInputStream in(ss);
   StdOutputStream out(ss);
 
-  const void* bytes = "foobar";
+  out.write("foobar"_kjb);
 
-  out.write(bytes, 6);
-
-  char buf[9]{};
+  byte buf[8]{};
 
   Maybe<Exception> e = kj::runCatchingExceptions([&]() {
-    in.read(buf, 8, 8);
+    in.read(buf);
   });
-  buf[6] = '\0';
 
   ASSERT_FALSE(e == kj::none);
 
   // Ensure that the value is still read up to the EOF.
-  EXPECT_STREQ("foobar", buf);
+  EXPECT_EQ("foobar"_kjb, arrayPtr(buf).first(6));
 }
 
 }  // namespace

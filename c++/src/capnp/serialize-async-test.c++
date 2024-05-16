@@ -63,13 +63,12 @@ class FragmentingOutputStream: public kj::OutputStream {
 public:
   FragmentingOutputStream(kj::OutputStream& inner): inner(inner) {}
 
-  void write(const void* buffer, size_t size) override {
-    while (size > 0) {
+  void write(kj::ArrayPtr<const byte> buffer) override {
+    while (buffer != nullptr) {
       delay();
-      size_t n = rand() % size + 1;
-      inner.write(buffer, n);
-      buffer = reinterpret_cast<const byte*>(buffer) + n;
-      size -= n;
+      size_t n = rand() % buffer.size() + 1;
+      inner.write(buffer.first(n));
+      buffer = buffer.slice(n);
     }
   }
 
@@ -176,13 +175,11 @@ class SocketOutputStream: public kj::OutputStream {
 public:
   explicit SocketOutputStream(SOCKET fd): fd(fd) {}
 
-  void write(const void* buffer, size_t size) override {
-    const char* ptr = reinterpret_cast<const char*>(buffer);
-    while (size > 0) {
+  void write(kj::ArrayPtr<const byte> data) override {
+    while (data != nullptr) {
       kj::miniposix::ssize_t n;
-      KJ_SOCKCALL(n = send(fd, ptr, size, 0));
-      size -= n;
-      ptr += n;
+      KJ_SOCKCALL(n = send(fd, data.asChars().begin(), data.size(), 0));
+      data = data.slice(n);
     }
   }
 
@@ -194,15 +191,13 @@ class SocketInputStream: public kj::InputStream {
 public:
   explicit SocketInputStream(SOCKET fd): fd(fd) {}
 
-  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    char* ptr = reinterpret_cast<char*>(buffer);
+  size_t tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
     size_t total = 0;
     while (total < minBytes) {
       kj::miniposix::ssize_t n;
-      KJ_SOCKCALL(n = recv(fd, ptr, maxBytes, 0));
+      KJ_SOCKCALL(n = recv(fd, buffer.asChars().begin(), buffer.size(), 0));
       total += n;
-      maxBytes -= n;
-      ptr += n;
+      buffer = buffer.slice(n);
     }
     return total;
   }
