@@ -109,8 +109,8 @@ public:
     return gzip.readAllText().wait(ws);
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    bytes.addAll(buffer);
     return kj::READY_NOW;
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -210,11 +210,11 @@ KJ_TEST("async gzip decompression") {
     GzipAsyncOutputStream gzip(rawOutput, GzipAsyncOutputStream::DECOMPRESS);
 
     auto mid = sizeof(FOOBAR_GZIP) / 2;
-    gzip.write(FOOBAR_GZIP, mid).wait(io.waitScope);
+    gzip.write(arrayPtr(FOOBAR_GZIP).first(mid)).wait(io.waitScope);
     auto str1 = kj::heapString(rawOutput.bytes.asPtr().asChars());
     KJ_EXPECT(str1 == "fo", str1);
 
-    gzip.write(FOOBAR_GZIP + mid, sizeof(FOOBAR_GZIP) - mid).wait(io.waitScope);
+    gzip.write(arrayPtr(FOOBAR_GZIP).slice(mid)).wait(io.waitScope);
     auto str2 = kj::heapString(rawOutput.bytes.asPtr().asChars());
     KJ_EXPECT(str2 == "foobar", str2);
 
@@ -286,7 +286,7 @@ KJ_TEST("async gzip compression") {
   {
     MockAsyncOutputStream rawOutput;
     GzipAsyncOutputStream gzip(rawOutput);
-    gzip.write("foobar", 6).wait(io.waitScope);
+    gzip.write("foobar"_kjb).wait(io.waitScope);
     gzip.end().wait(io.waitScope);
 
     KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");
@@ -297,10 +297,10 @@ KJ_TEST("async gzip compression") {
     MockAsyncOutputStream rawOutput;
     GzipAsyncOutputStream gzip(rawOutput);
 
-    gzip.write("foo", 3).wait(io.waitScope);
+    gzip.write("foo"_kjb).wait(io.waitScope);
     auto prevSize = rawOutput.bytes.size();
 
-    gzip.write("bar", 3).wait(io.waitScope);
+    gzip.write("bar"_kjb).wait(io.waitScope);
     auto curSize = rawOutput.bytes.size();
     KJ_EXPECT(prevSize == curSize, prevSize, curSize);
 
@@ -339,7 +339,7 @@ KJ_TEST("async gzip huge round trip") {
 
   MockAsyncOutputStream rawOutput;
   GzipAsyncOutputStream gzipOut(rawOutput);
-  gzipOut.write(bytes.begin(), bytes.size()).wait(io.waitScope);
+  gzipOut.write(bytes).wait(io.waitScope);
   gzipOut.end().wait(io.waitScope);
 
   MockAsyncInputStream rawInput(rawOutput.bytes, kj::maxValue);

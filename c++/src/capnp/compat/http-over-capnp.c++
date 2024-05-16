@@ -841,8 +841,8 @@ public:
         return inner->tryPumpFrom(input, amount);
       }
 
-      kj::Promise<void> write(const void* buffer, size_t size) override {
-        return inner->write(buffer, size);
+      kj::Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
+        return inner->write(buffer);
       }
 
       kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {

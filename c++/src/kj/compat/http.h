@@ -753,7 +753,7 @@ public:
 
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
-  kj::Promise<void> write(const void* buffer, size_t size) override;
+  kj::Promise<void> write(ArrayPtr<const byte> buffer) override;
 
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
 

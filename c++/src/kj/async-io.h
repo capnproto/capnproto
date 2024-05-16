@@ -109,7 +109,7 @@ class AsyncOutputStream: private AsyncObject {
   // Asynchronous equivalent of OutputStream (from io.h).
 
 public:
-  virtual Promise<void> write(const void* buffer, size_t size) KJ_WARN_UNUSED_RESULT = 0;
+  virtual Promise<void> write(ArrayPtr<const byte> buffer) KJ_WARN_UNUSED_RESULT = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
       KJ_WARN_UNUSED_RESULT = 0;
 
@@ -181,7 +181,7 @@ public:
   kj::Maybe<uint64_t> tryGetLength() override;
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
-  kj::Promise<void> write(const void* buffer, size_t size) override;
+  kj::Promise<void> write(ArrayPtr<const byte> buffer) override;
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
   kj::Promise<void> whenWriteDisconnected() override;
 
@@ -561,7 +561,7 @@ public:
 
 class DatagramPort {
 public:
-  virtual Promise<size_t> send(const void* buffer, size_t size, NetworkAddress& destination) = 0;
+  virtual Promise<size_t> send(ArrayPtr<const byte> buffer, NetworkAddress& destination) = 0;
   virtual Promise<size_t> send(ArrayPtr<const ArrayPtr<const byte>> pieces,
                                NetworkAddress& destination) = 0;
 
@@ -1080,7 +1080,7 @@ public:
   uint64_t getOffset() { return offset; }
   void seek(uint64_t newOffset) { offset = newOffset; }
 
-  Promise<void> write(const void* buffer, size_t size) override;
+  Promise<void> write(kj::ArrayPtr<const byte> buffer) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
   Promise<void> whenWriteDisconnected() override;
 

@@ -251,8 +251,8 @@ public:
     return tryReadInternal(buffer, minBytes, maxBytes, 0);
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    return writeInternal(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    return writeInternal(buffer, nullptr);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {

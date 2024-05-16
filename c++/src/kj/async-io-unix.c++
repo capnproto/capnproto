@@ -181,9 +181,9 @@ public:
     });
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer, size)) {
+    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer.begin(), buffer.size())) {
       // Error.
 
       // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -199,10 +199,10 @@ public:
 
     if (n < 0) {
       // EAGAIN -- need to wait for writability and try again.
-      return observer.whenBecomesWritable().then([buffer, size, this]() {
-        return write(buffer, size);
+      return observer.whenBecomesWritable().then([buffer, this]() {
+        return write(buffer);
       });
-    } else if (n == size) {
+    } else if (n == buffer.size()) {
       // All done.
       return READY_NOW;
     } else {
@@ -210,9 +210,8 @@ public:
       // Linux is known to return partial reads/writes when interrupted by a signal -- yes, even
       // for non-blocking operations. So, we'll need to write() again now, even though it will
       // almost certainly fail with EAGAIN. See comments in the read path for more info.
-      buffer = reinterpret_cast<const byte*>(buffer) + n;
-      size -= n;
-      return write(buffer, size);
+      buffer = buffer.slice(n);
+      return write(buffer);
     }
   }
 
@@ -347,7 +346,7 @@ private:
         // Oh crap, the output buffer is full. This should be rare. But, now we're going to have
         // to copy the remaining bytes into the heap to do an async write.
         auto leftover = kj::heapArray<byte>(buffer + n, pos - n);
-        auto promise = write(leftover.begin(), leftover.size());
+        auto promise = write(leftover);
         promise = promise.attach(kj::mv(leftover));
         if (eof || pos == amount) {
           return promise.then([pos]() -> uint64_t { return pos; });
@@ -1445,7 +1444,7 @@ public:
         observer(eventPort, fd, UnixEventPort::FdObserver::OBSERVE_READ |
                                 UnixEventPort::FdObserver::OBSERVE_WRITE) {}
 
-  Promise<size_t> send(const void* buffer, size_t size, NetworkAddress& destination) override;
+  Promise<size_t> send(ArrayPtr<const byte> buffer, NetworkAddress& destination) override;
   Promise<size_t> send(
       ArrayPtr<const ArrayPtr<const byte>> pieces, NetworkAddress& destination) override;
 
@@ -1769,15 +1768,15 @@ private:
 // =======================================================================================
 
 Promise<size_t> DatagramPortImpl::send(
-    const void* buffer, size_t size, NetworkAddress& destination) {
+    ArrayPtr<const byte> buffer, NetworkAddress& destination) {
   auto& addr = downcast<NetworkAddressImpl>(destination).chooseOneAddress();
 
   ssize_t n;
-  KJ_NONBLOCKING_SYSCALL(n = sendto(fd, buffer, size, 0, addr.getRaw(), addr.getRawSize()));
+  KJ_NONBLOCKING_SYSCALL(n = sendto(fd, buffer.begin(), buffer.size(), 0, addr.getRaw(), addr.getRawSize()));
   if (n < 0) {
     // Write buffer full.
-    return observer.whenBecomesWritable().then([this, buffer, size, &destination]() {
-      return send(buffer, size, destination);
+    return observer.whenBecomesWritable().then([this, buffer, &destination]() {
+      return send(buffer, destination);
     });
   } else {
     // If less than the whole message was sent, then it got truncated, and there's nothing we can

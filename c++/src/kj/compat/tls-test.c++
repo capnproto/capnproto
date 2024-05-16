@@ -432,7 +432,7 @@ struct TlsTest {
   }
 
   Promise<void> writeToServer(AsyncIoStream& client) {
-    return client.write("foo", 4);
+    return client.write("foo\x00"_kjb);
   }
 
   Promise<void> readFromClient(AsyncIoStream& server) {
@@ -509,7 +509,7 @@ KJ_TEST("TLS half-duplex") {
 
   for (uint i = 0; i < 100; i++) {
     char buffer[7]{};
-    auto writePromise = server->write("foobar", 6);
+    auto writePromise = server->write("foobar"_kjb);
     auto readPromise = client->read(buffer, 6);
     writePromise.wait(test.io.waitScope);
     readPromise.wait(test.io.waitScope);
@@ -573,8 +573,8 @@ KJ_TEST("TLS multiple messages") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  auto writePromise = client->write("foo", 3)
-      .then([&]() { return client->write("bar", 3); });
+  auto writePromise = client->write("foo"_kjb)
+      .then([&]() { return client->write("bar"_kjb); });
 
   char buf[4]{};
   buf[3] = '\0';
@@ -583,7 +583,7 @@ KJ_TEST("TLS multiple messages") {
   KJ_ASSERT(kj::StringPtr(buf) == "foo");
 
   writePromise = writePromise
-      .then([&]() { return client->write("baz", 3); });
+      .then([&]() { return client->write("baz"_kjb); });
 
   server->read(&buf, 3).wait(test.io.waitScope);
   KJ_ASSERT(kj::StringPtr(buf) == "bar");
@@ -595,7 +595,7 @@ KJ_TEST("TLS multiple messages") {
   KJ_EXPECT(!readPromise.poll(test.io.waitScope));
 
   writePromise = writePromise
-      .then([&]() { return client->write("qux", 3); });
+      .then([&]() { return client->write("qux"_kjb); });
 
   readPromise.wait(test.io.waitScope);
   KJ_ASSERT(kj::StringPtr(buf) == "qux");
@@ -616,10 +616,10 @@ KJ_TEST("TLS zero-sized write") {
   char buf[7]{};
   auto readPromise = server->read(&buf, 6);
 
-  client->write("", 0).wait(test.io.waitScope);
-  client->write("foo", 3).wait(test.io.waitScope);
-  client->write("", 0).wait(test.io.waitScope);
-  client->write("bar", 3).wait(test.io.waitScope);
+  client->write(""_kjb).wait(test.io.waitScope);
+  client->write("foo"_kjb).wait(test.io.waitScope);
+  client->write(""_kjb).wait(test.io.waitScope);
+  client->write("bar"_kjb).wait(test.io.waitScope);
 
   readPromise.wait(test.io.waitScope);
   buf[6] = '\0';
@@ -630,8 +630,7 @@ KJ_TEST("TLS zero-sized write") {
 kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
   if (count == 0) return kj::READY_NOW;
   --count;
-  return stream.write(text.begin(), text.size())
-      .then([&stream, text, count]() {
+  return stream.write(text.asBytes()).then([&stream, text, count]() {
     return writeN(stream, text, count);
   });
 }
@@ -1250,7 +1249,7 @@ KJ_TEST("NetworkHttpClient connect with tlsStarter") {
   auto buf = kj::heapArray<char>(4);
 
   auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
-  promises.add(request.connection->write("hello", 5));
+  promises.add(request.connection->write("hello"_kjb));
   promises.add(expectRead(*request.connection, "hello"_kj));
   kj::joinPromisesFailFast(promises.finish())
       .then([io=kj::mv(request.connection)]() mutable {

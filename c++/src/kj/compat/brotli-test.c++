@@ -114,8 +114,8 @@ public:
     return brotli.readAllText().wait(ws);
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    bytes.addAll(buffer);
     return kj::READY_NOW;
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -251,11 +251,11 @@ KJ_TEST("async brotli decompression") {
     BrotliAsyncOutputStream brotli(rawOutput, BrotliAsyncOutputStream::DECOMPRESS);
 
     auto mid = sizeof(FOOBAR_BR) / 2;
-    brotli.write(FOOBAR_BR, mid).wait(io.waitScope);
+    brotli.write(arrayPtr(FOOBAR_BR).first(mid)).wait(io.waitScope);
     auto str1 = kj::heapString(rawOutput.bytes.asPtr().asChars());
     KJ_EXPECT(str1 == "fo", str1);
 
-    brotli.write(FOOBAR_BR + mid, sizeof(FOOBAR_BR) - mid).wait(io.waitScope);
+    brotli.write(arrayPtr(FOOBAR_BR).slice(mid)).wait(io.waitScope);
     auto str2 = kj::heapString(rawOutput.bytes.asPtr().asChars());
     KJ_EXPECT(str2 == "foobar", str2);
 
@@ -327,7 +327,7 @@ KJ_TEST("async brotli compression") {
   {
     MockAsyncOutputStream rawOutput;
     BrotliAsyncOutputStream brotli(rawOutput);
-    brotli.write("foobar", 6).wait(io.waitScope);
+    brotli.write("foobar"_kjb).wait(io.waitScope);
     brotli.end().wait(io.waitScope);
 
     KJ_EXPECT(rawOutput.decompress(io.waitScope) == "foobar");
@@ -338,10 +338,10 @@ KJ_TEST("async brotli compression") {
     MockAsyncOutputStream rawOutput;
     BrotliAsyncOutputStream brotli(rawOutput);
 
-    brotli.write("foo", 3).wait(io.waitScope);
+    brotli.write("foo"_kjb).wait(io.waitScope);
     auto prevSize = rawOutput.bytes.size();
 
-    brotli.write("bar", 3).wait(io.waitScope);
+    brotli.write("bar"_kjb).wait(io.waitScope);
     auto curSize = rawOutput.bytes.size();
     KJ_EXPECT(prevSize == curSize, prevSize, curSize);
 
@@ -380,7 +380,7 @@ KJ_TEST("async brotli huge round trip") {
 
   MockAsyncOutputStream rawOutput;
   BrotliAsyncOutputStream brotliOut(rawOutput);
-  brotliOut.write(bytes.begin(), bytes.size()).wait(io.waitScope);
+  brotliOut.write(bytes).wait(io.waitScope);
   brotliOut.end().wait(io.waitScope);
 
   MockAsyncInputStream rawInput(rawOutput.bytes, kj::maxValue);
