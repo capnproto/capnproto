@@ -43,9 +43,9 @@ KJ_TEST("KJ and RPC HTTP method enums match") {
 kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   if (expected.size() == 0) return kj::READY_NOW;
 
-  auto buffer = kj::heapArray<char>(expected.size());
+  auto buffer = kj::heapArray<byte>(expected.size());
 
-  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
     if (amount == 0) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
@@ -719,7 +719,7 @@ public:
   }
 
   kj::Promise<void> manualPumpLoop(kj::ArrayPtr<byte> buffer, kj::AsyncIoStream& io) {
-    return io.tryRead(buffer.begin(), 1, buffer.size()).then(
+    return io.tryRead(buffer, 1).then(
         [this,&io,buffer](size_t amount) mutable -> kj::Promise<void> {
       if (amount == 0) { return kj::READY_NOW; }
       return io.write(buffer.first(amount)).then([this,&io,buffer]() mutable -> kj::Promise<void>  {
@@ -816,11 +816,11 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
     KJ_ASSERT(status.statusCode == 200);
     KJ_ASSERT(status.statusText == "OK"_kj);
 
-    auto buf = kj::heapArray<char>(4);
-    return io->tryRead(buf.begin(), 4, 4).then(
+    auto buf = kj::heapArray<byte>(4);
+    return io->tryRead(buf, 4).then(
         [buf = kj::mv(buf), io = kj::mv(io)](size_t count) mutable {
       KJ_ASSERT(count == 4, "Expecting the stream to read 4 chars.");
-      return io->tryRead(buf.begin(), 1, 1).then(
+      return io->tryRead(buf.first(1), 1).then(
           [buf = kj::mv(buf)](size_t count) mutable {
         KJ_ASSERT(count == 0, "Expecting the stream to get disconnected.");
       }).attach(kj::mv(io));
@@ -885,8 +885,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 
   paf.promise.then(
       [](auto body) mutable {
-    auto buf = kj::heapArray<char>(5);
-    return body->tryRead(buf.begin(), 5, 5).then(
+    auto buf = kj::heapArray<byte>(5);
+    return body->tryRead(buf, 5).then(
         [buf = kj::mv(buf), body = kj::mv(body)](size_t count) mutable {
       KJ_ASSERT(count == 5, "Expecting the stream to read 5 chars.");
     });
@@ -896,9 +896,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 }
 
 kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
-  static char buffer;
-
-  auto promise = in.tryRead(&buffer, 1, 1);
+  static byte buffer[1];
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([](size_t amount) {
     KJ_ASSERT(amount == 0, "expected EOF");
   });
@@ -970,7 +969,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
     return KJ_ASSERT_NONNULL(*tlsStarter)("example.com").then([io = kj::mv(io)]() mutable {
       return io->write("hello"_kjb).then([io = kj::mv(io)]() mutable {
         auto buffer = kj::heapArray<byte>(5);
-        return io->tryRead(buffer.begin(), 5, 5).then(
+        return io->tryRead(buffer, 5).then(
             [io = kj::mv(io), buffer = kj::mv(buffer)](size_t) mutable {
           io->shutdownWrite();
           return expectEnd(*io).attach(kj::mv(io));

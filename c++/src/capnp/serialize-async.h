@@ -227,7 +227,7 @@ private:
   // a single array and return it.
 
   kj::Promise<kj::AsyncCapabilityStream::ReadResult> tryReadWithFds(
-      void* buffer, size_t minBytes, size_t maxBytes, kj::AutoCloseFd* fdBuffer, size_t maxFds);
+      kj::ArrayPtr<byte> buffer, size_t minBytes, kj::AutoCloseFd* fdBuffer, size_t maxFds);
   // Executes AsyncCapabilityStream::tryReadWithFds() on the underlying stream, or falls back to
   // AsyncIoStream::tryRead() if it's not a capability stream.
 

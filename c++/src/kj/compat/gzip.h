@@ -100,7 +100,7 @@ public:
   ~GzipAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncInputStream);
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
 private:
   AsyncInputStream& inner;
@@ -109,7 +109,7 @@ private:
 
   byte buffer[_::KJ_GZ_BUF_SIZE];
 
-  Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
+  Promise<size_t> readImpl(ArrayPtr<byte> buffer, size_t minBytes, size_t alreadyRead);
 };
 
 class GzipAsyncOutputStream final: public AsyncOutputStream {
