@@ -71,9 +71,9 @@ public:
   MockAsyncInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     // Clamp max read to blockSize.
-    size_t n = kj::min(blockSize, maxBytes);
+    size_t n = kj::min(blockSize, buffer.size());
 
     // Unless that's less than minBytes -- in which case, use minBytes.
     n = kj::max(n, minBytes);
@@ -81,8 +81,8 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
-    bytes = bytes.slice(n, bytes.size());
+    buffer.first(n).copyFrom(bytes.first(n));
+    bytes = bytes.slice(n);
     return n;
   }
 
@@ -210,13 +210,12 @@ KJ_TEST("async brotli decompression") {
     MockAsyncInputStream rawInput(kj::arrayPtr(FOOBAR_BR, sizeof(FOOBAR_BR) / 2), kj::maxValue);
     BrotliAsyncInputStream brotli(rawInput);
 
-    char text[16]{};
-    size_t n = brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope);
-    text[n] = '\0';
-    KJ_EXPECT(StringPtr(text, n) == "fo");
+    byte text[16]{};
+    size_t n = brotli.tryRead(text, 1).wait(io.waitScope);
+    KJ_EXPECT(kj::arrayPtr(text).first(n) == "fo"_kjb);
 
     KJ_EXPECT_THROW_MESSAGE("brotli compressed stream ended prematurely",
-        brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope));
+        brotli.tryRead(text, 1).wait(io.waitScope));
   }
 
   // Check that stream with high window size is rejected. Conversely, check that it is accepted if

@@ -43,7 +43,7 @@ kj::Maybe<size_t> ReadyInputStreamWrapper::read(kj::ArrayPtr<byte> dst) {
     if (!isPumping) {
       isPumping = true;
       pumpTask = kj::evalNow([&]() {
-        return input.tryRead(buffer, 1, sizeof(buffer)).then([this](size_t n) {
+        return input.tryRead(buffer, 1).then([this](size_t n) {
           if (n == 0) {
             eof = true;
           } else {

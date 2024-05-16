@@ -189,17 +189,16 @@ GzipAsyncInputStream::~GzipAsyncInputStream() noexcept(false) {
   inflateEnd(&ctx);
 }
 
-Promise<size_t> GzipAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return constPromise<size_t, 0>();
-
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+Promise<size_t> GzipAsyncInputStream::tryRead(ArrayPtr<byte> buffer, size_t minBytes) {
+  if (buffer.size() == 0) return constPromise<size_t, 0>();
+  return readImpl(buffer, minBytes, 0);
 }
 
 Promise<size_t> GzipAsyncInputStream::readImpl(
-    byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
+    ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
-    return inner.tryRead(buffer, 1, sizeof(buffer))
-        .then([this,out,minBytes,maxBytes,alreadyRead](size_t amount) -> Promise<size_t> {
+    return inner.tryRead(buffer, 1)
+        .then([this,out,minBytes,alreadyRead](size_t amount) mutable -> Promise<size_t> {
       if (amount == 0) {
         if (!atValidEndpoint) {
           return KJ_EXCEPTION(DISCONNECTED, "gzip compressed stream ended prematurely");
@@ -208,13 +207,13 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
       } else {
         ctx.next_in = buffer;
         ctx.avail_in = amount;
-        return readImpl(out, minBytes, maxBytes, alreadyRead);
+        return readImpl(out, minBytes, alreadyRead);
       }
     });
   }
 
-  ctx.next_out = out;
-  ctx.avail_out = maxBytes;
+  ctx.next_out = out.begin();
+  ctx.avail_out = out.size();
 
   auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
   atValidEndpoint = inflateResult == Z_STREAM_END;
@@ -224,11 +223,11 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
       KJ_ASSERT(inflateReset(&ctx) == Z_OK);
     }
 
-    size_t n = maxBytes - ctx.avail_out;
+    size_t n = out.size() - ctx.avail_out;
     if (n >= minBytes) {
       return n + alreadyRead;
     } else {
-      return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+      return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
     }
   } else {
     if (ctx.msg == nullptr) {

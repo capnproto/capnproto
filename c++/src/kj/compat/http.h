@@ -752,9 +752,9 @@ public:
 
   _::Deferred<kj::Function<void()>> trackWrite();
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
-  kj::Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes);
+  kj::Promise<size_t> tryReadImpl(ArrayPtr<byte> buffer, size_t minBytes);
 
   kj::Maybe<uint64_t> tryGetLength() override;
 

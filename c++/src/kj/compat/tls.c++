@@ -282,8 +282,8 @@ public:
     SSL_free(ssl);
   }
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, 0);
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return tryReadInternal(buffer, minBytes, 0);
   }
 
   Promise<void> write(ArrayPtr<const byte> buffer) override {
@@ -348,14 +348,14 @@ private:
   ReadyOutputStreamWrapper writeBuffer;
 
   kj::Promise<size_t> tryReadInternal(
-      void* buffer, size_t minBytes, size_t maxBytes, size_t alreadyDone) {
-    return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
-        .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
+      ArrayPtr<byte> buffer, size_t minBytes, size_t alreadyDone) {
+    return sslCall([this,buffer]() mutable { return SSL_read(ssl, buffer.begin(), buffer.size()); })
+        .then([this,buffer,minBytes,alreadyDone](size_t n) mutable -> kj::Promise<size_t> {
       if (n >= minBytes || n == 0) {
         return alreadyDone + n;
       } else {
-        return tryReadInternal(reinterpret_cast<byte*>(buffer) + n,
-                               minBytes - n, maxBytes - n, alreadyDone + n);
+        return tryReadInternal(buffer.slice(n),
+                               minBytes - n, alreadyDone + n);
       }
     });
   }

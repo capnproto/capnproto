@@ -56,10 +56,10 @@ class AsyncInputStream: private AsyncObject {
   // Asynchronous equivalent of InputStream (from io.h).
 
 public:
-  virtual Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes);
-  virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  virtual Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes);
+  virtual Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) = 0;
 
-  Promise<void> read(void* buffer, size_t bytes);
+  Promise<void> read(ArrayPtr<byte> buffer);
 
   virtual Maybe<uint64_t> tryGetLength();
   // Get the remaining number of bytes that will be produced by this stream, if known.
@@ -182,7 +182,7 @@ class NullStream final: public AsyncIoStream {
   //
   // Hint: You can also use this class when you just need an input stream or an output stream.
 public:
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
   kj::Maybe<uint64_t> tryGetLength() override;
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
@@ -252,7 +252,7 @@ public:
     size_t capCount;
   };
 
-  virtual Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
+  virtual Promise<ReadResult> tryReadWithFds(ArrayPtr<byte> buffer, size_t minBytes,
                                              OwnFd* fdBuffer, size_t maxFds) = 0;
   // Read data from the stream that may have file descriptors attached. Any attached descriptors
   // will be placed in `fdBuffer`. If multiple bundles of FDs are encountered in the course of
@@ -266,7 +266,7 @@ public:
                                          ArrayPtr<const ArrayPtr<const byte>> moreData,
                                          Array<Own<AsyncCapabilityStream>> streams) = 0;
   virtual Promise<ReadResult> tryReadWithStreams(
-      void* buffer, size_t minBytes, size_t maxBytes,
+      ArrayPtr<byte> buffer, size_t minBytes,
       Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) = 0;
   // Like above, but passes AsyncCapabilityStream objects. The stream implementations must be from
   // the same AsyncIoProvider.
@@ -1059,7 +1059,7 @@ public:
   uint64_t getOffset() { return offset; }
   void seek(uint64_t newOffset) { offset = newOffset; }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
   Maybe<uint64_t> tryGetLength() override;
 
   // (pumpTo() is not actually overridden here, but AsyncStreamFd's tryPumpFrom() will detect when

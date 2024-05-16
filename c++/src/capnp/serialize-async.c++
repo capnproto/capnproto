@@ -83,7 +83,7 @@ private:
 
 kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
                                            kj::ArrayPtr<word> scratchSpace) {
-  return inputStream.tryRead(firstWord, sizeof(firstWord), sizeof(firstWord))
+  return inputStream.tryRead(kj::arrayPtr(firstWord).asBytes(), sizeof(firstWord))
       .then([this,&inputStream,KJ_CPCAP(scratchSpace)](size_t n) mutable -> kj::Promise<bool> {
     if (n == 0) {
       return false;
@@ -100,7 +100,7 @@ kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
 kj::Promise<kj::Maybe<size_t>> AsyncMessageReader::readWithFds(
     kj::AsyncCapabilityStream& inputStream, kj::ArrayPtr<kj::OwnFd> fds,
     kj::ArrayPtr<word> scratchSpace) {
-  return inputStream.tryReadWithFds(firstWord, sizeof(firstWord), sizeof(firstWord),
+  return inputStream.tryReadWithFds(kj::arrayPtr(firstWord).asBytes(), sizeof(firstWord),
                                     fds.begin(), fds.size())
       .then([this,&inputStream,KJ_CPCAP(scratchSpace)]
             (kj::AsyncCapabilityStream::ReadResult result) mutable
@@ -132,7 +132,7 @@ kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& i
   if (segmentCount() > 1) {
     // Read sizes for all segments except the first.  Include padding if necessary.
     moreSizes = kj::heapArray<_::WireValue<uint32_t>>(segmentCount() & ~1);
-    return inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]))
+    return inputStream.read(moreSizes.asBytes())
         .then([this,&inputStream,KJ_CPCAP(scratchSpace)]() mutable {
           return readSegments(inputStream, scratchSpace);
         });
@@ -180,7 +180,7 @@ kj::Promise<void> AsyncMessageReader::readSegments(kj::AsyncInputStream& inputSt
     }
   }
 
-  return inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
+  return inputStream.read(scratchSpace.first(totalWords).asBytes());
 }
 
 
@@ -761,7 +761,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessag
   KJ_DASSERT(minBytes <= maxBytes);
 
   // Read from underlying stream.
-  return tryReadWithFds(beginAvailable, minBytes, maxBytes,
+  return tryReadWithFds(kj::arrayPtr(beginAvailable, maxBytes), minBytes,
                         fdSpace.begin() + fdsSoFar, fdSpace.size() - fdsSoFar)
       .then([this,minBytes,fdSpace,fdsSoFar,options,scratchSpace]
             (kj::AsyncCapabilityStream::ReadResult result) mutable
@@ -796,13 +796,14 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::readEntireMes
 
   memcpy(msgBuffer.asBytes().begin(), prefix.begin(), prefix.size());
 
-  size_t bytesRemaining = msgBuffer.asBytes().size() - prefix.size();
+  auto remaining = msgBuffer.asBytes().slice(prefix.size());
+  auto bytesRemaining = remaining.size();
 
   // TODO(perf): If we had scatter-read API support, we could optimistically try to read additional
   //   bytes into the shared buffer, to save syscalls when a big message is immediately followed
   //   by small messages.
   auto promise = tryReadWithFds(
-      msgBuffer.asBytes().begin() + prefix.size(), bytesRemaining, bytesRemaining,
+      remaining, bytesRemaining,
       fdSpace.begin() + fdsSoFar, fdSpace.size() - fdsSoFar);
   return promise
       .then([this, msgBuffer = kj::mv(msgBuffer), fdSpace, fdsSoFar, options, bytesRemaining]
@@ -841,12 +842,12 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::readEntireMes
 }
 
 kj::Promise<kj::AsyncCapabilityStream::ReadResult> BufferedMessageStream::tryReadWithFds(
-    void* buffer, size_t minBytes, size_t maxBytes, kj::OwnFd* fdBuffer, size_t maxFds) {
+    kj::ArrayPtr<byte> buffer, size_t minBytes, kj::OwnFd* fdBuffer, size_t maxFds) {
   KJ_IF_SOME(cs, capStream) {
-    return cs.tryReadWithFds(buffer, minBytes, maxBytes, fdBuffer, maxFds);
+    return cs.tryReadWithFds(buffer, minBytes, fdBuffer, maxFds);
   } else {
     // Regular byte stream, no FDs.
-    return stream.tryRead(buffer, minBytes, maxBytes)
+    return stream.tryRead(buffer, minBytes)
         .then([](size_t amount) mutable -> kj::AsyncCapabilityStream::ReadResult {
       return { amount, 0 };
     });

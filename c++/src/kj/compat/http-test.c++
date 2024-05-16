@@ -406,11 +406,11 @@ class ReadFragmenter final: public kj::AsyncIoStream {
 public:
   ReadFragmenter(AsyncIoStream& inner, size_t limit): inner(inner), limit(limit) {}
 
-  Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner.read(buffer, minBytes, kj::max(minBytes, kj::min(limit, maxBytes)));
+  Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner.read(buffer.first(kj::max(minBytes, kj::min(limit, buffer.size()))), minBytes);
   }
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner.tryRead(buffer, minBytes, kj::max(minBytes, kj::min(limit, maxBytes)));
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner.tryRead(buffer.first(kj::max(minBytes, kj::min(limit, buffer.size()))), minBytes);
   }
 
   Maybe<uint64_t> tryGetLength() override { return inner.tryGetLength(); }
@@ -511,9 +511,9 @@ kj::Promise<void> writeEach(kj::AsyncOutputStream& out, kj::ArrayPtr<const kj::S
 kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   if (expected.size() == 0) return kj::READY_NOW;
 
-  auto buffer = kj::heapArray<char>(expected.size());
+  auto buffer = kj::heapArray<byte>(expected.size());
 
-  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
     if (amount == 0) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
@@ -533,7 +533,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
 
   auto buffer = kj::heapArray<byte>(expected.size());
 
-  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
     if (amount == 0) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
@@ -549,9 +549,8 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
 }
 
 kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
-  static char buffer;
-
-  auto promise = in.tryRead(&buffer, 1, 1);
+  static byte buffer[1]{};
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([](size_t amount) {
     KJ_ASSERT(amount == 0, "expected EOF");
   });
@@ -1140,11 +1139,11 @@ KJ_TEST("HttpClient chunked body gather-write") {
 
 KJ_TEST("HttpClient chunked body pump from fixed length stream") {
   class FixedBodyStream final: public kj::AsyncInputStream {
-    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      auto n = kj::min(body.size(), maxBytes);
+    Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+      auto n = kj::min(body.size(), buffer.size());
       n = kj::max(n, minBytes);
       n = kj::min(n, body.size());
-      memcpy(buffer, body.begin(), n);
+      buffer.first(n).copyFrom(body.first(n).asBytes());
       body = body.slice(n);
       return n;
     }
@@ -1915,7 +1914,7 @@ KJ_TEST("WebSocket unexpected RSV bits") {
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->write(DATA).then([&]() {
-    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+    return client->tryRead(rawCloseMessage, 2);
   });
 
   {
@@ -1945,7 +1944,7 @@ KJ_TEST("WebSocket unexpected continuation frame") {
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->write(DATA).then([&]() {
-    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+    return client->tryRead(rawCloseMessage, 2);
   });
 
   {
@@ -1976,7 +1975,7 @@ KJ_TEST("WebSocket missing continuation frame") {
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->write(DATA).then([&]() {
-    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+    return client->tryRead(rawCloseMessage, 2);
   });
 
   {
@@ -2005,7 +2004,7 @@ KJ_TEST("WebSocket fragmented control frame") {
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->write(DATA).then([&]() {
-    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+    return client->tryRead(rawCloseMessage, 2);
   });
 
   {
@@ -2035,7 +2034,7 @@ KJ_TEST("WebSocket unknown opcode") {
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->write(DATA).then([&]() {
-    return client->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+    return client->tryRead(rawCloseMessage, 2);
   });
 
   {
@@ -2175,11 +2174,11 @@ public:
   InputOutputPair(kj::Own<kj::AsyncInputStream> in, kj::Own<kj::AsyncOutputStream> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
 
-  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return in->read(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return in->read(buffer, minBytes);
   }
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return in->tryRead(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return in->tryRead(buffer, minBytes);
   }
 
   Maybe<uint64_t> tryGetLength() override {
@@ -2382,7 +2381,7 @@ KJ_TEST("WebSocket pump disconnect on send") {
   auto sendTask = client1->send("hello"_kj);
 
   // Endpoint reads three bytes and then disconnects.
-  char buffer[3]{};
+  byte buffer[3]{};
   pipe2.ends[1]->read(buffer, 3).wait(waitScope);
   pipe2.ends[1] = nullptr;
 
@@ -2459,7 +2458,7 @@ KJ_TEST("WebSocket maximum message size") {
   auto clientTask = client->send(biggestAllowedString)
       .then([&]() { return client->send(tooBigString); })
       .then([&]() {
-        return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+        return rawClient->tryRead(rawCloseMessage, 2);
       });
 
   {
@@ -2508,7 +2507,7 @@ KJ_TEST("WebSocket maximum compressed message size") {
   auto clientTask = client->send(biggestAllowedString)
       .then([&]() { return client->send(tooBigString); })
       .then([&]() {
-        return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+        return rawClient->tryRead(rawCloseMessage, 2);
       });
 
   {
@@ -4551,10 +4550,10 @@ public:
   SimpleInputStream(kj::StringPtr text)
       : unread(text.asBytes()) {}
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    size_t amount = kj::min(maxBytes, unread.size());
-    memcpy(buffer, unread.begin(), amount);
-    unread = unread.slice(amount, unread.size());
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    size_t amount = kj::min(buffer.size(), unread.size());
+    buffer.first(amount).copyFrom(unread.first(amount));
+    unread = unread.slice(amount);
     return amount;
   }
 
@@ -5366,13 +5365,12 @@ void doDelayedCompletionTest(bool exception, kj::Maybe<uint64_t> expectedLength)
   KJ_EXPECT(resp.statusCode == 200);
 
   // Read "foo" from the response body: works
-  char buffer[16]{};
-  KJ_ASSERT(resp.body->tryRead(buffer, 1, sizeof(buffer)).wait(waitScope) == 3);
-  buffer[3] = '\0';
-  KJ_EXPECT(buffer == "foo"_kj);
+  byte buffer[16]{};
+  KJ_ASSERT(resp.body->tryRead(buffer, 1).wait(waitScope) == 3);
+  KJ_EXPECT(arrayPtr(buffer, 3) == "foo"_kjb);
 
   // But reading any more hangs.
-  auto promise = resp.body->tryRead(buffer, 1, sizeof(buffer));
+  auto promise = resp.body->tryRead(buffer, 1);
 
   KJ_EXPECT(!promise.poll(waitScope));
 
@@ -5530,11 +5528,11 @@ public:
     --count;
   }
 
-  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner->read(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner->read(buffer, minBytes);
   }
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner->tryRead(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner->tryRead(buffer, minBytes);
   }
   kj::Maybe<uint64_t> tryGetLength() override {
     return inner->tryGetLength();;
@@ -6025,8 +6023,8 @@ KJ_TEST("HttpClientImpl connect()") {
 
   auto req = client->connect("foo:123", HttpHeaders(headerTable), {});
 
-  char buffer[16]{};
-  auto readPromise = req.connection->tryRead(buffer, 16, 16);
+  byte buffer[16]{};
+  auto readPromise = req.connection->tryRead(buffer, 16);
 
   expectRead(*pipe.ends[1], "CONNECT foo:123 HTTP/1.1\r\n\r\n").wait(waitScope);
 
@@ -6039,10 +6037,10 @@ KJ_TEST("HttpClientImpl connect()") {
 
   KJ_ASSERT(readPromise.poll(waitScope));
   KJ_ASSERT(readPromise.wait(waitScope) == 16);
-  KJ_EXPECT(kj::str(kj::ArrayPtr<char>(buffer)) == "this is the conn"_kj);
+  KJ_EXPECT(buffer == "this is the conn"_kjb);
 
-  KJ_EXPECT(req.connection->tryRead(buffer, 16, 16).wait(waitScope) == 16);
-  KJ_EXPECT(kj::str(kj::ArrayPtr<char>(buffer)) == "ection content!!"_kj);
+  KJ_EXPECT(req.connection->tryRead(buffer, 16).wait(waitScope) == 16);
+  KJ_EXPECT(buffer == "ection content!!"_kjb);
 
   KJ_ASSERT(writePromise.poll(waitScope));
   writePromise.wait(waitScope);
@@ -6068,11 +6066,11 @@ KJ_TEST("NetworkHttpClient connect impl") {
   auto request = client->connect(
       kj::str("localhost:", listener1->getPort()), HttpHeaders(headerTable), {});
 
-  auto buf = kj::heapArray<char>(4);
-  return request.connection->tryRead(buf.begin(), 1, buf.size())
+  auto buf = kj::heapArray<byte>(4);
+  return request.connection->tryRead(buf, 1)
       .then([buf = kj::mv(buf)](size_t count) {
     KJ_ASSERT(count == 4);
-    KJ_ASSERT(kj::str(buf.asChars()) == "test");
+    KJ_ASSERT(buf == "test"_kjb);
   }).attach(kj::mv(request.connection)).wait(io.waitScope);
 }
 #endif
@@ -6238,8 +6236,8 @@ public:
       // Actually, we can't literally cancel mid-read, because this leaves the stream in an
       // unknown state which requires closing the connection. Instead, we know that the sender
       // will send 5 bytes, so we read that, then pause.
-      static char junk[5];
-      return requestBody.read(junk, 5)
+      static byte junk[5];
+      return requestBody.read(junk)
           .then([]() -> kj::Promise<void> { return kj::NEVER_DONE; })
           .exclusiveJoin(timer.afterDelay(1 * kj::MILLISECONDS))
           .then([this, &responseSender]() {
@@ -6527,7 +6525,7 @@ private:
 
 class BrokenConnection final: public kj::AsyncIoStream {
 public:
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     return KJ_EXCEPTION(FAILED, "broken");
   }
   Promise<void> write(ArrayPtr<const byte> buffer) override {
@@ -6594,11 +6592,11 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
   public:
     DisconnectingAsyncIoStream(AsyncIoStream& inner): inner(inner) {}
 
-    Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner.read(buffer, minBytes, maxBytes);
+    Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+      return inner.read(buffer, minBytes);
     }
-    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner.tryRead(buffer, minBytes, maxBytes);
+    Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+      return inner.tryRead(buffer, minBytes);
     }
 
     Maybe<uint64_t> tryGetLength() override { return inner.tryGetLength(); }

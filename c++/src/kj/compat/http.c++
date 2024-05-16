@@ -1356,12 +1356,12 @@ private:
   }
 public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner, const HttpHeaderTable& table)
-      : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
+      : inner(inner), headerBuffer(kj::heapArray<byte>(MIN_BUFFER)), headers(table) {
   }
 
   explicit HttpInputStreamImpl(AsyncInputStream& inner,
-      kj::Array<char> headerBufferParam,
-      kj::ArrayPtr<char> leftoverParam,
+      kj::Array<byte> headerBufferParam,
+      kj::ArrayPtr<byte> leftoverParam,
       kj::OneOf<HttpMethod, HttpConnectMethod> method,
       kj::StringPtr url,
       HttpHeaders headers)
@@ -1514,7 +1514,7 @@ public:
         co_return true;
       }
 
-      auto amount = co_await inner.tryRead(headerBuffer.begin(), 1, headerBuffer.size());
+      auto amount = co_await inner.tryRead(headerBuffer.asBytes(), 1);
       if (amount == 0) {
         co_return false;
       }
@@ -1617,22 +1617,23 @@ public:
 
   inline const HttpHeaders& getHeaders() const { return headers; }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) {
     // Read message body data.
 
     KJ_REQUIRE(onMessageDone != kj::none);
+    auto maxBytes = buffer.size();
 
     if (leftover == nullptr) {
       // No leftovers. Forward directly to inner stream.
-      co_return co_await inner.tryRead(buffer, minBytes, maxBytes);
+      co_return co_await inner.tryRead(buffer, minBytes);
     } else if (leftover.size() >= maxBytes) {
       // Didn't even read the entire leftover buffer.
-      memcpy(buffer, leftover.begin(), maxBytes);
-      leftover = leftover.slice(maxBytes, leftover.size());
+      buffer.copyFrom(leftover.first(maxBytes));
+      leftover = leftover.slice(maxBytes);
       co_return maxBytes;
     } else {
       // Read the entire leftover buffer, plus some.
-      memcpy(buffer, leftover.begin(), leftover.size());
+      buffer.first(leftover.size()).copyFrom(leftover);
       size_t copied = leftover.size();
       leftover = nullptr;
       if (copied >= minBytes) {
@@ -1640,8 +1641,7 @@ public:
         co_return copied;
       } else {
         // Read the rest from the underlying stream.
-        auto n = co_await inner.tryRead(reinterpret_cast<byte*>(buffer) + copied,
-                             minBytes - copied, maxBytes - copied);
+        auto n = co_await inner.tryRead(buffer.slice(copied), minBytes - copied);
         co_return n + copied;
       }
     }
@@ -1674,13 +1674,13 @@ public:
 
 private:
   AsyncInputStream& inner;
-  kj::Array<char> headerBuffer;
+  kj::Array<byte> headerBuffer;
 
   size_t messageHeaderEnd = 0;
   // Position in headerBuffer where the message headers end -- further buffer space can
   // be used for chunk headers.
 
-  kj::ArrayPtr<char> leftover;
+  kj::ArrayPtr<byte> leftover;
   // Data in headerBuffer that comes immediately after the header content, if any.
 
   HttpHeaders headers;
@@ -1773,8 +1773,8 @@ private:
                   .description = "header too large.",
                   .rawContent = nullptr };
             }
-            auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
-            memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
+            auto newBuffer = kj::heapArray<byte>(headerBuffer.size() * 2);
+            newBuffer.asPtr().first(headerBuffer.size()).copyFrom(headerBuffer);
             headerBuffer = kj::mv(newBuffer);
           }
         }
@@ -1791,7 +1791,7 @@ private:
           maxBytes = kj::min(maxBytes, MAX_CHUNK_HEADER_SIZE);
         }
 
-        readPromise = inner.read(headerBuffer.begin() + bufferEnd, 1, maxBytes);
+        readPromise = inner.read(headerBuffer.slice(bufferEnd).first(maxBytes), 1);
       }
 
       auto amount = co_await readPromise;
@@ -1822,7 +1822,7 @@ private:
 
       for (;;) {
         // Search for next newline.
-        char* nl = reinterpret_cast<char*>(
+        byte* nl = reinterpret_cast<byte*>(
             memchr(headerBuffer.begin() + pos, '\n', newEnd - pos));
         if (nl == nullptr) {
           // No newline found. Wait for more data.
@@ -1847,8 +1847,8 @@ private:
           if (type == HeaderType::MESSAGE) {
             if (headerBuffer.size() - newEnd < MAX_CHUNK_HEADER_SIZE) {
               // Ugh, there's not enough space for the secondary await buffer. Grow once more.
-              auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
-              memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
+              auto newBuffer = kj::heapArray<byte>(headerBuffer.size() * 2);
+              newBuffer.asPtr().first(headerBuffer.size()).copyFrom(headerBuffer);
               headerBuffer = kj::mv(newBuffer);
             }
             messageHeaderEnd = endIndex;
@@ -1859,7 +1859,7 @@ private:
 
           auto result = headerBuffer.slice(bufferStart, endIndex);
           leftover = headerBuffer.slice(leftoverStart, newEnd);
-          co_return result;
+          co_return result.asChars();
         } else {
           pos = nl - headerBuffer.begin() + 1;
         }
@@ -1943,7 +1943,7 @@ public:
     doneReading();
   }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     return constPromise<size_t, 0>();
   }
 
@@ -1962,10 +1962,10 @@ public:
   HttpConnectionCloseEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     if (alreadyDone()) co_return 0;
 
-    auto amount = co_await getInner().tryRead(buffer, minBytes, maxBytes);
+    auto amount = co_await getInner().tryRead(buffer, minBytes);
     if (amount < minBytes) {
       doneReading();
     }
@@ -1986,7 +1986,7 @@ public:
     return length;
   }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
     clean = false;
 
@@ -2000,7 +2000,7 @@ public:
 
       // We have to set minBytes to 1 here so that if we read any data at all, we update our
       // counter immediately, so that we still know where we are in case of cancellation.
-      auto amount = co_await getInner().tryRead(buffer, 1, kj::min(maxBytes, length));
+      auto amount = co_await getInner().tryRead(buffer.first(kj::min(buffer.size(), length)), 1);
 
       length -= amount;
       if (length > 0) {
@@ -2016,9 +2016,8 @@ public:
         } else if (amount < minBytes) {
           // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
           // which has not yet been reached. Keep trying until we reach it.
-          buffer = reinterpret_cast<byte*>(buffer) + amount;
+          buffer = buffer.slice(amount);
           minBytes -= amount;
-          maxBytes -= amount;
           alreadyRead += amount;
           continue;
         }
@@ -2042,7 +2041,7 @@ public:
   HttpChunkedEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
     clean = false;
 
@@ -2067,7 +2066,7 @@ public:
         // Read current chunk.
         // We have to set minBytes to 1 here so that if we read any data at all, we update our
         // counter immediately, so that we still know where we are in case of cancellation.
-        auto amount = co_await getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize));
+        auto amount = co_await getInner().tryRead(buffer.first(kj::min(buffer.size(), chunkSize)), 1);
 
         chunkSize -= amount;
         if (amount == 0) {
@@ -2075,9 +2074,8 @@ public:
         } else if (amount < minBytes) {
           // We requested a minimum 1 byte above, but our own caller actually set a larger minimum
           // which has not yet been reached. Keep trying until we reach it.
-          buffer = reinterpret_cast<byte*>(buffer) + amount;
+          buffer = buffer.slice(amount);
           minBytes -= amount;
-          maxBytes -= amount;
           alreadyRead += amount;
           continue;
         }
@@ -2525,8 +2523,8 @@ public:
         if (actual == amount) {
           // We read exactly the amount expected. In order to detect an overshoot, we have to
           // try reading one more byte. Ugh.
-          static byte junk;
-          auto extra = co_await input.tryRead(&junk, 1, 1);
+          static byte junk[1];
+          auto extra = co_await input.tryRead(junk, 1);
           KJ_REQUIRE(extra == 0, "overwrote Content-Length");
         } else {
           // We actually read less data than requested so we couldn't have overshot. In fact, we
@@ -2704,7 +2702,7 @@ public:
         recvData = recvBuffer.first(recvData.size());
       }
 
-      return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
+      return stream->tryRead(arrayPtr(recvData.end(), recvBuffer.end() - recvData.end()), 1)
           .then([this,maxSize](size_t actual) -> kj::Promise<Message> {
         receivedBytes += actual;
         if (actual == 0) {
@@ -2933,7 +2931,7 @@ public:
       // Need to read more data.
       memcpy(payloadTarget, recvData.begin(), recvData.size());
       size_t remaining = payloadLen - recvData.size();
-      auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
+      auto promise = stream->tryRead(arrayPtr(payloadTarget + recvData.size(), remaining), remaining)
           .then([this, remaining](size_t amount) {
         receivedBytes += amount;
         if (amount < remaining) {
@@ -4555,16 +4553,15 @@ public:
   }
 
   // AsyncInputStream
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    KJ_REQUIRE(maxBytes >= minBytes);
-    auto destination = static_cast<byte*>(buffer);
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    KJ_REQUIRE(buffer.size() >= minBytes);
 
     // If there are at least minBytes available in the leftover buffer...
     if (leftover.size() >= minBytes) {
       // We are going to immediately read up to maxBytes from the leftover buffer...
-      auto bytesToCopy = kj::min(maxBytes, leftover.size());
-      memcpy(destination, leftover.begin(), bytesToCopy);
-      leftover = leftover.slice(bytesToCopy, leftover.size());
+      auto bytesToCopy = kj::min(buffer.size(), leftover.size());
+      buffer.first(bytesToCopy).copyFrom(leftover.first(bytesToCopy));
+      leftover = leftover.slice(bytesToCopy);
 
       // If we've consumed all of the data in the leftover buffer, go ahead and free it.
       if (leftover.size() == 0) {
@@ -4580,16 +4577,16 @@ public:
       KJ_DASSERT(bytesToCopy < minBytes);
 
       if (bytesToCopy > 0) {
-        memcpy(destination, leftover.begin(), bytesToCopy);
+        buffer.first(bytesToCopy).copyFrom(leftover);
+        buffer = buffer.slice(bytesToCopy);
         leftover = nullptr;
         leftoverBackingBuffer = nullptr;
         minBytes -= bytesToCopy;
-        maxBytes -= bytesToCopy;
         KJ_DASSERT(minBytes >= 1);
-        KJ_DASSERT(maxBytes >= minBytes);
+        KJ_DASSERT(buffer.size() >= minBytes);
       }
 
-      return stream->tryRead(destination + bytesToCopy, minBytes, maxBytes)
+      return stream->tryRead(buffer, minBytes)
           .then([bytesToCopy](size_t amount) { return amount + bytesToCopy; });
     }
   }
@@ -4682,12 +4679,12 @@ public:
         tasks(*this) {}
 
   // AsyncInputStream
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     if (readGuardReleased) {
-      return inner->tryRead(buffer, minBytes, maxBytes);
+      return inner->tryRead(buffer, minBytes);
     }
-    return readGuard.addBranch().then([this, buffer, minBytes, maxBytes] {
-      return inner->tryRead(buffer, minBytes, maxBytes);
+    return readGuard.addBranch().then([this, buffer, minBytes] () mutable {
+      return inner->tryRead(buffer, minBytes);
     });
   }
 
@@ -5321,7 +5318,7 @@ public:
   HeadResponseStream(kj::Maybe<size_t> expectedLength)
       : expectedLength(expectedLength) {}
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
     // TODO(someday): Maybe this should throw? We should not be trying to read the body of a
     // HEAD response.
     return constPromise<size_t, 0>();
@@ -5790,10 +5787,10 @@ class PausableReadAsyncIoStream::PausableRead {
 public:
   PausableRead(
       kj::PromiseFulfiller<size_t>& fulfiller, PausableReadAsyncIoStream& parent,
-      void* buffer, size_t minBytes, size_t maxBytes)
+      ArrayPtr<byte> buffer, size_t minBytes)
       : fulfiller(fulfiller), parent(parent),
-        operationBuffer(buffer), operationMinBytes(minBytes), operationMaxBytes(maxBytes),
-        innerRead(parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
+        operationBuffer(buffer), operationMinBytes(minBytes),
+        innerRead(parent.tryReadImpl(operationBuffer, operationMinBytes).then(
             [&fulfiller](size_t size) mutable -> kj::Promise<void> {
           fulfiller.fulfill(kj::mv(size));
           return kj::READY_NOW;
@@ -5813,7 +5810,7 @@ public:
   }
 
   void unpause() {
-    innerRead = parent.tryReadImpl(operationBuffer, operationMinBytes, operationMaxBytes).then(
+    innerRead = parent.tryReadImpl(operationBuffer, operationMinBytes).then(
         [this](size_t size) -> kj::Promise<void> {
       fulfiller.fulfill(kj::mv(size));
       return kj::READY_NOW;
@@ -5829,9 +5826,8 @@ private:
   kj::PromiseFulfiller<size_t>& fulfiller;
   PausableReadAsyncIoStream& parent;
 
-  void* operationBuffer;
+  ArrayPtr<byte> operationBuffer;
   size_t operationMinBytes;
-  size_t operationMaxBytes;
   // The parameters of the current tryRead call. Used to unpause a paused read.
 
   kj::Promise<void> innerRead;
@@ -5850,18 +5846,16 @@ _::Deferred<kj::Function<void()>> PausableReadAsyncIoStream::trackWrite() {
   return kj::defer<kj::Function<void()>>([this]() { currentlyWriting = false; });
 }
 
-kj::Promise<size_t> PausableReadAsyncIoStream::tryRead(
-    void* buffer, size_t minBytes, size_t maxBytes) {
-  return kj::newAdaptedPromise<size_t, PausableRead>(*this, buffer, minBytes, maxBytes);
+kj::Promise<size_t> PausableReadAsyncIoStream::tryRead(ArrayPtr<byte> buffer, size_t minBytes) {
+  return kj::newAdaptedPromise<size_t, PausableRead>(*this, buffer, minBytes);
 }
 
-kj::Promise<size_t> PausableReadAsyncIoStream::tryReadImpl(
-    void* buffer, size_t minBytes, size_t maxBytes) {
+kj::Promise<size_t> PausableReadAsyncIoStream::tryReadImpl(ArrayPtr<byte> buffer, size_t minBytes) {
   // Hack: evalNow used here because `newAdaptedPromise` has a bug. We may need to change
   // `PromiseDisposer::alloc` to not be `noexcept` but in order to do so we'll need to benchmark
   // its performance.
   return kj::evalNow([&]() -> kj::Promise<size_t> {
-    return inner->tryRead(buffer, minBytes, maxBytes).attach(trackRead());
+    return inner->tryRead(buffer, minBytes).attach(trackRead());
   });
 }
 
@@ -6112,8 +6106,8 @@ public:
   TransitionaryAsyncIoStream(kj::Own<kj::AsyncIoStream> unencryptedStream)
       : inner(kj::heap<kj::PausableReadAsyncIoStream>(kj::mv(unencryptedStream))) {}
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner->tryRead(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner->tryRead(buffer, minBytes);
   }
 
   kj::Maybe<uint64_t> tryGetLength() override {
@@ -6818,8 +6812,8 @@ private:
     DelayedEofInputStream(kj::Own<kj::AsyncInputStream> inner, kj::Promise<void> completionTask)
         : inner(kj::mv(inner)), completionTask(kj::mv(completionTask)) {}
 
-    kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return wrap(minBytes, inner->tryRead(buffer, minBytes, maxBytes));
+    kj::Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+      return wrap(minBytes, inner->tryRead(buffer, minBytes));
     }
 
     kj::Maybe<uint64_t> tryGetLength() override {
@@ -7472,8 +7466,8 @@ private:
 
     KJ_IF_SOME(sr, suspendedRequest) {
       return HttpInputStreamImpl(stream,
-          sr.buffer.releaseAsChars(),
-          sr.leftover.asChars(),
+          sr.buffer.releaseAsBytes(),
+          sr.leftover.asBytes(),
           sr.method,
           sr.url,
           kj::mv(sr.headers));

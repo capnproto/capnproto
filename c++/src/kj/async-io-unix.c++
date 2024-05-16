@@ -154,21 +154,21 @@ public:
         observer(eventPort, fd, observerFlags) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, nullptr, 0, {0,0})
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return tryReadInternal(buffer, minBytes, nullptr, 0, {0,0})
         .then([](ReadResult r) { return r.byteCount; });
   }
 
-  Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
+  Promise<ReadResult> tryReadWithFds(ArrayPtr<byte> buffer, size_t minBytes,
                                      OwnFd* fdBuffer, size_t maxFds) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, {0,0});
+    return tryReadInternal(buffer, minBytes, fdBuffer, maxFds, {0,0});
   }
 
   Promise<ReadResult> tryReadWithStreams(
-      void* buffer, size_t minBytes, size_t maxBytes,
+      ArrayPtr<byte> buffer, size_t minBytes,
       Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) override {
     auto fdBuffer = kj::heapArray<OwnFd>(maxStreams);
-    auto promise = tryReadInternal(buffer, minBytes, maxBytes, fdBuffer.begin(), maxStreams, {0,0});
+    auto promise = tryReadInternal(buffer, minBytes, fdBuffer.begin(), maxStreams, {0,0});
 
     return promise.then([this, fdBuffer = kj::mv(fdBuffer), streamBuffer]
                         (ReadResult result) mutable {
@@ -556,7 +556,7 @@ private:
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
   Maybe<Function<void(ArrayPtr<AncillaryMessage>)>> ancillaryMsgCallback;
 
-  Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
+  Promise<ReadResult> tryReadInternal(ArrayPtr<byte> buffer, size_t minBytes,
                                       OwnFd* fdBuffer, size_t maxFds,
                                       ReadResult alreadyRead) {
     // `alreadyRead` is the number of bytes we have already received via previous reads -- minBytes,
@@ -565,7 +565,7 @@ private:
 
     ssize_t n;
     if (maxFds == 0 && ancillaryMsgCallback == kj::none) {
-      KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
+      KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer.begin(), buffer.size())) {
         // Error.
 
         // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -580,8 +580,8 @@ private:
 
       struct iovec iov;
       memset(&iov, 0, sizeof(iov));
-      iov.iov_base = buffer;
-      iov.iov_len = maxBytes;
+      iov.iov_base = buffer.begin();
+      iov.iov_len = buffer.size();
       msg.msg_iov = &iov;
       msg.msg_iovlen = 1;
 
@@ -717,8 +717,8 @@ private:
     if (n < 0) {
       // Read would block.
       return observer.whenBecomesReadable().then(
-          [this, buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead]() {
-              return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
+          [this, buffer, minBytes, fdBuffer, maxFds, alreadyRead]() mutable {
+              return tryReadInternal(buffer, minBytes, fdBuffer, maxFds, alreadyRead);
       });
     } else if (n == 0) {
       // EOF -OR- maxBytes == 0.
@@ -730,9 +730,8 @@ private:
     } else {
       // The kernel returned fewer bytes than we asked for (and fewer than we need).
 
-      buffer = reinterpret_cast<byte*>(buffer) + n;
+      buffer = buffer.slice(n);
       minBytes -= n;
-      maxBytes -= n;
       alreadyRead.byteCount += n;
 
       // According to David Klempner, who works on Stubby at Google, we sadly CANNOT assume that
@@ -745,7 +744,7 @@ private:
       // Unfortunately, we have no choice but to issue more read()s until it either tells us EOF
       // or EAGAIN. We used to have an optimization here using observer.atEndHint() (when it is
       // non-null) to avoid a redundant call to read(). Alas...
-      return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
+      return tryReadInternal(buffer, minBytes, fdBuffer, maxFds, alreadyRead);
     }
   }
 

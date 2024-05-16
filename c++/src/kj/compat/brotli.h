@@ -134,7 +134,7 @@ public:
   ~BrotliAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncInputStream);
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
 private:
   AsyncInputStream& inner;
@@ -147,7 +147,7 @@ private:
   size_t availableIn;
   bool firstInput = true;
 
-  Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
+  Promise<size_t> readImpl(ArrayPtr<byte> buffer, size_t minBytes, size_t alreadyRead);
 };
 
 class BrotliAsyncOutputStream final: public AsyncOutputStream {
