@@ -35,7 +35,7 @@ jobs:
         driver: [bazel, super-test]
         include:
           - driver: bazel
-            run-test: cd c++ && bazel test --verbose_failures --test_output=errors -k //...
+            run-test: cd c++ && bazel test --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
           - driver: super-test
             run-test: ./super-test.sh quick
           - clang: 12
