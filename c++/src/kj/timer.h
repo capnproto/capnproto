@@ -50,7 +50,7 @@ class Timer: public MonotonicClock {
   // `systemPreciseMonotonicClock()` directly in this case.
 
 public:
-  virtual TimePoint now() const = 0;
+  virtual TimePoint now() const override = 0;
   // Returns the current value of a clock that moves steadily forward, independent of any
   // changes in the wall clock. The value is updated every time the event loop waits,
   // and is constant in-between waits.

@@ -657,7 +657,7 @@ private:
   }
 #endif
 
-  void disposeImpl(void* pointer) const {
+  void disposeImpl(void* pointer) const override {
     _::FiberStack* stack = reinterpret_cast<_::FiberStack*>(pointer);
     KJ_DEFER(delete stack);
 

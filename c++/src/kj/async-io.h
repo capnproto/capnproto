@@ -1050,8 +1050,8 @@ public:
   uint64_t getOffset() { return offset; }
   void seek(uint64_t newOffset) { offset = newOffset; }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes);
-  Maybe<uint64_t> tryGetLength();
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  Maybe<uint64_t> tryGetLength() override;
 
   // (pumpTo() is not actually overridden here, but AsyncStreamFd's tryPumpFrom() will detect when
   // the source is a file.)
@@ -1080,9 +1080,9 @@ public:
   uint64_t getOffset() { return offset; }
   void seek(uint64_t newOffset) { offset = newOffset; }
 
-  Promise<void> write(const void* buffer, size_t size);
-  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces);
-  Promise<void> whenWriteDisconnected();
+  Promise<void> write(const void* buffer, size_t size) override;
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+  Promise<void> whenWriteDisconnected() override;
 
 private:
   const File& file;

@@ -919,12 +919,13 @@ R"({
 
 class PrefixAdder: public JsonCodec::Handler<capnp::Text> {
 public:
-  void encode(const JsonCodec& codec, capnp::Text::Reader input, JsonValue::Builder output) const {
+  void encode(const JsonCodec& codec, capnp::Text::Reader input, 
+              JsonValue::Builder output) const override {
     output.setString(kj::str("add-prefix-", input));
   }
 
   Orphan<capnp::Text> decode(const JsonCodec& codec, JsonValue::Reader input,
-                             Orphanage orphanage) const {
+                             Orphanage orphanage) const override {
     return orphanage.newOrphanCopy(capnp::Text::Reader(input.getString().slice(11)));
   }
 };

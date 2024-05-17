@@ -502,7 +502,7 @@ public:
 
   kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, Response& response) {
+      kj::AsyncInputStream& requestBody, Response& response) override {
     kj::HttpHeaders respHeaders(headerTable);
     respHeaders.add("X-Foo", "bar");
     fulfiller->fulfill(response.acceptWebSocket(respHeaders));
@@ -631,7 +631,7 @@ public:
 
   kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, Response& response) {
+      kj::AsyncInputStream& requestBody, Response& response) override {
     called = true;
     return kj::NEVER_DONE;
   }

@@ -984,7 +984,7 @@ private:
       }
     }
 
-    void onRecoverableException(kj::Exception&& e) {
+    void onRecoverableException(kj::Exception&& e) override {
       // Only capture the first exception, on the assumption that later exceptions are probably
       // just cascading problems.
       if (exception == kj::none) {

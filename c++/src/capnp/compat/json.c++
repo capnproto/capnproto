@@ -904,24 +904,26 @@ static constexpr uint64_t JSON_HEX_ANNOTATION_ID = 0xf061e22f0ae5c7b5ull;
 
 class JsonCodec::Base64Handler final: public JsonCodec::Handler<capnp::Data> {
 public:
-  void encode(const JsonCodec& codec, capnp::Data::Reader input, JsonValue::Builder output) const {
+  void encode(const JsonCodec& codec, capnp::Data::Reader input,
+              JsonValue::Builder output) const override {
     output.setString(kj::encodeBase64(input));
   }
 
   Orphan<capnp::Data> decode(const JsonCodec& codec, JsonValue::Reader input,
-                             Orphanage orphanage) const {
+                             Orphanage orphanage) const override {
     return orphanage.newOrphanCopy(capnp::Data::Reader(kj::decodeBase64(input.getString())));
   }
 };
 
 class JsonCodec::HexHandler final: public JsonCodec::Handler<capnp::Data> {
 public:
-  void encode(const JsonCodec& codec, capnp::Data::Reader input, JsonValue::Builder output) const {
+  void encode(const JsonCodec& codec, capnp::Data::Reader input,
+              JsonValue::Builder output) const override {
     output.setString(kj::encodeHex(input));
   }
 
   Orphan<capnp::Data> decode(const JsonCodec& codec, JsonValue::Reader input,
-                             Orphanage orphanage) const {
+                             Orphanage orphanage) const override {
     return orphanage.newOrphanCopy(capnp::Data::Reader(kj::decodeHex(input.getString())));
   }
 };

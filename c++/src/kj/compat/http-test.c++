@@ -1873,7 +1873,7 @@ class WebSocketErrorCatcher : public WebSocketErrorHandler {
 public:
   kj::Vector<kj::WebSocket::ProtocolError> errors;
 
-  kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) {
+  kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) override {
     errors.add(kj::mv(protocolError));
     return KJ_EXCEPTION(FAILED, protocolError.description);
   }

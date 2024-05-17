@@ -689,10 +689,10 @@ public:
   virtual void fulfill(T&& value) = 0;
   // Fulfill the promise with the given value.
 
-  virtual void reject(Exception&& exception) = 0;
+  virtual void reject(Exception&& exception) override = 0;
   // Reject the promise with an error.
 
-  virtual bool isWaiting() = 0;
+  virtual bool isWaiting() override = 0;
   // Returns true if the promise is still unfulfilled and someone is potentially waiting for it.
   // Returns false if fulfill()/reject() has already been called *or* if the promise to be
   // fulfilled has been discarded and therefore the result will never be used anyway.
@@ -713,8 +713,8 @@ public:
   // Call with zero parameters.  The parameter is a dummy that only exists so that subclasses don't
   // have to specialize for <void>.
 
-  virtual void reject(Exception&& exception) = 0;
-  virtual bool isWaiting() = 0;
+  void reject(Exception&& exception) override = 0;
+  bool isWaiting() override = 0;
 
   template <typename Func>
   bool rejectIfThrows(Func&& func);

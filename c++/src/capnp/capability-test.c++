@@ -492,7 +492,7 @@ public:
   int& callCount;
 
   kj::Promise<void> call(InterfaceSchema::Method method,
-                         CallContext<DynamicStruct, DynamicStruct> context) {
+                         CallContext<DynamicStruct, DynamicStruct> context) override {
     auto methodName = method.getProto().getName();
     if (methodName == "foo") {
       ++callCount;
@@ -566,7 +566,7 @@ public:
   int& callCount;
 
   kj::Promise<void> call(InterfaceSchema::Method method,
-                         CallContext<DynamicStruct, DynamicStruct> context) {
+                         CallContext<DynamicStruct, DynamicStruct> context) override {
     auto methodName = method.getProto().getName();
     if (methodName == "foo") {
       ++callCount;
@@ -626,7 +626,7 @@ public:
   int& callCount;
 
   kj::Promise<void> call(InterfaceSchema::Method method,
-                         CallContext<DynamicStruct, DynamicStruct> context) {
+                         CallContext<DynamicStruct, DynamicStruct> context) override {
     auto methodName = method.getProto().getName();
     if (methodName == "getCap") {
       ++callCount;
@@ -719,7 +719,7 @@ public:
   int& callCount;
 
   kj::Promise<void> call(InterfaceSchema::Method method,
-                         CallContext<DynamicStruct, DynamicStruct> context) {
+                         CallContext<DynamicStruct, DynamicStruct> context) override {
     auto methodName = method.getProto().getName();
     if (methodName == "foo") {
       ++callCount;
@@ -1070,7 +1070,7 @@ public:
   }
 
 protected:
-  kj::Promise<void> bar(BarContext context) {
+  kj::Promise<void> bar(BarContext context) override {
     ++callCount;
     return kj::READY_NOW;
   }

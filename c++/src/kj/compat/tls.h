@@ -123,12 +123,12 @@ public:
   ~TlsContext() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(TlsContext);
 
-  kj::Promise<kj::Own<kj::AsyncIoStream>> wrapServer(kj::Own<kj::AsyncIoStream> stream);
+  kj::Promise<kj::Own<kj::AsyncIoStream>> wrapServer(kj::Own<kj::AsyncIoStream> stream) override;
   // Upgrade a regular network stream to TLS and begin the initial handshake as the server. The
   // returned promise resolves when the handshake has completed successfully.
 
   kj::Promise<kj::Own<kj::AsyncIoStream>> wrapClient(
-      kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname);
+      kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) override;
   // Upgrade a regular network stream to TLS and begin the initial handshake as a client. The
   // returned promise resolves when the handshake has completed successfully, including validating
   // the server's certificate.
@@ -139,23 +139,23 @@ public:
   // 2. The server's certificate is validated against this hostname. If validation fails, the
   //    promise returned by wrapClient() will be broken; you'll never get a stream.
 
-  kj::Promise<kj::AuthenticatedStream> wrapServer(kj::AuthenticatedStream stream);
+  kj::Promise<kj::AuthenticatedStream> wrapServer(kj::AuthenticatedStream stream) override;
   kj::Promise<kj::AuthenticatedStream> wrapClient(
-      kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname);
+      kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname) override;
   // Like wrapServer() and wrapClient(), but also produces information about the peer's
   // certificate (if any). The returned `peerIdentity` will be a `TlsPeerIdentity`.
 
-  kj::Own<kj::ConnectionReceiver> wrapPort(kj::Own<kj::ConnectionReceiver> port);
+  kj::Own<kj::ConnectionReceiver> wrapPort(kj::Own<kj::ConnectionReceiver> port) override;
   // Upgrade a ConnectionReceiver to one that automatically upgrades all accepted connections to
   // TLS (acting as the server).
 
   kj::Own<kj::NetworkAddress> wrapAddress(
-      kj::Own<kj::NetworkAddress> address, kj::StringPtr expectedServerHostname);
+      kj::Own<kj::NetworkAddress> address, kj::StringPtr expectedServerHostname) override;
   // Upgrade a NetworkAddress to one that automatically upgrades all connections to TLS, acting
   // as the client when `connect()` is called or the server if `listen()` is called.
   // `connect()` will athenticate the server as `expectedServerHostname`.
 
-  kj::Own<kj::Network> wrapNetwork(kj::Network& network);
+  kj::Own<kj::Network> wrapNetwork(kj::Network& network) override;
   // Upgrade a Network to one that automatically upgrades all connections to TLS. The network will
   // only accept addresses of the form "hostname" and "hostname:port" (it does not accept raw IP
   // addresses). It will automatically use SNI and verify certificates based on these hostnames.

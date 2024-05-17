@@ -525,11 +525,11 @@ public:
       : context(kj::mv(contextParam)),
         results(context->getResults(MessageSize { 0, 0 })) {}
 
-  kj::Own<PipelineHook> addRef() {
+  kj::Own<PipelineHook> addRef() override {
     return kj::addRef(*this);
   }
 
-  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
+  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     return results.getPipelinedCap(ops);
   }
 

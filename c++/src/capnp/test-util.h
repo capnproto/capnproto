@@ -303,7 +303,7 @@ public:
     fulfiller->fulfill();
   }
 
-  kj::Promise<void> foo(FooContext context) {
+  kj::Promise<void> foo(FooContext context) override {
     return impl.foo(context);
   }
 
