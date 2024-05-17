@@ -199,7 +199,7 @@ public:
 
     if (n < 0) {
       // EAGAIN -- need to wait for writability and try again.
-      return observer.whenBecomesWritable().then([=]() {
+      return observer.whenBecomesWritable().then([buffer, size, this]() {
         return write(buffer, size);
       });
     } else if (n == size) {
@@ -717,8 +717,9 @@ private:
 
     if (n < 0) {
       // Read would block.
-      return observer.whenBecomesReadable().then([=]() {
-        return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
+      return observer.whenBecomesReadable().then(
+          [this, buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead]() {
+              return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
       });
     } else if (n == 0) {
       // EOF -OR- maxBytes == 0.
@@ -830,7 +831,7 @@ private:
 
     if (n < 0) {
       // Got EAGAIN. Nothing was written.
-      return observer.whenBecomesWritable().then([=]() {
+      return observer.whenBecomesWritable().then([firstPiece, morePieces, fds, this]() {
         return writeInternal(firstPiece, morePieces, fds);
       });
     } else if (n == 0) {
