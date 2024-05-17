@@ -48,7 +48,7 @@
 #define KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR \
   auto capPipe = newCapabilityPipe(); \
   auto listener = kj::heap<kj::CapabilityStreamConnectionReceiver>(*capPipe.ends[0]); \
-  auto addr = kj::heap<kj::CapabilityStreamNetworkAddress>(nullptr, *capPipe.ends[1])
+  auto addr = kj::heap<kj::CapabilityStreamNetworkAddress>(kj::none, *capPipe.ends[1])
 #define KJ_HTTP_TEST_CREATE_2PIPE \
   kj::newTwoWayPipe()
 #endif
@@ -78,16 +78,16 @@ KJ_TEST("HttpMethod parse / stringify") {
   // Make sure attempting to stringify an invalid value doesn't segfault
   KJ_EXPECT_THROW(FAILED, kj::str(HttpMethod{101}));
 
-  KJ_EXPECT(tryParseHttpMethod("FOO") == nullptr);
-  KJ_EXPECT(tryParseHttpMethod("") == nullptr);
-  KJ_EXPECT(tryParseHttpMethod("G") == nullptr);
-  KJ_EXPECT(tryParseHttpMethod("GE") == nullptr);
-  KJ_EXPECT(tryParseHttpMethod("GET ") == nullptr);
-  KJ_EXPECT(tryParseHttpMethod("get") == nullptr);
+  KJ_EXPECT(tryParseHttpMethod("FOO") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("G") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("GE") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("GET ") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("get") == kj::none);
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(tryParseHttpMethodAllowingConnect("CONNECT"))
       .is<HttpConnectMethod>());
-  KJ_EXPECT(tryParseHttpMethod("connect") == nullptr);
+  KJ_EXPECT(tryParseHttpMethod("connect") == kj::none);
 }
 
 KJ_TEST("HttpHeaderTable") {
@@ -130,8 +130,8 @@ KJ_TEST("HttpHeaderTable") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("dATE")) == HttpHeaderId::DATE);
   KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("Foo-Bar")) == fooBar);
   KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("foo-BAR")) == fooBar);
-  KJ_EXPECT(table->stringToId("foobar") == nullptr);
-  KJ_EXPECT(table->stringToId("barfoo") == nullptr);
+  KJ_EXPECT(table->stringToId("foobar") == kj::none);
+  KJ_EXPECT(table->stringToId("barfoo") == kj::none);
 }
 
 KJ_TEST("HttpHeaders::parseRequest") {
@@ -159,10 +159,10 @@ KJ_TEST("HttpHeaders::parseRequest") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::HOST)) == "example.com");
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::DATE)) == "early");
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(fooBar)) == "Baz");
-  KJ_EXPECT(headers.get(bazQux) == nullptr);
-  KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == nullptr);
+  KJ_EXPECT(headers.get(bazQux) == kj::none);
+  KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
-  KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr);
+  KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == kj::none);
 
   std::map<kj::StringPtr, kj::StringPtr> unpackedHeaders;
   headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
@@ -211,10 +211,10 @@ KJ_TEST("HttpHeaders::parseResponse") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::HOST)) == "example.com");
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::DATE)) == "early");
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(fooBar)) == "Baz");
-  KJ_EXPECT(headers.get(bazQux) == nullptr);
-  KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == nullptr);
+  KJ_EXPECT(headers.get(bazQux) == kj::none);
+  KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
-  KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr);
+  KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == kj::none);
 
   std::map<kj::StringPtr, kj::StringPtr> unpackedHeaders;
   headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
@@ -713,7 +713,7 @@ public:
         KJ_FAIL_EXPECT("tryGetLength() returned nullptr; expected known size");
       }
     } else {
-      KJ_EXPECT(size == nullptr);
+      KJ_EXPECT(size == kj::none);
     }
 
     return requestBody.readAllText()
@@ -3008,11 +3008,11 @@ KJ_TEST("WebSocket Compression String Parsing (toKeysAndVals)") {
 
   auto firstKey = "client_no_context_takeover"_kj;
   KJ_ASSERT(keysMaybeValues[0].key == firstKey.asArray());
-  KJ_ASSERT(keysMaybeValues[0].val == nullptr);
+  KJ_ASSERT(keysMaybeValues[0].val == kj::none);
 
   auto secondKey = "client_max_window_bits"_kj;
   KJ_ASSERT(keysMaybeValues[1].key == secondKey.asArray());
-  KJ_ASSERT(keysMaybeValues[1].val == nullptr);
+  KJ_ASSERT(keysMaybeValues[1].val == kj::none);
 
   auto thirdKey = "server_max_window_bits"_kj;
   auto thirdVal = "10"_kj;
@@ -3089,44 +3089,44 @@ KJ_TEST("WebSocket Compression String Parsing (populateUnverifiedConfig)") {
   auto invalidKey = "somethingKey; client_max_window_bits;"_kj;
   parts = _::splitParts(invalidKey, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to invalid key name
 
   auto invalidKeyTwo = "client_max_window_bitsJUNK; server_no_context_takeover"_kj;
   parts = _::splitParts(invalidKeyTwo, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to invalid key name (invalid characters after valid parameter name).
 
   auto repeatedKey = "client_no_context_takeover; client_no_context_takeover"_kj;
   parts = _::splitParts(repeatedKey, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to repeated key name.
 
   auto unexpectedValue = "client_no_context_takeover="_kj;
   parts = _::splitParts(unexpectedValue, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to value in `x_no_context_takeover` parameter (unexpected value).
 
   auto unexpectedValueTwo = "client_no_context_takeover=   "_kj;
   parts = _::splitParts(unexpectedValueTwo, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to value in `x_no_context_takeover` parameter.
 
   auto emptyValue = "client_max_window_bits="_kj;
   parts = _::splitParts(emptyValue, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to empty value in `x_max_window_bits` parameter.
   // "Empty" in this case means an "=" was provided, but no subsequent value was provided.
 
   auto emptyValueTwo = "client_max_window_bits=   "_kj;
   parts = _::splitParts(emptyValueTwo, ';');
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
-  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == nullptr);
+  KJ_ASSERT(_::populateUnverifiedConfig(keysMaybeValues) == kj::none);
   // Fail to populate due to empty value in `x_max_window_bits` parameter.
   // "Empty" in this case means an "=" was provided, but no subsequent value was provided.
 }
@@ -3158,7 +3158,7 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   unverified = KJ_ASSERT_NONNULL(maybeUnverified);
   maybeValid = _::validateCompressionConfig(kj::mv(unverified), false); // Validate as Server.
-  KJ_ASSERT(maybeValid == nullptr);
+  KJ_ASSERT(maybeValid == kj::none);
   // The config "looks" correct, but the `server_max_window_bits` parameter has an invalid value.
 
   const auto invalidRange = "client_max_window_bits; server_max_window_bits=18;"_kj;
@@ -3167,7 +3167,7 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
-  KJ_ASSERT(maybeValid == nullptr);
+  KJ_ASSERT(maybeValid == kj::none);
 
   const auto invalidRangeTwo = "client_max_window_bits=4"_kj;
   // `server_max_window_bits` is out of range, decline.
@@ -3175,7 +3175,7 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
-  KJ_ASSERT(maybeValid == nullptr);
+  KJ_ASSERT(maybeValid == kj::none);
 
   const auto invalidRequest = "server_max_window_bits"_kj;
   // `sever_max_window_bits` must have a value in a request AND a response.
@@ -3183,7 +3183,7 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), false);
-  KJ_ASSERT(maybeValid == nullptr);
+  KJ_ASSERT(maybeValid == kj::none);
 
   const auto invalidResponse = "client_max_window_bits"_kj;
   // `client_max_window_bits` must have a value in a response.
@@ -3191,7 +3191,7 @@ KJ_TEST("WebSocket Compression String Parsing (validateCompressionConfig)") {
   keysMaybeValues = _::toKeysAndVals(parts.asPtr());
   maybeUnverified = _::populateUnverifiedConfig(keysMaybeValues);
   maybeValid = _::validateCompressionConfig(kj::mv(KJ_REQUIRE_NONNULL(maybeUnverified)), true);
-  KJ_ASSERT(maybeValid == nullptr);
+  KJ_ASSERT(maybeValid == kj::none);
 }
 
 KJ_TEST("WebSocket Compression String Parsing (findValidExtensionOffers)") {
@@ -3234,12 +3234,12 @@ KJ_TEST("WebSocket Compression String Parsing (findValidExtensionOffers)") {
   KJ_ASSERT(validOffers[1].outboundNoContextTakeover == true);
   KJ_ASSERT(validOffers[1].inboundNoContextTakeover == false);
   KJ_ASSERT(validOffers[1].outboundMaxWindowBits == 15);
-  KJ_ASSERT(validOffers[1].inboundMaxWindowBits == nullptr);
+  KJ_ASSERT(validOffers[1].inboundMaxWindowBits == kj::none);
 
   KJ_ASSERT(validOffers[2].outboundNoContextTakeover == false);
   KJ_ASSERT(validOffers[2].inboundNoContextTakeover == false);
-  KJ_ASSERT(validOffers[2].outboundMaxWindowBits == nullptr);
-  KJ_ASSERT(validOffers[2].inboundMaxWindowBits == nullptr);
+  KJ_ASSERT(validOffers[2].outboundMaxWindowBits == kj::none);
+  KJ_ASSERT(validOffers[2].inboundMaxWindowBits == kj::none);
 }
 
 KJ_TEST("WebSocket Compression String Parsing (generateExtensionRequest)") {
@@ -3308,7 +3308,7 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
   accepted = KJ_ASSERT_NONNULL(maybeAccepted);
   KJ_ASSERT(accepted.outboundNoContextTakeover == false);
   KJ_ASSERT(accepted.inboundNoContextTakeover == true);
-  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == kj::none);
   KJ_ASSERT(accepted.inboundMaxWindowBits == 15);
 
   auto offerThree = "permessage-deflate"_kj; // The third valid offer.
@@ -3316,12 +3316,12 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
   accepted = KJ_ASSERT_NONNULL(maybeAccepted);
   KJ_ASSERT(accepted.outboundNoContextTakeover == false);
   KJ_ASSERT(accepted.inboundNoContextTakeover == false);
-  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
-  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == kj::none);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == kj::none);
 
   auto invalid = "invalid"_kj; // Any of the invalid offers we saw above would return NULL.
   maybeAccepted = _::tryParseExtensionOffers(invalid);
-  KJ_ASSERT(maybeAccepted == nullptr);
+  KJ_ASSERT(maybeAccepted == kj::none);
 }
 
 KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
@@ -3361,15 +3361,15 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
   // Our default config is equivalent to `permessage-deflate` with no parameters.
 
   auto maybeAccepted = _::tryParseAllExtensionOffers(serverOnly, defaultConfig);
-  KJ_ASSERT(maybeAccepted == nullptr);
+  KJ_ASSERT(maybeAccepted == kj::none);
   // Asserts that we rejected all the offers with `server_x` parameters.
 
   maybeAccepted = _::tryParseAllExtensionOffers(acceptLast, defaultConfig);
   auto accepted = KJ_ASSERT_NONNULL(maybeAccepted);
   KJ_ASSERT(accepted.outboundNoContextTakeover == false);
   KJ_ASSERT(accepted.inboundNoContextTakeover == false);
-  KJ_ASSERT(accepted.outboundMaxWindowBits == nullptr);
-  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.outboundMaxWindowBits == kj::none);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == kj::none);
   // Asserts that we accepted the only offer that did not have a `server_x` parameter.
 
   const auto allowServerBits = CompressionParameters {
@@ -3383,7 +3383,7 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
   KJ_ASSERT(accepted.outboundNoContextTakeover == false);
   KJ_ASSERT(accepted.inboundNoContextTakeover == false);
   KJ_ASSERT(accepted.outboundMaxWindowBits == 14); // Note that we chose the lower of (14, 15).
-  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == kj::none);
   // Asserts that we accepted an offer that allowed for `server_max_window_bits` AND we chose the
   // lower number of bits (in this case, the clients offer of 14).
 
@@ -3399,7 +3399,7 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
   KJ_ASSERT(accepted.outboundNoContextTakeover == true);
   KJ_ASSERT(accepted.inboundNoContextTakeover == false);
   KJ_ASSERT(accepted.outboundMaxWindowBits == 13); // Note that we chose the lower of (14, 15).
-  KJ_ASSERT(accepted.inboundMaxWindowBits == nullptr);
+  KJ_ASSERT(accepted.inboundMaxWindowBits == kj::none);
   // Asserts that we accepted an offer that allowed for `server_no_context_takeover` AND we chose
   // the lower number of bits (in this case, the manual config's choice of 13).
 }
@@ -4688,7 +4688,7 @@ KJ_TEST("HttpServer can suspend a request") {
 
     // And we have a SuspendedRequest.
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest != nullptr);
+    KJ_EXPECT(suspendedRequest != kj::none);
   }
 
   {
@@ -4704,7 +4704,7 @@ KJ_TEST("HttpServer can suspend a request") {
 
     // We again have a suspendedRequest.
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest != nullptr);
+    KJ_EXPECT(suspendedRequest != kj::none);
   }
 
   {
@@ -4794,7 +4794,7 @@ KJ_TEST("HttpServer can suspend and resume pipelined requests") {
     KJ_EXPECT(listenPromise.poll(waitScope));
     KJ_EXPECT(!listenPromise.wait(waitScope));
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest != nullptr);
+    KJ_EXPECT(suspendedRequest != kj::none);
   }
 
   {
@@ -4807,7 +4807,7 @@ KJ_TEST("HttpServer can suspend and resume pipelined requests") {
     KJ_EXPECT(listenPromise.poll(waitScope));
     KJ_EXPECT(!listenPromise.wait(waitScope));
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest != nullptr);
+    KJ_EXPECT(suspendedRequest != kj::none);
   }
 
   {
@@ -4826,7 +4826,7 @@ KJ_TEST("HttpServer can suspend and resume pipelined requests") {
     KJ_EXPECT(listenPromise.wait(waitScope));
     // No suspended request this time.
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest == nullptr);
+    KJ_EXPECT(suspendedRequest == kj::none);
 
     drainPromise.wait(waitScope);
   }
@@ -4881,7 +4881,7 @@ KJ_TEST("HttpServer can suspend a request with no leftover") {
     // And we have a SuspendedRequest. We know that it has no leftover, because we only wrote
     // headers, no body yet.
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest != nullptr);
+    KJ_EXPECT(suspendedRequest != kj::none);
   }
 
   {
@@ -4911,7 +4911,7 @@ KJ_TEST("HttpServer can suspend a request with no leftover") {
 
     // No SuspendedRequest.
     suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest == nullptr);
+    KJ_EXPECT(suspendedRequest == kj::none);
 
     // Close the server side of the pipe so our read promise completes.
     pipe.ends[0] = nullptr;

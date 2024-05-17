@@ -36,14 +36,14 @@ TEST(CharParsers, ExactChar) {
   {
     StringPtr text = "a";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) != nullptr);
+    EXPECT_TRUE(parser(input) != kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     StringPtr text = "b";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_TRUE(parser(input) == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 }
@@ -54,7 +54,7 @@ TEST(CharParsers, ExactString) {
   {
     StringPtr text = "foobar";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) != nullptr);
+    EXPECT_TRUE(parser(input) != kj::none);
     ASSERT_FALSE(input.atEnd());
     EXPECT_EQ('b', input.current());
   }
@@ -62,7 +62,7 @@ TEST(CharParsers, ExactString) {
   {
     StringPtr text = "bar";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_TRUE(parser(input) == kj::none);
     EXPECT_FALSE(input.atEnd());
     EXPECT_EQ('b', input.current());
   }
@@ -111,7 +111,7 @@ TEST(CharParsers, CharRange) {
     StringPtr text = "`";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
@@ -119,7 +119,7 @@ TEST(CharParsers, CharRange) {
     StringPtr text = "{";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
@@ -127,7 +127,7 @@ TEST(CharParsers, CharRange) {
     StringPtr text = "A";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 }
@@ -175,7 +175,7 @@ TEST(CharParsers, AnyOfChars) {
     StringPtr text = "b";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
@@ -183,7 +183,7 @@ TEST(CharParsers, AnyOfChars) {
     StringPtr text = "j";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
@@ -191,7 +191,7 @@ TEST(CharParsers, AnyOfChars) {
     StringPtr text = "A";
     Input input(text.begin(), text.end());
     Maybe<char> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 }

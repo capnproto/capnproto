@@ -69,13 +69,13 @@ TEST(Schema, Structs) {
   EXPECT_TRUE(Schema::from<TestDefaults>().getFieldByName("int32Field")
       .getProto().getSlot().getHadExplicitDefault());
 
-  EXPECT_TRUE(schema.findFieldByName("noSuchField") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("noSuchField") == kj::none);
 
-  EXPECT_TRUE(schema.findFieldByName("int32Field") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("float32List") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("dataList") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("textField") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("structField") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("int32Field") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("float32List") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("dataList") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("textField") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("structField") != kj::none);
 }
 
 TEST(Schema, FieldLookupOutOfOrder) {
@@ -107,26 +107,26 @@ TEST(Schema, FieldLookupOutOfOrder) {
 TEST(Schema, Unions) {
   auto schema = Schema::from<TestUnion>().asStruct();
 
-  EXPECT_TRUE(schema.findFieldByName("bit0") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("u1f0s8") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("bit0") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("u1f0s8") == kj::none);
 
   auto union1 = schema.getFieldByName("union1");
   auto union1g = schema.getDependency(union1.getProto().getGroup().getTypeId()).asStruct();
   EXPECT_EQ(schema, union1g.getDependency(union1g.getProto().getScopeId()));
-  EXPECT_TRUE(union1g.findFieldByName("bin0") == nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("bin0") == kj::none);
 
   auto u1f0s8 = union1g.getFieldByName("u1f0s8");
   EXPECT_EQ("u1f0s8", u1f0s8.getProto().getName());
   EXPECT_TRUE(u1f0s8.getContainingStruct() == union1g);
 
-  EXPECT_TRUE(union1g.findFieldByName("u1f1s8") != nullptr);
-  EXPECT_TRUE(union1g.findFieldByName("u1f0s32") != nullptr);
-  EXPECT_TRUE(union1g.findFieldByName("u1f0sp") != nullptr);
-  EXPECT_TRUE(union1g.findFieldByName("u1f1s1") != nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u1f1s8") != kj::none);
+  EXPECT_TRUE(union1g.findFieldByName("u1f0s32") != kj::none);
+  EXPECT_TRUE(union1g.findFieldByName("u1f0sp") != kj::none);
+  EXPECT_TRUE(union1g.findFieldByName("u1f1s1") != kj::none);
 
-  EXPECT_TRUE(union1g.findFieldByName("u0f0s1") == nullptr);
-  EXPECT_TRUE(union1g.findFieldByName("u2f0s8") == nullptr);
-  EXPECT_TRUE(union1g.findFieldByName("noSuchField") == nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u0f0s1") == kj::none);
+  EXPECT_TRUE(union1g.findFieldByName("u2f0s8") == kj::none);
+  EXPECT_TRUE(union1g.findFieldByName("noSuchField") == kj::none);
 }
 
 TEST(Schema, Enums) {
@@ -151,12 +151,12 @@ TEST(Schema, Enums) {
   EXPECT_TRUE(lookup == enumerant);
   EXPECT_TRUE(lookup != schema.getEnumerants()[1]);
 
-  EXPECT_TRUE(schema.findEnumerantByName("noSuchEnumerant") == nullptr);
+  EXPECT_TRUE(schema.findEnumerantByName("noSuchEnumerant") == kj::none);
 
-  EXPECT_TRUE(schema.findEnumerantByName("bar") != nullptr);
-  EXPECT_TRUE(schema.findEnumerantByName("qux") != nullptr);
-  EXPECT_TRUE(schema.findEnumerantByName("corge") != nullptr);
-  EXPECT_TRUE(schema.findEnumerantByName("grault") != nullptr);
+  EXPECT_TRUE(schema.findEnumerantByName("bar") != kj::none);
+  EXPECT_TRUE(schema.findEnumerantByName("qux") != kj::none);
+  EXPECT_TRUE(schema.findEnumerantByName("corge") != kj::none);
+  EXPECT_TRUE(schema.findEnumerantByName("grault") != kj::none);
 }
 
 // TODO(someday):  Test interface schemas when interfaces are implemented.
@@ -253,12 +253,12 @@ TEST(Schema, Lists) {
 TEST(Schema, UnnamedUnion) {
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
 
-  EXPECT_TRUE(schema.findFieldByName("") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("") == kj::none);
 
-  EXPECT_TRUE(schema.findFieldByName("foo") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("bar") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("before") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("after") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("foo") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("bar") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("before") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("after") != kj::none);
 }
 
 TEST(Schema, NullSchemas) {
@@ -304,13 +304,13 @@ TEST(Schema, Interfaces) {
   EXPECT_TRUE(Schema::from<TestDefaults>().getFieldByName("int32Field")
       .getProto().getSlot().getHadExplicitDefault());
 
-  EXPECT_TRUE(schema.findMethodByName("noSuchMethod") == nullptr);
+  EXPECT_TRUE(schema.findMethodByName("noSuchMethod") == kj::none);
 
-  EXPECT_TRUE(schema.findMethodByName("callFooWhenResolved") != nullptr);
-  EXPECT_TRUE(schema.findMethodByName("neverReturn") != nullptr);
-  EXPECT_TRUE(schema.findMethodByName("hold") != nullptr);
-  EXPECT_TRUE(schema.findMethodByName("callHeld") != nullptr);
-  EXPECT_TRUE(schema.findMethodByName("getHeld") != nullptr);
+  EXPECT_TRUE(schema.findMethodByName("callFooWhenResolved") != kj::none);
+  EXPECT_TRUE(schema.findMethodByName("neverReturn") != kj::none);
+  EXPECT_TRUE(schema.findMethodByName("hold") != kj::none);
+  EXPECT_TRUE(schema.findMethodByName("callHeld") != kj::none);
+  EXPECT_TRUE(schema.findMethodByName("getHeld") != kj::none);
 
   auto params = schema.getDependency(schema.getMethodByName("methodWithDefaults")
       .getProto().getParamStructType()).asStruct();

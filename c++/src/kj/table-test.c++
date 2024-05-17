@@ -71,7 +71,7 @@ public:
 KJ_TEST("simple table") {
   Table<StringPtr, HashIndex<StringHasher>> table;
 
-  KJ_EXPECT(table.find("foo") == nullptr);
+  KJ_EXPECT(table.find("foo") == kj::none);
 
   KJ_EXPECT(table.size() == 0);
   KJ_EXPECT(table.insert("foo") == "foo");
@@ -81,8 +81,8 @@ KJ_TEST("simple table") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("foo")) == "foo");
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("bar")) == "bar");
-  KJ_EXPECT(table.find("fop") == nullptr);
-  KJ_EXPECT(table.find("baq") == nullptr);
+  KJ_EXPECT(table.find("fop") == kj::none);
+  KJ_EXPECT(table.find("baq") == kj::none);
 
   {
     StringPtr& ref = table.insert("baz");
@@ -103,7 +103,7 @@ KJ_TEST("simple table") {
 
   KJ_EXPECT(table.eraseMatch("foo"));
   KJ_EXPECT(table.size() == 2);
-  KJ_EXPECT(table.find("foo") == nullptr);
+  KJ_EXPECT(table.find("foo") == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("bar")) == "bar");
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("baz")) == "baz");
 
@@ -132,9 +132,9 @@ KJ_TEST("simple table") {
   StringPtr STRS[] = { "corge"_kj, "grault"_kj, "garply"_kj };
   table.insertAll(ArrayPtr<StringPtr>(STRS));
   KJ_EXPECT(table.size() == 6);
-  KJ_EXPECT(table.find("corge") != nullptr);
-  KJ_EXPECT(table.find("grault") != nullptr);
-  KJ_EXPECT(table.find("garply") != nullptr);
+  KJ_EXPECT(table.find("corge") != kj::none);
+  KJ_EXPECT(table.find("grault") != kj::none);
+  KJ_EXPECT(table.find("garply") != kj::none);
 
   KJ_EXPECT_THROW_MESSAGE("inserted row already exists in table", table.insert("bar"));
 
@@ -161,7 +161,7 @@ KJ_TEST("simple table") {
       [&]() -> kj::StringPtr { KJ_FAIL_ASSERT("shouldn't have called this"); }) == &graultRow);
   KJ_EXPECT(graultRow.begin() == origGrault.begin());
   KJ_EXPECT(&KJ_ASSERT_NONNULL(table.find("grault")) == &graultRow);
-  KJ_EXPECT(table.find("waldo") == nullptr);
+  KJ_EXPECT(table.find("waldo") == kj::none);
   KJ_EXPECT(table.size() == 4);
 
   kj::String searchWaldo = kj::str("waldo");
@@ -211,8 +211,8 @@ KJ_TEST("hash tables when hash is always same") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("foo")) == "foo");
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("bar")) == "bar");
-  KJ_EXPECT(table.find("fop") == nullptr);
-  KJ_EXPECT(table.find("baq") == nullptr);
+  KJ_EXPECT(table.find("fop") == kj::none);
+  KJ_EXPECT(table.find("baq") == kj::none);
 
   {
     StringPtr& ref = table.insert("baz");
@@ -233,7 +233,7 @@ KJ_TEST("hash tables when hash is always same") {
 
   KJ_EXPECT(table.eraseMatch("foo"));
   KJ_EXPECT(table.size() == 2);
-  KJ_EXPECT(table.find("foo") == nullptr);
+  KJ_EXPECT(table.find("foo") == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("bar")) == "bar");
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("baz")) == "baz");
 
@@ -262,9 +262,9 @@ KJ_TEST("hash tables when hash is always same") {
   StringPtr STRS[] = { "corge"_kj, "grault"_kj, "garply"_kj };
   table.insertAll(ArrayPtr<StringPtr>(STRS));
   KJ_EXPECT(table.size() == 6);
-  KJ_EXPECT(table.find("corge") != nullptr);
-  KJ_EXPECT(table.find("grault") != nullptr);
-  KJ_EXPECT(table.find("garply") != nullptr);
+  KJ_EXPECT(table.find("corge") != kj::none);
+  KJ_EXPECT(table.find("grault") != kj::none);
+  KJ_EXPECT(table.find("garply") != kj::none);
 
   KJ_EXPECT_THROW_MESSAGE("inserted row already exists in table", table.insert("bar"));
 }
@@ -288,7 +288,7 @@ KJ_TEST("HashIndex with many erasures doesn't keep growing") {
   kj::ArrayPtr<uint> rows = nullptr;
 
   for (uint i: kj::zeroTo(1000000)) {
-    KJ_ASSERT(index.insert(rows, 0, i) == nullptr);
+    KJ_ASSERT(index.insert(rows, 0, i) == kj::none);
     index.erase(rows, 0, i);
   }
 
@@ -368,7 +368,7 @@ KJ_TEST("double-index table") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(123)) == (SiPair {"foo", 123}));
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<0>("bar")) == (SiPair {"bar", 456}));
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find<1>(456)) == (SiPair {"bar", 456}));
-  KJ_EXPECT(table.find<0>("corge") == nullptr);
+  KJ_EXPECT(table.find<0>("corge") == kj::none);
 
   KJ_EXPECT(
       table.findOrCreate<0>("corge", []() -> SiPair { return {"corge", 789}; })
@@ -423,8 +423,8 @@ KJ_TEST("benchmark: kj::Table<uint, HashIndex>") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
       KJ_ASSERT(value == i * 5 + 123);
-      KJ_ASSERT(table.find(i * 5 + 122) == nullptr);
-      KJ_ASSERT(table.find(i * 5 + 124) == nullptr);
+      KJ_ASSERT(table.find(i * 5 + 122) == kj::none);
+      KJ_ASSERT(table.find(i * 5 + 124) == kj::none);
     }
 
     for (uint i: kj::zeroTo(SOME_PRIME)) {
@@ -436,7 +436,7 @@ KJ_TEST("benchmark: kj::Table<uint, HashIndex>") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       if (i % 2 == 0 || i % 7 == 0) {
         // erased
-        KJ_ASSERT(table.find(i * 5 + 123) == nullptr);
+        KJ_ASSERT(table.find(i * 5 + 123) == kj::none);
       } else {
         uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
         KJ_ASSERT(value == i * 5 + 123);
@@ -515,7 +515,7 @@ KJ_TEST("benchmark: kj::Table<StringPtr, HashIndex>") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       if (i % 2 == 0 || i % 7 == 0) {
         // erased
-        KJ_ASSERT(table.find(strings[i]) == nullptr);
+        KJ_ASSERT(table.find(strings[i]) == kj::none);
       } else {
         StringPtr value = KJ_ASSERT_NONNULL(table.find(strings[i]));
         KJ_ASSERT(value == strings[i]);
@@ -666,7 +666,7 @@ public:
 KJ_TEST("simple tree table") {
   Table<StringPtr, TreeIndex<StringCompare>> table;
 
-  KJ_EXPECT(table.find("foo") == nullptr);
+  KJ_EXPECT(table.find("foo") == kj::none);
 
   KJ_EXPECT(table.size() == 0);
   KJ_EXPECT(table.insert("foo") == "foo");
@@ -676,8 +676,8 @@ KJ_TEST("simple tree table") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("foo")) == "foo");
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("bar")) == "bar");
-  KJ_EXPECT(table.find("fop") == nullptr);
-  KJ_EXPECT(table.find("baq") == nullptr);
+  KJ_EXPECT(table.find("fop") == kj::none);
+  KJ_EXPECT(table.find("baq") == kj::none);
 
   {
     StringPtr& ref = table.insert("baz");
@@ -699,7 +699,7 @@ KJ_TEST("simple tree table") {
 
   KJ_EXPECT(table.eraseMatch("foo"));
   KJ_EXPECT(table.size() == 2);
-  KJ_EXPECT(table.find("foo") == nullptr);
+  KJ_EXPECT(table.find("foo") == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("bar")) == "bar");
   KJ_EXPECT(KJ_ASSERT_NONNULL(table.find("baz")) == "baz");
 
@@ -729,9 +729,9 @@ KJ_TEST("simple tree table") {
   StringPtr STRS[] = { "corge"_kj, "grault"_kj, "garply"_kj };
   table.insertAll(ArrayPtr<StringPtr>(STRS));
   KJ_EXPECT(table.size() == 6);
-  KJ_EXPECT(table.find("corge") != nullptr);
-  KJ_EXPECT(table.find("grault") != nullptr);
-  KJ_EXPECT(table.find("garply") != nullptr);
+  KJ_EXPECT(table.find("corge") != kj::none);
+  KJ_EXPECT(table.find("grault") != kj::none);
+  KJ_EXPECT(table.find("garply") != kj::none);
 
   KJ_EXPECT_THROW_MESSAGE("inserted row already exists in table", table.insert("bar"));
 
@@ -789,7 +789,7 @@ KJ_TEST("simple tree table") {
       [&]() -> kj::StringPtr { KJ_FAIL_ASSERT("shouldn't have called this"); }) == &graultRow);
   KJ_EXPECT(graultRow.begin() == origGrault.begin());
   KJ_EXPECT(&KJ_ASSERT_NONNULL(table.find("grault")) == &graultRow);
-  KJ_EXPECT(table.find("waldo") == nullptr);
+  KJ_EXPECT(table.find("waldo") == kj::none);
   KJ_EXPECT(table.size() == 4);
 
   kj::String searchWaldo = kj::str("waldo");
@@ -869,8 +869,8 @@ KJ_TEST("large tree table") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
       KJ_ASSERT(value == i * 5 + 123);
-      KJ_ASSERT(table.find(i * 5 + 122) == nullptr);
-      KJ_ASSERT(table.find(i * 5 + 124) == nullptr);
+      KJ_ASSERT(table.find(i * 5 + 122) == kj::none);
+      KJ_ASSERT(table.find(i * 5 + 124) == kj::none);
     }
     table.verify();
 
@@ -897,7 +897,7 @@ KJ_TEST("large tree table") {
       for (uint i: kj::zeroTo(SOME_PRIME)) {
         if (i % 2 == 0 || i % 7 == 0) {
           // erased
-          KJ_ASSERT(table.find(i * 5 + 123) == nullptr);
+          KJ_ASSERT(table.find(i * 5 + 123) == kj::none);
         } else {
           uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
           KJ_ASSERT(value == i * 5 + 123);
@@ -981,7 +981,7 @@ KJ_TEST("TreeIndex clear() leaves tree in valid state") {
 
   // Insert at least one value to allocate an initial set of tree nodes.
   table.upsert(1, [](auto&&, auto&&) {});
-  KJ_EXPECT(table.find(1) != nullptr);
+  KJ_EXPECT(table.find(1) != kj::none);
   table.clear();
 
   // Insert enough values to force writes/reads beyond the end of the tree's internal node array.
@@ -989,7 +989,7 @@ KJ_TEST("TreeIndex clear() leaves tree in valid state") {
     table.upsert(i, [](auto&&, auto&&) {});
   }
   for (uint i = 0; i < 29; ++i) {
-    KJ_EXPECT(table.find(i) != nullptr);
+    KJ_EXPECT(table.find(i) != kj::none);
   }
 }
 
@@ -1008,8 +1008,8 @@ KJ_TEST("benchmark: kj::Table<uint, TreeIndex>") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
       KJ_ASSERT(value == i * 5 + 123);
-      KJ_ASSERT(table.find(i * 5 + 122) == nullptr);
-      KJ_ASSERT(table.find(i * 5 + 124) == nullptr);
+      KJ_ASSERT(table.find(i * 5 + 122) == kj::none);
+      KJ_ASSERT(table.find(i * 5 + 124) == kj::none);
     }
 
     for (uint i: kj::zeroTo(SOME_PRIME)) {
@@ -1021,7 +1021,7 @@ KJ_TEST("benchmark: kj::Table<uint, TreeIndex>") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       if (i % 2 == 0 || i % 7 == 0) {
         // erased
-        KJ_ASSERT(table.find(i * 5 + 123) == nullptr);
+        KJ_ASSERT(table.find(i * 5 + 123) == kj::none);
       } else {
         uint value = KJ_ASSERT_NONNULL(table.find(i * 5 + 123));
         KJ_ASSERT(value == i * 5 + 123);
@@ -1101,7 +1101,7 @@ KJ_TEST("benchmark: kj::Table<StringPtr, TreeIndex>") {
     for (uint i: kj::zeroTo(SOME_PRIME)) {
       if (i % 2 == 0 || i % 7 == 0) {
         // erased
-        KJ_ASSERT(table.find(strings[i]) == nullptr);
+        KJ_ASSERT(table.find(strings[i]) == kj::none);
       } else {
         auto& value = KJ_ASSERT_NONNULL(table.find(strings[i]));
         KJ_ASSERT(value == strings[i]);

@@ -334,7 +334,7 @@ public:
     auto webSocket = kjResponse.acceptWebSocket(factory.headersToKj(params.getHeaders()));
 
     auto upWrapper = kj::heap<KjToCapnpWebSocketAdapter>(
-        nullptr, params.getUpSocket(), kj::mv(shorteningPaf.fulfiller));
+        kj::none, params.getUpSocket(), kj::mv(shorteningPaf.fulfiller));
     auto upPumpTask = webSocket->pumpTo(*upWrapper).attach(kj::mv(upWrapper))
         .catch_([&webSocket=*webSocket](kj::Exception&& e) -> kj::Promise<void> {
       // The pump in the client -> server direction failed. The error may have originated from
@@ -694,7 +694,7 @@ public:
       context(context), factory(factory) {}
 
   void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
-    KJ_REQUIRE(replyTask == nullptr, "already called accept() or reject()");
+    KJ_REQUIRE(replyTask == kj::none, "already called accept() or reject()");
 
     auto req = context.startConnectRequest();
     auto rpcResponse = req.initResponse();
@@ -711,7 +711,7 @@ public:
       kj::StringPtr statusText,
       const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
-    KJ_REQUIRE(replyTask == nullptr, "already called accept() or reject()");
+    KJ_REQUIRE(replyTask == kj::none, "already called accept() or reject()");
     auto pipe = kj::newOneWayPipe(expectedBodySize);
 
     auto req = context.startErrorRequest();

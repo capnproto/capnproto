@@ -1279,7 +1279,7 @@ kj::Promise<kj::Maybe<typename T::Server&>> CapabilityServerSet<T>::getLocalServ
   return getLocalServerInternal(client)
       .then([](void* server) -> kj::Maybe<typename T::Server&> {
     if (server == nullptr) {
-      return nullptr;
+      return kj::none;
     } else {
       return *reinterpret_cast<typename T::Server*>(server);
     }

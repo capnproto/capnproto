@@ -220,7 +220,7 @@ KJ_TEST("InFlightExceptionIterator works") {
           KJ_FAIL_EXPECT("missing second exception");
         }
 
-        KJ_EXPECT(iter.next() == nullptr, "more than two exceptions");
+        KJ_EXPECT(iter.next() == kj::none, "more than two exceptions");
 
         caught = true;
       }

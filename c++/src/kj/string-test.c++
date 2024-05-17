@@ -185,22 +185,22 @@ TEST(String, tryParseAs) {
   KJ_EXPECT(isNaN(StringPtr("nan").tryParseAs<double>().orDefault(0.0)) == true);
   KJ_EXPECT(isNaN(StringPtr("NAN").tryParseAs<double>().orDefault(0.0)) == true);
   KJ_EXPECT(isNaN(StringPtr("NaN").tryParseAs<double>().orDefault(0.0)) == true);
-  KJ_EXPECT(StringPtr("").tryParseAs<double>() == nullptr);
-  KJ_EXPECT(StringPtr("a").tryParseAs<double>() == nullptr);
-  KJ_EXPECT(StringPtr("1a").tryParseAs<double>() == nullptr);
-  KJ_EXPECT(StringPtr("+-1").tryParseAs<double>() == nullptr);
+  KJ_EXPECT(StringPtr("").tryParseAs<double>() == kj::none);
+  KJ_EXPECT(StringPtr("a").tryParseAs<double>() == kj::none);
+  KJ_EXPECT(StringPtr("1a").tryParseAs<double>() == kj::none);
+  KJ_EXPECT(StringPtr("+-1").tryParseAs<double>() == kj::none);
 
   KJ_EXPECT(StringPtr("1").tryParseAs<float>() == 1.0);
 
   KJ_EXPECT(StringPtr("1").tryParseAs<int64_t>() == 1);
   KJ_EXPECT(StringPtr("9223372036854775807").tryParseAs<int64_t>() == 9223372036854775807LL);
   KJ_EXPECT(StringPtr("-9223372036854775808").tryParseAs<int64_t>() == -9223372036854775808ULL);
-  KJ_EXPECT(StringPtr("9223372036854775808").tryParseAs<int64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("-9223372036854775809").tryParseAs<int64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("").tryParseAs<int64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("a").tryParseAs<int64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("1a").tryParseAs<int64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("+-1").tryParseAs<int64_t>() == nullptr);
+  KJ_EXPECT(StringPtr("9223372036854775808").tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("-9223372036854775809").tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("").tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("a").tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("1a").tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("+-1").tryParseAs<int64_t>() == kj::none);
   KJ_EXPECT(StringPtr("010").tryParseAs<int64_t>() == 10);
   KJ_EXPECT(StringPtr("0010").tryParseAs<int64_t>() == 10);
   KJ_EXPECT(StringPtr("0x10").tryParseAs<int64_t>() == 16);
@@ -212,24 +212,24 @@ TEST(String, tryParseAs) {
   KJ_EXPECT(StringPtr("1").tryParseAs<uint64_t>() == 1);
   KJ_EXPECT(StringPtr("0").tryParseAs<uint64_t>() == 0);
   KJ_EXPECT(StringPtr("18446744073709551615").tryParseAs<uint64_t>() == 18446744073709551615ULL);
-  KJ_EXPECT(StringPtr("-1").tryParseAs<uint64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("18446744073709551616").tryParseAs<uint64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("").tryParseAs<uint64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("a").tryParseAs<uint64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("1a").tryParseAs<uint64_t>() == nullptr);
-  KJ_EXPECT(StringPtr("+-1").tryParseAs<uint64_t>() == nullptr);
+  KJ_EXPECT(StringPtr("-1").tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("18446744073709551616").tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("").tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("a").tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("1a").tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT(StringPtr("+-1").tryParseAs<uint64_t>() == kj::none);
 
   KJ_EXPECT(StringPtr("1").tryParseAs<int32_t>() == 1);
   KJ_EXPECT(StringPtr("2147483647").tryParseAs<int32_t>() == 2147483647);
   KJ_EXPECT(StringPtr("-2147483648").tryParseAs<int32_t>() == -2147483648);
-  KJ_EXPECT(StringPtr("2147483648").tryParseAs<int32_t>() == nullptr);
-  KJ_EXPECT(StringPtr("-2147483649").tryParseAs<int32_t>() == nullptr);
+  KJ_EXPECT(StringPtr("2147483648").tryParseAs<int32_t>() == kj::none);
+  KJ_EXPECT(StringPtr("-2147483649").tryParseAs<int32_t>() == kj::none);
 
   KJ_EXPECT(StringPtr("1").tryParseAs<uint32_t>() == 1);
   KJ_EXPECT(StringPtr("0").tryParseAs<uint32_t>() == 0U);
   KJ_EXPECT(StringPtr("4294967295").tryParseAs<uint32_t>() == 4294967295U);
-  KJ_EXPECT(StringPtr("-1").tryParseAs<uint32_t>() == nullptr);
-  KJ_EXPECT(StringPtr("4294967296").tryParseAs<uint32_t>() == nullptr);
+  KJ_EXPECT(StringPtr("-1").tryParseAs<uint32_t>() == kj::none);
+  KJ_EXPECT(StringPtr("4294967296").tryParseAs<uint32_t>() == kj::none);
 
   KJ_EXPECT(StringPtr("1").tryParseAs<int16_t>() == 1);
   KJ_EXPECT(StringPtr("1").tryParseAs<uint16_t>() == 1);

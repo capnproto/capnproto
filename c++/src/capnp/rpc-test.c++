@@ -225,8 +225,8 @@ public:
         : network(network), sender(sender), tasks(kj::heap<kj::TaskSet>(*this)) {}
 
     void attach(ConnectionImpl& other) {
-      KJ_REQUIRE(partner == nullptr);
-      KJ_REQUIRE(other.partner == nullptr);
+      KJ_REQUIRE(partner == kj::none);
+      KJ_REQUIRE(other.partner == kj::none);
       partner = other;
       other.partner = *this;
     }
@@ -1308,7 +1308,7 @@ TEST(Rpc, Abort) {
   auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(context.waitScope));
   EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
 
-  EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
+  EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == kj::none);
 }
 
 KJ_TEST("handles exceptions thrown during disconnect") {
