@@ -926,9 +926,13 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
       return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
     }).exclusiveJoin(kj::mv(promise));
   }
+  auto peerId = stream.peerIdentity->toString();
   return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
     auto id = conn->getIdentity(kj::mv(innerId));
     return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
+  }).catch_([peerId=kj::mv(peerId)](kj::Exception&& e) -> kj::Promise<kj::AuthenticatedStream> {
+    e.setDescription(kj::str(e.getDescription(), "; clientId = ", peerId));
+    kj::throwFatalException(kj::mv(e));
   });
 }
 
