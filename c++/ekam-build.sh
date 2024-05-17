@@ -50,7 +50,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-CLANG_CXXFLAGS="-std=c++20 -stdlib=libc++ -pthread -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -Wimplicit-fallthrough -Wno-error=unused-command-line-argument -Wno-missing-field-initializers -DKJ_HEADER_WARNINGS -DCAPNP_HEADER_WARNINGS -DKJ_HAS_OPENSSL -DKJ_HAS_LIBDL -DKJ_HAS_ZLIB -DKJ_BENCHMARK_MALLOC"
+CLANG_CXXFLAGS="-std=c++20 -stdlib=libc++ -pthread -Wall -Wextra -Wsuggest-override -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -Wimplicit-fallthrough -Wno-error=unused-command-line-argument -Wno-missing-field-initializers -DKJ_HEADER_WARNINGS -DCAPNP_HEADER_WARNINGS -DKJ_HAS_OPENSSL -DKJ_HAS_LIBDL -DKJ_HAS_ZLIB -DKJ_BENCHMARK_MALLOC"
 
 export CXX=${CXX:-clang++}
 export CC=${CC:-clang}
