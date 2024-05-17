@@ -411,7 +411,7 @@ TEST(TwoPartyNetwork, Abort) {
     EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
   }
 
-  EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == nullptr);
+  EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == kj::none);
 }
 
 TEST(TwoPartyNetwork, ConvenienceClasses) {
@@ -1106,7 +1106,7 @@ KJ_TEST("Dropping capability during call doesn't destroy server") {
   auto promise = cap.fooRequest().send();
   KJ_EXPECT(!promise.poll(waitScope));
   KJ_EXPECT(count == 1);
-  KJ_EXPECT(fulfillerSlot != nullptr);
+  KJ_EXPECT(fulfillerSlot != kj::none);
 
   // Dropping the capability should not destroy the server as long as the call is still
   // outstanding.

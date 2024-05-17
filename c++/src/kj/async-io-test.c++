@@ -115,7 +115,7 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
       // result.peerIdentity tells us the specific address that was used. So it should be one
       // of the ones on the list, but only one.
       KJ_EXPECT(addr->toString().contains(id->getAddress().toString()));
-      KJ_EXPECT(id->getAddress().toString().findFirst(',') == nullptr);
+      KJ_EXPECT(id->getAddress().toString().findFirst(',') == kj::none);
 
       client = kj::mv(result.stream);
 
@@ -1024,7 +1024,7 @@ TEST(AsyncIo, Udp) {
         EXPECT_EQ(IPPROTO_IP, message.getLevel());
         EXPECT_EQ(IP_PKTINFO, message.getType());
 
-        EXPECT_TRUE(message.as<struct in_pktinfo>() == nullptr);
+        EXPECT_TRUE(message.as<struct in_pktinfo>() == kj::none);
         EXPECT_LT(message.asArray<byte>().size(), sizeof(struct in_pktinfo));
       }
     }
@@ -2306,8 +2306,8 @@ KJ_TEST("Userland tee read EOF propagation") {
   auto right = kj::mv(tee.branches[1]);
 
   // Lengthless pipe, so ...
-  KJ_EXPECT(left->tryGetLength() == nullptr);
-  KJ_EXPECT(right->tryGetLength() == nullptr);
+  KJ_EXPECT(left->tryGetLength() == kj::none);
+  KJ_EXPECT(right->tryGetLength() == kj::none);
 
   uint8_t leftBuf[7] = { 0 };
   auto leftPromise = left->tryRead(leftBuf, size(leftBuf), size(leftBuf));

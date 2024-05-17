@@ -455,7 +455,7 @@ KJ_TEST("BufferedMessageStream basics") {
   KJ_EXPECT(!eofPromise.poll(waitScope));
 
   pipe.ends[1]->shutdownWrite();
-  KJ_EXPECT(eofPromise.wait(waitScope) == nullptr);
+  KJ_EXPECT(eofPromise.wait(waitScope) == kj::none);
 }
 
 KJ_TEST("BufferedMessageStream fragmented reads") {

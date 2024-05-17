@@ -114,7 +114,7 @@ TEST(Common, Maybe) {
     }
     // We have moved the kj::Own away, so this should give us the default and leave the Maybe empty.
     EXPECT_EQ(456, m.orDefault(heap<CopyOrMove>(456))->i);
-    EXPECT_TRUE(m == nullptr);
+    EXPECT_TRUE(m == kj::none);
 
     bool ranLazy = false;
     EXPECT_EQ(123, mv(m).orDefault([&] {
@@ -122,17 +122,17 @@ TEST(Common, Maybe) {
       return heap<CopyOrMove>(123);
     })->i);
     EXPECT_TRUE(ranLazy);
-    EXPECT_TRUE(m == nullptr);
+    EXPECT_TRUE(m == kj::none);
 
     m = heap<CopyOrMove>(123);
-    EXPECT_TRUE(m != nullptr);
+    EXPECT_TRUE(m != kj::none);
     ranLazy = false;
     EXPECT_EQ(123, mv(m).orDefault([&] {
       ranLazy = true;
       return heap<CopyOrMove>(456);
     })->i);
     EXPECT_FALSE(ranLazy);
-    EXPECT_TRUE(m == nullptr);
+    EXPECT_TRUE(m == kj::none);
   }
 
   {

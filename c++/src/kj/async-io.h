@@ -1104,7 +1104,7 @@ inline Maybe<const T&> AncillaryMessage::as() const {
   if (data.size() >= sizeof(T)) {
     return *reinterpret_cast<const T*>(data.begin());
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 

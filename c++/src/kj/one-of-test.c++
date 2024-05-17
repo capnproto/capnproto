@@ -31,9 +31,9 @@ TEST(OneOf, Basic) {
   EXPECT_FALSE(var.is<int>());
   EXPECT_FALSE(var.is<float>());
   EXPECT_FALSE(var.is<String>());
-  EXPECT_TRUE(var.tryGet<int>() == nullptr);
-  EXPECT_TRUE(var.tryGet<float>() == nullptr);
-  EXPECT_TRUE(var.tryGet<String>() == nullptr);
+  EXPECT_TRUE(var.tryGet<int>() == kj::none);
+  EXPECT_TRUE(var.tryGet<float>() == kj::none);
+  EXPECT_TRUE(var.tryGet<String>() == kj::none);
 
   var.init<int>(123);
 
@@ -48,8 +48,8 @@ TEST(OneOf, Basic) {
 #endif
 
   EXPECT_EQ(123, KJ_ASSERT_NONNULL(var.tryGet<int>()));
-  EXPECT_TRUE(var.tryGet<float>() == nullptr);
-  EXPECT_TRUE(var.tryGet<String>() == nullptr);
+  EXPECT_TRUE(var.tryGet<float>() == kj::none);
+  EXPECT_TRUE(var.tryGet<String>() == kj::none);
 
   var.init<String>(kj::str("foo"));
 
@@ -59,8 +59,8 @@ TEST(OneOf, Basic) {
 
   EXPECT_EQ("foo", var.get<String>());
 
-  EXPECT_TRUE(var.tryGet<int>() == nullptr);
-  EXPECT_TRUE(var.tryGet<float>() == nullptr);
+  EXPECT_TRUE(var.tryGet<int>() == kj::none);
+  EXPECT_TRUE(var.tryGet<float>() == kj::none);
   EXPECT_EQ("foo", KJ_ASSERT_NONNULL(var.tryGet<String>()));
 
   OneOf<int, float, String> var2 = kj::mv(var);

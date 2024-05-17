@@ -1008,10 +1008,10 @@ TEST(Capability, CapabilityServerSet) {
   EXPECT_EQ(&server2, &KJ_ASSERT_NONNULL(set2.getLocalServer(client2).wait(waitScope)));
 
   // Getting the local server using the wrong set doesn't work.
-  EXPECT_TRUE(set1.getLocalServer(client2).wait(waitScope) == nullptr);
-  EXPECT_TRUE(set2.getLocalServer(client1).wait(waitScope) == nullptr);
-  EXPECT_TRUE(set1.getLocalServer(clientStandalone).wait(waitScope) == nullptr);
-  EXPECT_TRUE(set1.getLocalServer(clientNull).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set1.getLocalServer(client2).wait(waitScope) == kj::none);
+  EXPECT_TRUE(set2.getLocalServer(client1).wait(waitScope) == kj::none);
+  EXPECT_TRUE(set1.getLocalServer(clientStandalone).wait(waitScope) == kj::none);
+  EXPECT_TRUE(set1.getLocalServer(clientNull).wait(waitScope) == kj::none);
 
   // A promise client waits to be resolved.
   auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
@@ -1029,7 +1029,7 @@ TEST(Capability, CapabilityServerSet) {
   auto promise2 = set2.getLocalServer(clientPromise)
       .then([&](kj::Maybe<test::TestInterface::Server&> server) {
     resolved2 = true;
-    EXPECT_TRUE(server == nullptr);
+    EXPECT_TRUE(server == kj::none);
   });
   auto promise3 = set1.getLocalServer(errorPromise)
       .then([&](kj::Maybe<test::TestInterface::Server&> server) {

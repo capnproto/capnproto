@@ -194,7 +194,7 @@ KJ_TEST("readiness IO: read small") {
 
   ReadyInputStreamWrapper in(*pipe.in);
   char buf[4]{};
-  KJ_ASSERT(in.read(kj::ArrayPtr<char>(buf).asBytes()) == nullptr);
+  KJ_ASSERT(in.read(kj::ArrayPtr<char>(buf).asBytes()) == kj::none);
 
   pipe.out->write("foo", 3).wait(io.waitScope);
 

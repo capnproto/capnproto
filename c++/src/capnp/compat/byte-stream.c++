@@ -468,7 +468,7 @@ public:
     }
 
     void setNewParent(CapnpToKjStreamAdapter& newParent) {
-      KJ_ASSERT(parent == nullptr);
+      KJ_ASSERT(parent == kj::none);
       parent = newParent;
       auto paf = kj::newPromiseAndFulfiller<void>();
       readyPromise = paf.promise.fork();

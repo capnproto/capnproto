@@ -70,8 +70,8 @@ TEST(SchemaLoader, LoadLateUnion) {
   EXPECT_EQ(9,
       schema.getDependency(schema.getFieldByName("anotherUnion").getProto().getGroup().getTypeId())
             .asStruct().getFieldByName("corge").getProto().getOrdinal().getExplicit());
-  EXPECT_TRUE(schema.findFieldByName("corge") == nullptr);
-  EXPECT_TRUE(schema.findFieldByName("grault") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("corge") == kj::none);
+  EXPECT_TRUE(schema.findFieldByName("grault") == kj::none);
 }
 
 TEST(SchemaLoader, LoadUnnamedUnion) {
@@ -80,12 +80,12 @@ TEST(SchemaLoader, LoadUnnamedUnion) {
   StructSchema schema =
       loader.load(Schema::from<test::TestUnnamedUnion>().getProto()).asStruct();
 
-  EXPECT_TRUE(schema.findFieldByName("") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("") == kj::none);
 
-  EXPECT_TRUE(schema.findFieldByName("foo") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("bar") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("before") != nullptr);
-  EXPECT_TRUE(schema.findFieldByName("after") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("foo") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("bar") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("before") != kj::none);
+  EXPECT_TRUE(schema.findFieldByName("after") != kj::none);
 }
 
 TEST(SchemaLoader, Use) {
@@ -298,7 +298,7 @@ TEST(SchemaLoader, LazyLoad) {
   FakeLoaderCallback callback(Schema::from<TestAllTypes>().getProto());
   SchemaLoader loader(callback);
 
-  EXPECT_TRUE(loader.tryGet(1234) == nullptr);
+  EXPECT_TRUE(loader.tryGet(1234) == kj::none);
 
   EXPECT_FALSE(callback.isLoaded());
   Schema schema = loader.get(typeId<TestAllTypes>());

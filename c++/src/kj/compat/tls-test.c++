@@ -1245,7 +1245,7 @@ KJ_TEST("NetworkHttpClient connect with tlsStarter") {
   auto request = client->connect(
       kj::str("127.0.0.1:", listener1->getPort()), HttpHeaders(headerTable), httpConnectSettings);
 
-  KJ_ASSERT(tlsStarter != nullptr);
+  KJ_ASSERT(tlsStarter != kj::none);
 
   auto buf = kj::heapArray<char>(4);
 

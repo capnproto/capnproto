@@ -36,7 +36,7 @@ KJ_TEST("HashMap") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("bar"_kj)) == 456);
-  KJ_EXPECT(map.find("baz"_kj) == nullptr);
+  KJ_EXPECT(map.find("baz"_kj) == kj::none);
 
   map.upsert(kj::str("foo"), 789, [](int& old, uint newValue) {
     KJ_EXPECT(old == 123);
@@ -85,7 +85,7 @@ KJ_TEST("TreeMap") {
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("bar"_kj)) == 456);
-  KJ_EXPECT(map.find("baz"_kj) == nullptr);
+  KJ_EXPECT(map.find("baz"_kj) == kj::none);
 
   map.upsert(kj::str("foo"), 789, [](int& old, uint newValue) {
     KJ_EXPECT(old == 123);
@@ -175,7 +175,7 @@ KJ_TEST("HashMap findOrCreate throws") {
     // expected
   }
 
-  KJ_EXPECT(m.find(1) == nullptr);
+  KJ_EXPECT(m.find(1) == kj::none);
   m.findOrCreate(1, []() {
     return HashMap<int, String>::Entry { 1, kj::str("ok") };
   });
@@ -197,8 +197,8 @@ void testEraseAll(MapType& m) {
 
   KJ_EXPECT(count == 2);
   KJ_EXPECT(m.size() == 3);
-  KJ_EXPECT(m.find(12) == nullptr);
-  KJ_EXPECT(m.find(99) == nullptr);
+  KJ_EXPECT(m.find(12) == kj::none);
+  KJ_EXPECT(m.find(99) == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(83)) == "bar");
   KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(6)) == "qux");
   KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(55)) == "corge");

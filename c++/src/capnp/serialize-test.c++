@@ -453,7 +453,7 @@ TEST(Serialize, RejectTooManySegments) {
     ADD_FAILURE() << "Should have thrown an exception.";
   });
 
-  KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
+  KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
 }
 
 #if !__MINGW32__  // Inexplicably crashes when exception is thrown from constructor.
@@ -472,7 +472,7 @@ TEST(Serialize, RejectHugeMessage) {
     ADD_FAILURE() << "Should have thrown an exception.";
   });
 
-  KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
+  KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
 }
 #endif  // !__MINGW32__
 

@@ -650,7 +650,7 @@ TEST(Encoding, ListUpgrade) {
       ADD_FAILURE() << "Should have thrown an exception.";
     });
 
-    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
+    KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
   }
 
   {
@@ -756,7 +756,7 @@ TEST(Encoding, BitListUpgrade) {
       ADD_FAILURE() << "Should have thrown an exception.";
     });
 
-    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
+    KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
   }
 
   auto reader = root.asReader();
@@ -767,7 +767,7 @@ TEST(Encoding, BitListUpgrade) {
       ADD_FAILURE() << "Should have thrown an exception.";
     });
 
-    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
+    KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
   }
 }
 
