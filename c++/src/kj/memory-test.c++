@@ -382,7 +382,7 @@ KJ_DECLARE_NON_POLYMORPHIC(IncompleteTemplate<T, U>)
 struct IncompleteDisposer: public Disposer {
   mutable void* sawPtr = nullptr;
 
-  virtual void disposeImpl(void* pointer) const {
+  void disposeImpl(void* pointer) const override {
     sawPtr = pointer;
   }
 };

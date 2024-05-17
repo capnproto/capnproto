@@ -32,7 +32,7 @@ class PowerFunction final: public Calculator::Function::Server {
   // the server.  The server will then be able to make calls back to the client.
 
 public:
-  kj::Promise<void> call(CallContext context) {
+  kj::Promise<void> call(CallContext context) override {
     auto params = context.getParams().getParams();
     KJ_REQUIRE(params.size() == 2, "Wrong number of parameters.");
     context.getResults().setValue(pow(params[0], params[1]));

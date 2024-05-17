@@ -91,7 +91,7 @@ public:
   CapturingExceptionCallback(String& target): target(target) {}
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
-                  String&& text) {
+                  String&& text) override {
     target = kj::mv(text);
   }
 

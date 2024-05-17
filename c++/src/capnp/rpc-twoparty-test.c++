@@ -494,7 +494,7 @@ private:
 
 class TestBootstrapFactory: public BootstrapFactory<rpc::twoparty::VatId> {
 public:
-  Capability::Client createFor(rpc::twoparty::VatId::Reader clientId) {
+  Capability::Client createFor(rpc::twoparty::VatId::Reader clientId) override {
     called = true;
     EXPECT_EQ(rpc::twoparty::Side::CLIENT, clientId.getSide());
     return kj::heap<TestAuthenticatedBootstrapImpl>(clientId);

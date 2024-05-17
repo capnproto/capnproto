@@ -2,8 +2,9 @@ common --noenable_bzlmod
 common --enable_platform_specific_config
 
 build:unix --cxxopt='-std=c++20' --host_cxxopt='-std=c++20' --force_pic --verbose_failures
-build:unix --cxxopt='-Wall' --host_cxxopt='-Wall'
-build:unix --cxxopt='-Wextra' --host_cxxopt='-Wextra'
+build:unix --cxxopt='-Wall'
+build:unix --cxxopt='-Wextra'
+build:unix --cxxopt='-Wsuggest-override'
 build:unix --cxxopt='-Wno-strict-aliasing' --host_cxxopt='-Wno-strict-aliasing'
 build:unix --cxxopt='-Wno-sign-compare' --host_cxxopt='-Wno-sign-compare'
 build:unix --cxxopt='-Wno-unused-parameter' --host_cxxopt='-Wno-unused-parameter'

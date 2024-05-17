@@ -97,7 +97,7 @@ class ValueImpl final: public Calculator::Value::Server {
 public:
   ValueImpl(double value): value(value) {}
 
-  kj::Promise<void> read(ReadContext context) {
+  kj::Promise<void> read(ReadContext context) override {
     context.getResults().setValue(value);
     return kj::READY_NOW;
   }
@@ -116,7 +116,7 @@ public:
     this->body.setRoot(body);
   }
 
-  kj::Promise<void> call(CallContext context) {
+  kj::Promise<void> call(CallContext context) override {
     auto params = context.getParams().getParams();
     KJ_REQUIRE(params.size() == paramCount, "Wrong number of parameters.");
 
@@ -141,7 +141,7 @@ class OperatorImpl final: public Calculator::Function::Server {
 public:
   OperatorImpl(Calculator::Operator op): op(op) {}
 
-  kj::Promise<void> call(CallContext context) {
+  kj::Promise<void> call(CallContext context) override {
     auto params = context.getParams().getParams();
     KJ_REQUIRE(params.size() == 2, "Wrong number of parameters.");
 

@@ -6,7 +6,7 @@ ifeq ($(CXX),clang++)
   # Clang's verbose diagnostics don't play nice with the Ekam Eclipse plugin's error parsing,
   # so disable them.  Also enable some useful Clang warnings (dunno if GCC supports them, and don't
   # care).
-  EXTRA_FLAG=-fno-caret-diagnostics -Wglobal-constructors -Wextra-semi -Werror=return-type
+  EXTRA_FLAG=-fno-caret-diagnostics -Wglobal-constructors -Wextra-semi -Wsuggest-override -Werror=return-type
 #  EXTRA_FLAG=-fno-caret-diagnostics -Weverything -Wno-c++98-compat -Wno-shadow -Wno-c++98-compat-pedantic -Wno-padded -Wno-weak-vtables -Wno-gnu -Wno-unused-parameter -Wno-sign-conversion -Wno-undef -Wno-shorten-64-to-32 -Wno-conversion -Wno-unreachable-code -Wno-non-virtual-dtor
 else
   EXTRA_FLAG=

@@ -256,7 +256,7 @@ static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
 class MmapDisposer: public ArrayDisposer {
 protected:
   void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
-                   size_t capacity, void (*destroyElement)(void*)) const {
+                   size_t capacity, void (*destroyElement)(void*)) const override {
     auto range = getMmapRange(reinterpret_cast<uintptr_t>(firstElement),
                               elementSize * elementCount);
     KJ_SYSCALL(munmap(reinterpret_cast<byte*>(range.offset), range.size)) { break; }
