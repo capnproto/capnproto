@@ -38,6 +38,6 @@ build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-u
 build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 
 # build with ssl, zlib and bazel by default
-build --//src/kj:openssl=True
-build --//src/kj:zlib=True
-build --//src/kj:brotli=True
+build --//build:openssl=True
+build --//build:zlib=True
+build --//build:brotli=True

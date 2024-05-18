@@ -1,7 +1,3 @@
-load("//:build/configure.bzl", "kj_configure")
-
-kj_configure()
-
 cc_library(
     name = "kj",
     srcs = [
@@ -73,14 +69,14 @@ cc_library(
     include_prefix = "kj",
     linkopts = select({
         "@platforms//os:windows": [],
-        ":use_libdl": [
+        "//build:use_libdl": [
             "-lpthread",
             "-ldl",
         ],
         "//conditions:default": ["-lpthread"],
     }),
     visibility = ["//visibility:public"],
-    deps = [":kj-defines"],
+    deps = ["//build:kj-defines"],
 )
 
 cc_library(

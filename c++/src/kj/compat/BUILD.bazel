@@ -1,5 +1,3 @@
-exports_files(["gtest.h"])
-
 cc_library(
     name = "kj-tls",
     srcs = [
@@ -12,7 +10,7 @@ cc_library(
     ],
     include_prefix = "kj/compat",
     target_compatible_with = select({
-        "//src/kj:use_openssl": [],
+        "//build:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     visibility = ["//visibility:public"],
@@ -57,15 +55,15 @@ cc_library(
     srcs = ["brotli.c++"],
     hdrs = ["brotli.h"],
     include_prefix = "kj/compat",
-    visibility = ["//visibility:public"],
     target_compatible_with = select({
-        "//src/kj:use_brotli": [],
+        "//build:use_brotli": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
+    visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
-        "@brotli//:brotlienc",
         "@brotli//:brotlidec",
+        "@brotli//:brotlienc",
     ],
 )
 
@@ -99,13 +97,13 @@ cc_library(
 cc_test(
     name = "http-socketpair-test",
     srcs = ["http-socketpair-test.c++"],
+    target_compatible_with = [
+        "@platforms//os:linux",  # TODO: Investigate why this fails on macOS
+    ],
     deps = [
         ":http-socketpair-test-base",
         ":kj-http",
         "//src/kj:kj-test",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux", # TODO: Investigate why this fails on macOS
     ],
 )
 
@@ -118,12 +116,12 @@ kj_tls_tests = [
     name = f.removesuffix(".c++"),
     srcs = [f],
     target_compatible_with = select({
-        "//src/kj:use_openssl": [],
+        "//build:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
-        ":kj-tls",
         ":kj-http",
+        ":kj-tls",
         "//src/kj:kj-test",
     ],
 ) for f in kj_tls_tests]
@@ -132,7 +130,7 @@ cc_test(
     name = "gzip-test",
     srcs = ["gzip-test.c++"],
     target_compatible_with = select({
-        "//src/kj:use_zlib": [],
+        "//build:use_zlib": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
@@ -145,7 +143,7 @@ cc_test(
     name = "brotli-test",
     srcs = ["brotli-test.c++"],
     target_compatible_with = select({
-        "//src/kj:use_brotli": [],
+        "//build:use_brotli": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [

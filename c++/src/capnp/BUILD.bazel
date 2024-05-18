@@ -204,14 +204,14 @@ cc_library(
     name = "capnp-test",
     srcs = ["test-util.c++"],
     hdrs = ["test-util.h"],
+    include_prefix = "capnp",
+    visibility = [":__subpackages__"],
     deps = [
         ":capnp-rpc",
         ":capnp_test",
         ":capnpc",
         "//src/kj:kj-test",
     ],
-    include_prefix = "capnp",
-    visibility = [":__subpackages__" ]
 )
 
 [cc_test(
@@ -250,11 +250,11 @@ cc_library(
 cc_test(
     name = "endian-reverse-test",
     srcs = ["endian-reverse-test.c++"],
-    deps = [":capnp-test"],
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+    deps = [":capnp-test"],
 )
 
 cc_library(
@@ -273,6 +273,6 @@ cc_test(
     name = "fuzz-test",
     size = "large",
     srcs = ["fuzz-test.c++"],
-    deps = [":capnp-test"],
     tags = ["manual"],
+    deps = [":capnp-test"],
 )

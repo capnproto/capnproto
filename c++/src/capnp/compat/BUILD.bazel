@@ -108,9 +108,9 @@ cc_library(
     name = f.removesuffix(".c++"),
     srcs = [f],
     deps = [
-        ":websocket-rpc",
         ":http-over-capnp",
-        "//src/capnp:capnp-test"
+        ":websocket-rpc",
+        "//src/capnp:capnp-test",
     ],
 ) for f in [
     "byte-stream-test.c++",
