@@ -60,16 +60,6 @@ def kj_configure():
     )
 
     native.config_setting(
-        name = "use_save_acquired_lock_info",
-        flag_values = {"save_acquired_lock_info": "True"},
-    )
-
-    native.config_setting(
-        name = "use_track_lock_blocking",
-        flag_values = {"track_lock_blocking": "True"},
-    )
-
-    native.config_setting(
         name = "use_deprecate_kj_if_maybe",
         flag_values = {"deprecate_kj_if_maybe": "True"},
     )
