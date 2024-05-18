@@ -183,22 +183,22 @@ public:
 
   kj::Promise<void> connect(kj::StringPtr expectedServerHostname) {
     if (!SSL_set_tlsext_host_name(ssl, expectedServerHostname.cStr())) {
-      return getOpensslError();
+      throw getOpensslError();
     }
 
     X509_VERIFY_PARAM* verify = SSL_get0_param(ssl);
     if (verify == nullptr) {
-      return getOpensslError();
+      throw getOpensslError();
     }
 
     if (isIpAddress(expectedServerHostname)) {
       if (X509_VERIFY_PARAM_set1_ip_asc(verify, expectedServerHostname.cStr()) <= 0) {
-        return getOpensslError();
+        throw getOpensslError();
       }
     } else {
       if (X509_VERIFY_PARAM_set1_host(
           verify, expectedServerHostname.cStr(), expectedServerHostname.size()) <= 0) {
-        return getOpensslError();
+        throw getOpensslError();
       }
     }
 
@@ -209,33 +209,28 @@ public:
     // Otherwise, certificates issued by Let's Encrypt won't work as of September 30, 2021:
     // https://letsencrypt.org/docs/dst-root-ca-x3-expiration-september-2021/
     X509_VERIFY_PARAM_set_flags(verify, X509_V_FLAG_TRUSTED_FIRST);
+    co_await sslCall([this]() { return SSL_connect(ssl); });
 
-    return sslCall([this]() { return SSL_connect(ssl); }).then([this](size_t) {
-      X509* cert = SSL_get_peer_certificate(ssl);
-      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate") { return; }
-      X509_free(cert);
+    X509* cert = SSL_get_peer_certificate(ssl);
+    KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
+    X509_free(cert);
 
-      auto result = SSL_get_verify_result(ssl);
-      if (result != X509_V_OK) {
-        const char* reason = X509_verify_cert_error_string(result);
-        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason) { break; }
-      }
-    });
+    auto result = SSL_get_verify_result(ssl);
+    if (result != X509_V_OK) {
+      const char* reason = X509_verify_cert_error_string(result);
+      KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason);
+    }
   }
 
   kj::Promise<void> accept() {
     // We are the server. Set SSL options to prefer server's cipher choice.
     SSL_set_options(ssl, SSL_OP_CIPHER_SERVER_PREFERENCE);
 
-    auto acceptPromise = sslCall([this]() {
-      return SSL_accept(ssl);
-    });
-    return acceptPromise.then([](size_t ret) {
-      if (ret == 0) {
-        kj::throwRecoverableException(
-            KJ_EXCEPTION(DISCONNECTED, "Client disconnected during SSL_accept()"));
-      }
-    });
+    auto ret = co_await sslCall([this]() { return SSL_accept(ssl); });
+    if (ret == 0) {
+      kj::throwRecoverableException(
+          KJ_EXCEPTION(DISCONNECTED, "Client disconnected during SSL_accept()"));
+    }
   }
 
   kj::Own<TlsPeerIdentity> getIdentity(kj::Own<kj::PeerIdentity> inner) {
@@ -248,16 +243,26 @@ public:
   }
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryReadInternal(buffer, minBytes, maxBytes, 0);
+    size_t alreadyDone = 0;
+    while (true) {
+      auto n = co_await sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); });
+      if (n >= minBytes || n == 0) {
+        co_return alreadyDone + n;
+      } else {
+        buffer = reinterpret_cast<byte*>(buffer) + n;
+        minBytes -= n;
+        maxBytes -= n;
+        alreadyDone += n;
+      }
+    }
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
-    return writeInternal(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
+    return writeInternal({kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size)});
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-    auto cork = writeBuffer.cork();
-    return writeInternal(pieces[0], pieces.slice(1, pieces.size())).attach(kj::mv(cork));
+    return writeInternal(pieces);
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -312,78 +317,54 @@ private:
   ReadyInputStreamWrapper readBuffer;
   ReadyOutputStreamWrapper writeBuffer;
 
-  kj::Promise<size_t> tryReadInternal(
-      void* buffer, size_t minBytes, size_t maxBytes, size_t alreadyDone) {
-    return sslCall([this,buffer,maxBytes]() { return SSL_read(ssl, buffer, maxBytes); })
-        .then([this,buffer,minBytes,maxBytes,alreadyDone](size_t n) -> kj::Promise<size_t> {
-      if (n >= minBytes || n == 0) {
-        return alreadyDone + n;
-      } else {
-        return tryReadInternal(reinterpret_cast<byte*>(buffer) + n,
-                               minBytes - n, maxBytes - n, alreadyDone + n);
+  Promise<void> writeInternal(kj::ArrayPtr<const kj::ArrayPtr<const byte>> slices) {
+    auto cork = writeBuffer.cork();
+    for (auto slice: slices) {
+      // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
+      // an error. So, we need to avoid zero-sized writes entirely.
+      while (slice.size() > 0) {
+        KJ_REQUIRE(shutdownTask == kj::none, "already called shutdownWrite()");
+        auto n = co_await sslCall([this,slice]() { return SSL_write(ssl, slice.begin(), slice.size()); });
+        if (n == 0) {
+          throw KJ_EXCEPTION(DISCONNECTED, "ssl connection ended during write");
+        }
+        slice = slice.slice(n, slice.size());
       }
-    });
-  }
-
-  Promise<void> writeInternal(kj::ArrayPtr<const byte> first,
-                              kj::ArrayPtr<const kj::ArrayPtr<const byte>> rest) {
-    KJ_REQUIRE(shutdownTask == kj::none, "already called shutdownWrite()");
-
-    // SSL_write() with a zero-sized input returns 0, but a 0 return is documented as indicating
-    // an error. So, we need to avoid zero-sized writes entirely.
-    while (first.size() == 0) {
-      if (rest.size() == 0) {
-        return kj::READY_NOW;
-      }
-      first = rest.front();
-      rest = rest.slice(1, rest.size());
     }
-
-    return sslCall([this,first]() { return SSL_write(ssl, first.begin(), first.size()); })
-        .then([this,first,rest](size_t n) -> kj::Promise<void> {
-      if (n == 0) {
-        return KJ_EXCEPTION(DISCONNECTED, "ssl connection ended during write");
-      } else if (n < first.size()) {
-        return writeInternal(first.slice(n, first.size()), rest);
-      } else if (rest.size() > 0) {
-        return writeInternal(rest[0], rest.slice(1, rest.size()));
-      } else {
-        return kj::READY_NOW;
-      }
-    });
   }
 
   template <typename Func>
-  kj::Promise<size_t> sslCall(Func&& func) {
-    auto result = func();
+  kj::Promise<size_t> sslCall(Func func) {
+    while (true) {
+      auto result = func();
+      if (result > 0) {
+        co_return result;
+      }
 
-    if (result > 0) {
-      return result;
-    } else {
       int error = SSL_get_error(ssl, result);
       switch (error) {
         case SSL_ERROR_ZERO_RETURN:
-          return constPromise<size_t, 0>();
+          co_return 0;
         case SSL_ERROR_WANT_READ:
-          return readBuffer.whenReady().then(
-              [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
+          co_await readBuffer.whenReady();
+          break;
         case SSL_ERROR_WANT_WRITE:
-          return writeBuffer.whenReady().then(
-              [this,func=kj::mv(func)]() mutable { return sslCall(kj::fwd<Func>(func)); });
+          co_await writeBuffer.whenReady();
+          break;
         case SSL_ERROR_SSL:
-          return getOpensslError();
+          throw getOpensslError();
         case SSL_ERROR_SYSCALL:
           if (result == 0) {
             // OpenSSL pre-3.0 reports unexpected disconnects this way. Note that 3.0+ report it
             // as SSL_ERROR_SSL with the reason SSL_R_UNEXPECTED_EOF_WHILE_READING, which is
             // handled in throwOpensslError().
-            return KJ_EXCEPTION(DISCONNECTED,
+            throw KJ_EXCEPTION(DISCONNECTED,
                 "peer disconnected without gracefully ending TLS session");
           } else {
             // According to documentation we shouldn't get here, because our BIO never returns an
             // "error". But in practice we do get here sometimes when the peer disconnects
             // prematurely.
-            return KJ_EXCEPTION(DISCONNECTED, "SSL unable to continue I/O");
+            throw KJ_EXCEPTION(DISCONNECTED, "SSL unable to continue I/O");
           }
         default:
           KJ_FAIL_ASSERT("unexpected SSL error code", error);
@@ -502,9 +483,8 @@ public:
   };
 
   Promise<Own<AsyncIoStream>> accept() override {
-    return acceptAuthenticated().then([](AuthenticatedStream&& stream) {
-      return kj::mv(stream.stream);
-    });
+    auto stream = co_await acceptAuthenticated();
+    co_return kj::mv(stream.stream);
   }
 
   Promise<AuthenticatedStream> acceptAuthenticated() override {
@@ -554,15 +534,12 @@ private:
   }
 
   Promise<void> acceptLoop() {
-    // Accept one connection and queue up the next accept on our TaskSet.
-
-    return inner->acceptAuthenticated().then(
-        [this](AuthenticatedStream&& stream) {
+    while (true) {
+      // Accept one connection and queue up the next accept on our TaskSet.
+      auto stream = co_await inner->acceptAuthenticated();
       onAcceptSuccess(kj::mv(stream));
-
       // Queue up the next accept loop immediately without waiting for SSL_accept()/wrapServer().
-      return acceptLoop();
-    });
+    }
   }
 
   TlsContext& tls;
@@ -587,10 +564,8 @@ public:
     //   So, we make some copies here.
     auto& tlsRef = tls;
     auto hostnameCopy = kj::str(hostname);
-    return inner->connect().then(
-        [&tlsRef,hostname=kj::mv(hostnameCopy)](Own<AsyncIoStream>&& stream) {
-      return tlsRef.wrapClient(kj::mv(stream), hostname);
-    });
+    auto stream = co_await inner->connect();
+    co_return co_await tlsRef.wrapClient(kj::mv(stream), hostnameCopy);
   }
 
   Promise<kj::AuthenticatedStream> connectAuthenticated() override {
@@ -599,10 +574,8 @@ public:
     //   So, we make some copies here.
     auto& tlsRef = tls;
     auto hostnameCopy = kj::str(hostname);
-    return inner->connectAuthenticated().then(
-        [&tlsRef, hostname = kj::mv(hostnameCopy)](kj::AuthenticatedStream stream) {
-      return tlsRef.wrapClient(kj::mv(stream), hostname);
-    });
+    auto stream = co_await inner->connectAuthenticated();
+    co_return co_await tlsRef.wrapClient(kj::mv(stream), hostnameCopy);
   }
 
   Own<ConnectionReceiver> listen() override {
@@ -677,11 +650,8 @@ public:
       }
     }
 
-    return inner.parseAddress(addr, portHint)
-        .then([this, hostname=kj::mv(hostname)](kj::Own<NetworkAddress>&& addr) mutable
-            -> kj::Own<kj::NetworkAddress> {
-      return kj::heap<TlsNetworkAddress>(tls, kj::mv(hostname), kj::mv(addr));
-    });
+    auto parsedAddr = co_await inner.parseAddress(addr, portHint);
+    co_return kj::heap<TlsNetworkAddress>(tls, kj::mv(hostname), kj::mv(parsedAddr));
   }
 
   Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
@@ -887,11 +857,8 @@ TlsContext::~TlsContext() noexcept(false) {
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
     kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
-  auto promise = conn->connect(expectedServerHostname);
-  return promise.then([conn=kj::mv(conn)]() mutable
-      -> kj::Own<kj::AsyncIoStream> {
-    return kj::mv(conn);
-  });
+  co_await conn->connect(expectedServerHostname);
+  co_return kj::mv(conn);
 }
 
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::AsyncIoStream> stream) {
@@ -902,20 +869,16 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
       return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
     }).exclusiveJoin(kj::mv(promise));
   }
-  return promise.then([conn=kj::mv(conn)]() mutable
-      -> kj::Own<kj::AsyncIoStream> {
-    return kj::mv(conn);
-  });
+  co_await promise;
+  co_return kj::mv(conn);
 }
 
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(
     kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname) {
   auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
-  auto promise = conn->connect(expectedServerHostname);
-  return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
-    auto id = conn->getIdentity(kj::mv(innerId));
-    return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
-  });
+  co_await conn->connect(expectedServerHostname);
+  auto id = conn->getIdentity(kj::mv(stream.peerIdentity));
+  co_return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
 }
 
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStream stream) {
@@ -926,10 +889,9 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
       return KJ_EXCEPTION(DISCONNECTED, "timed out waiting for client during TLS handshake");
     }).exclusiveJoin(kj::mv(promise));
   }
-  return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
-    auto id = conn->getIdentity(kj::mv(innerId));
-    return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
-  });
+  co_await promise;
+  auto id = conn->getIdentity(kj::mv(stream.peerIdentity));
+  co_return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
 }
 
 kj::Own<kj::ConnectionReceiver> TlsContext::wrapPort(kj::Own<kj::ConnectionReceiver> port) {
