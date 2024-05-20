@@ -4162,7 +4162,7 @@ KJ_TEST("HttpServer bad requests") {
   struct TestCase {
     kj::StringPtr request;
     kj::StringPtr expectedResponse;
-    bool expectWriteError;
+    bool expectWriteError = false;
   };
 
   static auto hugeHeaderRequest = kj::str(

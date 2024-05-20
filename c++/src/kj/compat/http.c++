@@ -1770,7 +1770,8 @@ private:
               co_return HttpHeaders::ProtocolError {
                   .statusCode = 431,
                   .statusMessage = "Request Header Fields Too Large",
-                  .description = "header too large." };
+                  .description = "header too large.",
+                  .rawContent = nullptr };
             }
             auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
             memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
