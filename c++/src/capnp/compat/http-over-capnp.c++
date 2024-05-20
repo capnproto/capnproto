@@ -808,7 +808,9 @@ public:
     auto params = context.getParams();
     auto host = params.getHost();
     kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
-    kj::HttpConnectSettings settings = { .useTls = params.getSettings().getUseTls()};
+    kj::HttpConnectSettings settings = {
+        .useTls = params.getSettings().getUseTls(),
+        .tlsStarter = kj::none };
     settings.tlsStarter = tlsStarter;
     auto headers = factory.headersToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();

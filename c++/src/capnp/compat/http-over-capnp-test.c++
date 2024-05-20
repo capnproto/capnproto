@@ -956,7 +956,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
   auto frontCapnpHttpClient = kj::newHttpClient(*frontCapnpHttpService);
 
   kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
-  kj::HttpConnectSettings settings = { .useTls = false };
+  kj::HttpConnectSettings settings = { .useTls = false, .tlsStarter = kj::none };
   settings.tlsStarter = tlsStarter;
 
   auto request = frontCapnpHttpClient->connect(
