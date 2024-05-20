@@ -1958,6 +1958,10 @@ public:
     for (size_t s = size_, i = 0; i < s; i++) { dst[i] = src[i]; } 
   }
 
+  inline Array<ArrayPtr<T>> split(const T& delim);
+  // Returns all non-empty continuos sequences not including `delim`.
+  // The function is actually implemented in `kj/vector.h`
+
 private:
   T* ptr;
   size_t size_;

@@ -149,6 +149,23 @@ inline auto KJ_STRINGIFY(const Vector<T>& v) -> decltype(toCharSequence(v.asPtr(
   return toCharSequence(v.asPtr());
 }
 
+template<typename T>
+Array<ArrayPtr<T>> ArrayPtr<T>::split(const T& delim) {
+  auto result = Vector<ArrayPtr<T>>();
+  for (ArrayPtr<T> rem = *this; rem != nullptr; ) {
+    KJ_IF_SOME(index, rem.findFirst(delim)) {
+      if (index > 0) {
+        result.add(rem.first(index));
+      }
+      rem = rem.slice(index + 1);
+    } else {
+      result.add(rem);
+      break;
+    }
+  }
+  return result.releaseAsArray();
+}
+
 }  // namespace kj
 
 KJ_END_HEADER
