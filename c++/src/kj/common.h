@@ -2194,12 +2194,30 @@ inline void memzero(T& t) {
   memset(&t, 0, sizeof(T));
 }
 
+namespace _ {
+template <size_t N>
+struct ByteLiteral {
+  // Helper class to implement _kjb suffix: constexpr is not allowed to cast `char*`
+  // to `unsigned char*`. To overcome this limitation every char needs to be cast individually
+  // (which is apparently ok for constexpr).
+  // This class may not contain any private members, or else you get a
+  // misleading compiler error.
+
+  constexpr ByteLiteral(const char (&init)[N]) {
+    for (auto i = 0; i < N-1; ++i) data[i] = (kj::byte)(init[i]);
+  }
+  constexpr size_t size() const { return N - 1; }
+  kj::byte data[N-1]; // do not store 0-terminator
+}; 
+}
+
 }  // namespace kj
 
-constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb(const char* str, size_t n) {
+template <kj::_::ByteLiteral s>
+constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb() {
   // "string"_kjb creates constexpr byte array pointer to the content of the string
   // WITHOUT the trailing 0.
-  return kj::ArrayPtr<const char>(str, n).asBytes();
+  return kj::ArrayPtr<const kj::byte>(s.data, s.size());
 };
 
 KJ_END_HEADER

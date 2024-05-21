@@ -1009,11 +1009,28 @@ static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine&>());
 static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine*>());
 
 KJ_TEST("_kjb") {
-  ArrayPtr<const byte> arr = "abc"_kjb;
-  KJ_EXPECT(arr.size() == 3);
-  KJ_EXPECT(arr[0] == 'a');
-  KJ_EXPECT(arr[1] == 'b');
-  KJ_EXPECT(arr[2] == 'c');
+  {
+    ArrayPtr<const byte> arr = "abc"_kjb;
+    KJ_EXPECT(arr.size() == 3);
+    KJ_EXPECT(arr[0] == 'a');
+    KJ_EXPECT(arr[1] == 'b');
+    KJ_EXPECT(arr[2] == 'c');
+    KJ_EXPECT(arr == "abc"_kjb);
+  }
+
+  {
+      // _kjb literals can be constexpr too
+    constexpr ArrayPtr<const byte> arr2 = "def"_kjb;
+    KJ_EXPECT(arr2.size() == 3);
+    KJ_EXPECT(arr2[0] == 'd');
+    KJ_EXPECT(arr2[1] == 'e');
+    KJ_EXPECT(arr2[2] == 'f');
+    KJ_EXPECT(arr2 == "def"_kjb);
+  }
+
+  // empty array
+  KJ_EXPECT(""_kjb.size() == 0);
+  KJ_EXPECT(""_kjb == nullptr);
 }
 
 KJ_TEST("arrayPtr()") {
