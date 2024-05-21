@@ -1,6 +1,6 @@
 **THIS IS THE V2 DEVELOPMENT BRANCH**
 
-On this branch, we may make breaking changes to the API at any time. Do not use this brach if you want stability. If you want "1.0 plus bug fixes", use the `master` branch.
+On this branch, we may make breaking changes to the API at any time. Do not use this branch if you want stability. If you want "1.0 plus bug fixes", use the `master` branch.
 
 For more, see the 1.0 release announcement:
 
