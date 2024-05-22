@@ -3105,6 +3105,7 @@ private:
       auto promiseAndPipeline = startCall(
           call.getInterfaceId(), call.getMethodId(), kj::mv(capability), context->addRef(), hints);
       tasks.add(promiseAndPipeline.promise
+          .attach(kj::mv(context))
           .then([](){}, [](kj::Exception&& exception) {
             KJ_LOG(ERROR, exception);
           })
