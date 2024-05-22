@@ -351,8 +351,10 @@ public:
 
   static void dispose(PromiseArenaMember* node) {
     PromiseArena* arena = node->arena;
+    // Defer the `delete` to protect against exception in `destroy()`.
+    // Reminder: `delete` automatically ignores null pointers
+    KJ_DEFER(delete arena);
     node->destroy();
-    delete arena;  // reminder: `delete` automatically ignores null pointers
   }
 
   template <typename T, typename D = PromiseDisposer, typename... Params>
