@@ -1764,12 +1764,20 @@ private:
     }
 
     RemotePromise<AnyPointer> send() override {
-      //if (callBuilder.getIsRealtime()) {
-      //  // In a situation involving a call being proxied over another connection, it could
-      //  // happen that send() is called for a realtime stream. In that case, redirect to
-      //  // sendStreaming() directly.
-      //  return RemotePromise<AnyPointer>(sendStreaming(), getDisabledPipeline());
-      //}
+      if (callBuilder.getIsRealtime()) {
+        // In a situation involving a call being proxied over another connection, it could
+        // happen that send() is called for a realtime stream. In that case, redirect to
+        // sendStreaming().
+        auto streamPromise = sendStreaming().then([]() {
+          auto response = kj::Own<RpcResponse>();
+          auto reader = response->getResults();
+          return Response<AnyPointer>(reader, kj::mv(response));
+        });
+
+        return RemotePromise<AnyPointer>(
+            kj::mv(streamPromise),
+            AnyPointer::Pipeline(getDisabledPipeline()));
+      }
 
       if (!connectionState->connection.is<Connected>()) {
         // Connection is broken.
