@@ -2207,8 +2207,18 @@ struct ByteLiteral {
     for (auto i = 0; i < N-1; ++i) data[i] = (kj::byte)(init[i]);
   }
   constexpr size_t size() const { return N - 1; }
+  constexpr const kj::byte* begin() const { return data; }
   kj::byte data[N-1]; // do not store 0-terminator
 }; 
+
+template<>
+struct ByteLiteral<1ul> {
+  // Empty string specialization to avoid `data` array of 0 size.
+  constexpr ByteLiteral(const char (&init)[1]) { }
+  constexpr size_t size() const { return 0; }
+  constexpr const kj::byte* begin() const { return nullptr; }
+};
+
 }
 
 }  // namespace kj
@@ -2217,7 +2227,7 @@ template <kj::_::ByteLiteral s>
 constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb() {
   // "string"_kjb creates constexpr byte array pointer to the content of the string
   // WITHOUT the trailing 0.
-  return kj::ArrayPtr<const kj::byte>(s.data, s.size());
+  return kj::ArrayPtr<const kj::byte>(s.begin(), s.size());
 };
 
 KJ_END_HEADER
