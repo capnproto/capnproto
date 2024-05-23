@@ -245,7 +245,7 @@ struct MainBuilder::Impl {
 
   struct CharArrayCompare {
     inline bool operator()(const ArrayPtr<const char>& a, const ArrayPtr<const char>& b) const {
-      int cmp = memcmp(a.begin(), b.begin(), min(a.size(), b.size()));
+      int cmp = a <=> b;
       if (cmp == 0) {
         return a.size() < b.size();
       } else {

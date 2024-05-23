@@ -1928,6 +1928,18 @@ public:
     return true;
   }
 
+  inline int operator<=>(const ArrayPtr& other) const {
+    size_t comparisonSize = kj::min(size_, other.size_);
+    if constexpr (isIntegral<RemoveConst<T>>()) {
+      return memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
+    } else {
+      for(size_t i = 0; i < comparisonSize; i++) {
+        if(int ret = (ptr[i] <=> other[i])) return ret;
+      }
+    }
+    return 0;
+  }
+
   template <typename... Attachments>
   Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
   // Like Array<T>::attach(), but also promotes an ArrayPtr to an Array. Generally the attachment
