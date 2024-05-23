@@ -12,6 +12,13 @@ on:
     - v2
     - 'release-*'
 
+env:
+  INSTALL_DEPS: |
+    install_deps() {
+      local clang=$1
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade -y build-essential git zlib1g-dev cmake libssl-dev clang-$clang libc++-$clang-dev libc++abi-$clang-dev
+    }
+
 jobs:
   Linux-musl:
     # Docker images are no longer cached on the 24.04 runner, use 22.04 instead
@@ -42,16 +49,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: install dependencies
-        # I observed 404s for some packages and added an `apt-get update`.
-        run: |
-            export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get update
-            sudo apt-get install --no-upgrade -y build-essential git zlib1g-dev cmake libssl-dev clang-${{ matrix.clang }} libc++-${{ matrix.clang }}-dev libc++abi-${{ matrix.clang }}-dev
+        run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
         run: |
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
             ${{ matrix.run-test }}
+  Linux-clang-sanitizers:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: [18]
+        config: [asan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: install dependencies
+        run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
+      - name: test
+        run: |
+            export CC=clang-${{ matrix.clang }}
+            export CXX=clang++-${{ matrix.clang }}
+            cd c++ && bazel test --verbose_failures --test_output=errors -k --config=${{ matrix.config }} //...
   MacOS:
     runs-on: macos-latest
     strategy:
