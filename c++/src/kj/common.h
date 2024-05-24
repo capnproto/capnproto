@@ -1928,18 +1928,19 @@ public:
     return true;
   }
 
-  //Lexographic difference function can be overriden for the type by defining <=> on your type
-  //Designed infer the size to compare as the minimum i.e. auto truncates the comparison
   inline int operator<=>(const ArrayPtr& other) const {
+    //Lexographic difference function 
     size_t comparisonSize = kj::min(size_, other.size_);
     if constexpr (isIntegral<RemoveConst<T>>()) {
-      return memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
+      int ret = memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
+      if(ret) return ret;
     } else {
       for(size_t i = 0; i < comparisonSize; i++) {
         if(int ret = (ptr[i] <=> other[i])) return ret;
       }
     }
-    return 0;
+    return size_ == other.size_ ? 0 :
+              size_ <  other.size_ ? -1 : 1;
   }
 
   template <typename... Attachments>
