@@ -41,3 +41,16 @@ build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 build --//src/kj:openssl=True
 build --//src/kj:zlib=True
 build --//src/kj:brotli=True
+
+build:no-omit-frame-pointer --copt="-fno-omit-frame-pointer"
+build:no-omit-frame-pointer --copt="-mno-omit-leaf-frame-pointer"
+
+build:sanitizers-common --copt="-Og"
+build:sanitizers-common --copt="-fno-optimize-sibling-calls"
+build:sanitizers-common --config=no-omit-frame-pointer
+# sanitizers often do work on shutdown, do it cleanly
+build:sanitizers-common --test_env=KJ_CLEAN_SHUTDOWN=1
+
+build:asan --config=sanitizers-common
+build:asan --copt="-fsanitize=address" --linkopt="-fsanitize=address"
+build:asan --test_env=ASAN_OPTIONS=abort_on_error=1
