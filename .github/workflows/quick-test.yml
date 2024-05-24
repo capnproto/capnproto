@@ -13,10 +13,12 @@ on:
     - 'release-*'
 
 env:
+  # We used to install some more packages here (build-essential, git, zlib1g-dev, cmake, libssl-dev),
+  # but those appear to already be present/not needed for either build.
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
-      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade -y build-essential git zlib1g-dev cmake libssl-dev clang-$clang libc++-$clang-dev libc++abi-$clang-dev
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev
     }
 
 jobs:
