@@ -243,12 +243,6 @@ struct MainBuilder::Impl {
 
   Arena arena;
 
-  struct CharArrayCompare {
-    inline bool operator()(const ArrayPtr<const char>& a, const ArrayPtr<const char>& b) const {
-      return a < b;
-    }
-  };
-
   struct Option {
     ArrayPtr<OptionName> names;
     bool hasArg;
@@ -263,7 +257,7 @@ struct MainBuilder::Impl {
   class OptionDisplayOrder;
 
   std::map<char, Option*> shortOptions;
-  std::map<ArrayPtr<const char>, Option*, CharArrayCompare> longOptions;
+  std::map<ArrayPtr<const char>, Option*> longOptions;
 
   struct SubCommand {
     Function<MainFunc()> func;
