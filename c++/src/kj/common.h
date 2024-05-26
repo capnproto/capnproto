@@ -1906,8 +1906,7 @@ public:
     return { reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T) };
   }
 
-  inline bool operator<=>(decltype(nullptr)) const { return size_ == 0 ? 0 : 1;}
-  inline bool operator==(decltype(nullptr)) const {return size_ == 0;}
+  inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
@@ -1928,6 +1927,12 @@ public:
       if (ptr[i] != other[i]) return false;
     }
     return true;
+  }
+
+  inline auto operator<=>(decltype(nullptr)) const { 
+    using ReturnType = decltype(ptr[0] <=> ptr[0]);
+    return size_ == 0 ? (ReturnType) std::strong_ordering::equal
+                      : (ReturnType) std::strong_ordering::greater;
   }
 
   inline auto operator<=>(const ArrayPtr& other) const {

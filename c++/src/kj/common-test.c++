@@ -819,10 +819,18 @@ KJ_TEST("ArrayPtr operator ==") {
 }
 
 KJ_TEST("ArrayPtr operator <=>") {
+  KJ_EXPECT(ArrayPtr<const int>({}) == nullptr);
+  KJ_EXPECT((ArrayPtr<const int>({}) <=> nullptr) == std::strong_ordering::equal);
+  KJ_EXPECT(ArrayPtr<const int>({123}) != nullptr);
+  KJ_EXPECT((ArrayPtr<const int>({123}) <=> nullptr) == std::strong_ordering::greater);
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) <=> ArrayPtr<const int>({123, 456})) == std::strong_ordering::equal);
+  KJ_EXPECT((ArrayPtr<const int>({123, 456}) == ArrayPtr<const int>({123, 456})));
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) <=> ArrayPtr<const int>({123, 457})) == std::strong_ordering::less);
+  KJ_EXPECT((ArrayPtr<const int>({123, 456}) < ArrayPtr<const int>({123, 457})));
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) <=> ArrayPtr<const int>({123, 321})) == std::strong_ordering::greater);
+  KJ_EXPECT((ArrayPtr<const int>({123, 456}) > ArrayPtr<const int>({123, 321})));
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) <=> ArrayPtr<const int>({123})) == std::strong_ordering::greater);
+  KJ_EXPECT((ArrayPtr<const int>({123, 456}) > ArrayPtr<const int>({123})));
 
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) <=> ArrayPtr<const short>({123, 456})) == std::strong_ordering::equal);
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) <=> ArrayPtr<const short>({123, 457})) == std::strong_ordering::less);
@@ -831,10 +839,16 @@ KJ_TEST("ArrayPtr operator <=>") {
 
   KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) <=>
              ArrayPtr<const char* const>({"foo", "bar"})) == std::strong_ordering::equal);
+  KJ_EXPECT(!(ArrayPtr<const StringPtr>({"foo", "bar"}) <
+             ArrayPtr<const char* const>({"foo", "bar"})));
   KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) <=>
              ArrayPtr<const char* const>({"foo", "baz"})) == std::strong_ordering::less);
+  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) <
+             ArrayPtr<const char* const>({"foo", "baz"})));
   KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) <=> 
              ArrayPtr<const char* const>({"foo"})) == std::strong_ordering::greater);
+  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) > 
+             ArrayPtr<const char* const>({"foo"})));
 
   // operator== should not use memcmp for double elements.
   double d[1] = { nan() };
