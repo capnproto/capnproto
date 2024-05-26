@@ -953,8 +953,36 @@ KJ_TEST("ArrayPtr operator <=>") {
              ArrayPtr<const char* const>({"foo"})));
   //string types
 
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) <=> ArrayPtr<const double>({0.0})) == std::partial_ordering::equivalent);
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) == ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0}) != ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) <= ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) >= ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0}) > ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0}) < ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({1.0}) <=> ArrayPtr<const double>({0.0})) == std::partial_ordering::greater);
+  KJ_EXPECT(!(ArrayPtr<const double>({1.0}) == ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({1.0}) != ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({1.0}) <= ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({1.0}) >= ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({1.0}) < ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({1.0}) > ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) <=> ArrayPtr<const double>({1.0})) == std::partial_ordering::less);
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0}) == ArrayPtr<const double>({1.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) != ArrayPtr<const double>({1.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) <= ArrayPtr<const double>({1.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0}) >= ArrayPtr<const double>({1.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0}) < ArrayPtr<const double>({1.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0}) > ArrayPtr<const double>({1.0})));
+
   double d[1] = { nan() };
   KJ_EXPECT((ArrayPtr<double>(d, 1) <=> ArrayPtr<double>(d, 1)) == std::partial_ordering::unordered);
+  KJ_EXPECT(!(ArrayPtr<double>(d, 1) == ArrayPtr<double>(d, 1)));
+  KJ_EXPECT((ArrayPtr<double>(d, 1) != ArrayPtr<double>(d, 1)));
+  KJ_EXPECT(!(ArrayPtr<double>(d, 1) <= ArrayPtr<double>(d, 1)));
+  KJ_EXPECT(!(ArrayPtr<double>(d, 1) >= ArrayPtr<double>(d, 1)));
+  KJ_EXPECT(!(ArrayPtr<double>(d, 1) < ArrayPtr<double>(d, 1)));
+  KJ_EXPECT(!(ArrayPtr<double>(d, 1) > ArrayPtr<double>(d, 1)));
   // operator== should not use memcmp for double elements.
 }
 

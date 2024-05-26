@@ -1956,7 +1956,7 @@ public:
     }
     return size_ == other.size_ ? (ReturnType) std::strong_ordering::equal 
           : size_ <  other.size_ ? (ReturnType) std::strong_ordering::less 
-          : std::strong_ordering::greater;
+          : (ReturnType) std::strong_ordering::greater;
   }
 
   template <typename U>
