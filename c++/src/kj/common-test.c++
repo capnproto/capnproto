@@ -907,6 +907,13 @@ KJ_TEST("ArrayPtr operator <=>") {
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) >= ArrayPtr<const short>({123})));
   KJ_EXPECT(!(ArrayPtr<const int>({123, 456}) < ArrayPtr<const short>({123})));
   KJ_EXPECT((ArrayPtr<const int>({123, 456}) > ArrayPtr<const short>({123})));
+  KJ_EXPECT((ArrayPtr<const int>({124}) <=> ArrayPtr<const short>({123})) == std::strong_ordering::greater);
+  KJ_EXPECT(!(ArrayPtr<const int>({124}) == ArrayPtr<const short>({123})));
+  KJ_EXPECT((ArrayPtr<const int>({124}) != ArrayPtr<const short>({123})));
+  KJ_EXPECT(!(ArrayPtr<const int>({124}) <= ArrayPtr<const short>({123})));
+  KJ_EXPECT((ArrayPtr<const int>({124}) >= ArrayPtr<const short>({123})));
+  KJ_EXPECT(!(ArrayPtr<const int>({124}) < ArrayPtr<const short>({123})));
+  KJ_EXPECT((ArrayPtr<const int>({124}) > ArrayPtr<const short>({123})));
   //different type
 
   KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) <=>
@@ -974,6 +981,13 @@ KJ_TEST("ArrayPtr operator <=>") {
   KJ_EXPECT(!(ArrayPtr<const double>({0.0}) >= ArrayPtr<const double>({1.0})));
   KJ_EXPECT((ArrayPtr<const double>({0.0}) < ArrayPtr<const double>({1.0})));
   KJ_EXPECT(!(ArrayPtr<const double>({0.0}) > ArrayPtr<const double>({1.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0, 0.0}) <=> ArrayPtr<const double>({0.0})) == std::partial_ordering::greater);
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0, 0.0}) == ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0, 0.0}) != ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0, 0.0}) <= ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0, 0.0}) >= ArrayPtr<const double>({0.0})));
+  KJ_EXPECT(!(ArrayPtr<const double>({0.0, 0.0}) < ArrayPtr<const double>({0.0})));
+  KJ_EXPECT((ArrayPtr<const double>({0.0, 0.0}) > ArrayPtr<const double>({0.0})));
 
   double d[1] = { nan() };
   KJ_EXPECT((ArrayPtr<double>(d, 1) <=> ArrayPtr<double>(d, 1)) == std::partial_ordering::unordered);

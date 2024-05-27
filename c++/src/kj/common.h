@@ -1923,7 +1923,7 @@ public:
   template <typename U>
   inline bool operator==(const ArrayPtr<U>& other) const {
     if (size_ != other.size()) return false;
-    for (size_t i = 1; i < size_; i++) {
+    for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
     }
     return true;
