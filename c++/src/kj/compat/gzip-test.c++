@@ -276,8 +276,7 @@ KJ_TEST("gzip huge round trip") {
   GzipInputStream gzipIn(rawInput);
   auto decompressed = gzipIn.readAllBytes();
 
-  KJ_ASSERT(decompressed.size() == bytes.size());
-  KJ_ASSERT(memcmp(bytes.begin(), decompressed.begin(), bytes.size()) == 0);
+  KJ_ASSERT(bytes ==  decompressed);
 }
 
 KJ_TEST("async gzip compression") {
@@ -347,8 +346,7 @@ KJ_TEST("async gzip huge round trip") {
   GzipAsyncInputStream gzipIn(rawInput);
   auto decompressed = gzipIn.readAllBytes().wait(io.waitScope);
 
-  KJ_ASSERT(decompressed.size() == bytes.size());
-  KJ_ASSERT(memcmp(bytes.begin(), decompressed.begin(), bytes.size()) == 0);
+  KJ_ASSERT(bytes == decompressed);
 }
 
 }  // namespace

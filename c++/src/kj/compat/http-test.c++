@@ -524,7 +524,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
     }
 
     auto actual = buffer.first(amount);
-    if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
+    if (actual != expected.asBytes().first(amount)) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
     }
 
@@ -544,7 +544,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::ArrayPtr<const byte> 
     }
 
     auto actual = buffer.first(amount);
-    if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
+    if (actual != expected.first(amount)) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
     }
 

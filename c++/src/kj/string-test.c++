@@ -309,12 +309,12 @@ KJ_TEST("parsing 'nan' returns canonical NaN value") {
   {
     double parsedNan = StringPtr("NaN").parseAs<double>();
     double canonicalNan = kj::nan();
-    KJ_EXPECT(memcmp(&parsedNan, &canonicalNan, sizeof(parsedNan)) == 0);
+    KJ_EXPECT(kj::arrayPtr(parsedNan).asBytes() == kj::arrayPtr(canonicalNan).asBytes());
   }
   {
     float parsedNan = StringPtr("NaN").parseAs<float>();
     float canonicalNan = kj::nan();
-    KJ_EXPECT(memcmp(&parsedNan, &canonicalNan, sizeof(parsedNan)) == 0);
+    KJ_EXPECT(kj::arrayPtr(parsedNan).asBytes() == kj::arrayPtr(canonicalNan).asBytes());
   }
 }
 

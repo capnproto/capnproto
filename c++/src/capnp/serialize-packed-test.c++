@@ -126,7 +126,7 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<cons
     EXPECT_TRUE(pipe.allRead());
   }
 
-  if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
+  if (roundTrip != unpacked) {
     KJ_FAIL_ASSERT("Tried to unpack `packed`, expected `unpacked`, got `roundTrip`",
                    packed, unpacked, roundTrip);
     return;
@@ -141,7 +141,7 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<cons
       EXPECT_TRUE(pipe.allRead());
     }
 
-    if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
+    if (roundTrip != unpacked) {
       KJ_FAIL_ASSERT("Tried to unpack `packed`, expected `unpacked`, got `roundTrip`",
                      packed, blockSize, unpacked, roundTrip);
     }
@@ -185,7 +185,7 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<cons
     PackedInputStream packedIn(pipe);
     packedIn.InputStream::read(roundTrip);
 
-    if (memcmp(roundTrip.begin(), unpacked.begin(), unpacked.size()) != 0) {
+    if (roundTrip != unpacked) {
       KJ_FAIL_ASSERT("Tried to unpack `packed`, expected `unpacked`, got `roundTrip`",
                      packed, i, unpacked, roundTrip);
     }

@@ -53,12 +53,7 @@ KJ_TEST("WebSocketMessageStream") {
           auto oldSegment = originalSegments[i];
           auto newSegment = result.reader->getSegment(i);
 
-          KJ_ASSERT(oldSegment.size() == newSegment.size());
-          KJ_ASSERT(memcmp(
-                &oldSegment[0],
-                &newSegment[0],
-                oldSegment.size() * sizeof(capnp::word)
-                ) == 0);
+          KJ_ASSERT(oldSegment.asBytes() == newSegment.asBytes());
         }
         return kj::READY_NOW;
       } else {

@@ -1294,7 +1294,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
     }
 
     auto actual = buffer.first(amount);
-    if (memcmp(actual.begin(), expected.begin(), actual.size()) != 0) {
+    if (!expected.asArray().startsWith(actual)) {
       KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
     }
 
@@ -2218,8 +2218,7 @@ KJ_TEST("Userland tee concurrent read") {
   KJ_EXPECT(leftPromise.wait(ws) == 6);
   KJ_EXPECT(rightPromise.wait(ws) == 6);
 
-  KJ_EXPECT(memcmp(leftBuf, "foobar", 6) == 0);
-  KJ_EXPECT(memcmp(leftBuf, "foobar", 6) == 0);
+  KJ_EXPECT(leftBuf == "foobar"_kjb, 6);
 }
 
 KJ_TEST("Userland tee cancel and restart read") {
@@ -2285,14 +2284,14 @@ KJ_TEST("Userland tee subsequent other-branch reads are READY_NOW") {
   KJ_EXPECT(!leftPromise.poll(ws));
   pipe.out->write("foobar", 6).wait(ws);
   leftPromise.wait(ws);
-  KJ_EXPECT(memcmp(leftBuf, "foobar", 6) == 0);
+  KJ_EXPECT(leftBuf == "foobar"_kjb);
 
   uint8_t rightBuf[6] = { 0 };
   auto rightPromise = right->tryRead(rightBuf, 6, 6);
   // The left read promise was fulfilled, so there SHOULD be buffered data.
   KJ_EXPECT(rightPromise.poll(ws));
   rightPromise.wait(ws);
-  KJ_EXPECT(memcmp(rightBuf, "foobar", 6) == 0);
+  KJ_EXPECT(rightBuf == "foobar"_kjb);
 }
 
 KJ_TEST("Userland tee read EOF propagation") {
@@ -2316,13 +2315,13 @@ KJ_TEST("Userland tee read EOF propagation") {
   pipe.out = nullptr;
 
   KJ_EXPECT(leftPromise.wait(ws) == 6);
-  KJ_EXPECT(memcmp(leftBuf, "foobar", 6) == 0);
+  KJ_EXPECT(kj::arrayPtr(leftBuf, 6) == "foobar"_kjb);
 
   // And we should see a short read here, too.
   uint8_t rightBuf[7] = { 0 };
   auto rightPromise = right->tryRead(rightBuf, size(rightBuf), size(rightBuf));
   KJ_EXPECT(rightPromise.wait(ws) == 6);
-  KJ_EXPECT(memcmp(rightBuf, "foobar", 6) == 0);
+  KJ_EXPECT(kj::arrayPtr(rightBuf, 6) == "foobar"_kjb);
 
   // Further reads should all be short.
   KJ_EXPECT(left->tryRead(leftBuf, 1, size(leftBuf)).wait(ws) == 0);
@@ -2351,7 +2350,7 @@ KJ_TEST("Userland tee read exception propagation") {
   // Destroying the output side should force a fulfillment of the read (since we reached minBytes).
   pipe.out = nullptr;
   KJ_EXPECT(leftPromise.wait(ws) == 6);
-  KJ_EXPECT(memcmp(leftBuf, "foobar", 6) == 0);
+  KJ_EXPECT(kj::arrayPtr(leftBuf, 6) == "foobar"_kjb);
 
   // The next read sees the exception.
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
@@ -2365,7 +2364,7 @@ KJ_TEST("Userland tee read exception propagation") {
   uint8_t rightBuf[7] = { 0 };
   auto rightPromise = right->tryRead(rightBuf, size(rightBuf), size(rightBuf));
   KJ_EXPECT(rightPromise.wait(ws) == 6);
-  KJ_EXPECT(memcmp(rightBuf, "foobar", 6) == 0);
+  KJ_EXPECT(kj::arrayPtr(rightBuf, 6) == "foobar"_kjb);
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
       right->tryRead(rightBuf, 1, size(leftBuf)).ignoreResult().wait(ws));
 
@@ -2481,7 +2480,7 @@ KJ_TEST("Userland tee read stress test") {
     }
   }
 
-  KJ_EXPECT(memcmp(leftBuffer.begin(), bigText.begin(), leftBuffer.size()) == 0);
+  KJ_EXPECT(leftBuffer == bigText.asBytes());
   KJ_EXPECT(right->readAllText().wait(ws) == bigText);
 }
 
@@ -2873,7 +2872,7 @@ KJ_TEST("Userland tee buffer size limit") {
     // The first read on the left pipe will succeed.
     auto leftPromise = leftPipe.in->tryRead(leftBuf, 1, 11);
     KJ_EXPECT(leftPromise.wait(ws) == 2);
-    KJ_EXPECT(memcmp(leftBuf, text.begin(), 2) == 0);
+    KJ_EXPECT(kj::arrayPtr(leftBuf, 2) == text.first(2));
 
     // But the second will block until we relieve pressure on the right pipe.
     leftPromise = leftPipe.in->tryRead(leftBuf + 2, 1, 9);
@@ -2882,17 +2881,17 @@ KJ_TEST("Userland tee buffer size limit") {
     // Relieve the right pipe pressure ...
     auto rightPromise = rightPipe.in->tryRead(rightBuf, 1, 11);
     KJ_EXPECT(rightPromise.wait(ws) == 2);
-    KJ_EXPECT(memcmp(rightBuf, text.begin(), 2) == 0);
+    KJ_EXPECT(kj::arrayPtr(rightBuf, 2) == text.first(2));
 
     // Now the second left pipe read will complete.
     KJ_EXPECT(leftPromise.wait(ws) == 2);
-    KJ_EXPECT(memcmp(leftBuf, text.begin(), 4) == 0);
+    KJ_EXPECT(kj::arrayPtr(leftBuf, 4) == text.first(4));
 
     // Leapfrog the left branch with the right. There should be 2 bytes in the buffer, so we can
     // demand a total of 4.
     rightPromise = rightPipe.in->tryRead(rightBuf + 2, 4, 9);
     KJ_EXPECT(rightPromise.wait(ws) == 4);
-    KJ_EXPECT(memcmp(rightBuf, text.begin(), 6) == 0);
+    KJ_EXPECT(kj::arrayPtr(rightBuf, 6) == text.first(6));
 
     // Leapfrog the right with the left. We demand the entire rest of the stream, so this should
     // block. Note that a regular read for this amount on one of the tee branches directly would
@@ -2905,10 +2904,10 @@ KJ_TEST("Userland tee buffer size limit") {
     rightPromise = rightPipe.in->tryRead(rightBuf + 6, 5, 5);
 
     KJ_EXPECT(leftPromise.wait(ws) == 7);
-    KJ_EXPECT(memcmp(leftBuf, text.begin(), 11) == 0);
+    KJ_EXPECT(kj::arrayPtr(leftBuf, 11) == text.first(11));
 
     KJ_EXPECT(rightPromise.wait(ws) == 5);
-    KJ_EXPECT(memcmp(rightBuf, text.begin(), 11) == 0);
+    KJ_EXPECT(kj::arrayPtr(rightBuf, 11) == text.first(11));
   }
 }
 
