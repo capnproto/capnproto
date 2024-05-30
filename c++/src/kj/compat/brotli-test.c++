@@ -318,8 +318,7 @@ KJ_TEST("brotli huge round trip") {
   BrotliInputStream brotliIn(rawInput);
   auto decompressed = brotliIn.readAllBytes();
 
-  KJ_ASSERT(decompressed.size() == bytes.size());
-  KJ_ASSERT(memcmp(bytes.begin(), decompressed.begin(), bytes.size()) == 0);
+  KJ_ASSERT(bytes == decompressed);
 }
 
 KJ_TEST("async brotli compression") {
@@ -388,8 +387,7 @@ KJ_TEST("async brotli huge round trip") {
   BrotliAsyncInputStream brotliIn(rawInput);
   auto decompressed = brotliIn.readAllBytes().wait(io.waitScope);
 
-  KJ_ASSERT(decompressed.size() == bytes.size());
-  KJ_ASSERT(memcmp(bytes.begin(), decompressed.begin(), bytes.size()) == 0);
+  KJ_ASSERT(bytes == decompressed);
 }
 
 }  // namespace
