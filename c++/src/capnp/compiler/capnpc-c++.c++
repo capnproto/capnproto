@@ -472,7 +472,7 @@ private:
       }
     }
 
-    if (result.size() == 4 && memcmp(result.begin(), "NULL", 4) == 0) {
+    if (result == "NULL"_kjb) {
       // NULL probably collides with a macro.
       result.add('_');
     }
