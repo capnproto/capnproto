@@ -111,7 +111,7 @@ bool CidrRange::matches(const struct sockaddr* addr) const {
       if (addr->sa_family == AF_INET6) {
         otherBits = reinterpret_cast<const struct sockaddr_in6*>(addr)->sin6_addr.s6_addr;
         static constexpr byte V6MAPPED[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
-        if (memcmp(otherBits, V6MAPPED, sizeof(V6MAPPED)) == 0) {
+        if (arrayPtr(otherBits, sizeof(V6MAPPED)) == V6MAPPED) {
           // We're an ipv4 range and the address is ipv6, but it's a "v6 mapped" address, meaning
           // it's equivalent to an ipv4 address. Try to match against the ipv4 part.
           otherBits = otherBits + sizeof(V6MAPPED);
@@ -137,7 +137,7 @@ bool CidrRange::matches(const struct sockaddr* addr) const {
       KJ_UNREACHABLE;
   }
 
-  if (memcmp(bits, otherBits, bitCount / 8) != 0) return false;
+  if (arrayPtr(bits).first(bitCount / 8) != arrayPtr(otherBits, bitCount / 8)) return false;
 
   return bitCount == 128 ||
       bits[bitCount / 8] == (otherBits[bitCount / 8] & (0xff00 >> (bitCount % 8)));
