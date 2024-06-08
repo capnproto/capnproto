@@ -2064,46 +2064,6 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation locatio
   return true;
 }
 
-Promise<void> yield() {
-  class YieldPromiseNode final: public _::PromiseNode {
-  public:
-    void destroy() override {}
-
-    void onReady(_::Event* event) noexcept override {
-      if (event) event->armBreadthFirst();
-    }
-    void get(_::ExceptionOrValue& output) noexcept override {
-      output.as<_::Void>() = _::Void();
-    }
-    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-      builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
-    }
-  };
-
-  static YieldPromiseNode NODE;
-  return _::PromiseNode::to<Promise<void>>(OwnPromiseNode(&NODE));
-}
-
-Promise<void> yieldHarder() {
-  class YieldHarderPromiseNode final: public _::PromiseNode {
-  public:
-    void destroy() override {}
-
-    void onReady(_::Event* event) noexcept override {
-      if (event) event->armLast();
-    }
-    void get(_::ExceptionOrValue& output) noexcept override {
-      output.as<_::Void>() = _::Void();
-    }
-    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-      builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
-    }
-  };
-
-  static YieldHarderPromiseNode NODE;
-  return _::PromiseNode::to<Promise<void>>(OwnPromiseNode(&NODE));
-}
-
 OwnPromiseNode readyNow() {
   class ReadyNowPromiseNode: public ImmediatePromiseNodeBase {
     // This is like `ConstPromiseNode<Void, Void{}>`, but the compiler won't let me pass a literal
@@ -2880,6 +2840,46 @@ Promise<void> joinPromisesFailFast(Array<Promise<void>>&& promises, SourceLocati
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<_::Void>>(promises.size()), location,
       _::ArrayJoinBehavior::EAGER));
+}
+
+Promise<void> yield() {
+  class YieldPromiseNode final: public _::PromiseNode {
+  public:
+    void destroy() override {}
+
+    void onReady(_::Event* event) noexcept override {
+      if (event) event->armBreadthFirst();
+    }
+    void get(_::ExceptionOrValue& output) noexcept override {
+      output.as<_::Void>() = _::Void();
+    }
+    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+      builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
+    }
+  };
+
+  static YieldPromiseNode NODE;
+  return _::PromiseNode::to<Promise<void>>(_::OwnPromiseNode(&NODE));
+}
+
+Promise<void> yieldUntilQueueEmpty() {
+  class YieldUntilQueueEmptyPromiseNode final: public _::PromiseNode {
+  public:
+    void destroy() override {}
+
+    void onReady(_::Event* event) noexcept override {
+      if (event) event->armLast();
+    }
+    void get(_::ExceptionOrValue& output) noexcept override {
+      output.as<_::Void>() = _::Void();
+    }
+    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+      builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
+    }
+  };
+
+  static YieldUntilQueueEmptyPromiseNode NODE;
+  return _::PromiseNode::to<Promise<void>>(_::OwnPromiseNode(&NODE));
 }
 
 namespace _ {  // (private)

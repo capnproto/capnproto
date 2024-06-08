@@ -558,7 +558,7 @@ KJ_TEST("call own thread's executor") {
 
   KJ_EXPECT_THROW_MESSAGE(
       "can't call executeSync() on own thread's executor with a promise-returning function",
-      executor.executeSync([]() { return kj::evalLater([]() {}); }));
+      executor.executeSync([]() { return kj::yield(); }));
 
   {
     uint i = executor.executeAsync([]() {

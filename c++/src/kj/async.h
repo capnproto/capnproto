@@ -462,6 +462,14 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
 
+Promise<void> yield();
+// Like `eval()`, but without a function to be evaluated. Useful for yielding control temporarily
+// to serialize actions or schedule other actions for a later time using promise continuations.
+
+Promise<void> yieldUntilQueueEmpty();
+// Like `evalLast()`, but without a function to be evaluated. Useful for yielding control until the
+// event queue is otherwise completely empty and the thread is about to suspend waiting for I/O.
+
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();
 // If the event loop is currently running in this thread, get a trace back through the promise

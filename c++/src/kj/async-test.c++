@@ -1061,7 +1061,7 @@ TEST(Async, TaskSetOnEmpty) {
 
   auto paf = newPromiseAndFulfiller<void>();
   tasks.add(kj::mv(paf.promise));
-  tasks.add(evalLater([]() {}));
+  tasks.add(yield());
 
   KJ_EXPECT(!tasks.isEmpty());
 
@@ -1160,13 +1160,13 @@ TEST(Async, EagerlyEvaluate) {
   Promise<void> promise = Promise<void>(READY_NOW).then([&]() {
     called = true;
   });
-  evalLater([]() {}).wait(waitScope);
+  yield().wait(waitScope);
 
   EXPECT_FALSE(called);
 
   promise = promise.eagerlyEvaluate(nullptr);
 
-  evalLater([]() {}).wait(waitScope);
+  yield().wait(waitScope);
 
   EXPECT_TRUE(called);
 }
@@ -1190,7 +1190,7 @@ TEST(Async, Detach) {
   EXPECT_FALSE(ran2);
   EXPECT_FALSE(ran3);
 
-  evalLater([]() {}).wait(waitScope);
+  yield().wait(waitScope);
 
   EXPECT_FALSE(ran1);
   EXPECT_TRUE(ran2);
@@ -1219,7 +1219,7 @@ TEST(Async, SetRunnable) {
   EXPECT_EQ(0, port.callCount);
 
   {
-    auto promise = evalLater([]() {}).eagerlyEvaluate(nullptr);
+    auto promise = yield().eagerlyEvaluate(nullptr);
 
     EXPECT_TRUE(port.runnable);
     loop.run(1);
@@ -1236,7 +1236,7 @@ TEST(Async, SetRunnable) {
     auto promise = paf.promise.then([]() {}).eagerlyEvaluate(nullptr);
     EXPECT_FALSE(port.runnable);
 
-    auto promise2 = evalLater([]() {}).eagerlyEvaluate(nullptr);
+    auto promise2 = yield().eagerlyEvaluate(nullptr);
     paf.fulfiller->fulfill();
 
     EXPECT_TRUE(port.runnable);

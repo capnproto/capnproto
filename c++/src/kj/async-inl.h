@@ -1482,12 +1482,12 @@ inline Promise<T> constPromise() {
 
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
-  return _::yield().then(kj::fwd<Func>(func));
+  return yield().then(kj::fwd<Func>(func));
 }
 
 template <typename Func>
 inline PromiseForResult<Func, void> evalLast(Func&& func) {
-  return _::yieldHarder().then(kj::fwd<Func>(func));
+  return yieldUntilQueueEmpty().then(kj::fwd<Func>(func));
 }
 
 template <typename Func>
