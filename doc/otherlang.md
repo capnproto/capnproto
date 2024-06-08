@@ -47,6 +47,7 @@ new languages.
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 * [VS Code Syntax Highlighter](https://marketplace.visualstudio.com/items?itemName=xmonader.vscode-capnp) by [@xmonader](https://github.com/xmonader)
 * [IntelliJ Syntax Highlighter](https://github.com/xmonader/sercapnp) by [@xmonader](https://github.com/xmonader)
+* [RPC Tracer](https://github.com/toyota-digital-cockpit-pf/capnp-trace) by [@t-kondo-tmc](https://github.com/t-kondo-tmc)
 
 ## Contribute Your Own!
 
