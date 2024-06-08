@@ -420,29 +420,19 @@ static kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
   return PromiseDisposer::alloc<T>(kj::fwd<Params>(params)...);
 }
 
-template <typename T, bool arena = PromiseDisposer::canArenaAllocate<T>()>
-struct FreePromiseNode;
-template <typename T>
-struct FreePromiseNode<T, true> {
-  static inline void free(T* ptr) {
-    // The object will have been allocated in an arena, so we only want to run the destructor.
-    // The arena's memory will be freed separately.
-    kj::dtor(*ptr);
-  }
-};
-template <typename T>
-struct FreePromiseNode<T, false> {
-  static inline void free(T* ptr) {
-    // The object will have been allocated separately on the heap.
-    return delete ptr;
-  }
-};
-
 template <typename T>
 static void freePromise(T* ptr) {
   // Free a PromiseNode originally allocated using `allocPromise<T>()`. The implementation of
   // PromiseNode::destroy() must call this for any type that is allocated using allocPromise().
-  FreePromiseNode<T>::free(ptr);
+
+  if constexpr (PromiseDisposer::canArenaAllocate<T>()) {
+    // The object will have been allocated in an arena, so we only want to run the destructor.
+    // The arena's memory will be freed separately.
+    kj::dtor(*ptr);
+  } else {
+    // The object will have been allocated separately on the heap.
+    return delete ptr;
+  }
 }
 
 template <typename T, typename... Params>
