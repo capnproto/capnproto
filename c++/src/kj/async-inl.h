@@ -693,6 +693,15 @@ private:
 
   virtual void getImpl(ExceptionOrValue& output) = 0;
 
+  template <typename T>
+  ExceptionOr<T> handle(T&& value) {
+    return kj::mv(value);
+  }
+  template <typename T>
+  ExceptionOr<T> handle(PropagateException::Bottom&& value) {
+    return ExceptionOr<T>(false, value.asException());
+  }
+
   template <typename, typename, typename, typename>
   friend class TransformPromiseNode;
 };
@@ -724,19 +733,12 @@ private:
     ExceptionOr<DepT> depResult;
     getDepResult(depResult);
     KJ_IF_SOME(depException, depResult.exception) {
-      output.as<T>() = handle(
+      output.as<T>() = handle<T>(
           MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
               errorHandler, kj::mv(depException)));
     } else KJ_IF_SOME(depValue, depResult.value) {
       output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
     }
-  }
-
-  ExceptionOr<T> handle(T&& value) {
-    return kj::mv(value);
-  }
-  ExceptionOr<T> handle(PropagateException::Bottom&& value) {
-    return ExceptionOr<T>(false, value.asException());
   }
 };
 
