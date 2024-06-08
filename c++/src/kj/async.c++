@@ -367,7 +367,7 @@ TaskSet::~TaskSet() noexcept(false) {
 }
 
 void TaskSet::add(Promise<void>&& promise) {
-  auto task = _::appendPromise<Task>(_::PromiseNode::from(kj::mv(promise)), *this);
+  auto task = _::PromiseDisposer::appendPromise<Task>(_::PromiseNode::from(kj::mv(promise)), *this);
   KJ_IF_SOME(head, tasks) {
     head->prev = &task->next;
     task->next = kj::mv(tasks);
