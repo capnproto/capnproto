@@ -60,7 +60,7 @@ class Function;
 //
 //     AddN adder2(2);
 //     Function<int(int, int)> f3 = kj::mv(adder2);
-//     // f3 owns an insatnce of AddN moved from `adder2`.  f3 may safely
+//     // f3 owns an instance of AddN moved from `adder2`.  f3 may safely
 //     // be moved out of the local scope.
 //
 // Additionally, a Function may be bound to a class method using KJ_BIND_METHOD(object, methodName).

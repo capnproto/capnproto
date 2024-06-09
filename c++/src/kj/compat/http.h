@@ -1142,7 +1142,7 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // `maskEntropySource` is used to generate cryptographically-random frame masks. If null, outgoing
 // frames will not be masked. Servers are required NOT to mask their outgoing frames, but clients
 // ARE required to do so. So, on the client side, you MUST specify an entropy source. The mask
-// must be crytographically random if the data being sent on the WebSocket may be malicious. The
+// must be cryptographically random if the data being sent on the WebSocket may be malicious. The
 // purpose of the mask is to prevent badly-written HTTP proxies from interpreting "things that look
 // like HTTP requests" in a message as being actual HTTP requests, which could result in cache
 // poisoning. See RFC6455 section 10.3.

@@ -3065,7 +3065,7 @@ KJ_TEST("WebSocket Compression String Parsing (populateUnverifiedConfig)") {
   KJ_ASSERT(clientBits == ""_kj);
   auto serverBits = KJ_ASSERT_NONNULL(config.serverMaxWindowBits);
   KJ_ASSERT(serverBits == "10"_kj);
-  // Valid config can be populated succesfully.
+  // Valid config can be populated successfully.
 
   const auto weirdButValidParameters =  "client_no_context_takeover; client_max_window_bits; "
                                         "server_max_window_bits=this_should_be_a_number"_kj;
@@ -3205,15 +3205,15 @@ KJ_TEST("WebSocket Compression String Parsing (findValidExtensionOffers)") {
                                 "client_max_window_bits, "
                               "permessage-invalid; " // Invalid ext name.
                                 "client_no_context_takeover, "
-                              "permessage-deflate; " // Invalid parmeter.
+                              "permessage-deflate; " // Invalid parameter.
                                 "invalid_parameter; "
                                 "client_max_window_bits; "
                                 "server_max_window_bits=10, "
-                              "permessage-deflate; " // Invalid parmeter value.
+                              "permessage-deflate; " // Invalid parameter value.
                                 "server_max_window_bits=should_be_a_number, "
-                              "permessage-deflate; " // Unexpected parmeter value.
+                              "permessage-deflate; " // Unexpected parameter value.
                                 "client_max_window_bits=true, "
-                              "permessage-deflate; " // Missing expected parmeter value.
+                              "permessage-deflate; " // Missing expected parameter value.
                                 "server_max_window_bits, "
                               "permessage-deflate; " // Invalid parameter value (too high).
                                 "client_max_window_bits=99, "
@@ -3269,15 +3269,15 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
   // Test that we can accept a valid offer from string of offers.
   constexpr auto extensions = "permessage-invalid; " // Invalid ext name.
                                 "client_no_context_takeover, "
-                              "permessage-deflate; " // Invalid parmeter.
+                              "permessage-deflate; " // Invalid parameter.
                                 "invalid_parameter; "
                                 "client_max_window_bits; "
                                 "server_max_window_bits=10, "
-                              "permessage-deflate; " // Invalid parmeter value.
+                              "permessage-deflate; " // Invalid parameter value.
                                 "server_max_window_bits=should_be_a_number, "
-                              "permessage-deflate; " // Unexpected parmeter value.
+                              "permessage-deflate; " // Unexpected parameter value.
                                 "client_max_window_bits=true, "
-                              "permessage-deflate; " // Missing expected parmeter value.
+                              "permessage-deflate; " // Missing expected parameter value.
                                 "server_max_window_bits, "
                               "permessage-deflate; " // Invalid parameter value (too high).
                                 "client_max_window_bits=99, "
@@ -7333,7 +7333,7 @@ KJ_TEST("CONNECT HTTP-tunneled-over-pipelined-CONNECT") {
   HttpClientSettings settings;
 
   auto request = client->connect(
-      "https://exmaple.org"_kj, HttpHeaders(connectHeaderTable), {});
+      "https://example.org"_kj, HttpHeaders(connectHeaderTable), {});
   auto conn = kj::mv(request.connection);
   auto proxyClient = newHttpClient(tunneledHeaderTable, *conn, settings).attach(kj::mv(conn));
 
@@ -7567,7 +7567,7 @@ KJ_TEST("Range header parsing") {
     // ===== Invalid =====
     // Check range with no start or end rejected
     {"bytes=-"_kjc,                   2},
-    // Check range wih no dash rejected
+    // Check range with no dash rejected
     {"bytes=0"_kjc,                   2},
     // Check empty range rejected
     {"bytes=0-1,"_kjc,                2},

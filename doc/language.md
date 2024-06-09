@@ -740,7 +740,7 @@ without changing the [canonical](encoding.html#canonicalization) encoding of a m
   within it are new.  In other words, a field can be replaced with a group or union containing an
   equivalent field and some new fields.  Note that when creating a union this way, this particular
   change is not fully forwards-compatible: if you create a message where one of the union's new
-  fields are set, and the message is read by an old program that dosen't know about the union, then
+  fields are set, and the message is read by an old program that doesn't know about the union, then
   it may expect the original field to be present, and if it tries to read that field, may see a
   garbage value or throw an exception. To avoid this problem, make sure to only use the new union
   members when talking to programs that know about the union. This caveat only applies when moving

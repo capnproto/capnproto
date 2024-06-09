@@ -8,7 +8,7 @@
 #
 # We've rewritten the inconsistency check code (from avahi), to work
 # more broadly.  In particular, it no longer assumes ld accepts -zdefs.
-# This caused a restructing of the code, but the functionality has only
+# This caused a restructuring of the code, but the functionality has only
 # changed a little.
 
 dnl @synopsis ACX_PTHREAD([ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])

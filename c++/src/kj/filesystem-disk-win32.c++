@@ -854,7 +854,7 @@ public:
     auto filename = nativePath(path);
 
     if (has(mode, WriteMode::CREATE)) {
-      // First try just cerating the node in-place.
+      // First try just creating the node in-place.
       KJ_WIN32_HANDLE_ERRORS(tryCreate(filename.begin())) {
         case ERROR_ALREADY_EXISTS:
         case ERROR_FILE_EXISTS:
@@ -1255,7 +1255,7 @@ public:
     } else if (mode == TransferMode::MOVE) {
       return tryCommitReplacement(toPath, rawFromPath, toMode, toPath);
     } else if (mode == TransferMode::COPY) {
-      // We can accellerate copies on Windows.
+      // We can accelerate copies on Windows.
 
       if (!has(toMode, WriteMode::CREATE)) {
         // Non-atomically verify that target exists. There's no way to make this atomic.

@@ -1100,7 +1100,7 @@ TEST(Rpc, Embargo) {
 }
 
 TEST(Rpc, EmbargoUnwrap) {
-  // Test that embargos properly block unwraping a capability using CapabilityServerSet.
+  // Test that embargos properly block unwrapping a capability using CapabilityServerSet.
 
   TestContext context;
 
