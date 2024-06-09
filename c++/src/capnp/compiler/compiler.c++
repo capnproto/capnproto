@@ -343,7 +343,7 @@ private:
   // Map of nodes by ID.
 
   std::unordered_map<uint64_t, schema::Node::SourceInfo::Reader> sourceInfoById;
-  // Map of SourceInfos by ID, including SourceInfos for groups and param sturcts (which are not
+  // Map of SourceInfos by ID, including SourceInfos for groups and param structs (which are not
   // listed in nodesById).
 
   std::map<kj::StringPtr, kj::Own<Node>> builtinDecls;

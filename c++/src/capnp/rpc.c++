@@ -2325,7 +2325,7 @@ private:
     // Once an incoming call has returned, we may need to replace the `PipelineHook` with one that
     // correctly handles the Tribble 4-way race condition. Namely, we must ensure that if the
     // response contained any capabilities pointing back out to the network, then any further
-    // pipelined calls received targetting those capabilities (as well as any Disembargo messages)
+    // pipelined calls received targeting those capabilities (as well as any Disembargo messages)
     // will resolve to the same network capability forever, *even if* that network capability is
     // itself a promise which later resolves to somewhere else.
   public:

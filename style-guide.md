@@ -380,7 +380,7 @@ We do NOT recommend disabling RTTI in your own code.
 
 ### Lambdas
 
-Lamba capture lists must never use `=` to specify "capture all by value", because this makes it hard to review the capture list for possible lifetime issues.
+Lambda capture lists must never use `=` to specify "capture all by value", because this makes it hard to review the capture list for possible lifetime issues.
 
 Capture lists *may* use `&` ("capture all by reference") but *only* in cases where it is known that the lambda will not outlive the current stack frame. In fact, they generally *should* use `&` in this case, to make clear that there are no lifetime issues to think about.
 

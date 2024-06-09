@@ -61,7 +61,7 @@ public:
 
   ~CapnpToKjWebSocketAdapter() noexcept(false) {
     // The peer dropped the capability, which means the WebSocket stream has ended. We want to
-    // tanslate this to a `disconnect()` call on the `kj::WebSocket`, if it is still around.
+    // translate this to a `disconnect()` call on the `kj::WebSocket`, if it is still around.
 
     // Null out our self-ref, if any.
     KJ_IF_SOME(s, selfRef) {
@@ -268,7 +268,7 @@ public:
   uint64_t receivedByteCount() override { return KJ_ASSERT_NONNULL(in)->receivedByteCount(); }
 
   kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
-    // TODO(someday): Optimzed pump is tricky with HttpOverCapnp, we may want to revist
+    // TODO(someday): Optimized pump is tricky with HttpOverCapnp, we may want to revisit
     // this but for now we always return none (indicating no preference).
     return kj::none;
   };

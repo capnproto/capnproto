@@ -51,7 +51,7 @@ KJ_TEST("canonicalize succeeds on empty struct") {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
 
-  canonicalize(root.asReader());  // Throws an exception on canoncalization failure.
+  canonicalize(root.asReader());  // Throws an exception on canonicalization failure.
 }
 
 KJ_TEST("data word with only its most significant bit set does not get truncated") {

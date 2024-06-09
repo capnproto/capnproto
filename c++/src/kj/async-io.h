@@ -1120,7 +1120,7 @@ class SecureNetworkWrapper {
   //   actually belongs to the responding server.
   // * No man-in-the-middle attacker can potentially see the bytes sent and received.
   //
-  // The typical implementation uses TLS. The object in this case could be configured to use cerain
+  // The typical implementation uses TLS. The object in this case could be configured to use certain
   // keys, certificates, etc. See kj/compat/tls.h for such an implementation.
   //
   // However, an implementation could use some other form of encryption, or might not need to use
@@ -1138,7 +1138,7 @@ public:
 
   virtual kj::Promise<kj::Own<kj::AsyncIoStream>> wrapClient(
       kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) = 0;
-  // Act as the client side of a connection. The given stream is already connecetd to a server, but
+  // Act as the client side of a connection. The given stream is already connected to a server, but
   // no authentication has occurred. This method will verify that the server actually is the given
   // hostname, then return the stream representing a secure transport to that server.
 

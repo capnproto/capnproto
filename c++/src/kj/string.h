@@ -356,7 +356,7 @@ public:
   inline explicit ConstString(Array<const char> buffer);
   // Does not copy.  Requires `buffer` ends with `\0`.
   inline explicit ConstString(String&& string): content(string.releaseArray()) {}
-  // Does not copy. Ownership is transfered.
+  // Does not copy. Ownership is transferred.
 
   inline operator ArrayPtr<const char>() const KJ_LIFETIMEBOUND;
   inline ArrayPtr<const char> asArray() const KJ_LIFETIMEBOUND;

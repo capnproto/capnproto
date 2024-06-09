@@ -219,7 +219,7 @@ public:
   // directly to the event loop via function calls rather than OS events. For example, if anyone
   // calls `fulfill()` on a `PromiseFulfiller`, thus queuing work to this event loop, it needs
   // to wake up. The EventPort achieves this by implicitly calling `wake()` if any work is queued
-  // while sleeping -- similar to a cross-thread wakup. NOTE: Queuing work like this while the
+  // while sleeping -- similar to a cross-thread wakeup. NOTE: Queuing work like this while the
   // event loop is asleep is only safe if the EventLoop is still bound to the thread by the
   // existence of a WaitScope. If you are destroying the WaitScope while sleeping, then you cannot
   // manipulate promises attached to this loop at all while it is asleep. (Cross-thread events,

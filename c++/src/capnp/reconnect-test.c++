@@ -176,7 +176,7 @@ KJ_TEST("lazyAutoReconnect() direct call (exercises newCall() / RequestHook)") {
   doAutoReconnectTest(ws, [](auto c) {return kj::mv(c);});
 }
 
-KJ_TEST("lazyAutoReconnect() initialies lazily") {
+KJ_TEST("lazyAutoReconnect() initializes lazily") {
   kj::EventLoop loop;
   kj::WaitScope ws(loop);
 

@@ -430,7 +430,7 @@ private:
     // All use cases of this helper below are also wrapped in `canceler.wrap()`, and fulfilling
     // `fulfiller` may cause the canceler to be canceled. It's possible the canceler will be
     // canceled before the exception even gets a chance to propagate out of the wrapped promise,
-    // which would have the effet of replacing the original exception with a non-useful
+    // which would have the effet of replacing the original exception with a useless
     // "operation canceled" exception. To avoid this, we must release the canceler before
     // fulfilling the fulfiller.
     return [&fulfiller, &canceler](kj::Exception&& e) {
@@ -447,7 +447,7 @@ private:
     // All use cases of this helper below are also wrapped in `canceler.wrap()`, and fulfilling
     // `fulfiller` may cause the canceler to be canceled. It's possible the canceler will be
     // canceled before the exception even gets a chance to propagate out of the wrapped promise,
-    // which would have the effet of replacing the original exception with a non-useful
+    // which would have the effet of replacing the original exception with a useless
     // "operation canceled" exception. To avoid this, we must release the canceler before
     // fulfilling the fulfiller.
     return [&fulfiller, &canceler](kj::Exception&& e) -> size_t {
@@ -465,7 +465,7 @@ private:
     // All use cases of this helper below are also wrapped in `canceler.wrap()`, and fulfilling
     // `fulfiller` may cause the canceler to be canceled. It's possible the canceler will be
     // canceled before the exception even gets a chance to propagate out of the wrapped promise,
-    // which would have the effet of replacing the original exception with a non-useful
+    // which would have the effet of replacing the original exception with a useless
     // "operation canceled" exception. To avoid this, we must release the canceler before
     // fulfilling the fulfiller.
     return [&fulfiller, &canceler](kj::Exception&& e) -> kj::Promise<T> {

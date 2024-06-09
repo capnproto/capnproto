@@ -357,7 +357,7 @@ KJ_TEST("InMemoryFile") {
     file->truncate(18);
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == kj::StringPtr("\0\0\0\0\0", 5));
 
-    // Can't grow past previoous capacity.
+    // Can't grow past previous capacity.
     KJ_EXPECT_THROW_MESSAGE("cannot resize the file backing store", file->truncate(100));
 
     clock.expectChanged(*file);

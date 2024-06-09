@@ -81,7 +81,7 @@ void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
   // usual signal-safety concerns. We can treat this more like a callback. So, we can just call
   // gotSignal() directly, no biggy.
 
-  // Note that, if somehow the signal hanlder is invoked when *not* running `epoll_pwait()`, then
+  // Note that, if somehow the signal handler is invoked when *not* running `epoll_pwait()`, then
   // `threadEventPort` will be null. We silently ignore the signal in this case. This should never
   // happen in normal execution, so you might argue we should assert-fail instead. However:
   // - We obviously can't throw from here, so we'd have to crash instead.
@@ -623,7 +623,7 @@ bool UnixEventPort::wait() {
   if (n < 0) {
     int error = errno;
     if (error == EINTR) {
-      // We received a singal. The signal handler may have queued an event to the event loop. Even
+      // We received a signal. The signal handler may have queued an event to the event loop. Even
       // if it didn't, we can't simply restart the epoll call because we need to recompute the
       // timeout. Instead, we pretend epoll_wait() returned zero events. This will cause the event
       // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
@@ -1133,7 +1133,7 @@ public:
       if (result != 0) {
         KJ_ASSERT(result == p);
 
-        // NOTE: The proc is automatically unregsitered from the kqueue on exit, so we should NOT
+        // NOTE: The proc is automatically unregistered from the kqueue on exit, so we should NOT
         //   attempt to unregister it here.
 
         pid = kj::none;
@@ -1172,7 +1172,7 @@ bool UnixEventPort::doKqueueWait(struct timespec* timeout) {
   if (n < 0) {
     int error = errno;
     if (error == EINTR) {
-      // We received a singal. The signal handler may have queued an event to the event loop. Even
+      // We received a signal. The signal handler may have queued an event to the event loop. Even
       // if it didn't, we can't simply restart the kevent call because we need to recompute the
       // timeout. Instead, we pretend kevent() returned zero events. This will cause the event
       // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.

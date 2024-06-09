@@ -131,7 +131,7 @@ bool checkForQemuEpollPwaitBug() {
   KJ_ASSERT(errno == EINTR);
 
 #if !__aarch64__
-  // qemu-user should only be used to execute aarch64 binaries so we should'nt see this bug
+  // qemu-user should only be used to execute aarch64 binaries so we shouldn't see this bug
   // elsewhere!
   KJ_ASSERT(qemuBugTestSignalHandlerRan);
 #endif
@@ -1126,14 +1126,14 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
   kj::EventLoop loop(port);
   kj::WaitScope ws(loop);
 
-  auto portIsReady = [&port](int timout = 0) {
+  auto portIsReady = [&port](int timeout = 0) {
     struct pollfd pfd;
     memset(&pfd, 0, sizeof(pfd));
     pfd.events = POLLIN;
     pfd.fd = port.getPollableFd();
 
     int n;
-    KJ_SYSCALL(n = poll(&pfd, 1, timout));
+    KJ_SYSCALL(n = poll(&pfd, 1, timeout));
     return n > 0;
   };
 

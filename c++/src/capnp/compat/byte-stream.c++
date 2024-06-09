@@ -398,7 +398,7 @@ public:
           // Ugh, we somehow ended up with a non-explicit-end stream forwarding to an explicit-end
           // stream, so we have to detach the end() call.
           auto promise = expEnd.end();
-          promise.detach([steram = kj::mv(kjStream)](kj::Exception&&){});
+          promise.detach([stream = kj::mv(kjStream)](kj::Exception&&){});
         }
 
         state = Ended();

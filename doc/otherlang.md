@@ -30,7 +30,7 @@ project's documentation for details.
 * [Java](https://github.com/capnproto/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [JavaScript](https://github.com/capnp-js/plugin/) by [@popham](https://github.com/popham)
 * [JavaScript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)
-* [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
+* [Lua](https://github.com/cloudflare/lua-capnproto) by [Cloudflare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
 * [Nim](https://github.com/zielmicha/capnp.nim) by [@zielmicha](https://github.com/zielmicha)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
 * [Scala](https://github.com/katis/capnp-scala) by [@katis](https://github.com/katis)
