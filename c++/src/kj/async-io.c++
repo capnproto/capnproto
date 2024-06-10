@@ -3046,6 +3046,11 @@ ArrayPtr<const CidrRange> privateCidrs() {
 }
 
 ArrayPtr<const CidrRange> reservedCidrs() {
+  // Address ranges reserved by RFCs for specific alternative protocols. These are not considered
+  // part of "public", "private", "network", nor "local". But, we will allow apps to explicitly
+  // allowlist CIDRs in this range if they really want, because some people actually use these
+  // ranges as if they were private ranges.
+
   static const CidrRange result[] = {
     "192.0.0.0/24"_kj,          // RFC6890 reserved for special protocols
     "224.0.0.0/4"_kj,           // RFC1112 multicast
@@ -3085,7 +3090,6 @@ NetworkFilter::NetworkFilter()
     : allowUnix(true), allowAbstractUnix(true) {
   allowCidrs.add(CidrRange::inet4({0,0,0,0}, 0));
   allowCidrs.add(CidrRange::inet6({}, {}, 0));
-  denyCidrs.addAll(reservedCidrs());
 }
 
 NetworkFilter::NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
@@ -3151,7 +3155,9 @@ bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
 
   if (allowPublic) {
     if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
-        !matchesAny(privateCidrs(), addr) && !matchesAny(localCidrs(), addr)) {
+        !matchesAny(privateCidrs(), addr) &&
+        !matchesAny(localCidrs(), addr) &&
+        !matchesAny(reservedCidrs(), addr)) {
       allowed = true;
       // Don't adjust allowSpecificity as this match has an effective specificity of zero.
     }
@@ -3159,7 +3165,8 @@ bool NetworkFilter::shouldAllow(const struct sockaddr* addr, uint addrlen) {
 
   if (allowNetwork) {
     if ((addr->sa_family == AF_INET || addr->sa_family == AF_INET6) &&
-        !matchesAny(localCidrs(), addr)) {
+        !matchesAny(localCidrs(), addr) &&
+        !matchesAny(reservedCidrs(), addr)) {
       allowed = true;
       // Don't adjust allowSpecificity as this match has an effective specificity of zero.
     }
