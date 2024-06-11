@@ -30,8 +30,8 @@ namespace kj { class AutoCloseFd; }
 
 namespace capnp {
 
-template <typename VatId, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 class VatNetwork;
 
 class MessageReader;
@@ -68,16 +68,18 @@ class RpcSystem: public _::RpcSystemBase {
   // `RpcSystem` given a `VatNetwork`.
 
 public:
-  template <typename ProvisionId, typename RecipientId,
-            typename ThirdPartyCapId, typename JoinResult>
+  template <typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+            typename ThirdPartyToContact, typename JoinResult>
   RpcSystem(
-      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+                 JoinResult>& network,
       kj::Maybe<Capability::Client> bootstrapInterface);
 
-  template <typename ProvisionId, typename RecipientId,
-            typename ThirdPartyCapId, typename JoinResult>
+  template <typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+            typename ThirdPartyToContact, typename JoinResult>
   RpcSystem(
-      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+                 JoinResult>& network,
       BootstrapFactory<VatId>& bootstrapFactory);
 
   RpcSystem(RpcSystem&& other) = default;
@@ -139,10 +141,11 @@ public:
   // without restarting. All servers should therefore call run() and handle failures in some way.
 };
 
-template <typename VatId, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId> makeRpcServer(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>& network,
     Capability::Client bootstrapInterface);
 // Make an RPC server.  Typical usage (e.g. in a main() function):
 //
@@ -153,18 +156,20 @@ RpcSystem<VatId> makeRpcServer(
 //    auto server = makeRpcServer(network, bootstrap);
 //    kj::NEVER_DONE.wait(waitScope);  // run forever
 
-template <typename VatId, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId> makeRpcServer(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>& network,
     BootstrapFactory<VatId>& bootstrapFactory);
 // Make an RPC server that can serve different bootstrap interfaces to different clients via a
 // BootstrapInterface.
 
-template <typename VatId, typename ProvisionId,
-          typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion,
+          typename ThirdPartyToAwait, typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId> makeRpcClient(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network);
+    VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>& network);
 // Make an RPC client.  Typical usage (e.g. in a main() function):
 //
 //    MyEventLoop eventLoop;
@@ -284,8 +289,8 @@ public:
   // The window size used by the default implementation of Connection::newStream().
 };
 
-template <typename VatId, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 class VatNetwork: public _::VatNetworkBase {
   // Cap'n Proto RPC operates between vats, where a "vat" is some sort of host of objects.
   // Typically one Cap'n Proto process (in the Unix sense) is one vat.  The RPC system is what
@@ -304,7 +309,7 @@ class VatNetwork: public _::VatNetworkBase {
 public:
   class Connection;
 
-  struct ConnectionAndProvisionId {
+  struct ConnectionAndThirdPartyCompletion {
     // Result of connecting to a vat introduced by another vat.
 
     kj::Own<Connection> connection;
@@ -314,9 +319,9 @@ public:
     // An already-allocated `OutgoingRpcMessage` associated with `connection`.  The RPC system will
     // construct this as an `Accept` message and send it.
 
-    Orphan<ProvisionId> provisionId;
-    // A `ProvisionId` already allocated inside `firstMessage`, which the RPC system will use to
-    // build the `Accept` message.
+    Orphan<ThirdPartyCompletion> provision;
+    // A `ThirdPartyCompletion` already allocated inside `firstMessage`, which the RPC system will
+    // use to build the `Accept` message.
   };
 
   class Connection: public _::VatNetworkBase::Connection {
@@ -453,48 +458,51 @@ Capability::Client BootstrapFactory<VatId>::baseCreateFor(AnyStruct::Reader clie
   return createFor(clientId.as<VatId>());
 }
 
-template <typename SturdyRef, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
-    VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
-    baseConnect(AnyStruct::Reader ref) {
+    VatNetwork<SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>::baseConnect(AnyStruct::Reader ref) {
   auto maybe = connect(ref.as<SturdyRef>());
   return maybe.map([](kj::Own<Connection>& conn) -> kj::Own<_::VatNetworkBase::Connection> {
     return kj::mv(conn);
   });
 }
 
-template <typename SturdyRef, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
-    VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::baseAccept() {
+    VatNetwork<SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>::baseAccept() {
   return accept().then(
       [](kj::Own<Connection>&& connection) -> kj::Own<_::VatNetworkBase::Connection> {
     return kj::mv(connection);
   });
 }
 
-template <typename SturdyRef, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 AnyStruct::Reader VatNetwork<
-    SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
     Connection::baseGetPeerVatId() {
   return getPeerVatId();
 }
 
 template <typename VatId>
-template <typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId>::RpcSystem(
-      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+                 JoinResult>& network,
       kj::Maybe<Capability::Client> bootstrap)
     : _::RpcSystemBase(network, kj::mv(bootstrap)) {}
 
 template <typename VatId>
-template <typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId>::RpcSystem(
-      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+                 JoinResult>& network,
       BootstrapFactory<VatId>& bootstrapFactory)
     : _::RpcSystemBase(network, bootstrapFactory) {}
 
@@ -508,26 +516,29 @@ inline void RpcSystem<VatId>::setFlowLimit(size_t words) {
   baseSetFlowLimit(words);
 }
 
-template <typename VatId, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId> makeRpcServer(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>& network,
     Capability::Client bootstrapInterface) {
   return RpcSystem<VatId>(network, kj::mv(bootstrapInterface));
 }
 
-template <typename VatId, typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId> makeRpcServer(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>& network,
     BootstrapFactory<VatId>& bootstrapFactory) {
   return RpcSystem<VatId>(network, bootstrapFactory);
 }
 
-template <typename VatId, typename ProvisionId,
-          typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
+template <typename VatId, typename ThirdPartyCompletion,
+          typename ThirdPartyToAwait, typename ThirdPartyToContact, typename JoinResult>
 RpcSystem<VatId> makeRpcClient(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network) {
+    VatNetwork<VatId, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
+               JoinResult>& network) {
   return RpcSystem<VatId>(network, kj::none);
 }
 
