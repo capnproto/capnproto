@@ -1412,6 +1412,21 @@ using ThirdPartyToContact = AnyPointer;
 # ThirdPartyToContact could simply refer to a file descriptor attached to the message via
 # SCM_RIGHTS.  This file descriptor would be one end of a newly-created socketpair, with the other
 # end having been sent to the process hosting the capability in ThirdPartyToAwait.
+#
+# Some VatNetworks, as an optimization, may permit ThirdPartyToContact to be forwarded across
+# multiple vats. For example, imagine Alice sends a capability to Bob, who passes it along to Carol,
+# who further pass it to Dave. Bob will send a `Provide` message to Alice telling her to expect the
+# capability to be picked up by Carol, and then will pass Carol a `ThirdPartyToContact` pointing to
+# Alice. If `ThirdPartyToContact` is non-forwartable, then Carol must form a connection to Alice,
+# send an `Accept` to receive the capability, and then immediately send a `Provide` to provide it
+# to Dave, before then being able to give a `ThirdPartyToContact` to Dave which points to Alice.
+# This is a bit of a waste. If `ThirdPartyToContact` is forwardable, then Carol can simply pass
+# it along to Dave without making any connection to Alice. Some VatNetwork implementations may
+# require that Carol add a signature to the `ThirdPartyToContact` authenticating that she really
+# did forward it to Dave, which Dave will then present back to Alice. Other implementations may
+# simply pass along an unguessable token and instruct Alice that whoever presents the token should
+# receive the capability. A VatNetwork may choose not to allow forwarding if it doesn't want its
+# security to be dependent on secret bearer tokens nor cryptographic signatures.
 
 using JoinKeyPart = AnyPointer;
 # **(level 4)**
@@ -1543,6 +1558,14 @@ using JoinResult = AnyPointer;
 #   # Given an ThirdPartyToAwait received in a `Provide` message on this `Connection`, wait for the
 #   # recipient to connect, and return the connection formed.  Usually, the first message received
 #   # on the new connection will be an `Accept` message.
+#
+#   forwardThirdPartyToContact(original :ThirdPartyToContact, destination :Connection)
+#       :Maybe(ThirdPartyToContact);
+#   # Given a `ThirdPartyToContact` value received from *this* connection, add any necessary
+#   # information to allow it to be forwarded to `destination`. A VatNetwork could choose to add
+#   # some sort of signature to authenticate that this Vat really did choose to forward this
+#   # value. Returns null if forwarding is not permitted, in which case this vat will have to
+#   # directly contact the third party in order to complete this handoff and start a new one.
 # }
 #
 # struct ConnectionAndThirdPartyCompletion {
