@@ -287,8 +287,9 @@ struct Bootstrap {
   #
   # We call this a "bootstrap" because in an ideal Cap'n Proto world, bootstrap interfaces would
   # never be used. In such a world, any time you connect to a new vat, you do so because you
-  # received an introduction from some other vat (see `ThirdPartyCapId`). Thus, the first message
-  # you send is `Accept`, and further communications derive from there. `Bootstrap` is not used.
+  # received an introduction from some other vat (see `ThirdPartyToContact`). Thus, the first
+  # message you send is `Accept`, and further communications derive from there. `Bootstrap` is not
+  # used.
   #
   # In such an ideal world, DNS itself would support Cap'n Proto -- performing a DNS lookup would
   # actually return a new Cap'n Proto capability, thus introducing you to the target system via
@@ -489,7 +490,7 @@ struct Call {
     # - Vat A sends a `Finish` for the bar() call to Vat B.
     # - Vat B receives the `Finish` for bar() and sends a `Finish` for bar'().
 
-    thirdParty @7 :RecipientId;
+    thirdParty @7 :ThirdPartyToAwait;
     # **(level 3)**
     #
     # The call's result should be returned to a different vat.  The receiver (the callee) expects
@@ -559,7 +560,7 @@ struct Return {
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
     # results here.  `takeFromOtherQuestion` can only used once per question.
 
-    acceptFromThirdParty @7 :ThirdPartyCapId;
+    acceptFromThirdParty @7 :ThirdPartyToContact;
     # **(level 3)**
     #
     # The caller should contact a third-party vat to pick up the results.  An `Accept` message
@@ -828,7 +829,7 @@ struct Provide {
   target @1 :MessageTarget;
   # What is to be provided to the third party.
 
-  recipient @2 :RecipientId;
+  recipient @2 :ThirdPartyToAwait;
   # Identity of the third party that is expected to pick up the capability.
 }
 
@@ -845,7 +846,7 @@ struct Accept {
   # message containing the provided capability (or the call result in the case of a redirected
   # return).
 
-  provision @1 :ProvisionId;
+  provision @1 :ThirdPartyCompletion;
   # Identifies the provided object to be picked up.
 
   embargo @2 :Bool;
@@ -862,7 +863,7 @@ struct Accept {
   # - The promise P in Vat B ends up resolving to Carol, in Vat C.
   # - Vat B sends a `Provide` message to Vat C, identifying Vat A as the recipient.
   # - Vat B sends a `Resolve` message to Vat A, indicating that the promise has resolved to a
-  #   `ThirdPartyCapId` identifying Carol in Vat C.
+  #   `ThirdPartyToContact` identifying Carol in Vat C.
   # - Vat A sends an `Accept` message to Vat C to pick up the capability.  Since Vat A knows that
   #   it has an outstanding call to the promise, it sets `embargo` to `true` in the `Accept`
   #   message.
@@ -1148,7 +1149,7 @@ struct ThirdPartyCapDescriptor {
   #
   # Identifies a capability in a third-party vat that the sender wants the receiver to pick up.
 
-  id @0 :ThirdPartyCapId;
+  id @0 :ThirdPartyToContact;
   # Identifies the third-party host and the specific capability to accept from it.
 
   vineId @1 :ExportId;
@@ -1369,43 +1370,48 @@ using SturdyRef = AnyPointer;
 # In this case, the entire contents of SturdyRef might be opaque, because they are intended only
 # to be forwarded to the restorer service.
 
-using ProvisionId = AnyPointer;
+using ThirdPartyCompletion = AnyPointer;
 # **(level 3)**
 #
-# The information that must be sent in an `Accept` message to identify the object being accepted.
+# Used to express "I am the third party whom you are waiting for to complete an operation".
+#
+# In particular, this is given in an `Accept` message to identify the object being accepted.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the provider vat along with a nonce matching the one in the `RecipientId` used
-# in the `Provide` message sent from that provider.
+# fingerprint of the provider vat along with a nonce matching the one in the `ThirdPartyToAwait`
+# used in the `Provide` message sent from that provider.
 
-using RecipientId = AnyPointer;
+using ThirdPartyToAwait = AnyPointer;
 # **(level 3)**
 #
-# The information that must be sent in a `Provide` message to identify the recipient of the
-# capability.
+# Used to express "expect that some other vat will connect to you to complete this operation".
+#
+# In particular, this is given in a `Provide` message to identify the recipient of the capability.
+# The recipient will call the host directly to "pick up" the capability.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the recipient along with a nonce matching the one in the `ProvisionId`.
+# fingerprint of the recipient along with a nonce matching the one in the `ThirdPartyCompletion`.
 #
 # As another example, when communicating between processes on the same machine over Unix sockets,
-# RecipientId could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
+# ThirdPartyToAwait could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
 # This file descriptor would be one end of a newly-created socketpair, with the other end having
-# been sent to the capability's recipient in ThirdPartyCapId.
+# been sent to the capability's recipient in ThirdPartyToContact.
 
-using ThirdPartyCapId = AnyPointer;
+using ThirdPartyToContact = AnyPointer;
 # **(level 3)**
 #
-# The information needed to connect to a third party and accept a capability from it.
+# The information needed to connect to a third party to complete an operation, e.g. to accept a
+# capability from it.
 #
 # In a network where each vat has a public/private key pair, this could be a combination of the
 # third party's public key fingerprint, hints on how to connect to the third party (e.g. an IP
-# address), and the nonce used in the corresponding `Provide` message's `RecipientId` as sent
+# address), and the nonce used in the corresponding `Provide` message's `ThirdPartyToAwait` as sent
 # to that third party (used to identify which capability to pick up).
 #
 # As another example, when communicating between processes on the same machine over Unix sockets,
-# ThirdPartyCapId could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
-# This file descriptor would be one end of a newly-created socketpair, with the other end having
-# been sent to the process hosting the capability in RecipientId.
+# ThirdPartyToContact could simply refer to a file descriptor attached to the message via
+# SCM_RIGHTS.  This file descriptor would be one end of a newly-created socketpair, with the other
+# end having been sent to the process hosting the capability in ThirdPartyToAwait.
 
 using JoinKeyPart = AnyPointer;
 # **(level 4)**
@@ -1493,17 +1499,18 @@ using JoinResult = AnyPointer;
 #     # Add a JoinResult received in response to one of the `Join` messages.  All `JoinResult`s
 #     # returned from all paths must be added before trying to connect.
 #
-#     connect() :ConnectionAndProvisionId;
+#     connect() :ConnectionAndThirdPartyCompletion;
 #     # Try to form a connection to the joined capability's host, verifying that it has received
 #     # all of the JoinKeyParts.  Once the connection is formed, the caller should send an `Accept`
-#     # message on it with the specified `ProvisionId` in order to receive the final capability.
+#     # message on it with the specified `ThirdPartyCompletion` in order to receive the final
+#     # capability.
 #   }
 #
 #   acceptConnectionFromJoiner(parts :List(JoinKeyPart), paths :List(VatPath))
-#       :ConnectionAndProvisionId;
+#       :ConnectionAndThirdPartyCompletion;
 #   # Called on a joined capability's host to receive the connection from the joiner, once all
 #   # key parts have arrived.  The caller should expect to receive an `Accept` message over the
-#   # connection with the given ProvisionId.
+#   # connection with the given ThirdPartyCompletion.
 # }
 #
 # interface Connection {
@@ -1521,29 +1528,29 @@ using JoinResult = AnyPointer;
 #
 #   introduceTo(recipient :Connection) :IntroductionInfo;
 #   # Call before starting a three-way introduction, assuming a `Provide` message is to be sent on
-#   # this connection and a `ThirdPartyCapId` is to be sent to `recipient`.
+#   # this connection and a `ThirdPartyToContact` is to be sent to `recipient`.
 #
 #   struct IntroductionInfo {
-#     sendToRecipient :ThirdPartyCapId;
-#     sendToTarget :RecipientId;
+#     sendToRecipient :ThirdPartyToContact;
+#     sendToTarget :ThirdPartyToAwait;
 #   }
 #
-#   connectToIntroduced(capId :ThirdPartyCapId) :ConnectionAndProvisionId;
-#   # Given a ThirdPartyCapId received over this connection, connect to the third party.  The
+#   connectToIntroduced(capId :ThirdPartyToContact) :ConnectionAndThirdPartyCompletion;
+#   # Given a ThirdPartyToContact received over this connection, connect to the third party.  The
 #   # caller should then send an `Accept` message over the new connection.
 #
-#   acceptIntroducedConnection(recipientId :RecipientId) :Connection;
-#   # Given a RecipientId received in a `Provide` message on this `Connection`, wait for the
+#   acceptIntroducedConnection(recipientId :ThirdPartyToAwait) :Connection;
+#   # Given an ThirdPartyToAwait received in a `Provide` message on this `Connection`, wait for the
 #   # recipient to connect, and return the connection formed.  Usually, the first message received
 #   # on the new connection will be an `Accept` message.
 # }
 #
-# struct ConnectionAndProvisionId {
+# struct ConnectionAndThirdPartyCompletion {
 #   # **(level 3)**
 #
 #   connection :Connection;
 #   # Connection on which to issue `Accept` message.
 #
-#   provision :ProvisionId;
-#   # `ProvisionId` to send in the `Accept` message.
+#   provision :ThirdPartyCompletion;
+#   # `ThirdPartyCompletion` to send in the `Accept` message.
 # }

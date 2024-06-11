@@ -38,8 +38,8 @@ namespace rpc {
   }
 }
 
-typedef VatNetwork<rpc::twoparty::VatId, rpc::twoparty::ProvisionId,
-    rpc::twoparty::RecipientId, rpc::twoparty::ThirdPartyCapId, rpc::twoparty::JoinResult>
+typedef VatNetwork<rpc::twoparty::VatId, rpc::twoparty::ThirdPartyCompletion,
+    rpc::twoparty::ThirdPartyToAwait, rpc::twoparty::ThirdPartyToContact, rpc::twoparty::JoinResult>
     TwoPartyVatNetworkBase;
 
 class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
