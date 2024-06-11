@@ -266,6 +266,7 @@ struct Message {
 
     provide @10 :Provide;  # Provide a capability to a third party.
     accept @11 :Accept;    # Accept a capability provided by a third party.
+    thirdPartyAnswer @14 :ThirdPartyAnswer;  # Call handed off from a third party.
 
     # Level 4 features -----------------------------------------------
 
@@ -415,7 +416,7 @@ struct Call {
 
   allowThirdPartyTailCall @8 :Bool = false;
   # Indicates whether or not the receiver is allowed to send a `Return` containing
-  # `acceptFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
+  # `awaitFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
   # will have to proxy the return in the case of a tail call to a third-party vat.
 
   noPromisePipelining @9 :Bool = false;
@@ -490,18 +491,18 @@ struct Call {
     # - Vat A sends a `Finish` for the bar() call to Vat B.
     # - Vat B receives the `Finish` for bar() and sends a `Finish` for bar'().
 
-    thirdParty @7 :ThirdPartyToAwait;
+    thirdParty @7 :ThirdPartyToContact;
     # **(level 3)**
     #
-    # The call's result should be returned to a different vat.  The receiver (the callee) expects
-    # to receive an `Accept` message from the indicated vat, and should return the call's result
-    # to it, rather than to the sender of the `Call`.
+    # The call's result should be returned to a different vat.  The receiver (the callee) should
+    # connect to the given vat and sent it a ThirdPartyAnswer, followed by a Return to deliver the
+    # eventual result.
     #
     # This operates much like `yourself`, above, except that Carol is in a separate Vat C.  `Call`
     # messages are sent from Vat A -> Vat B and Vat B -> Vat C.  A `Return` message is sent from
-    # Vat B -> Vat A that contains `acceptFromThirdParty` in place of results.  When Vat A sends
-    # an `Accept` to Vat C, it receives back a `Return` containing the call's actual result.  Vat C
-    # also sends a `Return` to Vat B with `resultsSentElsewhere`.
+    # Vat B -> Vat A that contains `awaitFromThirdParty` in place of results.  Vat C sends a
+    # `ThirdPartyAnswer` directly to Vat A, and also sends a `Return` to `Vat B` with
+    # `resultsSendElsewhere`.
   }
 }
 
@@ -560,12 +561,12 @@ struct Return {
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
     # results here.  `takeFromOtherQuestion` can only used once per question.
 
-    acceptFromThirdParty @7 :ThirdPartyToContact;
+    awaitFromThirdParty @7 :ThirdPartyToAwait;
     # **(level 3)**
     #
-    # The caller should contact a third-party vat to pick up the results.  An `Accept` message
-    # sent to the vat will return the result.  This pairs with `Call.sendResultsTo.thirdParty`.
-    # It should only be used if the corresponding `Call` had `allowThirdPartyTailCall` set.
+    # The caller should expect to receive a `ThirdPartyAnswer` from some other vat.  This pairs
+    # with `Call.sendResultsTo.thirdParty`.  It should only be used if the corresponding `Call`
+    # had `allowThirdPartyTailCall` set.
   }
 }
 
@@ -673,6 +674,12 @@ struct Resolve {
     # Indicates that the promise was broken.
   }
 }
+
+# TODO(someday): There may be use cases for a `ResolvePipeline` method, which is very similar to
+#   `Return` but provides provisional results for pipelining purposes, used when `setPipeline()`
+#   is invoked by the callee. This would be particularly improtant when setPipeline() is given
+#   capabilities that could potentially be shortened before the call actually finishes. So far,
+#   though, we haven't seen a real-life use case.
 
 struct Release {
   # **(level 1)**
@@ -851,8 +858,6 @@ struct Accept {
   #
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
-  #
-  # This message is also used to pick up a redirected return -- see `Return.acceptFromThirdParty`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this accept message, which will eventually receive a Return
@@ -896,6 +901,44 @@ struct Accept {
   #   before delivering bar().
   # - Vat C receives `Disembargo` from Vat B.  It can now send a `Return` for the `Accept` from
   #   Vat A, as well as deliver bar().
+}
+
+struct ThirdPartyAnswer {
+  # **(level 3)**
+  #
+  # When a call has `sendResultsTo.thirdParty`, the callee directly connects to the given third
+  # party and sends it a `ThirdPartyAnswer` in order to adopt the call into its connection.
+
+  completion @0 :ThirdPartyCompletion;
+  # Information needed to identify which call is being returned.
+  #
+  # The introducer should have sent a `Return` message previously containing
+  # `awaitFromThirdParty`, directing the callee to wait for a `ThirdPartyAnswer` containing the
+  # final results. (Of course, it's possible that the `ThirdPartyAnswer` arrives before the
+  # original `Return`, in which case the recipient must wait to receive the corresponding
+  # `Return` message.)
+
+  answerId @1 :AnswerId;
+  # The answer ID which will now represent this call on this connection.
+  #
+  # The sender (callee) will follow up later with a `Return` message referencing the same ID. In
+  # the meantime, the receiver (caller) can begin sending pipelined requests directly to the
+  # sender, and must eventually send a `Finish` message.
+  #
+  # Normally, callers choose question IDs -- and answer IDs strictly match the question ID chosen
+  # by the caller. In this case, the callee is choosing an answer ID on its own. In theory, this
+  # is a bad design: we should be using an export ID here instead. However, we would then have to
+  # go around to all the types that reference `QuestionId` or `AnswerId` and make them be able to
+  # use `ImportId` / `ExportId` intsead. In retrospect, questions and exports proabbly should have
+  # been in the same ID space from the beginning, with a convention for which parts of the ID
+  # space can be allocated by which side. Unfortunately, that ship has sailed.
+  #
+  # Instead, we introduce a hack: Answer IDs introduced by `ThirdPartyAnswer` must be in the range
+  # [2^30,2^31), that is, they have bit 30 set, but not bit 31. We designate this range as
+  # callee-allocated; callers will never allocate in this range. This hack should be
+  # backwards-compatible given that implementations traditionally always use the lowest-numbered
+  # ID available. However, note that we don't use the range [2^31,2^32) because this has already
+  # been designated for use with `onlyPromisePipeline` (another hack).
 }
 
 # Level 4 message types ----------------------------------------------
