@@ -266,6 +266,7 @@ struct Message {
 
     provide @10 :Provide;  # Provide a capability to a third party.
     accept @11 :Accept;    # Accept a capability provided by a third party.
+    thirdPartyReturn @14 :ThirdPartyReturn;  # Return a call handed off from a third party.
 
     # Level 4 features -----------------------------------------------
 
@@ -415,7 +416,7 @@ struct Call {
 
   allowThirdPartyTailCall @8 :Bool = false;
   # Indicates whether or not the receiver is allowed to send a `Return` containing
-  # `acceptFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
+  # `awaitFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
   # will have to proxy the return in the case of a tail call to a third-party vat.
 
   noPromisePipelining @9 :Bool = false;
@@ -490,18 +491,17 @@ struct Call {
     # - Vat A sends a `Finish` for the bar() call to Vat B.
     # - Vat B receives the `Finish` for bar() and sends a `Finish` for bar'().
 
-    thirdParty @7 :ThirdPartyToAwait;
+    thirdParty @7 :ThirdPartyToContact;
     # **(level 3)**
     #
-    # The call's result should be returned to a different vat.  The receiver (the callee) expects
-    # to receive an `Accept` message from the indicated vat, and should return the call's result
-    # to it, rather than to the sender of the `Call`.
+    # The call's result should be returned to a different vat.  The receiver (the callee) should
+    # connect to the given vat and sent it a ThirdPartyReturn to deliver the eventual result.
     #
     # This operates much like `yourself`, above, except that Carol is in a separate Vat C.  `Call`
     # messages are sent from Vat A -> Vat B and Vat B -> Vat C.  A `Return` message is sent from
-    # Vat B -> Vat A that contains `acceptFromThirdParty` in place of results.  When Vat A sends
-    # an `Accept` to Vat C, it receives back a `Return` containing the call's actual result.  Vat C
-    # also sends a `Return` to Vat B with `resultsSentElsewhere`.
+    # Vat B -> Vat A that contains `awaitFromThirdParty` in place of results.  Vat C sends a
+    # `ThirdPartyReturn` directly to Vat A with the final results, and also sends a `Return` to
+    # `Vat B` with `resultsSendElsewhere`.
   }
 }
 
@@ -560,12 +560,12 @@ struct Return {
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
     # results here.  `takeFromOtherQuestion` can only used once per question.
 
-    acceptFromThirdParty @7 :ThirdPartyToContact;
+    awaitFromThirdParty @7 :ThirdPartyToAwait;
     # **(level 3)**
     #
-    # The caller should contact a third-party vat to pick up the results.  An `Accept` message
-    # sent to the vat will return the result.  This pairs with `Call.sendResultsTo.thirdParty`.
-    # It should only be used if the corresponding `Call` had `allowThirdPartyTailCall` set.
+    # The caller should expect to receive a `ThirdPartyReturn` from some other vat containing the
+    # results.  This pairs with `Call.sendResultsTo.thirdParty`.  It should only be used if the
+    # corresponding `Call` had `allowThirdPartyTailCall` set.
   }
 }
 
@@ -839,7 +839,7 @@ struct Accept {
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
   #
-  # This message is also used to pick up a redirected return -- see `Return.acceptFromThirdParty`.
+  # This message is also used to pick up a redirected return -- see `Return.awaitFromThirdParty`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this accept message, which will eventually receive a Return
@@ -882,6 +882,33 @@ struct Accept {
   #   before delivering bar().
   # - Vat C receives `Disembargo` from Vat B.  It can now send a `Return` for the `Accept` from
   #   Vat A, as well as deliver bar().
+}
+
+struct ThirdPartyReturn {
+  # **(level 3)**
+  #
+  # When a call has `sendResultsTo.thirdParty`, the callee directly connects to the given third
+  # party and sends it a `ThirdPartyReturn` with the final results.
+
+  completion @0 :ThirdPartyCompletion;
+  # Information needed to identify which call is being returned.
+  #
+  # The introducer should have sent a `Return` message previously containing
+  # `awaitFromThirdParty`, directing the callee to wait for a `ThirdPartyReturn` containing the
+  # final results. (Of course, it's possible that the `ThirdPartyReturn` arrives before the
+  # original `Return`, in which case the recipient must wait to receive the corresponding
+  # `Return` message.)
+
+  return @1 :Return;
+  # The results. Note that the `answerId` is always zero and doesn't refer to a previous question.
+  # Instead, `completion` is used to match the return with the original call.
+  #
+  # The recipient of this message is NOT expected to send any sort of `Finish` message to the
+  # sender. This is not necessary, because promise pipelining will have proceeded along the
+  # original path of the `Call` message all along, not along the newly-formed direct connection.
+  # A call can be canceled by seding a `Finish` along the original path before receiving the
+  # `ThirdPartyReturn`; in this case, the `ThirdPartyReturn` is still expected to be received
+  # eventually, but may indicate `canceled` as the result.
 }
 
 # Level 4 message types ----------------------------------------------
