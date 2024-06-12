@@ -441,6 +441,9 @@ PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If you schedule several evaluations with `evalLater` during the same callback, they are
 // guaranteed to be executed in order.
 
+Promise<void> evalLater() KJ_WARN_UNUSED_RESULT;
+// Schedule a promise to be resolved in the event loop at some time in the near future.
+
 template <typename Func>
 PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
 // Run `func()` and return a promise for its result. `func()` executes before `evalNow()` returns.
@@ -465,6 +468,10 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If evalLast() is called multiple times, functions are executed in LIFO order. If the first
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
+
+Promise<void> evalLast() KJ_WARN_UNUSED_RESULT;
+// Like `evalLater()`, except that the promise doesn't resolve until the event queue is otherwise
+// completely empty and the thread is about to suspend waiting for I/O.
 
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();
