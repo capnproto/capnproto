@@ -31,14 +31,20 @@
 #include <kj/io.h>
 #include <signal.h>
 
+#ifdef __APPLE__
+#include <AvailabilityMacros.h>
+#endif
+
 KJ_BEGIN_HEADER
 
 #if !defined(KJ_USE_EPOLL) && !defined(KJ_USE_KQUEUE)
 #if __linux__
 // Default to epoll on Linux.
 #define KJ_USE_EPOLL 1
-#elif __APPLE__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
-// MacOS and BSDs prefer kqueue() for event notification.
+#elif (__APPLE__ && (MAC_OS_X_VERSION_MIN_REQUIRED > 1050)) \
+  || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
+// MacOS and BSDs prefer kqueue() for event notification, however MacOS prior
+// to 10.6.x does not have NOTE_TRIGGER.
 #define KJ_USE_KQUEUE 1
 #endif
 #endif
