@@ -29,12 +29,12 @@ namespace {
 static const char DUMMY = 0;
 static constexpr const void* MEMBRANE_BRAND = &DUMMY;
 
-kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, MembranePolicy& policy, bool reverse);
+kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, kj::Rc<MembranePolicy> policy, bool reverse);
 
 class MembraneCapTableReader final: public _::CapTableReader {
 public:
-  MembraneCapTableReader(MembranePolicy& policy, bool reverse)
-      : policy(policy), reverse(reverse) {}
+  MembraneCapTableReader(kj::Rc<MembranePolicy> policy, bool reverse)
+      : policy(kj::mv(policy)), reverse(reverse) {}
 
   AnyPointer::Reader imbue(AnyPointer::Reader reader) {
     return AnyPointer::Reader(imbue(
@@ -63,20 +63,20 @@ public:
     // The underlying message is inside the membrane, and we're pulling a cap out of it. Therefore,
     // we want to wrap the extracted capability in the membrane.
     return inner->extractCap(index).map([this](kj::Own<ClientHook>&& cap) {
-      return membrane(kj::mv(cap), policy, reverse);
+      return membrane(kj::mv(cap), policy.addRef(), reverse);
     });
   }
 
 private:
   _::CapTableReader* inner = nullptr;
-  MembranePolicy& policy;
+  kj::Rc<MembranePolicy> policy;
   bool reverse;
 };
 
 class MembraneCapTableBuilder final: public _::CapTableBuilder {
 public:
-  MembraneCapTableBuilder(MembranePolicy& policy, bool reverse)
-      : policy(policy), reverse(reverse) {}
+  MembraneCapTableBuilder(kj::Rc<MembranePolicy> policy, bool reverse)
+      : policy(kj::mv(policy)), reverse(reverse) {}
 
   AnyPointer::Builder imbue(AnyPointer::Builder builder) {
     KJ_REQUIRE(inner == nullptr, "can only call this once");
@@ -95,14 +95,14 @@ public:
     // The underlying message is inside the membrane, and we're pulling a cap out of it. Therefore,
     // we want to wrap the extracted capability in the membrane.
     return inner->extractCap(index).map([this](kj::Own<ClientHook>&& cap) {
-      return membrane(kj::mv(cap), policy, reverse);
+      return membrane(kj::mv(cap), policy.addRef(), reverse);
     });
   }
 
   uint injectCap(kj::Own<ClientHook>&& cap) override {
     // The underlying message is inside the membrane, and we're inserting a cap from outside into
     // it. Therefore we want to add a reverse membrane.
-    return inner->injectCap(membrane(kj::mv(cap), policy, !reverse));
+    return inner->injectCap(membrane(kj::mv(cap), policy.addRef(), !reverse));
   }
 
   void dropCap(uint index) override {
@@ -111,14 +111,14 @@ public:
 
 private:
   _::CapTableBuilder* inner = nullptr;
-  MembranePolicy& policy;
+  kj::Rc<MembranePolicy> policy;
   bool reverse;
 };
 
 class MembranePipelineHook final: public PipelineHook, public kj::Refcounted {
 public:
   MembranePipelineHook(
-      kj::Own<PipelineHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
+      kj::Own<PipelineHook>&& inner, kj::Rc<MembranePolicy> policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse) {}
 
   kj::Own<PipelineHook> addRef() override {
@@ -126,46 +126,46 @@ public:
   }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
-    return membrane(inner->getPipelinedCap(ops), *policy, reverse);
+    return membrane(inner->getPipelinedCap(ops), policy.addRef(), reverse);
   }
 
   kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
-    return membrane(inner->getPipelinedCap(kj::mv(ops)), *policy, reverse);
+    return membrane(inner->getPipelinedCap(kj::mv(ops)), policy.addRef(), reverse);
   }
 
 private:
   kj::Own<PipelineHook> inner;
-  kj::Own<MembranePolicy> policy;
+  kj::Rc<MembranePolicy> policy;
   bool reverse;
 };
 
 class MembraneResponseHook final: public ResponseHook {
 public:
   MembraneResponseHook(
-      kj::Own<ResponseHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
-      : inner(kj::mv(inner)), policy(kj::mv(policy)), capTable(*this->policy, reverse) {}
+      kj::Own<ResponseHook>&& inner, kj::Rc<MembranePolicy> policy, bool reverse)
+      : inner(kj::mv(inner)), policy(kj::mv(policy)), capTable(this->policy.addRef(), reverse) {}
 
   AnyPointer::Reader imbue(AnyPointer::Reader reader) { return capTable.imbue(reader); }
 
 private:
   kj::Own<ResponseHook> inner;
-  kj::Own<MembranePolicy> policy;
+  kj::Rc<MembranePolicy> policy;
   MembraneCapTableReader capTable;
 };
 
 class MembraneRequestHook final: public RequestHook {
 public:
-  MembraneRequestHook(kj::Own<RequestHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
+  MembraneRequestHook(kj::Own<RequestHook>&& inner, kj::Rc<MembranePolicy> policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)),
-        reverse(reverse), capTable(*this->policy, reverse) {}
+        reverse(reverse), capTable(this->policy.addRef(), reverse) {}
 
   static Request<AnyPointer, AnyPointer> wrap(
-      Request<AnyPointer, AnyPointer>&& inner, MembranePolicy& policy, bool reverse) {
+      Request<AnyPointer, AnyPointer>&& inner, kj::Rc<MembranePolicy> policy, bool reverse) {
     AnyPointer::Builder builder = inner;
     auto innerHook = RequestHook::from(kj::mv(inner));
     if (innerHook->getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneRequestHook>(*innerHook);
-      if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
+      if (otherMembrane.policy == policy && otherMembrane.reverse == !reverse) {
         // Request that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
         builder = otherMembrane.capTable.unimbue(builder);
@@ -179,10 +179,10 @@ public:
   }
 
   static kj::Own<RequestHook> wrap(
-      kj::Own<RequestHook>&& inner, MembranePolicy& policy, bool reverse) {
+      kj::Own<RequestHook>&& inner, kj::Rc<MembranePolicy> policy, bool reverse) {
     if (inner->getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneRequestHook>(*inner);
-      if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
+      if (otherMembrane.policy == policy && otherMembrane.reverse == !reverse) {
         // Request that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
         return kj::mv(otherMembrane.inner);
@@ -196,7 +196,7 @@ public:
     auto promise = inner->send();
 
     auto newPipeline = AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
-        PipelineHook::from(kj::mv(promise)), policy->addRef(), reverse));
+        PipelineHook::from(kj::mv(promise)), policy.addRef(), reverse));
 
     auto onRevoked = policy->onRevoked();
 
@@ -205,7 +205,7 @@ public:
         [reverse,policy=kj::mv(policy)](Response<AnyPointer>&& response) mutable {
       AnyPointer::Reader reader = response;
       auto newRespHook = kj::heap<MembraneResponseHook>(
-          ResponseHook::from(kj::mv(response)), policy->addRef(), reverse);
+          ResponseHook::from(kj::mv(response)), policy.addRef(), reverse);
       reader = newRespHook->imbue(reader);
       return Response<AnyPointer>(reader, kj::mv(newRespHook));
     });
@@ -233,7 +233,7 @@ public:
 
   AnyPointer::Pipeline sendForPipeline() override {
     return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
-        PipelineHook::from(inner->sendForPipeline()), policy->addRef(), reverse));
+        PipelineHook::from(inner->sendForPipeline()), policy.addRef(), reverse));
   }
 
   const void* getBrand() override {
@@ -242,7 +242,7 @@ public:
 
 private:
   kj::Own<RequestHook> inner;
-  kj::Own<MembranePolicy> policy;
+  kj::Rc<MembranePolicy> policy;
   bool reverse;
   MembraneCapTableBuilder capTable;
 };
@@ -250,10 +250,10 @@ private:
 class MembraneCallContextHook final: public CallContextHook, public kj::Refcounted {
 public:
   MembraneCallContextHook(kj::Own<CallContextHook>&& inner,
-                          kj::Own<MembranePolicy>&& policy, bool reverse)
+                          kj::Rc<MembranePolicy> policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse),
-        paramsCapTable(*this->policy, reverse),
-        resultsCapTable(*this->policy, reverse) {}
+        paramsCapTable(this->policy.addRef(), reverse),
+        resultsCapTable(this->policy.addRef(), reverse) {}
 
   AnyPointer::Reader getParams() override {
     KJ_REQUIRE(!releasedParams);
@@ -284,27 +284,27 @@ public:
 
   void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
     inner->setPipeline(kj::refcounted<MembranePipelineHook>(
-        kj::mv(pipeline), policy->addRef(), !reverse));
+        kj::mv(pipeline), policy.addRef(), !reverse));
   }
 
   kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
-    return inner->tailCall(MembraneRequestHook::wrap(kj::mv(request), *policy, !reverse));
+    return inner->tailCall(MembraneRequestHook::wrap(kj::mv(request), policy.addRef(), !reverse));
   }
 
   kj::Promise<AnyPointer::Pipeline> onTailCall() override {
     return inner->onTailCall().then([this](AnyPointer::Pipeline&& innerPipeline) {
       return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
-          PipelineHook::from(kj::mv(innerPipeline)), policy->addRef(), reverse));
+          PipelineHook::from(kj::mv(innerPipeline)), policy.addRef(), reverse));
     });
   }
 
   ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
     auto pair = inner->directTailCall(
-        MembraneRequestHook::wrap(kj::mv(request), *policy, !reverse));
+        MembraneRequestHook::wrap(kj::mv(request), policy.addRef(), !reverse));
 
     return {
       kj::mv(pair.promise),
-      kj::refcounted<MembranePipelineHook>(kj::mv(pair.pipeline), policy->addRef(), reverse)
+      kj::refcounted<MembranePipelineHook>(kj::mv(pair.pipeline), policy.addRef(), reverse)
     };
   }
 
@@ -314,7 +314,7 @@ public:
 
 private:
   kj::Own<CallContextHook> inner;
-  kj::Own<MembranePolicy> policy;
+  kj::Rc<MembranePolicy> policy;
   bool reverse;
 
   MembraneCapTableReader paramsCapTable;
@@ -329,7 +329,7 @@ private:
 
 class MembraneHook final: public ClientHook, public kj::Refcounted {
 public:
-  MembraneHook(kj::Own<ClientHook>&& inner, kj::Own<MembranePolicy>&& policyParam, bool reverse)
+  MembraneHook(kj::Own<ClientHook>&& inner, kj::Rc<MembranePolicy> policyParam, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policyParam)), reverse(reverse) {
     KJ_IF_SOME(r, policy->onRevoked()) {
       revocationTask = r.eagerlyEvaluate([this](kj::Exception&& exception) {
@@ -348,29 +348,29 @@ public:
     }
   }
 
-  static kj::Own<ClientHook> wrap(ClientHook& cap, MembranePolicy& policy, bool reverse) {
+  static kj::Own<ClientHook> wrap(ClientHook& cap, kj::Rc<MembranePolicy> policy, bool reverse) {
     if (cap.getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneHook>(cap);
-      auto& rootPolicy = policy.rootPolicy();
+      auto& rootPolicy = policy->rootPolicy();
       if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
           otherMembrane.reverse == !reverse) {
         // Capability that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
         Capability::Client unwrapped(otherMembrane.inner->addRef());
         return ClientHook::from(
-            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), *otherMembrane.policy, policy)
-                    : rootPolicy.exportExternal(kj::mv(unwrapped), *otherMembrane.policy, policy));
+            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), otherMembrane.policy.addRef(), policy.addRef())
+                    : rootPolicy.exportExternal(kj::mv(unwrapped), otherMembrane.policy.addRef(), policy.addRef()));
       }
     }
 
-    auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
+    auto& map = reverse ? policy->reverseWrappers : policy->wrappers;
     ClientHook*& slot = map.findOrCreate(&cap, [&]() -> kj::Decay<decltype(map)>::Entry {
       return { &cap, nullptr };
     });
     if (slot == nullptr) {
       auto result = ClientHook::from(
-          reverse ? policy.importExternal(Capability::Client(cap.addRef()))
-                  : policy.exportInternal(Capability::Client(cap.addRef())));
+          reverse ? policy->importExternal(Capability::Client(cap.addRef()))
+                  : policy->exportInternal(Capability::Client(cap.addRef())));
       slot = result;
       return result;
     } else {
@@ -378,29 +378,29 @@ public:
     }
   }
 
-  static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, MembranePolicy& policy, bool reverse) {
+  static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, kj::Rc<MembranePolicy> policy, bool reverse) {
     if (cap->getBrand() == MEMBRANE_BRAND) {
       auto& otherMembrane = kj::downcast<MembraneHook>(*cap);
-      auto& rootPolicy = policy.rootPolicy();
+      auto& rootPolicy = policy->rootPolicy();
       if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
           otherMembrane.reverse == !reverse) {
         // Capability that passed across the membrane one way is now passing back the other way.
         // Unwrap it rather than double-wrap it.
         Capability::Client unwrapped(otherMembrane.inner->addRef());
         return ClientHook::from(
-            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), *otherMembrane.policy, policy)
-                    : rootPolicy.exportExternal(kj::mv(unwrapped), *otherMembrane.policy, policy));
+            reverse ? rootPolicy.importInternal(kj::mv(unwrapped), otherMembrane.policy.addRef(), policy.addRef())
+                    : rootPolicy.exportExternal(kj::mv(unwrapped), otherMembrane.policy.addRef(), policy.addRef()));
       }
     }
 
-    auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
+    auto& map = reverse ? policy->reverseWrappers : policy->wrappers;
     ClientHook*& slot = map.findOrCreate(cap.get(), [&]() -> kj::Decay<decltype(map)>::Entry {
       return { cap.get(), nullptr };
     });
     if (slot == nullptr) {
       auto result = ClientHook::from(
-          reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
-                  : policy.exportInternal(Capability::Client(kj::mv(cap))));
+          reverse ? policy->importExternal(Capability::Client(kj::mv(cap)))
+                  : policy->exportInternal(Capability::Client(kj::mv(cap))));
       slot = result;
       return result;
     } else {
@@ -435,7 +435,7 @@ public:
       // For pass-through calls, we don't worry about promises, because if the capability resolves
       // to something outside the membrane, then the call will pass back out of the membrane too.
       return MembraneRequestHook::wrap(
-          inner->newCall(interfaceId, methodId, sizeHint, hints), *policy, reverse);
+          inner->newCall(interfaceId, methodId, sizeHint, hints), policy.addRef(), reverse);
     }
   }
 
@@ -465,7 +465,7 @@ public:
     } else {
       // !reverse because calls to the CallContext go in the opposite direction.
       auto result = inner->call(interfaceId, methodId,
-          kj::refcounted<MembraneCallContextHook>(kj::mv(context), policy->addRef(), !reverse),
+          kj::refcounted<MembraneCallContextHook>(kj::mv(context), policy.addRef(), !reverse),
           hints);
 
       if (hints.onlyPromisePipeline) {
@@ -477,7 +477,7 @@ public:
 
       return {
         kj::mv(result.promise),
-        kj::refcounted<MembranePipelineHook>(kj::mv(result.pipeline), policy->addRef(), reverse)
+        kj::refcounted<MembranePipelineHook>(kj::mv(result.pipeline), policy.addRef(), reverse)
       };
     }
   }
@@ -488,7 +488,7 @@ public:
     }
 
     KJ_IF_SOME(newInner, inner->getResolved()) {
-      kj::Own<ClientHook> newResolved = wrap(newInner, *policy, reverse);
+      kj::Own<ClientHook> newResolved = wrap(newInner, policy.addRef(), reverse);
       ClientHook& result = *newResolved;
       resolved = kj::mv(newResolved);
       return result;
@@ -516,7 +516,7 @@ public:
         KJ_IF_SOME(r, resolved) {
           return r->addRef();
         } else {
-          return resolved.emplace(wrap(*newInner, *policy, reverse))->addRef();
+          return resolved.emplace(wrap(*newInner, policy.addRef(), reverse))->addRef();
         }
       });
     } else {
@@ -543,7 +543,7 @@ public:
 
 private:
   kj::Own<ClientHook> inner;
-  kj::Own<MembranePolicy> policy;
+  kj::Rc<MembranePolicy> policy;
   bool reverse;
   bool revoked = false;
   kj::Maybe<kj::Own<ClientHook>> resolved;
@@ -562,47 +562,47 @@ private:
 
 namespace {
 
-kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, MembranePolicy& policy, bool reverse) {
-  return MembraneHook::wrap(kj::mv(inner), policy, reverse);
+kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, kj::Rc<MembranePolicy> policy, bool reverse) {
+  return MembraneHook::wrap(kj::mv(inner), kj::mv(policy), reverse);
 }
 
 }  // namespace
 
 Capability::Client MembranePolicy::importExternal(Capability::Client external) {
   return Capability::Client(kj::refcounted<MembraneHook>(
-      ClientHook::from(kj::mv(external)), addRef(), true));
+      ClientHook::from(kj::mv(external)), addRefToThis(), true));
 }
 
 Capability::Client MembranePolicy::exportInternal(Capability::Client internal) {
   return Capability::Client(kj::refcounted<MembraneHook>(
-      ClientHook::from(kj::mv(internal)), addRef(), false));
+      ClientHook::from(kj::mv(internal)), addRefToThis(), false));
 }
 
 Capability::Client MembranePolicy::importInternal(
-    Capability::Client internal, MembranePolicy& exportPolicy, MembranePolicy& importPolicy) {
+    Capability::Client internal, kj::Rc<MembranePolicy> exportPolicy, kj::Rc<MembranePolicy> importPolicy) {
   return kj::mv(internal);
 }
 
 Capability::Client MembranePolicy::exportExternal(
-    Capability::Client external, MembranePolicy& importPolicy, MembranePolicy& exportPolicy) {
+    Capability::Client external, kj::Rc<MembranePolicy> importPolicy, kj::Rc<MembranePolicy> exportPolicy) {
   return kj::mv(external);
 }
 
-Capability::Client membrane(Capability::Client inner, kj::Own<MembranePolicy> policy) {
+Capability::Client membrane(Capability::Client inner, kj::Rc<MembranePolicy> policy) {
   return Capability::Client(membrane(
-      ClientHook::from(kj::mv(inner)), *policy, false));
+      ClientHook::from(kj::mv(inner)), kj::mv(policy), false));
 }
 
-Capability::Client reverseMembrane(Capability::Client inner, kj::Own<MembranePolicy> policy) {
+Capability::Client reverseMembrane(Capability::Client inner, kj::Rc<MembranePolicy> policy) {
   return Capability::Client(membrane(
-      ClientHook::from(kj::mv(inner)), *policy, true));
+      ClientHook::from(kj::mv(inner)), kj::mv(policy), true));
 }
 
 namespace _ {  // private
 
 _::OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
-                                   kj::Own<MembranePolicy> policy, bool reverse) {
-  MembraneCapTableReader capTable(*policy, reverse);
+                                   kj::Rc<MembranePolicy> policy, bool reverse) {
+  MembraneCapTableReader capTable(kj::mv(policy), reverse);
   return _::OrphanBuilder::copy(
       OrphanageInternal::getArena(to),
       OrphanageInternal::getCapTable(to),
@@ -610,8 +610,8 @@ _::OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
 }
 
 _::OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
-                                   kj::Own<MembranePolicy> policy, bool reverse) {
-  MembraneCapTableReader capTable(*policy, reverse);
+                                   kj::Rc<MembranePolicy> policy, bool reverse) {
+  MembraneCapTableReader capTable(kj::mv(policy), reverse);
   return _::OrphanBuilder::copy(
       OrphanageInternal::getArena(to),
       OrphanageInternal::getCapTable(to),
@@ -619,8 +619,8 @@ _::OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
 }
 
 _::OrphanBuilder copyOutOfMembrane(ListReader from, Orphanage to,
-                                   kj::Own<MembranePolicy> policy, bool reverse) {
-  MembraneCapTableReader capTable(*policy, reverse);
+                                   kj::Rc<MembranePolicy> policy, bool reverse) {
+  MembraneCapTableReader capTable(kj::mv(policy), reverse);
   return _::OrphanBuilder::copy(
       OrphanageInternal::getArena(to),
       OrphanageInternal::getCapTable(to),
