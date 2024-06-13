@@ -357,13 +357,15 @@ public:
     // Task which is working on sending an abort message and cleanly ending the connection.
   };
 
-  RpcConnectionState(BootstrapFactoryBase& bootstrapFactory,
+  RpcConnectionState(RpcSystemBase::Impl& rpcSystem,
+                     BootstrapFactoryBase& bootstrapFactory,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
                      size_t flowLimit,
                      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
-      : bootstrapFactory(bootstrapFactory),
+      : rpcSystem(rpcSystem),
+        bootstrapFactory(bootstrapFactory),
         restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
         traceEncoder(traceEncoder), tasks(*this) {
     connection.init<Connected>(kj::mv(connectionParam));
@@ -688,6 +690,7 @@ private:
   // =======================================================================================
   // OK, now we can define RpcConnectionState's member data.
 
+  RpcSystemBase::Impl& rpcSystem;
   BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
@@ -3644,7 +3647,7 @@ private:
         tasks.add(kj::mv(info.shutdownPromise));
       }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          bootstrapFactory, restorer, kj::mv(connection),
+          *this, bootstrapFactory, restorer, kj::mv(connection),
           kj::mv(onDisconnect.fulfiller), flowLimit, traceEncoder);
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
