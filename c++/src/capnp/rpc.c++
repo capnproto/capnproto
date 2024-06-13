@@ -352,20 +352,14 @@ private:
 class RpcSystemBase::RpcConnectionState final
     : public kj::TaskSet::ErrorHandler, public kj::Refcounted {
 public:
-  struct DisconnectInfo {
-    kj::Promise<void> shutdownPromise;
-    // Task which is working on sending an abort message and cleanly ending the connection.
-  };
-
   RpcConnectionState(RpcSystemBase::Impl& rpcSystem,
                      BootstrapFactoryBase& bootstrapFactory,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
-                     kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
                      size_t flowLimit,
                      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
       : bootstrapFactory(bootstrapFactory),
-        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
+        restorer(restorer), flowLimit(flowLimit),
         traceEncoder(traceEncoder), tasks(*this) {
     connection.init<Connected>(
         Connected { rpcSystem, kj::mv(connectionParam), kj::heap<kj::Canceler>() });
@@ -443,6 +437,7 @@ public:
 
     // Set our connection state to Disconnected now so that no one tries to write any messages to
     // it in their destructors.
+    auto& rpcSystem = connection.get<Connected>().rpcSystem;
     auto dyingConnection = kj::mv(connection.get<Connected>().connection);
     auto canceler = kj::mv(connection.get<Connected>().canceler);
     connection.init<Disconnected>(kj::cp(networkException));
@@ -521,6 +516,7 @@ public:
     });
 
     // Indicate disconnect.
+    auto& dyingConnectionRef = *dyingConnection;
     auto shutdownPromise = dyingConnection->shutdown()
         .attach(kj::mv(dyingConnection))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
@@ -543,8 +539,8 @@ public:
           }
           return kj::mv(shutdownException);
         });
-    disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
     canceler->cancel(networkException);
+    RpcSystemBase::dropConnection(rpcSystem, dyingConnectionRef, kj::mv(shutdownPromise));
   }
 
   void setFlowLimit(size_t words) {
@@ -705,8 +701,6 @@ private:
   kj::OneOf<Connected, Disconnected> connection;
   // Once the connection has failed, we drop it and replace it with an exception, which will be
   // thrown from all further calls.
-
-  kj::Own<kj::PromiseFulfiller<DisconnectInfo>> disconnectFulfiller;
 
   ExportTable<ExportId, Export> exports;
   ExportTable<QuestionId, Question> questions;
@@ -3572,17 +3566,21 @@ public:
     acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
   }
 
-  ~Impl() noexcept(false) {
+  void disconnectAll() {
     unwindDetector.catchExceptionsIfUnwinding([&]() {
       // std::unordered_map doesn't like it when elements' destructors throw, so carefully
-      // disassemble it.
+      // disassemble it. Also calling disconnect() on each object will remove it from the map,
+      // so we'd better finish iterating through the map before we start disconnecting things.
       if (!connections.empty()) {
         kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connections.size());
         kj::Exception shutdownException = KJ_EXCEPTION(DISCONNECTED, "RpcSystem was destroyed.");
         for (auto& entry: connections) {
-          entry.second->disconnect(kj::cp(shutdownException));
           deleteMe.add(kj::mv(entry.second));
         }
+        for (auto& entry: deleteMe) {
+          entry->disconnect(kj::cp(shutdownException));
+        }
+        KJ_ASSERT(connections.empty());
       }
     });
   }
@@ -3624,6 +3622,11 @@ public:
 
   kj::Promise<void> run() { return kj::mv(acceptLoopPromise); }
 
+  void dropConnection(VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask) {
+    connections.erase(&connection);
+    tasks.add(kj::mv(shutdownTask));
+  }
+
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
@@ -3644,15 +3647,8 @@ private:
     auto iter = connections.find(connection);
     if (iter == connections.end()) {
       VatNetworkBase::Connection* connectionPtr = connection;
-      auto onDisconnect = kj::newPromiseAndFulfiller<RpcConnectionState::DisconnectInfo>();
-      tasks.add(onDisconnect.promise
-          .then([this,connectionPtr](RpcConnectionState::DisconnectInfo info) {
-        connections.erase(connectionPtr);
-        tasks.add(kj::mv(info.shutdownPromise));
-      }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          *this, bootstrapFactory, restorer, kj::mv(connection),
-          kj::mv(onDisconnect.fulfiller), flowLimit, traceEncoder);
+          *this, bootstrapFactory, restorer, kj::mv(connection), flowLimit, traceEncoder);
       RpcConnectionState& result = *newState;
       connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
       return result;
@@ -3696,7 +3692,11 @@ RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
     : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
-RpcSystemBase::~RpcSystemBase() noexcept(false) {}
+RpcSystemBase::~RpcSystemBase() noexcept(false) {
+  if (impl.get() != nullptr) {  // could have been moved away
+    impl->disconnectAll();
+  }
+}
 
 Capability::Client RpcSystemBase::baseBootstrap(AnyStruct::Reader vatId) {
   return impl->bootstrap(vatId);
@@ -3717,6 +3717,11 @@ void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&
 
 kj::Promise<void> RpcSystemBase::run() {
   return impl->run();
+}
+
+void RpcSystemBase::dropConnection(RpcSystemBase::Impl& impl,
+    VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask) {
+  impl.dropConnection(connection, kj::mv(shutdownTask));
 }
 
 }  // namespace _ (private)
