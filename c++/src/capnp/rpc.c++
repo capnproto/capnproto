@@ -26,9 +26,8 @@
 #include <kj/async.h>
 #include <kj/one-of.h>
 #include <kj/function.h>
+#include <kj/map.h>
 #include <functional>  // std::greater
-#include <unordered_map>
-#include <map>
 #include <queue>
 #include <capnp/rpc.capnp.h>
 #include <kj/io.h>
@@ -299,7 +298,7 @@ public:
     if (id < kj::size(low)) {
       return low[id];
     } else {
-      return high[id];
+      return high.findOrCreate(id, [&]() -> typename decltype(high)::Entry { return {id, {}}; });
     }
   }
 
@@ -307,12 +306,7 @@ public:
     if (id < kj::size(low)) {
       return low[id];
     } else {
-      auto iter = high.find(id);
-      if (iter == high.end()) {
-        return kj::none;
-      } else {
-        return iter->second;
-      }
+      return high.find(id);
     }
   }
 
@@ -324,9 +318,11 @@ public:
       low[id] = T();
       return toRelease;
     } else {
-      T toRelease = kj::mv(high[id]);
-      high.erase(id);
-      return toRelease;
+      KJ_IF_SOME(entry, high.findEntry(id)) {
+        return high.release(entry).value;
+      } else {
+        return {};
+      }
     }
   }
 
@@ -336,13 +332,13 @@ public:
       func(i, low[i]);
     }
     for (auto& entry: high) {
-      func(entry.first, entry.second);
+      func(entry.key, entry.value);
     }
   }
 
 private:
   T low[16];
-  std::unordered_map<Id, T> high;
+  kj::HashMap<Id, T> high;
 };
 
 }  // namespace
@@ -713,7 +709,7 @@ private:
   // The Four Tables!
   // The order of the tables is important for correct destruction.
 
-  std::unordered_map<ClientHook*, ExportId> exportsByCap;
+  kj::HashMap<ClientHook*, ExportId> exportsByCap;
   // Maps already-exported ClientHook objects to their ID in the export table.
 
   ExportTable<EmbargoId, Embargo> embargoes;
@@ -1286,22 +1282,21 @@ private:
     if (inner->getBrand() == this) {
       return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor, fds);
     } else {
-      auto iter = exportsByCap.find(inner);
-      if (iter != exportsByCap.end()) {
+      KJ_IF_SOME(exportId, exportsByCap.find(inner)) {
         // We've already seen and exported this capability before.  Just up the refcount.
-        auto& exp = KJ_ASSERT_NONNULL(exports.find(iter->second));
+        auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
         ++exp.refcount;
         if (exp.resolveOp == kj::none) {
-          descriptor.setSenderHosted(iter->second);
+          descriptor.setSenderHosted(exportId);
         } else {
-          descriptor.setSenderPromise(iter->second);
+          descriptor.setSenderPromise(exportId);
         }
-        return iter->second;
+        return exportId;
       } else {
         // This is the first time we've seen this capability.
         ExportId exportId;
         auto& exp = exports.next(exportId);
-        exportsByCap[inner] = exportId;
+        exportsByCap.insert(inner, exportId);
         exp.canonical = true;
         exp.refcount = 1;
         exp.clientHook = inner->addRef();
@@ -1403,7 +1398,7 @@ private:
       // (i.e. this code) is canceled.
       auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
       if (exp.canonical) {
-        KJ_ASSERT(exportsByCap.erase(exp.clientHook) > 0);
+        KJ_ASSERT(exportsByCap.erase(exp.clientHook));
       }
       exp.clientHook = kj::mv(resolution);
 
@@ -1423,9 +1418,13 @@ private:
           // be able to just reuse the existing export table entry to represent the new promise --
           // unless it already has an entry.  Let's check.
 
-          auto insertResult = exportsByCap.insert(std::make_pair(exp.clientHook.get(), exportId));
-
-          if (insertResult.second) {
+          ExportId replacementExportId = exportsByCap.findOrCreate(
+              exp.clientHook, [&]() -> decltype(exportsByCap)::Entry {
+            // The replacement capability isn't previously exported, so assign it to the existing
+            // table entry.
+            return {exp.clientHook, exportId};
+          });
+          if (replacementExportId == exportId) {
             // The new promise was not already in the table, therefore the existing export table
             // entry has now been repurposed to represent it.  There is no need to send a resolve
             // message at all.  We do, however, have to start resolving the next promise.
@@ -3449,7 +3448,7 @@ private:
       exp.refcount -= refcount;
       if (exp.refcount == 0) {
         if (exp.canonical) {
-          KJ_ASSERT(exportsByCap.erase(exp.clientHook) > 0);
+          KJ_ASSERT(exportsByCap.erase(exp.clientHook));
         }
         exports.erase(id, exp);
       }
@@ -3585,19 +3584,18 @@ public:
 
   void disconnectAll() {
     unwindDetector.catchExceptionsIfUnwinding([&]() {
-      // std::unordered_map doesn't like it when elements' destructors throw, so carefully
-      // disassemble it. Also calling disconnect() on each object will remove it from the map,
-      // so we'd better finish iterating through the map before we start disconnecting things.
-      if (!connections.empty()) {
+      // We need to pull all the connections out of the map first, before calling disconnect on
+      // them, since they will each remove themselves from the map which invalidates iterators.
+      if (connections.size() > 0) {
         kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connections.size());
         kj::Exception shutdownException = KJ_EXCEPTION(DISCONNECTED, "RpcSystem was destroyed.");
         for (auto& entry: connections) {
-          deleteMe.add(kj::mv(entry.second));
+          deleteMe.add(kj::mv(entry.value));
         }
         for (auto& entry: deleteMe) {
           entry->disconnect(kj::cp(shutdownException));
         }
-        KJ_ASSERT(connections.empty());
+        KJ_ASSERT(connections.size() == 0);
       }
     });
   }
@@ -3629,7 +3627,7 @@ public:
     flowLimit = words;
 
     for (auto& conn: connections) {
-      conn.second->setFlowLimit(words);
+      conn.value->setFlowLimit(words);
     }
   }
 
@@ -3654,24 +3652,19 @@ private:
   kj::Promise<void> acceptLoopPromise = nullptr;
   kj::TaskSet tasks;
 
-  typedef std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
+  typedef kj::HashMap<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
       ConnectionMap;
   ConnectionMap connections;
 
   kj::UnwindDetector unwindDetector;
 
   RpcConnectionState& getConnectionState(kj::Own<VatNetworkBase::Connection>&& connection) {
-    auto iter = connections.find(connection);
-    if (iter == connections.end()) {
+    return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
       VatNetworkBase::Connection* connectionPtr = connection;
       auto newState = kj::refcounted<RpcConnectionState>(
           *this, bootstrapFactory, restorer, kj::mv(connection), flowLimit, traceEncoder);
-      RpcConnectionState& result = *newState;
-      connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
-      return result;
-    } else {
-      return *iter->second;
-    }
+      return {connectionPtr, kj::mv(newState)};
+    });
   }
 
   kj::Promise<void> acceptLoop() {

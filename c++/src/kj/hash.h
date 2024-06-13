@@ -102,6 +102,11 @@ struct HashCoder {
     }
   }
 
+  template <typename T>
+  uint operator*(const Own<T>& ptr) const {
+    return operator*(ptr.get());
+  }
+
   template <typename T, typename = decltype(instance<const HashCoder&>() * instance<const T&>())>
   uint operator*(ArrayPtr<T> arr) const;
   template <typename T, typename = decltype(instance<const HashCoder&>() * instance<const T&>())>
