@@ -396,6 +396,7 @@ TEST(TwoPartyNetwork, Abort) {
   hostId.setSide(rpc::twoparty::Side::SERVER);
 
   auto conn = KJ_ASSERT_NONNULL(network.connect(hostId));
+  conn->setIdle(false);
 
   {
     // Send an invalid message (Return to non-existent question).

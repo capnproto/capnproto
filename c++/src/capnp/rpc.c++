@@ -204,6 +204,10 @@ class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
 
 public:
+  bool empty() {
+    return slots.size() == freeIds.size() && highSlots.size() == 0;
+  }
+
   bool isHigh(Id& id) {
     return (id & highBit<Id>()) != 0;
   }
@@ -300,6 +304,10 @@ class ImportTable {
   // Table mapping integers to T, where the integers are chosen remotely.
 
 public:
+  bool empty() {
+    return presenceBits == 0 && high.size() == 0;
+  }
+
   T& findOrCreate(Id id) {
     // Get an entry, creating it if it doesn't exist.
     if (id < kj::size(low)) {
@@ -406,6 +414,8 @@ public:
     if (connection.is<Disconnected>()) {
       return newBrokenCap(kj::cp(connection.get<Disconnected>()));
     }
+
+    setNotIdle();
 
     QuestionId questionId;
     auto& question = questions.next(questionId);
@@ -543,13 +553,16 @@ public:
              newException);
     }
 
-    // Send an abort message, but ignore failure.
-    kj::runCatchingExceptions([&]() {
-      auto message = dyingConnection->newOutgoingMessage(
-          messageSizeHint<void>() + exceptionSizeHint(exception));
-      fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
-      message->send();
-    });
+    // Send an abort message, but ignore failure. Don't send if idle, because we promised not to
+    // send any more messages in that case... we'll just disconnect.
+    if (!idle) {
+      kj::runCatchingExceptions([&]() {
+        auto message = dyingConnection->newOutgoingMessage(
+            messageSizeHint<void>() + exceptionSizeHint(exception));
+        fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
+        message->send();
+      });
+    }
 
     // Indicate disconnect.
     auto& dyingConnectionRef = *dyingConnection;
@@ -784,6 +797,68 @@ private:
   bool receiveIncomingMessageError = false;
   // Becomes true when receiveIncomingMessage resulted in exception.
 
+  bool idle = true;
+  // What was the last value passed to setIdle() on the underlying connection? Used to avoid
+  // redundant calls. Initialized to true because we are expected to call setIdle(false) at
+  // startup.
+
+  // =====================================================================================
+  // Idle handling
+
+  void setNotIdle() {
+    // Inform the VatNetwork that this connection is NOT idle, unless we've already done so.
+
+    if (idle) {
+      idle = false;
+      KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+        c.connection->setIdle(false);
+      }
+    }
+  }
+
+  void checkIfBecameIdle() {
+    // Checks if the connection has become idle, and if so, informs the VatNetwork by calling
+    // setIdle(true). Generally, this must be called after erasing an entry from any of the
+    // Four Tables.
+
+    if (idle) return;  // already idle
+
+    bool allTablesEmpty =
+        questions.empty() && answers.empty() && exports.empty() && imports.empty() &&
+        // Technically the embargoes table should always be empty if the others are, but it's not
+        // expensive to check it.
+        embargoes.empty();
+
+    if (!allTablesEmpty) {
+      // Not idle, don't do anything.
+      return;
+    }
+
+    // Notes:
+    // - `exportsByCap` is a reverse mapping of `exports` so should be empty if `exports` is empty.
+    // - `tasks` only contains:
+    //   (a) messageLoop()
+    //   (b) instances of flowController->waitAllAcked(), which are meaningless if there are no
+    //       calls outstanding, and
+    //   (c) exceptions inserted specifically to break the connection
+    //   Of these, only messageLoop() could cause the connection to become non-idle again, but
+    //   that's a well-defined part of the setIdle() contract.
+    // - `flowWaiter` is only non-null when a large number of calls are outstanding; if the tables
+    //   are empty, it is null.
+    //
+    // Hence we know at this point that no further messages will be sent on this connection, unless
+    // the app initiates a new bootstrap or a message is received. I.e., we are idle.
+
+    KJ_ASSERT(exportsByCap.size() == 0);
+    KJ_ASSERT(flowWaiter == kj::none);
+
+    // OK, we can inform the VatNetwork of the idleness.
+    idle = true;
+    KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+      c.connection->setIdle(true);
+    }
+  }
+
   // =====================================================================================
   // ClientHook implementations
 
@@ -932,6 +1007,8 @@ private:
           builder.setReferenceCount(remoteRefcount);
           message->send();
         }
+
+        connectionState->checkIfBecameIdle();
       });
     }
 
@@ -1766,6 +1843,7 @@ private:
         } else {
           // Call has already returned, so we can now remove it from the table.
           connectionState->questions.erase(id, question);
+          connectionState->checkIfBecameIdle();
         }
       }
     }
@@ -2832,6 +2910,11 @@ private:
       // Also, this is the right time to stop counting the call against the flow limit.
       connectionState->callWordsInFlight -= requestSize;
       connectionState->maybeUnblockFlow();
+
+      // If we erased the answer table entry above, check for idleness now.
+      if (receivedFinish) {
+        connectionState->checkIfBecameIdle();
+      }
     }
   };
 
@@ -2873,8 +2956,46 @@ private:
       KJ_IF_SOME(m, message) {
         handleMessage(kj::mv(m));
       } else {
-        tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
-        co_return;
+        // Other end disconnected!
+
+        if (idle) {
+          // There were no outstanding capabilities or anything, so we don't have to propagate any
+          // exceptions anywhere. We can just remove ourselves from the connection map.
+
+          if (!connection.is<Connected>()) {
+            // Hmm, we're already in the Disconnected state. Odd that the message loop is still
+            // running at all but we should just let it end.
+            co_return;
+          }
+
+          Connected& state = connection.get<Connected>();
+
+          // At this point, the last reference to this connection state *should* be the one in
+          // the RpcSystem's map. The refcount should therefore be 1, and `isShared()`.
+          if (isShared()) {
+            // Oh, we still have references. This is probably a bug, but to be safe, set
+            // ourselves to the disconnected state (with an error).
+            KJ_LOG(ERROR, "RpcSystem bug: connection is idle but still has references?");
+            tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
+            co_return;
+          }
+
+          // Remove ourselves from the RpcSystem's table *now*. But have it create a shutdown
+          // task which will keep this object alive until `tasks` is empty. Note that
+          // `messageLoop()` itself is in `tasks`, so this will wait until `messageLoop()`
+          // finishes.
+          dropConnection(state.rpcSystem, *state.connection,
+              tasks.onEmpty().attach(kj::addRef(*this)));
+
+          // Shut down connection cleanly.
+          co_await state.connection->shutdown();
+
+          co_return;
+        } else {
+          // Need to raise an error in order to tear everything down.
+          tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
+          co_return;
+        }
       }
 
       // TODO(perf): We add a yield() here so that anything we needed to do in reaction to the
@@ -2893,6 +3014,11 @@ private:
   }
 
   void handleMessage(kj::Own<IncomingRpcMessage> message) {
+    // If we were idle before, receiving a message changes that. This is true even if we received
+    // a message that makes no sense while idle, because we need to send an error in response, and
+    // sending any message requires we are not idle.
+    setNotIdle();
+
     auto reader = message->getBody().getAs<rpc::Message>();
 
     switch (reader.which()) {
@@ -2942,6 +3068,16 @@ private:
         break;
       }
     }
+
+    // We need a checkIfBecameIdle() here mainly to handle the case that we were idle before
+    // receiving this message, and the message itself didn't actually add anything to the tables,
+    // so we are still idle.
+    //
+    // Note that most message types should inherently fail if they are received while idle (e.g.
+    // handleCall() would fail because it targets a capability on the export table, but when idle
+    // the export table is empty). In those cases, an exception will be thrown which will cause
+    // us to abort the connection.
+    checkIfBecameIdle();
   }
 
   void handleUnimplemented(const rpc::Message::Reader& message) {
@@ -3358,6 +3494,7 @@ private:
         // `releaseResultCaps` set true so that we don't have to release them here.  We can go
         // ahead and delete it from the table.
         questions.erase(ret.getAnswerId(), question);
+        checkIfBecameIdle();
       }
 
     } else {
@@ -3393,6 +3530,7 @@ private:
       } else {
         // The call context is already gone so we can tear down the Answer here.
         answerToRelease = answers.erase(finish.getQuestionId());
+        checkIfBecameIdle();
       }
     } else {
       // The `Finish` message targets a qusetion ID that isn't present in our answer table.
@@ -3495,6 +3633,7 @@ private:
           KJ_ASSERT(exportsByCap.erase(exp.clientHook));
         }
         exports.erase(id, exp);
+        checkIfBecameIdle();
       }
     } else {
       KJ_FAIL_REQUIRE("Tried to release invalid export ID.") {
@@ -3593,6 +3732,7 @@ private:
         KJ_IF_SOME(embargo, embargoes.find(context.getReceiverLoopback())) {
           KJ_ASSERT_NONNULL(embargo.fulfiller)->fulfill();
           embargoes.erase(context.getReceiverLoopback(), embargo);
+          checkIfBecameIdle();
         } else {
           KJ_FAIL_REQUIRE("Invalid embargo ID in 'Disembargo.context.receiverLoopback'.") {
             return;
