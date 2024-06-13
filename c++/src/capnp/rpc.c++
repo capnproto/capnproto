@@ -345,9 +345,12 @@ private:
   std::unordered_map<Id, T> high;
 };
 
+}  // namespace
+
 // =======================================================================================
 
-class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
+class RpcSystemBase::RpcConnectionState final
+    : public kj::TaskSet::ErrorHandler, public kj::Refcounted {
 public:
   struct DisconnectInfo {
     kj::Promise<void> shutdownPromise;
@@ -3545,8 +3548,6 @@ private:
   // ---------------------------------------------------------------------------
   // Level 2
 };
-
-}  // namespace
 
 class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
 public:
