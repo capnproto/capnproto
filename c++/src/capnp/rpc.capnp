@@ -1677,10 +1677,13 @@ using JoinResult = AnyPointer;
 #   # Given a ThirdPartyToContact received over this connection, connect to the third party.  The
 #   # caller should then send an `Accept` message over the new connection.
 #
-#   acceptIntroducedConnection(recipientId :ThirdPartyToAwait) :Connection;
-#   # Given an ThirdPartyToAwait received in a `Provide` message on this `Connection`, wait for the
-#   # recipient to connect, and return the connection formed.  Usually, the first message received
-#   # on the new connection will be an `Accept` message.
+#   awaitThirdParty(party: ThirdPartyToAwait, value :Any) :Any;
+#   completeThirdParty(completion: ThirdPartyCompletion, value :Any) :Any;
+#   # Complete a third-party handoff that is supposed to rendezvous at this node.
+#   #
+#   # Each method is called on the corresponding connection that received a `ThirdPartyToAwait` or
+#   # `ThirdPartyCompletion`. Once both are called, both return the `value` that was passed to the
+#   # other, allowing the RPC system to complete the handoff.
 #
 #   forwardThirdPartyToContact(original :ThirdPartyToContact, destination :Connection)
 #       :Maybe(ThirdPartyToContact);
