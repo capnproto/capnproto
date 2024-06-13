@@ -2786,39 +2786,35 @@ private:
   }
 
   kj::Promise<void> messageLoop() {
-    if (!connection.is<Connected>()) {
-      return kj::READY_NOW;
-    }
+    for (;;) {
+      if (!connection.is<Connected>()) {
+        co_return;
+      }
 
-    if (callWordsInFlight > flowLimit) {
-      auto paf = kj::newPromiseAndFulfiller<void>();
-      flowWaiter = kj::mv(paf.fulfiller);
-      return paf.promise.then([this]() {
-        return messageLoop();
-      });
-    }
+      if (callWordsInFlight > flowLimit) {
+        auto paf = kj::newPromiseAndFulfiller<void>();
+        flowWaiter = kj::mv(paf.fulfiller);
+        co_await paf.promise;
+        continue;
+      }
 
-    auto& connected = connection.get<Connected>();
+      auto& connected = connection.get<Connected>();
 
-    return connected.canceler->wrap(connected.connection->receiveIncomingMessage()).then(
-        [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) {
+      kj::Maybe<kj::Own<IncomingRpcMessage>> message;
+      try {
+        message = co_await connected.canceler->wrap(connected.connection->receiveIncomingMessage());
+      } catch (...) {
+        receiveIncomingMessageError = true;
+        throw;
+      }
+
       KJ_IF_SOME(m, message) {
         handleMessage(kj::mv(m));
-        return true;
       } else {
         tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
-        return false;
+        co_return;
       }
-    }, [this](kj::Exception&& exception) {
-      receiveIncomingMessageError = true;
-      kj::throwRecoverableException(kj::mv(exception));
-      return false;
-    }).then([this](bool keepGoing) {
-      // No exceptions; continue loop.
-      //
-      // (We do this in a separate continuation to handle the case where exceptions are
-      // disabled.)
-      //
+
       // TODO(perf): We add an evalLater() here so that anything we needed to do in reaction to
       //   the previous message has a chance to complete before the next message is handled. In
       //   particular, without this, I observed an ordering problem: I saw a case where a `Return`
@@ -2830,8 +2826,12 @@ private:
       //   resolution of `PromiseClient`s based on returned capabilities does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
       //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
-      if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));
-    });
+      // TODO(cleanup): As an extra optimization here I'm calling yield() directly since
+      //   evalLater(func) reduces to yield().then(func) and we don't need the .then(). yield()
+      //   itself does zero allocation which is nice. Maybe we should make it public? It's a much
+      //   better API for coroutines.
+      co_await kj::_::yield();  // instead of: co_await kj::evalLater([]() {});
+    }
   }
 
   void handleMessage(kj::Own<IncomingRpcMessage> message) {
@@ -3668,11 +3668,9 @@ private:
   }
 
   kj::Promise<void> acceptLoop() {
-    return network.baseAccept().then(
-        [this](kj::Own<VatNetworkBase::Connection>&& connection) {
-      getConnectionState(kj::mv(connection));
-      return acceptLoop();
-    });
+    for (;;) {
+      getConnectionState(co_await network.baseAccept());
+    }
   }
 
   Capability::Client baseCreateFor(AnyStruct::Reader clientId) override {
