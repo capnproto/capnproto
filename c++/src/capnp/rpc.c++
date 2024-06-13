@@ -645,6 +645,10 @@ private:
     uint refcount = 0;
     // When this reaches 0, drop `clientHook` and free this export.
 
+    bool canonical = false;
+    // If true, this is the canonical export entry for this clientHook, that is,
+    // `exportsByCap[clientHook]` points to this entry.
+
     kj::Own<ClientHook> clientHook;
 
     kj::Maybe<kj::Promise<void>> resolveOp = kj::none;
@@ -1298,6 +1302,7 @@ private:
         ExportId exportId;
         auto& exp = exports.next(exportId);
         exportsByCap[inner] = exportId;
+        exp.canonical = true;
         exp.refcount = 1;
         exp.clientHook = inner->addRef();
 
@@ -1397,8 +1402,17 @@ private:
       // export table is still live because when it is destroyed the asynchronous resolution task
       // (i.e. this code) is canceled.
       auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
-      exportsByCap.erase(exp.clientHook);
+      if (exp.canonical) {
+        KJ_ASSERT(exportsByCap.erase(exp.clientHook) > 0);
+      }
       exp.clientHook = kj::mv(resolution);
+
+      // The export now points to `resolution`, but it is not necessarily the canonical export
+      // for `resolution`. The export itself still represents the promise that ended up resolving
+      // to `resolution`, but `resoultion` itself also needs to be exported under a separate
+      // export ID to distinguish from the promise. (Unless it's also a promise, see the next
+      // bit...)
+      exp.canonical = false;
 
       if (exp.clientHook->getBrand() != this) {
         // We're resolving to a local capability.  If we're resolving to a promise, we might be
@@ -1415,6 +1429,7 @@ private:
             // The new promise was not already in the table, therefore the existing export table
             // entry has now been repurposed to represent it.  There is no need to send a resolve
             // message at all.  We do, however, have to start resolving the next promise.
+            exp.canonical = true;
             return resolveExportedPromise(exportId, kj::mv(promise));
           }
         }
@@ -3433,7 +3448,9 @@ private:
 
       exp.refcount -= refcount;
       if (exp.refcount == 0) {
-        exportsByCap.erase(exp.clientHook);
+        if (exp.canonical) {
+          KJ_ASSERT(exportsByCap.erase(exp.clientHook) > 0);
+        }
         exports.erase(id, exp);
       }
     } else {
