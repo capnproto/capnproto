@@ -410,6 +410,73 @@ public:
     //   to make sure any such return values have been delivered. If `setIdle(false)` is called in
     //   the meantime, cancel what you were going to do.
 
+    // Level 3 features ----------------------------------------------
+
+    virtual bool introduceTo(Connection& other,
+        ThirdPartyToContact::Builder otherContactInfo,
+        ThirdPartyToAwait::Builder thisAwaitInfo) { return false; }
+    // Introduce the vat at the other end of this connection ("this peer") to the vat at the other
+    // end of `other` ("the other peeer").
+    //
+    // `otherContactInfo` will be filled in with information needed to contact the other peer. This
+    // information should be passed to this peer. Conversely, `thisAwaitInfo` will be filled in with
+    // information identifying this peer; it should be passed to the other peer.
+    //
+    // Returns false if an introduction is not possible, in which case the RPC system must fall
+    // back to proxying. This is the default implementation for VatNetworks that do not support
+    // three-party handoff.
+    //
+    // TODO(someday): Define a way to attach FDs here.
+
+    virtual kj::Maybe<kj::Own<Connection>> connectToIntroduced(
+        ThirdPartyToContact::Reader contact,
+        ThirdPartyCompletion::Builder completion) { _::throwNo3ph(); }
+    // Given a `ThirdPartyToContact` that was received across this connection, form a direct
+    // connection to that contact, and fill in `completion` as appropriate to send to that contact
+    // in order to complete a three-party operation.
+    //
+    // Simlar to VatNetwork::connect(), this returns null if the target is actually the current
+    // vat, and could also return an existing `Connection` if there already is one connected to
+    // the requested Vat.
+
+    virtual bool forwardThirdPartyToContact(
+        ThirdPartyToContact::Reader contact, Connection& destination,
+        ThirdPartyToContact::Builder result) { return false; }
+    // Given `contact`, a `ThirdPartyToContact` received over *this* connection, construct a new
+    // `ThirdPartyToContact` that is valid to send over `destination` representing the same
+    // three-party handoff. Returns true if forwarding can be accomplished without actually
+    // connecting to `contact`, or returns false if the VatNetwork does not support this. In the
+    // latter case, the RpcSystem will respond by forming a direct connection to `contact` and
+    // then looping back later.
+
+    virtual kj::Promise<kj::Own<void>> awaitThirdParty(
+        ThirdPartyToAwait::Reader party, uint typeCode,
+        kj::Own<void> value) { _::throwNo3ph(); }
+    // Wait for the completion of a three-party handoff that is supposed to rendezvous at this node.
+    //
+    // `ThirdPartyToAwait` was received over this connection. The promise resolves when some other
+    // connection on this VatNetwork calls `completeThirdParty()` with the corresponding
+    // `ThirdPartyCompletion`. The two calls can happen in any order; both complete once both have
+    // been received.
+    //
+    // Each call returns the `value` passed to the other call. Both calls must pass the same
+    // `typeCode`, otherwise both calls will throw exceptions instead; this is intended to make
+    // sure the caller can safely downcast the return value to the expected object type.
+
+    virtual kj::Promise<kj::Own<void>> completeThirdParty(
+        ThirdPartyCompletion::Reader completion, uint typeCode,
+        kj::Own<void> value) { _::throwNo3ph(); }
+    // Complete a three-party handoff that is supposed to rendezvous at this node.
+    //
+    // `ThirdPartyCompletion` was received over this connection. The promise resolves when some
+    // other connection on this VatNetwork calls `awaitThirdParty()` with the corresponding
+    // `ThirdPartyToAwait`. The two calls can happen in any order; both complete once both have
+    // been received.
+    //
+    // Each call returns the `value` passed to the other call. Both calls must pass the same
+    // `typeCode`, otherwise both calls will throw exceptions instead; this is intended to make
+    // sure the caller can safely downcast the return value to the expected object type.
+
   private:
     AnyStruct::Reader baseGetPeerVatId() override;
   };
