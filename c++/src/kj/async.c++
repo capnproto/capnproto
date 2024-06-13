@@ -49,6 +49,10 @@
 #include <deque>
 #include <atomic>
 
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
+
 #if _WIN32 || __CYGWIN__
 #include <windows.h>  // for Sleep(0) and fibers
 #include <kj/windows-sanity.h>
@@ -1411,6 +1415,14 @@ struct FiberStack::Impl {
     KJ_ON_SCOPE_FAILURE({
       KJ_SYSCALL(munmap(stackMapping, allocSize)) { break; }
     });
+
+#ifdef __linux__
+#if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
+    // Try to name the virtual memory area for debugging purposes. This may fail if the kernel was
+    // not configured with the CONFIG_ANON_VMA_NAME option.
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, stackMapping, allocSize, "capnp_stack");
+#endif
+#endif
 
     void* stack = reinterpret_cast<byte*>(stackMapping) + pageSize;
     // Now mark everything except the guard page as read-write. We assume the stack grows down, so
