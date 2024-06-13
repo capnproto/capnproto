@@ -410,6 +410,84 @@ public:
     //   to make sure any such return values have been delivered. If `setIdle(false)` is called in
     //   the meantime, cancel what you were going to do.
 
+    // Level 3 features ----------------------------------------------
+
+    virtual bool canIntroduceTo(Connection& other) { return false; }
+    // Determines whether three-party handoff is supported, i.e. introduceTo(other, ...) can be
+    // called. The caller promises that `other` is a `Connection` produced by the same
+    // `VatNetwork`.
+    //
+    // Returns false if an introduction is not possible, in which case the RPC system must fall
+    // back to proxying. This is the default implementation for VatNetworks that do not support
+    // three-party handoff.
+
+    virtual void introduceTo(Connection& other,
+        typename ThirdPartyToContact::Builder otherContactInfo,
+        typename ThirdPartyToAwait::Builder thisAwaitInfo) { _::throwNo3ph(); }
+    // Introduce the vat at the other end of this connection ("this peer") to the vat at the other
+    // end of `other` ("the other peeer").
+    //
+    // `otherContactInfo` will be filled in with information needed to contact the other peer. This
+    // information should be passed to this peer. Conversely, `thisAwaitInfo` will be filled in with
+    // information identifying this peer; it should be passed to the other peer.
+    //
+    // This will not be called unless a previous call to `canIntroduceTo(other)` returned true.
+    //
+    // TODO(someday): Define a way to attach FDs here, useful for 3PH between local processes over
+    //   unix sockets.
+
+    virtual kj::Maybe<kj::Own<Connection>> connectToIntroduced(
+        typename ThirdPartyToContact::Reader contact,
+        typename ThirdPartyCompletion::Builder completion) { _::throwNo3ph(); }
+    // Given a `ThirdPartyToContact` that was received across this connection, form a direct
+    // connection to that contact, and fill in `completion` as appropriate to send to that contact
+    // in order to complete a three-party operation.
+    //
+    // Simlar to VatNetwork::connect(), this returns null if the target is actually the current
+    // vat, and could also return an existing `Connection` if there already is one connected to
+    // the requested Vat.
+
+    virtual bool canForwardThirdPartyToContact(
+        typename ThirdPartyToContact::Reader contact, Connection& destination) { return false; }
+    // Determines whether `contact`, a `ThirdPartyToContact` received over *this* connection, can
+    // be forwarded to another (fourth) party without actually connecting to `contact` first, i.e.
+    // `forwardThirdPartyToContact(contact, destination, ...)` can be called. The caller promises
+    // that `destination` is a `Connection` produced by the same `VatNetwork`.
+    //
+    // Returns true if forwarding can be accomplished without actually connecting to `contact`, or
+    // returns false if the VatNetwork does not support this. In the latter case, the RpcSystem
+    // will respond by forming a direct connection to `contact` and then initiating a second
+    // handoff to the destination.
+
+    virtual void forwardThirdPartyToContact(
+        typename ThirdPartyToContact::Reader contact, Connection& destination,
+        typename ThirdPartyToContact::Builder result) { _::throwNo3ph(); }
+    // Given `contact`, a `ThirdPartyToContact` received over *this* connection, construct a new
+    // `ThirdPartyToContact` that is valid to send over `destination` representing the same
+    // three-party handoff.
+
+    virtual kj::Own<void> awaitThirdParty(
+        typename ThirdPartyToAwait::Reader party,
+        kj::Rc<kj::Refcounted> value) { _::throwNo3ph(); }
+    // Expect completion of a three-party handoff that is supposed to rendezvous at this node.
+    //
+    // `ThirdPartyToAwait` was received over this connection. A corresponding call to
+    // `completeThirdParty()` will receive `value` as its result. Multiple matching calls to
+    // `completeThirdParty()` are permitted and will all receive references to the value, hence
+    // why it is refcounted. Once the returned `Own<void>` is dropped, `value` will be dropped
+    // and any later matching call to `completeThirdParty()` will either throw or just hang.
+
+    virtual kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(
+        typename ThirdPartyCompletion::Reader completion) { _::throwNo3ph(); }
+    // Complete a three-party handoff that is supposed to rendezvous at this node.
+    //
+    // `ThirdPartyCompletion` was received over this connection. The promise resolves when some
+    // other connection on this VatNetwork calls `awaitThirdParty()` with the corresponding
+    // `ThirdPartyToAwait`. The two calls can happen in any order; `completeThirdParty()` will
+    // wait for a corresponding `awaitThirdParty()` if it hasn't happened already.
+    //
+    // Returns a reference to the `value` passed to `awaitThirdParty()`.
+
   private:
     AnyStruct::Reader baseGetPeerVatId() override;
   };

@@ -40,6 +40,9 @@ class RpcSystem;
 
 namespace _ {  // private
 
+[[noreturn]] void throwNo3ph();
+// Throws an exception indicating that the VatNetwork does not support three-party handoff.
+
 class VatNetworkBase {
   // Non-template version of VatNetwork.  Ignore this class; see VatNetwork in rpc.h.
 
