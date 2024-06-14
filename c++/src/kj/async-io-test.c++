@@ -2236,7 +2236,7 @@ KJ_TEST("Userland tee concurrent read") {
   KJ_EXPECT(leftPromise.wait(ws) == 6);
   KJ_EXPECT(rightPromise.wait(ws) == 6);
 
-  KJ_EXPECT(leftBuf == "foobar"_kjb, 6);
+  KJ_EXPECT(leftBuf == "foobar"_kjb);
 }
 
 KJ_TEST("Userland tee cancel and restart read") {
