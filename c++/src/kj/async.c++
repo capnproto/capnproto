@@ -1420,7 +1420,7 @@ struct FiberStack::Impl {
 #if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
     // Try to name the virtual memory area for debugging purposes. This may fail if the kernel was
     // not configured with the CONFIG_ANON_VMA_NAME option.
-    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, stackMapping, allocSize, "capnp_stack");
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, stackMapping, allocSize, "kj_fiber_stack");
 #endif
 #endif
 
