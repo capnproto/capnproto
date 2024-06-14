@@ -1047,9 +1047,9 @@ private:
     }
 
     void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
-      if (cap->getBrand() == connectionState.get()) {
+      KJ_IF_SOME(rpcCap, connectionState->unwrapIfSameConnection(*cap)) {
         // Pass the flow controller on to our inner cap.
-        kj::downcast<RpcClient>(*cap).adoptFlowController(kj::mv(flowController));
+        rpcCap.adoptFlowController(kj::mv(flowController));
       } else {
         // We resolved to a capability that isn't another RPC capability. We should simply make
         // sure that all the calls complete.
@@ -1135,9 +1135,10 @@ private:
     kj::Promise<kj::Own<ClientHook>> resolve(kj::Own<ClientHook> replacement) {
       KJ_DASSERT(!isResolved());
 
-      const void* replacementBrand = replacement->getBrand();
-      bool isSameConnection = replacementBrand == connectionState.get();
-      if (isSameConnection) {
+      bool isSameConnection = false;
+      KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameConnection(*replacement)) {
+        isSameConnection = true;
+
         // We resolved to some other RPC capability hosted by the same peer.
         if (replacement->whenMoreResolved() != kj::none) {
           // We resolved to another remote promise. If *that* promise eventually resolves back
@@ -1154,15 +1155,14 @@ private:
 
           // We know the other object is a PromiseClient because it's the only ClientHook
           // type in the RPC implementation which returns non-null for `whenMoreResolved()`.
-          PromiseClient* other = &kj::downcast<PromiseClient>(*replacement);
+          PromiseClient* other = &kj::downcast<PromiseClient>(rpcReplacement);
           while (other->resolutionType == MERGED) {
             // There's no need to resolve to a thing that's just going to resolve to another thing.
             replacement = other->cap->addRef();
             other = &kj::downcast<PromiseClient>(*replacement);
 
-            // Note that replacementBrand is unchanged since we'd only merge with other
-            // PromiseClients on the same connection.
-            KJ_DASSERT(replacement->getBrand() == replacementBrand);
+            // We'd only merge with other PromiseClients on the same connection.
+            KJ_DASSERT(connectionState->unwrapIfSameConnection(*replacement) != kj::none);
           }
 
           if (other->isResolved()) {
@@ -1179,8 +1179,7 @@ private:
           resolutionType = REMOTE;
         }
       } else {
-        if (replacementBrand == &ClientHook::NULL_CAPABILITY_BRAND ||
-            replacementBrand == &ClientHook::BROKEN_CAPABILITY_BRAND) {
+        if (replacement->isNull() || replacement->isError()) {
           // We don't consider null or broken capabilities as "reflected" because they may have
           // been communicated to us literally as a null pointer or an exception on the wire,
           // rather than as a reference to one of our exports, in which case a disembargo won't
@@ -1277,8 +1276,8 @@ private:
       fds.add(kj::mv(fd));
     }
 
-    if (inner->getBrand() == this) {
-      return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor, fds);
+    KJ_IF_SOME(rpcInner, unwrapIfSameConnection(*inner)) {
+      return rpcInner.writeDescriptor(descriptor, fds);
     } else {
       KJ_IF_SOME(exportId, exportsByCap.find(inner)) {
         // We've already seen and exported this capability before.  Just up the refcount.
@@ -1344,8 +1343,8 @@ private:
     // this network connection, but then the promise resolved to point somewhere else before the
     // request was sent.  Now the request has to be redirected to the new target instead.
 
-    if (cap.getBrand() == this) {
-      return kj::downcast<RpcClient>(cap).writeTarget(target);
+    KJ_IF_SOME(rpcCap, unwrapIfSameConnection(cap)) {
+      return rpcCap.writeTarget(target);
     } else {
       return cap.addRef();
     }
@@ -1361,8 +1360,8 @@ private:
       }
     }
 
-    if (ptr->getBrand() == this) {
-      return kj::downcast<RpcClient>(*ptr).getInnermostClient();
+    KJ_IF_SOME(rpcPtr, unwrapIfSameConnection(*ptr)) {
+      return rpcPtr.getInnermostClient();
     } else {
       return ptr->addRef();
     }
@@ -1407,7 +1406,7 @@ private:
       // bit...)
       exp.canonical = false;
 
-      if (exp.clientHook->getBrand() != this) {
+      if (unwrapIfSameConnection(*exp.clientHook) == kj::none) {
         // We're resolving to a local capability.  If we're resolving to a promise, we might be
         // able to reuse our export table entry and avoid sending a message.
 
@@ -1617,7 +1616,7 @@ private:
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_SOME(exp, exports.find(descriptor.getReceiverHosted())) {
           auto result = exp.clientHook->addRef();
-          if (result->getBrand() == this) {
+          if (unwrapIfSameConnection(*result) != kj::none) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
           return kj::mv(result);
@@ -1633,7 +1632,7 @@ private:
             KJ_IF_SOME(pipeline, answer.pipeline) {
               KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
                 auto result = pipeline->getPipelinedCap(ops);
-                if (result->getBrand() == this) {
+                if (unwrapIfSameConnection(*result) != kj::none) {
                   result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
                 }
                 return kj::mv(result);
@@ -2213,6 +2212,22 @@ private:
     kj::Own<QuestionRef> questionRef;
   };
 
+  kj::Maybe<RpcClient&> unwrapIfSameConnection(ClientHook& hook) {
+    if (hook.getBrand() == this) {
+      return kj::downcast<RpcClient>(hook);
+    } else {
+      return kj::none;
+    }
+  }
+
+  kj::Maybe<RpcRequest&> unwrapIfSameConnection(RequestHook& hook) {
+    if (hook.getBrand() == this) {
+      return kj::downcast<RpcRequest>(hook);
+    } else {
+      return kj::none;
+    }
+  }
+
   // =====================================================================================
   // CallContextHook implementation
 
@@ -2631,33 +2646,34 @@ private:
       KJ_REQUIRE(response == kj::none,
                  "Can't call tailCall() after initializing the results struct.");
 
-      if (request->getBrand() == connectionState.get() &&
-          !redirectResults && !hints.noPromisePipelining) {
-        // The tail call is headed towards the peer that called us in the first place, so we can
-        // optimize out the return trip.
-        //
-        // If the noPromisePipelining hint was sent, we skip this trick since the caller will
-        // ignore the `Return` message anyway.
+      KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameConnection(*request)) {
+        if (!redirectResults && !hints.noPromisePipelining) {
+          // The tail call is headed towards the peer that called us in the first place, so we can
+          // optimize out the return trip.
+          //
+          // If the noPromisePipelining hint was sent, we skip this trick since the caller will
+          // ignore the `Return` message anyway.
 
-        KJ_IF_SOME(tailInfo, kj::downcast<RpcRequest>(*request).tailSend()) {
-          if (isFirstResponder()) {
-            if (connectionState->connection.is<Connected>()) {
-              auto message = connectionState->connection.get<Connected>().connection
-                  ->newOutgoingMessage(messageSizeHint<rpc::Return>());
-              auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+          KJ_IF_SOME(tailInfo, rpcRequest.tailSend()) {
+            if (isFirstResponder()) {
+              if (connectionState->connection.is<Connected>()) {
+                auto message = connectionState->connection.get<Connected>().connection
+                    ->newOutgoingMessage(messageSizeHint<rpc::Return>());
+                auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-              builder.setAnswerId(answerId);
-              builder.setReleaseParamCaps(false);
-              builder.setTakeFromOtherQuestion(tailInfo.questionId);
+                builder.setAnswerId(answerId);
+                builder.setReleaseParamCaps(false);
+                builder.setTakeFromOtherQuestion(tailInfo.questionId);
 
-              message->send();
+                message->send();
+              }
+
+              // There are no caps in our return message, but of course the tail results could have
+              // caps, so we must continue to honor pipeline calls (and just bounce them back).
+              cleanupAnswerTable(nullptr, false);
             }
-
-            // There are no caps in our return message, but of course the tail results could have
-            // caps, so we must continue to honor pipeline calls (and just bounce them back).
-            cleanupAnswerTable(nullptr, false);
+            return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
           }
-          return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
         }
       }
 
@@ -3498,7 +3514,7 @@ private:
             }
           }
 
-          KJ_REQUIRE(target->getBrand() == this,
+          KJ_REQUIRE(unwrapIfSameConnection(*target) != kj::none,
                     "'Disembargo' of type 'senderLoopback' sent to an object that does not point "
                     "back to the sender.") {
             return;
