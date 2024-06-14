@@ -1416,7 +1416,7 @@ struct FiberStack::Impl {
       KJ_SYSCALL(munmap(stackMapping, allocSize)) { break; }
     });
 
-#ifdef __linux__
+#if __linux__
 #if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
     // Try to name the virtual memory area for debugging purposes. This may fail if the kernel was
     // not configured with the CONFIG_ANON_VMA_NAME option.
