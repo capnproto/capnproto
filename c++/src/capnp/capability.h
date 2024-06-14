@@ -732,6 +732,8 @@ class RequestHook {
   // Hook interface implemented by RPC system representing a request being built.
 
 public:
+  RequestHook(const void* brand = nullptr): brand(brand) {}
+
   virtual RemotePromise<AnyPointer> send() = 0;
   // Send the call and return a promise for the result.
 
@@ -741,7 +743,7 @@ public:
   virtual AnyPointer::Pipeline sendForPipeline() = 0;
   // Send a call for pipelining purposes only.
 
-  virtual const void* getBrand() = 0;
+  const void* getBrand() { return brand; }
   // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
   // discover when tail call is going to be sent over its own connection and therefore can be
   // optimized into a remote tail call.
@@ -750,6 +752,9 @@ public:
   inline static kj::Own<RequestHook> from(Request<T, U>&& request) {
     return kj::mv(request.hook);
   }
+
+private:
+  const void* brand;
 };
 
 class ResponseHook {
@@ -772,7 +777,7 @@ public:
 
 class ClientHook {
 public:
-  ClientHook();
+  ClientHook(const void* brand = nullptr);
 
   using CallHints = Capability::Client::CallHints;
 
@@ -827,7 +832,7 @@ public:
   virtual kj::Own<ClientHook> addRef() = 0;
   // Return a new reference to the same capability.
 
-  virtual const void* getBrand() = 0;
+  const void* getBrand() { return brand; }
   // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
   // discover when a capability it needs to marshal is one that it created in the first place, and
   // therefore it can transfer the capability without proxying.
@@ -848,6 +853,9 @@ public:
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
   static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
+
+private:
+  const void* brand;
 };
 
 class RevocableClientHook: public ClientHook {

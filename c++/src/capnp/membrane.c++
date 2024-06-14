@@ -156,7 +156,8 @@ private:
 class MembraneRequestHook final: public RequestHook {
 public:
   MembraneRequestHook(kj::Own<RequestHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
-      : inner(kj::mv(inner)), policy(kj::mv(policy)),
+      : RequestHook(&MEMBRANE_BRAND),
+        inner(kj::mv(inner)), policy(kj::mv(policy)),
         reverse(reverse), capTable(*this->policy, reverse) {}
 
   static Request<AnyPointer, AnyPointer> wrap(
@@ -234,10 +235,6 @@ public:
   AnyPointer::Pipeline sendForPipeline() override {
     return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
         PipelineHook::from(inner->sendForPipeline()), policy->addRef(), reverse));
-  }
-
-  const void* getBrand() override {
-    return MEMBRANE_BRAND;
   }
 
 private:
@@ -330,7 +327,8 @@ private:
 class MembraneHook final: public ClientHook, public kj::Refcounted {
 public:
   MembraneHook(kj::Own<ClientHook>&& inner, kj::Own<MembranePolicy>&& policyParam, bool reverse)
-      : inner(kj::mv(inner)), policy(kj::mv(policyParam)), reverse(reverse) {
+      : ClientHook(MEMBRANE_BRAND), inner(kj::mv(inner)), policy(kj::mv(policyParam)),
+        reverse(reverse) {
     KJ_IF_SOME(r, policy->onRevoked()) {
       revocationTask = r.eagerlyEvaluate([this](kj::Exception&& exception) {
         // Since `inner` will be overwritten here and could even be destroyed, it's important that
@@ -526,10 +524,6 @@ public:
 
   kj::Own<ClientHook> addRef() override {
     return kj::addRef(*this);
-  }
-
-  const void* getBrand() override {
-    return MEMBRANE_BRAND;
   }
 
   kj::Maybe<int> getFd() override {

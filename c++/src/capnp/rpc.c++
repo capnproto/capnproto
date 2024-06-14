@@ -746,7 +746,8 @@ private:
   class RpcClient: public ClientHook, public kj::Refcounted {
   public:
     RpcClient(RpcConnectionState& connectionState)
-        : connectionState(kj::addRef(connectionState)) {}
+        : ClientHook(&connectionState),
+          connectionState(kj::addRef(connectionState)) {}
 
     ~RpcClient() noexcept(false) {
       KJ_IF_SOME(f, this->flowController) {
@@ -847,9 +848,6 @@ private:
 
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
-    }
-    const void* getBrand() override {
-      return connectionState.get();
     }
 
     kj::Own<RpcConnectionState> connectionState;
@@ -1591,9 +1589,6 @@ private:
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
     }
-    const void* getBrand() override {
-      return nullptr;
-    }
     kj::Maybe<int> getFd() override {
       return inner->getFd();
     }
@@ -1764,7 +1759,8 @@ private:
   public:
     RpcRequest(RpcConnectionState& connectionState, VatNetworkBase::Connection& connection,
                kj::Maybe<MessageSize> sizeHint, kj::Own<RpcClient>&& target)
-        : connectionState(kj::addRef(connectionState)),
+        : RequestHook(&connectionState),
+          connectionState(kj::addRef(connectionState)),
           target(kj::mv(target)),
           message(connection.newOutgoingMessage(
               firstSegmentSize(sizeHint, messageSizeHint<rpc::Call>() +
@@ -1920,10 +1916,6 @@ private:
       }
 
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
-    }
-
-    const void* getBrand() override {
-      return connectionState.get();
     }
 
   private:

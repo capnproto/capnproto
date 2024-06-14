@@ -57,7 +57,7 @@ static BrokenCapFactoryImpl brokenCapFactory;
 
 }  // namespace
 
-ClientHook::ClientHook() {
+ClientHook::ClientHook(const void* brand): brand(brand) {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
 }
 
@@ -252,10 +252,6 @@ public:
         kj::mv(message), client->addRef(), hints, isStreaming);
     auto vpap = client->call(interfaceId, methodId, kj::addRef(*context), hints);
     return AnyPointer::Pipeline(kj::mv(vpap.pipeline));
-  }
-
-  const void* getBrand() override {
-    return nullptr;
   }
 
   kj::Own<MallocMessageBuilder> message;
@@ -460,10 +456,6 @@ public:
     return kj::addRef(*this);
   }
 
-  const void* getBrand() override {
-    return nullptr;
-  }
-
   kj::Maybe<int> getFd() override {
     KJ_IF_SOME(r, redirect) {
       return r->getFd();
@@ -540,7 +532,8 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::Own<Capability::Server>&& serverParam, bool revocable = false) {
+  LocalClient(kj::Own<Capability::Server>&& serverParam, bool revocable = false)
+      : ClientHook(&BRAND) {
     auto& serverRef = *server.emplace(kj::mv(serverParam));
     serverRef.thisHook = this;
     if (revocable) revoker.emplace();
@@ -549,7 +542,7 @@ public:
   LocalClient(kj::Own<Capability::Server>&& serverParam,
               _::CapabilityServerSetBase& capServerSet, void* ptr,
               bool revocable = false)
-      : capServerSet(&capServerSet), ptr(ptr) {
+      : ClientHook(&BRAND), capServerSet(&capServerSet), ptr(ptr) {
     auto& serverRef = *server.emplace(kj::mv(serverParam));
     serverRef.thisHook = this;
     if (revocable) revoker.emplace();
@@ -691,10 +684,6 @@ public:
 
   static const uint BRAND;
   // Value is irrelevant; used for pointer.
-
-  const void* getBrand() override {
-    return &BRAND;
-  }
 
   kj::Maybe<kj::Promise<void*>> getLocalServer(_::CapabilityServerSetBase& capServerSet) {
     // If this is a local capability created through `capServerSet`, return the underlying Server.
@@ -1015,10 +1004,6 @@ public:
     return AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception));
   }
 
-  const void* getBrand() override {
-    return nullptr;
-  }
-
   kj::Exception exception;
   MallocMessageBuilder message;
 };
@@ -1026,10 +1011,10 @@ public:
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
   BrokenClient(const kj::Exception& exception, bool resolved, const void* brand)
-      : exception(exception), resolved(resolved), brand(brand) {}
+      : ClientHook(brand), exception(exception), resolved(resolved) {}
   BrokenClient(const kj::StringPtr description, bool resolved, const void* brand)
-      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)),
-        resolved(resolved), brand(brand) {}
+      : ClientHook(brand), exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)),
+        resolved(resolved) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
@@ -1058,10 +1043,6 @@ public:
     return kj::addRef(*this);
   }
 
-  const void* getBrand() override {
-    return brand;
-  }
-
   kj::Maybe<int> getFd() override {
     return kj::none;
   }
@@ -1069,7 +1050,6 @@ public:
 private:
   kj::Exception exception;
   bool resolved;
-  const void* brand;
 };
 
 kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
