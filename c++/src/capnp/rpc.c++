@@ -186,6 +186,12 @@ ClientHook::CallHints callHintsFromReader(rpc::Call::Reader reader) {
   return hints;
 }
 
+class RpcSystemBrand: public kj::Refcounted {
+  // A dummy object, allocated once per RpcSystem, which serves no other purpose than to be the
+  // brand pointer for that RpcSystem's ClientHooks. We can't use a pointer to the RpcSystem itself
+  // since it can actually be destroyed while the ClientHooks still exist.
+};
+
 // =======================================================================================
 
 template <typename Id>
@@ -353,10 +359,11 @@ public:
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      size_t flowLimit,
-                     kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
+                     kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder,
+                     RpcSystemBrand& brand)
       : bootstrapFactory(bootstrapFactory),
         restorer(restorer), flowLimit(flowLimit),
-        traceEncoder(traceEncoder), tasks(*this) {
+        traceEncoder(traceEncoder), brand(kj::addRef(brand)), tasks(*this) {
     connection.init<Connected>(
         Connected { rpcSystem, kj::mv(connectionParam), kj::heap<kj::Canceler>() });
     tasks.add(messageLoop());
@@ -725,6 +732,8 @@ private:
 
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder;
 
+  kj::Own<RpcSystemBrand> brand;
+
   kj::TaskSet tasks;
 
   bool gotReturnForHighQuestionId = false;
@@ -746,7 +755,7 @@ private:
   class RpcClient: public ClientHook, public kj::Refcounted {
   public:
     RpcClient(RpcConnectionState& connectionState)
-        : ClientHook(&connectionState),
+        : ClientHook(connectionState.brand.get()),
           connectionState(kj::addRef(connectionState)) {}
 
     ~RpcClient() noexcept(false) {
@@ -754,6 +763,10 @@ private:
         // Destroying the client should not cancel outstanding streaming calls.
         connectionState->tasks.add(f->waitAllAcked().attach(kj::mv(f)));
       }
+    }
+
+    bool isOnConnection(RpcConnectionState& expected) {
+      return connectionState.get() == &expected;
     }
 
     virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
@@ -1758,7 +1771,7 @@ private:
   public:
     RpcRequest(RpcConnectionState& connectionState, VatNetworkBase::Connection& connection,
                kj::Maybe<MessageSize> sizeHint, kj::Own<RpcClient>&& target)
-        : RequestHook(&connectionState),
+        : RequestHook(connectionState.brand.get()),
           connectionState(kj::addRef(connectionState)),
           target(kj::mv(target)),
           message(connection.newOutgoingMessage(
@@ -1766,6 +1779,10 @@ private:
                   sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT))),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
           paramsBuilder(capTable.imbue(callBuilder.getParams().getContent())) {}
+
+    bool isOnConnection(RpcConnectionState& expected) {
+      return connectionState.get() == &expected;
+    }
 
     inline AnyPointer::Builder getRoot() {
       return paramsBuilder;
@@ -2213,19 +2230,23 @@ private:
   };
 
   kj::Maybe<RpcClient&> unwrapIfSameConnection(ClientHook& hook) {
-    if (hook.getBrand() == this) {
-      return kj::downcast<RpcClient>(hook);
-    } else {
-      return kj::none;
+    if (hook.getBrand() == brand.get()) {
+      RpcClient& result = kj::downcast<RpcClient>(hook);
+      if (result.isOnConnection(*this)) {
+        return result;
+      }
     }
+    return kj::none;
   }
 
   kj::Maybe<RpcRequest&> unwrapIfSameConnection(RequestHook& hook) {
-    if (hook.getBrand() == this) {
-      return kj::downcast<RpcRequest>(hook);
-    } else {
-      return kj::none;
+    if (hook.getBrand() == brand.get()) {
+      RpcRequest& result = kj::downcast<RpcRequest>(hook);
+      if (result.isOnConnection(*this)) {
+        return result;
+      }
     }
+    return kj::none;
   }
 
   // =====================================================================================
@@ -3658,6 +3679,7 @@ private:
   size_t flowLimit = kj::maxValue;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::Promise<void> acceptLoopPromise = nullptr;
+  kj::Own<RpcSystemBrand> brand = kj::refcounted<RpcSystemBrand>();
   kj::TaskSet tasks;
 
   typedef kj::HashMap<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
@@ -3670,7 +3692,7 @@ private:
     return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
       VatNetworkBase::Connection* connectionPtr = connection;
       auto newState = kj::refcounted<RpcConnectionState>(
-          *this, bootstrapFactory, restorer, kj::mv(connection), flowLimit, traceEncoder);
+          *this, bootstrapFactory, restorer, kj::mv(connection), flowLimit, traceEncoder, *brand);
       return {connectionPtr, kj::mv(newState)};
     });
   }
