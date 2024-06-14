@@ -1171,7 +1171,7 @@ kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::C
   }
 
   // Try to unwrap that.
-  if (hook->getBrand() == &LocalClient::BRAND) {
+  if (hook->isBrand(&LocalClient::BRAND)) {
     KJ_IF_SOME(promise, kj::downcast<LocalClient>(*hook).getLocalServer(*this)) {
       // This is definitely a member of our set and will resolve to non-null. We just have to wait
       // for any existing streaming calls to complete.

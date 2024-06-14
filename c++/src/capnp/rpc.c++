@@ -2230,7 +2230,7 @@ private:
   };
 
   kj::Maybe<RpcClient&> unwrapIfSameConnection(ClientHook& hook) {
-    if (hook.getBrand() == brand.get()) {
+    if (hook.isBrand(brand.get())) {
       RpcClient& result = kj::downcast<RpcClient>(hook);
       if (result.isOnConnection(*this)) {
         return result;
@@ -2240,7 +2240,7 @@ private:
   }
 
   kj::Maybe<RpcRequest&> unwrapIfSameConnection(RequestHook& hook) {
-    if (hook.getBrand() == brand.get()) {
+    if (hook.isBrand(brand.get())) {
       RpcRequest& result = kj::downcast<RpcRequest>(hook);
       if (result.isOnConnection(*this)) {
         return result;

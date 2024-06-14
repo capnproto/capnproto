@@ -743,10 +743,10 @@ public:
   virtual AnyPointer::Pipeline sendForPipeline() = 0;
   // Send a call for pipelining purposes only.
 
-  const void* getBrand() { return brand; }
-  // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
-  // discover when tail call is going to be sent over its own connection and therefore can be
-  // optimized into a remote tail call.
+  inline bool isBrand(const void* other) { return brand == other; }
+  // Checks if this RequestHook's brand, as passed to the constructor, matches the given pointer.
+  // This can be used by an RPC adapter to discover when tail call is going to be sent over its own
+  // connection and therefore can be optimized into a remote tail call.
 
   template <typename T, typename U>
   inline static kj::Own<RequestHook> from(Request<T, U>&& request) {
@@ -832,20 +832,21 @@ public:
   virtual kj::Own<ClientHook> addRef() = 0;
   // Return a new reference to the same capability.
 
-  const void* getBrand() { return brand; }
-  // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
-  // discover when a capability it needs to marshal is one that it created in the first place, and
-  // therefore it can transfer the capability without proxying.
+  inline bool isBrand(const void* other) { return brand == other; }
+  // Checks if this ClientHooks's brand, as passed to the constructor, matches the given pointer.
+  // This can be used by an RPC adapter to discover when a capability it needs to marshal is one
+  // that it created in the first place, and therefore it can transfer the capability without
+  // proxying.
 
   static const uint NULL_CAPABILITY_BRAND;
   static const uint BROKEN_CAPABILITY_BRAND;
   // Values are irrelevant; used for pointers.
 
-  inline bool isNull() { return getBrand() == &NULL_CAPABILITY_BRAND; }
+  inline bool isNull() { return isBrand(&NULL_CAPABILITY_BRAND); }
   // Returns true if the capability was created as a result of assigning a Client to null or by
   // reading a null pointer out of a Cap'n Proto message.
 
-  inline bool isError() { return getBrand() == &BROKEN_CAPABILITY_BRAND; }
+  inline bool isError() { return isBrand(&BROKEN_CAPABILITY_BRAND); }
   // Returns true if the capability was created by newBrokenCap().
 
   virtual kj::Maybe<int> getFd() = 0;

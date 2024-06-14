@@ -164,7 +164,7 @@ public:
       Request<AnyPointer, AnyPointer>&& inner, MembranePolicy& policy, bool reverse) {
     AnyPointer::Builder builder = inner;
     auto innerHook = RequestHook::from(kj::mv(inner));
-    if (innerHook->getBrand() == MEMBRANE_BRAND) {
+    if (innerHook->isBrand(MEMBRANE_BRAND)) {
       auto& otherMembrane = kj::downcast<MembraneRequestHook>(*innerHook);
       if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
         // Request that passed across the membrane one way is now passing back the other way.
@@ -181,7 +181,7 @@ public:
 
   static kj::Own<RequestHook> wrap(
       kj::Own<RequestHook>&& inner, MembranePolicy& policy, bool reverse) {
-    if (inner->getBrand() == MEMBRANE_BRAND) {
+    if (inner->isBrand(MEMBRANE_BRAND)) {
       auto& otherMembrane = kj::downcast<MembraneRequestHook>(*inner);
       if (otherMembrane.policy.get() == &policy && otherMembrane.reverse == !reverse) {
         // Request that passed across the membrane one way is now passing back the other way.
@@ -347,7 +347,7 @@ public:
   }
 
   static kj::Own<ClientHook> wrap(ClientHook& cap, MembranePolicy& policy, bool reverse) {
-    if (cap.getBrand() == MEMBRANE_BRAND) {
+    if (cap.isBrand(MEMBRANE_BRAND)) {
       auto& otherMembrane = kj::downcast<MembraneHook>(cap);
       auto& rootPolicy = policy.rootPolicy();
       if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
@@ -377,7 +377,7 @@ public:
   }
 
   static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, MembranePolicy& policy, bool reverse) {
-    if (cap->getBrand() == MEMBRANE_BRAND) {
+    if (cap->isBrand(MEMBRANE_BRAND)) {
       auto& otherMembrane = kj::downcast<MembraneHook>(*cap);
       auto& rootPolicy = policy.rootPolicy();
       if (&otherMembrane.policy->rootPolicy() == &rootPolicy &&
