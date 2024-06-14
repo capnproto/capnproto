@@ -49,7 +49,7 @@
 #include <deque>
 #include <atomic>
 
-#ifdef __linux__
+#if __linux__
 #include <sys/prctl.h>
 #endif
 
