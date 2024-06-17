@@ -26,9 +26,8 @@
 #include <kj/async.h>
 #include <kj/one-of.h>
 #include <kj/function.h>
+#include <kj/map.h>
 #include <functional>  // std::greater
-#include <unordered_map>
-#include <map>
 #include <queue>
 #include <capnp/rpc.capnp.h>
 #include <kj/io.h>
@@ -187,6 +186,12 @@ ClientHook::CallHints callHintsFromReader(rpc::Call::Reader reader) {
   return hints;
 }
 
+class RpcSystemBrand: public kj::Refcounted {
+  // A dummy object, allocated once per RpcSystem, which serves no other purpose than to be the
+  // brand pointer for that RpcSystem's ClientHooks. We can't use a pointer to the RpcSystem itself
+  // since it can actually be destroyed while the ClientHooks still exist.
+};
+
 // =======================================================================================
 
 template <typename Id>
@@ -299,7 +304,7 @@ public:
     if (id < kj::size(low)) {
       return low[id];
     } else {
-      return high[id];
+      return high.findOrCreate(id, [&]() -> typename decltype(high)::Entry { return {id, {}}; });
     }
   }
 
@@ -307,12 +312,7 @@ public:
     if (id < kj::size(low)) {
       return low[id];
     } else {
-      auto iter = high.find(id);
-      if (iter == high.end()) {
-        return kj::none;
-      } else {
-        return iter->second;
-      }
+      return high.find(id);
     }
   }
 
@@ -324,9 +324,11 @@ public:
       low[id] = T();
       return toRelease;
     } else {
-      T toRelease = kj::mv(high[id]);
-      high.erase(id);
-      return toRelease;
+      KJ_IF_SOME(entry, high.findEntry(id)) {
+        return high.release(entry).value;
+      } else {
+        return {};
+      }
     }
   }
 
@@ -336,34 +338,34 @@ public:
       func(i, low[i]);
     }
     for (auto& entry: high) {
-      func(entry.first, entry.second);
+      func(entry.key, entry.value);
     }
   }
 
 private:
   T low[16];
-  std::unordered_map<Id, T> high;
+  kj::HashMap<Id, T> high;
 };
+
+}  // namespace
 
 // =======================================================================================
 
-class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
+class RpcSystemBase::RpcConnectionState final
+    : public kj::TaskSet::ErrorHandler, public kj::Refcounted {
 public:
-  struct DisconnectInfo {
-    kj::Promise<void> shutdownPromise;
-    // Task which is working on sending an abort message and cleanly ending the connection.
-  };
-
-  RpcConnectionState(BootstrapFactoryBase& bootstrapFactory,
+  RpcConnectionState(RpcSystemBase::Impl& rpcSystem,
+                     BootstrapFactoryBase& bootstrapFactory,
                      kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
-                     kj::Own<kj::PromiseFulfiller<DisconnectInfo>>&& disconnectFulfiller,
                      size_t flowLimit,
-                     kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder)
+                     kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder,
+                     RpcSystemBrand& brand)
       : bootstrapFactory(bootstrapFactory),
-        restorer(restorer), disconnectFulfiller(kj::mv(disconnectFulfiller)), flowLimit(flowLimit),
-        traceEncoder(traceEncoder), tasks(*this) {
-    connection.init<Connected>(kj::mv(connectionParam));
+        restorer(restorer), flowLimit(flowLimit),
+        traceEncoder(traceEncoder), brand(kj::addRef(brand)), tasks(*this) {
+    connection.init<Connected>(
+        Connected { rpcSystem, kj::mv(connectionParam), kj::heap<kj::Canceler>() });
     tasks.add(messageLoop());
   }
 
@@ -385,7 +387,7 @@ public:
     paf.promise = paf.promise.attach(kj::addRef(*questionRef));
 
     {
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = connection.get<Connected>().connection->newOutgoingMessage(
           objectId.targetSize().wordCount + messageSizeHint<rpc::Bootstrap>());
 
       auto builder = message->getBody().initAs<rpc::Message>().initBootstrap();
@@ -438,7 +440,9 @@ public:
 
     // Set our connection state to Disconnected now so that no one tries to write any messages to
     // it in their destructors.
-    auto dyingConnection = kj::mv(connection.get<Connected>());
+    auto& rpcSystem = connection.get<Connected>().rpcSystem;
+    auto dyingConnection = kj::mv(connection.get<Connected>().connection);
+    auto canceler = kj::mv(connection.get<Connected>().canceler);
     connection.init<Disconnected>(kj::cp(networkException));
 
     KJ_IF_SOME(newException, kj::runCatchingExceptions([&]() {
@@ -515,6 +519,7 @@ public:
     });
 
     // Indicate disconnect.
+    auto& dyingConnectionRef = *dyingConnection;
     auto shutdownPromise = dyingConnection->shutdown()
         .attach(kj::mv(dyingConnection))
         .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
@@ -537,8 +542,8 @@ public:
           }
           return kj::mv(shutdownException);
         });
-    disconnectFulfiller->fulfill(DisconnectInfo { kj::mv(shutdownPromise) });
-    canceler.cancel(networkException);
+    canceler->cancel(networkException);
+    RpcSystemBase::dropConnection(rpcSystem, dyingConnectionRef, kj::mv(shutdownPromise));
   }
 
   void setFlowLimit(size_t words) {
@@ -643,6 +648,10 @@ private:
     uint refcount = 0;
     // When this reaches 0, drop `clientHook` and free this export.
 
+    bool canonical = false;
+    // If true, this is the canonical export entry for this clientHook, that is,
+    // `exportsByCap[clientHook]` points to this entry.
+
     kj::Own<ClientHook> clientHook;
 
     kj::Maybe<kj::Promise<void>> resolveOp = kj::none;
@@ -688,18 +697,17 @@ private:
   BootstrapFactoryBase& bootstrapFactory;
   kj::Maybe<SturdyRefRestorerBase&> restorer;
 
-  typedef kj::Own<VatNetworkBase::Connection> Connected;
+  struct Connected {
+    RpcSystemBase::Impl& rpcSystem;
+    kj::Own<VatNetworkBase::Connection> connection;
+    kj::Own<kj::Canceler> canceler;
+    // Will be canceled if and when `connection` is changed from `Connected` to `Disconnected`.
+  };
+
   typedef kj::Exception Disconnected;
   kj::OneOf<Connected, Disconnected> connection;
   // Once the connection has failed, we drop it and replace it with an exception, which will be
   // thrown from all further calls.
-
-  kj::Canceler canceler;
-  // Will be canceled if and when `connection` is changed from `Connected` to `Disconnected`.
-  // TODO(cleanup): `Connected` should be a struct that contains the connection and the Canceler,
-  //   but that's more refactoring than I want to do right now.
-
-  kj::Own<kj::PromiseFulfiller<DisconnectInfo>> disconnectFulfiller;
 
   ExportTable<ExportId, Export> exports;
   ExportTable<QuestionId, Question> questions;
@@ -708,7 +716,7 @@ private:
   // The Four Tables!
   // The order of the tables is important for correct destruction.
 
-  std::unordered_map<ClientHook*, ExportId> exportsByCap;
+  kj::HashMap<ClientHook*, ExportId> exportsByCap;
   // Maps already-exported ClientHook objects to their ID in the export table.
 
   ExportTable<EmbargoId, Embargo> embargoes;
@@ -723,6 +731,8 @@ private:
   // below flowLimit. Fulfill this to un-block.
 
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder;
+
+  kj::Own<RpcSystemBrand> brand;
 
   kj::TaskSet tasks;
 
@@ -745,13 +755,18 @@ private:
   class RpcClient: public ClientHook, public kj::Refcounted {
   public:
     RpcClient(RpcConnectionState& connectionState)
-        : connectionState(kj::addRef(connectionState)) {}
+        : ClientHook(connectionState.brand.get()),
+          connectionState(kj::addRef(connectionState)) {}
 
     ~RpcClient() noexcept(false) {
       KJ_IF_SOME(f, this->flowController) {
         // Destroying the client should not cancel outstanding streaming calls.
         connectionState->tasks.add(f->waitAllAcked().attach(kj::mv(f)));
       }
+    }
+
+    bool isOnConnection(RpcConnectionState& expected) {
+      return connectionState.get() == &expected;
     }
 
     virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
@@ -813,7 +828,7 @@ private:
       }
 
       auto request = kj::heap<RpcRequest>(
-          *connectionState, *connectionState->connection.get<Connected>(),
+          *connectionState, *connectionState->connection.get<Connected>().connection,
           sizeHint, kj::addRef(*this));
       auto callBuilder = request->getCall();
 
@@ -847,9 +862,6 @@ private:
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
     }
-    const void* getBrand() override {
-      return connectionState.get();
-    }
 
     kj::Own<RpcConnectionState> connectionState;
 
@@ -878,8 +890,8 @@ private:
 
         // Send a message releasing our remote references.
         if (remoteRefcount > 0 && connectionState->connection.is<Connected>()) {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-              messageSizeHint<rpc::Release>());
+          auto message = connectionState->connection.get<Connected>().connection
+              ->newOutgoingMessage(messageSizeHint<rpc::Release>());
           rpc::Release::Builder builder = message->getBody().initAs<rpc::Message>().initRelease();
           builder.setId(importId);
           builder.setReferenceCount(remoteRefcount);
@@ -1048,9 +1060,9 @@ private:
     }
 
     void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
-      if (cap->getBrand() == connectionState.get()) {
+      KJ_IF_SOME(rpcCap, connectionState->unwrapIfSameConnection(*cap)) {
         // Pass the flow controller on to our inner cap.
-        kj::downcast<RpcClient>(*cap).adoptFlowController(kj::mv(flowController));
+        rpcCap.adoptFlowController(kj::mv(flowController));
       } else {
         // We resolved to a capability that isn't another RPC capability. We should simply make
         // sure that all the calls complete.
@@ -1136,9 +1148,10 @@ private:
     kj::Promise<kj::Own<ClientHook>> resolve(kj::Own<ClientHook> replacement) {
       KJ_DASSERT(!isResolved());
 
-      const void* replacementBrand = replacement->getBrand();
-      bool isSameConnection = replacementBrand == connectionState.get();
-      if (isSameConnection) {
+      bool isSameConnection = false;
+      KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameConnection(*replacement)) {
+        isSameConnection = true;
+
         // We resolved to some other RPC capability hosted by the same peer.
         if (replacement->whenMoreResolved() != kj::none) {
           // We resolved to another remote promise. If *that* promise eventually resolves back
@@ -1155,15 +1168,14 @@ private:
 
           // We know the other object is a PromiseClient because it's the only ClientHook
           // type in the RPC implementation which returns non-null for `whenMoreResolved()`.
-          PromiseClient* other = &kj::downcast<PromiseClient>(*replacement);
+          PromiseClient* other = &kj::downcast<PromiseClient>(rpcReplacement);
           while (other->resolutionType == MERGED) {
             // There's no need to resolve to a thing that's just going to resolve to another thing.
             replacement = other->cap->addRef();
             other = &kj::downcast<PromiseClient>(*replacement);
 
-            // Note that replacementBrand is unchanged since we'd only merge with other
-            // PromiseClients on the same connection.
-            KJ_DASSERT(replacement->getBrand() == replacementBrand);
+            // We'd only merge with other PromiseClients on the same connection.
+            KJ_DASSERT(connectionState->unwrapIfSameConnection(*replacement) != kj::none);
           }
 
           if (other->isResolved()) {
@@ -1180,8 +1192,7 @@ private:
           resolutionType = REMOTE;
         }
       } else {
-        if (replacementBrand == &ClientHook::NULL_CAPABILITY_BRAND ||
-            replacementBrand == &ClientHook::BROKEN_CAPABILITY_BRAND) {
+        if (replacement->isNull() || replacement->isError()) {
           // We don't consider null or broken capabilities as "reflected" because they may have
           // been communicated to us literally as a null pointer or an exception on the wire,
           // rather than as a reference to one of our exports, in which case a disembargo won't
@@ -1221,7 +1232,7 @@ private:
         // calls to go directly to the local capability, so we need to set a local embargo and send
         // a `Disembargo` to echo through the peer.
 
-        auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
+        auto message = connectionState->connection.get<Connected>().connection->newOutgoingMessage(
             messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
 
         auto disembargo = message->getBody().initAs<rpc::Message>().initDisembargo();
@@ -1278,25 +1289,25 @@ private:
       fds.add(kj::mv(fd));
     }
 
-    if (inner->getBrand() == this) {
-      return kj::downcast<RpcClient>(*inner).writeDescriptor(descriptor, fds);
+    KJ_IF_SOME(rpcInner, unwrapIfSameConnection(*inner)) {
+      return rpcInner.writeDescriptor(descriptor, fds);
     } else {
-      auto iter = exportsByCap.find(inner);
-      if (iter != exportsByCap.end()) {
+      KJ_IF_SOME(exportId, exportsByCap.find(inner)) {
         // We've already seen and exported this capability before.  Just up the refcount.
-        auto& exp = KJ_ASSERT_NONNULL(exports.find(iter->second));
+        auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
         ++exp.refcount;
         if (exp.resolveOp == kj::none) {
-          descriptor.setSenderHosted(iter->second);
+          descriptor.setSenderHosted(exportId);
         } else {
-          descriptor.setSenderPromise(iter->second);
+          descriptor.setSenderPromise(exportId);
         }
-        return iter->second;
+        return exportId;
       } else {
         // This is the first time we've seen this capability.
         ExportId exportId;
         auto& exp = exports.next(exportId);
-        exportsByCap[inner] = exportId;
+        exportsByCap.insert(inner, exportId);
+        exp.canonical = true;
         exp.refcount = 1;
         exp.clientHook = inner->addRef();
 
@@ -1345,8 +1356,8 @@ private:
     // this network connection, but then the promise resolved to point somewhere else before the
     // request was sent.  Now the request has to be redirected to the new target instead.
 
-    if (cap.getBrand() == this) {
-      return kj::downcast<RpcClient>(cap).writeTarget(target);
+    KJ_IF_SOME(rpcCap, unwrapIfSameConnection(cap)) {
+      return rpcCap.writeTarget(target);
     } else {
       return cap.addRef();
     }
@@ -1362,8 +1373,8 @@ private:
       }
     }
 
-    if (ptr->getBrand() == this) {
-      return kj::downcast<RpcClient>(*ptr).getInnermostClient();
+    KJ_IF_SOME(rpcPtr, unwrapIfSameConnection(*ptr)) {
+      return rpcPtr.getInnermostClient();
     } else {
       return ptr->addRef();
     }
@@ -1396,10 +1407,19 @@ private:
       // export table is still live because when it is destroyed the asynchronous resolution task
       // (i.e. this code) is canceled.
       auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
-      exportsByCap.erase(exp.clientHook);
+      if (exp.canonical) {
+        KJ_ASSERT(exportsByCap.erase(exp.clientHook));
+      }
       exp.clientHook = kj::mv(resolution);
 
-      if (exp.clientHook->getBrand() != this) {
+      // The export now points to `resolution`, but it is not necessarily the canonical export
+      // for `resolution`. The export itself still represents the promise that ended up resolving
+      // to `resolution`, but `resoultion` itself also needs to be exported under a separate
+      // export ID to distinguish from the promise. (Unless it's also a promise, see the next
+      // bit...)
+      exp.canonical = false;
+
+      if (unwrapIfSameConnection(*exp.clientHook) == kj::none) {
         // We're resolving to a local capability.  If we're resolving to a promise, we might be
         // able to reuse our export table entry and avoid sending a message.
 
@@ -1408,19 +1428,24 @@ private:
           // be able to just reuse the existing export table entry to represent the new promise --
           // unless it already has an entry.  Let's check.
 
-          auto insertResult = exportsByCap.insert(std::make_pair(exp.clientHook.get(), exportId));
-
-          if (insertResult.second) {
+          ExportId replacementExportId = exportsByCap.findOrCreate(
+              exp.clientHook, [&]() -> decltype(exportsByCap)::Entry {
+            // The replacement capability isn't previously exported, so assign it to the existing
+            // table entry.
+            return {exp.clientHook, exportId};
+          });
+          if (replacementExportId == exportId) {
             // The new promise was not already in the table, therefore the existing export table
             // entry has now been repurposed to represent it.  There is no need to send a resolve
             // message at all.  We do, however, have to start resolving the next promise.
+            exp.canonical = true;
             return resolveExportedPromise(exportId, kj::mv(promise));
           }
         }
       }
 
       // OK, we have to send a `Resolve` message.
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = connection.get<Connected>().connection->newOutgoingMessage(
           messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
@@ -1432,7 +1457,7 @@ private:
       return kj::READY_NOW;
     }, [this,exportId](kj::Exception&& exception) {
       // send error resolution
-      auto message = connection.get<Connected>()->newOutgoingMessage(
+      auto message = connection.get<Connected>().connection->newOutgoingMessage(
           messageSizeHint<rpc::Resolve>() + exceptionSizeHint(exception) + 8);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
@@ -1576,9 +1601,6 @@ private:
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
     }
-    const void* getBrand() override {
-      return nullptr;
-    }
     kj::Maybe<int> getFd() override {
       return inner->getFd();
     }
@@ -1607,7 +1629,7 @@ private:
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_SOME(exp, exports.find(descriptor.getReceiverHosted())) {
           auto result = exp.clientHook->addRef();
-          if (result->getBrand() == this) {
+          if (unwrapIfSameConnection(*result) != kj::none) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
           return kj::mv(result);
@@ -1623,7 +1645,7 @@ private:
             KJ_IF_SOME(pipeline, answer.pipeline) {
               KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
                 auto result = pipeline->getPipelinedCap(ops);
-                if (result->getBrand() == this) {
+                if (unwrapIfSameConnection(*result) != kj::none) {
                   result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
                 }
                 return kj::mv(result);
@@ -1683,8 +1705,8 @@ private:
         // Send the "Finish" message (if the connection is not already broken).
         if (connectionState->connection.is<Connected>() && !question.skipFinish) {
           KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
-            auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-                messageSizeHint<rpc::Finish>());
+            auto message = connectionState->connection.get<Connected>().connection
+                ->newOutgoingMessage(messageSizeHint<rpc::Finish>());
             auto builder = message->getBody().getAs<rpc::Message>().initFinish();
             builder.setQuestionId(id);
             // If we're still awaiting a return, then this request is being canceled, and we're going
@@ -1749,13 +1771,18 @@ private:
   public:
     RpcRequest(RpcConnectionState& connectionState, VatNetworkBase::Connection& connection,
                kj::Maybe<MessageSize> sizeHint, kj::Own<RpcClient>&& target)
-        : connectionState(kj::addRef(connectionState)),
+        : RequestHook(connectionState.brand.get()),
+          connectionState(kj::addRef(connectionState)),
           target(kj::mv(target)),
           message(connection.newOutgoingMessage(
               firstSegmentSize(sizeHint, messageSizeHint<rpc::Call>() +
                   sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT))),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
           paramsBuilder(capTable.imbue(callBuilder.getParams().getContent())) {}
+
+    bool isOnConnection(RpcConnectionState& expected) {
+      return connectionState.get() == &expected;
+    }
 
     inline AnyPointer::Builder getRoot() {
       return paramsBuilder;
@@ -1907,10 +1934,6 @@ private:
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
     }
 
-    const void* getBrand() override {
-      return connectionState.get();
-    }
-
   private:
     kj::Own<RpcConnectionState> connectionState;
 
@@ -2004,7 +2027,7 @@ private:
           flow = f;
         } else {
           flow = target->flowController.emplace(
-              connectionState->connection.get<Connected>()->newStream());
+              connectionState->connection.get<Connected>().connection->newStream());
         }
         flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
       })) {
@@ -2205,6 +2228,26 @@ private:
     AnyPointer::Reader reader;
     kj::Own<QuestionRef> questionRef;
   };
+
+  kj::Maybe<RpcClient&> unwrapIfSameConnection(ClientHook& hook) {
+    if (hook.isBrand(brand.get())) {
+      RpcClient& result = kj::downcast<RpcClient>(hook);
+      if (result.isOnConnection(*this)) {
+        return result;
+      }
+    }
+    return kj::none;
+  }
+
+  kj::Maybe<RpcRequest&> unwrapIfSameConnection(RequestHook& hook) {
+    if (hook.isBrand(brand.get())) {
+      RpcRequest& result = kj::downcast<RpcRequest>(hook);
+      if (result.isOnConnection(*this)) {
+        return result;
+      }
+    }
+    return kj::none;
+  }
 
   // =====================================================================================
   // CallContextHook implementation
@@ -2421,8 +2464,8 @@ private:
           // was used (in which case the caller doesn't care to receive a `Return`).
           bool shouldFreePipeline = true;
           if (connectionState->connection.is<Connected>() && !hints.onlyPromisePipeline) {
-            auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-                messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
+            auto message = connectionState->connection.get<Connected>().connection
+                ->newOutgoingMessage(messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
             auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
             builder.setAnswerId(answerId);
@@ -2525,8 +2568,8 @@ private:
       KJ_ASSERT(!hints.onlyPromisePipeline);
       if (isFirstResponder()) {
         if (connectionState->connection.is<Connected>()) {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-              messageSizeHint<rpc::Return>() + exceptionSizeHint(exception));
+          auto message = connectionState->connection.get<Connected>().connection
+              ->newOutgoingMessage(messageSizeHint<rpc::Return>() + exceptionSizeHint(exception));
           auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
           builder.setAnswerId(answerId);
@@ -2552,8 +2595,8 @@ private:
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
       if (isFirstResponder()) {
-        auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-            messageSizeHint<rpc::Return>());
+        auto message = connectionState->connection.get<Connected>().connection
+            ->newOutgoingMessage(messageSizeHint<rpc::Return>());
         auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
         builder.setAnswerId(answerId);
@@ -2594,9 +2637,10 @@ private:
         if (redirectResults || !connectionState->connection.is<Connected>()) {
           response = kj::refcounted<LocallyRedirectedRpcResponse>(sizeHint);
         } else {
-          auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-              firstSegmentSize(sizeHint, messageSizeHint<rpc::Return>() +
-                               sizeInWords<rpc::Payload>()));
+          auto message = connectionState->connection.get<Connected>().connection
+              ->newOutgoingMessage(
+                  firstSegmentSize(sizeHint, messageSizeHint<rpc::Return>() +
+                                  sizeInWords<rpc::Payload>()));
           returnMessage = message->getBody().initAs<rpc::Message>().initReturn();
           response = kj::heap<RpcServerResponseImpl>(
               *connectionState, kj::mv(message), returnMessage.getResults());
@@ -2623,33 +2667,34 @@ private:
       KJ_REQUIRE(response == kj::none,
                  "Can't call tailCall() after initializing the results struct.");
 
-      if (request->getBrand() == connectionState.get() &&
-          !redirectResults && !hints.noPromisePipelining) {
-        // The tail call is headed towards the peer that called us in the first place, so we can
-        // optimize out the return trip.
-        //
-        // If the noPromisePipelining hint was sent, we skip this trick since the caller will
-        // ignore the `Return` message anyway.
+      KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameConnection(*request)) {
+        if (!redirectResults && !hints.noPromisePipelining) {
+          // The tail call is headed towards the peer that called us in the first place, so we can
+          // optimize out the return trip.
+          //
+          // If the noPromisePipelining hint was sent, we skip this trick since the caller will
+          // ignore the `Return` message anyway.
 
-        KJ_IF_SOME(tailInfo, kj::downcast<RpcRequest>(*request).tailSend()) {
-          if (isFirstResponder()) {
-            if (connectionState->connection.is<Connected>()) {
-              auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
-                  messageSizeHint<rpc::Return>());
-              auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+          KJ_IF_SOME(tailInfo, rpcRequest.tailSend()) {
+            if (isFirstResponder()) {
+              if (connectionState->connection.is<Connected>()) {
+                auto message = connectionState->connection.get<Connected>().connection
+                    ->newOutgoingMessage(messageSizeHint<rpc::Return>());
+                auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-              builder.setAnswerId(answerId);
-              builder.setReleaseParamCaps(false);
-              builder.setTakeFromOtherQuestion(tailInfo.questionId);
+                builder.setAnswerId(answerId);
+                builder.setReleaseParamCaps(false);
+                builder.setTakeFromOtherQuestion(tailInfo.questionId);
 
-              message->send();
+                message->send();
+              }
+
+              // There are no caps in our return message, but of course the tail results could have
+              // caps, so we must continue to honor pipeline calls (and just bounce them back).
+              cleanupAnswerTable(nullptr, false);
             }
-
-            // There are no caps in our return message, but of course the tail results could have
-            // caps, so we must continue to honor pipeline calls (and just bounce them back).
-            cleanupAnswerTable(nullptr, false);
+            return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
           }
-          return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
         }
       }
 
@@ -2770,37 +2815,35 @@ private:
   }
 
   kj::Promise<void> messageLoop() {
-    if (!connection.is<Connected>()) {
-      return kj::READY_NOW;
-    }
+    for (;;) {
+      if (!connection.is<Connected>()) {
+        co_return;
+      }
 
-    if (callWordsInFlight > flowLimit) {
-      auto paf = kj::newPromiseAndFulfiller<void>();
-      flowWaiter = kj::mv(paf.fulfiller);
-      return paf.promise.then([this]() {
-        return messageLoop();
-      });
-    }
+      if (callWordsInFlight > flowLimit) {
+        auto paf = kj::newPromiseAndFulfiller<void>();
+        flowWaiter = kj::mv(paf.fulfiller);
+        co_await paf.promise;
+        continue;
+      }
 
-    return canceler.wrap(connection.get<Connected>()->receiveIncomingMessage()).then(
-        [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) {
+      auto& connected = connection.get<Connected>();
+
+      kj::Maybe<kj::Own<IncomingRpcMessage>> message;
+      try {
+        message = co_await connected.canceler->wrap(connected.connection->receiveIncomingMessage());
+      } catch (...) {
+        receiveIncomingMessageError = true;
+        throw;
+      }
+
       KJ_IF_SOME(m, message) {
         handleMessage(kj::mv(m));
-        return true;
       } else {
         tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
-        return false;
+        co_return;
       }
-    }, [this](kj::Exception&& exception) {
-      receiveIncomingMessageError = true;
-      kj::throwRecoverableException(kj::mv(exception));
-      return false;
-    }).then([this](bool keepGoing) {
-      // No exceptions; continue loop.
-      //
-      // (We do this in a separate continuation to handle the case where exceptions are
-      // disabled.)
-      //
+
       // TODO(perf): We add an evalLater() here so that anything we needed to do in reaction to
       //   the previous message has a chance to complete before the next message is handled. In
       //   particular, without this, I observed an ordering problem: I saw a case where a `Return`
@@ -2812,8 +2855,12 @@ private:
       //   resolution of `PromiseClient`s based on returned capabilities does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
       //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
-      if (keepGoing) tasks.add(kj::evalLater([this]() { return messageLoop(); }));
-    });
+      // TODO(cleanup): As an extra optimization here I'm calling yield() directly since
+      //   evalLater(func) reduces to yield().then(func) and we don't need the .then(). yield()
+      //   itself does zero allocation which is nice. Maybe we should make it public? It's a much
+      //   better API for coroutines.
+      co_await kj::_::yield();  // instead of: co_await kj::evalLater([]() {});
+    }
   }
 
   void handleMessage(kj::Own<IncomingRpcMessage> message) {
@@ -2858,7 +2905,7 @@ private:
 
       default: {
         if (connection.is<Connected>()) {
-          auto message = connection.get<Connected>()->newOutgoingMessage(
+          auto message = connection.get<Connected>().connection->newOutgoingMessage(
               firstSegmentSize(reader.totalSize(), messageSizeHint<void>()));
           message->getBody().initAs<rpc::Message>().setUnimplemented(reader);
           message->send();
@@ -2945,7 +2992,7 @@ private:
       return;
     }
 
-    VatNetworkBase::Connection& conn = *connection.get<Connected>();
+    VatNetworkBase::Connection& conn = *connection.get<Connected>().connection;
     auto response = conn.newOutgoingMessage(
         messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
 
@@ -3429,7 +3476,9 @@ private:
 
       exp.refcount -= refcount;
       if (exp.refcount == 0) {
-        exportsByCap.erase(exp.clientHook);
+        if (exp.canonical) {
+          KJ_ASSERT(exportsByCap.erase(exp.clientHook));
+        }
         exports.erase(id, exp);
       }
     } else {
@@ -3486,7 +3535,7 @@ private:
             }
           }
 
-          KJ_REQUIRE(target->getBrand() == this,
+          KJ_REQUIRE(unwrapIfSameConnection(*target) != kj::none,
                     "'Disembargo' of type 'senderLoopback' sent to an object that does not point "
                     "back to the sender.") {
             return;
@@ -3498,7 +3547,7 @@ private:
 
           RpcClient& downcasted = kj::downcast<RpcClient>(*target);
 
-          auto message = connection.get<Connected>()->newOutgoingMessage(
+          auto message = connection.get<Connected>().connection->newOutgoingMessage(
               messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
           auto builder = message->getBody().initAs<rpc::Message>().initDisembargo();
 
@@ -3546,8 +3595,6 @@ private:
   // Level 2
 };
 
-}  // namespace
-
 class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
 public:
   Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface)
@@ -3564,17 +3611,20 @@ public:
     acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
   }
 
-  ~Impl() noexcept(false) {
+  void disconnectAll() {
     unwindDetector.catchExceptionsIfUnwinding([&]() {
-      // std::unordered_map doesn't like it when elements' destructors throw, so carefully
-      // disassemble it.
-      if (!connections.empty()) {
+      // We need to pull all the connections out of the map first, before calling disconnect on
+      // them, since they will each remove themselves from the map which invalidates iterators.
+      if (connections.size() > 0) {
         kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connections.size());
         kj::Exception shutdownException = KJ_EXCEPTION(DISCONNECTED, "RpcSystem was destroyed.");
         for (auto& entry: connections) {
-          entry.second->disconnect(kj::cp(shutdownException));
-          deleteMe.add(kj::mv(entry.second));
+          deleteMe.add(kj::mv(entry.value));
         }
+        for (auto& entry: deleteMe) {
+          entry->disconnect(kj::cp(shutdownException));
+        }
+        KJ_ASSERT(connections.size() == 0);
       }
     });
   }
@@ -3606,7 +3656,7 @@ public:
     flowLimit = words;
 
     for (auto& conn: connections) {
-      conn.second->setFlowLimit(words);
+      conn.value->setFlowLimit(words);
     }
   }
 
@@ -3616,6 +3666,11 @@ public:
 
   kj::Promise<void> run() { return kj::mv(acceptLoopPromise); }
 
+  void dropConnection(VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask) {
+    connections.erase(&connection);
+    tasks.add(kj::mv(shutdownTask));
+  }
+
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
@@ -3624,41 +3679,28 @@ private:
   size_t flowLimit = kj::maxValue;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::Promise<void> acceptLoopPromise = nullptr;
+  kj::Own<RpcSystemBrand> brand = kj::refcounted<RpcSystemBrand>();
   kj::TaskSet tasks;
 
-  typedef std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
+  typedef kj::HashMap<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
       ConnectionMap;
   ConnectionMap connections;
 
   kj::UnwindDetector unwindDetector;
 
   RpcConnectionState& getConnectionState(kj::Own<VatNetworkBase::Connection>&& connection) {
-    auto iter = connections.find(connection);
-    if (iter == connections.end()) {
+    return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
       VatNetworkBase::Connection* connectionPtr = connection;
-      auto onDisconnect = kj::newPromiseAndFulfiller<RpcConnectionState::DisconnectInfo>();
-      tasks.add(onDisconnect.promise
-          .then([this,connectionPtr](RpcConnectionState::DisconnectInfo info) {
-        connections.erase(connectionPtr);
-        tasks.add(kj::mv(info.shutdownPromise));
-      }));
       auto newState = kj::refcounted<RpcConnectionState>(
-          bootstrapFactory, restorer, kj::mv(connection),
-          kj::mv(onDisconnect.fulfiller), flowLimit, traceEncoder);
-      RpcConnectionState& result = *newState;
-      connections.insert(std::make_pair(connectionPtr, kj::mv(newState)));
-      return result;
-    } else {
-      return *iter->second;
-    }
+          *this, bootstrapFactory, restorer, kj::mv(connection), flowLimit, traceEncoder, *brand);
+      return {connectionPtr, kj::mv(newState)};
+    });
   }
 
   kj::Promise<void> acceptLoop() {
-    return network.baseAccept().then(
-        [this](kj::Own<VatNetworkBase::Connection>&& connection) {
-      getConnectionState(kj::mv(connection));
-      return acceptLoop();
-    });
+    for (;;) {
+      getConnectionState(co_await network.baseAccept());
+    }
   }
 
   Capability::Client baseCreateFor(AnyStruct::Reader clientId) override {
@@ -3688,7 +3730,11 @@ RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
     : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
-RpcSystemBase::~RpcSystemBase() noexcept(false) {}
+RpcSystemBase::~RpcSystemBase() noexcept(false) {
+  if (impl.get() != nullptr) {  // could have been moved away
+    impl->disconnectAll();
+  }
+}
 
 Capability::Client RpcSystemBase::baseBootstrap(AnyStruct::Reader vatId) {
   return impl->bootstrap(vatId);
@@ -3709,6 +3755,11 @@ void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&
 
 kj::Promise<void> RpcSystemBase::run() {
   return impl->run();
+}
+
+void RpcSystemBase::dropConnection(RpcSystemBase::Impl& impl,
+    VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask) {
+  impl.dropConnection(connection, kj::mv(shutdownTask));
 }
 
 }  // namespace _ (private)

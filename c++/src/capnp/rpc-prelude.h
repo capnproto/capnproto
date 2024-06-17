@@ -97,6 +97,17 @@ private:
   Capability::Client baseRestore(AnyStruct::Reader vatId, AnyPointer::Reader objectId);
   void baseSetFlowLimit(size_t words);
 
+  class RpcConnectionState;
+
+  static void dropConnection(Impl& impl,
+      VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask);
+  // Called when RpcConnectionState becomes disconnected and so should be removed from the map of
+  // known connections.
+  //
+  // TODO(cleanup): This is defined as a static method with `Impl&` passed in because the caller
+  //   is defined before `Impl` in rpc.c++. We can't have the caller hold a pointer to
+  //   `RpcSystemBase` instead because it is movable.
+
   template <typename>
   friend class capnp::RpcSystem;
 };

@@ -69,10 +69,6 @@ public:
     return kj::addRef(*this);
   }
 
-  const void* getBrand() override {
-    return nullptr;
-  }
-
   kj::Maybe<int> getFd() override {
     // It's not safe to return current->getFd() because normally callers wouldn't expect the FD to
     // change or go away over time, but this one could whenever we reconnect. If there's a use
@@ -137,10 +133,6 @@ private:
     AnyPointer::Pipeline sendForPipeline() override {
       // TODO(bug): This definitely fails to detect disconnects; see comment in send().
       return inner->sendForPipeline();
-    }
-
-    const void* getBrand() override {
-      return nullptr;
     }
 
   private:
