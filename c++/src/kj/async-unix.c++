@@ -550,7 +550,7 @@ bool UnixEventPort::wait() {
     sigset_t currentMask;
     memset(&currentMask, 0, sizeof(currentMask));
     KJ_SYSCALL(sigprocmask(0, nullptr, &currentMask));
-    if (memcmp(&currentMask, &originalMask, sizeof(currentMask)) != 0) {
+    if (arrayPtr(currentMask).asBytes() != arrayPtr(originalMask).asBytes()) {
       kj::Vector<kj::String> changes;
       for (int i = 0; i <= SIGRTMAX; i++) {
         if (sigismember(&currentMask, i) && !sigismember(&originalMask, i)) {
