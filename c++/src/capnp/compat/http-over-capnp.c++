@@ -518,7 +518,20 @@ public:
     }
 
     // Finish pumping the response or WebSocket. (Probably it's already finished.)
-    co_await context.finishPump();
+    try {
+      co_await context.finishPump();
+    } catch (...) {
+      // Ignore DISCONNECTED exceptions from this pump, because it should have been the server's
+      // responsibility to propagate any exceptions from pushing the response. If this were a local
+      // HttpService (with no RPC layer), such exceptions would not propagate here, so we want to
+      // do the same. Actually, technically, even non-DISCONNECTED exceptions arguably shouldn't
+      // propagate here for the same reason. But, non-DISCONNECTED exceptions are more likely to
+      // flag some real bug, so I'm leaving them alone for now. This could be revisited later.
+      auto exception = kj::getCaughtExceptionAsKj();
+      if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
+        kj::throwFatalException(kj::mv(exception));
+      }
+    }
   }
 
   kj::Promise<void> connect(
