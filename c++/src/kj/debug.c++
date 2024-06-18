@@ -285,9 +285,8 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
     }
 
-    auto needsLabel = [](ArrayPtr<const char> &argName) -> bool {
-      return (argName.size() > 0 && argName[0] != '\"' &&
-          !(argName.size() >= 8 && memcmp(argName.begin(), "kj::str(", 8) == 0));
+    auto needsLabel = [](const ArrayPtr<const char> &argName) -> bool {
+      return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
     };
 
     for (size_t i = 0; i < argValues.size(); i++) {
