@@ -241,6 +241,11 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
 
 // =======================================================================================
 
+GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, Options options)
+    : kj::GzipAsyncOutputStream(inner, options.compressionLevel) {
+  writeFlush = options.writeFlush;
+}
+
 GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel)
     : inner(inner), ctx(compressionLevel) {}
 
@@ -248,13 +253,18 @@ GzipAsyncOutputStream::GzipAsyncOutputStream(AsyncOutputStream& inner, decltype(
     : inner(inner), ctx(kj::none) {}
 
 Promise<void> GzipAsyncOutputStream::write(const void* in, size_t size) {
+  return writeImpl(in, size, writeFlush);
+}
+
+Promise<void> GzipAsyncOutputStream::writeImpl(const void* in, size_t size, int flush) {
   ctx.setInput(in, size);
-  return pump(Z_NO_FLUSH);
+  return pump(flush);
 }
 
 Promise<void> GzipAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
+  int flushFlag = pieces.size() > 1 ? Z_NO_FLUSH : writeFlush;
+  return writeImpl(pieces[0].begin(), pieces[0].size(), flushFlag)
       .then([this,pieces]() {
     return write(pieces.slice(1, pieces.size()));
   });

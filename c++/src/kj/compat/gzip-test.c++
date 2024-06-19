@@ -102,6 +102,7 @@ public:
 class MockAsyncOutputStream: public AsyncOutputStream {
 public:
   kj::Vector<byte> bytes;
+  kj::Vector<size_t> writes;
 
   kj::String decompress(WaitScope& ws) {
     MockAsyncInputStream rawInput(bytes, kj::maxValue);
@@ -110,13 +111,17 @@ public:
   }
 
   Promise<void> write(const void* buffer, size_t size) override {
+    writes.add(size);
     bytes.addAll(arrayPtr(reinterpret_cast<const byte*>(buffer), size));
     return kj::READY_NOW;
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    size_t total = 0;
     for (auto& piece: pieces) {
+      total += piece.size();
       bytes.addAll(piece);
     }
+    writes.add(total);
     return kj::READY_NOW;
   }
 
@@ -347,6 +352,41 @@ KJ_TEST("async gzip huge round trip") {
   auto decompressed = gzipIn.readAllBytes().wait(io.waitScope);
 
   KJ_ASSERT(bytes == decompressed);
+}
+
+KJ_TEST("gzip with write flush option") {
+  auto io = setupAsyncIo();
+
+  MockAsyncOutputStream rawOutput;
+  GzipAsyncOutputStream gzip(rawOutput, GzipAsyncOutputStream::Options {
+    .writeFlush = Z_SYNC_FLUSH,
+  });
+
+  // We are going to perform several writes. We should see more frequent
+  // writes to the output stream due to the Z_SYNC_FLUSH option.
+
+  auto bytes = heapArray<byte>(100);
+  for (auto& b: bytes) {
+    b = rand();
+  }
+
+  for (int n = 0; n < 10; n++) {
+    gzip.write(bytes.begin(), bytes.size()).wait(io.waitScope);
+  }
+
+  // In this case, we should only flush once once when writing the
+  // last piece.
+  kj::Vector<kj::ArrayPtr<const byte>> pieces;
+  pieces.add("data"_kjb);
+  pieces.add("more"_kjb);
+  gzip.write(pieces.asPtr()).wait(io.waitScope);
+
+  gzip.end().wait(io.waitScope);
+
+  KJ_ASSERT(rawOutput.writes.size() == 12);
+  for (auto& write : rawOutput.writes) {
+    KJ_ASSERT(write > 0);
+  }
 }
 
 }  // namespace
