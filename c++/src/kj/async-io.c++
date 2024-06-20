@@ -90,7 +90,7 @@ kj::Promise<uint64_t> NullStream::pumpTo(kj::AsyncOutputStream& output, uint64_t
   return kj::constPromise<uint64_t, 0>();
 }
 
-kj::Promise<void> NullStream::write(const void* buffer, size_t size) {
+kj::Promise<void> NullStream::write(ArrayPtr<const byte> buffer) {
   return kj::READY_NOW;
 }
 kj::Promise<void> NullStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
@@ -120,8 +120,7 @@ public:
         .then([this](size_t amount) -> Promise<uint64_t> {
       if (amount == 0) return doneSoFar;  // EOF
       doneSoFar += amount;
-      return output.write(buffer, amount)
-          .then([this]() {
+      return output.write(arrayPtr(buffer).first(amount)).then([this]() {
         return pump();
       });
     });
@@ -305,14 +304,13 @@ public:
     }
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) {
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    if (buffer == nullptr) {
       return READY_NOW;
     } else KJ_IF_SOME(s, state) {
-      return s.write(buffer, size);
+      return s.write(buffer);
     } else {
-      return newAdaptedPromise<void, BlockedWrite>(
-          *this, arrayPtr(reinterpret_cast<const byte*>(buffer), size), nullptr);
+      return newAdaptedPromise<void, BlockedWrite>(*this, buffer, nullptr);
     }
   }
 
@@ -609,9 +607,9 @@ private:
 
       if (amount < writeBuffer.size()) {
         // Consume a portion of the write buffer.
-        return canceler.wrap(output.write(writeBuffer.begin(), amount)
+        return canceler.wrap(output.write(writeBuffer.first(amount))
             .then([this,amount]() {
-          writeBuffer = writeBuffer.slice(amount, writeBuffer.size());
+          writeBuffer = writeBuffer.slice(amount);
           // We pumped the full amount, so we're done pumping.
           return amount;
         }, teeExceptionSize(fulfiller, canceler)));
@@ -626,7 +624,7 @@ private:
       }
 
       // Write the first piece.
-      auto promise = output.write(writeBuffer.begin(), writeBuffer.size());
+      auto promise = output.write(writeBuffer);
 
       // Write full pieces as a single gather-write.
       if (i > 0) {
@@ -659,7 +657,7 @@ private:
         auto prefix = splitPiece.first(n);
         if (prefix.size() > 0) {
           promise = promise.then([&output,prefix]() {
-            return output.write(prefix.begin(), prefix.size());
+            return output.write(prefix);
           });
         }
 
@@ -679,7 +677,7 @@ private:
       pipe.abortRead();
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
       KJ_FAIL_REQUIRE("can't write() again until previous write() completes");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -874,7 +872,7 @@ private:
       pipe.abortRead();
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
       KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -952,17 +950,16 @@ private:
       pipe.abortRead();
     }
 
-    Promise<void> write(const void* writeBuffer, size_t size) override {
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      auto data = arrayPtr(reinterpret_cast<const byte*>(writeBuffer), size);
-      KJ_SWITCH_ONEOF(writeImpl(data, nullptr)) {
+      KJ_SWITCH_ONEOF(writeImpl(buffer, nullptr)) {
         KJ_CASE_ONEOF(done, Done) {
           return READY_NOW;
         }
         KJ_CASE_ONEOF(retry, Retry) {
           KJ_ASSERT(retry.moreData == nullptr);
-          return pipe.write(retry.data.begin(), retry.data.size());
+          return pipe.write(retry.data);
         }
       }
       KJ_UNREACHABLE;
@@ -989,7 +986,7 @@ private:
           } else {
             // Unfortunately we have to execute a separate write() for the remaining part of this
             // piece, because we can't modify the pieces array.
-            auto promise = pipe.write(retry.data.begin(), retry.data.size());
+            auto promise = pipe.write(retry.data);
             if (retry.moreData.size() == 0) {
               // No more pieces so that's it.
               return kj::mv(promise);
@@ -1242,17 +1239,17 @@ private:
       pipe.abortRead();
     }
 
-    Promise<void> write(const void* writeBuffer, size_t size) override {
+    Promise<void> write(ArrayPtr<const byte> writeBuffer) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
-      auto actual = kj::min(amount - pumpedSoFar, size);
-      return canceler.wrap(output.write(writeBuffer, actual)
-          .then([this,size,actual,writeBuffer]() -> kj::Promise<void> {
+      auto actual = kj::min(amount - pumpedSoFar, writeBuffer.size());
+      return canceler.wrap(output.write(writeBuffer.first(actual))
+          .then([this,actual,writeBuffer]() -> kj::Promise<void> {
         canceler.release();
         pumpedSoFar += actual;
 
         KJ_ASSERT(pumpedSoFar <= amount);
-        KJ_ASSERT(actual <= size);
+        KJ_ASSERT(actual <= writeBuffer.size());
 
         if (pumpedSoFar == amount) {
           // Done with pump.
@@ -1260,11 +1257,11 @@ private:
           pipe.endState(*this);
         }
 
-        if (actual == size) {
+        if (actual == writeBuffer.size()) {
           return kj::READY_NOW;
         } else {
           KJ_ASSERT(pumpedSoFar == amount);
-          return pipe.write(reinterpret_cast<const byte*>(writeBuffer) + actual, size - actual);
+          return pipe.write(writeBuffer.slice(actual));
         }
       }, teeExceptionPromise<void>(fulfiller, canceler)));
     }
@@ -1285,14 +1282,14 @@ private:
             // writes.
             auto partial = pieces[i].first(needed);
             promise = promise.then([this,partial]() {
-              return output.write(partial.begin(), partial.size());
+              return output.write(partial);
             });
             auto partial2 = pieces[i].slice(needed, pieces[i].size());
             promise = canceler.wrap(promise.then([this,partial2]() {
               canceler.release();
               fulfiller.fulfill(kj::cp(amount));
               pipe.endState(*this);
-              return pipe.write(partial2.begin(), partial2.size());
+              return pipe.write(partial2);
             }, teeExceptionPromise<void>(fulfiller, canceler)));
             ++i;
           } else {
@@ -1341,7 +1338,7 @@ private:
       // TODO(cleaunp): After stream API refactor, regular write() methods will take
       //   (data, moreData) and we can clean this up.
       if (moreData.size() == 0) {
-        return write(data.begin(), data.size());
+        return write(data);
       } else {
         auto pieces = kj::heapArrayBuilder<const ArrayPtr<const byte>>(moreData.size() + 1);
         pieces.add(data);
@@ -1358,7 +1355,7 @@ private:
       // TODO(cleaunp): After stream API refactor, regular write() methods will take
       //   (data, moreData) and we can clean this up.
       if (moreData.size() == 0) {
-        return write(data.begin(), data.size());
+        return write(data);
       } else {
         auto pieces = kj::heapArrayBuilder<const ArrayPtr<const byte>>(moreData.size() + 1);
         pieces.add(data);
@@ -1442,7 +1439,7 @@ private:
       // ignore repeated abort
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -1515,7 +1512,7 @@ private:
       // ignore
     }
 
-    Promise<void> write(const void* buffer, size_t size) override {
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
       KJ_FAIL_REQUIRE("shutdownWrite() has been called");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -1575,8 +1572,8 @@ public:
     });
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    return pipe->write(buffer, size);
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    return pipe->write(buffer);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -1627,8 +1624,8 @@ public:
     in->abortRead();
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    return out->write(buffer, size);
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    return out->write(buffer);
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return out->write(pieces);
@@ -2415,12 +2412,12 @@ public:
     }
   }
 
-  kj::Promise<void> write(const void* buffer, size_t size) override {
+  kj::Promise<void> write(ArrayPtr<const byte> buffer) override {
     KJ_IF_SOME(s, stream) {
-      return s->write(buffer, size);
+      return s->write(buffer);
     } else {
-      return promise.addBranch().then([this,buffer,size]() {
-        return KJ_ASSERT_NONNULL(stream)->write(buffer, size);
+      return promise.addBranch().then([this,buffer]() {
+        return KJ_ASSERT_NONNULL(stream)->write(buffer);
       });
     }
   }
@@ -2516,12 +2513,12 @@ public:
           stream = kj::mv(result);
         }).fork()) {}
 
-  kj::Promise<void> write(const void* buffer, size_t size) override {
+  kj::Promise<void> write(ArrayPtr<const byte> buffer) override {
     KJ_IF_SOME(s, stream) {
-      return s->write(buffer, size);
+      return s->write(buffer);
     } else {
-      return promise.addBranch().then([this,buffer,size]() {
-        return KJ_ASSERT_NONNULL(stream)->write(buffer, size);
+      return promise.addBranch().then([this,buffer]() {
+        return KJ_ASSERT_NONNULL(stream)->write(buffer);
       });
     }
   }
@@ -2832,9 +2829,9 @@ Maybe<uint64_t> FileInputStream::tryGetLength() {
   return offset < size ? size - offset : 0;
 }
 
-Promise<void> FileOutputStream::write(const void* buffer, size_t size) {
-  file.write(offset, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
-  offset += size;
+Promise<void> FileOutputStream::write(kj::ArrayPtr<const byte> buffer) {
+  file.write(offset, buffer);
+  offset += buffer.size();
   return kj::READY_NOW;
 }
 

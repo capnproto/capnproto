@@ -192,12 +192,12 @@ public:
       KJ_CASE_ONEOF(streaming, Streaming) {
         if (completed + data.size() < limit) {
           completed += data.size();
-          return streaming.stream.write(data.begin(), data.size());
+          return streaming.stream.write(data);
         } else {
           // This write passes the limit.
           uint64_t remainder = limit - completed;
-          auto leftover = data.slice(remainder, data.size());
-          return streaming.stream.write(data.begin(), remainder)
+          auto leftover = data.slice(remainder);
+          return streaming.stream.write(data.first(remainder))
               .then([this, leftover]() -> kj::Promise<void> {
             completed = limit;
             limitReached();
@@ -622,7 +622,7 @@ protected:
       }
       KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
         auto data = context.getParams().getBytes();
-        return kjStream->write(data.begin(), data.size());
+        return kjStream->write(data);
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
         auto params = context.getParams();
@@ -862,41 +862,40 @@ public:
     }
   }
 
-  kj::Promise<void> write(const void* buffer, size_t size) override {
+  kj::Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
     KJ_SWITCH_ONEOF(getShortestPath()) {
       KJ_CASE_ONEOF(promise, kj::Promise<void>) {
-        return promise.then([this,buffer,size]() {
-          return write(buffer, size);
+        return promise.then([this,buffer]() {
+          return write(buffer);
         });
       }
       KJ_CASE_ONEOF(kjStream, StreamServerBase::BorrowedStream) {
         auto limit = kj::min(kjStream.limit, MAX_BYTES_PER_WRITE);
-        if (size <= limit) {
-          auto promise = kjStream.stream.write(buffer, size);
+        if (buffer.size() <= limit) {
+          auto promise = kjStream.stream.write(buffer);
+          auto size = buffer.size();
           return promise.then([kjStream,size]() mutable {
             kjStream.lender.returnStream(size);
           });
         } else {
-          auto promise = kjStream.stream.write(buffer, limit);
-          return promise.then([this,kjStream,buffer,size,limit]() mutable {
+          auto promise = kjStream.stream.write(buffer.first(limit));
+          return promise.then([this,kjStream,buffer,limit]() mutable {
             kjStream.lender.returnStream(limit);
-            return write(reinterpret_cast<const byte*>(buffer) + limit,
-                         size - limit);
+            return write(buffer.slice(limit));
           });
         }
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client*) {
-        if (size <= MAX_BYTES_PER_WRITE) {
-          auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
-          req.setBytes(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size));
+        if (buffer.size() <= MAX_BYTES_PER_WRITE) {
+          auto req = capnpStream->writeRequest(MessageSize { 8 + buffer.size() / sizeof(word), 0 });
+          req.setBytes(buffer);
           return req.send();
         } else {
           auto req = capnpStream->writeRequest(
               MessageSize { 8 + MAX_BYTES_PER_WRITE / sizeof(word), 0 });
-          req.setBytes(kj::arrayPtr(reinterpret_cast<const byte*>(buffer), MAX_BYTES_PER_WRITE));
-          return req.send().then([this,buffer,size]() mutable {
-            return write(reinterpret_cast<const byte*>(buffer) + MAX_BYTES_PER_WRITE,
-                         size - MAX_BYTES_PER_WRITE);
+          req.setBytes(buffer.first(MAX_BYTES_PER_WRITE));
+          return req.send().then([this,buffer]() mutable {
+            return write(buffer.slice(MAX_BYTES_PER_WRITE));
           });
         }
       }

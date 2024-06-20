@@ -126,10 +126,10 @@ public:
       return inner.tryGetLength();
     }
 
-    kj::Promise<void> write(const void* buffer, size_t size)  override {
+    kj::Promise<void> write(kj::ArrayPtr<const byte> buffer)  override {
       ++writeCount;
-      writeBytes += size;
-      return inner.write(buffer, size);
+      writeBytes += buffer.size();
+      return inner.write(buffer);
     }
     kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
       ++writeCount;
@@ -232,8 +232,8 @@ public:
     return kj::String(chars.releaseAsArray());
   }
 
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    chars.addAll(kj::arrayPtr(reinterpret_cast<const char*>(buffer), size));
+  kj::Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
+    chars.addAll(buffer);
     return kj::READY_NOW;
   }
 
@@ -269,7 +269,7 @@ public:
     responseHeaders.set(kj::HttpHeaderId::CONTENT_TYPE, "text/plain");
     responseHeaders.set(customHeaderId, "foobar"_kj);
     auto stream = response.send(200, "OK", responseHeaders);
-    auto promise = stream->write(HELLO_WORLD.begin(), HELLO_WORLD.size());
+    auto promise = stream->write(HELLO_WORLD.asBytes());
     return promise.attach(kj::mv(stream));
   }
 

@@ -422,7 +422,7 @@ KJ_TEST("BufferedMessageStream basics") {
   kj::WaitScope waitScope(loop);
 
   auto pipe = kj::newTwoWayPipe();
-  auto writePromise = pipe.ends[1]->write(data.getArray().begin(), data.getArray().size());
+  auto writePromise = pipe.ends[1]->write(data.getArray());
 
   uint callbackCallCount = 0;
   auto callback = [&](MessageReader& reader) {
@@ -480,30 +480,30 @@ KJ_TEST("BufferedMessageStream fragmented reads") {
   auto remainingData = data.getArray();
 
   // Write 5 bytes. This won't even fulfill the first read's minBytes.
-  pipe.ends[1]->write(remainingData.begin(), 5).wait(waitScope);
-  remainingData = remainingData.slice(5, remainingData.size());
+  pipe.ends[1]->write(remainingData.first(5)).wait(waitScope);
+  remainingData = remainingData.slice(5);
   KJ_EXPECT(!readPromise.poll(waitScope));
 
   // Write 4 more. Now the MessageStream will only see the first word which contains the first
   // segment size. This size is small so the MessageStream won't yet fall back to
   // readEntireMessage().
-  pipe.ends[1]->write(remainingData.begin(), 4).wait(waitScope);
-  remainingData = remainingData.slice(4, remainingData.size());
+  pipe.ends[1]->write(remainingData.first(4)).wait(waitScope);
+  remainingData = remainingData.slice(4);
   KJ_EXPECT(!readPromise.poll(waitScope));
 
   // Drip 10 more bytes. Now the MessageStream will realize that it needs to try
   // readEntireMessage().
-  pipe.ends[1]->write(remainingData.begin(), 10).wait(waitScope);
-  remainingData = remainingData.slice(10, remainingData.size());
+  pipe.ends[1]->write(remainingData.first(10)).wait(waitScope);
+  remainingData = remainingData.slice(10);
   KJ_EXPECT(!readPromise.poll(waitScope));
 
   // Give it all except the last byte.
-  pipe.ends[1]->write(remainingData.begin(), remainingData.size() - 1).wait(waitScope);
-  remainingData = remainingData.slice(remainingData.size() - 1, remainingData.size());
+  pipe.ends[1]->write(remainingData.first(remainingData.size() - 1)).wait(waitScope);
+  remainingData = remainingData.slice(remainingData.size() - 1);
   KJ_EXPECT(!readPromise.poll(waitScope));
 
   // Finish it off.
-  pipe.ends[1]->write(remainingData.begin(), 1).wait(waitScope);
+  pipe.ends[1]->write(remainingData.first(1)).wait(waitScope);
   KJ_ASSERT(readPromise.poll(waitScope));
 
   auto msg = readPromise.wait(waitScope);
@@ -525,10 +525,10 @@ KJ_TEST("BufferedMessageStream many small messages") {
   kj::WaitScope waitScope(loop);
 
   auto pipe = kj::newTwoWayPipe();
-  auto writePromise = pipe.ends[1]->write(data.getArray().begin(), data.getArray().size())
+  auto writePromise = pipe.ends[1]->write(data.getArray())
       .then([&]() {
     // Write some garbage at the end.
-    return pipe.ends[1]->write("bogus", 5);
+    return pipe.ends[1]->write("bogus"_kjb);
   }).then([&]() {
     // EOF.
     return pipe.ends[1]->shutdownWrite();

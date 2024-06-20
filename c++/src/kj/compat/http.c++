@@ -2275,7 +2275,7 @@ public:
     queueWrite(kj::mv(content));
   }
 
-  kj::Promise<void> writeBodyData(const void* buffer, size_t size) {
+  kj::Promise<void> writeBodyData(ArrayPtr<const byte> buffer) {
     KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
     KJ_REQUIRE(inBody);
 
@@ -2284,7 +2284,7 @@ public:
     writeQueue = fork.addBranch();
 
     co_await fork;
-    co_await inner.write(buffer, size);
+    co_await inner.write(buffer);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
     // want to block further writes.
@@ -2384,7 +2384,7 @@ private:
     // concurrent writes.
 
     writeQueue = writeQueue.then([this,content=kj::mv(content)]() mutable {
-      auto promise = inner.write(content.begin(), content.size());
+      auto promise = inner.write(content.asBytes());
       return promise.attach(kj::mv(content));
     });
   }
@@ -2437,7 +2437,7 @@ private:
 class HttpNullEntityWriter final: public kj::AsyncOutputStream {
   // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
 public:
-  Promise<void> write(const void* buffer, size_t size) override {
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -2451,7 +2451,7 @@ public:
 class HttpDiscardingEntityWriter final: public kj::AsyncOutputStream {
   // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
 public:
-  Promise<void> write(const void* buffer, size_t size) override {
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
     return kj::READY_NOW;
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -2469,12 +2469,12 @@ public:
     if (length == 0) doneWriting();
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) co_return;
-    KJ_REQUIRE(size <= length, "overwrote Content-Length");
-    length -= size;
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    if (buffer == nullptr) co_return;
+    KJ_REQUIRE(buffer.size() <= length, "overwrote Content-Length");
+    length -= buffer.size();
 
-    co_await getInner().writeBodyData(buffer, size);
+    co_await getInner().writeBodyData(buffer);
     if (length == 0) doneWriting();
   }
 
@@ -2559,13 +2559,13 @@ public:
     }
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
-    if (size == 0) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    if (buffer == nullptr) return kj::READY_NOW;  // can't encode zero-size chunk since it indicates EOF.
 
-    auto header = kj::str(kj::hex(size), "\r\n");
+    auto header = kj::str(kj::hex(buffer.size()), "\r\n");
     auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
     parts[0] = header.asBytes();
-    parts[1] = kj::arrayPtr(reinterpret_cast<const byte*>(buffer), size);
+    parts[1] = buffer;
     parts[2] = kj::StringPtr("\r\n").asBytes();
 
     auto promise = getInner().writeBodyData(parts.asPtr());
@@ -3673,7 +3673,7 @@ private:
 
     if (recvData.size() > 0) {
       // We have some data buffered. Write it first.
-      return other.stream->write(recvData.begin(), recvData.size())
+      return other.stream->write(recvData)
           .then([this, &other, size = recvData.size()]() {
         recvData = nullptr;
         other.sentBytes += size;
@@ -4579,8 +4579,8 @@ public:
   }
 
   // AsyncOutputStream
-  Promise<void> write(const void* buffer, size_t size) override {
-    return stream->write(buffer, size);
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
+    return stream->write(buffer);
   }
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -4600,7 +4600,7 @@ private:
     // If there is any data remaining in the leftover queue, we'll write it out first to output.
     if (leftover.size() > 0) {
       auto bytesToWrite = kj::min(leftover.size(), remaining);
-      return output.write(leftover.begin(), bytesToWrite).then(
+      return output.write(leftover.first(bytesToWrite)).then(
           [this, &output, remaining, total, bytesToWrite]() mutable -> kj::Promise<uint64_t> {
         leftover = leftover.slice(bytesToWrite, leftover.size());
         // If the leftover buffer has been fully consumed, go ahead and free it now.
@@ -4694,12 +4694,12 @@ public:
     }
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
+  Promise<void> write(ArrayPtr<const byte> buffer) override {
     if (writeGuardReleased) {
-      return inner->write(buffer, size);
+      return inner->write(buffer);
     } else {
-      return writeGuard.addBranch().then([this,buffer,size]() {
-        return inner->write(buffer, size);
+      return writeGuard.addBranch().then([this,buffer]() {
+        return inner->write(buffer);
       });
     }
   }
@@ -5843,8 +5843,8 @@ kj::Promise<uint64_t> PausableReadAsyncIoStream::pumpTo(
   return kj::unoptimizedPumpTo(*this, output, amount);
 }
 
-kj::Promise<void> PausableReadAsyncIoStream::write(const void* buffer, size_t size) {
-  return inner->write(buffer, size).attach(trackWrite());
+kj::Promise<void> PausableReadAsyncIoStream::write(ArrayPtr<const byte> buffer) {
+  return inner->write(buffer).attach(trackWrite());
 }
 
 kj::Promise<void> PausableReadAsyncIoStream::write(
@@ -6093,8 +6093,8 @@ public:
     return inner->pumpTo(output, amount);
   }
 
-  kj::Promise<void> write(const void* buffer, size_t size) override {
-    return inner->write(buffer, size);
+  kj::Promise<void> write(ArrayPtr<const byte> buffer) override {
+    return inner->write(buffer);
   }
 
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
@@ -7326,7 +7326,7 @@ kj::Own<HttpService> newHttpService(HttpClient& client) {
 kj::Promise<void> HttpService::Response::sendError(
     uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {
   auto stream = send(statusCode, statusText, headers, statusText.size());
-  auto promise = stream->write(statusText.begin(), statusText.size());
+  auto promise = stream->write(statusText.asBytes());
   return promise.attach(kj::mv(stream));
 }
 
@@ -8296,8 +8296,7 @@ kj::Promise<void> HttpServerErrorHandler::handleClientProtocolError(
   auto body = response.send(protocolError.statusCode, protocolError.statusMessage,
                             headers, errorMessage.size());
 
-  return body->write(errorMessage.begin(), errorMessage.size())
-      .attach(kj::mv(errorMessage), kj::mv(body));
+  return body->write(errorMessage.asBytes()).attach(kj::mv(errorMessage), kj::mv(body));
 }
 
 kj::Promise<void> HttpServerErrorHandler::handleApplicationError(
@@ -8339,8 +8338,7 @@ kj::Promise<void> HttpServerErrorHandler::handleApplicationError(
       body = r.send(500, "Internal Server Error", headers, errorMessage.size());
     }
 
-    return body->write(errorMessage.begin(), errorMessage.size())
-        .attach(kj::mv(errorMessage), kj::mv(body));
+    return body->write(errorMessage.asBytes()).attach(kj::mv(errorMessage), kj::mv(body));
   }
 
   KJ_LOG(ERROR, "HttpService threw exception after generating a partial response",
@@ -8360,7 +8358,7 @@ kj::Promise<void> HttpServerErrorHandler::handleNoResponse(kj::HttpService::Resp
   constexpr auto errorMessage = "ERROR: The HttpService did not generate a response."_kj;
   auto body = response.send(500, "Internal Server Error", headers, errorMessage.size());
 
-  return body->write(errorMessage.begin(), errorMessage.size()).attach(kj::mv(body));
+  return body->write(errorMessage.asBytes()).attach(kj::mv(body));
 }
 
 } // namespace kj

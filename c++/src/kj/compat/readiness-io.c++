@@ -131,7 +131,7 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
 
   kj::Promise<void> promise = nullptr;
   if (end <= sizeof(buffer)) {
-    promise = output.write(buffer + start, filled);
+    promise = output.write(kj::arrayPtr(buffer + start, filled));
   } else {
     end = end % sizeof(buffer);
     segments[0] = kj::arrayPtr(buffer + start, buffer + sizeof(buffer));

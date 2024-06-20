@@ -329,17 +329,13 @@ BrotliAsyncOutputStream::BrotliAsyncOutputStream(AsyncOutputStream& inner, declt
                                                  int windowBits)
     : inner(inner), ctx(kj::none, windowBits) {}
 
-Promise<void> BrotliAsyncOutputStream::write(const void* in, size_t size) {
-  ctx.setInput(in, size);
+Promise<void> BrotliAsyncOutputStream::write(ArrayPtr<const byte> buffer) {
+  ctx.setInput(buffer.begin(), buffer.size());
   return pump(BROTLI_OPERATION_PROCESS);
 }
 
 Promise<void> BrotliAsyncOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  if (pieces.size() == 0) return kj::READY_NOW;
-  return write(pieces[0].begin(), pieces[0].size())
-      .then([this,pieces]() {
-    return write(pieces.slice(1, pieces.size()));
-  });
+  for (auto piece: pieces) co_await write(piece);
 }
 
 kj::Promise<void> BrotliAsyncOutputStream::pump(BrotliEncoderOperation flush) {
@@ -354,7 +350,7 @@ kj::Promise<void> BrotliAsyncOutputStream::pump(BrotliEncoderOperation flush) {
       return kj::READY_NOW;
     }
   } else {
-    auto promise = inner.write(chunk.begin(), chunk.size());
+    auto promise = inner.write(chunk);
     if (ok) {
       promise = promise.then([this, flush]() { return pump(flush); });
     }

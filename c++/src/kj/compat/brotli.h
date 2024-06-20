@@ -161,7 +161,7 @@ public:
                           int windowBits = _::KJ_BROTLI_MAX_DEC_WBITS);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncOutputStream);
 
-  Promise<void> write(const void* buffer, size_t size) override;
+  Promise<void> write(ArrayPtr<const byte> buffer) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
   Promise<void> whenWriteDisconnected() override { return inner.whenWriteDisconnected(); }

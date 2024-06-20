@@ -242,10 +242,10 @@ public:
     return tryReadInternal(ref, minBytes, 0).attach(kj::mv(bufs));
   }
 
-  Promise<void> write(const void* buffer, size_t size) override {
+  Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
     auto bufs = heapArray<WSABUF>(1);
-    bufs[0].buf = const_cast<char*>(reinterpret_cast<const char*>(buffer));
-    bufs[0].len = size;
+    bufs[0].buf = const_cast<char*>(buffer.asChars().begin());
+    bufs[0].len = buffer.size();
 
     ArrayPtr<WSABUF> ref = bufs;
     return writeInternal(ref).attach(kj::mv(bufs));
