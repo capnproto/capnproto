@@ -278,7 +278,7 @@ public:
     return a == b;
   }
   uint hashCode(uint i) const {
-    return i;
+    return kj::hashCode(i);
   }
 };
 
@@ -327,8 +327,11 @@ public:
     return a.i == b;
   }
   uint hashCode(uint i) const {
-    return i;
+    return inner.hashCode(i);
   }
+
+private:
+  IntHasher inner;
 };
 
 KJ_TEST("double-index table") {
@@ -405,7 +408,7 @@ public:
     return a == b;
   }
   uint hashCode(uint i) const {
-    return i;
+    return kj::hashCode(i);
   }
 };
 
@@ -1337,7 +1340,7 @@ public:
   }
 
   uint hashCode(size_t size) const {
-    return size;
+    return kj::hashCode(size);
   }
 };
 

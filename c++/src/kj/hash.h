@@ -22,11 +22,15 @@
 #pragma once
 
 #include "string.h"
+#include <stdint.h>
 
 KJ_BEGIN_HEADER
 
 namespace kj {
 namespace _ {  // private
+
+inline uint intHash32(uint32_t i);
+inline uint intHash64(uint64_t i);
 
 struct HashCoder {
   // This is a dummy type with only one instance: HASHCODER (below).  To make an arbitrary type
@@ -54,51 +58,43 @@ struct HashCoder {
 
   inline uint operator*(decltype(nullptr)) const { return 0; }
   inline uint operator*(bool b) const { return b; }
-  inline uint operator*(char i) const { return i; }
-  inline uint operator*(signed char i) const { return i; }
-  inline uint operator*(unsigned char i) const { return i; }
-  inline uint operator*(signed short i) const { return i; }
-  inline uint operator*(unsigned short i) const { return i; }
-  inline uint operator*(signed int i) const { return i; }
-  inline uint operator*(unsigned int i) const { return i; }
+  inline uint operator*(char i) const { return intHash32(i); }
+  inline uint operator*(signed char i) const { return intHash32(i); }
+  inline uint operator*(unsigned char i) const { return intHash32(i); }
+  inline uint operator*(signed short i) const { return intHash32(i); }
+  inline uint operator*(unsigned short i) const { return intHash32(i); }
+  inline uint operator*(signed int i) const { return intHash32(i); }
+  inline uint operator*(unsigned int i) const { return intHash32(i); }
 
   inline uint operator*(signed long i) const {
-    if (sizeof(i) == sizeof(uint)) {
-      return operator*(static_cast<uint>(i));
+    if constexpr (sizeof(i) == sizeof(uint32_t)) {
+      return intHash32(i);
     } else {
-      return operator*(static_cast<unsigned long long>(i));
+      return intHash64(i);
     }
   }
   inline uint operator*(unsigned long i) const {
-    if (sizeof(i) == sizeof(uint)) {
-      return operator*(static_cast<uint>(i));
+    if constexpr (sizeof(i) == sizeof(uint32_t)) {
+      return intHash32(i);
     } else {
-      return operator*(static_cast<unsigned long long>(i));
+      return intHash64(i);
     }
   }
   inline uint operator*(signed long long i) const {
-    return operator*(static_cast<unsigned long long>(i));
+    return intHash64(i);
   }
   inline uint operator*(unsigned long long i) const {
-    // Mix 64 bits to 32 bits in such a way that if our input values differ primarily in the upper
-    // 32 bits, we still get good diffusion. (I.e. we cannot just truncate!)
-    //
-    // 49123 is an arbitrarily-chosen prime that is vaguely close to 2^16.
-    //
-    // TODO(perf): I just made this up. Is it OK?
-    return static_cast<uint>(i) + static_cast<uint>(i >> 32) * 49123;
+    return intHash64(i);
   }
 
   template <typename T>
   uint operator*(T* ptr) const {
     static_assert(!isSameType<Decay<T>, char>(), "Wrap in StringPtr if you want to hash string "
         "contents. If you want to hash the pointer, cast to void*");
-    if (sizeof(ptr) == sizeof(uint)) {
-      // TODO(cleanup): In C++17, make the if() above be `if constexpr ()`, then change this to
-      //   reinterpret_cast<uint>(ptr).
-      return reinterpret_cast<unsigned long long>(ptr);
+    if constexpr (sizeof(ptr) == sizeof(uint32_t)) {
+      return intHash32(reinterpret_cast<uint32_t>(ptr));
     } else {
-      return operator*(reinterpret_cast<unsigned long long>(ptr));
+      return intHash64(reinterpret_cast<uint64_t>(ptr));
     }
   }
 
@@ -132,16 +128,36 @@ static KJ_CONSTEXPR(const) HashCoder HASHCODER = HashCoder();
 // The function should be declared either in the same namespace as the target type or in the global
 // namespace. It can return any type which itself is hashable -- that value will be hashed in turn
 // until a `uint` comes out.
+//
+// Hash code functions MUST produce hashes that are uniform even in the low-order bits. That is,
+// if the caller keeps only the lowest-order N bits of each hash, they will still find hash outputs
+// are uniform within those bits. This is important because it allows kj::HashMap to use
+// power-of-two hashtable sizes, using only the lower bits of the hash to choose the appropriate
+// bucket. In particular this means that, for example, to hash a pointer value, it is not
+// sufficient to simply reinterpret it as an integer, becaues pointers are typically aligned and
+// so the bottom 2-3 bits are always zero, and also allocation patterns could cause other bits
+// to be highly correlated.
+//
+// The easiest way to satisfy the above is to always write your hash function in terms of calling
+// `kj::hashCode()` on some other value, e.g.:
+//
+//     KJ_HASHCODE(MyType x) { return kj::hashCode(x.key); }
+//
+// TODO(someday): We should define a type `kj::HashCode` which wraps `uint`, then require all
+//   `hashCode()` implementations to return this type. Hash implementations which just forward
+//   back to `kj::hashCode()` on an inner value trivially satisfy this. Anything else will need
+//   to call a specific API to construct a `HashCode` value, like
+//   `kj::HashCode::fromUniformInteger(hash)`, which promises that the value is already uniform.
 
-inline uint hashCode(uint value) { return value; }
 template <typename T>
-inline uint hashCode(T&& value) { return hashCode(_::HASHCODER * kj::fwd<T>(value)); }
+inline uint hashCode(T&& value) { return _::HASHCODER * kj::fwd<T>(value); }
 template <typename T, size_t N>
 inline uint hashCode(T (&arr)[N]) {
   static_assert(!isSameType<Decay<T>, char>(), "Wrap in StringPtr if you want to hash string "
       "contents. If you want to hash the pointer, cast to void*");
   static_assert(isSameType<Decay<T>, char>(), "Wrap in ArrayPtr if you want to hash a C array. "
       "If you want to hash the pointer, cast to void*");
+  // At least one of the two static_asserts above always fails, so this won't be used.
   return 0;
 }
 template <typename... T>
@@ -193,6 +209,60 @@ inline uint HashCoder::operator*(const Array<T>& arr) const {
 template <typename T, typename>
 inline uint HashCoder::operator*(T e) const {
   return operator*(static_cast<__underlying_type(T)>(e));
+}
+
+inline uint intHash32(uint32_t i) {
+  // Basic 32-bit integer hash function.
+  //
+  // This hash function needs to have a uniform distribution, such that changing any bits in the
+  // input tends to randomly change ~half the bits in the output. In particular, it is important
+  // that a change to the high bits of the input will affect the low bits of the output, so that
+  // even if we truncate the high bits of the output, the lower bits still have a uniform
+  // distribution.
+  //
+  // The point of all this is that kj::HashMap uses power-of-two-sized tables, and we want to make
+  // sure maps with integer keys hash well into those tables.
+
+  // On architectures with a hardware CRC32 instruction, use it. Otherwise fall back to a
+  // reasonable shifty hash.
+#if __CRC32__
+  return __builtin_ia32_crc32si(0, i);
+#elif __ARM_FEATURE_CRC32
+  return __builtin_arm_crc32w(0, i);
+#else
+  // Thomas Wang 32 bit integer hash function from https://gist.github.com/badboy/6267743
+  // This page says it's public domain: http://burtleburtle.net/bob/hash/integer.html
+  i = ~i + (i << 15); // i = (i << 15) - i - 1;
+  i = i ^ (i >> 12);
+  i = i + (i << 2);
+  i = i ^ (i >> 4);
+  i = i * 2057; // i = (i + (i << 3)) + (i << 11);
+  i = i ^ (i >> 16);
+  return i;
+#endif
+}
+
+inline uint intHash64(uint64_t i) {
+  // Basic 64-bit integer hash function.
+  //
+  // Like intHash32(), but where the input is 64 bits.
+
+#if __CRC32__
+  return __builtin_ia32_crc32di(0, i);
+#elif __ARM_FEATURE_CRC32
+  return __builtin_arm_crc32d(0, i);
+#else
+  // Thomas Wang hash6432shift() from https://gist.github.com/badboy/6267743
+  // This page says it's public domain (inthash.c):
+  //     https://github.com/markokr/pghashlib/blob/master/COPYRIGHT
+  i = (~i) + (i << 18);
+  i = i ^ (i >> 31);
+  i = i * 21;
+  i = i ^ (i >> 11);
+  i = i + (i << 6);
+  i = i ^ (i >> 22);
+  return i;
+#endif
 }
 
 }  // namespace _ (private)
