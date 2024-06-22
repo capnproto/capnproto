@@ -57,99 +57,12 @@ void logHashTableInconsistency() {
       "\nstack: ", kj::getStackTrace());
 }
 
-// List of primes where each element is roughly double the previous.  Obtained
-// from:
-//   http://planetmath.org/goodhashtableprimes
-// Primes < 53 were added to ensure that small tables don't allocate excessive memory.
-static const size_t PRIMES[] = {
-           1,  // 2^ 0 = 1
-           3,  // 2^ 1 = 2
-           5,  // 2^ 2 = 4
-          11,  // 2^ 3 = 8
-          23,  // 2^ 4 = 16
-          53,  // 2^ 5 = 32
-          97,  // 2^ 6 = 64
-         193,  // 2^ 7 = 128
-         389,  // 2^ 8 = 256
-         769,  // 2^ 9 = 512
-        1543,  // 2^10 = 1024
-        3079,  // 2^11 = 2048
-        6151,  // 2^12 = 4096
-       12289,  // 2^13 = 8192
-       24593,  // 2^14 = 16384
-       49157,  // 2^15 = 32768
-       98317,  // 2^16 = 65536
-      196613,  // 2^17 = 131072
-      393241,  // 2^18 = 262144
-      786433,  // 2^19 = 524288
-     1572869,  // 2^20 = 1048576
-     3145739,  // 2^21 = 2097152
-     6291469,  // 2^22 = 4194304
-    12582917,  // 2^23 = 8388608
-    25165843,  // 2^24 = 16777216
-    50331653,  // 2^25 = 33554432
-   100663319,  // 2^26 = 67108864
-   201326611,  // 2^27 = 134217728
-   402653189,  // 2^28 = 268435456
-   805306457,  // 2^29 = 536870912
-  1610612741,  // 2^30 = 1073741824
-};
-
-uint chooseBucket(uint hash, uint count) {
-  // Integer modulus is really, really slow. It turns out that the compiler can generate much
-  // faster code if the denominator is a constant. Since we have a fixed set of possible
-  // denominators, a big old switch() statement is a win.
-
-  // TODO(perf): Consider using power-of-two bucket sizes. We can safely do so as long as we demand
-  //   high-quality hash functions -- kj::hashCode() needs good diffusion even for integers, can't
-  //   just be a cast. Also be sure to implement Robin Hood hashing to avoid extremely bad negative
-  //   lookup time when elements have sequential hashes (otherwise, it could be necessary to scan
-  //   the entire list to determine that an element isn't present).
-
-  switch (count) {
-#define HANDLE(i) case i##u: return hash % i##u
-    HANDLE(         1);
-    HANDLE(         3);
-    HANDLE(         5);
-    HANDLE(        11);
-    HANDLE(        23);
-    HANDLE(        53);
-    HANDLE(        97);
-    HANDLE(       193);
-    HANDLE(       389);
-    HANDLE(       769);
-    HANDLE(      1543);
-    HANDLE(      3079);
-    HANDLE(      6151);
-    HANDLE(     12289);
-    HANDLE(     24593);
-    HANDLE(     49157);
-    HANDLE(     98317);
-    HANDLE(    196613);
-    HANDLE(    393241);
-    HANDLE(    786433);
-    HANDLE(   1572869);
-    HANDLE(   3145739);
-    HANDLE(   6291469);
-    HANDLE(  12582917);
-    HANDLE(  25165843);
-    HANDLE(  50331653);
-    HANDLE( 100663319);
-    HANDLE( 201326611);
-    HANDLE( 402653189);
-    HANDLE( 805306457);
-    HANDLE(1610612741);
-#undef HANDLE
-    default: return hash % count;
-  }
-}
-
-size_t chooseHashTableSize(uint size) {
+static inline size_t chooseHashTableSize(uint size) {
   if (size == 0) return 0;
 
-  // Add 1 to compensate for the floor() above, then look up the best prime bucket size for that
-  // target size.
-  return PRIMES[lg(size) + 1];
+  // We want to return the next power of 2 larger that `size`. Add 1 to lg(size) because it
+  // returns floor(log2(size)).
+  return 1 << (lg(size) + 1);
 }
 
 kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t targetSize) {
