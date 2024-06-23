@@ -951,6 +951,12 @@ KJ_TEST("kj::ArrayPtr fill") {
     KJ_EXPECT(o.i == 42);
     KJ_EXPECT(o.d == 3.1415926);
   }
+
+  // test filling from an Array
+  byte byteArray2[10]{};
+  auto source = "abc"_kjb;
+  arrayPtr(byteArray2).fill(source);
+  KJ_EXPECT("abcabcabca"_kjb == byteArray2);
 }
 
 struct Std {
