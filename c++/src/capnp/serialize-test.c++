@@ -21,6 +21,7 @@
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include "kj/array.h"
 #endif
 
 #include "serialize.h"
@@ -475,6 +476,21 @@ TEST(Serialize, RejectHugeMessage) {
   KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
 }
 #endif  // !__MINGW32__
+
+TEST(Serialize, SegmentsTable) {
+  TestMessageBuilder builder(1);
+  initTestMessage(builder.initRoot<TestAllTypes>());
+  auto serialized = messageToFlatArray(builder);
+
+  auto segments = builder.getSegmentsForOutput();
+  auto table = serializeSegmentTable(segments);
+  
+  auto message = kj::heapArrayBuilder<kj::byte>(serialized.asBytes().size());
+  message.addAll(table.asBytes());
+  for (auto segment: segments) message.addAll(segment.asBytes());
+
+  KJ_EXPECT(serialized.asBytes() == message.asPtr());
+}
 
 // TODO(test):  Test error cases.
 

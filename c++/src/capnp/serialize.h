@@ -119,6 +119,10 @@ size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> messagePrefix);
 // using the full KJ async infrastructure would be too difficult. Each time bytes are received,
 // use this function to determine if an entire message is ready to be parsed.
 
+kj::Array<word> serializeSegmentTable(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
+// Returns the segments table for given message segments.
+// Fully serialized message consists of the table and segments written consecutively. 
+
 // =======================================================================================
 
 class InputStreamMessageReader: public MessageReader {
