@@ -235,8 +235,6 @@ void detach(kj::Promise<void>&& promise);
 void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
               SourceLocation location);
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
-Promise<void> yield();
-Promise<void> yieldHarder();
 OwnPromiseNode readyNow();
 OwnPromiseNode neverDone();
 

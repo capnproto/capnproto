@@ -66,11 +66,11 @@ KJ_TEST("Win32IocpEventPort I/O operations") {
 
   KJ_EXPECT(!done);
 
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
 
   KJ_EXPECT(!done);
 
@@ -125,11 +125,11 @@ KJ_TEST("Win32IocpEventPort timer") {
 
   KJ_EXPECT(!done);
 
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
-  evalLater([]() {}).wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
+  yield().wait(waitScope);
 
   KJ_EXPECT(!done);
 

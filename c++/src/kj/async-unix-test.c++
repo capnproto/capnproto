@@ -1168,7 +1168,7 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
 
     KJ_EXPECT(!portIsReady());
 
-    auto promise = kj::evalLater([]() {}).eagerlyEvaluate(nullptr);
+    auto promise = yield().eagerlyEvaluate(nullptr);
 
     KJ_EXPECT(portIsReady());
     KJ_ASSERT(promise.poll(ws));

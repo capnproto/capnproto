@@ -196,8 +196,11 @@ public:
 
   inline Promise(decltype(nullptr)) {}
 
-  template <typename Func, typename ErrorFunc = _::PropagateException>
-  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException(),
+  template <typename Func>
+  PromiseForResult<Func, T> then(Func&& func) KJ_WARN_UNUSED_RESULT;
+
+  template <typename Func, typename ErrorFunc>
+  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler,
                                  SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Register a continuation function to be executed when the promise completes.  The continuation
   // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation
@@ -458,6 +461,14 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // If evalLast() is called multiple times, functions are executed in LIFO order. If the first
 // callback enqueues new events, then latter callbacks will not execute until those events are
 // drained.
+
+Promise<void> yield();
+// Like `eval()`, but without a function to be evaluated. Useful for yielding control temporarily
+// to serialize actions or schedule other actions for a later time using promise continuations.
+
+Promise<void> yieldUntilQueueEmpty();
+// Like `evalLast()`, but without a function to be evaluated. Useful for yielding control until the
+// event queue is otherwise completely empty and the thread is about to suspend waiting for I/O.
 
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();

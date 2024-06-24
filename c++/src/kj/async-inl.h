@@ -367,9 +367,9 @@ public:
     } else {
       // Start a new arena.
       //
-      // NOTE: As in append() (below), we don't implement exception-safety because it causes code
-      //   bloat and these constructors probably don't throw. Instead this function is noexcept, so
-      //   if a constructor does throw, it'll crash rather than leak memory.
+      // NOTE: As in appendPromise() (below), we don't implement exception-safety because it causes
+      //   code bloat and these constructors probably don't throw. Instead this function is
+      //   noexcept, so if a constructor does throw, it'll crash rather than leak memory.
       auto* arena = new PromiseArena;
       ptr = reinterpret_cast<T*>(arena + 1) - 1;
       ctor(*ptr, kj::fwd<Params>(params)...);
@@ -382,9 +382,15 @@ public:
   }
 
   template <typename T, typename D = PromiseDisposer, typename... Params>
-  static kj::Own<T, D> append(
+  static kj::Own<T, D> appendPromise(
       OwnPromiseNode&& next, Params&&... params) noexcept {
-    // Implements appendPromise().
+    // Append a promise to the arena that currently ends with `next`. `next` is also still passed as
+    // the first parameter to the new object's constructor.
+    //
+    // This is semantically the same as `allocPromise()` except that it may avoid the underlying
+    // memory allocation. `next` must end up being destroyed before the new object (i.e. the new
+    // object must never transfer away ownership of `next`).
+
 
     PromiseArena* arena = next->arena;
 
@@ -420,40 +426,19 @@ static kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
   return PromiseDisposer::alloc<T>(kj::fwd<Params>(params)...);
 }
 
-template <typename T, bool arena = PromiseDisposer::canArenaAllocate<T>()>
-struct FreePromiseNode;
-template <typename T>
-struct FreePromiseNode<T, true> {
-  static inline void free(T* ptr) {
-    // The object will have been allocated in an arena, so we only want to run the destructor.
-    // The arena's memory will be freed separately.
-    kj::dtor(*ptr);
-  }
-};
-template <typename T>
-struct FreePromiseNode<T, false> {
-  static inline void free(T* ptr) {
-    // The object will have been allocated separately on the heap.
-    return delete ptr;
-  }
-};
-
 template <typename T>
 static void freePromise(T* ptr) {
   // Free a PromiseNode originally allocated using `allocPromise<T>()`. The implementation of
   // PromiseNode::destroy() must call this for any type that is allocated using allocPromise().
-  FreePromiseNode<T>::free(ptr);
-}
 
-template <typename T, typename... Params>
-static kj::Own<T, PromiseDisposer> appendPromise(OwnPromiseNode&& next, Params&&... params) {
-  // Append a promise to the arena that currently ends with `next`. `next` is also still passed as
-  // the first parameter to the new object's constructor.
-  //
-  // This is semantically the same as `allocPromise()` except that it may avoid the underlying
-  // memory allocation. `next` must end up being destroyed before the new object (i.e. the new
-  // object must never transfer away ownership of `next`).
-  return PromiseDisposer::append<T>(kj::mv(next), kj::fwd<Params>(params)...);
+  if constexpr (PromiseDisposer::canArenaAllocate<T>()) {
+    // The object will have been allocated in an arena, so we only want to run the destructor.
+    // The arena's memory will be freed separately.
+    kj::dtor(*ptr);
+  } else {
+    // The object will have been allocated separately on the heap.
+    return delete ptr;
+  }
 }
 
 // -------------------------------------------------------------------
@@ -703,11 +688,22 @@ private:
 
   virtual void getImpl(ExceptionOrValue& output) = 0;
 
-  template <typename, typename, typename, typename>
+  template <typename T>
+  ExceptionOr<T> handle(T&& value) {
+    return kj::mv(value);
+  }
+  template <typename T>
+  ExceptionOr<T> handle(PropagateException::Bottom&& value) {
+    return ExceptionOr<T>(false, value.asException());
+  }
+
+  template <typename, typename, typename>
   friend class TransformPromiseNode;
+  template <typename, typename>
+  friend class SimpleTransformPromiseNode;
 };
 
-template <typename T, typename DepT, typename Func, typename ErrorFunc>
+template <typename _DepT, typename Func, typename ErrorFunc>
 class TransformPromiseNode final: public TransformPromiseNodeBase {
   // A PromiseNode that transforms the result of another PromiseNode through an application-provided
   // function (implements `then()`).
@@ -731,22 +727,55 @@ private:
   ErrorFunc errorHandler;
 
   void getImpl(ExceptionOrValue& output) override {
+    // Derive return type from DepT to reduce templating.
+    typedef _::FixVoid<_::ReturnType<Func, _DepT>> T;
+    typedef _::FixVoid<_DepT> DepT;
     ExceptionOr<DepT> depResult;
     getDepResult(depResult);
     KJ_IF_SOME(depException, depResult.exception) {
-      output.as<T>() = handle(
+      output.as<T>() = handle<T>(
           MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
               errorHandler, kj::mv(depException)));
     } else KJ_IF_SOME(depValue, depResult.value) {
       output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
     }
   }
+};
 
-  ExceptionOr<T> handle(T&& value) {
-    return kj::mv(value);
+template <typename _DepT, typename Func>
+class SimpleTransformPromiseNode final: public TransformPromiseNodeBase {
+  // TransformPromiseNodeBase variant using default error handler to reduce templating.
+
+public:
+  SimpleTransformPromiseNode(OwnPromiseNode&& dependency, Func&& func,
+                       void* continuationTracePtr)
+      : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
+        func(kj::fwd<Func>(func)) {}
+
+  void destroy() override {
+    freePromise(this);
   }
-  ExceptionOr<T> handle(PropagateException::Bottom&& value) {
-    return ExceptionOr<T>(false, value.asException());
+
+  ~SimpleTransformPromiseNode() noexcept(false) {
+    // We need to make sure the dependency is deleted before we delete the continuations because it
+    // is a common pattern for the continuations to hold ownership of objects that might be in-use
+    // by the dependency.
+    dropDependency();
+  }
+
+private:
+  Func func;
+
+  void getImpl(ExceptionOrValue& output) override {
+    typedef _::FixVoid<_::ReturnType<Func, _DepT>> T;
+    typedef _::FixVoid<_DepT> DepT;
+    ExceptionOr<DepT> depResult;
+    getDepResult(depResult);
+    KJ_IF_SOME(depException, depResult.exception) {
+      output.as<T>() = ExceptionOr<T>(false, kj::mv(depException));
+    } else KJ_IF_SOME(depValue, depResult.value) {
+      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
+    }
   }
 };
 
@@ -963,7 +992,7 @@ private:
 
 template <typename T>
 OwnPromiseNode maybeChain(OwnPromiseNode&& node, Promise<T>*, SourceLocation location) {
-  return appendPromise<ChainPromiseNode>(kj::mv(node), location);
+  return PromiseDisposer::appendPromise<ChainPromiseNode>(kj::mv(node), location);
 }
 
 template <typename T>
@@ -1154,7 +1183,7 @@ template <typename T>
 OwnPromiseNode spark(OwnPromiseNode&& node, SourceLocation location) {
   // Forces evaluation of the given node to begin as soon as possible, even if no one is waiting
   // on it.
-  return appendPromise<EagerPromiseNode<T>>(kj::mv(node), location);
+  return PromiseDisposer::appendPromise<EagerPromiseNode<T>>(kj::mv(node), location);
 }
 
 // -------------------------------------------------------------------
@@ -1298,6 +1327,22 @@ Promise<T>::Promise(kj::Exception&& exception)
     : PromiseBase(_::allocPromise<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
 
 template <typename T>
+template <typename Func>
+PromiseForResult<Func, T> Promise<T>::then(Func&& func) {
+  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
+
+  void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
+
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::SimpleTransformPromiseNode<T, Func>>(
+      kj::mv(node), kj::fwd<Func>(func), continuationTracePtr);
+
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), {}));
+  return _::maybeReduce(kj::mv(result), false);
+}
+
+template <typename T>
 template <typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler,
                                            SourceLocation location) {
@@ -1305,7 +1350,7 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
 
   void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
   _::OwnPromiseNode intermediate =
-      _::appendPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+      _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
           continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
@@ -1355,7 +1400,7 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler, SourceLocation location)
   // pointer to be based on ErrorFunc rather than Func.
   void* continuationTracePtr = _::GetFunctorStartAddress<kj::Exception&&>::apply(errorHandler);
   _::OwnPromiseNode intermediate =
-      _::appendPromise<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+      _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
           kj::mv(node), Func(), kj::fwd<ErrorFunc>(errorHandler), continuationTracePtr);
   auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
@@ -1398,15 +1443,16 @@ _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
 
 template <typename T>
 Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other, SourceLocation location) {
-  return Promise(false, _::appendPromise<_::ExclusiveJoinPromiseNode>(
+  return Promise(false, _::PromiseDisposer::appendPromise<_::ExclusiveJoinPromiseNode>(
       kj::mv(node), kj::mv(other.node), location));
 }
 
 template <typename T>
 template <typename... Attachments>
 Promise<T> Promise<T>::attach(Attachments&&... attachments) {
-  return Promise(false, _::appendPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
-      kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));
+  return Promise(false,
+      _::PromiseDisposer::appendPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
+          kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));
 }
 
 template <typename T>
@@ -1436,12 +1482,12 @@ inline Promise<T> constPromise() {
 
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
-  return _::yield().then(kj::fwd<Func>(func), _::PropagateException());
+  return yield().then(kj::fwd<Func>(func));
 }
 
 template <typename Func>
 inline PromiseForResult<Func, void> evalLast(Func&& func) {
-  return _::yieldHarder().then(kj::fwd<Func>(func), _::PropagateException());
+  return yieldUntilQueueEmpty().then(kj::fwd<Func>(func));
 }
 
 template <typename Func>

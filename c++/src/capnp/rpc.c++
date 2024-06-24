@@ -2844,8 +2844,8 @@ private:
         co_return;
       }
 
-      // TODO(perf): We add an evalLater() here so that anything we needed to do in reaction to
-      //   the previous message has a chance to complete before the next message is handled. In
+      // TODO(perf): We add a yield() here so that anything we needed to do in reaction to the
+      //   previous message has a chance to complete before the next message is handled. In
       //   particular, without this, I observed an ordering problem: I saw a case where a `Return`
       //   message was followed by a `Resolve` message, but the `PromiseClient` associated with the
       //   `Resolve` had its `resolve()` method invoked _before_ any `PromiseClient`s associated
@@ -2854,12 +2854,8 @@ private:
       //   other. This is probably really a bug in the way `Return`s are handled -- apparently,
       //   resolution of `PromiseClient`s based on returned capabilities does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
-      //   `evalLater()`. However, the `evalLater()` is not that bad and solves the problem...
-      // TODO(cleanup): As an extra optimization here I'm calling yield() directly since
-      //   evalLater(func) reduces to yield().then(func) and we don't need the .then(). yield()
-      //   itself does zero allocation which is nice. Maybe we should make it public? It's a much
-      //   better API for coroutines.
-      co_await kj::_::yield();  // instead of: co_await kj::evalLater([]() {});
+      //   `yield()`. However, the `yield()` is not that bad and solves the problem...
+      co_await kj::yield();
     }
   }
 

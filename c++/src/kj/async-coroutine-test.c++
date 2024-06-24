@@ -263,7 +263,7 @@ KJ_TEST("Coroutines can be canceled while suspended") {
 
   auto coro = [&](kj::Promise<int> promise) -> kj::Promise<void> {
     Counter counter1(wind, unwind);
-    co_await kj::evalLater([](){});
+    co_await kj::yield();
     Counter counter2(wind, unwind);
     co_await promise;
   };
