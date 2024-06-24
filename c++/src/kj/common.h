@@ -1944,12 +1944,25 @@ public:
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
 
-  inline void fill(T t) { 
+  inline void fill(T t) {
     // Fill the area by copying t over every element.
 
-    for (size_t i = 0; i < size_; i++) { ptr[i] = t; } 
+    for (size_t i = 0; i < size_; i++) { ptr[i] = t; }
     // All modern compilers are smart enough to optimize this loop for simple T's.
     // libc++ std::fill doesn't have memset specialization either.
+  }
+
+  inline void fill(ArrayPtr<const T> other) {
+    // Fill the area by copying each element of other, in sequence, over every element.
+    const size_t otherSize = other.size();
+    KJ_IREQUIRE(otherSize > 0, "fill requires non-empty source array");
+    T* __restrict__ dst = begin();
+    const T* __restrict__ src = other.begin();
+    size_t counter = 0;
+    for (size_t s = size_, i = 0; i < s; i++) {
+      dst[i] = src[counter];
+      if (++counter == otherSize) counter = 0;
+    }
   }
 
   inline void copyFrom(kj::ArrayPtr<const T> other) {
@@ -1959,7 +1972,7 @@ public:
     KJ_IREQUIRE(!intersects(other), "copy memory area must not overlap");
     T* __restrict__ dst = begin();
     const T* __restrict__ src = other.begin();
-    for (size_t s = size_, i = 0; i < s; i++) { dst[i] = src[i]; } 
+    for (size_t s = size_, i = 0; i < s; i++) { dst[i] = src[i]; }
   }
 
 private:
@@ -2213,7 +2226,7 @@ struct ByteLiteral {
   constexpr size_t size() const { return N - 1; }
   constexpr const kj::byte* begin() const { return data; }
   kj::byte data[N-1]; // do not store 0-terminator
-}; 
+};
 
 template<>
 struct ByteLiteral<1ul> {
