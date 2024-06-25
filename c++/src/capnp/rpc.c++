@@ -300,8 +300,10 @@ class ImportTable {
   // Table mapping integers to T, where the integers are chosen remotely.
 
 public:
-  T& operator[](Id id) {
+  T& findOrCreate(Id id) {
+    // Get an entry, creating it if it doesn't exist.
     if (id < kj::size(low)) {
+      presenceBits |= 1 << id;
       return low[id];
     } else {
       return high.findOrCreate(id, [&]() -> typename decltype(high)::Entry { return {id, {}}; });
@@ -309,10 +311,37 @@ public:
   }
 
   kj::Maybe<T&> find(Id id) {
+    // Look up an entry, returning null if it doesn't exist.
     if (id < kj::size(low)) {
-      return low[id];
+      if (presenceBits & (1 << id)) {
+        return low[id];
+      } else {
+        return kj::none;
+      }
     } else {
       return high.find(id);
+    }
+  }
+
+  kj::Maybe<T&> create(Id id) {
+    // Strictly create a new entry; return null if it already exists.
+    if (id < kj::size(low)) {
+      if (presenceBits & (1 << id)) {
+        return kj::none;
+      }
+      presenceBits |= 1 << id;
+      return low[id];
+    } else {
+      bool created = false;
+      T& result = high.findOrCreate(id, [&]() -> typename decltype(high)::Entry {
+        created = true;
+        return {id, {}};
+      });
+      if (created) {
+        return result;
+      } else {
+        return kj::none;
+      }
     }
   }
 
@@ -322,6 +351,7 @@ public:
     if (id < kj::size(low)) {
       T toRelease = kj::mv(low[id]);
       low[id] = T();
+      presenceBits &= ~(1 << id);
       return toRelease;
     } else {
       KJ_IF_SOME(entry, high.findEntry(id)) {
@@ -335,7 +365,9 @@ public:
   template <typename Func>
   void forEach(Func&& func) {
     for (Id i: kj::indices(low)) {
-      func(i, low[i]);
+      if (presenceBits & (1 << i)) {
+        func(i, low[i]);
+      }
     }
     for (auto& entry: high) {
       func(entry.key, entry.value);
@@ -344,6 +376,7 @@ public:
 
 private:
   T low[16];
+  uint presenceBits = 0;
   kj::HashMap<Id, T> high;
 };
 
@@ -614,10 +647,6 @@ private:
     Answer& operator=(Answer&&) = default;
     // If we don't explicitly write all this, we get some stupid error deep in STL.
 
-    bool active = false;
-    // True from the point when the Call message is received to the point when both the `Finish`
-    // message has been received and the `Return` has been sent.
-
     kj::Maybe<kj::Own<PipelineHook>> pipeline;
     // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
 
@@ -670,6 +699,12 @@ private:
 
     kj::Maybe<ImportClient&> importClient;
     // Becomes null when the import is destroyed.
+    //
+    // TODO(cleanup): This comes from when the ImportTable didn't explicitly track which entries
+    //   were present, so you had to check whether `importClient` was null. ImportTable now tracks
+    //   this itself, so `importClient` no longer needs tobe a `Maybe`. However, it still can't be
+    //   a reference since the current ImportTable implementation requires default-constructable
+    //   entries. Changing that is more refactoring than I care to do at this moment.
 
     kj::Maybe<RpcClient&> appClient;
     // Either a copy of importClient, or, in the case of promises, the wrapping PromiseClient.
@@ -1479,7 +1514,7 @@ private:
   kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::AutoCloseFd> fd) {
     // Receive a new import.
 
-    auto& import = imports[importId];
+    auto& import = imports.findOrCreate(importId);
     kj::Own<ImportClient> importClient;
 
     // Create the ImportClient, or if one already exists, use it.
@@ -1641,17 +1676,15 @@ private:
         auto promisedAnswer = descriptor.getReceiverAnswer();
 
         KJ_IF_SOME(answer, answers.find(promisedAnswer.getQuestionId())) {
-          if (answer.active) {
-            KJ_IF_SOME(pipeline, answer.pipeline) {
-              KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
-                auto result = pipeline->getPipelinedCap(ops);
-                if (unwrapIfSameConnection(*result) != kj::none) {
-                  result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
-                }
-                return kj::mv(result);
-              } else {
-                return newBrokenCap("unrecognized pipeline ops");
+          KJ_IF_SOME(pipeline, answer.pipeline) {
+            KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
+              auto result = pipeline->getPipelinedCap(ops);
+              if (unwrapIfSameConnection(*result) != kj::none) {
+                result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
               }
+              return kj::mv(result);
+            } else {
+              return newBrokenCap("unrecognized pipeline ops");
             }
           }
         }
@@ -2784,7 +2817,7 @@ private:
         connectionState->answers.erase(answerId);
       } else {
         // We just have to null out callContext and set the exports.
-        auto& answer = connectionState->answers[answerId];
+        auto& answer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
         answer.callContext = kj::none;
         answer.resultExports = kj::mv(resultExports);
 
@@ -3039,13 +3072,10 @@ private:
     message = nullptr;
 
     // Add the answer to the answer table for pipelining and send the response.
-    auto& answer = answers[answerId];
-    KJ_REQUIRE(!answer.active, "questionId is already in use", answerId) {
-      return;
-    }
+    auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
+                                     "questionId is already in use", answerId);
 
     answer.resultExports = kj::mv(resultExports);
-    answer.active = true;
     answer.pipeline = kj::Own<PipelineHook>(kj::refcounted<SingleCapPipeline>(kj::mv(capHook)));
 
     response->send();
@@ -3091,13 +3121,9 @@ private:
     // No more using `call` after this point, as it now belongs to the context.
 
     {
-      auto& answer = answers[answerId];
+      auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
+                                       "questionId is already in use", answerId);
 
-      KJ_REQUIRE(!answer.active, "questionId is already in use") {
-        return;
-      }
-
-      answer.active = true;
       answer.callContext = *context;
     }
 
@@ -3108,7 +3134,7 @@ private:
     // context->directTailCall().
 
     {
-      auto& answer = answers[answerId];
+      auto& answer = KJ_ASSERT_NONNULL(answers.find(answerId));
 
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
@@ -3165,10 +3191,8 @@ private:
         kj::Own<PipelineHook> pipeline;
 
         KJ_IF_SOME(answer, answers.find(promisedAnswer.getQuestionId())) {
-          if (answer.active) {
-            KJ_IF_SOME(p, answer.pipeline) {
-              pipeline = p->addRef();
-            }
+          KJ_IF_SOME(p, answer.pipeline) {
+            pipeline = p->addRef();
           }
         }
         if (pipeline.get() == nullptr) {
@@ -3351,11 +3375,6 @@ private:
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     KJ_IF_SOME(answer, answers.find(finish.getQuestionId())) {
-      if (!answer.active) {
-        // Treat the same as if the answer wasn't in the table; see comment below.
-        return;
-      }
-
       if (finish.getReleaseResultCaps()) {
         exportsToRelease = kj::mv(answer.resultExports);
       } else {
