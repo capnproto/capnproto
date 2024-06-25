@@ -196,10 +196,6 @@ private:
   void* traceAddr;
 };
 
-struct DummyFunctor {
-  void operator()() {};
-};
-
 }  // namespace
 
 // =======================================================================================
@@ -2854,7 +2850,7 @@ Promise<void> yield() {
       output.as<_::Void>() = _::Void();
     }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-      builder.add(reinterpret_cast<void*>(&kj::evalLater<DummyFunctor>));
+      builder.add(reinterpret_cast<void*>(&kj::yield));
     }
   };
 
@@ -2874,7 +2870,7 @@ Promise<void> yieldUntilQueueEmpty() {
       output.as<_::Void>() = _::Void();
     }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
-      builder.add(reinterpret_cast<void*>(&kj::evalLast<DummyFunctor>));
+      builder.add(reinterpret_cast<void*>(&kj::yieldUntilQueueEmpty));
     }
   };
 
