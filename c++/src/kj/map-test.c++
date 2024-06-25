@@ -214,6 +214,18 @@ KJ_TEST("TreeMap eraseAll") {
   testEraseAll(m);
 }
 
+KJ_TEST("HashMap<uint64> with int key") {
+  // Make sure searching for an `int` key in a `uint64_t` table works -- i.e., the hashes are
+  // consistent even though the types differ.
+  kj::HashMap<uint64_t, kj::StringPtr> map;
+  map.insert((uint64_t)123, "foo"_kj);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find((int)123)) == "foo"_kj);
+
+  // But also make sure that the upper bits of a 64-bit integer do affect the hash.
+  KJ_EXPECT(kj::hashCode(0x1200000001ull) != kj::hashCode(0x3400000001ull));
+  KJ_EXPECT(kj::hashCode(0x1200000001ull) != kj::hashCode(1));
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace kj
