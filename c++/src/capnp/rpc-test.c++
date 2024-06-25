@@ -654,17 +654,17 @@ TEST(Rpc, Release) {
 
   handle1 = nullptr;
 
-  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
   EXPECT_EQ(1, context.restorer.handleCount);
 
   handle2 = nullptr;
 
-  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
   EXPECT_EQ(1, context.restorer.handleCount);
 
   promise = nullptr;
 
-  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
   EXPECT_EQ(0, context.restorer.handleCount);
 }
 
@@ -684,16 +684,16 @@ TEST(Rpc, ReleaseOnCancel) {
 
     // If the server receives cancellation too early, it won't even return a capability in the
     // results, it will just return "canceled". We want to emulate the case where the return message
-    // and the cancel (finish) message cross paths. It turns out that exactly two evalLater()s get
-    // us there.
+    // and the cancel (finish) message cross paths. It turns out that exactly two yield()s get us
+    // there.
     //
     // TODO(cleanup): This is fragile, but I'm not sure how else to write it without a ton
     //   of scaffolding.
-    kj::evalLater([]() {}).wait(context.waitScope);
-    kj::evalLater([]() {}).wait(context.waitScope);
+    kj::yield().wait(context.waitScope);
+    kj::yield().wait(context.waitScope);
   }
 
-  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
   EXPECT_EQ(0, context.restorer.handleCount);
 }
 
@@ -865,12 +865,12 @@ TEST(Rpc, Cancellation) {
       returned = true;
     }).eagerlyEvaluate(nullptr);
   }
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
 
   // We can detect that the method was canceled because it will drop the cap.
   EXPECT_FALSE(destroyed);
@@ -1257,14 +1257,14 @@ TEST(Rpc, CallBrokenPromise) {
     kj::throwRecoverableException(kj::mv(e));
   }).eagerlyEvaluate(nullptr);
 
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
 
   EXPECT_FALSE(returned);
 
@@ -1273,14 +1273,14 @@ TEST(Rpc, CallBrokenPromise) {
   expectPromiseThrows(kj::mv(req), context.waitScope);
   EXPECT_TRUE(returned);
 
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
+  kj::yield().wait(context.waitScope);
 
   // Verify that we're still connected (there were no protocol errors).
   getCallSequence(client, 1).wait(context.waitScope);

@@ -3517,9 +3517,9 @@ private:
         // Disembargo is delivered to a promise capability.
         auto promise = target->whenResolved()
             .then([]() {
-          // We also need to insert an evalLast() here to make sure that any pending calls towards
-          // this cap have had time to find their way through the event loop.
-          return kj::evalLast([]() {});
+          // We also need to insert yieldUntilQueueEmpty() here to make sure that any pending calls
+          // towards this cap have had time to find their way through the event loop.
+          return kj::yieldUntilQueueEmpty();
         });
 
         tasks.add(promise.then([this, embargoId, target = kj::mv(target)]() mutable {

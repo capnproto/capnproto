@@ -306,8 +306,8 @@ TEST(Capability, AsyncCancelation) {
       returned = true;
     }).eagerlyEvaluate(nullptr);
   }
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
+  kj::yield().wait(waitScope);
+  kj::yield().wait(waitScope);
 
   // We can detect that the method was canceled because it will drop the cap.
   EXPECT_FALSE(destroyed);
@@ -1040,10 +1040,10 @@ TEST(Capability, CapabilityServerSet) {
     KJ_EXPECT(e.getDescription().endsWith("foo"), e.getDescription());
   });
 
-  kj::evalLater([](){}).wait(waitScope);
-  kj::evalLater([](){}).wait(waitScope);
-  kj::evalLater([](){}).wait(waitScope);
-  kj::evalLater([](){}).wait(waitScope);
+  kj::yield().wait(waitScope);
+  kj::yield().wait(waitScope);
+  kj::yield().wait(waitScope);
+  kj::yield().wait(waitScope);
 
   EXPECT_FALSE(resolved1);
   EXPECT_FALSE(resolved2);
