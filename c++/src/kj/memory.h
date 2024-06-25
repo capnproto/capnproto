@@ -224,6 +224,8 @@ using PtrCounter = AtomicPtrCounter;
 template <typename T, typename StaticDisposer = decltype(nullptr)>
 class Own;
 
+void throwWrongDisposerError();
+
 template <typename T>
 class Own<T, decltype(nullptr)> {
   // A transferrable title to a T.  When an Own<T> goes out of scope, the object's Disposer is
@@ -318,7 +320,7 @@ public:
   // Surrenders ownership of the underlying object to the caller. The caller must pass in the 
   // correct disposer to prove that they know how the object is meant to be disposed of. 
   inline T* disown(const Disposer* d) {
-    KJ_REQUIRE(d == disposer, "When disowning an object, disposer must be equal to Own's disposer");
+    if (d != disposer) throwWrongDisposerError();
     T* ptrCopy = ptr;
     ptr = nullptr;
   }

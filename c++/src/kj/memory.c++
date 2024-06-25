@@ -27,6 +27,10 @@ namespace kj {
 
 const NullDisposer NullDisposer::instance = NullDisposer();
 
+void throwWrongDisposerError() {
+  KJ_FAIL_REQUIRE("When disowning an object, disposer must be equal to Own's disposer");
+}
+
 #ifdef KJ_ASSERT_PTR_COUNTERS
 namespace _ {
 
