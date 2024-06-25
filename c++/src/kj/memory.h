@@ -107,6 +107,8 @@ const void* castToConstVoid(T* ptr) {
   return CastToVoid_<T>::applyConst(ptr);
 }
 
+void throwWrongDisposerError();
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -223,8 +225,6 @@ using PtrCounter = AtomicPtrCounter;
 
 template <typename T, typename StaticDisposer = decltype(nullptr)>
 class Own;
-
-void throwWrongDisposerError();
 
 template <typename T>
 class Own<T, decltype(nullptr)> {
