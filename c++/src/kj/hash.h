@@ -247,6 +247,13 @@ inline uint intHash64(uint64_t i) {
   //
   // Like intHash32(), but where the input is 64 bits.
 
+  // It's important that if the actual value is in the 32-bit range, the hash code is consistent
+  // with a 32-bit integer. Otherwise, if you have, say, a `HashMap<uint64_t, T>` and you write
+  // `map.find(1)` it won't work, because `1` is type `int` and will be hashed as a 32-bit integer.
+  if (i <= UINT32_MAX) {
+    return intHash32(i);
+  }
+
 #if __CRC32__
   return __builtin_ia32_crc32di(0, i);
 #elif __ARM_FEATURE_CRC32
