@@ -376,7 +376,7 @@ TEST(Memory, OwnConstVoid) {
     Own<SingularDerivedDynamic> ptr = heap<SingularDerivedDynamic>(123, destructorCalled);
     SingularDerivedDynamic* addr = ptr.get();
 
-    ptr.disown(&_::HeapDisposer<SingularDerivedDynamic>::instance);
+    KJ_EXPECT(ptr.disown(&_::HeapDisposer<SingularDerivedDynamic>::instance) == addr);
     KJ_EXPECT(!destructorCalled);
     ptr = nullptr;
     KJ_EXPECT(!destructorCalled);
