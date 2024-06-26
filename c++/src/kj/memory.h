@@ -107,6 +107,8 @@ const void* castToConstVoid(T* ptr) {
   return CastToVoid_<T>::applyConst(ptr);
 }
 
+void throwWrongDisposerError();
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -315,6 +317,15 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
+  // Surrenders ownership of the underlying object to the caller. The caller must pass in the 
+  // correct disposer to prove that they know how the object is meant to be disposed of. 
+  inline T* disown(const Disposer* d) {
+    if (d != disposer) _::throwWrongDisposerError();
+    T* ptrCopy = ptr;
+    ptr = nullptr;
+    return ptrCopy;
+  }
+
 private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
@@ -428,6 +439,16 @@ public:
   inline const T* get() const { return ptr; }
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
+
+  // Surrenders ownership of the underlying object to the caller. The caller must pass in the 
+  // correct disposer to prove that they know how the object is meant to be disposed of. 
+  template<typename SD>
+  inline T* disown() {
+    static_assert(kj::isSameType<StaticDisposer, SD>(), "disposer must be the same as Own's disposer");
+    T* ptrCopy = ptr;
+    ptr = nullptr;
+    return ptrCopy;
+  }
 
 private:
   T* ptr;

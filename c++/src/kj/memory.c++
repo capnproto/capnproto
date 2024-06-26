@@ -37,6 +37,10 @@ void atomicPtrCounterAssertionFailed(char const* reason) {
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
+void throwWrongDisposerError() {
+  KJ_FAIL_REQUIRE("When disowning an object, disposer must be equal to Own's disposer");
+}
+
 }
 #endif
 
