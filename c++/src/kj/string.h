@@ -133,11 +133,15 @@ public:
   inline constexpr const char* end() const { return content.end() - 1; }
 
   inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+  inline constexpr bool operator<=(decltype(nullptr)) const { return *this == nullptr; }
+  inline constexpr bool operator>=(decltype(nullptr)) const { return true; }
+  inline constexpr bool operator< (decltype(nullptr)) const { return false; }
+  inline constexpr bool operator> (decltype(nullptr)) const { return content.size() > 1; }
 
-  inline bool operator==(const StringPtr& other) const;
-  inline bool operator< (const StringPtr& other) const;
+  inline bool operator==(const StringPtr& other) const { return content.first(content.size() - 1) == other.content.first(other.content.size() - 1); }
+  inline bool operator< (const StringPtr& other) const { return content.first(content.size()) < other.content.first(other.content.size()); }
   inline bool operator> (const StringPtr& other) const { return other < *this; }
-  inline bool operator<=(const StringPtr& other) const { return !(other < *this); }
+  inline bool operator<=(const StringPtr& other) const { return !(*this > other); }
   inline bool operator>=(const StringPtr& other) const { return !(*this < other); }
 
   inline StringPtr slice(size_t start) const;
@@ -718,18 +722,6 @@ inline constexpr StringPtr::operator ArrayPtr<const char>() const {
 
 inline constexpr ArrayPtr<const char> StringPtr::asArray() const {
   return ArrayPtr<const char>(content.begin(), content.size() - 1);
-}
-
-inline bool StringPtr::operator==(const StringPtr& other) const {
-  return content.size() == other.content.size() &&
-      memcmp(content.begin(), other.content.begin(), content.size() - 1) == 0;
-}
-
-inline bool StringPtr::operator<(const StringPtr& other) const {
-  bool shorter = content.size() < other.content.size();
-  int cmp = memcmp(content.begin(), other.content.begin(),
-                   shorter ? content.size() : other.content.size());
-  return cmp < 0 || (cmp == 0 && shorter);
 }
 
 inline StringPtr StringPtr::slice(size_t start) const {

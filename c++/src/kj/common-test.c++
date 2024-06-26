@@ -793,30 +793,143 @@ TEST(Common, ArrayAsBytes) {
   }
 }
 
-KJ_TEST("ArrayPtr operator ==") {
-  KJ_EXPECT(ArrayPtr<const int>({123, 456}) == ArrayPtr<const int>({123, 456}));
-  KJ_EXPECT(!(ArrayPtr<const int>({123, 456}) != ArrayPtr<const int>({123, 456})));
-  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const int>({123, 321}));
-  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const int>({123}));
+enum testOrdering {
+  unordered,
+  equal,
+  less,
+  greater,
+  notEqual,
+};
 
-  KJ_EXPECT(ArrayPtr<const int>({123, 456}) == ArrayPtr<const short>({123, 456}));
-  KJ_EXPECT(!(ArrayPtr<const int>({123, 456}) != ArrayPtr<const short>({123, 456})));
-  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const short>({123, 321}));
-  KJ_EXPECT(ArrayPtr<const int>({123, 456}) != ArrayPtr<const short>({123}));
-
-  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) ==
-             ArrayPtr<const char* const>({"foo", "bar"})));
-  KJ_EXPECT(!(ArrayPtr<const StringPtr>({"foo", "bar"}) !=
-             ArrayPtr<const char* const>({"foo", "bar"})));
-  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) !=
-             ArrayPtr<const char* const>({"foo", "baz"})));
-  KJ_EXPECT((ArrayPtr<const StringPtr>({"foo", "bar"}) !=
-             ArrayPtr<const char* const>({"foo"})));
-
-  // operator== should not use memcmp for double elements.
-  double d[1] = { nan() };
-  KJ_EXPECT(ArrayPtr<double>(d, 1) != ArrayPtr<double>(d, 1));
+template<typename A, typename B>
+void verifyEqualityComparisons(A a, B b, bool expectedEq) {
+  KJ_EXPECT((a ==  b) == expectedEq);
+  KJ_EXPECT((b ==  a) == expectedEq);
+  KJ_EXPECT((a !=  b) == !expectedEq);
+  KJ_EXPECT((b !=  a) == !expectedEq);
 }
+
+template<typename A, typename B>
+void verifyEqualityComparisons(A a, B b, testOrdering ord) {
+  verifyEqualityComparisons(a, b, ord == equal);
+}
+
+template<typename A, typename B>
+void strongComparisonsTests(A a, B b, testOrdering ans3way) {
+  const bool expectedEq = ans3way == equal;
+  const bool expectedLT = ans3way == less;
+  verifyEqualityComparisons(a, b, expectedEq);
+  KJ_EXPECT((a <=  b) == (expectedEq || expectedLT));
+  KJ_EXPECT((b <=  a) == !expectedLT);
+  KJ_EXPECT((a >=  b) == !expectedLT);
+  KJ_EXPECT((b >=  a) == (expectedEq || expectedLT));
+  KJ_EXPECT((a <   b) == expectedLT);
+  KJ_EXPECT((b <   a) == !(expectedEq || expectedLT));
+  KJ_EXPECT((a >   b) == !(expectedEq || expectedLT));
+  KJ_EXPECT((b >   a) == expectedLT);
+}
+
+template<typename A, typename B>
+struct ArrayComparisonTest {
+  Array<A> left;
+  Array<B> right;
+  testOrdering expectedResult;
+  ArrayComparisonTest(std::initializer_list<A> left, std::initializer_list<B> right, testOrdering expectedResult) :
+    left(heapArray(left)), right(heapArray(right)), expectedResult(expectedResult) {}
+
+};
+
+KJ_TEST("ArrayPtr comparators for nullptr type") {
+  struct Test {
+    Array<const int> left;
+    testOrdering expectedResult;
+    Test(std::initializer_list<const int> left, testOrdering expectedResult) :
+      left(heapArray(left)), expectedResult(expectedResult) {}
+  };
+  Test testCases[] = {
+    {{}, equal},
+    {{123}, greater},
+  };
+
+  for(auto const& testCase : testCases) {
+    strongComparisonsTests(testCase.left.asPtr(), nullptr, testCase.expectedResult);
+  }
+}
+
+KJ_TEST("ArrayPtr comparators for same int type") {
+  using Test = ArrayComparisonTest<const int, const int>;
+  Test testCases[] = {
+    {{1,2}, {1,2}, equal},
+    {{1,2}, {1,3}, less},
+    {{1,3}, {1,2}, greater},
+    {{1}  , {1,2}, less},
+    {{2}  , {1,2}, greater},
+  };
+
+  for(auto const& testCase : testCases) {
+    strongComparisonsTests(testCase.left.asPtr(), testCase.right.asPtr(), testCase.expectedResult);
+  }
+}
+
+KJ_TEST("ArrayPtr equality comparisons for different int type") {
+   using Test = ArrayComparisonTest<const int, const short>;
+  Test testCases[] = {
+    {{1,2}, {1,2}, equal},
+    {{1,2}, {1,3}, less},
+    {{1,3}, {1,2}, greater},
+    {{1}  , {1,2}, less},
+    {{2}  , {1,2}, greater},
+  };
+
+  for(auto const& testCase : testCases) {
+    verifyEqualityComparisons(testCase.left.asPtr(), testCase.right.asPtr(), testCase.expectedResult);
+  }
+}
+
+
+KJ_TEST("ArrayPtr comparators for doubles (testing partial orderings)") {
+  using Test = ArrayComparisonTest<const double, const double>;
+  const double d = nan();
+  Test testCases[] = {
+    {{0.0}, {0.0}, equal},
+    {{1.0}, {0.0}, notEqual},
+    {{0.0}, {1.0}, notEqual},
+    {{0,0, 0.0}, {0.0}, notEqual},
+    {{0.0, 0.0}, {1.0}, notEqual},
+    {{d}, {d}, unordered},
+  };
+
+  for(auto const& testCase : testCases) {
+    verifyEqualityComparisons(testCase.left.asPtr(), testCase.right.asPtr(), testCase.expectedResult);
+  }
+}
+
+KJ_TEST("ArrayPtr comparator for same string types") {
+  using TestCase = ArrayComparisonTest<const StringPtr, const StringPtr>;
+  TestCase testCases[] = {
+    {{"foo", "bar"}, {"foo", "bar"}, equal},
+    {{"foo", "bar"}, {"foo", "baz"}, less},
+    {{"foo", "bar"}, {"foo"       }, greater},
+  };
+
+  for(auto const& testCase : testCases) {
+    strongComparisonsTests(testCase.left.asPtr(), testCase.right.asPtr(), testCase.expectedResult);
+  }
+}
+
+KJ_TEST("ArrayPtr equality for different string types") {
+  using Test = ArrayComparisonTest<const StringPtr, const char* const>;
+  Test testCases[] = {
+    {{"foo", "bar"}, {"foo", "bar"}, equal},
+    {{"foo", "bar"}, {"foo", "baz"}, less},
+    {{"foo", "bar"}, {"foo"       }, greater},
+  };
+
+  for(auto const& testCase : testCases) {
+    verifyEqualityComparisons(testCase.left.asPtr(), testCase.right.asPtr(), testCase.expectedResult);
+  }
+}
+
 
 KJ_TEST("kj::range()") {
   uint expected = 5;
