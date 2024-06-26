@@ -320,9 +320,10 @@ public:
   // Surrenders ownership of the underlying object to the caller. The caller must pass in the 
   // correct disposer to prove that they know how the object is meant to be disposed of. 
   inline T* disown(const Disposer* d) {
-    if (d != disposer) throwWrongDisposerError();
+    if (d != disposer) _::throwWrongDisposerError();
     T* ptrCopy = ptr;
     ptr = nullptr;
+    return ptrCopy;
   }
 
 private:
