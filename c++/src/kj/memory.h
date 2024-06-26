@@ -444,7 +444,7 @@ public:
   // correct disposer to prove that they know how the object is meant to be disposed of. 
   template<typename SD>
   inline T* disown() {
-    static_assert(std::is_same<StaticDisposer, SD>::value, "disposer must be the same as Own's disposer");
+    static_assert(kj::isSameType<StaticDisposer, SD>(), "disposer must be the same as Own's disposer");
     T* ptrCopy = ptr;
     ptr = nullptr;
     return ptrCopy;
