@@ -260,18 +260,17 @@ BrotliAsyncInputStream::~BrotliAsyncInputStream() noexcept(false) {
   BrotliDecoderDestroyInstance(ctx);
 }
 
-Promise<size_t> BrotliAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return constPromise<size_t, 0>();
-
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+Promise<size_t> BrotliAsyncInputStream::tryRead(ArrayPtr<byte> out, size_t minBytes) {
+  if (out == nullptr) return constPromise<size_t, 0>();
+  return readImpl(out, minBytes, 0);
 }
 
 Promise<size_t> BrotliAsyncInputStream::readImpl(
-    byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
+    ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   // Ask for more input unless there is pending output
   if (availableIn == 0 && !BrotliDecoderHasMoreOutput(ctx)) {
-    return inner.tryRead(buffer, 1, sizeof(buffer))
-        .then([this,out,minBytes,maxBytes,alreadyRead](size_t amount) -> Promise<size_t> {
+    return inner.tryRead(buffer, 1)
+        .then([this,out,minBytes,alreadyRead](size_t amount) mutable -> Promise<size_t> {
       if (amount == 0) {
         if (!atValidEndpoint) {
           return KJ_EXCEPTION(DISCONNECTED, "brotli compressed stream ended prematurely");
@@ -280,13 +279,13 @@ Promise<size_t> BrotliAsyncInputStream::readImpl(
       } else {
         nextIn = buffer;
         availableIn = amount;
-        return readImpl(out, minBytes, maxBytes, alreadyRead);
+        return readImpl(out, minBytes, alreadyRead);
       }
     });
   }
 
-  byte* nextOut = out;
-  size_t availableOut = maxBytes;
+  byte* nextOut = out.begin();
+  size_t availableOut = out.size();
   // Check window bits
   if (firstInput && availableIn) {
     firstInput = false;
@@ -311,11 +310,11 @@ Promise<size_t> BrotliAsyncInputStream::readImpl(
     firstInput = true;
   }
 
-  size_t n = maxBytes - availableOut;
+  size_t n = out.size() - availableOut;
   if (n >= minBytes) {
     return n + alreadyRead;
   } else {
-    return readImpl(out + n, minBytes - n, maxBytes - n, alreadyRead + n);
+    return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
   }
 }
 

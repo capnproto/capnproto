@@ -105,17 +105,15 @@ public:
       }
     }
 
-    kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner.read(buffer, minBytes, maxBytes)
-          .then([this](size_t n) {
+    kj::Promise<size_t> read(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
+      return inner.read(buffer, minBytes).then([this](size_t n) {
         ++readCount;
         readBytes += n;
         return n;
       });
     }
-    kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner.tryRead(buffer, minBytes, maxBytes)
-          .then([this](size_t n) {
+    kj::Promise<size_t> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
+      return inner.tryRead(buffer, minBytes).then([this](size_t n) {
         ++readCount;
         readBytes += n;
         return n;
@@ -209,7 +207,7 @@ public:
   NullInputStream(kj::Maybe<size_t> expectedLength = size_t(0))
       : expectedLength(expectedLength) {}
 
-  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  kj::Promise<size_t> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
     return size_t(0);
   }
 
