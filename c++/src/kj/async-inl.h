@@ -2232,9 +2232,11 @@ private:
   // preserve that assertion.
 #endif
 
-  Maybe<PromiseNode&> promiseNodeForTrace;
+  Maybe<OwnPromiseNode&> promiseNodeForTrace;
   // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
-  // promise so tracePromise()/traceEvent() can trace into it.
+  // promise so tracePromise()/traceEvent() can trace into it. Since ChainPromiseNodes have the
+  // ability to destroy themselves, replacing their own Own, we hold a reference to the owning Own
+  // instead of directly to the PromiseNode.
 
   UnwindDetector unwindDetector;
 
