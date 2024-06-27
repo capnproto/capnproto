@@ -3586,10 +3586,9 @@ private:
         KJ_FAIL_REQUIRE("Unimplemented Disembargo type.", disembargo) { return; }
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Level 2
 };
+
+// =======================================================================================
 
 class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
 public:
