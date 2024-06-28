@@ -153,7 +153,7 @@ size_t BufferedInputStreamWrapper::tryRead(void* dst, size_t minBytes, size_t ma
 
     if (maxBytes <= buffer.size()) {
       // Read the next buffer-full.
-      size_t n = inner.read(buffer.begin(), minBytes, buffer.size());
+      size_t n = inner.tryRead(buffer.begin(), minBytes, buffer.size());
       size_t fromSecondBuffer = std::min(n, maxBytes);
       memcpy(dst, buffer.begin(), fromSecondBuffer);
       bufferAvailable = buffer.slice(fromSecondBuffer, n);
@@ -161,7 +161,7 @@ size_t BufferedInputStreamWrapper::tryRead(void* dst, size_t minBytes, size_t ma
     } else {
       // Forward large read to the underlying stream.
       bufferAvailable = nullptr;
-      return fromFirstBuffer + inner.read(dst, minBytes, maxBytes);
+      return fromFirstBuffer + inner.tryRead(dst, minBytes, maxBytes);
     }
   }
 }
