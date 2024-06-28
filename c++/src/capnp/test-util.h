@@ -81,6 +81,7 @@ using ::capnproto_test::capnp::test::TestUnionDefaults;
 using ::capnproto_test::capnp::test::TestNestedTypes;
 using ::capnproto_test::capnp::test::TestUsing;
 using ::capnproto_test::capnp::test::TestListDefaults;
+using ::capnproto_test::capnp::test::TestInterleavedGroups;
 
 void initTestMessage(TestAllTypes::Builder builder);
 void initTestMessage(TestDefaults::Builder builder);

@@ -661,6 +661,8 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           dst.set(field, src.get(field));
         }
       }
+	  
+      return;
     }
   }
 

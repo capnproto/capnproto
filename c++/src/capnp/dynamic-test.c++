@@ -492,6 +492,25 @@ TEST(DynamicApi, BuilderAssign) {
   listValue.set(0, 123);
 }
 
+TEST(DynamicApi, SetGroup) {
+  MallocMessageBuilder srcBuilder;
+  MallocMessageBuilder dstBuilder;
+  
+  auto srcRoot = srcBuilder.initRoot<TestInterleavedGroups>();
+  auto srcGroup = srcRoot.initGroup1();
+  srcGroup.setFoo(10);
+  srcGroup.initCorge().setPlugh("howdy");
+  
+  auto dstRoot = dstBuilder.initRoot<DynamicStruct>(Schema::from<TestInterleavedGroups>());
+  dstRoot.set("group1", srcGroup.asReader());
+  
+  auto dstGroup = dstRoot.get("group1").as<DynamicStruct>();
+  
+  EXPECT_EQ(10u, dstGroup.get("foo").as<uint32_t>());
+  EXPECT_ANY_THROW(dstGroup.get("qux"));
+  EXPECT_EQ("howdy", dstGroup.get("corge").as<DynamicStruct>().get("plugh").as<Text>());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
