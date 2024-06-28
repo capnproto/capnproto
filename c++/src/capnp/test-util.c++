@@ -890,7 +890,8 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader) {
 
 #if !CAPNP_LITE
 
-TestInterfaceImpl::TestInterfaceImpl(int& callCount): callCount(callCount) {}
+TestInterfaceImpl::TestInterfaceImpl(int& callCount, kj::Maybe<int&> handleCount)
+    : callCount(callCount), handleCount(handleCount) {}
 
 kj::Promise<void> TestInterfaceImpl::foo(FooContext context) {
   ++callCount;
@@ -909,6 +910,24 @@ kj::Promise<void> TestInterfaceImpl::baz(BazContext context) {
   context.releaseParams();
   EXPECT_ANY_THROW(context.getParams());
 
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> TestInterfaceImpl::getTestPipeline(GetTestPipelineContext context) {
+  context.getResults().setCap(kj::heap<TestPipelineImpl>(callCount));
+  return kj::READY_NOW;
+}
+kj::Promise<void> TestInterfaceImpl::getTestTailCallee(GetTestTailCalleeContext context) {
+  context.getResults().setCap(kj::heap<TestTailCalleeImpl>(callCount));
+  return kj::READY_NOW;
+}
+kj::Promise<void> TestInterfaceImpl::getTestTailCaller(GetTestTailCallerContext context) {
+  context.getResults().setCap(kj::heap<TestTailCallerImpl>(callCount));
+  return kj::READY_NOW;
+}
+kj::Promise<void> TestInterfaceImpl::getTestMoreStuff(GetTestMoreStuffContext context) {
+  context.getResults().setCap(
+      kj::heap<TestMoreStuffImpl>(callCount, KJ_REQUIRE_NONNULL(handleCount)));
   return kj::READY_NOW;
 }
 

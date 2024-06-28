@@ -790,6 +790,11 @@ interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);
   bar @1 () -> ();
   baz @2 (s: TestAllTypes);
+
+  getTestPipeline @3 () -> (cap :TestPipeline);
+  getTestTailCallee @4 () -> (cap :TestTailCallee);
+  getTestTailCaller @5 () -> (cap :TestTailCaller);
+  getTestMoreStuff @6 () -> (cap :TestMoreStuff);
 }
 
 interface TestExtends extends(TestInterface) {
@@ -939,25 +944,8 @@ interface TestAuthenticatedBootstrap(VatId) {
   getCallerId @0 () -> (caller :VatId);
 }
 
-struct TestSturdyRef {
-  hostId @0 :TestSturdyRefHostId;
-  objectId @1 :AnyPointer;
-}
-
 struct TestSturdyRefHostId {
   host @0 :Text;
-}
-
-struct TestSturdyRefObjectId {
-  tag @0 :Tag;
-  enum Tag {
-    testInterface @0;
-    testExtends @1;
-    testPipeline @2;
-    testTailCallee @3;
-    testTailCaller @4;
-    testMoreStuff @5;
-  }
 }
 
 struct TestProvisionId {}
