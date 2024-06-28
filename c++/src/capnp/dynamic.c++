@@ -662,7 +662,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
         }
       }
 	  
-	  return;
+      return;
     }
   }
 
