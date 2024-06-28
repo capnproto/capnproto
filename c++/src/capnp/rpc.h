@@ -439,6 +439,38 @@ public:
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
     // returned promise resolves after shutdown is complete.
 
+    virtual void setIdle(bool idle) override {}
+    // Called by the RPC system whenever the connection transitions into or out of the "idle"
+    // state. "Idle" means that there are no outstanding calls or capabilities held over this
+    // connection in either direction. When a connection is idle, there are only two ways that
+    // it can become no longer idle:
+    //
+    // a. A new incoming messages is received on this connection.
+    // b. A call to some other VatNetwork method (e.g. `connect()` or `accept()`) returns this same
+    //    Connection object again.
+    //
+    // In either of these two cases, the connection is no longer idle. The RpcSystem will call
+    // `setIdle(false)` and then continue te service the connection.
+    //
+    // The RpcSystem will never send a message on a connection while it is idle.
+    //
+    // A VatNetwork may be able to use `setIdle()` to opportunistically end connections that are
+    // no longer needed. This is easiest to do with networks that do not reuse incoming connections
+    // for outgoing requests, i.e. `connect()` never returns a connection object previously
+    // returned by `accept()`. The `RpcSystem` always sends bootstrap requests on connections
+    // returned by `connect()`. So, in this case, it will only *receive* bootstrap requests on
+    // incoming connections returned by `accept()`. Hence, when an outgoing connection becomes
+    // idle, the VatNetwork can assume that no more messages will be received on it at all, unless
+    // a message is sent first to start a new bootstrap. In this case, the VatNetwork can safely
+    // close the connection instead.
+    //
+    // NOTE: If implementing such behavior, be careful about event loop concurrency. It is possible
+    //   that your implementation recently returned a result from receiveIncomingMessage(), but
+    //   this result is still in the event queue, and the RpcSystem has not received it yet. One
+    //   way to avoid this is to `co_await kj::yieldUntilQueueEmpty()` (or use `kj::evalLast()`)
+    //   to make sure any such return values have been delivered. If `setIdle(false)` is called in
+    //   the meantime, cancel what you were going to do.
+
   private:
     AnyStruct::Reader baseGetPeerVatId() override;
   };
@@ -454,6 +486,15 @@ public:
   // hearing back from the server at all, to avoid a round trip.
   //
   // Returns nullptr if `hostId` refers to the local host.
+  //
+  // The RpcSystem will call `connect()` every time the application invokes `bootstrap(vatId)`,
+  // even if the vatId given is the same as a previous call. It is entirely up to the VatNetwork
+  // implementation to decide whether to reuse an existing connection or make a new one each time.
+  // If the VatNetwork returns a `Connection` object that it has returned before, the RpcSystem
+  // will recognize this and will multiplex the new session on that existing connection.
+  //
+  // Similarly, `connect()` can return a connection that was previously returned by `accept()`, if
+  // the VatNetwork knows that that connection goes to the right place.
 
   virtual kj::Promise<kj::Own<Connection>> accept() = 0;
   // Wait for the next incoming connection and return it.

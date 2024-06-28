@@ -199,7 +199,8 @@ typedef VatNetwork<
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
 public:
-  TestNetworkAdapter(TestNetwork& network, kj::StringPtr self): network(network), self(self) {}
+  TestNetworkAdapter(TestNetwork& network, kj::StringPtr self)
+      : network(network), self(self) {}
 
   ~TestNetworkAdapter() {
     kj::Exception exception = KJ_EXCEPTION(FAILED, "Network was destroyed.");
@@ -222,14 +223,38 @@ public:
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
-    ConnectionImpl(TestNetworkAdapter& network, RpcDumper::Sender sender)
-        : network(network), sender(sender), tasks(kj::heap<kj::TaskSet>(*this)) {}
+    ConnectionImpl(TestNetworkAdapter& network, TestNetworkAdapter& peerNetwork,
+                   RpcDumper::Sender sender)
+        : network(network), peerNetwork(peerNetwork), sender(sender),
+          tasks(kj::heap<kj::TaskSet>(*this)) {
+      network.connections[&peerNetwork] = this;
+    }
+
+    ~ConnectionImpl() noexcept(false) {
+      KJ_IF_SOME(p, partner) {
+        p.partner = kj::none;
+      }
+      network.connections.erase(&peerNetwork);
+    }
+
+    bool isIdle() { return idle; }
 
     void attach(ConnectionImpl& other) {
       KJ_REQUIRE(partner == kj::none);
       KJ_REQUIRE(other.partner == kj::none);
       partner = other;
       other.partner = *this;
+    }
+
+    void initiateIdleShutdown() {
+      initiatedIdleShutdown = true;
+      while (!fulfillers.empty()) {
+        fulfillers.front()->fulfill(kj::none);
+        fulfillers.pop();
+      }
+      KJ_IF_SOME(f, fulfillOnEnd) {
+        f->fulfill();
+      }
     }
 
     void disconnect(kj::Exception&& exception) {
@@ -273,6 +298,7 @@ public:
       }
 
       void send() override {
+        KJ_EXPECT(!connection.idle);
         if (!connection.network.sendCallback(message)) return;
 
         if (connection.networkException != kj::none) {
@@ -319,11 +345,16 @@ public:
     }
 
     kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override {
+      KJ_EXPECT(!idle);
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
       KJ_IF_SOME(e, networkException) {
         return kj::cp(e);
+      }
+
+      if (initiatedIdleShutdown) {
+        return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::none);
       }
 
       if (messages.empty()) {
@@ -347,12 +378,37 @@ public:
         return kj::cp(e);
       }
       KJ_IF_SOME(p, partner) {
-        auto paf = kj::newPromiseAndFulfiller<void>();
-        p.fulfillOnEnd = kj::mv(paf.fulfiller);
-        return kj::mv(paf.promise);
+        if (p.initiatedIdleShutdown) {
+          // Partner already initiated shutdown so don't wait for it to call
+          // receiveIncomingMessage() again (it won't).
+          return kj::READY_NOW;
+        }
+
+        // Make sure partner receives EOF. We have to evalLater() because
+        // OutgoingMessageImpl::send() also does that and we need to deliver in order.
+        return kj::evalLater([this]() -> kj::Promise<void> {
+          KJ_IF_SOME(p, partner) {
+            if (p.fulfillers.empty()) {
+              auto paf = kj::newPromiseAndFulfiller<void>();
+              p.fulfillOnEnd = kj::mv(paf.fulfiller);
+              return kj::mv(paf.promise);
+            } else {
+              p.fulfillers.front()->fulfill(kj::none);
+              p.fulfillers.pop();
+              return kj::READY_NOW;
+            }
+          } else {
+            return kj::READY_NOW;
+          }
+        });
       } else {
         return kj::READY_NOW;
       }
+    }
+
+    void setIdle(bool idle) override {
+      KJ_REQUIRE(idle != this->idle);
+      this->idle = idle;
     }
 
     void taskFailed(kj::Exception&& exception) override {
@@ -361,6 +417,7 @@ public:
 
   private:
     TestNetworkAdapter& network;
+    TestNetworkAdapter& peerNetwork;
     RpcDumper::Sender sender KJ_UNUSED_MEMBER;
     kj::Maybe<ConnectionImpl&> partner;
 
@@ -369,6 +426,9 @@ public:
     std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
     std::queue<kj::Own<IncomingRpcMessage>> messages;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillOnEnd;
+
+    bool idle = true;
+    bool initiatedIdleShutdown = false;
 
     kj::Own<kj::TaskSet> tasks;
   };
@@ -382,12 +442,9 @@ public:
 
     auto iter = connections.find(&dst);
     if (iter == connections.end()) {
-      auto local = kj::refcounted<ConnectionImpl>(*this, RpcDumper::CLIENT);
-      auto remote = kj::refcounted<ConnectionImpl>(dst, RpcDumper::SERVER);
+      auto local = kj::refcounted<ConnectionImpl>(*this, dst, RpcDumper::CLIENT);
+      auto remote = kj::refcounted<ConnectionImpl>(dst, *this, RpcDumper::SERVER);
       local->attach(*remote);
-
-      connections[&dst] = kj::addRef(*local);
-      dst.connections[this] = kj::addRef(*remote);
 
       if (dst.fulfillerQueue.empty()) {
         dst.connectionQueue.push(kj::mv(remote));
@@ -418,6 +475,15 @@ public:
     shutdownExceptionToThrow = kj::mv(e);
   }
 
+  kj::Maybe<ConnectionImpl&> getConnectionTo(TestNetworkAdapter& other) {
+    auto iter = connections.find(&other);
+    if (iter == connections.end()) {
+      return kj::none;
+    } else {
+      return *iter->second;
+    }
+  }
+
 private:
   TestNetwork& network;
   kj::StringPtr self;
@@ -425,7 +491,7 @@ private:
   uint received = 0;
   kj::Maybe<kj::Exception> shutdownExceptionToThrow = kj::none;
 
-  std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
+  std::map<const TestNetworkAdapter*, ConnectionImpl*> connections;
   std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
   std::queue<kj::Own<Connection>> connectionQueue;
 
@@ -1296,6 +1362,7 @@ TEST(Rpc, Abort) {
   hostId.setHost("server");
 
   auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+  conn->setIdle(false);
 
   {
     // Send an invalid message (Return to non-existent question).
@@ -1326,6 +1393,7 @@ KJ_TEST("handles exceptions thrown during disconnect") {
       KJ_EXCEPTION(FAILED, "a_disconnect_exception"));
 
   auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+  conn->setIdle(false);
 
   {
     // Send an invalid message (Return to non-existent question).
@@ -1642,6 +1710,88 @@ KJ_TEST("export the same promise twice") {
   KJ_EXPECT(promise5.wait(context.waitScope).getS() == "bar");
   KJ_EXPECT(promise6.wait(context.waitScope).getS() == "bar");
   KJ_EXPECT(callCount == 3);
+}
+
+KJ_TEST("connections set idle when appropriate") {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+  context.waitScope.poll();  // let messages propagate
+
+  auto& clientConn = KJ_ASSERT_NONNULL(
+      context.clientNetwork.getConnectionTo(context.serverNetwork));
+  auto& serverConn = KJ_ASSERT_NONNULL(
+      context.serverNetwork.getConnectionTo(context.clientNetwork));
+
+  KJ_EXPECT(!clientConn.isIdle());
+  KJ_EXPECT(!serverConn.isIdle());
+
+  {auto drop = kj::mv(client);}
+  context.waitScope.poll();  // let messages propagate
+
+  // We dropped the only capability, so now the connections are idle.
+  KJ_EXPECT(clientConn.isIdle());
+  KJ_EXPECT(serverConn.isIdle());
+
+  // Establish bootstrap again.
+  client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+  context.waitScope.poll();  // let messages propagate
+
+  // Once again, not idle.
+  KJ_EXPECT(!clientConn.isIdle());
+  KJ_EXPECT(!serverConn.isIdle());
+
+  // Start a call, and immediately drop the cap.
+  auto promise = client.neverReturnRequest().send();
+  {auto drop = kj::mv(client);}
+  context.waitScope.poll();  // let messages propagate
+
+  // Still not idle.
+  KJ_EXPECT(!clientConn.isIdle());
+  KJ_EXPECT(!serverConn.isIdle());
+
+  // But if we cancel the call...
+  {auto drop = kj::mv(promise);}
+  context.waitScope.poll();  // let messages propagate
+
+  // Now we are idle!
+  KJ_EXPECT(clientConn.isIdle());
+  KJ_EXPECT(serverConn.isIdle());
+}
+
+KJ_TEST("clean connection shutdown") {
+  TestContext context;
+
+  // Open a connection and immediately drop the capability.
+  {
+    auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+        .castAs<test::TestMoreStuff>();
+    context.waitScope.poll();  // let messages propagate
+  }
+  context.waitScope.poll();  // let messages propagate
+
+  // How many messages have we sent at this point?
+  auto sent = context.clientNetwork.getSentCount();
+  auto received = context.clientNetwork.getReceivedCount();
+
+  // Have the client connection decide to end itself due to idleness, as is allowed under the
+  // setIdle() contract.
+  auto& clientConn = KJ_ASSERT_NONNULL(
+      context.clientNetwork.getConnectionTo(context.serverNetwork));
+  KJ_EXPECT(clientConn.isIdle());
+  clientConn.initiateIdleShutdown();
+
+  context.waitScope.poll();  // let messages propagate
+
+  // Connections should have gracefully shut down.
+  KJ_EXPECT(context.clientNetwork.getConnectionTo(context.serverNetwork) == kj::none);
+  KJ_EXPECT(context.serverNetwork.getConnectionTo(context.clientNetwork) == kj::none);
+
+  // No more messages should have been sent during shutdown (not even errors).
+  KJ_EXPECT(context.clientNetwork.getSentCount() == sent);
+  KJ_EXPECT(context.clientNetwork.getReceivedCount() == received);
 }
 
 }  // namespace

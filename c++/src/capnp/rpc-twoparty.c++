@@ -143,6 +143,8 @@ public:
   }
 
   void send() override {
+    KJ_REQUIRE(!network.idle, "bug in RpcSystem: trying to send a message while idle");
+
     size_t size = 0;
     for (auto& segment: message.getSegmentsForOutput()) {
       size += segment.size();
@@ -295,6 +297,7 @@ rpc::twoparty::VatId::Reader TwoPartyVatNetwork::getPeerVatId() {
 }
 
 kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSegmentWordSize) {
+  KJ_REQUIRE(!idle, "bug in RpcSystem: trying to send a message while idle");
   return kj::refcounted<OutgoingMessageImpl>(*this, firstSegmentWordSize);
 }
 
@@ -333,6 +336,13 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   });
   previousWrite = kj::none;
   return kj::mv(result);
+}
+
+void TwoPartyVatNetwork::setIdle(bool idle) {
+  // TwoPartyVatNetwork doesn't care about idleness, but tracks it just for the sake of catching
+  // bugs in the RPC system itself.
+  KJ_REQUIRE(idle != this->idle);
+  this->idle = idle;
 }
 
 // =======================================================================================
