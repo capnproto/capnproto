@@ -397,20 +397,18 @@ class RpcSystemBase::RpcConnectionState final
 public:
   RpcConnectionState(RpcSystemBase::Impl& rpcSystem,
                      BootstrapFactoryBase& bootstrapFactory,
-                     kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      size_t flowLimit,
                      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder,
                      RpcSystemBrand& brand)
-      : bootstrapFactory(bootstrapFactory),
-        restorer(restorer), flowLimit(flowLimit),
+      : bootstrapFactory(bootstrapFactory), flowLimit(flowLimit),
         traceEncoder(traceEncoder), brand(kj::addRef(brand)), tasks(*this) {
     connection.init<Connected>(
         Connected { rpcSystem, kj::mv(connectionParam), kj::heap<kj::Canceler>() });
     tasks.add(messageLoop());
   }
 
-  kj::Own<ClientHook> restore(AnyPointer::Reader objectId) {
+  kj::Own<ClientHook> bootstrap() {
     if (connection.is<Disconnected>()) {
       return newBrokenCap(kj::cp(connection.get<Disconnected>()));
     }
@@ -431,12 +429,10 @@ public:
 
     {
       auto message = connection.get<Connected>().connection->newOutgoingMessage(
-          objectId.targetSize().wordCount + messageSizeHint<rpc::Bootstrap>());
+          messageSizeHint<rpc::Bootstrap>());
 
       auto builder = message->getBody().initAs<rpc::Message>().initBootstrap();
       builder.setQuestionId(questionId);
-      builder.getDeprecatedObjectId().set(objectId);
-
       message->send();
     }
 
@@ -743,7 +739,6 @@ private:
   // OK, now we can define RpcConnectionState's member data.
 
   BootstrapFactoryBase& bootstrapFactory;
-  kj::Maybe<SturdyRefRestorerBase&> restorer;
 
   struct Connected {
     RpcSystemBase::Impl& rpcSystem;
@@ -3173,12 +3168,8 @@ private:
       Capability::Client cap = nullptr;
 
       if (bootstrap.hasDeprecatedObjectId()) {
-        KJ_IF_SOME(r, restorer) {
-          cap = r.baseRestore(bootstrap.getDeprecatedObjectId());
-        } else {
-          KJ_FAIL_REQUIRE("This vat only supports a bootstrap interface, not the old "
-                          "Cap'n-Proto-0.4-style named exports.") { return; }
-        }
+        KJ_FAIL_REQUIRE("This vat only supports a bootstrap interface, not the old "
+                        "Cap'n-Proto-0.4-style named exports.") { return; }
       } else {
         cap = bootstrapFactory.baseCreateFor(conn.baseGetPeerVatId());
       }
@@ -3760,10 +3751,6 @@ public:
       : network(network), bootstrapFactory(bootstrapFactory), tasks(*this) {
     acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
   }
-  Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
-      : network(network), bootstrapFactory(*this), restorer(restorer), tasks(*this) {
-    acceptLoopPromise = acceptLoop().eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
-  }
 
   void disconnectAll() {
     unwindDetector.catchExceptionsIfUnwinding([&]() {
@@ -3784,25 +3771,13 @@ public:
   }
 
   Capability::Client bootstrap(AnyStruct::Reader vatId) {
-    // For now we delegate to restore() since it's equivalent, but eventually we'll remove restore()
-    // and implement bootstrap() directly.
-    return restore(vatId, AnyPointer::Reader());
-  }
-
-  Capability::Client restore(AnyStruct::Reader vatId, AnyPointer::Reader objectId) {
     KJ_IF_SOME(connection, network.baseConnect(vatId)) {
       auto& state = getConnectionState(kj::mv(connection));
-      return Capability::Client(state.restore(objectId));
-    } else if (objectId.isNull()) {
+      return Capability::Client(state.bootstrap());
+    } else {
       // Turns out `vatId` refers to ourselves, so we can also pass it as the client ID for
       // baseCreateFor().
       return bootstrapFactory.baseCreateFor(vatId);
-    } else KJ_IF_SOME(r, restorer) {
-      return r.baseRestore(objectId);
-    } else {
-      return Capability::Client(newBrokenCap(
-          "This vat only supports a bootstrap interface, not the old Cap'n-Proto-0.4-style "
-          "named exports."));
     }
   }
 
@@ -3829,7 +3804,6 @@ private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
   BootstrapFactoryBase& bootstrapFactory;
-  kj::Maybe<SturdyRefRestorerBase&> restorer;
   size_t flowLimit = kj::maxValue;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::Promise<void> acceptLoopPromise = nullptr;
@@ -3846,7 +3820,7 @@ private:
     return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
       VatNetworkBase::Connection* connectionPtr = connection;
       auto newState = kj::refcounted<RpcConnectionState>(
-          *this, bootstrapFactory, restorer, kj::mv(connection), flowLimit, traceEncoder, *brand);
+          *this, bootstrapFactory, kj::mv(connection), flowLimit, traceEncoder, *brand);
       return {connectionPtr, kj::mv(newState)};
     });
   }
@@ -3858,13 +3832,11 @@ private:
   }
 
   Capability::Client baseCreateFor(AnyStruct::Reader clientId) override {
-    // Implements BootstrapFactory::baseCreateFor() in terms of `bootstrapInterface` or `restorer`,
+    // Implements BootstrapFactory::baseCreateFor() in terms of `bootstrapInterface`,
     // for use when we were given one of those instead of an actual `bootstrapFactory`.
 
     KJ_IF_SOME(cap, bootstrapInterface) {
       return cap;
-    } else KJ_IF_SOME(r, restorer) {
-      return r.baseRestore(AnyPointer::Reader());
     } else {
       return KJ_EXCEPTION(FAILED, "This vat does not expose any public/bootstrap interfaces.");
     }
@@ -3881,8 +3853,6 @@ RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network,
                              BootstrapFactoryBase& bootstrapFactory)
     : impl(kj::heap<Impl>(network, bootstrapFactory)) {}
-RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer)
-    : impl(kj::heap<Impl>(network, restorer)) {}
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {
   if (impl.get() != nullptr) {  // could have been moved away
@@ -3892,11 +3862,6 @@ RpcSystemBase::~RpcSystemBase() noexcept(false) {
 
 Capability::Client RpcSystemBase::baseBootstrap(AnyStruct::Reader vatId) {
   return impl->bootstrap(vatId);
-}
-
-Capability::Client RpcSystemBase::baseRestore(
-    AnyStruct::Reader hostId, AnyPointer::Reader objectId) {
-  return impl->restore(hostId, objectId);
 }
 
 void RpcSystemBase::baseSetFlowLimit(size_t words) {
