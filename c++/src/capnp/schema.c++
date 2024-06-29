@@ -759,51 +759,6 @@ ListSchema ListSchema::of(schema::Type::Which primitiveType) {
   return ListSchema(primitiveType);
 }
 
-ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
-  // This method is deprecated because it can only be implemented in terms of other deprecated
-  // methods. Temporarily disable warnings for those other deprecated methods.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
-  switch (elementType.which()) {
-    case schema::Type::VOID:
-    case schema::Type::BOOL:
-    case schema::Type::INT8:
-    case schema::Type::INT16:
-    case schema::Type::INT32:
-    case schema::Type::INT64:
-    case schema::Type::UINT8:
-    case schema::Type::UINT16:
-    case schema::Type::UINT32:
-    case schema::Type::UINT64:
-    case schema::Type::FLOAT32:
-    case schema::Type::FLOAT64:
-    case schema::Type::TEXT:
-    case schema::Type::DATA:
-      return of(elementType.which());
-
-    case schema::Type::STRUCT:
-      return of(context.getDependency(elementType.getStruct().getTypeId()).asStruct());
-
-    case schema::Type::ENUM:
-      return of(context.getDependency(elementType.getEnum().getTypeId()).asEnum());
-
-    case schema::Type::INTERFACE:
-      return of(context.getDependency(elementType.getInterface().getTypeId()).asInterface());
-
-    case schema::Type::LIST:
-      return of(of(elementType.getList().getElementType(), context));
-
-    case schema::Type::ANY_POINTER:
-      KJ_FAIL_REQUIRE("List(AnyPointer) not supported.");
-      return ListSchema();
-  }
-
-  // Unknown type is acceptable.
-  return ListSchema(elementType.which());
-#pragma GCC diagnostic pop
-}
-
 // =======================================================================================
 
 StructSchema Type::asStruct() const {

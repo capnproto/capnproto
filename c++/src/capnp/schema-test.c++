@@ -236,18 +236,6 @@ TEST(Schema, Lists) {
     EXPECT_EQ(schema::Type::ENUM, inner.whichElementType());
     EXPECT_TRUE(inner.getEnumElementType() == Schema::from<TestEnum>());
   }
-
-  {
-    auto context = Schema::from<TestAllTypes>();
-    auto type = context.getFieldByName("enumList").getProto().getSlot().getType();
-
-    ListSchema schema = ListSchema::of(type.getList().getElementType(), context);
-    EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());
-    EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
-    EXPECT_NONFATAL_FAILURE(schema.getStructElementType());
-    EXPECT_NONFATAL_FAILURE(schema.getInterfaceElementType());
-    EXPECT_NONFATAL_FAILURE(schema.getListElementType());
-  }
 }
 
 TEST(Schema, UnnamedUnion) {
