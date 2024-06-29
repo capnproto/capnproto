@@ -311,7 +311,7 @@ struct Bootstrap {
   # containing the restored capability.
 
   deprecatedObjectId @1 :AnyPointer;
-  # ** DEPRECATED **
+  # ** OBSOLETE **
   #
   # A Vat may export multiple bootstrap interfaces. In this case, `deprecatedObjectId` specifies
   # which one to return. If this pointer is null, then the default bootstrap interface is returned.
@@ -319,6 +319,8 @@ struct Bootstrap {
   # As of version 0.5, use of this field is deprecated. If a service wants to export multiple
   # bootstrap interfaces, it should instead define a single bootstrap interface that has methods
   # that return each of the other interfaces.
+  #
+  # As of version 2.0, this field is no longer implemented at all.
   #
   # **History**
   #

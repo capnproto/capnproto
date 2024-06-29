@@ -33,8 +33,6 @@ namespace capnp {
 template <typename VatId, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 class VatNetwork;
-template <typename SturdyRefObjectId>
-class SturdyRefRestorer;
 
 class MessageReader;
 
@@ -82,31 +80,10 @@ public:
       VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
       BootstrapFactory<VatId>& bootstrapFactory);
 
-  template <typename ProvisionId, typename RecipientId,
-            typename ThirdPartyCapId, typename JoinResult,
-            typename LocalSturdyRefObjectId>
-  RpcSystem(
-      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-      SturdyRefRestorer<LocalSturdyRefObjectId>& restorer);
-
   RpcSystem(RpcSystem&& other) = default;
 
   Capability::Client bootstrap(typename VatId::Reader vatId);
   // Connect to the given vat and return its bootstrap interface.
-
-  Capability::Client restore(typename VatId::Reader hostId, AnyPointer::Reader objectId)
-      CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.");
-  // ** DEPRECATED **
-  //
-  // Restores the given SturdyRef from the network and return the capability representing it.
-  //
-  // `hostId` identifies the host from which to request the ref, in the format specified by the
-  // `VatNetwork` in use.  `objectId` is the object ID in whatever format is expected by said host.
-  //
-  // This method will be removed in a future version of Cap'n Proto. Instead, please transition
-  // to using bootstrap(), which is equivalent to calling restore() with a null `objectId`.
-  // You may emulate the old concept of object IDs by exporting a bootstrap interface which has
-  // methods that can be used to obtain other capabilities by ID.
 
   void setFlowLimit(size_t words);
   // Sets the incoming call flow limit. If more than `words` worth of call messages have not yet
@@ -184,24 +161,6 @@ RpcSystem<VatId> makeRpcServer(
 // Make an RPC server that can serve different bootstrap interfaces to different clients via a
 // BootstrapInterface.
 
-template <typename VatId, typename LocalSturdyRefObjectId,
-          typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
-RpcSystem<VatId> makeRpcServer(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-    SturdyRefRestorer<LocalSturdyRefObjectId>& restorer)
-    CAPNP_DEPRECATED("Please transition to using a bootstrap interface instead.");
-// ** DEPRECATED **
-//
-// Create an RPC server which exports multiple main interfaces by object ID. The `restorer` object
-// can be used to look up objects by ID.
-//
-// Please transition to exporting only one interface, which is known as the "bootstrap" interface.
-// For backwards-compatibility with old clients, continue to implement SturdyRefRestorer, but
-// return the new bootstrap interface when the request object ID is null. When new clients connect
-// and request the bootstrap interface, they will get that interface. Eventually, once all clients
-// are updated to request only the bootstrap interface, stop implementing SturdyRefRestorer and
-// switch to passing the bootstrap capability itself as the second parameter to `makeRpcServer()`.
-
 template <typename VatId, typename ProvisionId,
           typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
 RpcSystem<VatId> makeRpcClient(
@@ -212,34 +171,9 @@ RpcSystem<VatId> makeRpcClient(
 //    kj::WaitScope waitScope(eventLoop);
 //    MyNetwork network;
 //    auto client = makeRpcClient(network);
-//    MyCapability::Client cap = client.restore(hostId, objId).castAs<MyCapability>();
+//    MyCapability::Client cap = client.bootstrap(hostId).castAs<MyCapability>();
 //    auto response = cap.fooRequest().send().wait(waitScope);
 //    handleMyResponse(response);
-
-template <typename SturdyRefObjectId>
-class SturdyRefRestorer: public _::SturdyRefRestorerBase {
-  // ** DEPRECATED **
-  //
-  // In Cap'n Proto 0.4.x, applications could export multiple main interfaces identified by
-  // object IDs. The callback used to map object IDs to objects was `SturdyRefRestorer`, as we
-  // imagined this would eventually be used for restoring SturdyRefs as well. In practice, it was
-  // never used for real SturdyRefs, only for exporting singleton objects under well-known names.
-  //
-  // The new preferred strategy is to export only a _single_ such interface, called the
-  // "bootstrap interface". That interface can itself have methods for obtaining other objects, of
-  // course, but that is up to the app. `SturdyRefRestorer` exists for backwards-compatibility.
-  //
-  // Hint:  Use SturdyRefRestorer<capnp::Text> to define a server that exports services under
-  //   string names.
-
-public:
-  virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref) CAPNP_DEPRECATED(
-      "Please transition to using bootstrap interfaces instead of SturdyRefRestorer.") = 0;
-  // Restore the given object, returning a capability representing it.
-
-private:
-  Capability::Client baseRestore(AnyPointer::Reader ref) override final;
-};
 
 // =======================================================================================
 // VatNetwork
@@ -548,14 +482,6 @@ AnyStruct::Reader VatNetwork<
   return getPeerVatId();
 }
 
-template <typename SturdyRef>
-Capability::Client SturdyRefRestorer<SturdyRef>::baseRestore(AnyPointer::Reader ref) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-  return restore(ref.getAs<SturdyRef>());
-#pragma GCC diagnostic pop
-}
-
 template <typename VatId>
 template <typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
@@ -573,23 +499,8 @@ RpcSystem<VatId>::RpcSystem(
     : _::RpcSystemBase(network, bootstrapFactory) {}
 
 template <typename VatId>
-template <typename ProvisionId, typename RecipientId,
-          typename ThirdPartyCapId, typename JoinResult,
-          typename LocalSturdyRefObjectId>
-RpcSystem<VatId>::RpcSystem(
-      VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-      SturdyRefRestorer<LocalSturdyRefObjectId>& restorer)
-    : _::RpcSystemBase(network, restorer) {}
-
-template <typename VatId>
 Capability::Client RpcSystem<VatId>::bootstrap(typename VatId::Reader vatId) {
   return baseBootstrap(_::PointerHelpers<VatId>::getInternalReader(vatId));
-}
-
-template <typename VatId>
-Capability::Client RpcSystem<VatId>::restore(
-    typename VatId::Reader hostId, AnyPointer::Reader objectId) {
-  return baseRestore(_::PointerHelpers<VatId>::getInternalReader(hostId), objectId);
 }
 
 template <typename VatId>
@@ -611,14 +522,6 @@ RpcSystem<VatId> makeRpcServer(
     VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
     BootstrapFactory<VatId>& bootstrapFactory) {
   return RpcSystem<VatId>(network, bootstrapFactory);
-}
-
-template <typename VatId, typename LocalSturdyRefObjectId,
-          typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
-RpcSystem<VatId> makeRpcServer(
-    VatNetwork<VatId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-    SturdyRefRestorer<LocalSturdyRefObjectId>& restorer) {
-  return RpcSystem<VatId>(network, restorer);
 }
 
 template <typename VatId, typename ProvisionId,
