@@ -674,6 +674,12 @@ struct Resolve {
   }
 }
 
+# TODO(someday): There may be use cases for a `ResolvePipeline` method, which is very similar to
+#   `Return` but provides provisional results for pipelining purposes, used when `setPipeline()`
+#   is invoked by the callee. This would be particularly improtant when setPipeline() is given
+#   capabilities that could potentially be shortened before the call actually finishes. So far,
+#   though, we haven't seen a real-life use case.
+
 struct Release {
   # **(level 1)**
   #
@@ -884,31 +890,42 @@ struct Accept {
   #   Vat A, as well as deliver bar().
 }
 
-struct ThirdPartyReturn {
+struct ThirdPartyAnswer {
   # **(level 3)**
   #
   # When a call has `sendResultsTo.thirdParty`, the callee directly connects to the given third
-  # party and sends it a `ThirdPartyReturn` with the final results.
+  # party and sends it a `ThirdPartyAnswer` in order to adopt the call into its connection.
 
   completion @0 :ThirdPartyCompletion;
   # Information needed to identify which call is being returned.
   #
   # The introducer should have sent a `Return` message previously containing
-  # `awaitFromThirdParty`, directing the callee to wait for a `ThirdPartyReturn` containing the
-  # final results. (Of course, it's possible that the `ThirdPartyReturn` arrives before the
+  # `awaitFromThirdParty`, directing the callee to wait for a `ThirdPartyAnswer` containing the
+  # final results. (Of course, it's possible that the `ThirdPartyAnswer` arrives before the
   # original `Return`, in which case the recipient must wait to receive the corresponding
   # `Return` message.)
 
-  return @1 :Return;
-  # The results. Note that the `answerId` is always zero and doesn't refer to a previous question.
-  # Instead, `completion` is used to match the return with the original call.
+  answerId @1 :AnswerId;
+  # The answer ID which will now represent this call on this connection.
   #
-  # The recipient of this message is NOT expected to send any sort of `Finish` message to the
-  # sender. This is not necessary, because promise pipelining will have proceeded along the
-  # original path of the `Call` message all along, not along the newly-formed direct connection.
-  # A call can be canceled by seding a `Finish` along the original path before receiving the
-  # `ThirdPartyReturn`; in this case, the `ThirdPartyReturn` is still expected to be received
-  # eventually, but may indicate `canceled` as the result.
+  # The sender (callee) will follow up later with a `Return` message referencing the same ID. In
+  # the meantime, the receiver (caller) can begin sending pipelined requests directly to the
+  # sender, and must eventually send a `Finish` message.
+  #
+  # Normally, callers choose question IDs -- and answer IDs strictly match the question ID chosen
+  # by the caller. In this case, the callee is choosing an answer ID on its own. In theory, this
+  # is a bad design: we should be using an export ID here instead. However, we would then have to
+  # go around to all the types that reference `QuestionId` or `AnswerId` and make them be able to
+  # use `ImportId` / `ExportId` intsead. In retrospect, questions and exports proabbly should have
+  # been in the same ID space from the beginning, with a convention for which parts of the ID
+  # space can be allocated by which side. Unfortunately, that ship has sailed.
+  #
+  # Instead, we introduce a hack: Answer IDs introduced by `ThirdPartyAnswer` must be in the range
+  # [2^30,2^31), that is, they have bit 30 set, but not bit 31. We designate this range as
+  # callee-allocated; callers will never allocate in this range. This hack should be
+  # backwards-compatible given that implementations traditionally always use the lowest-numbered
+  # ID available. However, note that we don't use the range [2^31,2^32) because this has already
+  # been designated for use with `onlyPromisePipeline` (another hack).
 }
 
 # Level 4 message types ----------------------------------------------
