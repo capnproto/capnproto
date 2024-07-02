@@ -290,7 +290,8 @@ public:
   }
 
   kj::Promise<void> startResponse(StartResponseContext context) override {
-    KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
+    KJ_REQUIRE(!sentResponse, "already called startResponse() or startWebSocket()");
+    sentResponse = true;
 
     auto params = context.getParams();
     auto rpcResponse = params.getResponse();
@@ -319,7 +320,8 @@ public:
   }
 
   kj::Promise<void> startWebSocket(StartWebSocketContext context) override {
-    KJ_REQUIRE(responsePumpTask == kj::none, "already called startResponse() or startWebSocket()");
+    KJ_REQUIRE(!sentResponse, "already called startResponse() or startWebSocket()");
+    sentResponse = true;
 
     auto params = context.getParams();
 
@@ -358,10 +360,21 @@ public:
   }
 
   kj::Promise<void> finishPump() {
-    KJ_IF_SOME(r, responsePumpTask) {
-      return kj::mv(r);
+    if (sentResponse) {
+      return finishPumpInner();
     } else {
-      return kj::READY_NOW;
+      // It seems the client->server request() RPC finished before we got a server->client
+      // startResponse() call. Maybe the server forgot to call it, but another possibility is
+      // an ordering issue: When a call is received, it is delayed by kj::evalLater(). It's
+      // possible the return message was delivered during this delay, giving the impression that
+      // the return beat the call. We can compensate by yielding here.
+      //
+      // TODO(someday): Perhaps calls *shouldn't* yield? The `evalLater()`'s purpose is really
+      //   only to make sure the call doesn't occur synchronously, but it's perhaps a little
+      //   too aggressive to schedule it breadth-first. A depth-first schedule probably makes
+      //   more sense, and would allow the call to be fully delivered before more messages
+      //   are handled. That's kind of a big change though, needs testing.
+      return kj::yield().then([this]() { return finishPumpInner(); });
     }
   }
 
@@ -372,6 +385,15 @@ private:
   kj::Maybe<CapnpToKjWebSocketAdapter&> maybeWebSocket;
 
   kj::HttpService::Response& kjResponse;
+  bool sentResponse = false;
+
+  kj::Promise<void> finishPumpInner() {
+    KJ_IF_SOME(r, responsePumpTask) {
+      return kj::mv(r);
+    } else {
+      return kj::READY_NOW;
+    }
+  }
 };
 
 class HttpOverCapnpFactory::ConnectClientRequestContextImpl final
