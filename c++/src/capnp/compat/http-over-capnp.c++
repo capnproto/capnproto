@@ -617,21 +617,18 @@ class HttpOverCapnpFactory::HttpServiceResponseImpl final
 public:
   HttpServiceResponseImpl(HttpOverCapnpFactory& factory,
                           capnp::HttpRequest::Reader request,
-                          capnp::HttpService::ClientRequestContext::Client clientContext,
-                          kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> replyFulfiller)
+                          capnp::HttpService::ClientRequestContext::Client clientContext)
       : factory(factory),
         method(validateMethod(request.getMethod())),
         url(request.getUrl()),
         headers(factory.headersToKj(request.getHeaders())),
-        clientContext(kj::mv(clientContext)),
-        replyFulfiller(kj::mv(replyFulfiller)) {}
-  // `replyFulfiller` is eventulaly fulfilled with the task that that sends the reply back to
-  // the client.
+        clientContext(kj::mv(clientContext)) {}
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
-    KJ_REQUIRE(replyFulfiller->isWaiting(), "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
+    responseSent = true;
 
     auto req = clientContext.startResponseRequest();
 
@@ -654,16 +651,17 @@ public:
     if (hasBody) {
       auto pipeline = req.send();
       auto result = factory.streamFactory.capnpToKj(pipeline.getBody());
-      replyFulfiller->fulfill(pipeline.ignoreResult());
+      dontWaitForRpc(kj::mv(pipeline));
       return result;
     } else {
-      replyFulfiller->fulfill(req.send().ignoreResult());
+      dontWaitForRpc(req.send());
       return kj::heap<kj::NullStream>();
     }
   }
 
   kj::Own<kj::WebSocket> acceptWebSocket(const kj::HttpHeaders& headers) override {
-    KJ_REQUIRE(replyFulfiller->isWaiting(), "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
+    responseSent = true;
 
     auto req = clientContext.startWebSocketRequest();
 
@@ -682,8 +680,7 @@ public:
     auto pipeline = req.send();
     auto result = kj::heap<KjToCapnpWebSocketAdapter>(
         kj::mv(pipe.ends[1]), pipeline.getDownSocket(), kj::mv(shorteningPaf.fulfiller));
-
-    replyFulfiller->fulfill(pipeline.ignoreResult());
+    dontWaitForRpc(kj::mv(pipeline));
 
     return result;
   }
@@ -693,11 +690,29 @@ public:
   kj::StringPtr url;
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
-  kj::Own<kj::PromiseFulfiller<kj::Promise<void>>> replyFulfiller;
+  bool responseSent = false;
 
   static kj::HttpMethod validateMethod(capnp::HttpMethod method) {
     KJ_REQUIRE(method <= capnp::HttpMethod::UNSUBSCRIBE, "unknown method", method);
     return static_cast<kj::HttpMethod>(method);
+  }
+
+  template <typename T>
+  void dontWaitForRpc(kj::Promise<T> promise) {
+    // When we call clientContext.startResponse(), we really don't want to actually wait for
+    // the reply to this RPC, because in many cases we will call this, write a response body,
+    // and then immediately return from the HttpService::requset() handler. At that point, we
+    // would like CapnpToKjHttpServiceAdapter::request() to be able to propagate this return
+    // immediately *without* waiting for a round trip to the client, so without waiting for
+    // `startResponse()` to finish. However, we also do not want to inadvertently cancel
+    // `startResponse()`, so we have to save the promise somewhere. Since this is an RPC that
+    // doesn't depend on the lifetime of any other object... we will just detach() it.
+
+    promise.detach([](kj::Exception&& e) {
+      if (e.getType() == kj::Exception::Type::FAILED) {
+        KJ_LOG(ERROR, e);
+      }
+    });
   }
 };
 
@@ -803,21 +818,8 @@ public:
       requestBody = kj::heap<kj::NullStream>();
     }
 
-    auto replyPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
-    auto replyPromise = replyPaf.promise.then([]() -> kj::Promise<void> {
-      // The reply may complete before the request promise does. We don't want to cancel the
-      // request if the reply completed successfully, so return NEVER_DONE here so that the
-      // exclusiveJoin() below becomes a no-op.
-      //
-      // On the other hand, if the reply throws an exception, we want to cancel the request and
-      // propagate that exception immediately!
-      return kj::NEVER_DONE;
-    });
-
-    HttpServiceResponseImpl impl(
-        factory, metadata, params.getContext(), kj::mv(replyPaf.fulfiller));
-    co_await inner->request(impl.method, impl.url, impl.headers, *requestBody, impl)
-        .exclusiveJoin(kj::mv(replyPromise));
+    HttpServiceResponseImpl impl(factory, metadata, params.getContext());
+    co_await inner->request(impl.method, impl.url, impl.headers, *requestBody, impl);
   }
 
   kj::Promise<void> connect(ConnectContext context) override {
