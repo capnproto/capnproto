@@ -2663,24 +2663,14 @@ public:
     return promise.attach(kj::mv(payload));
   }
 
-  kj::Promise<void> disconnect() override {
+  void disconnect() override {
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
-    KJ_IF_SOME(p, sendingControlMessage) {
-      // We recently sent a control message; make sure it's finished before proceeding.
-      currentlySending = true;
-      auto promise = p.then([this]() {
-        currentlySending = false;
-        return disconnect();
-      });
-      sendingControlMessage = kj::none;
-      return promise;
-    }
+    // If we're sending a control message (e.g. a PONG), cancel it.
+    sendingControlMessage = kj::none;
 
     disconnected = true;
-
     stream->shutdownWrite();
-    return kj::READY_NOW;
   }
 
   void abort() override {
@@ -3749,12 +3739,14 @@ static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
       }
     }
     KJ_UNREACHABLE;
-  }, [&to](kj::Exception&& e) {
-    if (e.getType() == kj::Exception::Type::DISCONNECTED) {
-      return to.disconnect();
-    } else {
-      return to.close(1002, e.getDescription());
-    }
+  }, [&to](kj::Exception&& e) -> kj::Promise<void> {
+    // We don't know if it was a read or a write that threw. If it was a read that threw, we need
+    // to send a disconnect on the destination. If it was the destination that threw, it
+    // shouldn't hurt to disconnect() it again, but we'll catch and squelch any exceptions.
+    kj::runCatchingExceptions([&to]() { to.disconnect(); });
+
+    // In any case, this error broke the pump. We should propagate it out as the pump result.
+    return kj::mv(e);
   });
 }
 
@@ -3841,13 +3833,12 @@ public:
           .then([&, size = reason.size()]() { transferredBytes += (2 +size); });
     }
   }
-  kj::Promise<void> disconnect() override {
+  void disconnect() override {
     KJ_IF_SOME(s, state) {
-      return s.disconnect();
+      s.disconnect();
     } else {
       ownState = heap<Disconnected>();
       state = *ownState;
-      return kj::READY_NOW;
     }
   }
   kj::Promise<void> whenAborted() override {
@@ -3973,7 +3964,7 @@ private:
     kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
       KJ_FAIL_ASSERT("another message send is already in progress");
     }
-    kj::Promise<void> disconnect() override {
+    void disconnect() override {
       KJ_FAIL_ASSERT("another message send is already in progress");
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
@@ -4075,7 +4066,7 @@ private:
     kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
       KJ_FAIL_ASSERT("another message send is already in progress");
     }
-    kj::Promise<void> disconnect() override {
+    void disconnect() override {
       KJ_FAIL_ASSERT("another message send is already in progress");
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
@@ -4175,11 +4166,11 @@ private:
       pipe.endState(*this);
       return kj::READY_NOW;
     }
-    kj::Promise<void> disconnect() override {
+    void disconnect() override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "WebSocket disconnected"));
       pipe.endState(*this);
-      return pipe.disconnect();
+      pipe.disconnect();
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
@@ -4268,19 +4259,13 @@ private:
         kj::throwRecoverableException(kj::mv(e));
       }));
     }
-    kj::Promise<void> disconnect() override {
+    void disconnect() override {
       KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
-      return canceler.wrap(output.disconnect().then([this]() {
-        canceler.release();
-        pipe.endState(*this);
-        fulfiller.fulfill();
-        return pipe.disconnect();
-      }, [this](kj::Exception&& e) {
-        canceler.release();
-        pipe.endState(*this);
-        fulfiller.reject(kj::cp(e));
-        kj::throwRecoverableException(kj::mv(e));
-      }));
+
+      output.disconnect();
+      pipe.endState(*this);
+      fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "WebSocket::disconnect() ended the pump"));
+      pipe.disconnect();
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
       KJ_REQUIRE(canceler.isEmpty(), "another message send is already in progress");
@@ -4339,8 +4324,8 @@ private:
     kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
       KJ_FAIL_REQUIRE("can't close() after disconnect()");
     }
-    kj::Promise<void> disconnect() override {
-      return kj::READY_NOW;
+    void disconnect() override {
+      // redundant; ignore
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
       KJ_FAIL_REQUIRE("can't tryPumpFrom() after disconnect()");
@@ -4383,8 +4368,8 @@ private:
     kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
       return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
     }
-    kj::Promise<void> disconnect() override {
-      return KJ_EXCEPTION(DISCONNECTED, "other end of WebSocketPipe was destroyed");
+    void disconnect() override {
+      // redundant; ignore
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
       return kj::Promise<void>(KJ_EXCEPTION(DISCONNECTED,
@@ -4428,8 +4413,8 @@ public:
   kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
     return out->close(code, reason);
   }
-  kj::Promise<void> disconnect() override {
-    return out->disconnect();
+  void disconnect() override {
+    out->disconnect();
   }
   void abort() override {
     in->abort();
@@ -6927,8 +6912,8 @@ private:
         return afterSendClosed();
       });
     }
-    kj::Promise<void> disconnect() override {
-      return inner->disconnect();
+    void disconnect() override {
+      inner->disconnect();
     }
     void abort() override {
       // Don't need to worry about completion task in this case -- cancelling it is reasonable.
@@ -8040,48 +8025,7 @@ private:
         "received bad WebSocket handshake", errorMessage);
     webSocketError = sendError(
         HttpHeaders::ProtocolError { 400, "Bad Request", errorMessage, nullptr });
-    kj::throwRecoverableException(kj::mv(exception));
-
-    // Fallback path when exceptions are disabled.
-    class BrokenWebSocket final: public WebSocket {
-    public:
-      BrokenWebSocket(kj::Exception exception): exception(kj::mv(exception)) {}
-
-      kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
-        return kj::cp(exception);
-      }
-      kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
-        return kj::cp(exception);
-      }
-      kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
-        return kj::cp(exception);
-      }
-      kj::Promise<void> disconnect() override {
-        return kj::cp(exception);
-      }
-      void abort() override {
-        kj::throwRecoverableException(kj::cp(exception));
-      }
-      kj::Promise<void> whenAborted() override {
-        return kj::cp(exception);
-      }
-      kj::Promise<Message> receive(size_t maxSize) override {
-        return kj::cp(exception);
-      }
-
-      uint64_t sentByteCount() override { KJ_FAIL_ASSERT("received bad WebSocket handshake"); }
-      uint64_t receivedByteCount() override { KJ_FAIL_ASSERT("received bad WebSocket handshake"); }
-
-      kj::Maybe<kj::String> getPreferredExtensions(ExtensionsContext ctx) override {
-        KJ_FAIL_ASSERT(kj::cp(exception));
-      };
-
-    private:
-      kj::Exception exception;
-    };
-
-    return kj::heap<BrokenWebSocket>(KJ_EXCEPTION(FAILED,
-        "received bad WebSocket handshake", errorMessage));
+    kj::throwFatalException(kj::mv(exception));
   }
 
   kj::Own<kj::AsyncIoStream> getConnectStream() {

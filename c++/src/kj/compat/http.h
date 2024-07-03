@@ -623,10 +623,18 @@ public:
   // for the other end to send a Close reply. The application should await a reply before dropping
   // the WebSocket object.
 
-  virtual kj::Promise<void> disconnect() = 0;
-  // Sends EOF on the underlying connection without sending a "close" message. This is NOT a clean
-  // shutdown, but is sometimes useful when you want the other end to trigger whatever behavior
-  // it normally triggers when a connection is dropped.
+  virtual void disconnect() = 0;
+  // Immediately uncleanly disconnects the underlying connection in the outgoing direction without
+  // sending a "close" message. The other end will receive a DISCONNECTED exception from receive().
+  //
+  // This is an unclean shutdown, meaning that messages could be lost or truncated. For example,
+  // if the output is being buffered, disconnect() does not offer a chance to flush the buffer.
+  // For a clean shutdown, you must call close().
+  //
+  // Note that it is UB to call disconnect() while a send() or close() promise is still
+  // outstanding. As long as all promises are canceled, though, disconnect() is always legal to
+  // call and should not throw (e.g. there is no need to wrap in a try/catch when calling inside
+  // a destructor).
 
   virtual void abort() = 0;
   // Forcefully close this WebSocket, such that the remote end should get a DISCONNECTED error if
@@ -666,9 +674,8 @@ public:
   // again after Close is received.
 
   virtual kj::Promise<void> pumpTo(WebSocket& other);
-  // Continuously receives messages from this WebSocket and send them to `other`.
-  //
-  // On EOF, calls other.disconnect(), then resolves.
+  // Continuously receives messages from this WebSocket and send them to `other`, until a close
+  // message is seen.
   //
   // On other read errors, calls other.close() with the error, then resolves.
   //

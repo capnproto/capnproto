@@ -544,11 +544,10 @@ void runWebSocketBasicTestCase(
   }
 
   {
-    auto promise = serverWs.disconnect();
+    serverWs.disconnect();
     auto receivePromise = clientWs.receive();
     KJ_EXPECT(receivePromise.poll(waitScope));
     KJ_EXPECT_THROW(DISCONNECTED, receivePromise.wait(waitScope));
-    promise.wait(waitScope);
   }
 }
 

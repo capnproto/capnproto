@@ -78,9 +78,8 @@ public:
     KJ_IF_SOME(e, error) {
       onEnd->reject(kj::mv(*e));
     } else KJ_IF_SOME(ws, webSocket) {
-      onEnd->fulfill(kj::evalNow([&]() {
-        return ws.disconnect().attach(kj::mv(ownWebSocket));
-      }));
+      ws.disconnect();
+      onEnd->fulfill(kj::READY_NOW);
     } else {
       // cancel() was called -- we assume no one is waiting on the fulfiller
     }
@@ -215,9 +214,8 @@ public:
     return req.send().ignoreResult();
   }
 
-  kj::Promise<void> disconnect() override {
+  void disconnect() override {
     out = kj::none;
-    return kj::READY_NOW;
   }
 
   void abort() override {
