@@ -133,11 +133,35 @@ private:
   Promise<IoResult> promise;
 };
 
+typedef LONG(NTAPI* NtSetInfoFuncPtr)(HANDLE, ULONG_PTR*, void*, ULONG, ULONG);
+
+NtSetInfoFuncPtr getSetInfoFileFunc() {
+  static const NtSetInfoFuncPtr setInfoFileFunc = []() -> NtSetInfoFuncPtr {
+    HMODULE ntDll = ::GetModuleHandleA("NTDLL.DLL");
+    KJ_ASSERT(ntDll != nullptr, "Could not load 'ntdll' dynamic library");
+    FARPROC funcPtr = GetProcAddress(ntDll, "NtSetInformationFile");
+    KJ_ASSERT(funcPtr != nullptr, "Could not determine the address of the "
+      "'NtSetInformationFile' function in the 'ntdll' library");
+    return reinterpret_cast<NtSetInfoFuncPtr>(funcPtr);
+  }();
+  return setInfoFileFunc;
+}
+
 class Win32IocpEventPort::IoObserverImpl final: public Win32EventPort::IoObserver {
 public:
   IoObserverImpl(Win32IocpEventPort& port, HANDLE handle)
       : port(port), handle(handle) {
     KJ_WIN32(CreateIoCompletionPort(handle, port.iocp, 0, 1), handle, port.iocp.get());
+  }
+
+  ~IoObserverImpl() {
+      // Use NtSetInformationFile to remove the completion port from the handle.
+      // See https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntsetinformationfile?redirectedfrom=MSDN
+      NtSetInfoFuncPtr setInfoFunc = getSetInfoFileFunc();
+      ULONG_PTR iosb[2] = { 0, 0 };
+      void* info[2] = { 0, 0 };
+      static const ULONG FileReplaceCompletionInformation = 61;
+      KJ_WIN32(setInfoFunc(handle, iosb, &info, sizeof(info), FileReplaceCompletionInformation));
   }
 
   Own<IoOperation> newOperation(uint64_t offset) {
