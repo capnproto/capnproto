@@ -467,8 +467,8 @@ private:
         return kj::strTree(
             indent, proto.getName(), " @", proto.getOrdinal().getExplicit(),
             " :", genType(slot.getType(), scope, nullptr),
-            isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
-                kj::strTree(" = ", genValue(field.getType(), slot.getDefaultValue())),
+            isEmptyValue(field.getDefaultValueProto()) ? kj::strTree("") :
+                kj::strTree(" = ", genValue(field.getType(), field.getDefaultValueProto())),
             genAnnotations(proto.getAnnotations(), scope),
             ";  # ", size == -1 ? kj::strTree("ptr[", slot.getOffset(), "]")
                                 : kj::strTree("bits[", slot.getOffset() * size, ", ",
@@ -505,8 +505,8 @@ private:
 
             return kj::strTree(
                 proto.getName(), " :", genType(slot.getType(), interface, nullptr),
-                isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
-                    kj::strTree(" = ", genValue(field.getType(), slot.getDefaultValue())),
+                isEmptyValue(field.getDefaultValueProto()) ? kj::strTree("") :
+                    kj::strTree(" = ", genValue(field.getType(), field.getDefaultValueProto())),
                 genAnnotations(proto.getAnnotations(), interface));
           }, ", "), ")");
     } else {
