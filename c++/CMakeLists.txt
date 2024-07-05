@@ -136,6 +136,10 @@ if(MSVC)
 
   add_compile_options(/Zc:__cplusplus)
   # Set the __cplusplus macro properly.
+  add_compile_options(/Zc:inline)
+  # Do not generate code for unreferenced symbols with internal linkage. Significantly improves
+  # object code size and link speeds under MSVC (clang-cl is sane enough to not need a flag for
+  # this). https://devblogs.microsoft.com/cppblog/feedback-making-zcinline-default-for-debugrelease-configs-in-14/
 else()
   # Note that it's important to add new CXXFLAGS before ones specified by the
   # user, so that the user's flags override them. This is particularly
