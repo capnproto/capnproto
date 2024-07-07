@@ -35,7 +35,6 @@
 #include <kj/filesystem.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include <unordered_map>
 #include <unordered_set>
 #include <map>
 #include <set>

@@ -7896,7 +7896,6 @@ private:
     httpOutput.writeHeaders(headers.serializeResponse(
         statusCode, statusText, connectionHeadersArray));
 
-    kj::Own<kj::AsyncOutputStream> bodyStream;
     if (isHeadRequest) {
       // Ignore entity-body.
       httpOutput.finishBody();

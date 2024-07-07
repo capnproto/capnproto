@@ -30,7 +30,6 @@
 #include "io.h"
 #include "debug.h"
 #include "miniposix.h"
-#include <algorithm>
 #include <errno.h>
 #include "vector.h"
 
@@ -61,7 +60,7 @@ size_t InputStream::read(ArrayPtr<byte> buffer, size_t minBytes) {
 void InputStream::skip(size_t bytes) {
   byte scratch[8192]{};
   while (bytes > 0) {
-    size_t amount = std::min(bytes, sizeof(scratch));
+    size_t amount = kj::min(bytes, sizeof(scratch));
     read(arrayPtr(scratch).first(amount));
     bytes -= amount;
   }
@@ -139,7 +138,7 @@ size_t BufferedInputStreamWrapper::tryRead(ArrayPtr<byte> dst, size_t minBytes) 
   size_t maxBytes = dst.size();
   if (minBytes <= bufferAvailable.size()) {
     // Serve from current buffer.
-    size_t n = std::min(bufferAvailable.size(), maxBytes);
+    size_t n = kj::min(bufferAvailable.size(), maxBytes);
     memcpy(dst.begin(), bufferAvailable.begin(), n);
     bufferAvailable = bufferAvailable.slice(n);
     return n;
@@ -154,7 +153,7 @@ size_t BufferedInputStreamWrapper::tryRead(ArrayPtr<byte> dst, size_t minBytes) 
     if (maxBytes <= buffer.size()) {
       // Read the next buffer-full.
       size_t n = inner.read(buffer, minBytes);
-      size_t fromSecondBuffer = std::min(n, maxBytes);
+      size_t fromSecondBuffer = kj::min(n, maxBytes);
       memcpy(dst.begin(), buffer.begin(), fromSecondBuffer);
       bufferAvailable = buffer.slice(fromSecondBuffer, n);
       return fromFirstBuffer + fromSecondBuffer;
@@ -248,7 +247,7 @@ ArrayPtr<const byte> ArrayInputStream::tryGetReadBuffer() {
 }
 
 size_t ArrayInputStream::tryRead(ArrayPtr<byte> dst, size_t minBytes) {
-  size_t n = std::min(dst.size(), array.size());
+  size_t n = kj::min(dst.size(), array.size());
   memcpy(dst.begin(), array.begin(), n);
   array = array.slice(n);
   return n;

@@ -765,7 +765,7 @@ private:
     // lists are sorted by ordinal.
     auto fields = structNode.getFields();
     auto replacementFields = replacement.getFields();
-    uint count = std::min(fields.size(), replacementFields.size());
+    uint count = kj::min(fields.size(), replacementFields.size());
 
     if (replacementFields.size() > fields.size()) {
       replacementIsNewer();
@@ -907,7 +907,7 @@ private:
       replacementIsOlder();
     }
 
-    uint count = std::min(methods.size(), replacementMethods.size());
+    uint count = kj::min(methods.size(), replacementMethods.size());
 
     for (uint i = 0; i < count; i++) {
       checkCompatibility(methods[i], replacementMethods[i]);
