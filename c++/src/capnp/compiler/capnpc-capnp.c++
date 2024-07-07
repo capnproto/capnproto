@@ -35,7 +35,6 @@
 #include "../schema-loader.h"
 #include "../dynamic.h"
 #include <kj/miniposix.h>
-#include <unordered_map>
 #include <kj/main.h>
 #include <algorithm>
 #include <map>

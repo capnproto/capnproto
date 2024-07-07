@@ -146,7 +146,7 @@ void TimerImpl::advanceTo(TimePoint newTime) {
   // This workaround is to avoid the assert triggering on these machines.
   // See also https://github.com/capnproto/capnproto/issues/1693
 #if __APPLE__ && (defined(__x86_64__) || defined(__POWERPC__))
-  time = std::max(time, newTime);
+  time = kj::max(time, newTime);
 #else
   KJ_REQUIRE(newTime >= time, "can't advance backwards in time") { return; }
   time = newTime;

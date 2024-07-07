@@ -26,7 +26,6 @@
 
 #include "time.h"
 #include "debug.h"
-#include <set>
 
 #if _WIN32
 #include <windows.h>
