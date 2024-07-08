@@ -156,6 +156,11 @@ public:
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                   String&& text) override {
+    if (text.contains("To symbolize stack traces, install it in your $PATH")) {
+      // Ignore warning about LLVM_SYMBOLIZER not being available.
+      return;
+    }
+
     this->text += "log message: ";
     text = str(file, ":", line, ":+", contextDepth, ": ", severity, ": ", mv(text));
     this->text.append(text.begin(), text.end());
