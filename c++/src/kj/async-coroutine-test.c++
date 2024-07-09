@@ -382,14 +382,6 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
 }
 
 #if (!_MSC_VER || defined(__clang__)) && !__aarch64__
-uint countLines(StringPtr s) {
-  uint lines = 0;
-  for (char c: s) {
-    lines += c == '\n';
-  }
-  return lines;
-}
-
 // TODO(msvc): This test relies on GetFunctorStartAddress, which is not supported on MSVC currently,
 //   so skip the test.
 // TODO(someday): Test is flakey on arm64, depending on how it's compiled. I haven't had a chance to
@@ -415,11 +407,12 @@ KJ_TEST("Can trace through coroutines") {
   // Get an async trace when the promise is fulfilled. We eagerlyEvaluate() to make sure the
   // continuation executes while the event loop is running.
   paf.promise = paf.promise.then([]() {
-    auto trace = getAsyncTrace();
+    void* scratch[16];
+    auto trace = getAsyncTrace(scratch);
     // We expect one entry for waitImpl(), one for the coroutine, and one for this continuation.
     // When building in debug mode with CMake, I observed this count can be 2. The missing frame is
     // probably this continuation. Let's just expect a range.
-    auto count = countLines(trace);
+    auto count = trace.size();
     KJ_EXPECT(0 < count && count <= 3);
   }).eagerlyEvaluate(nullptr);
 
@@ -428,9 +421,12 @@ KJ_TEST("Can trace through coroutines") {
   }();
 
   {
-    auto trace = coroPromise.trace();
+    void* space[32]{};
+    _::TraceBuilder builder(space);
+    _::PromiseNode::from(coroPromise).tracePromise(builder, false);
+
     // One for the Coroutine PromiseNode, one for paf.promise.
-    KJ_EXPECT(countLines(trace) >= 2);
+    KJ_EXPECT(builder.finish().size() >= 2);
   }
 
   paf.fulfiller->fulfill();

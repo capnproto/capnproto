@@ -119,6 +119,10 @@ private:
   bool solSndbufUnimplemented = false;
   // Whether stream.getsockopt(SO_SNDBUF) has been observed to throw UNIMPLEMENTED.
 
+  bool idle = true;
+  // Only used to catch RpcSystem bugs. Starts true because RpcSystem should call setIdle(false)
+  // right away.
+
   kj::Canceler readCanceler;
   kj::Maybe<kj::Exception> readCancelReason;
   // Used to propagate write errors into (permanent) read errors.
@@ -173,6 +177,7 @@ private:
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   kj::Promise<void> shutdown() override;
+  void setIdle(bool idle) override;
 
   // implements WindowGetter ---------------------------------------------------
 

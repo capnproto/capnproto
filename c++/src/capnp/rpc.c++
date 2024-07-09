@@ -204,6 +204,10 @@ class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
 
 public:
+  bool empty() {
+    return slots.size() == freeIds.size() && highSlots.size() == 0;
+  }
+
   bool isHigh(Id& id) {
     return (id & highBit<Id>()) != 0;
   }
@@ -300,8 +304,14 @@ class ImportTable {
   // Table mapping integers to T, where the integers are chosen remotely.
 
 public:
-  T& operator[](Id id) {
+  bool empty() {
+    return presenceBits == 0 && high.size() == 0;
+  }
+
+  T& findOrCreate(Id id) {
+    // Get an entry, creating it if it doesn't exist.
     if (id < kj::size(low)) {
+      presenceBits |= 1 << id;
       return low[id];
     } else {
       return high.findOrCreate(id, [&]() -> typename decltype(high)::Entry { return {id, {}}; });
@@ -309,10 +319,37 @@ public:
   }
 
   kj::Maybe<T&> find(Id id) {
+    // Look up an entry, returning null if it doesn't exist.
     if (id < kj::size(low)) {
-      return low[id];
+      if (presenceBits & (1 << id)) {
+        return low[id];
+      } else {
+        return kj::none;
+      }
     } else {
       return high.find(id);
+    }
+  }
+
+  kj::Maybe<T&> create(Id id) {
+    // Strictly create a new entry; return null if it already exists.
+    if (id < kj::size(low)) {
+      if (presenceBits & (1 << id)) {
+        return kj::none;
+      }
+      presenceBits |= 1 << id;
+      return low[id];
+    } else {
+      bool created = false;
+      T& result = high.findOrCreate(id, [&]() -> typename decltype(high)::Entry {
+        created = true;
+        return {id, {}};
+      });
+      if (created) {
+        return result;
+      } else {
+        return kj::none;
+      }
     }
   }
 
@@ -322,6 +359,7 @@ public:
     if (id < kj::size(low)) {
       T toRelease = kj::mv(low[id]);
       low[id] = T();
+      presenceBits &= ~(1 << id);
       return toRelease;
     } else {
       KJ_IF_SOME(entry, high.findEntry(id)) {
@@ -335,7 +373,9 @@ public:
   template <typename Func>
   void forEach(Func&& func) {
     for (Id i: kj::indices(low)) {
-      func(i, low[i]);
+      if (presenceBits & (1 << i)) {
+        func(i, low[i]);
+      }
     }
     for (auto& entry: high) {
       func(entry.key, entry.value);
@@ -344,6 +384,7 @@ public:
 
 private:
   T low[16];
+  uint presenceBits = 0;
   kj::HashMap<Id, T> high;
 };
 
@@ -373,6 +414,8 @@ public:
     if (connection.is<Disconnected>()) {
       return newBrokenCap(kj::cp(connection.get<Disconnected>()));
     }
+
+    setNotIdle();
 
     QuestionId questionId;
     auto& question = questions.next(questionId);
@@ -510,13 +553,16 @@ public:
              newException);
     }
 
-    // Send an abort message, but ignore failure.
-    kj::runCatchingExceptions([&]() {
-      auto message = dyingConnection->newOutgoingMessage(
-          messageSizeHint<void>() + exceptionSizeHint(exception));
-      fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
-      message->send();
-    });
+    // Send an abort message, but ignore failure. Don't send if idle, because we promised not to
+    // send any more messages in that case... we'll just disconnect.
+    if (!idle) {
+      kj::runCatchingExceptions([&]() {
+        auto message = dyingConnection->newOutgoingMessage(
+            messageSizeHint<void>() + exceptionSizeHint(exception));
+        fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
+        message->send();
+      });
+    }
 
     // Indicate disconnect.
     auto& dyingConnectionRef = *dyingConnection;
@@ -614,10 +660,6 @@ private:
     Answer& operator=(Answer&&) = default;
     // If we don't explicitly write all this, we get some stupid error deep in STL.
 
-    bool active = false;
-    // True from the point when the Call message is received to the point when both the `Finish`
-    // message has been received and the `Return` has been sent.
-
     kj::Maybe<kj::Own<PipelineHook>> pipeline;
     // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
 
@@ -670,6 +712,12 @@ private:
 
     kj::Maybe<ImportClient&> importClient;
     // Becomes null when the import is destroyed.
+    //
+    // TODO(cleanup): This comes from when the ImportTable didn't explicitly track which entries
+    //   were present, so you had to check whether `importClient` was null. ImportTable now tracks
+    //   this itself, so `importClient` no longer needs tobe a `Maybe`. However, it still can't be
+    //   a reference since the current ImportTable implementation requires default-constructable
+    //   entries. Changing that is more refactoring than I care to do at this moment.
 
     kj::Maybe<RpcClient&> appClient;
     // Either a copy of importClient, or, in the case of promises, the wrapping PromiseClient.
@@ -748,6 +796,68 @@ private:
 
   bool receiveIncomingMessageError = false;
   // Becomes true when receiveIncomingMessage resulted in exception.
+
+  bool idle = true;
+  // What was the last value passed to setIdle() on the underlying connection? Used to avoid
+  // redundant calls. Initialized to true because we are expected to call setIdle(false) at
+  // startup.
+
+  // =====================================================================================
+  // Idle handling
+
+  void setNotIdle() {
+    // Inform the VatNetwork that this connection is NOT idle, unless we've already done so.
+
+    if (idle) {
+      idle = false;
+      KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+        c.connection->setIdle(false);
+      }
+    }
+  }
+
+  void checkIfBecameIdle() {
+    // Checks if the connection has become idle, and if so, informs the VatNetwork by calling
+    // setIdle(true). Generally, this must be called after erasing an entry from any of the
+    // Four Tables.
+
+    if (idle) return;  // already idle
+
+    bool allTablesEmpty =
+        questions.empty() && answers.empty() && exports.empty() && imports.empty() &&
+        // Technically the embargoes table should always be empty if the others are, but it's not
+        // expensive to check it.
+        embargoes.empty();
+
+    if (!allTablesEmpty) {
+      // Not idle, don't do anything.
+      return;
+    }
+
+    // Notes:
+    // - `exportsByCap` is a reverse mapping of `exports` so should be empty if `exports` is empty.
+    // - `tasks` only contains:
+    //   (a) messageLoop()
+    //   (b) instances of flowController->waitAllAcked(), which are meaningless if there are no
+    //       calls outstanding, and
+    //   (c) exceptions inserted specifically to break the connection
+    //   Of these, only messageLoop() could cause the connection to become non-idle again, but
+    //   that's a well-defined part of the setIdle() contract.
+    // - `flowWaiter` is only non-null when a large number of calls are outstanding; if the tables
+    //   are empty, it is null.
+    //
+    // Hence we know at this point that no further messages will be sent on this connection, unless
+    // the app initiates a new bootstrap or a message is received. I.e., we are idle.
+
+    KJ_ASSERT(exportsByCap.size() == 0);
+    KJ_ASSERT(flowWaiter == kj::none);
+
+    // OK, we can inform the VatNetwork of the idleness.
+    idle = true;
+    KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+      c.connection->setIdle(true);
+    }
+  }
 
   // =====================================================================================
   // ClientHook implementations
@@ -897,6 +1007,8 @@ private:
           builder.setReferenceCount(remoteRefcount);
           message->send();
         }
+
+        connectionState->checkIfBecameIdle();
       });
     }
 
@@ -1479,7 +1591,7 @@ private:
   kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::AutoCloseFd> fd) {
     // Receive a new import.
 
-    auto& import = imports[importId];
+    auto& import = imports.findOrCreate(importId);
     kj::Own<ImportClient> importClient;
 
     // Create the ImportClient, or if one already exists, use it.
@@ -1641,17 +1753,15 @@ private:
         auto promisedAnswer = descriptor.getReceiverAnswer();
 
         KJ_IF_SOME(answer, answers.find(promisedAnswer.getQuestionId())) {
-          if (answer.active) {
-            KJ_IF_SOME(pipeline, answer.pipeline) {
-              KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
-                auto result = pipeline->getPipelinedCap(ops);
-                if (unwrapIfSameConnection(*result) != kj::none) {
-                  result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
-                }
-                return kj::mv(result);
-              } else {
-                return newBrokenCap("unrecognized pipeline ops");
+          KJ_IF_SOME(pipeline, answer.pipeline) {
+            KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
+              auto result = pipeline->getPipelinedCap(ops);
+              if (unwrapIfSameConnection(*result) != kj::none) {
+                result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
               }
+              return kj::mv(result);
+            } else {
+              return newBrokenCap("unrecognized pipeline ops");
             }
           }
         }
@@ -1733,6 +1843,7 @@ private:
         } else {
           // Call has already returned, so we can now remove it from the table.
           connectionState->questions.erase(id, question);
+          connectionState->checkIfBecameIdle();
         }
       }
     }
@@ -2784,7 +2895,7 @@ private:
         connectionState->answers.erase(answerId);
       } else {
         // We just have to null out callContext and set the exports.
-        auto& answer = connectionState->answers[answerId];
+        auto& answer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
         answer.callContext = kj::none;
         answer.resultExports = kj::mv(resultExports);
 
@@ -2799,6 +2910,11 @@ private:
       // Also, this is the right time to stop counting the call against the flow limit.
       connectionState->callWordsInFlight -= requestSize;
       connectionState->maybeUnblockFlow();
+
+      // If we erased the answer table entry above, check for idleness now.
+      if (receivedFinish) {
+        connectionState->checkIfBecameIdle();
+      }
     }
   };
 
@@ -2840,8 +2956,46 @@ private:
       KJ_IF_SOME(m, message) {
         handleMessage(kj::mv(m));
       } else {
-        tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
-        co_return;
+        // Other end disconnected!
+
+        if (idle) {
+          // There were no outstanding capabilities or anything, so we don't have to propagate any
+          // exceptions anywhere. We can just remove ourselves from the connection map.
+
+          if (!connection.is<Connected>()) {
+            // Hmm, we're already in the Disconnected state. Odd that the message loop is still
+            // running at all but we should just let it end.
+            co_return;
+          }
+
+          Connected& state = connection.get<Connected>();
+
+          // At this point, the last reference to this connection state *should* be the one in
+          // the RpcSystem's map. The refcount should therefore be 1, and `isShared()`.
+          if (isShared()) {
+            // Oh, we still have references. This is probably a bug, but to be safe, set
+            // ourselves to the disconnected state (with an error).
+            KJ_LOG(ERROR, "RpcSystem bug: connection is idle but still has references?");
+            tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
+            co_return;
+          }
+
+          // Remove ourselves from the RpcSystem's table *now*. But have it create a shutdown
+          // task which will keep this object alive until `tasks` is empty. Note that
+          // `messageLoop()` itself is in `tasks`, so this will wait until `messageLoop()`
+          // finishes.
+          dropConnection(state.rpcSystem, *state.connection,
+              tasks.onEmpty().attach(kj::addRef(*this)));
+
+          // Shut down connection cleanly.
+          co_await state.connection->shutdown();
+
+          co_return;
+        } else {
+          // Need to raise an error in order to tear everything down.
+          tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
+          co_return;
+        }
       }
 
       // TODO(perf): We add a yield() here so that anything we needed to do in reaction to the
@@ -2860,6 +3014,11 @@ private:
   }
 
   void handleMessage(kj::Own<IncomingRpcMessage> message) {
+    // If we were idle before, receiving a message changes that. This is true even if we received
+    // a message that makes no sense while idle, because we need to send an error in response, and
+    // sending any message requires we are not idle.
+    setNotIdle();
+
     auto reader = message->getBody().getAs<rpc::Message>();
 
     switch (reader.which()) {
@@ -2909,6 +3068,16 @@ private:
         break;
       }
     }
+
+    // We need a checkIfBecameIdle() here mainly to handle the case that we were idle before
+    // receiving this message, and the message itself didn't actually add anything to the tables,
+    // so we are still idle.
+    //
+    // Note that most message types should inherently fail if they are received while idle (e.g.
+    // handleCall() would fail because it targets a capability on the export table, but when idle
+    // the export table is empty). In those cases, an exception will be thrown which will cause
+    // us to abort the connection.
+    checkIfBecameIdle();
   }
 
   void handleUnimplemented(const rpc::Message::Reader& message) {
@@ -3039,13 +3208,10 @@ private:
     message = nullptr;
 
     // Add the answer to the answer table for pipelining and send the response.
-    auto& answer = answers[answerId];
-    KJ_REQUIRE(!answer.active, "questionId is already in use", answerId) {
-      return;
-    }
+    auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
+                                     "questionId is already in use", answerId);
 
     answer.resultExports = kj::mv(resultExports);
-    answer.active = true;
     answer.pipeline = kj::Own<PipelineHook>(kj::refcounted<SingleCapPipeline>(kj::mv(capHook)));
 
     response->send();
@@ -3091,13 +3257,9 @@ private:
     // No more using `call` after this point, as it now belongs to the context.
 
     {
-      auto& answer = answers[answerId];
+      auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
+                                       "questionId is already in use", answerId);
 
-      KJ_REQUIRE(!answer.active, "questionId is already in use") {
-        return;
-      }
-
-      answer.active = true;
       answer.callContext = *context;
     }
 
@@ -3108,7 +3270,7 @@ private:
     // context->directTailCall().
 
     {
-      auto& answer = answers[answerId];
+      auto& answer = KJ_ASSERT_NONNULL(answers.find(answerId));
 
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
@@ -3165,10 +3327,8 @@ private:
         kj::Own<PipelineHook> pipeline;
 
         KJ_IF_SOME(answer, answers.find(promisedAnswer.getQuestionId())) {
-          if (answer.active) {
-            KJ_IF_SOME(p, answer.pipeline) {
-              pipeline = p->addRef();
-            }
+          KJ_IF_SOME(p, answer.pipeline) {
+            pipeline = p->addRef();
           }
         }
         if (pipeline.get() == nullptr) {
@@ -3334,6 +3494,7 @@ private:
         // `releaseResultCaps` set true so that we don't have to release them here.  We can go
         // ahead and delete it from the table.
         questions.erase(ret.getAnswerId(), question);
+        checkIfBecameIdle();
       }
 
     } else {
@@ -3351,11 +3512,6 @@ private:
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     KJ_IF_SOME(answer, answers.find(finish.getQuestionId())) {
-      if (!answer.active) {
-        // Treat the same as if the answer wasn't in the table; see comment below.
-        return;
-      }
-
       if (finish.getReleaseResultCaps()) {
         exportsToRelease = kj::mv(answer.resultExports);
       } else {
@@ -3374,6 +3530,7 @@ private:
       } else {
         // The call context is already gone so we can tear down the Answer here.
         answerToRelease = answers.erase(finish.getQuestionId());
+        checkIfBecameIdle();
       }
     } else {
       // The `Finish` message targets a qusetion ID that isn't present in our answer table.
@@ -3476,6 +3633,7 @@ private:
           KJ_ASSERT(exportsByCap.erase(exp.clientHook));
         }
         exports.erase(id, exp);
+        checkIfBecameIdle();
       }
     } else {
       KJ_FAIL_REQUIRE("Tried to release invalid export ID.") {
@@ -3574,6 +3732,7 @@ private:
         KJ_IF_SOME(embargo, embargoes.find(context.getReceiverLoopback())) {
           KJ_ASSERT_NONNULL(embargo.fulfiller)->fulfill();
           embargoes.erase(context.getReceiverLoopback(), embargo);
+          checkIfBecameIdle();
         } else {
           KJ_FAIL_REQUIRE("Invalid embargo ID in 'Disembargo.context.receiverLoopback'.") {
             return;
@@ -3586,10 +3745,9 @@ private:
         KJ_FAIL_REQUIRE("Unimplemented Disembargo type.", disembargo) { return; }
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Level 2
 };
+
+// =======================================================================================
 
 class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
 public:
