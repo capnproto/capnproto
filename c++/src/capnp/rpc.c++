@@ -2774,11 +2774,11 @@ private:
                  "Can't call tailCall() after initializing the results struct.");
 
       KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameConnection(*request)) {
-        if (!redirectResults && !hints.noPromisePipelining) {
+        if (!redirectResults && !hints.onlyPromisePipeline) {
           // The tail call is headed towards the peer that called us in the first place, so we can
           // optimize out the return trip.
           //
-          // If the noPromisePipelining hint was sent, we skip this trick since the caller will
+          // If the onlyPromisePipeline hint was sent, we skip this trick since the caller will
           // ignore the `Return` message anyway.
 
           KJ_IF_SOME(tailInfo, rpcRequest.tailSend()) {

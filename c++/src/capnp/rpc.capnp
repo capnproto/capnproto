@@ -423,7 +423,7 @@ struct Call {
   # calls.
   #
   # The receiver may use this as an optimization, by skipping the bookkeeping needed for pipelining
-  # when no pipelined calls are expected. The sender typically sets this to false when the method's
+  # when no pipelined calls are expected. The sender typically sets this to true when the method's
   # schema does not specify any return capabilities.
 
   onlyPromisePipeline @10 :Bool = false;
