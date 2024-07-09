@@ -6541,8 +6541,8 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
       int writeId = writeCount++;
       if (writeId == 0) {
         // Allow first write (headers) to succeed.
-        auto promise = inner.write(buffer);
-        inner.shutdownWrite();
+        auto promise = inner.write(buffer)
+            .then([this]() { inner.shutdownWrite(); });
         return promise;
       } else if (writeId == 1) {
         // Fail subsequent write (body) with a disconnected exception.
