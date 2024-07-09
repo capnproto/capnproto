@@ -3172,6 +3172,10 @@ private:
     schemaLoader.computeOptimizationHints();
 
     for (auto requestedFile: request.getRequestedFiles()) {
+      // Starting a new file. Set hasInterfaces back to false, so it only becomes true if this
+      // file contains interfaces.
+      hasInterfaces = false;
+
       auto schema = schemaLoader.get(requestedFile.getId());
       auto fileText = makeFileText(schema, requestedFile);
 
