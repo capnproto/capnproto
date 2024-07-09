@@ -65,9 +65,25 @@ public:
       s = kj::none;
     }
 
-    KJ_IF_SOME(ws, webSocket) {
-      // We didn't get a close(), so this is an unexpected disconnect.
-      ws.disconnect();
+    if (!shortened) {
+      KJ_IF_SOME(ws, webSocket) {
+        // We didn't get a close(), so this is an unexpected disconnect.
+        //
+        // Exception: If we path-shortened, then we expect that this capability will be dropped in
+        // favor of the new shorter path, but we do NOT want to call `disconnect()` in this case
+        // because it will raise an error. TODO(bug): This seems to be dependent on the
+        // implementation details of WebSocketPipeImpl. WebSocketPipeEnd invokes in->abort() and
+        // out->abort() in its destructor. BlockedPumpTo treats abort() as a non-erroneous
+        // shutdown, which seems wrong, but treats disconnect() as erronous, which seems right, but
+        // is what leads to the problem here. What we really want to do is cancel the pump when
+        // the path is shortened. See KjToCapnpWebSocketAdapter::pumpTo() where
+        // `shorteningFulfiller` is fulfilled, and then we start pumping -- that pump should be
+        // canceled / complete without error at this point. Once that is fixed, we should change
+        // WebSocketPipeImpl so that it doesn't treat simply dropping one of the ends as
+        // successfully completing the pump! This a bit more refactoring than I want to do right
+        // this moment.
+        ws.disconnect();
+      }
     }
   }
 
@@ -105,7 +121,11 @@ public:
         .then([]() -> kj::Promise<Capability::Client> {
       return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
     });
-    return shorteningPromise.exclusiveJoin(kj::mv(onAbort));
+    return shorteningPromise
+        .then([this](Capability::Client&& shorterPath) {
+      shortened = true;
+      return kj::mv(shorterPath);
+    }).exclusiveJoin(kj::mv(onAbort));
   }
 
   kj::Promise<void> sendText(SendTextContext context) override {
@@ -136,6 +156,8 @@ private:
   kj::Canceler canceler;
 
   kj::Maybe<kj::Own<kj::Exception>> error;
+
+  bool shortened = false;
 
   kj::WebSocket& getWebSocket() {
     return KJ_REQUIRE_NONNULL(webSocket, "request canceled");
