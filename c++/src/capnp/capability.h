@@ -302,6 +302,7 @@ private:
 
   static kj::Own<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
   static kj::Own<ClientHook> makeRevocableLocalClient(Capability::Server& server);
+  static void revokeLocalClientIfShared(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook, kj::Exception&& reason);
 
@@ -1217,7 +1218,9 @@ template <typename T>
 RevocableServer<T>::~RevocableServer() noexcept(false) {
   // Check if moved away.
   if (hook.get() != nullptr) {
-    Capability::Client::revokeLocalClient(*hook);
+    // Optimization: If we hold the only reference on the ClientHook, we don't really need to
+    // revoke it.
+    Capability::Client::revokeLocalClientIfShared(*hook);
   }
 }
 
