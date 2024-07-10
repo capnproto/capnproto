@@ -105,15 +105,18 @@ public:
     //   - A server->client disconnect will presumably be followed by the server returning from
     //     the request() RPC.
 
+    // cancel() is only invoked in cases where we don't own the WebSocket.
+    KJ_REQUIRE(ownWebSocket.get() == nullptr);
+
+    // We don't call webSocket.disconnect() because the immediate caller is about to drop the
+    // WebSocket anyway.
+
+    selfRef = kj::none;
+    webSocket = kj::none;
+
     if (!canceler.isEmpty()) {
       canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
     }
-    KJ_IF_SOME(ws, webSocket) {
-      ws.disconnect();
-    }
-    selfRef = kj::none;
-    webSocket = kj::none;
-    { auto drop = kj::mv(ownWebSocket); }
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
