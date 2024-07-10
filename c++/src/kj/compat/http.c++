@@ -2664,7 +2664,10 @@ public:
   }
 
   void disconnect() override {
-    KJ_REQUIRE(!currentlySending, "another message send is already in progress");
+    // NOTE: While it's true that disconnect() is UB if called while a send is still in progress,
+    // it would be inappropriate for us to assert !currentlySending here because currentlySending
+    // remains true after a send is canceled, and it is OK to call disconnect() after canceling
+    // a send.
 
     // If we're sending a control message (e.g. a PONG), cancel it.
     sendingControlMessage = kj::none;

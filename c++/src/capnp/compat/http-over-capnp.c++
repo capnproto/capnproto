@@ -105,15 +105,18 @@ public:
     //   - A server->client disconnect will presumably be followed by the server returning from
     //     the request() RPC.
 
+    // cancel() is only invoked in cases where we don't own the WebSocket.
+    KJ_REQUIRE(ownWebSocket.get() == nullptr);
+
+    // We don't call webSocket.disconnect() because the immediate caller is about to drop the
+    // WebSocket anyway.
+
+    selfRef = kj::none;
+    webSocket = kj::none;
+
     if (!canceler.isEmpty()) {
       canceler.cancel(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
     }
-    KJ_IF_SOME(ws, webSocket) {
-      ws.disconnect();
-    }
-    selfRef = kj::none;
-    webSocket = kj::none;
-    { auto drop = kj::mv(ownWebSocket); }
   }
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
@@ -400,6 +403,10 @@ public:
     }
   }
 
+  bool hasSentResponse() {
+    return sentResponse;
+  }
+
 private:
   HttpOverCapnpFactory& factory;
   kj::Maybe<kj::Own<kj::WebSocket>> ownWebSocket;
@@ -504,6 +511,14 @@ public:
 
     ClientRequestContextImpl context(factory, kjResponse);
     RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(context);
+    KJ_DEFER({
+      if (!context.hasSentResponse()) {
+        // Client is disconnecting before server has sent a response. Make sure to revoke with a
+        // DISCONNECTED exception here so that the server side doesn't log a spurious error.
+        revocableContext.revoke(KJ_EXCEPTION(DISCONNECTED,
+            "client disconnected before HTTP-over-capnp response was sent"));
+      }
+    });
 
     rpcRequest.setContext(revocableContext.getClient());
 
