@@ -403,6 +403,10 @@ public:
     }
   }
 
+  bool hasSentResponse() {
+    return sentResponse;
+  }
+
 private:
   HttpOverCapnpFactory& factory;
   kj::Maybe<kj::Own<kj::WebSocket>> ownWebSocket;
@@ -507,6 +511,14 @@ public:
 
     ClientRequestContextImpl context(factory, kjResponse);
     RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(context);
+    KJ_DEFER({
+      if (!context.hasSentResponse()) {
+        // Client is disconnecting before server has sent a response. Make sure to revoke with a
+        // DISCONNECTED exception here so that the server side doesn't log a spurious error.
+        revocableContext.revoke(KJ_EXCEPTION(DISCONNECTED,
+            "client disconnected before HTTP-over-capnp response was sent"));
+      }
+    });
 
     rpcRequest.setContext(revocableContext.getClient());
 
