@@ -70,7 +70,7 @@ uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint, uint additional) {
   }
 }
 
-kj::Maybe<kj::Array<PipelineOp>> toPipelineOps(List<rpc::PromisedAnswer::Op>::Reader ops) {
+kj::Array<PipelineOp> toPipelineOps(List<rpc::PromisedAnswer::Op>::Reader ops) {
   auto result = kj::heapArrayBuilder<PipelineOp>(ops.size());
   for (auto opReader: ops) {
     PipelineOp op;
@@ -83,9 +83,7 @@ kj::Maybe<kj::Array<PipelineOp>> toPipelineOps(List<rpc::PromisedAnswer::Op>::Re
         op.pointerIndex = opReader.getGetPointerField();
         break;
       default:
-        KJ_FAIL_REQUIRE("Unsupported pipeline op.", (uint)opReader.which()) {
-          return kj::none;
-        }
+        KJ_FAIL_REQUIRE("Unsupported pipeline op.", (uint)opReader.which());
     }
     result.add(op);
   }
@@ -1749,15 +1747,12 @@ private:
 
         KJ_IF_SOME(answer, answers.find(promisedAnswer.getQuestionId())) {
           KJ_IF_SOME(pipeline, answer.pipeline) {
-            KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
-              auto result = pipeline->getPipelinedCap(ops);
-              if (unwrapIfSameConnection(*result) != kj::none) {
-                result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
-              }
-              return kj::mv(result);
-            } else {
-              return newBrokenCap("unrecognized pipeline ops");
+            auto ops = toPipelineOps(promisedAnswer.getTransform());
+            auto result = pipeline->getPipelinedCap(ops);
+            if (unwrapIfSameConnection(*result) != kj::none) {
+              result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
             }
+            return kj::mv(result);
           }
         }
 
@@ -3209,14 +3204,7 @@ private:
   }
 
   void handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
-    kj::Own<ClientHook> capability;
-
-    KJ_IF_SOME(t, getMessageTarget(call.getTarget())) {
-      capability = kj::mv(t);
-    } else {
-      // Exception already reported.
-      return;
-    }
+    kj::Own<ClientHook> capability = getMessageTarget(call.getTarget());
 
     bool redirectResults;
     switch (call.getSendResultsTo().which()) {
@@ -3300,15 +3288,13 @@ private:
     return capability->call(interfaceId, methodId, kj::mv(context), hints);
   }
 
-  kj::Maybe<kj::Own<ClientHook>> getMessageTarget(const rpc::MessageTarget::Reader& target) {
+  kj::Own<ClientHook> getMessageTarget(const rpc::MessageTarget::Reader& target) {
     switch (target.which()) {
       case rpc::MessageTarget::IMPORTED_CAP: {
         KJ_IF_SOME(exp, exports.find(target.getImportedCap())) {
           return exp.clientHook->addRef();
         } else {
-          KJ_FAIL_REQUIRE("Message target is not a current export ID.") {
-            return kj::none;
-          }
+          KJ_FAIL_REQUIRE("Message target is not a current export ID.");
         }
         break;
       }
@@ -3327,18 +3313,12 @@ private:
               "Pipeline call on a request that returned no capabilities or was already closed."));
         }
 
-        KJ_IF_SOME(ops, toPipelineOps(promisedAnswer.getTransform())) {
-          return pipeline->getPipelinedCap(ops);
-        } else {
-          // Exception already thrown.
-          return kj::none;
-        }
+        auto ops = toPipelineOps(promisedAnswer.getTransform());
+        return pipeline->getPipelinedCap(ops);
       }
 
       default:
-        KJ_FAIL_REQUIRE("Unknown message target type.", target) {
-          return kj::none;
-        }
+        KJ_FAIL_REQUIRE("Unknown message target type.", target);
     }
 
     KJ_UNREACHABLE;
@@ -3643,14 +3623,7 @@ private:
     auto context = disembargo.getContext();
     switch (context.which()) {
       case rpc::Disembargo::Context::SENDER_LOOPBACK: {
-        kj::Own<ClientHook> target;
-
-        KJ_IF_SOME(t, getMessageTarget(disembargo.getTarget())) {
-          target = kj::mv(t);
-        } else {
-          // Exception already reported.
-          return;
-        }
+        kj::Own<ClientHook> target = getMessageTarget(disembargo.getTarget());
 
         EmbargoId embargoId = context.getSenderLoopback();
 
