@@ -63,6 +63,23 @@ public:
     virtual AnyStruct::Reader baseGetPeerVatId() = 0;
     virtual kj::Own<RpcFlowController> newStream() = 0;
     virtual void setIdle(bool idle) = 0;
+
+    virtual bool canIntroduceTo(Connection& other) = 0;
+    virtual void introduceTo(Connection& other,
+        AnyPointer::Builder otherContactInfo,
+        AnyPointer::Builder thisAwaitInfo) = 0;
+    virtual kj::Maybe<kj::Own<Connection>> connectToIntroduced(
+        AnyPointer::Reader contact,
+        AnyPointer::Builder completion) = 0;
+    virtual bool canForwardThirdPartyToContact(
+        AnyPointer::Reader contact, Connection& destination) = 0;
+    virtual void forwardThirdPartyToContact(
+        AnyPointer::Reader contact, Connection& destination,
+        AnyPointer::Builder result) = 0;
+    virtual kj::Own<void> awaitThirdParty(
+        AnyPointer::Reader party, kj::Rc<kj::Refcounted> value) = 0;
+    virtual kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(
+        AnyPointer::Reader completion) = 0;
   };
   virtual kj::Maybe<kj::Own<Connection>> baseConnect(AnyStruct::Reader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;

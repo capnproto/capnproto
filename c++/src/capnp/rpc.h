@@ -490,6 +490,22 @@ public:
 
   private:
     AnyStruct::Reader baseGetPeerVatId() override;
+    bool canIntroduceTo(VatNetworkBase::Connection& other) override;
+    void introduceTo(VatNetworkBase::Connection& other,
+        AnyPointer::Builder otherContactInfo,
+        AnyPointer::Builder thisAwaitInfo) override;
+    kj::Maybe<kj::Own<VatNetworkBase::Connection>> connectToIntroduced(
+        AnyPointer::Reader contact,
+        AnyPointer::Builder completion) override;
+    bool canForwardThirdPartyToContact(
+        AnyPointer::Reader contact, VatNetworkBase::Connection& destination) override;
+    void forwardThirdPartyToContact(
+        AnyPointer::Reader contact, VatNetworkBase::Connection& destination,
+        AnyPointer::Builder result) override;
+    kj::Own<void> awaitThirdParty(
+        AnyPointer::Reader party, kj::Rc<kj::Refcounted> value) override;
+    kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(AnyPointer::Reader completion) override;
+    // Implements VatNetworkBase::Connection methods in terms of templated methods.
   };
 
   // Level 0 features ------------------------------------------------
@@ -564,6 +580,80 @@ AnyStruct::Reader VatNetwork<
     SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
     Connection::baseGetPeerVatId() {
   return getPeerVatId();
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+bool VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::canIntroduceTo(VatNetworkBase::Connection& other) {
+  return canIntroduceTo(kj::downcast<Connection>(other));
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+void VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::introduceTo(
+        VatNetworkBase::Connection& other,
+        AnyPointer::Builder otherContactInfo,
+        AnyPointer::Builder thisAwaitInfo) {
+  return introduceTo(kj::downcast<Connection>(other),
+      otherContactInfo.initAs<ThirdPartyToContact>(),
+      thisAwaitInfo.initAs<ThirdPartyToAwait>());
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+kj::Maybe<kj::Own<_::VatNetworkBase::Connection>> VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::connectToIntroduced(
+        AnyPointer::Reader contact,
+        AnyPointer::Builder completion) {
+  return connectToIntroduced(
+      contact.getAs<ThirdPartyToContact>(),
+      completion.initAs<ThirdPartyCompletion>());
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+bool VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::canForwardThirdPartyToContact(
+        AnyPointer::Reader contact, VatNetworkBase::Connection& destination) {
+  return canForwardThirdPartyToContact(
+      contact.getAs<ThirdPartyToContact>(),
+      kj::downcast<Connection>(destination));
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+void VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::forwardThirdPartyToContact(
+      AnyPointer::Reader contact, VatNetworkBase::Connection& destination,
+      AnyPointer::Builder result) {
+  forwardThirdPartyToContact(
+      contact.getAs<ThirdPartyToContact>(),
+      kj::downcast<Connection>(destination),
+      result.initAs<ThirdPartyToContact>());
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+kj::Own<void> VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::awaitThirdParty(
+        AnyPointer::Reader party, kj::Rc<kj::Refcounted> value) {
+  return awaitThirdParty(party.getAs<ThirdPartyToAwait>(), kj::mv(value));
+}
+
+template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
+          typename ThirdPartyToContact, typename JoinResult>
+kj::Promise<kj::Rc<kj::Refcounted>> VatNetwork<
+    SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
+    Connection::completeThirdParty(AnyPointer::Reader completion) {
+  return completeThirdParty(completion.getAs<ThirdPartyCompletion>());
 }
 
 template <typename VatId>
