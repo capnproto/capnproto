@@ -85,15 +85,22 @@ public:
         }
 
         auto payload = call.getParams();
-        auto params = kj::str(payload.getContent().getAs<DynamicStruct>(paramType));
+
+        auto capTable = payload.getCapTable();
+        ReaderCapabilityTable capTableReader(
+            KJ_MAP(i, kj::range(0, capTable.size())) -> kj::Maybe<kj::Own<ClientHook>> {
+          return newBrokenCap("fake");
+        });
+
+        auto params = capTableReader.imbue(payload.getContent()).getAs<DynamicStruct>(paramType);
 
         auto sendResultsTo = call.getSendResultsTo();
 
         return kj::str(senderName, "(", call.getQuestionId(), "): call ",
-                       call.getTarget(), " <- ", interfaceName, ".",
-                       methodProto.getName(), params,
-                       " caps:[", kj::strArray(payload.getCapTable(), ", "), "]",
-                       sendResultsTo.isCaller() ? kj::str()
+                      call.getTarget(), " <- ", interfaceName, ".",
+                      methodProto.getName(), params,
+                      " caps:[", kj::strArray(capTable, ", "), "]",
+                      sendResultsTo.isCaller() ? kj::str()
                                                 : kj::str(" sendResultsTo:", sendResultsTo));
       }
 
@@ -117,15 +124,23 @@ public:
 
         auto payload = ret.getResults();
 
+        auto capTable = payload.getCapTable();
+        ReaderCapabilityTable capTableReader(
+            KJ_MAP(i, kj::range(0, capTable.size())) -> kj::Maybe<kj::Own<ClientHook>> {
+          return newBrokenCap("fake");
+        });
+
+        auto content = capTableReader.imbue(payload.getContent());
+
         if (schema.getProto().isStruct()) {
-          auto results = kj::str(payload.getContent().getAs<DynamicStruct>(schema.asStruct()));
+          auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
           return kj::str(senderName, "(", ret.getAnswerId(), "): return ", results,
-                         " caps:[", kj::strArray(payload.getCapTable(), ", "), "]");
+                         " caps:[", kj::strArray(capTable, ", "), "]");
         } else if (schema.getProto().isInterface()) {
-          payload.getContent().getAs<DynamicCapability>(schema.asInterface());
+          content.getAs<DynamicCapability>(schema.asInterface());
           return kj::str(senderName, "(", ret.getAnswerId(), "): return cap ",
-                         kj::strArray(payload.getCapTable(), ", "));
+                         kj::strArray(capTable, ", "));
         } else {
           break;
         }
