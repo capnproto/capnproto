@@ -30,8 +30,8 @@
 #include <kj/string-tree.h>
 #include <kj/compat/gtest.h>
 #include <capnp/rpc.capnp.h>
+#include <kj/async-queue.h>
 #include <map>
-#include <queue>
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnp {
@@ -247,23 +247,15 @@ public:
 
     void initiateIdleShutdown() {
       initiatedIdleShutdown = true;
-      while (!fulfillers.empty()) {
-        fulfillers.front()->fulfill(kj::none);
-        fulfillers.pop();
-      }
+      messageQueue.push(kj::none);
       KJ_IF_SOME(f, fulfillOnEnd) {
         f->fulfill();
       }
     }
 
     void disconnect(kj::Exception&& exception) {
-      while (!fulfillers.empty()) {
-        fulfillers.front()->reject(kj::cp(exception));
-        fulfillers.pop();
-      }
-
+      messageQueue.rejectAll(kj::cp(exception));
       networkException = kj::mv(exception);
-
       tasks = nullptr;
     }
 
@@ -317,14 +309,7 @@ public:
         connection.tasks->add(kj::evalLater(
             [connectionPtr,message=kj::mv(incomingMessage)]() mutable {
           KJ_IF_SOME(p, connectionPtr->partner) {
-            if (p.fulfillers.empty()) {
-              p.messages.push(kj::mv(message));
-            } else {
-              ++p.network.received;
-              p.fulfillers.front()->fulfill(
-                  kj::Own<IncomingRpcMessage>(kj::mv(message)));
-              p.fulfillers.pop();
-            }
+            p.messageQueue.push(kj::Own<IncomingRpcMessage>(kj::mv(message)));
           }
         }));
       }
@@ -349,28 +334,24 @@ public:
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
       KJ_IF_SOME(e, networkException) {
-        return kj::cp(e);
+        kj::throwFatalException(kj::cp(e));
       }
 
       if (initiatedIdleShutdown) {
-        return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::none);
+        co_return kj::none;
       }
 
-      if (messages.empty()) {
+      auto result = co_await messageQueue.pop();
+
+      if (result == kj::none) {
         KJ_IF_SOME(f, fulfillOnEnd) {
           f->fulfill();
-          return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::none);
-        } else {
-          auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
-          fulfillers.push(kj::mv(paf.fulfiller));
-          return kj::mv(paf.promise);
         }
       } else {
         ++network.received;
-        auto result = kj::mv(messages.front());
-        messages.pop();
-        return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
       }
+
+      co_return result;
     }
     kj::Promise<void> shutdown() override {
       KJ_IF_SOME(e, network.shutdownExceptionToThrow) {
@@ -387,15 +368,10 @@ public:
         // OutgoingMessageImpl::send() also does that and we need to deliver in order.
         return kj::evalLater([this]() -> kj::Promise<void> {
           KJ_IF_SOME(p, partner) {
-            if (p.fulfillers.empty()) {
-              auto paf = kj::newPromiseAndFulfiller<void>();
-              p.fulfillOnEnd = kj::mv(paf.fulfiller);
-              return kj::mv(paf.promise);
-            } else {
-              p.fulfillers.front()->fulfill(kj::none);
-              p.fulfillers.pop();
-              return kj::READY_NOW;
-            }
+            p.messageQueue.push(kj::none);
+            auto paf = kj::newPromiseAndFulfiller<void>();
+            p.fulfillOnEnd = kj::mv(paf.fulfiller);
+            return kj::mv(paf.promise);
           } else {
             return kj::READY_NOW;
           }
@@ -422,8 +398,7 @@ public:
 
     kj::Maybe<kj::Exception> networkException;
 
-    std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
-    std::queue<kj::Own<IncomingRpcMessage>> messages;
+    kj::ProducerConsumerQueue<kj::Maybe<kj::Own<IncomingRpcMessage>>> messageQueue;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillOnEnd;
 
     bool idle = true;
@@ -445,13 +420,7 @@ public:
       auto remote = kj::refcounted<ConnectionImpl>(dst, *this, RpcDumper::SERVER);
       local->attach(*remote);
 
-      if (dst.fulfillerQueue.empty()) {
-        dst.connectionQueue.push(kj::mv(remote));
-      } else {
-        dst.fulfillerQueue.front()->fulfill(kj::mv(remote));
-        dst.fulfillerQueue.pop();
-      }
-
+      dst.acceptQueue.push(kj::mv(remote));
       return kj::Own<Connection>(kj::mv(local));
     } else {
       return kj::Own<Connection>(kj::addRef(*iter->second));
@@ -459,15 +428,7 @@ public:
   }
 
   kj::Promise<kj::Own<Connection>> accept() override {
-    if (connectionQueue.empty()) {
-      auto paf = kj::newPromiseAndFulfiller<kj::Own<Connection>>();
-      fulfillerQueue.push(kj::mv(paf.fulfiller));
-      return kj::mv(paf.promise);
-    } else {
-      auto result = kj::mv(connectionQueue.front());
-      connectionQueue.pop();
-      return kj::mv(result);
-    }
+    return acceptQueue.pop();
   }
 
   void setShutdownExceptionToThrow(kj::Exception&& e) {
@@ -491,8 +452,7 @@ private:
   kj::Maybe<kj::Exception> shutdownExceptionToThrow = kj::none;
 
   std::map<const TestNetworkAdapter*, ConnectionImpl*> connections;
-  std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
-  std::queue<kj::Own<Connection>> connectionQueue;
+  kj::ProducerConsumerQueue<kj::Own<Connection>> acceptQueue;
 
   kj::Function<bool(MessageBuilder& message)> sendCallback = [](MessageBuilder&) { return true; };
 };
