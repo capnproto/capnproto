@@ -49,132 +49,147 @@ public:
     schemas.insert(schema.getProto().getId(), schema);
   }
 
-  enum Sender {
-    CLIENT,
-    SERVER
-  };
+  class Sender {
+  public:
+    explicit Sender(RpcDumper& parent, kj::StringPtr name)
+        : parent(parent), name(name) {}
 
-  kj::String dump(rpc::Message::Reader message, Sender sender) {
-    const char* senderName = sender == CLIENT ? "client" : "server";
-
-    switch (message.which()) {
-      case rpc::Message::CALL: {
-        auto call = message.getCall();
-        InterfaceSchema schema;
-        KJ_IF_SOME(s, schemas.find(call.getInterfaceId())) {
-          schema = s;
-        } else {
-          break;
-        }
-        auto methods = schema.getMethods();
-        if (call.getMethodId() >= methods.size()) {
-          break;
-        }
-        InterfaceSchema::Method method = methods[call.getMethodId()];
-
-        auto schemaProto = schema.getProto();
-        auto interfaceName =
-            schemaProto.getDisplayName().slice(schemaProto.getDisplayNamePrefixLength());
-
-        auto methodProto = method.getProto();
-        auto paramType = method.getParamType();
-        auto resultType = method.getResultType();
-
-        if (call.getSendResultsTo().isCaller()) {
-          returnTypes.insert(ExpectedReturn { sender, call.getQuestionId() }, resultType);
-        }
-
-        auto payload = call.getParams();
-
-        auto capTable = payload.getCapTable();
-        ReaderCapabilityTable capTableReader(
-            KJ_MAP(i, kj::range(0, capTable.size())) -> kj::Maybe<kj::Own<ClientHook>> {
-          return newBrokenCap("fake");
-        });
-
-        auto params = capTableReader.imbue(payload.getContent()).getAs<DynamicStruct>(paramType);
-
-        auto sendResultsTo = call.getSendResultsTo();
-
-        return kj::str(senderName, "(", call.getQuestionId(), "): call ",
-                      call.getTarget(), " <- ", interfaceName, ".",
-                      methodProto.getName(), params,
-                      " caps:[", kj::strArray(capTable, ", "), "]",
-                      sendResultsTo.isCaller() ? kj::str()
-                                                : kj::str(" sendResultsTo:", sendResultsTo));
+    ~Sender() noexcept(false) {
+      KJ_IF_SOME(p, partner) {
+        p.partner = kj::none;
       }
-
-      case rpc::Message::RETURN: {
-        auto ret = message.getReturn();
-
-        Schema schema;
-        KJ_IF_SOME(entry, returnTypes.findEntry(
-            ExpectedReturn { sender == CLIENT ? SERVER : CLIENT, ret.getAnswerId() })) {
-          schema = entry.value;
-          returnTypes.erase(entry);
-        } else {
-          break;
-        }
-
-        if (ret.which() != rpc::Return::RESULTS) {
-          // Oops, no results returned.  We don't check this earlier because we want to make sure
-          // returnTypes.erase() gets a chance to happen.
-          break;
-        }
-
-        auto payload = ret.getResults();
-
-        auto capTable = payload.getCapTable();
-        ReaderCapabilityTable capTableReader(
-            KJ_MAP(i, kj::range(0, capTable.size())) -> kj::Maybe<kj::Own<ClientHook>> {
-          return newBrokenCap("fake");
-        });
-
-        auto content = capTableReader.imbue(payload.getContent());
-
-        if (schema.getProto().isStruct()) {
-          auto results = content.getAs<DynamicStruct>(schema.asStruct());
-
-          return kj::str(senderName, "(", ret.getAnswerId(), "): return ", results,
-                         " caps:[", kj::strArray(capTable, ", "), "]");
-        } else if (schema.getProto().isInterface()) {
-          content.getAs<DynamicCapability>(schema.asInterface());
-          return kj::str(senderName, "(", ret.getAnswerId(), "): return cap ",
-                         kj::strArray(capTable, ", "));
-        } else {
-          break;
-        }
-      }
-
-      case rpc::Message::BOOTSTRAP: {
-        auto restore = message.getBootstrap();
-
-        returnTypes.insert(ExpectedReturn { sender, restore.getQuestionId() }, InterfaceSchema());
-
-        return kj::str(senderName, "(", restore.getQuestionId(), "): bootstrap");
-      }
-
-      default:
-        break;
     }
 
-    return kj::str(senderName, ": ", message);
-  }
+    void setPartner(Sender& p) {
+      partner = p;
+      p.partner = *this;
+      partnerName = p.name;
+      p.partnerName = name;
+    }
+
+    kj::String dump(rpc::Message::Reader message) {
+      switch (message.which()) {
+        case rpc::Message::CALL: {
+          auto call = message.getCall();
+          InterfaceSchema schema;
+          KJ_IF_SOME(s, parent.schemas.find(call.getInterfaceId())) {
+            schema = s;
+          } else {
+            break;
+          }
+          auto methods = schema.getMethods();
+          if (call.getMethodId() >= methods.size()) {
+            break;
+          }
+          InterfaceSchema::Method method = methods[call.getMethodId()];
+
+          auto schemaProto = schema.getProto();
+          auto interfaceName =
+              schemaProto.getDisplayName().slice(schemaProto.getDisplayNamePrefixLength());
+
+          auto methodProto = method.getProto();
+          auto paramType = method.getParamType();
+          auto resultType = method.getResultType();
+
+          if (call.getSendResultsTo().isCaller()) {
+            KJ_IF_SOME(p, partner) {
+              p.returnTypes.insert(call.getQuestionId(), resultType);
+            }
+          }
+
+          auto payload = call.getParams();
+
+          auto capTable = payload.getCapTable();
+          ReaderCapabilityTable capTableReader(
+              KJ_MAP(i, kj::range(0, capTable.size())) -> kj::Maybe<kj::Own<ClientHook>> {
+            return newBrokenCap("fake");
+          });
+
+          auto params = capTableReader.imbue(payload.getContent()).getAs<DynamicStruct>(paramType);
+
+          auto sendResultsTo = call.getSendResultsTo();
+
+          return kj::str(name, "->", partnerName, "(", call.getQuestionId(), "): call ",
+                        call.getTarget(), " <- ", interfaceName, ".",
+                        methodProto.getName(), params,
+                        " caps:[", kj::strArray(capTable, ", "), "]",
+                        sendResultsTo.isCaller() ? kj::str()
+                                                  : kj::str(" sendResultsTo:", sendResultsTo));
+        }
+
+        case rpc::Message::RETURN: {
+          auto ret = message.getReturn();
+
+          Schema schema;
+          KJ_IF_SOME(entry, returnTypes.findEntry(ret.getAnswerId())) {
+            schema = entry.value;
+            returnTypes.erase(entry);
+          } else {
+            break;
+          }
+
+          if (ret.which() != rpc::Return::RESULTS) {
+            // Oops, no results returned.  We don't check this earlier because we want to make sure
+            // returnTypes.erase() gets a chance to happen.
+            break;
+          }
+
+          auto payload = ret.getResults();
+
+          auto capTable = payload.getCapTable();
+          ReaderCapabilityTable capTableReader(
+              KJ_MAP(i, kj::range(0, capTable.size())) -> kj::Maybe<kj::Own<ClientHook>> {
+            return newBrokenCap("fake");
+          });
+
+          auto content = capTableReader.imbue(payload.getContent());
+
+          if (schema.getProto().isStruct()) {
+            auto results = content.getAs<DynamicStruct>(schema.asStruct());
+
+            return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return ", results,
+                          " caps:[", kj::strArray(capTable, ", "), "]");
+          } else if (schema.getProto().isInterface()) {
+            content.getAs<DynamicCapability>(schema.asInterface());
+            return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
+                          kj::strArray(capTable, ", "));
+          } else {
+            break;
+          }
+        }
+
+        case rpc::Message::BOOTSTRAP: {
+          auto restore = message.getBootstrap();
+
+          KJ_IF_SOME(p, partner) {
+            p.returnTypes.insert(restore.getQuestionId(), InterfaceSchema());
+          }
+
+          return kj::str(name, "->", partnerName, "(", restore.getQuestionId(), "): bootstrap");
+        }
+
+        default:
+          break;
+      }
+
+      return kj::str(name, "->", partnerName, ": ", message);
+    }
+
+  private:
+    RpcDumper& parent;
+    kj::StringPtr name;
+
+    kj::Maybe<Sender&> partner;
+    kj::StringPtr partnerName;
+    // `Sender` representing the opposite direction of the same stream.
+
+    kj::HashMap<uint32_t, Schema> returnTypes;
+    // Maps answer IDs to expected return types. Partner populates this when sending the
+    // corresponding `Call`.
+  };
 
 private:
   kj::HashMap<uint64_t, InterfaceSchema> schemas;
-
-  struct ExpectedReturn {
-    Sender sender;
-    uint32_t questionId;
-
-    uint hashCode() const { return kj::hashCode(sender, questionId); }
-    bool operator==(const ExpectedReturn& other) const {
-      return sender == other.sender && questionId == other.questionId;
-    }
-  };
-
-  kj::HashMap<ExpectedReturn, Schema> returnTypes;
 };
 
 // =======================================================================================
@@ -240,9 +255,8 @@ public:
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
-    ConnectionImpl(TestVat& vat, TestVat& peerVat,
-                   RpcDumper::Sender sender)
-        : vat(vat), peerVat(peerVat), sender(sender),
+    ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name)
+        : vat(vat), peerVat(peerVat), dumper(vat.network.dumper, name),
           tasks(kj::heap<kj::TaskSet>(*this)) {
       vat.connections.insert(&peerVat, this);
     }
@@ -261,6 +275,7 @@ public:
       KJ_REQUIRE(other.partner == kj::none);
       partner = other;
       other.partner = *this;
+      dumper.setPartner(other.dumper);
     }
 
     void initiateIdleShutdown() {
@@ -317,8 +332,7 @@ public:
         ++connection.vat.sent;
 
         // Uncomment to get a debug dump.
-//        kj::String msg = connection.vat.network.dumper.dump(
-//            message.getRoot<rpc::Message>(), connection.sender);
+//        kj::String msg = connection.dumper.dump(message.getRoot<rpc::Message>());
 //        KJ_ DBG(msg);
 
         auto incomingMessage = kj::heap<IncomingRpcMessageImpl>(messageToFlatArray(message));
@@ -411,7 +425,7 @@ public:
   private:
     TestVat& vat;
     TestVat& peerVat;
-    RpcDumper::Sender sender KJ_UNUSED_MEMBER;
+    RpcDumper::Sender dumper;
     kj::Maybe<ConnectionImpl&> partner;
 
     kj::Maybe<kj::Exception> networkException;
@@ -435,8 +449,8 @@ public:
     KJ_IF_SOME(conn, connections.find(&dst)) {
       return kj::Own<Connection>(kj::addRef(*conn));
     } else {
-      auto local = kj::refcounted<ConnectionImpl>(*this, dst, RpcDumper::CLIENT);
-      auto remote = kj::refcounted<ConnectionImpl>(dst, *this, RpcDumper::SERVER);
+      auto local = kj::refcounted<ConnectionImpl>(*this, dst, self);
+      auto remote = kj::refcounted<ConnectionImpl>(dst, *this, dst.self);
       local->attach(*remote);
 
       dst.acceptQueue.push(kj::mv(remote));
