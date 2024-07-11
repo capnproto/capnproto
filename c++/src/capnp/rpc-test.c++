@@ -516,29 +516,56 @@ struct TestContext {
   kj::WaitScope waitScope;
   TestNetwork network;
   TestRestorer restorer;
-  TestVat& clientVat;
-  TestVat& serverVat;
-  RpcSystem<test::TestSturdyRefHostId> rpcClient;
-  RpcSystem<test::TestSturdyRefHostId> rpcServer;
+
+  struct Vat {
+    TestVat& vatNetwork;
+    RpcSystem<test::TestSturdyRefHostId> rpcSystem;
+
+    Vat(TestVat& vatNetwork)
+        : vatNetwork(vatNetwork), rpcSystem(makeRpcClient(vatNetwork)) {}
+
+    template <typename T>
+    Vat(TestVat& vatNetwork, T bootstrap)
+        : vatNetwork(vatNetwork), rpcSystem(makeRpcServer(vatNetwork, kj::mv(bootstrap))) {}
+
+    template <typename T = test::TestInterface>
+    typename T::Client connect(kj::StringPtr to) {
+      MallocMessageBuilder refMessage(128);
+      auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
+      hostId.setHost(to);
+      return rpcSystem.bootstrap(hostId).castAs<T>();
+    }
+  };
+  kj::HashMap<kj::StringPtr, kj::Own<Vat>> vats;
+
+  Vat& getVat(kj::StringPtr name) {
+    // Get or create a vat with the given name. (Name must be a string literal or otherwise
+    // outlive the TestContext.)
+    return *vats.findOrCreate(name, [&]() -> decltype(vats)::Entry {
+      return { name,  kj::heap<Vat>(network.add(name)) };
+    });
+  }
+
+  template <typename T>
+  Vat& initVat(kj::StringPtr name, T bootstrap) {
+    // Create a vat with the given name and bootstrap capability.
+    return *vats.insert(name, kj::heap<Vat>(network.add(name), kj::mv(bootstrap))).value;
+  }
+
+  Vat& client;
+  Vat& server;
 
   TestContext()
       : waitScope(loop),
-        clientVat(network.add("client")),
-        serverVat(network.add("server")),
-        rpcClient(makeRpcClient(clientVat)),
-        rpcServer(makeRpcServer(serverVat, restorer.cap)) {}
+        client(getVat("client")),
+        server(initVat("server", restorer.cap)) {}
   TestContext(Capability::Client bootstrap)
       : waitScope(loop),
-        clientVat(network.add("client")),
-        serverVat(network.add("server")),
-        rpcClient(makeRpcClient(clientVat)),
-        rpcServer(makeRpcServer(serverVat, bootstrap)) {}
+        client(getVat("client")),
+        server(initVat("server", kj::mv(bootstrap))) {}
 
   test::TestInterface::Client connect() {
-    MallocMessageBuilder refMessage(128);
-    auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
-    hostId.setHost("server");
-    return rpcClient.bootstrap(hostId).castAs<test::TestInterface>();
+    return getVat("client").connect<>("server");
   }
 };
 
@@ -848,7 +875,7 @@ TEST(Rpc, TailCallCancelRace) {
   auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
   serverHostId.setHost("server");
 
-  auto caller = context.rpcClient.bootstrap(serverHostId).castAs<test::TestTailCaller>();
+  auto caller = context.client.rpcSystem.bootstrap(serverHostId).castAs<test::TestTailCaller>();
 
   int callCount = 0, cancelCount = 0;
 
@@ -986,12 +1013,12 @@ TEST(Rpc, RetainAndRelease) {
 
       {
         // And call it, without any network communications.
-        uint oldSentCount = context.clientVat.getSentCount();
+        uint oldSentCount = context.client.vatNetwork.getSentCount();
         auto request = capCopy.fooRequest();
         request.setI(123);
         request.setJ(true);
         EXPECT_EQ("foo", request.send().wait(context.waitScope).getX());
-        EXPECT_EQ(oldSentCount, context.clientVat.getSentCount());
+        EXPECT_EQ(oldSentCount, context.client.vatNetwork.getSentCount());
       }
 
       {
@@ -1321,7 +1348,7 @@ TEST(Rpc, Abort) {
   auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
   hostId.setHost("server");
 
-  auto conn = KJ_ASSERT_NONNULL(context.clientVat.connect(hostId));
+  auto conn = KJ_ASSERT_NONNULL(context.client.vatNetwork.connect(hostId));
   conn->setIdle(false);
 
   {
@@ -1349,10 +1376,10 @@ KJ_TEST("handles exceptions thrown during disconnect") {
   auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
   hostId.setHost("server");
 
-  context.serverVat.setShutdownExceptionToThrow(
+  context.server.vatNetwork.setShutdownExceptionToThrow(
       KJ_EXCEPTION(FAILED, "a_disconnect_exception"));
 
-  auto conn = KJ_ASSERT_NONNULL(context.clientVat.connect(hostId));
+  auto conn = KJ_ASSERT_NONNULL(context.client.vatNetwork.connect(hostId));
   conn->setIdle(false);
 
   {
@@ -1389,7 +1416,7 @@ KJ_TEST("loopback bootstrap()") {
   hostId.setHost("server");
 
   TestContext context(bootstrap);
-  auto client = context.rpcServer.bootstrap(hostId).castAs<test::TestInterface>();
+  auto client = context.server.rpcSystem.bootstrap(hostId).castAs<test::TestInterface>();
 
   auto request = client.fooRequest();
   request.setI(123);
@@ -1435,7 +1462,7 @@ KJ_TEST("method throws exception won't redundantly add remote exception prefix")
 KJ_TEST("method throws exception with trace encoder") {
   TestContext context;
 
-  context.rpcServer.setTraceEncoder([](const kj::Exception& e) {
+  context.server.rpcSystem.setTraceEncoder([](const kj::Exception& e) {
     return kj::str("trace for ", e.getDescription());
   });
 
@@ -1480,7 +1507,7 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
   uint32_t expectedExportNumber = 0;
   uint interceptCount = 0;
   bool shouldThrowFromSend = false;
-  context.clientVat.onSend([&](MessageBuilder& builder) {
+  context.client.vatNetwork.onSend([&](MessageBuilder& builder) {
     auto message = builder.getRoot<rpc::Message>().asReader();
     if (message.isCall()) {
       auto call = message.getCall();
@@ -1588,7 +1615,7 @@ KJ_TEST("export the same promise twice") {
   bool exportIsPromise;
   uint32_t expectedExportNumber;
   uint interceptCount = 0;
-  context.clientVat.onSend([&](MessageBuilder& builder) {
+  context.client.vatNetwork.onSend([&](MessageBuilder& builder) {
     auto message = builder.getRoot<rpc::Message>().asReader();
     if (message.isCall()) {
       auto call = message.getCall();
@@ -1673,9 +1700,9 @@ KJ_TEST("connections set idle when appropriate") {
   context.waitScope.poll();  // let messages propagate
 
   auto& clientConn = KJ_ASSERT_NONNULL(
-      context.clientVat.getConnectionTo(context.serverVat));
+      context.client.vatNetwork.getConnectionTo(context.server.vatNetwork));
   auto& serverConn = KJ_ASSERT_NONNULL(
-      context.serverVat.getConnectionTo(context.clientVat));
+      context.server.vatNetwork.getConnectionTo(context.client.vatNetwork));
 
   KJ_EXPECT(!clientConn.isIdle());
   KJ_EXPECT(!serverConn.isIdle());
@@ -1724,25 +1751,25 @@ KJ_TEST("clean connection shutdown") {
   context.waitScope.poll();  // let messages propagate
 
   // How many messages have we sent at this point?
-  auto sent = context.clientVat.getSentCount();
-  auto received = context.clientVat.getReceivedCount();
+  auto sent = context.client.vatNetwork.getSentCount();
+  auto received = context.client.vatNetwork.getReceivedCount();
 
   // Have the client connection decide to end itself due to idleness, as is allowed under the
   // setIdle() contract.
   auto& clientConn = KJ_ASSERT_NONNULL(
-      context.clientVat.getConnectionTo(context.serverVat));
+      context.client.vatNetwork.getConnectionTo(context.server.vatNetwork));
   KJ_EXPECT(clientConn.isIdle());
   clientConn.initiateIdleShutdown();
 
   context.waitScope.poll();  // let messages propagate
 
   // Connections should have gracefully shut down.
-  KJ_EXPECT(context.clientVat.getConnectionTo(context.serverVat) == kj::none);
-  KJ_EXPECT(context.serverVat.getConnectionTo(context.clientVat) == kj::none);
+  KJ_EXPECT(context.client.vatNetwork.getConnectionTo(context.server.vatNetwork) == kj::none);
+  KJ_EXPECT(context.server.vatNetwork.getConnectionTo(context.client.vatNetwork) == kj::none);
 
   // No more messages should have been sent during shutdown (not even errors).
-  KJ_EXPECT(context.clientVat.getSentCount() == sent);
-  KJ_EXPECT(context.clientVat.getReceivedCount() == received);
+  KJ_EXPECT(context.client.vatNetwork.getSentCount() == sent);
+  KJ_EXPECT(context.client.vatNetwork.getReceivedCount() == received);
 }
 
 }  // namespace
