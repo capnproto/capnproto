@@ -115,12 +115,12 @@ public:
           auto sendResultsTo = call.getSendResultsTo();
 
           return kj::str(name, "->", partnerName, ": call ", call.getQuestionId(), ": ",
-                        call.getTarget(), " <- ", interfaceName, ".",
-                        methodProto.getName(), params,
-                        " caps:[", kj::strArray(capTable, ", "), "]",
-                        sendResultsTo.isCaller() ? kj::str()
+                         call.getTarget(), " <- ", interfaceName, ".",
+                         methodProto.getName(), params,
+                         " caps:[", kj::strArray(capTable, ", "), "]",
+                         sendResultsTo.isCaller() ? kj::str()
                                                   : kj::str(" sendResultsTo:", sendResultsTo),
-                        '\n');
+                         '\n');
         }
 
         case rpc::Message::RETURN: {
@@ -154,11 +154,11 @@ public:
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
             return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
-                          " caps:[", kj::strArray(capTable, ", "), "]");
+                           " caps:[", kj::strArray(capTable, ", "), "]");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
             return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
-                          kj::strArray(capTable, ", "), '\n');
+                           kj::strArray(capTable, ", "), '\n');
           } else {
             break;
           }
