@@ -151,7 +151,7 @@ private:
 
 // =======================================================================================
 
-class TestNetworkAdapter;
+class TestVat;
 
 class TestNetwork {
 public:
@@ -166,9 +166,9 @@ public:
   }
   ~TestNetwork() noexcept(false);
 
-  TestNetworkAdapter& add(kj::StringPtr name);
+  TestVat& add(kj::StringPtr name);
 
-  kj::Maybe<TestNetworkAdapter&> find(kj::StringPtr name) {
+  kj::Maybe<TestVat&> find(kj::StringPtr name) {
     auto iter = map.find(name);
     if (iter == map.end()) {
       return kj::none;
@@ -180,19 +180,19 @@ public:
   RpcDumper dumper;
 
 private:
-  std::map<kj::StringPtr, kj::Own<TestNetworkAdapter>> map;
+  std::map<kj::StringPtr, kj::Own<TestVat>> map;
 };
 
 typedef VatNetwork<
     test::TestSturdyRefHostId, test::TestProvisionId, test::TestRecipientId,
-    test::TestThirdPartyCapId, test::TestJoinResult> TestNetworkAdapterBase;
+    test::TestThirdPartyCapId, test::TestJoinResult> TestVatBase;
 
-class TestNetworkAdapter final: public TestNetworkAdapterBase {
+class TestVat final: public TestVatBase {
 public:
-  TestNetworkAdapter(TestNetwork& network, kj::StringPtr self)
+  TestVat(TestNetwork& network, kj::StringPtr self)
       : network(network), self(self) {}
 
-  ~TestNetworkAdapter() {
+  ~TestVat() {
     kj::Exception exception = KJ_EXCEPTION(FAILED, "Network was destroyed.");
     for (auto& entry: connections) {
       entry.second->disconnect(kj::cp(exception));
@@ -208,23 +208,23 @@ public:
     sendCallback = kj::mv(callback);
   }
 
-  typedef TestNetworkAdapterBase::Connection Connection;
+  typedef TestVatBase::Connection Connection;
 
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
-    ConnectionImpl(TestNetworkAdapter& network, TestNetworkAdapter& peerNetwork,
+    ConnectionImpl(TestVat& vat, TestVat& peerVat,
                    RpcDumper::Sender sender)
-        : network(network), peerNetwork(peerNetwork), sender(sender),
+        : vat(vat), peerVat(peerVat), sender(sender),
           tasks(kj::heap<kj::TaskSet>(*this)) {
-      network.connections[&peerNetwork] = this;
+      vat.connections[&peerVat] = this;
     }
 
     ~ConnectionImpl() noexcept(false) {
       KJ_IF_SOME(p, partner) {
         p.partner = kj::none;
       }
-      network.connections.erase(&peerNetwork);
+      vat.connections.erase(&peerVat);
     }
 
     bool isIdle() { return idle; }
@@ -281,16 +281,16 @@ public:
 
       void send() override {
         KJ_EXPECT(!connection.idle);
-        if (!connection.network.sendCallback(message)) return;
+        if (!connection.vat.sendCallback(message)) return;
 
         if (connection.networkException != kj::none) {
           return;
         }
 
-        ++connection.network.sent;
+        ++connection.vat.sent;
 
         // Uncomment to get a debug dump.
-//        kj::String msg = connection.network.network.dumper.dump(
+//        kj::String msg = connection.vat.network.dumper.dump(
 //            message.getRoot<rpc::Message>(), connection.sender);
 //        KJ_ DBG(msg);
 
@@ -339,13 +339,13 @@ public:
           f->fulfill();
         }
       } else {
-        ++network.received;
+        ++vat.received;
       }
 
       co_return result;
     }
     kj::Promise<void> shutdown() override {
-      KJ_IF_SOME(e, network.shutdownExceptionToThrow) {
+      KJ_IF_SOME(e, vat.shutdownExceptionToThrow) {
         return kj::cp(e);
       }
       KJ_IF_SOME(p, partner) {
@@ -382,8 +382,8 @@ public:
     }
 
   private:
-    TestNetworkAdapter& network;
-    TestNetworkAdapter& peerNetwork;
+    TestVat& vat;
+    TestVat& peerVat;
     RpcDumper::Sender sender KJ_UNUSED_MEMBER;
     kj::Maybe<ConnectionImpl&> partner;
 
@@ -403,7 +403,7 @@ public:
       return kj::none;
     }
 
-    TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
+    TestVat& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
     auto iter = connections.find(&dst);
     if (iter == connections.end()) {
@@ -426,7 +426,7 @@ public:
     shutdownExceptionToThrow = kj::mv(e);
   }
 
-  kj::Maybe<ConnectionImpl&> getConnectionTo(TestNetworkAdapter& other) {
+  kj::Maybe<ConnectionImpl&> getConnectionTo(TestVat& other) {
     auto iter = connections.find(&other);
     if (iter == connections.end()) {
       return kj::none;
@@ -442,7 +442,7 @@ private:
   uint received = 0;
   kj::Maybe<kj::Exception> shutdownExceptionToThrow = kj::none;
 
-  std::map<const TestNetworkAdapter*, ConnectionImpl*> connections;
+  std::map<const TestVat*, ConnectionImpl*> connections;
   kj::ProducerConsumerQueue<kj::Own<Connection>> acceptQueue;
 
   kj::Function<bool(MessageBuilder& message)> sendCallback = [](MessageBuilder&) { return true; };
@@ -450,8 +450,8 @@ private:
 
 TestNetwork::~TestNetwork() noexcept(false) {}
 
-TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
-  return *(map[name] = kj::heap<TestNetworkAdapter>(*this, name));
+TestVat& TestNetwork::add(kj::StringPtr name) {
+  return *(map[name] = kj::heap<TestVat>(*this, name));
 }
 
 // =======================================================================================
@@ -472,23 +472,23 @@ struct TestContext {
   kj::WaitScope waitScope;
   TestNetwork network;
   TestRestorer restorer;
-  TestNetworkAdapter& clientNetwork;
-  TestNetworkAdapter& serverNetwork;
+  TestVat& clientVat;
+  TestVat& serverVat;
   RpcSystem<test::TestSturdyRefHostId> rpcClient;
   RpcSystem<test::TestSturdyRefHostId> rpcServer;
 
   TestContext()
       : waitScope(loop),
-        clientNetwork(network.add("client")),
-        serverNetwork(network.add("server")),
-        rpcClient(makeRpcClient(clientNetwork)),
-        rpcServer(makeRpcServer(serverNetwork, restorer.cap)) {}
+        clientVat(network.add("client")),
+        serverVat(network.add("server")),
+        rpcClient(makeRpcClient(clientVat)),
+        rpcServer(makeRpcServer(serverVat, restorer.cap)) {}
   TestContext(Capability::Client bootstrap)
       : waitScope(loop),
-        clientNetwork(network.add("client")),
-        serverNetwork(network.add("server")),
-        rpcClient(makeRpcClient(clientNetwork)),
-        rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
+        clientVat(network.add("client")),
+        serverVat(network.add("server")),
+        rpcClient(makeRpcClient(clientVat)),
+        rpcServer(makeRpcServer(serverVat, bootstrap)) {}
 
   test::TestInterface::Client connect() {
     MallocMessageBuilder refMessage(128);
@@ -942,12 +942,12 @@ TEST(Rpc, RetainAndRelease) {
 
       {
         // And call it, without any network communications.
-        uint oldSentCount = context.clientNetwork.getSentCount();
+        uint oldSentCount = context.clientVat.getSentCount();
         auto request = capCopy.fooRequest();
         request.setI(123);
         request.setJ(true);
         EXPECT_EQ("foo", request.send().wait(context.waitScope).getX());
-        EXPECT_EQ(oldSentCount, context.clientNetwork.getSentCount());
+        EXPECT_EQ(oldSentCount, context.clientVat.getSentCount());
       }
 
       {
@@ -1277,7 +1277,7 @@ TEST(Rpc, Abort) {
   auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
   hostId.setHost("server");
 
-  auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+  auto conn = KJ_ASSERT_NONNULL(context.clientVat.connect(hostId));
   conn->setIdle(false);
 
   {
@@ -1305,10 +1305,10 @@ KJ_TEST("handles exceptions thrown during disconnect") {
   auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
   hostId.setHost("server");
 
-  context.serverNetwork.setShutdownExceptionToThrow(
+  context.serverVat.setShutdownExceptionToThrow(
       KJ_EXCEPTION(FAILED, "a_disconnect_exception"));
 
-  auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+  auto conn = KJ_ASSERT_NONNULL(context.clientVat.connect(hostId));
   conn->setIdle(false);
 
   {
@@ -1436,7 +1436,7 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
   uint32_t expectedExportNumber = 0;
   uint interceptCount = 0;
   bool shouldThrowFromSend = false;
-  context.clientNetwork.onSend([&](MessageBuilder& builder) {
+  context.clientVat.onSend([&](MessageBuilder& builder) {
     auto message = builder.getRoot<rpc::Message>().asReader();
     if (message.isCall()) {
       auto call = message.getCall();
@@ -1544,7 +1544,7 @@ KJ_TEST("export the same promise twice") {
   bool exportIsPromise;
   uint32_t expectedExportNumber;
   uint interceptCount = 0;
-  context.clientNetwork.onSend([&](MessageBuilder& builder) {
+  context.clientVat.onSend([&](MessageBuilder& builder) {
     auto message = builder.getRoot<rpc::Message>().asReader();
     if (message.isCall()) {
       auto call = message.getCall();
@@ -1629,9 +1629,9 @@ KJ_TEST("connections set idle when appropriate") {
   context.waitScope.poll();  // let messages propagate
 
   auto& clientConn = KJ_ASSERT_NONNULL(
-      context.clientNetwork.getConnectionTo(context.serverNetwork));
+      context.clientVat.getConnectionTo(context.serverVat));
   auto& serverConn = KJ_ASSERT_NONNULL(
-      context.serverNetwork.getConnectionTo(context.clientNetwork));
+      context.serverVat.getConnectionTo(context.clientVat));
 
   KJ_EXPECT(!clientConn.isIdle());
   KJ_EXPECT(!serverConn.isIdle());
@@ -1680,25 +1680,25 @@ KJ_TEST("clean connection shutdown") {
   context.waitScope.poll();  // let messages propagate
 
   // How many messages have we sent at this point?
-  auto sent = context.clientNetwork.getSentCount();
-  auto received = context.clientNetwork.getReceivedCount();
+  auto sent = context.clientVat.getSentCount();
+  auto received = context.clientVat.getReceivedCount();
 
   // Have the client connection decide to end itself due to idleness, as is allowed under the
   // setIdle() contract.
   auto& clientConn = KJ_ASSERT_NONNULL(
-      context.clientNetwork.getConnectionTo(context.serverNetwork));
+      context.clientVat.getConnectionTo(context.serverVat));
   KJ_EXPECT(clientConn.isIdle());
   clientConn.initiateIdleShutdown();
 
   context.waitScope.poll();  // let messages propagate
 
   // Connections should have gracefully shut down.
-  KJ_EXPECT(context.clientNetwork.getConnectionTo(context.serverNetwork) == kj::none);
-  KJ_EXPECT(context.serverNetwork.getConnectionTo(context.clientNetwork) == kj::none);
+  KJ_EXPECT(context.clientVat.getConnectionTo(context.serverVat) == kj::none);
+  KJ_EXPECT(context.serverVat.getConnectionTo(context.clientVat) == kj::none);
 
   // No more messages should have been sent during shutdown (not even errors).
-  KJ_EXPECT(context.clientNetwork.getSentCount() == sent);
-  KJ_EXPECT(context.clientNetwork.getReceivedCount() == received);
+  KJ_EXPECT(context.clientVat.getSentCount() == sent);
+  KJ_EXPECT(context.clientVat.getReceivedCount() == received);
 }
 
 }  // namespace
