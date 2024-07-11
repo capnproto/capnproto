@@ -32,6 +32,7 @@
 #include <capnp/rpc.capnp.h>
 #include <kj/async-queue.h>
 #include <kj/map.h>
+#include <kj/miniposix.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -67,7 +68,11 @@ public:
       p.partnerName = name;
     }
 
-    kj::String dump(rpc::Message::Reader message) {
+    void dump(rpc::Message::Reader message) {
+      kj::FdOutputStream(STDOUT_FILENO).write(dumpStr(message).asBytes());
+    }
+
+    kj::String dumpStr(rpc::Message::Reader message) {
       switch (message.which()) {
         case rpc::Message::CALL: {
           auto call = message.getCall();
@@ -114,7 +119,8 @@ public:
                         methodProto.getName(), params,
                         " caps:[", kj::strArray(capTable, ", "), "]",
                         sendResultsTo.isCaller() ? kj::str()
-                                                  : kj::str(" sendResultsTo:", sendResultsTo));
+                                                  : kj::str(" sendResultsTo:", sendResultsTo),
+                        '\n');
         }
 
         case rpc::Message::RETURN: {
@@ -152,7 +158,7 @@ public:
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
             return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
-                          kj::strArray(capTable, ", "));
+                          kj::strArray(capTable, ", "), '\n');
           } else {
             break;
           }
@@ -165,14 +171,14 @@ public:
             p.returnTypes.insert(restore.getQuestionId(), InterfaceSchema());
           }
 
-          return kj::str(name, "->", partnerName, "(", restore.getQuestionId(), "): bootstrap");
+          return kj::str(name, "->", partnerName, "(", restore.getQuestionId(), "): bootstrap\n");
         }
 
         default:
           break;
       }
 
-      return kj::str(name, "->", partnerName, ": ", message);
+      return kj::str(name, "->", partnerName, ": ", message, '\n');
     }
 
   private:
@@ -332,8 +338,7 @@ public:
         ++connection.vat.sent;
 
         // Uncomment to get a debug dump.
-//        kj::String msg = connection.dumper.dump(message.getRoot<rpc::Message>());
-//        KJ_ DBG(msg);
+//        connection.dumper.dump(message.getRoot<rpc::Message>());
 
         auto incomingMessage = kj::heap<IncomingRpcMessageImpl>(messageToFlatArray(message));
 
