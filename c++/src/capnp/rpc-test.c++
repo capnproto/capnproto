@@ -563,11 +563,6 @@ struct TestContext {
         alice(getVat("alice")),
         bob(initVat("bob", restorer.cap)) {}
 
-  TestContext(Capability::Client bootstrap)
-      : waitScope(loop),
-        alice(getVat("alice")),
-        bob(initVat("bob", kj::mv(bootstrap))) {}
-
   test::TestInterface::Client connect() {
     // Create the default alice -> bob connection.
     return getVat("alice").connect<>("bob");
@@ -873,14 +868,11 @@ TEST(Rpc, TailCallCancel) {
 }
 
 TEST(Rpc, TailCallCancelRace) {
+  TestContext context;
   auto paf = kj::newPromiseAndFulfiller<void>();
-  TestContext context(kj::heap<TestRacingTailCaller>(kj::mv(paf.promise)));
+  context.initVat("carol", kj::heap<TestRacingTailCaller>(kj::mv(paf.promise)));
 
-  MallocMessageBuilder serverHostIdBuilder;
-  auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  serverHostId.setHost("bob");
-
-  auto caller = context.alice.rpcSystem.bootstrap(serverHostId).castAs<test::TestTailCaller>();
+  auto caller = context.alice.connect<test::TestTailCaller>("carol");
 
   int callCount = 0, cancelCount = 0;
 
@@ -1413,15 +1405,13 @@ KJ_TEST("handles exceptions thrown during disconnect") {
 }
 
 KJ_TEST("loopback bootstrap()") {
+  TestContext context;
+
   int callCount = 0;
   test::TestInterface::Client bootstrap = kj::heap<TestInterfaceImpl>(callCount);
+  auto& carol = context.initVat("carol", bootstrap);
 
-  MallocMessageBuilder hostIdBuilder;
-  auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  hostId.setHost("bob");
-
-  TestContext context(bootstrap);
-  auto client = context.bob.rpcSystem.bootstrap(hostId).castAs<test::TestInterface>();
+  auto client = carol.connect("carol").castAs<test::TestInterface>();
 
   auto request = client.fooRequest();
   request.setI(123);
