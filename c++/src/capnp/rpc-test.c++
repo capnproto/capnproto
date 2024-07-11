@@ -31,7 +31,7 @@
 #include <kj/compat/gtest.h>
 #include <capnp/rpc.capnp.h>
 #include <kj/async-queue.h>
-#include <map>
+#include <kj/map.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -46,7 +46,7 @@ class RpcDumper {
 
 public:
   void addSchema(InterfaceSchema schema) {
-    schemas[schema.getProto().getId()] = schema;
+    schemas.insert(schema.getProto().getId(), schema);
   }
 
   enum Sender {
@@ -60,11 +60,12 @@ public:
     switch (message.which()) {
       case rpc::Message::CALL: {
         auto call = message.getCall();
-        auto iter = schemas.find(call.getInterfaceId());
-        if (iter == schemas.end()) {
+        InterfaceSchema schema;
+        KJ_IF_SOME(s, schemas.find(call.getInterfaceId())) {
+          schema = s;
+        } else {
           break;
         }
-        InterfaceSchema schema = iter->second;
         auto methods = schema.getMethods();
         if (call.getMethodId() >= methods.size()) {
           break;
@@ -80,7 +81,7 @@ public:
         auto resultType = method.getResultType();
 
         if (call.getSendResultsTo().isCaller()) {
-          returnTypes[std::make_pair(sender, call.getQuestionId())] = resultType;
+          returnTypes.insert(ExpectedReturn { sender, call.getQuestionId() }, resultType);
         }
 
         auto payload = call.getParams();
@@ -99,14 +100,15 @@ public:
       case rpc::Message::RETURN: {
         auto ret = message.getReturn();
 
-        auto iter = returnTypes.find(
-            std::make_pair(sender == CLIENT ? SERVER : CLIENT, ret.getAnswerId()));
-        if (iter == returnTypes.end()) {
+        Schema schema;
+        KJ_IF_SOME(entry, returnTypes.findEntry(
+            ExpectedReturn { sender == CLIENT ? SERVER : CLIENT, ret.getAnswerId() })) {
+          schema = entry.value;
+          returnTypes.erase(entry);
+        } else {
           break;
         }
 
-        auto schema = iter->second;
-        returnTypes.erase(iter);
         if (ret.which() != rpc::Return::RESULTS) {
           // Oops, no results returned.  We don't check this earlier because we want to make sure
           // returnTypes.erase() gets a chance to happen.
@@ -132,7 +134,7 @@ public:
       case rpc::Message::BOOTSTRAP: {
         auto restore = message.getBootstrap();
 
-        returnTypes[std::make_pair(sender, restore.getQuestionId())] = InterfaceSchema();
+        returnTypes.insert(ExpectedReturn { sender, restore.getQuestionId() }, InterfaceSchema());
 
         return kj::str(senderName, "(", restore.getQuestionId(), "): bootstrap");
       }
@@ -145,8 +147,19 @@ public:
   }
 
 private:
-  std::map<uint64_t, InterfaceSchema> schemas;
-  std::map<std::pair<Sender, uint32_t>, Schema> returnTypes;
+  kj::HashMap<uint64_t, InterfaceSchema> schemas;
+
+  struct ExpectedReturn {
+    Sender sender;
+    uint32_t questionId;
+
+    uint hashCode() const { return kj::hashCode(sender, questionId); }
+    bool operator==(const ExpectedReturn& other) const {
+      return sender == other.sender && questionId == other.questionId;
+    }
+  };
+
+  kj::HashMap<ExpectedReturn, Schema> returnTypes;
 };
 
 // =======================================================================================
@@ -169,18 +182,17 @@ public:
   TestVat& add(kj::StringPtr name);
 
   kj::Maybe<TestVat&> find(kj::StringPtr name) {
-    auto iter = map.find(name);
-    if (iter == map.end()) {
-      return kj::none;
+    KJ_IF_SOME(vat, map.find(name)) {
+      return *vat;
     } else {
-      return *iter->second;
+      return kj::none;
     }
   }
 
   RpcDumper dumper;
 
 private:
-  std::map<kj::StringPtr, kj::Own<TestVat>> map;
+  kj::HashMap<kj::StringPtr, kj::Own<TestVat>> map;
 };
 
 typedef VatNetwork<
@@ -195,7 +207,7 @@ public:
   ~TestVat() {
     kj::Exception exception = KJ_EXCEPTION(FAILED, "Network was destroyed.");
     for (auto& entry: connections) {
-      entry.second->disconnect(kj::cp(exception));
+      entry.value->disconnect(kj::cp(exception));
     }
   }
 
@@ -217,7 +229,7 @@ public:
                    RpcDumper::Sender sender)
         : vat(vat), peerVat(peerVat), sender(sender),
           tasks(kj::heap<kj::TaskSet>(*this)) {
-      vat.connections[&peerVat] = this;
+      vat.connections.insert(&peerVat, this);
     }
 
     ~ConnectionImpl() noexcept(false) {
@@ -405,16 +417,15 @@ public:
 
     TestVat& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
-    auto iter = connections.find(&dst);
-    if (iter == connections.end()) {
+    KJ_IF_SOME(conn, connections.find(&dst)) {
+      return kj::Own<Connection>(kj::addRef(*conn));
+    } else {
       auto local = kj::refcounted<ConnectionImpl>(*this, dst, RpcDumper::CLIENT);
       auto remote = kj::refcounted<ConnectionImpl>(dst, *this, RpcDumper::SERVER);
       local->attach(*remote);
 
       dst.acceptQueue.push(kj::mv(remote));
       return kj::Own<Connection>(kj::mv(local));
-    } else {
-      return kj::Own<Connection>(kj::addRef(*iter->second));
     }
   }
 
@@ -427,11 +438,10 @@ public:
   }
 
   kj::Maybe<ConnectionImpl&> getConnectionTo(TestVat& other) {
-    auto iter = connections.find(&other);
-    if (iter == connections.end()) {
-      return kj::none;
+    KJ_IF_SOME(conn, connections.find(&other)) {
+      return *conn;
     } else {
-      return *iter->second;
+      return kj::none;
     }
   }
 
@@ -442,7 +452,7 @@ private:
   uint received = 0;
   kj::Maybe<kj::Exception> shutdownExceptionToThrow = kj::none;
 
-  std::map<const TestVat*, ConnectionImpl*> connections;
+  kj::HashMap<const TestVat*, ConnectionImpl*> connections;
   kj::ProducerConsumerQueue<kj::Own<Connection>> acceptQueue;
 
   kj::Function<bool(MessageBuilder& message)> sendCallback = [](MessageBuilder&) { return true; };
@@ -451,7 +461,7 @@ private:
 TestNetwork::~TestNetwork() noexcept(false) {}
 
 TestVat& TestNetwork::add(kj::StringPtr name) {
-  return *(map[name] = kj::heap<TestVat>(*this, name));
+  return *map.insert(name, kj::heap<TestVat>(*this, name)).value;
 }
 
 // =======================================================================================
