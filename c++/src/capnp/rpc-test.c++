@@ -28,7 +28,6 @@
 #include <kj/debug.h>
 #include <kj/function.h>
 #include <kj/string-tree.h>
-#include <kj/compat/gtest.h>
 #include <capnp/rpc.capnp.h>
 #include <kj/async-queue.h>
 #include <kj/map.h>
@@ -569,7 +568,7 @@ struct TestContext {
   }
 };
 
-TEST(Rpc, Basic) {
+KJ_TEST("basics") {
   TestContext context;
 
   auto client = context.connect();
@@ -595,21 +594,21 @@ TEST(Rpc, Basic) {
   initTestMessage(request2.initS());
   auto promise2 = request2.send();
 
-  EXPECT_EQ(0, context.restorer.callCount);
+  KJ_EXPECT(context.restorer.callCount == 0);
 
   auto response1 = promise1.wait(context.waitScope);
 
-  EXPECT_EQ("foo", response1.getX());
+  KJ_EXPECT(response1.getX() == "foo");
 
   auto response2 = promise2.wait(context.waitScope);
 
   promise3.wait(context.waitScope);
 
-  EXPECT_EQ(2, context.restorer.callCount);
-  EXPECT_TRUE(barFailed);
+  KJ_EXPECT(context.restorer.callCount == 2);
+  KJ_EXPECT(barFailed);
 }
 
-TEST(Rpc, Pipelining) {
+KJ_TEST("pipelining") {
   TestContext context;
 
   auto client = context.connect().getTestPipelineRequest().send().getCap();
@@ -631,20 +630,20 @@ TEST(Rpc, Pipelining) {
 
   promise = nullptr;  // Just to be annoying, drop the original promise.
 
-  EXPECT_EQ(0, context.restorer.callCount);
-  EXPECT_EQ(0, chainedCallCount);
+  KJ_EXPECT(context.restorer.callCount == 0);
+  KJ_EXPECT(chainedCallCount == 0);
 
   auto response = pipelinePromise.wait(context.waitScope);
-  EXPECT_EQ("bar", response.getX());
+  KJ_EXPECT(response.getX() == "bar");
 
   auto response2 = pipelinePromise2.wait(context.waitScope);
   checkTestMessage(response2);
 
-  EXPECT_EQ(3, context.restorer.callCount);
-  EXPECT_EQ(1, chainedCallCount);
+  KJ_EXPECT(context.restorer.callCount == 3);
+  KJ_EXPECT(chainedCallCount == 1);
 }
 
-KJ_TEST("RPC sendForPipeline()") {
+KJ_TEST("sendForPipeline()") {
   TestContext context;
 
   auto client = context.connect().getTestPipelineRequest().send().getCap();
@@ -666,20 +665,20 @@ KJ_TEST("RPC sendForPipeline()") {
 
   pipeline = nullptr;  // Just to be annoying, drop the original pipeline.
 
-  EXPECT_EQ(0, context.restorer.callCount);
-  EXPECT_EQ(0, chainedCallCount);
+  KJ_EXPECT(context.restorer.callCount == 0);
+  KJ_EXPECT(chainedCallCount == 0);
 
   auto response = pipelinePromise.wait(context.waitScope);
-  EXPECT_EQ("bar", response.getX());
+  KJ_EXPECT(response.getX() == "bar");
 
   auto response2 = pipelinePromise2.wait(context.waitScope);
   checkTestMessage(response2);
 
-  EXPECT_EQ(3, context.restorer.callCount);
-  EXPECT_EQ(1, chainedCallCount);
+  KJ_EXPECT(context.restorer.callCount == 3);
+  KJ_EXPECT(chainedCallCount == 1);
 }
 
-KJ_TEST("RPC context.setPipeline") {
+KJ_TEST("context.setPipeline") {
   TestContext context;
 
   auto client = context.connect().getTestPipelineRequest().send().getCap();
@@ -693,21 +692,21 @@ KJ_TEST("RPC context.setPipeline") {
   auto pipelineRequest2 = promise.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
   auto pipelinePromise2 = pipelineRequest2.send();
 
-  EXPECT_EQ(0, context.restorer.callCount);
+  KJ_EXPECT(context.restorer.callCount == 0);
 
   auto response = pipelinePromise.wait(context.waitScope);
-  EXPECT_EQ("bar", response.getX());
+  KJ_EXPECT(response.getX() == "bar");
 
   auto response2 = pipelinePromise2.wait(context.waitScope);
   checkTestMessage(response2);
 
-  EXPECT_EQ(3, context.restorer.callCount);
+  KJ_EXPECT(context.restorer.callCount == 3);
 
   // The original promise never completed.
   KJ_EXPECT(!promise.poll(context.waitScope));
 }
 
-TEST(Rpc, Release) {
+KJ_TEST("release capability") {
   TestContext context;
 
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
@@ -716,25 +715,25 @@ TEST(Rpc, Release) {
   auto promise = client.getHandleRequest().send();
   auto handle2 = promise.wait(context.waitScope).getHandle();
 
-  EXPECT_EQ(2, context.restorer.handleCount);
+  KJ_EXPECT(context.restorer.handleCount == 2);
 
   handle1 = nullptr;
 
   for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
-  EXPECT_EQ(1, context.restorer.handleCount);
+  KJ_EXPECT(context.restorer.handleCount == 1);
 
   handle2 = nullptr;
 
   for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
-  EXPECT_EQ(1, context.restorer.handleCount);
+  KJ_EXPECT(context.restorer.handleCount == 1);
 
   promise = nullptr;
 
   for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
-  EXPECT_EQ(0, context.restorer.handleCount);
+  KJ_EXPECT(context.restorer.handleCount == 0);
 }
 
-TEST(Rpc, ReleaseOnCancel) {
+KJ_TEST("release capabilities when canceled during return") {
   // At one time, there was a bug where if a Return contained capabilities, but the client had
   // canceled the request and already send a Finish (which presumably didn't reach the server before
   // the Return), then we'd leak those caps. Test for that.
@@ -759,10 +758,10 @@ TEST(Rpc, ReleaseOnCancel) {
   }
 
   for (uint i = 0; i < 16; i++) kj::yield().wait(context.waitScope);
-  EXPECT_EQ(0, context.restorer.handleCount);
+  KJ_EXPECT(context.restorer.handleCount == 0);
 }
 
-TEST(Rpc, TailCall) {
+KJ_TEST("tail call") {
   TestContext context;
 
   auto caller = context.connect().getTestTailCallerRequest().send().getCap();
@@ -780,13 +779,13 @@ TEST(Rpc, TailCall) {
   auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
 
   auto response = promise.wait(context.waitScope);
-  EXPECT_EQ(456, response.getI());
-  EXPECT_EQ("from TestTailCaller", response.getT());
+  KJ_EXPECT(response.getI() == 456);
+  KJ_EXPECT(response.getT() == "from TestTailCaller");
 
   auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
 
-  EXPECT_EQ(0, dependentCall0.wait(context.waitScope).getN());
-  EXPECT_EQ(1, dependentCall1.wait(context.waitScope).getN());
+  KJ_EXPECT(dependentCall0.wait(context.waitScope).getN() == 0);
+  KJ_EXPECT(dependentCall1.wait(context.waitScope).getN() == 1);
 
   // TODO(someday): We used to initiate dependentCall2 here before waiting on the first two calls,
   //   and the ordering was still "correct". But this was apparently by accident. Calling getC() on
@@ -800,10 +799,10 @@ TEST(Rpc, TailCall) {
   //   for now I'm not gonna do it.
   auto dependentCall2 = response.getC().getCallSequenceRequest().send();
 
-  EXPECT_EQ(2, dependentCall2.wait(context.waitScope).getN());
+  KJ_EXPECT(dependentCall2.wait(context.waitScope).getN() == 2);
 
-  EXPECT_EQ(1, calleeCallCount);
-  EXPECT_EQ(1, context.restorer.callCount);
+  KJ_EXPECT(calleeCallCount == 1);
+  KJ_EXPECT(context.restorer.callCount == 1);
 }
 
 class TestHangingTailCallee final: public test::TestTailCallee::Server {
@@ -837,7 +836,7 @@ private:
   kj::Promise<void> unblock;
 };
 
-TEST(Rpc, TailCallCancel) {
+KJ_TEST("cancel tail call") {
   TestContext context;
 
   auto caller = context.connect().getTestTailCallerRequest().send().getCap();
@@ -867,7 +866,7 @@ TEST(Rpc, TailCallCancel) {
   KJ_ASSERT(cancelCount == 1);
 }
 
-TEST(Rpc, TailCallCancelRace) {
+KJ_TEST("tail call cancellation race") {
   TestContext context;
   auto paf = kj::newPromiseAndFulfiller<void>();
   context.initVat("carol", kj::heap<TestRacingTailCaller>(kj::mv(paf.promise)));
@@ -902,7 +901,7 @@ TEST(Rpc, TailCallCancelRace) {
   KJ_ASSERT(cancelCount == 1);
 }
 
-TEST(Rpc, Cancellation) {
+KJ_TEST("cancellation") {
   // Tests cancellation.
 
   TestContext context;
@@ -932,17 +931,17 @@ TEST(Rpc, Cancellation) {
   kj::yield().wait(context.waitScope);
 
   // We can detect that the method was canceled because it will drop the cap.
-  EXPECT_FALSE(destroyed);
-  EXPECT_FALSE(returned);
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(!returned);
 
   promise = nullptr;  // request cancellation
   destructionPromise.wait(context.waitScope);
 
-  EXPECT_TRUE(destroyed);
-  EXPECT_FALSE(returned);
+  KJ_EXPECT(destroyed);
+  KJ_EXPECT(!returned);
 }
 
-TEST(Rpc, PromiseResolve) {
+KJ_TEST("resolve promise") {
   TestContext context;
 
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
@@ -965,21 +964,21 @@ TEST(Rpc, PromiseResolve) {
 
   // Make sure getCap() has been called on the server side by sending another call and waiting
   // for it.
-  EXPECT_EQ(2, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
-  EXPECT_EQ(3, context.restorer.callCount);
+  KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 2);
+  KJ_EXPECT(context.restorer.callCount == 3);
 
   // OK, now fulfill the local promise.
   paf.fulfiller->fulfill(kj::heap<TestInterfaceImpl>(chainedCallCount));
 
   // We should now be able to wait for getCap() to finish.
-  EXPECT_EQ("bar", promise.wait(context.waitScope).getS());
-  EXPECT_EQ("bar", promise2.wait(context.waitScope).getS());
+  KJ_EXPECT(promise.wait(context.waitScope).getS() == "bar");
+  KJ_EXPECT(promise2.wait(context.waitScope).getS() == "bar");
 
-  EXPECT_EQ(3, context.restorer.callCount);
-  EXPECT_EQ(2, chainedCallCount);
+  KJ_EXPECT(context.restorer.callCount == 3);
+  KJ_EXPECT(chainedCallCount == 2);
 }
 
-TEST(Rpc, RetainAndRelease) {
+KJ_TEST("retain and release") {
   TestContext context;
 
   auto paf = kj::newPromiseAndFulfiller<void>();
@@ -996,13 +995,13 @@ TEST(Rpc, RetainAndRelease) {
     }
 
     // Do some other call to add a round trip.
-    EXPECT_EQ(1, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+    KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 1);
 
     // Shouldn't be destroyed because it's being held by the server.
-    EXPECT_FALSE(destroyed);
+    KJ_EXPECT(!destroyed);
 
     // We can ask it to call the held capability.
-    EXPECT_EQ("bar", client.callHeldRequest().send().wait(context.waitScope).getS());
+    KJ_EXPECT(client.callHeldRequest().send().wait(context.waitScope).getS() == "bar");
 
     {
       // We can get the cap back from it.
@@ -1014,34 +1013,34 @@ TEST(Rpc, RetainAndRelease) {
         auto request = capCopy.fooRequest();
         request.setI(123);
         request.setJ(true);
-        EXPECT_EQ("foo", request.send().wait(context.waitScope).getX());
-        EXPECT_EQ(oldSentCount, context.alice.vatNetwork.getSentCount());
+        KJ_EXPECT(request.send().wait(context.waitScope).getX() == "foo");
+        KJ_EXPECT(context.alice.vatNetwork.getSentCount() == oldSentCount);
       }
 
       {
         // We can send another copy of the same cap to another method, and it works.
         auto request = client.callFooRequest();
         request.setCap(capCopy);
-        EXPECT_EQ("bar", request.send().wait(context.waitScope).getS());
+        KJ_EXPECT(request.send().wait(context.waitScope).getS() == "bar");
       }
     }
 
     // Give some time to settle.
-    EXPECT_EQ(5, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
-    EXPECT_EQ(6, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
-    EXPECT_EQ(7, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+    KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 5);
+    KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 6);
+    KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 7);
 
     // Can't be destroyed, we haven't released it.
-    EXPECT_FALSE(destroyed);
+    KJ_EXPECT(!destroyed);
   }
 
   // We released our client, which should cause the server to be released, which in turn will
   // release the cap pointing back to us.
   destructionPromise.wait(context.waitScope);
-  EXPECT_TRUE(destroyed);
+  KJ_EXPECT(destroyed);
 }
 
-TEST(Rpc, Cancel) {
+KJ_TEST("cancel releases params") {
   TestContext context;
 
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
@@ -1058,20 +1057,20 @@ TEST(Rpc, Cancel) {
       auto responsePromise = request.send();
 
       // Allow some time to settle.
-      EXPECT_EQ(1, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
-      EXPECT_EQ(2, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+      KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 1);
+      KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 2);
 
       // The cap shouldn't have been destroyed yet because the call never returned.
-      EXPECT_FALSE(destroyed);
+      KJ_EXPECT(!destroyed);
     }
   }
 
   // Now the cap should be released.
   destructionPromise.wait(context.waitScope);
-  EXPECT_TRUE(destroyed);
+  KJ_EXPECT(destroyed);
 }
 
-TEST(Rpc, SendTwice) {
+KJ_TEST("send same cap twice") {
   TestContext context;
 
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
@@ -1086,11 +1085,11 @@ TEST(Rpc, SendTwice) {
     auto request = client.callFooRequest();
     request.setCap(cap);
 
-    EXPECT_EQ("bar", request.send().wait(context.waitScope).getS());
+    KJ_EXPECT(request.send().wait(context.waitScope).getS() == "bar");
   }
 
   // Allow some time for the server to release `cap`.
-  EXPECT_EQ(1, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+  KJ_EXPECT(client.getCallSequenceRequest().send().wait(context.waitScope).getN() == 1);
 
   {
     // More requests with the same cap.
@@ -1102,13 +1101,13 @@ TEST(Rpc, SendTwice) {
     auto promise = request.send();
     auto promise2 = request2.send();
 
-    EXPECT_EQ("bar", promise.wait(context.waitScope).getS());
-    EXPECT_EQ("bar", promise2.wait(context.waitScope).getS());
+    KJ_EXPECT(promise.wait(context.waitScope).getS() == "bar");
+    KJ_EXPECT(promise2.wait(context.waitScope).getS() == "bar");
   }
 
   // Now the cap should be released.
   destructionPromise.wait(context.waitScope);
-  EXPECT_TRUE(destroyed);
+  KJ_EXPECT(destroyed);
 }
 
 RemotePromise<test::TestCallOrder::GetCallSequenceResults> getCallSequence(
@@ -1118,7 +1117,7 @@ RemotePromise<test::TestCallOrder::GetCallSequenceResults> getCallSequence(
   return req.send();
 }
 
-TEST(Rpc, Embargo) {
+KJ_TEST("embargo") {
   TestContext context;
 
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
@@ -1146,15 +1145,15 @@ TEST(Rpc, Embargo) {
   auto call4 = getCallSequence(pipeline, 4);
   auto call5 = getCallSequence(pipeline, 5);
 
-  EXPECT_EQ(0, call0.wait(context.waitScope).getN());
-  EXPECT_EQ(1, call1.wait(context.waitScope).getN());
-  EXPECT_EQ(2, call2.wait(context.waitScope).getN());
-  EXPECT_EQ(3, call3.wait(context.waitScope).getN());
-  EXPECT_EQ(4, call4.wait(context.waitScope).getN());
-  EXPECT_EQ(5, call5.wait(context.waitScope).getN());
+  KJ_EXPECT(call0.wait(context.waitScope).getN() == 0);
+  KJ_EXPECT(call1.wait(context.waitScope).getN() == 1);
+  KJ_EXPECT(call2.wait(context.waitScope).getN() == 2);
+  KJ_EXPECT(call3.wait(context.waitScope).getN() == 3);
+  KJ_EXPECT(call4.wait(context.waitScope).getN() == 4);
+  KJ_EXPECT(call5.wait(context.waitScope).getN() == 5);
 }
 
-TEST(Rpc, EmbargoUnwrap) {
+KJ_TEST("embargos block CapabilityServerSet") {
   // Test that embargos properly block unwrapping a capability using CapabilityServerSet.
 
   TestContext context;
@@ -1191,12 +1190,12 @@ TEST(Rpc, EmbargoUnwrap) {
   auto call4 = getCallSequence(pipeline, 4);
   auto call5 = getCallSequence(pipeline, 5);
 
-  EXPECT_EQ(0, call0.wait(context.waitScope).getN());
-  EXPECT_EQ(1, call1.wait(context.waitScope).getN());
-  EXPECT_EQ(2, call2.wait(context.waitScope).getN());
-  EXPECT_EQ(3, call3.wait(context.waitScope).getN());
-  EXPECT_EQ(4, call4.wait(context.waitScope).getN());
-  EXPECT_EQ(5, call5.wait(context.waitScope).getN());
+  KJ_EXPECT(call0.wait(context.waitScope).getN() == 0);
+  KJ_EXPECT(call1.wait(context.waitScope).getN() == 1);
+  KJ_EXPECT(call2.wait(context.waitScope).getN() == 2);
+  KJ_EXPECT(call3.wait(context.waitScope).getN() == 3);
+  KJ_EXPECT(call4.wait(context.waitScope).getN() == 4);
+  KJ_EXPECT(call5.wait(context.waitScope).getN() == 5);
 
   uint unwrappedAt = unwrap.wait(context.waitScope);
   KJ_EXPECT(unwrappedAt >= 3, unwrappedAt);
@@ -1204,17 +1203,17 @@ TEST(Rpc, EmbargoUnwrap) {
 
 template <typename T>
 void expectPromiseThrows(kj::Promise<T>&& promise, kj::WaitScope& waitScope) {
-  EXPECT_TRUE(promise.then([](T&&) { return false; }, [](kj::Exception&&) { return true; })
+  KJ_EXPECT(promise.then([](T&&) { return false; }, [](kj::Exception&&) { return true; })
       .wait(waitScope));
 }
 
 template <>
 void expectPromiseThrows(kj::Promise<void>&& promise, kj::WaitScope& waitScope) {
-  EXPECT_TRUE(promise.then([]() { return false; }, [](kj::Exception&&) { return true; })
+  KJ_EXPECT(promise.then([]() { return false; }, [](kj::Exception&&) { return true; })
       .wait(waitScope));
 }
 
-TEST(Rpc, EmbargoError) {
+KJ_TEST("embargo error") {
   TestContext context;
 
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
@@ -1257,7 +1256,7 @@ TEST(Rpc, EmbargoError) {
   getCallSequence(client, 1).wait(context.waitScope);
 }
 
-TEST(Rpc, EmbargoNull) {
+KJ_TEST("don't embargo null capability") {
   // Set up a situation where we pipeline on a capability that ends up coming back null. This
   // should NOT cause a Disembargo to be sent, but due to a bug in earlier versions of Cap'n Proto,
   // a Disembargo was indeed sent to the null capability, which caused the server to disconnect
@@ -1284,7 +1283,7 @@ TEST(Rpc, EmbargoNull) {
   getCallSequence(client, 0).wait(context.waitScope);
 }
 
-TEST(Rpc, CallBrokenPromise) {
+KJ_TEST("call promise that later rejects") {
   // Tell the server to call back to a promise client, then resolve the promise to an error.
 
   TestContext context;
@@ -1316,12 +1315,12 @@ TEST(Rpc, CallBrokenPromise) {
   kj::yield().wait(context.waitScope);
   kj::yield().wait(context.waitScope);
 
-  EXPECT_FALSE(returned);
+  KJ_EXPECT(!returned);
 
   paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo") { break; } });
 
   expectPromiseThrows(kj::mv(req), context.waitScope);
-  EXPECT_TRUE(returned);
+  KJ_EXPECT(returned);
 
   kj::yield().wait(context.waitScope);
   kj::yield().wait(context.waitScope);
@@ -1336,7 +1335,7 @@ TEST(Rpc, CallBrokenPromise) {
   getCallSequence(client, 1).wait(context.waitScope);
 }
 
-TEST(Rpc, Abort) {
+KJ_TEST("abort") {
   // Verify that aborts are received.
 
   TestContext context;
@@ -1358,9 +1357,9 @@ TEST(Rpc, Abort) {
   }
 
   auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(context.waitScope));
-  EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+  KJ_EXPECT(reply->getBody().getAs<rpc::Message>().which() == rpc::Message::ABORT);
 
-  EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == kj::none);
+  KJ_EXPECT(conn->receiveIncomingMessage().wait(context.waitScope) == kj::none);
 }
 
 KJ_TEST("handles exceptions thrown during disconnect") {
