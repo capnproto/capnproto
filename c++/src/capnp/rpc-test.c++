@@ -552,20 +552,25 @@ struct TestContext {
     return *vats.insert(name, kj::heap<Vat>(network.add(name), kj::mv(bootstrap))).value;
   }
 
-  Vat& client;
-  Vat& server;
+  Vat& alice;
+  Vat& bob;
+  // For convenience, we create two default vats:
+  // - alice is a client (no bootstrap)
+  // - bob is a server serving TestInterfaceImpl (restorer.cap) as its bootstrap.
 
   TestContext()
       : waitScope(loop),
-        client(getVat("client")),
-        server(initVat("server", restorer.cap)) {}
+        alice(getVat("alice")),
+        bob(initVat("bob", restorer.cap)) {}
+
   TestContext(Capability::Client bootstrap)
       : waitScope(loop),
-        client(getVat("client")),
-        server(initVat("server", kj::mv(bootstrap))) {}
+        alice(getVat("alice")),
+        bob(initVat("bob", kj::mv(bootstrap))) {}
 
   test::TestInterface::Client connect() {
-    return getVat("client").connect<>("server");
+    // Create the default alice -> bob connection.
+    return getVat("alice").connect<>("bob");
   }
 };
 
@@ -873,9 +878,9 @@ TEST(Rpc, TailCallCancelRace) {
 
   MallocMessageBuilder serverHostIdBuilder;
   auto serverHostId = serverHostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  serverHostId.setHost("server");
+  serverHostId.setHost("bob");
 
-  auto caller = context.client.rpcSystem.bootstrap(serverHostId).castAs<test::TestTailCaller>();
+  auto caller = context.alice.rpcSystem.bootstrap(serverHostId).castAs<test::TestTailCaller>();
 
   int callCount = 0, cancelCount = 0;
 
@@ -1013,12 +1018,12 @@ TEST(Rpc, RetainAndRelease) {
 
       {
         // And call it, without any network communications.
-        uint oldSentCount = context.client.vatNetwork.getSentCount();
+        uint oldSentCount = context.alice.vatNetwork.getSentCount();
         auto request = capCopy.fooRequest();
         request.setI(123);
         request.setJ(true);
         EXPECT_EQ("foo", request.send().wait(context.waitScope).getX());
-        EXPECT_EQ(oldSentCount, context.client.vatNetwork.getSentCount());
+        EXPECT_EQ(oldSentCount, context.alice.vatNetwork.getSentCount());
       }
 
       {
@@ -1346,9 +1351,9 @@ TEST(Rpc, Abort) {
 
   MallocMessageBuilder refMessage(128);
   auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
-  hostId.setHost("server");
+  hostId.setHost("bob");
 
-  auto conn = KJ_ASSERT_NONNULL(context.client.vatNetwork.connect(hostId));
+  auto conn = KJ_ASSERT_NONNULL(context.alice.vatNetwork.connect(hostId));
   conn->setIdle(false);
 
   {
@@ -1374,12 +1379,12 @@ KJ_TEST("handles exceptions thrown during disconnect") {
 
   MallocMessageBuilder refMessage(128);
   auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
-  hostId.setHost("server");
+  hostId.setHost("bob");
 
-  context.server.vatNetwork.setShutdownExceptionToThrow(
+  context.bob.vatNetwork.setShutdownExceptionToThrow(
       KJ_EXCEPTION(FAILED, "a_disconnect_exception"));
 
-  auto conn = KJ_ASSERT_NONNULL(context.client.vatNetwork.connect(hostId));
+  auto conn = KJ_ASSERT_NONNULL(context.alice.vatNetwork.connect(hostId));
   conn->setIdle(false);
 
   {
@@ -1413,10 +1418,10 @@ KJ_TEST("loopback bootstrap()") {
 
   MallocMessageBuilder hostIdBuilder;
   auto hostId = hostIdBuilder.getRoot<test::TestSturdyRefHostId>();
-  hostId.setHost("server");
+  hostId.setHost("bob");
 
   TestContext context(bootstrap);
-  auto client = context.server.rpcSystem.bootstrap(hostId).castAs<test::TestInterface>();
+  auto client = context.bob.rpcSystem.bootstrap(hostId).castAs<test::TestInterface>();
 
   auto request = client.fooRequest();
   request.setI(123);
@@ -1462,7 +1467,7 @@ KJ_TEST("method throws exception won't redundantly add remote exception prefix")
 KJ_TEST("method throws exception with trace encoder") {
   TestContext context;
 
-  context.server.rpcSystem.setTraceEncoder([](const kj::Exception& e) {
+  context.bob.rpcSystem.setTraceEncoder([](const kj::Exception& e) {
     return kj::str("trace for ", e.getDescription());
   });
 
@@ -1507,7 +1512,7 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
   uint32_t expectedExportNumber = 0;
   uint interceptCount = 0;
   bool shouldThrowFromSend = false;
-  context.client.vatNetwork.onSend([&](MessageBuilder& builder) {
+  context.alice.vatNetwork.onSend([&](MessageBuilder& builder) {
     auto message = builder.getRoot<rpc::Message>().asReader();
     if (message.isCall()) {
       auto call = message.getCall();
@@ -1615,7 +1620,7 @@ KJ_TEST("export the same promise twice") {
   bool exportIsPromise;
   uint32_t expectedExportNumber;
   uint interceptCount = 0;
-  context.client.vatNetwork.onSend([&](MessageBuilder& builder) {
+  context.alice.vatNetwork.onSend([&](MessageBuilder& builder) {
     auto message = builder.getRoot<rpc::Message>().asReader();
     if (message.isCall()) {
       auto call = message.getCall();
@@ -1700,9 +1705,9 @@ KJ_TEST("connections set idle when appropriate") {
   context.waitScope.poll();  // let messages propagate
 
   auto& clientConn = KJ_ASSERT_NONNULL(
-      context.client.vatNetwork.getConnectionTo(context.server.vatNetwork));
+      context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork));
   auto& serverConn = KJ_ASSERT_NONNULL(
-      context.server.vatNetwork.getConnectionTo(context.client.vatNetwork));
+      context.bob.vatNetwork.getConnectionTo(context.alice.vatNetwork));
 
   KJ_EXPECT(!clientConn.isIdle());
   KJ_EXPECT(!serverConn.isIdle());
@@ -1751,25 +1756,25 @@ KJ_TEST("clean connection shutdown") {
   context.waitScope.poll();  // let messages propagate
 
   // How many messages have we sent at this point?
-  auto sent = context.client.vatNetwork.getSentCount();
-  auto received = context.client.vatNetwork.getReceivedCount();
+  auto sent = context.alice.vatNetwork.getSentCount();
+  auto received = context.alice.vatNetwork.getReceivedCount();
 
   // Have the client connection decide to end itself due to idleness, as is allowed under the
   // setIdle() contract.
   auto& clientConn = KJ_ASSERT_NONNULL(
-      context.client.vatNetwork.getConnectionTo(context.server.vatNetwork));
+      context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork));
   KJ_EXPECT(clientConn.isIdle());
   clientConn.initiateIdleShutdown();
 
   context.waitScope.poll();  // let messages propagate
 
   // Connections should have gracefully shut down.
-  KJ_EXPECT(context.client.vatNetwork.getConnectionTo(context.server.vatNetwork) == kj::none);
-  KJ_EXPECT(context.server.vatNetwork.getConnectionTo(context.client.vatNetwork) == kj::none);
+  KJ_EXPECT(context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork) == kj::none);
+  KJ_EXPECT(context.bob.vatNetwork.getConnectionTo(context.alice.vatNetwork) == kj::none);
 
   // No more messages should have been sent during shutdown (not even errors).
-  KJ_EXPECT(context.client.vatNetwork.getSentCount() == sent);
-  KJ_EXPECT(context.client.vatNetwork.getReceivedCount() == received);
+  KJ_EXPECT(context.alice.vatNetwork.getSentCount() == sent);
+  KJ_EXPECT(context.alice.vatNetwork.getReceivedCount() == received);
 }
 
 }  // namespace
