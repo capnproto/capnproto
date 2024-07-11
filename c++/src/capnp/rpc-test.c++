@@ -114,7 +114,7 @@ public:
 
           auto sendResultsTo = call.getSendResultsTo();
 
-          return kj::str(name, "->", partnerName, "(", call.getQuestionId(), "): call ",
+          return kj::str(name, "->", partnerName, ": call ", call.getQuestionId(), ": ",
                         call.getTarget(), " <- ", interfaceName, ".",
                         methodProto.getName(), params,
                         " caps:[", kj::strArray(capTable, ", "), "]",
@@ -153,7 +153,7 @@ public:
           if (schema.getProto().isStruct()) {
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
-            return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return ", results,
+            return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
                           " caps:[", kj::strArray(capTable, ", "), "]");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
