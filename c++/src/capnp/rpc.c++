@@ -939,6 +939,46 @@ private:
       }
     }
 
+    virtual kj::Own<ClientHook> writeThirdPartyDescriptor(
+          VatNetworkBase::Connection& provider,
+          VatNetworkBase::Connection& recipient,
+          AnyPointer::Builder contact) {
+      // Called to fill in a ThirdPartyCapDescriptor when sending this capability to a different
+      // connection.
+      //
+      // `provider` is this object's backing connection; the caller has already verified it is
+      // currently connected. (Calling connectionState->tryGetConnection() would return the same
+      // object.)
+      //
+      // `recipient` is the connection receiving the ThirdPartyCapDescriptor.
+      //
+      // `contact` is the ThirdPartyToContact which goes in the descriptor.
+      //
+      // Returns the ClientHook which should be used as the "vine". This needs to be callable as
+      // a stand-in for the object. It also needs to hold open the `Provide` operation until the
+      // returned reference is dropped. Note that `addRef()`s on the returned reference do NOT have
+      // to hold open the Provide; the Provide can be held open by an attachment on the ref itself.
+      //
+      // The default implementation of this method is appropriate most of the time. It is
+      // overridded for the specific case of `DeferredThirdPartyClient`.
+
+      // Send `Provide` message to our connection.
+      QuestionId questionId;
+      auto& question = connectionState->questions.nextHigh(questionId);
+      question.isAwaitingReturn = false;  // No Return needed
+      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, kj::none);
+      question.selfRef = *questionRef;
+
+      auto otherMsg = provider.newOutgoingMessage(messageSizeHint<rpc::Provide>() + 32);
+      auto provide = otherMsg->getBody().initAs<rpc::Message>().initProvide();
+      provide.setQuestionId(questionId);
+      writeTarget(provide.initTarget());
+      recipient.introduceTo(provider, contact, provide.initRecipient());
+      otherMsg->send();
+
+      return addRef().attach(kj::mv(questionRef));
+    }
+
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
@@ -1448,19 +1488,7 @@ private:
 
             auto tph = descriptor.initThirdPartyHosted();
 
-            QuestionId questionId;
-            auto& question = rpcInner.connectionState->questions.nextHigh(questionId);
-            question.isAwaitingReturn = false;  // No Return needed
-            auto questionRef = kj::refcounted<QuestionRef>(
-                *rpcInner.connectionState, questionId, kj::none);
-            question.selfRef = *questionRef;
-
-            auto otherMsg = otherConn.newOutgoingMessage(messageSizeHint<rpc::Provide>() + 32);
-            auto provide = otherMsg->getBody().initAs<rpc::Message>().initProvide();
-            provide.setQuestionId(questionId);
-            rpcInner.writeTarget(provide.initTarget());
-            conn.introduceTo(otherConn, tph.initId(), provide.initRecipient());
-            otherMsg->send();
+            auto vine = rpcInner.writeThirdPartyDescriptor(otherConn, conn, tph.initId());
 
             // We always have to add a new export to the table to use as the "vine"; we cannot
             // share an existing export pointing to the same capability. The reason is, the vine
@@ -1474,7 +1502,7 @@ private:
             auto& exp = exports.next(exportId);
             exp.canonical = false;
             exp.refcount = 1;
-            exp.clientHook = inner->addRef().attach(kj::mv(questionRef));
+            exp.clientHook = kj::mv(vine);
 
             tph.setVineId(exportId);
             return exportId;
