@@ -821,10 +821,19 @@ struct Provide {
   # every vat.  In Cap'n Proto, we bake this into the core protocol.)
 
   questionId @0 :QuestionId;
-  # Question ID to be held open until the recipient has received the capability.  A result will be
-  # returned once the third party has successfully received the capability.  The sender must at some
-  # point send a `Finish` message as with any other call, and that message can be used to cancel the
-  # whole operation.
+  # Question ID to be held open until the recipient has received the capability.  No `Return`
+  # message will be sent, similarly to a `Call` that has `onlyPromisePipeline = true`.  The sender
+  # must at some point send a `Finish` message as with any other call, which unregisters the
+  # provision. Typically, the sender would send such a `Finish` message once it has received
+  # confirmation from the third party that the capability has been successfully accepted, or that
+  # the third party is no longer trying to accept it. Specifically, the sender learns this when the
+  # third party drops the "vine" capability passed along with the ThirdPartyCapDescriptor -- the
+  # vine must be held until the `Accept` has completed.
+  #
+  # More than one party can accept the provision. The recipient will offer the capability to
+  # anyone who sends a matching `Accept` message. This is particularly useful when the VatNetwork
+  # supports forwarding, as a capability may be forwarded to many parties before any of them
+  # actually connects back to the host to accept it.
 
   target @1 :MessageTarget;
   # What is to be provided to the third party.
