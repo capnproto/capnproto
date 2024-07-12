@@ -1436,38 +1436,81 @@ private:
       fds.add(kj::mv(fd));
     }
 
-    KJ_IF_SOME(rpcInner, unwrapIfSameConnection(*inner)) {
-      return rpcInner.writeDescriptor(descriptor, fds);
-    } else {
-      KJ_IF_SOME(exportId, exportsByCap.find(inner)) {
-        // We've already seen and exported this capability before.  Just up the refcount.
-        auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
-        ++exp.refcount;
-        if (exp.resolveOp == kj::none) {
-          descriptor.setSenderHosted(exportId);
-        } else {
-          descriptor.setSenderPromise(exportId);
-        }
-        return exportId;
-      } else {
-        // This is the first time we've seen this capability.
-        ExportId exportId;
-        auto& exp = exports.next(exportId);
-        exportsByCap.insert(inner, exportId);
-        exp.canonical = true;
-        exp.refcount = 1;
-        exp.clientHook = inner->addRef();
-
-        KJ_IF_SOME(wrapped, inner->whenMoreResolved()) {
-          // This is a promise.  Arrange for the `Resolve` message to be sent later.
-          exp.resolveOp = resolveExportedPromise(exportId, kj::mv(wrapped));
-          descriptor.setSenderPromise(exportId);
-        } else {
-          descriptor.setSenderHosted(exportId);
-        }
-
-        return exportId;
+    KJ_IF_SOME(rpcInner, unwrapIfSameNetwork(*inner)) {
+      if (rpcInner.isOnConnection(*this)) {
+        return rpcInner.writeDescriptor(descriptor, fds);
       }
+
+      KJ_IF_SOME(conn, tryGetConnection()) {
+        KJ_IF_SOME(otherConn, rpcInner.connectionState->tryGetConnection()) {
+          if (conn.canIntroduceTo(otherConn)) {
+            // We can do three-party handoff!
+
+            auto tph = descriptor.initThirdPartyHosted();
+
+            QuestionId questionId;
+            auto& question = rpcInner.connectionState->questions.nextHigh(questionId);
+            question.isAwaitingReturn = false;  // No Return needed
+            auto questionRef = kj::refcounted<QuestionRef>(
+                *rpcInner.connectionState, questionId, kj::none);
+            question.selfRef = *questionRef;
+
+            auto otherMsg = otherConn.newOutgoingMessage(messageSizeHint<rpc::Provide>() + 32);
+            auto provide = otherMsg->getBody().initAs<rpc::Message>().initProvide();
+            provide.setQuestionId(questionId);
+            rpcInner.writeTarget(provide.initTarget());
+            conn.introduceTo(otherConn, tph.initId(), provide.initRecipient());
+            otherMsg->send();
+
+            // We always have to add a new export to the table to use as the "vine"; we cannot
+            // share an existing export pointing to the same capability. The reason is, the vine
+            // represents not just the capability but *this specific handoff* of the capability;
+            // when it is dropped, we can clean up the handoff. This is accomplished by attaching
+            // the `questionRef` to the export, below.
+            //
+            // Additionally, the vine is never treated as a promise, even if the capability backing
+            // it is a promise.
+            ExportId exportId;
+            auto& exp = exports.next(exportId);
+            exp.canonical = false;
+            exp.refcount = 1;
+            exp.clientHook = inner->addRef().attach(kj::mv(questionRef));
+
+            tph.setVineId(exportId);
+            return exportId;
+          }
+        }
+      }
+    }
+
+    KJ_IF_SOME(exportId, exportsByCap.find(inner)) {
+      // We've already seen and exported this capability before.  Just up the refcount.
+      auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
+      ++exp.refcount;
+      if (exp.resolveOp == kj::none) {
+        descriptor.setSenderHosted(exportId);
+      } else {
+        descriptor.setSenderPromise(exportId);
+      }
+      return exportId;
+    } else {
+      // This is the first time we've seen this capability.
+      ExportId exportId;
+      auto& exp = exports.next(exportId);
+      exportsByCap.insert(inner, exportId);
+      exp.canonical = true;
+      exp.refcount = 1;
+      exp.clientHook = inner->addRef();
+
+      KJ_IF_SOME(wrapped, inner->whenMoreResolved()) {
+        // This is a promise.  Arrange for the `Resolve` message to be sent later.
+        exp.resolveOp = resolveExportedPromise(exportId, kj::mv(wrapped));
+        descriptor.setSenderPromise(exportId);
+      } else {
+        descriptor.setSenderHosted(exportId);
+      }
+
+      return exportId;
     }
   }
 
@@ -1801,9 +1844,72 @@ private:
         return newBrokenCap("invalid 'receiverAnswer'");
       }
 
-      case rpc::CapDescriptor::THIRD_PARTY_HOSTED:
-        // We don't support third-party caps, so use the vine instead.
-        return import(descriptor.getThirdPartyHosted().getVineId(), false, kj::mv(fd));
+      case rpc::CapDescriptor::THIRD_PARTY_HOSTED: {
+        // We need to connect to a third party to accept this capability.
+        //
+        // TODO(now): Defer sending the Accept until the capability is actually invoked. This way,
+        //   if the capability is merely forwarded on without being used locally, and the
+        //   VatNetwork supports forwarding, we can avoid a redundant connection.
+
+        auto& state = KJ_ASSERT_NONNULL(connection.tryGet<Connected>());
+
+        auto tph = descriptor.getThirdPartyHosted();
+
+        // Import the vine first so that we're sure to drop it if anything goes wrong.
+        auto vine = import(tph.getVineId(), false, kj::mv(fd));
+
+        // Allocate temporary message to hold ThirdPartyCompletion. Unfortunately we need a temp
+        // message here because we can't allocate the actual outgoing message until we have a
+        // connection object.
+        // TODO(perf): Maybe we can change the signature of connectToIntroduced() to fix this?
+        capnp::word scratch[32];
+        memset(scratch, 0, sizeof(scratch));
+        MallocMessageBuilder message(scratch);
+        auto completion = message.getRoot<AnyPointer>();
+
+        // Call connectToIntroduced() and get the other connection state.
+        KJ_IF_SOME(ownOtherConn, state.connection->connectToIntroduced(tph.getId(), completion)) {
+          RpcConnectionState& other = getConnectionState(state.rpcSystem, kj::mv(ownOtherConn));
+
+          other.setNotIdle();
+          auto& otherConn = *KJ_ASSERT_NONNULL(other.connection.tryGet<Connected>()).connection;
+
+          // Start a question for the Accept message.
+          QuestionId questionId;
+          auto& question = other.questions.next(questionId);
+          question.isAwaitingReturn = true;
+          auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
+          auto questionRef = kj::refcounted<QuestionRef>(other, questionId, kj::mv(paf.fulfiller));
+          question.selfRef = *questionRef;
+
+          // Send the Accept message.
+          {
+            auto acceptMsg = otherConn.newOutgoingMessage(messageSizeHint<rpc::Accept>() +
+                completion.targetSize().wordCount);
+            auto accept = acceptMsg->getBody().getAs<rpc::Message>().initAccept();
+            accept.setQuestionId(questionId);
+            accept.getProvision().set(completion.asReader());
+            // TODO(now): accept.setEmbargo();
+            acceptMsg->send();
+          }
+
+          // Construct the ClientHook representing all this. We attach the vine to this promise so
+          // that we drop it as soon as the Accept completes, which lets the introducer know that it
+          // can finish out the Provide.
+          kj::Promise<kj::Own<ClientHook>> promise = paf.promise
+              .then([q = kj::addRef(*questionRef), vine = kj::mv(vine)]
+                    (kj::Own<RpcResponse> response) {
+            return ClientHook::from(response->getResults().getAs<Capability>());
+          });
+          auto pipeline = kj::refcounted<PipelineClient>(other, kj::mv(questionRef), nullptr);
+          return kj::refcounted<PromiseClient>(other, kj::mv(pipeline), kj::mv(promise), kj::none);
+        } else {
+          // We've been introduced to ourselves. A corresponding `Provide` message will come
+          // directly to us via another connection.
+          // TODO(now): implement this
+          KJ_UNIMPLEMENTED("introduction to self");
+        }
+      }
 
       default:
         KJ_FAIL_REQUIRE("unknown CapDescriptor type");
@@ -2392,6 +2498,28 @@ private:
     return kj::none;
   }
 
+  kj::Maybe<RpcClient&> unwrapIfSameNetwork(ClientHook& hook) {
+    if (hook.isBrand(brand.get())) {
+      return kj::downcast<RpcClient>(hook);
+    }
+    return kj::none;
+  }
+
+  kj::Maybe<RpcRequest&> unwrapIfSameNetwork(RequestHook& hook) {
+    if (hook.isBrand(brand.get())) {
+      return kj::downcast<RpcRequest>(hook);
+    }
+    return kj::none;
+  }
+
+  kj::Maybe<VatNetworkBase::Connection&> tryGetConnection() {
+    KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+      return *c.connection;
+    } else {
+      return kj::none;
+    }
+  }
+
   // =====================================================================================
   // CallContextHook implementation
 
@@ -2598,6 +2726,18 @@ private:
           redirectResults(redirectResults) {
       connectionState.callWordsInFlight += requestSize;
     }
+
+    RpcCallContext(RpcConnectionState& connectionState, AnswerId answerId)
+        : connectionState(kj::addRef(connectionState)),
+          answerId(answerId),
+          interfaceId(0),
+          methodId(0),
+          requestSize(0),
+          paramsCapTable(nullptr),
+          returnMessage(nullptr),
+          redirectResults(false) {}
+    // Creates a dummy RpcCallContext used for pseudo-calls like `Accept`. This is helpful to
+    // reuse the state machine around `Return` and `Finish` messages.
 
     ~RpcCallContext() noexcept(false) {
       if (isFirstResponder()) {
@@ -3095,6 +3235,14 @@ private:
 
       case rpc::Message::DISEMBARGO:
         handleDisembargo(reader.getDisembargo());
+        break;
+
+      case rpc::Message::PROVIDE:
+        handleProvide(reader.getProvide());
+        break;
+
+      case rpc::Message::ACCEPT:
+        handleAccept(reader.getAccept());
         break;
 
       default: {
@@ -3746,6 +3894,108 @@ private:
         KJ_FAIL_REQUIRE("Unimplemented Disembargo type.", disembargo);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Level 3
+
+  struct ThirdPartyExchangeValue: public kj::Refcounted {
+    kj::OneOf<kj::Own<ClientHook>> value;
+    // For Provide/Accept, the value is a ClientHook.
+    //
+    // (Eventually this will be extended with another type for ThirdPartyAnswer.)
+
+    ThirdPartyExchangeValue(kj::Own<ClientHook> value): value(kj::mv(value)) {}
+  };
+
+  void handleProvide(const rpc::Provide::Reader& provide) {
+    if (!connection.is<Connected>()) {
+      // Disconnected; ignore.
+      return;
+    }
+
+    kj::Own<ClientHook> target = getMessageTarget(provide.getTarget());
+    auto xcghValue = kj::rc<ThirdPartyExchangeValue>(kj::mv(target));
+
+    AnswerId answerId = provide.getQuestionId();
+    auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
+                                     "questionId is already in use", answerId);
+
+    // NOTE: We don't need an RpcCallContext since we don't need to send a `Return`. We can just
+    // leave `answer.context` null.
+
+    // Register that we're awaiting an Accept.
+    auto awaiter = connection.get<Connected>().connection
+        ->awaitThirdParty(provide.getRecipient(), kj::mv(xcghValue));
+
+    // Use a `pipeline` that'll throw exceptions if anyone actually tries to use it.
+    //
+    // It also holds onto `awaiter`, so that `awaiter` is dropped when `Finish` is received.
+    class ProvidePipelineHook final: public PipelineHook, public kj::Refcounted {
+    public:
+      ProvidePipelineHook(kj::Own<void> awaiter): awaiter(kj::mv(awaiter)) {}
+
+      kj::Own<PipelineHook> addRef() override {
+        return kj::addRef(*this);
+      }
+
+      kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+        return newBrokenCap(KJ_EXCEPTION(FAILED, "can't pipeline on a Provide operation"));
+      }
+
+      kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
+        return newBrokenCap(KJ_EXCEPTION(FAILED, "can't pipeline on a Provide operation"));
+      }
+
+    private:
+      kj::Own<void> awaiter;
+    };
+
+    answer.pipeline = kj::refcounted<ProvidePipelineHook>(kj::mv(awaiter));
+  }
+
+  void handleAccept(const rpc::Accept::Reader& accept) {
+    if (!connection.is<Connected>()) {
+      // Disconnected; ignore.
+      return;
+    }
+
+    AnswerId answerId = accept.getQuestionId();
+    auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
+                                     "questionId is already in use", answerId);
+
+    auto context = kj::refcounted<RpcCallContext>(*this, answerId);
+    answer.callContext = context;
+
+    // Hack:  Both the success and error continuations need to use the context.  We could
+    //   refcount, but both will be destroyed at the same time anyway.
+    RpcCallContext& contextRef = *context;
+
+    // Wait for `Provide` message and expect it to give us a ClientHook.
+    kj::ForkedPromise<Capability::Client> promise = connection.get<Connected>().connection
+        ->completeThirdParty(accept.getProvision())
+        .then([](kj::Rc<kj::Refcounted> holder) mutable {
+      // TODO(now): Await embargo if needed.
+
+      return Capability::Client(kj::mv(KJ_ASSERT_NONNULL(
+          holder.downcast<ThirdPartyExchangeValue>()->value.tryGet<kj::Own<ClientHook>>())));
+    }).fork();
+
+    // Set `answer.task` to a promise that eventually sends `Return`.
+    answer.task = promise.addBranch()
+        .then([context = kj::mv(context)](Capability::Client cap) mutable {
+      context->getResults(MessageSize {4, 1}).setAs<Capability>(kj::mv(cap));
+      context->sendReturn();
+    }, [&contextRef](kj::Exception&& exception) {
+      contextRef.sendErrorReturn(kj::mv(exception));
+    }).eagerlyEvaluate([&](kj::Exception&& exception) {
+      // Handle exceptions that occur in sendReturn()/sendErrorReturn().
+      tasks.add(kj::mv(exception));
+    });
+
+    // Set `answer.pipeline` to a single-cap pipeline.
+    answer.pipeline = kj::refcounted<SingleCapPipeline>(
+        ClientHook::from(Capability::Client(promise.addBranch())));
+  }
 };
 
 // =======================================================================================
@@ -3810,6 +4060,15 @@ public:
     tasks.add(kj::mv(shutdownTask));
   }
 
+  RpcConnectionState& getConnectionState(kj::Own<VatNetworkBase::Connection>&& connection) {
+    return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
+      VatNetworkBase::Connection* connectionPtr = connection;
+      auto newState = kj::refcounted<RpcConnectionState>(
+          *this, bootstrapFactory, kj::mv(connection), flowLimit, traceEncoder, *brand);
+      return {connectionPtr, kj::mv(newState)};
+    });
+  }
+
 private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
@@ -3825,15 +4084,6 @@ private:
   ConnectionMap connections;
 
   kj::UnwindDetector unwindDetector;
-
-  RpcConnectionState& getConnectionState(kj::Own<VatNetworkBase::Connection>&& connection) {
-    return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
-      VatNetworkBase::Connection* connectionPtr = connection;
-      auto newState = kj::refcounted<RpcConnectionState>(
-          *this, bootstrapFactory, kj::mv(connection), flowLimit, traceEncoder, *brand);
-      return {connectionPtr, kj::mv(newState)};
-    });
-  }
 
   kj::Promise<void> acceptLoop() {
     for (;;) {
@@ -3889,6 +4139,11 @@ kj::Promise<void> RpcSystemBase::run() {
 void RpcSystemBase::dropConnection(RpcSystemBase::Impl& impl,
     VatNetworkBase::Connection& connection, kj::Promise<void> shutdownTask) {
   impl.dropConnection(connection, kj::mv(shutdownTask));
+}
+
+RpcSystemBase::RpcConnectionState& RpcSystemBase::getConnectionState(Impl& impl,
+    kj::Own<VatNetworkBase::Connection> connection) {
+  return impl.getConnectionState(kj::mv(connection));
 }
 
 }  // namespace _ (private)

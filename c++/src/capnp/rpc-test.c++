@@ -224,10 +224,21 @@ public:
     }
   }
 
+  uint64_t newToken() {
+    // Make a unique token for three-party handoffs.
+    //
+    // In the real world, we'd be using cryptographically unguessable strings, but for testing
+    // purposes a counter will do just fine.
+
+    return ++tokenCounter;
+  }
+
   RpcDumper dumper;
 
 private:
   kj::HashMap<kj::StringPtr, kj::Own<TestVat>> map;
+
+  uint64_t tokenCounter = 0;
 };
 
 typedef VatNetwork<
@@ -279,7 +290,9 @@ public:
       KJ_REQUIRE(partner == kj::none);
       KJ_REQUIRE(other.partner == kj::none);
       partner = other;
+      partnerName = other.vat.self;
       other.partner = *this;
+      other.partnerName = vat.self;
       dumper.setPartner(other.dumper);
     }
 
@@ -422,6 +435,44 @@ public:
       this->idle = idle;
     }
 
+    bool canIntroduceTo(Connection& other) override {
+      return true;
+    }
+
+    void introduceTo(Connection& other,
+        test::TestThirdPartyToContact::Builder otherContactInfo,
+        test::TestThirdPartyToAwait::Builder thisAwaitInfo) override {
+      uint64_t token = vat.network.newToken();
+      otherContactInfo.initPath().setHost(kj::downcast<ConnectionImpl>(other).partnerName);
+      otherContactInfo.setToken(token);
+      thisAwaitInfo.setToken(token);
+    }
+
+    kj::Maybe<kj::Own<Connection>> connectToIntroduced(
+        test::TestThirdPartyToContact::Reader contact,
+        test::TestThirdPartyCompletion::Builder completion) override {
+      completion.setToken(contact.getToken());
+      return vat.connect(contact.getPath());
+    }
+
+    kj::Own<void> awaitThirdParty(
+        test::TestThirdPartyToAwait::Reader party,
+        kj::Rc<kj::Refcounted> value) override {
+      uint64_t token = party.getToken();
+      auto& xchg = vat.getTphExchange(token);
+      xchg.fulfiller->fulfill(kj::mv(value));
+
+      return kj::heap(kj::defer([this, token]() {
+        vat.tphExchanges.erase(token);
+      }));
+    }
+
+    kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(
+        test::TestThirdPartyCompletion::Reader completion) override {
+      auto& xchg = vat.getTphExchange(completion.getToken());
+      return xchg.promise.addBranch();
+    }
+
     void taskFailed(kj::Exception&& exception) override {
       ADD_FAILURE() << kj::str(exception).cStr();
     }
@@ -431,6 +482,7 @@ public:
     TestVat& peerVat;
     RpcDumper::Sender dumper;
     kj::Maybe<ConnectionImpl&> partner;
+    kj::StringPtr partnerName;
 
     kj::Maybe<kj::Exception> networkException;
 
@@ -489,6 +541,22 @@ private:
   kj::ProducerConsumerQueue<kj::Own<Connection>> acceptQueue;
 
   kj::Function<bool(MessageBuilder& message)> sendCallback = [](MessageBuilder&) { return true; };
+
+  struct ThirdPartyExchange {
+    kj::ForkedPromise<kj::Rc<kj::Refcounted>> promise;
+    kj::Own<kj::PromiseFulfiller<kj::Rc<kj::Refcounted>>> fulfiller;
+
+    ThirdPartyExchange(kj::PromiseFulfillerPair<kj::Rc<kj::Refcounted>> paf =
+                       kj::newPromiseAndFulfiller<kj::Rc<kj::Refcounted>>())
+        : promise(paf.promise.fork()), fulfiller(kj::mv(paf.fulfiller)) {}
+  };
+  kj::HashMap<uint64_t, ThirdPartyExchange> tphExchanges;
+
+  ThirdPartyExchange& getTphExchange(uint64_t token) {
+    return tphExchanges.findOrCreate(token, [&]() -> decltype(tphExchanges)::Entry {
+      return {token, ThirdPartyExchange()};
+    });
+  }
 };
 
 TestNetwork::~TestNetwork() noexcept(false) {}
@@ -1764,6 +1832,79 @@ KJ_TEST("clean connection shutdown") {
   // No more messages should have been sent during shutdown (not even errors).
   KJ_EXPECT(context.alice.vatNetwork.getSentCount() == sent);
   KJ_EXPECT(context.alice.vatNetwork.getReceivedCount() == received);
+}
+
+KJ_TEST("basic three-party handoff") {
+  TestContext context;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  auto& carol = context.initVat("carol",
+      kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  // Alice connects to Bob and Carol.
+  auto bobCap = context.alice.connect<test::TestInterface>("bob");
+  auto carolCap = context.alice.connect<test::TestMoreStuff>("carol");
+
+  // Alice should be connected to Bob. Get the connection for further inspection.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  // Alice -> Bob connection is not idle.
+  KJ_EXPECT(!aliceToBob.isIdle());
+
+  // Carol is not connected to Bob.
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Send `bobCap` to Carol.
+  {
+    auto req = carolCap.holdRequest();
+    req.setCap(kj::mv(bobCap));
+    req.send().wait(context.waitScope);
+  }
+
+  // Pump event loop to allow things to settle.
+  context.waitScope.poll();
+
+  // Carol is now connected to Bob, and not idle.
+  auto& carolToBob = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
+  KJ_EXPECT(!carolToBob.isIdle());
+
+  // Alice -> Bob connection is idle, since we moved away `bobCap`.
+  KJ_EXPECT(aliceToBob.isIdle());
+
+  // Let's shut it down, even, to prove it isn't needed.
+  aliceToBob.initiateIdleShutdown();
+  context.waitScope.poll();
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Bob hasn't been called yet but Carol has.
+  KJ_EXPECT(context.restorer.callCount == 0);
+  KJ_EXPECT(carolCallCount == 1);
+
+  // Tell Carol to invoke the held capability.
+  {
+    auto resp = carolCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Bob has been called.
+  KJ_EXPECT(context.restorer.callCount == 1);
+
+  // Carol -> Bob connection is still not idle.
+  KJ_EXPECT(!carolToBob.isIdle());
+
+  // Tell Carol to drop the cap to Bob, by sending a hold request but leaving the capability null.
+  carolCap.holdRequest().send().wait(context.waitScope);
+
+  // Now Carol -> Bob connection is idle.
+  KJ_EXPECT(carolToBob.isIdle());
+
+  // Alice is still notn connected to Bob.
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
 }
 
 }  // namespace

@@ -948,9 +948,16 @@ struct TestSturdyRefHostId {
   host @0 :Text;
 }
 
-struct TestThirdPartyCompletion {}
-struct TestThirdPartyToAwait {}
-struct TestThirdPartyToContact {}
+struct TestThirdPartyCompletion {
+  token @0 :UInt64;
+}
+struct TestThirdPartyToAwait {
+  token @0 :UInt64;
+}
+struct TestThirdPartyToContact {
+  path @0 :TestSturdyRefHostId;
+  token @1 :UInt64;
+}
 struct TestJoinResult {}
 
 struct TestNameAnnotation $Cxx.name("RenamedStruct") {

@@ -123,6 +123,10 @@ private:
   //   is defined before `Impl` in rpc.c++. We can't have the caller hold a pointer to
   //   `RpcSystemBase` instead because it is movable.
 
+  static RpcConnectionState& getConnectionState(Impl& impl,
+      kj::Own<VatNetworkBase::Connection> connection);
+  // Get the RpcConnectionState associated with the given connection, creating it if necessary.
+
   template <typename>
   friend class capnp::RpcSystem;
 };
