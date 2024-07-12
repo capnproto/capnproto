@@ -271,17 +271,21 @@ public:
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
-    ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name)
-        : vat(vat), peerVat(peerVat), dumper(vat.network.dumper, name),
+    ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name, bool unique)
+        : vat(vat), peerVat(peerVat), unique(unique), dumper(vat.network.dumper, name),
           tasks(kj::heap<kj::TaskSet>(*this)) {
-      vat.connections.insert(&peerVat, this);
+      if (!unique) {
+        vat.connections.insert(&peerVat, this);
+      }
     }
 
     ~ConnectionImpl() noexcept(false) {
       KJ_IF_SOME(p, partner) {
         p.partner = kj::none;
       }
-      vat.connections.erase(&peerVat);
+      if (!unique) {
+        vat.connections.erase(&peerVat);
+      }
     }
 
     bool isIdle() { return idle; }
@@ -480,6 +484,7 @@ public:
   private:
     TestVat& vat;
     TestVat& peerVat;
+    bool unique;
     RpcDumper::Sender dumper;
     kj::Maybe<ConnectionImpl&> partner;
     kj::StringPtr partnerName;
@@ -502,16 +507,21 @@ public:
 
     TestVat& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
-    KJ_IF_SOME(conn, connections.find(&dst)) {
-      return kj::Own<Connection>(kj::addRef(*conn));
-    } else {
-      auto local = kj::refcounted<ConnectionImpl>(*this, dst, self);
-      auto remote = kj::refcounted<ConnectionImpl>(dst, *this, dst.self);
-      local->attach(*remote);
-
-      dst.acceptQueue.push(kj::mv(remote));
-      return kj::Own<Connection>(kj::mv(local));
+    bool unique = hostId.getUnique();
+    if (!unique) {
+      KJ_IF_SOME(conn, connections.find(&dst)) {
+        // Return existing connection.
+        return kj::Own<Connection>(kj::addRef(*conn));
+      }
     }
+
+    // Create new connection.
+    auto local = kj::refcounted<ConnectionImpl>(*this, dst, self, unique);
+    auto remote = kj::refcounted<ConnectionImpl>(dst, *this, dst.self, unique);
+    local->attach(*remote);
+
+    dst.acceptQueue.push(kj::mv(remote));
+    return kj::Own<Connection>(kj::mv(local));
   }
 
   kj::Promise<kj::Own<Connection>> accept() override {
@@ -596,10 +606,11 @@ struct TestContext {
         : vatNetwork(vatNetwork), rpcSystem(makeRpcServer(vatNetwork, kj::mv(bootstrap))) {}
 
     template <typename T = test::TestInterface>
-    typename T::Client connect(kj::StringPtr to) {
+    typename T::Client connect(kj::StringPtr to, bool unique = false) {
       MallocMessageBuilder refMessage(128);
       auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
       hostId.setHost(to);
+      hostId.setUnique(unique);
       return rpcSystem.bootstrap(hostId).castAs<T>();
     }
   };
@@ -1905,6 +1916,48 @@ KJ_TEST("basic three-party handoff") {
 
   // Alice is still notn connected to Bob.
   KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+}
+
+KJ_TEST("three-party handoff introduce to self") {
+  TestContext context;
+
+  // Create a CapabilityServerSet with a TestInterfaceImpl in it.
+  CapabilityServerSet<test::TestInterface> capSet;
+  TestInterfaceImpl* ptr;
+  test::TestInterface::Client cap = nullptr;
+  int callCount = 0;
+  {
+    auto obj = kj::heap<TestInterfaceImpl>(callCount);
+    ptr = obj;
+    cap = capSet.add(kj::mv(obj));
+  }
+
+  // Create Carol, whose bootstrap is a TestMoreStuffImpl. (Can't use Bob because calling
+  // getTestMoreStuff() returns a new instance each time, but we want a single shared instance.)
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  context.initVat("carol", kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  // Connect to Carol by two different means, getting the same capability back.
+  auto carolCap1 = context.alice.connect<test::TestMoreStuff>("carol", true);
+  auto carolCap2 = context.alice.connect<test::TestMoreStuff>("carol", true);
+
+  // Pass a capability to Carol over the first connection.
+  {
+    auto req = carolCap1.holdRequest();
+    req.setCap(cap);
+    req.send().wait(context.waitScope);
+  }
+
+  // Receive it back over the second.
+  auto roundTripCap = carolCap2.getHeldRequest().send().wait(context.waitScope).getCap();
+
+  // We should be able to unwrap that.
+  auto& roundTripObj = KJ_ASSERT_NONNULL(
+      capSet.getLocalServer(roundTripCap).wait(context.waitScope));
+
+  // It should have unwrapped to the same original object.
+  KJ_EXPECT(&roundTripObj == ptr);
 }
 
 }  // namespace

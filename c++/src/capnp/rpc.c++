@@ -1906,8 +1906,13 @@ private:
         } else {
           // We've been introduced to ourselves. A corresponding `Provide` message will come
           // directly to us via another connection.
-          // TODO(now): implement this
-          KJ_UNIMPLEMENTED("introduction to self");
+          return newLocalPromiseClient(state.connection->completeThirdParty(completion)
+              .then([](kj::Rc<kj::Refcounted> holder) mutable {
+            // TODO(now): Await embargo if needed.
+
+            return kj::mv(KJ_ASSERT_NONNULL(
+                holder.downcast<ThirdPartyExchangeValue>()->value.tryGet<kj::Own<ClientHook>>()));
+          }));
         }
       }
 

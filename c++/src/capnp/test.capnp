@@ -946,6 +946,9 @@ interface TestAuthenticatedBootstrap(VatId) {
 
 struct TestSturdyRefHostId {
   host @0 :Text;
+
+  unique @1 :Bool = false;
+  # Set true (in rpc-test) to open a new connection even if one already exists.
 }
 
 struct TestThirdPartyCompletion {
