@@ -184,14 +184,20 @@ void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
 
 class TestInterfaceImpl final: public test::TestInterface::Server {
 public:
-  TestInterfaceImpl(int& callCount);
+  TestInterfaceImpl(int& callCount, kj::Maybe<int&> handleCount = kj::none);
 
   kj::Promise<void> foo(FooContext context) override;
 
   kj::Promise<void> baz(BazContext context) override;
 
+  kj::Promise<void> getTestPipeline(GetTestPipelineContext context) override;
+  kj::Promise<void> getTestTailCallee(GetTestTailCalleeContext context) override;
+  kj::Promise<void> getTestTailCaller(GetTestTailCallerContext context) override;
+  kj::Promise<void> getTestMoreStuff(GetTestMoreStuffContext context) override;
+
 private:
   int& callCount;
+  kj::Maybe<int&> handleCount;
 };
 
 class TestExtendsImpl final: public test::TestExtends2::Server {

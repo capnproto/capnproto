@@ -65,11 +65,6 @@ public:
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;
 };
 
-class SturdyRefRestorerBase {
-public:
-  virtual Capability::Client baseRestore(AnyPointer::Reader ref) = 0;
-};
-
 class BootstrapFactoryBase {
   // Non-template version of BootstrapFactory.  Ignore this class; see BootstrapFactory in rpc.h.
 public:
@@ -82,7 +77,6 @@ class RpcSystemBase {
 public:
   RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface);
   RpcSystemBase(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory);
-  RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer);
   RpcSystemBase(RpcSystemBase&& other) noexcept;
   ~RpcSystemBase() noexcept(false);
 
@@ -95,7 +89,6 @@ private:
   kj::Own<Impl> impl;
 
   Capability::Client baseBootstrap(AnyStruct::Reader vatId);
-  Capability::Client baseRestore(AnyStruct::Reader vatId, AnyPointer::Reader objectId);
   void baseSetFlowLimit(size_t words);
 
   class RpcConnectionState;

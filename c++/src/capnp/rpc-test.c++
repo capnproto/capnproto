@@ -143,8 +143,7 @@ public:
 
         returnTypes[std::make_pair(sender, restore.getQuestionId())] = InterfaceSchema();
 
-        return kj::str(senderName, "(", restore.getQuestionId(), "): bootstrap ",
-                       restore.getDeprecatedObjectId().getAs<test::TestSturdyRefObjectId>());
+        return kj::str(senderName, "(", restore.getQuestionId(), "): bootstrap");
       }
 
       default:
@@ -506,28 +505,15 @@ TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
 
 // =======================================================================================
 
-class TestRestorer final: public SturdyRefRestorer<test::TestSturdyRefObjectId> {
+class TestRestorer {
+  // The name of this class is historical. It used to implement an interface called
+  // SturdyRefRestorer, but that interface was deprecated and removed in favor of singleton
+  // bootstrap objects. So now this just holds the boostrap object.
 public:
   int callCount = 0;
   int handleCount = 0;
 
-  Capability::Client restore(test::TestSturdyRefObjectId::Reader objectId) override {
-    switch (objectId.getTag()) {
-      case test::TestSturdyRefObjectId::Tag::TEST_INTERFACE:
-        return kj::heap<TestInterfaceImpl>(callCount);
-      case test::TestSturdyRefObjectId::Tag::TEST_EXTENDS:
-        return Capability::Client(newBrokenCap("No TestExtends implemented."));
-      case test::TestSturdyRefObjectId::Tag::TEST_PIPELINE:
-        return kj::heap<TestPipelineImpl>(callCount);
-      case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLEE:
-        return kj::heap<TestTailCalleeImpl>(callCount);
-      case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
-        return kj::heap<TestTailCallerImpl>(callCount);
-      case test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF:
-        return kj::heap<TestMoreStuffImpl>(callCount, handleCount);
-    }
-    KJ_UNREACHABLE;
-  }
+  test::TestInterface::Client cap = kj::heap<TestInterfaceImpl>(callCount, handleCount);
 };
 
 struct TestContext {
@@ -545,7 +531,7 @@ struct TestContext {
         clientNetwork(network.add("client")),
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork)),
-        rpcServer(makeRpcServer(serverNetwork, restorer)) {}
+        rpcServer(makeRpcServer(serverNetwork, restorer.cap)) {}
   TestContext(Capability::Client bootstrap)
       : waitScope(loop),
         clientNetwork(network.add("client")),
@@ -553,22 +539,18 @@ struct TestContext {
         rpcClient(makeRpcClient(clientNetwork)),
         rpcServer(makeRpcServer(serverNetwork, bootstrap)) {}
 
-  Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
+  test::TestInterface::Client connect() {
     MallocMessageBuilder refMessage(128);
-    auto ref = refMessage.initRoot<test::TestSturdyRef>();
-    auto hostId = ref.initHostId();
+    auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
     hostId.setHost("server");
-    ref.getObjectId().initAs<test::TestSturdyRefObjectId>().setTag(tag);
-
-    return rpcClient.restore(hostId, ref.getObjectId());
+    return rpcClient.bootstrap(hostId).castAs<test::TestInterface>();
   }
 };
 
 TEST(Rpc, Basic) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_INTERFACE)
-      .castAs<test::TestInterface>();
+  auto client = context.connect();
 
   auto request1 = client.fooRequest();
   request1.setI(123);
@@ -608,8 +590,7 @@ TEST(Rpc, Basic) {
 TEST(Rpc, Pipelining) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
-      .castAs<test::TestPipeline>();
+  auto client = context.connect().getTestPipelineRequest().send().getCap();
 
   int chainedCallCount = 0;
 
@@ -644,8 +625,7 @@ TEST(Rpc, Pipelining) {
 KJ_TEST("RPC sendForPipeline()") {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
-      .castAs<test::TestPipeline>();
+  auto client = context.connect().getTestPipelineRequest().send().getCap();
 
   int chainedCallCount = 0;
 
@@ -680,8 +660,7 @@ KJ_TEST("RPC sendForPipeline()") {
 KJ_TEST("RPC context.setPipeline") {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
-      .castAs<test::TestPipeline>();
+  auto client = context.connect().getTestPipelineRequest().send().getCap();
 
   auto promise = client.getCapPipelineOnlyRequest().send();
 
@@ -709,8 +688,7 @@ KJ_TEST("RPC context.setPipeline") {
 TEST(Rpc, Release) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto handle1 = client.getHandleRequest().send().wait(context.waitScope).getHandle();
   auto promise = client.getHandleRequest().send();
@@ -741,8 +719,7 @@ TEST(Rpc, ReleaseOnCancel) {
 
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
   client.whenResolved().wait(context.waitScope);
 
   {
@@ -766,8 +743,7 @@ TEST(Rpc, ReleaseOnCancel) {
 TEST(Rpc, TailCall) {
   TestContext context;
 
-  auto caller = context.connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
-      .castAs<test::TestTailCaller>();
+  auto caller = context.connect().getTestTailCallerRequest().send().getCap();
 
   int calleeCallCount = 0;
 
@@ -842,8 +818,7 @@ private:
 TEST(Rpc, TailCallCancel) {
   TestContext context;
 
-  auto caller = context.connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
-      .castAs<test::TestTailCaller>();
+  auto caller = context.connect().getTestTailCallerRequest().send().getCap();
 
   int callCount = 0, cancelCount = 0;
 
@@ -917,8 +892,7 @@ TEST(Rpc, Cancellation) {
   bool destroyed = false;
   auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Promise<void> promise = nullptr;
 
@@ -952,8 +926,7 @@ TEST(Rpc, Cancellation) {
 TEST(Rpc, PromiseResolve) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   int chainedCallCount = 0;
 
@@ -995,8 +968,7 @@ TEST(Rpc, RetainAndRelease) {
   auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   {
-    auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-        .castAs<test::TestMoreStuff>();
+    auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
     {
       auto request = client.holdRequest();
@@ -1053,8 +1025,7 @@ TEST(Rpc, RetainAndRelease) {
 TEST(Rpc, Cancel) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
@@ -1084,8 +1055,7 @@ TEST(Rpc, Cancel) {
 TEST(Rpc, SendTwice) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
@@ -1132,8 +1102,7 @@ RemotePromise<test::TestCallOrder::GetCallSequenceResults> getCallSequence(
 TEST(Rpc, Embargo) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>());
 
@@ -1173,8 +1142,7 @@ TEST(Rpc, EmbargoUnwrap) {
 
   capnp::CapabilityServerSet<test::TestCallOrder> capSet;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto cap = capSet.add(kj::heap<TestCallOrderImpl>());
 
@@ -1230,8 +1198,7 @@ void expectPromiseThrows(kj::Promise<void>&& promise, kj::WaitScope& waitScope) 
 TEST(Rpc, EmbargoError) {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto paf = kj::newPromiseAndFulfiller<test::TestCallOrder::Client>();
 
@@ -1279,8 +1246,7 @@ TEST(Rpc, EmbargoNull) {
 
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto promise = client.getNullRequest().send();
 
@@ -1304,8 +1270,7 @@ TEST(Rpc, CallBrokenPromise) {
 
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
   auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
 
   {
@@ -1443,8 +1408,7 @@ KJ_TEST("loopback bootstrap()") {
 KJ_TEST("method throws exception") {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
   client.throwExceptionRequest().send().ignoreResult()
@@ -1460,8 +1424,7 @@ KJ_TEST("method throws exception") {
 KJ_TEST("method throws exception won't redundantly add remote exception prefix") {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
   client.throwRemoteExceptionRequest().send().ignoreResult()
@@ -1481,8 +1444,7 @@ KJ_TEST("method throws exception with trace encoder") {
     return kj::str("trace for ", e.getDescription());
   });
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
   client.throwExceptionRequest().send().ignoreResult()
@@ -1498,8 +1460,7 @@ KJ_TEST("method throws exception with trace encoder") {
 KJ_TEST("method throws exception with detail") {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
   client.throwExceptionWithDetailRequest().send().ignoreResult()
@@ -1547,8 +1508,7 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
     return true;
   });
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   {
     shouldThrowFromSend = true;
@@ -1658,8 +1618,7 @@ KJ_TEST("export the same promise twice") {
     return true;
   });
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   auto sendReq = [&](test::TestInterface::Client cap) {
     auto req = client.callFooRequest();
@@ -1715,8 +1674,7 @@ KJ_TEST("export the same promise twice") {
 KJ_TEST("connections set idle when appropriate") {
   TestContext context;
 
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
   context.waitScope.poll();  // let messages propagate
 
   auto& clientConn = KJ_ASSERT_NONNULL(
@@ -1735,8 +1693,7 @@ KJ_TEST("connections set idle when appropriate") {
   KJ_EXPECT(serverConn.isIdle());
 
   // Establish bootstrap again.
-  client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
+  client = context.connect().getTestMoreStuffRequest().send().getCap();
   context.waitScope.poll();  // let messages propagate
 
   // Once again, not idle.
@@ -1766,8 +1723,7 @@ KJ_TEST("clean connection shutdown") {
 
   // Open a connection and immediately drop the capability.
   {
-    auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-        .castAs<test::TestMoreStuff>();
+    auto client = context.connect().getTestMoreStuffRequest().send().getCap();
     context.waitScope.poll();  // let messages propagate
   }
   context.waitScope.poll();  // let messages propagate

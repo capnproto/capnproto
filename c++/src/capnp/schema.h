@@ -747,16 +747,6 @@ public:
   static ListSchema of(Type elementType);
   // Construct the schema for a list of the given type.
 
-  static ListSchema of(schema::Type::Reader elementType, Schema context)
-      CAPNP_DEPRECATED("Does not handle generics correctly.");
-  // DEPRECATED: This method cannot correctly account for generic type parameter bindings that
-  //   may apply to the input type. Instead of using this method, use a method of the Schema API
-  //   that corresponds to the exact kind of dependency. For example, to get a field type, use
-  //   StructSchema::Field::getType().
-  //
-  // Construct from an element type schema.  Requires a context which can handle getDependency()
-  // requests for any type ID found in the schema.
-
   Type getElementType() const;
 
   inline schema::Type::Which whichElementType() const;
