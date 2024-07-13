@@ -1180,6 +1180,16 @@ private:
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
         CallHints hints) override {
+      if (isResolved()) {
+        // Go directly to the resolved capability.
+        //
+        // If we don't do this now, then we'll return an RpcRequest which, as soon as send() is
+        // called, may discover that it's not sending to an RPC capability after all, and will
+        // just have to call `newCall()` on the inner capability at that point and copy the request
+        // over. Better to redirect now and avoid the copy later.
+        return cap->newCall(interfaceId, methodId, sizeHint, hints);
+      }
+
       receivedCall = true;
 
       // IMPORTANT: We must call our superclass's version of newCall(), NOT cap->newCall(), because
@@ -1190,6 +1200,10 @@ private:
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context, CallHints hints) override {
+      // Unlike newCall(), call() always goes directly to the underlying cap, so we don't need an
+      // `isResolved()` check. Note that `receivedCall = true` doesn't do anything if we're already
+      // resolved.
+
       receivedCall = true;
       return cap->call(interfaceId, methodId, kj::mv(context), hints);
     }
@@ -1312,12 +1326,16 @@ private:
       // Every branch above ends by setting resolutionType to something other than UNRESOLVED.
       KJ_DASSERT(isResolved());
 
-      // If the original capability was used for streaming calls, it will have a
-      // `flowController` that might still be shepherding those calls. We'll need make sure that
-      // it doesn't get thrown away. Note that we know that *cap is an RpcClient because resolve()
-      // is only called once and our constructor required that the initial capability is an
-      // RpcClient.
-      KJ_IF_SOME(f, kj::downcast<RpcClient>(*cap).flowController) {
+      // If the promise was used for streaming calls, it will have a `flowController` that might
+      // still be shepherding those calls. We'll need make sure that it doesn't get thrown away.
+      //
+      // NOTE: An older version of this code pulled the flow controller off of `*cap` (the original
+      //   underlying capability) instead of using our own. This was actually wrong because calls
+      //   on the `PromiseClient` will use the `PromiseClient`'s own `flowController` and not the
+      //   one on the underlying pre-resolution capability.
+      // TODO(cleanup): It seems awkward that both the promise and the thing it is wrapping can
+      //   have separate flow controllers?
+      KJ_IF_SOME(f, flowController) {
         if (isSameConnection) {
           // The new target is on the same connection. It would make a lot of sense to keep using
           // the same flow controller if possible.
