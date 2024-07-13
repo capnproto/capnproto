@@ -2002,14 +2002,25 @@ KJ_TEST("three-party handoff introduce to self") {
   KJ_EXPECT(&roundTripObj == ptr);
 }
 
-class TestNoTailForwarder final: public Capability::Server {
+class TestNoTailForwarder final: public test::TestMoreStuff::Server {
   // Capability which just forwards to some other capability, but without using a tail call.
+  //
+  // If `holdBouncer` is provided, then calls to `hold()` will additionally round-trip the
+  // capability to the bouncer and back, adding a leg that should get path-shortened away if
+  // everything is working correctly.
 
 public:
-  TestNoTailForwarder(Capability::Client next): next(kj::mv(next)) {}
+  TestNoTailForwarder(test::TestMoreStuff::Client next,
+                      kj::Maybe<test::TestMoreStuff::Client> holdBouncer)
+      : next(kj::mv(next)), holdBouncer(kj::mv(holdBouncer)) {}
 
   DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
                                   CallContext<AnyPointer, AnyPointer> context) override {
+    if (interfaceId == capnp::typeId<test::TestMoreStuff>() && methodId == 3) {
+      // Calling TestMoreStuff.hold(). Dispatch normally.
+      return test::TestMoreStuff::Server::dispatchCall(interfaceId, methodId, context);
+    }
+
     auto params = context.getParams();
     auto req = next.typelessRequest(interfaceId, methodId, params.targetSize(), {});
     req.set(params);
@@ -2020,10 +2031,33 @@ public:
   }
 
 private:
-  Capability::Client next;
+  test::TestMoreStuff::Client next;
+  kj::Maybe<test::TestMoreStuff::Client> holdBouncer;
+
+  kj::Promise<void> hold(HoldContext context) override {
+    auto cap = context.getParams().getCap();
+
+    // If we have a holdBouncer, bounce the capability through it first before forwarding on.
+    KJ_IF_SOME(hb, holdBouncer) {
+      auto req = hb.echoRequest();
+
+      // HACK: echo() just reflects the cap back, but it was written to expect TestCallOrder
+      //   specifically. We'll just pretend that's what we have, it doesn't matter.
+      // TODO(cleanup): Change echo() to take `Capability` or maybe even be a generic.
+      req.setCap(cap.castAs<test::TestCallOrder>());
+      auto resp = co_await req.send();
+      cap = resp.getCap().castAs<test::TestInterface>();
+    }
+
+    auto req = next.holdRequest();
+    req.setCap(kj::mv(cap));
+    co_await req.send();
+
+    // (hold() has no results)
+  }
 };
 
-void doForwardingTest(bool allowForwarding) {
+void doForwardingTest(bool allowForwarding, bool addReflectionLeg) {
   TestContext context;
   context.network.forwardingEnabled = allowForwarding;
 
@@ -2036,11 +2070,24 @@ void doForwardingTest(bool allowForwarding) {
   auto& carol = context.initVat("carol",
       kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
 
+  int eveCallCount = 0;
+  int eveHandleCount = 0;
+
   // Arrange for Dave to forward all calls to Carol.
   auto& dave = [&]() -> TestContext::Vat& {
     auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
     auto& dave = context.initVat("dave", kj::mv(paf.promise));
-    paf.fulfiller->fulfill(kj::heap<TestNoTailForwarder>(dave.connect<Capability>("carol")));
+
+    kj::Maybe<test::TestMoreStuff::Client> holdBouncer = kj::none;
+    if (addReflectionLeg) {
+      // Add a `holdBouncer`, so the capability gets bounced from Dave to Eve and back to Dave
+      // again before forwarding on to Carol.
+      context.initVat("eve", kj::heap<TestMoreStuffImpl>(eveCallCount, eveHandleCount));
+      holdBouncer = dave.connect<test::TestMoreStuff>("eve");
+    }
+
+    paf.fulfiller->fulfill(kj::heap<TestNoTailForwarder>(
+        dave.connect<test::TestMoreStuff>("carol"), kj::mv(holdBouncer)));
     return dave;
   }();
 
@@ -2077,7 +2124,7 @@ void doForwardingTest(bool allowForwarding) {
     KJ_EXPECT(dave.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
 
     // Forwarding occurred.
-    KJ_EXPECT(context.network.forwardCount == 1);
+    KJ_EXPECT(context.network.forwardCount == addReflectionLeg ? 3 : 1);
     KJ_EXPECT(context.network.deniedForwardCount == 0);
   } else {
     // Dave had to accept the capability from Bob before forwarding it, so had to connect to bob.
@@ -2090,11 +2137,15 @@ void doForwardingTest(bool allowForwarding) {
 }
 
 KJ_TEST("four-party handoff with forwarding") {
-  doForwardingTest(true);
+  doForwardingTest(true, false);
 }
 
 KJ_TEST("four-party handoff without forwarding") {
-  doForwardingTest(false);
+  doForwardingTest(false, false);
+}
+
+KJ_TEST("four-party handoff with forwarding through a reflected path") {
+  doForwardingTest(true, true);
 }
 
 }  // namespace

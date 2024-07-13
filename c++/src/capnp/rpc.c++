@@ -896,6 +896,9 @@ private:
       return connectionState.get() == &expected;
     }
 
+    virtual kj::Maybe<PromiseClient&> tryDowncastToPromiseClient() { return kj::none; }
+    // Returns a reference to this same object if it's a PromiseClient specifically.
+
     virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                                 kj::Vector<int>& fds) = 0;
     // Writes a CapDescriptor referencing this client.  The CapDescriptor must be sent as part of
@@ -1225,6 +1228,8 @@ private:
       }
     }
 
+    kj::Maybe<PromiseClient&> tryDowncastToPromiseClient() override { return *this; }
+
     kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                         kj::Vector<int>& fds) override {
       receivedCall = true;
@@ -1350,7 +1355,7 @@ private:
         isSameConnection = true;
 
         // We resolved to some other RPC capability hosted by the same peer.
-        if (replacement->whenMoreResolved() != kj::none) {
+        KJ_IF_SOME(promiseReplacement, rpcReplacement.tryDowncastToPromiseClient()) {
           // We resolved to another remote promise. If *that* promise eventually resolves back
           // to us, we'll need a disembargo. Possibilities:
           // 1. The other promise hasn't resolved at all yet. In that case we can simply set its
@@ -1363,9 +1368,7 @@ private:
           //    case we should treat it as if we resolved directly to the other promise's result,
           //    possibly requiring a disembargo under the same conditions.
 
-          // We know the other object is a PromiseClient because it's the only ClientHook
-          // type in the RPC implementation which returns non-null for `whenMoreResolved()`.
-          PromiseClient* other = &kj::downcast<PromiseClient>(rpcReplacement);
+          PromiseClient* other = &promiseReplacement;
           while (other->resolutionType == MERGED) {
             // There's no need to resolve to a thing that's just going to resolve to another thing.
             replacement = other->cap->addRef();
@@ -1550,7 +1553,25 @@ private:
         // We can get away without accepting the capability.
         auto& deferred = state.get<Deferred>();
         provider.forwardThirdPartyToContact(*deferred.contact, recipient, contact);
-        return deferred.vine->addRef();
+
+        // This gets tricky: The vine we return has to have two properties:
+        // 1. Its existence holds open the upstream vine, since the recipient of the forward is
+        //    depending on the Provide operation remaining available until the vine is dropped.
+        // 2. If the recipient forwards the capability *back* to us, it can do so by specifynig the
+        //    vine itself (see `writeDescriptor()`, above).
+        //
+        // If we only needed to solve (1), we could just return vine->addRef() here. But then if
+        // the capability got reflected back, we'd lose the ability to forward it further, because
+        // we would have lost the `DeferredThirdPartyClient` and would be holding only the vine at
+        // that point.
+        //
+        // If we only needed to solve (2), we'd return a reference to ourselves. But then if
+        // ensureAccepted() was subsequently called on this object, which could cancel the provide
+        // operation before the recipient of the forward got a chance to accept it.
+        //
+        // We can solve both at once by returning a reference to ourselves with the vine reference
+        // attached!
+        return addRef().attach(deferred.vine->addRef());
       } else {
         // Either:
         // a. We already accepted this cap, so we should treat this as a normal three-party handoff
