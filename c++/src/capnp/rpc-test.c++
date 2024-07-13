@@ -153,7 +153,7 @@ public:
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
             return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
-                           " caps:[", kj::strArray(capTable, ", "), "]");
+                           " caps:[", kj::strArray(capTable, ", "), "]\n");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
             return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
@@ -234,6 +234,10 @@ public:
   }
 
   RpcDumper dumper;
+
+  bool forwardingEnabled = false;
+  uint forwardCount = 0;
+  uint deniedForwardCount = 0;
 
 private:
   kj::HashMap<kj::StringPtr, kj::Own<TestVat>> map;
@@ -449,14 +453,35 @@ public:
       uint64_t token = vat.network.newToken();
       otherContactInfo.initPath().setHost(kj::downcast<ConnectionImpl>(other).partnerName);
       otherContactInfo.setToken(token);
+      otherContactInfo.setSentBy(vat.self);
       thisAwaitInfo.setToken(token);
     }
 
     kj::Maybe<kj::Own<Connection>> connectToIntroduced(
         test::TestThirdPartyToContact::Reader contact,
         test::TestThirdPartyCompletion::Builder completion) override {
+      KJ_EXPECT(contact.getSentBy() == partnerName);
       completion.setToken(contact.getToken());
       return vat.connect(contact.getPath());
+    }
+
+    bool canForwardThirdPartyToContact(
+        test::TestThirdPartyToContact::Reader contact, Connection& destination) override {
+      if (!vat.network.forwardingEnabled) {
+        ++vat.network.deniedForwardCount;
+      }
+      return vat.network.forwardingEnabled;
+    }
+
+    void forwardThirdPartyToContact(
+        test::TestThirdPartyToContact::Reader contact, Connection& destination,
+        test::TestThirdPartyToContact::Builder result) override {
+      KJ_EXPECT(vat.network.forwardingEnabled);
+      KJ_EXPECT(contact.getSentBy() == partnerName);
+      ++vat.network.forwardCount;
+      result.setPath(contact.getPath());
+      result.setToken(contact.getToken());
+      result.setSentBy(vat.self);
     }
 
     kj::Own<void> awaitThirdParty(
@@ -1880,6 +1905,23 @@ KJ_TEST("basic three-party handoff") {
   // Pump event loop to allow things to settle.
   context.waitScope.poll();
 
+  // Bob hasn't been called yet but Carol has.
+  KJ_EXPECT(context.restorer.callCount == 0);
+  KJ_EXPECT(carolCallCount == 1);
+
+  // Carol is not connected to Bob yet because Carol accepts the capability lazily on first
+  // invocation.
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Tell Carol to invoke the held capability. This forces Carol to connect to Bob.
+  {
+    auto resp = carolCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Bob has been called.
+  KJ_EXPECT(context.restorer.callCount == 1);
+
   // Carol is now connected to Bob, and not idle.
   auto& carolToBob = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
   KJ_EXPECT(!carolToBob.isIdle());
@@ -1892,18 +1934,14 @@ KJ_TEST("basic three-party handoff") {
   context.waitScope.poll();
   KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
 
-  // Bob hasn't been called yet but Carol has.
-  KJ_EXPECT(context.restorer.callCount == 0);
-  KJ_EXPECT(carolCallCount == 1);
-
-  // Tell Carol to invoke the held capability.
+  // Do another call to prove shutting down the connection didn't hurt.
   {
     auto resp = carolCap.callHeldRequest().send().wait(context.waitScope);
     KJ_EXPECT(resp.getS() == "bar");
   }
 
-  // Bob has been called.
-  KJ_EXPECT(context.restorer.callCount == 1);
+  // Bob has been called again.
+  KJ_EXPECT(context.restorer.callCount == 2);
 
   // Carol -> Bob connection is still not idle.
   KJ_EXPECT(!carolToBob.isIdle());
@@ -1916,6 +1954,10 @@ KJ_TEST("basic three-party handoff") {
 
   // Alice is still notn connected to Bob.
   KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // No forwarding should have occurred in this test.
+  KJ_EXPECT(context.network.forwardCount == 0);
+  KJ_EXPECT(context.network.deniedForwardCount == 0);
 }
 
 KJ_TEST("three-party handoff introduce to self") {
@@ -1958,6 +2000,101 @@ KJ_TEST("three-party handoff introduce to self") {
 
   // It should have unwrapped to the same original object.
   KJ_EXPECT(&roundTripObj == ptr);
+}
+
+class TestNoTailForwarder final: public Capability::Server {
+  // Capability which just forwards to some other capability, but without using a tail call.
+
+public:
+  TestNoTailForwarder(Capability::Client next): next(kj::mv(next)) {}
+
+  DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                  CallContext<AnyPointer, AnyPointer> context) override {
+    auto params = context.getParams();
+    auto req = next.typelessRequest(interfaceId, methodId, params.targetSize(), {});
+    req.set(params);
+    auto promise = req.send().then([context](Response<AnyPointer> resp) mutable {
+      context.getResults(resp.targetSize()).set(resp);
+    });
+    return { .promise = kj::mv(promise), .isStreaming = false };
+  }
+
+private:
+  Capability::Client next;
+};
+
+void doForwardingTest(bool allowForwarding) {
+  TestContext context;
+  context.network.forwardingEnabled = allowForwarding;
+
+  // Set up Alice, Bob, Carol, and Dave.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  auto& carol = context.initVat("carol",
+      kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  // Arrange for Dave to forward all calls to Carol.
+  auto& dave = [&]() -> TestContext::Vat& {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& dave = context.initVat("dave", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestNoTailForwarder>(dave.connect<Capability>("carol")));
+    return dave;
+  }();
+
+  // Alice connects to Bob and Dave.
+  auto bobCap = context.alice.connect<test::TestInterface>("bob");
+  auto daveCap = context.alice.connect<test::TestMoreStuff>("dave");
+
+  // Send `bobCap` to Dave, who sends it on to Carol.
+  {
+    auto req = daveCap.holdRequest();
+    req.setCap(kj::mv(bobCap));
+    req.send().wait(context.waitScope);
+  }
+
+  // Pump event loop to allow things to settle.
+  context.waitScope.poll();
+
+  // Tell Dave to invoke the held capability. Dave forwards to Carol. This forces Carol to connect
+  // to Bob.
+  {
+    auto resp = daveCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Dave is connected to Carol, who is connected to Bob.
+  KJ_EXPECT(dave.vatNetwork.getConnectionTo(carol.vatNetwork) != kj::none);
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(bob.vatNetwork) != kj::none);
+
+  // Carol never connected to Alice.
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(alice.vatNetwork) == kj::none);
+
+  if (allowForwarding) {
+    // Dave never connected to Bob.
+    KJ_EXPECT(dave.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+    // Forwarding occurred.
+    KJ_EXPECT(context.network.forwardCount == 1);
+    KJ_EXPECT(context.network.deniedForwardCount == 0);
+  } else {
+    // Dave had to accept the capability from Bob before forwarding it, so had to connect to bob.
+    KJ_EXPECT(dave.vatNetwork.getConnectionTo(bob.vatNetwork) != kj::none);
+
+    // No forwarding occurred.
+    KJ_EXPECT(context.network.forwardCount == 0);
+    KJ_EXPECT(context.network.deniedForwardCount == 1);
+  }
+}
+
+KJ_TEST("four-party handoff with forwarding") {
+  doForwardingTest(true);
+}
+
+KJ_TEST("four-party handoff without forwarding") {
+  doForwardingTest(false);
 }
 
 }  // namespace

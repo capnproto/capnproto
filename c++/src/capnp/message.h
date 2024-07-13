@@ -530,9 +530,14 @@ namespace _ {
   };
 };
 
-template <typename Reader, typename>
+template <typename Reader, typename T>
 kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
-  auto size = reader.totalSize();
+  MessageSize size;
+  if constexpr(kj::isSameType<T, AnyPointer>()) {
+    size = reader.targetSize();
+  } else {
+    size = reader.totalSize();
+  }
   auto buffer = kj::heapArray<capnp::word>(size.wordCount + 1);
   memset(buffer.asBytes().begin(), 0, buffer.asBytes().size());
   if (size.capCount == 0) {

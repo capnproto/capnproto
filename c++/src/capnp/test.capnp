@@ -960,6 +960,10 @@ struct TestThirdPartyToAwait {
 struct TestThirdPartyToContact {
   path @0 :TestSturdyRefHostId;
   token @1 :UInt64;
+
+  sentBy @2 :Text;
+  # Host who sent this, used to verify we didn't just forward by copying the contact, we used
+  # forwardThirdPartyToContact() to rewrite it.
 }
 struct TestJoinResult {}
 
