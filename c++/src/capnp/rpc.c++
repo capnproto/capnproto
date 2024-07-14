@@ -896,8 +896,13 @@ private:
       return connectionState.get() == &expected;
     }
 
-    virtual kj::Maybe<PromiseClient&> tryDowncastToPromiseClient() { return kj::none; }
-    // Returns a reference to this same object if it's a PromiseClient specifically.
+    virtual void promiseResolvedToThis(bool receivedCall) {}
+    // Called to indicate that an RPC promise was resolved (via a `Resolve` message we received)
+    // to point to this client (i.e. the `CapDescriptor` for the resolution pointed to another
+    // import table entry). `receivedCall` is true if the resolving promise had received calls
+    // in the past, which had been pipelined. Some RpcClient derivatives need to know when this
+    // happens in order to arrange to use embargoes where appropriate. Others don't care, so can
+    // use the default implementation.
 
     struct WriteDescriptorResult {
       kj::Maybe<ExportId> exportId;
@@ -1251,7 +1256,14 @@ private:
       }
     }
 
-    kj::Maybe<PromiseClient&> tryDowncastToPromiseClient() override { return *this; }
+    void promiseResolvedToThis(bool receivedCall) override {
+      // Some other promise resolved to *this* promise.
+      KJ_REQUIRE(!isResolved,
+          "peer committed RPC protocol error: a promise cannot resolve to another promise "
+          "where the latter promise is itself already resolved; see "
+          "`CapDescriptor.senderPromise`.");
+      this->receivedCall = this->receivedCall || receivedCall;
+    }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                           kj::Vector<int>& fds) override {
@@ -1358,19 +1370,18 @@ private:
         isSameConnection = true;
 
         // We resolved to some other RPC capability hosted by the same peer.
-        KJ_IF_SOME(promiseReplacement, rpcReplacement.tryDowncastToPromiseClient()) {
-          // We resolved to another remote promise. If *that* promise eventually resolves back
-          // to us, we'll need a disembargo. Luckily, we know that the other promise cannot have
-          // resolved yet, due to the requirement that a `CapDescriptor` cannot reference an
-          // already-resolved promise. So, we don't need to start a disembargo now; we can simply
-          // rely on the other promise applying a disembargo later. To make sure that happens,
-          // we need to propagate our `receivedCall` flag to it.
-          KJ_REQUIRE(!promiseReplacement.isResolved,
-              "peer committed RPC protocol error: a promise cannot resolve to another promise "
-              "where the latter promise is itself already resolved; see "
-              "`CapDescriptor.senderPromise`.");
-          promiseReplacement.receivedCall = promiseReplacement.receivedCall || receivedCall;
-        }
+        //
+        // It's possible we resolved to a remote promise. If *that* promise eventually resolves
+        // back to us, we'll need a disembargo. Luckily, we know that the other promise cannot have
+        // resolved yet, due to the requirement that a `CapDescriptor` cannot reference an
+        // already-resolved promise. So, we don't need to start a disembargo now; we can simply
+        // rely on the other promise applying a disembargo later. To make sure that happens,
+        // we need to propagate our `receivedCall` flag to it.
+        //
+        // (And if `rpcReplacement` is *not* a promise then no embargo is needed because the
+        // capability cannot resolve back to point to us later. It's remote over the same
+        // connection and therefore calls will stay ordered naturally.)
+        rpcReplacement.promiseResolvedToThis(receivedCall);
       } else {
         if (replacement->isNull() || replacement->isError()) {
           // Null or broken capabilities appear to be local capabilities, but they aren't really.
