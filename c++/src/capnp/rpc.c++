@@ -686,6 +686,21 @@ private:
     // will need to be released.
   };
 
+  struct VineInfo {
+    // Metadata possibly attached to an export describing the 3PH vine it represents.
+
+    using Provision = kj::Own<QuestionRef>;
+    // This is the root of the vine. The `QuestionRef` is the `Provide` operation initiated from
+    // this node.
+
+    using Contact = kj::Own<AnyPointer::Reader>;
+    // This vine was passed over one or more connections. The `AnyPointer` contains the
+    // `ThirdPartyToContact` value as received to create this import.
+
+    kj::OneOf<Provision, Contact> info;
+    // The info is one of the two above things.
+  };
+
   struct Export {
     uint refcount = 0;
     // When this reaches 0, drop `clientHook` and free this export.
@@ -699,6 +714,9 @@ private:
     kj::Maybe<kj::Promise<void>> resolveOp = kj::none;
     // If this export is a promise (not a settled capability), the `resolveOp` represents the
     // ongoing operation to wait for that promise to resolve and then send a `Resolve` message.
+
+    kj::Maybe<kj::Own<VineInfo>> vineInfo = kj::none;
+    // If this export is a 3PH vine, we need to remember some info about it.
 
     inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
   };
@@ -957,19 +975,21 @@ private:
       }
     }
 
-    struct WriteThirdPartyDescriptorResult {
+    struct VineToExport {
       kj::Own<ClientHook> vine;
       // Capability to export as the "vine" in the ThirdPartyCapDescriptor.
 
-      kj::Maybe<ClientHook&> described;
-      // Same as `WriteDescriptorResult::described`.
-      //
-      // If null, then it was discovered while attempting to write the descriptor that some other
-      // capability should be described instead, so nothing was written. In this case, `vine`
-      // points to that other capability, and the caller should proceed by attempting to write
-      // that capability's descriptor instead.
-      // TODO(cleanup): This is is an ugly API, consider making it better.
+      kj::Maybe<kj::Own<VineInfo>> vineInfo;
+      // VineInfo to attach to the vine export.
     };
+
+    using WriteThirdPartyDescriptorResult = kj::OneOf<VineToExport, kj::Own<ClientHook>>;
+    // If a three-party handoff was successfully initiated, returns VineToExport.
+    //
+    // If this is a ClientHook instead, then it was discovered while attempting to write the
+    // descriptor that some other capability should be described instead, so nothing was written.
+    // In this case, the caller should proceed by attempting to write that capability's descriptor
+    // instead.
 
     virtual WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
           VatNetworkBase::Connection& provider,
@@ -1009,17 +1029,14 @@ private:
         // caller of writeThirdPartyDescriptor() would have already followed redirects, but as it
         // happens, if we simply return the redirect here (without filling in `contact`), we are
         // honoring our contract.
-        return {
-          .vine = kj::mv(redirect),
-          .described = kj::none,
-        };
+        return kj::mv(redirect);
       }
       recipient.introduceTo(provider, contact, provide.initRecipient());
       otherMsg->send();
 
-      return {
-        .vine = addRef().attach(kj::mv(questionRef)),
-        .described = *this,
+      return VineToExport {
+        .vine = addRef(),
+        .vineInfo = kj::heap(VineInfo { .info = kj::mv(questionRef) })
       };
     }
 
@@ -1517,29 +1534,9 @@ private:
         auto& deferred = state.get<Deferred>();
         provider.forwardThirdPartyToContact(*deferred.contact, recipient, contact);
 
-        // This gets tricky: The vine we return has to have two properties:
-        // 1. Its existence holds open the upstream vine, since the recipient of the forward is
-        //    depending on the Provide operation remaining available until the vine is dropped.
-        // 2. If the recipient forwards the capability *back* to us, it can do so by specifynig the
-        //    vine itself (see `writeDescriptor()`, above).
-        //
-        // If we only needed to solve (1), we could just return vine->addRef() here. But then if
-        // the capability got reflected back, we'd lose the ability to forward it further, because
-        // we would have lost the `DeferredThirdPartyClient` and would be holding only the vine at
-        // that point.
-        //
-        // If we only needed to solve (2), we'd return a reference to ourselves. But then if
-        // ensureAccepted() was subsequently called on this object, which could cancel the provide
-        // operation before the recipient of the forward got a chance to accept it.
-        //
-        // We can solve both at once by returning a reference to ourselves with the vine reference
-        // attached!
-        return {
-          .vine = addRef().attach(deferred.vine->addRef()),
-
-          // If some promise resolved *to* this third-party, pipelined calls on that promise, and
-          // any subsequent disembargo, must proceed towards the vine to maintain e-order.
-          .described = *deferred.vine,
+        return VineToExport {
+          .vine = deferred.vine->addRef(),
+          .vineInfo = kj::heap(VineInfo {.info = capnp::clone(*deferred.contact)}),
         };
       } else {
         // Either:
@@ -1559,10 +1556,7 @@ private:
             KJ_CASE_ONEOF(error, Disconnected) {
               // We accepted the capability but the connection we accepted it on is now dead.
               // Don't fill in `contact` and just return a broken cap.
-              return {
-                .vine = newBrokenCap(kj::cp(error)),
-                .described = kj::none,
-              };
+              return newBrokenCap(kj::cp(error));
             }
           }
           KJ_UNREACHABLE;
@@ -1570,10 +1564,7 @@ private:
           // Apparently, when we accepted the capability, it turned out to be a self-introduction
           // and now we're left with a capability pointing into our own vat. We need to return
           // that instead.
-          return {
-            .vine = hook.addRef(),
-            .described = kj::none,
-          };
+          return hook.addRef();
         }
       }
     }
@@ -1688,43 +1679,46 @@ private:
             auto id = tph.initId();
             auto result = rpcInner.writeThirdPartyDescriptor(otherConn, conn, id);
 
-            KJ_IF_SOME(described, result.described) {
-              // We always have to add a new export to the table to use as the "vine"; we cannot
-              // share an existing export pointing to the same capability. The reason is, the vine
-              // represents not just the capability but *this specific handoff* of the capability;
-              // when it is dropped, we can clean up the handoff. This is accomplished by attaching
-              // the `questionRef` to the export, below.
-              //
-              // Additionally, the vine is never treated as a promise, even if the capability
-              // backing it is a promise.
-              ExportId exportId;
-              auto& exp = exports.next(exportId);
-              exp.canonical = false;
-              exp.refcount = 1;
-              exp.clientHook = kj::mv(result.vine);
+            KJ_SWITCH_ONEOF(result) {
+              KJ_CASE_ONEOF(vine, RpcClient::VineToExport) {
+                // We always have to add a new export to the table to use as the "vine"; we cannot
+                // share an existing export pointing to the same capability. The reason is, the
+                // vine represents not just the capability but *this specific handoff* of the
+                // capability; when it is dropped, we can clean up the handoff. This is
+                // accomplished by attaching the `vineInfo` to the export.
+                //
+                // Additionally, the vine is never treated as a promise, even if the capability
+                // backing it is a promise.
+                ExportId exportId;
+                auto& exp = exports.next(exportId);
+                exp.canonical = false;
+                exp.refcount = 1;
+                exp.clientHook = kj::mv(vine.vine);
+                exp.vineInfo = kj::mv(vine.vineInfo);
 
-              tph.setVineId(exportId);
-              return {
-                .exportId = exportId,
+                tph.setVineId(exportId);
+                return {
+                  .exportId = exportId,
 
-                // The vine is the correct inner cap to use for disembargo purposes.
-                .described = described,
-              };
-            } else  {
-              // writeThirdPartyDescriptor() ended up deciding that it's not pointing at a
-              // third party after all, oops. This is unusual, but DeferredThirdPartyClient has
-              // some edge cases where this happens.
+                  // The vine is the correct inner cap to use for disembargo purposes.
+                  .described = *exp.clientHook,
+                };
+              }
+              KJ_CASE_ONEOF(redirect, kj::Own<ClientHook>) {
+                // writeThirdPartyDescriptor() ended up deciding that it's not pointing at a
+                // third party after all, oops. This is unusual, but DeferredThirdPartyClient has
+                // some edge cases where this happens.
 
-              // Unfortunately, this will leave a hole in the message. This should be rare.
-              // TODO(perf): Since we're removing the last object allocated, the segment ought
-              //   to be able to reclaim the memory, but this doesn't appear to be implemented
-              //   at present. Fix that?
-              descriptor.disownThirdPartyHosted();
-              descriptor.setNone();
+                // Unfortunately, this will leave a hole in the message. This should be rare.
+                // TODO(perf): Since we're removing the last object allocated, the segment ought
+                //   to be able to reclaim the memory, but this doesn't appear to be implemented
+                //   at present. Fix that?
+                descriptor.disownThirdPartyHosted();
+                descriptor.setNone();
 
-              // Recursively apply to the client returned by `writeThirdPartyDescriptor()` (which
-              // is not actually a vine in this case).
-              return writeDescriptor(*result.vine, descriptor, fds);
+                // Recursively apply to the redirected client.
+                return writeDescriptor(*redirect, descriptor, fds);
+              }
             }
           }
         }
@@ -2091,6 +2085,20 @@ private:
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_SOME(exp, exports.find(descriptor.getReceiverHosted())) {
           auto result = exp.clientHook->addRef();
+          KJ_IF_SOME(vineInfo, exp.vineInfo) {
+            KJ_IF_SOME(contact, vineInfo->info.tryGet<VineInfo::Contact>()) {
+              // This is a vine, and not the root of the vine. We previously forwarded a
+              // three-party handoff to the peer, and the peer reflected it back to us. We need
+              // to wrap this in a new `DeferredThirdPartyClient` so that if it is sent to yet
+              // another party, it will be handed off correctly. If we just pass along the vine
+              // itself, then three-party handoff will stop working.
+              KJ_ASSERT(isSameNetwork(*result));
+              kj::Own<RpcClient> vine = result.downcast<RpcClient>();
+              auto& vineConnection = *vine->connectionState;
+              result = kj::refcounted<DeferredThirdPartyClient>(
+                  vineConnection, capnp::clone(*contact), kj::mv(vine));
+            }
+          }
           if (unwrapIfSameConnection(*result) != kj::none) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
@@ -2787,6 +2795,10 @@ private:
       return kj::downcast<RpcClient>(hook);
     }
     return kj::none;
+  }
+
+  bool isSameNetwork(ClientHook& hook) {
+    return hook.isBrand(brand.get());
   }
 
   kj::Maybe<RpcRequest&> unwrapIfSameNetwork(RequestHook& hook) {
