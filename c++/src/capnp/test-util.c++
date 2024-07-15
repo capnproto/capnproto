@@ -894,8 +894,11 @@ TestInterfaceImpl::TestInterfaceImpl(int& callCount, kj::Maybe<int&> handleCount
     : callCount(callCount), handleCount(handleCount) {}
 
 kj::Promise<void> TestInterfaceImpl::foo(FooContext context) {
-  ++callCount;
+  uint sequence = callCount++;
   auto params = context.getParams();
+  if (params.getExpectedCallCount() >= 0) {
+    KJ_EXPECT(sequence == params.getExpectedCallCount());
+  }
   auto result = context.getResults();
   EXPECT_EQ(123, params.getI());
   EXPECT_TRUE(params.getJ());
@@ -1112,6 +1115,7 @@ kj::Promise<void> TestMoreStuffImpl::callHeld(CallHeldContext context) {
   auto request = clientToHold.fooRequest();
   request.setI(123);
   request.setJ(true);
+  request.setExpectedCallCount(context.getParams().getExpectedCallCount());
 
   return request.send().then(
       [KJ_CPCAP(context)](Response<test::TestInterface::FooResults>&& response) mutable {

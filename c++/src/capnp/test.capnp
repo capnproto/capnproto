@@ -787,7 +787,7 @@ struct TestListOfAny {
 }
 
 interface TestInterface {
-  foo @0 (i :UInt32, j :Bool) -> (x :Text);
+  foo @0 (i :UInt32, j :Bool, expectedCallCount :Int32 = -1) -> (x :Text);
   bar @1 () -> ();
   baz @2 (s: TestAllTypes);
 
@@ -866,7 +866,7 @@ interface TestMoreStuff extends(TestCallOrder) {
   hold @3 (cap :TestInterface) -> ();
   # Returns immediately but holds on to the capability.
 
-  callHeld @4 () -> (s: Text);
+  callHeld @4 (expectedCallCount :Int32 = -1) -> (s: Text);
   # Calls the capability previously held using `hold` (and keeps holding it).
 
   getHeld @5 () -> (cap :TestInterface);
