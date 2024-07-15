@@ -152,7 +152,7 @@ size_t BufferedInputStreamWrapper::tryRead(ArrayPtr<byte> dst, size_t minBytes) 
 
     if (maxBytes <= buffer.size()) {
       // Read the next buffer-full.
-      size_t n = inner.read(buffer, minBytes);
+      size_t n = inner.tryRead(buffer, minBytes);
       size_t fromSecondBuffer = kj::min(n, maxBytes);
       memcpy(dst.begin(), buffer.begin(), fromSecondBuffer);
       bufferAvailable = buffer.slice(fromSecondBuffer, n);
@@ -160,7 +160,7 @@ size_t BufferedInputStreamWrapper::tryRead(ArrayPtr<byte> dst, size_t minBytes) 
     } else {
       // Forward large read to the underlying stream.
       bufferAvailable = nullptr;
-      return fromFirstBuffer + inner.read(dst, minBytes);
+      return fromFirstBuffer + inner.tryRead(dst, minBytes);
     }
   }
 }

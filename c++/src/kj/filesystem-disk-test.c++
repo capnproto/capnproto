@@ -19,6 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+// Request 64-bit off_t and ino_t, otherwise this code will break when either value exceeds 2^32.
+#endif
+
 #include "debug.h"
 #include "filesystem.h"
 #include "string.h"

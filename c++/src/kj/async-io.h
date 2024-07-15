@@ -169,6 +169,10 @@ public:
   virtual kj::Maybe<int> getFd() const { return kj::none; }
   // Get the underlying Unix file descriptor, if any. Returns kj::none if this object actually
   // isn't wrapping a file descriptor.
+
+  virtual kj::Maybe<void*> getWin32Handle() const { return kj::none; }
+  // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
+  // wrapping a handle.
 };
 
 class NullStream final: public AsyncIoStream {

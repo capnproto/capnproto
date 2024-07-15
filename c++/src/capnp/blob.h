@@ -79,7 +79,9 @@ public:
   inline Reader(const StringPtr& value): StringPtr(value) {}
 
 #if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
-  template <typename T, typename = decltype(kj::instance<T>().c_str())>
+  template <
+    typename T,
+    typename = kj::EnableIf<kj::canConvert<decltype(kj::instance<T>().c_str()), const char*>()>>
   inline Reader(const T& t): StringPtr(t) {}
   // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
