@@ -653,6 +653,8 @@ private:
     }
   };
 
+  struct ThirdPartyExchangeValue;
+
   struct Answer {
     Answer() = default;
     Answer(const Answer&) = delete;
@@ -666,8 +668,9 @@ private:
     using Running = kj::Promise<void>;
     struct Finished {};
     using Redirected = kj::Promise<kj::Own<RpcResponse>>;
+    using Provide = kj::Rc<ThirdPartyExchangeValue>;
 
-    kj::OneOf<Running, Finished, Redirected> task;
+    kj::OneOf<Running, Finished, Redirected, Provide> task;
     // While the RPC is running locally, `task` is a `Promise` representing the task to execute
     // the RPC.
     //
@@ -1383,22 +1386,27 @@ private:
 
       bool isSameConnection = false;
       bool needsEmbargo = false;
-      KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameConnection(*replacement)) {
-        isSameConnection = true;
+      KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameNetwork(*replacement)) {
+        if (rpcReplacement.isOnConnection(*connectionState)) {
+          isSameConnection = true;
 
-        // We resolved to some other RPC capability hosted by the same peer.
-        //
-        // It's possible we resolved to a remote promise. If *that* promise eventually resolves
-        // back to us, we'll need a disembargo. Luckily, we know that the other promise cannot have
-        // resolved yet, due to the requirement that a `CapDescriptor` cannot reference an
-        // already-resolved promise. So, we don't need to start a disembargo now; we can simply
-        // rely on the other promise applying a disembargo later. To make sure that happens,
-        // we need to propagate our `receivedCall` flag to it.
-        //
-        // (And if `rpcReplacement` is *not* a promise then no embargo is needed because the
-        // capability cannot resolve back to point to us later. It's remote over the same
-        // connection and therefore calls will stay ordered naturally.)
-        rpcReplacement.promiseResolvedToThis(receivedCall);
+          // We resolved to some other RPC capability hosted by the same peer.
+          //
+          // It's possible we resolved to a remote promise. If *that* promise eventually resolves
+          // back to us, we'll need a disembargo. Luckily, we know that the other promise cannot have
+          // resolved yet, due to the requirement that a `CapDescriptor` cannot reference an
+          // already-resolved promise. So, we don't need to start a disembargo now; we can simply
+          // rely on the other promise applying a disembargo later. To make sure that happens,
+          // we need to propagate our `receivedCall` flag to it.
+          //
+          // (And if `rpcReplacement` is *not* a promise then no embargo is needed because the
+          // capability cannot resolve back to point to us later. It's remote over the same
+          // connection and therefore calls will stay ordered naturally.)
+          rpcReplacement.promiseResolvedToThis(receivedCall);
+        } else {
+          // Resolved to a thard-party capability. The three-party handoff mechanism takes care
+          // of embargoing this.
+        }
       } else {
         if (replacement->isNull() || replacement->isError()) {
           // Null or broken capabilities appear to be local capabilities, but they aren't really.
@@ -1491,6 +1499,34 @@ private:
         kj::Own<AnyPointer::Reader> contact, kj::Own<RpcClient> vine)
         : RpcClient(connectionState), state(Deferred {kj::mv(contact), kj::mv(vine)}) {}
 
+    void promiseResolvedToThis(bool receivedCall) override {
+      if (receivedCall) {
+        // A promise resolved to us, and it had received calls that were pipelined. If we end up
+        // accepting this capability locally, we will need to use an embargo.
+        needEmbargo = true;
+
+        // promiseResolvedToThis() is always called immediately after the resolution capability was
+        // received off the wire, so there should not have been a chance for it to have been
+        // accepted yet. This is good, because we need to make sure we embargo it on accept.
+        //
+        // Note that we know for sure that the resolution message could only have created a new
+        // `DeferredThirdPartyClient` -- not referred to an existing one -- because:
+        // - If the type was `senderHosted` or `senderPromise`, it refers to an import, and we
+        //   never place `DeferredThirdPartyClient` directly on the import table. (Its vine is on
+        //   the import table, but the `DeferredThirdPartyClient` object itself is not.)
+        // - If the type was `receiverHosted` or `receiverAnswer` then promiseResolvedToThis()
+        //   would not have been called on it, because `unwrapIfSameConnection()` would have
+        //   returned kj::none.
+        // - Therefore the only possibility is that the resolve message contained a
+        //   `ThirdPartyCapDescriptor`, which casued a fresh `DeferredThirdPartyClient` to be
+        //   created.
+        //
+        // It's good that this all works out, because otherwise we'd probably need to change the
+        // embargo protocol so that an embargo could be established *after* accepting the
+        // capability.
+        KJ_ASSERT(state.is<Deferred>());
+      }
+    }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                           kj::Vector<int>& fds) override {
@@ -1626,6 +1662,8 @@ private:
 
     kj::OneOf<Deferred, kj::Own<ClientHook>> state;
 
+    bool needEmbargo = false;
+
     ClientHook& ensureAccepted() {
       // Call when this capability is actually used locally. If it's the first use, the Accept
       // message will be sent to actually accept it.
@@ -1633,7 +1671,8 @@ private:
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(deferred, Deferred) {
           return *state.init<kj::Own<ClientHook>>(
-              connectionState->acceptThirdParty(*deferred.contact, kj::mv(deferred.vine)));
+              connectionState->acceptThirdParty(
+                  *deferred.contact, kj::mv(deferred.vine), needEmbargo));
         }
         KJ_CASE_ONEOF(cap, kj::Own<ClientHook>) {
           return *cap;
@@ -2142,7 +2181,8 @@ private:
     }
   }
 
-  kj::Own<ClientHook> acceptThirdParty(AnyPointer::Reader contact, kj::Own<RpcClient> vine) {
+  kj::Own<ClientHook> acceptThirdParty(AnyPointer::Reader contact, kj::Own<RpcClient> vine,
+                                       bool embargo) {
     KJ_SWITCH_ONEOF(connection) {
       KJ_CASE_ONEOF(state, Connected) {
         // Allocate temporary message to hold ThirdPartyCompletion. Unfortunately we need a temp
@@ -2153,6 +2193,23 @@ private:
         memset(scratch, 0, sizeof(scratch));
         MallocMessageBuilder message(scratch);
         auto completion = message.getRoot<AnyPointer>();
+
+        kj::Maybe<kj::Array<byte>> embargoId;
+        if (embargo) {
+          // Oh, this accept should be embargoed. Generate embargo ID.
+          auto eid = state.connection->generateEmbargoId();
+
+          // Send the Disembargo message to the vine.
+          auto disembargoMsg = state.connection->newOutgoingMessage(
+              messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT +
+              eid.size() / sizeof(word) + 1);
+          auto disembargo = disembargoMsg->getBody().getAs<rpc::Message>().initDisembargo();
+          vine->writeTarget(disembargo.initTarget());
+          disembargo.getContext().setAccept(eid);
+          disembargoMsg->send();
+
+          embargoId = kj::mv(eid);
+        }
 
         // Call connectToIntroduced() and get the other connection state.
         KJ_IF_SOME(ownOtherConn, state.connection->connectToIntroduced(contact, completion)) {
@@ -2172,11 +2229,16 @@ private:
           // Send the Accept message.
           {
             auto acceptMsg = otherConn.newOutgoingMessage(messageSizeHint<rpc::Accept>() +
-                completion.targetSize().wordCount);
+                completion.targetSize().wordCount + (embargo ? 8 : 0));
             auto accept = acceptMsg->getBody().getAs<rpc::Message>().initAccept();
             accept.setQuestionId(questionId);
             accept.getProvision().set(completion.asReader());
-            // TODO(now): accept.setEmbargo();
+
+            KJ_IF_SOME(eid, embargoId) {
+              // And finally adopt the embargo ID into the accept message.
+              accept.setEmbargo(eid);
+            }
+
             acceptMsg->send();
           }
 
@@ -2193,13 +2255,7 @@ private:
         } else {
           // We've been introduced to ourselves. A corresponding `Provide` message will come
           // directly to us via another connection.
-          return newLocalPromiseClient(state.connection->completeThirdParty(completion)
-              .then([](kj::Rc<kj::Refcounted> holder) mutable {
-            // TODO(now): Await embargo if needed.
-
-            return kj::mv(KJ_ASSERT_NONNULL(
-                holder.downcast<ThirdPartyExchangeValue>()->value.tryGet<kj::Own<ClientHook>>()));
-          }));
+          return newLocalPromiseClient(doAccept(state, completion, kj::mv(embargoId)));
         }
       }
       KJ_CASE_ONEOF(error, Disconnected) {
@@ -2300,6 +2356,14 @@ private:
 
     void disconnect() {
       connectionState = kj::none;
+    }
+
+    kj::Maybe<VatNetworkBase::Connection&> tryGetConnection() {
+      KJ_IF_SOME(c, connectionState) {
+        return c->tryGetConnection();
+      } else {
+        return kj::none;
+      }
     }
 
   private:
@@ -4186,6 +4250,86 @@ private:
         break;
       }
 
+      case rpc::Disembargo::Context::ACCEPT: {
+        kj::ArrayPtr<const byte> embargoId = context.getAccept();
+        auto target = disembargo.getTarget();
+
+        switch (target.which()) {
+          case rpc::MessageTarget::IMPORTED_CAP: {
+            auto& exp = KJ_REQUIRE_NONNULL(exports.find(target.getImportedCap()),
+                "Message target is not a current export ID.");
+
+            auto& vineInfo = KJ_REQUIRE_NONNULL(exp.vineInfo, "Disembargo target is not a vine.");
+
+            kj::Maybe<VatNetworkBase::Connection&> nextConn;
+            kj::OneOf<QuestionRef*, RpcClient*> nextTarget;
+
+            KJ_SWITCH_ONEOF(vineInfo->info) {
+              KJ_CASE_ONEOF(provision, VineInfo::Provision) {
+                nextConn = provision->tryGetConnection();
+                nextTarget = provision.get();
+              }
+              KJ_CASE_ONEOF(contact, VineInfo::Contact) {
+                // This is a forwarded vine.
+                RpcClient& client = KJ_ASSERT_NONNULL(unwrapIfSameNetwork(*exp.clientHook));
+                nextConn = client.connectionState->tryGetConnection();
+                nextTarget = &client;
+              }
+            }
+
+            KJ_IF_SOME(c, nextConn) {
+              auto nextMsg = c.newOutgoingMessage(messageSizeHint<rpc::Disembargo>() +
+                  embargoId.size() / sizeof(word) + MESSAGE_TARGET_SIZE_HINT + 1);
+
+              auto nextDisembargo = nextMsg->getBody().initAs<rpc::Message>().initDisembargo();
+              nextDisembargo.getContext().setAccept(embargoId);
+
+              KJ_SWITCH_ONEOF(nextTarget) {
+                KJ_CASE_ONEOF(question, QuestionRef*) {
+                  nextDisembargo.initTarget().initPromisedAnswer()
+                      .setQuestionId(question->getId());
+                }
+                KJ_CASE_ONEOF(import, RpcClient*) {
+                  KJ_ASSERT(import->writeTarget(nextDisembargo.initTarget()) == kj::none);
+                }
+              }
+
+              nextMsg->send();
+            } else {
+              // Ugh the connection was lost. Hopefully the vine will be dropped causing the
+              // disembargo to fail, at least.
+            }
+
+            break;
+          }
+
+          case rpc::MessageTarget::PROMISED_ANSWER: {
+            auto promisedAnswer = target.getPromisedAnswer();
+            KJ_REQUIRE(!promisedAnswer.hasTransform(),
+                "Disembargo sent to Provide operation cannot include a transformation.");
+
+            auto& answer = KJ_REQUIRE_NONNULL(answers.find(promisedAnswer.getQuestionId()),
+                "Disembargo specified a provision ID (question ID) that doesn't exist.");
+
+            auto& provision = KJ_REQUIRE_NONNULL(answer.task.tryGet<Answer::Provide>(),
+                "Disembargo specified a question ID that didn't belong to a Provide operation.");
+
+            auto& embargo =
+                KJ_ASSERT_NONNULL(provision->value.tryGet<ThirdPartyExchangeValue::Provide>())
+                .findOrCreateThirdPartyEmbargo(embargoId);
+
+            embargo.fulfiller->fulfill();
+
+            break;
+          }
+
+          default:
+            KJ_FAIL_REQUIRE("Unknown message target type.", target);
+        }
+
+        break;
+      }
+
       default:
         KJ_FAIL_REQUIRE("Unimplemented Disembargo type.", disembargo);
     }
@@ -4194,13 +4338,49 @@ private:
   // ---------------------------------------------------------------------------
   // Level 3
 
-  struct ThirdPartyExchangeValue: public kj::Refcounted {
-    kj::OneOf<kj::Own<ClientHook>> value;
-    // For Provide/Accept, the value is a ClientHook.
-    //
-    // (Eventually this will be extended with another type for ThirdPartyAnswer.)
+  struct ThirdPartyEmbargo {
+    // For handling the `Disembargo` message for three-party handoff.
 
-    ThirdPartyExchangeValue(kj::Own<ClientHook> value): value(kj::mv(value)) {}
+    kj::Maybe<kj::Promise<void>> promise;
+    kj::Own<kj::PromiseFulfiller<void>> fulfiller;
+    // Both are filled in when the embargo is created, and then each of the Accept and Disembargo
+    // messages consume their respective side of the pair.
+  };
+
+  struct ThirdPartyExchangeValue: public kj::Refcounted {
+    struct Provide {
+      // Exchanged content for a Provide/Accept operation.
+
+      kj::Own<ClientHook> client;
+      kj::HashMap<kj::Array<byte>, ThirdPartyEmbargo> embargoes;
+
+      explicit Provide(kj::Own<ClientHook> client): client(kj::mv(client)) {}
+      ~Provide() noexcept(false) {
+        for (auto& e: embargoes) {
+          if (e.value.fulfiller->isWaiting()) {
+            e.value.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED,
+                "Three-party handoff failed because a connection was lost along the introducing "
+                "route before the embargo could clear."));
+          }
+        }
+      }
+
+      ThirdPartyEmbargo& findOrCreateThirdPartyEmbargo(kj::ArrayPtr<const byte> id) {
+        return embargoes.findOrCreate(id, [&]() -> decltype(embargoes)::Entry {
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          return {
+            .key = kj::heapArray<byte>(id),
+            .value = {
+              .promise = kj::mv(paf.promise),
+              .fulfiller = kj::mv(paf.fulfiller),
+            }
+          };
+        });
+      }
+    };
+
+    kj::OneOf<Provide> value;
+    // (Eventually this will be extended with another type for ThirdPartyAnswer.)
   };
 
   void handleProvide(const rpc::Provide::Reader& provide) {
@@ -4210,18 +4390,21 @@ private:
     }
 
     kj::Own<ClientHook> target = getMessageTarget(provide.getTarget());
-    auto xcghValue = kj::rc<ThirdPartyExchangeValue>(kj::mv(target));
+    auto xchgValue = kj::rc<ThirdPartyExchangeValue>();
+    xchgValue->value.init<ThirdPartyExchangeValue::Provide>(kj::mv(target));
 
     AnswerId answerId = provide.getQuestionId();
     auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
                                      "questionId is already in use", answerId);
+
+    answer.task = xchgValue.addRef();
 
     // NOTE: We don't need an RpcCallContext since we don't need to send a `Return`. We can just
     // leave `answer.context` null.
 
     // Register that we're awaiting an Accept.
     auto awaiter = connection.get<Connected>().connection
-        ->awaitThirdParty(provide.getRecipient(), kj::mv(xcghValue));
+        ->awaitThirdParty(provide.getRecipient(), kj::mv(xchgValue));
 
     // Use a `pipeline` that'll throw exceptions if anyone actually tries to use it.
     //
@@ -4266,20 +4449,18 @@ private:
     //   refcount, but both will be destroyed at the same time anyway.
     RpcCallContext& contextRef = *context;
 
-    // Wait for `Provide` message and expect it to give us a ClientHook.
-    kj::ForkedPromise<Capability::Client> promise = connection.get<Connected>().connection
-        ->completeThirdParty(accept.getProvision())
-        .then([](kj::Rc<kj::Refcounted> holder) mutable {
-      // TODO(now): Await embargo if needed.
+    kj::Maybe<kj::Array<byte>> embargoId;
+    if (accept.hasEmbargo()) {
+      embargoId = kj::heapArray<byte>(accept.getEmbargo());
+    }
 
-      return Capability::Client(kj::mv(KJ_ASSERT_NONNULL(
-          holder.downcast<ThirdPartyExchangeValue>()->value.tryGet<kj::Own<ClientHook>>())));
-    }).fork();
+    kj::ForkedPromise<kj::Own<ClientHook>> promise =
+        doAccept(connection.get<Connected>(), accept.getProvision(), kj::mv(embargoId)).fork();
 
     // Set `answer.task` to a promise that eventually sends `Return`.
     answer.task = promise.addBranch()
-        .then([context = kj::mv(context)](Capability::Client cap) mutable {
-      context->getResults(MessageSize {4, 1}).setAs<Capability>(kj::mv(cap));
+        .then([context = kj::mv(context)](kj::Own<ClientHook> cap) mutable {
+      context->getResults(MessageSize {4, 1}).setAs<Capability>(Capability::Client(kj::mv(cap)));
       context->sendReturn();
     }, [&contextRef](kj::Exception&& exception) {
       contextRef.sendErrorReturn(kj::mv(exception));
@@ -4290,7 +4471,44 @@ private:
 
     // Set `answer.pipeline` to a single-cap pipeline.
     answer.pipeline = kj::refcounted<SingleCapPipeline>(
-        ClientHook::from(Capability::Client(promise.addBranch())));
+        newLocalPromiseClient(promise.addBranch()));
+  }
+
+  kj::Promise<kj::Own<ClientHook>> doAccept(
+      Connected& connectedState, AnyPointer::Reader thirdPartyCompletion,
+      kj::Maybe<kj::Array<byte>> embargoId) {
+    // `connectedState` and `thirdPartyCompletion` are temporary, can't pass them to a coroutine.
+    // But we can consume them here and pass on the rest. We should also wrap this promise in the
+    // canceler in case we get disconnected.
+    auto completionPromise = connectedState.canceler->wrap(
+        connectedState.connection->completeThirdParty(thirdPartyCompletion));
+    return doAccept(kj::mv(completionPromise), kj::mv(embargoId));
+  }
+
+  kj::Promise<kj::Own<ClientHook>> doAccept(
+      kj::Promise<kj::Rc<kj::Refcounted>> completionPromise,
+      kj::Maybe<kj::Array<byte>> embargoId) {
+    // Part of handleAccept() implementation that benefits greatly from coroutines.
+
+    kj::Rc<ThirdPartyExchangeValue> xcghValue =
+        (co_await completionPromise).downcast<ThirdPartyExchangeValue>();
+
+    auto& provide = KJ_REQUIRE_NONNULL(
+        xcghValue->value.tryGet<ThirdPartyExchangeValue::Provide>(),
+        "ThirdPartyCompletion given in Accept did not match a Provide operation.");
+
+    KJ_IF_SOME(e, embargoId) {
+      auto& embargo = provide.findOrCreateThirdPartyEmbargo(e);
+      auto embargoPromise = kj::mv(KJ_REQUIRE_NONNULL(embargo.promise,
+          "Duplicate embargo ID in Accept message."));
+      embargo.promise = kj::none;
+      co_await embargoPromise;
+
+      // This embargo is complete, so we can erase it.
+      provide.embargoes.erase(e);
+    }
+
+    co_return provide.client->addRef();
   }
 };
 

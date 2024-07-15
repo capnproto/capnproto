@@ -312,6 +312,26 @@ public:
       }
     }
 
+    void block() {
+      // Block all messages sent on this connection until unblock() is called.
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      currentBlock = paf.promise.fork();
+      currentBlockFulfiller = kj::mv(paf.fulfiller);
+    }
+
+    void blockAfter(kj::Function<bool(rpc::Message::Reader)> predicate) {
+      // Automatically call block() immediately after a message matching `predicate` is sent
+      // on this connection.
+      blockAfterPredicate = kj::mv(predicate);
+    }
+
+    void unblock() {
+      // Allow blocked messages to proceed.
+      KJ_REQUIRE_NONNULL(currentBlockFulfiller)->fulfill();
+      currentBlock = kj::none;
+      currentBlockFulfiller = kj::none;
+    }
+
     void disconnect(kj::Exception&& exception) {
       messageQueue.rejectAll(kj::cp(exception));
       networkException = kj::mv(exception);
@@ -362,8 +382,23 @@ public:
 
         auto incomingMessage = kj::heap<IncomingRpcMessageImpl>(messageToFlatArray(message));
 
+        kj::Promise<void> blocker = nullptr;
+        KJ_IF_SOME(b, connection.currentBlock) {
+          blocker = b.addBranch();
+        } else {
+          blocker = kj::yield();
+
+          // Check if we should start blocking.
+          KJ_IF_SOME(p, connection.blockAfterPredicate) {
+            if (p(message.getRoot<rpc::Message>())) {
+              connection.block();
+              connection.blockAfterPredicate = kj::none;
+            }
+          }
+        }
+
         auto connectionPtr = &connection;
-        connection.tasks->add(kj::evalLater(
+        connection.tasks->add(blocker.then(
             [connectionPtr,message=kj::mv(incomingMessage)]() mutable {
           KJ_IF_SOME(p, connectionPtr->partner) {
             p.messageQueue.push(kj::Own<IncomingRpcMessage>(kj::mv(message)));
@@ -502,6 +537,14 @@ public:
       return xchg.promise.addBranch();
     }
 
+    kj::Array<byte> generateEmbargoId() override {
+      static uint counter = 0;
+      auto result = kj::heapArray<byte>(sizeof(counter));
+      result.asPtr().copyFrom(kj::arrayPtr(&counter, 1).asBytes());
+      ++counter;
+      return result;
+    }
+
     void taskFailed(kj::Exception&& exception) override {
       ADD_FAILURE() << kj::str(exception).cStr();
     }
@@ -513,6 +556,12 @@ public:
     RpcDumper::Sender dumper;
     kj::Maybe<ConnectionImpl&> partner;
     kj::StringPtr partnerName;
+
+    kj::Maybe<kj::ForkedPromise<void>> currentBlock;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> currentBlockFulfiller;
+    // When present, all outgoing messages are blocked waiting for it.
+
+    kj::Maybe<kj::Function<bool(rpc::Message::Reader)>> blockAfterPredicate;
 
     kj::Maybe<kj::Exception> networkException;
 
@@ -1978,11 +2027,20 @@ KJ_TEST("three-party handoff introduce to self") {
   // getTestMoreStuff() returns a new instance each time, but we want a single shared instance.)
   int carolCallCount = 0;
   int carolHandleCount = 0;
-  context.initVat("carol", kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+  auto& carol = context.initVat("carol",
+      kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
 
-  // Connect to Carol by two different means, getting the same capability back.
-  auto carolCap1 = context.alice.connect<test::TestMoreStuff>("carol", true);
+  // Connect to Carol by two different means, getting the same capability back. The second
+  // connection is "unique" so it isn't shared with the first.
+  auto carolCap1 = context.alice.connect<test::TestMoreStuff>("carol", false);
   auto carolCap2 = context.alice.connect<test::TestMoreStuff>("carol", true);
+
+  // Get a reference to the first Carol -> Alice connection, and tell it to block itself as soon
+  // as a `Provide` message is sent. This should block the subsequent `Disembargo`.
+  auto& conn1 = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(context.alice.vatNetwork));
+  conn1.blockAfter([](rpc::Message::Reader msg) {
+    return msg.isProvide();
+  });
 
   // Pass a capability to Carol over the first connection.
   {
@@ -1991,12 +2049,49 @@ KJ_TEST("three-party handoff introduce to self") {
     req.send().wait(context.waitScope);
   }
 
-  // Receive it back over the second.
-  auto roundTripCap = carolCap2.getHeldRequest().send().wait(context.waitScope).getCap();
+  // Receive it back over the second, while making a pipelined request.
+  test::TestInterface::Client roundTripCap = nullptr;
+  kj::Promise<void> call1 = nullptr;
+  {
+    auto pipeline = carolCap2.getHeldRequest().send();
 
-  // We should be able to unwrap that.
-  auto& roundTripObj = KJ_ASSERT_NONNULL(
-      capSet.getLocalServer(roundTripCap).wait(context.waitScope));
+    auto req = pipeline.getCap().fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(0);
+    call1 = req.send().ignoreResult();
+
+    roundTripCap = pipeline.wait(context.waitScope).getCap();
+  }
+
+  // Make a second call on the final returned capability.
+  auto call2 = [&]() {
+    auto req = roundTripCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(1);
+    return req.send();
+  }();
+
+  // Also try to unwrap it.
+  auto unwrapPromise = capSet.getLocalServer(roundTripCap);
+
+  // All of that should be blocked on the embargo which is blocked on conn1.
+  KJ_EXPECT(!call1.poll(context.waitScope));
+  KJ_EXPECT(!call2.poll(context.waitScope));
+  KJ_EXPECT(!unwrapPromise.poll(context.waitScope));
+  KJ_EXPECT(callCount == 0);
+
+  // Unblock it.
+  conn1.unblock();
+
+  // Calls should complete (and shouldn't fail from incorrect ordering).
+  call1.wait(context.waitScope);
+  call2.wait(context.waitScope);
+  KJ_EXPECT(callCount == 2);
+
+  // We should now be able to fully unwrap the capability, too.
+  auto& roundTripObj = KJ_ASSERT_NONNULL(unwrapPromise.wait(context.waitScope));
 
   // It should have unwrapped to the same original object.
   KJ_EXPECT(&roundTripObj == ptr);
@@ -2146,6 +2241,88 @@ KJ_TEST("four-party handoff without forwarding") {
 
 KJ_TEST("four-party handoff with forwarding through a reflected path") {
   doForwardingTest(true, true);
+}
+
+KJ_TEST("three-party handoff with embargos") {
+  TestContext context;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  auto& carol = context.initVat("carol",
+      kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  // Alice connects to Bob and Carol.
+  auto bobCap = context.alice.connect<test::TestInterface>("bob");
+  auto carolCap = context.alice.connect<test::TestMoreStuff>("carol");
+
+  // Send `bobCap` to Carol to hold for later.
+  {
+    auto req = carolCap.holdRequest();
+    req.setCap(kj::mv(bobCap));
+    req.send().wait(context.waitScope);
+  }
+
+  // Tell Carol to invoke the held capability. This forces Carol to connect to Bob and to release
+  // the vine.
+  {
+    auto resp = carolCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Pump event loop to allow things to settle.
+  context.waitScope.poll();
+
+  // Alice -> Bob connection is idle since we passed the capability to Carol.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(bob.vatNetwork));
+  KJ_EXPECT(aliceToBob.isIdle());
+
+  // Block the connection from Carol -> Bob immediately after the `Provide` message is sent. This
+  // will prevent pipelined calls and the Disembargo from going through.
+  auto& carolToBob = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
+  carolToBob.blockAfter([](rpc::Message::Reader msg) {
+    return msg.isProvide();
+  });
+
+  // Now get the cap back from Carol.
+  auto promise = carolCap.getHeldRequest().send();
+
+  // Immediately do a pipelined call, which should go Alice -> Carol -> Bob. (But the second hop
+  // is blocked.)
+  auto call1 = [&]() {
+    auto req = promise.getCap().fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(1);
+    return req.send();
+  }();
+
+  // Now actually wait for the call to Carol to return.
+  auto response = promise.wait(context.waitScope);
+
+  // And do a call on that.
+  auto call2 = [&]() {
+    auto req = response.getCap().fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(2);
+    return req.send();
+  }();
+
+  // Neither call is able to make progress since call1 must be delivered first.
+  KJ_EXPECT(!call1.poll(context.waitScope));
+  KJ_EXPECT(!call2.poll(context.waitScope));
+  KJ_EXPECT(context.restorer.callCount == 1);
+
+  // Unblock Carol -> Bob so the provision can complete.
+  carolToBob.unblock();
+
+  call1.wait(context.waitScope);
+  call2.wait(context.waitScope);
+  KJ_EXPECT(context.restorer.callCount == 3);
 }
 
 }  // namespace
