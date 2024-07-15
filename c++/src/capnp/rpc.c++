@@ -2500,11 +2500,17 @@ private:
       kj::Own<PipelineHook> pipeline;
     };
 
-    kj::Maybe<TailInfo> tailSend() {
-      // Send the request as a tail call.
+    template <typename InitSendResultsToFunc>
+    kj::Maybe<TailInfo> tailSend(InitSendResultsToFunc&& initSendResultsTo) {
+      // Send the request as an optimized tail call (with results redirected directly to the
+      // original caller).
       //
       // Returns null if for some reason a tail call is not possible and the caller should fall
       // back to using send() and copying the response.
+      //
+      // Calls `initSendResultsTo(callBuilder.getSendResultsTo())` to initialize the
+      // `sendResultsTo` part of the call. This is only called after checking for any circumstances
+      // that might cause this to return null.
 
       SendInternalResult sendResult;
 
@@ -2517,9 +2523,12 @@ private:
         // Whoops, this capability has been redirected while we were building the request!
         // Fall back to regular send().
         return kj::none;
-      } else {
-        sendResult = sendInternal(true);
       }
+
+      // OK, now that we're definitely sending the call, we can initialize `sendResultsTo`.
+      initSendResultsTo(callBuilder.getSendResultsTo());
+
+      sendResult = sendInternal(true);
 
       auto promise = sendResult.promise.then([](kj::Own<RpcResponse>&& response) {
         // Response should be null if `Return` handling code is correct.
@@ -2592,9 +2601,6 @@ private:
 
       // Finish and send.
       callBuilder.setQuestionId(result.questionId);
-      if (isTailCall) {
-        callBuilder.getSendResultsTo().setYourself();
-      }
       KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
         KJ_CONTEXT("sending RPC call",
            callBuilder.getInterfaceId(), callBuilder.getMethodId());
@@ -2620,9 +2626,6 @@ private:
 
       // Finish and send.
       callBuilder.setQuestionId(setup.questionId);
-      if (isTailCall) {
-        callBuilder.getSendResultsTo().setYourself();
-      }
       kj::Promise<void> flowPromise = nullptr;
       KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
         KJ_CONTEXT("sending RPC call",
@@ -3306,7 +3309,11 @@ private:
           // If the onlyPromisePipeline hint was sent, we skip this trick since the caller will
           // ignore the `Return` message anyway.
 
-          KJ_IF_SOME(tailInfo, rpcRequest.tailSend()) {
+          auto initSendResultsTo = [](rpc::Call::SendResultsTo::Builder sendResultsTo) {
+            sendResultsTo.setYourself();
+          };
+
+          KJ_IF_SOME(tailInfo, rpcRequest.tailSend(initSendResultsTo)) {
             if (isFirstResponder()) {
               if (connectionState->connection.is<Connected>()) {
                 auto message = connectionState->connection.get<Connected>().connection
