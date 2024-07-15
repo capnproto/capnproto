@@ -80,6 +80,7 @@ public:
         AnyPointer::Reader party, kj::Rc<kj::Refcounted> value) = 0;
     virtual kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(
         AnyPointer::Reader completion) = 0;
+    virtual kj::Array<byte> generateEmbargoId() = 0;
   };
   virtual kj::Maybe<kj::Own<Connection>> baseConnect(AnyStruct::Reader vatId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAccept() = 0;

@@ -217,7 +217,7 @@ struct Disembargo {
   struct Context;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(f964368b0fbd3711, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(f964368b0fbd3711, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -234,11 +234,10 @@ struct Disembargo::Context {
     SENDER_LOOPBACK,
     RECEIVER_LOOPBACK,
     ACCEPT,
-    PROVIDE,
   };
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d562b4df655bdd4d, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d562b4df655bdd4d, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -268,7 +267,7 @@ struct Accept {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d4c9b56290554016, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d4c9b56290554016, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -1499,10 +1498,8 @@ public:
   inline  ::uint32_t getReceiverLoopback() const;
 
   inline bool isAccept() const;
-  inline  ::capnp::Void getAccept() const;
-
-  inline bool isProvide() const;
-  inline  ::uint32_t getProvide() const;
+  inline bool hasAccept() const;
+  inline  ::capnp::Data::Reader getAccept() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1542,12 +1539,12 @@ public:
   inline void setReceiverLoopback( ::uint32_t value);
 
   inline bool isAccept();
-  inline  ::capnp::Void getAccept();
-  inline void setAccept( ::capnp::Void value = ::capnp::VOID);
-
-  inline bool isProvide();
-  inline  ::uint32_t getProvide();
-  inline void setProvide( ::uint32_t value);
+  inline bool hasAccept();
+  inline  ::capnp::Data::Builder getAccept();
+  inline void setAccept( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initAccept(unsigned int size);
+  inline void adoptAccept(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownAccept();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1691,7 +1688,8 @@ public:
   inline bool hasProvision() const;
   inline ::capnp::AnyPointer::Reader getProvision() const;
 
-  inline bool getEmbargo() const;
+  inline bool hasEmbargo() const;
+  inline  ::capnp::Data::Reader getEmbargo() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1728,8 +1726,12 @@ public:
   inline ::capnp::AnyPointer::Builder getProvision();
   inline ::capnp::AnyPointer::Builder initProvision();
 
-  inline bool getEmbargo();
-  inline void setEmbargo(bool value);
+  inline bool hasEmbargo();
+  inline  ::capnp::Data::Builder getEmbargo();
+  inline void setEmbargo( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initEmbargo(unsigned int size);
+  inline void adoptEmbargo(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownEmbargo();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4193,6 +4195,7 @@ inline typename Disembargo::Context::Pipeline Disembargo::Pipeline::getContext()
 inline typename Disembargo::Context::Builder Disembargo::Builder::initContext() {
   _builder.setDataField< ::uint32_t>(::capnp::bounded<0>() * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(::capnp::bounded<2>() * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(::capnp::bounded<1>() * ::capnp::POINTERS).clear();
   return typename Disembargo::Context::Builder(_builder);
 }
 inline  ::capnp::rpc::Disembargo::Context::Which Disembargo::Context::Reader::which() const {
@@ -4262,50 +4265,52 @@ inline bool Disembargo::Context::Reader::isAccept() const {
 inline bool Disembargo::Context::Builder::isAccept() {
   return which() == Disembargo::Context::ACCEPT;
 }
-inline  ::capnp::Void Disembargo::Context::Reader::getAccept() const {
+inline bool Disembargo::Context::Reader::hasAccept() const {
+  if (which() != Disembargo::Context::ACCEPT) return false;
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool Disembargo::Context::Builder::hasAccept() {
+  if (which() != Disembargo::Context::ACCEPT) return false;
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Data::Reader Disembargo::Context::Reader::getAccept() const {
   KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-
-inline  ::capnp::Void Disembargo::Context::Builder::getAccept() {
+inline  ::capnp::Data::Builder Disembargo::Context::Builder::getAccept() {
   KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void Disembargo::Context::Builder::setAccept( ::capnp::Void value) {
+inline void Disembargo::Context::Builder::setAccept( ::capnp::Data::Reader value) {
   _builder.setDataField<Disembargo::Context::Which>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
-  _builder.setDataField< ::capnp::Void>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-
-inline bool Disembargo::Context::Reader::isProvide() const {
-  return which() == Disembargo::Context::PROVIDE;
-}
-inline bool Disembargo::Context::Builder::isProvide() {
-  return which() == Disembargo::Context::PROVIDE;
-}
-inline  ::uint32_t Disembargo::Context::Reader::getProvide() const {
-  KJ_IREQUIRE((which() == Disembargo::Context::PROVIDE),
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Disembargo::Context::Builder::getProvide() {
-  KJ_IREQUIRE((which() == Disembargo::Context::PROVIDE),
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
-}
-inline void Disembargo::Context::Builder::setProvide( ::uint32_t value) {
+inline  ::capnp::Data::Builder Disembargo::Context::Builder::initAccept(unsigned int size) {
   _builder.setDataField<Disembargo::Context::Which>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::PROVIDE);
-  _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void Disembargo::Context::Builder::adoptAccept(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  _builder.setDataField<Disembargo::Context::Which>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> Disembargo::Context::Builder::disownAccept() {
+  KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Provide::Reader::getQuestionId() const {
@@ -4421,18 +4426,38 @@ inline ::capnp::AnyPointer::Builder Accept::Builder::initProvision() {
   return result;
 }
 
-inline bool Accept::Reader::getEmbargo() const {
-  return _reader.getDataField<bool>(
-      ::capnp::bounded<32>() * ::capnp::ELEMENTS);
+inline bool Accept::Reader::hasEmbargo() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-
-inline bool Accept::Builder::getEmbargo() {
-  return _builder.getDataField<bool>(
-      ::capnp::bounded<32>() * ::capnp::ELEMENTS);
+inline bool Accept::Builder::hasEmbargo() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
 }
-inline void Accept::Builder::setEmbargo(bool value) {
-  _builder.setDataField<bool>(
-      ::capnp::bounded<32>() * ::capnp::ELEMENTS, value);
+inline  ::capnp::Data::Reader Accept::Reader::getEmbargo() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Data::Builder Accept::Builder::getEmbargo() {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void Accept::Builder::setEmbargo( ::capnp::Data::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Data::Builder Accept::Builder::initEmbargo(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void Accept::Builder::adoptEmbargo(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> Accept::Builder::disownEmbargo() {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Join::Reader::getQuestionId() const {

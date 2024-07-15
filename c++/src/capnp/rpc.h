@@ -488,6 +488,12 @@ public:
     //
     // Returns a reference to the `value` passed to `awaitThirdParty()`.
 
+    virtual kj::Array<byte> generateEmbargoId() override { _::throwNo3ph(); }
+    // Generate an embargo ID for a three-party handoff. The returned ID must be unique among all
+    // embargos on a particular provision. If the VatNetwork does not support forwarding (i.e.
+    // canForwardThirdPartyToContact() always returns false), then it can safely return null (an
+    // empty array), since there can be no more than one embargo per provision in this case.
+
   private:
     AnyStruct::Reader baseGetPeerVatId() override;
     bool canIntroduceTo(VatNetworkBase::Connection& other) override;

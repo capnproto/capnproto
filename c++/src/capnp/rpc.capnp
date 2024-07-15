@@ -766,6 +766,10 @@ struct Disembargo {
   using EmbargoId = UInt32;
   # Used in `senderLoopback` and `receiverLoopback`, below.
 
+  using ThirdPartyEmbargoId = Data;
+  # Used in `accept`, below, to embago a capability received via three-party handoff. Must be a
+  # globally-unique string, typically chosen at random with enough entropy to guarantee uniqueness.
+
   context :union {
     senderLoopback @1 :EmbargoId;
     # The sender is requesting a disembargo on a promise that is known to resolve back to a
@@ -782,25 +786,25 @@ struct Disembargo {
     # The receiver previously sent a `senderLoopback` Disembargo towards a promise resolving to
     # this capability, and that Disembargo is now being echoed back.
 
-    accept @3 :Void;
+    accept @3 :ThirdPartyEmbargoId;
     # **(level 3)**
     #
     # The sender is requesting a disembargo on a promise that is known to resolve to a third-party
     # capability that the sender is currently in the process of accepting (using `Accept`).
-    # The receiver of this `Disembargo` has an outstanding `Provide` on said capability.  The
-    # receiver should now send a `Disembargo` with `provide` set to the question ID of that
-    # `Provide` message.
+    #
+    # If `target` is the variant `importedCap`, then this `Disembargo` is addressed to an import
+    # representing a vine leading towards where the three-party handoff began.
+    #
+    # If `target` is the variant `promisedAnswer`, then it specifies the `QuestionId` of the
+    # `Provide` operation which initiated this handoff. A corresponding `Accept` will be waiting
+    # on the `Disembargo`.
+    #
+    # The value uniquely identifies this particular embargo among all embargoes requested against
+    # the same `Provide` operation. The same ID will be sent in `Accept.embago`. The embargo ID is
+    # necessary because forwarding allows the same provision to be accepted multiple times. If a
+    # VatNetwork does not allow forwarding, the embargo ID can be omitted.
     #
     # See `Accept.embargo` for an example.
-
-    provide @4 :QuestionId;
-    # **(level 3)**
-    #
-    # The sender is requesting a disembargo on a capability currently being provided to a third
-    # party.  The question ID identifies the `Provide` message previously sent by the sender to
-    # this capability.  On receipt, the receiver (the capability host) shall release the embargo
-    # on the `Accept` message that it has received from the third party.  See `Accept.embargo` for
-    # an example.
   }
 }
 
@@ -858,13 +862,13 @@ struct Accept {
   provision @1 :ThirdPartyCompletion;
   # Identifies the provided object to be picked up.
 
-  embargo @2 :Bool;
-  # If true, this accept shall be temporarily embargoed.  The resulting `Return` will not be sent,
-  # and any pipelined calls will not be delivered, until the embargo is released.  The receiver
-  # (the capability host) will expect the provider (the vat that sent the `Provide` message) to
-  # eventually send a `Disembargo` message with the field `context.provide` set to the question ID
-  # of the original `Provide` message.  At that point, the embargo is released and the queued
-  # messages are delivered.
+  embargo @2 :Disembargo.ThirdPartyEmbargoId;
+  # If non-null, this accept shall be temporarily embargoed.  The resulting `Return` will not be
+  # sent, and any pipelined calls will not be delivered, until the embargo is released.  The
+  # receiver (the capability host) will expect the provider (the vat that sent the `Provide`
+  # message) to eventually send a `Disembargo` message with the field `context.accept` set to a
+  # byte string matching the one specified here.  At that point, the embargo is released and the
+  # queued messages are delivered.
   #
   # For example:
   # - Alice, in Vat A, holds a promise P, which currently points toward Vat B.
@@ -873,10 +877,12 @@ struct Accept {
   # - Vat B sends a `Provide` message to Vat C, identifying Vat A as the recipient.
   # - Vat B sends a `Resolve` message to Vat A, indicating that the promise has resolved to a
   #   `ThirdPartyToContact` identifying Carol in Vat C.
-  # - Vat A sends an `Accept` message to Vat C to pick up the capability.  Since Vat A knows that
-  #   it has an outstanding call to the promise, it sets `embargo` to `true` in the `Accept`
-  #   message.
-  # - Vat A sends a `Disembargo` message to Vat B on promise P, with `context.accept` set.
+  # - Since Vat A knows that it has an outstanding call to the promise, it knows it needs to use
+  #   an embargo. Vat A chooses a random byte string to be the embargo ID.
+  # - Vat A sends an `Accept` message to Vat C to pick up the capability, setting `embargo` to the
+  #   embargo ID.
+  # - Vat A sends a `Disembargo` message to Vat B on promise P, with `context.accept` set to
+  #   the embargo ID.
   # - Alice makes a call bar() to promise P, which is now pointing towards Vat C.  Alice doesn't
   #   know anything about the mechanics of promise resolution happening under the hood, but she
   #   expects that bar() will be delivered after foo() because that is the order in which she
@@ -885,8 +891,7 @@ struct Accept {
   #   hasn't returned yet, due to the embargo).  Since calls to the newly-accepted capability
   #   are embargoed, Vat C does not deliver the call yet.
   # - At some point, Vat B forwards the foo() call from the beginning of this example on to Vat C.
-  # - Vat B forwards the `Disembargo` from Vat A on to vat C.  It sets `context.provide` to the
-  #   question ID of the `Provide` message it had sent previously.
+  # - Vat B forwards the `Disembargo` from Vat A on to vat C.
   # - Vat C receives foo() before `Disembargo`, thus allowing it to correctly deliver foo()
   #   before delivering bar().
   # - Vat C receives `Disembargo` from Vat B.  It can now send a `Return` for the `Accept` from
