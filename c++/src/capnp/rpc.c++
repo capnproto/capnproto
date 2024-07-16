@@ -3113,16 +3113,7 @@ private:
             builder.setAnswerId(answerId);
             builder.setReleaseParamCaps(false);
 
-            if (sendResultsTo.is<SendToSelf>()) {
-              // The reason we haven't sent a return is because the results were sent somewhere
-              // else.
-              builder.setResultsSentElsewhere();
-
-              // The pipeline could still be valid and in-use in this case.
-              shouldFreePipeline = false;
-            } else {
-              builder.setCanceled();
-            }
+            builder.setCanceled();
 
             message->send();
           }
