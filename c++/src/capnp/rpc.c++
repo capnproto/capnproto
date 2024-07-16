@@ -624,6 +624,15 @@ private:
   // means that any time we read an ID from a received message, its type should invert.
   // TODO(cleanup):  Perhaps we could enforce that in a type-safe way?  Hmm...
 
+  using ThirdPartyCompletion = AnyPointer;
+  using ThirdPartyToAwait = AnyPointer;
+  using ThirdPartyToContact = AnyPointer;
+  // Again, see rpc.capnp.
+  //
+  // Each VatNetwork implementation defines these types, but the RPC implementation must work with
+  // any implementation, so can only treat these as AnyPointer. We use these aliases to make the
+  // code easier to understand.
+
   struct Question {
     kj::Array<ExportId> paramExports;
     // List of exports that were sent in the request.  If the response has `releaseParamCaps` these
@@ -695,7 +704,7 @@ private:
     // This is the root of the vine. The `QuestionRef` is the `Provide` operation initiated from
     // this node.
 
-    using Contact = kj::Own<AnyPointer::Reader>;
+    using Contact = kj::Own<ThirdPartyToContact::Reader>;
     // This vine was passed over one or more connections. The `AnyPointer` contains the
     // `ThirdPartyToContact` value as received to create this import.
 
@@ -996,7 +1005,7 @@ private:
     virtual WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
           VatNetworkBase::Connection& provider,
           VatNetworkBase::Connection& recipient,
-          AnyPointer::Builder contact) {
+          ThirdPartyToContact::Builder contact) {
       // Called to fill in a ThirdPartyCapDescriptor when sending this capability to a different
       // connection.
       //
@@ -1495,7 +1504,7 @@ private:
 
   public:
     DeferredThirdPartyClient(RpcConnectionState& connectionState,
-        kj::Own<AnyPointer::Reader> contact, kj::Own<RpcClient> vine)
+        kj::Own<ThirdPartyToContact::Reader> contact, kj::Own<RpcClient> vine)
         : RpcClient(connectionState), state(Deferred {kj::mv(contact), kj::mv(vine)}) {}
 
     void promiseResolvedToThis(bool receivedCall) override {
@@ -1561,7 +1570,7 @@ private:
     WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
           VatNetworkBase::Connection& provider,
           VatNetworkBase::Connection& recipient,
-          AnyPointer::Builder contact) override {
+          ThirdPartyToContact::Builder contact) override {
       if (state.is<Deferred>() &&
           provider.canForwardThirdPartyToContact(*state.get<Deferred>().contact, recipient)) {
         // We have not accepted this capability yet, and the VatNetwork supports forwarding it!
@@ -1655,7 +1664,7 @@ private:
 
   private:
     struct Deferred {
-      kj::Own<AnyPointer::Reader> contact;
+      kj::Own<ThirdPartyToContact::Reader> contact;
       kj::Own<RpcClient> vine;
     };
 
@@ -2180,7 +2189,7 @@ private:
     }
   }
 
-  kj::Own<ClientHook> acceptThirdParty(AnyPointer::Reader contact, kj::Own<RpcClient> vine,
+  kj::Own<ClientHook> acceptThirdParty(ThirdPartyToContact::Reader contact, kj::Own<RpcClient> vine,
                                        bool embargo) {
     KJ_SWITCH_ONEOF(connection) {
       KJ_CASE_ONEOF(state, Connected) {
@@ -2191,7 +2200,7 @@ private:
         capnp::word scratch[32];
         memset(scratch, 0, sizeof(scratch));
         MallocMessageBuilder message(scratch);
-        auto completion = message.getRoot<AnyPointer>();
+        auto completion = message.getRoot<ThirdPartyCompletion>();
 
         kj::Maybe<kj::Array<byte>> embargoId;
         if (embargo) {
@@ -4481,7 +4490,7 @@ private:
   }
 
   kj::Promise<kj::Own<ClientHook>> doAccept(
-      Connected& connectedState, AnyPointer::Reader thirdPartyCompletion,
+      Connected& connectedState, ThirdPartyCompletion::Reader thirdPartyCompletion,
       kj::Maybe<kj::Array<byte>> embargoId) {
     // `connectedState` and `thirdPartyCompletion` are temporary, can't pass them to a coroutine.
     // But we can consume them here and pass on the rest. We should also wrap this promise in the
