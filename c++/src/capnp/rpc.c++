@@ -3051,13 +3051,17 @@ private:
     }
   };
 
+  struct SendToCaller {};
+  struct SendToSelf {};
+  using SendResultsTo = kj::OneOf<SendToCaller, SendToSelf>;
+
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
   public:
     RpcCallContext(RpcConnectionState& connectionState, AnswerId answerId,
                    kj::Own<IncomingRpcMessage>&& request,
                    kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
                    const AnyPointer::Reader& params,
-                   bool redirectResults, uint64_t interfaceId, uint16_t methodId,
+                   SendResultsTo sendResultsTo, uint64_t interfaceId, uint16_t methodId,
                    ClientHook::CallHints hints)
         : connectionState(kj::addRef(connectionState)),
           answerId(answerId),
@@ -3069,7 +3073,7 @@ private:
           paramsCapTable(kj::mv(capTableArray)),
           params(paramsCapTable.imbue(params)),
           returnMessage(nullptr),
-          redirectResults(redirectResults) {
+          sendResultsTo(sendResultsTo) {
       connectionState.callWordsInFlight += requestSize;
     }
 
@@ -3081,7 +3085,7 @@ private:
           requestSize(0),
           paramsCapTable(nullptr),
           returnMessage(nullptr),
-          redirectResults(false) {}
+          sendResultsTo(SendToCaller()) {}
     // Creates a dummy RpcCallContext used for pseudo-calls like `Accept`. This is helpful to
     // reuse the state machine around `Return` and `Finish` messages.
 
@@ -3100,7 +3104,7 @@ private:
             builder.setAnswerId(answerId);
             builder.setReleaseParamCaps(false);
 
-            if (redirectResults) {
+            if (sendResultsTo.is<SendToSelf>()) {
               // The reason we haven't sent a return is because the results were sent somewhere
               // else.
               builder.setResultsSentElsewhere();
@@ -3120,7 +3124,7 @@ private:
     }
 
     kj::Own<RpcResponse> consumeRedirectedResponse() {
-      KJ_ASSERT(redirectResults);
+      KJ_ASSERT(sendResultsTo.is<SendToSelf>());
 
       if (response == kj::none) getResults(MessageSize{0, 0});  // force initialization of response
 
@@ -3130,7 +3134,7 @@ private:
     }
 
     void sendReturn() {
-      KJ_ASSERT(!redirectResults);
+      KJ_ASSERT(!sendResultsTo.is<SendToSelf>());
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
       // Avoid sending results if canceled so that we don't have to figure out whether or not
@@ -3193,7 +3197,7 @@ private:
       }
     }
     void sendErrorReturn(kj::Exception&& exception) {
-      KJ_ASSERT(!redirectResults);
+      KJ_ASSERT(!sendResultsTo.is<SendToSelf>());
       KJ_ASSERT(!hints.onlyPromisePipeline);
       if (isFirstResponder()) {
         if (connectionState->connection.is<Connected>()) {
@@ -3220,7 +3224,7 @@ private:
       }
     }
     void sendRedirectReturn() {
-      KJ_ASSERT(redirectResults);
+      KJ_ASSERT(sendResultsTo.is<SendToSelf>());
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
       if (isFirstResponder()) {
@@ -3263,7 +3267,7 @@ private:
       } else {
         kj::Own<RpcServerResponse> response;
 
-        if (redirectResults || !connectionState->connection.is<Connected>()) {
+        if (sendResultsTo.is<SendToSelf>() || !connectionState->connection.is<Connected>()) {
           response = kj::refcounted<LocallyRedirectedRpcResponse>(sizeHint);
         } else {
           auto message = connectionState->connection.get<Connected>().connection
@@ -3297,7 +3301,7 @@ private:
                  "Can't call tailCall() after initializing the results struct.");
 
       KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameConnection(*request)) {
-        if (!redirectResults && !hints.onlyPromisePipeline) {
+        if (!sendResultsTo.is<SendToSelf>() && !hints.onlyPromisePipeline) {
           // The tail call is headed towards the peer that called us in the first place, so we can
           // optimize out the return trip.
           //
@@ -3382,7 +3386,7 @@ private:
 
     kj::Maybe<kj::Own<RpcServerResponse>> response;
     rpc::Return::Builder returnMessage;
-    bool redirectResults = false;
+    SendResultsTo sendResultsTo;
     bool responseSent = false;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<AnyPointer::Pipeline>>> tailCallPipelineFulfiller;
 
@@ -3765,13 +3769,13 @@ private:
   void handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
     kj::Own<ClientHook> capability = getMessageTarget(call.getTarget());
 
-    bool redirectResults;
+    SendResultsTo sendResultsTo;
     switch (call.getSendResultsTo().which()) {
       case rpc::Call::SendResultsTo::CALLER:
-        redirectResults = false;
+        sendResultsTo.init<SendToCaller>();
         break;
       case rpc::Call::SendResultsTo::YOURSELF:
-        redirectResults = true;
+        sendResultsTo.init<SendToSelf>();
         break;
       default:
         KJ_FAIL_REQUIRE("Unsupported `Call.sendResultsTo`.");
@@ -3786,11 +3790,11 @@ private:
 
     // Don't honor onlyPromisePipeline if results are redirected, because this situation isn't
     // useful in practice and would be complicated to handle "correctly".
-    if (redirectResults) hints.onlyPromisePipeline = false;
+    if (sendResultsTo.is<SendToSelf>()) hints.onlyPromisePipeline = false;
 
     auto context = kj::refcounted<RpcCallContext>(
         *this, answerId, kj::mv(message), kj::mv(capTableArray), payload.getContent(),
-        redirectResults, call.getInterfaceId(), call.getMethodId(), hints);
+        sendResultsTo, call.getInterfaceId(), call.getMethodId(), hints);
 
     // No more using `call` after this point, as it now belongs to the context.
 
@@ -3812,7 +3816,7 @@ private:
 
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
-      if (redirectResults) {
+      if (sendResultsTo.is<SendToSelf>()) {
         answer.task = promiseAndPipeline.promise.then(
             [context=kj::mv(context)]() mutable {
               return context->consumeRedirectedResponse();
