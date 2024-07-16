@@ -199,9 +199,11 @@ class RpcSystemBrand: public kj::Refcounted {
 // =======================================================================================
 
 template <typename Id>
-static constexpr Id highBit() {
-  return 1u << (sizeof(Id) * 8 - 1);
-}
+static constexpr Id ONE_WAY_BIT = 1u << (sizeof(Id) * 8 - 1);
+template <typename Id>
+static constexpr Id REVERSE_ALLOCATED_BIT = 1u << (sizeof(Id) * 8 - 2);
+template <typename Id>
+static constexpr Id ALL_HIGH_BITS = ONE_WAY_BIT<Id> | REVERSE_ALLOCATED_BIT<Id>;
 
 template <typename Id, typename T>
 class ExportTable {
@@ -212,8 +214,23 @@ public:
     return slots.size() == freeIds.size() && highSlots.size() == 0;
   }
 
-  bool isHigh(Id& id) {
-    return (id & highBit<Id>()) != 0;
+  bool isOneWay(Id id) {
+    // Returns whether this ID is in the range of one-way IDs, that is, the creator of the ID does
+    // not expect the peer to ever send a message referencing it. In particular, this is used for
+    // calls with `onlyPromisePipeline`, in which the caller does not care to receive a `Return`
+    // message. Some peers may not understand this hint and may send a `Return` anyway, which can
+    // then be ignored. To avoid confusion with such peers, one-way IDs are allocated round-robin
+    // to minimize reuse, unlike regular IDs which always use the lowest-numbered available ID.
+
+    return (id & ONE_WAY_BIT<Id>) != 0;
+  }
+
+  bool isReverseAllocated(Id id) {
+    // Returns whether this ID is in the range that is actually allocated by the "import" side
+    // instead of the "export" side. This is used for ThirdPartyAnswer in particular, where the
+    // sender needs to inject an entry into the recipient's question table.
+
+    return (id & REVERSE_ALLOCATED_BIT<Id>) != 0;
   }
 
   kj::Maybe<T&> find(Id id) {
@@ -248,7 +265,7 @@ public:
   T& next(Id& id) {
     if (freeIds.empty()) {
       id = slots.size();
-      KJ_ASSERT(!isHigh(id), "2^31 concurrent questions?!!?!");
+      KJ_ASSERT(!isHigh(id), "2^30 concurrent questions?!!?!");
       return slots.add();
     } else {
       id = freeIds.top();
@@ -257,23 +274,38 @@ public:
     }
   }
 
-  T& nextHigh(Id& id) {
+  T& nextOneWay(Id& id) {
     // Choose an ID with the top bit set in round-robin fashion, but don't choose an ID that
     // is still in use.
 
-    KJ_ASSERT(highSlots.size() < Id(kj::maxValue) / 2);  // avoid infinite loop below.
+    uint startCounter = oneWayCounter;
+    for (;;) {
+      id = oneWayCounter++ | ONE_WAY_BIT<Id>;
+      if (oneWayCounter == ONE_WAY_BIT<Id>) {
+        // Wrap around.
+        oneWayCounter = 0;
+      }
 
-    bool created = false;
-    T* slot;
-    while (!created) {
-      id = highCounter++ | highBit<Id>();
-      slot = &highSlots.findOrCreate(id, [&]() {
+      bool created = false;
+      T& slot = highSlots.findOrCreate(id, [&]() {
         created = true;
         return typename kj::HashMap<Id, T>::Entry { id, T() };
       });
-    }
 
-    return *slot;
+      if (created) {
+        return slot;
+      }
+
+      KJ_ASSERT(oneWayCounter != startCounter, "All one-way slots used up?");
+    }
+  }
+
+  T& injectReverseAllocated(Id id) {
+    // Create an entry for an ID that was allocated by the peer in the reverse-allocated range.
+    KJ_REQUIRE(isReverseAllocated(id), "ID is not in the reverse-allocated range.");
+    return highSlots.upsert(id, T(), [&](auto&, auto&&) {
+      KJ_FAIL_REQUIRE("Reverse-allocated ID is already in use.");
+    }).value;
   }
 
   template <typename Func>
@@ -300,7 +332,12 @@ private:
   std::priority_queue<Id, std::vector<Id>, std::greater<Id>> freeIds;
 
   kj::HashMap<Id, T> highSlots;
-  Id highCounter = 0;
+  Id oneWayCounter = 0;
+
+  bool isHigh(Id id) {
+    // Does this ID belong in `highSlots`?
+    return id & ALL_HIGH_BITS<Id>;
+  }
 };
 
 template <typename Id, typename T>
@@ -374,6 +411,36 @@ public:
     }
   }
 
+  T& nextReverseAllocated(Id& id) {
+    // We allocate these round-robin not because we have to (unlike one-way IDs) but rather because
+    // it's not worth the effort to track unused IDs for reuse, given most connections will see
+    // very few of these (and often only at the start of the connection).
+    //
+    // I also decided to allocate these in descending order on a vague hunch that I might be happy
+    // later that I did but honestly I can't present a great argument for it.
+
+    uint startCounter = reverseAllocatedCounter;
+    for (;;) {
+      id = (REVERSE_ALLOCATED_BIT<Id> - ++reverseAllocatedCounter) | REVERSE_ALLOCATED_BIT<Id>;
+      if (reverseAllocatedCounter == REVERSE_ALLOCATED_BIT<Id>) {
+        // Wrap around.
+        reverseAllocatedCounter = 0;
+      }
+
+      bool created = false;
+      T& slot = high.findOrCreate(id, [&]() {
+        created = true;
+        return typename kj::HashMap<Id, T>::Entry { id, T() };
+      });
+
+      if (created) {
+        return slot;
+      }
+
+      KJ_ASSERT(reverseAllocatedCounter != startCounter, "All one-way slots used up?");
+    }
+  }
+
   template <typename Func>
   void forEach(Func&& func) {
     for (Id i: kj::indices(low)) {
@@ -389,6 +456,7 @@ public:
 private:
   T low[16];
   uint presenceBits = 0;
+  uint reverseAllocatedCounter = 0;
   kj::HashMap<Id, T> high;
 };
 
@@ -1027,7 +1095,7 @@ private:
 
       // Send `Provide` message to our connection.
       QuestionId questionId;
-      auto& question = connectionState->questions.nextHigh(questionId);
+      auto& question = connectionState->questions.nextOneWay(questionId);
       question.isAwaitingReturn = false;  // No Return needed
       auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, kj::none);
       question.selfRef = *questionRef;
@@ -2669,7 +2737,7 @@ private:
 
       // Init the question table.  Do this after writing descriptors to avoid interference.
       QuestionId questionId;
-      auto& question = connectionState->questions.nextHigh(questionId);
+      auto& question = connectionState->questions.nextOneWay(questionId);
       question.isAwaitingReturn = false;  // No Return needed
       question.paramExports = kj::mv(exports);
       question.isTailCall = false;
@@ -3895,7 +3963,7 @@ private:
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     QuestionId questionId = ret.getAnswerId();
-    if (questions.isHigh(questionId)) {
+    if (questions.isOneWay(questionId)) {
       // We sent hints with this question saying we didn't want a `Return` but we got one anyway.
       // We cannot even look up the question on the question table because it's (remotely) possible
       // that we already removed it and re-allocated the ID to something else. So, we should ignore
