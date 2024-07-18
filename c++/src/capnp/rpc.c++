@@ -747,10 +747,10 @@ private:
 
     using Running = kj::Promise<void>;
     struct Finished {};
-    using Redirected = kj::Promise<kj::Own<RpcResponse>>;
+    using RedirectedToSelf = kj::Promise<kj::Own<RpcResponse>>;
     using Provide = kj::Rc<ThirdPartyExchangeValue>;
 
-    kj::OneOf<Running, Finished, Redirected, Provide> task;
+    kj::OneOf<Running, Finished, RedirectedToSelf, Provide> task;
     // While the RPC is running locally, `task` is a `Promise` representing the task to execute
     // the RPC.
     //
@@ -3383,7 +3383,10 @@ private:
       }
     }
 
-    kj::Own<RpcResponse> consumeRedirectedResponse() {
+    kj::Own<RpcResponse> consumeRedirectedToSelfResponse() {
+      // Consume a "send results to yourself" response, taking ownership of the response locally
+      // without it ever being sent over a network.
+
       KJ_ASSERT(sendResultsTo.is<SendToSelf>());
 
       if (response == kj::none) getResults(MessageSize{0, 0});  // force initialization of response
@@ -3483,7 +3486,7 @@ private:
         cleanupAnswerTable(nullptr, false);
       }
     }
-    void sendRedirectReturn() {
+    void sendRedirectToSelfReturn() {
       KJ_ASSERT(sendResultsTo.is<SendToSelf>());
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
@@ -3496,9 +3499,11 @@ private:
         builder.setReleaseParamCaps(false);
         builder.setResultsSentElsewhere();
 
-        // TODO(perf): Could `noFinishNeeded` be used here? The `Finish` messages are pretty
-        //   redundant after a redirect, but as this case is less common and more complicated I
-        //   don't want to fully think through the implications right now.
+        // TODO(now): We have no idea if the response contains capabilities, so we can't use
+        //   `noFinishNeeded` as aggressively as usual, but we could probably still use it as
+        //   long as `hints.noPromisePipelining` is true. In that case we can assume no pipelined
+        //   calls and also assume no disembargo, since an embargo would only be needed after
+        //   pipelined calls.
 
         message->send();
 
@@ -4079,7 +4084,7 @@ private:
       if (sendResultsTo.is<SendToSelf>()) {
         answer.task = promiseAndPipeline.promise.then(
             [context=kj::mv(context)]() mutable {
-              return context->consumeRedirectedResponse();
+              return context->consumeRedirectedToSelfResponse();
             });
       } else if (hints.onlyPromisePipeline) {
         // The promise is probably fake anyway, so don't bother adding a .then(). We do, however,
@@ -4238,14 +4243,14 @@ private:
 
           case rpc::Return::TAKE_FROM_OTHER_QUESTION:
             KJ_IF_SOME(answer, answers.find(ret.getTakeFromOtherQuestion())) {
-              KJ_IF_SOME(response, answer.task.tryGet<Answer::Redirected>()) {
+              KJ_IF_SOME(response, answer.task.tryGet<Answer::RedirectedToSelf>()) {
                 questionRef.fulfill(kj::mv(response));
                 answer.task = Answer::Finished();
 
                 KJ_IF_SOME(context, answer.callContext) {
                   // Send the `Return` message  for the call of which we're taking ownership, so
                   // that the peer knows it can now tear down the call state.
-                  context.sendRedirectReturn();
+                  context.sendRedirectToSelfReturn();
                 }
               } else {
                 KJ_FAIL_REQUIRE("`Return.takeFromOtherQuestion` referenced a call that did not "
@@ -4276,7 +4281,7 @@ private:
             KJ_IF_SOME(context, answer.callContext) {
               // Send the `Return` message  for the call of which we're taking ownership, so
               // that the peer knows it can now tear down the call state.
-              context.sendRedirectReturn();
+              context.sendRedirectToSelfReturn();
             }
           }
         }
