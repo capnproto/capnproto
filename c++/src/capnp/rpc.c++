@@ -492,12 +492,8 @@ public:
 
     question.isAwaitingReturn = true;
 
-    auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
-
-    auto questionRef = kj::refcounted<QuestionRef>(*this, questionId, kj::mv(paf.fulfiller));
+    auto questionRef = kj::refcounted<QuestionRef>(*this, questionId);
     question.selfRef = *questionRef;
-
-    paf.promise = paf.promise.attach(kj::addRef(*questionRef));
 
     {
       auto message = connection.get<Connected>().connection->newOutgoingMessage(
@@ -1102,7 +1098,7 @@ private:
       QuestionId questionId;
       auto& question = connectionState->questions.nextOneWay(questionId);
       question.isAwaitingReturn = false;  // No Return needed
-      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, kj::none);
+      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId);
       question.selfRef = *questionRef;
 
       auto otherMsg = provider.newOutgoingMessage(messageSizeHint<rpc::Provide>() + 32);
@@ -2351,8 +2347,7 @@ private:
           QuestionId questionId;
           auto& question = other.questions.next(questionId);
           question.isAwaitingReturn = true;
-          auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
-          auto questionRef = kj::refcounted<QuestionRef>(other, questionId, kj::mv(paf.fulfiller));
+          auto questionRef = kj::refcounted<QuestionRef>(other, questionId);
           question.selfRef = *questionRef;
 
           // Send the Accept message.
@@ -2410,10 +2405,8 @@ private:
     // can be sent.
 
   public:
-    inline QuestionRef(
-        RpcConnectionState& connectionState, QuestionId id,
-        kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>>> fulfiller)
-        : connectionState(kj::addRef(connectionState)), id(id), fulfiller(kj::mv(fulfiller)) {}
+    inline QuestionRef(RpcConnectionState& connectionState, QuestionId id)
+        : connectionState(kj::addRef(connectionState)), id(id) {}
 
     ~QuestionRef() noexcept {
       // Contrary to KJ style, we declare this destructor `noexcept` because if anything in here
@@ -2478,10 +2471,11 @@ private:
       }
 
       KJ_IF_SOME(f, fulfiller) {
-        f->fulfill(kj::mv(response));
+        f.fulfill(kj::mv(response));
       }
 
       dropWhenDone = kj::none;
+      done = true;
     }
 
     void fulfill(kj::Promise<kj::Own<RpcResponse>>&& promise) {
@@ -2505,10 +2499,11 @@ private:
       }
 
       KJ_IF_SOME(f, fulfiller) {
-        f->fulfill(kj::mv(promise));
+        f.fulfill(kj::mv(promise));
       }
 
       dropWhenDone = kj::none;
+      done = true;
     }
 
     void fulfillTailCall() {
@@ -2520,10 +2515,11 @@ private:
         // As a hack, we fulfill the response with null. RpcRequest::tailSend() expects this and
         // will not use the response.
         // TODO(cleanup): This is pretty ugly.
-        f->fulfill(kj::Own<RpcResponse>());
+        f.fulfill(kj::Own<RpcResponse>());
       }
 
       dropWhenDone = kj::none;
+      done = true;
     }
 
     void reject(kj::Exception&& exception) {
@@ -2537,10 +2533,13 @@ private:
       }
 
       KJ_IF_SOME(f, fulfiller) {
-        f->reject(kj::mv(exception));
+        f.reject(kj::cp(exception));
       }
 
+      this->exception = kj::heap(kj::mv(exception));
+
       dropWhenDone = kj::none;
+      done = true;
     }
 
     void disconnect() {
@@ -2555,16 +2554,41 @@ private:
       }
     }
 
+    using FulfillerT = kj::Promise<kj::Own<RpcResponse>>;
+    using Fulfiller = kj::PromiseFulfiller<FulfillerT>;
+    void setFulfiller(Fulfiller& f) {
+      KJ_ASSERT(fulfiller == nullptr);
+      KJ_IF_SOME(e, exception) {
+        f.reject(kj::cp(*e));
+      } else {
+        KJ_REQUIRE(!done);
+        fulfiller = f;
+      }
+    }
+    void clearFulfiller() {
+      fulfiller = kj::none;
+    }
+
     void setPipeline(RpcPipeline& pipeline) {
       KJ_ASSERT(waitingPipeline == kj::none);
-      waitingPipeline = pipeline;
+      KJ_IF_SOME(e, exception) {
+        pipeline.reject({}, kj::cp(*e));
+      } else {
+        KJ_REQUIRE(!done);
+        waitingPipeline = pipeline;
+      }
     }
     void clearPipeline() {
       waitingPipeline = kj::none;
     }
 
     void addPromiseClient(PromiseClient& promise) {
-      waitingPromises.add(promise);
+      KJ_IF_SOME(e, exception) {
+        promise.reject(kj::cp(*e));
+      } else {
+        KJ_REQUIRE(!done);
+        waitingPromises.add(promise);
+      }
     }
     void removePromiseClient(PromiseClient& promise) {
       waitingPromises.remove(promise);
@@ -2578,7 +2602,8 @@ private:
   private:
     kj::Maybe<kj::Own<RpcConnectionState>> connectionState;
     QuestionId id;
-    kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>>> fulfiller;
+    bool done = false;
+    kj::Maybe<Fulfiller&> fulfiller;
 
     kj::Maybe<RpcPipeline&> waitingPipeline;
     // The RpcPipeline waiting for the result of this question.
@@ -2592,7 +2617,29 @@ private:
     // question.
 
     kj::Maybe<kj::Own<void>> dropWhenDone;
+
+    kj::Maybe<kj::Own<kj::Exception>> exception;
   };
+
+  class QuestionPromiseAdapter {
+  public:
+    QuestionPromiseAdapter(QuestionRef::Fulfiller& fulfiller,
+                           kj::Own<QuestionRef> questionRefParam)
+        : questionRef(kj::mv(questionRefParam)) {
+      questionRef->setFulfiller(fulfiller);
+    }
+    ~QuestionPromiseAdapter() noexcept(false) {
+      questionRef->clearFulfiller();
+    }
+
+  private:
+    kj::Own<QuestionRef> questionRef;
+  };
+
+  static kj::Promise<kj::Own<RpcResponse>> toPromise(kj::Own<QuestionRef> questionRef) {
+    return kj::newAdaptedPromise<QuestionRef::FulfillerT, QuestionPromiseAdapter>(
+        kj::mv(questionRef));
+  }
 
   class RpcRequest final: public RequestHook {
   public:
@@ -2640,17 +2687,17 @@ private:
       } else {
         bool noPromisePipelining = callBuilder.getNoPromisePipelining();
 
-        auto sendResult = sendInternal(false);
+        auto questionRef = sendInternal(false);
 
         kj::Own<PipelineHook> pipeline;
         if (noPromisePipelining) {
           pipeline = getDisabledPipeline();
         } else {
-          pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef),
+          pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::addRef(*questionRef),
                                                  /*willResolve =*/ true);
         }
 
-        auto appPromise = sendResult.promise.then(
+        auto appPromise = toPromise(kj::mv(questionRef)).then(
             [=](kj::Own<RpcResponse>&& response) {
               auto reader = response->getResults();
               return Response<AnyPointer>(reader, kj::mv(response));
@@ -2729,8 +2776,6 @@ private:
       // `sendResultsTo` part of the call. This is only called after checking for any circumstances
       // that might cause this to return null.
 
-      SendInternalResult sendResult;
-
       if (!connectionState->connection.is<Connected>()) {
         // Disconnected; fall back to a regular send() which will fail appropriately.
         return kj::none;
@@ -2745,14 +2790,14 @@ private:
       // OK, now that we're definitely sending the call, we can initialize `sendResultsTo`.
       initSendResultsTo(callBuilder.getSendResultsTo());
 
-      sendResult = sendInternal(true);
+      auto questionRef = sendInternal(true);
 
-      auto promise = sendResult.promise.then([](kj::Own<RpcResponse>&& response) {
+      auto promise = toPromise(kj::addRef(*questionRef)).then([](kj::Own<RpcResponse>&& response) {
         // Response should be null if `Return` handling code is correct.
         KJ_ASSERT(!response);
       });
 
-      QuestionId questionId = sendResult.questionRef->getId();
+      QuestionId questionId = questionRef->getId();
 
       kj::Own<PipelineHook> pipeline;
       bool noPromisePipelining = callBuilder.getNoPromisePipelining();
@@ -2760,7 +2805,7 @@ private:
         pipeline = getDisabledPipeline();
       } else {
         pipeline = kj::refcounted<RpcPipeline>(
-            *connectionState, kj::mv(sendResult.questionRef), /*willResolve =*/ false);
+            *connectionState, kj::mv(questionRef), /*willResolve =*/ false);
       }
 
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
@@ -2775,12 +2820,8 @@ private:
     rpc::Call::Builder callBuilder;
     AnyPointer::Builder paramsBuilder;
 
-    struct SendInternalResult {
+    struct SetupSendResult {
       kj::Own<QuestionRef> questionRef;
-      kj::Promise<kj::Own<RpcResponse>> promise = nullptr;
-    };
-
-    struct SetupSendResult: public SendInternalResult {
       QuestionId questionId;
       Question& question;
     };
@@ -2800,17 +2841,13 @@ private:
       question.isTailCall = isTailCall;
 
       // Make the QuestionRef and result promise.
-      SendInternalResult result;
-      auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
-      result.questionRef = kj::refcounted<QuestionRef>(
-          *connectionState, questionId, kj::mv(paf.fulfiller));
-      question.selfRef = *result.questionRef;
-      result.promise = paf.promise.attach(kj::addRef(*result.questionRef));
+      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId);
+      question.selfRef = *questionRef;
 
-      return { kj::mv(result), questionId, question };
+      return { kj::mv(questionRef), questionId, question };
     }
 
-    SendInternalResult sendInternal(bool isTailCall) {
+    kj::Own<QuestionRef> sendInternal(bool isTailCall) {
       auto result = setupSend(isTailCall);
 
       // Finish and send.
@@ -2832,7 +2869,7 @@ private:
       }
 
       // Send and return.
-      return kj::mv(result);
+      return kj::mv(result.questionRef);
     }
 
     kj::Promise<void> sendStreamingInternal(bool isTailCall) {
@@ -2851,7 +2888,8 @@ private:
           flow = target->flowController.emplace(
               connectionState->connection.get<Connected>().connection->newStream());
         }
-        flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
+        flowPromise = flow->send(kj::mv(message),
+            toPromise(kj::mv(setup.questionRef)).ignoreResult());
       })) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
@@ -2885,7 +2923,7 @@ private:
       question.isTailCall = false;
 
       // Make the QuestionRef and result promise.
-      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId, kj::none);
+      auto questionRef = kj::refcounted<QuestionRef>(*connectionState, questionId);
       question.selfRef = *questionRef;
 
       // If sending throws, we'll need to fix up the state a little...
