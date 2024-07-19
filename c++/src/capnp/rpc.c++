@@ -1111,7 +1111,8 @@ private:
         // honoring our contract.
         return kj::mv(redirect);
       }
-      recipient.introduceTo(provider, contact, provide.initRecipient());
+      recipient.introduceTo(provider, ThreePartyHandoffPurpose::CAPABILITY_PASSING, contact,
+                            provide.initRecipient());
       otherMsg->send();
 
       return VineToExport {
@@ -1698,11 +1699,15 @@ private:
           VatNetworkBase::Connection& recipient,
           ThirdPartyToContact::Builder contact) override {
       if (state.is<Deferred>() &&
-          provider.canForwardThirdPartyToContact(*state.get<Deferred>().contact, recipient)) {
+          provider.canForwardThirdPartyToContact(
+              *state.get<Deferred>().contact, recipient,
+              ThreePartyHandoffPurpose::CAPABILITY_PASSING)) {
         // We have not accepted this capability yet, and the VatNetwork supports forwarding it!
         // We can get away without accepting the capability.
         auto& deferred = state.get<Deferred>();
-        provider.forwardThirdPartyToContact(*deferred.contact, recipient, contact);
+        provider.forwardThirdPartyToContact(
+            *deferred.contact, recipient,
+            ThreePartyHandoffPurpose::CAPABILITY_PASSING, contact);
 
         return VineToExport {
           .vine = deferred.vine->addRef(),
@@ -1844,7 +1849,7 @@ private:
 
       KJ_IF_SOME(conn, tryGetConnection()) {
         KJ_IF_SOME(otherConn, rpcInner.connectionState->tryGetConnection()) {
-          if (conn.canIntroduceTo(otherConn)) {
+          if (conn.canIntroduceTo(otherConn, ThreePartyHandoffPurpose::CAPABILITY_PASSING)) {
             // We can do three-party handoff!
 
             auto tph = descriptor.initThirdPartyHosted();
