@@ -478,11 +478,11 @@ public:
       this->idle = idle;
     }
 
-    bool canIntroduceTo(Connection& other) override {
+    bool canIntroduceTo(Connection& other, ThreePartyHandoffPurpose purpose) override {
       return true;
     }
 
-    void introduceTo(Connection& other,
+    void introduceTo(Connection& other, ThreePartyHandoffPurpose purpose,
         test::TestThirdPartyToContact::Builder otherContactInfo,
         test::TestThirdPartyToAwait::Builder thisAwaitInfo) override {
       uint64_t token = vat.network.newToken();
@@ -501,7 +501,8 @@ public:
     }
 
     bool canForwardThirdPartyToContact(
-        test::TestThirdPartyToContact::Reader contact, Connection& destination) override {
+        test::TestThirdPartyToContact::Reader contact, Connection& destination,
+        ThreePartyHandoffPurpose purpose) override {
       if (!vat.network.forwardingEnabled) {
         ++vat.network.deniedForwardCount;
       }
@@ -510,7 +511,7 @@ public:
 
     void forwardThirdPartyToContact(
         test::TestThirdPartyToContact::Reader contact, Connection& destination,
-        test::TestThirdPartyToContact::Builder result) override {
+        ThreePartyHandoffPurpose purpose, test::TestThirdPartyToContact::Builder result) override {
       KJ_EXPECT(vat.network.forwardingEnabled);
       KJ_EXPECT(contact.getSentBy() == partnerName);
       ++vat.network.forwardCount;
