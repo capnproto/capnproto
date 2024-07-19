@@ -748,9 +748,10 @@ private:
     using Running = kj::Promise<void>;
     struct Finished {};
     using RedirectedToSelf = kj::Promise<kj::Own<RpcResponse>>;
+    struct RedirectedToThirdParty {};
     using Provide = kj::Rc<ThirdPartyExchangeValue>;
 
-    kj::OneOf<Running, Finished, RedirectedToSelf, Provide> task;
+    kj::OneOf<Running, Finished, RedirectedToSelf, RedirectedToThirdParty, Provide> task;
     // While the RPC is running locally, `task` is a `Promise` representing the task to execute
     // the RPC.
     //
@@ -2461,6 +2462,7 @@ private:
     }
 
     inline QuestionId getId() const { return id; }
+    inline bool isDone() const { return done; }
 
     void fulfill(kj::Own<RpcResponse>&& response) {
       // Pipelined caps must get notified of resolution before the app does to maintain ordering.
@@ -2521,6 +2523,28 @@ private:
         // will not use the response.
         // TODO(cleanup): This is pretty ugly.
         f.fulfill(kj::Own<RpcResponse>());
+      }
+
+      dropWhenDone = kj::none;
+      done = true;
+    }
+
+    void redirect(kj::Promise<kj::Own<RpcResponse>>&& promise,
+                  kj::Own<PipelineHook> newPipeline) {
+      // Redirect to a new promise and pipeline, for accepting a third-party call.
+
+      if (waitingPipeline != kj::none || !waitingPromises.empty()) {
+        for (auto& w: waitingPromises) {
+          w.resolveQuestion(*newPipeline);
+        }
+
+        KJ_IF_SOME(w, waitingPipeline) {
+          w.forward({}, kj::mv(newPipeline));
+        }
+      }
+
+      KJ_IF_SOME(f, fulfiller) {
+        f.fulfill(kj::mv(promise));
       }
 
       dropWhenDone = kj::none;
@@ -2601,6 +2625,11 @@ private:
 
     void setDropWhenDone(kj::Own<void> obj) {
       // Arrange that the given object will be dropped when this question completes or is canceled.
+      KJ_IF_SOME(d, dropWhenDone) {
+        // Oops, we alerady have a drop-when-done... we can chain them.
+        // (I don't think this ever happens, just being safe.)
+        obj = obj.attach(kj::mv(d));
+      }
       dropWhenDone = kj::mv(obj);
     }
 
@@ -2816,9 +2845,9 @@ private:
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
     }
 
-  private:
     kj::Own<RpcConnectionState> connectionState;
 
+  private:
     kj::Own<RpcClient> target;
     kj::Own<OutgoingRpcMessage> message;
     BuilderCapabilityTable capTable;
@@ -3327,7 +3356,8 @@ private:
 
   struct SendToCaller {};
   struct SendToSelf {};
-  using SendResultsTo = kj::OneOf<SendToCaller, SendToSelf>;
+  using SendToThirdParty = ThirdPartyToContact::Reader;
+  using SendResultsTo = kj::OneOf<SendToCaller, SendToSelf, SendToThirdParty>;
 
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
   public:
@@ -3405,6 +3435,23 @@ private:
       KJ_ASSERT(!sendResultsTo.is<SendToSelf>());
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
+      // Force initialization of response. (Also forces acceptThirdPartyRedirectIfNeeded().)
+      if (response == kj::none) getResults(MessageSize{0, 0});
+
+      KJ_IF_SOME(selfIntro, sendResultsTo.tryGet<SendToSelfIntroduced>()) {
+        // We had a self-introduction earlier, we just want to fulfill the fulfillers...
+
+        auto resp = KJ_ASSERT_NONNULL(response).downcast<LocallyRedirectedRpcResponse>();
+
+        if (selfIntro.pipelineFulfiller->isWaiting()) {
+          selfIntro.pipelineFulfiller->fulfill(
+              newLocalPipeline(kj::addRef(*resp), resp->getResults()));
+        }
+
+        selfIntro.responseFulfiller->fulfill(kj::mv(resp));
+        return;
+      }
+
       // Avoid sending results if canceled so that we don't have to figure out whether or not
       // `releaseResultCaps` was set in the already-received `Finish`.
       if (!receivedFinish && isFirstResponder()) {
@@ -3412,8 +3459,6 @@ private:
                   "Cancellation should have been requested on disconnect.") {
           return;
         }
-
-        if (response == kj::none) getResults(MessageSize{0, 0});  // force initialization of response
 
         returnMessage.setAnswerId(answerId);
         returnMessage.setReleaseParamCaps(false);
@@ -3467,6 +3512,27 @@ private:
     void sendErrorReturn(kj::Exception&& exception) {
       KJ_ASSERT(!sendResultsTo.is<SendToSelf>());
       KJ_ASSERT(!hints.onlyPromisePipeline);
+
+      // If we were told to redirect to a third party, we have to do so even if the result was an
+      // error. This is a bit lame since we might open a connection that literally won't do
+      // anything except report this one error. However, if we were to send the error back to
+      // the caller, they have no way to propagate it back, since they already sent a `Return`
+      // to the original caller with `awaitFromThirdParty`.
+      //
+      // TODO(someday): Maybe we need some new message we can send here which says "actually
+      //   that handoff failed"? Otherwise I guess any failure to connect back to the original
+      //   caller turns into a hang / timeout.
+      acceptThirdPartyRedirectIfNeeded();
+
+      KJ_IF_SOME(selfIntro, sendResultsTo.tryGet<SendToSelfIntroduced>()) {
+        // We had a self-introduction earlier, we just want to reject the fulfillers.
+        if (selfIntro.pipelineFulfiller->isWaiting()) {
+          selfIntro.pipelineFulfiller->reject(kj::cp(exception));
+        }
+        selfIntro.responseFulfiller->reject(kj::mv(exception));
+        return;
+      }
+
       if (isFirstResponder()) {
         if (connectionState->connection.is<Connected>()) {
           auto message = connectionState->connection.get<Connected>().connection
@@ -3529,15 +3595,27 @@ private:
       return params;
     }
     void releaseParams() override {
-      request = kj::none;
+      if (sendResultsTo.is<SendToThirdParty>()) {
+        // Can't actually release params since the SendToThirdParty points into them.
+        // TODO(perf): Maybe we can carefully release if we know we've consumed the redirect
+        //   already?
+      } else {
+        request = kj::none;
+      }
     }
     AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
       KJ_IF_SOME(r, response) {
         return r->getResultsBuilder();
       } else {
+        // It's important we are using the correct connection before we initialize any results.
+        // But if `getResults()` is called we can be pretty sure we're not going to end up in
+        // a tail call so won't be able to forward further anyawy.
+        acceptThirdPartyRedirectIfNeeded();
+
         kj::Own<RpcServerResponse> response;
 
-        if (sendResultsTo.is<SendToSelf>() || !connectionState->connection.is<Connected>()) {
+        if (sendResultsTo.is<SendToSelf>() || sendResultsTo.is<SendToSelfIntroduced>() ||
+            !connectionState->connection.is<Connected>()) {
           response = kj::refcounted<LocallyRedirectedRpcResponse>(sizeHint);
         } else {
           auto message = connectionState->connection.get<Connected>().connection
@@ -3555,6 +3633,24 @@ private:
       }
     }
     void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+      // If setPipeline() is called, we can probably guess that we are not likely to end up in
+      // a tail call, because if a tail call were the intent, the application would have just done
+      // that in the first place, instead of using setPipeline().
+      //
+      // Moreover, setPipeline() is a great hint that we might be execution a long-running
+      // RPC that expects to receive a lot of pipelined calls, such as an http-over-capnp request.
+      // In that case we'd really like to shorten the pipeline path promptly without waiting for
+      // the call to complete first.
+      //
+      // So, let's go ahead and accept any third-party redirect now.
+      acceptThirdPartyRedirectIfNeeded();
+
+      KJ_IF_SOME(selfIntro, sendResultsTo.tryGet<SendToSelfIntroduced>()) {
+        // We saw a three-party redirection to ourselves. We'd like to hook up the pipeline as soon
+        // as we can.
+        selfIntro.pipelineFulfiller->fulfill(pipeline->addRef());
+      }
+
       KJ_IF_SOME(f, tailCallPipelineFulfiller) {
         f->fulfill(AnyPointer::Pipeline(kj::mv(pipeline)));
       }
@@ -3570,8 +3666,25 @@ private:
       KJ_REQUIRE(response == kj::none,
                  "Can't call tailCall() after initializing the results struct.");
 
-      KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameConnection(*request)) {
-        if (!sendResultsTo.is<SendToSelf>() && !hints.onlyPromisePipeline) {
+      KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameNetwork(*request)) {
+        // Tail-calling to an RPC request on the same network. We can shorten the return path!
+
+        if (hints.onlyPromisePipeline) {
+          // Wait, this is an only-promise-pipeline request. Per the documentation of
+          // `sendForPipeline()`, we won't do path-shortening. The assumption is that the caller
+          // has *already* queued any pipelined calls they want to make and so path-shortening
+          // now would be useless, as nothing would actually use the shorter path.
+        } else if (sendResultsTo.is<SendToSelf>()) {
+          // Actually, there's no return path to shorten. The results are already going to be
+          // consumed locally. So don't bother.
+        } else if (!connectionState->connection.is<Connected>() ||
+                   !rpcRequest.connectionState->connection.is<Connected>()) {
+          // Either our connection or the request's connection are disconnecnted so don't try
+          // anything fancy.
+        } else if (responseSent) {
+          // Umm we sent a response already? Better not do anything fancy.
+        } else if (sendResultsTo.is<SendToCaller>() &&
+                   rpcRequest.isOnConnection(*connectionState)) {
           // The tail call is headed towards the peer that called us in the first place, so we can
           // optimize out the return trip.
           //
@@ -3583,24 +3696,105 @@ private:
           };
 
           KJ_IF_SOME(tailInfo, rpcRequest.tailSend(initSendResultsTo)) {
-            if (isFirstResponder()) {
-              if (connectionState->connection.is<Connected>()) {
-                auto message = connectionState->connection.get<Connected>().connection
-                    ->newOutgoingMessage(messageSizeHint<rpc::Return>());
-                auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+            KJ_ASSERT(isFirstResponder());
+            auto message = connectionState->connection.get<Connected>().connection
+                ->newOutgoingMessage(messageSizeHint<rpc::Return>());
+            auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-                builder.setAnswerId(answerId);
-                builder.setReleaseParamCaps(false);
-                builder.setTakeFromOtherQuestion(tailInfo.questionId);
+            builder.setAnswerId(answerId);
+            builder.setReleaseParamCaps(false);
+            builder.setTakeFromOtherQuestion(tailInfo.questionId);
 
-                message->send();
-              }
+            message->send();
 
-              // There are no caps in our return message, but of course the tail results could have
-              // caps, so we must continue to honor pipeline calls (and just bounce them back).
-              cleanupAnswerTable(nullptr, false);
-            }
+            // There are no caps in our return message, but of course the tail results could have
+            // caps, so we must continue to honor pipeline calls (and just bounce them back).
+            cleanupAnswerTable(nullptr, false);
+
             return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
+          }
+        } else if (sendResultsTo.is<SendToThirdParty>()) {
+          // Our own results are supposed to go to a third party. Let's try to arrange to forward
+          // the three-party handoff without actually accepting it, so that we avoid creating
+          // an unnecessary connection.
+
+          auto contact = sendResultsTo.get<SendToThirdParty>();
+          auto& conn = *connectionState->connection.get<Connected>().connection;
+          auto& otherConn = *rpcRequest.connectionState->connection.get<Connected>().connection;
+
+          if (conn.canForwardThirdPartyToContact(
+              contact, otherConn, ThreePartyHandoffPurpose::CALL_FORWARDING)) {
+            // Yay, forwarding is supported.
+
+            auto initSendResultsTo = [&](rpc::Call::SendResultsTo::Builder sendResultsTo) {
+              conn.forwardThirdPartyToContact(contact, otherConn,
+                  ThreePartyHandoffPurpose::CALL_FORWARDING, sendResultsTo.initThirdParty());
+            };
+
+            KJ_IF_SOME(tailInfo, rpcRequest.tailSend(initSendResultsTo)) {
+              KJ_ASSERT(isFirstResponder());
+              auto message = connectionState->connection.get<Connected>().connection
+                  ->newOutgoingMessage(messageSizeHint<rpc::Return>());
+              auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+
+              builder.setAnswerId(answerId);
+              builder.setReleaseParamCaps(false);
+
+              // TODO(now): Consider if, in the case that `conn` and `otherConn` are actually the
+              //   same, we can actually use `takeFromOtherQuestion` here in order to more rapidly
+              //   cut this spur off of the path, speeding up the later disembargo...
+              builder.setResultsSentElsewhere();
+
+              message->send();
+
+              cleanupAnswerTable(nullptr, false);
+
+              return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
+            }
+          }
+
+          // Failed to forward, so we will need to accept the handoff ourselves.
+          acceptThirdPartyRedirectIfNeeded();
+
+          // And now we should start over as we're now on a different connection than before so
+          // we should re-check everything above!
+          return directTailCall(kj::mv(request));
+        } else {
+          // OK, we are a regular old incoming call returning results to the caller, and we're
+          // tail-calling to a third party. Let's initiate a three-party handoff.
+
+          auto& conn = *connectionState->connection.get<Connected>().connection;
+          auto& otherConn = *rpcRequest.connectionState->connection.get<Connected>().connection;
+
+          // Note that we are introducing `otherConn` to `conn`, not vice versa, because with call
+          // forwarding, the vat that we're forwarding the call to (the callee) is expected to
+          // connect back to the caller.
+          if (otherConn.canIntroduceTo(conn, ThreePartyHandoffPurpose::CALL_FORWARDING)) {
+            // Start building the return message so we can init `awaitFromThirdParty` at the
+            // same time as `sendResultsTo`. We'll just have to toss out the message object if
+            // we don't end up being able to send it.
+            auto message = connectionState->connection.get<Connected>().connection
+                ->newOutgoingMessage(messageSizeHint<rpc::Return>());
+            auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+
+            auto initSendResultsTo = [&](rpc::Call::SendResultsTo::Builder sendResultsTo) {
+              otherConn.introduceTo(conn, ThreePartyHandoffPurpose::CALL_FORWARDING,
+                                    sendResultsTo.initThirdParty(),
+                                    builder.initAwaitFromThirdParty());
+            };
+
+            KJ_IF_SOME(tailInfo, rpcRequest.tailSend(initSendResultsTo)) {
+              KJ_ASSERT(isFirstResponder());
+
+              builder.setAnswerId(answerId);
+              builder.setReleaseParamCaps(false);
+
+              message->send();
+
+              cleanupAnswerTable(nullptr, false);
+
+              return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
+            }
           }
         }
       }
@@ -3621,6 +3815,9 @@ private:
         // Copy the response.
         // TODO(perf):  It would be nice if we could somehow make the response get built in-place
         //   but requires some refactoring.
+        // TODO(now): Actually this seems important to fix. We don't want a local tail call in the
+        //   chain to break three-party forwarding. Can we just pass the same CallContext to the
+        //   new call?
         getResults(tailResponse.targetSize()).set(tailResponse);
       });
 
@@ -3654,9 +3851,18 @@ private:
 
     // Response --------------------------------------------
 
+    struct SendToSelfIntroduced {
+      // Special state set in the case that we were told to send our results to a third party, but
+      // it turned out the third party is us.
+      kj::Own<kj::PromiseFulfiller<kj::Own<RpcResponse>>> responseFulfiller;
+      kj::Own<kj::PromiseFulfiller<kj::Own<PipelineHook>>> pipelineFulfiller;
+    };
+    using ExtendedSendResultsTo =
+        kj::OneOf<SendToCaller, SendToSelf, SendToThirdParty, SendToSelfIntroduced>;
+
     kj::Maybe<kj::Own<RpcServerResponse>> response;
     rpc::Return::Builder returnMessage;
-    SendResultsTo sendResultsTo;
+    ExtendedSendResultsTo sendResultsTo;
     bool responseSent = false;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<AnyPointer::Pipeline>>> tailCallPipelineFulfiller;
 
@@ -3676,6 +3882,140 @@ private:
       } else {
         responseSent = true;
         return true;
+      }
+    }
+
+    void acceptThirdPartyRedirectIfNeeded() {
+      // Called when we know we're supposed to redirect to a third party, and we've decided that
+      // we certainly want to make the connection from this vat -- we don't want to forward.
+      //
+      // In this function, we need to connect to the third party, send them the ThirdPartyAnswer to
+      // take over the call, and then "transfer ownership" of this context away from the original
+      // connection it was on over to the new one.
+
+      // Ignore this call if:
+      // - We weren't asked to three-party redirect.
+      // - We're not connected anymore. The caller will receive a disconnected exception through
+      //   the original path.
+      // - We already sent a response.
+      // - We already received `Finish`. The call has been canceled before the handoff could occur.
+      if (!sendResultsTo.is<SendToThirdParty>() ||
+          !connectionState->connection.is<Connected>() ||
+          responseSent || receivedFinish) {
+        return;
+      }
+
+      auto& oldState = connectionState->connection.get<Connected>();
+      auto& oldConn = *oldState.connection;
+      AnswerId oldAnswerId = answerId;
+      Answer& oldAnswer = KJ_ASSERT_NONNULL(connectionState->answers.find(oldAnswerId));
+
+      auto sendOldConnReturn = [&]() {
+        // Send Return message on old connection.
+
+        auto msg = oldConn.newOutgoingMessage(messageSizeHint<rpc::Return>());
+        auto ret = msg->getBody().initAs<rpc::Message>().initReturn();
+        ret.setAnswerId(oldAnswerId);
+        ret.setReleaseParamCaps(false);
+        ret.setResultsSentElsewhere();
+        msg->send();
+      };
+
+      // Allocate temporary message to hold ThirdPartyCompletion. Unfortunately we need a temp
+      // message here because we can't allocate the actual outgoing message until we have a
+      // connection object.
+      // TODO(perf): Maybe we can change the signature of connectToIntroduced() to fix this?
+      capnp::word scratch[32];
+      memset(scratch, 0, sizeof(scratch));
+      MallocMessageBuilder message(scratch);
+      auto completion = message.getRoot<ThirdPartyCompletion>();
+
+      KJ_IF_SOME(ownNewConn, oldConn.connectToIntroduced(
+          sendResultsTo.get<SendToThirdParty>(), completion)) {
+        RpcConnectionState& newConnRpc = getConnectionState(oldState.rpcSystem, kj::mv(ownNewConn));
+
+        newConnRpc.setNotIdle();
+        auto& newConn = *KJ_ASSERT_NONNULL(newConnRpc.connection.tryGet<Connected>()).connection;
+
+        AnswerId newAnswerId;
+        Answer& newAnswer = newConnRpc.answers.nextReverseAllocated(newAnswerId);
+
+        // Clone the pipeline, if there is one.
+        // Note that there might not be one in the case of a `noPromisePipelining` request.
+        KJ_IF_SOME(p, oldAnswer.pipeline) {
+          newAnswer.pipeline = p->addRef();
+        }
+
+        // Transfer the context. (Since we're sending a Return on the old path, it's the correct
+        // time to null out its context.)
+        newAnswer.callContext = kj::mv(oldAnswer.callContext);
+
+        // Transfer the task.
+        newAnswer.task = kj::mv(oldAnswer.task);
+        oldAnswer.task = Answer::RedirectedToThirdParty();
+
+        // Change our `connectionState` to be the new connection (whoa).
+        auto oldConnectionState = kj::mv(connectionState);
+        connectionState = kj::addRef(newConnRpc);
+
+        answerId = newAnswerId;
+
+        // We've effectively changed our "caller" to an entirely different connection, and now
+        // we want to send the results to that caller!
+        sendResultsTo = SendToCaller();
+
+        // Send Return message on old connection.
+        sendOldConnReturn();
+
+        // Send ThirdPartyAnswer message.
+        {
+          auto msg = newConn.newOutgoingMessage(
+              messageSizeHint<rpc::ThirdPartyAnswer>() + completion.targetSize().wordCount);
+          auto tpa = msg->getBody().initAs<rpc::Message>().initThirdPartyAnswer();
+          tpa.setAnswerId(newAnswerId);
+          tpa.getCompletion().set(completion);
+          msg->send();
+        }
+
+      } else {
+        // We're being introduced to ourselves.
+
+        // Send Return message on old connection.
+        KJ_ASSERT(isFirstResponder());
+        sendOldConnReturn();
+
+        // sendReturn() or sendError() is still going to be called later (as part of our answer
+        // task). Arrange that when they are, we'll get these fulfillers fulfilled with the
+        // results. Also, if `setPipeline()` is called, the pipeline can be fulfilled sooner.
+        auto responsePaf = kj::newPromiseAndFulfiller<kj::Own<RpcResponse>>();
+        auto pipelinePaf = kj::newPromiseAndFulfiller<kj::Own<PipelineHook>>();
+        sendResultsTo = SendToSelfIntroduced {
+          .responseFulfiller = kj::mv(responsePaf.fulfiller),
+          .pipelineFulfiller = kj::mv(pipelinePaf.fulfiller),
+        };
+
+        // Create a background task to wait for the introduction to complete, and hook everything
+        // up there.
+        connectionState->tasks.add(oldState.canceler->wrap(
+            oldState.connection->completeThirdParty(completion))
+            .then([responsePromise = kj::mv(responsePaf.promise),
+                   pipelinePromise = kj::mv(pipelinePaf.promise)]
+                  (kj::Rc<kj::Refcounted> holder) mutable {
+          kj::Rc<ThirdPartyExchangeValue> xcghValue = holder.downcast<ThirdPartyExchangeValue>();
+
+          auto& call = KJ_REQUIRE_NONNULL(
+              xcghValue->value.tryGet<ThirdPartyExchangeValue::Call>(),
+              "ThirdPartyCompletion given in ThirdPartyAnswer did not match a redirected Return.");
+
+          KJ_IF_SOME(origQuestion, call.question) {
+            // Calling redirect() might release all remaining references to `origQuestion`, so make
+            // sure we have one of our own.
+            kj::addRef(origQuestion)->redirect(kj::mv(responsePromise),
+                newLocalPromisePipeline(kj::mv(pipelinePromise)));
+          } else {
+            // Original call was canceled, so... do nothing.
+          }
+        }));
       }
     }
 
@@ -3877,6 +4217,10 @@ private:
         handleAccept(reader.getAccept());
         break;
 
+      case rpc::Message::THIRD_PARTY_ANSWER:
+        handleThirdPartyAnswer(reader.getThirdPartyAnswer());
+        break;
+
       default: {
         if (connection.is<Connected>()) {
           auto message = connection.get<Connected>().connection->newOutgoingMessage(
@@ -4040,12 +4384,16 @@ private:
     kj::Own<ClientHook> capability = getMessageTarget(call.getTarget());
 
     SendResultsTo sendResultsTo;
-    switch (call.getSendResultsTo().which()) {
+    auto srt = call.getSendResultsTo();
+    switch (srt.which()) {
       case rpc::Call::SendResultsTo::CALLER:
         sendResultsTo.init<SendToCaller>();
         break;
       case rpc::Call::SendResultsTo::YOURSELF:
         sendResultsTo.init<SendToSelf>();
+        break;
+      case rpc::Call::SendResultsTo::THIRD_PARTY:
+        sendResultsTo.init<SendToThirdParty>(srt.getThirdParty());
         break;
       default:
         KJ_FAIL_REQUIRE("Unsupported `Call.sendResultsTo`.");
@@ -4108,7 +4456,7 @@ private:
               contextRef.sendErrorReturn(kj::mv(exception));
             }).eagerlyEvaluate([&](kj::Exception&& exception) {
               // Handle exceptions that occur in sendReturn()/sendErrorReturn().
-              taskFailed(kj::mv(exception));
+              tasks.add(kj::mv(exception));
             });
       }
     }
@@ -4266,6 +4614,30 @@ private:
             }
 
             break;
+
+          case rpc::Return::AWAIT_FROM_THIRD_PARTY: {
+            if (!connection.is<Connected>()) {
+              // Disconnected; ignore.
+              return;
+            }
+
+            auto& conn = *connection.get<Connected>().connection;
+
+            auto xchgValue = kj::rc<ThirdPartyExchangeValue>();
+            xchgValue->value.init<ThirdPartyExchangeValue::Call>(questionRef);
+            auto handle = conn.awaitThirdParty(ret.getAwaitFromThirdParty(), xchgValue.addRef());
+
+            // Make sure if we're canceled, we null out `question` is `xchangeValue`, just in
+            // case the value is in the process of being delivered (i.e. in the event loop) so
+            // canceling the exchange doesn't actually halt the delivery.
+            handle = handle.attach(kj::defer([xchgValue = kj::mv(xchgValue)]() mutable {
+              xchgValue->value.get<ThirdPartyExchangeValue::Call>().question = kj::none;
+            }));
+
+            // If the question is canceled, we'll stop waiting.
+            questionRef.setDropWhenDone(kj::mv(handle));
+            break;
+          }
 
           default:
             KJ_FAIL_REQUIRE("Unknown 'Return' type.");
@@ -4659,7 +5031,16 @@ private:
       }
     };
 
-    kj::OneOf<Provide> value;
+    struct Call {
+      // Exchanged content for three-party call forwarding.
+
+      kj::Maybe<QuestionRef&> question;
+      // The original question that was redirected.
+
+      Call(QuestionRef& question): question(kj::addRef(question)) {}
+    };
+
+    kj::OneOf<Provide, Call> value;
     // (Eventually this will be extended with another type for ThirdPartyAnswer.)
   };
 
@@ -4789,6 +5170,64 @@ private:
     }
 
     co_return provide.client->addRef();
+  }
+
+  void handleThirdPartyAnswer(const rpc::ThirdPartyAnswer::Reader& tpa) {
+    if (!connection.is<Connected>()) {
+      // Disconnected; ignore.
+      return;
+    }
+
+    setNotIdle();
+
+    QuestionId questionId = tpa.getAnswerId();
+    auto& question = questions.injectReverseAllocated(questionId);
+    question.isAwaitingReturn = true;
+
+    auto questionRef = kj::refcounted<QuestionRef>(*this, questionId);
+    question.selfRef = *questionRef;
+
+    auto& connectedState = connection.get<Connected>();
+    auto completionPromise = connectedState.canceler->wrap(
+        connectedState.connection->completeThirdParty(tpa.getCompletion()));
+
+    // We have to allocate a response promise now, before there's any opportunity for a return
+    // message to arrive.
+    auto responsePromise = toPromise(kj::addRef(*questionRef));
+
+    tasks.add(doThirdPartyAnswer(
+        kj::mv(completionPromise), kj::mv(questionRef), kj::mv(responsePromise)));
+  }
+
+  kj::Promise<void> doThirdPartyAnswer(
+        kj::Promise<kj::Rc<kj::Refcounted>> completionPromise,
+        kj::Own<QuestionRef> questionRef,
+        kj::Promise<kj::Own<RpcResponse>> responsePromise) {
+    kj::Rc<ThirdPartyExchangeValue> xcghValue =
+        (co_await completionPromise).downcast<ThirdPartyExchangeValue>();
+
+    auto& call = KJ_REQUIRE_NONNULL(
+        xcghValue->value.tryGet<ThirdPartyExchangeValue::Call>(),
+        "ThirdPartyCompletion given in ThirdPartyAnswer did not match a redirected Return.");
+
+    if (questionRef->isDone()) {
+      // `responsePromise` is actually already resolved. Let's just extract it and deliver.
+      auto response = co_await responsePromise;
+      KJ_IF_SOME(origQuestion, call.question) {
+        origQuestion.fulfill(kj::mv(response));
+      } else {
+        // Original call was canceled, so... do nothing.
+      }
+    } else {
+      // No response yet, so we should redirect the pipeline.
+      auto newPipeline = kj::refcounted<RpcPipeline>(
+          *this, kj::mv(questionRef), /*willResolve =*/ true);
+      KJ_IF_SOME(origQuestion, call.question) {
+        origQuestion.redirect(kj::mv(responsePromise), kj::mv(newPipeline));
+      } else {
+        // Original call was canceled, so... do nothing.
+      }
+    }
   }
 };
 
