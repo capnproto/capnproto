@@ -162,7 +162,11 @@ public:
   MACRO(LOCATION, "Location") \
   MACRO(CONTENT_TYPE, "Content-Type") \
   MACRO(RANGE, "Range") \
-  MACRO(CONTENT_RANGE, "Content-Range")
+  MACRO(CONTENT_RANGE, "Content-Range") \
+  \
+  /* no-cache Header */ \
+  MACRO(CACHE_CONTROL, "Cache-Control") \
+  MACRO(PRAGMA, "Pragma")
   // For convenience, these headers are valid for all HttpHeaderTables. You can refer to them like:
   //
   //     HttpHeaderId::HOST

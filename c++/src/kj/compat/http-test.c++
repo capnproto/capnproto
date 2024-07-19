@@ -152,6 +152,8 @@ KJ_TEST("HttpHeaders::parseRequest") {
       "DATE:     early\r\n"
       "other-Header: yep\r\n"
       "with.dots: sure\r\n"
+      "Cache-Control: no-store\r\n"
+      "Pragma: no-cache\r\n"
       "\r\n");
   auto result = headers.tryParseRequest(text.asArray()).get<HttpHeaders::Request>();
 
@@ -164,24 +166,30 @@ KJ_TEST("HttpHeaders::parseRequest") {
   KJ_EXPECT(headers.get(HttpHeaderId::CONTENT_TYPE) == kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
   KJ_EXPECT(headers.get(HttpHeaderId::TRANSFER_ENCODING) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CACHE_CONTROL)) == "no-store");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::PRAGMA)) == "no-cache");
 
   std::map<kj::StringPtr, kj::StringPtr> unpackedHeaders;
   headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
     KJ_EXPECT(unpackedHeaders.insert(std::make_pair(name, value)).second);
   });
-  KJ_EXPECT(unpackedHeaders.size() == 6);
+  KJ_EXPECT(unpackedHeaders.size() == 8);
   KJ_EXPECT(unpackedHeaders["Content-Length"] == "123");
   KJ_EXPECT(unpackedHeaders["Host"] == "example.com");
   KJ_EXPECT(unpackedHeaders["Date"] == "early");
   KJ_EXPECT(unpackedHeaders["Foo-Bar"] == "Baz");
   KJ_EXPECT(unpackedHeaders["other-Header"] == "yep");
   KJ_EXPECT(unpackedHeaders["with.dots"] == "sure");
+  KJ_EXPECT(unpackedHeaders["Cache-Control"] == "no-store")
+  KJ_EXPECT(unpackedHeaders["Pragma"] == "no-cache")
 
   KJ_EXPECT(headers.serializeRequest(result.method, result.url) ==
       "POST /some/path HTTP/1.1\r\n"
       "Content-Length: 123\r\n"
       "Host: example.com\r\n"
       "Date: early\r\n"
+      "Cache-Control: no-store\r\n"
+      "Pragma: no-cache\r\n"
       "Foo-Bar: Baz\r\n"
       "other-Header: yep\r\n"
       "with.dots: sure\r\n"
