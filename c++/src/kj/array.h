@@ -442,7 +442,9 @@ public:
 
     T* target = ptr + size;
     if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-      pos = target;
+      // const_cast is safe here because the member won't ever be dereferenced because it 
+      // points to the end of the segment.
+      pos = const_cast<RemoveConst<T>*>(target);
     } else {
       while (pos > target) {
         kj::dtor(*--pos);
@@ -452,7 +454,9 @@ public:
 
   void clear() {
     if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-      pos = ptr;
+      // const_cast is safe here because the member won't ever be dereferenced because it 
+      // points to the end of the segment.
+      pos = const_cast<RemoveConst<T>*>(ptr);
     } else {
       while (pos > ptr) {
         kj::dtor(*--pos);
@@ -467,7 +471,9 @@ public:
     if (target > pos) {
       // expand
       if (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
-        pos = target;
+        // const_cast is safe here because the member won't ever be dereferenced because it 
+        // points to the end of the segment.
+        pos = const_cast<RemoveConst<T>*>(target);
       } else {
         while (pos < target) {
           kj::ctor(*pos++);
@@ -476,7 +482,9 @@ public:
     } else {
       // truncate
       if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-        pos = target;
+        // const_cast is safe here because the member won't ever be dereferenced because it 
+        // points to the end of the segment.
+        pos = const_cast<RemoveConst<T>*>(target);
       } else {
         while (pos > target) {
           kj::dtor(*--pos);
