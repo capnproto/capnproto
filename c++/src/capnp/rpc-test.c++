@@ -51,8 +51,8 @@ public:
 
   class Sender {
   public:
-    explicit Sender(RpcDumper& parent, kj::StringPtr name)
-        : parent(parent), name(name) {}
+    explicit Sender(RpcDumper& parent, kj::StringPtr name, bool unique)
+        : parent(parent), name(name), unique(unique) {}
 
     ~Sender() noexcept(false) {
       KJ_IF_SOME(p, partner) {
@@ -113,8 +113,8 @@ public:
 
           auto sendResultsTo = call.getSendResultsTo();
 
-          return kj::str(name, "->", partnerName, ": call ", call.getQuestionId(), ": ",
-                         call.getTarget(), " <- ", interfaceName, ".",
+          return kj::str(name, unique ? "=>" : "->", partnerName, ": call ", call.getQuestionId(),
+                         ": ", call.getTarget(), " <- ", interfaceName, ".",
                          methodProto.getName(), params,
                          " caps:[", kj::strArray(capTable, ", "), "]",
                          sendResultsTo.isCaller() ? kj::str()
@@ -152,12 +152,12 @@ public:
           if (schema.getProto().isStruct()) {
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
-            return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
-                           " caps:[", kj::strArray(capTable, ", "), "]\n");
+            return kj::str(name, unique ? "=>" : "->", partnerName, ": return ", ret.getAnswerId(),
+                           ": ", results, " caps:[", kj::strArray(capTable, ", "), "]\n");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
-            return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
-                           kj::strArray(capTable, ", "), '\n');
+            return kj::str(name, unique ? "=>" : "->", partnerName, "(", ret.getAnswerId(),
+                           "): return cap ", kj::strArray(capTable, ", "), '\n');
           } else {
             break;
           }
@@ -183,6 +183,7 @@ public:
   private:
     RpcDumper& parent;
     kj::StringPtr name;
+    bool unique;
 
     kj::Maybe<Sender&> partner;
     kj::StringPtr partnerName;
@@ -280,7 +281,7 @@ public:
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
     ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name, bool unique)
-        : vat(vat), peerVat(peerVat), unique(unique), dumper(vat.network.dumper, name),
+        : vat(vat), peerVat(peerVat), unique(unique), dumper(vat.network.dumper, name, unique),
           tasks(kj::heap<kj::TaskSet>(*this)) {
       if (!unique) {
         vat.connections.insert(&peerVat, this);
