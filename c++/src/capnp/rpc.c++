@@ -3481,6 +3481,28 @@ private:
       }
     }
 
+    void initializeAnswer(Answer& answer, kj::Own<PipelineHook> pipeline,
+                          decltype(Answer::task) task) {
+      // Called immediately after the call is started, when the answer table's `answer.pipeline`
+      // is being assigned, to give the `RpcCallContext` a chance to do something with the
+      // pipeline if it needs to.
+
+      answerIsInitialized = true;
+
+      if (acceptedThirdPartyRedirectBeforeInitialized) {
+        auto& newAnswer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
+        if (!hints.noPromisePipelining) {
+          newAnswer.pipeline = pipeline->addRef();
+        }
+        newAnswer.task = kj::mv(task);
+      } else {
+        answer.task = kj::mv(task);
+      }
+
+      // We always want to initialize the pipeline.
+      answer.pipeline = kj::mv(pipeline);
+    }
+
     kj::Own<RpcResponse> consumeRedirectedToSelfResponse() {
       // Consume a "send results to yourself" response, taking ownership of the response locally
       // without it ever being sent over a network.
@@ -3910,6 +3932,13 @@ private:
     uint16_t methodId;
     // For debugging.
 
+    bool answerIsInitialized = false;
+    // Has the context's answer table entry actually been initialized yet?
+
+    bool acceptedThirdPartyRedirectBeforeInitialized = false;
+    // Did acceptThirdPartyRedirectIfNeeded() cause this context to be redirected before
+    // initializeAnswer() could be called?
+
     // Request ---------------------------------------------
 
     size_t requestSize;  // for flow limit purposes
@@ -4010,10 +4039,24 @@ private:
 
         kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> embargo;
 
+        if (!answerIsInitialized) {
+          // `oldAnswer` isn't actually fully initialized yet, so we'd better tread carefully
+          // here. This can happen if `startCall()` is actually still on the stack. Set a flag to
+          // fix this later.
+          acceptedThirdPartyRedirectBeforeInitialized = true;
+        }
+
         // Clone the pipeline, if there is one.
         // Note that there might not be one in the case of a `noPromisePipelining` request.
-        KJ_IF_SOME(p, oldAnswer.pipeline) {
-          newAnswer.pipeline = p->addRef();
+        if (hints.noPromisePipelining) {
+          newAnswer.pipeline = getDisabledPipeline();
+        } else {
+          KJ_IF_SOME(p, oldAnswer.pipeline) {
+            newAnswer.pipeline = p->addRef();
+          } else {
+            // Probably, !answerIsInitialized, but in any case, leave `newAnswer.pipeline` null
+            // for now, matching `oldAnswer.pipeline`.
+          }
 
           // Since there is a pipeline, we could be asked to embargo it. Arrange to be informed
           // when the original question receives a `Finish`, which implicitly lifts the embargo.
@@ -4026,10 +4069,13 @@ private:
         // time to null out its context.)
         newAnswer.callContext = kj::mv(oldAnswer.callContext);
 
-        // Transfer the task.
+        // Transfer the task. Note that if !answerIsInitialized, `oldAnswer.task` is probably
+        // null; we'll fix newAnswer.task later.
         newAnswer.task = kj::mv(oldAnswer.task);
 
         // Replace old task with a placeholder that drops the embargo when `Finish` is received.
+        // If !answerIsInitialized, don't worry, we'll make sure this doesn't get overwritten in
+        // `initializeAnswer()`.
         oldAnswer.task = Answer::RedirectedToThirdParty { kj::mv(embargo) };
 
         // Change our `connectionState` to be the new connection (whoa).
@@ -4517,11 +4563,11 @@ private:
 
     {
       auto& answer = KJ_ASSERT_NONNULL(answers.find(answerId));
+      RpcCallContext& contextRef = *context;
 
-      answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
-
+      decltype(answer.task) task;
       if (sendResultsTo.is<SendToSelf>()) {
-        answer.task = promiseAndPipeline.promise.then(
+        task = promiseAndPipeline.promise.then(
             [context=kj::mv(context)]() mutable {
               return context->consumeRedirectedToSelfResponse();
             });
@@ -4529,13 +4575,11 @@ private:
         // The promise is probably fake anyway, so don't bother adding a .then(). We do, however,
         // have to attach `context` to this, since we destroy `task` upon receiving a `Finish`
         // message, and we want `RpcCallContext` to be destroyed no earlier than that.
-        answer.task = promiseAndPipeline.promise.attach(kj::mv(context));
+        task = promiseAndPipeline.promise.attach(kj::mv(context));
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
-        RpcCallContext& contextRef = *context;
-
-        answer.task = promiseAndPipeline.promise.then(
+        task = promiseAndPipeline.promise.then(
             [context = kj::mv(context)]() mutable {
               context->sendReturn();
             }, [&contextRef](kj::Exception&& exception) {
@@ -4545,6 +4589,8 @@ private:
               tasks.add(kj::mv(exception));
             });
       }
+
+      contextRef.initializeAnswer(answer, kj::mv(promiseAndPipeline.pipeline), kj::mv(task));
     }
   }
 
