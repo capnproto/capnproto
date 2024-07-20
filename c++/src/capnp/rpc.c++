@@ -592,6 +592,16 @@ public:
           pipelinesToRelease.add(kj::mv(p));
         }
 
+        KJ_IF_SOME(redirect, answer.task.tryGet<Answer::RedirectedToThirdParty>()) {
+          KJ_IF_SOME(e, redirect.embargo) {
+            // If we disconnected before a `Finish` message was actually received on a three-party
+            // redirected call, we should actually fail the embargo. This is important because it's
+            // possible some calls never actually made it all the way through, and it would be a
+            // violation of e-order to deliver them anyway.
+            e->reject(kj::cp(networkException));
+          }
+        }
+
         tasksToRelease.add(kj::mv(answer.task));
 
         KJ_IF_SOME(context, answer.callContext) {
@@ -748,7 +758,7 @@ private:
     using Running = kj::Promise<void>;
     struct Finished {};
     using RedirectedToSelf = kj::Promise<kj::Own<RpcResponse>>;
-    struct RedirectedToThirdParty {};
+    struct RedirectedToThirdParty { kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> embargo; };
     using Provide = kj::Rc<ThirdPartyExchangeValue>;
 
     kj::OneOf<Running, Finished, RedirectedToSelf, RedirectedToThirdParty, Provide> task;
@@ -768,6 +778,13 @@ private:
     kj::Array<ExportId> resultExports;
     // List of exports that were sent in the results.  If the finish has `releaseResultCaps` these
     // will need to be released.
+
+    kj::Maybe<kj::Promise<void>> thirdPartyFinishPromise;
+    // Specifically for a call that is the result of a three-party call handoff, that is, a call
+    // introduced by sending a `ThirdPartyAnswer` message, this promise resolves when the
+    // *original* call receives a `Finish` message, thus cleaning up the long path in favor of
+    // the shortened path. If a `ThirdPartyAnswerEmbargo` is received, it will consume this
+    // promise.
   };
 
   struct VineInfo {
@@ -1336,6 +1353,8 @@ private:
 
     kj::ListLink<PromiseClient> link;
 
+    bool hasReceivedCall() { return receivedCall; }
+
     void resolveImport(kj::Own<ClientHook> replacement) {
       KJ_ASSERT(status == IMPORT, "peer committed RPC protocol error: resolved a promise that "
           "was already resolved");
@@ -1493,26 +1512,14 @@ private:
       bool isSameConnection = false;
       bool needsEmbargo = false;
       KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameNetwork(*replacement)) {
-        if (rpcReplacement.isOnConnection(*connectionState)) {
-          isSameConnection = true;
+        isSameConnection = rpcReplacement.isOnConnection(*connectionState);
 
-          // We resolved to some other RPC capability hosted by the same peer.
-          //
-          // It's possible we resolved to a remote promise. If *that* promise eventually resolves
-          // back to us, we'll need a disembargo. Luckily, we know that the other promise cannot have
-          // resolved yet, due to the requirement that a `CapDescriptor` cannot reference an
-          // already-resolved promise. So, we don't need to start a disembargo now; we can simply
-          // rely on the other promise applying a disembargo later. To make sure that happens,
-          // we need to propagate our `receivedCall` flag to it.
-          //
-          // (And if `rpcReplacement` is *not* a promise then no embargo is needed because the
-          // capability cannot resolve back to point to us later. It's remote over the same
-          // connection and therefore calls will stay ordered naturally.)
-          rpcReplacement.promiseResolvedToThis(receivedCall);
-        } else {
-          // Resolved to a thard-party capability. The three-party handoff mechanism takes care
-          // of embargoing this.
-        }
+        // We resolved to some other RPC capability.
+        //
+        // If any embargo is needed, it will be handled elsewhere. However, whoever is handling it
+        // may need to know that a promise that received calls in the past has resolved to it.
+        // So, notify it.
+        rpcReplacement.promiseResolvedToThis(receivedCall);
       } else {
         if (replacement->isNull() || replacement->isError()) {
           // Null or broken capabilities appear to be local capabilities, but they aren't really.
@@ -1646,16 +1653,11 @@ private:
         // accepted yet. This is good, because we need to make sure we embargo it on accept.
         //
         // Note that we know for sure that the resolution message could only have created a new
-        // `DeferredThirdPartyClient` -- not referred to an existing one -- because:
-        // - If the type was `senderHosted` or `senderPromise`, it refers to an import, and we
-        //   never place `DeferredThirdPartyClient` directly on the import table. (Its vine is on
-        //   the import table, but the `DeferredThirdPartyClient` object itself is not.)
-        // - If the type was `receiverHosted` or `receiverAnswer` then promiseResolvedToThis()
-        //   would not have been called on it, because `unwrapIfSameConnection()` would have
-        //   returned kj::none.
-        // - Therefore the only possibility is that the resolve message contained a
-        //   `ThirdPartyCapDescriptor`, which casued a fresh `DeferredThirdPartyClient` to be
-        //   created.
+        // `DeferredThirdPartyClient` -- not referred to an existing one -- because we do not
+        // actually ever export a `DeferredThirdPartyClient`, we only export its underlying vine
+        // (when forwarding), or the fully-accepted third-party capability. If a peer refers back
+        // to the vine itself, we always construct a *new* DeferredThirdPartyClient instance when
+        // that vine reference is received.
         //
         // It's good that this all works out, because otherwise we'd probably need to change the
         // embargo protocol so that an embargo could be established *after* accepting the
@@ -2464,19 +2466,37 @@ private:
     inline QuestionId getId() const { return id; }
     inline bool isDone() const { return done; }
 
+    bool hasReceivedPipeliendCall() {
+      for (auto& w: waitingPromises) {
+        if (w.hasReceivedCall()) return true;
+      }
+      return false;
+    }
+
     void fulfill(kj::Own<RpcResponse>&& response) {
       // Pipelined caps must get notified of resolution before the app does to maintain ordering.
-      if (!waitingPromises.empty()) {
-        auto results = response->getResults();
-        for (auto& w: waitingPromises) {
-          w.resolveQuestion(results);
-        }
+      if (waitingPipeline != kj::none || !waitingPromises.empty()) {
+        callAfterTpaEmbargo([this, response = response->addRef()]() mutable {
+          auto results = response->getResults();
+          for (auto& w: waitingPromises) {
+            w.resolveQuestion(results);
+          }
+
+          KJ_IF_SOME(p, waitingPipeline) {
+            p.resolve({}, response->addRef());
+          }
+        });
       }
 
-      KJ_IF_SOME(p, waitingPipeline) {
-        p.resolve({}, response->addRef());
-      }
-
+      // TODO(someday): If the response object contains capabilities on which pipelined calls were
+      //   made, in theory the response object's copies of those capabilities should be embargoed
+      //   too, but we have never actually made this so. Only the capabilities obtained from the
+      //   Pipeline object ever respect any embargo. That said, any application that actually does
+      //   pipelined calls in practice holds on to the pipeline cap long-term and does not fetch
+      //   the same cap off of the promise later, so the embargoes work as expected. Still,
+      //   could consider replacing the capabilities on the response with the corresponding
+      //   PipelineClients if they exist, in order to make things actually fully consistent.
+      //   (This TODO applies to the other similar methods below as well.)
       KJ_IF_SOME(f, fulfiller) {
         f.fulfill(kj::mv(response));
       }
@@ -2496,13 +2516,15 @@ private:
         }));
         promise = fork.addBranch();
 
-        for (auto& w: waitingPromises) {
-          w.resolveQuestion(*newPipeline);
-        }
+        callAfterTpaEmbargo([this, newPipeline = kj::mv(newPipeline)]() mutable {
+          for (auto& w: waitingPromises) {
+            w.resolveQuestion(*newPipeline);
+          }
 
-        KJ_IF_SOME(w, waitingPipeline) {
-          w.forward({}, kj::mv(newPipeline));
-        }
+          KJ_IF_SOME(w, waitingPipeline) {
+            w.forward({}, kj::mv(newPipeline));
+          }
+        });
       }
 
       KJ_IF_SOME(f, fulfiller) {
@@ -2534,13 +2556,15 @@ private:
       // Redirect to a new promise and pipeline, for accepting a third-party call.
 
       if (waitingPipeline != kj::none || !waitingPromises.empty()) {
-        for (auto& w: waitingPromises) {
-          w.resolveQuestion(*newPipeline);
-        }
+        callAfterTpaEmbargo([this, newPipeline = kj::mv(newPipeline)]() mutable {
+          for (auto& w: waitingPromises) {
+            w.resolveQuestion(*newPipeline);
+          }
 
-        KJ_IF_SOME(w, waitingPipeline) {
-          w.forward({}, kj::mv(newPipeline));
-        }
+          KJ_IF_SOME(w, waitingPipeline) {
+            w.forward({}, kj::mv(newPipeline));
+          }
+        });
       }
 
       KJ_IF_SOME(f, fulfiller) {
@@ -2615,7 +2639,7 @@ private:
       KJ_IF_SOME(e, exception) {
         promise.reject(kj::cp(*e));
       } else {
-        KJ_REQUIRE(!done);
+        KJ_REQUIRE(!done || tpaEmbargoLifter != kj::none);
         waitingPromises.add(promise);
       }
     }
@@ -2633,10 +2657,33 @@ private:
       dropWhenDone = kj::mv(obj);
     }
 
+    void expectThirdPartyAnswerDisembargo() {
+      // Mark that this question expects a ThirdPartyAnswerDisembargo to be delivered later.
+
+      KJ_REQUIRE(!done);
+      expectingTpaDisembargo = true;
+    }
+
+    void gotThirdPartyAnswerDisembargo() {
+      // Indicates that we received the ThirdPartyAnswerDisembargo we were waiting for.
+
+      KJ_IF_SOME(f, tpaEmbargoLifter) {
+        f();
+        tpaEmbargoLifter = kj::none;
+      }
+
+      // Note that if the embargo is lifted before the `Return` is received, then
+      // `tpaDisembargoFulfiller` is null. But in this case we don't actually have to do anything
+      // on our end anyway; the embargo was fully managed on the remote end. So we can just unset
+      // the flag here to pretend we never had an embargo.
+      expectingTpaDisembargo = false;
+    }
+
   private:
     kj::Maybe<kj::Own<RpcConnectionState>> connectionState;
     QuestionId id;
     bool done = false;
+    bool expectingTpaDisembargo = false;
     kj::Maybe<Fulfiller&> fulfiller;
 
     kj::Maybe<RpcPipeline&> waitingPipeline;
@@ -2653,6 +2700,22 @@ private:
     kj::Maybe<kj::Own<void>> dropWhenDone;
 
     kj::Maybe<kj::Own<kj::Exception>> exception;
+
+    kj::Maybe<kj::Function<void()>> tpaEmbargoLifter;
+
+    template <typename Func>
+    void callAfterTpaEmbargo(Func&& func) {
+      // If no three-party embargo is in effect, call func() now.
+      //
+      // If one is in effect, call func() as soon as it is lifted.
+
+      if (expectingTpaDisembargo) {
+        KJ_ASSERT(tpaEmbargoLifter == kj::none, "Duplicate return?");
+        tpaEmbargoLifter = kj::mv(func);
+      } else {
+        func();
+      }
+    }
   };
 
   class QuestionPromiseAdapter {
@@ -3749,6 +3812,11 @@ private:
 
               cleanupAnswerTable(nullptr, false);
 
+              // TODO(now): When forwarding, we don't actually set up any state such that if we
+              //   disconnect before seeing the final `Finish`, embargoes are rejected. So, a
+              //   disconnect could violate e-order my causing an embargo to resolve even though
+              //   one of the pre-embargo pipelined calls was never delivered.
+
               return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
             }
           }
@@ -3940,10 +4008,18 @@ private:
         AnswerId newAnswerId;
         Answer& newAnswer = newConnRpc.answers.nextReverseAllocated(newAnswerId);
 
+        kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> embargo;
+
         // Clone the pipeline, if there is one.
         // Note that there might not be one in the case of a `noPromisePipelining` request.
         KJ_IF_SOME(p, oldAnswer.pipeline) {
           newAnswer.pipeline = p->addRef();
+
+          // Since there is a pipeline, we could be asked to embargo it. Arrange to be informed
+          // when the original question receives a `Finish`, which implicitly lifts the embargo.
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          newAnswer.thirdPartyFinishPromise = kj::mv(paf.promise);
+          embargo = kj::mv(paf.fulfiller);
         }
 
         // Transfer the context. (Since we're sending a Return on the old path, it's the correct
@@ -3952,7 +4028,9 @@ private:
 
         // Transfer the task.
         newAnswer.task = kj::mv(oldAnswer.task);
-        oldAnswer.task = Answer::RedirectedToThirdParty();
+
+        // Replace old task with a placeholder that drops the embargo when `Finish` is received.
+        oldAnswer.task = Answer::RedirectedToThirdParty { kj::mv(embargo) };
 
         // Change our `connectionState` to be the new connection (whoa).
         auto oldConnectionState = kj::mv(connectionState);
@@ -4219,6 +4297,14 @@ private:
 
       case rpc::Message::THIRD_PARTY_ANSWER:
         handleThirdPartyAnswer(reader.getThirdPartyAnswer());
+        break;
+
+      case rpc::Message::THIRD_PARTY_ANSWER_EMBARGO:
+        handleThirdPartyAnswerEmbargo(reader.getThirdPartyAnswerEmbargo());
+        break;
+
+      case rpc::Message::THIRD_PARTY_ANSWER_DISEMBARGO:
+        handleThirdPartyAnswerDisembargo(reader.getThirdPartyAnswerDisembargo());
         break;
 
       default: {
@@ -4692,6 +4778,14 @@ private:
       }
 
       pipelineToRelease = kj::mv(answer.pipeline);
+
+      // If this was a three-party redirected answer, signal that the Finish message was received,
+      // thus lifting the embargo (if any).
+      KJ_IF_SOME(redirect, answer.task.tryGet<Answer::RedirectedToThirdParty>()) {
+        KJ_IF_SOME(e, redirect.embargo) {
+          e->fulfill();
+        }
+      }
 
       KJ_IF_SOME(context, answer.callContext) {
         // Destroying answer.task will probably destroy the call context, but we can't prove that
@@ -5221,13 +5315,89 @@ private:
     } else {
       // No response yet, so we should redirect the pipeline.
       auto newPipeline = kj::refcounted<RpcPipeline>(
-          *this, kj::mv(questionRef), /*willResolve =*/ true);
+          *this, kj::addRef(*questionRef), /*willResolve =*/ true);
       KJ_IF_SOME(origQuestion, call.question) {
-        origQuestion.redirect(kj::mv(responsePromise), kj::mv(newPipeline));
+        if (origQuestion.hasReceivedPipeliendCall()) {
+          // Some pipelined calls were sent before the redirect. We will need to embargo new calls
+          // that go over the shorter path.
+
+          // Send embargo message.
+          KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+            auto msg = c.connection->newOutgoingMessage(
+                messageSizeHint<rpc::ThirdPartyAnswerEmbargo>());
+            auto embargo = msg->getBody().initAs<rpc::Message>().initThirdPartyAnswerEmbargo();
+            embargo.setQuestionId(questionRef->getId());
+            msg->send();
+          }
+
+          // Note that we should NOT implement the embargo by wrapping `newPipeline` in
+          // `newLocalPromisePipeline()` that waits for the disembargo. This would cause new
+          // pipelined calls made after this point to be blocked *locally*, which wastes up to
+          // a whole network round trip. We should let the calls be sent to the remote end and
+          // embargoed there. What we do have to make sure is that the pipeline is not actually
+          // resolved to the final response until the disembargo is received on our end.
+          questionRef->expectThirdPartyAnswerDisembargo();
+        }
+
+        origQuestion.redirect(kj::mv(responsePromise), kj::addRef(*newPipeline));
       } else {
         // Original call was canceled, so... do nothing.
       }
     }
+  }
+
+  void handleThirdPartyAnswerEmbargo(const rpc::ThirdPartyAnswerEmbargo::Reader& embargo) {
+    AnswerId answerId = embargo.getQuestionId();
+    auto& answer = KJ_REQUIRE_NONNULL(answers.find(answerId),
+        "No such question for ThirdPartyAnswerEmbargo.", answerId);
+
+    auto sendReply = [this, answerId]() {
+      KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+        auto msg = c.connection->newOutgoingMessage(
+            messageSizeHint<rpc::ThirdPartyAnswerDisembargo>());
+        msg->getBody().initAs<rpc::Message>().initThirdPartyAnswerDisembargo()
+            .setAnswerId(answerId);
+        msg->send();
+      }
+    };
+
+    KJ_IF_SOME(pipeline, answer.pipeline) {
+      auto disembargoPromise = kj::mv(KJ_ASSERT_NONNULL(answer.thirdPartyFinishPromise,
+          "Question was not introduced by ThirdPartyAnswer, can't use ThirdPartyAnswerEmbargo."));
+      answer.thirdPartyFinishPromise = kj::none;
+
+      auto promise = disembargoPromise.then([sendReply, pipeline = kj::mv(pipeline)]() mutable {
+        sendReply();
+        return kj::mv(pipeline);
+      });
+
+      pipeline = newLocalPromisePipeline(kj::mv(promise));
+    } else  {
+      // No pipeline present on answer, suggesting that the call was made using
+      // `noPromisePipelining`. It's weird that the peer is trying to embargo anything here, as
+      // all pipelined calls will just error out. That said, we can just send the reply message
+      // here and let those errors happen naturally.
+
+      sendReply();
+    }
+  }
+
+  void handleThirdPartyAnswerDisembargo(const rpc::ThirdPartyAnswerDisembargo::Reader& disembargo) {
+    QuestionId questionId = disembargo.getAnswerId();
+
+    KJ_IF_SOME(question, questions.find(questionId)) {
+      KJ_IF_SOME(questionRef, question.selfRef) {
+        // Be careful that this object doesn't destroy itself in the process of fulfilling the
+        // last promises.
+        auto q = kj::addRef(questionRef);
+        q->gotThirdPartyAnswerDisembargo();
+      }
+    }
+
+    // If either of the above `KJ_IF_SOME` failed, then we must have sent the `Finish` for this
+    // qeustion already. In this case there couldn't be anything waiting on a disembargo, or it
+    // would have held a reference on the QuestionRef preventing the finish. We can ignore the
+    // ThirdPartyAnswerDisembargo message in this case.
   }
 };
 

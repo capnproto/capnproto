@@ -31,6 +31,8 @@ CAPNP_DECLARE_SCHEMA(d562b4df655bdd4d);
 CAPNP_DECLARE_SCHEMA(9c6a046bfbc1ac5a);
 CAPNP_DECLARE_SCHEMA(d4c9b56290554016);
 CAPNP_DECLARE_SCHEMA(b6511ce6c5f0e58c);
+CAPNP_DECLARE_SCHEMA(969ebd65854969ab);
+CAPNP_DECLARE_SCHEMA(c0a549f1edd6e19a);
 CAPNP_DECLARE_SCHEMA(fbe1980490e001af);
 CAPNP_DECLARE_SCHEMA(95bc14545813fbc1);
 CAPNP_DECLARE_SCHEMA(9a0e61223d96743b);
@@ -77,6 +79,8 @@ struct Message {
     JOIN,
     DISEMBARGO,
     THIRD_PARTY_ANSWER,
+    THIRD_PARTY_ANSWER_EMBARGO,
+    THIRD_PARTY_ANSWER_DISEMBARGO,
   };
 
   struct _capnpPrivate {
@@ -285,6 +289,36 @@ struct ThirdPartyAnswer {
 
   struct _capnpPrivate {
     CAPNP_DECLARE_STRUCT_HEADER(b6511ce6c5f0e58c, 1, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct ThirdPartyAnswerEmbargo {
+  ThirdPartyAnswerEmbargo() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(969ebd65854969ab, 1, 0)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct ThirdPartyAnswerDisembargo {
+  ThirdPartyAnswerDisembargo() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c0a549f1edd6e19a, 1, 0)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -526,6 +560,14 @@ public:
   inline bool hasThirdPartyAnswer() const;
   inline  ::capnp::rpc::ThirdPartyAnswer::Reader getThirdPartyAnswer() const;
 
+  inline bool isThirdPartyAnswerEmbargo() const;
+  inline bool hasThirdPartyAnswerEmbargo() const;
+  inline  ::capnp::rpc::ThirdPartyAnswerEmbargo::Reader getThirdPartyAnswerEmbargo() const;
+
+  inline bool isThirdPartyAnswerDisembargo() const;
+  inline bool hasThirdPartyAnswerDisembargo() const;
+  inline  ::capnp::rpc::ThirdPartyAnswerDisembargo::Reader getThirdPartyAnswerDisembargo() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -668,6 +710,22 @@ public:
   inline  ::capnp::rpc::ThirdPartyAnswer::Builder initThirdPartyAnswer();
   inline void adoptThirdPartyAnswer(::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer> disownThirdPartyAnswer();
+
+  inline bool isThirdPartyAnswerEmbargo();
+  inline bool hasThirdPartyAnswerEmbargo();
+  inline  ::capnp::rpc::ThirdPartyAnswerEmbargo::Builder getThirdPartyAnswerEmbargo();
+  inline void setThirdPartyAnswerEmbargo( ::capnp::rpc::ThirdPartyAnswerEmbargo::Reader value);
+  inline  ::capnp::rpc::ThirdPartyAnswerEmbargo::Builder initThirdPartyAnswerEmbargo();
+  inline void adoptThirdPartyAnswerEmbargo(::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerEmbargo>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerEmbargo> disownThirdPartyAnswerEmbargo();
+
+  inline bool isThirdPartyAnswerDisembargo();
+  inline bool hasThirdPartyAnswerDisembargo();
+  inline  ::capnp::rpc::ThirdPartyAnswerDisembargo::Builder getThirdPartyAnswerDisembargo();
+  inline void setThirdPartyAnswerDisembargo( ::capnp::rpc::ThirdPartyAnswerDisembargo::Reader value);
+  inline  ::capnp::rpc::ThirdPartyAnswerDisembargo::Builder initThirdPartyAnswerDisembargo();
+  inline void adoptThirdPartyAnswerDisembargo(::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerDisembargo>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerDisembargo> disownThirdPartyAnswerDisembargo();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1858,6 +1916,158 @@ private:
 class ThirdPartyAnswer::Pipeline {
 public:
   typedef ThirdPartyAnswer Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class ThirdPartyAnswerEmbargo::Reader {
+public:
+  typedef ThirdPartyAnswerEmbargo Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getQuestionId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class ThirdPartyAnswerEmbargo::Builder {
+public:
+  typedef ThirdPartyAnswerEmbargo Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getQuestionId();
+  inline void setQuestionId( ::uint32_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class ThirdPartyAnswerEmbargo::Pipeline {
+public:
+  typedef ThirdPartyAnswerEmbargo Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class ThirdPartyAnswerDisembargo::Reader {
+public:
+  typedef ThirdPartyAnswerDisembargo Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getAnswerId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class ThirdPartyAnswerDisembargo::Builder {
+public:
+  typedef ThirdPartyAnswerDisembargo Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline  ::uint32_t getAnswerId();
+  inline void setAnswerId( ::uint32_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class ThirdPartyAnswerDisembargo::Pipeline {
+public:
+  typedef ThirdPartyAnswerDisembargo Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -3520,6 +3730,114 @@ inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer> Message::Builder::disown
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
+inline bool Message::Reader::isThirdPartyAnswerEmbargo() const {
+  return which() == Message::THIRD_PARTY_ANSWER_EMBARGO;
+}
+inline bool Message::Builder::isThirdPartyAnswerEmbargo() {
+  return which() == Message::THIRD_PARTY_ANSWER_EMBARGO;
+}
+inline bool Message::Reader::hasThirdPartyAnswerEmbargo() const {
+  if (which() != Message::THIRD_PARTY_ANSWER_EMBARGO) return false;
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool Message::Builder::hasThirdPartyAnswerEmbargo() {
+  if (which() != Message::THIRD_PARTY_ANSWER_EMBARGO) return false;
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::rpc::ThirdPartyAnswerEmbargo::Reader Message::Reader::getThirdPartyAnswerEmbargo() const {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER_EMBARGO),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerEmbargo>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::rpc::ThirdPartyAnswerEmbargo::Builder Message::Builder::getThirdPartyAnswerEmbargo() {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER_EMBARGO),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerEmbargo>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Message::Builder::setThirdPartyAnswerEmbargo( ::capnp::rpc::ThirdPartyAnswerEmbargo::Reader value) {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER_EMBARGO);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerEmbargo>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::ThirdPartyAnswerEmbargo::Builder Message::Builder::initThirdPartyAnswerEmbargo() {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER_EMBARGO);
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerEmbargo>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Message::Builder::adoptThirdPartyAnswerEmbargo(
+    ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerEmbargo>&& value) {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER_EMBARGO);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerEmbargo>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerEmbargo> Message::Builder::disownThirdPartyAnswerEmbargo() {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER_EMBARGO),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerEmbargo>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline bool Message::Reader::isThirdPartyAnswerDisembargo() const {
+  return which() == Message::THIRD_PARTY_ANSWER_DISEMBARGO;
+}
+inline bool Message::Builder::isThirdPartyAnswerDisembargo() {
+  return which() == Message::THIRD_PARTY_ANSWER_DISEMBARGO;
+}
+inline bool Message::Reader::hasThirdPartyAnswerDisembargo() const {
+  if (which() != Message::THIRD_PARTY_ANSWER_DISEMBARGO) return false;
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool Message::Builder::hasThirdPartyAnswerDisembargo() {
+  if (which() != Message::THIRD_PARTY_ANSWER_DISEMBARGO) return false;
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::rpc::ThirdPartyAnswerDisembargo::Reader Message::Reader::getThirdPartyAnswerDisembargo() const {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER_DISEMBARGO),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerDisembargo>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::rpc::ThirdPartyAnswerDisembargo::Builder Message::Builder::getThirdPartyAnswerDisembargo() {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER_DISEMBARGO),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerDisembargo>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Message::Builder::setThirdPartyAnswerDisembargo( ::capnp::rpc::ThirdPartyAnswerDisembargo::Reader value) {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER_DISEMBARGO);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerDisembargo>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::ThirdPartyAnswerDisembargo::Builder Message::Builder::initThirdPartyAnswerDisembargo() {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER_DISEMBARGO);
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerDisembargo>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Message::Builder::adoptThirdPartyAnswerDisembargo(
+    ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerDisembargo>&& value) {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER_DISEMBARGO);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerDisembargo>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswerDisembargo> Message::Builder::disownThirdPartyAnswerDisembargo() {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER_DISEMBARGO),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswerDisembargo>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
 inline  ::uint32_t Bootstrap::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
@@ -4659,6 +4977,34 @@ inline  ::uint32_t ThirdPartyAnswer::Builder::getAnswerId() {
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 inline void ThirdPartyAnswer::Builder::setAnswerId( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint32_t ThirdPartyAnswerEmbargo::Reader::getQuestionId() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t ThirdPartyAnswerEmbargo::Builder::getQuestionId() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void ThirdPartyAnswerEmbargo::Builder::setQuestionId( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint32_t ThirdPartyAnswerDisembargo::Reader::getAnswerId() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t ThirdPartyAnswerDisembargo::Builder::getAnswerId() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void ThirdPartyAnswerDisembargo::Builder::setAnswerId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
