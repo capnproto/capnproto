@@ -2589,6 +2589,120 @@ KJ_TEST("three-party call handoff with forwarding blocked") {
   doCallForwardingTest(false);
 }
 
+void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction) {
+  // Like previous test but we're going to do some pipelining and capability-passing.
+
+  TestContext context;
+  context.network.callHandoffEnabled = true;
+  context.network.forwardingEnabled = forwardingEnabled;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  // Arrange that Carol always tail-calls to Bob, without actually path-shortening to Bob.
+  auto& carol = [&]() -> TestContext::Vat& {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& carol = context.initVat("carol", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(carol.connect<Capability>("bob")));
+    return carol;
+  }();
+
+  // Arrange that Dave tail-calls to Carol.
+  {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& dave = context.initVat("dave", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(dave.connect<Capability>("carol")));
+  }
+
+  auto clientCap =
+      fourParty        ? alice.connect<test::TestInterface>("dave")
+    : selfIntroduction ? bob.connect<test::TestInterface>("carol", true)
+                       : alice.connect<test::TestInterface>("carol");
+
+  context.waitScope.poll();
+
+  int callCount = 0;
+  test::TestInterface::Client cap = kj::heap<TestInterfaceImpl>(callCount);
+
+  // Arrange to block the Carol -> Bob connection immediately after the `Call` message for
+  // `echo()` goes through.
+  auto& carolToBob = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
+  carolToBob.blockAfter([](rpc::Message::Reader msg) {
+    if (!msg.isCall()) return false;
+    auto call = msg.getCall();
+    return call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
+           call.getMethodId() == 6;
+  });
+
+  // Bounce our capability through the carol->bob path and immediately make a pipelined call on
+  // it.
+  kj::Promise<void> promise = nullptr;
+  test::TestInterface::Client echoCap = nullptr;
+  {
+    auto moreStuff = clientCap.getTestMoreStuffRequest().send().getCap();
+
+    // Echo `cap` through `echo()`.
+    echoCap = [&]() {
+      auto req = moreStuff.echoRequest();
+
+      // HACK: echo() just reflects the cap back, but it was written to expect TestCallOrder
+      //   specifically. We'll just pretend that's what we have, it doesn't matter.
+      // TODO(cleanup): Change echo() to take `Capability` or maybe even be a generic.
+      req.setCap(cap.castAs<test::TestCallOrder>());
+      return req.send().getCap().castAs<test::TestInterface>();
+    }();
+
+    // Make a pipelined call.
+    auto req = echoCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(0);
+    promise = req.send().ignoreResult();
+  }
+
+  // The pipelined call doesn't complete yet.
+  KJ_EXPECT(!promise.poll(context.waitScope));
+
+  // echoCap doesn't resolve yet.
+  KJ_EXPECT(!echoCap.whenResolved().poll(context.waitScope));
+
+  // A second call doesn't complete yet.
+  auto promise2 = [&]() {
+    auto req = echoCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(1);
+    return req.send();
+  }();
+  KJ_EXPECT(!promise2.poll(context.waitScope));
+
+  carolToBob.unblock();
+
+  promise.wait(context.waitScope);
+  promise2.wait(context.waitScope);
+
+  KJ_EXPECT(callCount == 2);
+}
+
+KJ_TEST("three-party call handoff embargo") {
+  doEmbargoTest(false, false, false);
+}
+
+// TODO(now): Doesn't work yet.
+// KJ_TEST("four-party call handoff embargo, no forwarding") {
+//   doEmbargoTest(true, false, false);
+// }
+
+KJ_TEST("four-party call handoff embargo, with forwarding") {
+  doEmbargoTest(true, true, false);
+}
+
+// TODO(now): Doesn't work yet.
+// KJ_TEST("self-introduction call handoff embargo") {
+//   doEmbargoTest(false, false, true);
+// }
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

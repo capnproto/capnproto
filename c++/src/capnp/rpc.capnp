@@ -268,6 +268,10 @@ struct Message {
     accept @11 :Accept;    # Accept a capability provided by a third party.
     thirdPartyAnswer @14 :ThirdPartyAnswer;  # Call handed off from a third party.
 
+    thirdPartyAnswerEmbargo @15 :ThirdPartyAnswerEmbargo;
+    thirdPartyAnswerDisembargo @16 :ThirdPartyAnswerDisembargo;
+    # Embargo control around `ThirdPartyAnswer`.
+
     # Level 4 features -----------------------------------------------
 
     join @12 :Join;        # Directly connect to the common root of two or more proxied caps.
@@ -939,6 +943,66 @@ struct ThirdPartyAnswer {
   # backwards-compatible given that implementations traditionally always use the lowest-numbered
   # ID available. However, note that we don't use the range [2^31,2^32) because this has already
   # been designated for use with `onlyPromisePipeline` (another hack).
+}
+
+struct ThirdPartyAnswerEmbargo {
+  # **(level 3)**
+  #
+  # After a ThirdPartyAnswer is received, the caller (the recipient of ThirdPartyAnswer) may
+  # respond with a `ThirdPartyAnswerEmbargo`, which applies an embargo to the answer's pipelined
+  # capabilities. This is only needed if any pipelined calls had been made on those capabilities
+  # prior to receiving the `ThirdPartyAnswer`; if so, the embargo ensures those calls are delivered
+  # first, before any calls made over the newly-shortened path.
+  #
+  # This embargo will be released automatically as soon as the receiver (the callee) receives
+  # a `Finish` message along the *original* path, which indicates that all pipelined calls on
+  # the original path have completed.
+  #
+  # Later, the recipient will repsond with a `ThirdPartyAnswerDisembargo`.
+  #
+  # Example:
+  # * Alice calls `foo()` on Bob.
+  # * Bob tail-calls to Carol, with `sendResultsTo.thirdParty` pointing to Alice.
+  # * Alice makes a pipelined call `foo().bar.baz()`, sent to Bob.
+  # * Carol receives the call from Bob and establishes a direct connection to Alice, sending a
+  #   `ThirdPartyAnswer`.
+  # * Alice recives the `ThirdPartyAnswer` and redirects her original `foo()` call and all
+  #   pipelined capabilities to point at Carol. This inludes redirecting `bar`, so further
+  #   pipelined calls on `bar` will go directly to Carol.
+  # * However, since Alice had called `bar.baz()`, she must ensure that that call is delivered
+  #   before any new pipelined calls, even though `bar.baz()` is travelling a different path
+  #   (through Bob) than any future calls Alice makes on `bar` (through Carol).
+  # * So, Alice sends `ThirdPartyAnswerEmbargo` to Carol, identifying the question and specifying
+  #   that `bar` needs an embargo.
+  # * Meanwhile, Alice sends a `Finish` message to Bob.
+  # * Alice calls `bar.qux()`. This call is embargoed at Carol.
+  # * Eventually, the `bar.baz()` call Alice made earlier passes through Bob to Carol, and is
+  #   delivered.
+  # * Eventually, the `Finish` message also passes through Bob to Carol. This lifts the embargo.
+  #   * The `bar.qux()` call is now allowed to be delivered.
+  #   * Carol sends a `ThirdPartyAnswerDisembrago` to Alice, to let her know the embargo is done.
+
+  questionId @0 :QuestionId;
+}
+
+struct ThirdPartyAnswerDisembargo {
+  # **(level 3)**
+  #
+  # Sent in response to a `ThirdPartyAnswerEmbargo`. This message indicates that the embargo has
+  # been lifted, because the `Finish` message was received over the original path.
+  #
+  # The recipient of this message (the callee) uses this as a signal that it is now safe to
+  # resolve the pipeline promises to their final values from the response message.
+  #
+  # Note that this message may arrive after a `Return` has been received and `Finish` sent (if
+  # the `Finish` was not yet received on the other side). However, if a call is already finished,
+  # then the disembargo doesn't matter, since there are no promise caps being held. Meanwhile,
+  # it's impossible that `answerId` has been re-allocated for a new question, becasue the ID will
+  # always be in the range that is allocated by the callee side, i.e. the sender of
+  # `ThirdPartyAnswerDisembrago`. So, if the receiver doesn't recognize the `answerId`, they should
+  # simply ignore the message.
+
+  answerId @0 :AnswerId;
 }
 
 # Level 4 message types ----------------------------------------------
