@@ -2697,10 +2697,9 @@ KJ_TEST("four-party call handoff embargo, with forwarding") {
   doEmbargoTest(true, true, false);
 }
 
-// TODO(now): Doesn't work yet.
-// KJ_TEST("self-introduction call handoff embargo") {
-//   doEmbargoTest(false, false, true);
-// }
+KJ_TEST("self-introduction call handoff embargo") {
+  doEmbargoTest(false, false, true);
+}
 
 }  // namespace
 }  // namespace _ (private)
