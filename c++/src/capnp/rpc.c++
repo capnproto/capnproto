@@ -3860,7 +3860,7 @@ private:
               builder.setAnswerId(answerId);
               builder.setReleaseParamCaps(false);
 
-              // TODO(now): Consider if, in the case that `conn` and `otherConn` are actually the
+              // TODO(perf): Consider if, in the case that `conn` and `otherConn` are actually the
               //   same, we can actually use `takeFromOtherQuestion` here in order to more rapidly
               //   cut this spur off of the path, speeding up the later disembargo...
               builder.setResultsSentElsewhere();
@@ -3943,7 +3943,7 @@ private:
         // Copy the response.
         // TODO(perf):  It would be nice if we could somehow make the response get built in-place
         //   but requires some refactoring.
-        // TODO(now): Actually this seems important to fix. We don't want a local tail call in the
+        // TODO(soon): Actually this seems important to fix. We don't want a local tail call in the
         //   chain to break three-party forwarding. Can we just pass the same CallContext to the
         //   new call?
         getResults(tailResponse.targetSize()).set(tailResponse);
