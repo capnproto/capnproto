@@ -2668,12 +2668,24 @@ private:
       expectingTpaDisembargo = true;
     }
 
-    void gotThirdPartyAnswerDisembargo() {
+    void gotThirdPartyAnswerDisembargo(kj::Maybe<kj::Exception>&& exception) {
       // Indicates that we received the ThirdPartyAnswerDisembargo we were waiting for.
 
       KJ_IF_SOME(f, tpaEmbargoLifter) {
-        f();
-        tpaEmbargoLifter = kj::none;
+        KJ_IF_SOME(e, exception) {
+          tpaEmbargoLifter = kj::none;
+
+          for (auto& w: waitingPromises) {
+            w.reject(kj::cp(e));
+          }
+
+          KJ_IF_SOME(p, waitingPipeline) {
+            p.reject({}, kj::mv(e));
+          }
+        } else {
+          f();
+          tpaEmbargoLifter = kj::none;
+        }
       }
 
       // Note that if the embargo is lifted before the `Return` is received, then
@@ -5447,12 +5459,15 @@ private:
     auto& answer = KJ_REQUIRE_NONNULL(answers.find(answerId),
         "No such question for ThirdPartyAnswerEmbargo.", answerId);
 
-    auto sendReply = [this, answerId]() {
+    auto sendReply = [this, answerId](kj::Maybe<const kj::Exception&> exception) {
       KJ_IF_SOME(c, connection.tryGet<Connected>()) {
         auto msg = c.connection->newOutgoingMessage(
             messageSizeHint<rpc::ThirdPartyAnswerDisembargo>());
-        msg->getBody().initAs<rpc::Message>().initThirdPartyAnswerDisembargo()
-            .setAnswerId(answerId);
+        auto disembargo = msg->getBody().initAs<rpc::Message>().initThirdPartyAnswerDisembargo();
+        disembargo.setAnswerId(answerId);
+        KJ_IF_SOME(e, exception) {
+          fromException(e, disembargo.initException());
+        }
         msg->send();
       }
     };
@@ -5463,8 +5478,11 @@ private:
       answer.thirdPartyFinishPromise = kj::none;
 
       auto promise = disembargoPromise.then([sendReply, pipeline = kj::mv(pipeline)]() mutable {
-        sendReply();
+        sendReply(kj::none);
         return kj::mv(pipeline);
+      }, [sendReply](kj::Exception&& e) -> kj::Own<PipelineHook> {
+        sendReply(e);
+        return newBrokenPipeline(kj::mv(e));
       });
 
       pipeline = newLocalPromisePipeline(kj::mv(promise));
@@ -5474,7 +5492,7 @@ private:
       // all pipelined calls will just error out. That said, we can just send the reply message
       // here and let those errors happen naturally.
 
-      sendReply();
+      sendReply(kj::none);
     }
   }
 
@@ -5486,7 +5504,11 @@ private:
         // Be careful that this object doesn't destroy itself in the process of fulfilling the
         // last promises.
         auto q = kj::addRef(questionRef);
-        q->gotThirdPartyAnswerDisembargo();
+        kj::Maybe<kj::Exception> exception;
+        if (disembargo.hasException()) {
+          exception = toException(disembargo.getException());
+        }
+        q->gotThirdPartyAnswerDisembargo(kj::mv(exception));
       }
     }
 

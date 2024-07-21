@@ -318,7 +318,7 @@ struct ThirdPartyAnswerDisembargo {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(c0a549f1edd6e19a, 1, 0)
+    CAPNP_DECLARE_STRUCT_HEADER(c0a549f1edd6e19a, 1, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -2024,6 +2024,9 @@ public:
 
   inline  ::uint32_t getAnswerId() const;
 
+  inline bool hasException() const;
+  inline  ::capnp::rpc::Exception::Reader getException() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -2055,6 +2058,13 @@ public:
   inline  ::uint32_t getAnswerId();
   inline void setAnswerId( ::uint32_t value);
 
+  inline bool hasException();
+  inline  ::capnp::rpc::Exception::Builder getException();
+  inline void setException( ::capnp::rpc::Exception::Reader value);
+  inline  ::capnp::rpc::Exception::Builder initException();
+  inline void adoptException(::capnp::Orphan< ::capnp::rpc::Exception>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::Exception> disownException();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
@@ -2073,6 +2083,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::rpc::Exception::Pipeline getException();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
@@ -5007,6 +5018,45 @@ inline  ::uint32_t ThirdPartyAnswerDisembargo::Builder::getAnswerId() {
 inline void ThirdPartyAnswerDisembargo::Builder::setAnswerId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool ThirdPartyAnswerDisembargo::Reader::hasException() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool ThirdPartyAnswerDisembargo::Builder::hasException() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::rpc::Exception::Reader ThirdPartyAnswerDisembargo::Reader::getException() const {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::rpc::Exception::Builder ThirdPartyAnswerDisembargo::Builder::getException() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+#if !CAPNP_LITE
+inline  ::capnp::rpc::Exception::Pipeline ThirdPartyAnswerDisembargo::Pipeline::getException() {
+  return  ::capnp::rpc::Exception::Pipeline(_typeless.getPointerField(0));
+}
+#endif  // !CAPNP_LITE
+inline void ThirdPartyAnswerDisembargo::Builder::setException( ::capnp::rpc::Exception::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::Exception::Builder ThirdPartyAnswerDisembargo::Builder::initException() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void ThirdPartyAnswerDisembargo::Builder::adoptException(
+    ::capnp::Orphan< ::capnp::rpc::Exception>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::Exception> ThirdPartyAnswerDisembargo::Builder::disownException() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::Exception>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Join::Reader::getQuestionId() const {
