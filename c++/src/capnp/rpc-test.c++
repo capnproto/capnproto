@@ -2589,7 +2589,16 @@ KJ_TEST("three-party call handoff with forwarding blocked") {
   doCallForwardingTest(false);
 }
 
-void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction, bool disconnect) {
+enum EmbargoTestArrangement {
+  THREE_PARTY,
+  SELF_INTRODUCTION,
+  FOUR_PARTY_BLOCK_CAROL,
+  FOUR_PARTY_BLOCK_DAVE,
+};
+
+void doEmbargoTest(EmbargoTestArrangement arrangement,
+                   bool forwardingEnabled,
+                   bool disconnect) {
   // Like previous test but we're going to do some pipelining and capability-passing.
 
   TestContext context;
@@ -2617,9 +2626,9 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
   }();
 
   auto clientCap =
-      fourParty        ? alice.connect<test::TestInterface>("dave")
-    : selfIntroduction ? bob.connect<test::TestInterface>("carol", true)
-                       : alice.connect<test::TestInterface>("carol");
+      arrangement == SELF_INTRODUCTION ? bob.connect<test::TestInterface>("carol", true)
+    : arrangement == THREE_PARTY       ? alice.connect<test::TestInterface>("carol")
+                                       : alice.connect<test::TestInterface>("dave");
 
   context.waitScope.poll();
 
@@ -2627,9 +2636,12 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
   test::TestInterface::Client cap = kj::heap<TestInterfaceImpl>(callCount);
 
   // Arrange to block the Carol -> Bob connection immediately after the `Call` message for
-  // `echo()` goes through.
-  auto& carolToBob = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
-  carolToBob.blockAfter([](rpc::Message::Reader msg) {
+  // `echo()` goes through. (Or Dave -> Carol if desired.)
+  auto& connToBlock = arrangement == FOUR_PARTY_BLOCK_DAVE
+      ? KJ_ASSERT_NONNULL(dave.vatNetwork.getConnectionTo(carol.vatNetwork))
+      : KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  connToBlock.blockAfter([](rpc::Message::Reader msg) {
     if (!msg.isCall()) return false;
     auto call = msg.getCall();
     return call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
@@ -2679,20 +2691,18 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
   KJ_EXPECT(!promise2.poll(context.waitScope));
 
   if (disconnect) {
-    if (fourParty) {
-      // In the four-party test, it's more interesting to disconnect Dave -> Carol, and see if
-      // that propagates.
-      KJ_ASSERT_NONNULL(dave.vatNetwork.getConnectionTo(carol.vatNetwork))
-          .disconnect(KJ_EXCEPTION(DISCONNECTED, "test disconnect"));
-    } else {
-      carolToBob.disconnect(KJ_EXCEPTION(DISCONNECTED, "test disconnect"));
-    }
+    connToBlock.disconnect(KJ_EXCEPTION(DISCONNECTED, "test disconnect"));
   } else {
-    carolToBob.unblock();
+    connToBlock.unblock();
   }
 
   if (disconnect) {
-    KJ_EXPECT_THROW_MESSAGE("Peer disconnected", echoCap.whenResolved().wait(context.waitScope));
+    kj::StringPtr expectedMessage = "Peer disconnected";
+    if (arrangement == FOUR_PARTY_BLOCK_DAVE && forwardingEnabled) {
+      expectedMessage = "Embargo failed because a connection along the call forwarding path";
+    }
+
+    KJ_EXPECT_THROW_MESSAGE(expectedMessage, echoCap.whenResolved().wait(context.waitScope));
 
     // TODO(someday): Unfortunately, `promise` does not resolve, becauese Carol already send a
     //   `Return` to Alice telling her to await a result from a third party, but Bob never received
@@ -2701,7 +2711,7 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
     //   for this?
     KJ_EXPECT(!promise.poll(context.waitScope));
 
-    KJ_EXPECT_THROW_MESSAGE("Peer disconnected", promise2.wait(context.waitScope));
+    KJ_EXPECT_THROW_MESSAGE(expectedMessage, promise2.wait(context.waitScope));
 
     KJ_EXPECT(callCount == 0);
   } else {
@@ -2714,32 +2724,51 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
 }
 
 KJ_TEST("three-party call handoff embargo") {
-  doEmbargoTest(false, false, false, false);
+  doEmbargoTest(THREE_PARTY, false, false);
 }
 
 KJ_TEST("four-party call handoff embargo, no forwarding") {
-  doEmbargoTest(true, false, false, false);
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, false, false);
+}
+
+KJ_TEST("four-party call handoff embargo, no forwarding, block dave") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, false, false);
 }
 
 KJ_TEST("four-party call handoff embargo, with forwarding") {
-  doEmbargoTest(true, true, false, false);
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, true, false);
+}
+
+KJ_TEST("four-party call handoff embargo, with forwarding, block dave") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, true, false);
 }
 
 KJ_TEST("self-introduction call handoff embargo") {
-  doEmbargoTest(false, false, true, false);
+  doEmbargoTest(SELF_INTRODUCTION, false, false);
 }
 
 KJ_TEST("three-party call handoff embargo disconnected") {
-  doEmbargoTest(false, false, false, true);
+  doEmbargoTest(THREE_PARTY, false, true);
 }
 
-// TODO(now): Doesn't work yet.
-// KJ_TEST("four-party call handoff embargo disconnected, with forwarding") {
-//   doEmbargoTest(true, true, false, true);
-// }
+KJ_TEST("four-party call handoff embargo carol disconnected") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, false, true);
+}
+
+KJ_TEST("four-party call handoff embargo carol disconnected, with forwarding") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, true, true);
+}
+
+KJ_TEST("four-party call handoff embargo dave disconnected") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, false, true);
+}
+
+KJ_TEST("four-party call handoff embargo dave disconnected, with forwarding") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, true, true);
+}
 
 KJ_TEST("self-introduction call handoff embargo disconnected") {
-  doEmbargoTest(false, false, true, true);
+  doEmbargoTest(SELF_INTRODUCTION, false, true);
 }
 
 }  // namespace

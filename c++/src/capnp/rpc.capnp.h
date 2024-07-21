@@ -1226,6 +1226,8 @@ public:
 
   inline bool getRequireEarlyCancellationWorkaround() const;
 
+  inline bool getTransitiveDisconnect() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -1262,6 +1264,9 @@ public:
 
   inline bool getRequireEarlyCancellationWorkaround();
   inline void setRequireEarlyCancellationWorkaround(bool value);
+
+  inline bool getTransitiveDisconnect();
+  inline void setTransitiveDisconnect(bool value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -4476,6 +4481,20 @@ inline bool Finish::Builder::getRequireEarlyCancellationWorkaround() {
 inline void Finish::Builder::setRequireEarlyCancellationWorkaround(bool value) {
   _builder.setDataField<bool>(
       ::capnp::bounded<33>() * ::capnp::ELEMENTS, value, true);
+}
+
+inline bool Finish::Reader::getTransitiveDisconnect() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<34>() * ::capnp::ELEMENTS);
+}
+
+inline bool Finish::Builder::getTransitiveDisconnect() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<34>() * ::capnp::ELEMENTS);
+}
+inline void Finish::Builder::setTransitiveDisconnect(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<34>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::capnp::rpc::Resolve::Which Resolve::Reader::which() const {

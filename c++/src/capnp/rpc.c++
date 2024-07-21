@@ -600,6 +600,9 @@ public:
             // violation of e-order to deliver them anyway.
             e->reject(kj::cp(networkException));
           }
+        } else KJ_IF_SOME(forward, answer.task.tryGet<Answer::ForwardedToThirdParty>()) {
+          // Similar to above, we need to propagate disconnections through forwarded calls.
+          forward.forwardedTo->markTransitiveDisconnect();
         }
 
         tasksToRelease.add(kj::mv(answer.task));
@@ -759,9 +762,11 @@ private:
     struct Finished {};
     using RedirectedToSelf = kj::Promise<kj::Own<RpcResponse>>;
     struct RedirectedToThirdParty { kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> embargo; };
+    struct ForwardedToThirdParty { kj::Own<QuestionRef> forwardedTo; };
     using Provide = kj::Rc<ThirdPartyExchangeValue>;
 
-    kj::OneOf<Running, Finished, RedirectedToSelf, RedirectedToThirdParty, Provide> task;
+    kj::OneOf<Running, Finished, RedirectedToSelf, RedirectedToThirdParty,
+              ForwardedToThirdParty, Provide> task;
     // While the RPC is running locally, `task` is a `Promise` representing the task to execute
     // the RPC.
     //
@@ -2444,6 +2449,8 @@ private:
             // Let the peer know we don't have the early cancellation bug.
             builder.setRequireEarlyCancellationWorkaround(false);
 
+            builder.setTransitiveDisconnect(transitiveDisconnect);
+
             message->send();
           })) {
             connectionState->tasks.add(kj::mv(e));
@@ -2469,6 +2476,8 @@ private:
 
     void reset() { done = false; }
     // Allow this question to be fulfilled again.
+
+    void markTransitiveDisconnect() { transitiveDisconnect = true; }
 
     bool hasReceivedPipeliendCall() {
       for (auto& w: waitingPromises) {
@@ -2700,6 +2709,7 @@ private:
     QuestionId id;
     bool done = false;
     bool expectingTpaDisembargo = false;
+    bool transitiveDisconnect = false;
     kj::Maybe<Fulfiller&> fulfiller;
 
     kj::Maybe<RpcPipeline&> waitingPipeline;
@@ -2872,6 +2882,7 @@ private:
     }
 
     struct TailInfo {
+      kj::Own<QuestionRef> questionRef;
       QuestionId questionId;
       kj::Promise<void> promise;
       kj::Own<PipelineHook> pipeline;
@@ -2918,10 +2929,10 @@ private:
         pipeline = getDisabledPipeline();
       } else {
         pipeline = kj::refcounted<RpcPipeline>(
-            *connectionState, kj::mv(questionRef), /*willResolve =*/ false);
+            *connectionState, kj::addRef(*questionRef), /*willResolve =*/ false);
       }
 
-      return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
+      return TailInfo { kj::mv(questionRef), questionId, kj::mv(promise), kj::mv(pipeline) };
     }
 
     kj::Own<RpcConnectionState> connectionState;
@@ -3516,6 +3527,9 @@ private:
           }
           newAnswer.task = kj::mv(task);
         }
+      } else if (answer.task.is<Answer::ForwardedToThirdParty>()) {
+        // See related code in directTailCall().
+        connectionState->tasks.add(kj::mv(KJ_ASSERT_NONNULL(task.tryGet<Answer::Running>())));
       } else {
         answer.task = kj::mv(task);
       }
@@ -3855,10 +3869,13 @@ private:
 
               cleanupAnswerTable(nullptr, false);
 
-              // TODO(now): When forwarding, we don't actually set up any state such that if we
-              //   disconnect before seeing the final `Finish`, embargoes are rejected. So, a
-              //   disconnect could violate e-order my causing an embargo to resolve even though
-              //   one of the pre-embargo pipelined calls was never delivered.
+              auto& answer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
+              KJ_IF_SOME(promise, answer.task.tryGet<Answer::Running>()) {
+                // Since we're tail-calling, this task is expected to complete promptly. As a hack
+                // let's put it in the TaskSet.
+                connectionState->tasks.add(kj::mv(promise));
+              }
+              answer.task = Answer::ForwardedToThirdParty { kj::mv(tailInfo.questionRef) };
 
               return { kj::mv(tailInfo.promise), kj::mv(tailInfo.pipeline) };
             }
@@ -4883,7 +4900,13 @@ private:
       // thus lifting the embargo (if any).
       KJ_IF_SOME(redirect, answer.task.tryGet<Answer::RedirectedToThirdParty>()) {
         KJ_IF_SOME(e, redirect.embargo) {
-          e->fulfill();
+          if (finish.getTransitiveDisconnect()) {
+            e->reject(KJ_EXCEPTION(DISCONNECTED,
+                "Embargo failed because a connection along the call forwarding path was "
+                "disconnected before it could complete."));
+          } else {
+            e->fulfill();
+          }
         }
       }
 

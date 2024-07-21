@@ -617,6 +617,11 @@ struct Finish {
   # peer is an older version, so that it can attempt to work around the issue.
   #
   # See also comments in handleFinish() in rpc.c++ for more details.
+
+  transitiveDisconnect @3 :Bool = false;
+  # A hint that this Finish was sent as a result of another RPC connection becoming disconnected.
+  # This allows three-party call handoff embargos to detect when the embargo hasn't been properly
+  # completed. This is a pretty big hack.
 }
 
 # Level 1 message types ----------------------------------------------
