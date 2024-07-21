@@ -1003,6 +1003,10 @@ struct ThirdPartyAnswerDisembargo {
   # simply ignore the message.
 
   answerId @0 :AnswerId;
+
+  exception @1 :Exception;
+  # If not null, then the embargo failed to be resolved due to a disconnect. The exception
+  # describes the reason for the disconnect.
 }
 
 # Level 4 message types ----------------------------------------------

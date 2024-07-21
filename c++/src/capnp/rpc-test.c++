@@ -2589,7 +2589,7 @@ KJ_TEST("three-party call handoff with forwarding blocked") {
   doCallForwardingTest(false);
 }
 
-void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction) {
+void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction, bool disconnect) {
   // Like previous test but we're going to do some pipelining and capability-passing.
 
   TestContext context;
@@ -2609,11 +2609,12 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
   }();
 
   // Arrange that Dave tail-calls to Carol.
-  {
+  auto& dave = [&]() -> TestContext::Vat& {
     auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
     auto& dave = context.initVat("dave", kj::mv(paf.promise));
     paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(dave.connect<Capability>("carol")));
-  }
+    return dave;
+  }();
 
   auto clientCap =
       fourParty        ? alice.connect<test::TestInterface>("dave")
@@ -2677,28 +2678,68 @@ void doEmbargoTest(bool fourParty, bool forwardingEnabled, bool selfIntroduction
   }();
   KJ_EXPECT(!promise2.poll(context.waitScope));
 
-  carolToBob.unblock();
+  if (disconnect) {
+    if (fourParty) {
+      // In the four-party test, it's more interesting to disconnect Dave -> Carol, and see if
+      // that propagates.
+      KJ_ASSERT_NONNULL(dave.vatNetwork.getConnectionTo(carol.vatNetwork))
+          .disconnect(KJ_EXCEPTION(DISCONNECTED, "test disconnect"));
+    } else {
+      carolToBob.disconnect(KJ_EXCEPTION(DISCONNECTED, "test disconnect"));
+    }
+  } else {
+    carolToBob.unblock();
+  }
 
-  promise.wait(context.waitScope);
-  promise2.wait(context.waitScope);
+  if (disconnect) {
+    KJ_EXPECT_THROW_MESSAGE("Peer disconnected", echoCap.whenResolved().wait(context.waitScope));
 
-  KJ_EXPECT(callCount == 2);
+    // TODO(someday): Unfortunately, `promise` does not resolve, becauese Carol already send a
+    //   `Return` to Alice telling her to await a result from a third party, but Bob never received
+    //   the message from Carol saying that he should take over the call. Hence, there's no way
+    //   for Carol to communicate to Alice that the handoff failed. Should we add a special message
+    //   for this?
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT_THROW_MESSAGE("Peer disconnected", promise2.wait(context.waitScope));
+
+    KJ_EXPECT(callCount == 0);
+  } else {
+    echoCap.whenResolved().wait(context.waitScope);
+    promise.wait(context.waitScope);
+    promise2.wait(context.waitScope);
+
+    KJ_EXPECT(callCount == 2);
+  }
 }
 
 KJ_TEST("three-party call handoff embargo") {
-  doEmbargoTest(false, false, false);
+  doEmbargoTest(false, false, false, false);
 }
 
 KJ_TEST("four-party call handoff embargo, no forwarding") {
-  doEmbargoTest(true, false, false);
+  doEmbargoTest(true, false, false, false);
 }
 
 KJ_TEST("four-party call handoff embargo, with forwarding") {
-  doEmbargoTest(true, true, false);
+  doEmbargoTest(true, true, false, false);
 }
 
 KJ_TEST("self-introduction call handoff embargo") {
-  doEmbargoTest(false, false, true);
+  doEmbargoTest(false, false, true, false);
+}
+
+KJ_TEST("three-party call handoff embargo disconnected") {
+  doEmbargoTest(false, false, false, true);
+}
+
+// TODO(now): Doesn't work yet.
+// KJ_TEST("four-party call handoff embargo disconnected, with forwarding") {
+//   doEmbargoTest(true, true, false, true);
+// }
+
+KJ_TEST("self-introduction call handoff embargo disconnected") {
+  doEmbargoTest(false, false, true, true);
 }
 
 }  // namespace
