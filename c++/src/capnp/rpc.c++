@@ -2466,6 +2466,9 @@ private:
     inline QuestionId getId() const { return id; }
     inline bool isDone() const { return done; }
 
+    void reset() { done = false; }
+    // Allow this question to be fulfilled again.
+
     bool hasReceivedPipeliendCall() {
       for (auto& w: waitingPromises) {
         if (w.hasReceivedCall()) return true;
@@ -2610,7 +2613,7 @@ private:
     using FulfillerT = kj::Promise<kj::Own<RpcResponse>>;
     using Fulfiller = kj::PromiseFulfiller<FulfillerT>;
     void setFulfiller(Fulfiller& f) {
-      KJ_ASSERT(fulfiller == nullptr);
+      KJ_ASSERT(fulfiller == kj::none);
       KJ_IF_SOME(e, exception) {
         f.reject(kj::cp(*e));
       } else {
@@ -5350,45 +5353,53 @@ private:
         xcghValue->value.tryGet<ThirdPartyExchangeValue::Call>(),
         "ThirdPartyCompletion given in ThirdPartyAnswer did not match a redirected Return.");
 
+    kj::Maybe<kj::Own<RpcResponse>> prematureResponse;
     if (questionRef->isDone()) {
-      // `responsePromise` is actually already resolved. Let's just extract it and deliver.
+      // Crap, the return was delivered while we were waiting for the exchange. Awkwardly the
+      // question has now already been resolved with no one waiting. Let's undo that and then
+      // re-deliver the response later.
+      questionRef->reset();
       auto response = co_await responsePromise;
-      KJ_IF_SOME(origQuestion, call.question) {
-        origQuestion.fulfill(kj::mv(response));
-      } else {
-        // Original call was canceled, so... do nothing.
-      }
-    } else {
-      // No response yet, so we should redirect the pipeline.
-      auto newPipeline = kj::refcounted<RpcPipeline>(
-          *this, kj::addRef(*questionRef), /*willResolve =*/ true);
-      KJ_IF_SOME(origQuestion, call.question) {
-        if (origQuestion.hasReceivedPipeliendCall()) {
-          // Some pipelined calls were sent before the redirect. We will need to embargo new calls
-          // that go over the shorter path.
+      responsePromise = response->addRef();
+      prematureResponse = kj::mv(response);
+    }
 
-          // Send embargo message.
-          KJ_IF_SOME(c, connection.tryGet<Connected>()) {
-            auto msg = c.connection->newOutgoingMessage(
-                messageSizeHint<rpc::ThirdPartyAnswerEmbargo>());
-            auto embargo = msg->getBody().initAs<rpc::Message>().initThirdPartyAnswerEmbargo();
-            embargo.setQuestionId(questionRef->getId());
-            msg->send();
-          }
+    // No response yet, so we should redirect the pipeline.
+    auto newPipeline = kj::refcounted<RpcPipeline>(
+        *this, kj::addRef(*questionRef), /*willResolve =*/ true);
+    KJ_IF_SOME(origQuestion, call.question) {
+      if (origQuestion.hasReceivedPipeliendCall()) {
+        // Some pipelined calls were sent before the redirect. We will need to embargo new calls
+        // that go over the shorter path.
 
-          // Note that we should NOT implement the embargo by wrapping `newPipeline` in
-          // `newLocalPromisePipeline()` that waits for the disembargo. This would cause new
-          // pipelined calls made after this point to be blocked *locally*, which wastes up to
-          // a whole network round trip. We should let the calls be sent to the remote end and
-          // embargoed there. What we do have to make sure is that the pipeline is not actually
-          // resolved to the final response until the disembargo is received on our end.
-          questionRef->expectThirdPartyAnswerDisembargo();
+        // Send embargo message.
+        KJ_IF_SOME(c, connection.tryGet<Connected>()) {
+          auto msg = c.connection->newOutgoingMessage(
+              messageSizeHint<rpc::ThirdPartyAnswerEmbargo>());
+          auto embargo = msg->getBody().initAs<rpc::Message>().initThirdPartyAnswerEmbargo();
+          embargo.setQuestionId(questionRef->getId());
+          msg->send();
         }
 
-        origQuestion.redirect(kj::mv(responsePromise), kj::addRef(*newPipeline));
-      } else {
-        // Original call was canceled, so... do nothing.
+        // Note that we should NOT implement the embargo by wrapping `newPipeline` in
+        // `newLocalPromisePipeline()` that waits for the disembargo. This would cause new
+        // pipelined calls made after this point to be blocked *locally*, which wastes up to
+        // a whole network round trip. We should let the calls be sent to the remote end and
+        // embargoed there. What we do have to make sure is that the pipeline is not actually
+        // resolved to the final response until the disembargo is received on our end.
+        questionRef->expectThirdPartyAnswerDisembargo();
       }
+
+      // Calling redirect() might release all remaining references to `origQuestion`, so make sure
+      // we have one of our own.
+      kj::addRef(origQuestion)->redirect(kj::mv(responsePromise), kj::addRef(*newPipeline));
+    } else {
+      // Original call was canceled, so... do nothing.
+    }
+
+    KJ_IF_SOME(p, prematureResponse) {
+      // Re-deliver the response we got before we were ready for it.
+      questionRef->fulfill(kj::mv(p));
     }
   }
 

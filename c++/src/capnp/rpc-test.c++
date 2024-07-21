@@ -2689,10 +2689,9 @@ KJ_TEST("three-party call handoff embargo") {
   doEmbargoTest(false, false, false);
 }
 
-// TODO(now): Doesn't work yet.
-// KJ_TEST("four-party call handoff embargo, no forwarding") {
-//   doEmbargoTest(true, false, false);
-// }
+KJ_TEST("four-party call handoff embargo, no forwarding") {
+  doEmbargoTest(true, false, false);
+}
 
 KJ_TEST("four-party call handoff embargo, with forwarding") {
   doEmbargoTest(true, true, false);
