@@ -1402,10 +1402,6 @@ private:
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
                                           kj::Vector<int>& fds) override {
-      // TODO(now): Setting receivedCall = true seems wrong here, writing a descriptor does not
-      //   imply that the capability is being called, and so does not imply that an embargo is
-      //   needed when the capability is resolved.
-      receivedCall = true;
       return connectionState->writeDescriptor(*cap, descriptor, fds);
     }
 
