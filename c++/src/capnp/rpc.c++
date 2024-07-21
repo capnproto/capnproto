@@ -3686,11 +3686,15 @@ private:
         builder.setReleaseParamCaps(false);
         builder.setResultsSentElsewhere();
 
-        // TODO(now): We have no idea if the response contains capabilities, so we can't use
-        //   `noFinishNeeded` as aggressively as usual, but we could probably still use it as
-        //   long as `hints.noPromisePipelining` is true. In that case we can assume no pipelined
-        //   calls and also assume no disembargo, since an embargo would only be needed after
-        //   pipelined calls.
+        if (hints.noPromisePipelining) {
+          // Since we expect no pipelined calls, we also expect no embargoes, so there's no need
+          // to wait for a Finish message before cleaning up the answer table.
+          builder.setNoFinishNeeded(true);
+
+          // Tell ourselves that a finish was already received, so that `cleanupAnswerTable()`
+          // removes the answer table entry.
+          receivedFinish = true;
+        }
 
         message->send();
 
