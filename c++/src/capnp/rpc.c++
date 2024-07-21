@@ -1374,9 +1374,10 @@ private:
       }
     }
 
-    void resolveQuestion(PipelineHook& newPipeline) {
+    void resolveQuestion(PipelineHook& newPipeline, bool disembargoHandledElsewhere = false) {
       KJ_REQUIRE(status == PIPELINE);
-      resolve(newPipeline.getPipelinedCap(kj::downcast<PipelineClient>(*cap).getPipelineOps()));
+      resolve(newPipeline.getPipelinedCap(kj::downcast<PipelineClient>(*cap).getPipelineOps()),
+              disembargoHandledElsewhere);
     }
 
     void reject(kj::Exception&& e) {
@@ -1506,7 +1507,7 @@ private:
       RESOLVED,   // we've resolved, cap is somethingh else
     } status;
 
-    void resolve(kj::Own<ClientHook> replacement) {
+    void resolve(kj::Own<ClientHook> replacement, bool disembargoHandledElsewhere = false) {
       KJ_ASSERT(replacement.get() != this, "can't resolve promise to itself");
 
       bool isSameConnection = false;
@@ -1529,7 +1530,7 @@ private:
           // irrelevant for these since they are just going to reject all calls anyway, so we
           // do not need to worry about embargoing them.
         } else {
-          needsEmbargo = receivedCall;
+          needsEmbargo = receivedCall && !disembargoHandledElsewhere;
         }
       }
 
@@ -2561,7 +2562,7 @@ private:
       if (waitingPipeline != kj::none || !waitingPromises.empty()) {
         callAfterTpaEmbargo([this, newPipeline = kj::mv(newPipeline)]() mutable {
           for (auto& w: waitingPromises) {
-            w.resolveQuestion(*newPipeline);
+            w.resolveQuestion(*newPipeline, /*disembargoHandledElsewhere =*/ true);
           }
 
           KJ_IF_SOME(w, waitingPipeline) {
@@ -3493,11 +3494,16 @@ private:
       answerIsInitialized = true;
 
       if (acceptedThirdPartyRedirectBeforeInitialized) {
-        auto& newAnswer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
-        if (!hints.noPromisePipelining) {
-          newAnswer.pipeline = pipeline->addRef();
+        if (sendResultsTo.is<SendToSelfIntroduced>()) {
+          // Same as in acceptThirdPartyRedirectIfNeeded(), put the task on the local TaskSet.
+          connectionState->tasks.add(kj::mv(KJ_ASSERT_NONNULL(task.tryGet<Answer::Running>())));
+        } else {
+          auto& newAnswer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
+          if (!hints.noPromisePipelining) {
+            newAnswer.pipeline = pipeline->addRef();
+          }
+          newAnswer.task = kj::mv(task);
         }
-        newAnswer.task = kj::mv(task);
       } else {
         answer.task = kj::mv(task);
       }
@@ -4010,6 +4016,13 @@ private:
       AnswerId oldAnswerId = answerId;
       Answer& oldAnswer = KJ_ASSERT_NONNULL(connectionState->answers.find(oldAnswerId));
 
+      if (!answerIsInitialized) {
+        // `oldAnswer` isn't actually fully initialized yet, so we'd better tread carefully
+        // here. This can happen if `startCall()` is actually still on the stack. Set a flag to
+        // fix this later.
+        acceptedThirdPartyRedirectBeforeInitialized = true;
+      }
+
       auto sendOldConnReturn = [&]() {
         // Send Return message on old connection.
 
@@ -4041,13 +4054,6 @@ private:
         Answer& newAnswer = newConnRpc.answers.nextReverseAllocated(newAnswerId);
 
         kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> embargo;
-
-        if (!answerIsInitialized) {
-          // `oldAnswer` isn't actually fully initialized yet, so we'd better tread carefully
-          // here. This can happen if `startCall()` is actually still on the stack. Set a flag to
-          // fix this later.
-          acceptedThirdPartyRedirectBeforeInitialized = true;
-        }
 
         // Clone the pipeline, if there is one.
         // Note that there might not be one in the case of a `noPromisePipelining` request.
@@ -4111,6 +4117,28 @@ private:
         KJ_ASSERT(isFirstResponder());
         sendOldConnReturn();
 
+        cleanupAnswerTable(nullptr, false);
+
+        kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> embargoFulfiller;
+        kj::Maybe<kj::Promise<void>> embargoPromise;
+        if (!hints.noPromisePipelining) {
+          // Since there is a pipeline, we could be asked to embargo it. Arrange to be informed
+          // when the original question receives a `Finish`, which implicitly lifts the embargo.
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          embargoPromise = kj::mv(paf.promise);
+          embargoFulfiller = kj::mv(paf.fulfiller);
+        }
+
+        if (answerIsInitialized) {
+          // HACK: Move the answer task to the local TaskSet, becaues it's no cancelable by a
+          //   Finish message. It should be completing promptly anyway, since a tail call has
+          //   occurred.
+          connectionState->tasks.add(
+              kj::mv(KJ_ASSERT_NONNULL(oldAnswer.task.tryGet<Answer::Running>())));
+        }
+
+        oldAnswer.task = Answer::RedirectedToThirdParty { kj::mv(embargoFulfiller) };
+
         // sendReturn() or sendError() is still going to be called later (as part of our answer
         // task). Arrange that when they are, we'll get these fulfillers fulfilled with the
         // results. Also, if `setPipeline()` is called, the pipeline can be fulfilled sooner.
@@ -4126,7 +4154,8 @@ private:
         connectionState->tasks.add(oldState.canceler->wrap(
             oldState.connection->completeThirdParty(completion))
             .then([responsePromise = kj::mv(responsePaf.promise),
-                   pipelinePromise = kj::mv(pipelinePaf.promise)]
+                   pipelinePromise = kj::mv(pipelinePaf.promise),
+                   embargoPromise = kj::mv(embargoPromise)]
                   (kj::Rc<kj::Refcounted> holder) mutable {
           kj::Rc<ThirdPartyExchangeValue> xcghValue = holder.downcast<ThirdPartyExchangeValue>();
 
@@ -4135,6 +4164,16 @@ private:
               "ThirdPartyCompletion given in ThirdPartyAnswer did not match a redirected Return.");
 
           KJ_IF_SOME(origQuestion, call.question) {
+            if (origQuestion.hasReceivedPipeliendCall()) {
+              // Some pipelined calls were sent, so we need to embargo.
+              KJ_IF_SOME(e, embargoPromise) {
+                // Delay the pipeline until the embargo is lifted.
+                pipelinePromise = e.then([p = kj::mv(pipelinePromise)]() mutable {
+                  return kj::mv(p);
+                });
+              }
+            }
+
             // Calling redirect() might release all remaining references to `origQuestion`, so make
             // sure we have one of our own.
             kj::addRef(origQuestion)->redirect(kj::mv(responsePromise),
