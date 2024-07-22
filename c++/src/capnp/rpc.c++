@@ -559,13 +559,18 @@ public:
       kj::Vector<kj::Own<ClientHook>> clientsToRelease;
       kj::Vector<decltype(Answer::task)> tasksToRelease;
       kj::Vector<kj::Promise<void>> resolveOpsToRelease;
-      KJ_DEFER(tasks.clear());
-
       kj::Vector<kj::Own<QuestionRef>> questionsToReject;
+
       KJ_DEFER({
         for (auto& questionRef: questionsToReject) {
-          questionRef->reject(kj::cp(networkException));
+          KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+            questionRef->reject(kj::cp(networkException));
+          })) {
+            KJ_LOG(ERROR, exception);
+          }
         }
+
+        tasks.clear();
       });
 
       // All current questions complete with exceptions.
