@@ -15,18 +15,27 @@ build:unix --cxxopt='-DCAPNP_HEADER_WARNINGS'
 # I needed these magic spells to build locally with clang-11 and clang-12 on Ubuntu. clang-13 and up
 # work out-of-the-box.
 # TODO(2.0): Remove this when we support g++ again.
-build:linux --action_env=CXXFLAGS=-stdlib=libc++
-build:linux --action_env=LDFLAGS=-stdlib=libc++
-build:linux --action_env=BAZEL_CXXOPTS=-stdlib=libc++
-build:linux --action_env=BAZEL_LINKOPTS=-lc++:-lm
+build:linux --cxxopt=-stdlib=libc++ --host_cxxopt=-stdlib=libc++
+build:linux --linkopt='-stdlib=libc++' --host_linkopt='-stdlib=libc++'
+# Drop default link flags, which include libstdc++ for Linux
+build:linux --features=-default_link_libs --host_features=-default_link_libs
+build:linux --linkopt='-lc++' --linkopt='-lm'
+build:linux --host_linkopt='-lc++' --host_linkopt='-lm'
+
+# Limit recursive header includes within libc++. This improves compliance with IWYU, helps avoid
+# errors with downstream projects that implicitly define this already and reduces total include size.
+https://libcxx.llvm.org/DesignDocs/HeaderRemovalPolicy.html
+build:unix --cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+build:unix --host_cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 
 build:linux --config=unix
 build:macos --config=unix
 
 # See https://bazel.build/configure/windows#symlink
 startup --windows_enable_symlinks
-# We use LLVM's MSVC-compatible compiler driver to compile our code on Windows
-# under Bazel. MSVC is natively supported when using CMake builds.
+# We use LLVM's MSVC-compatible compiler driver to compile our code on Windows under Bazel. MSVC is
+# natively supported when using CMake builds. This does not support toolchain resolution yet.
+build:windows --noincompatible_enable_cc_toolchain_resolution
 build:windows --compiler=clang-cl
 
 build:windows --cxxopt='/std:c++20' --host_cxxopt='/std:c++20' --verbose_failures

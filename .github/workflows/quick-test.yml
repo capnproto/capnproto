@@ -119,3 +119,18 @@ jobs:
 
             cd build-output\src
             ctest -V -C debug
+  Windows-bazel-clang-cl:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['windows-latest']
+        include:
+          - os: windows-latest
+            target: 'Visual Studio 17 2022'
+            arch: -A x64
+    steps:
+      - uses: actions/checkout@v4
+      - name: test
+        run: |
+            cd c++ && bazel test --verbose_failures --test_output=errors -k //...

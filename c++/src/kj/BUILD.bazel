@@ -71,6 +71,10 @@ cc_library(
         "windows-sanity.h",
     ],
     include_prefix = "kj",
+    # TODO(cleanup): Starting with glibc 2.34 (Debian Bookworm, Ubuntu 22.04), pthread and libdl
+    # are being compiled into the glibc archive itself and no longer need to be included. Drop
+    # these once we no longer need to support older platforms, -lpthread is duplicated many times in
+    # downstream project targets and bazel is unable to deduplicate it itself.
     linkopts = select({
         "@platforms//os:windows": [],
         ":use_libdl": [
