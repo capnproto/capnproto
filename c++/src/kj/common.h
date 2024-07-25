@@ -1933,6 +1933,30 @@ public:
     return true;
   }
 
+  inline bool operator<(const ArrayPtr& other) const {
+    size_t comparisonSize = kj::min(size_, other.size_);
+    if constexpr (isSameType<RemoveConst<T>, char>() || isSameType<RemoveConst<T>, unsigned char>()) {
+      int ret = memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
+      if (ret != 0) {
+        return ret < 0;
+      }
+    } else {
+      for (size_t i = 0; i < comparisonSize; i++) {
+        bool ret = ptr[i] == other.ptr[i];
+        if (!ret) {
+          return ptr[i] < other.ptr[i];
+        }
+      }
+    }
+    // arrays are equal up to comparisonSize
+    return size_ <  other.size_;
+  }
+
+  inline bool operator<=(const ArrayPtr& other) const { return !(other < *this); }
+  inline bool operator>=(const ArrayPtr& other) const { return other <= *this; }
+  // Note that only strongly ordered types are currently supported
+  inline bool operator> (const ArrayPtr& other) const { return other < *this; }
+
   template <typename... Attachments>
   Array<T> attach(Attachments&&... attachments) const KJ_WARN_UNUSED_RESULT;
   // Like Array<T>::attach(), but also promotes an ArrayPtr to an Array. Generally the attachment

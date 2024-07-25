@@ -721,15 +721,11 @@ inline constexpr ArrayPtr<const char> StringPtr::asArray() const {
 }
 
 inline bool StringPtr::operator==(const StringPtr& other) const {
-  return content.size() == other.content.size() &&
-      memcmp(content.begin(), other.content.begin(), content.size() - 1) == 0;
+  return content == other.content;
 }
 
-inline bool StringPtr::operator<(const StringPtr& other) const {
-  bool shorter = content.size() < other.content.size();
-  int cmp = memcmp(content.begin(), other.content.begin(),
-                   shorter ? content.size() : other.content.size());
-  return cmp < 0 || (cmp == 0 && shorter);
+inline bool StringPtr::operator< (const StringPtr& other) const {
+  return content < other.content;
 }
 
 inline StringPtr StringPtr::slice(size_t start) const {
