@@ -787,7 +787,7 @@ struct TestListOfAny {
 }
 
 interface TestInterface {
-  foo @0 (i :UInt32, j :Bool) -> (x :Text);
+  foo @0 (i :UInt32, j :Bool, expectedCallCount :Int32 = -1) -> (x :Text);
   bar @1 () -> ();
   baz @2 (s: TestAllTypes);
 
@@ -866,7 +866,7 @@ interface TestMoreStuff extends(TestCallOrder) {
   hold @3 (cap :TestInterface) -> ();
   # Returns immediately but holds on to the capability.
 
-  callHeld @4 () -> (s: Text);
+  callHeld @4 (expectedCallCount :Int32 = -1) -> (s: Text);
   # Calls the capability previously held using `hold` (and keeps holding it).
 
   getHeld @5 () -> (cap :TestInterface);
@@ -946,11 +946,25 @@ interface TestAuthenticatedBootstrap(VatId) {
 
 struct TestSturdyRefHostId {
   host @0 :Text;
+
+  unique @1 :Bool = false;
+  # Set true (in rpc-test) to open a new connection even if one already exists.
 }
 
-struct TestProvisionId {}
-struct TestRecipientId {}
-struct TestThirdPartyCapId {}
+struct TestThirdPartyCompletion {
+  token @0 :UInt64;
+}
+struct TestThirdPartyToAwait {
+  token @0 :UInt64;
+}
+struct TestThirdPartyToContact {
+  path @0 :TestSturdyRefHostId;
+  token @1 :UInt64;
+
+  sentBy @2 :Text;
+  # Host who sent this, used to verify we didn't just forward by copying the contact, we used
+  # forwardThirdPartyToContact() to rewrite it.
+}
 struct TestJoinResult {}
 
 struct TestNameAnnotation $Cxx.name("RenamedStruct") {
