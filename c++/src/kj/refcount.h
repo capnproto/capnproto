@@ -210,7 +210,8 @@ public:
   inline T* operator->() { return own.get(); }
   inline const T* operator->() const { return own.get(); }
 
-  // do not expose * to avoid dangling references
+  inline T* get() { return own.get(); }
+  inline const T* get() const { return own.get(); }
 
 private:
   Rc(T* t) : own(t, *t) { }
@@ -490,7 +491,8 @@ public:
   inline T* operator->() { return own.get(); }
   inline const T* operator->() const { return own.get(); }
 
-  // do not expose * to avoid dangling references
+  inline T* get() { return own.get(); }
+  inline const T* get() const { return own.get(); }
 
 private:
   Arc(T* t) : own(t, *t) { }
