@@ -151,6 +151,7 @@ public:
   }
 
 private:
+  friend HttpOverCapnpFactory::ClientRequestContextImpl;
   kj::Maybe<kj::WebSocket&> webSocket;  // becomes none when canceled
   kj::Own<kj::WebSocket> ownWebSocket;
   kj::Promise<Capability::Client> shorteningPromise;
@@ -311,6 +312,10 @@ public:
   ~ClientRequestContextImpl() noexcept(false) {
     KJ_IF_SOME(ws, maybeWebSocket) {
       ws.cancel();
+      // Clear out selfRef here – the CapnpToKjWebSocketAdapter destructor tries to clear it too to
+      // remove the reference to itself, but the reference to that will no longer be valid once this
+      // destructor completes.
+      ws.selfRef = kj::none;
     }
   }
 
