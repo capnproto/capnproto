@@ -2853,9 +2853,18 @@ public:
             }
             bool addNullTerminator = true;
             // We want to add the null terminator when receiving a TEXT message.
-            auto decompressed = decompressor.processMessage(message, originalMaxSize,
+            auto decompressedOrError = decompressor.processMessage(message, originalMaxSize, 
                 addNullTerminator);
-            return Message(kj::String(decompressed.releaseAsChars()));
+            KJ_SWITCH_ONEOF(decompressedOrError) {
+              KJ_CASE_ONEOF(protocolError, ProtocolError) {
+                KJ_DBG("Returning error with", protocolError.description);
+                return sendCloseDueToError(protocolError.statusCode, protocolError.description)
+                    .attach(kj::mv(decompressedOrError));
+              }
+              KJ_CASE_ONEOF(decompressed, kj::Array<byte>) {
+                return Message(kj::String(decompressed.releaseAsChars()));
+              }
+            }
           }
 #endif // KJ_HAS_ZLIB
           message.back() = '\0';
@@ -2877,8 +2886,17 @@ public:
               // We must reset context on each message.
               decompressor.reset();
             }
-            auto decompressed = decompressor.processMessage(message, originalMaxSize);
-            return Message(decompressed.releaseAsBytes());
+            
+            auto decompressedOrError = decompressor.processMessage(message, originalMaxSize);
+            KJ_SWITCH_ONEOF(decompressedOrError) {
+              KJ_CASE_ONEOF(protocolError, ProtocolError) {
+                return sendCloseDueToError(protocolError.statusCode, protocolError.description)
+                    .attach(kj::mv(decompressedOrError));
+              }
+              KJ_CASE_ONEOF(decompressed, kj::Array<byte>) {
+                return Message(decompressed.releaseAsBytes());
+              }
+            }
           }
 #endif // KJ_HAS_ZLIB
           return Message(message.releaseAsBytes());
@@ -3260,7 +3278,7 @@ private:
 
     KJ_DISALLOW_COPY_AND_MOVE(ZlibContext);
 
-    kj::Array<kj::byte> processMessage(kj::ArrayPtr<const byte> message,
+    kj::OneOf<kj::Array<kj::byte>, ProtocolError> processMessage(kj::ArrayPtr<const byte> message,
         kj::Maybe<size_t> maxSize = kj::none,
         bool addNullTerminator = false) {
       // If `this` is the compressor, calling `processMessage()` will compress the `message`.
@@ -3275,7 +3293,15 @@ private:
       ctx.next_in = const_cast<byte*>(reinterpret_cast<const byte*>(message.begin()));
       ctx.avail_in = message.size();
 
-      kj::Vector<Result> parts(processLoop(maxSize));
+      kj::Vector<Result> parts;
+      KJ_SWITCH_ONEOF(processLoop(maxSize)) {
+        KJ_CASE_ONEOF(protocolError, ProtocolError) {
+          return kj::mv(protocolError);
+        }
+        KJ_CASE_ONEOF(dataParts, kj::Vector<Result>) {
+          parts = kj::mv(dataParts);
+        }
+      }
 
       size_t amountToAllocate = 0;
       for (const auto& part : parts) {
@@ -3358,7 +3384,7 @@ private:
       };
     }
 
-    kj::Vector<Result> processLoop(kj::Maybe<size_t> maxSize) {
+    kj::OneOf<kj::Vector<Result>, ProtocolError> processLoop(kj::Maybe<size_t> maxSize) {
       // Since Zlib buffers the writes, we want to continue processing until there's nothing left.
       kj::Vector<Result> output;
       size_t totalBytesProcessed = 0;
@@ -3373,8 +3399,11 @@ private:
           KJ_IF_SOME(m, maxSize) {
             // This is only non-null for `receive` calls, so we must be decompressing. We don't want
             // the decompressed message to OOM us, so let's make sure it's not too big.
-            KJ_REQUIRE(totalBytesProcessed < m,
-                "Decompressed WebSocket message is too large");
+            if (totalBytesProcessed > m) {
+              return ProtocolError {
+                  .statusCode = 1009,
+                  .description = "Message is too large"};
+            }
           }
         }
 
@@ -3511,16 +3540,24 @@ private:
           // We must reset context on each message.
           compressor.reset();
         }
-        auto& innerMessage = compressedMessage.emplace(compressor.processMessage(message));
-        if (message.size() > 0) {
-          KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
-          message = innerMessage.first(innerMessage.size() - 4);
-          // Strip 0x00 0x00 0xFF 0xFF off the tail.
-          // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.1
-        } else {
-          // RFC 7692 (7.2.3.6) specifies that an empty uncompressed DEFLATE block (0x00) should be
-          // built if the compression library doesn't generate data when the input is empty.
-          message = compressedMessage.emplace(kj::heapArray<byte>({0x00}));
+        
+        KJ_SWITCH_ONEOF(compressor.processMessage(message)) {
+          KJ_CASE_ONEOF(error, ProtocolError) {
+            KJ_FAIL_REQUIRE("Error compressing websocket message: ", error.description);
+          }
+          KJ_CASE_ONEOF(compressed, kj::Array<byte>) {
+            auto& innerMessage = compressedMessage.emplace(kj::mv(compressed));
+            if (message.size() > 0) {
+              KJ_ASSERT(innerMessage.asPtr().endsWith({0x00, 0x00, 0xFF, 0xFF}));
+              message = innerMessage.first(innerMessage.size() - 4);
+              // Strip 0x00 0x00 0xFF 0xFF off the tail.
+              // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.1
+            } else {
+              // RFC 7692 (7.2.3.6) specifies that an empty uncompressed DEFLATE block (0x00) should
+              // be built if the compression library doesn't generate data when the input is empty.
+              message = compressedMessage.emplace(kj::heapArray<byte>({0x00}));
+            }
+          }
         }
       }
 #endif // KJ_HAS_ZLIB
