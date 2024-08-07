@@ -231,8 +231,8 @@ private:
 };
 
 typedef VatNetwork<
-    test::TestSturdyRefHostId, test::TestProvisionId, test::TestRecipientId,
-    test::TestThirdPartyCapId, test::TestJoinResult> TestVatBase;
+    test::TestSturdyRefHostId, test::TestThirdPartyCompletion, test::TestThirdPartyToAwait,
+    test::TestThirdPartyToContact, test::TestJoinResult> TestVatBase;
 
 class TestVat final: public TestVatBase {
 public:
