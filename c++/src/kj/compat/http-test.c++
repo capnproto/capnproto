@@ -2459,6 +2459,56 @@ KJ_TEST("WebSocket maximum message size") {
   assertContainsWebSocketClose(rawCloseMessage.first(nread), 1009, "too large"_kjc);
 }
 
+#if KJ_HAS_ZLIB
+KJ_TEST("WebSocket maximum compressed message size") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe =KJ_HTTP_TEST_CREATE_2PIPE;
+
+  WebSocketErrorCatcher errorCatcher;
+  FakeEntropySource maskGenerator;
+  auto* rawClient = pipe.ends[0].get();
+  auto client = newWebSocket(kj::mv(pipe.ends[0]), maskGenerator, CompressionParameters{
+      .outboundNoContextTakeover = false,
+      .inboundNoContextTakeover = false,
+      .outboundMaxWindowBits=15,
+      .inboundMaxWindowBits=15,
+  });
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, CompressionParameters{
+      .outboundNoContextTakeover = false,
+      .inboundNoContextTakeover = false,
+      .outboundMaxWindowBits=15,
+      .inboundMaxWindowBits=15,
+  }, errorCatcher);
+
+  size_t maxSize = 100;
+  auto biggestAllowedString = kj::strArray(kj::repeat(kj::StringPtr("A"), maxSize), "");
+  auto tooBigString = kj::strArray(kj::repeat(kj::StringPtr("B"), maxSize + 1), "");
+
+  auto rawCloseMessage = kj::heapArray<kj::byte>(129);
+  auto clientTask = client->send(biggestAllowedString)
+      .then([&]() { return client->send(tooBigString); })
+      .then([&]() {
+        return rawClient->tryRead(rawCloseMessage.begin(), 2, rawCloseMessage.size());
+      });
+
+  {
+    auto message = server->receive(maxSize).wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>().size() == maxSize);
+  }
+
+  {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("too large",
+        server->receive(maxSize).ignoreResult().wait(waitScope));
+    KJ_ASSERT(errorCatcher.errors.size() == 1);
+    KJ_ASSERT(errorCatcher.errors[0].statusCode == 1009);
+  }
+
+  auto nread = clientTask.wait(waitScope);
+  assertContainsWebSocketClose(rawCloseMessage.first(nread), 1009, "too large"_kjc);
+}
+#endif
+
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {
 public:
   TestWebSocketService(HttpHeaderTable& headerTable, HttpHeaderId hMyHeader)
