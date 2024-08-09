@@ -2081,6 +2081,11 @@ inline constexpr ArrayPtr<T> arrayPtr(T (&arr)[s]) {
   return ArrayPtr<T>(arr);
 }
 
+template <typename... Params>
+auto asBytes(Params&&... params) {
+  return kj::arrayPtr(kj::fwd<Params>(params)...).asBytes();
+}
+
 // =======================================================================================
 // Casts
 

@@ -965,6 +965,45 @@ KJ_TEST("ArrayPtr equality for arrays of different string types") {
   }
 }
 
+KJ_TEST("asBytes Tests") {
+  const char helloMessage[] = "helloThere";
+
+  // Use size to specify
+  {
+    auto helloPtr = kj::asBytes(helloMessage, 5);
+    static_assert(isSameType<decltype(helloPtr), ArrayPtr<const byte>>());
+    KJ_EXPECT(helloPtr.size(), 5);
+    KJ_EXPECT(memcmp(helloPtr.begin(), helloMessage, 5) == 0);
+  }
+
+  // Use begin and end
+  {
+    auto helloPtr = kj::asBytes(helloMessage, helloMessage + 5);
+    static_assert(isSameType<decltype(helloPtr), ArrayPtr<const byte>>());
+    KJ_EXPECT(helloPtr.size(), 5);
+    KJ_EXPECT(memcmp(helloPtr.begin(), helloMessage, 5) == 0);
+  }
+
+  // Check struct to ArrayPtr<byte>
+  {
+    struct Foo {
+      size_t i = 0;
+      size_t j = 1;
+    };
+    const Foo foo {};
+    auto fooBytesPtr = asBytes(foo);
+    static_assert(isSameType<decltype(fooBytesPtr), ArrayPtr<const byte>>());
+    KJ_EXPECT(fooBytesPtr.size(), sizeof(Foo));
+    KJ_EXPECT(memcmp(fooBytesPtr.begin(), &foo, sizeof(Foo)) == 0);
+  }
+  {
+    const int simpleInts[] = {0, 100, 200, 300, -100};
+    auto simpleIntsPtr = asBytes(simpleInts);
+    static_assert(isSameType<decltype(simpleIntsPtr), ArrayPtr<const byte>>());
+    KJ_EXPECT(simpleIntsPtr.size(), sizeof(simpleInts));
+    KJ_EXPECT(memcmp(simpleIntsPtr.begin(), simpleInts, sizeof(simpleInts)) == 0);
+  }
+}
 
 KJ_TEST("kj::range()") {
   uint expected = 5;
