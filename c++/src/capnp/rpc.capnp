@@ -1080,6 +1080,17 @@ struct CapDescriptor {
     # `senderPromise` is received multiple times, only one `Resolve` is sent to cover all of
     # them.  If `senderPromise` is released before the `Resolve` is sent, the sender (of this
     # `CapDescriptor`) may choose not to send the `Resolve` at all.
+    #
+    # `senderPromise` must not refer to an export for which `Resolve` was already sent in the past.
+    # The reason for this is that the receiver may no longer have a record of that past `Resolve`.
+    # In fact, it's extremely likely that when the receiver received the `Resolve`, it promptly
+    # released the promise from its import table, since it updated all references to the new taget.
+    # This means that if the old promise's export ID were sent again here, the receiver wouldn't
+    # know anything about it and wouldn't know that it's already resolved.
+    #
+    # In order to avoid the above case, if the sender detects that promise A is resolving to
+    # promise B, but promise B has already previously resolved to C, then the sender should simply
+    # resolve promise A directly to C.
 
     receiverHosted @3 :ImportId;
     # A capability (or promise) previously exported by the receiver (imported by the sender).
