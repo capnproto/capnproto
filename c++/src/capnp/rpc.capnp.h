@@ -30,6 +30,7 @@ CAPNP_DECLARE_SCHEMA(f964368b0fbd3711);
 CAPNP_DECLARE_SCHEMA(d562b4df655bdd4d);
 CAPNP_DECLARE_SCHEMA(9c6a046bfbc1ac5a);
 CAPNP_DECLARE_SCHEMA(d4c9b56290554016);
+CAPNP_DECLARE_SCHEMA(b6511ce6c5f0e58c);
 CAPNP_DECLARE_SCHEMA(fbe1980490e001af);
 CAPNP_DECLARE_SCHEMA(95bc14545813fbc1);
 CAPNP_DECLARE_SCHEMA(9a0e61223d96743b);
@@ -75,6 +76,7 @@ struct Message {
     ACCEPT,
     JOIN,
     DISEMBARGO,
+    THIRD_PARTY_ANSWER,
   };
 
   struct _capnpPrivate {
@@ -148,7 +150,7 @@ struct Return {
     CANCELED,
     RESULTS_SENT_ELSEWHERE,
     TAKE_FROM_OTHER_QUESTION,
-    ACCEPT_FROM_THIRD_PARTY,
+    AWAIT_FROM_THIRD_PARTY,
   };
 
   struct _capnpPrivate {
@@ -217,7 +219,7 @@ struct Disembargo {
   struct Context;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(f964368b0fbd3711, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(f964368b0fbd3711, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -234,11 +236,10 @@ struct Disembargo::Context {
     SENDER_LOOPBACK,
     RECEIVER_LOOPBACK,
     ACCEPT,
-    PROVIDE,
   };
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d562b4df655bdd4d, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d562b4df655bdd4d, 1, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -268,7 +269,22 @@ struct Accept {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d4c9b56290554016, 1, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d4c9b56290554016, 1, 2)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct ThirdPartyAnswer {
+  ThirdPartyAnswer() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b6511ce6c5f0e58c, 1, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -506,6 +522,10 @@ public:
   inline bool hasDisembargo() const;
   inline  ::capnp::rpc::Disembargo::Reader getDisembargo() const;
 
+  inline bool isThirdPartyAnswer() const;
+  inline bool hasThirdPartyAnswer() const;
+  inline  ::capnp::rpc::ThirdPartyAnswer::Reader getThirdPartyAnswer() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -640,6 +660,14 @@ public:
   inline  ::capnp::rpc::Disembargo::Builder initDisembargo();
   inline void adoptDisembargo(::capnp::Orphan< ::capnp::rpc::Disembargo>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::Disembargo> disownDisembargo();
+
+  inline bool isThirdPartyAnswer();
+  inline bool hasThirdPartyAnswer();
+  inline  ::capnp::rpc::ThirdPartyAnswer::Builder getThirdPartyAnswer();
+  inline void setThirdPartyAnswer( ::capnp::rpc::ThirdPartyAnswer::Reader value);
+  inline  ::capnp::rpc::ThirdPartyAnswer::Builder initThirdPartyAnswer();
+  inline void adoptThirdPartyAnswer(::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer> disownThirdPartyAnswer();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1014,9 +1042,9 @@ public:
   inline bool isTakeFromOtherQuestion() const;
   inline  ::uint32_t getTakeFromOtherQuestion() const;
 
-  inline bool isAcceptFromThirdParty() const;
-  inline bool hasAcceptFromThirdParty() const;
-  inline ::capnp::AnyPointer::Reader getAcceptFromThirdParty() const;
+  inline bool isAwaitFromThirdParty() const;
+  inline bool hasAwaitFromThirdParty() const;
+  inline ::capnp::AnyPointer::Reader getAwaitFromThirdParty() const;
 
   inline bool getNoFinishNeeded() const;
 
@@ -1083,10 +1111,10 @@ public:
   inline  ::uint32_t getTakeFromOtherQuestion();
   inline void setTakeFromOtherQuestion( ::uint32_t value);
 
-  inline bool isAcceptFromThirdParty();
-  inline bool hasAcceptFromThirdParty();
-  inline ::capnp::AnyPointer::Builder getAcceptFromThirdParty();
-  inline ::capnp::AnyPointer::Builder initAcceptFromThirdParty();
+  inline bool isAwaitFromThirdParty();
+  inline bool hasAwaitFromThirdParty();
+  inline ::capnp::AnyPointer::Builder getAwaitFromThirdParty();
+  inline ::capnp::AnyPointer::Builder initAwaitFromThirdParty();
 
   inline bool getNoFinishNeeded();
   inline void setNoFinishNeeded(bool value);
@@ -1499,10 +1527,8 @@ public:
   inline  ::uint32_t getReceiverLoopback() const;
 
   inline bool isAccept() const;
-  inline  ::capnp::Void getAccept() const;
-
-  inline bool isProvide() const;
-  inline  ::uint32_t getProvide() const;
+  inline bool hasAccept() const;
+  inline  ::capnp::Data::Reader getAccept() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1542,12 +1568,12 @@ public:
   inline void setReceiverLoopback( ::uint32_t value);
 
   inline bool isAccept();
-  inline  ::capnp::Void getAccept();
-  inline void setAccept( ::capnp::Void value = ::capnp::VOID);
-
-  inline bool isProvide();
-  inline  ::uint32_t getProvide();
-  inline void setProvide( ::uint32_t value);
+  inline bool hasAccept();
+  inline  ::capnp::Data::Builder getAccept();
+  inline void setAccept( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initAccept(unsigned int size);
+  inline void adoptAccept(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownAccept();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1691,7 +1717,8 @@ public:
   inline bool hasProvision() const;
   inline ::capnp::AnyPointer::Reader getProvision() const;
 
-  inline bool getEmbargo() const;
+  inline bool hasEmbargo() const;
+  inline  ::capnp::Data::Reader getEmbargo() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1728,8 +1755,12 @@ public:
   inline ::capnp::AnyPointer::Builder getProvision();
   inline ::capnp::AnyPointer::Builder initProvision();
 
-  inline bool getEmbargo();
-  inline void setEmbargo(bool value);
+  inline bool hasEmbargo();
+  inline  ::capnp::Data::Builder getEmbargo();
+  inline void setEmbargo( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initEmbargo(unsigned int size);
+  inline void adoptEmbargo(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownEmbargo();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1744,6 +1775,89 @@ private:
 class Accept::Pipeline {
 public:
   typedef Accept Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
+class ThirdPartyAnswer::Reader {
+public:
+  typedef ThirdPartyAnswer Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline bool hasCompletion() const;
+  inline ::capnp::AnyPointer::Reader getCompletion() const;
+
+  inline  ::uint32_t getAnswerId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class ThirdPartyAnswer::Builder {
+public:
+  typedef ThirdPartyAnswer Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline bool hasCompletion();
+  inline ::capnp::AnyPointer::Builder getCompletion();
+  inline ::capnp::AnyPointer::Builder initCompletion();
+
+  inline  ::uint32_t getAnswerId();
+  inline void setAnswerId( ::uint32_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class ThirdPartyAnswer::Pipeline {
+public:
+  typedef ThirdPartyAnswer Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -3352,6 +3466,60 @@ inline ::capnp::Orphan< ::capnp::rpc::Disembargo> Message::Builder::disownDisemb
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
+inline bool Message::Reader::isThirdPartyAnswer() const {
+  return which() == Message::THIRD_PARTY_ANSWER;
+}
+inline bool Message::Builder::isThirdPartyAnswer() {
+  return which() == Message::THIRD_PARTY_ANSWER;
+}
+inline bool Message::Reader::hasThirdPartyAnswer() const {
+  if (which() != Message::THIRD_PARTY_ANSWER) return false;
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline bool Message::Builder::hasThirdPartyAnswer() {
+  if (which() != Message::THIRD_PARTY_ANSWER) return false;
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::rpc::ThirdPartyAnswer::Reader Message::Reader::getThirdPartyAnswer() const {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswer>::get(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline  ::capnp::rpc::ThirdPartyAnswer::Builder Message::Builder::getThirdPartyAnswer() {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswer>::get(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Message::Builder::setThirdPartyAnswer( ::capnp::rpc::ThirdPartyAnswer::Reader value) {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswer>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::ThirdPartyAnswer::Builder Message::Builder::initThirdPartyAnswer() {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER);
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswer>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline void Message::Builder::adoptThirdPartyAnswer(
+    ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer>&& value) {
+  _builder.setDataField<Message::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Message::THIRD_PARTY_ANSWER);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswer>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyAnswer> Message::Builder::disownThirdPartyAnswer() {
+  KJ_IREQUIRE((which() == Message::THIRD_PARTY_ANSWER),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::ThirdPartyAnswer>::disown(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
 inline  ::uint32_t Bootstrap::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
@@ -3888,37 +4056,37 @@ inline void Return::Builder::setTakeFromOtherQuestion( ::uint32_t value) {
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
-inline bool Return::Reader::isAcceptFromThirdParty() const {
-  return which() == Return::ACCEPT_FROM_THIRD_PARTY;
+inline bool Return::Reader::isAwaitFromThirdParty() const {
+  return which() == Return::AWAIT_FROM_THIRD_PARTY;
 }
-inline bool Return::Builder::isAcceptFromThirdParty() {
-  return which() == Return::ACCEPT_FROM_THIRD_PARTY;
+inline bool Return::Builder::isAwaitFromThirdParty() {
+  return which() == Return::AWAIT_FROM_THIRD_PARTY;
 }
-inline bool Return::Reader::hasAcceptFromThirdParty() const {
-  if (which() != Return::ACCEPT_FROM_THIRD_PARTY) return false;
+inline bool Return::Reader::hasAwaitFromThirdParty() const {
+  if (which() != Return::AWAIT_FROM_THIRD_PARTY) return false;
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline bool Return::Builder::hasAcceptFromThirdParty() {
-  if (which() != Return::ACCEPT_FROM_THIRD_PARTY) return false;
+inline bool Return::Builder::hasAwaitFromThirdParty() {
+  if (which() != Return::AWAIT_FROM_THIRD_PARTY) return false;
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::AnyPointer::Reader Return::Reader::getAcceptFromThirdParty() const {
-  KJ_IREQUIRE((which() == Return::ACCEPT_FROM_THIRD_PARTY),
+inline ::capnp::AnyPointer::Reader Return::Reader::getAwaitFromThirdParty() const {
+  KJ_IREQUIRE((which() == Return::AWAIT_FROM_THIRD_PARTY),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Reader(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Return::Builder::getAcceptFromThirdParty() {
-  KJ_IREQUIRE((which() == Return::ACCEPT_FROM_THIRD_PARTY),
+inline ::capnp::AnyPointer::Builder Return::Builder::getAwaitFromThirdParty() {
+  KJ_IREQUIRE((which() == Return::AWAIT_FROM_THIRD_PARTY),
               "Must check which() before get()ing a union member.");
   return ::capnp::AnyPointer::Builder(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Return::Builder::initAcceptFromThirdParty() {
+inline ::capnp::AnyPointer::Builder Return::Builder::initAwaitFromThirdParty() {
   _builder.setDataField<Return::Which>(
-      ::capnp::bounded<3>() * ::capnp::ELEMENTS, Return::ACCEPT_FROM_THIRD_PARTY);
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, Return::AWAIT_FROM_THIRD_PARTY);
   auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
   result.clear();
@@ -4193,6 +4361,7 @@ inline typename Disembargo::Context::Pipeline Disembargo::Pipeline::getContext()
 inline typename Disembargo::Context::Builder Disembargo::Builder::initContext() {
   _builder.setDataField< ::uint32_t>(::capnp::bounded<0>() * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(::capnp::bounded<2>() * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(::capnp::bounded<1>() * ::capnp::POINTERS).clear();
   return typename Disembargo::Context::Builder(_builder);
 }
 inline  ::capnp::rpc::Disembargo::Context::Which Disembargo::Context::Reader::which() const {
@@ -4262,50 +4431,52 @@ inline bool Disembargo::Context::Reader::isAccept() const {
 inline bool Disembargo::Context::Builder::isAccept() {
   return which() == Disembargo::Context::ACCEPT;
 }
-inline  ::capnp::Void Disembargo::Context::Reader::getAccept() const {
+inline bool Disembargo::Context::Reader::hasAccept() const {
+  if (which() != Disembargo::Context::ACCEPT) return false;
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool Disembargo::Context::Builder::hasAccept() {
+  if (which() != Disembargo::Context::ACCEPT) return false;
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Data::Reader Disembargo::Context::Reader::getAccept() const {
   KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-
-inline  ::capnp::Void Disembargo::Context::Builder::getAccept() {
+inline  ::capnp::Data::Builder Disembargo::Context::Builder::getAccept() {
   KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
-inline void Disembargo::Context::Builder::setAccept( ::capnp::Void value) {
+inline void Disembargo::Context::Builder::setAccept( ::capnp::Data::Reader value) {
   _builder.setDataField<Disembargo::Context::Which>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
-  _builder.setDataField< ::capnp::Void>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
 }
-
-inline bool Disembargo::Context::Reader::isProvide() const {
-  return which() == Disembargo::Context::PROVIDE;
-}
-inline bool Disembargo::Context::Builder::isProvide() {
-  return which() == Disembargo::Context::PROVIDE;
-}
-inline  ::uint32_t Disembargo::Context::Reader::getProvide() const {
-  KJ_IREQUIRE((which() == Disembargo::Context::PROVIDE),
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Disembargo::Context::Builder::getProvide() {
-  KJ_IREQUIRE((which() == Disembargo::Context::PROVIDE),
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
-}
-inline void Disembargo::Context::Builder::setProvide( ::uint32_t value) {
+inline  ::capnp::Data::Builder Disembargo::Context::Builder::initAccept(unsigned int size) {
   _builder.setDataField<Disembargo::Context::Which>(
-      ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::PROVIDE);
-  _builder.setDataField< ::uint32_t>(
-      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void Disembargo::Context::Builder::adoptAccept(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  _builder.setDataField<Disembargo::Context::Which>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> Disembargo::Context::Builder::disownAccept() {
+  KJ_IREQUIRE((which() == Disembargo::Context::ACCEPT),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Provide::Reader::getQuestionId() const {
@@ -4421,18 +4592,75 @@ inline ::capnp::AnyPointer::Builder Accept::Builder::initProvision() {
   return result;
 }
 
-inline bool Accept::Reader::getEmbargo() const {
-  return _reader.getDataField<bool>(
-      ::capnp::bounded<32>() * ::capnp::ELEMENTS);
+inline bool Accept::Reader::hasEmbargo() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool Accept::Builder::hasEmbargo() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Data::Reader Accept::Reader::getEmbargo() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Data::Builder Accept::Builder::getEmbargo() {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void Accept::Builder::setEmbargo( ::capnp::Data::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Data::Builder Accept::Builder::initEmbargo(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void Accept::Builder::adoptEmbargo(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> Accept::Builder::disownEmbargo() {
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
-inline bool Accept::Builder::getEmbargo() {
-  return _builder.getDataField<bool>(
-      ::capnp::bounded<32>() * ::capnp::ELEMENTS);
+inline bool ThirdPartyAnswer::Reader::hasCompletion() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline void Accept::Builder::setEmbargo(bool value) {
-  _builder.setDataField<bool>(
-      ::capnp::bounded<32>() * ::capnp::ELEMENTS, value);
+inline bool ThirdPartyAnswer::Builder::hasCompletion() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::AnyPointer::Reader ThirdPartyAnswer::Reader::getCompletion() const {
+  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder ThirdPartyAnswer::Builder::getCompletion() {
+  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+inline ::capnp::AnyPointer::Builder ThirdPartyAnswer::Builder::initCompletion() {
+  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+  result.clear();
+  return result;
+}
+
+inline  ::uint32_t ThirdPartyAnswer::Reader::getAnswerId() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t ThirdPartyAnswer::Builder::getAnswerId() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void ThirdPartyAnswer::Builder::setAnswerId( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t Join::Reader::getQuestionId() const {

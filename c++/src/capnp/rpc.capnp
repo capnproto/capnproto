@@ -266,6 +266,7 @@ struct Message {
 
     provide @10 :Provide;  # Provide a capability to a third party.
     accept @11 :Accept;    # Accept a capability provided by a third party.
+    thirdPartyAnswer @14 :ThirdPartyAnswer;  # Call handed off from a third party.
 
     # Level 4 features -----------------------------------------------
 
@@ -287,8 +288,9 @@ struct Bootstrap {
   #
   # We call this a "bootstrap" because in an ideal Cap'n Proto world, bootstrap interfaces would
   # never be used. In such a world, any time you connect to a new vat, you do so because you
-  # received an introduction from some other vat (see `ThirdPartyCapId`). Thus, the first message
-  # you send is `Accept`, and further communications derive from there. `Bootstrap` is not used.
+  # received an introduction from some other vat (see `ThirdPartyToContact`). Thus, the first
+  # message you send is `Accept`, and further communications derive from there. `Bootstrap` is not
+  # used.
   #
   # In such an ideal world, DNS itself would support Cap'n Proto -- performing a DNS lookup would
   # actually return a new Cap'n Proto capability, thus introducing you to the target system via
@@ -414,7 +416,7 @@ struct Call {
 
   allowThirdPartyTailCall @8 :Bool = false;
   # Indicates whether or not the receiver is allowed to send a `Return` containing
-  # `acceptFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
+  # `awaitFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
   # will have to proxy the return in the case of a tail call to a third-party vat.
 
   noPromisePipelining @9 :Bool = false;
@@ -489,18 +491,18 @@ struct Call {
     # - Vat A sends a `Finish` for the bar() call to Vat B.
     # - Vat B receives the `Finish` for bar() and sends a `Finish` for bar'().
 
-    thirdParty @7 :RecipientId;
+    thirdParty @7 :ThirdPartyToContact;
     # **(level 3)**
     #
-    # The call's result should be returned to a different vat.  The receiver (the callee) expects
-    # to receive an `Accept` message from the indicated vat, and should return the call's result
-    # to it, rather than to the sender of the `Call`.
+    # The call's result should be returned to a different vat.  The receiver (the callee) should
+    # connect to the given vat and sent it a ThirdPartyAnswer, followed by a Return to deliver the
+    # eventual result.
     #
     # This operates much like `yourself`, above, except that Carol is in a separate Vat C.  `Call`
     # messages are sent from Vat A -> Vat B and Vat B -> Vat C.  A `Return` message is sent from
-    # Vat B -> Vat A that contains `acceptFromThirdParty` in place of results.  When Vat A sends
-    # an `Accept` to Vat C, it receives back a `Return` containing the call's actual result.  Vat C
-    # also sends a `Return` to Vat B with `resultsSentElsewhere`.
+    # Vat B -> Vat A that contains `awaitFromThirdParty` in place of results.  Vat C sends a
+    # `ThirdPartyAnswer` directly to Vat A, and also sends a `Return` to `Vat B` with
+    # `resultsSendElsewhere`.
   }
 }
 
@@ -559,12 +561,12 @@ struct Return {
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
     # results here.  `takeFromOtherQuestion` can only used once per question.
 
-    acceptFromThirdParty @7 :ThirdPartyCapId;
+    awaitFromThirdParty @7 :ThirdPartyToAwait;
     # **(level 3)**
     #
-    # The caller should contact a third-party vat to pick up the results.  An `Accept` message
-    # sent to the vat will return the result.  This pairs with `Call.sendResultsTo.thirdParty`.
-    # It should only be used if the corresponding `Call` had `allowThirdPartyTailCall` set.
+    # The caller should expect to receive a `ThirdPartyAnswer` from some other vat.  This pairs
+    # with `Call.sendResultsTo.thirdParty`.  It should only be used if the corresponding `Call`
+    # had `allowThirdPartyTailCall` set.
   }
 }
 
@@ -673,6 +675,12 @@ struct Resolve {
   }
 }
 
+# TODO(someday): There may be use cases for a `ResolvePipeline` method, which is very similar to
+#   `Return` but provides provisional results for pipelining purposes, used when `setPipeline()`
+#   is invoked by the callee. This would be particularly improtant when setPipeline() is given
+#   capabilities that could potentially be shortened before the call actually finishes. So far,
+#   though, we haven't seen a real-life use case.
+
 struct Release {
   # **(level 1)**
   #
@@ -765,6 +773,10 @@ struct Disembargo {
   using EmbargoId = UInt32;
   # Used in `senderLoopback` and `receiverLoopback`, below.
 
+  using ThirdPartyEmbargoId = Data;
+  # Used in `accept`, below, to embago a capability received via three-party handoff. Must be a
+  # globally-unique string, typically chosen at random with enough entropy to guarantee uniqueness.
+
   context :union {
     senderLoopback @1 :EmbargoId;
     # The sender is requesting a disembargo on a promise that is known to resolve back to a
@@ -781,25 +793,25 @@ struct Disembargo {
     # The receiver previously sent a `senderLoopback` Disembargo towards a promise resolving to
     # this capability, and that Disembargo is now being echoed back.
 
-    accept @3 :Void;
+    accept @3 :ThirdPartyEmbargoId;
     # **(level 3)**
     #
     # The sender is requesting a disembargo on a promise that is known to resolve to a third-party
     # capability that the sender is currently in the process of accepting (using `Accept`).
-    # The receiver of this `Disembargo` has an outstanding `Provide` on said capability.  The
-    # receiver should now send a `Disembargo` with `provide` set to the question ID of that
-    # `Provide` message.
+    #
+    # If `target` is the variant `importedCap`, then this `Disembargo` is addressed to an import
+    # representing a vine leading towards where the three-party handoff began.
+    #
+    # If `target` is the variant `promisedAnswer`, then it specifies the `QuestionId` of the
+    # `Provide` operation which initiated this handoff. A corresponding `Accept` will be waiting
+    # on the `Disembargo`.
+    #
+    # The value uniquely identifies this particular embargo among all embargoes requested against
+    # the same `Provide` operation. The same ID will be sent in `Accept.embago`. The embargo ID is
+    # necessary because forwarding allows the same provision to be accepted multiple times. If a
+    # VatNetwork does not allow forwarding, the embargo ID can be omitted.
     #
     # See `Accept.embargo` for an example.
-
-    provide @4 :QuestionId;
-    # **(level 3)**
-    #
-    # The sender is requesting a disembargo on a capability currently being provided to a third
-    # party.  The question ID identifies the `Provide` message previously sent by the sender to
-    # this capability.  On receipt, the receiver (the capability host) shall release the embargo
-    # on the `Accept` message that it has received from the third party.  See `Accept.embargo` for
-    # an example.
   }
 }
 
@@ -820,15 +832,24 @@ struct Provide {
   # every vat.  In Cap'n Proto, we bake this into the core protocol.)
 
   questionId @0 :QuestionId;
-  # Question ID to be held open until the recipient has received the capability.  A result will be
-  # returned once the third party has successfully received the capability.  The sender must at some
-  # point send a `Finish` message as with any other call, and that message can be used to cancel the
-  # whole operation.
+  # Question ID to be held open until the recipient has received the capability.  No `Return`
+  # message will be sent, similarly to a `Call` that has `onlyPromisePipeline = true`.  The sender
+  # must at some point send a `Finish` message as with any other call, which unregisters the
+  # provision. Typically, the sender would send such a `Finish` message once it has received
+  # confirmation from the third party that the capability has been successfully accepted, or that
+  # the third party is no longer trying to accept it. Specifically, the sender learns this when the
+  # third party drops the "vine" capability passed along with the ThirdPartyCapDescriptor -- the
+  # vine must be held until the `Accept` has completed.
+  #
+  # More than one party can accept the provision. The recipient will offer the capability to
+  # anyone who sends a matching `Accept` message. This is particularly useful when the VatNetwork
+  # supports forwarding, as a capability may be forwarded to many parties before any of them
+  # actually connects back to the host to accept it.
 
   target @1 :MessageTarget;
   # What is to be provided to the third party.
 
-  recipient @2 :RecipientId;
+  recipient @2 :ThirdPartyToAwait;
   # Identity of the third party that is expected to pick up the capability.
 }
 
@@ -837,24 +858,22 @@ struct Accept {
   #
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
-  #
-  # This message is also used to pick up a redirected return -- see `Return.acceptFromThirdParty`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this accept message, which will eventually receive a Return
   # message containing the provided capability (or the call result in the case of a redirected
   # return).
 
-  provision @1 :ProvisionId;
+  provision @1 :ThirdPartyCompletion;
   # Identifies the provided object to be picked up.
 
-  embargo @2 :Bool;
-  # If true, this accept shall be temporarily embargoed.  The resulting `Return` will not be sent,
-  # and any pipelined calls will not be delivered, until the embargo is released.  The receiver
-  # (the capability host) will expect the provider (the vat that sent the `Provide` message) to
-  # eventually send a `Disembargo` message with the field `context.provide` set to the question ID
-  # of the original `Provide` message.  At that point, the embargo is released and the queued
-  # messages are delivered.
+  embargo @2 :Disembargo.ThirdPartyEmbargoId;
+  # If non-null, this accept shall be temporarily embargoed.  The resulting `Return` will not be
+  # sent, and any pipelined calls will not be delivered, until the embargo is released.  The
+  # receiver (the capability host) will expect the provider (the vat that sent the `Provide`
+  # message) to eventually send a `Disembargo` message with the field `context.accept` set to a
+  # byte string matching the one specified here.  At that point, the embargo is released and the
+  # queued messages are delivered.
   #
   # For example:
   # - Alice, in Vat A, holds a promise P, which currently points toward Vat B.
@@ -862,11 +881,13 @@ struct Accept {
   # - The promise P in Vat B ends up resolving to Carol, in Vat C.
   # - Vat B sends a `Provide` message to Vat C, identifying Vat A as the recipient.
   # - Vat B sends a `Resolve` message to Vat A, indicating that the promise has resolved to a
-  #   `ThirdPartyCapId` identifying Carol in Vat C.
-  # - Vat A sends an `Accept` message to Vat C to pick up the capability.  Since Vat A knows that
-  #   it has an outstanding call to the promise, it sets `embargo` to `true` in the `Accept`
-  #   message.
-  # - Vat A sends a `Disembargo` message to Vat B on promise P, with `context.accept` set.
+  #   `ThirdPartyToContact` identifying Carol in Vat C.
+  # - Since Vat A knows that it has an outstanding call to the promise, it knows it needs to use
+  #   an embargo. Vat A chooses a random byte string to be the embargo ID.
+  # - Vat A sends an `Accept` message to Vat C to pick up the capability, setting `embargo` to the
+  #   embargo ID.
+  # - Vat A sends a `Disembargo` message to Vat B on promise P, with `context.accept` set to
+  #   the embargo ID.
   # - Alice makes a call bar() to promise P, which is now pointing towards Vat C.  Alice doesn't
   #   know anything about the mechanics of promise resolution happening under the hood, but she
   #   expects that bar() will be delivered after foo() because that is the order in which she
@@ -875,12 +896,49 @@ struct Accept {
   #   hasn't returned yet, due to the embargo).  Since calls to the newly-accepted capability
   #   are embargoed, Vat C does not deliver the call yet.
   # - At some point, Vat B forwards the foo() call from the beginning of this example on to Vat C.
-  # - Vat B forwards the `Disembargo` from Vat A on to vat C.  It sets `context.provide` to the
-  #   question ID of the `Provide` message it had sent previously.
+  # - Vat B forwards the `Disembargo` from Vat A on to vat C.
   # - Vat C receives foo() before `Disembargo`, thus allowing it to correctly deliver foo()
   #   before delivering bar().
   # - Vat C receives `Disembargo` from Vat B.  It can now send a `Return` for the `Accept` from
   #   Vat A, as well as deliver bar().
+}
+
+struct ThirdPartyAnswer {
+  # **(level 3)**
+  #
+  # When a call has `sendResultsTo.thirdParty`, the callee directly connects to the given third
+  # party and sends it a `ThirdPartyAnswer` in order to adopt the call into its connection.
+
+  completion @0 :ThirdPartyCompletion;
+  # Information needed to identify which call is being returned.
+  #
+  # The introducer should have sent a `Return` message previously containing
+  # `awaitFromThirdParty`, directing the callee to wait for a `ThirdPartyAnswer` containing the
+  # final results. (Of course, it's possible that the `ThirdPartyAnswer` arrives before the
+  # original `Return`, in which case the recipient must wait to receive the corresponding
+  # `Return` message.)
+
+  answerId @1 :AnswerId;
+  # The answer ID which will now represent this call on this connection.
+  #
+  # The sender (callee) will follow up later with a `Return` message referencing the same ID. In
+  # the meantime, the receiver (caller) can begin sending pipelined requests directly to the
+  # sender, and must eventually send a `Finish` message.
+  #
+  # Normally, callers choose question IDs -- and answer IDs strictly match the question ID chosen
+  # by the caller. In this case, the callee is choosing an answer ID on its own. In theory, this
+  # is a bad design: we should be using an export ID here instead. However, we would then have to
+  # go around to all the types that reference `QuestionId` or `AnswerId` and make them be able to
+  # use `ImportId` / `ExportId` intsead. In retrospect, questions and exports proabbly should have
+  # been in the same ID space from the beginning, with a convention for which parts of the ID
+  # space can be allocated by which side. Unfortunately, that ship has sailed.
+  #
+  # Instead, we introduce a hack: Answer IDs introduced by `ThirdPartyAnswer` must be in the range
+  # [2^30,2^31), that is, they have bit 30 set, but not bit 31. We designate this range as
+  # callee-allocated; callers will never allocate in this range. This hack should be
+  # backwards-compatible given that implementations traditionally always use the lowest-numbered
+  # ID available. However, note that we don't use the range [2^31,2^32) because this has already
+  # been designated for use with `onlyPromisePipeline` (another hack).
 }
 
 # Level 4 message types ----------------------------------------------
@@ -1148,7 +1206,7 @@ struct ThirdPartyCapDescriptor {
   #
   # Identifies a capability in a third-party vat that the sender wants the receiver to pick up.
 
-  id @0 :ThirdPartyCapId;
+  id @0 :ThirdPartyToContact;
   # Identifies the third-party host and the specific capability to accept from it.
 
   vineId @1 :ExportId;
@@ -1369,43 +1427,186 @@ using SturdyRef = AnyPointer;
 # In this case, the entire contents of SturdyRef might be opaque, because they are intended only
 # to be forwarded to the restorer service.
 
-using ProvisionId = AnyPointer;
+using ThirdPartyCompletion = AnyPointer;
 # **(level 3)**
 #
-# The information that must be sent in an `Accept` message to identify the object being accepted.
+# Used to express "I am the third party whom you are waiting for to complete an operation".
+#
+# In particular, this is given in an `Accept` message to identify the object being accepted.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the provider vat along with a nonce matching the one in the `RecipientId` used
-# in the `Provide` message sent from that provider.
+# fingerprint of the provider vat along with a nonce matching the one in the `ThirdPartyToAwait`
+# used in the `Provide` message sent from that provider.
 
-using RecipientId = AnyPointer;
+using ThirdPartyToAwait = AnyPointer;
 # **(level 3)**
 #
-# The information that must be sent in a `Provide` message to identify the recipient of the
-# capability.
+# Used to express "expect that some other vat will connect to you to complete this operation".
+#
+# In particular, this is given in a `Provide` message to identify the recipient of the capability.
+# The recipient will call the host directly to "pick up" the capability.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the recipient along with a nonce matching the one in the `ProvisionId`.
+# fingerprint of the recipient along with a nonce matching the one in the `ThirdPartyCompletion`.
 #
 # As another example, when communicating between processes on the same machine over Unix sockets,
-# RecipientId could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
+# ThirdPartyToAwait could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
 # This file descriptor would be one end of a newly-created socketpair, with the other end having
-# been sent to the capability's recipient in ThirdPartyCapId.
+# been sent to the capability's recipient in ThirdPartyToContact.
 
-using ThirdPartyCapId = AnyPointer;
+using ThirdPartyToContact = AnyPointer;
 # **(level 3)**
 #
-# The information needed to connect to a third party and accept a capability from it.
+# The information needed to connect to a third party to complete an operation, e.g. to accept a
+# capability from it.
 #
 # In a network where each vat has a public/private key pair, this could be a combination of the
 # third party's public key fingerprint, hints on how to connect to the third party (e.g. an IP
-# address), and the nonce used in the corresponding `Provide` message's `RecipientId` as sent
+# address), and the nonce used in the corresponding `Provide` message's `ThirdPartyToAwait` as sent
 # to that third party (used to identify which capability to pick up).
 #
 # As another example, when communicating between processes on the same machine over Unix sockets,
-# ThirdPartyCapId could simply refer to a file descriptor attached to the message via SCM_RIGHTS.
-# This file descriptor would be one end of a newly-created socketpair, with the other end having
-# been sent to the process hosting the capability in RecipientId.
+# ThirdPartyToContact could simply refer to a file descriptor attached to the message via
+# SCM_RIGHTS.  This file descriptor would be one end of a newly-created socketpair, with the other
+# end having been sent to the process hosting the capability in ThirdPartyToAwait.
+#
+# Some VatNetworks, as an optimization, may permit ThirdPartyToContact to be forwarded across
+# multiple vats. For example, imagine Alice sends a capability to Bob, who passes it along to Carol,
+# who further pass it to Dave. Bob will send a `Provide` message to Alice telling her to expect the
+# capability to be picked up by Carol, and then will pass Carol a `ThirdPartyToContact` pointing to
+# Alice. If `ThirdPartyToContact` is non-forwartable, then Carol must form a connection to Alice,
+# send an `Accept` to receive the capability, and then immediately send a `Provide` to provide it
+# to Dave, before then being able to give a `ThirdPartyToContact` to Dave which points to Alice.
+# This is a bit of a waste. If `ThirdPartyToContact` is forwardable, then Carol can simply pass
+# it along to Dave without making any connection to Alice. Some VatNetwork implementations may
+# require that Carol add a signature to the `ThirdPartyToContact` authenticating that she really
+# did forward it to Dave, which Dave will then present back to Alice. Other implementations may
+# simply pass along an unguessable token and instruct Alice that whoever presents the token should
+# receive the capability. A VatNetwork may choose not to allow forwarding if it doesn't want its
+# security to be dependent on secret bearer tokens nor cryptographic signatures.
+
+# The following are some examples showing possible ways that the above types could be defined for
+# various VatNetwork implementations.
+#
+# struct SimpleExample {
+#   # In this example, three-party handoff is authenticated merely by a bearer token.
+#
+#   struct ThirdPartyToContact {
+#     contactAddress :IpAddress;
+#     secretToken :Data;
+#
+#     # Note: ThirdPartyToContact can freely be forwarded across several vats before being
+#     #   redeemed.
+#   }
+#
+#   struct ThirdPartyToAwait {
+#     secretToken :Data;
+#   }
+#
+#   struct ThirdPartyCompletion {
+#     secretToken :Data;
+#   }
+# }
+#
+# struct NoSecretsExample {
+#   # In this example, three-party handoff is accomplished without any secret values. It is
+#   # assumed, however, that the system is able to securely authenticate the party on the other
+#   # end of each connection matches some `VatId`. While this would commonly be accomplished with
+#   # cryptography, which involves secrets, there do exist systems where no secrets are needed at
+#   # all, for example processes communicating over Unix sockets using SCM_CREDENTIALS or similar.
+#
+#   struct ThirdPartyToContact {
+#     contactId :VatId;
+#     # Who to contact (identity which can be authenticated by the VatNetwork).
+#
+#     contactAddress :VatPath;
+#     # How to reach them (e.g. an IP address).
+#
+#     nonce :UInt64;
+#     # A number representing this particular three-party handoff, unique among all handoffs
+#     # initiated by the same introducer. This may be generated by a simple counter, i.e. it
+#     # is guessable, but it will only be accepted when the vat trying to redeem it is actually
+#     # the one that the introducer specified.
+#
+#     # Note: This ThirdPartyToContact cannot be forwarded since only the specific vat that it was
+#     #  given to is authorized to redeem it.
+#   }
+#
+#   struct ThirdPartyToAwait {
+#     expectedId :VatId;
+#     # Who to expect a contact from. ONLY this Vat is permitted to redeem the nonce.
+#
+#     nonce :UInt64;
+#     # The nonce identifing the specific handoff. See above.
+#   }
+#
+#   struct ThirdPartyCompletion {
+#     introducer :VatId;
+#     # Who initiated this three-party handoff? Note that the nonce is only unique among nonces
+#     # from the same introducer.
+#
+#     nonce :UInt64;
+#     # The nonce identifying the handoff.
+#   }
+# }
+#
+# struct PublicKeyExample {
+#   # In this example, we assume vats have a public/private key pair identifying them.
+#
+#   struct ThirdPartyToContact {
+#     contactVat :PublicKey;
+#     # Public key of the vat to contact.
+#
+#     contactAddress :IpAddress;
+#     # Address at which `contactVat` can be reached.
+#
+#     introducer :PubilcKey;
+#     nonce :UInt64;
+#     # Nonce, unique among all handoffs initiated by `introducer`. As with NoSecretsExample, this
+#     # can be guessable.
+#
+#     forwards :List(Forward);
+#     # This ThirdPartyToContact can be forwarded from vat to vat, but each vat must add a signature
+#     # proving that they approved this forwarding. This way, no secrets are ever sent over the
+#     # network which, if leaked, would allow an attacker to hijack the handoff.
+#
+#     struct Forward {
+#       to :PublicKey;
+#       # Public key of the recipient of the forward.
+#
+#       by :PublicKey;
+#       # Public key of vat that chose to forward the ThirdPartyContact.
+#
+#       signed :Signature;
+#       # Signs the tuple of (introducer, nonce, to) using the private key corresponding to `by`.
+#     }
+#   }
+#
+#   struct ThirdPartyToAwait {
+#     expectVat :PubilcKey;
+#     # Public key of the vat to expect to hear from (or, if the ThirdPartyToContact is forwarded,
+#     # who should be the first signer in the forwarding chain).
+#
+#     nonce :UInt64;
+#     # Nonce identifying the handoff.
+#   }
+#
+#   struct ThirdPartyCompletion {
+#     introducer :PublicKey;
+#     nonce :UInt64;
+#
+#     forwards :List(ThirdPartyToContact.Forward);
+#     # Chain of vats through which this completion was forwarded, with signatures proving that the
+#     # forwards were authorized.
+#     #
+#     # If empty, then the sender of this `ThirdPartyCompletion` should exactly match
+#     # `ThirdPartyToAwait.expectVat`.
+#     #
+#     # If `forwards` is non-empty, then the sender matches `forward.to` of the last forward in the
+#     # list, and each `by` matches the previous forward, with the first forward matching
+#     # `ThirdPartyToAwait.expectVat`, and all signatures are valid.
+#   }
+# }
 
 using JoinKeyPart = AnyPointer;
 # **(level 4)**
@@ -1493,17 +1694,18 @@ using JoinResult = AnyPointer;
 #     # Add a JoinResult received in response to one of the `Join` messages.  All `JoinResult`s
 #     # returned from all paths must be added before trying to connect.
 #
-#     connect() :ConnectionAndProvisionId;
+#     connect() :ConnectionAndThirdPartyCompletion;
 #     # Try to form a connection to the joined capability's host, verifying that it has received
 #     # all of the JoinKeyParts.  Once the connection is formed, the caller should send an `Accept`
-#     # message on it with the specified `ProvisionId` in order to receive the final capability.
+#     # message on it with the specified `ThirdPartyCompletion` in order to receive the final
+#     # capability.
 #   }
 #
 #   acceptConnectionFromJoiner(parts :List(JoinKeyPart), paths :List(VatPath))
-#       :ConnectionAndProvisionId;
+#       :ConnectionAndThirdPartyCompletion;
 #   # Called on a joined capability's host to receive the connection from the joiner, once all
 #   # key parts have arrived.  The caller should expect to receive an `Accept` message over the
-#   # connection with the given ProvisionId.
+#   # connection with the given ThirdPartyCompletion.
 # }
 #
 # interface Connection {
@@ -1521,29 +1723,40 @@ using JoinResult = AnyPointer;
 #
 #   introduceTo(recipient :Connection) :IntroductionInfo;
 #   # Call before starting a three-way introduction, assuming a `Provide` message is to be sent on
-#   # this connection and a `ThirdPartyCapId` is to be sent to `recipient`.
+#   # this connection and a `ThirdPartyToContact` is to be sent to `recipient`.
 #
 #   struct IntroductionInfo {
-#     sendToRecipient :ThirdPartyCapId;
-#     sendToTarget :RecipientId;
+#     sendToRecipient :ThirdPartyToContact;
+#     sendToTarget :ThirdPartyToAwait;
 #   }
 #
-#   connectToIntroduced(capId :ThirdPartyCapId) :ConnectionAndProvisionId;
-#   # Given a ThirdPartyCapId received over this connection, connect to the third party.  The
+#   connectToIntroduced(capId :ThirdPartyToContact) :ConnectionAndThirdPartyCompletion;
+#   # Given a ThirdPartyToContact received over this connection, connect to the third party.  The
 #   # caller should then send an `Accept` message over the new connection.
 #
-#   acceptIntroducedConnection(recipientId :RecipientId) :Connection;
-#   # Given a RecipientId received in a `Provide` message on this `Connection`, wait for the
-#   # recipient to connect, and return the connection formed.  Usually, the first message received
-#   # on the new connection will be an `Accept` message.
+#   awaitThirdParty(party: ThirdPartyToAwait, value :Any) :Any;
+#   completeThirdParty(completion: ThirdPartyCompletion, value :Any) :Any;
+#   # Complete a third-party handoff that is supposed to rendezvous at this node.
+#   #
+#   # Each method is called on the corresponding connection that received a `ThirdPartyToAwait` or
+#   # `ThirdPartyCompletion`. Once both are called, both return the `value` that was passed to the
+#   # other, allowing the RPC system to complete the handoff.
+#
+#   forwardThirdPartyToContact(original :ThirdPartyToContact, destination :Connection)
+#       :Maybe(ThirdPartyToContact);
+#   # Given a `ThirdPartyToContact` value received from *this* connection, add any necessary
+#   # information to allow it to be forwarded to `destination`. A VatNetwork could choose to add
+#   # some sort of signature to authenticate that this Vat really did choose to forward this
+#   # value. Returns null if forwarding is not permitted, in which case this vat will have to
+#   # directly contact the third party in order to complete this handoff and start a new one.
 # }
 #
-# struct ConnectionAndProvisionId {
+# struct ConnectionAndThirdPartyCompletion {
 #   # **(level 3)**
 #
 #   connection :Connection;
 #   # Connection on which to issue `Accept` message.
 #
-#   provision :ProvisionId;
-#   # `ProvisionId` to send in the `Accept` message.
+#   provision :ThirdPartyCompletion;
+#   # `ThirdPartyCompletion` to send in the `Accept` message.
 # }

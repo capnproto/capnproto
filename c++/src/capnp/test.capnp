@@ -948,9 +948,9 @@ struct TestSturdyRefHostId {
   host @0 :Text;
 }
 
-struct TestProvisionId {}
-struct TestRecipientId {}
-struct TestThirdPartyCapId {}
+struct TestThirdPartyCompletion {}
+struct TestThirdPartyToAwait {}
+struct TestThirdPartyToContact {}
 struct TestJoinResult {}
 
 struct TestNameAnnotation $Cxx.name("RenamedStruct") {

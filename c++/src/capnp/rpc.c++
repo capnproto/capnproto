@@ -36,6 +36,12 @@
 namespace capnp {
 namespace _ {  // private
 
+[[noreturn]] void throwNo3ph() {
+  KJ_FAIL_REQUIRE(
+      "This VatNetwork does not support three-party handoff, but received a request from a peer "
+      "indicating that a three-party handoff should occur.");
+}
+
 namespace {
 
 template <typename T>
