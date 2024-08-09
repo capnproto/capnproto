@@ -436,12 +436,12 @@ struct TlsTest {
   }
 
   Promise<void> readFromClient(AsyncIoStream& server) {
-    auto buf = heapArray<char>(4);
+    auto buf = heapArray<byte>(4);
 
-    auto readPromise = server.read(buf.begin(), buf.size());
+    auto readPromise = server.read(buf);
 
     auto checkBuffer = [buf = kj::mv(buf)]() {
-      KJ_ASSERT(kj::StringPtr(buf.begin(), buf.end()-1) == kj::StringPtr("foo"));
+      KJ_ASSERT(buf.first(3)  == "foo"_kjb);
     };
 
     return readPromise.then(kj::mv(checkBuffer));
@@ -508,13 +508,12 @@ KJ_TEST("TLS half-duplex") {
   KJ_EXPECT(server->readAllText().wait(test.io.waitScope) == "");
 
   for (uint i = 0; i < 100; i++) {
-    char buffer[7]{};
+    byte buffer[7]{};
     auto writePromise = server->write("foobar"_kjb);
     auto readPromise = client->read(buffer, 6);
     writePromise.wait(test.io.waitScope);
     readPromise.wait(test.io.waitScope);
-    buffer[6] = '\0';
-    KJ_ASSERT(kj::StringPtr(buffer, 6) == "foobar");
+    KJ_ASSERT(arrayPtr(buffer, 6) == "foobar"_kjb);
   }
 
   server->shutdownWrite();
@@ -576,29 +575,28 @@ KJ_TEST("TLS multiple messages") {
   auto writePromise = client->write("foo"_kjb)
       .then([&]() { return client->write("bar"_kjb); });
 
-  char buf[4]{};
-  buf[3] = '\0';
+  byte buf[3]{};
 
-  server->read(&buf, 3).wait(test.io.waitScope);
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  server->read(buf).wait(test.io.waitScope);
+  KJ_ASSERT(buf == "foo"_kjb);
 
   writePromise = writePromise
       .then([&]() { return client->write("baz"_kjb); });
 
-  server->read(&buf, 3).wait(test.io.waitScope);
-  KJ_ASSERT(kj::StringPtr(buf) == "bar");
+  server->read(buf).wait(test.io.waitScope);
+  KJ_ASSERT(buf == "bar"_kjb);
 
-  server->read(&buf, 3).wait(test.io.waitScope);
-  KJ_ASSERT(kj::StringPtr(buf) == "baz");
+  server->read(buf).wait(test.io.waitScope);
+  KJ_ASSERT(buf == "baz"_kjb);
 
-  auto readPromise = server->read(&buf, 3);
+  auto readPromise = server->read(buf);
   KJ_EXPECT(!readPromise.poll(test.io.waitScope));
 
   writePromise = writePromise
       .then([&]() { return client->write("qux"_kjb); });
 
   readPromise.wait(test.io.waitScope);
-  KJ_ASSERT(kj::StringPtr(buf) == "qux");
+  KJ_ASSERT(buf == "qux"_kjb);
 }
 
 KJ_TEST("TLS zero-sized write") {
@@ -613,8 +611,8 @@ KJ_TEST("TLS zero-sized write") {
   auto client = clientPromise.wait(test.io.waitScope);
   auto server = serverPromise.wait(test.io.waitScope);
 
-  char buf[7]{};
-  auto readPromise = server->read(&buf, 6);
+  byte buf[6]{};
+  auto readPromise = server->read(buf);
 
   client->write(""_kjb).wait(test.io.waitScope);
   client->write("foo"_kjb).wait(test.io.waitScope);
@@ -622,9 +620,8 @@ KJ_TEST("TLS zero-sized write") {
   client->write("bar"_kjb).wait(test.io.waitScope);
 
   readPromise.wait(test.io.waitScope);
-  buf[6] = '\0';
 
-  KJ_ASSERT(kj::StringPtr(buf) == "foobar");
+  KJ_ASSERT(buf == "foobar"_kjb);
 }
 
 kj::Promise<void> writeN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t count) {
@@ -639,7 +636,7 @@ kj::Promise<void> readN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t co
   if (count == 0) return kj::READY_NOW;
   --count;
   auto buf = kj::heapString(text.size());
-  auto promise = stream.read(buf.begin(), buf.size());
+  auto promise = stream.read(buf.asBytes());
   return promise.then([&stream, text, buf=kj::mv(buf), count]() {
     KJ_ASSERT(buf == text, buf, text, count);
     return readN(stream, text, count);
@@ -1194,9 +1191,9 @@ KJ_TEST("TLS receiver does not stall on hung client") {
 kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   if (expected.size() == 0) return kj::READY_NOW;
 
-  auto buffer = kj::heapArray<char>(expected.size());
+  auto buffer = kj::heapArray<byte>(expected.size());
 
-  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
     if (amount == 0) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
@@ -1212,9 +1209,8 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
 }
 
 kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
-  static char buffer;
-
-  auto promise = in.tryRead(&buffer, 1, 1);
+  byte buffer[1]{};
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([](size_t amount) {
     KJ_ASSERT(amount == 0, "expected EOF");
   });
