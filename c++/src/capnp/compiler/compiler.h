@@ -48,6 +48,9 @@ public:
 
   virtual kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) = 0;
   // Read and return the content of a file specified using `embed`.
+
+  virtual kj::ArrayPtr<const Resolution> getResolutions() { return nullptr; }
+  // Get the list of all resolutions reported using ErrorHandler::reportResolution().
 };
 
 class Compiler final: private SchemaLoader::LazyLoadCallback {
