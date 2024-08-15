@@ -2857,7 +2857,6 @@ public:
                 addNullTerminator);
             KJ_SWITCH_ONEOF(decompressedOrError) {
               KJ_CASE_ONEOF(protocolError, ProtocolError) {
-                KJ_DBG("Returning error with", protocolError.description);
                 return sendCloseDueToError(protocolError.statusCode, protocolError.description)
                     .attach(kj::mv(decompressedOrError));
               }
