@@ -331,7 +331,7 @@ public:
     }
 
     auto bodyStream = kjResponse.send(rpcResponse.getStatusCode(), rpcResponse.getStatusText(),
-        factory.headersToKj(rpcResponse.getHeaders()), expectedSize);
+        factory.capnpToKj(rpcResponse.getHeaders()), expectedSize);
 
     auto results = context.getResults(MessageSize { 16, 1 });
     if (hasBody) {
@@ -352,7 +352,7 @@ public:
 
     auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
 
-    auto webSocket = kjResponse.acceptWebSocket(factory.headersToKj(params.getHeaders()));
+    auto webSocket = kjResponse.acceptWebSocket(factory.capnpToKj(params.getHeaders()));
 
     auto upWrapper = kj::heap<KjToCapnpWebSocketAdapter>(
         kj::none, params.getUpSocket(), kj::mv(shorteningPaf.fulfiller));
@@ -439,7 +439,7 @@ public:
     auto params = context.getParams();
     auto resp = params.getResponse();
 
-    auto headers = factory.headersToKj(resp.getHeaders());
+    auto headers = factory.capnpToKj(resp.getHeaders());
     connResponse.accept(resp.getStatusCode(), resp.getStatusText(), headers);
 
     return kj::READY_NOW;
@@ -452,7 +452,7 @@ public:
     auto params = context.getParams();
     auto resp = params.getResponse();
 
-    auto headers = factory.headersToKj(resp.getHeaders());
+    auto headers = factory.capnpToKj(resp.getHeaders());
 
     auto bodySize = resp.getBodySize();
     kj::Maybe<uint64_t> expectedSize;
@@ -658,7 +658,7 @@ public:
       : factory(factory),
         method(validateMethod(request.getMethod())),
         url(request.getUrl()),
-        headers(factory.headersToKj(request.getHeaders())),
+        headers(factory.capnpToKj(request.getHeaders())),
         clientContext(kj::mv(clientContext)) {}
 
   kj::Own<kj::AsyncOutputStream> send(
@@ -867,7 +867,7 @@ public:
         .useTls = params.getSettings().getUseTls(),
         .tlsStarter = kj::none };
     settings.tlsStarter = tlsStarter;
-    auto headers = factory.headersToKj(params.getHeaders());
+    auto headers = factory.capnpToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 
     class EofDetector final: public kj::AsyncOutputStream {
@@ -1033,7 +1033,7 @@ Orphan<List<capnp::HttpHeader>> HttpOverCapnpFactory::headersToCapnp(
   return result;
 }
 
-kj::HttpHeaders HttpOverCapnpFactory::headersToKj(
+kj::HttpHeaders HttpOverCapnpFactory::capnpToKj(
     List<capnp::HttpHeader>::Reader capnpHeaders) const {
   kj::HttpHeaders result(headerTable);
 

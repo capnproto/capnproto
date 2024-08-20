@@ -79,6 +79,9 @@ public:
   kj::Own<kj::HttpService> capnpToKj(capnp::HttpService::Client rpcService);
   capnp::HttpService::Client kjToCapnp(kj::Own<kj::HttpService> service);
 
+  kj::HttpHeaders capnpToKj(capnp::List<capnp::HttpHeader>::Reader capnpHeaders) const;
+  // Returned headers may alias into `capnpHeaders`.
+
 private:
   ByteStreamFactory& streamFactory;
   const kj::HttpHeaderTable& headerTable;
@@ -99,9 +102,6 @@ private:
   class HttpOverCapnpConnectResponseImpl;
   class ServerRequestContextImpl;
   class CapnpToKjHttpServiceAdapter;
-
-  kj::HttpHeaders headersToKj(capnp::List<capnp::HttpHeader>::Reader capnpHeaders) const;
-  // Returned headers may alias into `capnpHeaders`.
 
   capnp::Orphan<capnp::List<capnp::HttpHeader>> headersToCapnp(
       const kj::HttpHeaders& headers, capnp::Orphanage orphanage);
