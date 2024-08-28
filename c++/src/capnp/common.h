@@ -513,7 +513,7 @@ constexpr auto MAX_SEGMENT_WORDS =
     bounded<kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>()>() * WORDS;
 constexpr auto MAX_LIST_ELEMENTS =
     bounded<kj::maxValueForBits<LIST_ELEMENT_COUNT_BITS>()>() * ELEMENTS;
-constexpr auto MAX_STUCT_DATA_WORDS =
+constexpr auto MAX_STRUCT_DATA_WORDS =
     bounded<kj::maxValueForBits<STRUCT_DATA_WORD_COUNT_BITS>()>() * WORDS;
 constexpr auto MAX_STRUCT_POINTER_COUNT =
     bounded<kj::maxValueForBits<STRUCT_POINTER_COUNT_BITS>()>() * POINTERS;
@@ -526,7 +526,7 @@ using StructPointerOffset = StructPointerCount;
 // Type of a field offset.
 
 inline StructDataOffset assumeDataOffset(uint32_t offset) {
-  return assumeMax(MAX_STUCT_DATA_WORDS * BITS_PER_WORD * (ONE * ELEMENTS / BITS),
+  return assumeMax(MAX_STRUCT_DATA_WORDS * BITS_PER_WORD * (ONE * ELEMENTS / BITS),
                    bounded(offset) * ELEMENTS);
 }
 
@@ -710,7 +710,7 @@ typedef ByteCountN<BLOB_SIZE_BITS> BlobSize;
 
 constexpr auto MAX_SEGMENT_WORDS = kj::maxValueForBits<SEGMENT_WORD_COUNT_BITS>();
 constexpr auto MAX_LIST_ELEMENTS = kj::maxValueForBits<LIST_ELEMENT_COUNT_BITS>();
-constexpr auto MAX_STUCT_DATA_WORDS = kj::maxValueForBits<STRUCT_DATA_WORD_COUNT_BITS>();
+constexpr auto MAX_STRUCT_DATA_WORDS = kj::maxValueForBits<STRUCT_DATA_WORD_COUNT_BITS>();
 constexpr auto MAX_STRUCT_POINTER_COUNT = kj::maxValueForBits<STRUCT_POINTER_COUNT_BITS>();
 
 typedef uint StructDataBitCount;

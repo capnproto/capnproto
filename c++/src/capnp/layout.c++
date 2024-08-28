@@ -1785,7 +1785,7 @@ struct WireHelpers {
         auto data = value.getDataSectionAsBlob();
         auto end = data.end();
         while (end > data.begin() && end[-1] == 0) --end;
-        dataSize = intervalLength(data.begin(), end, MAX_STUCT_DATA_WORDS * BYTES_PER_WORD);
+        dataSize = intervalLength(data.begin(), end, MAX_STRUCT_DATA_WORDS * BYTES_PER_WORD);
       }
 
       // Truncate pointer section
@@ -1893,7 +1893,7 @@ struct WireHelpers {
           auto end = data.end();
           while (end > data.begin() && end[-1] == 0) --end;
           dataSize = kj::max(dataSize, roundBytesUpToWords(
-              intervalLength(data.begin(), end, MAX_STUCT_DATA_WORDS * BYTES_PER_WORD)));
+              intervalLength(data.begin(), end, MAX_STRUCT_DATA_WORDS * BYTES_PER_WORD)));
 
           // Truncate pointer section
           const WirePointer* ptr = element.pointers + element.pointerCount;
