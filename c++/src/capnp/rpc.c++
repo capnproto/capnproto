@@ -3522,7 +3522,7 @@ private:
         checkIfBecameIdle();
       }
     } else {
-      // The `Finish` message targets a qusetion ID that isn't present in our answer table.
+      // The `Finish` message targets a question ID that isn't present in our answer table.
       // Probably, we send a `Return` with `noFinishNeeded = true`, but the other side didn't
       // recognize this hint and sent a `Finish` anyway, or the `Finish` was already in-flight at
       // the time we sent the `Return`. We can silently ignore this.

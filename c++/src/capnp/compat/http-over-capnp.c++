@@ -738,7 +738,7 @@ public:
   void dontWaitForRpc(kj::Promise<T> promise) {
     // When we call clientContext.startResponse(), we really don't want to actually wait for
     // the reply to this RPC, because in many cases we will call this, write a response body,
-    // and then immediately return from the HttpService::requset() handler. At that point, we
+    // and then immediately return from the HttpService::request() handler. At that point, we
     // would like CapnpToKjHttpServiceAdapter::request() to be able to propagate this return
     // immediately *without* waiting for a round trip to the client, so without waiting for
     // `startResponse()` to finish. However, we also do not want to inadvertently cancel
