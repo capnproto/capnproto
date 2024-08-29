@@ -502,7 +502,7 @@ struct Call {
     # messages are sent from Vat A -> Vat B and Vat B -> Vat C.  A `Return` message is sent from
     # Vat B -> Vat A that contains `awaitFromThirdParty` in place of results.  Vat C sends a
     # `ThirdPartyAnswer` directly to Vat A, and also sends a `Return` to `Vat B` with
-    # `resultsSendElsewhere`.
+    # `resultsSentElsewhere`.
   }
 }
 
@@ -602,7 +602,7 @@ struct Finish {
 
   requireEarlyCancellationWorkaround @2 :Bool = true;
   # If true, if the RPC system receives this Finish message before the original call has even been
-  # delivered, it should defer cancellation util after delivery. In particular, this gives the
+  # delivered, it should defer cancellation until after delivery. In particular, this gives the
   # destination object a chance to opt out of cancellation, e.g. as controlled by the
   # `allowCancellation` annotation defined in `c++.capnp`.
   #
@@ -929,7 +929,7 @@ struct ThirdPartyAnswer {
   # by the caller. In this case, the callee is choosing an answer ID on its own. In theory, this
   # is a bad design: we should be using an export ID here instead. However, we would then have to
   # go around to all the types that reference `QuestionId` or `AnswerId` and make them be able to
-  # use `ImportId` / `ExportId` intsead. In retrospect, questions and exports proabbly should have
+  # use `ImportId` / `ExportId` instead. In retrospect, questions and exports probably should have
   # been in the same ID space from the beginning, with a convention for which parts of the ID
   # space can be allocated by which side. Unfortunately, that ship has sailed.
   #
@@ -1560,7 +1560,7 @@ using ThirdPartyToContact = AnyPointer;
 #     contactAddress :IpAddress;
 #     # Address at which `contactVat` can be reached.
 #
-#     introducer :PubilcKey;
+#     introducer :PublicKey;
 #     nonce :UInt64;
 #     # Nonce, unique among all handoffs initiated by `introducer`. As with NoSecretsExample, this
 #     # can be guessable.
@@ -1583,7 +1583,7 @@ using ThirdPartyToContact = AnyPointer;
 #   }
 #
 #   struct ThirdPartyToAwait {
-#     expectVat :PubilcKey;
+#     expectVat :PublicKey;
 #     # Public key of the vat to expect to hear from (or, if the ThirdPartyToContact is forwarded,
 #     # who should be the first signer in the forwarding chain).
 #
