@@ -49,8 +49,18 @@ def _capnp_gen_impl(ctx):
 
     args.add_all([s for s in ctx.files.srcs])
 
+    # process language extras, starting with files we should include
+    extra_inputs = ctx.files.language_extras or []
+
+    # then compute input flags, taking the parent of the first file in each extra as the include path
+    if len(ctx.attr.language_extras) > 0:
+        for extra in ctx.attr.language_extras:
+            files = extra.files.to_list()
+            if len(files) > 0:
+                args.add_all(["-I", files[0].dirname.removesuffix("/capnp")])
+
     ctx.actions.run(
-        inputs = inputs + ctx.files._capnpc_cxx + ctx.files._capnpc_capnp + ctx.files._capnp_system,
+        inputs = inputs + ctx.files._capnpc_cxx + ctx.files._capnpc_capnp + ctx.files._capnp_system + extra_inputs,
         outputs = ctx.outputs.outs,
         executable = ctx.executable._capnpc,
         arguments = [args],
@@ -72,6 +82,7 @@ _capnp_gen = rule(
         "data": attr.label_list(allow_files = True),
         "outs": attr.output_list(),
         "src_prefix": attr.string(),
+        "language_extras": attr.label_list(default = []),
         "_capnpc": attr.label(executable = True, allow_single_file = True, cfg = "exec", default = "@capnp-cpp//src/capnp:capnp_tool"),
         "_capnpc_cxx": attr.label(executable = True, allow_single_file = True, cfg = "exec", default = "@capnp-cpp//src/capnp:capnpc-c++"),
         "_capnpc_capnp": attr.label(executable = True, allow_single_file = True, cfg = "exec", default = "@capnp-cpp//src/capnp:capnpc-capnp"),
@@ -88,6 +99,7 @@ def cc_capnp_library(
         deps = [],
         src_prefix = "",
         tags = ["off-by-default"],
+        language_extras = [],
         visibility = None,
         target_compatible_with = None,
         **kwargs):
@@ -100,6 +112,7 @@ def cc_capnp_library(
             be compiled
         deps: other cc_capnp_library rules to depend on
         src_prefix: src_prefix for capnp compiler to the source root
+        language_extras: Extra inputs to add to the capnp compiler invocation
         visibility: rule visibility
         target_compatible_with: target compatibility
         **kwargs: rest of the arguments to cc_library rule
@@ -113,6 +126,7 @@ def cc_capnp_library(
         srcs = srcs,
         deps = [s + "_gen" for s in deps],
         data = data,
+        language_extras = language_extras,
         outs = hdrs + srcs_cpp,
         src_prefix = src_prefix,
         visibility = visibility,
