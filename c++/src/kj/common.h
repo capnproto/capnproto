@@ -1838,7 +1838,7 @@ public:
   }
 
   inline constexpr size_t size() const { return size_; }
-  inline const T& operator[](size_t index) const {
+  inline constexpr const T& operator[](size_t index) const {
     KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
@@ -1847,40 +1847,40 @@ public:
     return ptr[index];
   }
 
-  inline T* begin() { return ptr; }
-  inline T* end() { return ptr + size_; }
-  inline T& front() { return *ptr; }
-  inline T& back() { return *(ptr + size_ - 1); }
+  inline constexpr T* begin() { return ptr; }
+  inline constexpr T* end() { return ptr + size_; }
+  inline constexpr T& front() { return *ptr; }
+  inline constexpr T& back() { return *(ptr + size_ - 1); }
   inline constexpr const T* begin() const { return ptr; }
   inline constexpr const T* end() const { return ptr + size_; }
-  inline const T& front() const { return *ptr; }
-  inline const T& back() const { return *(ptr + size_ - 1); }
+  inline constexpr const T& front() const { return *ptr; }
+  inline constexpr const T& back() const { return *(ptr + size_ - 1); }
 
-  inline ArrayPtr<const T> slice(size_t start, size_t end) const {
+  inline constexpr ArrayPtr<const T> slice(size_t start, size_t end) const {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }
-  inline ArrayPtr slice(size_t start, size_t end) {
+  inline constexpr ArrayPtr slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
-  inline ArrayPtr<const T> slice(size_t start) const {
+  inline constexpr ArrayPtr<const T> slice(size_t start) const {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr<const T>(ptr + start, size_ - start);
   }
-  inline ArrayPtr slice(size_t start) {
+  inline constexpr ArrayPtr slice(size_t start) {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, size_ - start);
   }
-  inline bool startsWith(const ArrayPtr<const T>& other) const {
+  inline constexpr bool startsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && slice(0, other.size()) == other;
   }
-  inline bool endsWith(const ArrayPtr<const T>& other) const {
+  inline constexpr bool endsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && slice(size_ - other.size(), size_) == other;
   }
 
-  inline ArrayPtr first(size_t count) { return slice(0, count); }
-  inline ArrayPtr<const T> first(size_t count) const { return slice(0, count); }
+  inline constexpr ArrayPtr first(size_t count) { return slice(0, count); }
+  inline constexpr ArrayPtr<const T> first(size_t count) const { return slice(0, count); }
 
   inline Maybe<size_t> findFirst(const T& match) const {
     for (size_t i = 0; i < size_; i++) {
@@ -1910,14 +1910,16 @@ public:
     return { reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T) };
   }
 
-  inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return size_ == 0; }
 
-  inline bool operator==(const ArrayPtr& other) const {
+  inline constexpr bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
+#if __has_feature(cxx_constexpr_string_builtins)
     if (isIntegral<RemoveConst<T>>()) {
       if (size_ == 0) return true;
-      return memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
+      return __builtin_memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
     }
+#endif
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
     }
@@ -1925,7 +1927,7 @@ public:
   }
 
   template <typename U>
-  inline bool operator==(const ArrayPtr<U>& other) const {
+  inline constexpr bool operator==(const ArrayPtr<U>& other) const {
     if (size_ != other.size()) return false;
     for (size_t i = 0; i < size_; i++) {
       if (ptr[i] != other[i]) return false;
