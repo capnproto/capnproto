@@ -153,7 +153,7 @@ public:
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
             return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
-                           " caps:[", kj::strArray(capTable, ", "), "]");
+                           " caps:[", kj::strArray(capTable, ", "), "]\n");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
             return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
