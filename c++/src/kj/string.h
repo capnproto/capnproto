@@ -72,10 +72,10 @@ namespace kj {
 
 class StringPtr {
 public:
-  inline StringPtr(): content("", 1) {}
-  inline StringPtr(decltype(nullptr)): content("", 1) {}
+  inline constexpr StringPtr(): content("", 1) {}
+  inline constexpr StringPtr(decltype(nullptr)): content("", 1) {}
   inline StringPtr(const char* value KJ_LIFETIMEBOUND): content(value, strlen(value) + 1) {}
-  inline StringPtr(const char* value KJ_LIFETIMEBOUND, size_t size): content(value, size + 1) {
+  inline constexpr StringPtr(const char* value KJ_LIFETIMEBOUND, size_t size): content(value, size + 1) {
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
   inline StringPtr(const char* begin KJ_LIFETIMEBOUND, const char* end KJ_LIFETIMEBOUND): StringPtr(begin, end - begin) {}
@@ -118,38 +118,38 @@ public:
 
   inline constexpr operator ArrayPtr<const char>() const;
   inline constexpr ArrayPtr<const char> asArray() const;
-  inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
+  inline constexpr ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
-  inline const char* cStr() const { return content.begin(); }
+  inline constexpr const char* cStr() const { return content.begin(); }
   // Returns NUL-terminated string.
 
-  inline size_t size() const { return content.size() - 1; }
+  inline constexpr size_t size() const { return content.size() - 1; }
   // Result does not include NUL terminator.
 
-  inline char operator[](size_t index) const { return content[index]; }
+  inline constexpr char operator[](size_t index) const { return content[index]; }
 
   inline constexpr const char* begin() const { return content.begin(); }
   inline constexpr const char* end() const { return content.end() - 1; }
 
   inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
 
-  inline bool operator==(const StringPtr& other) const;
+  inline constexpr bool operator==(const StringPtr& other) const;
   inline bool operator< (const StringPtr& other) const;
   inline bool operator> (const StringPtr& other) const { return other < *this; }
   inline bool operator<=(const StringPtr& other) const { return !(other < *this); }
   inline bool operator>=(const StringPtr& other) const { return !(*this < other); }
 
-  inline StringPtr slice(size_t start) const;
-  inline ArrayPtr<const char> slice(size_t start, size_t end) const;
+  inline constexpr StringPtr slice(size_t start) const;
+  inline constexpr ArrayPtr<const char> slice(size_t start, size_t end) const;
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
-  inline ArrayPtr<const char> first(size_t count) const;
+  inline constexpr ArrayPtr<const char> first(size_t count) const;
   // Return string prefix.
 
-  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
-  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
+  inline constexpr bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline constexpr bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
   inline Maybe<size_t> findFirst(char c) const { return asArray().findFirst(c); }
   inline Maybe<size_t> findLast(char c) const { return asArray().findLast(c); }
@@ -249,12 +249,12 @@ public:
   inline explicit String(Array<char> buffer);
   // Does not copy.  Requires `buffer` ends with `\0`.
 
-  inline operator ArrayPtr<char>() KJ_LIFETIMEBOUND;
-  inline operator ArrayPtr<const char>() const KJ_LIFETIMEBOUND;
-  inline ArrayPtr<char> asArray() KJ_LIFETIMEBOUND;
-  inline ArrayPtr<const char> asArray() const KJ_LIFETIMEBOUND;
-  inline ArrayPtr<byte> asBytes() KJ_LIFETIMEBOUND { return asArray().asBytes(); }
-  inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asArray().asBytes(); }
+  inline constexpr operator ArrayPtr<char>() KJ_LIFETIMEBOUND;
+  inline constexpr operator ArrayPtr<const char>() const KJ_LIFETIMEBOUND;
+  inline constexpr ArrayPtr<char> asArray() KJ_LIFETIMEBOUND;
+  inline constexpr ArrayPtr<const char> asArray() const KJ_LIFETIMEBOUND;
+  inline constexpr ArrayPtr<byte> asBytes() KJ_LIFETIMEBOUND { return asArray().asBytes(); }
+  inline constexpr ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline StringPtr asPtr() const KJ_LIFETIMEBOUND {
@@ -266,20 +266,20 @@ public:
   // Disowns the backing array (which includes the NUL terminator) and returns it. The String value
   // is clobbered (as if moved away).
 
-  inline const char* cStr() const KJ_LIFETIMEBOUND;
+  inline constexpr const char* cStr() const KJ_LIFETIMEBOUND;
 
-  inline size_t size() const;
+  inline constexpr size_t size() const;
   // Result does not include NUL terminator.
 
-  inline char operator[](size_t index) const;
-  inline char& operator[](size_t index) KJ_LIFETIMEBOUND;
+  inline constexpr char operator[](size_t index) const;
+  inline constexpr char& operator[](size_t index) KJ_LIFETIMEBOUND;
 
-  inline char* begin() KJ_LIFETIMEBOUND;
-  inline char* end() KJ_LIFETIMEBOUND;
-  inline const char* begin() const KJ_LIFETIMEBOUND;
-  inline const char* end() const KJ_LIFETIMEBOUND;
+  inline constexpr char* begin() KJ_LIFETIMEBOUND;
+  inline constexpr char* end() KJ_LIFETIMEBOUND;
+  inline constexpr const char* begin() const KJ_LIFETIMEBOUND;
+  inline constexpr const char* end() const KJ_LIFETIMEBOUND;
 
-  inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
 
   inline bool operator==(const StringPtr& other) const { return StringPtr(*this) == other; }
   inline bool operator< (const StringPtr& other) const { return StringPtr(*this) <  other; }
@@ -302,8 +302,8 @@ public:
   inline bool operator<=(const ConstString& other) const { return StringPtr(*this) <= StringPtr(other); }
   inline bool operator>=(const ConstString& other) const { return StringPtr(*this) >= StringPtr(other); }
 
-  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
-  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
+  inline constexpr bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline constexpr bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
   Maybe<size_t> find(const StringPtr& other) const { return asPtr().find(other); }
   // Return the index at which other appears in this string.
@@ -358,9 +358,9 @@ public:
   inline explicit ConstString(String&& string): content(string.releaseArray()) {}
   // Does not copy. Ownership is transferred.
 
-  inline operator ArrayPtr<const char>() const KJ_LIFETIMEBOUND;
-  inline ArrayPtr<const char> asArray() const KJ_LIFETIMEBOUND;
-  inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asArray().asBytes(); }
+  inline constexpr operator ArrayPtr<const char>() const KJ_LIFETIMEBOUND;
+  inline constexpr ArrayPtr<const char> asArray() const KJ_LIFETIMEBOUND;
+  inline constexpr ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline StringPtr asPtr() const KJ_LIFETIMEBOUND {
@@ -372,18 +372,18 @@ public:
   // Disowns the backing array (which includes the NUL terminator) and returns it. The ConstString value
   // is clobbered (as if moved away).
 
-  inline const char* cStr() const KJ_LIFETIMEBOUND;
+  inline constexpr const char* cStr() const KJ_LIFETIMEBOUND;
 
-  inline size_t size() const;
+  inline constexpr size_t size() const;
   // Result does not include NUL terminator.
 
-  inline char operator[](size_t index) const;
-  inline char& operator[](size_t index) KJ_LIFETIMEBOUND;
+  inline constexpr char operator[](size_t index) const;
+  inline constexpr char& operator[](size_t index) KJ_LIFETIMEBOUND;
 
-  inline const char* begin() const KJ_LIFETIMEBOUND;
-  inline const char* end() const KJ_LIFETIMEBOUND;
+  inline constexpr const char* begin() const KJ_LIFETIMEBOUND;
+  inline constexpr const char* end() const KJ_LIFETIMEBOUND;
 
-  inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
 
   inline bool operator==(const StringPtr& other) const { return StringPtr(*this) == other; }
   inline bool operator< (const StringPtr& other) const { return StringPtr(*this) <  other; }
@@ -406,8 +406,8 @@ public:
   // comparisons between two strings are ambiguous. (Clang turns this into a warning,
   // -Wambiguous-reversed-operator, due to the stupidity...)
 
-  inline bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
-  inline bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
+  inline constexpr bool startsWith(const StringPtr& other) const { return asArray().startsWith(other);}
+  inline constexpr bool endsWith(const StringPtr& other) const { return asArray().endsWith(other); }
 
   Maybe<size_t> find(const StringPtr& other) const { return asPtr().find(other); }
   // Return the index at which other appears in this string.
@@ -720,7 +720,7 @@ inline constexpr ArrayPtr<const char> StringPtr::asArray() const {
   return ArrayPtr<const char>(content.begin(), content.size() - 1);
 }
 
-inline bool StringPtr::operator==(const StringPtr& other) const {
+inline constexpr bool StringPtr::operator==(const StringPtr& other) const {
   return content == other.content;
 }
 
@@ -728,13 +728,13 @@ inline bool StringPtr::operator< (const StringPtr& other) const {
   return content < other.content;
 }
 
-inline StringPtr StringPtr::slice(size_t start) const {
+inline constexpr StringPtr StringPtr::slice(size_t start) const {
   return StringPtr(content.slice(start, content.size()));
 }
-inline ArrayPtr<const char> StringPtr::slice(size_t start, size_t end) const {
+inline constexpr ArrayPtr<const char> StringPtr::slice(size_t start, size_t end) const {
   return content.slice(start, end);
 }
-inline ArrayPtr<const char> StringPtr::first(size_t count) const { return slice(0, count); }
+inline constexpr ArrayPtr<const char> StringPtr::first(size_t count) const { return slice(0, count); }
 
 inline LiteralStringConst::operator ConstString() const {
   return ConstString(begin(), size(), NullArrayDisposer::instance);
@@ -750,42 +750,42 @@ inline ConstString StringPtr::attach(Attachments&&... attachments) const {
   return ConstString { content.attach(kj::fwd<Attachments>(attachments)...) };
 }
 
-inline String::operator ArrayPtr<char>() {
+inline constexpr String::operator ArrayPtr<char>() {
   return content == nullptr ? ArrayPtr<char>(nullptr) : content.first(content.size() - 1);
 }
-inline String::operator ArrayPtr<const char>() const {
+inline constexpr String::operator ArrayPtr<const char>() const {
   return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
-inline ConstString::operator ArrayPtr<const char>() const {
+inline constexpr ConstString::operator ArrayPtr<const char>() const {
   return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
 
-inline ArrayPtr<char> String::asArray() {
+inline constexpr ArrayPtr<char> String::asArray() {
   return content == nullptr ? ArrayPtr<char>(nullptr) : content.first(content.size() - 1);
 }
-inline ArrayPtr<const char> String::asArray() const {
+inline constexpr ArrayPtr<const char> String::asArray() const {
   return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
-inline ArrayPtr<const char> ConstString::asArray() const {
+inline constexpr ArrayPtr<const char> ConstString::asArray() const {
   return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
 }
 
-inline const char* String::cStr() const { return content == nullptr ? "" : content.begin(); }
-inline const char* ConstString::cStr() const { return content == nullptr ? "" : content.begin(); }
+inline constexpr const char* String::cStr() const { return content == nullptr ? "" : content.begin(); }
+inline constexpr const char* ConstString::cStr() const { return content == nullptr ? "" : content.begin(); }
 
-inline size_t String::size() const { return content == nullptr ? 0 : content.size() - 1; }
-inline size_t ConstString::size() const { return content == nullptr ? 0 : content.size() - 1; }
+inline constexpr size_t String::size() const { return content == nullptr ? 0 : content.size() - 1; }
+inline constexpr size_t ConstString::size() const { return content == nullptr ? 0 : content.size() - 1; }
 
-inline char String::operator[](size_t index) const { return content[index]; }
-inline char& String::operator[](size_t index) { return content[index]; }
-inline char ConstString::operator[](size_t index) const { return content[index]; }
+inline constexpr char String::operator[](size_t index) const { return content[index]; }
+inline constexpr char& String::operator[](size_t index) { return content[index]; }
+inline constexpr char ConstString::operator[](size_t index) const { return content[index]; }
 
-inline char* String::begin() { return content == nullptr ? nullptr : content.begin(); }
-inline char* String::end() { return content == nullptr ? nullptr : content.end() - 1; }
-inline const char* String::begin() const { return content == nullptr ? nullptr : content.begin(); }
-inline const char* String::end() const { return content == nullptr ? nullptr : content.end() - 1; }
-inline const char* ConstString::begin() const { return content == nullptr ? nullptr : content.begin(); }
-inline const char* ConstString::end() const { return content == nullptr ? nullptr : content.end() - 1; }
+inline constexpr char* String::begin() { return content == nullptr ? nullptr : content.begin(); }
+inline constexpr char* String::end() { return content == nullptr ? nullptr : content.end() - 1; }
+inline constexpr const char* String::begin() const { return content == nullptr ? nullptr : content.begin(); }
+inline constexpr const char* String::end() const { return content == nullptr ? nullptr : content.end() - 1; }
+inline constexpr const char* ConstString::begin() const { return content == nullptr ? nullptr : content.begin(); }
+inline constexpr const char* ConstString::end() const { return content == nullptr ? nullptr : content.end() - 1; }
 
 inline String::String(char* value, size_t size, const ArrayDisposer& disposer)
     : content(value, size + 1, disposer) {

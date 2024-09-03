@@ -159,12 +159,12 @@ public:
     return ArrayPtr<T>(ptr, size_);
   }
 
-  inline size_t size() const { return size_; }
-  inline T& operator[](size_t index) KJ_LIFETIMEBOUND {
+  inline constexpr size_t size() const { return size_; }
+  inline constexpr T& operator[](size_t index) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
-  inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
+  inline constexpr const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
