@@ -231,6 +231,17 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
 
 namespace {
 
+struct PipePair {
+  kj::AutoCloseFd readEnd;
+  kj::AutoCloseFd writeEnd;
+};
+
+PipePair raiiPipe() {
+  int fds[2];
+  KJ_SYSCALL(pipe(fds));
+  return PipePair { AutoCloseFd(fds[0]), AutoCloseFd(fds[1]) };
+}
+
 // A simple subprocess wrapper with in/out pipes.
 struct Subprocess {
   // Execute command with a shell.
@@ -238,40 +249,22 @@ struct Subprocess {
     // Since this is used during error handling we do not to try to free resources in
     // case of errors.
 
-    int in[2]{}; // process stdin pipe
-    int out[2]{}; // process stdout pipe
+    auto in = raiiPipe();
+    auto out = raiiPipe();
 
-    if (pipe(in)) {
-      KJ_LOG(ERROR, "can't allocate in pipe", strerror(errno));
-      return kj::none;
-    }
-    if (pipe(out)){
-      KJ_LOG(ERROR, "can't allocate out pipe", strerror(errno));
-      return kj::none;
-    }
-
-    auto pid = fork();
+    pid_t pid;
+    KJ_SYSCALL(pid = fork());
     if (pid > 0) {
       // parent
-      close(in[0]);
-      close(out[1]);
-      return Subprocess({ .pid = pid, .in = in[1], .out = out[0] });
+      return Subprocess({ .pid = pid, .in = kj::mv(in.writeEnd), .out = kj::mv(out.readEnd) });
     } else {
       // child
-      close(in[1]);
-      close(out[0]);
+      in.writeEnd = nullptr;
+      out.readEnd = nullptr;
 
-      // redirect stdin
-      close(0);
-      if(dup(in[0]) < 0) {
-        _exit(2 * errno);
-      }
-
-      // redirect stdout
-      close(1);
-      if(dup(out[1]) < 0) {
-        _exit(3 * errno);
-      }
+      // redirect stdin & stdout
+      KJ_SYSCALL(dup2(in.readEnd, 0));
+      KJ_SYSCALL(dup2(out.writeEnd, 1));
 
       KJ_SYSCALL_HANDLE_ERRORS(execvp(argv[0], const_cast<char**>(argv))) {
         case ENOENT:
@@ -279,21 +272,19 @@ struct Subprocess {
         default:
           KJ_FAIL_SYSCALL("execvp", error);
       }
-      _exit(1);
+      KJ_UNREACHABLE;
     }
   }
 
-  int closeAndWait() {
-    close(in);
-    close(out);
+  int wait() {
     int status;
-    waitpid(pid, &status, 0);
+    KJ_SYSCALL(waitpid(pid, &status, 0));
     return status;
   }
 
-  int pid;
-  int in;
-  int out;
+  pid_t pid;
+  kj::AutoCloseFd in;
+  kj::AutoCloseFd out;
 };
 
 String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
@@ -316,65 +307,77 @@ String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
     return false;
   }();
 
-  KJ_IF_SOME(subprocess, Subprocess::exec(argv)) {
-    // write addresses as "CODE <file_name> <hex_address>" lines.
-    auto addrs = strArray(KJ_MAP(addr, trace) {
-      Dl_info info;
-      if (dladdr(addr, &info)) {
-        uintptr_t offset = reinterpret_cast<uintptr_t>(addr) -
-                            reinterpret_cast<uintptr_t>(info.dli_fbase);
-        return kj::str("CODE ", info.dli_fname, " 0x", reinterpret_cast<void*>(offset));
-      } else {
-        return kj::str("CODE 0x", reinterpret_cast<void*>(addr));
-      }
-    }, "\n");
-    if (write(subprocess.in, addrs.cStr(), addrs.size()) != addrs.size()) {
-      // Ignore EPIPE, which means the process exited early. We'll deal with it below, presumably.
-      if (errno != EPIPE) {
-        KJ_LOG(ERROR, "write error", strerror(errno));
-        return nullptr;
-      }
-    }
-    close(subprocess.in);
-
-    // read result
-    auto out = fdopen(subprocess.out, "r");
-    if (!out) {
-      KJ_LOG(ERROR, "fdopen error", strerror(errno));
-      return nullptr;
-    }
-
-    kj::String lines[256];
-    size_t i = 0;
-    for (char line[512]{}; fgets(line, sizeof(line), out) != nullptr;) {
-      if (i < kj::size(lines)) {
-        lines[i++] = kj::str(line);
-      }
-    }
-    int status = subprocess.closeAndWait();
-    if (WIFEXITED(status)) {
-      if (WEXITSTATUS(status) != 0) {
-        if (WEXITSTATUS(status) == 2) {
-          static bool logged = false;
-          if (!logged) {
-            KJ_LOG(WARNING, kj::str(llvmSymbolizer, " was not found. "
-                "To symbolize stack traces, install it in your $PATH or set $LLVM_SYMBOLIZER to the "
-                "location of the binary. When running tests under bazel, use "
-                "`--test_env=LLVM_SYMBOLIZER=<path>`."));
-            logged = true;
-          }
+  try {
+    KJ_IF_SOME(subprocess, Subprocess::exec(argv)) {
+      // write addresses as "CODE <file_name> <hex_address>" lines.
+      auto addrs = strArray(KJ_MAP(addr, trace) {
+        Dl_info info;
+        if (dladdr(addr, &info)) {
+          uintptr_t offset = reinterpret_cast<uintptr_t>(addr) -
+                              reinterpret_cast<uintptr_t>(info.dli_fbase);
+          return kj::str("CODE ", info.dli_fname, " 0x", reinterpret_cast<void*>(offset));
         } else {
-          KJ_LOG(ERROR, "bad exit code", WEXITSTATUS(status));
+          return kj::str("CODE 0x", reinterpret_cast<void*>(addr));
         }
+      }, "\n");
+      if (write(subprocess.in, addrs.cStr(), addrs.size()) != addrs.size()) {
+        // Ignore EPIPE, which means the process exited early. We'll deal with it below, presumably.
+        if (errno != EPIPE) {
+          KJ_LOG(ERROR, "write error", strerror(errno));
+          return nullptr;
+        }
+      }
+      subprocess.in = nullptr;
+
+      // read result
+      // Note that fdopen() takes ownership of the FD and will close it later.
+      auto out = fdopen(subprocess.out.release(), "r");
+      if (!out) {
+        KJ_LOG(ERROR, "fdopen error", strerror(errno));
         return nullptr;
       }
+      KJ_DEFER(fclose(out));
+
+      kj::String lines[256];
+      size_t i = 0;
+      for (char line[512]{}; fgets(line, sizeof(line), out) != nullptr;) {
+        if (i < kj::size(lines)) {
+          lines[i++] = kj::str(line);
+        }
+      }
+      int status = subprocess.wait();
+      if (WIFEXITED(status)) {
+        if (WEXITSTATUS(status) != 0) {
+          if (WEXITSTATUS(status) == 2) {
+            static bool logged = false;
+            if (!logged) {
+              KJ_LOG(WARNING, kj::str(llvmSymbolizer, " was not found. "
+                  "To symbolize stack traces, install it in your $PATH or set $LLVM_SYMBOLIZER to "
+                  "the location of the binary. When running tests under bazel, use "
+                  "`--test_env=LLVM_SYMBOLIZER=<path>`."));
+              logged = true;
+            }
+          } else {
+            KJ_LOG(ERROR, "bad exit code", WEXITSTATUS(status));
+          }
+          return nullptr;
+        }
+      } else {
+        KJ_LOG(ERROR, "bad exit status", status);
+        return nullptr;
+      }
+      return kj::str("\n", kj::strArray(kj::arrayPtr(lines, i), ""));
     } else {
-      KJ_LOG(ERROR, "bad exit status", status);
-      return nullptr;
+      return kj::str("\nerror starting llvm-symbolizer");
     }
-    return kj::str("\n", kj::strArray(kj::arrayPtr(lines, i), ""));
-  } else {
-    return kj::str("\nerror starting llvm-symbolizer");
+  } catch (...) {
+    auto exception = getCaughtExceptionAsKj();
+
+    // Carefully log only the exception description here, since we don't want to trigger stack
+    // trace stringification recursively!
+    KJ_LOG(ERROR, "caught exception while trying to stringify stack trace",
+        exception.getDescription());
+    return nullptr;
   }
 }
 
