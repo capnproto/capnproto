@@ -510,11 +510,15 @@ static_assert(HELLO_WORLD.startsWith("hello"_kj));
 static_assert(HELLO_WORLD.endsWith("world"_kj));
 static_assert(HELLO_WORLD[0] == *"h");
 static_assert(HELLO_WORLD.asArray().size() == 11);
+static_assert(*HELLO_WORLD.asArray().begin() == 'h');
+static_assert(HELLO_WORLD.asArray().front() == 'h');
 static_assert(HELLO_WORLD.first(2).size() == 2);
 static_assert(HELLO_WORLD.slice(5).size() == 6);
 static_assert(StringPtr().size() == 0);
 static_assert(StringPtr(nullptr).size() == 0);
 static_assert(StringPtr(HELLO_WORLD.begin(), HELLO_WORLD.size()).size() == 11);
+static_assert(HELLO_WORLD > StringPtr());
+static_assert(StringPtr("const"_kj).size() == 5);
 
 }  // namespace
 }  // namespace _ (private)

@@ -78,10 +78,10 @@ public:
   inline constexpr StringPtr(const char* value KJ_LIFETIMEBOUND, size_t size): content(value, size + 1) {
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
-  inline StringPtr(const char* begin KJ_LIFETIMEBOUND, const char* end KJ_LIFETIMEBOUND): StringPtr(begin, end - begin) {}
-  inline StringPtr(String&& value KJ_LIFETIMEBOUND) : StringPtr(value) {}
-  inline StringPtr(const String& value KJ_LIFETIMEBOUND);
-  inline StringPtr(const ConstString& value KJ_LIFETIMEBOUND);
+  inline constexpr StringPtr(const char* begin KJ_LIFETIMEBOUND, const char* end KJ_LIFETIMEBOUND): StringPtr(begin, end - begin) {}
+  inline constexpr StringPtr(String&& value KJ_LIFETIMEBOUND) : StringPtr(value) {}
+  inline constexpr StringPtr(const String& value KJ_LIFETIMEBOUND);
+  inline constexpr StringPtr(const ConstString& value KJ_LIFETIMEBOUND);
   StringPtr& operator=(String&& value) = delete;
   inline StringPtr& operator=(decltype(nullptr)) {
     content = ArrayPtr<const char>("", 1);
@@ -102,7 +102,7 @@ public:
     typename T,
     typename = EnableIf<canConvert<decltype(instance<T>().c_str()), const char*>()>,
     typename = decltype(instance<T>().size())>
-  inline StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str(), t.size()) {}
+  inline constexpr StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str(), t.size()) {}
   // Allow implicit conversion from any class that has a c_str() and a size() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
@@ -110,7 +110,7 @@ public:
     typename T,
     typename = EnableIf<canConvert<decltype(instance<T>().c_str()), const char*>()>,
     typename = decltype(instance<T>().size())>
-  inline operator T() const { return {cStr(), size()}; }
+  inline constexpr operator T() const { return {cStr(), size()}; }
   // Allow implicit conversion to any class that has a c_str() method and a size() method (namely, std::string).
   // We use a template trick to detect std::string in order to avoid including the header for
   // those who don't want it.
@@ -135,10 +135,10 @@ public:
   inline constexpr bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
 
   inline constexpr bool operator==(const StringPtr& other) const;
-  inline bool operator< (const StringPtr& other) const;
-  inline bool operator> (const StringPtr& other) const { return other < *this; }
-  inline bool operator<=(const StringPtr& other) const { return !(other < *this); }
-  inline bool operator>=(const StringPtr& other) const { return !(*this < other); }
+  inline constexpr bool operator< (const StringPtr& other) const;
+  inline constexpr bool operator> (const StringPtr& other) const { return other < *this; }
+  inline constexpr bool operator<=(const StringPtr& other) const { return !(other < *this); }
+  inline constexpr bool operator>=(const StringPtr& other) const { return !(*this < other); }
 
   inline constexpr StringPtr slice(size_t start) const;
   inline constexpr ArrayPtr<const char> slice(size_t start, size_t end) const;
@@ -709,8 +709,8 @@ inline _::Delimited<ArrayPtr<const T>> operator*(const _::Stringifier&, const Ar
 // =======================================================================================
 // Inline implementation details.
 
-inline StringPtr::StringPtr(const String& value): content(value.cStr(), value.size() + 1) {}
-inline StringPtr::StringPtr(const ConstString& value): content(value.cStr(), value.size() + 1) {}
+inline constexpr StringPtr::StringPtr(const String& value): content(value.cStr(), value.size() + 1) {}
+inline constexpr StringPtr::StringPtr(const ConstString& value): content(value.cStr(), value.size() + 1) {}
 
 inline constexpr StringPtr::operator ArrayPtr<const char>() const {
   return ArrayPtr<const char>(content.begin(), content.size() - 1);
@@ -724,7 +724,7 @@ inline constexpr bool StringPtr::operator==(const StringPtr& other) const {
   return content == other.content;
 }
 
-inline bool StringPtr::operator< (const StringPtr& other) const {
+inline constexpr bool StringPtr::operator< (const StringPtr& other) const {
   return content < other.content;
 }
 
