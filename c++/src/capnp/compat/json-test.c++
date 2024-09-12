@@ -196,6 +196,26 @@ KJ_TEST("encode union") {
   KJ_EXPECT(json.encode(root) == "{\"before\":\"a\",\"middle\":44,\"bar\":321,\"after\":\"c\"}");
 }
 
+KJ_TEST("null pointer field") {
+  // Pointer fields are to be treated as missing if they're set to null in JSON
+
+  JsonCodec json;
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestJsonAnnotations>();
+  auto jsonMessage = R"({
+  "names-can_contain!anything Really": null,
+  "dependency": null,
+  "enums": null,
+  "testBase64": null
+  })"_kj;
+  json.decode(jsonMessage, root);
+
+  KJ_EXPECT(!root.hasSomeField());
+  KJ_EXPECT(!root.hasDependency());
+  KJ_EXPECT(!root.hasEnums());
+  KJ_EXPECT(!root.hasTestBase64());
+}
+
 KJ_TEST("decode all types") {
   JsonCodec json;
   json.setHasMode(HasMode::NON_DEFAULT);
@@ -297,10 +317,6 @@ KJ_TEST("decode all types") {
   CASE_NO_ROUNDTRIP(R"({"textField":"foo\u1234bar"})",
       kj::str(u8"foo\u1234bar") == root.getTextField());
 
-  CASE_THROW_RECOVERABLE(R"({"structField":null})", "Expected object value");
-  CASE_THROW_RECOVERABLE(R"({"structList":null})", "Expected list value");
-  CASE_THROW_RECOVERABLE(R"({"boolList":null})", "Expected list value");
-  CASE_THROW_RECOVERABLE(R"({"structList":[null]})", "Expected object value");
   CASE_THROW_RECOVERABLE(R"({"int64Field":"177a"})", "String does not contain valid");
   CASE_THROW_RECOVERABLE(R"({"uInt64Field":"177a"})", "String does not contain valid");
   CASE_THROW_RECOVERABLE(R"({"float64Field":"177a"})", "String does not contain valid");
@@ -920,7 +936,7 @@ R"({
 
 class PrefixAdder: public JsonCodec::Handler<capnp::Text> {
 public:
-  void encode(const JsonCodec& codec, capnp::Text::Reader input, 
+  void encode(const JsonCodec& codec, capnp::Text::Reader input,
               JsonValue::Builder output) const override {
     output.setString(kj::str("add-prefix-", input));
   }

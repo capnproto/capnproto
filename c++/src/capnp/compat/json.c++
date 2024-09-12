@@ -401,6 +401,10 @@ void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphana
   }
 }
 
+bool isPointerToJsonNull(JsonValue::Reader input, Type type) {
+  return input.isNull() && (type.isText() || type.isData() || type.isList() || type.isStruct());
+}
+
 void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader fieldValue,
                             Orphanage orphanage, DynamicStruct::Builder output) const {
   auto fieldType = fieldSchema.getType();
@@ -408,7 +412,11 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
   KJ_IF_SOME(handler, impl->fieldHandlers.find(fieldSchema)) {
     output.adopt(fieldSchema, handler->decodeBase(*this, fieldValue, fieldType, orphanage));
   } else {
-    output.adopt(fieldSchema, decode(fieldValue, fieldType, orphanage));
+    if (!isPointerToJsonNull(fieldValue, fieldType)) {
+      // If the schema type is a pointer type and the json value is null, we act as if the value
+      // doesn't exist.
+      output.adopt(fieldSchema, decode(fieldValue, fieldType, orphanage));
+    }
   }
 }
 
