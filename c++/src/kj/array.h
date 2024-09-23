@@ -169,14 +169,14 @@ public:
     return ptr[index];
   }
 
-  inline const T* begin() const KJ_LIFETIMEBOUND { return ptr; }
-  inline const T* end() const KJ_LIFETIMEBOUND { return ptr + size_; }
-  inline const T& front() const KJ_LIFETIMEBOUND { return *ptr; }
-  inline const T& back() const KJ_LIFETIMEBOUND { return *(ptr + size_ - 1); }
-  inline T* begin() KJ_LIFETIMEBOUND { return ptr; }
-  inline T* end() KJ_LIFETIMEBOUND { return ptr + size_; }
-  inline T& front() KJ_LIFETIMEBOUND { return *ptr; }
-  inline T& back() KJ_LIFETIMEBOUND { return *(ptr + size_ - 1); }
+  inline constexpr const T* begin() const KJ_LIFETIMEBOUND { return ptr; }
+  inline constexpr const T* end() const KJ_LIFETIMEBOUND { return ptr + size_; }
+  inline constexpr const T& front() const KJ_LIFETIMEBOUND { return *ptr; }
+  inline constexpr const T& back() const KJ_LIFETIMEBOUND { return *(ptr + size_ - 1); }
+  inline constexpr T* begin() KJ_LIFETIMEBOUND { return ptr; }
+  inline constexpr T* end() KJ_LIFETIMEBOUND { return ptr + size_; }
+  inline constexpr T& front() KJ_LIFETIMEBOUND { return *ptr; }
+  inline constexpr T& back() KJ_LIFETIMEBOUND { return *(ptr + size_ - 1); }
 
   template <typename U>
   inline bool operator==(const U& other) const { return asPtr() == other; }
