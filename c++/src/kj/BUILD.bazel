@@ -1,4 +1,4 @@
-load("//:build/configure.bzl", "kj_configure")
+load(":configure.bzl", "kj_configure")
 
 kj_configure()
 

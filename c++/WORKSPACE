@@ -59,3 +59,9 @@ http_archive(
     strip_prefix = "zlib-1.3.1",
     urls = ["https://zlib.net/zlib-1.3.1.tar.xz"],
 )
+
+http_archive(
+    name = "rules_rust",
+    integrity = "sha256-BCrPtzRpstGEj+FI2Bw0IsYepHqeGQDxyew29R6OcZM=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.51.0/rules_rust-v0.51.0.tar.gz"],
+)
