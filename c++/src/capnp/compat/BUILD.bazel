@@ -1,4 +1,5 @@
 load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
+load("@capnp-cpp//src/capnp:rust_capnp_library.bzl", "rust_capnp_library")
 
 exports_files([
     "json.capnp",
@@ -46,6 +47,30 @@ cc_capnp_library(
     ],
     include_prefix = "capnp/compat",
     src_prefix = "src",
+    visibility = ["//visibility:public"],
+)
+
+rust_capnp_library(
+    name = "json_capnp_rust",
+    srcs = ["json.capnp"],
+    crate_name = "json_capnp",
+    src_prefix = "src",
+    target_compatible_with = select({
+        "//src/capnp:gen_rust_true": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+rust_capnp_library(
+    name = "byte-stream_capnp_rust",
+    srcs = ["byte-stream.capnp"],
+    crate_name = "byte_stream_capnp",
+    src_prefix = "src",
+    target_compatible_with = select({
+        "//src/capnp:gen_rust_true": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     visibility = ["//visibility:public"],
 )
 
@@ -108,9 +133,9 @@ cc_library(
     name = f.removesuffix(".c++"),
     srcs = [f],
     deps = [
-        ":websocket-rpc",
         ":http-over-capnp",
-        "//src/capnp:capnp-test"
+        ":websocket-rpc",
+        "//src/capnp:capnp-test",
     ],
 ) for f in [
     "byte-stream-test.c++",
