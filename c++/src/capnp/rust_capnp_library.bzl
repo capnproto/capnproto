@@ -63,7 +63,7 @@ def rust_capnp_library(
 
 def _lib_rs_content(crate_name, deps, outs):
     use_deps = [
-        "use ::{}::*;".format(dep.split(":")[1].removesuffix("_rust").replace("-", "_"))
+        "#[allow(unused_imports)] use ::{}::*;".format(dep.split(":")[1].removesuffix("_rust").replace("-", "_"))
         for dep in deps
     ]
 
@@ -72,11 +72,11 @@ def _lib_rs_content(crate_name, deps, outs):
         for out in outs
     ]
 
-    return """
-    pub mod {crate_name} {{
-    {outs}
-    }}
-    // re-export all names, so that imports look nicer.
-    pub use {crate_name}::*;
-    {deps}
-    """.format(crate_name = crate_name, outs = "\n".join(include_outs), deps = "\n".join(use_deps))
+    return """pub mod {crate_name} {{
+{outs}
+}}
+// re-export names to be accessible directly
+pub use {crate_name}::*;
+// use dependencies
+{deps}
+""".format(crate_name = crate_name, outs = "\n".join(include_outs), deps = "\n".join(use_deps))
