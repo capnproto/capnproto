@@ -79,4 +79,5 @@ def _lib_rs_content(crate_name, deps, outs):
 pub use {crate_name}::*;
 // use dependencies
 {deps}
+#[allow(unused_imports)] use ::capnp::*;
 """.format(crate_name = crate_name, outs = "\n".join(include_outs), deps = "\n".join(use_deps))
