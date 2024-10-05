@@ -371,9 +371,12 @@ static Maybe<uint> tryFromOctDigit(char c) {
 }  // namespace
 
 String encodeHex(ArrayPtr<const byte> input) {
-  return strArray(KJ_MAP(b, input) {
-    return heapArray<char>({HEX_DIGITS[b/16], HEX_DIGITS[b%16]});
-  }, "");
+  auto result = heapString(input.size() * 2);
+  for (auto i: kj::indices(input)) {
+    result[i*2] = HEX_DIGITS[input[i] / 16];
+    result[i*2+1] = HEX_DIGITS[input[i] % 16];
+  }
+  return result;
 }
 
 EncodingResult<Array<byte>> decodeHex(ArrayPtr<const char> text) {
