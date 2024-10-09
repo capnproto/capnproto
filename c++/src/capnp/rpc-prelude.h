@@ -38,6 +38,8 @@ class RpcFlowController;
 template <typename SturdyRefHostId>
 class RpcSystem;
 
+enum class ThreePartyHandoffPurpose: uint8_t;
+
 namespace _ {  // private
 
 [[noreturn]] void throwNo3ph();
@@ -64,18 +66,20 @@ public:
     virtual kj::Own<RpcFlowController> newStream() = 0;
     virtual void setIdle(bool idle) = 0;
 
-    virtual bool canIntroduceTo(Connection& other) = 0;
+    virtual bool canIntroduceTo(Connection& other, ThreePartyHandoffPurpose purpose) = 0;
     virtual void introduceTo(Connection& other,
+        ThreePartyHandoffPurpose purpose,
         AnyPointer::Builder otherContactInfo,
         AnyPointer::Builder thisAwaitInfo) = 0;
     virtual kj::Maybe<kj::Own<Connection>> connectToIntroduced(
         AnyPointer::Reader contact,
         AnyPointer::Builder completion) = 0;
     virtual bool canForwardThirdPartyToContact(
-        AnyPointer::Reader contact, Connection& destination) = 0;
+        AnyPointer::Reader contact, Connection& destination,
+        ThreePartyHandoffPurpose purpose) = 0;
     virtual void forwardThirdPartyToContact(
         AnyPointer::Reader contact, Connection& destination,
-        AnyPointer::Builder result) = 0;
+        ThreePartyHandoffPurpose purpose, AnyPointer::Builder result) = 0;
     virtual kj::Own<void> awaitThirdParty(
         AnyPointer::Reader party, kj::Rc<kj::Refcounted> value) = 0;
     virtual kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(
@@ -122,6 +126,10 @@ private:
   // TODO(cleanup): This is defined as a static method with `Impl&` passed in because the caller
   //   is defined before `Impl` in rpc.c++. We can't have the caller hold a pointer to
   //   `RpcSystemBase` instead because it is movable.
+
+  static RpcConnectionState& getConnectionState(Impl& impl,
+      kj::Own<VatNetworkBase::Connection> connection);
+  // Get the RpcConnectionState associated with the given connection, creating it if necessary.
 
   template <typename>
   friend class capnp::RpcSystem;
