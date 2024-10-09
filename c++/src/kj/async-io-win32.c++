@@ -474,7 +474,8 @@ public:
     if (addrlen < other.addrlen) return true;
     if (addrlen > other.addrlen) return false;
 
-    return memcmp(&addr.generic, &other.addr.generic, addrlen) < 0;
+    // addrlen == other.addrlen at this point
+    return kj::asBytes(addr).first(addrlen) < kj::asBytes(other.addr).first(addrlen);
   }
 
   const struct sockaddr* getRaw() const { return &addr.generic; }
