@@ -27,7 +27,6 @@ namespace kj {
 
 const NullDisposer NullDisposer::instance = NullDisposer();
 
-#ifdef KJ_ASSERT_PTR_COUNTERS
 namespace _ {
 
 void atomicPtrCounterAssertionFailed(char const* reason) {
@@ -42,6 +41,5 @@ void throwWrongDisposerError() {
 }
 
 }
-#endif
 
 }  // namespace kj
