@@ -54,6 +54,8 @@ public:
   // is to inhibit the reporting of errors which may have been caused by previous errors, or to
   // allow the compiler to bail out entirely if it gets confused and thinks this could be because
   // of previous errors.
+
+  virtual void reportResolution(uint32_t startByte, uint32_t endByte, uint64_t typeId){};
 };
 
 class GlobalErrorReporter {

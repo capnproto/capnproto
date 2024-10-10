@@ -207,6 +207,18 @@ public:
     return loader.getErrorReporter().hadErrors();
   }
 
+  void reportResolution(uint32_t startByte, uint32_t endByte, uint64_t typeId) override{
+    Resolution resolution;
+    resolution.startByte = startByte;
+    resolution.endByte = endByte;
+    resolution.target = Resolution::Type{typeId};
+    resolutions.add(kj::mv(resolution));
+  }
+
+  kj::ArrayPtr<const Resolution> getResolutions() override {
+    return resolutions.asPtr();
+  }
+
 private:
   ModuleLoader::Impl& loader;
   kj::Own<const kj::ReadableFile> file;
@@ -216,6 +228,7 @@ private:
 
   kj::SpaceFor<LineBreakTable> lineBreaksSpace;
   kj::Maybe<kj::Own<LineBreakTable>> lineBreaks;
+  kj::Vector<Resolution> resolutions;
 };
 
 // =======================================================================================

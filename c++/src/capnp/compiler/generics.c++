@@ -564,7 +564,11 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
       }
 
       KJ_IF_MAYBE(r, resolver.resolve(nameValue)) {
-        return interpretResolve(resolver, *r, source);
+        auto result = interpretResolve(resolver, *r, source);
+        if (r->is<Resolver::ResolvedDecl>()){
+          errorReporter.reportResolution(source.getStartByte(), source.getEndByte(), r->get<Resolver::ResolvedDecl>().id);
+        }
+        return kj::mv(result);
       } else {
         errorReporter.addErrorOn(name, kj::str("Not defined: ", nameValue));
         return nullptr;

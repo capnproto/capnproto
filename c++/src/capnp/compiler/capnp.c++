@@ -502,6 +502,23 @@ public:
       requestedFile.setFilename(sourceFiles[i].name);
       requestedFile.adoptImports(compiler->getFileImportTable(
           *sourceFiles[i].module, Orphanage::getForMessageContaining(requestedFile)));
+      // Add FileSourceInfo
+      auto fileSourceInfo = requestedFile.initFileSourceInfo();
+      const auto resolutions = sourceFiles[i].module->getResolutions();
+      auto identifiers = fileSourceInfo.initIdentifiers(resolutions.size());
+      for (size_t j = 0; j < resolutions.size(); j++) {
+        auto identifier = identifiers[j];
+        identifier.setStartByte(resolutions[j].startByte);
+        identifier.setEndByte(resolutions[j].endByte);
+        if (resolutions[j].target.is<Resolution::Type>()) {
+          identifier.setTypeId(resolutions[j].target.get<Resolution::Type>().typeId);
+        }
+        else if (resolutions[j].target.is<Resolution::Member>()) {
+          auto member = identifier.initMember();
+          member.setParentTypeId(resolutions[j].target.get<Resolution::Member>().parentTypeId);
+          member.setOrdinal(resolutions[j].target.get<Resolution::Member>().ordinal);
+        }
+      }
     }
 
     for (auto& output: outputs) {

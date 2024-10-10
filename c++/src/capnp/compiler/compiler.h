@@ -32,6 +32,19 @@ CAPNP_BEGIN_HEADER
 namespace capnp {
 namespace compiler {
 
+struct Resolution {
+  uint32_t startByte;
+  uint32_t endByte;
+
+  struct Type { uint64_t typeId; };
+  struct Member {
+    uint64_t parentTypeId;
+    uint16_t ordinal;
+  };
+
+  kj::OneOf<Type, Member> target;
+};
+
 class Module: public ErrorReporter {
 public:
   virtual kj::StringPtr getSourceName() = 0;
@@ -48,6 +61,9 @@ public:
 
   virtual kj::Maybe<kj::Array<const byte>> embedRelative(kj::StringPtr embedPath) = 0;
   // Read and return the content of a file specified using `embed`.
+  virtual kj::ArrayPtr<const Resolution> getResolutions(){
+    return kj::ArrayPtr<const Resolution>();
+  };
 };
 
 class Compiler final: private SchemaLoader::LazyLoadCallback {
