@@ -3759,34 +3759,33 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 }
 
 static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
-  return from.receive().then([&from,&to](WebSocket::Message&& message) {
-    KJ_SWITCH_ONEOF(message) {
-      KJ_CASE_ONEOF(text, kj::String) {
-        return to.send(text)
-            .attach(kj::mv(text))
-            .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
+  try {
+    while (true) {
+      auto message = co_await from.receive();
+      KJ_SWITCH_ONEOF(message) {
+        KJ_CASE_ONEOF(text, kj::String) {
+          co_await to.send(text);
+        }
+        KJ_CASE_ONEOF(data, kj::Array<byte>) {
+          co_await to.send(data);
+        }
+        KJ_CASE_ONEOF(close, WebSocket::Close) {
+          // Once a close has passed through, the pump is complete.
+          co_await to.close(close.code, close.reason);
+          co_return;
+        }
       }
-      KJ_CASE_ONEOF(data, kj::Array<byte>) {
-        return to.send(data)
-            .attach(kj::mv(data))
-            .then([&from,&to]() { return pumpWebSocketLoop(from, to); });
-      }
-      KJ_CASE_ONEOF(close, WebSocket::Close) {
-        // Once a close has passed through, the pump is complete.
-        return to.close(close.code, close.reason)
-            .attach(kj::mv(close));
-      }
+      // continue the loop
     }
-    KJ_UNREACHABLE;
-  }, [&to](kj::Exception&& e) -> kj::Promise<void> {
+  } catch (...) {
     // We don't know if it was a read or a write that threw. If it was a read that threw, we need
     // to send a disconnect on the destination. If it was the destination that threw, it
     // shouldn't hurt to disconnect() it again, but we'll catch and squelch any exceptions.
     kj::runCatchingExceptions([&to]() { to.disconnect(); });
 
     // In any case, this error broke the pump. We should propagate it out as the pump result.
-    return kj::mv(e);
-  });
+    throw;
+  }
 }
 
 kj::Promise<void> WebSocket::pumpTo(WebSocket& other) {
