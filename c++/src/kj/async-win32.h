@@ -100,11 +100,6 @@ public:
   // Different Win32EventPort implementations may handle this in different ways, such as by using
   // completion routines (APCs) or by using I/O completion ports. The caller should not assume
   // any particular technique.
-  //
-  // WARNING: It is only safe to call observeIo() on a particular handle once during its lifetime.
-  //   You cannot observe the same handle from multiple Win32EventPorts, even if not at the same
-  //   time. This is because the Win32 API provides no way to disassociate a handle from an I/O
-  //   completion port once it is associated.
 
   // ---------------------------------------------------------------------------
   // signalable handles
