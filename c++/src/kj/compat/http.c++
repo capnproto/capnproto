@@ -2853,7 +2853,7 @@ public:
             }
             bool addNullTerminator = true;
             // We want to add the null terminator when receiving a TEXT message.
-            auto decompressedOrError = decompressor.processMessage(message, originalMaxSize, 
+            auto decompressedOrError = decompressor.processMessage(message, originalMaxSize,
                 addNullTerminator);
             KJ_SWITCH_ONEOF(decompressedOrError) {
               KJ_CASE_ONEOF(protocolError, ProtocolError) {
@@ -6949,10 +6949,8 @@ private:
       return inner->send(message);
     }
     kj::Promise<void> close(uint16_t code, kj::StringPtr reason) override {
-      return inner->close(code, reason)
-          .then([this]() {
-        return afterSendClosed();
-      });
+      co_await inner->close(code, reason);
+      co_await afterSendClosed();
     }
     void disconnect() override {
       inner->disconnect();
@@ -6965,18 +6963,15 @@ private:
       return inner->whenAborted();
     }
     kj::Promise<Message> receive(size_t maxSize) override {
-      return inner->receive(maxSize).then([this](Message&& message) -> kj::Promise<Message> {
-        if (message.is<WebSocket::Close>()) {
-          return afterReceiveClosed()
-              .then([message = kj::mv(message)]() mutable { return kj::mv(message); });
-        }
-        return kj::mv(message);
-      });
+      auto message = co_await inner->receive(maxSize);
+      if (message.is<WebSocket::Close>()) {
+        co_await afterReceiveClosed();
+      }
+      co_return message;
     }
     kj::Promise<void> pumpTo(WebSocket& other) override {
-      return inner->pumpTo(other).then([this]() {
-        return afterReceiveClosed();
-      });
+      co_await inner->pumpTo(other);
+      co_await afterReceiveClosed();
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
       return other.pumpTo(*inner).then([this]() {
@@ -7004,10 +6999,9 @@ private:
         KJ_IF_SOME(t, completionTask) {
           auto result = kj::mv(t);
           completionTask = kj::none;
-          return result;
+          co_await result;
         }
       }
-      return kj::READY_NOW;
     }
 
     kj::Promise<void> afterReceiveClosed() {
@@ -7016,10 +7010,9 @@ private:
         KJ_IF_SOME(t, completionTask) {
           auto result = kj::mv(t);
           completionTask = kj::none;
-          return result;
+          co_await result;
         }
       }
-      return kj::READY_NOW;
     }
   };
 
