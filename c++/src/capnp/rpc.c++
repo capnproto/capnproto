@@ -2987,10 +2987,17 @@ private:
           // At this point, the last reference to this connection state *should* be the one in
           // the RpcSystem's map. The refcount should therefore be 1, and `isShared()`.
           if (isShared()) {
-            // Oh, we still have references. This is probably a bug, but to be safe, set
-            // ourselves to the disconnected state (with an error).
-            KJ_LOG(ERROR, "RpcSystem bug: connection is idle but still has references?");
-            tasks.add(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected."));
+            // Oh, we still have references. We will need to set ourselves to the "disconnected"
+            // state.
+            // TODO(bug): Previously, I had a KJ_LOG(ERROR) here, and it did actually show up in
+            //   production, but I couldn't tell what was holding the reference. Hopefully,
+            //   propagating an explicit exception here will give us a stack trace that tells us
+            //   what's holding onto the connection.
+            tasks.add(KJ_EXCEPTION(FAILED,
+                "RpcSystem bug: Connection shut down due to being idle, but if you're seeing "
+                "this error then apparently something was still using the connection. Please "
+                "take note of the stack and fix checkIfBecameIdle() to account for this kind of "
+                "reference still existing."));
             co_return;
           }
 
