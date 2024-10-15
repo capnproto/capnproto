@@ -2077,12 +2077,12 @@ KJ_TEST("WebSocket unsolicited pong") {
   clientTask.wait(waitScope);
 }
 
-KJ_TEST("WebSocket ping") {
+void doWebSocketPingTest(kj::Maybe<EntropySource&> maskGenerator) {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
   auto client = kj::mv(pipe.ends[0]);
-  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), maskGenerator);
 
   // Be extra-annoying by having the ping arrive between fragments.
   byte DATA[] = {
@@ -2103,15 +2103,35 @@ KJ_TEST("WebSocket ping") {
 
   auto serverTask = server->send(kj::StringPtr("bar"));
 
-  byte EXPECTED[] = {
-    0x8A, 0x03, 'f', 'o', 'o',  // pong
-    0x81, 0x03, 'b', 'a', 'r',  // message
-  };
+  kj::ArrayPtr<const byte> expected;
 
-  expectRead(*client, EXPECTED).wait(waitScope);
+  if (maskGenerator == kj::none) {
+    static const byte EXPECTED[] = {
+      0x8A, 0x03, 'f', 'o', 'o',  // pong
+      0x81, 0x03, 'b', 'a', 'r',  // message
+    };
+    expected = EXPECTED;
+  } else {
+    static const byte EXPECTED[] = {
+      0x8A, 0x83, 12, 34, 56, 78, 'f'^12, 'o'^34, 'o'^56,  // masked pong
+      0x81, 0x83, 12, 34, 56, 78, 'b'^12, 'a'^34, 'r'^56,  // masked message
+    };
+    expected = EXPECTED;
+  }
+
+  expectRead(*client, expected).wait(waitScope);
 
   clientTask.wait(waitScope);
   serverTask.wait(waitScope);
+}
+
+KJ_TEST("WebSocket ping") {
+  doWebSocketPingTest(kj::none);
+}
+
+KJ_TEST("WebSocket ping with mask") {
+  FakeEntropySource maskGenerator;
+  doWebSocketPingTest(maskGenerator);
 }
 
 KJ_TEST("WebSocket ping mid-send") {
@@ -5166,16 +5186,16 @@ KJ_TEST("HttpClient WebSocket: client can have a custom WebSocket error handler"
     0xF0, 0x02, 'y', 'o'  // all RSV bits set, plus FIN
   };
   const byte closeFrame[] = {
-    0x88, 0xa8, 0xC, 0x22, 0x38, 0x4e, 0x3, 0xea, // FIN, opcode=Close, code=1009
-    'R', 'e', 'c', 'e', 'i', 'v', 'e', 'd', ' ',
-    'f', 'r', 'a', 'm', 'e', ' ',
-    'h', 'a', 'd', ' ',
-    'R', 'S', 'V', ' ',
-    'b', 'i', 't', 's', ' ',
-    '2', ' ',
-    'o', 'r', ' ',
-    '3', ' ',
-    's', 'e', 't',
+    0x88, 0xa8, 12, 34, 56, 78, 0x3^12, 0xea^34, // FIN, opcode=Close, code=1009
+    'R'^56, 'e'^78, 'c'^12, 'e'^34, 'i'^56, 'v'^78, 'e'^12, 'd'^34, ' '^56,
+    'f'^78, 'r'^12, 'a'^34, 'm'^56, 'e'^78, ' '^12,
+    'h'^34, 'a'^56, 'd'^78, ' '^12,
+    'R'^34, 'S'^56, 'V'^78, ' '^12,
+    'b'^34, 'i'^56, 't'^78, 's'^12, ' '^34,
+    '2'^56, ' '^78,
+    'o'^12, 'r'^34, ' '^56,
+    '3'^78, ' '^12,
+    's'^34, 'e'^56, 't'^78,
   };
 
   auto request = kj::str("GET /websocket", wsRequestHandshake);
