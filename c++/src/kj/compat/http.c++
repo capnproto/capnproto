@@ -3679,9 +3679,13 @@ private:
         co_return;
       }
 
+      Mask mask(maskKeyGenerator);
+      if (!mask.isZero()) {
+        mask.apply(payload);
+      }
+
       kj::ArrayPtr<const byte> sendParts[2];
-      sendParts[0] = sendHeader.compose(true, false, opcode,
-                                        payload.size(), Mask(maskKeyGenerator));
+      sendParts[0] = sendHeader.compose(true, false, opcode, payload.size(), mask);
       sendParts[1] = payload;
       co_await stream->write(sendParts);
       KJ_IF_SOME(fulfiller, maybeFulfiller) {
