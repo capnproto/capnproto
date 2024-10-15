@@ -105,8 +105,7 @@ bool checkForQemuEpollPwaitBug() {
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &mask, &origMask));
   KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &origMask, nullptr)));
 
-  struct sigaction action;
-  memset(&action, 0, sizeof(action));
+  struct sigaction action{};
   action.sa_sigaction = &qemuBugTestSignalHandler;
   action.sa_flags = SA_SIGINFO;
 
