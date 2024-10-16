@@ -676,6 +676,31 @@ TEST(Async, ExclusiveJoin) {
 
     EXPECT_EQ(456, left.exclusiveJoin(kj::mv(right)).wait(waitScope));
   }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() { return 123; });
+    auto right = evalLater([&]() -> Promise<int>{
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+    });
+
+    EXPECT_EQ(123, left.exclusiveJoin(kj::mv(right)).wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() -> Promise<int> {
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed 1"));
+    });
+    auto right = evalLater([&]() -> Promise<int>{
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed 2"));
+    });
+    KJ_EXPECT_THROW(FAILED, left.exclusiveJoin(kj::mv(right)).wait(waitScope));
+  }
 }
 
 TEST(Async, ArrayJoin) {
