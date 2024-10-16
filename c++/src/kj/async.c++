@@ -2822,6 +2822,96 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
   output.as<_::Void>() = _::Void();
 }
 
+RaceSuccessfulPromiseNodeBase::RaceSuccessfulPromiseNodeBase(
+    Array<OwnPromiseNode> promises, ExceptionOrValue &output,
+    SourceLocation location)
+    : output(output), countLeft(promises.size()) {
+  // Make the branches.
+  auto builder = heapArrayBuilder<Branch>(promises.size());
+  for (uint i : indices(promises)) {
+    builder.add(*this, kj::mv(promises[i]), location);
+  }
+  branches = builder.finish();
+
+  if (branches.size() == 0) {
+    onReadyEvent.arm();
+  }
+}
+RaceSuccessfulPromiseNodeBase::~RaceSuccessfulPromiseNodeBase() noexcept(
+    false) {}
+
+void RaceSuccessfulPromiseNodeBase::onReady(Event *event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void RaceSuccessfulPromiseNodeBase::get(ExceptionOrValue &output) noexcept {
+  KJ_IF_SOME(exception, this->output.exception) {
+    output.addException(kj::mv(exception));
+  } else {
+    getNoError(output);
+  }
+}
+
+void RaceSuccessfulPromiseNodeBase::tracePromise(TraceBuilder &builder,
+                                                 bool stopAtNextEvent) {
+  if (stopAtNextEvent)
+    return;
+
+  // Trace the first branch I guess.
+  if (branches != nullptr) {
+    branches[0].promise->tracePromise(builder, false);
+  }
+}
+
+RaceSuccessfulPromiseNodeBase::Branch::Branch(
+    RaceSuccessfulPromiseNodeBase &parent, OwnPromiseNode dependencyParam,
+    SourceLocation location)
+    : Event(location), parent(parent), promise(kj::mv(dependencyParam)) {
+  promise->setSelfPointer(&promise);
+  promise->onReady(this);
+}
+
+RaceSuccessfulPromiseNodeBase::Branch::~Branch() noexcept(false) {}
+
+Maybe<Own<Event>> RaceSuccessfulPromiseNodeBase::Branch::fire() {
+  if (parent.armed) {
+    // the parent node has already received the value, no need to bother with
+    // anything
+    return kj::none;
+  }
+
+  auto count = --parent.countLeft;
+  promise->get(parent.output);
+
+  if (parent.output.exception == kj::none) {
+    // our promise was successful
+
+    // cancel the others, ignore errors caused by cancellations
+    for (auto& otherBranch: parent.branches) {
+      if (this != &otherBranch) {
+        kj::runCatchingExceptions([&]() { otherBranch.promise = nullptr; });
+      }
+    }
+  }
+
+  if (parent.output.exception == kj::none || count == 0) {
+    // we're either successful or the only one left, trigger the parent
+    parent.armed = true;
+    parent.onReadyEvent.arm();
+  }
+
+  return kj::none;
+}
+
+void RaceSuccessfulPromiseNodeBase::Branch::traceEvent(TraceBuilder &builder) {
+  promise->tracePromise(builder, true);
+  parent.onReadyEvent.traceEvent(builder);
+}
+
+RaceSuccessfulPromiseNode<void>::RaceSuccessfulPromiseNode(
+    Array<OwnPromiseNode> promises, SourceLocation location)
+    : RaceSuccessfulPromiseNodeBase(kj::mv(promises), output, location) {}
+
 }  // namespace _ (private)
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location) {

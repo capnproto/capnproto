@@ -21,9 +21,11 @@
 
 #include "async.h"
 #include "debug.h"
-#include <kj/compat/gtest.h>
+#include "kj/array.h"
+#include "kj/test.h"
 #include "mutex.h"
 #include "thread.h"
+#include <kj/compat/gtest.h>
 
 #if !_WIN32
 #include <errno.h>
@@ -718,6 +720,86 @@ TEST(Async, ArrayJoinVoid) {
     Promise<void> promise = specificJoinPromisesOverload(builder.finish());
 
     promise.wait(waitScope);
+  }
+}
+
+TEST(Async, RaceSuccessful) {
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() { return 123; });
+    auto right = newPromiseAndFulfiller<int>(); // never fulfilled
+
+    EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right.promise)))
+                       .wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = newPromiseAndFulfiller<int>(); // never fulfilled
+    auto right = evalLater([&]() { return 123; });
+
+    EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left.promise), kj::mv(right))).wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() { return 123; });
+    auto right = evalLater([&]() { return 456; });
+
+    EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() { return 123; });
+    auto right = evalLater([&]() { return 456; }).eagerlyEvaluate(nullptr);
+
+    EXPECT_EQ(456, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() { return 123; });
+    auto right = evalLater([&]() -> Promise<int>{
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+    });
+
+    EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
+  }
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() -> Promise<int>{
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+    });
+    auto right = evalLater([&]() { return 123; });
+
+    EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([&]() -> Promise<int>{
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+    });
+    auto right = evalLater([&]() -> Promise<int>{
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+    });
+
+    KJ_EXPECT_THROW(FAILED, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
   }
 }
 
