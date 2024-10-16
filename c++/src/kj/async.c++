@@ -2822,6 +2822,95 @@ void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
   output.as<_::Void>() = _::Void();
 }
 
+RacePromiseNodeBase::RacePromiseNodeBase(Array<OwnPromiseNode> promises,
+                                         ExceptionOrValue &output,
+                                         SourceLocation location)
+    : output(output), countLeft(promises.size()) {
+  // Make the branches.
+  auto builder = heapArrayBuilder<Branch>(promises.size());
+  for (uint i : indices(promises)) {
+    builder.add(*this, kj::mv(promises[i]), location);
+  }
+  branches = builder.finish();
+
+  if (branches.size() == 0) {
+    onReadyEvent.arm();
+  }
+}
+RacePromiseNodeBase::~RacePromiseNodeBase() noexcept(false) {}
+
+void RacePromiseNodeBase::onReady(Event *event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void RacePromiseNodeBase::get(ExceptionOrValue &output) noexcept {
+  KJ_IF_SOME(exception, this->output.exception) {
+    output.addException(kj::mv(exception));
+  } else {
+    getNoError(output);
+  }
+}
+
+void RacePromiseNodeBase::tracePromise(TraceBuilder &builder,
+                                       bool stopAtNextEvent) {
+  if (stopAtNextEvent)
+    return;
+
+  // Trace the first branch I guess.
+  if (branches != nullptr) {
+    branches[0].promise->tracePromise(builder, false);
+  }
+}
+
+RacePromiseNodeBase::Branch::Branch(RacePromiseNodeBase &parent,
+                                    OwnPromiseNode dependencyParam,
+                                    SourceLocation location)
+    : Event(location), parent(parent), promise(kj::mv(dependencyParam)) {
+  promise->setSelfPointer(&promise);
+  promise->onReady(this);
+}
+
+RacePromiseNodeBase::Branch::~Branch() noexcept(false) {}
+
+Maybe<Own<Event>> RacePromiseNodeBase::Branch::fire() {
+  if (parent.armed) {
+    // the parent node has already received the value, no need to bother with
+    // anything
+    return kj::none;
+  }
+
+  auto count = --parent.countLeft;
+  promise->get(parent.output);
+
+  if (parent.output.exception == kj::none) {
+    // our promise was successful
+
+    // cancel the others, ignore errors caused by cancellations
+    for (auto& otherBranch: parent.branches) {
+      if (this != &otherBranch) {
+        kj::runCatchingExceptions([&]() { otherBranch.promise = nullptr; });
+      }
+    }
+  }
+
+  if (parent.output.exception == kj::none || count == 0) {
+    // we're either successful or the only one left, trigger the parent
+    parent.armed = true;
+    parent.onReadyEvent.arm();
+  }
+
+  return kj::none;
+}
+
+void RacePromiseNodeBase::Branch::traceEvent(TraceBuilder &builder) {
+  promise->tracePromise(builder, true);
+  parent.onReadyEvent.traceEvent(builder);
+}
+
+RacePromiseNode<void>::RacePromiseNode(Array<OwnPromiseNode> promises,
+                                       SourceLocation location)
+    : RacePromiseNodeBase(kj::mv(promises), output, location) {}
+
 }  // namespace _ (private)
 
 Promise<void> joinPromises(Array<Promise<void>>&& promises, SourceLocation location) {

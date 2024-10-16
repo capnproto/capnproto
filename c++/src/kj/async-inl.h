@@ -1141,6 +1141,76 @@ private:
   Array<ExceptionOr<_::Void>> resultParts;
 };
 
+class RacePromiseNodeBase : public PromiseNode {
+public:
+  RacePromiseNodeBase(Array<OwnPromiseNode> promises,
+                      ExceptionOrValue &output,
+                      SourceLocation location);
+  ~RacePromiseNodeBase() noexcept(false);
+
+  void onReady(Event *event) noexcept override final;
+  void get(ExceptionOrValue &output) noexcept override final;
+  void tracePromise(TraceBuilder &builder, bool stopAtNextEvent) override final;
+
+protected:
+  virtual void getNoError(ExceptionOrValue &output) noexcept = 0;
+  // Called to compile the result only in the case where there were no errors.
+
+private:
+  ExceptionOrValue &output;
+  uint countLeft;
+  OnReadyEvent onReadyEvent;
+  bool armed = false;
+
+  class Branch final : public Event {
+  public:
+    Branch(RacePromiseNodeBase &parent, OwnPromiseNode promise, SourceLocation location);
+    ~Branch() noexcept(false);
+
+    Maybe<Own<Event>> fire() override;
+    void traceEvent(TraceBuilder &builder) override;
+
+  private:
+    RacePromiseNodeBase &parent;
+    OwnPromiseNode promise;
+
+    friend class RacePromiseNodeBase;
+  };
+
+  Array<Branch> branches;
+};
+
+template <typename T> 
+class RacePromiseNode final : public RacePromiseNodeBase {
+public:
+  RacePromiseNode(Array<OwnPromiseNode> promises,SourceLocation location)
+      : RacePromiseNodeBase(kj::mv(promises), output, location) {}
+  void destroy() override { freePromise(this); }
+
+protected:
+  void getNoError(ExceptionOrValue &output) noexcept override {
+    output.as<T>().value = this->output.value;
+  }
+
+private:
+  ExceptionOr<T> output;
+};
+
+template <> class RacePromiseNode<void> final : public RacePromiseNodeBase {
+public:
+  RacePromiseNode(Array<OwnPromiseNode> promises, SourceLocation location);
+  ~RacePromiseNode() { }
+  void destroy() override { freePromise(this); }
+
+protected:
+  void getNoError(ExceptionOrValue &output) noexcept override {
+    output.as<_::Void>() = _::Void();
+  }
+
+private:
+  ExceptionOr<_::Void> output;
+};
+
 // -------------------------------------------------------------------
 
 class EagerPromiseNodeBase: public PromiseNode, protected Event {
@@ -1589,6 +1659,13 @@ Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocat
       KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
       heapArray<_::ExceptionOr<T>>(promises.size()), location,
       _::ArrayJoinBehavior::EAGER));
+}
+
+template <typename T>
+Promise<T> racePromises(Array<Promise<T>> &&promises, SourceLocation location) {
+  return _::PromiseNode::to<Promise<T>>(_::allocPromise<_::RacePromiseNode<T>>(
+      KJ_MAP(p, promises) { return _::PromiseNode::from(kj::mv(p)); },
+      location));
 }
 
 // =======================================================================================
