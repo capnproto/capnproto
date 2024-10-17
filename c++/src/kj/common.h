@@ -1912,6 +1912,34 @@ public:
 
   inline constexpr bool operator==(decltype(nullptr)) const { return size_ == 0; }
 
+  inline constexpr int cmp(const ArrayPtr& other) const {
+    size_t comparisonSize = kj::min(size_, other.size_);
+
+    if constexpr (isSameType<RemoveConst<T>, char>() || isSameType<RemoveConst<T>, unsigned char>()) {
+#if __has_feature(cxx_constexpr_string_builtins)
+      int ret = __builtin_memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
+      if (ret != 0) {
+        return ret;
+      }
+#else
+      for (size_t i = 0; i < comparisonSize; ++i) {
+        if (static_cast<unsigned char>(ptr[i]) != static_cast<unsigned char>(other.ptr[i])) {
+          return static_cast<unsigned char>(ptr[i]) - static_cast<unsigned char>(other.ptr[i]);
+        }
+      }
+#endif
+    } else {
+      for (size_t i = 0; i < comparisonSize; i++) {
+        bool ret = ptr[i] == other.ptr[i];
+        if (!ret) {
+          return ptr[i] < other.ptr[i] ? -1 : 1;
+        }
+      }
+    }
+    // arrays are equal up to comparisonSize
+    return size_ - other.size_;
+  }
+
   inline constexpr bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
 #if __has_feature(cxx_constexpr_string_builtins)
@@ -1935,32 +1963,7 @@ public:
     return true;
   }
 
-  inline constexpr bool operator<(const ArrayPtr& other) const {
-    size_t comparisonSize = kj::min(size_, other.size_);
-    if constexpr (isSameType<RemoveConst<T>, char>() || isSameType<RemoveConst<T>, unsigned char>()) {
-#if __has_feature(cxx_constexpr_string_builtins)
-      int ret = __builtin_memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
-      if (ret != 0) {
-        return ret < 0;
-      }
-#else
-      for (size_t i = 0; i < comparisonSize; ++i) {
-        if (static_cast<unsigned char>(ptr[i]) != static_cast<unsigned char>(other.ptr[i])) {
-          return static_cast<unsigned char>(ptr[i]) < static_cast<unsigned char>(other.ptr[i]);
-        }
-      }
-#endif
-    } else {
-      for (size_t i = 0; i < comparisonSize; i++) {
-        bool ret = ptr[i] == other.ptr[i];
-        if (!ret) {
-          return ptr[i] < other.ptr[i];
-        }
-      }
-    }
-    // arrays are equal up to comparisonSize
-    return size_ < other.size_;
-  }
+  inline constexpr bool operator<(const ArrayPtr& other) const { return this->cmp(other) < 0; }
 
   inline constexpr bool operator<=(const ArrayPtr& other) const { return !(other < *this); }
   inline constexpr bool operator>=(const ArrayPtr& other) const { return other <= *this; }
