@@ -1191,7 +1191,7 @@ public:
 
 protected:
   void getNoError(ExceptionOrValue &output) noexcept override {
-    output.as<T>().value = this->output.value;
+    output.as<T>().value = kj::mv(this->output.value);
   }
 
 private:
