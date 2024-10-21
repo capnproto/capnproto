@@ -573,6 +573,12 @@ Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocat
 // evaluated eagerly. If any promise results in an exception, the exception is immediately
 // propagated to the returned join promise.
 
+template <typename T>
+Promise<T> raceSuccessful(Array<Promise<T>>&& promises, SourceLocation location = {});
+// Races multiple promises to completion.
+// Returns the first successful promise result (and cancels the rest).
+// In case of every promise failing the result fails with the last error.
+
 // =======================================================================================
 // Hack for safely using a lambda as a coroutine.
 
