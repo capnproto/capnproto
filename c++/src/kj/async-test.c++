@@ -801,6 +801,27 @@ TEST(Async, RaceSuccessful) {
 
     KJ_EXPECT_THROW(FAILED, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
   }
+
+  {
+    struct NoCopy {
+      int i;
+
+      NoCopy(int i) : i(i) {}
+      NoCopy(const NoCopy&) = delete;
+
+      NoCopy(NoCopy&&) = default;
+      NoCopy& operator=(NoCopy&&) = default;
+    };
+
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = evalLater([]() -> kj::Promise<NoCopy> { return NoCopy(123); });
+    kj::PromiseFulfillerPair<NoCopy> right = newPromiseAndFulfiller<NoCopy>(); // never fulfilled
+
+    EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right.promise)))
+                       .wait(waitScope).i);
+  }
 }
 
 struct Pafs {
