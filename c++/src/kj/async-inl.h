@@ -175,6 +175,9 @@ public:
   // Enqueues this event to happen after all other events have run to completion and there is
   // really nothing left to do except wait for I/O.
 
+  void armWhenWouldSleep();
+  // Enqueues this event to a separate queue of events which should be promoted
+
   bool isNext();
   // True if the Event has been armed and is next in line to be fired. This can be used after
   // calling PromiseNode::onReady(event) to determine if a promise being waited is immediately

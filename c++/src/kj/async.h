@@ -468,7 +468,12 @@ Promise<void> yield();
 
 Promise<void> yieldUntilQueueEmpty();
 // Like `evalLast()`, but without a function to be evaluated. Useful for yielding control until the
-// event queue is otherwise completely empty and the thread is about to suspend waiting for I/O.
+// event queue is otherwise completely empty and the thread is about to check for new I/O events
+// from the OS.
+
+Promise<void> yieldUntilWouldSleep();
+// Like `yieldUntilQueueEmpty()`, but also waits until the I/O event queue from the OS is also
+// empty, such that the event loop has nothing left to do except to go to sleep.
 
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();
@@ -1233,6 +1238,12 @@ private:
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
   _::Event** breadthFirstInsertPoint = &head;
+  // Main event queue.
+
+  _::Event* wouldSleepHead = nullptr;
+  _::Event** wouldSleepTail = &wouldSleepHead;
+  // A totally separate list of events to run if we get to the point where we otherwise would
+  // sleep. (See yieldUntilWouldSleep().)
 
   kj::Maybe<Own<Executor>> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
