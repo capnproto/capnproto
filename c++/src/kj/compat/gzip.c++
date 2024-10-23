@@ -232,9 +232,9 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
     }
   } else {
     if (ctx.msg == nullptr) {
-      KJ_FAIL_REQUIRE("gzip decompression failed", inflateResult);
+      return KJ_EXCEPTION(FAILED, "gzip decompression failed", inflateResult);
     } else {
-      KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
+      return KJ_EXCEPTION(FAILED, "gzip decompression failed", ctx.msg);
     }
   }
 }

@@ -193,6 +193,19 @@ KJ_TEST("async gzip decompression") {
         gzip.tryRead(text, 1, sizeof(text)).wait(io.waitScope));
   }
 
+  // Read corrupt input.
+  {
+    Vector<byte> bytes;
+    bytes.addAll(ArrayPtr<const byte>(FOOBAR_GZIP));
+    bytes[20] ^= 0x55;  // Corrupt gzip stream.
+    MockAsyncInputStream rawInput(bytes, kj::maxValue);
+    GzipAsyncInputStream gzip(rawInput);
+
+    char text[16]{};
+    KJ_EXPECT_THROW_MESSAGE("gzip decompression failed; ctx.msg = incorrect data check",
+        gzip.tryRead(text, 1, sizeof(text)).wait(io.waitScope));
+  }
+
   // Read concatenated input.
   {
     Vector<byte> bytes;
