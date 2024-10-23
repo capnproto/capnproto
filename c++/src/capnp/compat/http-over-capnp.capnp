@@ -22,7 +22,7 @@
 @0xb665280aaff2e632;
 # Cap'n Proto interface for HTTP.
 
-using import "byte-stream.capnp".ByteStream;
+using import "/capnp/compat/byte-stream.capnp".ByteStream;
 
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("capnp");
