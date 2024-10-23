@@ -62,6 +62,14 @@ rust_capnp_library(
     visibility = ["//visibility:public"],
 )
 
+cc_capnp_library(
+    name = "byte-stream_capnp",
+    srcs = ["byte-stream.capnp"],
+    include_prefix = "capnp/compat",
+    src_prefix = "src",
+    visibility = ["//visibility:public"],
+)
+
 rust_capnp_library(
     name = "byte-stream_capnp_rust",
     srcs = ["byte-stream.capnp"],
@@ -86,13 +94,11 @@ cc_capnp_library(
 
 cc_capnp_library(
     name = "http-over-capnp_capnp",
-    srcs = [
-        "byte-stream.capnp",
-        "http-over-capnp.capnp",
-    ],
+    srcs = ["http-over-capnp.capnp"],
     include_prefix = "capnp/compat",
     src_prefix = "src",
     visibility = ["//visibility:public"],
+    deps = [":byte-stream_capnp"],
 )
 
 cc_library(
@@ -111,6 +117,19 @@ cc_library(
         ":http-over-capnp_capnp",
         "//src/kj/compat:kj-http",
     ],
+)
+
+rust_capnp_library(
+    name = "http-over-capnp_capnp_rust",
+    srcs = ["http-over-capnp.capnp"],
+    crate_name = "http_over_capnp_capnp",
+    src_prefix = "src",
+    target_compatible_with = select({
+        "//src/capnp:gen_rust_true": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [":byte-stream_capnp_rust"],
 )
 
 cc_library(
