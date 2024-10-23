@@ -1950,5 +1950,29 @@ KJ_TEST("constPromise") {
   KJ_EXPECT(i == 123);
 }
 
+KJ_TEST("yieldUntilWouldSleep") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // We need the eagerlyEvaluate() here as a buffer since calling `.poll()` calls `onReady()` and
+  // then cancels the `onReady()` after polling, which would actually unregister the yield
+  // entirely until something else waits on it.
+  auto p1 = yieldUntilWouldSleep().eagerlyEvaluate(nullptr);
+  auto p2 = yieldUntilWouldSleep().eagerlyEvaluate(nullptr);
+
+  // Polling the promises returns false, because they don't actually resolve unless we would have
+  // slept.
+  KJ_EXPECT(!p1.poll(waitScope));
+  KJ_EXPECT(!p2.poll(waitScope));
+
+  // The last-registered yield completes first.
+  p2.wait(waitScope);
+
+  // Only one resolves at a time, so the other one has't resolved yet.
+  KJ_EXPECT(!p1.poll(waitScope));
+
+  p1.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace kj
