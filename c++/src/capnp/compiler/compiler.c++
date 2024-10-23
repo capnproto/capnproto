@@ -1289,7 +1289,7 @@ void Compiler::Impl::eagerlyCompile(uint64_t id, uint eagerness,
     // clearWorkspace() is called.
     for (auto& sourceInfo: sourceInfos) {
       auto words = nodeArena.allocateArray<word>(sourceInfo.totalSize().wordCount + 1);
-      memset(words.begin(), 0, words.asBytes().size());
+      words.asBytes().fill(0);
       copyToUnchecked(sourceInfo, words);
       sourceInfoById.insert(std::make_pair(sourceInfo.getId(),
           readMessageUnchecked<schema::Node::SourceInfo>(words.begin())));
@@ -1368,8 +1368,7 @@ public:
 Compiler::ErrorIgnorer Compiler::ErrorIgnorer::instance;
 
 kj::Maybe<Type> Compiler::CompiledType::getSchema() {
-  capnp::word scratch[32];
-  memset(&scratch, 0, sizeof(scratch));
+  capnp::word scratch[32]{};
   capnp::MallocMessageBuilder message(scratch);
   auto builder = message.getRoot<schema::Type>();
 
