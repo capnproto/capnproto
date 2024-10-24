@@ -904,6 +904,9 @@ kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>
 // Returns a PipelineHook that queues up calls until `promise` resolves, then forwards them to
 // the new pipeline.
 
+kj::Own<PipelineHook> newLocalPipeline(kj::Own<void> owner, AnyPointer::Reader results);
+// Create a PipelineHook that's simply backed by the given results message.
+
 kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
 kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.

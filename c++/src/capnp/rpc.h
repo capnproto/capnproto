@@ -289,6 +289,14 @@ public:
   // The window size used by the default implementation of Connection::newStream().
 };
 
+enum class ThreePartyHandoffPurpose: uint8_t {
+  // Enum hinting why a three-party handoff is taking place. A VatNetwork may use this to inform
+  // its decision on whether and how to use 3PH.
+
+  CAPABILITY_PASSING,  // Passing a capability to a third party.
+  CALL_FORWARDING,     // Forwarding a call to a third party.
+};
+
 template <typename VatId, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
           typename ThirdPartyToContact, typename JoinResult>
 class VatNetwork: public _::VatNetworkBase {
@@ -412,7 +420,8 @@ public:
 
     // Level 3 features ----------------------------------------------
 
-    virtual bool canIntroduceTo(Connection& other) { return false; }
+    virtual bool canIntroduceTo(
+        Connection& other, ThreePartyHandoffPurpose purpose) { return false; }
     // Determines whether three-party handoff is supported, i.e. introduceTo(other, ...) can be
     // called. The caller promises that `other` is a `Connection` produced by the same
     // `VatNetwork`.
@@ -422,6 +431,7 @@ public:
     // three-party handoff.
 
     virtual void introduceTo(Connection& other,
+        ThreePartyHandoffPurpose purpose,
         typename ThirdPartyToContact::Builder otherContactInfo,
         typename ThirdPartyToAwait::Builder thisAwaitInfo) { _::throwNo3ph(); }
     // Introduce the vat at the other end of this connection ("this peer") to the vat at the other
@@ -448,7 +458,8 @@ public:
     // the requested Vat.
 
     virtual bool canForwardThirdPartyToContact(
-        typename ThirdPartyToContact::Reader contact, Connection& destination) { return false; }
+        typename ThirdPartyToContact::Reader contact, Connection& destination,
+        ThreePartyHandoffPurpose purpose) { return false; }
     // Determines whether `contact`, a `ThirdPartyToContact` received over *this* connection, can
     // be forwarded to another (fourth) party without actually connecting to `contact` first, i.e.
     // `forwardThirdPartyToContact(contact, destination, ...)` can be called. The caller promises
@@ -461,6 +472,7 @@ public:
 
     virtual void forwardThirdPartyToContact(
         typename ThirdPartyToContact::Reader contact, Connection& destination,
+        ThreePartyHandoffPurpose purpose,
         typename ThirdPartyToContact::Builder result) { _::throwNo3ph(); }
     // Given `contact`, a `ThirdPartyToContact` received over *this* connection, construct a new
     // `ThirdPartyToContact` that is valid to send over `destination` representing the same
@@ -496,18 +508,21 @@ public:
 
   private:
     AnyStruct::Reader baseGetPeerVatId() override;
-    bool canIntroduceTo(VatNetworkBase::Connection& other) override;
+    bool canIntroduceTo(VatNetworkBase::Connection& other,
+        ThreePartyHandoffPurpose purpose) override;
     void introduceTo(VatNetworkBase::Connection& other,
+        ThreePartyHandoffPurpose purpose,
         AnyPointer::Builder otherContactInfo,
         AnyPointer::Builder thisAwaitInfo) override;
     kj::Maybe<kj::Own<VatNetworkBase::Connection>> connectToIntroduced(
         AnyPointer::Reader contact,
         AnyPointer::Builder completion) override;
     bool canForwardThirdPartyToContact(
-        AnyPointer::Reader contact, VatNetworkBase::Connection& destination) override;
+        AnyPointer::Reader contact, VatNetworkBase::Connection& destination,
+        ThreePartyHandoffPurpose purpose) override;
     void forwardThirdPartyToContact(
         AnyPointer::Reader contact, VatNetworkBase::Connection& destination,
-        AnyPointer::Builder result) override;
+        ThreePartyHandoffPurpose purpose, AnyPointer::Builder result) override;
     kj::Own<void> awaitThirdParty(
         AnyPointer::Reader party, kj::Rc<kj::Refcounted> value) override;
     kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(AnyPointer::Reader completion) override;
@@ -592,8 +607,9 @@ template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdParty
           typename ThirdPartyToContact, typename JoinResult>
 bool VatNetwork<
     SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
-    Connection::canIntroduceTo(VatNetworkBase::Connection& other) {
-  return canIntroduceTo(kj::downcast<Connection>(other));
+    Connection::canIntroduceTo(
+        VatNetworkBase::Connection& other, ThreePartyHandoffPurpose purpose) {
+  return canIntroduceTo(kj::downcast<Connection>(other), purpose);
 }
 
 template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
@@ -602,9 +618,10 @@ void VatNetwork<
     SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
     Connection::introduceTo(
         VatNetworkBase::Connection& other,
+        ThreePartyHandoffPurpose purpose,
         AnyPointer::Builder otherContactInfo,
         AnyPointer::Builder thisAwaitInfo) {
-  return introduceTo(kj::downcast<Connection>(other),
+  return introduceTo(kj::downcast<Connection>(other), purpose,
       otherContactInfo.initAs<ThirdPartyToContact>(),
       thisAwaitInfo.initAs<ThirdPartyToAwait>());
 }
@@ -626,10 +643,11 @@ template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdParty
 bool VatNetwork<
     SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
     Connection::canForwardThirdPartyToContact(
-        AnyPointer::Reader contact, VatNetworkBase::Connection& destination) {
+        AnyPointer::Reader contact, VatNetworkBase::Connection& destination,
+        ThreePartyHandoffPurpose purpose) {
   return canForwardThirdPartyToContact(
       contact.getAs<ThirdPartyToContact>(),
-      kj::downcast<Connection>(destination));
+      kj::downcast<Connection>(destination), purpose);
 }
 
 template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,
@@ -638,10 +656,10 @@ void VatNetwork<
     SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact, JoinResult>::
     Connection::forwardThirdPartyToContact(
       AnyPointer::Reader contact, VatNetworkBase::Connection& destination,
-      AnyPointer::Builder result) {
+      ThreePartyHandoffPurpose purpose, AnyPointer::Builder result) {
   forwardThirdPartyToContact(
       contact.getAs<ThirdPartyToContact>(),
-      kj::downcast<Connection>(destination),
+      kj::downcast<Connection>(destination), purpose,
       result.initAs<ThirdPartyToContact>());
 }
 
