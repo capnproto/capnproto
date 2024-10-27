@@ -46,6 +46,7 @@
 #include "one-of.h"
 #include "function.h"
 #include "list.h"
+#include "map.h"
 #include <deque>
 #include <atomic>
 
@@ -1959,6 +1960,29 @@ void WaitScope::cancelAllDetached() {
       "can't call cancelAllDetached() on a fiber WaitScope, only top-level");
 
   loop.cancelAllDetached();
+}
+
+struct EventLoop::LocalMap {
+  kj::HashMap<const void*, kj::Own<void>> map;
+};
+
+void* EventLoop::getLocal(const void* key, kj::Own<void>(*allocate)()) {
+  EventLoop* loop = threadLocalEventLoop;
+  KJ_REQUIRE(loop != nullptr, "there is no current EventLoop in this thread");
+
+  LocalMap* localMap;
+  KJ_IF_SOME(m, loop->localMap) {
+    localMap = m;
+  } else {
+    localMap = loop->localMap.emplace(kj::heap<LocalMap>());
+  }
+
+  return localMap->map.findOrCreate(key, [&]() -> decltype(localMap->map)::Entry {
+    return {
+      .key = key,
+      .value = allocate()
+    };
+  }).get();
 }
 
 namespace _ {  // private

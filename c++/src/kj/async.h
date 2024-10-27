@@ -53,6 +53,9 @@ struct PromiseFulfillerPair;
 template <typename Func>
 class FunctionParam;
 
+template <typename T>
+class EventLoopLocal;
+
 template <typename Func, typename T>
 using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
@@ -1252,6 +1255,10 @@ private:
   kj::Maybe<Own<Executor>> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
 
+  struct LocalMap;
+  kj::Maybe<Own<LocalMap>> localMap;
+  // For EventLoopLocal. Allocated separately to avoid including HashMap here.
+
   Own<TaskSet> daemons;
 
   _::Event* currentlyFiring = nullptr;
@@ -1263,6 +1270,8 @@ private:
 
   void wait();
   void poll();
+
+  static void* getLocal(const void* key, kj::Own<void>(*allocate)());
 
   friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
@@ -1276,6 +1285,8 @@ private:
   friend class _::FiberBase;
   friend class _::FiberStack;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+  template <typename T>
+  friend class EventLoopLocal;
 };
 
 class WaitScope {
@@ -1358,6 +1369,23 @@ private:
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
+};
+
+template <typename T>
+class EventLoopLocal {
+  // Like thread-local storage, but attached to the current EventLoop instead. Value is
+  // default-initialized on first access and then destroyed when the EventLoop is destroyed.
+  //
+  // EventLoopLocal MUST be declared as a global or static variable. It cannot be allocated
+  // dynamically at runtime.
+public:
+  T* get() const {
+    return static_cast<T*>(EventLoop::getLocal(this,
+        []() -> kj::Own<void> { return kj::heap<T>(); }));
+  }
+
+  T& operator*() const { return *get(); }
+  T* operator->() const { return get(); }
 };
 
 }  // namespace kj

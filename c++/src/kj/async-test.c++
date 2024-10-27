@@ -1950,5 +1950,48 @@ KJ_TEST("constPromise") {
   KJ_EXPECT(i == 123);
 }
 
+KJ_TEST("EventLoopLocal") {
+  static const EventLoopLocal<int> evLocalInt;
+  static const EventLoopLocal<Own<Refcounted>> evLocalOwn;
+
+  auto rc1 = kj::refcounted<Refcounted>();
+  auto rc2 = kj::refcounted<Refcounted>();;
+
+  {
+    EventLoop loop1, loop2;
+
+    {
+      WaitScope waitScope(loop1);
+      *evLocalInt = 123;
+      *evLocalOwn = kj::addRef(*rc1);
+    }
+
+    {
+      WaitScope waitScope(loop2);
+      *evLocalInt = 456;
+      *evLocalOwn = kj::addRef(*rc2);
+    }
+
+    {
+      WaitScope waitScope(loop1);
+      KJ_EXPECT(*evLocalInt == 123);
+      KJ_EXPECT(evLocalOwn->get() == rc1.get());
+    }
+
+    {
+      WaitScope waitScope(loop2);
+      KJ_EXPECT(*evLocalInt == 456);
+      KJ_EXPECT(evLocalOwn->get() == rc2.get());
+    }
+
+    KJ_EXPECT(rc1->isShared());
+    KJ_EXPECT(rc2->isShared());
+  }
+
+  // Destroying the event loop destoys all locals, so these are no longer shared.
+  KJ_EXPECT(!rc1->isShared());
+  KJ_EXPECT(!rc2->isShared());
+}
+
 }  // namespace
 }  // namespace kj
