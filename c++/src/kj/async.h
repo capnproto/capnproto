@@ -1223,6 +1223,10 @@ public:
   // Note that this is only needed for cross-thread scheduling. To schedule code to run later in
   // the current thread, use `kj::evalLater()`, which will be more efficient.
 
+  void cancelAllDetached();
+  // Same as WaitScope::cancelAllDetached(). Sometimes it's easier to call on the EventLoop. (A
+  // WaitScope still must exist, i.e., this EventLoop must be current.)
+
 private:
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive

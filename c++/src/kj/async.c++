@@ -1943,15 +1943,22 @@ uint WaitScope::poll(uint maxTurnCount) {
   return turnCount;
 }
 
+void EventLoop::cancelAllDetached() {
+  KJ_REQUIRE(this == threadLocalEventLoop,
+      "can't call cancelAllDetached() on an EventLoop that isn't current in the thread");
+
+  while (!daemons->isEmpty()) {
+    auto oldDaemons = kj::mv(daemons);
+    daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
+    // Destroying `oldDaemons` could theoretically add new ones.
+  }
+}
+
 void WaitScope::cancelAllDetached() {
   KJ_REQUIRE(fiber == kj::none,
       "can't call cancelAllDetached() on a fiber WaitScope, only top-level");
 
-  while (!loop.daemons->isEmpty()) {
-    auto oldDaemons = kj::mv(loop.daemons);
-    loop.daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
-    // Destroying `oldDaemons` could theoretically add new ones.
-  }
+  loop.cancelAllDetached();
 }
 
 namespace _ {  // private
