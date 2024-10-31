@@ -1729,12 +1729,12 @@ void FiberBase::onReady(_::Event* event) noexcept {
 
 void FiberBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   if (stopAtNextEvent) return;
-  currentInner->tracePromise(builder, false);
+  currentInner->get()->tracePromise(builder, false);
   stack->trace(builder);
 }
 
 void FiberBase::traceEvent(TraceBuilder& builder) {
-  currentInner->tracePromise(builder, true);
+  currentInner->get()->tracePromise(builder, true);
   stack->trace(builder);
   onReadyEvent.traceEvent(builder);
 }
@@ -2009,7 +2009,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
     node->setSelfPointer(&node);
     node->onReady(&fiber);
 
-    fiber.currentInner = node;
+    fiber.currentInner = &node;
     KJ_DEFER(fiber.currentInner = nullptr);
 
     // Switch to the main stack to run the event loop.

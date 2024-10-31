@@ -1347,7 +1347,7 @@ protected:
 private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
-  _::PromiseNode* currentInner = nullptr;
+  OwnPromiseNode* currentInner = nullptr;
   OnReadyEvent onReadyEvent;
   Own<FiberStack> stack;
   _::ExceptionOrValue& result;
