@@ -141,6 +141,10 @@ cc_binary(
     srcs = [
         "compiler/capnpc-c++.c++",
     ],
+    defines = select({
+        "//src/capnp:capnp_no_inline_accessors_true": ["CAPNP_NO_INLINE_ACCESSORS"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnpc",
