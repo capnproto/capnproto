@@ -93,7 +93,7 @@ kj::Promise<double> evaluateImpl(
 class ValueImpl final: public Calculator::Value::Server {
   // Simple implementation of the Calculator.Value Cap'n Proto interface.
 
-public:
+ public:
   ValueImpl(double value): value(value) {}
 
   kj::Promise<void> read(ReadContext context) {
@@ -101,7 +101,7 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   double value;
 };
 
@@ -109,7 +109,7 @@ class FunctionImpl final: public Calculator::Function::Server {
   // Implementation of the Calculator.Function Cap'n Proto interface, where the
   // function is defined by a Calculator.Expression.
 
-public:
+ public:
   FunctionImpl(uint paramCount, Calculator::Expression::Reader body)
       : paramCount(paramCount) {
     this->body.setRoot(body);
@@ -125,7 +125,7 @@ public:
     });
   }
 
-private:
+ private:
   uint paramCount;
   // The function's arity.
 
@@ -137,7 +137,7 @@ class OperatorImpl final: public Calculator::Function::Server {
   // Implementation of the Calculator.Function Cap'n Proto interface, wrapping
   // basic binary arithmetic operators.
 
-public:
+ public:
   OperatorImpl(Calculator::Operator op): op(op) {}
 
   kj::Promise<void> call(CallContext context) {
@@ -158,14 +158,14 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   Calculator::Operator op;
 };
 
 class CalculatorImpl final: public Calculator::Server {
   // Implementation of the Calculator Cap'n Proto interface.
 
-public:
+ public:
   kj::Promise<void> evaluate(EvaluateContext context) override {
     return evaluateImpl(context.getParams().getExpression())
         .then([KJ_CPCAP(context)](double value) mutable {

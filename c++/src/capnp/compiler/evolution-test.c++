@@ -640,7 +640,7 @@ void checkExampleStruct(DynamicStruct::Reader reader, uint sharedOrdinalCount) {
 // ================================================================================
 
 class ModuleImpl final: public Module {
-public:
+ public:
   explicit ModuleImpl(ParsedFile::Reader content): content(content) {}
 
   kj::StringPtr getSourceName() override { return "evolving-schema.capnp"; }
@@ -661,7 +661,7 @@ public:
     return false;
   }
 
-private:
+ private:
   ParsedFile::Reader content;
 };
 
@@ -847,7 +847,7 @@ void doTest() {
 }
 
 class EvolutionTestMain {
-public:
+ public:
   explicit EvolutionTestMain(kj::ProcessContext& context)
       : context(context) {}
 
@@ -903,7 +903,7 @@ public:
     return true;
   }
 
-private:
+ private:
   kj::ProcessContext& context;
   uint seed = time(nullptr);
 };

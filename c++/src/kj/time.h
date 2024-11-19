@@ -69,7 +69,7 @@ constexpr Date UNIX_EPOCH = origin<Date>();
 
 class Clock {
   // Interface to read the current date and time.
-public:
+ public:
   virtual Date now() const = 0;
 };
 
@@ -80,7 +80,7 @@ class MonotonicClock {
   // time points are only meaningful in comparison to other time points from the same clock, and
   // cannot be used to determine the current calendar date.
 
-public:
+ public:
   virtual TimePoint now() const = 0;
 };
 

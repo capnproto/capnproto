@@ -28,7 +28,7 @@ namespace compiler {
 namespace {
 
 class TestFailingErrorReporter: public ErrorReporter {
-public:
+ public:
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
     KJ_FAIL_EXPECT("Parse failed.", startByte, endByte, message);
   }

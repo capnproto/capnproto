@@ -58,7 +58,7 @@ class MembranePolicy {
   // Applications may implement this interface to define a membrane policy, which allows some
   // calls crossing the membrane to be blocked or redirected.
 
-public:
+ public:
   virtual kj::Maybe<Capability::Client> inboundCall(
       uint64_t interfaceId, uint16_t methodId, Capability::Client target) = 0;
   // Given an inbound call (a call originating "outside" the membrane destined for an object
@@ -193,7 +193,7 @@ public:
   //
   // The default implementation simply returns `external`.
 
-private:
+ private:
   kj::HashMap<ClientHook*, ClientHook*> wrappers;
   kj::HashMap<ClientHook*, ClientHook*> reverseWrappers;
   // Tracks capabilities that already have wrappers instantiated. The maps map from pointer to

@@ -118,7 +118,7 @@ class HttpHeaderId {
   //
   // See HttpHeaderTable for usage hints.
 
-public:
+ public:
   HttpHeaderId() = default;
 
   inline bool operator==(const HttpHeaderId& other) const { return id == other.id; }
@@ -175,7 +175,7 @@ public:
   KJ_HTTP_FOR_EACH_BUILTIN_HEADER(DECLARE_HEADER);
 #undef DECLARE_HEADER
 
-private:
+ private:
   const HttpHeaderTable* table;
   uint id;
 
@@ -209,12 +209,12 @@ class HttpHeaderTable {
 
   struct IdsByNameMap;
 
-public:
+ public:
   HttpHeaderTable();
   // Constructs a table that only contains the builtin headers.
 
   class Builder {
-  public:
+   public:
     Builder();
     HttpHeaderId add(kj::StringPtr name);
     Own<HttpHeaderTable> build();
@@ -227,7 +227,7 @@ public:
     // to several components, each of which will register the headers they need and get a reference
     // to the future table.
 
-  private:
+   private:
     kj::Own<HttpHeaderTable> table;
   };
 
@@ -250,7 +250,7 @@ public:
   // Returns true if this HttpHeaderTable either was default constructed or its Builder has
   // invoked `build()` and released it.
 
-private:
+ private:
   kj::Vector<kj::StringPtr> namesById;
   kj::Own<IdsByNameMap> idsByName;
 
@@ -269,7 +269,7 @@ class HttpHeaders {
   // value containing a newline, carriage return, or other invalid character will throw an
   // exception.
 
-public:
+ public:
   explicit HttpHeaders(const HttpHeaderTable& table);
 
   static bool isValidHeaderValue(kj::StringPtr value);
@@ -462,7 +462,7 @@ public:
 
   kj::String toString() const;
 
-private:
+ private:
   const HttpHeaderTable* table;
 
   kj::Array<kj::StringPtr> indexedHeaders;
@@ -500,7 +500,7 @@ class HttpInputStream {
   // is mainly useful for apps implementing various protocols that look like HTTP but aren't
   // really.
 
-public:
+ public:
   struct Request {
     HttpMethod method;
     kj::StringPtr url;
@@ -561,7 +561,7 @@ class EntropySource {
   //
   // TODO(cleanup): Put this somewhere more general.
 
-public:
+ public:
   virtual void generate(kj::ArrayPtr<byte> buffer) = 0;
 };
 
@@ -585,7 +585,7 @@ class WebSocket {
   // and thus applications typically need to implement these features at the application protocol
   // level instead. The implementation is, however, expected to reply to Ping messages it receives.
 
-public:
+ public:
   virtual kj::Promise<void> send(kj::ArrayPtr<const byte> message) = 0;
   virtual kj::Promise<void> send(kj::ArrayPtr<const char> message) = 0;
   // Send a message (binary or text). The underlying buffer must remain valid, and you must not
@@ -712,7 +712,7 @@ class PausableReadAsyncIoStream final: public kj::AsyncIoStream {
   // TODO(cleanup): this class should be rewritten to use a CRTP mixin approach so that pumps
   // can be optimised once startTls is invoked.
   class PausableRead;
-public:
+ public:
   PausableReadAsyncIoStream(kj::Own<kj::AsyncIoStream> stream)
       : inner(kj::mv(stream)), currentlyWriting(false), currentlyReading(false) {}
 
@@ -757,7 +757,7 @@ public:
 
   void reject(kj::Exception&& exc);
 
-private:
+ private:
   kj::Own<kj::AsyncIoStream> inner;
   kj::Maybe<PausableRead&> maybePausableRead;
   bool currentlyWriting;
@@ -773,7 +773,7 @@ class HttpClient {
   // * Proxy clients are used when the target could be any arbitrary host on the internet.
   //   The `url` specified in a request is a full URL including protocol and hostname.
 
-public:
+ public:
   struct Response {
     uint statusCode;
     kj::StringPtr statusText;
@@ -877,9 +877,9 @@ class HttpService {
   //   implement an HTTP proxy. The `url` specified in a request is a full URL including protocol
   //   and hostname.
 
-public:
+ public:
   class Response {
-  public:
+   public:
     virtual kj::Own<kj::AsyncOutputStream> send(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = nullptr) = 0;
@@ -939,7 +939,7 @@ public:
   // `Maybe<Response&>` parameter.
 
   class ConnectResponse {
-  public:
+   public:
     virtual void accept(
         uint statusCode,
         kj::StringPtr statusText,
@@ -975,7 +975,7 @@ public:
 };
 
 class HttpClientErrorHandler {
-public:
+ public:
   virtual HttpClient::Response handleProtocolError(HttpHeaders::ProtocolError protocolError);
   // Override this function to customize error handling when the client receives an HTTP message
   // that fails to parse. The default implementations throws an exception.
@@ -1026,7 +1026,7 @@ struct HttpClientSettings {
 };
 
 class WebSocketErrorHandler {
-public:
+ public:
   virtual kj::Exception handleWebSocketProtocolError(WebSocket::ProtocolError protocolError);
   // Handles low-level protocol errors in received WebSocket data.
   //
@@ -1174,7 +1174,7 @@ struct HttpServerSettings {
 };
 
 class HttpServerErrorHandler {
-public:
+ public:
   virtual kj::Promise<void> handleClientProtocolError(
       HttpHeaders::ProtocolError protocolError, kj::HttpService::Response& response);
   virtual kj::Promise<void> handleApplicationError(
@@ -1214,7 +1214,7 @@ public:
 };
 
 class HttpServerCallbacks {
-public:
+ public:
   virtual bool shouldClose() { return false; }
   // Whenever the HttpServer begins response headers, it will check `shouldClose()` to decide
   // whether to send a `Connection: close` header and close the connection.
@@ -1227,7 +1227,7 @@ public:
 class HttpServer final: private kj::TaskSet::ErrorHandler {
   // Class which listens for requests on ports or connections and sends them to an HttpService.
 
-public:
+ public:
   typedef HttpServerSettings Settings;
   typedef kj::Function<kj::Own<HttpService>(kj::AsyncIoStream&)> HttpServiceFactory;
   class SuspendableRequest;
@@ -1279,10 +1279,10 @@ public:
     // SuspendableRequest::suspend(), then later resume the request with another call to
     // listenHttpCleanDrain().
 
-  public:
+   public:
     // Nothing, this is an opaque type.
 
-  private:
+   private:
     SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, HttpHeaders);
 
     kj::Array<byte> buffer;
@@ -1323,7 +1323,7 @@ public:
   // This overload of listenHttpCleanDrain() implements draining, as documented above. Note that the
   // returned promise will resolve to false (not clean) if a request is suspended.
 
-private:
+ private:
   class Connection;
 
   kj::Timer& timer;
@@ -1358,7 +1358,7 @@ private:
 class HttpServer::SuspendableRequest {
   // Interface passed to the SuspendableHttpServiceFactory parameter of listenHttpCleanDrain().
 
-public:
+ public:
   kj::OneOf<HttpMethod,HttpConnectMethod> method;
   kj::StringPtr url;
   const HttpHeaders& headers;
@@ -1370,7 +1370,7 @@ public:
   // buffer. The request can be later resumed with a call to listenHttpCleanDrain() using the same
   // connection.
 
-private:
+ private:
   explicit SuspendableRequest(
       Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, const HttpHeaders& headers)
       : method(method), url(url), headers(headers), connection(connection) {}

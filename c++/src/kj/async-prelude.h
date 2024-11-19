@@ -95,14 +95,14 @@ using UnwrapPromise = typename UnwrapPromise_<T>::Type;
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
   // arbitrary type which simply propagates the exception.
-public:
+ public:
   class Bottom {
-  public:
+   public:
     Bottom(Exception&& exception): exception(kj::mv(exception)) {}
 
     Exception asException() { return kj::mv(exception); }
 
-  private:
+   private:
     Exception exception;
   };
 
@@ -220,11 +220,11 @@ using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
 // PromiseNode uses a static disposer.
 
 class PromiseBase {
-public:
+ public:
   kj::String trace();
   // Dump debug info about this promise.
 
-private:
+ private:
   OwnPromiseNode node;
 
   PromiseBase() = default;
@@ -245,12 +245,12 @@ OwnPromiseNode readyNow();
 OwnPromiseNode neverDone();
 
 class ReadyNow {
-public:
+ public:
   operator Promise<void>() const;
 };
 
 class NeverDone {
-public:
+ public:
   template <typename T>
   operator Promise<T>() const;
 

@@ -117,7 +117,7 @@ class Disposer {
   // Few developers will ever touch this interface.  It is primarily useful for those implementing
   // custom memory allocators.
 
-protected:
+ protected:
   // Do not declare a destructor, as doing so will force a global initializer for each HeapDisposer
   // instance.  Eww!
 
@@ -127,7 +127,7 @@ protected:
   // Own<T> does not allow any casting, so the pointer exactly matches the original one given to
   // Own<T>.
 
-public:
+ public:
 
   template <typename T>
   void dispose(T* object) const;
@@ -139,7 +139,7 @@ public:
   // Callers must not call dispose() on the same pointer twice, even if the first call throws
   // an exception.
 
-private:
+ private:
   template <typename T, bool polymorphic = _kj_internal_isPolymorphic((T*)nullptr)>
   struct Dispose_;
 };
@@ -148,7 +148,7 @@ template <typename T>
 class DestructorOnlyDisposer: public Disposer {
   // A disposer that merely calls the type's destructor and nothing else.
 
-public:
+ public:
   static const DestructorOnlyDisposer instance;
 
   void disposeImpl(void* pointer) const override {
@@ -162,7 +162,7 @@ const DestructorOnlyDisposer<T> DestructorOnlyDisposer<T>::instance = Destructor
 class NullDisposer: public Disposer {
   // A disposer that does nothing.
 
-public:
+ public:
   static const NullDisposer instance;
 
   void disposeImpl(void* pointer) const override {}
@@ -190,7 +190,7 @@ class Own<T, decltype(nullptr)> {
   //   inheritance and upcasting, and anyway if you force everyone to use a custom deleter
   //   then you've lost any benefit to interoperating with the "standard" unique_ptr.
 
-public:
+ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): disposer(nullptr), ptr(nullptr) {}
   inline Own(Own&& other) noexcept
@@ -265,7 +265,7 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
-private:
+ private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
 
@@ -320,7 +320,7 @@ class Own {
   // resources. You should avoid this unless you have a specific need, because it precludes a lot
   // of power.
 
-public:
+ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): ptr(nullptr) {}
   inline Own(Own&& other) noexcept
@@ -380,7 +380,7 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
-private:
+ private:
   T* ptr;
 
   inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
@@ -413,7 +413,7 @@ namespace _ {  // private
 
 template <typename T, typename D>
 class OwnOwn {
-public:
+ public:
   inline OwnOwn(Own<T, D>&& value) noexcept: value(kj::mv(value)) {}
 
   inline Own<T, D>& operator*() & { return value; }
@@ -425,7 +425,7 @@ public:
   inline operator Own<T, D>*() { return value ? &value : nullptr; }
   inline operator const Own<T, D>*() const { return value ? &value : nullptr; }
 
-private:
+ private:
   Own<T, D> value;
 };
 
@@ -442,7 +442,7 @@ const Own<T, D>* readMaybe(const Maybe<Own<T, D>>& maybe) {
 
 template <typename T, typename D>
 class Maybe<Own<T, D>> {
-public:
+ public:
   inline Maybe(): ptr(nullptr) {}
   inline Maybe(Own<T, D>&& t) noexcept: ptr(kj::mv(t)) {}
   inline Maybe(Maybe&& other) noexcept: ptr(kj::mv(other.ptr)) {}
@@ -536,7 +536,7 @@ public:
     }
   }
 
-private:
+ private:
   Own<T, D> ptr;
 
   template <typename U>
@@ -553,7 +553,7 @@ namespace _ {  // private
 
 template <typename T>
 class HeapDisposer final: public Disposer {
-public:
+ public:
   virtual void disposeImpl(void* pointer) const override { delete reinterpret_cast<T*>(pointer); }
 
   static const HeapDisposer instance;
@@ -574,7 +574,7 @@ const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 #if KJ_CPP_STD >= 202002L
 template <typename T, void(*F)(T*)>
 class CustomDisposer: public Disposer {
-public:
+ public:
   void disposeImpl(void* pointer) const override {
     (*F)(reinterpret_cast<T*>(pointer));
   }
@@ -585,7 +585,7 @@ static constexpr CustomDisposer<T, F> CUSTOM_DISPOSER_INSTANCE {};
 #else
 template <typename T, void(*F)(T*)>
 class CustomDisposer: public Disposer {
-public:
+ public:
   static const CustomDisposer instance;
 
   void disposeImpl(void* pointer) const override {
@@ -664,7 +664,7 @@ class SpaceFor {
   // destructor automatically.  Instead, call construct() to construct a T in the space, which
   // returns an Own<T> which will take care of calling T's destructor later.
 
-public:
+ public:
   inline SpaceFor() {}
   inline ~SpaceFor() {}
 
@@ -674,7 +674,7 @@ public:
     return Own<T>(&value, DestructorOnlyDisposer<T>::instance);
   }
 
-private:
+ private:
   union {
     T value;
   };
@@ -732,7 +732,7 @@ struct DisposableOwnedBundle final: public Disposer, public OwnedBundle<T...> {
 template <typename T, typename StaticDisposer>
 class StaticDisposerAdapter final: public Disposer {
   // Adapts a static disposer to be called dynamically.
-public:
+ public:
   virtual void disposeImpl(void* pointer) const override {
     StaticDisposer::dispose(reinterpret_cast<T*>(pointer));
   }

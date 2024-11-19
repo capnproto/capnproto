@@ -52,7 +52,7 @@ class RpcDumper {
   // TODO(cleanup):  Clean this code up and move it to someplace reusable, so it can be used as
   //   a packet inspector / debugging tool for Cap'n Proto network traffic.
 
-public:
+ public:
   void addSchema(InterfaceSchema schema) {
     schemas[schema.getProto().getId()] = schema;
   }
@@ -153,7 +153,7 @@ public:
     return kj::str(senderName, ": ", message);
   }
 
-private:
+ private:
   std::map<uint64_t, InterfaceSchema> schemas;
   std::map<std::pair<Sender, uint32_t>, Schema> returnTypes;
 };
@@ -163,7 +163,7 @@ private:
 class TestNetworkAdapter;
 
 class TestNetwork {
-public:
+ public:
   TestNetwork() {
     dumper.addSchema(Schema::from<test::TestInterface>());
     dumper.addSchema(Schema::from<test::TestExtends>());
@@ -188,7 +188,7 @@ public:
 
   RpcDumper dumper;
 
-private:
+ private:
   std::map<kj::StringPtr, kj::Own<TestNetworkAdapter>> map;
 };
 
@@ -197,7 +197,7 @@ typedef VatNetwork<
     test::TestThirdPartyCapId, test::TestJoinResult> TestNetworkAdapterBase;
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
-public:
+ public:
   TestNetworkAdapter(TestNetwork& network, kj::StringPtr self): network(network), self(self) {}
 
   ~TestNetworkAdapter() {
@@ -220,7 +220,7 @@ public:
 
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
-  public:
+   public:
     ConnectionImpl(TestNetworkAdapter& network, RpcDumper::Sender sender)
         : network(network), sender(sender), tasks(kj::heap<kj::TaskSet>(*this)) {}
 
@@ -243,7 +243,7 @@ public:
     }
 
     class IncomingRpcMessageImpl final: public IncomingRpcMessage, public kj::Refcounted {
-    public:
+     public:
       IncomingRpcMessageImpl(kj::Array<word> data)
           : data(kj::mv(data)),
             message(this->data) {}
@@ -261,7 +261,7 @@ public:
     };
 
     class OutgoingRpcMessageImpl final: public OutgoingRpcMessage {
-    public:
+     public:
       OutgoingRpcMessageImpl(ConnectionImpl& connection, uint firstSegmentWordSize)
           : connection(connection),
             message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS
@@ -307,7 +307,7 @@ public:
         return message.sizeInWords();
       }
 
-    private:
+     private:
       ConnectionImpl& connection;
       MallocMessageBuilder message;
     };
@@ -358,7 +358,7 @@ public:
       ADD_FAILURE() << kj::str(exception).cStr();
     }
 
-  private:
+   private:
     TestNetworkAdapter& network;
     RpcDumper::Sender sender KJ_UNUSED_MEMBER;
     kj::Maybe<ConnectionImpl&> partner;
@@ -417,7 +417,7 @@ public:
     shutdownExceptionToThrow = kj::mv(e);
   }
 
-private:
+ private:
   TestNetwork& network;
   kj::StringPtr self;
   uint sent = 0;
@@ -440,7 +440,7 @@ TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
 // =======================================================================================
 
 class TestRestorer final: public SturdyRefRestorer<test::TestSturdyRefObjectId> {
-public:
+ public:
   int callCount = 0;
   int handleCount = 0;
 
@@ -742,7 +742,7 @@ TEST(Rpc, TailCall) {
 }
 
 class TestHangingTailCallee final: public test::TestTailCallee::Server {
-public:
+ public:
   TestHangingTailCallee(int& callCount, int& cancelCount)
       : callCount(callCount), cancelCount(cancelCount) {}
 
@@ -752,13 +752,13 @@ public:
         .attach(kj::defer([&cancelCount = cancelCount]() { ++cancelCount; }));
   }
 
-private:
+ private:
   int& callCount;
   int& cancelCount;
 };
 
 class TestRacingTailCaller final: public test::TestTailCaller::Server {
-public:
+ public:
   TestRacingTailCaller(kj::Promise<void> unblock): unblock(kj::mv(unblock)) {}
 
   kj::Promise<void> foo(FooContext context) override {
@@ -768,7 +768,7 @@ public:
     });
   }
 
-private:
+ private:
   kj::Promise<void> unblock;
 };
 

@@ -467,7 +467,7 @@ There has also never been any agreement on C++ file extensions, for some reason.
 * Place a closing brace on a new line indented the same as the parent block. If there is post-brace code related to the block (e.g. `else` or `while`), place it on the same line as the closing brace.
 * Always place braces around a block *unless* the block is so short that it can actually go on the same line as the introductory `if` or `while`, e.g.: `if (done) return;`.
 * `case` statements are indented within the `switch`, and their following blocks are **further** indented (so the actual statements in a case are indented four spaces more than the `switch`).
-* `public:`, `private:`, and `protected:` are reverse-indented by one stop.
+* `public:`, `private:`, and `protected:` are reverse-indented by one half stop.
 * Statements inside a `namespace` are **not** indented unless the namespace is a short block that is just forward-declaring things at the top of a file.
 * Set your editor to strip trailing whitespace on save, otherwise other people who use this setting will see spurious diffs when they edit a file after you.
 
@@ -507,10 +507,10 @@ There has also never been any agreement on C++ file extensions, for some reason.
     namespace myproj {
 
     class Fred {
-    public:
+     public:
       Fred();
       ~Fred();
-    private:
+     private:
       int plugh;
     };
 
@@ -535,7 +535,7 @@ Other than that, there is absolutely no good reason to space things one way or a
 
         class Bar {
           // This is documentation for Bar.
-        public:
+         public:
           Bar();
 
           inline int baz() { return 5; }

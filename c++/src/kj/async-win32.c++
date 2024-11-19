@@ -43,7 +43,7 @@ Win32IocpEventPort::Win32IocpEventPort()
 Win32IocpEventPort::~Win32IocpEventPort() noexcept(false) {}
 
 class Win32IocpEventPort::IoPromiseAdapter final: public OVERLAPPED {
-public:
+ public:
   IoPromiseAdapter(PromiseFulfiller<IoResult>& fulfiller, Win32IocpEventPort& port,
                    uint64_t offset, IoPromiseAdapter** selfPtr)
       : fulfiller(fulfiller), port(port) {
@@ -101,7 +101,7 @@ public:
     fulfiller.fulfill(kj::mv(result));
   }
 
-private:
+ private:
   PromiseFulfiller<IoResult>& fulfiller;
   Win32IocpEventPort& port;
 
@@ -110,7 +110,7 @@ private:
 };
 
 class Win32IocpEventPort::IoOperationImpl final: public Win32EventPort::IoOperation {
-public:
+ public:
   explicit IoOperationImpl(Win32IocpEventPort& port, HANDLE handle, uint64_t offset)
       : handle(handle),
         promise(newAdaptedPromise<IoResult, IoPromiseAdapter>(port, offset, &promiseAdapter)) {}
@@ -127,14 +127,14 @@ public:
     return kj::mv(promise);
   }
 
-private:
+ private:
   HANDLE handle;
   IoPromiseAdapter* promiseAdapter;
   Promise<IoResult> promise;
 };
 
 class Win32IocpEventPort::IoObserverImpl final: public Win32EventPort::IoObserver {
-public:
+ public:
   IoObserverImpl(Win32IocpEventPort& port, HANDLE handle)
       : port(port), handle(handle) {
     KJ_WIN32(CreateIoCompletionPort(handle, port.iocp, 0, 1), handle, port.iocp.get());
@@ -144,7 +144,7 @@ public:
     return heap<IoOperationImpl>(port, handle, offset);
   }
 
-private:
+ private:
   Win32IocpEventPort& port;
   HANDLE handle;
 };

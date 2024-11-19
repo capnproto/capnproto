@@ -42,7 +42,7 @@ struct ScoredResult {
 };
 
 class CatRankTestCase {
-public:
+ public:
   typedef List<SearchResult> Request;
   typedef List<SearchResult> Response;
   typedef int Expectation;

@@ -166,7 +166,7 @@ void randomCar(Car* car) {
 }
 
 class CarSalesTestCase {
-public:
+ public:
   typedef List<Car> Request;
   typedef uint64_t Response;
   typedef uint64_t Expectation;

@@ -71,7 +71,7 @@ struct ImplicitParams {
 class BrandedDecl {
   // Represents a declaration possibly with generic parameter bindings.
 
-public:
+ public:
   inline BrandedDecl(Resolver::ResolvedDecl decl,
                      kj::Own<BrandScope>&& brand,
                      Expression::Reader source)
@@ -141,7 +141,7 @@ public:
   kj::String toString();
   kj::String toDebugString();
 
-private:
+ private:
   Resolver::ResolveResult body;
   kj::Own<BrandScope> brand;  // null if parameter
   Expression::Reader source;
@@ -154,7 +154,7 @@ class BrandScope: public kj::Refcounted {
   // parameter bindings to it, then create a further child scope for "Bar". Thus the BrandScope for
   // Bar knows that Foo's parameter list has been bound to "(Text)".
 
-public:
+ public:
   BrandScope(ErrorReporter& errorReporter, uint64_t startingScopeId,
              uint startingScopeParamCount, Resolver& startingScope);
   // TODO(bug): Passing an `errorReporter` to the constructor of `BrandScope` turns out not to
@@ -229,7 +229,7 @@ public:
 
   inline uint64_t getScopeId() { return leafId; }
 
-private:
+ private:
   ErrorReporter& errorReporter;
   kj::Maybe<kj::Own<BrandScope>> parent;
   uint64_t leafId;                     // zero = this is the root

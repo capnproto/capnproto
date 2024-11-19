@@ -66,7 +66,7 @@ class SourceLocation {
 
   struct Badge { explicit constexpr Badge() = default; };
   // Neat little trick to make sure we can never call SourceLocation with explicit arguments.
-public:
+ public:
 #if !KJ_COMPILER_SUPPORTS_SOURCE_LOCATION
   constexpr SourceLocation() : fileName("??"), function("??"), lineNumber(0), columnNumber(0) {}
   // Constructs a dummy source location that's not pointing at anything.

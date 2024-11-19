@@ -93,7 +93,7 @@ int32_t evaluateExpression(const Expression& exp) {
 }
 
 class ExpressionTestCase {
-public:
+ public:
   typedef Expression Request;
   typedef EvaluationResult Response;
   typedef int32_t Expectation;

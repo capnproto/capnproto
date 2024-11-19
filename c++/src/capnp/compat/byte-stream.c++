@@ -28,7 +28,7 @@ namespace capnp {
 const uint MAX_BYTES_PER_WRITE = 1 << 16;
 
 class ByteStreamFactory::StreamServerBase: public capnp::ByteStream::Server {
-public:
+ public:
   virtual void returnStream(uint64_t written) = 0;
   // Called after the StreamServerBase's internal kj::AsyncOutputStream has been borrowed, to
   // indicate that the borrower is done.
@@ -65,7 +65,7 @@ public:
 };
 
 class ByteStreamFactory::SubstreamImpl final: public StreamServerBase {
-public:
+ public:
   SubstreamImpl(ByteStreamFactory& factory,
                 StreamServerBase& parent,
                 capnp::ByteStream::Client ownParent,
@@ -280,7 +280,7 @@ public:
     KJ_UNREACHABLE;
   }
 
-private:
+ private:
   ByteStreamFactory& factory;
 
   struct Streaming {
@@ -325,7 +325,7 @@ class ByteStreamFactory::CapnpToKjStreamAdapter final: public StreamServerBase {
 
   class SubstreamCallbackImpl;
 
-public:
+ public:
   class PathProber;
 
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
@@ -439,7 +439,7 @@ public:
   // PathProber
 
   class PathProber final: public kj::AsyncInputStream {
-  public:
+   public:
     PathProber(CapnpToKjStreamAdapter& parent, kj::Own<kj::AsyncOutputStream> inner,
                kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>())
         : parent(parent), inner(kj::mv(inner)),
@@ -521,7 +521,7 @@ public:
       }
     }
 
-  private:
+   private:
     kj::Maybe<CapnpToKjStreamAdapter&> parent;
     kj::Own<kj::AsyncOutputStream> inner;
     kj::ForkedPromise<void> readyPromise;
@@ -559,7 +559,7 @@ public:
     }
   };
 
-protected:
+ protected:
   // ---------------------------------------------------------------------------
   // implements ByteStream::Server RPC interface
 
@@ -725,7 +725,7 @@ protected:
     KJ_UNREACHABLE;
   }
 
-private:
+ private:
   ByteStreamFactory& factory;
   kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter;
 
@@ -736,7 +736,7 @@ private:
             capnp::ByteStream::Client, Borrowed, Ended> state;
 
   class SubstreamCallbackImpl final: public capnp::ByteStream::SubstreamCallback::Server {
-  public:
+   public:
     SubstreamCallbackImpl(ByteStreamFactory& factory,
                           kj::Own<PathProber> pathProber,
                           kj::Own<kj::PromiseFulfiller<uint64_t>> originalPumpfulfiller,
@@ -784,7 +784,7 @@ private:
       return kj::READY_NOW;
     }
 
-  private:
+   private:
     ByteStreamFactory& factory;
     kj::Own<PathProber> pathProber;
     kj::Own<kj::PromiseFulfiller<uint64_t>> originalPumpfulfiller;
@@ -796,7 +796,7 @@ private:
 // =======================================================================================
 
 class ByteStreamFactory::KjToCapnpStreamAdapter final: public ExplicitEndOutputStream {
-public:
+ public:
   KjToCapnpStreamAdapter(ByteStreamFactory& factory, capnp::ByteStream::Client innerParam,
                          bool explicitEnd)
       : factory(factory),
@@ -940,7 +940,7 @@ public:
     return findShorterPathTask.addBranch();
   }
 
-private:
+ private:
   ByteStreamFactory& factory;
   capnp::ByteStream::Client inner;
   kj::Maybe<StreamServerBase&> optimized;

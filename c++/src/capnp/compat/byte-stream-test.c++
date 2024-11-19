@@ -111,7 +111,7 @@ KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
 }
 
 class ExactPointerWriter: public kj::AsyncOutputStream {
-public:
+ public:
   kj::ArrayPtr<const char> receivedBuffer;
 
   void fulfill() {
@@ -138,7 +138,7 @@ public:
     KJ_EXPECT(receivedBuffer == expected.asArray(), receivedBuffer, expected);
   }
 
-private:
+ private:
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 };
 

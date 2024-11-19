@@ -324,7 +324,7 @@ constexpr TestStep TEST_STEPS[] = {
 };
 
 class OneConnectNetworkAddress final: public kj::NetworkAddress {
-public:
+ public:
   OneConnectNetworkAddress(kj::Own<kj::AsyncIoStream> stream)
       : stream(kj::mv(stream)) {}
 
@@ -338,7 +338,7 @@ public:
   kj::Own<kj::NetworkAddress> clone() override { KJ_UNIMPLEMENTED("test"); }
   kj::String toString() override { KJ_UNIMPLEMENTED("test"); }
 
-private:
+ private:
   kj::Maybe<kj::Own<kj::AsyncIoStream>> stream;
 };
 
@@ -494,7 +494,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
 // =======================================================================================
 
 class WebSocketAccepter final: public kj::HttpService {
-public:
+ public:
   WebSocketAccepter(kj::HttpHeaderTable& headerTable,
                     kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller,
                     kj::Promise<void> done)
@@ -509,7 +509,7 @@ public:
     return kj::mv(done);
   }
 
-private:
+ private:
   kj::HttpHeaderTable& headerTable;
   kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller;
   kj::Promise<void> done;
@@ -622,7 +622,7 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
 // bug fixes
 
 class HangingHttpService final: public kj::HttpService {
-public:
+ public:
   HangingHttpService(bool& called, bool& destroyed)
       : called(called), destroyed(destroyed) {}
   ~HangingHttpService() noexcept(false) {
@@ -636,7 +636,7 @@ public:
     return kj::NEVER_DONE;
   }
 
-private:
+ private:
   bool& called;
   bool& destroyed;
 };
@@ -675,7 +675,7 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
 class ConnectWriteCloseService final: public kj::HttpService {
   // A simple CONNECT server that will accept a connection, write some data and close the
   // connection.
-public:
+ public:
   ConnectWriteCloseService(kj::HttpHeaderTable& headerTable)
       : headerTable(headerTable) {}
 
@@ -695,12 +695,12 @@ public:
     });
   }
 
-private:
+ private:
   kj::HttpHeaderTable& headerTable;
 };
 
 class ConnectWriteRespService final: public kj::HttpService {
-public:
+ public:
   ConnectWriteRespService(kj::HttpHeaderTable& headerTable)
       : headerTable(headerTable) {}
 
@@ -731,13 +731,13 @@ public:
     });
   }
 
-private:
+ private:
   kj::HttpHeaderTable& headerTable;
 };
 
 class ConnectRejectService final: public kj::HttpService {
   // A simple CONNECT server that will reject a connection.
-public:
+ public:
   ConnectRejectService(kj::HttpHeaderTable& headerTable)
       : headerTable(headerTable) {}
 
@@ -755,7 +755,7 @@ public:
     return body->write("Error", 5).attach(kj::mv(body));
   }
 
-private:
+ private:
   kj::HttpHeaderTable& headerTable;
 };
 
@@ -927,7 +927,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
   auto client = newHttpClient(*table, *pipe.ends[1]);
 
   class WrapperHttpClient final: public kj::HttpClient {
-  public:
+   public:
     kj::HttpClient& inner;
 
     WrapperHttpClient(kj::HttpClient& client) : inner(client) {};

@@ -32,7 +32,7 @@ struct sockaddr;
 namespace kj {
 
 class CidrRange {
-public:
+ public:
   CidrRange(StringPtr pattern);
 
   static CidrRange inet4(ArrayPtr<const byte> bits, uint bitCount);
@@ -47,7 +47,7 @@ public:
 
   String toString() const;
 
-private:
+ private:
   int family;
   byte bits[16];
   uint bitCount;    // how many bits in `bits` need to match

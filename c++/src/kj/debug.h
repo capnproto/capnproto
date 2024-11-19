@@ -386,7 +386,7 @@ namespace kj {
 namespace _ {  // private
 
 class Debug {
-public:
+ public:
   Debug() = delete;
 
   typedef LogSeverity Severity;  // backwards-compatibility
@@ -412,7 +412,7 @@ public:
                   Params&&... params);
 
   class Fault {
-  public:
+   public:
     template <typename Code, typename... Params>
     Fault(const char* file, int line, Code code,
           const char* condition, const char* macroArgs, Params&&... params);
@@ -429,7 +429,7 @@ public:
     KJ_NOINLINE KJ_NORETURN(void fatal());
     // Throw the exception.
 
-  private:
+   private:
     void init(const char* file, int line, Exception::Type type,
               const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
     void init(const char* file, int line, int osErrorNumber,
@@ -443,12 +443,12 @@ public:
   };
 
   class SyscallResult {
-  public:
+   public:
     inline SyscallResult(int errorNumber): errorNumber(errorNumber) {}
     inline operator void*() { return errorNumber == 0 ? this : nullptr; }
     inline int getErrorNumber() { return errorNumber; }
 
-  private:
+   private:
     int errorNumber;
   };
 
@@ -465,7 +465,7 @@ public:
 #endif
 
   class Context: public ExceptionCallback {
-  public:
+   public:
     Context();
     KJ_DISALLOW_COPY_AND_MOVE(Context);
     virtual ~Context() noexcept(false);
@@ -486,7 +486,7 @@ public:
     virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                             String&& text) override;
 
-  private:
+   private:
     bool logged;
     Maybe<Value> value;
 
@@ -495,21 +495,21 @@ public:
 
   template <typename Func>
   class ContextImpl: public Context {
-  public:
+   public:
     inline ContextImpl(Func& func): func(func) {}
     KJ_DISALLOW_COPY_AND_MOVE(ContextImpl);
 
     Value evaluate() override {
       return func();
     }
-  private:
+   private:
     Func& func;
   };
 
   template <typename... Params>
   static String makeDescription(const char* macroArgs, Params&&... params);
 
-private:
+ private:
   static LogSeverity minSeverity;
 
   static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,

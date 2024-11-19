@@ -90,7 +90,7 @@ void LogExpectation::logMessage(
 namespace {
 
 class FatalThrowExpectation: public ExceptionCallback {
-public:
+ public:
   FatalThrowExpectation(Maybe<Exception::Type> type,
                         Maybe<StringPtr> message)
       : type(type), message(message) {}
@@ -111,7 +111,7 @@ public:
     _exit(0);
   }
 
-private:
+ private:
   Maybe<Exception::Type> type;
   Maybe<StringPtr> message;
 };

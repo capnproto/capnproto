@@ -51,7 +51,7 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
   // See `ez-rpc.h` for a simple interface for setting up two-party clients and servers.
   // Use `TwoPartyVatNetwork` only if you need the advanced features.
 
-public:
+ public:
   TwoPartyVatNetwork(MessageStream& msgStream,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
                      const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
@@ -105,7 +105,7 @@ public:
       rpc::twoparty::VatId::Reader ref) override;
   kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> accept() override;
 
-private:
+ private:
   class OutgoingMessageImpl;
   class IncomingMessageImpl;
 
@@ -148,7 +148,7 @@ private:
     //   So we hand out Own<Connection>s with this disposer attached, so that we can detect when
     //   they are dropped.
 
-  public:
+   public:
     mutable kj::Own<kj::PromiseFulfiller<void>> fulfiller;
     mutable uint refcount = 0;
 
@@ -186,7 +186,7 @@ class TwoPartyServer: private kj::TaskSet::ErrorHandler {
   // Convenience class which implements a simple server which accepts connections on a listener
   // socket and services them as two-party connections.
 
-public:
+ public:
   explicit TwoPartyServer(Capability::Client bootstrapInterface,
       kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder = nullptr);
   // `traceEncoder`, if provided, will be passed on to `rpcSystem.setTraceEncoder()`.
@@ -221,7 +221,7 @@ public:
   //
   // Only considers clients whose connections TwoPartyServer took ownership of.
 
-private:
+ private:
   Capability::Client bootstrapInterface;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::TaskSet tasks;
@@ -234,7 +234,7 @@ private:
 class TwoPartyClient {
   // Convenience class which implements a simple client.
 
-public:
+ public:
   explicit TwoPartyClient(kj::AsyncIoStream& connection);
   explicit TwoPartyClient(kj::AsyncCapabilityStream& connection, uint maxFdsPerMessage);
   TwoPartyClient(kj::AsyncIoStream& connection, Capability::Client bootstrapInterface,
@@ -255,7 +255,7 @@ public:
   size_t getCurrentQueueCount() { return network.getCurrentQueueCount(); }
   kj::Duration getOutgoingMessageWaitTime() { return network.getOutgoingMessageWaitTime(); }
 
-private:
+ private:
   TwoPartyVatNetwork network;
   RpcSystem<rpc::twoparty::VatId> rpcSystem;
 };

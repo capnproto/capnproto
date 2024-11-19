@@ -39,7 +39,7 @@ namespace benchmark {
 namespace capnp {
 
 class CountingOutputStream: public kj::FdOutputStream {
-public:
+ public:
   CountingOutputStream(int fd): FdOutputStream(fd), throughput(0) {}
 
   uint64_t throughput;
@@ -64,7 +64,7 @@ struct Uncompressed {
   typedef InputStreamMessageReader MessageReader;
 
   class ArrayMessageReader: public FlatArrayMessageReader {
-  public:
+   public:
     ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
                        kj::ArrayPtr<word> scratchSpace = nullptr)
@@ -83,7 +83,7 @@ struct Packed {
   typedef PackedMessageReader MessageReader;
 
   class ArrayMessageReader: private kj::ArrayInputStream, public PackedMessageReader {
-  public:
+   public:
     ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
                        kj::ArrayPtr<word> scratchSpace = nullptr)
@@ -110,7 +110,7 @@ struct SnappyCompressed {
   typedef SnappyPackedMessageReader MessageReader;
 
   class ArrayMessageReader: private ArrayInputStream, public SnappyPackedMessageReader {
-  public:
+   public:
     ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
                        kj::ArrayPtr<word> scratchSpace = nullptr)
@@ -134,25 +134,25 @@ struct NoScratch {
 
   template <typename Compression>
   class MessageReader: public Compression::MessageReader {
-  public:
+   public:
     inline MessageReader(typename Compression::BufferedInput& input, ScratchSpace& scratch)
         : Compression::MessageReader(input) {}
   };
 
   template <typename Compression>
   class ArrayMessageReader: public Compression::ArrayMessageReader {
-  public:
+   public:
     inline ArrayMessageReader(kj::ArrayPtr<const byte> input, ScratchSpace& scratch)
         : Compression::ArrayMessageReader(input) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
-  public:
+   public:
     inline MessageBuilder(ScratchSpace& scratch): MallocMessageBuilder() {}
   };
 
   class ObjectSizeCounter {
-  public:
+   public:
     ObjectSizeCounter(uint64_t iters): counter(0) {}
 
     template <typename RequestBuilder, typename ResponseBuilder>
@@ -167,7 +167,7 @@ struct NoScratch {
 
     uint64_t get() { return counter; }
 
-  private:
+   private:
     uint64_t counter;
   };
 };
@@ -191,7 +191,7 @@ struct UseScratch {
 
   template <typename Compression>
   class MessageReader: public Compression::MessageReader {
-  public:
+   public:
     inline MessageReader(typename Compression::BufferedInput& input, ScratchSpace& scratch)
         : Compression::MessageReader(
             input, ReaderOptions(), kj::arrayPtr(scratch.words, SCRATCH_SIZE)) {}
@@ -199,20 +199,20 @@ struct UseScratch {
 
   template <typename Compression>
   class ArrayMessageReader: public Compression::ArrayMessageReader {
-  public:
+   public:
     inline ArrayMessageReader(kj::ArrayPtr<const byte> input, ScratchSpace& scratch)
         : Compression::ArrayMessageReader(
             input, ReaderOptions(), kj::arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
-  public:
+   public:
     inline MessageBuilder(ScratchSpace& scratch)
         : MallocMessageBuilder(kj::arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   class ObjectSizeCounter {
-  public:
+   public:
     ObjectSizeCounter(uint64_t iters): iters(iters), maxSize(0) {}
 
     template <typename RequestBuilder, typename ResponseBuilder>
@@ -229,7 +229,7 @@ struct UseScratch {
 
     uint64_t get() { return iters * maxSize; }
 
-  private:
+   private:
     uint64_t iters;
     size_t maxSize;
   };

@@ -38,7 +38,7 @@ class Arena {
   // single-threaded.  If you need to use arena allocation in a multithreaded context, consider
   // allocating thread-local arenas.
 
-public:
+ public:
   explicit Arena(size_t chunkSizeHint = 1024);
   // Create an Arena.  `chunkSizeHint` hints at where to start when allocating chunks, but is only
   // a hint -- the Arena will, for example, allocate progressively larger chunks as time goes on,
@@ -79,7 +79,7 @@ public:
   StringPtr copyString(StringPtr content);
   // Make a copy of the given string inside the arena, and return a pointer to the copy.
 
-private:
+ private:
   struct ChunkHeader {
     ChunkHeader* next;
     byte* pos;  // first unallocated byte in this chunk

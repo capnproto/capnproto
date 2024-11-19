@@ -64,7 +64,7 @@ class Refcounted: private Disposer {
   //   virtual function call for every refcount is sad in its own way.  A Ref<T> type to replace
   //   Own<T> could also be nice.
 
-public:
+ public:
   Refcounted() = default;
   virtual ~Refcounted() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(Refcounted);
@@ -73,7 +73,7 @@ public:
   // Check if there are multiple references to this object. This is sometimes useful for deciding
   // whether it's safe to modify the object vs. make a copy.
 
-private:
+ private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
 
@@ -120,7 +120,7 @@ class RefcountedWrapper: public Refcounted {
   // Adds refcounting as a wrapper around an existing type, allowing you to construct references
   // with type Own<T> that appears to point directly to the underlying object.
 
-public:
+ public:
   template <typename... Params>
   RefcountedWrapper(Params&&... params): wrapped(kj::fwd<Params>(params)...) {}
 
@@ -133,7 +133,7 @@ public:
     return Own<T>(&wrapped, *this);
   }
 
-private:
+ private:
   T wrapped;
 };
 
@@ -142,7 +142,7 @@ class RefcountedWrapper<Own<T>>: public Refcounted {
   // Specialization for when the wrapped type is itself Own<T>. We don't want this to result in
   // Own<Own<T>>.
 
-public:
+ public:
   RefcountedWrapper(Own<T> wrapped): wrapped(kj::mv(wrapped)) {}
 
   T& getWrapped() { return *wrapped; }
@@ -154,7 +154,7 @@ public:
     return Own<T>(wrapped.get(), *this);
   }
 
-private:
+ private:
   Own<T> wrapped;
 };
 
@@ -182,7 +182,7 @@ Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
 #endif
 
 class AtomicRefcounted: private kj::Disposer {
-public:
+ public:
   AtomicRefcounted() = default;
   virtual ~AtomicRefcounted() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(AtomicRefcounted);
@@ -195,7 +195,7 @@ public:
 #endif
   }
 
-private:
+ private:
 #if _MSC_VER && !defined(__clang__)
   mutable volatile long refcount = 0;
 #else

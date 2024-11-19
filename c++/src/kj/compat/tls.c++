@@ -96,7 +96,7 @@ void X509_up_ref(X509* x509) {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 class OpenSslInit {
   // Initializes the OpenSSL library.
-public:
+ public:
   OpenSslInit() {
     SSL_library_init();
     SSL_load_error_strings();
@@ -157,7 +157,7 @@ bool isIpAddress(kj::StringPtr addr) {
 //   that directly if so.
 
 class TlsConnection final: public kj::AsyncIoStream {
-public:
+ public:
   TlsConnection(kj::Own<kj::AsyncIoStream> stream, SSL_CTX* ctx)
       : TlsConnection(*stream, ctx) {
     ownInner = kj::mv(stream);
@@ -302,7 +302,7 @@ public:
     return inner.getFd();
   }
 
-private:
+ private:
   SSL* ssl;
   kj::AsyncIoStream& inner;
   kj::Own<kj::AsyncIoStream> ownInner;
@@ -482,7 +482,7 @@ private:
 // Implementations of ConnectionReceiver, NetworkAddress, and Network as wrappers adding TLS.
 
 class TlsConnectionReceiver final: public ConnectionReceiver, public TaskSet::ErrorHandler {
-public:
+ public:
   TlsConnectionReceiver(
       TlsContext &tls, Own<ConnectionReceiver> inner,
       kj::Maybe<TlsErrorHandler> acceptErrorHandler)
@@ -528,7 +528,7 @@ public:
     return inner->setsockopt(level, option, value, length);
   }
 
-private:
+ private:
   void onAcceptSuccess(AuthenticatedStream&& stream) {
     // Queue this stream to go through SSL_accept.
 
@@ -577,7 +577,7 @@ private:
 };
 
 class TlsNetworkAddress final: public kj::NetworkAddress {
-public:
+ public:
   TlsNetworkAddress(TlsContext& tls, kj::String hostname, kj::Own<kj::NetworkAddress>&& inner)
       : tls(tls), hostname(kj::mv(hostname)), inner(kj::mv(inner)) {}
 
@@ -617,14 +617,14 @@ public:
     return kj::str("tls:", inner->toString());
   }
 
-private:
+ private:
   TlsContext& tls;
   kj::String hostname;
   kj::Own<kj::NetworkAddress> inner;
 };
 
 class TlsNetwork final: public kj::Network {
-public:
+ public:
   TlsNetwork(TlsContext& tls, kj::Network& inner): tls(tls), inner(inner) {}
   TlsNetwork(TlsContext& tls, kj::Own<kj::Network> inner)
       : tls(tls), inner(*inner), ownInner(kj::mv(inner)) {}
@@ -697,7 +697,7 @@ public:
     return kj::heap<TlsNetwork>(tls, inner.restrictPeers(allow, deny));
   }
 
-private:
+ private:
   TlsContext& tls;
   kj::Network& inner;
   kj::Own<kj::Network> ownInner;

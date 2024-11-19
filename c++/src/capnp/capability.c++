@@ -44,7 +44,7 @@ namespace {
 static kj::Own<ClientHook> newNullCap();
 
 class BrokenCapFactoryImpl: public _::BrokenCapFactory {
-public:
+ public:
   kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) override {
     return capnp::newBrokenCap(description);
   }
@@ -136,7 +136,7 @@ static inline uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint) {
 }
 
 class LocalResponse final: public ResponseHook {
-public:
+ public:
   LocalResponse(kj::Maybe<MessageSize> sizeHint)
       : message(firstSegmentSize(sizeHint)) {}
 
@@ -144,7 +144,7 @@ public:
 };
 
 class LocalCallContext final: public CallContextHook, public ResponseHook, public kj::Refcounted {
-public:
+ public:
   LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef,
                    ClientHook::CallHints hints, bool isStreaming)
       : request(kj::mv(request)), clientRef(kj::mv(clientRef)), hints(hints),
@@ -222,7 +222,7 @@ public:
 };
 
 class LocalRequest final: public RequestHook {
-public:
+ public:
   inline LocalRequest(uint64_t interfaceId, uint16_t methodId,
                       kj::Maybe<MessageSize> sizeHint, ClientHook::CallHints hints,
                       kj::Own<ClientHook> client)
@@ -260,7 +260,7 @@ public:
 
   kj::Own<MallocMessageBuilder> message;
 
-private:
+ private:
   uint64_t interfaceId;
   uint16_t methodId;
   ClientHook::CallHints hints;
@@ -309,7 +309,7 @@ class QueuedPipeline final: public PipelineHook, public kj::Refcounted {
   // A PipelineHook which simply queues calls while waiting for a PipelineHook to which to forward
   // them.
 
-public:
+ public:
   QueuedPipeline(kj::Promise<kj::Own<PipelineHook>>&& promiseParam)
       : promise(promiseParam.fork()),
         selfResolutionOp(promise.addBranch().then([this](kj::Own<PipelineHook>&& inner) {
@@ -332,7 +332,7 @@ public:
 
   kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override;
 
-private:
+ private:
   kj::ForkedPromise<kj::Own<PipelineHook>> promise;
 
   kj::Maybe<kj::Own<PipelineHook>> redirect;
@@ -389,7 +389,7 @@ class QueuedClient final: public ClientHook, public kj::Refcounted {
   // A ClientHook which simply queues calls while waiting for a ClientHook to which to forward
   // them.
 
-public:
+ public:
   QueuedClient(kj::Promise<kj::Own<ClientHook>>&& promiseParam)
       : promise(promiseParam.fork()),
         selfResolutionOp(promise.addBranch().then([this](kj::Own<ClientHook>&& inner) {
@@ -472,7 +472,7 @@ public:
     }
   }
 
-private:
+ private:
   typedef kj::ForkedPromise<kj::Own<ClientHook>> ClientHookPromiseFork;
 
   kj::Maybe<kj::Own<ClientHook>> redirect;
@@ -520,7 +520,7 @@ kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops)
 // =======================================================================================
 
 class LocalPipeline final: public PipelineHook, public kj::Refcounted {
-public:
+ public:
   inline LocalPipeline(kj::Own<CallContextHook>&& contextParam)
       : context(kj::mv(contextParam)),
         results(context->getResults(MessageSize { 0, 0 })) {}
@@ -533,13 +533,13 @@ public:
     return results.getPipelinedCap(ops);
   }
 
-private:
+ private:
   kj::Own<CallContextHook> context;
   AnyPointer::Reader results;
 };
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
-public:
+ public:
   LocalClient(kj::Own<Capability::Server>&& serverParam, bool revocable = false) {
     auto& serverRef = *server.emplace(kj::mv(serverParam));
     serverRef.thisHook = this;
@@ -736,7 +736,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::Maybe<kj::Own<Capability::Server>> server;
   _::CapabilityServerSetBase* capServerSet = nullptr;
   void* ptr = nullptr;
@@ -771,7 +771,7 @@ private:
   }
 
   class BlockedCall {
-  public:
+   public:
     BlockedCall(kj::PromiseFulfiller<kj::Promise<void>>& fulfiller, LocalClient& client,
                 uint64_t interfaceId, uint16_t methodId, CallContextHook& context)
         : fulfiller(fulfiller), client(client),
@@ -803,7 +803,7 @@ private:
       }
     }
 
-  private:
+   private:
     kj::PromiseFulfiller<kj::Promise<void>>& fulfiller;
     LocalClient& client;
     uint64_t interfaceId;
@@ -827,7 +827,7 @@ private:
   };
 
   class BlockingScope {
-  public:
+   public:
     BlockingScope(LocalClient& client): client(client) { client.blocked = true; }
     BlockingScope(): client(nullptr) {}
     BlockingScope(BlockingScope&& other): client(other.client) { other.client = nullptr; }
@@ -839,7 +839,7 @@ private:
       }
     }
 
-  private:
+   private:
     kj::Maybe<LocalClient&> client;
   };
 
@@ -930,7 +930,7 @@ kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>
 namespace _ {  // private
 
 class PipelineBuilderHook final: public PipelineHook, public kj::Refcounted {
-public:
+ public:
   PipelineBuilderHook(uint firstSegmentWords)
       : message(firstSegmentWords),
         root(message.getRoot<AnyPointer>()) {}
@@ -960,7 +960,7 @@ PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords) {
 namespace {
 
 class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
-public:
+ public:
   BrokenPipeline(const kj::Exception& exception): exception(exception) {}
 
   kj::Own<PipelineHook> addRef() override {
@@ -969,12 +969,12 @@ public:
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override;
 
-private:
+ private:
   kj::Exception exception;
 };
 
 class BrokenRequest final: public RequestHook {
-public:
+ public:
   BrokenRequest(const kj::Exception& exception, kj::Maybe<MessageSize> sizeHint)
       : exception(exception), message(firstSegmentSize(sizeHint)) {}
 
@@ -1000,7 +1000,7 @@ public:
 };
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
-public:
+ public:
   BrokenClient(const kj::Exception& exception, bool resolved, const void* brand)
       : exception(exception), resolved(resolved), brand(brand) {}
   BrokenClient(const kj::StringPtr description, bool resolved, const void* brand)
@@ -1042,7 +1042,7 @@ public:
     return nullptr;
   }
 
-private:
+ private:
   kj::Exception exception;
   bool resolved;
   const void* brand;
@@ -1081,7 +1081,7 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
 
 kj::Own<PipelineHook> getDisabledPipeline() {
   class DisabledPipelineHook final: public PipelineHook {
-  public:
+   public:
     kj::Own<PipelineHook> addRef() override {
       return kj::Own<PipelineHook>(this, kj::NullDisposer::instance);
     }

@@ -352,9 +352,9 @@ class word {
   //
   // A pointer of type word* should always be word-aligned even if won't actually be dereferenced
   // as that type.
-public:
+ public:
   word() = default;
-private:
+ private:
   uint64_t content KJ_UNUSED_MEMBER;
 #if __GNUC__ < 8 || __clang__
   // GCC 8's -Wclass-memaccess complains whenever we try to memcpy() a `word` if we've disallowed

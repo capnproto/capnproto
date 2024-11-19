@@ -33,13 +33,13 @@ namespace kj {
 class TestRunner;
 
 class TestCase {
-public:
+ public:
   TestCase(const char* file, uint line, const char* description);
   ~TestCase();
 
   virtual void run() = 0;
 
-protected:
+ protected:
   template <typename Func>
   void doBenchmark(Func&& func) {
     // Perform a benchmark with configurable iterations. func() will be called N times, where N
@@ -54,7 +54,7 @@ protected:
     }
   }
 
-private:
+ private:
   const char* file;
   uint line;
   const char* description;
@@ -71,7 +71,7 @@ private:
   /* Make sure the linker fails if tests are not in anonymous namespaces. */ \
   extern int KJ_CONCAT(YouMustWrapTestsInAnonymousNamespace, __COUNTER__) KJ_UNUSED; \
   class KJ_UNIQUE_NAME(TestCase): public ::kj::TestCase { \
-  public: \
+   public: \
     KJ_UNIQUE_NAME(TestCase)(): ::kj::TestCase(__FILE__, __LINE__, description) {} \
     void run() override; \
   } KJ_UNIQUE_NAME(testCase); \
@@ -192,14 +192,14 @@ bool expectSignal(Maybe<int> signal, FunctionParam<void()> code) noexcept;
 // Resets signal handlers to default prior to running the code in the child process.
 
 class LogExpectation: public ExceptionCallback {
-public:
+ public:
   LogExpectation(LogSeverity severity, StringPtr substring);
   ~LogExpectation();
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                   String&& text) override;
 
-private:
+ private:
   LogSeverity severity;
   StringPtr substring;
   bool seen;
@@ -211,13 +211,13 @@ class GlobFilter {
   //
   // Exposed in header only for testing.
 
-public:
+ public:
   explicit GlobFilter(const char* pattern);
   explicit GlobFilter(ArrayPtr<const char> pattern);
 
   bool matches(StringPtr name);
 
-private:
+ private:
   String pattern;
   Vector<uint> states;
 

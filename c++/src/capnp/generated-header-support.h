@@ -207,7 +207,7 @@ inline kj::String enumString(T value) {
 // TODO(cleanup):  Unify ConstStruct and ConstList.
 template <typename T>
 class ConstStruct {
-public:
+ public:
   ConstStruct() = delete;
   KJ_DISALLOW_COPY_AND_MOVE(ConstStruct);
   inline explicit constexpr ConstStruct(const word* ptr): ptr(ptr) {}
@@ -220,13 +220,13 @@ public:
   inline typename T::Reader operator*() const { return get(); }
   inline TemporaryPointer<typename T::Reader> operator->() const { return get(); }
 
-private:
+ private:
   const word* ptr;
 };
 
 template <typename T>
 class ConstList {
-public:
+ public:
   ConstList() = delete;
   KJ_DISALLOW_COPY_AND_MOVE(ConstList);
   inline explicit constexpr ConstList(const word* ptr): ptr(ptr) {}
@@ -239,13 +239,13 @@ public:
   inline typename List<T>::Reader operator*() const { return get(); }
   inline TemporaryPointer<typename List<T>::Reader> operator->() const { return get(); }
 
-private:
+ private:
   const word* ptr;
 };
 
 template <size_t size>
 class ConstText {
-public:
+ public:
   ConstText() = delete;
   KJ_DISALLOW_COPY_AND_MOVE(ConstText);
   inline explicit constexpr ConstText(const word* ptr): ptr(ptr) {}
@@ -262,7 +262,7 @@ public:
     return get();
   }
 
-private:
+ private:
   const word* ptr;
 };
 
@@ -273,7 +273,7 @@ inline kj::StringPtr KJ_STRINGIFY(const ConstText<size>& s) {
 
 template <size_t size>
 class ConstData {
-public:
+ public:
   ConstData() = delete;
   KJ_DISALLOW_COPY_AND_MOVE(ConstData);
   inline explicit constexpr ConstData(const word* ptr): ptr(ptr) {}
@@ -286,7 +286,7 @@ public:
   inline Data::Reader operator*() const { return get(); }
   inline TemporaryPointer<Data::Reader> operator->() const { return get(); }
 
-private:
+ private:
   const word* ptr;
 };
 

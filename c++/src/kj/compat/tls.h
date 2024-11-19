@@ -56,7 +56,7 @@ class TlsContext: public kj::SecureNetworkWrapper {
   // use the defaults), and then use it to wrap the standard KJ network interfaces in
   // implementations that transparently use TLS.
 
-public:
+ public:
 
   struct Options {
     Options();
@@ -155,7 +155,7 @@ public:
   // only accept addresses of the form "hostname" and "hostname:port" (it does not accept raw IP
   // addresses). It will automatically use SNI and verify certificates based on these hostnames.
 
-private:
+ private:
   void* ctx;  // actually type SSL_CTX, but we don't want to #include the OpenSSL headers here
   kj::Maybe<kj::Timer&> timer;
   kj::Maybe<kj::Duration> acceptTimeout;
@@ -167,7 +167,7 @@ private:
 class TlsPrivateKey {
   // A private key suitable for use in a TLS server.
 
-public:
+ public:
   TlsPrivateKey(kj::ArrayPtr<const byte> asn1);
   // Parse a single binary (ASN1) private key. Supports PKCS8 keys as well as "traditional format"
   // RSA and DSA keys. Does not accept encrypted keys; it is the caller's responsibility to
@@ -190,7 +190,7 @@ public:
     return *this;
   }
 
-private:
+ private:
   void* pkey;  // actually type EVP_PKEY*
 
   friend class TlsContext;
@@ -201,7 +201,7 @@ private:
 class TlsCertificate {
   // A TLS certificate, possibly with chained intermediate certificates.
 
-public:
+ public:
   TlsCertificate(kj::ArrayPtr<const byte> asn1);
   // Parse a single binary (ASN1) X509 certificate.
 
@@ -228,7 +228,7 @@ public:
     return *this;
   }
 
-private:
+ private:
   void* chain[10];
   // Actually type X509*[10].
   //
@@ -260,14 +260,14 @@ class TlsSniCallback {
   //   Node may be manually parsing the ClientHello message rather than relying on OpenSSL. We
   //   could do that but it's too much work for today.
 
-public:
+ public:
   virtual kj::Maybe<TlsKeypair> getKey(kj::StringPtr hostname) = 0;
   // Get the key to use for `hostname`. Null return means use the default from
   // TlsContext::Options::defaultKeypair.
 };
 
 class TlsPeerIdentity final: public kj::PeerIdentity {
-public:
+ public:
   KJ_DISALLOW_COPY_AND_MOVE(TlsPeerIdentity);
   ~TlsPeerIdentity() noexcept(false);
 
@@ -295,11 +295,11 @@ public:
   // TODO(someday): Methods for other things. Match hostnames (i.e. evaluate wildcards and SAN)?
   //   Key fingerprint? Other certificate fields?
 
-private:
+ private:
   void* cert;  // actually type X509*, but we don't want to #include the OpenSSL headers here.
   kj::Own<kj::PeerIdentity> inner;
 
-public:  // (not really public, only TlsConnection can call this)
+ public:  // (not really public, only TlsConnection can call this)
   TlsPeerIdentity(void* cert, kj::Own<kj::PeerIdentity> inner, kj::Badge<TlsConnection>)
       : cert(cert), inner(kj::mv(inner)) {}
 };

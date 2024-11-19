@@ -37,7 +37,7 @@ namespace {
 #endif
 
 class FakeFileReader final: public kj::Filesystem {
-public:
+ public:
   void add(kj::StringPtr name, kj::StringPtr content) {
     root->openFile(cwd.evalNative(name), kj::WriteMode::CREATE | kj::WriteMode::CREATE_PARENT)
         ->writeAll(content);
@@ -47,7 +47,7 @@ public:
   const kj::Directory& getCurrent() const override { return *current; }
   kj::PathPtr getCurrentPath() const override { return cwd; }
 
-private:
+ private:
   kj::Own<const kj::Directory> root = kj::newInMemoryDirectory(kj::nullClock());
   kj::Path cwd = kj::Path({}).evalNative(ABS("path/to/current/dir"));
   kj::Own<const kj::Directory> current = root->openSubdir(cwd,

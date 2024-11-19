@@ -48,12 +48,12 @@ class BootstrapFactory: public _::BootstrapFactoryBase {
   // This is only useful for multi-party networks. For TwoPartyVatNetwork, there's no reason to
   // use a BootstrapFactory; just specify a single bootstrap capability in this case.
 
-public:
+ public:
   virtual Capability::Client createFor(typename VatId::Reader clientId) = 0;
   // Create a bootstrap capability appropriate for exposing to the given client. VatNetwork will
   // have authenticated the client VatId before this is called.
 
-private:
+ private:
   Capability::Client baseCreateFor(AnyStruct::Reader clientId) override;
 };
 
@@ -72,7 +72,7 @@ class RpcSystem: public _::RpcSystemBase {
   // See `ez-rpc.h` for an even simpler interface for setting up RPC in a typical two-party
   // client/server scenario.
 
-public:
+ public:
   template <typename ProvisionId, typename RecipientId,
             typename ThirdPartyCapId, typename JoinResult>
   RpcSystem(
@@ -241,12 +241,12 @@ class SturdyRefRestorer: public _::SturdyRefRestorerBase {
   // Hint:  Use SturdyRefRestorer<capnp::Text> to define a server that exports services under
   //   string names.
 
-public:
+ public:
   virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref) CAPNP_DEPRECATED(
       "Please transition to using bootstrap interfaces instead of SturdyRefRestorer.") = 0;
   // Restore the given object, returning a capability representing it.
 
-private:
+ private:
   Capability::Client baseRestore(AnyPointer::Reader ref) override final;
 };
 
@@ -256,7 +256,7 @@ private:
 class OutgoingRpcMessage {
   // A message to be sent by a `VatNetwork`.
 
-public:
+ public:
   virtual AnyPointer::Builder getBody() = 0;
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
   // implementation initializes it as a Message as defined in rpc.capnp.)
@@ -278,7 +278,7 @@ public:
 class IncomingRpcMessage {
   // A message received from a `VatNetwork`.
 
-public:
+ public:
   virtual AnyPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
@@ -310,7 +310,7 @@ public:
 class RpcFlowController {
   // Tracks a particular RPC stream in order to implement a flow control algorithm.
 
-public:
+ public:
   virtual kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) = 0;
   // Like calling message->send(), but the promise resolves when it's a good time to send the
   // next message.
@@ -344,7 +344,7 @@ public:
   // window.
 
   class WindowGetter {
-  public:
+   public:
     virtual size_t getWindow() = 0;
   };
 
@@ -377,7 +377,7 @@ class VatNetwork: public _::VatNetworkBase {
   //
   // TODO(someday):  Provide a standard implementation for the public internet.
 
-public:
+ public:
   class Connection;
 
   struct ConnectionAndProvisionId {
@@ -402,7 +402,7 @@ public:
     // in the future.  In this case, sent messages will automatically be queued and sent once the
     // connection is ready, so that the caller doesn't need to know the difference.
 
-  public:
+   public:
     virtual kj::Own<RpcFlowController> newStream() override
         { return RpcFlowController::newFixedWindowController(65536); }
     // Construct a flow controller for a new stream on this connection. The controller can be
@@ -449,7 +449,7 @@ public:
     // Waits until all outgoing messages have been sent, then shuts down the outgoing stream. The
     // returned promise resolves after shutdown is complete.
 
-  private:
+   private:
     AnyStruct::Reader baseGetPeerVatId() override;
   };
 
@@ -471,7 +471,7 @@ public:
   // Level 4 features ------------------------------------------------
   // TODO(someday)
 
-private:
+ private:
   kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
       baseConnect(AnyStruct::Reader hostId) override final;
   kj::Promise<kj::Own<_::VatNetworkBase::Connection>> baseAccept() override final;

@@ -74,10 +74,10 @@ class AsyncObject {
   // (We prefer inheritance rather than composition here because inheriting an empty type adds zero
   // size to the derived class.)
 
-public:
+ public:
   ~AsyncObject();
 
-private:
+ private:
   KJ_NORETURN(static void failed() noexcept);
 };
 
@@ -90,12 +90,12 @@ class DisallowAsyncDestructorsScope {
   // intended to be passed between threads, you can set up one of these scopes to catch whether
   // the object contains any async objects, which are not legal to pass across threads.
 
-public:
+ public:
   explicit DisallowAsyncDestructorsScope(kj::StringPtr reason);
   ~DisallowAsyncDestructorsScope();
   KJ_DISALLOW_COPY_AND_MOVE(DisallowAsyncDestructorsScope);
 
-private:
+ private:
   kj::StringPtr reason;
   DisallowAsyncDestructorsScope* previousValue;
 
@@ -105,12 +105,12 @@ private:
 class AllowAsyncDestructorsScope {
   // Negates the effect of DisallowAsyncDestructorsScope.
 
-public:
+ public:
   AllowAsyncDestructorsScope();
   ~AllowAsyncDestructorsScope();
   KJ_DISALLOW_COPY_AND_MOVE(AllowAsyncDestructorsScope);
 
-private:
+ private:
   DisallowAsyncDestructorsScope* previousValue;
 };
 
@@ -187,7 +187,7 @@ class Promise: protected _::PromiseBase {
   //   http://promisesaplus.com/
   //   https://github.com/domenic/promises-unwrapping
 
-public:
+ public:
   Promise(_::FixVoid<T> value);
   // Construct an already-fulfilled Promise from a value of type T.  For non-void promises, the
   // parameter type is simply T.  So, e.g., in a function that returns `Promise<int>`, you can
@@ -379,7 +379,7 @@ public:
   // Returns a dump of debug info about this promise.  Not for production use.  Requires RTTI.
   // This method does NOT consume the promise as other methods do.
 
-private:
+ private:
   Promise(bool, _::OwnPromiseNode&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
@@ -391,7 +391,7 @@ class ForkedPromise {
   // The result of `Promise::fork()` and `EventLoop::fork()`.  Allows branches to be created.
   // Like `Promise<T>`, this is a pass-by-move type.
 
-public:
+ public:
   inline ForkedPromise(decltype(nullptr)) {}
 
   Promise<T> addBranch();
@@ -400,7 +400,7 @@ public:
   bool hasBranches();
   // Returns true if there are any branches that haven't been canceled.
 
-private:
+ private:
   Own<_::ForkHub<_::FixVoid<T>>> hub;
 
   inline ForkedPromise(bool, Own<_::ForkHub<_::FixVoid<T>>>&& hub): hub(kj::mv(hub)) {}
@@ -505,7 +505,7 @@ class FiberPool final {
   // the expense of memory usage. Fibers in this pool will always use the max amount of memory
   // used until the pool is destroyed.
 
-public:
+ public:
   explicit FiberPool(size_t stackSize);
   ~FiberPool() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(FiberPool);
@@ -546,7 +546,7 @@ public:
   size_t getFreelistSize() const;
   // Get the number of stacks currently in the freelist. Does not count stacks that are active.
 
-private:
+ private:
   class Impl;
   Own<Impl> impl;
 
@@ -574,7 +574,7 @@ Promise<Array<T>> joinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocat
 
 template <typename Func, typename MovedParam>
 class CaptureByMove {
-public:
+ public:
   inline CaptureByMove(Func&& func, MovedParam&& param)
       : func(kj::mv(func)), param(kj::mv(param)) {}
 
@@ -584,7 +584,7 @@ public:
     return func(kj::mv(param), kj::fwd<Params>(params)...);
   }
 
-private:
+ private:
   Func func;
   MovedParam param;
 };
@@ -725,7 +725,7 @@ auto coCapture(Functor&& f) {
 class PromiseRejector: private AsyncObject {
   // Superclass of PromiseFulfiller containing the non-typed methods. Useful when you only really
   // need to be able to reject a promise, and you need to operate on fulfillers of different types.
-public:
+ public:
   virtual void reject(Exception&& exception) = 0;
   virtual bool isWaiting() = 0;
 };
@@ -735,7 +735,7 @@ class PromiseFulfiller: public PromiseRejector {
   // A callback which can be used to fulfill a promise.  Only the first call to fulfill() or
   // reject() matters; subsequent calls are ignored.
 
-public:
+ public:
   virtual void fulfill(T&& value) = 0;
   // Fulfill the promise with the given value.
 
@@ -758,7 +758,7 @@ template <>
 class PromiseFulfiller<void>: public PromiseRejector {
   // Specialization of PromiseFulfiller for void promises.  See PromiseFulfiller<T>.
 
-public:
+ public:
   virtual void fulfill(_::Void&& value = _::Void()) = 0;
   // Call with zero parameters.  The parameter is a dummy that only exists so that subclasses don't
   // have to specialize for <void>.
@@ -816,7 +816,7 @@ class CrossThreadPromiseFulfiller: public kj::PromiseFulfiller<T> {
   // Like PromiseFulfiller<T> but the methods are `const`, indicating they can safely be called
   // from another thread.
 
-public:
+ public:
   virtual void fulfill(T&& value) const = 0;
   virtual void reject(Exception&& exception) const = 0;
   virtual bool isWaiting() const = 0;
@@ -825,7 +825,7 @@ public:
   void reject(Exception&& exception) override { return constThis()->reject(kj::mv(exception)); }
   bool isWaiting() override { return constThis()->isWaiting(); }
 
-private:
+ private:
   const CrossThreadPromiseFulfiller* constThis() { return this; }
 };
 
@@ -834,7 +834,7 @@ class CrossThreadPromiseFulfiller<void>: public kj::PromiseFulfiller<void> {
   // Specialization of CrossThreadPromiseFulfiller for void promises.  See
   // CrossThreadPromiseFulfiller<T>.
 
-public:
+ public:
   virtual void fulfill(_::Void&& value = _::Void()) const = 0;
   virtual void reject(Exception&& exception) const = 0;
   virtual bool isWaiting() const = 0;
@@ -843,7 +843,7 @@ public:
   void reject(Exception&& exception) override { return constThis()->reject(kj::mv(exception)); }
   bool isWaiting() override { return constThis()->isWaiting(); }
 
-private:
+ private:
   const CrossThreadPromiseFulfiller* constThis() { return this; }
 };
 
@@ -886,7 +886,7 @@ class Canceler: private AsyncObject {
   // task might continue to execute. If it holds pointers to objects that have been destroyed, this
   // might cause segfaults. Thus, it is safer to use a Canceler.
 
-public:
+ public:
   inline Canceler() {}
   ~Canceler() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(Canceler);
@@ -910,9 +910,9 @@ public:
   // Indicates if any previously-wrapped promises are still executing. (If this returns true, then
   // cancel() would be a no-op.)
 
-private:
+ private:
   class AdapterBase {
-  public:
+   public:
     AdapterBase(Canceler& canceler);
     ~AdapterBase() noexcept(false);
 
@@ -920,7 +920,7 @@ private:
 
     void unlink();
 
-  private:
+   private:
     Maybe<Maybe<AdapterBase&>&> prev;
     Maybe<AdapterBase&> next;
     friend class Canceler;
@@ -928,7 +928,7 @@ private:
 
   template <typename T>
   class AdapterImpl: public AdapterBase {
-  public:
+   public:
     AdapterImpl(PromiseFulfiller<T>& fulfiller,
                 Canceler& canceler, Promise<T> inner)
         : AdapterBase(canceler),
@@ -943,7 +943,7 @@ private:
       inner = nullptr;
     }
 
-  private:
+   private:
     PromiseFulfiller<T>& fulfiller;
     Promise<void> inner;
   };
@@ -953,14 +953,14 @@ private:
 
 template <>
 class Canceler::AdapterImpl<void>: public AdapterBase {
-public:
+ public:
   AdapterImpl(kj::PromiseFulfiller<void>& fulfiller,
               Canceler& canceler, kj::Promise<void> inner);
   void cancel(kj::Exception&& e) override;
   // These must be defined in async.c++ to prevent translation units compiled by MSVC from trying to
   // link with symbols defined in async.c++ merely because they included async.h.
 
-private:
+ private:
   kj::PromiseFulfiller<void>& fulfiller;
   kj::Promise<void> inner;
 };
@@ -979,9 +979,9 @@ class TaskSet: private AsyncObject {
   // working on.  This way, if the daemon itself is destroyed, the TaskSet is destroyed as well,
   // and everything the daemon is doing is canceled.
 
-public:
+ public:
   class ErrorHandler {
-  public:
+   public:
     virtual void taskFailed(kj::Exception&& exception) = 0;
   };
 
@@ -1012,7 +1012,7 @@ public:
   //
   // Calling this will always trigger onEmpty(), if anyone is listening.
 
-private:
+ private:
   class Task;
   using OwnTask = Own<Task, _::PromiseDisposer>;
 
@@ -1032,7 +1032,7 @@ class Executor {
   // thread's event loop. You may then pass the reference to other threads to enable them to call
   // back to this one.
 
-public:
+ public:
   Executor(EventLoop& loop, Badge<EventLoop>);
   ~Executor() noexcept(false);
 
@@ -1116,7 +1116,7 @@ public:
   // As with `executeAsync()`, `func` is always destroyed on the requesting thread, after the
   // executor thread has signaled completion. The return value is transferred between threads.
 
-private:
+ private:
   struct Impl;
   Own<Impl> impl;
   // To avoid including mutex.h...
@@ -1147,7 +1147,7 @@ class EventPort {
   // threads.  You can also write an `EventPort` which wraps some other (non-KJ) event loop
   // framework, allowing the two to coexist in a single thread.
 
-public:
+ public:
   virtual bool wait() = 0;
   // Wait for an external event to arrive, sleeping if necessary.  Once at least one event has
   // arrived, queue it to the event loop (e.g. by fulfilling a promise) and return.
@@ -1223,7 +1223,7 @@ class EventLoop {
   // Most applications that do I/O will prefer to use `setupAsyncIo()` from `async-io.h` rather
   // than allocate an `EventLoop` directly.
 
-public:
+ public:
   EventLoop();
   // Construct an `EventLoop` which does not receive external events at all.
 
@@ -1249,7 +1249,7 @@ public:
   // Note that this is only needed for cross-thread scheduling. To schedule code to run later in
   // the current thread, use `kj::evalLater()`, which will be more efficient.
 
-private:
+ private:
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
   // events from other threads via the Executor.
@@ -1303,7 +1303,7 @@ class WaitScope {
   // * `WaitScope` may be passed to `Promise::wait()` to synchronously wait for a particular
   //   promise to complete.  See `Promise::wait()` for an extended discussion.
 
-public:
+ public:
   inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
   inline ~WaitScope() { if (fiber == nullptr) loop.leaveScope(); }
   KJ_DISALLOW_COPY_AND_MOVE(WaitScope);
@@ -1350,7 +1350,7 @@ public:
   //
   // This method may be removed in the future.
 
-private:
+ private:
   EventLoop& loop;
   uint busyPollInterval = kj::maxValue;
 

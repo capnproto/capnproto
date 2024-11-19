@@ -99,7 +99,7 @@ struct Persistent<SturdyRef, Owner>::SaveResults {
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::Client
     : public virtual ::capnp::Capability::Client {
-public:
+ public:
   typedef Persistent Calls;
   typedef Persistent Reads;
 
@@ -123,14 +123,14 @@ public:
   CAPNP_AUTO_IF_MSVC(::capnp::Request<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults>) saveRequest(
       ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);
 
-protected:
+ protected:
   Client() = default;
 };
 
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::Server
     : public virtual ::capnp::Capability::Server {
-public:
+ public:
   typedef Persistent Serves;
 
   ::capnp::Capability::Server::DispatchCallResult dispatchCall(
@@ -138,7 +138,7 @@ public:
       ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)
       override;
 
-protected:
+ protected:
   typedef ::capnp::CallContext<typename  ::capnp::Persistent<SturdyRef, Owner>::SaveParams, typename  ::capnp::Persistent<SturdyRef, Owner>::SaveResults> SaveContext;
   virtual ::kj::Promise<void> save(SaveContext context);
 
@@ -155,7 +155,7 @@ protected:
 
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::SaveParams::Reader {
-public:
+ public:
   typedef SaveParams Reads;
 
   Reader() = default;
@@ -179,7 +179,7 @@ public:
   inline bool hasSealFor() const;
   inline  ::capnp::ReaderFor<Owner> getSealFor() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -193,7 +193,7 @@ private:
 
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::SaveParams::Builder {
-public:
+ public:
   typedef SaveParams Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -221,7 +221,7 @@ public:
   inline void adoptSealFor(::capnp::Orphan<Owner>&& value);
   inline ::capnp::Orphan<Owner> disownSealFor();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -233,7 +233,7 @@ private:
 #if !CAPNP_LITE
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::SaveParams::Pipeline {
-public:
+ public:
   typedef SaveParams Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -241,7 +241,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::PipelineFor<Owner> getSealFor();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -251,7 +251,7 @@ private:
 
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::SaveResults::Reader {
-public:
+ public:
   typedef SaveResults Reads;
 
   Reader() = default;
@@ -275,7 +275,7 @@ public:
   inline bool hasSturdyRef() const;
   inline  ::capnp::ReaderFor<SturdyRef> getSturdyRef() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -289,7 +289,7 @@ private:
 
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::SaveResults::Builder {
-public:
+ public:
   typedef SaveResults Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -317,7 +317,7 @@ public:
   inline void adoptSturdyRef(::capnp::Orphan<SturdyRef>&& value);
   inline ::capnp::Orphan<SturdyRef> disownSturdyRef();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -329,7 +329,7 @@ private:
 #if !CAPNP_LITE
 template <typename SturdyRef, typename Owner>
 class Persistent<SturdyRef, Owner>::SaveResults::Pipeline {
-public:
+ public:
   typedef SaveResults Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -337,7 +337,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::PipelineFor<SturdyRef> getSturdyRef();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>

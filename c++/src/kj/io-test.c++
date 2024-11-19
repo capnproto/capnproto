@@ -119,7 +119,7 @@ KJ_TEST("VectorOutputStream") {
 }
 
 class MockInputStream: public InputStream {
-public:
+ public:
   MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
@@ -138,7 +138,7 @@ public:
     return n;
   }
 
-private:
+ private:
   kj::ArrayPtr<const byte> bytes;
   size_t blockSize;
 };

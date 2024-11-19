@@ -71,7 +71,7 @@ namespace kj {
 // counted in the string's size.
 
 class StringPtr {
-public:
+ public:
   inline StringPtr(): content("", 1) {}
   inline StringPtr(decltype(nullptr)): content("", 1) {}
   inline StringPtr(const char* value KJ_LIFETIMEBOUND): content(value, strlen(value) + 1) {}
@@ -174,7 +174,7 @@ public:
   // Like ArrayPtr<T>::attach(), but instead promotes a StringPtr into a ConstString. Generally the
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
 
-private:
+ private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
   friend constexpr StringPtr (::operator "" _kj)(const char* str, size_t n);
   friend class LiteralStringConst;
@@ -217,10 +217,10 @@ template <> Maybe<float> StringPtr::tryParseAs<float>() const;
 template <> Maybe<double> StringPtr::tryParseAs<double>() const;
 
 class LiteralStringConst: public StringPtr {
-public:
+ public:
   inline operator ConstString() const;
 
-private:
+ private:
   inline explicit constexpr LiteralStringConst(ArrayPtr<const char> content): StringPtr(content) {}
   friend constexpr LiteralStringConst (::operator "" _kjc)(const char* str, size_t n);
 };
@@ -236,7 +236,7 @@ private:
 // the heap because this hides potential inefficiency from the developer.
 
 class String {
-public:
+ public:
   String() = default;
   inline String(decltype(nullptr)): content(nullptr) {}
   inline String(char* value, size_t size, const ArrayDisposer& disposer);
@@ -327,7 +327,7 @@ public:
   template <typename T>
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
-private:
+ private:
   Array<char> content;
 };
 
@@ -339,7 +339,7 @@ private:
 // the buffer.
 
 class ConstString {
-public:
+ public:
   ConstString() = default;
   inline ConstString(decltype(nullptr)): content(nullptr) {}
   inline ConstString(const char* value, size_t size, const ArrayDisposer& disposer);
@@ -427,7 +427,7 @@ public:
   template <typename T>
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
-private:
+ private:
   Array<const char> content;
 };
 
@@ -821,7 +821,7 @@ namespace _ {  // private
 
 template <typename T>
 class Delimited {
-public:
+ public:
   Delimited(T array, kj::StringPtr delimiter)
       : array(kj::fwd<T>(array)), delimiter(delimiter) {}
 
@@ -876,7 +876,7 @@ public:
     return target;
   }
 
-private:
+ private:
   typedef decltype(toCharSequence(*instance<T>().begin())) StringifiedItem;
   T array;
   kj::StringPtr delimiter;

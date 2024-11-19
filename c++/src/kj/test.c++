@@ -160,7 +160,7 @@ void GlobFilter::applyState(char c, int state) {
 namespace {
 
 class TestExceptionCallback: public ExceptionCallback {
-public:
+ public:
   TestExceptionCallback(ProcessContext& context): context(context) {}
 
   bool failed() { return sawError; }
@@ -184,7 +184,7 @@ public:
     }
   }
 
-private:
+ private:
   ProcessContext& context;
   bool sawError = false;
 };
@@ -196,7 +196,7 @@ TimePoint readClock() {
 }  // namespace
 
 class TestRunner {
-public:
+ public:
   explicit TestRunner(ProcessContext& context)
       : context(context), useColor(isatty(STDOUT_FILENO)) {}
 
@@ -344,7 +344,7 @@ public:
     KJ_UNREACHABLE;
   }
 
-private:
+ private:
   ProcessContext& context;
   bool useColor;
   bool hasFilter = false;

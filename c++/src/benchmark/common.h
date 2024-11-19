@@ -94,7 +94,7 @@ constexpr size_t WORDS_COUNT = sizeof(WORDS) / sizeof(WORDS[0]);
 
 template <typename T>
 class ProducerConsumerQueue {
-public:
+ public:
   ProducerConsumerQueue() {
     front = new Node;
     back = front;
@@ -124,7 +124,7 @@ public:
     return front->value;
   }
 
-private:
+ private:
   struct Node {
     T value;
     Node* next;
@@ -140,7 +140,7 @@ private:
 
 // TODO(cleanup):  Use SYSCALL(), get rid of this exception class.
 class OsException: public std::exception {
-public:
+ public:
   OsException(int error): error(error) {}
   ~OsException() noexcept {}
 
@@ -148,7 +148,7 @@ public:
     return strerror(error);
   }
 
-private:
+ private:
   int error;
 };
 

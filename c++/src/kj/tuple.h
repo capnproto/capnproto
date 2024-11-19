@@ -150,7 +150,7 @@ template <typename... T>
 class Tuple {
   // The actual Tuple class (used for tuples of size other than 1).
 
-public:
+ public:
   Tuple() = default;
 
   template <typename... U>
@@ -160,7 +160,7 @@ public:
   template <typename... U>
   constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
 
-private:
+ private:
   template <typename... Params>
   constexpr Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
 

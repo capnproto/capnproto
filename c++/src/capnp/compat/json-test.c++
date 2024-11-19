@@ -687,7 +687,7 @@ KJ_TEST("unknown fields") {
 }
 
 class TestCallHandler: public JsonCodec::Handler<Text> {
-public:
+ public:
   void encode(const JsonCodec& codec, Text::Reader input,
               JsonValue::Builder output) const override {
     auto call = output.initCall();
@@ -704,7 +704,7 @@ public:
 };
 
 class TestDynamicStructHandler: public JsonCodec::Handler<DynamicStruct> {
-public:
+ public:
   void encode(const JsonCodec& codec, DynamicStruct::Reader input,
               JsonValue::Builder output) const override {
     auto fields = input.getSchema().getFields();
@@ -736,7 +736,7 @@ public:
 };
 
 class TestStructHandler: public JsonCodec::Handler<test::TestOldVersion> {
-public:
+ public:
   void encode(const JsonCodec& codec, test::TestOldVersion::Reader input, JsonValue::Builder output) const override {
     dynamicHandler.encode(codec, input, output);
   }
@@ -745,7 +745,7 @@ public:
     dynamicHandler.decode(codec, input, output);
   }
 
-private:
+ private:
   TestDynamicStructHandler dynamicHandler;
 };
 
@@ -844,7 +844,7 @@ KJ_TEST("register field handler") {
 }
 
 class TestCapabilityHandler: public JsonCodec::Handler<test::TestInterface> {
-public:
+ public:
   void encode(const JsonCodec& codec, test::TestInterface::Client input,
               JsonValue::Builder output) const override {
     KJ_UNIMPLEMENTED("TestCapabilityHandler::encode");
@@ -918,7 +918,7 @@ R"({
 })"_kj;
 
 class PrefixAdder: public JsonCodec::Handler<capnp::Text> {
-public:
+ public:
   void encode(const JsonCodec& codec, capnp::Text::Reader input, JsonValue::Builder output) const {
     output.setString(kj::str("add-prefix-", input));
   }

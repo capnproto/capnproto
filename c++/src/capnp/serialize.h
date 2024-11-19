@@ -51,7 +51,7 @@ class FlatArrayMessageReader: public MessageReader {
   // Parses a message from a flat array.  Note that it makes sense to use this together with mmap()
   // for extremely fast parsing.
 
-public:
+ public:
   FlatArrayMessageReader(kj::ArrayPtr<const word> array, ReaderOptions options = ReaderOptions());
   // The array must remain valid until the MessageReader is destroyed.
 
@@ -63,7 +63,7 @@ public:
   // you know that the input array has extra stuff appended after the message and you want to
   // get at it.
 
-private:
+ private:
   // Optimize for single-segment case.
   kj::ArrayPtr<const word> segment0;
   kj::Array<kj::ArrayPtr<const word>> moreSegments;
@@ -125,7 +125,7 @@ class InputStreamMessageReader: public MessageReader {
   // A MessageReader that reads from an abstract kj::InputStream. See also StreamFdMessageReader
   // for a subclass specific to file descriptors.
 
-public:
+ public:
   InputStreamMessageReader(kj::InputStream& inputStream,
                            ReaderOptions options = ReaderOptions(),
                            kj::ArrayPtr<word> scratchSpace = nullptr);
@@ -134,7 +134,7 @@ public:
   // implements MessageReader ----------------------------------------
   kj::ArrayPtr<const word> getSegment(uint id) override;
 
-private:
+ private:
   kj::InputStream& inputStream;
   byte* readPos;
 
@@ -171,7 +171,7 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 class StreamFdMessageReader: private kj::FdInputStream, public InputStreamMessageReader {
   // A MessageReader that reads from a stream-based file descriptor.
 
-public:
+ public:
   StreamFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
                         kj::ArrayPtr<word> scratchSpace = nullptr)
       : FdInputStream(fd), InputStreamMessageReader(*this, options, scratchSpace) {}

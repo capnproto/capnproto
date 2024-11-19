@@ -97,7 +97,7 @@ int32_t evaluateExpression(Expression::Reader exp) {
 }
 
 class ExpressionTestCase {
-public:
+ public:
   typedef Expression Request;
   typedef EvaluationResult Response;
   typedef int32_t Expectation;

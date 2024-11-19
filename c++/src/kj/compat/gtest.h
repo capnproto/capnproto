@@ -76,7 +76,7 @@ inline bool doubleAlmostEqual(double a, double b) {
 #define ASSERT_DOUBLE_EQ(x, y) KJ_ASSERT(::kj::_::doubleAlmostEqual(y, x), y, x);
 
 class AddFailureAdapter {
-public:
+ public:
   AddFailureAdapter(const char* file, int line): file(file), line(line) {}
 
   ~AddFailureAdapter() {
@@ -92,7 +92,7 @@ public:
                   "expectation failed", kj::fwd<T>(info));
   }
 
-private:
+ private:
   bool handled = false;
   const char* file;
   int line;

@@ -123,7 +123,7 @@ struct FileKeyHash {
 };
 
 class ModuleLoader::Impl {
-public:
+ public:
   Impl(GlobalErrorReporter& errorReporter)
       : errorReporter(errorReporter) {}
 
@@ -140,7 +140,7 @@ public:
   void setFileIdsRequired(bool value) { fileIdsRequired = value; }
   bool areFileIdsRequired() { return fileIdsRequired; }
 
-private:
+ private:
   GlobalErrorReporter& errorReporter;
   kj::Vector<const kj::ReadableDirectory*> searchPath;
   std::unordered_map<FileKey, kj::Own<Module>, FileKeyHash> modules;
@@ -148,7 +148,7 @@ private:
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
-public:
+ public:
   ModuleImpl(ModuleLoader::Impl& loader, kj::Own<const kj::ReadableFile> file,
              const kj::ReadableDirectory& sourceDir, kj::Path pathParam)
       : loader(loader), file(kj::mv(file)), sourceDir(sourceDir), path(kj::mv(pathParam)),
@@ -207,7 +207,7 @@ public:
     return loader.getErrorReporter().hadErrors();
   }
 
-private:
+ private:
   ModuleLoader::Impl& loader;
   kj::Own<const kj::ReadableFile> file;
   const kj::ReadableDirectory& sourceDir;

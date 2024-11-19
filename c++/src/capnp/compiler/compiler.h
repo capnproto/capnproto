@@ -33,7 +33,7 @@ namespace capnp {
 namespace compiler {
 
 class Module: public ErrorReporter {
-public:
+ public:
   virtual kj::StringPtr getSourceName() = 0;
   // The name of the module file relative to the source tree.  Used to decide where to output
   // generated code and to form the `displayName` in the schema.
@@ -57,7 +57,7 @@ class Compiler final: private SchemaLoader::LazyLoadCallback {
 
   class Node;
 
-public:
+ public:
   enum AnnotationFlag {
     COMPILE_ANNOTATIONS,
     // Compile annotations normally.
@@ -82,7 +82,7 @@ public:
     // Represents a compiled type expression, from which you can traverse to nested types, apply
     // generics, etc.
 
-  public:
+   public:
     CompiledType clone();
     // Make another CompiledType pointing to the same type.
 
@@ -98,7 +98,7 @@ public:
     // If this is a generic type, specializes apply a brand to it. Returns null if this is
     // not a generic type or too many arguments were specified.
 
-  private:
+   private:
     const Compiler& compiler;
     kj::ExternalMutexGuarded<BrandedDecl> decl;
 
@@ -111,7 +111,7 @@ public:
   class ModuleScope {
     // Result of compiling a module.
 
-  public:
+   public:
     uint64_t getId() { return id; }
 
     CompiledType getRoot();
@@ -124,7 +124,7 @@ public:
     // Returns null if errors prevented evaluation; the errors will have been reported to
     // `errorReporter`.
 
-  private:
+   private:
     const Compiler& compiler;
     uint64_t id;
     Node& node;
@@ -244,7 +244,7 @@ public:
   // compile more nodes in the future; it may simply lead to redundant work if the discarded
   // structures are needed again.
 
-private:
+ private:
   class Impl;
   kj::MutexGuarded<kj::Own<Impl>> impl;
   SchemaLoader loader;

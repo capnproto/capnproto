@@ -34,7 +34,7 @@ class Thread {
   // the thread.  If the function throws an exception, it is rethrown from the thread's destructor
   // (if not unwinding from another exception).
 
-public:
+ public:
   explicit Thread(Function<void()> func);
   KJ_DISALLOW_COPY_AND_MOVE(Thread);
 
@@ -48,7 +48,7 @@ public:
   void detach();
   // Don't join the thread in ~Thread().
 
-private:
+ private:
   struct ThreadState {
     ThreadState(Function<void()> func);
 

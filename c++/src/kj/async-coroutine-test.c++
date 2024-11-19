@@ -399,7 +399,7 @@ KJ_TEST("Can trace through coroutines") {
 
   // Enable stack traces, even in release mode.
   class EnableFullStackTrace: public ExceptionCallback {
-  public:
+   public:
     StackTraceMode stackTraceMode() override { return StackTraceMode::FULL; }
   };
   EnableFullStackTrace exceptionCallback;

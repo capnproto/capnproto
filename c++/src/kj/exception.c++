@@ -940,7 +940,7 @@ KJ_THREADLOCAL_PTR(ExceptionImpl) currentException = nullptr;
 }  // namespace
 
 class ExceptionImpl: public Exception, public std::exception {
-public:
+ public:
   inline ExceptionImpl(Exception&& other): Exception(mv(other)) {
     insertIntoCurrentExceptions();
   }
@@ -964,7 +964,7 @@ public:
 
   const char* what() const noexcept override;
 
-private:
+ private:
   mutable String whatBuffer;
   ExceptionImpl* nextCurrentException = nullptr;
 
@@ -1080,7 +1080,7 @@ namespace _ {  // private
 }
 
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
-public:
+ public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
 
   void onRecoverableException(Exception&& exception) override {
@@ -1141,7 +1141,7 @@ public:
     };
   }
 
-private:
+ private:
   void logException(LogSeverity severity, Exception&& e) {
     // We intentionally go back to the top exception callback on the stack because we don't want to
     // bypass whatever log processing is in effect.
@@ -1370,7 +1370,7 @@ class RecoverableExceptionCatcher: public ExceptionCallback {
   // Catches a recoverable exception without using try/catch.  Used when compiled with
   // -fno-exceptions.
 
-public:
+ public:
   virtual ~RecoverableExceptionCatcher() noexcept(false) {}
 
   void onRecoverableException(Exception&& exception) override {

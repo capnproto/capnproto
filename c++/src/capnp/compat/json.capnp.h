@@ -129,7 +129,7 @@ struct DiscriminatorOptions {
 // =======================================================================================
 
 class Value::Reader {
-public:
+ public:
   typedef Value Reads;
 
   Reader() = default;
@@ -175,7 +175,7 @@ public:
   inline bool hasRaw() const;
   inline  ::capnp::Text::Reader getRaw() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -188,7 +188,7 @@ private:
 };
 
 class Value::Builder {
-public:
+ public:
   typedef Value Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -256,7 +256,7 @@ public:
   inline void adoptRaw(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownRaw();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -267,14 +267,14 @@ private:
 
 #if !CAPNP_LITE
 class Value::Pipeline {
-public:
+ public:
   typedef Value Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -283,7 +283,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Value::Field::Reader {
-public:
+ public:
   typedef Field Reads;
 
   Reader() = default;
@@ -305,7 +305,7 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::json::Value::Reader getValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -318,7 +318,7 @@ private:
 };
 
 class Value::Field::Builder {
-public:
+ public:
   typedef Field Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -347,7 +347,7 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::json::Value>&& value);
   inline ::capnp::Orphan< ::capnp::json::Value> disownValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -358,7 +358,7 @@ private:
 
 #if !CAPNP_LITE
 class Value::Field::Pipeline {
-public:
+ public:
   typedef Field Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -366,7 +366,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::json::Value::Pipeline getValue();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -375,7 +375,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Value::Call::Reader {
-public:
+ public:
   typedef Call Reads;
 
   Reader() = default;
@@ -397,7 +397,7 @@ public:
   inline bool hasParams() const;
   inline  ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>::Reader getParams() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -410,7 +410,7 @@ private:
 };
 
 class Value::Call::Builder {
-public:
+ public:
   typedef Call Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -439,7 +439,7 @@ public:
   inline void adoptParams(::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::json::Value,  ::capnp::Kind::STRUCT>> disownParams();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -450,14 +450,14 @@ private:
 
 #if !CAPNP_LITE
 class Value::Call::Pipeline {
-public:
+ public:
   typedef Call Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -466,7 +466,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class FlattenOptions::Reader {
-public:
+ public:
   typedef FlattenOptions Reads;
 
   Reader() = default;
@@ -485,7 +485,7 @@ public:
   inline bool hasPrefix() const;
   inline  ::capnp::Text::Reader getPrefix() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -498,7 +498,7 @@ private:
 };
 
 class FlattenOptions::Builder {
-public:
+ public:
   typedef FlattenOptions Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -520,7 +520,7 @@ public:
   inline void adoptPrefix(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownPrefix();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -531,14 +531,14 @@ private:
 
 #if !CAPNP_LITE
 class FlattenOptions::Pipeline {
-public:
+ public:
   typedef FlattenOptions Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -547,7 +547,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class DiscriminatorOptions::Reader {
-public:
+ public:
   typedef DiscriminatorOptions Reads;
 
   Reader() = default;
@@ -569,7 +569,7 @@ public:
   inline bool hasValueName() const;
   inline  ::capnp::Text::Reader getValueName() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -582,7 +582,7 @@ private:
 };
 
 class DiscriminatorOptions::Builder {
-public:
+ public:
   typedef DiscriminatorOptions Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -611,7 +611,7 @@ public:
   inline void adoptValueName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownValueName();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -622,14 +622,14 @@ private:
 
 #if !CAPNP_LITE
 class DiscriminatorOptions::Pipeline {
-public:
+ public:
   typedef DiscriminatorOptions Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>

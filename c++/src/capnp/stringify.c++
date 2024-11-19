@@ -46,7 +46,7 @@ enum class PrintKind {
 };
 
 class Indent {
-public:
+ public:
   explicit Indent(bool enable): amount(enable ? 1 : 0) {}
 
   Indent next() {
@@ -72,7 +72,7 @@ public:
     }
   }
 
-private:
+ private:
   uint amount;
 
   explicit Indent(uint amount): amount(amount) {}

@@ -41,7 +41,7 @@ class NodeTranslator::StructLayout {
   // Massive, disgusting class which implements the layout algorithm, which decides the offset
   // for each field.
 
-public:
+ public:
   template <typename UIntType>
   struct HoleSet {
     inline HoleSet(): holes{0, 0, 0, 0, 0, 0} {}
@@ -278,9 +278,9 @@ public:
   };
 
   struct Group final: public StructOrGroup {
-  public:
+   public:
     class DataLocationUsage {
-    public:
+     public:
       DataLocationUsage(): isUsed(false) {}
       explicit DataLocationUsage(uint lgSize): isUsed(true), lgSizeUsed(lgSize) {}
 
@@ -398,7 +398,7 @@ public:
         }
       }
 
-    private:
+     private:
       bool isUsed;
       // Whether or not this location has been used at all by the group.
 
@@ -572,7 +572,7 @@ public:
 
   Top& getTop() { return top; }
 
-private:
+ private:
   Top top;
 };
 
@@ -635,12 +635,12 @@ NodeTranslator::NodeSet NodeTranslator::finish(Schema selfBootstrapSchema) {
 }
 
 class NodeTranslator::DuplicateNameDetector {
-public:
+ public:
   inline explicit DuplicateNameDetector(ErrorReporter& errorReporter)
       : errorReporter(errorReporter) {}
   void check(List<Declaration>::Reader nestedDecls, Declaration::Which parentKind);
 
-private:
+ private:
   ErrorReporter& errorReporter;
   std::map<kj::StringPtr, LocatedText::Reader> names;
 };
@@ -880,7 +880,7 @@ void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
 }
 
 class NodeTranslator::DuplicateOrdinalDetector {
-public:
+ public:
   DuplicateOrdinalDetector(ErrorReporter& errorReporter): errorReporter(errorReporter) {}
 
   void check(LocatedInteger::Reader ordinal) {
@@ -903,7 +903,7 @@ public:
     }
   }
 
-private:
+ private:
   ErrorReporter& errorReporter;
   uint expectedOrdinal = 0;
   kj::Maybe<LocatedInteger::Reader> lastOrdinalLocation;
@@ -950,7 +950,7 @@ void NodeTranslator::compileEnum(Void decl,
 // -------------------------------------------------------------------
 
 class NodeTranslator::StructTranslator {
-public:
+ public:
   explicit StructTranslator(NodeTranslator& translator, ImplicitParams implicitMethodParams)
       : translator(translator), errorReporter(translator.errorReporter),
         implicitMethodParams(implicitMethodParams) {}
@@ -972,7 +972,7 @@ public:
     translateInternal(root, builder);
   }
 
-private:
+ private:
   NodeTranslator& translator;
   ErrorReporter& errorReporter;
   ImplicitParams implicitMethodParams;
@@ -1794,7 +1794,7 @@ void NodeTranslator::compileValue(Expression::Reader source, schema::Type::Reade
                                   Schema typeScope, schema::Value::Builder target,
                                   bool isBootstrap) {
   class ResolverGlue: public ValueTranslator::Resolver {
-  public:
+   public:
     inline ResolverGlue(NodeTranslator& translator, bool isBootstrap)
         : translator(translator), isBootstrap(isBootstrap) {}
 
@@ -1806,7 +1806,7 @@ void NodeTranslator::compileValue(Expression::Reader source, schema::Type::Reade
       return translator.readEmbed(filename);
     }
 
-  private:
+   private:
     NodeTranslator& translator;
     bool isBootstrap;
   };

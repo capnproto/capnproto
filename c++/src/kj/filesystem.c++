@@ -771,7 +771,7 @@ void Directory::commitFailed(WriteMode mode) {
 namespace {
 
 class InMemoryFile final: public File, public AtomicRefcounted {
-public:
+ public:
   InMemoryFile(const Clock& clock): impl(clock) {}
 
   Own<const FsNode> cloneFsNode() const override {
@@ -896,7 +896,7 @@ public:
     return n;
   }
 
-private:
+ private:
   struct Impl {
     const Clock& clock;
     Array<byte> bytes;
@@ -927,7 +927,7 @@ private:
   kj::MutexGuarded<Impl> impl;
 
   class MmapDisposer final: public ArrayDisposer {
-  public:
+   public:
     MmapDisposer(Own<const InMemoryFile>&& refParam): ref(kj::mv(refParam)) {
       ++ref->impl.getAlreadyLockedExclusive().mmapCount;
     }
@@ -940,12 +940,12 @@ private:
       delete this;
     }
 
-  private:
+   private:
     Own<const InMemoryFile> ref;
   };
 
   class WritableFileMappingImpl final: public WritableFileMapping {
-  public:
+   public:
     WritableFileMappingImpl(Own<const InMemoryFile>&& refParam, ArrayPtr<byte> range)
         : ref(kj::mv(refParam)), range(range) {
       ++ref->impl.getAlreadyLockedExclusive().mmapCount;
@@ -968,7 +968,7 @@ private:
       ref->impl.lockExclusive()->modified();
     }
 
-  private:
+   private:
     Own<const InMemoryFile> ref;
     ArrayPtr<byte> range;
   };
@@ -977,7 +977,7 @@ private:
 // -----------------------------------------------------------------------------
 
 class InMemoryDirectory final: public Directory, public AtomicRefcounted {
-public:
+ public:
   InMemoryDirectory(const Clock& clock): impl(clock) {}
 
   Own<const FsNode> cloneFsNode() const override {
@@ -1351,7 +1351,7 @@ public:
     }
   }
 
-private:
+ private:
   struct FileNode {
     Own<const File> file;
   };
@@ -1398,7 +1398,7 @@ private:
 
   template <typename T>
   class ReplacerImpl final: public Replacer<T> {
-  public:
+   public:
     ReplacerImpl(const InMemoryDirectory& directory, kj::StringPtr name,
                  Own<const T> inner, WriteMode mode)
         : Replacer<T>(mode), directory(atomicAddRef(directory)), name(heapString(name)),
@@ -1419,7 +1419,7 @@ private:
       }
     }
 
-  private:
+   private:
     bool committed = false;
     Own<const InMemoryDirectory> directory;
     kj::String name;
@@ -1430,7 +1430,7 @@ private:
   class BrokenReplacer final: public Replacer<T> {
     // For recovery path when exceptions are disabled.
 
-  public:
+   public:
     BrokenReplacer(Own<const T> inner)
         : Replacer<T>(WriteMode::CREATE | WriteMode::MODIFY),
           inner(kj::mv(inner)) {}
@@ -1438,7 +1438,7 @@ private:
     const T& get() override { return *inner; }
     bool tryCommit() override { return false; }
 
-  private:
+   private:
     Own<const T> inner;
   };
 
@@ -1700,7 +1700,7 @@ private:
 // -----------------------------------------------------------------------------
 
 class AppendableFileImpl final: public AppendableFile {
-public:
+ public:
   AppendableFileImpl(Own<const File>&& fileParam): file(kj::mv(fileParam)) {}
 
   Own<const FsNode> cloneFsNode() const override {
@@ -1722,7 +1722,7 @@ public:
     file->write(file->stat().size, arrayPtr(reinterpret_cast<const byte*>(buffer), size));
   }
 
-private:
+ private:
   Own<const File> file;
 };
 

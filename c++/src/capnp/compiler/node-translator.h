@@ -41,7 +41,7 @@ class NodeTranslator {
   // Translates one node in the schema from AST form to final schema form.  A "node" is anything
   // that has a unique ID, such as structs, enums, constants, and annotations, but not fields,
   // unions, enumerants, or methods (the latter set have 16-bit ordinals but not 64-bit global IDs).
-public:
+ public:
   NodeTranslator(Resolver& resolver, ErrorReporter& errorReporter,
                  const Declaration::Reader& decl, Orphan<schema::Node> wipNode,
                  bool compileAnnotations);
@@ -89,7 +89,7 @@ public:
   // `brandBuilder` may be used to construct a message which will fill in ResolvedDecl::brand in
   // the result.
 
-private:
+ private:
   class DuplicateNameDetector;
   class DuplicateOrdinalDetector;
   class StructLayout;
@@ -193,9 +193,9 @@ private:
 };
 
 class ValueTranslator {
-public:
+ public:
   class Resolver {
-  public:
+   public:
     virtual kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) = 0;
     virtual kj::Maybe<kj::Array<const byte>> readEmbed(LocatedText::Reader filename) = 0;
   };
@@ -209,7 +209,7 @@ public:
                        List<Expression::Param>::Reader assignments);
   // Interprets the given assignments and uses them to fill in the given struct builder.
 
-private:
+ private:
   Resolver& resolver;
   ErrorReporter& errorReporter;
   Orphanage orphanage;

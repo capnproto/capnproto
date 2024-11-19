@@ -57,7 +57,7 @@ KJ_TEST("_::tryReserveSize() works") {
 }
 
 class StringHasher {
-public:
+ public:
   StringPtr keyForRow(StringPtr s) const { return s; }
 
   bool matches(StringPtr a, StringPtr b) const {
@@ -189,7 +189,7 @@ KJ_TEST("simple table") {
 class BadHasher {
   // String hash that always returns the same hash code. This should not affect correctness, only
   // performance.
-public:
+ public:
   StringPtr keyForRow(StringPtr s) const { return s; }
 
   bool matches(StringPtr a, StringPtr b) const {
@@ -271,7 +271,7 @@ KJ_TEST("hash tables when hash is always same") {
 
 class IntHasher {
   // Dumb integer hasher that just returns the integer itself.
-public:
+ public:
   uint keyForRow(uint i) const { return i; }
 
   bool matches(uint a, uint b) const {
@@ -305,7 +305,7 @@ struct SiPair {
 };
 
 class SiPairStringHasher {
-public:
+ public:
   StringPtr keyForRow(SiPair s) const { return s.str; }
 
   bool matches(SiPair a, StringPtr b) const {
@@ -315,12 +315,12 @@ public:
     return inner.hashCode(str);
   }
 
-private:
+ private:
   StringHasher inner;
 };
 
 class SiPairIntHasher {
-public:
+ public:
   uint keyForRow(SiPair s) const { return s.i; }
 
   bool matches(SiPair a, uint b) const {
@@ -398,7 +398,7 @@ KJ_TEST("double-index table") {
 }
 
 class UintHasher {
-public:
+ public:
   uint keyForRow(uint i) const { return i; }
 
   bool matches(uint a, uint b) const {
@@ -652,7 +652,7 @@ KJ_TEST("B-tree internals") {
 }
 
 class StringCompare {
-public:
+ public:
   StringPtr keyForRow(StringPtr s) const { return s; }
 
   bool isBefore(StringPtr a, StringPtr b) const {
@@ -844,7 +844,7 @@ KJ_TEST("simple tree table") {
 }
 
 class UintCompare {
-public:
+ public:
   uint keyForRow(uint i) const { return i; }
 
   bool isBefore(uint a, uint b) const {
@@ -1323,7 +1323,7 @@ KJ_TEST("insertion order index is movable") {
 
 class StringLengthCompare {
   // Considers two strings equal if they have the same length.
-public:
+ public:
   inline size_t keyForRow(StringPtr entry) const {
     return entry.size();
   }

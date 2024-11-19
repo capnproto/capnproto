@@ -193,7 +193,7 @@ namespace {
 static constexpr uint NEW_FD_FLAGS = LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
 
 class OwnedFd {
-public:
+ public:
   OwnedFd(SOCKET fd, uint flags): fd(fd), flags(flags) {
     // TODO(perf): Maybe use SetFileCompletionNotificationModes() to tell Windows not to bother
     //   delivering an event when the operation completes inline. Not currently implemented on
@@ -206,17 +206,17 @@ public:
     }
   }
 
-protected:
+ protected:
   SOCKET fd;
 
-private:
+ private:
   uint flags;
 };
 
 // =======================================================================================
 
 class AsyncStreamFd: public OwnedFd, public AsyncIoStream {
-public:
+ public:
   AsyncStreamFd(Win32EventPort& eventPort, SOCKET fd, uint flags)
       : OwnedFd(fd, flags),
         observer(eventPort.observeIo(reinterpret_cast<HANDLE>(fd))) {}
@@ -356,7 +356,7 @@ public:
     return reinterpret_cast<void*>(fd);
   }
 
-private:
+ private:
   Own<Win32EventPort::IoObserver> observer;
 
   Promise<size_t> tryReadInternal(ArrayPtr<WSABUF> bufs, size_t minBytes, size_t alreadyRead) {
@@ -459,7 +459,7 @@ private:
 // =======================================================================================
 
 class SocketAddress {
-public:
+ public:
   SocketAddress(const void* sockaddr, uint len): addrlen(len) {
     KJ_REQUIRE(len <= sizeof(addr), "Sorry, your sockaddr is too big for me.");
     memcpy(&addr.generic, sockaddr, len);
@@ -711,7 +711,7 @@ public:
     }
   }
 
-private:
+ private:
   SocketAddress(): addrlen(0) {
     memset(&addr, 0, sizeof(addr));
   }
@@ -831,7 +831,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 // =======================================================================================
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFd {
-public:
+ public:
   FdConnectionReceiver(Win32EventPort& eventPort, SOCKET fd,
                        LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
       : OwnedFd(fd, flags), eventPort(eventPort), filter(filter),
@@ -911,7 +911,7 @@ public:
     *length = socklen;
   }
 
-public:
+ public:
   Win32EventPort& eventPort;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
   Own<Win32EventPort::IoObserver> observer;
@@ -922,7 +922,7 @@ public:
 // TODO(someday): DatagramPortImpl
 
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
-public:
+ public:
   LowLevelAsyncIoProviderImpl()
       : eventLoop(eventPort), waitScope(eventLoop) {}
 
@@ -958,7 +958,7 @@ public:
 
   Win32EventPort& getEventPort() { return eventPort; }
 
-private:
+ private:
   Win32IocpEventPort eventPort;
   EventLoop eventLoop;
   WaitScope waitScope;
@@ -967,7 +967,7 @@ private:
 // =======================================================================================
 
 class NetworkAddressImpl final: public NetworkAddress {
-public:
+ public:
   NetworkAddressImpl(LowLevelAsyncIoProvider& lowLevel,
                      LowLevelAsyncIoProvider::NetworkFilter& filter,
                      Array<SocketAddress> addrs)
@@ -1043,7 +1043,7 @@ public:
     return addrs[counter++ % addrs.size()];
   }
 
-private:
+ private:
   LowLevelAsyncIoProvider& lowLevel;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
   Array<SocketAddress> addrs;
@@ -1082,7 +1082,7 @@ private:
 };
 
 class SocketNetwork final: public Network {
-public:
+ public:
   explicit SocketNetwork(LowLevelAsyncIoProvider& lowLevel): lowLevel(lowLevel) {}
   explicit SocketNetwork(SocketNetwork& parent,
                          kj::ArrayPtr<const kj::StringPtr> allow,
@@ -1110,7 +1110,7 @@ public:
     return heap<SocketNetwork>(*this, allow, deny);
   }
 
-private:
+ private:
   LowLevelAsyncIoProvider& lowLevel;
   _::NetworkFilter filter;
 };
@@ -1118,7 +1118,7 @@ private:
 // =======================================================================================
 
 class AsyncIoProviderImpl final: public AsyncIoProvider {
-public:
+ public:
   AsyncIoProviderImpl(LowLevelAsyncIoProvider& lowLevel)
       : lowLevel(lowLevel), network(lowLevel) {}
 
@@ -1166,7 +1166,7 @@ public:
 
   Timer& getTimer() override { return lowLevel.getTimer(); }
 
-private:
+ private:
   LowLevelAsyncIoProvider& lowLevel;
   SocketNetwork network;
 };

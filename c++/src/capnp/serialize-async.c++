@@ -40,7 +40,7 @@ namespace capnp {
 namespace {
 
 class AsyncMessageReader: public MessageReader {
-public:
+ public:
   inline AsyncMessageReader(ReaderOptions options): MessageReader(options) {
     memset(firstWord, 0, sizeof(firstWord));
   }
@@ -63,7 +63,7 @@ public:
     }
   }
 
-private:
+ private:
   _::WireValue<uint32_t> firstWord[2];
   kj::Array<_::WireValue<uint32_t>> moreSizes;
   kj::Array<const word*> segmentStarts;
@@ -545,7 +545,7 @@ kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
 // =======================================================================================
 
 class BufferedMessageStream::MessageReaderImpl: public FlatArrayMessageReader {
-public:
+ public:
   MessageReaderImpl(BufferedMessageStream& parent, kj::ArrayPtr<const word> data,
                     ReaderOptions options)
       : FlatArrayMessageReader(data, options), state(&parent) {
@@ -563,7 +563,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::OneOf<BufferedMessageStream*, kj::Array<word>> state;
   // * BufferedMessageStream* if this reader aliases the original buffer.
   // * kj::Array<word> if this reader owns its own backing buffer.

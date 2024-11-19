@@ -54,7 +54,7 @@ constexpr size_t KJ_BROTLI_MAX_DEC_WBITS = BROTLI_MAX_WINDOW_BITS;
 constexpr size_t KJ_BROTLI_BUF_SIZE = 8192;
 
 class BrotliOutputContext final {
-public:
+ public:
   BrotliOutputContext(kj::Maybe<int> compressionLevel, kj::Maybe<int> windowBits = nullptr);
   ~BrotliOutputContext() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliOutputContext);
@@ -64,7 +64,7 @@ public:
   // Flush the stream. Parameter is ignored for decoding as brotli only uses an operation parameter
   // during encoding.
 
-private:
+ private:
   int windowBits;
   const byte* nextIn;
   size_t availableIn;
@@ -77,14 +77,14 @@ private:
 }  // namespace _ (private)
 
 class BrotliInputStream final: public InputStream {
-public:
+ public:
   BrotliInputStream(InputStream& inner, kj::Maybe<int> windowBits = nullptr);
   ~BrotliInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliInputStream);
 
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
-private:
+ private:
   InputStream& inner;
   BrotliDecoderState* ctx;
   int windowBits;
@@ -100,7 +100,7 @@ private:
 };
 
 class BrotliOutputStream final: public OutputStream {
-public:
+ public:
   enum { DECOMPRESS };
 
   // Order of arguments is not ideal, but allows us to specify the window size if needed while
@@ -120,7 +120,7 @@ public:
     pump(BROTLI_OPERATION_FLUSH);
   }
 
-private:
+ private:
   OutputStream& inner;
   _::BrotliOutputContext ctx;
 
@@ -128,14 +128,14 @@ private:
 };
 
 class BrotliAsyncInputStream final: public AsyncInputStream {
-public:
+ public:
   BrotliAsyncInputStream(AsyncInputStream& inner, kj::Maybe<int> windowBits = nullptr);
   ~BrotliAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncInputStream);
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
-private:
+ private:
   AsyncInputStream& inner;
   BrotliDecoderState* ctx;
   int windowBits;
@@ -150,7 +150,7 @@ private:
 };
 
 class BrotliAsyncOutputStream final: public AsyncOutputStream {
-public:
+ public:
   enum { DECOMPRESS };
 
   BrotliAsyncOutputStream(AsyncOutputStream& inner,
@@ -178,7 +178,7 @@ public:
   //
   // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
-private:
+ private:
   AsyncOutputStream& inner;
   _::BrotliOutputContext ctx;
 

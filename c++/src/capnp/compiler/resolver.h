@@ -45,7 +45,7 @@ class Resolver {
   // the methods of Resolver may recurse back into other parts of the compiler. It must detect when
   // a dependency cycle occurs and report an error in order to prevent an infinite loop.
 
-public:
+ public:
   struct ResolvedDecl {
     // Information about a resolved declaration.
 

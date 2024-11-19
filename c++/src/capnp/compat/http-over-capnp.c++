@@ -31,7 +31,7 @@ using kj::byte;
 
 class HttpOverCapnpFactory::RequestState final
     : public kj::Refcounted, public kj::TaskSet::ErrorHandler {
-public:
+ public:
   RequestState() {
     tasks.emplace(*this);
   }
@@ -99,7 +99,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::Maybe<kj::Exception> error;
   kj::Maybe<kj::Own<kj::WebSocket>> webSocket;
   kj::Canceler canceler;
@@ -109,7 +109,7 @@ private:
 // =======================================================================================
 
 class HttpOverCapnpFactory::CapnpToKjWebSocketAdapter final: public capnp::WebSocket::Server {
-public:
+ public:
   CapnpToKjWebSocketAdapter(kj::Own<RequestState> state, kj::WebSocket& webSocket,
                             kj::Promise<Capability::Client> shorteningPromise)
       : state(kj::mv(state)), webSocket(webSocket),
@@ -138,14 +138,14 @@ public:
     return state->wrap([&]() { return webSocket.close(params.getCode(), params.getReason()); });
   }
 
-private:
+ private:
   kj::Own<RequestState> state;
   kj::WebSocket& webSocket;
   kj::Promise<Capability::Client> shorteningPromise;
 };
 
 class HttpOverCapnpFactory::KjToCapnpWebSocketAdapter final: public kj::WebSocket {
-public:
+ public:
   KjToCapnpWebSocketAdapter(
       kj::Maybe<kj::Own<kj::WebSocket>> in, capnp::WebSocket::Client out,
       kj::Own<kj::PromiseFulfiller<kj::Promise<Capability::Client>>> shorteningFulfiller)
@@ -234,7 +234,7 @@ public:
   uint64_t sentByteCount() override { return sentBytes; }
   uint64_t receivedByteCount() override { return KJ_ASSERT_NONNULL(in)->receivedByteCount(); }
 
-private:
+ private:
   kj::Maybe<kj::Own<kj::WebSocket>> in;   // One end of a WebSocketPipe, used only for receiving.
   kj::Maybe<capnp::WebSocket::Client> out;  // Used only for sending.
   kj::Own<kj::PromiseFulfiller<kj::Promise<Capability::Client>>> shorteningFulfiller;
@@ -245,7 +245,7 @@ private:
 
 class HttpOverCapnpFactory::ClientRequestContextImpl final
     : public capnp::HttpService::ClientRequestContext::Server {
-public:
+ public:
   ClientRequestContextImpl(HttpOverCapnpFactory& factory,
                            kj::Own<RequestState> state,
                            kj::HttpService::Response& kjResponse)
@@ -318,7 +318,7 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   HttpOverCapnpFactory& factory;
   kj::Own<RequestState> state;
   bool sent = false;
@@ -329,7 +329,7 @@ private:
 
 class HttpOverCapnpFactory::ConnectClientRequestContextImpl final
     : public capnp::HttpService::ConnectClientRequestContext::Server {
-public:
+ public:
   ConnectClientRequestContextImpl(HttpOverCapnpFactory& factory,
       kj::HttpService::ConnectResponse& connResponse)
       : factory(factory), connResponse(connResponse) {}
@@ -370,7 +370,7 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   HttpOverCapnpFactory& factory;
   bool sent = false;
 
@@ -378,7 +378,7 @@ private:
 };
 
 class HttpOverCapnpFactory::KjToCapnpHttpServiceAdapter final: public kj::HttpService {
-public:
+ public:
   KjToCapnpHttpServiceAdapter(HttpOverCapnpFactory& factory, capnp::HttpService::Client inner)
       : factory(factory), inner(kj::mv(inner)) {}
 
@@ -531,7 +531,7 @@ public:
   }
 
 
-private:
+ private:
   HttpOverCapnpFactory& factory;
   capnp::HttpService::Client inner;
 };
@@ -548,7 +548,7 @@ class NullInputStream final: public kj::AsyncInputStream {
   // TODO(cleanup): This class has been replicated in a bunch of places now, make it public
   //   somewhere.
 
-public:
+ public:
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return kj::constPromise<size_t, 0>();
   }
@@ -566,7 +566,7 @@ class NullOutputStream final: public kj::AsyncOutputStream {
   // TODO(cleanup): This class has been replicated in a bunch of places now, make it public
   //   somewhere.
 
-public:
+ public:
   kj::Promise<void> write(const void* buffer, size_t size) override {
     return kj::READY_NOW;
   }
@@ -581,7 +581,7 @@ public:
 };
 
 class ResolvedServerRequestContext final: public capnp::HttpService::ServerRequestContext::Server {
-public:
+ public:
   // Nothing! It's done.
 };
 
@@ -589,7 +589,7 @@ public:
 
 class HttpOverCapnpFactory::HttpServiceResponseImpl
     : public kj::HttpService::Response {
-public:
+ public:
   HttpServiceResponseImpl(HttpOverCapnpFactory& factory,
                           capnp::HttpRequest::Reader request,
                           capnp::HttpService::ClientRequestContext::Client clientContext)
@@ -692,7 +692,7 @@ public:
 
 class HttpOverCapnpFactory::HttpOverCapnpConnectResponseImpl final :
     public kj::HttpService::ConnectResponse {
-public:
+ public:
   HttpOverCapnpConnectResponseImpl(
       HttpOverCapnpFactory& factory,
       capnp::HttpService::ConnectClientRequestContext::Client context) :
@@ -753,7 +753,7 @@ public:
 class HttpOverCapnpFactory::ServerRequestContextImpl final
     : public capnp::HttpService::ServerRequestContext::Server,
       public HttpServiceResponseImpl {
-public:
+ public:
   ServerRequestContextImpl(HttpOverCapnpFactory& factory,
                            HttpService::Client serviceCap,
                            kj::Own<capnp::HttpRequest::Reader> request,
@@ -781,14 +781,14 @@ public:
 
   KJ_DISALLOW_COPY_AND_MOVE(ServerRequestContextImpl);
 
-private:
+ private:
   kj::Own<capnp::HttpRequest::Reader> request;
   HttpService::Client serviceCap;  // ensures the inner kj::HttpService isn't destroyed
   kj::Promise<void> task;
 };
 
 class HttpOverCapnpFactory::CapnpToKjHttpServiceAdapter final: public capnp::HttpService::Server {
-public:
+ public:
   CapnpToKjHttpServiceAdapter(HttpOverCapnpFactory& factory, kj::Own<kj::HttpService> inner)
       : factory(factory), inner(kj::mv(inner)) {}
 
@@ -840,7 +840,7 @@ public:
     return requestImpl(kj::mv(context),
         [&](auto& results, auto& metadata, auto& params, auto& requestBody) {
       class FinalHttpServiceResponseImpl final: public HttpServiceResponseImpl {
-      public:
+       public:
         using HttpServiceResponseImpl::HttpServiceResponseImpl;
       };
       auto impl = kj::heap<FinalHttpServiceResponseImpl>(factory, metadata, params.getContext());
@@ -870,7 +870,7 @@ public:
     auto pipe = kj::newTwoWayPipe();
 
     class EofDetector final: public kj::AsyncOutputStream {
-    public:
+     public:
       EofDetector(kj::Own<kj::AsyncIoStream> inner)
           : inner(kj::mv(inner)) {}
       ~EofDetector() {
@@ -893,7 +893,7 @@ public:
       kj::Promise<void> whenWriteDisconnected() override {
         return inner->whenWriteDisconnected();
       }
-    private:
+     private:
       kj::Own<kj::AsyncIoStream> inner;
     };
 
@@ -930,7 +930,7 @@ public:
         .exclusiveJoin(kj::mv(pumpTask));
   }
 
-private:
+ private:
   HttpOverCapnpFactory& factory;
   kj::Own<kj::HttpService> inner;
 };

@@ -34,7 +34,7 @@ namespace capnp {
 namespace compiler {
 
 class ModuleLoader {
-public:
+ public:
   explicit ModuleLoader(GlobalErrorReporter& errorReporter);
   // Create a ModuleLoader that reports error messages to the given reporter.
 
@@ -53,7 +53,7 @@ public:
   // Same as SchemaParser::setFileIdsRequired(). If set false, files will not be required to have
   // a top-level file ID; if missing a random one will be assigned.
 
-private:
+ private:
   class Impl;
   kj::Own<Impl> impl;
 

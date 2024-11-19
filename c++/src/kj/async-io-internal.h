@@ -45,7 +45,7 @@ kj::ArrayPtr<const char> safeUnixPath(const struct sockaddr_un* addr, uint addrl
 #endif
 
 class NetworkFilter: public LowLevelAsyncIoProvider::NetworkFilter {
-public:
+ public:
   NetworkFilter();
   NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
                 NetworkFilter& next);
@@ -53,7 +53,7 @@ public:
   bool shouldAllow(const struct sockaddr* addr, uint addrlen) override;
   bool shouldAllowParse(const struct sockaddr* addr, uint addrlen);
 
-private:
+ private:
   Vector<CidrRange> allowCidrs;
   Vector<CidrRange> denyCidrs;
   bool allowUnix;

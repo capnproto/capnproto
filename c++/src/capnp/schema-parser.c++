@@ -61,7 +61,7 @@ size_t findLargestElementBefore(const kj::Vector<T>& vec, const T& key) {
 // =======================================================================================
 
 class SchemaParser::ModuleImpl final: public compiler::Module {
-public:
+ public:
   ModuleImpl(const SchemaParser& parser, kj::Own<const SchemaFile>&& file)
       : parser(parser), file(kj::mv(file)) {}
 
@@ -134,7 +134,7 @@ public:
     return parser.hadErrors;
   }
 
-private:
+ private:
   const SchemaParser& parser;
   kj::Own<const SchemaFile> file;
 
@@ -354,7 +354,7 @@ ParsedSchema ParsedSchema::ParsedSchemaList::operator[](uint index) const {
 // -------------------------------------------------------------------
 
 class SchemaFile::DiskSchemaFile final: public SchemaFile {
-public:
+ public:
   DiskSchemaFile(const kj::ReadableDirectory& baseDir, kj::Path pathParam,
                  kj::ArrayPtr<const kj::ReadableDirectory* const> importPath,
                  kj::Own<const kj::ReadableFile> file,
@@ -435,7 +435,7 @@ public:
         kj::heapString(message)));
   }
 
-private:
+ private:
   const kj::ReadableDirectory& baseDir;
   kj::Path path;
   kj::ArrayPtr<const kj::ReadableDirectory* const> importPath;

@@ -439,7 +439,7 @@ TEST(Async, Ordering) {
   WaitScope waitScope(loop);
 
   class ErrorHandlerImpl: public TaskSet::ErrorHandler {
-  public:
+   public:
     void taskFailed(kj::Exception&& exception) override {
       KJ_FAIL_EXPECT(exception);
     }
@@ -831,7 +831,7 @@ TEST(Async, CancelerDoubleWrap) {
 }
 
 class ErrorHandlerImpl: public TaskSet::ErrorHandler {
-public:
+ public:
   uint exceptionCount = 0;
   void taskFailed(kj::Exception&& exception) override {
     EXPECT_TRUE(exception.getDescription().endsWith("example TaskSet failure"));
@@ -976,7 +976,7 @@ KJ_TEST("TaskSet::clear()") {
   WaitScope waitScope(loop);
 
   class ClearOnError: public TaskSet::ErrorHandler {
-  public:
+   public:
     TaskSet* tasks;
     void taskFailed(kj::Exception&& exception) override {
       KJ_EXPECT(exception.getDescription().endsWith("example TaskSet failure"));
@@ -1018,11 +1018,11 @@ KJ_TEST("TaskSet::clear()") {
 }
 
 class DestructorDetector {
-public:
+ public:
   DestructorDetector(bool& setTrue): setTrue(setTrue) {}
   ~DestructorDetector() { setTrue = true; }
 
-private:
+ private:
   bool& setTrue;
 };
 
@@ -1094,7 +1094,7 @@ TEST(Async, Detach) {
 }
 
 class DummyEventPort: public EventPort {
-public:
+ public:
   bool runnable = false;
   int callCount = 0;
 
@@ -1531,7 +1531,7 @@ KJ_TEST("run event loop on freelisted stacks") {
   FiberPool pool(65536);
 
   class MockEventPort: public EventPort {
-  public:
+   public:
     bool wait() override {
       char c;
       waitStack = &c;

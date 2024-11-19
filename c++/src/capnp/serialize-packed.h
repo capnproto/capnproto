@@ -33,7 +33,7 @@ class PackedInputStream: public kj::InputStream {
   // An input stream that unpacks packed data with a picky constraint:  The caller must read data
   // in the exact same size and sequence as the data was written to PackedOutputStream.
 
-public:
+ public:
   explicit PackedInputStream(kj::BufferedInputStream& inner);
   KJ_DISALLOW_COPY_AND_MOVE(PackedInputStream);
   ~PackedInputStream() noexcept(false);
@@ -42,13 +42,13 @@ public:
   size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
-private:
+ private:
   kj::BufferedInputStream& inner;
 };
 
 class PackedOutputStream: public kj::OutputStream {
   // An output stream that packs data. Buffers passed to `write()` must be word-aligned.
-public:
+ public:
   explicit PackedOutputStream(kj::BufferedOutputStream& inner);
   KJ_DISALLOW_COPY_AND_MOVE(PackedOutputStream);
   ~PackedOutputStream() noexcept(false);
@@ -56,14 +56,14 @@ public:
   // implements OutputStream -----------------------------------------
   void write(const void* buffer, size_t bytes) override;
 
-private:
+ private:
   kj::BufferedOutputStream& inner;
 };
 
 }  // namespace _ (private)
 
 class PackedMessageReader: private _::PackedInputStream, public InputStreamMessageReader {
-public:
+ public:
   PackedMessageReader(kj::BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
                       kj::ArrayPtr<word> scratchSpace = nullptr);
   KJ_DISALLOW_COPY_AND_MOVE(PackedMessageReader);
@@ -72,7 +72,7 @@ public:
 
 class PackedFdMessageReader: private kj::FdInputStream, private kj::BufferedInputStreamWrapper,
                              public PackedMessageReader {
-public:
+ public:
   PackedFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
                         kj::ArrayPtr<word> scratchSpace = nullptr);
   // Read message from a file descriptor, without taking ownership of the descriptor.

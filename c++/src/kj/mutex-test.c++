@@ -525,7 +525,7 @@ TEST(Mutex, LazyException) {
 }
 
 class OnlyTouchUnderLock {
-public:
+ public:
   OnlyTouchUnderLock(): ptr(nullptr) {}
   OnlyTouchUnderLock(MutexGuarded<uint>& ref): ptr(&ref) {
     ptr->getAlreadyLockedExclusive()++;
@@ -561,7 +561,7 @@ public:
     ptr->getAlreadyLockedExclusive()++;
   }
 
-private:
+ private:
   MutexGuarded<uint>* ptr;
 };
 
@@ -865,7 +865,7 @@ KJ_TEST("get location of shared mutex") {
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
 KJ_TEST("make sure contended mutex warns") {
   class Expectation final: public ExceptionCallback {
-  public:
+   public:
     Expectation(LogSeverity severity, StringPtr substring) :
         severity(severity), substring(substring), seen(false) {}
 
@@ -887,7 +887,7 @@ KJ_TEST("make sure contended mutex warns") {
       return seen;
     }
 
-  private:
+   private:
     LogSeverity severity;
     StringPtr substring;
     bool seen;

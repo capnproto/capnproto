@@ -240,7 +240,7 @@ struct UnixEventPort::ChildSet {
 };
 
 class UnixEventPort::ChildExitPromiseAdapter {
-public:
+ public:
   inline ChildExitPromiseAdapter(PromiseFulfiller<int>& fulfiller,
                                  ChildSet& childSet, Maybe<pid_t>& pidRef)
       : childSet(childSet),
@@ -309,7 +309,7 @@ void UnixEventPort::captureChildExit() {
 }
 
 class UnixEventPort::SignalPromiseAdapter {
-public:
+ public:
   inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
                               UnixEventPort& loop, int signum)
       : loop(loop), signum(signum), fulfiller(fulfiller) {
@@ -888,7 +888,7 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
 }
 
 class UnixEventPort::SignalPromiseAdapter {
-public:
+ public:
   inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
                               UnixEventPort& eventPort, int signum)
       : eventPort(eventPort), signum(signum), fulfiller(fulfiller) {
@@ -998,7 +998,7 @@ Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
 }
 
 class UnixEventPort::ChildExitPromiseAdapter {
-public:
+ public:
   inline ChildExitPromiseAdapter(PromiseFulfiller<int>& fulfiller,
                                  UnixEventPort& eventPort, Maybe<pid_t>& pid)
       : eventPort(eventPort), pid(pid), fulfiller(fulfiller) {
@@ -1327,7 +1327,7 @@ Promise<void> UnixEventPort::FdObserver::whenWriteDisconnected() {
 }
 
 class UnixEventPort::PollContext {
-public:
+ public:
   PollContext(UnixEventPort& port) {
     for (FdObserver* ptr = port.observersHead; ptr != nullptr; ptr = ptr->next) {
       struct pollfd pollfd;
@@ -1394,7 +1394,7 @@ public:
     return woken;
   }
 
-private:
+ private:
   kj::Vector<struct pollfd> pollfds;
   kj::Vector<FdObserver*> pollEvents;
   int pollResult = 0;

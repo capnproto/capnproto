@@ -683,7 +683,7 @@ class Badge {
   // use cases for this pattern in KJ. In any case, dereferencing a null pointer is UB; there are
   // plenty of other ways to get access to private members if you're willing to go UB. For one-off
   // debugging purposes, you might as well use `#define private public` at the top of the file.
-private:
+ private:
   Badge() {}
   friend T;
 };
@@ -729,7 +729,7 @@ inline constexpr size_t size(T&& arr) { return arr.size(); }
 // with a `.size()` method.
 
 class MaxValue_ {
-private:
+ private:
   template <typename T>
   inline constexpr T maxSigned() const {
     return (1ull << (sizeof(T) * 8 - 1)) - 1;
@@ -739,7 +739,7 @@ private:
     return ~static_cast<T>(0u);
   }
 
-public:
+ public:
 #define _kJ_HANDLE_TYPE(T) \
   inline constexpr operator   signed T() const { return MaxValue_::maxSigned  <  signed T>(); } \
   inline constexpr operator unsigned T() const { return MaxValue_::maxUnsigned<unsigned T>(); }
@@ -759,7 +759,7 @@ public:
 };
 
 class MinValue_ {
-private:
+ private:
   template <typename T>
   inline constexpr T minSigned() const {
     return 1ull << (sizeof(T) * 8 - 1);
@@ -769,7 +769,7 @@ private:
     return 0u;
   }
 
-public:
+ public:
 #define _kJ_HANDLE_TYPE(T) \
   inline constexpr operator   signed T() const { return MinValue_::minSigned  <  signed T>(); } \
   inline constexpr operator unsigned T() const { return MinValue_::minUnsigned<unsigned T>(); }
@@ -847,12 +847,12 @@ inline int popCount(unsigned int x) {
 
 template <typename T>
 class Range {
-public:
+ public:
   inline constexpr Range(const T& begin, const T& end): begin_(begin), end_(end) {}
   inline explicit constexpr Range(const T& end): begin_(0), end_(end) {}
 
   class Iterator {
-  public:
+   public:
     Iterator() = default;
     inline Iterator(const T& value): value(value) {}
 
@@ -875,7 +875,7 @@ public:
     inline bool operator< (const Iterator& other) const { return value <  other.value; }
     inline bool operator> (const Iterator& other) const { return value >  other.value; }
 
-  private:
+   private:
     T value;
   };
 
@@ -884,7 +884,7 @@ public:
 
   inline auto size() const -> decltype(instance<T>() - instance<T>()) { return end_ - begin_; }
 
-private:
+ private:
   T begin_;
   T end_;
 };
@@ -921,11 +921,11 @@ inline constexpr Range<size_t> indices(T&& container) {
 
 template <typename T>
 class Repeat {
-public:
+ public:
   inline constexpr Repeat(const T& value, size_t count): value(value), count(count) {}
 
   class Iterator {
-  public:
+   public:
     Iterator() = default;
     inline Iterator(const T& value, size_t index): value(value), index(index) {}
 
@@ -948,7 +948,7 @@ public:
     inline bool operator< (const Iterator& other) const { return index <  other.index; }
     inline bool operator> (const Iterator& other) const { return index >  other.index; }
 
-  private:
+   private:
     T value;
     size_t index;
   };
@@ -959,7 +959,7 @@ public:
   inline size_t size() const { return count; }
   inline const T& operator[](ptrdiff_t) const { return value; }
 
-private:
+ private:
   T value;
   size_t count;
 };
@@ -977,7 +977,7 @@ class MappedIterator: private Mapping {
   // An iterator that wraps some other iterator and maps the values through a mapping function.
   // The type `Mapping` must define a method `map()` which performs this mapping.
 
-public:
+ public:
   template <typename... Params>
   MappedIterator(Inner inner, Params&&... params)
       : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
@@ -1006,7 +1006,7 @@ public:
   inline bool operator< (const MappedIterator& other) const { return inner <  other.inner; }
   inline bool operator> (const MappedIterator& other) const { return inner >  other.inner; }
 
-private:
+ private:
   Inner inner;
 };
 
@@ -1015,7 +1015,7 @@ class MappedIterable: private Mapping {
   // An iterable that wraps some other iterable and maps the values through a mapping function.
   // The type `Mapping` must define a method `map()` which performs this mapping.
 
-public:
+ public:
   template <typename... Params>
   MappedIterable(Inner inner, Params&&... params)
       : Mapping(kj::fwd<Params>(params)...), inner(inner) {}
@@ -1030,7 +1030,7 @@ public:
   inline ConstIterator begin() const { return { inner.begin(), (const Mapping&)*this }; }
   inline ConstIterator end() const { return { inner.end(), (const Mapping&)*this }; }
 
-private:
+ private:
   Inner inner;
 };
 
@@ -1099,7 +1099,7 @@ class NullableValue {
   // Class whose interface behaves much like T*, but actually contains an instance of T and a
   // boolean flag indicating nullness.
 
-public:
+ public:
   inline NullableValue(NullableValue&& other)
       : isSet(other.isSet) {
     if (isSet) {
@@ -1279,7 +1279,7 @@ public:
   // We used to permit assigning a Maybe<T> directly from a T*, and the assignment would check for
   // nullness. This turned out never to be useful, and sometimes to be dangerous.
 
-private:
+ private:
   bool isSet;
 
 #if _MSC_VER && !defined(__clang__)
@@ -1384,7 +1384,7 @@ class Maybe {
 
   // IF YOU CHANGE THIS CLASS:  Note that there is a specialization of it in memory.h.
 
-public:
+ public:
   Maybe(): ptr(nullptr) {}
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
@@ -1577,7 +1577,7 @@ public:
     }
   }
 
-private:
+ private:
   _::NullableValue<T> ptr;
 
   template <typename U>
@@ -1592,7 +1592,7 @@ private:
 
 template <typename T>
 class Maybe<T&> {
-public:
+ public:
   constexpr Maybe(): ptr(nullptr) {}
   constexpr Maybe(T& t): ptr(&t) {}
   constexpr Maybe(T* t): ptr(t) {}
@@ -1674,7 +1674,7 @@ public:
     }
   }
 
-private:
+ private:
   T* ptr;
 
   template <typename U>
@@ -1698,7 +1698,7 @@ class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
   // and passing by value only copies the pointer, not the target.
 
-public:
+ public:
   inline constexpr ArrayPtr(): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size): ptr(ptr), size_(size) {}
@@ -1874,7 +1874,7 @@ public:
   //
   // You must include kj/array.h to call this.
 
-private:
+ private:
   T* ptr;
   size_t size_;
 };
@@ -1990,7 +1990,7 @@ namespace _ {  // private
 
 template <typename Func>
 class Deferred {
-public:
+ public:
   Deferred(Func&& func): maybeFunc(kj::fwd<Func>(func)) {}
   ~Deferred() noexcept(false) {
     run();
@@ -2012,7 +2012,7 @@ public:
     maybeFunc = nullptr;
   }
 
-private:
+ private:
   kj::Maybe<Func> maybeFunc;
   // Note that `Func` may actually be an lvalue reference because `kj::defer` takes its argument via
   // universal reference. `kj::Maybe` has specializations for lvalue reference types, so this works

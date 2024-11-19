@@ -38,7 +38,7 @@ class HashMap {
   // there is an `operator==` implementation with `Key` on the left and that other type on the
   // right. For example, if the key type is `String`, you can pass `StringPtr` to `find()`.
 
-public:
+ public:
   void reserve(size_t size);
   // Pre-allocates space for a map of the given size.
 
@@ -113,9 +113,9 @@ public:
   size_t eraseAll(Predicate&& predicate);
   // Erase all values for which predicate(key, value) returns true. This scans over the entire map.
 
-private:
+ private:
   class Callbacks {
-  public:
+   public:
     inline const Key& keyForRow(const Entry& entry) const { return entry.key; }
     inline Key& keyForRow(Entry& entry) const { return entry.key; }
 
@@ -143,7 +143,7 @@ class TreeMap {
   // `Key` must support `operator<` and `operator==` against other Keys, and against any type
   // which you might want to pass to find() (with `Key` always on the left of the comparison).
 
-public:
+ public:
   void reserve(size_t size);
   // Pre-allocates space for a map of the given size.
 
@@ -225,9 +225,9 @@ public:
   size_t eraseRange(K1&& k1, K2&& k2);
   // Erases all entries with keys between k1 (inclusive) and k2 (exclusive).
 
-private:
+ private:
   class Callbacks {
-  public:
+   public:
     inline const Key& keyForRow(const Entry& entry) const { return entry.key; }
     inline Key& keyForRow(Entry& entry) const { return entry.key; }
 
@@ -255,7 +255,7 @@ private:
 namespace _ {  // private
 
 class HashSetCallbacks {
-public:
+ public:
   template <typename Row>
   inline Row& keyForRow(Row& row) const { return row; }
 
@@ -268,7 +268,7 @@ public:
 };
 
 class TreeSetCallbacks {
-public:
+ public:
   template <typename Row>
   inline Row& keyForRow(Row& row) const { return row; }
 
@@ -284,7 +284,7 @@ template <typename Element>
 class HashSet: public Table<Element, HashIndex<_::HashSetCallbacks>> {
   // A simple hashtable-based set, using kj::hashCode() and operator==().
 
-public:
+ public:
   // Everything is inherited.
 
   template <typename... Params>
@@ -297,7 +297,7 @@ template <typename Element>
 class TreeSet: public Table<Element, TreeIndex<_::TreeSetCallbacks>> {
   // A simple b-tree-based set, using operator<() and operator==().
 
-public:
+ public:
   // Everything is inherited.
 };
 

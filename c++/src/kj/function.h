@@ -67,7 +67,7 @@ class Function;
 // For example:
 //
 //     class Printer {
-//     public:
+//      public:
 //       void print(int i);
 //       void print(kj::StringPtr s);
 //     };
@@ -98,7 +98,7 @@ class FunctionParam;
 
 template <typename Return, typename... Params>
 class Function<Return(Params...)> {
-public:
+ public:
   template <typename F>
   inline Function(F&& f): impl(heap<Impl<F>>(kj::fwd<F>(f))) {}
   Function() = default;
@@ -127,22 +127,22 @@ public:
     return *impl;
   }
 
-private:
+ private:
   class Iface {
-  public:
+   public:
     virtual Return operator()(Params... params) = 0;
   };
 
   template <typename F>
   class Impl final: public Iface {
-  public:
+   public:
     explicit Impl(F&& f): f(kj::fwd<F>(f)) {}
 
     Return operator()(Params... params) override {
       return f(kj::fwd<Params>(params)...);
     }
 
-  private:
+   private:
     F f;
   };
 
@@ -151,7 +151,7 @@ private:
 
 template <typename Return, typename... Params>
 class ConstFunction<Return(Params...)> {
-public:
+ public:
   template <typename F>
   inline ConstFunction(F&& f): impl(heap<Impl<F>>(kj::fwd<F>(f))) {}
   ConstFunction() = default;
@@ -180,22 +180,22 @@ public:
     return *impl;
   }
 
-private:
+ private:
   class Iface {
-  public:
+   public:
     virtual Return operator()(Params... params) const = 0;
   };
 
   template <typename F>
   class Impl final: public Iface {
-  public:
+   public:
     explicit Impl(F&& f): f(kj::fwd<F>(f)) {}
 
     Return operator()(Params... params) const override {
       return f(kj::fwd<Params>(params)...);
     }
 
-  private:
+   private:
     F f;
   };
 
@@ -204,7 +204,7 @@ private:
 
 template <typename Return, typename... Params>
 class FunctionParam<Return(Params...)> {
-public:
+ public:
   template <typename Func>
   FunctionParam(Func&& func) {
     typedef Wrapper<Decay<Func>> WrapperType;
@@ -228,24 +228,24 @@ public:
     return (*reinterpret_cast<WrapperBase*>(space))(kj::fwd<Params>(params)...);
   }
 
-private:
+ private:
   alignas(void*) char space[2 * sizeof(void*)];
 
   class WrapperBase {
-  public:
+   public:
     virtual Return operator()(Params... params) = 0;
   };
 
   template <typename Func>
   class Wrapper: public WrapperBase {
-  public:
+   public:
     Wrapper(Func& func): func(func) {}
 
     inline Return operator()(Params... params) override {
       return func(kj::fwd<Params>(params)...);
     }
 
-  private:
+   private:
     Func& func;
   };
 };
@@ -254,7 +254,7 @@ namespace _ {  // private
 
 template <typename T, typename Func, typename ConstFunc>
 class BoundMethod {
-public:
+ public:
   BoundMethod(T&& t, Func&& func, ConstFunc&& constFunc)
       : t(kj::fwd<T>(t)), func(kj::mv(func)), constFunc(kj::mv(constFunc)) {}
 
@@ -267,7 +267,7 @@ public:
     return constFunc(t, kj::fwd<Params>(params)...);
   }
 
-private:
+ private:
   T t;
   Func func;
   ConstFunc constFunc;

@@ -56,7 +56,7 @@ class EzRpcClient {
   //
   //     // C++ server
   //     class AdderImpl final: public Adder::Server {
-  //     public:
+  //      public:
   //       kj::Promise<void> add(AddContext context) override {
   //         auto params = context.getParams();
   //         context.getResults().setValue(params.getLeft() + params.getRight());
@@ -91,7 +91,7 @@ class EzRpcClient {
   // - `RpcSystem` in `capnp/rpc.h`.
   // - `TwoPartyVatNetwork` in `capnp/rpc-twoparty.h`.
 
-public:
+ public:
   explicit EzRpcClient(kj::StringPtr serverAddress, uint defaultPort = 0,
                        ReaderOptions readerOpts = ReaderOptions());
   // Construct a new EzRpcClient and connect to the given address.  The connection is formed in
@@ -151,7 +151,7 @@ public:
   // Get the underlying LowLevelAsyncIoProvider set up by the RPC system.  This is useful if you
   // want to do some non-RPC I/O in asynchronous fashion.
 
-private:
+ private:
   struct Impl;
   kj::Own<Impl> impl;
 };
@@ -159,7 +159,7 @@ private:
 class EzRpcServer {
   // The server counterpart to `EzRpcClient`.  See `EzRpcClient` for an example.
 
-public:
+ public:
   explicit EzRpcServer(Capability::Client mainInterface, kj::StringPtr bindAddress,
                        uint defaultPort = 0, ReaderOptions readerOpts = ReaderOptions());
   // Construct a new `EzRpcServer` that binds to the given address.  An address of "*" means to
@@ -228,7 +228,7 @@ public:
   // Get the underlying LowLevelAsyncIoProvider set up by the RPC system.  This is useful if you
   // want to do some non-RPC I/O in asynchronous fashion.
 
-private:
+ private:
   struct Impl;
   kj::Own<Impl> impl;
 };

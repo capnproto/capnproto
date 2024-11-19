@@ -37,7 +37,7 @@ class Vector {
 
   // TODO(someday): Allow specifying a custom allocator.
 
-public:
+ public:
   inline Vector() = default;
   inline explicit Vector(size_t capacity): builder(heapArrayBuilder<T>(capacity)) {}
   inline Vector(Array<T>&& array): builder(kj::mv(array)) {}
@@ -127,7 +127,7 @@ public:
     }
   }
 
-private:
+ private:
   ArrayBuilder<T> builder;
 
   void grow(size_t minCapacity = 0) {

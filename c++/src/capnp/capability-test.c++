@@ -484,7 +484,7 @@ TEST(Capability, DynamicClientPipelineAnyCap) {
 // =======================================================================================
 
 class TestInterfaceDynamicImpl final: public DynamicCapability::Server {
-public:
+ public:
   TestInterfaceDynamicImpl(int& callCount)
       : DynamicCapability::Server(Schema::from<test::TestInterface>()),
         callCount(callCount) {}
@@ -558,7 +558,7 @@ TEST(Capability, DynamicServer) {
 }
 
 class TestExtendsDynamicImpl final: public DynamicCapability::Server {
-public:
+ public:
   TestExtendsDynamicImpl(int& callCount)
       : DynamicCapability::Server(Schema::from<test::TestExtends>()),
         callCount(callCount) {}
@@ -618,7 +618,7 @@ TEST(Capability, DynamicServerInheritance) {
 }
 
 class TestPipelineDynamicImpl final: public DynamicCapability::Server {
-public:
+ public:
   TestPipelineDynamicImpl(int& callCount)
       : DynamicCapability::Server(Schema::from<test::TestPipeline>()),
         callCount(callCount) {}
@@ -711,7 +711,7 @@ TEST(Capability, DynamicServerPipelining) {
 }
 
 class TestTailCallerDynamicImpl final: public DynamicCapability::Server {
-public:
+ public:
   TestTailCallerDynamicImpl(int& callCount)
       : DynamicCapability::Server(Schema::from<test::TestTailCaller>()),
         callCount(callCount) {}
@@ -906,7 +906,7 @@ TEST(Capability, KeywordMethods) {
   bool called = false;
 
   class TestKeywordMethodsImpl final: public test::TestKeywordMethods::Server {
-  public:
+   public:
     TestKeywordMethodsImpl(bool& called): called(called) {}
 
     kj::Promise<void> delete_(DeleteContext context) override {
@@ -914,7 +914,7 @@ TEST(Capability, KeywordMethods) {
       return kj::READY_NOW;
     }
 
-  private:
+   private:
     bool& called;
   };
 
@@ -1061,7 +1061,7 @@ TEST(Capability, CapabilityServerSet) {
 }
 
 class TestThisCap final: public test::TestInterface::Server {
-public:
+ public:
   TestThisCap(int& callCount): callCount(callCount) {}
   ~TestThisCap() noexcept(false) { callCount = -1; }
 
@@ -1069,13 +1069,13 @@ public:
     return thisCap();
   }
 
-protected:
+ protected:
   kj::Promise<void> bar(BarContext context) {
     ++callCount;
     return kj::READY_NOW;
   }
 
-private:
+ private:
   int& callCount;
 };
 
@@ -1395,7 +1395,7 @@ KJ_TEST("RevocableServer") {
   kj::WaitScope waitScope(loop);
 
   class ServerImpl: public test::TestMembrane::Server {
-  public:
+   public:
     kj::Promise<void> waitForever(WaitForeverContext context) override {
       return kj::NEVER_DONE;
     }

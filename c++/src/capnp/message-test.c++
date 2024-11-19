@@ -49,7 +49,7 @@ TEST(Message, MallocBuilderWithFirstSegment) {
 }
 
 class TestInitMessageBuilder: public MessageBuilder {
-public:
+ public:
   TestInitMessageBuilder(kj::ArrayPtr<SegmentInit> segments): MessageBuilder(segments) {}
 
   kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {

@@ -109,7 +109,7 @@ static constexpr uint NEW_FD_FLAGS =
 // this is not possible.
 
 class OwnedFileDescriptor {
-public:
+ public:
   OwnedFileDescriptor(int fd, uint flags): fd(fd), flags(flags) {
     if (flags & LowLevelAsyncIoProvider::ALREADY_NONBLOCK) {
       KJ_DREQUIRE(fcntl(fd, F_GETFL) & O_NONBLOCK, "You claimed you set NONBLOCK, but you didn't.");
@@ -137,17 +137,17 @@ public:
     }
   }
 
-protected:
+ protected:
   const int fd;
 
-private:
+ private:
   uint flags;
 };
 
 // =======================================================================================
 
 class AsyncStreamFd: public OwnedFileDescriptor, public AsyncCapabilityStream {
-public:
+ public:
   AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags, uint observerFlags)
       : OwnedFileDescriptor(fd, flags),
         eventPort(eventPort),
@@ -263,7 +263,7 @@ public:
   // TODO(someday): Support sendfile on other OS's... unfortunately, it works differently on
   //   different systems.
 
-private:
+ private:
   Promise<uint64_t> pumpFromFile(FileInputStream& input, int fileFd,
                                  uint64_t amount, uint64_t soFar) {
     while (soFar < amount) {
@@ -300,7 +300,7 @@ private:
     return soFar;
   }
 
-public:
+ public:
 #endif  // __linux__
 
 #if __linux__ && !__ANDROID__
@@ -309,7 +309,7 @@ public:
 // TODO(someday): splice()-based pumping hangs in unit tests on Android for some reason. We should
 //   figure out why, but for now I'm just disabling it...
 
-private:
+ private:
   Maybe<Promise<uint64_t>> pumpFromOther(AsyncStreamFd& input, uint64_t amount) {
     // The input is another AsyncStreamFd, so perhaps we can do an optimized pump with splice().
 
@@ -471,7 +471,7 @@ private:
     }
   }
 
-public:
+ public:
 #endif  // __linux__ && !__ANDROID__
 
   Promise<void> whenWriteDisconnected() override {
@@ -551,7 +551,7 @@ public:
     }
   }
 
-private:
+ private:
   UnixEventPort& eventPort;
   UnixEventPort::FdObserver observer;
   Maybe<ForkedPromise<void>> writeDisconnectedPromise;
@@ -887,7 +887,7 @@ constexpr size_t AsyncStreamFd::MAX_SPLICE_LEN;
 // =======================================================================================
 
 class SocketAddress {
-public:
+ public:
   SocketAddress(const void* sockaddr, uint len): addrlen(len) {
     KJ_REQUIRE(len <= sizeof(addr), "Sorry, your sockaddr is too big for me.");
     memcpy(&addr.generic, sockaddr, len);
@@ -1181,7 +1181,7 @@ public:
                                     LowLevelAsyncIoProvider::NetworkFilter& filter,
                                     AsyncIoStream& stream) const;
 
-private:
+ private:
   SocketAddress() {
     // We need to memset the whole object 0 otherwise Valgrind gets unhappy when we write it to a
     // pipe, due to the padding bytes being uninitialized.
@@ -1312,7 +1312,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 // =======================================================================================
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
-public:
+ public:
   FdConnectionReceiver(LowLevelAsyncIoProvider& lowLevel,
                        UnixEventPort& eventPort, int fd,
                        LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
@@ -1429,7 +1429,7 @@ public:
     *length = socklen;
   }
 
-public:
+ public:
   LowLevelAsyncIoProvider& lowLevel;
   UnixEventPort& eventPort;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
@@ -1437,7 +1437,7 @@ public:
 };
 
 class DatagramPortImpl final: public DatagramPort, public OwnedFileDescriptor {
-public:
+ public:
   DatagramPortImpl(LowLevelAsyncIoProvider& lowLevel, UnixEventPort& eventPort, int fd,
                    LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
       : OwnedFileDescriptor(fd, flags), lowLevel(lowLevel), eventPort(eventPort), filter(filter),
@@ -1465,7 +1465,7 @@ public:
     KJ_SYSCALL(::setsockopt(fd, level, option, value, length));
   }
 
-public:
+ public:
   LowLevelAsyncIoProvider& lowLevel;
   UnixEventPort& eventPort;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
@@ -1473,7 +1473,7 @@ public:
 };
 
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
-public:
+ public:
   LowLevelAsyncIoProviderImpl()
       : eventPort(), eventLoop(eventPort), waitScope(eventLoop) {}
 
@@ -1541,7 +1541,7 @@ public:
 
   UnixEventPort& getEventPort() { return eventPort; }
 
-private:
+ private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
   WaitScope waitScope;
@@ -1550,7 +1550,7 @@ private:
 // =======================================================================================
 
 class NetworkAddressImpl final: public NetworkAddress {
-public:
+ public:
   NetworkAddressImpl(LowLevelAsyncIoProvider& lowLevel,
                      LowLevelAsyncIoProvider::NetworkFilter& filter,
                      Array<SocketAddress> addrs)
@@ -1633,7 +1633,7 @@ public:
     return addrs[counter++ % addrs.size()];
   }
 
-private:
+ private:
   LowLevelAsyncIoProvider& lowLevel;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
   Array<SocketAddress> addrs;
@@ -1738,7 +1738,7 @@ kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& ll
 }
 
 class SocketNetwork final: public Network {
-public:
+ public:
   explicit SocketNetwork(LowLevelAsyncIoProvider& lowLevel): lowLevel(lowLevel) {}
   explicit SocketNetwork(SocketNetwork& parent,
                          kj::ArrayPtr<const kj::StringPtr> allow,
@@ -1766,7 +1766,7 @@ public:
     return heap<SocketNetwork>(*this, allow, deny);
   }
 
-private:
+ private:
   LowLevelAsyncIoProvider& lowLevel;
   _::NetworkFilter filter;
 };
@@ -1846,7 +1846,7 @@ Promise<size_t> DatagramPortImpl::send(
 }
 
 class DatagramPortImpl::ReceiverImpl final: public DatagramReceiver {
-public:
+ public:
   explicit ReceiverImpl(DatagramPortImpl& port, Capacity capacity)
       : port(port),
         contentBuffer(heapArray<byte>(capacity.content)),
@@ -1940,7 +1940,7 @@ public:
     return KJ_REQUIRE_NONNULL(source, "Haven't sent a message yet.").abstract;
   }
 
-private:
+ private:
   DatagramPortImpl& port;
   Array<byte> contentBuffer;
   Array<byte> ancillaryBuffer;
@@ -1969,7 +1969,7 @@ Own<DatagramReceiver> DatagramPortImpl::makeReceiver(DatagramReceiver::Capacity 
 // =======================================================================================
 
 class AsyncIoProviderImpl final: public AsyncIoProvider {
-public:
+ public:
   AsyncIoProviderImpl(LowLevelAsyncIoProvider& lowLevel)
       : lowLevel(lowLevel), network(lowLevel) {}
 
@@ -2042,7 +2042,7 @@ public:
 
   Timer& getTimer() override { return lowLevel.getTimer(); }
 
-private:
+ private:
   LowLevelAsyncIoProvider& lowLevel;
   SocketNetwork network;
 };

@@ -37,7 +37,7 @@ namespace parse {
 // Exact char/string.
 
 class ExactString_ {
-public:
+ public:
   constexpr inline ExactString_(const char* str): str(str) {}
 
   template <typename Input>
@@ -53,7 +53,7 @@ public:
     return Tuple<>();
   }
 
-private:
+ private:
   const char* str;
 };
 
@@ -72,7 +72,7 @@ constexpr ExactlyConst_<char, c> exactChar() {
 // Char ranges / sets
 
 class CharGroup_ {
-public:
+ public:
   constexpr inline CharGroup_(): bits{0, 0, 0, 0} {}
 
   constexpr inline CharGroup_ orRange(unsigned char first, unsigned char last) const {
@@ -127,7 +127,7 @@ public:
     }
   }
 
-private:
+ private:
   typedef unsigned long long Bits64;
 
   constexpr inline CharGroup_(Bits64 a, Bits64 b, Bits64 c, Bits64 d): bits{a, b, c, d} {}

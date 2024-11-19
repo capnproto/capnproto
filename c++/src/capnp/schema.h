@@ -77,7 +77,7 @@ extern const RawSchema NULL_CONST_SCHEMA;
 class Schema {
   // Convenience wrapper around capnp::schema::Node.
 
-public:
+ public:
   inline Schema(): raw(&_::NULL_SCHEMA.defaultBrand) {}
 
   template <typename T>
@@ -159,7 +159,7 @@ public:
   const kj::StringPtr getUnqualifiedName() const;
   // Get the display name "nickname" of this node minus the prefix
 
-private:
+ private:
   const _::RawBrandedSchema* raw;
 
   inline explicit Schema(const _::RawBrandedSchema* raw): raw(raw) {
@@ -213,7 +213,7 @@ class Schema::BrandArgumentList {
   // type. Missing parameters should be treated as AnyPointer. This class's implementation of
   // operator[] already does this for you; out-of-bounds access will safely return AnyPointer.
 
-public:
+ public:
   inline BrandArgumentList(): scopeId(0), size_(0), bindings(nullptr) {}
 
   inline uint size() const { return size_; }
@@ -223,7 +223,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   uint64_t scopeId;
   uint size_;
   bool isUnbound;
@@ -241,7 +241,7 @@ private:
 // -------------------------------------------------------------------
 
 class StructSchema: public Schema {
-public:
+ public:
   inline StructSchema(): Schema(&_::NULL_STRUCT_SCHEMA.defaultBrand) {}
 
   class Field;
@@ -298,7 +298,7 @@ public:
   // and could actually return capabilities, but for the client to make a pipelined call, the
   // client would have to know in advance that capabilities could be returned.
 
-private:
+ private:
   StructSchema(Schema base): Schema(base) {}
   template <typename T> static inline StructSchema fromImpl() {
     return StructSchema(Schema(&_::rawBrandedSchema<T>()));
@@ -308,7 +308,7 @@ private:
 };
 
 class StructSchema::Field {
-public:
+ public:
   Field() = default;
 
   inline schema::Field::Reader getProto() const { return proto; }
@@ -345,7 +345,7 @@ public:
   inline bool operator!=(const Field& other) const { return !(*this == other); }
   inline uint hashCode() const;
 
-private:
+ private:
   StructSchema parent;
   uint index;
   schema::Field::Reader proto;
@@ -359,7 +359,7 @@ private:
 kj::StringPtr KJ_STRINGIFY(const StructSchema::Field& field);
 
 class StructSchema::FieldList {
-public:
+ public:
   FieldList() = default;  // empty list
 
   inline uint size() const { return list.size(); }
@@ -369,7 +369,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   StructSchema parent;
   List<schema::Field>::Reader list;
 
@@ -380,7 +380,7 @@ private:
 };
 
 class StructSchema::FieldSubset {
-public:
+ public:
   FieldSubset() = default;  // empty list
 
   inline uint size() const { return size_; }
@@ -392,7 +392,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   StructSchema parent;
   List<schema::Field>::Reader list;
   const uint16_t* indices;
@@ -408,7 +408,7 @@ private:
 // -------------------------------------------------------------------
 
 class EnumSchema: public Schema {
-public:
+ public:
   inline EnumSchema(): Schema(&_::NULL_ENUM_SCHEMA.defaultBrand) {}
 
   class Enumerant;
@@ -421,7 +421,7 @@ public:
   Enumerant getEnumerantByName(kj::StringPtr name) const;
   // Like findEnumerantByName() but throws an exception on failure.
 
-private:
+ private:
   EnumSchema(Schema base): Schema(base) {}
   template <typename T> static inline EnumSchema fromImpl() {
     return EnumSchema(Schema(&_::rawBrandedSchema<T>()));
@@ -431,7 +431,7 @@ private:
 };
 
 class EnumSchema::Enumerant {
-public:
+ public:
   Enumerant() = default;
 
   inline schema::Enumerant::Reader getProto() const { return proto; }
@@ -444,7 +444,7 @@ public:
   inline bool operator!=(const Enumerant& other) const { return !(*this == other); }
   inline uint hashCode() const;
 
-private:
+ private:
   EnumSchema parent;
   uint16_t ordinal;
   schema::Enumerant::Reader proto;
@@ -456,7 +456,7 @@ private:
 };
 
 class EnumSchema::EnumerantList {
-public:
+ public:
   EnumerantList() = default;  // empty list
 
   inline uint size() const { return list.size(); }
@@ -466,7 +466,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   EnumSchema parent;
   List<schema::Enumerant>::Reader list;
 
@@ -479,7 +479,7 @@ private:
 // -------------------------------------------------------------------
 
 class InterfaceSchema: public Schema {
-public:
+ public:
   inline InterfaceSchema(): Schema(&_::NULL_INTERFACE_SCHEMA.defaultBrand) {}
 
   class Method;
@@ -504,7 +504,7 @@ public:
   // Find the superclass of this interface with the given type ID.  Returns null if the interface
   // extends no such type.
 
-private:
+ private:
   InterfaceSchema(Schema base): Schema(base) {}
   template <typename T> static inline InterfaceSchema fromImpl() {
     return InterfaceSchema(Schema(&_::rawBrandedSchema<T>()));
@@ -520,7 +520,7 @@ private:
 };
 
 class InterfaceSchema::Method {
-public:
+ public:
   Method() = default;
 
   inline schema::Method::Reader getProto() const { return proto; }
@@ -540,7 +540,7 @@ public:
   inline bool operator!=(const Method& other) const { return !(*this == other); }
   inline uint hashCode() const;
 
-private:
+ private:
   InterfaceSchema parent;
   uint16_t ordinal;
   schema::Method::Reader proto;
@@ -553,7 +553,7 @@ private:
 };
 
 class InterfaceSchema::MethodList {
-public:
+ public:
   MethodList() = default;  // empty list
 
   inline uint size() const { return list.size(); }
@@ -563,7 +563,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   InterfaceSchema parent;
   List<schema::Method>::Reader list;
 
@@ -574,7 +574,7 @@ private:
 };
 
 class InterfaceSchema::SuperclassList {
-public:
+ public:
   SuperclassList() = default;  // empty list
 
   inline uint size() const { return list.size(); }
@@ -584,7 +584,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   InterfaceSchema parent;
   List<schema::Superclass>::Reader list;
 
@@ -601,7 +601,7 @@ class ConstSchema: public Schema {
   //
   // `ConstSchema` can be implicitly cast to DynamicValue to read its value.
 
-public:
+ public:
   inline ConstSchema(): Schema(&_::NULL_CONST_SCHEMA.defaultBrand) {}
 
   template <typename T>
@@ -617,7 +617,7 @@ public:
 
   Type getType() const;
 
-private:
+ private:
   ConstSchema(Schema base): Schema(base) {}
   friend class Schema;
 };
@@ -625,7 +625,7 @@ private:
 // -------------------------------------------------------------------
 
 class Type {
-public:
+ public:
   struct BrandParameter {
     uint64_t scopeId;
     uint index;
@@ -699,7 +699,7 @@ public:
   inline Type(schema::Type::Which derived, const _::RawBrandedSchema* schema);
   // For internal use.
 
-private:
+ private:
   schema::Type::Which baseType;  // type not including applications of List()
   uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
 
@@ -741,7 +741,7 @@ class ListSchema {
   // ListSchema is a little different because list types are not described by schema nodes.  So,
   // ListSchema doesn't subclass Schema.
 
-public:
+ public:
   ListSchema() = default;
 
   static ListSchema of(schema::Type::Which primitiveType);
@@ -782,7 +782,7 @@ public:
   template <typename T>
   void requireUsableAs() const;
 
-private:
+ private:
   Type elementType;
 
   inline explicit ListSchema(Type elementType): elementType(elementType) {}

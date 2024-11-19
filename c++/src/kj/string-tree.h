@@ -41,7 +41,7 @@ class StringTree {
   // KJ_STRINGIFY() functions that construct large strings from many smaller strings are encouraged
   // to return StringTree rather than a flat char container.
 
-public:
+ public:
   inline StringTree(): size_(0) {}
   inline StringTree(String&& text): size_(text.size()), text(kj::mv(text)) {}
 
@@ -65,7 +65,7 @@ public:
   // Copy the contents to the given character array.  Does not add a NUL terminator. Returns a
   // pointer just past the end of what was filled.
 
-private:
+ private:
   size_t size_;
   String text;
 

@@ -46,7 +46,7 @@ class Lexer {
   // Advanced lexer interface.  This interface exposes the inner parsers so that you can embed them
   // into your own parsers.
 
-public:
+ public:
   Lexer(Orphanage orphanage, ErrorReporter& errorReporter);
   // `orphanage` is used to allocate Cap'n Proto message objects in the result.  `inputStart` is
   // a pointer to the beginning of the input, used to compute byte offsets.
@@ -57,7 +57,7 @@ public:
     // Like IteratorInput<char, const char*> except that positions are measured as byte offsets
     // rather than pointers.
 
-  public:
+   public:
     ParserInput(const char* begin, const char* end)
       : IteratorInput<char, const char*>(begin, end), begin(begin) {}
     explicit ParserInput(ParserInput& parent)
@@ -70,7 +70,7 @@ public:
       return IteratorInput<char, const char*>::getPosition() - begin;
     }
 
-  private:
+   private:
     const char* begin;
   };
 
@@ -87,7 +87,7 @@ public:
 
   const Parsers& getParsers() { return parsers; }
 
-private:
+ private:
   Orphanage orphanage;
   kj::Arena arena;
   Parsers parsers;

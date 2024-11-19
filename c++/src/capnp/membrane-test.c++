@@ -33,10 +33,10 @@ namespace {
 using Thing = test::TestMembrane::Thing;
 
 class ThingImpl final: public Thing::Server {
-public:
+ public:
   ThingImpl(kj::StringPtr text): text(text) {}
 
-protected:
+ protected:
   kj::Promise<void> passThrough(PassThroughContext context) override {
     context.getResults().setText(text);
     return kj::READY_NOW;
@@ -47,12 +47,12 @@ protected:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   kj::StringPtr text;
 };
 
 class TestMembraneImpl final: public test::TestMembrane::Server {
-protected:
+ protected:
   kj::Promise<void> makeThing(MakeThingContext context) override {
     context.getResults().setThing(kj::heap<ThingImpl>("inside"));
     return kj::READY_NOW;
@@ -95,7 +95,7 @@ protected:
 };
 
 class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
-public:
+ public:
   MembranePolicyImpl() = default;
   MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise)
       : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })) {}
@@ -130,7 +130,7 @@ public:
 
   bool shouldResolveBeforeRedirecting() override { return true; }
 
-private:
+ private:
   kj::Maybe<kj::ForkedPromise<void>> revokePromise;
 };
 

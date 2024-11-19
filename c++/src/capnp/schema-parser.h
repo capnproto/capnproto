@@ -37,7 +37,7 @@ class SchemaParser {
   //
   // This class is thread-safe, hence all its methods are const.
 
-public:
+ public:
   SchemaParser();
   ~SchemaParser() noexcept(false);
 
@@ -160,7 +160,7 @@ public:
   // type IDs are irrelevant for config files, and the requirement to specify one is cumbersome.
   // For this reason, `capnp eval` does not require type ID to be present.
 
-private:
+ private:
   struct Impl;
   struct DiskFileCompat;
   class ModuleImpl;
@@ -182,7 +182,7 @@ class ParsedSchema: public Schema {
   class ParsedSchemaList;
   friend class ParsedSchemaList;
 
-public:
+ public:
   inline ParsedSchema(): parser(nullptr) {}
 
   kj::Maybe<ParsedSchema> findNested(kj::StringPtr name) const;
@@ -199,7 +199,7 @@ public:
   schema::Node::SourceInfo::Reader getSourceInfo() const;
   // Get the source info for this schema.
 
-private:
+ private:
   inline ParsedSchema(Schema inner, const SchemaParser& parser): Schema(inner), parser(&parser) {}
 
   const SchemaParser* parser;
@@ -207,7 +207,7 @@ private:
 };
 
 class ParsedSchema::ParsedSchemaList {
-public:
+ public:
   ParsedSchemaList() = default;  // empty list
 
   inline uint size() const { return list.size(); }
@@ -217,7 +217,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   ParsedSchema parent;
   List<schema::Node::NestedNode>::Reader list;
 
@@ -236,7 +236,7 @@ class SchemaFile {
   // common case of files on disk or other global filesystem-like namespaces, use
   // `SchemaFile::newDiskFile()`.
 
-public:
+ public:
   // Note: Cap'n Proto 0.6.x and below had classes FileReader and DiskFileReader and a method
   //   newDiskFile() defined here. These were removed when SchemaParser was transitioned to use the
   //   KJ filesystem API. You should be able to get the same effect by subclassing
@@ -284,7 +284,7 @@ public:
   virtual void reportError(SourcePos start, SourcePos end, kj::StringPtr message) const = 0;
   // Report that the file contains an error at the given interval.
 
-private:
+ private:
   class DiskSchemaFile;
 };
 

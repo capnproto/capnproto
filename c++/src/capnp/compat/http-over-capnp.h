@@ -32,14 +32,14 @@ CAPNP_BEGIN_HEADER
 namespace capnp {
 
 class HttpOverCapnpFactory {
-public:
+ public:
   class HeaderIdBundle {
-  public:
+   public:
     HeaderIdBundle(kj::HttpHeaderTable::Builder& builder);
 
     HeaderIdBundle clone() const;
 
-  private:
+   private:
     HeaderIdBundle(const kj::HttpHeaderTable& table, kj::Array<kj::HttpHeaderId> nameCapnpToKj,
         size_t maxHeaderId);
     // Constructor for clone().
@@ -71,7 +71,7 @@ public:
   kj::Own<kj::HttpService> capnpToKj(capnp::HttpService::Client rpcService);
   capnp::HttpService::Client kjToCapnp(kj::Own<kj::HttpService> service);
 
-private:
+ private:
   ByteStreamFactory& streamFactory;
   const kj::HttpHeaderTable& headerTable;
   OptimizationLevel peerOptimizationLevel;

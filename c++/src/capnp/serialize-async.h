@@ -42,7 +42,7 @@ struct MessageAndFds {
 class MessageStream {
   // Interface over which messages can be sent and received; virtualizes
   // the functionality above.
-public:
+ public:
   virtual kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
       kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) = 0;
@@ -109,7 +109,7 @@ public:
 
 class AsyncIoMessageStream final: public MessageStream {
   // A MessageStream that wraps an AsyncIoStream.
-public:
+ public:
   explicit AsyncIoMessageStream(kj::AsyncIoStream& stream);
 
   // Implements MessageStream
@@ -128,13 +128,13 @@ public:
   // Make sure the overridden virtual methods don't hide the non-virtual methods.
   using MessageStream::tryReadMessage;
   using MessageStream::writeMessage;
-private:
+ private:
   kj::AsyncIoStream& stream;
 };
 
 class AsyncCapabilityMessageStream final: public MessageStream {
   // A MessageStream that wraps an AsyncCapabilityStream.
-public:
+ public:
   explicit AsyncCapabilityMessageStream(kj::AsyncCapabilityStream& stream);
 
   // Implements MessageStream
@@ -152,7 +152,7 @@ public:
   // Make sure the overridden virtual methods don't hide the non-virtual methods.
   using MessageStream::tryReadMessage;
   using MessageStream::writeMessage;
-private:
+ private:
   kj::AsyncCapabilityStream& stream;
 };
 
@@ -163,7 +163,7 @@ class BufferedMessageStream final: public MessageStream {
   // async pipe). It has the down sides of using more memory (for the buffer) and requiring extra
   // copies.
 
-public:
+ public:
   using IsShortLivedCallback = kj::Function<bool(MessageReader&)>;
   // Callback function which decides whether a message will be "short-lived", meaning that it is
   // guaranteed to be dropped before the next message is read. The stream uses this as an
@@ -194,7 +194,7 @@ public:
   using MessageStream::tryReadMessage;
   using MessageStream::writeMessage;
 
-private:
+ private:
   kj::AsyncIoStream& stream;
   kj::Maybe<kj::AsyncCapabilityStream&> capStream;
   IsShortLivedCallback isShortLivedCallback;

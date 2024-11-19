@@ -54,7 +54,7 @@ class Win32EventPort: public EventPort {
   // compat library could provide a Win32EventPort implementation that works with the UI message
   // queue.
 
-public:
+ public:
   // ---------------------------------------------------------------------------
   // overlapped I/O
 
@@ -64,7 +64,7 @@ public:
   };
 
   class IoOperation {
-  public:
+   public:
     virtual LPOVERLAPPED getOverlapped() = 0;
     // Gets the OVERLAPPED structure to pass to the Win32 I/O call. Do NOT modify it; just pass it
     // on.
@@ -87,7 +87,7 @@ public:
   };
 
   class IoObserver {
-  public:
+   public:
     virtual Own<IoOperation> newOperation(uint64_t offset) = 0;
     // Begin an I/O operation. For file operations, `offset` is the offset within the file at
     // which the operation will start. For stream operations, `offset` is ignored.
@@ -115,7 +115,7 @@ public:
   //   handles at once.
 
   class SignalObserver {
-  public:
+   public:
     virtual Promise<void> onSignaled() = 0;
     // Returns a promise that completes the next time the handle enters the signaled state.
     //
@@ -159,7 +159,7 @@ class Win32WaitObjectThreadPool {
   //
   // This class is intended to be used to assist in building Win32EventPort implementations.
 
-public:
+ public:
   Win32WaitObjectThreadPool(uint mainThreadCount = 0);
   // `mainThreadCount` indicates the number of objects the main thread is able to listen on
   // directly. Typically this would be zero (e.g. if the main thread watches an I/O completion
@@ -189,7 +189,7 @@ class Win32IocpEventPort final: public Win32EventPort {
   //
   // With this implementation, observeSignalState() requires spawning a separate thread.
 
-public:
+ public:
   Win32IocpEventPort();
   ~Win32IocpEventPort() noexcept(false);
 
@@ -204,7 +204,7 @@ public:
   Timer& getTimer() override { return timerImpl; }
   void allowApc() override { isAllowApc = true; }
 
-private:
+ private:
   class IoPromiseAdapter;
   class IoOperationImpl;
   class IoObserverImpl;

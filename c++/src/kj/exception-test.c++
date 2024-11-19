@@ -96,7 +96,7 @@ TEST(Exception, RunCatchingExceptionsOtherException) {
 // place.
 
 class ThrowingDestructor: public UnwindDetector {
-public:
+ public:
   ~ThrowingDestructor() noexcept(false) {
     catchExceptionsIfUnwinding([]() {
       KJ_FAIL_ASSERT("this is a test, not a real bug");

@@ -172,7 +172,7 @@ EventLoop& currentEventLoop() {
 }
 
 class RootEvent: public _::Event {
-public:
+ public:
   RootEvent(_::PromiseNode* node, void* traceAddr, SourceLocation location)
       : Event(location), node(node), traceAddr(traceAddr) {}
 
@@ -188,7 +188,7 @@ public:
     builder.add(traceAddr);
   }
 
-private:
+ private:
   _::PromiseNode* node;
   void* traceAddr;
 };
@@ -285,7 +285,7 @@ TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler, SourceLocation location)
   : errorHandler(errorHandler), location(location) {}
 
 class TaskSet::Task final: public _::PromiseArenaMember, public _::Event {
-public:
+ public:
   Task(_::OwnPromiseNode&& nodeParam, TaskSet& taskSet)
       : Event(taskSet.location), taskSet(taskSet), node(kj::mv(nodeParam)) {
     node->setSelfPointer(&node);
@@ -314,7 +314,7 @@ public:
     return kj::str("task: ", builder);
   }
 
-protected:
+ protected:
   Maybe<Own<Event>> fire() override {
     // Get the result.
     _::ExceptionOr<_::Void> result;
@@ -354,7 +354,7 @@ protected:
     builder.add(_::getMethodStartAddress(taskSet.errorHandler, &ErrorHandler::taskFailed));
   }
 
-private:
+ private:
   TaskSet& taskSet;
   _::OwnPromiseNode node;
 };
@@ -454,7 +454,7 @@ class FiberStack final {
   // A class containing a fiber stack impl. This is separate from fiber
   // promises since it lets us move the stack itself around and reuse it.
 
-public:
+ public:
   FiberStack(size_t stackSize);
   ~FiberStack() noexcept(false);
 
@@ -478,7 +478,7 @@ public:
     builder.add(getMethodStartAddress(*this, &FiberStack::trace));
   }
 
-private:
+ private:
   size_t stackSize;
   OneOf<FiberBase*, SynchronousFunc*> main;
 
@@ -515,7 +515,7 @@ static const size_t CACHE_LINE_SIZE = 64;
 #endif
 
 class FiberPool::Impl final: private Disposer {
-public:
+ public:
   Impl(size_t stackSize): stackSize(stackSize) {}
   ~Impl() noexcept(false) {
 #if USE_CORE_LOCAL_FREELISTS
@@ -601,7 +601,7 @@ public:
     return { result, *this };
   }
 
-private:
+ private:
   size_t stackSize;
   size_t maxFreelist = kj::maxValue;
   MutexGuarded<std::deque<_::FiberStack*>> freelist;
@@ -712,7 +712,7 @@ void FiberPool::runSynchronously(kj::FunctionParam<void()> func) const {
 namespace _ {  // private
 
 class LoggingErrorHandler: public TaskSet::ErrorHandler {
-public:
+ public:
   static LoggingErrorHandler instance;
 
   void taskFailed(kj::Exception&& exception) override {
@@ -1109,7 +1109,7 @@ class XThreadEvent::DelayedDoneHack: public Disposer {
   // It just happens to be that in this case, the event isn't deleting itself, but rather releasing
   // itself back to the other thread.
 
-protected:
+ protected:
   void disposeImpl(void* pointer) const override {
     reinterpret_cast<XThreadEvent*>(pointer)->done();
   }
@@ -1240,7 +1240,7 @@ kj::Exception XThreadPaf::unfulfilledException() {
 }
 
 class ExecutorImpl: public Executor, public AtomicRefcounted {
-public:
+ public:
   using Executor::Executor;
 
   kj::Own<const Executor> addRef() const override {
@@ -2038,7 +2038,7 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation locatio
 
 Promise<void> yield() {
   class YieldPromiseNode final: public _::PromiseNode {
-  public:
+   public:
     void destroy() override {}
 
     void onReady(_::Event* event) noexcept override {
@@ -2058,7 +2058,7 @@ Promise<void> yield() {
 
 Promise<void> yieldHarder() {
   class YieldHarderPromiseNode final: public _::PromiseNode {
-  public:
+   public:
     void destroy() override {}
 
     void onReady(_::Event* event) noexcept override {
@@ -2081,7 +2081,7 @@ OwnPromiseNode readyNow() {
     // This is like `ConstPromiseNode<Void, Void{}>`, but the compiler won't let me pass a literal
     // value of type `Void` as a template parameter. (Might require C++20?)
 
-  public:
+   public:
     void destroy() override {}
     void get(ExceptionOrValue& output) noexcept override {
       output.as<Void>() = Void();
@@ -2094,7 +2094,7 @@ OwnPromiseNode readyNow() {
 
 OwnPromiseNode neverDone() {
   class NeverDonePromiseNode final: public _::PromiseNode {
-  public:
+   public:
     void destroy() override {}
 
     void onReady(_::Event* event) noexcept override {

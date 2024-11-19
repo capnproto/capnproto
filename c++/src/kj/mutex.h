@@ -96,14 +96,14 @@ namespace _ {  // private
 #if KJ_SAVE_ACQUIRED_LOCK_INFO
 class HoldingExclusively {
   // The lock is being held in exclusive mode.
-public:
+ public:
   constexpr HoldingExclusively(pid_t tid, const SourceLocation& location)
       : heldBy(tid), acquiredAt(location) {}
 
   pid_t threadHoldingLock() const { return heldBy; }
   const SourceLocation& lockAcquiredAt() const { return acquiredAt; }
 
-private:
+ private:
   pid_t heldBy;
   SourceLocation acquiredAt;
 };
@@ -111,12 +111,12 @@ private:
 class HoldingShared {
   // The lock is being held in shared mode currently. Which threads are holding this lock open
   // is unknown.
-public:
+ public:
   constexpr HoldingShared(const SourceLocation& location) : acquiredAt(location) {}
 
   const SourceLocation& lockAcquiredAt() const { return acquiredAt; }
 
-private:
+ private:
   SourceLocation acquiredAt;
 };
 #endif
@@ -126,7 +126,7 @@ class Mutex {
 
   struct Waiter;
 
-public:
+ public:
   Mutex();
   ~Mutex();
   KJ_DISALLOW_COPY_AND_MOVE(Mutex);
@@ -145,7 +145,7 @@ public:
   // in unit tests).  In non-debug builds, do nothing.
 
   class Predicate {
-  public:
+   public:
     virtual bool check() = 0;
   };
 
@@ -177,7 +177,7 @@ public:
   // holding the lock.
 #endif
 
-private:
+ private:
 #if KJ_USE_FUTEX
   uint futex;
   // bit 31 (msb) = set if exclusive lock held
@@ -260,7 +260,7 @@ private:
 class Once {
   // Internal implementation details.  See `Lazy<T>`.
 
-public:
+ public:
 #if KJ_USE_FUTEX
   inline Once(bool startInitialized = false)
       : futex(startInitialized ? INITIALIZED : UNINITIALIZED) {}
@@ -271,7 +271,7 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(Once);
 
   class Initializer {
-  public:
+   public:
     virtual void run() = 0;
   };
 
@@ -296,7 +296,7 @@ public:
   // not already initialized, or when runOnce() or isInitialized() might be called concurrently in
   // another thread.
 
-private:
+ private:
 #if KJ_USE_FUTEX
   uint futex;
 
@@ -330,7 +330,7 @@ class Locked {
   // Return type for `MutexGuarded<T>::lock()`.  `Locked<T>` provides access to the bounded object
   // and unlocks the mutex when it goes out of scope.
 
-public:
+ public:
   KJ_DISALLOW_COPY(Locked);
   inline Locked(): mutex(nullptr), ptr(nullptr) {}
   inline Locked(Locked&& other): mutex(other.mutex), ptr(other.ptr) {
@@ -391,7 +391,7 @@ public:
     mutex->wait(impl, timeout, location);
   }
 
-private:
+ private:
   _::Mutex* mutex;
   T* ptr;
 
@@ -403,7 +403,7 @@ private:
   friend class ExternalMutexGuarded;
 
 #if KJ_MUTEX_TEST
-public:
+ public:
 #endif
   void induceSpuriousWakeupForTest() { mutex->induceSpuriousWakeupForTest(); }
   // Utility method for mutex-test.c++ which causes a spurious thread wakeup on all threads that
@@ -425,7 +425,7 @@ class MutexGuarded {
   // lock, thread B requests a write lock (and starts waiting), and then thread A tries to take
   // another read lock recursively, the result is deadlock.
 
-public:
+ public:
   template <typename... Params>
   explicit MutexGuarded(Params&&... params);
   // Initialize the mutex-bounded object by passing the given parameters to its constructor.
@@ -490,7 +490,7 @@ public:
     return callback(value);
   }
 
-private:
+ private:
   mutable _::Mutex mutex;
   mutable T value;
 };
@@ -526,7 +526,7 @@ class ExternalMutexGuarded {
   // Inherits from LockSourceLocation to perform an empty base class optimization when lock tracking
   // is compiled out. Once the minimum C++ standard for the KJ library is C++20, this optimization
   // could be replaced by a member variable with a [[no_unique_address]] annotation.
-public:
+ public:
   ExternalMutexGuarded(LockSourceLocationArg location = {})
       : location(location) {}
 
@@ -594,7 +594,7 @@ public:
     return result;
   }
 
-private:
+ private:
   _::Mutex* mutex = nullptr;
   T value;
   KJ_NO_UNIQUE_ADDRESS LockSourceLocation location;
@@ -606,7 +606,7 @@ template <typename T>
 class Lazy {
   // A lazily-initialized value.
 
-public:
+ public:
   template <typename Func>
   T& get(Func&& init, LockSourceLocationArg location = {});
   template <typename Func>
@@ -619,7 +619,7 @@ public:
   // call to `get()`, and subsequent calls behave as if `get()` hadn't been called at all yet --
   // in other words, subsequent calls retry initialization until it succeeds.
 
-private:
+ private:
   mutable _::Once once;
   mutable SpaceFor<T> space;
   mutable Own<T> value;
@@ -694,14 +694,14 @@ inline T& MutexGuarded<T>::getAlreadyLockedExclusive() const {
 template <typename T>
 template <typename Func>
 class Lazy<T>::InitImpl: public _::Once::Initializer {
-public:
+ public:
   inline InitImpl(const Lazy<T>& lazy, Func&& func): lazy(lazy), func(kj::fwd<Func>(func)) {}
 
   void run() override {
     lazy.value = func(lazy.space);
   }
 
-private:
+ private:
   const Lazy<T>& lazy;
   Func func;
 };

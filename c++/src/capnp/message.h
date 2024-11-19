@@ -93,7 +93,7 @@ class MessageReader {
   // `serialize.h`), which reads the message from a file descriptor.  One might implement other
   // subclasses to handle things like reading from shared memory segments, mmap()ed files, etc.
 
-public:
+ public:
   MessageReader(ReaderOptions options);
   // It is suggested that subclasses take ReaderOptions as a constructor parameter, but give it a
   // default value of "ReaderOptions()".  The base class constructor doesn't have a default value
@@ -124,7 +124,7 @@ public:
   size_t sizeInWords();
   // Add up the size of all segments.
 
-private:
+ private:
   ReaderOptions options;
 
 #if defined(__EMSCRIPTEN__) || (defined(__APPLE__) && (defined(__ppc__) || defined(__i386__)))
@@ -156,7 +156,7 @@ class MessageBuilder {
   // `messageBuilder.getSegmentsForOutput()` to get a list of flat data arrays containing the
   // message.
 
-public:
+ public:
   MessageBuilder();
   virtual ~MessageBuilder() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(MessageBuilder);
@@ -240,7 +240,7 @@ public:
   size_t sizeInWords();
   // Add up the allocated space from all segments.
 
-private:
+ private:
   alignas(8) void* arenaSpace[22];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
@@ -337,7 +337,7 @@ class SegmentArrayMessageReader: public MessageReader {
   // In particular you can read directly from the output of MessageBuilder::getSegmentsForOutput()
   // (although it would probably make more sense to call builder.getRoot().asReader() in that case).
 
-public:
+ public:
   SegmentArrayMessageReader(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
                             ReaderOptions options = ReaderOptions());
   // Creates a message pointing at the given segment array, without taking ownership of the
@@ -348,7 +348,7 @@ public:
 
   virtual kj::ArrayPtr<const word> getSegment(uint id) override;
 
-private:
+ private:
   kj::ArrayPtr<const kj::ArrayPtr<const word>> segments;
 };
 
@@ -376,7 +376,7 @@ class MallocMessageBuilder: public MessageBuilder {
   // implementation should be reasonable for any case that doesn't require writing the message to
   // a specific location in memory.
 
-public:
+ public:
   explicit MallocMessageBuilder(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
       AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
   // Creates a BuilderContext which allocates at least the given number of words for the first
@@ -405,7 +405,7 @@ public:
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) override;
 
-private:
+ private:
   uint nextSize;
   AllocationStrategy allocationStrategy;
 
@@ -429,7 +429,7 @@ class FlatMessageBuilder: public MessageBuilder {
   // implement `copyToUnchecked()`, which itself exists only to support other internal parts of
   // the Cap'n Proto implementation.
 
-public:
+ public:
   explicit FlatMessageBuilder(kj::ArrayPtr<word> array);
   KJ_DISALLOW_COPY_AND_MOVE(FlatMessageBuilder);
   virtual ~FlatMessageBuilder() noexcept(false);
@@ -439,7 +439,7 @@ public:
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) override;
 
-private:
+ private:
   kj::ArrayPtr<word> array;
   bool allocated;
 };

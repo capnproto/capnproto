@@ -45,7 +45,7 @@ class TextCodec {
   //
   // Requires linking with the capnpc library.
 
-public:
+ public:
   TextCodec();
   ~TextCodec() noexcept(true);
 
@@ -69,7 +69,7 @@ public:
   // input or assigning the fields of the output are thrown as exceptions.
 
   // TODO(someday): expose some control over the error handling?
-private:
+ private:
   Orphan<DynamicValue> decode(kj::StringPtr input, Type type, Orphanage orphanage) const;
 
   bool prettyPrint;

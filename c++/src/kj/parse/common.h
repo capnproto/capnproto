@@ -58,7 +58,7 @@ template <typename Element, typename Iterator>
 class IteratorInput {
   // A parser input implementation based on an iterator range.
 
-public:
+ public:
   IteratorInput(Iterator begin, Iterator end)
       : parent(nullptr), pos(begin), end(end), best(begin) {}
   explicit IteratorInput(IteratorInput& parent)
@@ -95,7 +95,7 @@ public:
 
   Iterator getPosition() { return pos; }
 
-private:
+ private:
   IteratorInput* parent;
   Iterator pos;
   Iterator end;
@@ -124,7 +124,7 @@ class ParserRef {
   // it is important to inject refs into the grammar here and there to prevent the parser types
   // from becoming ridiculous.  Using too many of them can hurt performance, though.
 
-public:
+ public:
   ParserRef(): parser(nullptr), wrapper(nullptr) {}
   ParserRef(const ParserRef&) = default;
   ParserRef(ParserRef&&) = default;
@@ -151,7 +151,7 @@ public:
     return wrapper->parse(parser, input);
   }
 
-private:
+ private:
   struct Wrapper {
     virtual Maybe<Output> parse(const void* parser, Input& input) const = 0;
   };
@@ -199,7 +199,7 @@ constexpr ParserRef<Input, OutputType<ParserImpl, Input>> ref(ParserImpl& impl) 
 // Output = one token
 
 class Any_ {
-public:
+ public:
   template <typename Input>
   Maybe<Decay<decltype(instance<Input>().consume())>> operator()(Input& input) const {
     if (input.atEnd()) {
@@ -219,7 +219,7 @@ constexpr Any_ any = Any_();
 
 template <typename T>
 class Exactly_ {
-public:
+ public:
   explicit constexpr Exactly_(T&& expected): expected(expected) {}
 
   template <typename Input>
@@ -232,7 +232,7 @@ public:
     }
   }
 
-private:
+ private:
   T expected;
 };
 
@@ -250,7 +250,7 @@ constexpr Exactly_<T> exactly(T&& expected) {
 
 template <typename T, T expected>
 class ExactlyConst_ {
-public:
+ public:
   explicit constexpr ExactlyConst_() {}
 
   template <typename Input>
@@ -278,7 +278,7 @@ constexpr ExactlyConst_<T, expected> exactlyConst() {
 
 template <typename SubParser, typename Result>
 class ConstResult_ {
-public:
+ public:
   explicit constexpr ConstResult_(SubParser&& subParser, Result&& result)
       : subParser(kj::fwd<SubParser>(subParser)), result(kj::fwd<Result>(result)) {}
 
@@ -291,7 +291,7 @@ public:
     }
   }
 
-private:
+ private:
   SubParser subParser;
   Result result;
 };
@@ -316,7 +316,7 @@ template <typename... SubParsers> class Sequence_;
 
 template <typename FirstSubParser, typename... SubParsers>
 class Sequence_<FirstSubParser, SubParsers...> {
-public:
+ public:
   template <typename T, typename... U>
   explicit constexpr Sequence_(T&& firstSubParser, U&&... rest)
       : first(kj::fwd<T>(firstSubParser)), rest(kj::fwd<U>(rest)...) {}
@@ -364,14 +364,14 @@ public:
     }
   }
 
-private:
+ private:
   FirstSubParser first;
   Sequence_<SubParsers...> rest;
 };
 
 template <>
 class Sequence_<> {
-public:
+ public:
   template <typename Input>
   Maybe<Tuple<>> operator()(Input& input) const {
     return parseNext(input);
@@ -400,7 +400,7 @@ template <typename SubParser, bool atLeastOne>
 class Many_ {
   template <typename Input, typename Output = OutputType<SubParser, Input>>
   struct Impl;
-public:
+ public:
   explicit constexpr Many_(SubParser&& subParser)
       : subParser(kj::fwd<SubParser>(subParser)) {}
 
@@ -408,7 +408,7 @@ public:
   auto operator()(Input& input) const
       -> decltype(Impl<Input>::apply(instance<const SubParser&>(), input));
 
-private:
+ private:
   SubParser subParser;
 };
 
@@ -493,7 +493,7 @@ template <typename SubParser>
 class Times_ {
   template <typename Input, typename Output = OutputType<SubParser, Input>>
   struct Impl;
-public:
+ public:
   explicit constexpr Times_(SubParser&& subParser, uint count)
       : subParser(kj::fwd<SubParser>(subParser)), count(count) {}
 
@@ -501,7 +501,7 @@ public:
   auto operator()(Input& input) const
       -> decltype(Impl<Input>::apply(instance<const SubParser&>(), instance<uint>(), input));
 
-private:
+ private:
   SubParser subParser;
   uint count;
 };
@@ -567,7 +567,7 @@ constexpr Times_<SubParser> times(SubParser&& subParser, uint count) {
 
 template <typename SubParser>
 class Optional_ {
-public:
+ public:
   explicit constexpr Optional_(SubParser&& subParser)
       : subParser(kj::fwd<SubParser>(subParser)) {}
 
@@ -584,7 +584,7 @@ public:
     }
   }
 
-private:
+ private:
   SubParser subParser;
 };
 
@@ -605,7 +605,7 @@ class OneOf_;
 
 template <typename FirstSubParser, typename... SubParsers>
 class OneOf_<FirstSubParser, SubParsers...> {
-public:
+ public:
   explicit constexpr OneOf_(FirstSubParser&& firstSubParser, SubParsers&&... rest)
       : first(kj::fwd<FirstSubParser>(firstSubParser)), rest(kj::fwd<SubParsers>(rest)...) {}
 
@@ -625,14 +625,14 @@ public:
     return rest(input);
   }
 
-private:
+ private:
   FirstSubParser first;
   OneOf_<SubParsers...> rest;
 };
 
 template <>
 class OneOf_<> {
-public:
+ public:
   template <typename Input>
   decltype(nullptr) operator()(Input& input) const {
     return nullptr;
@@ -654,14 +654,14 @@ constexpr OneOf_<SubParsers...> oneOf(SubParsers&&... parsers) {
 
 template <typename Position>
 struct Span {
-public:
+ public:
   inline const Position& begin() const { return begin_; }
   inline const Position& end() const { return end_; }
 
   Span() = default;
   inline constexpr Span(Position&& begin, Position&& end): begin_(mv(begin)), end_(mv(end)) {}
 
-private:
+ private:
   Position begin_;
   Position end_;
 };
@@ -673,7 +673,7 @@ constexpr Span<Decay<Position>> span(Position&& start, Position&& end) {
 
 template <typename SubParser, typename TransformFunc>
 class Transform_ {
-public:
+ public:
   explicit constexpr Transform_(SubParser&& subParser, TransformFunc&& transform)
       : subParser(kj::fwd<SubParser>(subParser)), transform(kj::fwd<TransformFunc>(transform)) {}
 
@@ -688,14 +688,14 @@ public:
     }
   }
 
-private:
+ private:
   SubParser subParser;
   TransformFunc transform;
 };
 
 template <typename SubParser, typename TransformFunc>
 class TransformOrReject_ {
-public:
+ public:
   explicit constexpr TransformOrReject_(SubParser&& subParser, TransformFunc&& transform)
       : subParser(kj::fwd<SubParser>(subParser)), transform(kj::fwd<TransformFunc>(transform)) {}
 
@@ -709,14 +709,14 @@ public:
     }
   }
 
-private:
+ private:
   SubParser subParser;
   TransformFunc transform;
 };
 
 template <typename SubParser, typename TransformFunc>
 class TransformWithLocation_ {
-public:
+ public:
   explicit constexpr TransformWithLocation_(SubParser&& subParser, TransformFunc&& transform)
       : subParser(kj::fwd<SubParser>(subParser)), transform(kj::fwd<TransformFunc>(transform)) {}
 
@@ -734,7 +734,7 @@ public:
     }
   }
 
-private:
+ private:
   SubParser subParser;
   TransformFunc transform;
 };
@@ -774,7 +774,7 @@ constexpr TransformWithLocation_<SubParser, TransformFunc> transformWithLocation
 
 template <typename SubParser>
 class NotLookingAt_ {
-public:
+ public:
   explicit constexpr NotLookingAt_(SubParser&& subParser)
       : subParser(kj::fwd<SubParser>(subParser)) {}
 
@@ -789,7 +789,7 @@ public:
     }
   }
 
-private:
+ private:
   SubParser subParser;
 };
 
@@ -805,7 +805,7 @@ constexpr NotLookingAt_<SubParser> notLookingAt(SubParser&& subParser) {
 // Output = Tuple<>, only succeeds if at end-of-input
 
 class EndOfInput_ {
-public:
+ public:
   template <typename Input>
   Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd()) {

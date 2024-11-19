@@ -133,7 +133,7 @@ struct RawBrandedSchema {
   }
 
   class Initializer {
-  public:
+   public:
     virtual void init(const RawBrandedSchema* generic) const = 0;
   };
 
@@ -199,7 +199,7 @@ struct RawSchema {
   // dynamically-loaded types.
 
   class Initializer {
-  public:
+   public:
     virtual void init(const RawSchema* schema) const = 0;
   };
 

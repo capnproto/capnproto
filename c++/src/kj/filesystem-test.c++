@@ -267,7 +267,7 @@ KJ_TEST("WriteMode operators") {
 // ======================================================================================
 
 class TestClock final: public Clock {
-public:
+ public:
   void tick() {
     time += 1 * SECONDS;
   }
@@ -282,7 +282,7 @@ public:
     KJ_EXPECT(file.stat().lastModified != time);
   }
 
-private:
+ private:
   Date time = UNIX_EPOCH + 1 * SECONDS;
 };
 

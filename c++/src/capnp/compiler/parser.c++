@@ -199,7 +199,7 @@ constexpr auto rawBracketedList =
 // =======================================================================================
 
 class ExactString {
-public:
+ public:
   constexpr ExactString(const char* expected): expected(expected) {}
 
   kj::Maybe<kj::Tuple<>> operator()(Located<Text::Reader>&& text) const {
@@ -210,7 +210,7 @@ public:
     }
   }
 
-private:
+ private:
   const char* expected;
 };
 
@@ -225,7 +225,7 @@ constexpr auto op(const char* expected)
 }
 
 class LocatedExactString {
-public:
+ public:
   constexpr LocatedExactString(const char* expected): expected(expected) {}
 
   kj::Maybe<Located<Text::Reader>> operator()(Located<Text::Reader>&& text) const {
@@ -236,7 +236,7 @@ public:
     }
   }
 
-private:
+ private:
   const char* expected;
 };
 
@@ -251,7 +251,7 @@ template <typename ItemParser>
 class ParseListItems {
   // Transformer that parses all items in the input token sequence list using the given parser.
 
-public:
+ public:
   constexpr ParseListItems(ItemParser&& itemParser, ErrorReporter& errorReporter)
       : itemParser(p::sequence(kj::fwd<ItemParser>(itemParser), p::endOfInput)),
         errorReporter(errorReporter) {}
@@ -288,7 +288,7 @@ public:
         kj::mv(result), items.startByte, items.endByte);
   }
 
-private:
+ private:
   decltype(p::sequence(kj::instance<ItemParser>(), p::endOfInput)) itemParser;
   ErrorReporter& errorReporter;
 };

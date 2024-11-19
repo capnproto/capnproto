@@ -32,7 +32,7 @@ namespace capnp {
 KJ_THREADLOCAL_PTR(EzRpcContext) threadEzContext = nullptr;
 
 class EzRpcContext: public kj::Refcounted {
-public:
+ public:
   EzRpcContext(): ioContext(kj::setupAsyncIo()) {
     threadEzContext = this;
   }
@@ -66,7 +66,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::AsyncIoContext ioContext;
 };
 
@@ -201,7 +201,7 @@ kj::LowLevelAsyncIoProvider& EzRpcClient::getLowLevelIoProvider() {
 namespace {
 
 class DummyFilter: public kj::LowLevelAsyncIoProvider::NetworkFilter {
-public:
+ public:
   bool shouldAllow(const struct sockaddr* addr, uint addrlen) override {
     return true;
   }
