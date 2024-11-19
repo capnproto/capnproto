@@ -315,11 +315,10 @@ private:
     auto fields = structNode.getFields();
 
     KJ_STACK_ARRAY(bool, sawCodeOrder, fields.size(), 32, 256);
-    memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
+    sawCodeOrder.fill(0);
 
     KJ_STACK_ARRAY(bool, sawDiscriminantValue, structNode.getDiscriminantCount(), 32, 256);
-    memset(sawDiscriminantValue.begin(), 0,
-           sawDiscriminantValue.size() * sizeof(sawDiscriminantValue[0]));
+    sawDiscriminantValue.fill(0);
 
     if (structNode.getDiscriminantCount() > 0) {
       VALIDATE_SCHEMA(structNode.getDiscriminantCount() != 1,
@@ -410,7 +409,7 @@ private:
   void validate(const schema::Node::Enum::Reader& enumNode) {
     auto enumerants = enumNode.getEnumerants();
     KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
-    memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
+    sawCodeOrder.fill(0);
 
     uint index = 0;
     for (auto enumerant: enumerants) {
@@ -431,7 +430,7 @@ private:
 
     auto methods = interfaceNode.getMethods();
     KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
-    memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
+    sawCodeOrder.fill(0);
 
     uint index = 0;
     for (auto method: methods) {
@@ -1029,8 +1028,7 @@ private:
     // guarantees that any incompatibility will be caught either now or when the real version of
     // that struct is loaded.
 
-    word scratch[32];
-    memset(scratch, 0, sizeof(scratch));
+    word scratch[32]{};
     MallocMessageBuilder builder(scratch);
     auto node = builder.initRoot<schema::Node>();
     node.setId(structTypeId);
@@ -1267,7 +1265,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
   } else {
     // Nope, allocate a new RawSchema.
     schema = &arena.allocate<_::RawSchema>();
-    memset(&schema->defaultBrand, 0, sizeof(schema->defaultBrand));
+    kj::memzero(schema->defaultBrand);
     schema->id = validatedReader.getId();
     schema->canCastTo = nullptr;
     schema->defaultBrand.generic = schema;
@@ -1337,7 +1335,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     }
   } else {
     schema = &arena.allocate<_::RawSchema>();
-    memset(&schema->defaultBrand, 0, sizeof(schema->defaultBrand));
+    kj::memzero(schema->defaultBrand);
     schema->defaultBrand.generic = schema;
     schema->lazyInitializer = nullptr;
     schema->defaultBrand.lazyInitializer = nullptr;
@@ -1412,8 +1410,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
 
 _::RawSchema* SchemaLoader::Impl::loadEmpty(
     uint64_t id, kj::StringPtr name, schema::Node::Which kind, bool isPlaceholder) {
-  word scratch[32];
-  memset(scratch, 0, sizeof(scratch));
+  word scratch[32]{};
   MallocMessageBuilder builder(scratch);
   auto node = builder.initRoot<schema::Node>();
   node.setId(id);
@@ -1442,7 +1439,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   auto srcScopes = proto.getScopes();
 
   KJ_STACK_ARRAY(_::RawBrandedSchema::Scope, dstScopes, srcScopes.size(), 16, 32);
-  memset(dstScopes.begin(), 0, dstScopes.size() * sizeof(dstScopes[0]));
+  dstScopes.asBytes().fill(0);
 
   uint dstScopeCount = 0;
   for (auto srcScope: srcScopes) {
@@ -1450,13 +1447,13 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
       case schema::Brand::Scope::BIND: {
         auto srcBindings = srcScope.getBind();
         KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
-        memset(dstBindings.begin(), 0, dstBindings.size() * sizeof(dstBindings[0]));
+        dstBindings.asBytes().fill(0);
 
         for (auto j: kj::indices(srcBindings)) {
           auto srcBinding = srcBindings[j];
           auto& dstBinding = dstBindings[j];
 
-          memset(&dstBinding, 0, sizeof(dstBinding));
+          kj::memzero(dstBinding);
           dstBinding.which = schema::Type::ANY_POINTER;
 
           switch (srcBinding.which()) {
@@ -1520,7 +1517,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     return existing;
   } else {
     auto& brand = arena.allocate<_::RawBrandedSchema>();
-    memset(&brand, 0, sizeof(brand));
+    kj::memzero(brand);
     brands.insert(key, &brand);
 
     brand.generic = schema;
@@ -1545,7 +1542,7 @@ SchemaLoader::Impl::makeBrandedDependencies(
 #define ADD_ENTRY(kind, index, make) \
     if (const _::RawBrandedSchema* dep = make) { \
       auto& slot = deps.add(); \
-      memset(&slot, 0, sizeof(slot)); \
+      kj::memzero(slot); \
       slot.location = _::RawBrandedSchema::makeDepLocation( \
         _::RawBrandedSchema::DepKind::kind, index); \
       slot.schema = dep; \
@@ -1743,8 +1740,7 @@ void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
 const _::RawBrandedSchema* SchemaLoader::Impl::makeDepSchema(
     schema::Type::Reader type, kj::StringPtr scopeName,
     kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
-  _::RawBrandedSchema::Binding binding;
-  memset(&binding, 0, sizeof(binding));
+  _::RawBrandedSchema::Binding binding{};
   makeDep(binding, type, scopeName, brandBindings);
   return binding.schema;
 }
@@ -1753,8 +1749,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeDepSchema(
     uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
     schema::Brand::Reader brand, kj::StringPtr scopeName,
     kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
-  _::RawBrandedSchema::Binding binding;
-  memset(&binding, 0, sizeof(binding));
+  _::RawBrandedSchema::Binding binding{};
   makeDep(binding, typeId, whichType, expectedKind, brand, scopeName, brandBindings);
   return binding.schema;
 }
@@ -1803,7 +1798,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* sc
     return existing;
   } else {
     auto slot = &arena.allocate<_::RawBrandedSchema>();
-    memset(slot, 0, sizeof(*slot));
+    kj::memzero(*slot);
     slot->generic = schema;
     auto deps = makeBrandedDependencies(schema, kj::none);
     slot->dependencies = deps.begin();
@@ -2013,7 +2008,7 @@ void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint
 kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema::Node::Reader node) {
   size_t size = node.totalSize().wordCount + 1;
   kj::ArrayPtr<word> result = arena.allocateArray<word>(size);
-  memset(result.begin(), 0, size * sizeof(word));
+  result.asBytes().fill(0);
   copyToUnchecked(node, result);
   return result;
 }
