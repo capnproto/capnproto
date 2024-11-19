@@ -49,7 +49,7 @@ class Timer: public MonotonicClock {
   // accurate time, then `Timer::now()` is not appropriate. Instead, use
   // `systemPreciseMonotonicClock()` directly in this case.
 
-public:
+ public:
   virtual TimePoint now() const override = 0;
   // Returns the current value of a clock that moves steadily forward, independent of any
   // changes in the wall clock. The value is updated every time the event loop waits,
@@ -73,7 +73,7 @@ public:
   // original promise) if it hasn't completed after `delay` from now. The thrown exception is of
   // type "OVERLOADED".
 
-private:
+ private:
   static kj::Exception makeTimeoutException();
 };
 
@@ -81,7 +81,7 @@ class TimerImpl final: public Timer {
   // Implementation of Timer that expects an external caller -- usually, the EventPort
   // implementation -- to tell it when time has advanced.
 
-public:
+ public:
   TimerImpl(TimePoint startTime);
   ~TimerImpl() noexcept(false);
 
@@ -109,7 +109,7 @@ public:
   // Set the time to `time` and fire any at() events that have been passed.
 
   class SleepHooks {
-  public:
+   public:
     virtual void updateNextTimerEvent(kj::Maybe<TimePoint> time) = 0;
     // Called whenever the value returned by `nextEvent()` changes.
 
@@ -132,7 +132,7 @@ public:
   Promise<void> atTime(TimePoint time) override;
   Promise<void> afterDelay(Duration delay) override;
 
-private:
+ private:
   struct Impl;
   class TimerPromiseAdapter;
   TimePoint time;

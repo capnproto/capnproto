@@ -38,7 +38,7 @@ namespace compiler {
 class ErrorReporter {
   // Callback for reporting errors within a particular file.
 
-public:
+ public:
   virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) = 0;
   // Report an error at the given location in the input text.  `startByte` and `endByte` indicate
   // the span of text that is erroneous.  They may be equal, in which case the parser was only
@@ -62,7 +62,7 @@ public:
 class GlobalErrorReporter {
   // Callback for reporting errors in any file.
 
-public:
+ public:
   struct SourcePos {
     uint byte;
     uint line;
@@ -82,12 +82,12 @@ public:
 };
 
 class LineBreakTable {
-public:
+ public:
   LineBreakTable(kj::ArrayPtr<const char> content);
 
   GlobalErrorReporter::SourcePos toSourcePos(uint32_t byteOffset) const;
 
-private:
+ private:
   kj::Vector<uint> lineBreaks;
   // Byte offsets of the first byte in each source line.  The first element is always zero.
   // Initialized the first time the module is loaded.

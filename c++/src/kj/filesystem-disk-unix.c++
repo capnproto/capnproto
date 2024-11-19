@@ -254,7 +254,7 @@ static MmapRange getMmapRange(uint64_t offset, uint64_t size) {
 }
 
 class MmapDisposer: public ArrayDisposer {
-protected:
+ protected:
   void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                    size_t capacity, void (*destroyElement)(void*)) const override {
     auto range = getMmapRange(reinterpret_cast<uintptr_t>(firstElement),
@@ -275,7 +275,7 @@ class DiskHandle {
   // inheriting anything, and then we have DiskFile, DiskDirectory, etc. hold this and delegate to
   // it. Ugly, but works.
 
-public:
+ public:
   DiskHandle(AutoCloseFd&& fd): fd(kj::mv(fd)) {}
 
   // OsHandle ------------------------------------------------------------------
@@ -462,7 +462,7 @@ public:
   }
 
   class WritableFileMappingImpl final: public WritableFileMapping {
-  public:
+   public:
     WritableFileMappingImpl(Array<byte> bytes): bytes(kj::mv(bytes)) {}
 
     ArrayPtr<byte> get() const override {
@@ -491,7 +491,7 @@ public:
       KJ_SYSCALL(msync(reinterpret_cast<void*>(range.offset), range.size, MS_SYNC));
     }
 
-  private:
+   private:
     Array<byte> bytes;
   };
 
@@ -1263,7 +1263,7 @@ public:
 
   template <typename T>
   class ReplacerImpl final: public Directory::Replacer<T> {
-  public:
+   public:
     ReplacerImpl(Own<const T>&& object, const DiskHandle& handle,
                  String&& tempPath, String&& path, WriteMode mode)
         : Directory::Replacer<T>(mode),
@@ -1286,7 +1286,7 @@ public:
                                                      Directory::Replacer<T>::mode);
     }
 
-  private:
+   private:
     Own<const T> object;
     const DiskHandle& handle;
     String tempPath;
@@ -1298,7 +1298,7 @@ public:
   class BrokenReplacer final: public Directory::Replacer<T> {
     // For recovery path when exceptions are disabled.
 
-  public:
+   public:
     BrokenReplacer(Own<const T> inner)
         : Directory::Replacer<T>(WriteMode::CREATE | WriteMode::MODIFY),
           inner(kj::mv(inner)) {}
@@ -1306,7 +1306,7 @@ public:
     const T& get() override { return *inner; }
     bool tryCommit() override { return false; }
 
-  private:
+   private:
     Own<const T> inner;
   };
 
@@ -1474,7 +1474,7 @@ public:
     return rmrf(fd, path.toString());
   }
 
-protected:
+ protected:
   AutoCloseFd fd;
 };
 
@@ -1490,7 +1490,7 @@ protected:
   void datasync() const override { DiskHandle::datasync(); }
 
 class DiskReadableFile final: public ReadableFile, public DiskHandle {
-public:
+ public:
   DiskReadableFile(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskReadableFile);
@@ -1507,7 +1507,7 @@ public:
 };
 
 class DiskAppendableFile final: public AppendableFile, public DiskHandle, public FdOutputStream {
-public:
+ public:
   DiskAppendableFile(AutoCloseFd&& fd)
       : DiskHandle(kj::mv(fd)),
         FdOutputStream(DiskHandle::fd.get()) {}
@@ -1523,7 +1523,7 @@ public:
 };
 
 class DiskFile final: public File, public DiskHandle {
-public:
+ public:
   DiskFile(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskFile);
@@ -1561,7 +1561,7 @@ public:
 };
 
 class DiskReadableDirectory final: public ReadableDirectory, public DiskHandle {
-public:
+ public:
   DiskReadableDirectory(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskReadableDirectory);
@@ -1582,7 +1582,7 @@ public:
 };
 
 class DiskDirectory final: public Directory, public DiskHandle {
-public:
+ public:
   DiskDirectory(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskDirectory);
@@ -1634,7 +1634,7 @@ public:
 };
 
 class DiskFilesystem final: public Filesystem {
-public:
+ public:
   DiskFilesystem()
       : root(openDir("/")),
         current(openDir(".")),
@@ -1670,7 +1670,7 @@ public:
     return currentPath;
   }
 
-private:
+ private:
   DiskDirectory root;
   DiskDirectory current;
   Path currentPath;

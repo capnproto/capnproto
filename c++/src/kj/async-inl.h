@@ -46,7 +46,7 @@ template <typename T>
 class ExceptionOr;
 
 class ExceptionOrValue {
-public:
+ public:
   ExceptionOrValue(bool, Exception&& exception): exception(kj::mv(exception)) {}
   KJ_DISALLOW_COPY(ExceptionOrValue);
 
@@ -63,7 +63,7 @@ public:
 
   Maybe<Exception> exception;
 
-protected:
+ protected:
   // Allow subclasses to have move constructor / assignment.
   ExceptionOrValue() = default;
   ExceptionOrValue(ExceptionOrValue&& other) = default;
@@ -72,7 +72,7 @@ protected:
 
 template <typename T>
 class ExceptionOr: public ExceptionOrValue {
-public:
+ public:
   ExceptionOr() = default;
   ExceptionOr(T&& value): value(kj::mv(value)) {}
   ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
@@ -114,7 +114,7 @@ inline void convertToReturn(ExceptionOr<Void>&& result) {
 
 class TraceBuilder {
   // Helper for methods that build a call trace.
-public:
+ public:
   TraceBuilder(ArrayPtr<void*> space)
       : start(space.begin()), current(space.begin()), limit(space.end()) {}
 
@@ -132,7 +132,7 @@ public:
 
   String toString();
 
-private:
+ private:
   void** start;
   void** current;
   void** limit;
@@ -147,7 +147,7 @@ class Event: private AsyncObject {
   // An event waiting to be executed.  Not for direct use by applications -- promises use this
   // internally.
 
-public:
+ public:
   Event(SourceLocation location);
   Event(kj::EventLoop& loop, SourceLocation location);
   ~Event() noexcept;
@@ -206,13 +206,13 @@ public:
   String traceEvent();
   // Helper that builds a trace and stringifies it.
 
-protected:
+ protected:
   virtual Maybe<Own<Event>> fire() = 0;
   // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
   // caller.  This is the only way that an event can delete itself as a result of firing, as
   // doing so from within fire() will throw an exception.
 
-private:
+ private:
   friend class kj::EventLoop;
   EventLoop& loop;
   Event* next;
@@ -230,7 +230,7 @@ class PromiseArenaMember {
   // potentially other objects that commonly live on the end of a promise chain can also leverage
   // this.
 
-public:
+ public:
   virtual void destroy() = 0;
   // Destroys and frees the node.
   //
@@ -243,7 +243,7 @@ public:
   //    handle to delete themselves.
   // 2. XThreadEvents sometimes leave it up to a different thread to actually delete the object.
 
-private:
+ private:
   PromiseArena* arena = nullptr;
   // If non-null, then this PromiseNode is the last node allocated within the given arena, and
   // therefore owns the arena. After this node is destroyed, the arena should be deleted.
@@ -265,7 +265,7 @@ class PromiseNode: public PromiseArenaMember, private AsyncObject {
   // so down-cast in the few places that really need to be templated.  Luckily this is all
   // internal implementation details.
 
-public:
+ public:
   virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
   //
@@ -322,11 +322,11 @@ public:
     return T(false, kj::mv(node));
   }
 
-protected:
+ protected:
   class OnReadyEvent {
     // Helper class for implementing onReady().
 
-  public:
+   public:
     void init(Event* newEvent);
 
     void arm();
@@ -338,13 +338,13 @@ protected:
       if (event != nullptr && !builder.full()) event->traceEvent(builder);
     }
 
-  private:
+   private:
     Event* event = nullptr;
   };
 };
 
 class PromiseDisposer {
-public:
+ public:
   template <typename T>
   static constexpr bool canArenaAllocate() {
     // We can only use arena allocation for types that fit in an arena and have pointer-size
@@ -458,7 +458,7 @@ inline NeverDone::operator Promise<T>() const {
 // -------------------------------------------------------------------
 
 class ImmediatePromiseNodeBase: public PromiseNode {
-public:
+ public:
   ImmediatePromiseNodeBase();
   ~ImmediatePromiseNodeBase() noexcept(false);
 
@@ -470,7 +470,7 @@ template <typename T>
 class ImmediatePromiseNode final: public ImmediatePromiseNodeBase {
   // A promise that has already been resolved to an immediate value or exception.
 
-public:
+ public:
   ImmediatePromiseNode(ExceptionOr<T>&& result): result(kj::mv(result)) {}
   void destroy() override { freePromise(this); }
 
@@ -478,24 +478,24 @@ public:
     output.as<T>() = kj::mv(result);
   }
 
-private:
+ private:
   ExceptionOr<T> result;
 };
 
 class ImmediateBrokenPromiseNode final: public ImmediatePromiseNodeBase {
-public:
+ public:
   ImmediateBrokenPromiseNode(Exception&& exception);
   void destroy() override;
 
   void get(ExceptionOrValue& output) noexcept override;
 
-private:
+ private:
   Exception exception;
 };
 
 template <typename T, T value>
 class ConstPromiseNode: public ImmediatePromiseNodeBase {
-public:
+ public:
   void destroy() override {}
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = value;
@@ -505,14 +505,14 @@ public:
 // -------------------------------------------------------------------
 
 class AttachmentPromiseNodeBase: public PromiseNode {
-public:
+ public:
   AttachmentPromiseNodeBase(OwnPromiseNode&& dependency);
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-private:
+ private:
   OwnPromiseNode dependency;
 
   void dropDependency();
@@ -526,7 +526,7 @@ class AttachmentPromiseNode final: public AttachmentPromiseNodeBase {
   // A PromiseNode that holds on to some object (usually, an Own<T>, but could be any movable
   // object) until the promise resolves.
 
-public:
+ public:
   AttachmentPromiseNode(OwnPromiseNode&& dependency, Attachment&& attachment)
       : AttachmentPromiseNodeBase(kj::mv(dependency)),
         attachment(kj::mv<Attachment>(attachment)) {}
@@ -538,7 +538,7 @@ public:
     dropDependency();
   }
 
-private:
+ private:
   Attachment attachment;
 };
 
@@ -675,14 +675,14 @@ struct GetFunctorStartAddress<Void&&>: public GetFunctorStartAddress<> {};
 // actually has no parameters.
 
 class TransformPromiseNodeBase: public PromiseNode {
-public:
+ public:
   TransformPromiseNodeBase(OwnPromiseNode&& dependency, void* continuationTracePtr);
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-private:
+ private:
   OwnPromiseNode dependency;
   void* continuationTracePtr;
 
@@ -711,7 +711,7 @@ class TransformPromiseNode final: public TransformPromiseNodeBase {
   // A PromiseNode that transforms the result of another PromiseNode through an application-provided
   // function (implements `then()`).
 
-public:
+ public:
   TransformPromiseNode(OwnPromiseNode&& dependency, Func&& func, ErrorFunc&& errorHandler,
                        void* continuationTracePtr)
       : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
@@ -725,7 +725,7 @@ public:
     dropDependency();
   }
 
-private:
+ private:
   Func func;
   ErrorFunc errorHandler;
 
@@ -749,7 +749,7 @@ template <typename _DepT, typename Func>
 class SimpleTransformPromiseNode final: public TransformPromiseNodeBase {
   // TransformPromiseNodeBase variant using default error handler to reduce templating.
 
-public:
+ public:
   SimpleTransformPromiseNode(OwnPromiseNode&& dependency, Func&& func,
                        void* continuationTracePtr)
       : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
@@ -766,7 +766,7 @@ public:
     dropDependency();
   }
 
-private:
+ private:
   Func func;
 
   void getImpl(ExceptionOrValue& output) override {
@@ -788,7 +788,7 @@ class ForkHubBase;
 using OwnForkHubBase = Own<ForkHubBase, ForkHubBase>;
 
 class ForkBranchBase: public PromiseNode {
-public:
+ public:
   ForkBranchBase(OwnForkHubBase&& hub);
   ~ForkBranchBase() noexcept(false);
 
@@ -799,13 +799,13 @@ public:
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-protected:
+ protected:
   inline ExceptionOrValue& getHubResultRef();
 
   void releaseHub(ExceptionOrValue& output);
   // Release the hub.  If an exception is thrown, add it to `output`.
 
-private:
+ private:
   OnReadyEvent onReadyEvent;
 
   OwnForkHubBase hub;
@@ -835,7 +835,7 @@ template <typename T> Maybe<Arc<T>> copyOrAddRef(Maybe<Arc<T>>& t) {
 // a const reference.
 template <typename T, bool FreeOnDestroy>
 class ForkBranch final: public ForkBranchBase {
-public:
+ public:
   ForkBranch(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
   ForkBranch(ForkedPromise<UnfixVoid<T>>& promise) : ForkBranchBase(promise.hub->addRef()) {}
 
@@ -858,7 +858,7 @@ class SplitBranch final: public ForkBranchBase {
   // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
   // a const reference.
 
-public:
+ public:
   SplitBranch(OwnForkHubBase&& hub): ForkBranchBase(kj::mv(hub)) {}
   void destroy() override { freePromise(this); }
 
@@ -879,7 +879,7 @@ public:
 // -------------------------------------------------------------------
 
 class ForkHubBase: public PromiseArenaMember, protected Event {
-public:
+ public:
   ForkHubBase(OwnPromiseNode&& inner, ExceptionOrValue& resultRef, SourceLocation location);
 
   inline ExceptionOrValue& getResultRef() { return resultRef; }
@@ -897,7 +897,7 @@ public:
     }
   }
 
-private:
+ private:
   uint refcount = 1;
   // We manually implement refcounting for ForkHubBase so that we can use it together with
   // PromiseDisposer's arena allocation.
@@ -921,7 +921,7 @@ class ForkHub final: public ForkHubBase {
   // the promise's outer node with a ForkHub, and subsequent calls add branches to that hub (if
   // possible).
 
-public:
+ public:
   ForkHub(OwnPromiseNode&& inner, SourceLocation location)
       : ForkHubBase(kj::mv(inner), result, location) {}
   void destroy() override { freePromise(this); }
@@ -935,7 +935,7 @@ public:
     return splitImpl(MakeIndexes<tupleSize<T>()>(), location);
   }
 
-private:
+ private:
   ExceptionOr<T> result;
 
   template <size_t... indexes>
@@ -964,7 +964,7 @@ class ChainPromiseNode final: public PromiseNode, public Event {
   // `Event` is only a public base class because otherwise we can't cast Own<ChainPromiseNode> to
   // Own<Event>.  Ugh, templates and private...
 
-public:
+ public:
   explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location);
   ~ChainPromiseNode() noexcept(false);
   void destroy() override;
@@ -974,7 +974,7 @@ public:
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-private:
+ private:
   enum State {
     STEP1,
     STEP2
@@ -1016,7 +1016,7 @@ inline Promise<T> maybeReduce(Promise<T>&& promise, ...) {
 // -------------------------------------------------------------------
 
 class ExclusiveJoinPromiseNode final: public PromiseNode {
-public:
+ public:
   ExclusiveJoinPromiseNode(OwnPromiseNode left, OwnPromiseNode right, SourceLocation location);
   ~ExclusiveJoinPromiseNode() noexcept(false);
   void destroy() override;
@@ -1025,9 +1025,9 @@ public:
   void get(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-private:
+ private:
   class Branch: public Event {
-  public:
+   public:
     Branch(ExclusiveJoinPromiseNode& joinNode, OwnPromiseNode dependency,
            SourceLocation location);
     ~Branch() noexcept(false);
@@ -1038,7 +1038,7 @@ private:
     Maybe<Own<Event>> fire() override;
     void traceEvent(TraceBuilder& builder) override;
 
-  private:
+   private:
     ExclusiveJoinPromiseNode& joinNode;
     OwnPromiseNode dependency;
 
@@ -1058,7 +1058,7 @@ enum class ArrayJoinBehavior {
 };
 
 class ArrayJoinPromiseNodeBase: public PromiseNode {
-public:
+ public:
   ArrayJoinPromiseNodeBase(Array<OwnPromiseNode> promises,
                            ExceptionOrValue* resultParts, size_t partSize,
                            SourceLocation location,
@@ -1069,11 +1069,11 @@ public:
   void get(ExceptionOrValue& output) noexcept override final;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override final;
 
-protected:
+ protected:
   virtual void getNoError(ExceptionOrValue& output) noexcept = 0;
   // Called to compile the result only in the case where there were no errors.
 
-private:
+ private:
   const ArrayJoinBehavior joinBehavior;
 
   uint countLeft;
@@ -1081,7 +1081,7 @@ private:
   bool armed = false;
 
   class Branch final: public Event {
-  public:
+   public:
     Branch(ArrayJoinPromiseNodeBase& joinNode, OwnPromiseNode dependency,
            ExceptionOrValue& output, SourceLocation location);
     ~Branch() noexcept(false);
@@ -1089,7 +1089,7 @@ private:
     Maybe<Own<Event>> fire() override;
     void traceEvent(TraceBuilder& builder) override;
 
-  private:
+   private:
     ArrayJoinPromiseNodeBase& joinNode;
     OwnPromiseNode dependency;
     ExceptionOrValue& output;
@@ -1102,7 +1102,7 @@ private:
 
 template <typename T>
 class ArrayJoinPromiseNode final: public ArrayJoinPromiseNodeBase {
-public:
+ public:
   ArrayJoinPromiseNode(Array<OwnPromiseNode> promises,
                        Array<ExceptionOr<T>> resultParts,
                        SourceLocation location,
@@ -1112,7 +1112,7 @@ public:
         resultParts(kj::mv(resultParts)) {}
   void destroy() override { freePromise(this); }
 
-protected:
+ protected:
   void getNoError(ExceptionOrValue& output) noexcept override {
     auto builder = heapArrayBuilder<T>(resultParts.size());
     for (auto& part: resultParts) {
@@ -1123,13 +1123,13 @@ protected:
     output.as<Array<T>>() = builder.finish();
   }
 
-private:
+ private:
   Array<ExceptionOr<T>> resultParts;
 };
 
 template <>
 class ArrayJoinPromiseNode<void> final: public ArrayJoinPromiseNodeBase {
-public:
+ public:
   ArrayJoinPromiseNode(Array<OwnPromiseNode> promises,
                        Array<ExceptionOr<_::Void>> resultParts,
                        SourceLocation location,
@@ -1137,15 +1137,15 @@ public:
   ~ArrayJoinPromiseNode();
   void destroy() override;
 
-protected:
+ protected:
   void getNoError(ExceptionOrValue& output) noexcept override;
 
-private:
+ private:
   Array<ExceptionOr<_::Void>> resultParts;
 };
 
 class RaceSuccessfulPromiseNodeBase : public PromiseNode {
-public:
+ public:
   RaceSuccessfulPromiseNodeBase(Array<OwnPromiseNode> promises,
                                 ExceptionOrValue &output,
                                 SourceLocation location);
@@ -1155,18 +1155,18 @@ public:
   void get(ExceptionOrValue &output) noexcept override final;
   void tracePromise(TraceBuilder &builder, bool stopAtNextEvent) override final;
 
-protected:
+ protected:
   virtual void getNoError(ExceptionOrValue &output) noexcept = 0;
   // Called to compile the result only in the case where there were no errors.
 
-private:
+ private:
   ExceptionOrValue &output;
   uint countLeft;
   OnReadyEvent onReadyEvent;
   bool armed = false;
 
   class Branch final : public Event {
-  public:
+   public:
     Branch(RaceSuccessfulPromiseNodeBase &parent, OwnPromiseNode promise,
            SourceLocation location);
     ~Branch() noexcept(false);
@@ -1174,7 +1174,7 @@ private:
     Maybe<Own<Event>> fire() override;
     void traceEvent(TraceBuilder &builder) override;
 
-  private:
+   private:
     RaceSuccessfulPromiseNodeBase &parent;
     OwnPromiseNode promise;
 
@@ -1186,36 +1186,36 @@ private:
 
 template <typename T>
 class RaceSuccessfulPromiseNode final : public RaceSuccessfulPromiseNodeBase {
-public:
+ public:
   RaceSuccessfulPromiseNode(Array<OwnPromiseNode> promises,
                             SourceLocation location)
       : RaceSuccessfulPromiseNodeBase(kj::mv(promises), output, location) {}
   void destroy() override { freePromise(this); }
 
-protected:
+ protected:
   void getNoError(ExceptionOrValue &output) noexcept override {
     output.as<T>().value = kj::mv(this->output.value);
   }
 
-private:
+ private:
   ExceptionOr<T> output;
 };
 
 template <>
 class RaceSuccessfulPromiseNode<void> final
     : public RaceSuccessfulPromiseNodeBase {
-public:
+ public:
   RaceSuccessfulPromiseNode(Array<OwnPromiseNode> promises,
                             SourceLocation location);
   ~RaceSuccessfulPromiseNode() {}
   void destroy() override { freePromise(this); }
 
-protected:
+ protected:
   void getNoError(ExceptionOrValue &output) noexcept override {
     output.as<_::Void>() = _::Void();
   }
 
-private:
+ private:
   ExceptionOr<_::Void> output;
 };
 
@@ -1225,14 +1225,14 @@ class EagerPromiseNodeBase: public PromiseNode, protected Event {
   // A PromiseNode that eagerly evaluates its dependency even if its dependent does not eagerly
   // evaluate it.
 
-public:
+ public:
   EagerPromiseNodeBase(OwnPromiseNode&& dependency, ExceptionOrValue& resultRef,
                        SourceLocation location);
 
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-private:
+ private:
   OwnPromiseNode dependency;
   OnReadyEvent onReadyEvent;
 
@@ -1244,7 +1244,7 @@ private:
 
 template <typename T>
 class EagerPromiseNode final: public EagerPromiseNodeBase {
-public:
+ public:
   EagerPromiseNode(OwnPromiseNode&& dependency, SourceLocation location)
       : EagerPromiseNodeBase(kj::mv(dependency), result, location) {}
   void destroy() override { freePromise(this); }
@@ -1253,7 +1253,7 @@ public:
     output.as<T>() = kj::mv(result);
   }
 
-private:
+ private:
   ExceptionOr<T> result;
 };
 
@@ -1267,16 +1267,16 @@ OwnPromiseNode spark(OwnPromiseNode&& node, SourceLocation location) {
 // -------------------------------------------------------------------
 
 class AdapterPromiseNodeBase: public PromiseNode {
-public:
+ public:
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-protected:
+ protected:
   inline void setReady() {
     onReadyEvent.arm();
   }
 
-private:
+ private:
   OnReadyEvent onReadyEvent;
 };
 
@@ -1285,7 +1285,7 @@ class AdapterPromiseNode final: public AdapterPromiseNodeBase,
                                 private PromiseFulfiller<UnfixVoid<T>> {
   // A PromiseNode that wraps a PromiseAdapter.
 
-public:
+ public:
   template <typename... Params>
   AdapterPromiseNode(Params&&... params)
       : adapter(static_cast<PromiseFulfiller<UnfixVoid<T>>&>(*this), kj::fwd<Params>(params)...) {}
@@ -1296,7 +1296,7 @@ public:
     output.as<T>() = kj::mv(result);
   }
 
-private:
+ private:
   ExceptionOr<T> result;
   bool waiting = true;
   Adapter adapter;
@@ -1327,7 +1327,7 @@ private:
 class FiberBase: public PromiseNode, private Event {
   // Base class for the outer PromiseNode representing a fiber.
 
-public:
+ public:
   explicit FiberBase(size_t stackSize, _::ExceptionOrValue& result, SourceLocation location);
   explicit FiberBase(const FiberPool& pool, _::ExceptionOrValue& result, SourceLocation location);
   ~FiberBase() noexcept(false);
@@ -1340,11 +1340,11 @@ public:
   void onReady(_::Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-protected:
+ protected:
   bool isFinished() { return state == FINISHED; }
   void cancel();
 
-private:
+ private:
   enum { WAITING, RUNNING, CANCELED, FINISHED } state;
 
   OwnPromiseNode* currentInner = nullptr;
@@ -1367,7 +1367,7 @@ private:
 
 template <typename Func>
 class Fiber final: public FiberBase {
-public:
+ public:
   explicit Fiber(size_t stackSize, Func&& func, SourceLocation location)
       : FiberBase(stackSize, result, location), func(kj::fwd<Func>(func)) {}
   explicit Fiber(const FiberPool& pool, Func&& func, SourceLocation location)
@@ -1382,7 +1382,7 @@ public:
     output.as<ResultType>() = kj::mv(result);
   }
 
-private:
+ private:
   Func func;
   ExceptionOr<ResultType> result;
 
@@ -1682,7 +1682,7 @@ Promise<T> raceSuccessful(Array<Promise<T>> &&promises, SourceLocation location)
 namespace _ {  // private
 
 class WeakFulfillerBase: protected kj::Disposer {
-protected:
+ protected:
   WeakFulfillerBase(): inner(nullptr) {}
   virtual ~WeakFulfillerBase() noexcept(false) {}
 
@@ -1695,7 +1695,7 @@ protected:
     inner = ptr;
   };
 
-private:
+ private:
   mutable PromiseRejector* inner;
 
   void disposeImpl(void* pointer) const override;
@@ -1716,7 +1716,7 @@ class WeakFulfiller final: public PromiseFulfiller<T>, public WeakFulfillerBase 
   //   Disposer -- dispose() is called when the application discards its owned pointer to the
   //   fulfiller and detach() is called when the promise is destroyed.
 
-public:
+ public:
   KJ_DISALLOW_COPY_AND_MOVE(WeakFulfiller);
 
   static kj::Own<WeakFulfiller> make() {
@@ -1754,13 +1754,13 @@ public:
     }
   }
 
-private:
+ private:
   WeakFulfiller() {}
 };
 
 template <typename T>
 class PromiseAndFulfillerAdapter {
-public:
+ public:
   PromiseAndFulfillerAdapter(PromiseFulfiller<T>& fulfiller,
                              WeakFulfiller<T>& wrapper)
       : fulfiller(fulfiller), wrapper(wrapper) {
@@ -1771,7 +1771,7 @@ public:
     wrapper.detach(fulfiller);
   }
 
-private:
+ private:
   PromiseFulfiller<T>& fulfiller;
   WeakFulfiller<T>& wrapper;
 };
@@ -1829,13 +1829,13 @@ namespace _ {  // (private)
 
 class XThreadEvent: public PromiseNode,    // it's a PromiseNode in the requesting thread
                     private Event {        // it's an event in the target thread
-public:
+ public:
   XThreadEvent(ExceptionOrValue& result, const Executor& targetExecutor, EventLoop& loop,
                void* funcTracePtr, SourceLocation location);
 
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-protected:
+ protected:
   void ensureDoneOrCanceled();
   // MUST be called in destructor of subclasses to make sure the object is not destroyed while
   // still being accessed by the other thread. (This can't be placed in ~XThreadEvent() because
@@ -1848,7 +1848,7 @@ protected:
   // implements PromiseNode ----------------------------------------------------
   void onReady(Event* event) noexcept override;
 
-private:
+ private:
   ExceptionOrValue& result;
   void* funcTracePtr;
 
@@ -1931,7 +1931,7 @@ private:
 template <typename Func, typename = _::FixVoid<_::ReturnType<Func, void>>>
 class XThreadEventImpl final: public XThreadEvent {
   // Implementation for a function that does not return a Promise.
-public:
+ public:
   XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location)
       : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
@@ -1950,7 +1950,7 @@ public:
     output.as<ResultT>() = kj::mv(result);
   }
 
-private:
+ private:
   Func func;
   ExceptionOr<ResultT> result;
   friend Executor;
@@ -1959,7 +1959,7 @@ private:
 template <typename Func, typename T>
 class XThreadEventImpl<Func, Promise<T>> final: public XThreadEvent {
   // Implementation for a function that DOES return a Promise.
-public:
+ public:
   XThreadEventImpl(Func&& func, const Executor& target, EventLoop& loop, SourceLocation location)
       : XThreadEvent(result, target, loop, GetFunctorStartAddress<>::apply(func), location),
         func(kj::fwd<Func>(func)) {}
@@ -1979,7 +1979,7 @@ public:
     output.as<ResultT>() = kj::mv(result);
   }
 
-private:
+ private:
   Func func;
   ExceptionOr<ResultT> result;
   friend Executor;
@@ -2013,7 +2013,7 @@ template <typename T>
 class XThreadFulfiller;
 
 class XThreadPaf: public PromiseNode {
-public:
+ public:
   XThreadPaf();
   virtual ~XThreadPaf() noexcept(false);
   void destroy() override;
@@ -2022,7 +2022,7 @@ public:
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-private:
+ private:
   enum {
     WAITING,
     // Not yet fulfilled, and the waiter is still waiting.
@@ -2079,13 +2079,13 @@ private:
 
 template <typename T>
 class XThreadPafImpl final: public XThreadPaf {
-public:
+ public:
   // implements PromiseNode ----------------------------------------------------
   void get(ExceptionOrValue& output) noexcept override {
     output.as<FixVoid<T>>() = kj::mv(result);
   }
 
-private:
+ private:
   ExceptionOr<FixVoid<T>> result;
 
   friend class XThreadFulfiller<T>;
@@ -2097,7 +2097,7 @@ class XThreadPaf::FulfillScope {
   // This ensures that:
   // - Only one call is carried out, even if multiple threads try to fulfill concurrently.
   // - The waiting thread is correctly signaled.
-public:
+ public:
   FulfillScope(XThreadPaf** pointer);
   // Atomically nulls out *pointer and takes ownership of the pointer.
 
@@ -2110,13 +2110,13 @@ public:
   template <typename T>
   XThreadPafImpl<T>* getTarget() { return static_cast<XThreadPafImpl<T>*>(obj); }
 
-private:
+ private:
   XThreadPaf* obj;
 };
 
 template <typename T>
 class XThreadFulfiller final: public CrossThreadPromiseFulfiller<T> {
-public:
+ public:
   XThreadFulfiller(XThreadPafImpl<T>* target): target(target) {}
 
   ~XThreadFulfiller() noexcept(false) {
@@ -2149,13 +2149,13 @@ public:
     }
   }
 
-private:
+ private:
   mutable XThreadPaf* target;  // accessed using atomic ops
 };
 
 template <typename T>
 class XThreadFulfiller<kj::Promise<T>> {
-public:
+ public:
   static_assert(sizeof(T) < 0,
       "newCrosssThreadPromiseAndFulfiller<Promise<T>>() is not currently supported");
   // TODO(someday): Is this worth supporting? Presumably, when someone calls `fulfill(somePromise)`,
@@ -2251,7 +2251,7 @@ namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
 class CoroutineBase: public PromiseNode,
                      public Event {
-public:
+ public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                 SourceLocation location);
   ~CoroutineBase() noexcept(false);
@@ -2277,7 +2277,7 @@ public:
 
   void unhandled_exception();
 
-protected:
+ protected:
   class AwaiterBase;
 
   bool isWaiting() { return waiting; }
@@ -2286,7 +2286,7 @@ protected:
     waiting = false;
   }
 
-private:
+ private:
   // -------------------------------------------------------
   // PromiseNode implementation
 
@@ -2360,7 +2360,7 @@ class Coroutine final: public CoroutineBase,
   // await-expression's type are both `kj::Promise` instantiations -- see further comments under
   // `await_transform()`.
 
-public:
+ public:
   using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
 
   Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
@@ -2376,7 +2376,7 @@ public:
     return PromiseNode::to<Promise<T>>(OwnPromiseNode(this));
   }
 
-public:
+ public:
   template <typename U>
   class Awaiter;
 
@@ -2418,7 +2418,7 @@ public:
     }
   }
 
-private:
+ private:
   // -------------------------------------------------------
   // PromiseNode implementation
 
@@ -2431,14 +2431,14 @@ private:
 
 template <typename Self, typename T>
 class CoroutineMixin {
-public:
+ public:
   void return_value(T value) {
     static_cast<Self*>(this)->fulfill(kj::mv(value));
   }
 };
 template <typename Self>
 class CoroutineMixin<Self, void> {
-public:
+ public:
   void return_void() {
     static_cast<Self*>(this)->fulfill(_::Void());
   }
@@ -2449,7 +2449,7 @@ public:
 // these return_* functions live in a CRTP mixin.
 
 class CoroutineBase::AwaiterBase {
-public:
+ public:
   explicit AwaiterBase(OwnPromiseNode&& node);
 
   AwaiterBase(AwaiterBase&&);
@@ -2463,11 +2463,11 @@ public:
   // must return false here. Fortunately, await_suspend() has a trick up its sleeve to enable
   // suspension-less co_awaits.
 
-protected:
+ protected:
   void getImpl(ExceptionOrValue& result, void* awaitedAt);
   bool awaitSuspendImpl(CoroutineBase& coroutineEvent);
 
-private:
+ private:
   UnwindDetector unwindDetector;
   OwnPromiseNode node;
 
@@ -2488,7 +2488,7 @@ class Coroutine<T>::Awaiter: public AwaiterBase {
   // implementation resumes the coroutine, which transitively calls await_resume() to unwrap the
   // awaited promise result.
 
-public:
+ public:
   explicit Awaiter(OwnPromiseNode&& node): AwaiterBase(kj::mv(node)) {}
 
   KJ_NOINLINE U await_resume() {
@@ -2514,7 +2514,7 @@ public:
     return awaitSuspendImpl(coroutine.promise());
   }
 
-private:
+ private:
   ExceptionOr<FixVoid<U>> result;
 };
 
@@ -2523,7 +2523,7 @@ private:
 template <typename T>
 template <typename U>
 class Coroutine<T>::ForkedPromiseAwaiter {
-public:
+ public:
   ForkedPromiseAwaiter(ForkedPromise<U>& promise)
       : node(promise), awaiter(OwnPromiseNode(&node)) { }
 
@@ -2536,7 +2536,7 @@ public:
 
   inline bool await_ready() const { return awaiter.await_ready(); }
 
-private:
+ private:
   ForkBranch<_::FixVoid<U>, false> node;
   Awaiter<U> awaiter;
 };

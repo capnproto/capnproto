@@ -73,11 +73,11 @@ namespace _ {  // private
 
 template <typename T>
 class DirectWireValue {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) { return value; }
   KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
 
-private:
+ private:
   T value;
 };
 
@@ -103,17 +103,17 @@ class SwappingWireValue;
 
 template <typename T>
 class SwappingWireValue<T, 1> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) { return value; }
   KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
 
-private:
+ private:
   T value;
 };
 
 template <typename T>
 class SwappingWireValue<T, 2> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) {
     // Not all platforms have __builtin_bswap16() for some reason.  In particular, it is missing
     // on gcc-4.7.3-cygwin32 (but present on gcc-4.8.1-cygwin64).
@@ -130,13 +130,13 @@ public:
     value = (raw << 8) | (raw >> 8);
   }
 
-private:
+ private:
   uint16_t value;
 };
 
 template <typename T>
 class SwappingWireValue<T, 4> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint32_t swapped = __builtin_bswap32(value);
     T result;
@@ -149,13 +149,13 @@ public:
     value = __builtin_bswap32(raw);
   }
 
-private:
+ private:
   uint32_t value;
 };
 
 template <typename T>
 class SwappingWireValue<T, 8> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint64_t swapped = __builtin_bswap64(value);
     T result;
@@ -168,7 +168,7 @@ public:
     value = __builtin_bswap64(raw);
   }
 
-private:
+ private:
   uint64_t value;
 };
 
@@ -196,17 +196,17 @@ class ShiftingWireValue;
 
 template <typename T>
 class ShiftingWireValue<T, 1> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) { return value; }
   KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
 
-private:
+ private:
   T value;
 };
 
 template <typename T>
 class ShiftingWireValue<T, 2> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint16_t raw = (static_cast<uint16_t>(bytes[0])     ) |
                    (static_cast<uint16_t>(bytes[1]) << 8);
@@ -221,7 +221,7 @@ public:
     bytes[1] = raw >> 8;
   }
 
-private:
+ private:
   union {
     byte bytes[2];
     uint16_t align;
@@ -230,7 +230,7 @@ private:
 
 template <typename T>
 class ShiftingWireValue<T, 4> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint32_t raw = (static_cast<uint32_t>(bytes[0])      ) |
                    (static_cast<uint32_t>(bytes[1]) <<  8) |
@@ -249,7 +249,7 @@ public:
     bytes[3] = raw >> 24;
   }
 
-private:
+ private:
   union {
     byte bytes[4];
     uint32_t align;
@@ -258,7 +258,7 @@ private:
 
 template <typename T>
 class ShiftingWireValue<T, 8> {
-public:
+ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint64_t raw = (static_cast<uint64_t>(bytes[0])      ) |
                    (static_cast<uint64_t>(bytes[1]) <<  8) |
@@ -285,7 +285,7 @@ public:
     bytes[7] = raw >> 56;
   }
 
-private:
+ private:
   union {
     byte bytes[8];
     uint64_t align;

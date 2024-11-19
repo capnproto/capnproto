@@ -122,7 +122,7 @@ class Disposer {
   // Few developers will ever touch this interface.  It is primarily useful for those implementing
   // custom memory allocators.
 
-protected:
+ protected:
   // Do not declare a destructor, as doing so will force a global initializer for each HeapDisposer
   // instance.  Eww!
 
@@ -132,7 +132,7 @@ protected:
   // Own<T> does not allow any casting, so the pointer exactly matches the original one given to
   // Own<T>.
 
-public:
+ public:
 
   template <typename T>
   void dispose(T* object) const;
@@ -144,7 +144,7 @@ public:
   // Callers must not call dispose() on the same pointer twice, even if the first call throws
   // an exception.
 
-private:
+ private:
   template <typename T, bool polymorphic = _kj_internal_isPolymorphic((T*)nullptr)>
   struct Dispose_;
 };
@@ -153,7 +153,7 @@ template <typename T>
 class DestructorOnlyDisposer: public Disposer {
   // A disposer that merely calls the type's destructor and nothing else.
 
-public:
+ public:
   static const DestructorOnlyDisposer instance;
 
   void disposeImpl(void* pointer) const override {
@@ -167,7 +167,7 @@ const DestructorOnlyDisposer<T> DestructorOnlyDisposer<T>::instance = Destructor
 class NullDisposer: public Disposer {
   // A disposer that does nothing.
 
-public:
+ public:
   static const NullDisposer instance;
 
   void disposeImpl(void* pointer) const override {}
@@ -191,7 +191,7 @@ class AtomicPtrCounter {
   // AtomicPtrCounter uses atomic operations to keep track of active pointers.
   // Since no other memory location is observed, memory_order_relaxed is used.
 
-public:
+ public:
   inline void dec() {
     size_t prevCount = count.fetch_sub(1, std::memory_order_relaxed);
     if (KJ_UNLIKELY(prevCount == 0)) {
@@ -210,7 +210,7 @@ public:
     }
   }
 
-private:
+ private:
   std::atomic<size_t> count = 0;
 };
 
@@ -242,7 +242,7 @@ class Own<T, decltype(nullptr)> {
   //   inheritance and upcasting, and anyway if you force everyone to use a custom deleter
   //   then you've lost any benefit to interoperating with the "standard" unique_ptr.
 
-public:
+ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): disposer(nullptr), ptr(nullptr) {}
   inline Own(Own&& other) noexcept
@@ -326,7 +326,7 @@ public:
     return ptrCopy;
   }
 
-private:
+ private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
 
@@ -380,7 +380,7 @@ class Own {
   // resources. You should avoid this unless you have a specific need, because it precludes a lot
   // of power.
 
-public:
+ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): ptr(nullptr) {}
   inline Own(Own&& other) noexcept
@@ -450,7 +450,7 @@ public:
     return ptrCopy;
   }
 
-private:
+ private:
   T* ptr;
 
   inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
@@ -482,7 +482,7 @@ namespace _ {  // private
 
 template <typename T, typename D>
 class OwnOwn {
-public:
+ public:
   inline OwnOwn(Own<T, D>&& value) noexcept: value(kj::mv(value)) {}
 
   inline Own<T, D>& operator*() & { return value; }
@@ -494,7 +494,7 @@ public:
   inline operator Own<T, D>*() { return value ? &value : nullptr; }
   inline operator const Own<T, D>*() const { return value ? &value : nullptr; }
 
-private:
+ private:
   Own<T, D> value;
 };
 
@@ -511,7 +511,7 @@ const Own<T, D>* readMaybe(const Maybe<Own<T, D>>& maybe) {
 
 template <typename T, typename D>
 class Maybe<Own<T, D>> {
-public:
+ public:
   inline Maybe(): ptr(nullptr) {}
   inline Maybe(Own<T, D>&& t) noexcept: ptr(kj::mv(t)) {}
   inline Maybe(Maybe&& other) noexcept: ptr(kj::mv(other.ptr)) {}
@@ -610,7 +610,7 @@ public:
     }
   }
 
-private:
+ private:
   Own<T, D> ptr;
 
   template <typename U>
@@ -627,7 +627,7 @@ namespace _ {  // private
 
 template <typename T>
 class HeapDisposer final: public Disposer {
-public:
+ public:
   virtual void disposeImpl(void* pointer) const override { delete reinterpret_cast<T*>(pointer); }
 
   static const HeapDisposer instance;
@@ -647,7 +647,7 @@ const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 
 template <typename T, void(*F)(T*)>
 class CustomDisposer: public Disposer {
-public:
+ public:
   void disposeImpl(void* pointer) const override {
     (*F)(reinterpret_cast<T*>(pointer));
   }
@@ -711,7 +711,7 @@ class SpaceFor {
   // destructor automatically.  Instead, call construct() to construct a T in the space, which
   // returns an Own<T> which will take care of calling T's destructor later.
 
-public:
+ public:
   inline SpaceFor() {}
   inline ~SpaceFor() {}
 
@@ -721,7 +721,7 @@ public:
     return Own<T>(&value, DestructorOnlyDisposer<T>::instance);
   }
 
-private:
+ private:
   union {
     T value;
   };
@@ -745,7 +745,7 @@ class Pin {
   // operations are asserted.
   // Zero-overhead replacement for T if KJ_ASSERT_PTR_COUNTERS is not defined.
 
-public:
+ public:
   template <typename... Params>
   inline Pin(Params&&... params) : t(kj::fwd<Params>(params)...) {  }
   // Create new Pin<T> using corresponding T constructor.
@@ -787,7 +787,7 @@ public:
   void* operator new[](size_t count) = delete;
   // Pin<T> can't be heap allocated, only local or data field usage is ok.
 
-private:
+ private:
   KJ_DISALLOW_COPY(Pin);
 
   inline Pin(T&& t): t(kj::mv(t)) {}
@@ -815,7 +815,7 @@ class Ptr {
   // Asserts lifetime constraints when KJ_ASSERT_PTR_COUNTERS is defined.
   // Zero-overhead alternative for T& if KJ_ASSERT_PTR_COUNTERS is not defined.
 
-public:
+ public:
   inline ~Ptr() {
     if (ptr == nullptr) {
       // the value was moved out
@@ -876,7 +876,7 @@ public:
   // It is undefined behavior to use the reference after the object managed by this Ptr<T>
   // ceased to exist.
 
-private:
+ private:
 
 #ifdef KJ_ASSERT_PTR_COUNTERS
   inline Ptr(Pin<T>* pin) : ptr(pin->get()), counter(&pin->ptrCounter) { counter->inc(); }
@@ -959,7 +959,7 @@ struct DisposableOwnedBundle final: public Disposer, public OwnedBundle<T...> {
 template <typename T, typename StaticDisposer>
 class StaticDisposerAdapter final: public Disposer {
   // Adapts a static disposer to be called dynamically.
-public:
+ public:
   virtual void disposeImpl(void* pointer) const override {
     StaticDisposer::dispose(reinterpret_cast<T*>(pointer));
   }

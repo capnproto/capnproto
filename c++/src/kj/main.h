@@ -34,7 +34,7 @@ namespace kj {
 class ProcessContext {
   // Context for command-line programs.
 
-public:
+ public:
   virtual StringPtr getProgramName() = 0;
   // Get argv[0] as passed to main().
 
@@ -137,7 +137,7 @@ class TopLevelProcessContext final: public ProcessContext {
   // program).  This implementation writes errors to stderr, and its `exit()` method actually
   // calls the C `quick_exit()` function.
 
-public:
+ public:
   explicit TopLevelProcessContext(StringPtr programName);
 
   struct CleanShutdownException { int exitCode; };
@@ -154,7 +154,7 @@ public:
   KJ_NORETURN(void exitInfo(StringPtr message) override);
   void increaseLoggingVerbosity() override;
 
-private:
+ private:
   StringPtr programName;
   bool cleanShutdown;
   // hadErrors is mutable because we need to modify it in const-for-multithreadedness methods.
@@ -205,7 +205,7 @@ class MainBuilder {
   // Example usage:
   //
   //     class FooMain {
-  //     public:
+  //      public:
   //       FooMain(kj::ProcessContext& context): context(context) {}
   //
   //       bool setAll() { all = true; return true; }
@@ -242,24 +242,24 @@ class MainBuilder {
   //             .build();
   //       }
   //
-  //     private:
+  //      private:
   //       bool all = false;
   //       kj::StringPtr outputFile;
   //       kj::ProcessContext& context;
   //     };
 
-public:
+ public:
   MainBuilder(ProcessContext& context, StringPtr version,
               StringPtr briefDescription, StringPtr extendedDescription = nullptr);
   ~MainBuilder() noexcept(false);
 
   class OptionName {
-  public:
+   public:
     OptionName() = default;
     inline OptionName(char shortName): isLong(false), shortName(shortName) {}
     inline OptionName(const char* longName): isLong(true), longName(longName) {}
 
-  private:
+   private:
     bool isLong;
     union {
       char shortName;
@@ -269,7 +269,7 @@ public:
   };
 
   class Validity {
-  public:
+   public:
     inline Validity(bool valid) {
       if (!valid) errorMessage = heapString("invalid argument");
     }
@@ -281,7 +281,7 @@ public:
     inline const Maybe<String>& getError() const { return errorMessage; }
     inline Maybe<String> releaseError() { return kj::mv(errorMessage); }
 
-  private:
+   private:
     Maybe<String> errorMessage;
     friend class MainBuilder;
   };
@@ -398,7 +398,7 @@ public:
   // Build the "main" function, which simply parses the arguments.  Once this returns, the
   // `MainBuilder` is no longer valid.
 
-private:
+ private:
   struct Impl;
   Own<Impl> impl;
 

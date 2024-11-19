@@ -1321,7 +1321,7 @@ kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
 }
 
 class MockAsyncInputStream final: public AsyncInputStream {
-public:
+ public:
   MockAsyncInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
@@ -1340,7 +1340,7 @@ public:
     return n;
   }
 
-private:
+ private:
   kj::ArrayPtr<const byte> bytes;
   size_t blockSize;
 };

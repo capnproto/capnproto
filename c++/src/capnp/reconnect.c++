@@ -26,7 +26,7 @@ namespace capnp {
 namespace {
 
 class ReconnectHook final: public ClientHook, public kj::Refcounted {
-public:
+ public:
   ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
         current(lazy ? kj::Maybe<kj::Own<ClientHook>>() : ClientHook::from(connect())) {}
@@ -76,7 +76,7 @@ public:
     return kj::none;
   }
 
-private:
+ private:
   kj::Function<Capability::Client()> connect;
   kj::Maybe<kj::Own<ClientHook>> current;
   uint generation = 0;
@@ -108,7 +108,7 @@ private:
   }
 
   class RequestImpl final: public RequestHook {
-  public:
+   public:
     RequestImpl(kj::Own<ReconnectHook> parent, kj::Own<RequestHook> inner)
         : parent(kj::mv(parent)), inner(kj::mv(inner)) {}
 
@@ -135,7 +135,7 @@ private:
       return inner->sendForPipeline();
     }
 
-  private:
+   private:
     kj::Own<ReconnectHook> parent;
     kj::Own<RequestHook> inner;
   };

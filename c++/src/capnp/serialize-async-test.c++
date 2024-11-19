@@ -60,7 +60,7 @@ inline void delay() { usleep(5000); }
 #endif
 
 class FragmentingOutputStream: public kj::OutputStream {
-public:
+ public:
   FragmentingOutputStream(kj::OutputStream& inner): inner(inner) {}
 
   void write(kj::ArrayPtr<const byte> buffer) override {
@@ -72,7 +72,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::OutputStream& inner;
 };
 
@@ -81,7 +81,7 @@ class TestMessageBuilder: public MallocMessageBuilder {
   // minimum-size segments until it reaches the number, then allocating one large segment to
   // finish.
 
-public:
+ public:
   explicit TestMessageBuilder(uint desiredSegmentCount)
       : MallocMessageBuilder(0, AllocationStrategy::FIXED_SIZE),
         desiredSegmentCount(desiredSegmentCount) {}
@@ -103,12 +103,12 @@ public:
     }
   }
 
-private:
+ private:
   uint desiredSegmentCount;
 };
 
 class PipeWithSmallBuffer {
-public:
+ public:
 #ifdef _WIN32
 #define KJ_SOCKCALL KJ_WINSOCK
 #ifndef SHUT_WR
@@ -157,7 +157,7 @@ public:
 
   inline int operator[](uint index) { return fds[index]; }
 
-private:
+ private:
 #ifdef _WIN32
   SOCKET fds[2];
 #else
@@ -172,7 +172,7 @@ private:
 //   really want to link against winsock.
 
 class SocketOutputStream: public kj::OutputStream {
-public:
+ public:
   explicit SocketOutputStream(SOCKET fd): fd(fd) {}
 
   void write(kj::ArrayPtr<const byte> data) override {
@@ -183,12 +183,12 @@ public:
     }
   }
 
-private:
+ private:
   SOCKET fd;
 };
 
 class SocketInputStream: public kj::InputStream {
-public:
+ public:
   explicit SocketInputStream(SOCKET fd): fd(fd) {}
 
   size_t tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
@@ -202,7 +202,7 @@ public:
     return total;
   }
 
-private:
+ private:
   SOCKET fd;
 };
 #else  // _WIN32

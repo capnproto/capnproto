@@ -74,7 +74,7 @@ size_t TestCase::iterCount() {
 namespace {
 
 class TestExceptionCallback: public ExceptionCallback {
-public:
+ public:
   TestExceptionCallback(const ProcessContext& context)
       : context(context), mainThreadCallback(kj::none) {}
 
@@ -118,7 +118,7 @@ public:
     };
   }
 
-private:
+ private:
   const ProcessContext& context;
   // In the case where a thread spawns a thread, we report failure to the main thread's
   // TestExceptionCallback, which I assume stays alive as long as all child threads.  If we reported
@@ -142,7 +142,7 @@ TimePoint readClock() {
 }  // namespace
 
 class TestRunner {
-public:
+ public:
   explicit TestRunner(ProcessContext& context)
       : context(context), useColor(isatty(STDOUT_FILENO)) {}
 
@@ -290,7 +290,7 @@ public:
     KJ_UNREACHABLE;
   }
 
-private:
+ private:
   ProcessContext& context;
   bool useColor;
   bool hasFilter = false;

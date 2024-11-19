@@ -103,7 +103,7 @@ void randomCar(Car::Builder car) {
 }
 
 class CarSalesTestCase {
-public:
+ public:
   typedef ParkingLot Request;
   typedef TotalValue Response;
   typedef uint64_t Expectation;

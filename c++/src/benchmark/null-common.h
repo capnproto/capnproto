@@ -64,7 +64,7 @@ struct List {
 
 struct SingleUseObjects {
   class ObjectSizeCounter {
-  public:
+   public:
     ObjectSizeCounter(uint64_t iters): counter(0) {}
 
     void add(uint64_t wordCount) {
@@ -73,14 +73,14 @@ struct SingleUseObjects {
 
     uint64_t get() { return counter; }
 
-  private:
+   private:
     uint64_t counter;
   };
 };
 
 struct ReusableObjects {
   class ObjectSizeCounter {
-  public:
+   public:
     ObjectSizeCounter(uint64_t iters): iters(iters), maxSize(0) {}
 
     void add(size_t wordCount) {
@@ -89,7 +89,7 @@ struct ReusableObjects {
 
     uint64_t get() { return iters * maxSize; }
 
-  private:
+   private:
     uint64_t iters;
     size_t maxSize;
   };

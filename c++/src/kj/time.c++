@@ -37,7 +37,7 @@ namespace kj {
 
 const Clock& nullClock() {
   class NullClock final: public Clock {
-  public:
+   public:
     Date now() const override { return UNIX_EPOCH; }
   };
   static KJ_CONSTEXPR(const) NullClock NULL_CLOCK = NullClock();
@@ -57,7 +57,7 @@ static Date toKjDate(FILETIME t) {
 }
 
 class Win32CoarseClock: public Clock {
-public:
+ public:
   Date now() const override {
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
@@ -67,7 +67,7 @@ public:
 
 class Win32PreciseClock: public Clock {
   typedef VOID WINAPI GetSystemTimePreciseAsFileTimeFunc(LPFILETIME);
-public:
+ public:
   Date now() const override {
     static GetSystemTimePreciseAsFileTimeFunc* const getSystemTimePreciseAsFileTimePtr =
         getGetSystemTimePreciseAsFileTime();
@@ -82,7 +82,7 @@ public:
     return toKjDate(ft);
   }
 
-private:
+ private:
   static GetSystemTimePreciseAsFileTimeFunc* getGetSystemTimePreciseAsFileTime() {
     // Dynamically look up the function GetSystemTimePreciseAsFileTimeFunc(). This was only
     // introduced as of Windows 8, so it might be missing.
@@ -100,7 +100,7 @@ private:
 };
 
 class Win32CoarseMonotonicClock: public MonotonicClock {
-public:
+ public:
   TimePoint now() const override {
     return kj::origin<TimePoint>() + GetTickCount64() * kj::MILLISECONDS;
   }
@@ -113,7 +113,7 @@ class Win32PreciseMonotonicClock: public MonotonicClock {
   //   QueryUnbiasedInterruptTimePrecise(), a new API for monotonic timing that isn't as difficult.
   //   Is there any benefit to dynamically checking for these and using them if available?
 
-public:
+ public:
   TimePoint now() const override {
     static const QpcProperties props;
 
@@ -124,7 +124,7 @@ public:
     return kj::origin<TimePoint>() + ns * kj::NANOSECONDS;
   }
 
-private:
+ private:
   struct QpcProperties {
     uint64_t origin;
     // What QueryPerformanceCounter() would have returned at the time when GetTickCount64() returned
@@ -184,7 +184,7 @@ const MonotonicClock& systemPreciseMonotonicClock() {
 namespace {
 
 class PosixClock: public Clock {
-public:
+ public:
   constexpr PosixClock(clockid_t clockId): clockId(clockId) {}
 
   Date now() const override {
@@ -193,12 +193,12 @@ public:
     return UNIX_EPOCH + ts.tv_sec * kj::SECONDS + ts.tv_nsec * kj::NANOSECONDS;
   }
 
-private:
+ private:
   clockid_t clockId;
 };
 
 class PosixMonotonicClock: public MonotonicClock {
-public:
+ public:
   constexpr PosixMonotonicClock(clockid_t clockId): clockId(clockId) {}
 
   TimePoint now() const override {
@@ -207,7 +207,7 @@ public:
     return kj::origin<TimePoint>() + ts.tv_sec * kj::SECONDS + ts.tv_nsec * kj::NANOSECONDS;
   }
 
-private:
+ private:
   clockid_t clockId;
 };
 

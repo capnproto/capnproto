@@ -215,7 +215,7 @@ struct Directory {
 
 class Directory::Client
     : public virtual capnp::Capability::Client {
-public:
+ public:
   Client(std::nullptr_t);
   Client(kj::Own<Directory::Server> server);
   Client(kj::Promise<Client> promise);
@@ -228,7 +228,7 @@ public:
 
 class Directory::Server
     : public virtual capnp::Capability::Server {
-protected:
+ protected:
   typedef capnp::CallContext<CreateParams, CreateResults> CreateContext;
   typedef capnp::CallContext<OpenParams, OpenResults> OpenContext;
   typedef capnp::CallContext<RemoveParams, RemoveResults> RemoveContext;
@@ -318,7 +318,7 @@ the shared memory segment.  Hence, the method implementation cannot just create 
 
 {% highlight c++ %}
 class DirectoryImpl final: public Directory::Server {
-public:
+ public:
   kj::Promise<void> open(OpenContext context) override {
     auto iter = files.find(context.getParams().getName());
 
@@ -333,7 +333,7 @@ public:
   // Any method which we don't implement will simply throw
   // an exception by default.
 
-private:
+ private:
   std::map<kj::StringPtr, File::Client> files;
 };
 {% endhighlight %}

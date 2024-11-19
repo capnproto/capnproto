@@ -46,7 +46,7 @@ namespace _ {  // private
 class VatNetworkBase {
   // Non-template version of VatNetwork.  Ignore this class; see VatNetwork in rpc.h.
 
-public:
+ public:
   class Connection;
 
   struct ConnectionAndProvisionId {
@@ -56,7 +56,7 @@ public:
   };
 
   class Connection {
-  public:
+   public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual kj::Promise<void> shutdown() = 0;
@@ -88,14 +88,14 @@ public:
 
 class BootstrapFactoryBase {
   // Non-template version of BootstrapFactory.  Ignore this class; see BootstrapFactory in rpc.h.
-public:
+ public:
   virtual Capability::Client baseCreateFor(AnyStruct::Reader clientId) = 0;
 };
 
 class RpcSystemBase {
   // Non-template version of RpcSystem.  Ignore this class; see RpcSystem in rpc.h.
 
-public:
+ public:
   RpcSystemBase(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface);
   RpcSystemBase(VatNetworkBase& network, BootstrapFactoryBase& bootstrapFactory);
   RpcSystemBase(RpcSystemBase&& other) noexcept;
@@ -105,7 +105,7 @@ public:
 
   kj::Promise<void> run();
 
-private:
+ private:
   class Impl;
   kj::Own<Impl> impl;
 

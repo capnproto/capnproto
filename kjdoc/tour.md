@@ -504,10 +504,10 @@ Second, `kj::UnwindDetector` can be used to squelch exceptions during unwind. Th
 
 ```c++
 class Transaction {
-public:
+ public:
   // ...
 
-private:
+ private:
   kj::UnwindDetector unwindDetector;
   // ...
 };

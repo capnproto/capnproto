@@ -106,7 +106,7 @@ struct LexedStatements {
 // =======================================================================================
 
 class Token::Reader {
-public:
+ public:
   typedef Token Reads;
 
   Reader() = default;
@@ -157,7 +157,7 @@ public:
   inline bool hasBinaryLiteral() const;
   inline  ::capnp::Data::Reader getBinaryLiteral() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -170,7 +170,7 @@ private:
 };
 
 class Token::Builder {
-public:
+ public:
   typedef Token Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -250,7 +250,7 @@ public:
   inline void adoptBinaryLiteral(::capnp::Orphan< ::capnp::Data>&& value);
   inline ::capnp::Orphan< ::capnp::Data> disownBinaryLiteral();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -261,14 +261,14 @@ private:
 
 #if !CAPNP_LITE
 class Token::Pipeline {
-public:
+ public:
   typedef Token Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -277,7 +277,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Statement::Reader {
-public:
+ public:
   typedef Statement Reads;
 
   Reader() = default;
@@ -311,7 +311,7 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -324,7 +324,7 @@ private:
 };
 
 class Statement::Builder {
-public:
+ public:
   typedef Statement Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -372,7 +372,7 @@ public:
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -383,14 +383,14 @@ private:
 
 #if !CAPNP_LITE
 class Statement::Pipeline {
-public:
+ public:
   typedef Statement Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -399,7 +399,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class LexedTokens::Reader {
-public:
+ public:
   typedef LexedTokens Reads;
 
   Reader() = default;
@@ -418,7 +418,7 @@ public:
   inline bool hasTokens() const;
   inline  ::capnp::List< ::capnp::compiler::Token,  ::capnp::Kind::STRUCT>::Reader getTokens() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -431,7 +431,7 @@ private:
 };
 
 class LexedTokens::Builder {
-public:
+ public:
   typedef LexedTokens Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -453,7 +453,7 @@ public:
   inline void adoptTokens(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token,  ::capnp::Kind::STRUCT>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token,  ::capnp::Kind::STRUCT>> disownTokens();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -464,14 +464,14 @@ private:
 
 #if !CAPNP_LITE
 class LexedTokens::Pipeline {
-public:
+ public:
   typedef LexedTokens Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -480,7 +480,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class LexedStatements::Reader {
-public:
+ public:
   typedef LexedStatements Reads;
 
   Reader() = default;
@@ -499,7 +499,7 @@ public:
   inline bool hasStatements() const;
   inline  ::capnp::List< ::capnp::compiler::Statement,  ::capnp::Kind::STRUCT>::Reader getStatements() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -512,7 +512,7 @@ private:
 };
 
 class LexedStatements::Builder {
-public:
+ public:
   typedef LexedStatements Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -534,7 +534,7 @@ public:
   inline void adoptStatements(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement,  ::capnp::Kind::STRUCT>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement,  ::capnp::Kind::STRUCT>> disownStatements();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -545,14 +545,14 @@ private:
 
 #if !CAPNP_LITE
 class LexedStatements::Pipeline {
-public:
+ public:
   typedef LexedStatements Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>

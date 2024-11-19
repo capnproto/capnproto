@@ -90,7 +90,7 @@ struct AnyPointer {
   AnyPointer() = delete;
 
   class Reader {
-  public:
+   public:
     typedef AnyPointer Reads;
 
     Reader() = default;
@@ -131,7 +131,7 @@ struct AnyPointer {
     // directly.
 #endif  // !CAPNP_LITE
 
-  private:
+   private:
     _::PointerReader reader;
     friend struct AnyPointer;
     friend class Orphanage;
@@ -140,7 +140,7 @@ struct AnyPointer {
   };
 
   class Builder {
-  public:
+   public:
     typedef AnyPointer Builds;
 
     Builder() = delete;
@@ -251,7 +251,7 @@ struct AnyPointer {
     inline Reader asReader() const { return Reader(builder.asReader()); }
     inline operator Reader() const { return Reader(builder.asReader()); }
 
-  private:
+   private:
     _::PointerBuilder builder;
     friend class Orphanage;
     friend class CapBuilderContext;
@@ -260,7 +260,7 @@ struct AnyPointer {
 
 #if !CAPNP_LITE
   class Pipeline {
-  public:
+   public:
     typedef AnyPointer Pipelines;
 
     inline Pipeline(decltype(nullptr)) {}
@@ -283,7 +283,7 @@ struct AnyPointer {
     template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromClient<T>) == Kind::INTERFACE>>
     inline operator T() { return T(asCap()); }
 
-  private:
+   private:
     kj::Own<PipelineHook> hook;
     kj::Array<PipelineOp> ops;
 
@@ -301,7 +301,7 @@ template <>
 class Orphan<AnyPointer> {
   // An orphaned object of unknown type.
 
-public:
+ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
@@ -349,7 +349,7 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
 
-private:
+ private:
   _::OrphanBuilder builder;
 
   template <typename, Kind>
@@ -386,7 +386,7 @@ struct List<AnyPointer, Kind::OTHER> {
   List() = delete;
 
   class Reader {
-  public:
+   public:
     typedef List<AnyPointer> Reads;
 
     inline Reader(): reader(ElementSize::POINTER) {}
@@ -406,7 +406,7 @@ struct List<AnyPointer, Kind::OTHER> {
       return reader.totalSize().asPublic();
     }
 
-  private:
+   private:
     _::ListReader reader;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -418,7 +418,7 @@ struct List<AnyPointer, Kind::OTHER> {
   };
 
   class Builder {
-  public:
+   public:
     typedef List<AnyPointer> Builds;
 
     Builder() = delete;
@@ -438,7 +438,7 @@ struct List<AnyPointer, Kind::OTHER> {
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
-  private:
+   private:
     _::ListBuilder builder;
     template <typename, Kind>
     friend struct _::PointerHelpers;
@@ -449,7 +449,7 @@ struct List<AnyPointer, Kind::OTHER> {
 };
 
 class AnyStruct::Reader {
-public:
+ public:
   typedef AnyStruct Reads;
 
   Reader() = default;
@@ -485,7 +485,7 @@ public:
   ReaderFor<T> as(StructSchema schema) const;
   // T must be DynamicStruct. Defined in dynamic.h.
 
-private:
+ private:
   _::StructReader _reader;
 
   template <typename, Kind>
@@ -494,7 +494,7 @@ private:
 };
 
 class AnyStruct::Builder {
-public:
+ public:
   typedef AnyStruct Builds;
 
   inline Builder(decltype(nullptr)) {}
@@ -533,7 +533,7 @@ public:
   BuilderFor<T> as(StructSchema schema);
   // T must be DynamicStruct. Defined in dynamic.h.
 
-private:
+ private:
   _::StructBuilder _builder;
   friend class Orphanage;
   friend class CapBuilderContext;
@@ -541,7 +541,7 @@ private:
 
 #if !CAPNP_LITE
 class AnyStruct::Pipeline {
-public:
+ public:
   inline Pipeline(decltype(nullptr)): typeless(nullptr) {}
   inline explicit Pipeline(AnyPointer::Pipeline&& typeless)
       : typeless(kj::mv(typeless)) {}
@@ -555,13 +555,13 @@ public:
     return typeless.getPointerField(pointerIndex);
   }
 
-private:
+ private:
   AnyPointer::Pipeline typeless;
 };
 #endif  // !CAPNP_LITE
 
 class List<AnyStruct, Kind::OTHER>::Reader {
-public:
+ public:
   typedef List<AnyStruct> Reads;
 
   inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
@@ -581,7 +581,7 @@ public:
     return reader.totalSize().asPublic();
   }
 
-private:
+ private:
   _::ListReader reader;
   template <typename U, Kind K>
   friend struct _::PointerHelpers;
@@ -593,7 +593,7 @@ private:
 };
 
 class List<AnyStruct, Kind::OTHER>::Builder {
-public:
+ public:
   typedef List<AnyStruct> Builds;
 
   Builder() = delete;
@@ -613,7 +613,7 @@ public:
   inline Iterator begin() { return Iterator(this, 0); }
   inline Iterator end() { return Iterator(this, size()); }
 
-private:
+ private:
   _::ListBuilder builder;
   template <typename U, Kind K>
   friend struct _::PointerHelpers;
@@ -623,7 +623,7 @@ private:
 };
 
 class AnyList::Reader {
-public:
+ public:
   typedef AnyList Reads;
 
   inline Reader(): _reader(ElementSize::VOID) {}
@@ -651,7 +651,7 @@ public:
     // T must be List<U>.
     return ReaderFor<T>(_reader);
   }
-private:
+ private:
   _::ListReader _reader;
 
   template <typename, Kind>
@@ -660,7 +660,7 @@ private:
 };
 
 class AnyList::Builder {
-public:
+ public:
   typedef AnyList Builds;
 
   inline Builder(decltype(nullptr)): _builder(ElementSize::VOID) {}
@@ -688,7 +688,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return Reader(_builder.asReader()); }
 
-private:
+ private:
   _::ListBuilder _builder;
 
   friend class Orphanage;
@@ -739,7 +739,7 @@ inline bool operator==(const PipelineOp& a, const PipelineOp& b) {
 class PipelineHook {
   // Represents a currently-running call, and implements pipelined requests on its result.
 
-public:
+ public:
   virtual kj::Own<PipelineHook> addRef() = 0;
   // Increment this object's reference count.
 
@@ -756,7 +756,7 @@ public:
   template <typename Pipeline, typename = FromPipeline<Pipeline>>
   static inline PipelineHook& from(Pipeline& pipeline);
 
-private:
+ private:
   template <typename T> struct FromImpl;
 };
 

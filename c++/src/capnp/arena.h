@@ -77,7 +77,7 @@ class ReadLimiter {
   // overwrite each others' changes to the counter, but this is OK because it only means that the
   // limit is enforced a bit less strictly -- it will still kick in eventually.
 
-public:
+ public:
   inline explicit ReadLimiter();                     // No limit.
   inline explicit ReadLimiter(WordCount64 limit);    // Limit to the given number of words.
 
@@ -89,7 +89,7 @@ public:
   // Adds back some words to the limit.  Useful when the caller knows they are double-reading
   // some data.
 
-private:
+ private:
   alignas(8) volatile uint64_t limit;
   // Current limit, decremented each time catRead() is called. We modify this variable using atomics
   // with "relaxed" thread safety to make TSAN happy (on ARM & x86 this is no different from a
@@ -123,14 +123,14 @@ class BrokenCapFactory {
   // Callback for constructing broken caps.  We use this so that we can avoid arena.c++ having a
   // link-time dependency on capability code that lives in libcapnp-rpc.
 
-public:
+ public:
   virtual kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
   virtual kj::Own<ClientHook> newNullCap() = 0;
 };
 #endif  // !CAPNP_LITE
 
 class SegmentReader {
-public:
+ public:
   inline SegmentReader(Arena* arena, SegmentId id, const word* ptr, SegmentWordCount size,
                        ReadLimiter* readLimiter);
 
@@ -168,7 +168,7 @@ public:
   inline void unread(WordCount64 amount);
   // Add back some words to the ReadLimiter.
 
-private:
+ private:
   Arena* arena;
   SegmentId id;
   kj::ArrayPtr<const word> ptr;  // size guaranteed to fit in SEGMENT_WORD_COUNT_BITS bits
@@ -183,7 +183,7 @@ private:
 };
 
 class SegmentBuilder: public SegmentReader {
-public:
+ public:
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, word* ptr, SegmentWordCount size,
                         ReadLimiter* readLimiter, SegmentWordCount wordsUsed = ZERO * WORDS);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, const word* ptr, SegmentWordCount size,
@@ -217,7 +217,7 @@ public:
   // boundaries, then move the end up to `to` and return true. Otherwise, do nothing and return
   // false.
 
-private:
+ private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
   // next object should be allocated.
@@ -230,7 +230,7 @@ private:
 };
 
 class Arena {
-public:
+ public:
   virtual ~Arena() noexcept(false);
 
   virtual SegmentReader* tryGetSegment(SegmentId id) = 0;
@@ -243,7 +243,7 @@ public:
 };
 
 class ReaderArena final: public Arena {
-public:
+ public:
   explicit ReaderArena(MessageReader* message);
   ~ReaderArena() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(ReaderArena);
@@ -254,7 +254,7 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
 
-private:
+ private:
   MessageReader* message;
   ReadLimiter readLimiter;
 
@@ -278,7 +278,7 @@ private:
 class BuilderArena final: public Arena {
   // A BuilderArena that does not allow the injection of capabilities.
 
-public:
+ public:
   explicit BuilderArena(MessageBuilder* message);
   BuilderArena(MessageBuilder* message, kj::ArrayPtr<MessageBuilder::SegmentInit> segments);
   ~BuilderArena() noexcept(false);
@@ -343,18 +343,18 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
 
-private:
+ private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
 
   class LocalCapTable final: public CapTableBuilder {
-  public:
+   public:
     kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
     uint injectCap(kj::Own<ClientHook>&& cap) override;
     void dropCap(uint index) override;
 
 #if !CAPNP_LITE
-  private:
+   private:
     kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
 #endif // ! CAPNP_LITE
   };

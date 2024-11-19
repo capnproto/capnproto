@@ -42,7 +42,7 @@ class TestMessageBuilder: public MallocMessageBuilder {
   // minimum-size segments until it reaches the number, then allocating one large segment to
   // finish.
 
-public:
+ public:
   explicit TestMessageBuilder(uint desiredSegmentCount)
       : MallocMessageBuilder(0, AllocationStrategy::FIXED_SIZE),
         desiredSegmentCount(desiredSegmentCount) {}
@@ -64,7 +64,7 @@ public:
     }
   }
 
-private:
+ private:
   uint desiredSegmentCount;
 };
 
@@ -201,7 +201,7 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
 }
 
 class TestInputStream: public kj::InputStream {
-public:
+ public:
   TestInputStream(kj::ArrayPtr<const word> data, bool lazy)
       : pos(data.asChars().begin()),
         end(data.asChars().end()),
@@ -217,7 +217,7 @@ public:
     return amount;
   }
 
-private:
+ private:
   const char* pos;
   const char* end;
   bool lazy;
@@ -323,7 +323,7 @@ TEST(Serialize, InputStreamToBuilder) {
 }
 
 class TestOutputStream: public kj::OutputStream {
-public:
+ public:
   TestOutputStream() {}
   ~TestOutputStream() {}
 
@@ -336,7 +336,7 @@ public:
         std::string(other.asChars().begin(), other.asChars().size());
   }
 
-private:
+ private:
   std::string data;
 };
 

@@ -39,7 +39,7 @@ struct TimerImpl::Impl {
 };
 
 class TimerImpl::TimerPromiseAdapter {
-public:
+ public:
   TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, TimerImpl& parent, TimePoint time)
       : time(time), fulfiller(fulfiller), parent(parent) {
     pos = parent.impl->timers.insert(this);
@@ -79,7 +79,7 @@ public:
 
   const TimePoint time;
 
-private:
+ private:
   PromiseFulfiller<void>& fulfiller;
   TimerImpl& parent;
   Impl::Timers::const_iterator pos;

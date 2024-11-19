@@ -1286,7 +1286,7 @@ class WrappableStreamMixin {
   // underlying connection stream. This used to lead to UAF. This mixin class implements behavior
   // that detached the wrapper if it outlives the wrapped stream, so that we log errors and
 
-public:
+ public:
   WrappableStreamMixin() = default;
   WrappableStreamMixin(WrappableStreamMixin&& other) {
     // This constructor is only needed by HttpServer::Connection::makeHttpInput() which constructs
@@ -1328,7 +1328,7 @@ public:
     currentWrapper = kj::none;
   }
 
-private:
+ private:
   kj::Maybe<kj::Maybe<Subclass&>&> currentWrapper;
 };
 
@@ -1340,7 +1340,7 @@ static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
 class HttpInputStreamImpl final: public HttpInputStream,
                                  public WrappableStreamMixin<HttpInputStreamImpl> {
-private:
+ private:
   static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
       kj::OneOf<HttpMethod, HttpConnectMethod> method,
       kj::StringPtr url) {
@@ -1354,7 +1354,7 @@ private:
     }
     KJ_UNREACHABLE;
   }
-public:
+ public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner, const HttpHeaderTable& table)
       : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
   }
@@ -1672,7 +1672,7 @@ public:
     return inner.pumpTo(output, maxBytes).ignoreResult();
   }
 
-private:
+ private:
   AsyncInputStream& inner;
   kj::Array<char> headerBuffer;
 
@@ -1889,7 +1889,7 @@ private:
 // -----------------------------------------------------------------------------
 
 class HttpEntityBodyReader: public kj::AsyncInputStream {
-public:
+ public:
   HttpEntityBodyReader(HttpInputStreamImpl& inner) {
     inner.setCurrentWrapper(weakInner);
   }
@@ -1905,7 +1905,7 @@ public:
     }
   }
 
-protected:
+ protected:
   HttpInputStreamImpl& getInner() {
     KJ_IF_SOME(i, weakInner) {
       return i;
@@ -1926,7 +1926,7 @@ protected:
 
   inline bool alreadyDone() { return weakInner == kj::none; }
 
-private:
+ private:
   kj::Maybe<HttpInputStreamImpl&> weakInner;
   bool finished = false;
 };
@@ -1935,7 +1935,7 @@ class HttpNullEntityReader final: public HttpEntityBodyReader {
   // Stream for an entity-body which is not present. Always returns EOF on read, but tryGetLength()
   // may indicate non-zero in the special case of a response to a HEAD request.
 
-public:
+ public:
   HttpNullEntityReader(HttpInputStreamImpl& inner, kj::Maybe<uint64_t> length)
       : HttpEntityBodyReader(inner), length(length) {
     // `length` is what to return from tryGetLength(). For a response to a HEAD request, this may
@@ -1951,14 +1951,14 @@ public:
     return length;
   }
 
-private:
+ private:
   kj::Maybe<uint64_t> length;
 };
 
 class HttpConnectionCloseEntityReader final: public HttpEntityBodyReader {
   // Stream which reads until EOF.
 
-public:
+ public:
   HttpConnectionCloseEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
@@ -1976,7 +1976,7 @@ public:
 class HttpFixedLengthEntityReader final: public HttpEntityBodyReader {
   // Stream which reads only up to a fixed length from the underlying stream, then emulates EOF.
 
-public:
+ public:
   HttpFixedLengthEntityReader(HttpInputStreamImpl& inner, size_t length)
       : HttpEntityBodyReader(inner), length(length) {
     if (length == 0) doneReading();
@@ -2030,7 +2030,7 @@ public:
     }
   }
 
-private:
+ private:
   size_t length;
   bool clean = true;
 };
@@ -2038,7 +2038,7 @@ private:
 class HttpChunkedEntityReader final: public HttpEntityBodyReader {
   // Stream which reads a Transfer-Encoding: Chunked stream.
 
-public:
+ public:
   HttpChunkedEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
@@ -2087,7 +2087,7 @@ public:
     }
   }
 
-private:
+ private:
   size_t chunkSize = 0;
   bool clean = true;
 };
@@ -2239,7 +2239,7 @@ kj::Own<HttpInputStream> newHttpInputStream(
 namespace {
 
 class HttpOutputStream: public WrappableStreamMixin<HttpOutputStream> {
-public:
+ public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
   bool isInBody() {
@@ -2364,7 +2364,7 @@ public:
 
   bool isWriteInProgress() { return writeInProgress; }
 
-private:
+ private:
   AsyncOutputStream& inner;
   kj::Promise<void> writeQueue = kj::READY_NOW;
   bool inBody = false;
@@ -2391,7 +2391,7 @@ private:
 };
 
 class HttpEntityBodyWriter: public kj::AsyncOutputStream {
-public:
+ public:
   HttpEntityBodyWriter(HttpOutputStream& inner) {
     inner.setCurrentWrapper(weakInner);
   }
@@ -2408,7 +2408,7 @@ public:
     }
   }
 
-protected:
+ protected:
   HttpOutputStream& getInner() {
     KJ_IF_SOME(i, weakInner) {
       return i;
@@ -2429,14 +2429,14 @@ protected:
 
   inline bool alreadyDone() { return weakInner == kj::none; }
 
-private:
+ private:
   kj::Maybe<HttpOutputStream&> weakInner;
   bool finished = false;
 };
 
 class HttpNullEntityWriter final: public kj::AsyncOutputStream {
   // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
-public:
+ public:
   Promise<void> write(ArrayPtr<const byte> buffer) override {
     return KJ_EXCEPTION(FAILED, "HTTP message has no entity-body; can't write()");
   }
@@ -2450,7 +2450,7 @@ public:
 
 class HttpDiscardingEntityWriter final: public kj::AsyncOutputStream {
   // Does not inherit HttpEntityBodyWriter because it doesn't actually write anything.
-public:
+ public:
   Promise<void> write(ArrayPtr<const byte> buffer) override {
     return kj::READY_NOW;
   }
@@ -2463,7 +2463,7 @@ public:
 };
 
 class HttpFixedLengthEntityWriter final: public HttpEntityBodyWriter {
-public:
+ public:
   HttpFixedLengthEntityWriter(HttpOutputStream& inner, uint64_t length)
       : HttpEntityBodyWriter(inner), length(length) {
     if (length == 0) doneWriting();
@@ -2541,12 +2541,12 @@ public:
     return getInner().whenWriteDisconnected();
   }
 
-private:
+ private:
   uint64_t length;
 };
 
 class HttpChunkedEntityWriter final: public HttpEntityBodyWriter {
-public:
+ public:
   HttpChunkedEntityWriter(HttpOutputStream& inner)
       : HttpEntityBodyWriter(inner) {}
   ~HttpChunkedEntityWriter() noexcept(false) {
@@ -2625,7 +2625,7 @@ public:
 // =======================================================================================
 
 class WebSocketImpl final: public WebSocket, private WebSocketErrorHandler {
-public:
+ public:
   WebSocketImpl(kj::Own<kj::AsyncIoStream> stream,
                 kj::Maybe<EntropySource&> maskKeyGenerator,
                 kj::Maybe<CompressionParameters> compressionConfigParam = kj::none,
@@ -3049,9 +3049,9 @@ public:
     }
   }
 
-private:
+ private:
   class Mask {
-  public:
+   public:
     Mask(): maskBytes { 0, 0, 0, 0 } {}
     Mask(const byte* ptr) { memcpy(maskBytes, ptr, 4); }
 
@@ -3075,7 +3075,7 @@ private:
       return (maskBytes[0] | maskBytes[1] | maskBytes[2] | maskBytes[3]) == 0;
     }
 
-  private:
+   private:
     byte maskBytes[4];
 
     void apply(byte* __restrict__ bytes, size_t size) const {
@@ -3086,7 +3086,7 @@ private:
   };
 
   class Header {
-  public:
+   public:
     kj::ArrayPtr<const byte> compose(bool fin, bool compressed, byte opcode, uint64_t payloadLen,
         Mask mask) {
       bytes[0] = (fin ? FIN_MASK : 0) | (compressed ? RSV1_MASK : 0) | opcode;
@@ -3203,7 +3203,7 @@ private:
       return required;
     }
 
-  private:
+   private:
     byte bytes[14];
 
     static constexpr byte FIN_MASK = 0x80;
@@ -3219,7 +3219,7 @@ private:
   class ZlibContext {
     // `ZlibContext` is the WebSocket's interface to Zlib's compression/decompression functions.
     // Depending on the `mode`, `ZlibContext` will act as a compressor or a decompressor.
-  public:
+   public:
     enum class Mode {
       COMPRESS,
       DECOMPRESS,
@@ -3346,7 +3346,7 @@ private:
 
     }
 
-  private:
+   private:
     Result pumpOnce() {
       // Prepares Zlib's internal state for a call to deflate/inflate, then calls the relevant
       // function to process the input buffer. It is assumed that the caller has already set up
@@ -3826,7 +3826,7 @@ class WebSocketPipeImpl final: public WebSocket, public kj::Refcounted {
   // send() calls on a WebSocketPipeImpl instance always come from one of the two WebSocketPipeEnds
   // while receive() calls come from the other end.
 
-public:
+ public:
   ~WebSocketPipeImpl() noexcept(false) {
     KJ_REQUIRE(state == kj::none || ownState.get() != nullptr,
         "destroying WebSocketPipe with operation still in-progress; probably going to segfault") {
@@ -3952,7 +3952,7 @@ public:
   // getPreferredExtensions() does not fit into the model used by all the other methods because it
   // is not directional (not a read nor a write call).
 
-private:
+ private:
   kj::Maybe<WebSocket&> state;
   // Object-oriented state! If any method call is blocked waiting on activity from the other end,
   // then `state` is non-null and method calls should be forwarded to it. If no calls are
@@ -3981,7 +3981,7 @@ private:
   typedef kj::OneOf<kj::ArrayPtr<const char>, kj::ArrayPtr<const byte>, ClosePtr> MessagePtr;
 
   class BlockedSend final: public WebSocket {
-  public:
+   public:
     BlockedSend(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, MessagePtr message)
         : fulfiller(fulfiller), pipe(pipe), message(kj::mv(message)) {
       KJ_REQUIRE(pipe.state == kj::none);
@@ -4074,7 +4074,7 @@ private:
     KJ_UNREACHABLE;
   };
 
-  private:
+   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
     MessagePtr message;
@@ -4082,7 +4082,7 @@ private:
   };
 
   class BlockedPumpFrom final: public WebSocket {
-  public:
+   public:
     BlockedPumpFrom(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe,
                     WebSocket& input)
         : fulfiller(fulfiller), pipe(pipe), input(input) {
@@ -4163,7 +4163,7 @@ private:
       KJ_UNREACHABLE;
     };
 
-  private:
+   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
     WebSocket& input;
@@ -4171,7 +4171,7 @@ private:
   };
 
   class BlockedReceive final: public WebSocket {
-  public:
+   public:
     BlockedReceive(kj::PromiseFulfiller<Message>& fulfiller, WebSocketPipeImpl& pipe,
                    size_t maxSize)
         : fulfiller(fulfiller), pipe(pipe), maxSize(maxSize) {
@@ -4251,7 +4251,7 @@ private:
       KJ_UNREACHABLE;
     };
 
-  private:
+   private:
     kj::PromiseFulfiller<Message>& fulfiller;
     WebSocketPipeImpl& pipe;
     size_t maxSize;
@@ -4259,7 +4259,7 @@ private:
   };
 
   class BlockedPumpTo final: public WebSocket {
-  public:
+   public:
     BlockedPumpTo(kj::PromiseFulfiller<void>& fulfiller, WebSocketPipeImpl& pipe, WebSocket& output)
         : fulfiller(fulfiller), pipe(pipe), output(output) {
       KJ_REQUIRE(pipe.state == kj::none);
@@ -4345,7 +4345,7 @@ private:
       KJ_UNREACHABLE;
     };
 
-  private:
+   private:
     kj::PromiseFulfiller<void>& fulfiller;
     WebSocketPipeImpl& pipe;
     WebSocket& output;
@@ -4353,7 +4353,7 @@ private:
   };
 
   class Disconnected final: public WebSocket {
-  public:
+   public:
     void abort() override {
       // can ignore
     }
@@ -4397,7 +4397,7 @@ private:
   };
 
   class Aborted final: public WebSocket {
-  public:
+   public:
     void abort() override {
       // can ignore
     }
@@ -4442,7 +4442,7 @@ private:
 };
 
 class WebSocketPipeEnd final: public WebSocket {
-public:
+ public:
   WebSocketPipeEnd(kj::Rc<WebSocketPipeImpl>&& in, kj::Rc<WebSocketPipeImpl>&& out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
   ~WebSocketPipeEnd() noexcept(false) {
@@ -4514,7 +4514,7 @@ public:
     return kj::none;
   };
 
-private:
+ private:
   kj::Rc<WebSocketPipeImpl> in;
   kj::Rc<WebSocketPipeImpl> out;
 };
@@ -4542,7 +4542,7 @@ class AsyncIoStreamWithInitialBuffer final: public kj::AsyncIoStream {
   // buffer representing the queued data that is pending to be read. Calling
   // tryRead will consume the data from the leftover first. Once leftover has
   // been fully consumed, reads will defer to the underlying stream.
-public:
+ public:
   AsyncIoStreamWithInitialBuffer(kj::Own<kj::AsyncIoStream> stream,
                                  kj::Array<byte> leftoverBackingBuffer,
                                  kj::ArrayPtr<byte> leftover)
@@ -4622,7 +4622,7 @@ public:
     return stream->whenWriteDisconnected();
   }
 
-private:
+ private:
 
   kj::Promise<uint64_t> pumpLoop(
       kj::AsyncOutputStream& output,
@@ -4671,7 +4671,7 @@ class AsyncIoStreamWithGuards final: public kj::AsyncIoStream,
   // optimistically allow outbound writes to happen while establishing the CONNECT
   // tunnel has not yet been completed. If the guard promise rejects, the stream
   // is permanently errored and existing pending calls (reads and writes) are canceled.
-public:
+ public:
   AsyncIoStreamWithGuards(
       kj::Own<kj::AsyncIoStream> inner,
       kj::Promise<kj::Maybe<HttpInputStreamImpl::ReleasedBuffer>> readGuard,
@@ -4761,7 +4761,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::Own<kj::AsyncIoStream> inner;
   kj::ForkedPromise<void> readGuard;
   kj::ForkedPromise<void> writeGuard;
@@ -5317,7 +5317,7 @@ namespace {
 class HeadResponseStream final: public kj::AsyncInputStream {
   // An input stream which returns no data, but `tryGetLength()` returns a specified value. Used
   // for HEAD responses, where the size is known but the body content is not sent.
-public:
+ public:
   HeadResponseStream(kj::Maybe<size_t> expectedLength)
       : expectedLength(expectedLength) {}
 
@@ -5335,13 +5335,13 @@ public:
     return constPromise<uint64_t, 0>();
   }
 
-private:
+ private:
   kj::Maybe<size_t> expectedLength;
 };
 
 class HttpClientImpl final: public HttpClient,
                             private HttpClientErrorHandler {
-public:
+ public:
   HttpClientImpl(const HttpHeaderTable& responseHeaderTable, kj::Own<kj::AsyncIoStream> rawStream,
                  HttpClientSettings settings)
       : httpInput(*rawStream, responseHeaderTable),
@@ -5687,7 +5687,7 @@ public:
     };
   }
 
-private:
+ private:
   HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
   kj::Own<AsyncIoStream> ownStream;
@@ -5787,7 +5787,7 @@ kj::Exception WebSocketErrorHandler::handleWebSocketProtocolError(
 }
 
 class PausableReadAsyncIoStream::PausableRead {
-public:
+ public:
   PausableRead(
       kj::PromiseFulfiller<size_t>& fulfiller, PausableReadAsyncIoStream& parent,
       void* buffer, size_t minBytes, size_t maxBytes)
@@ -5825,7 +5825,7 @@ public:
   void reject(kj::Exception&& exc) {
     fulfiller.reject(kj::mv(exc));
   }
-private:
+ private:
   kj::PromiseFulfiller<size_t>& fulfiller;
   PausableReadAsyncIoStream& parent;
 
@@ -5948,7 +5948,7 @@ void PausableReadAsyncIoStream::reject(kj::Exception&& exc) {
 namespace {
 
 class NetworkAddressHttpClient final: public HttpClient {
-public:
+ public:
   NetworkAddressHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                            kj::Own<kj::NetworkAddress> address, HttpClientSettings settings)
       : timer(timer),
@@ -6014,7 +6014,7 @@ public:
     };
   }
 
-private:
+ private:
   kj::Timer& timer;
   const HttpHeaderTable& responseHeaderTable;
   kj::Own<kj::NetworkAddress> address;
@@ -6108,7 +6108,7 @@ private:
 
 class TransitionaryAsyncIoStream final: public kj::AsyncIoStream {
   // This specialised AsyncIoStream is used by NetworkHttpClient to support startTls.
-public:
+ public:
   TransitionaryAsyncIoStream(kj::Own<kj::AsyncIoStream> unencryptedStream)
       : inner(kj::heap<kj::PausableReadAsyncIoStream>(kj::mv(unencryptedStream))) {}
 
@@ -6171,7 +6171,7 @@ public:
     inner->unpause();
   }
 
-private:
+ private:
   kj::Own<kj::PausableReadAsyncIoStream> inner;
 };
 
@@ -6179,7 +6179,7 @@ class PromiseNetworkAddressHttpClient final: public HttpClient {
   // An HttpClient which waits for a promise to resolve then forwards all calls to the promised
   // client.
 
-public:
+ public:
   PromiseNetworkAddressHttpClient(kj::Promise<kj::Own<NetworkAddressHttpClient>> promise)
       : promise(promise.then([this](kj::Own<NetworkAddressHttpClient>&& client) {
           this->client = kj::mv(client);
@@ -6264,14 +6264,14 @@ public:
     }
   }
 
-private:
+ private:
   kj::ForkedPromise<void> promise;
   kj::Maybe<kj::Own<NetworkAddressHttpClient>> client;
   bool failed = false;
 };
 
 class NetworkHttpClient final: public HttpClient, private kj::TaskSet::ErrorHandler {
-public:
+ public:
   NetworkHttpClient(kj::Timer& timer, const HttpHeaderTable& responseHeaderTable,
                     kj::Network& network, kj::Maybe<kj::Network&> tlsNetwork,
                     HttpClientSettings settings)
@@ -6365,7 +6365,7 @@ public:
     };
   }
 
-private:
+ private:
   kj::Timer& timer;
   const HttpHeaderTable& responseHeaderTable;
   kj::Network& network;
@@ -6475,7 +6475,7 @@ kj::Own<HttpClient> newHttpClient(kj::Timer& timer, const HttpHeaderTable& respo
 namespace {
 
 class ConcurrencyLimitingHttpClient final: public HttpClient {
-public:
+ public:
   KJ_DISALLOW_COPY_AND_MOVE(ConcurrencyLimitingHttpClient);
   ConcurrencyLimitingHttpClient(
       kj::HttpClient& inner, uint maxConcurrentRequests,
@@ -6574,7 +6574,7 @@ public:
     };
   }
 
-private:
+ private:
   struct ConnectionCounter;
 
   kj::HttpClient& inner;
@@ -6695,7 +6695,7 @@ kj::Own<HttpClient> newConcurrencyLimitingHttpClient(
 namespace {
 
 class HttpClientAdapter final: public HttpClient {
-public:
+ public:
   HttpClientAdapter(HttpService& service): service(service) {}
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -6807,14 +6807,14 @@ public:
     };
   }
 
-private:
+ private:
   HttpService& service;
 
   class DelayedEofInputStream final: public kj::AsyncInputStream {
     // An AsyncInputStream wrapper that, when it reaches EOF, delays the final read until some
     // promise completes.
 
-  public:
+   public:
     DelayedEofInputStream(kj::Own<kj::AsyncInputStream> inner, kj::Promise<void> completionTask)
         : inner(kj::mv(inner)), completionTask(kj::mv(completionTask)) {}
 
@@ -6830,7 +6830,7 @@ private:
       return wrap(amount, inner->pumpTo(output, amount));
     }
 
-  private:
+   private:
     kj::Own<kj::AsyncInputStream> inner;
     kj::Maybe<kj::Promise<void>> completionTask;
 
@@ -6873,7 +6873,7 @@ private:
   };
 
   class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
-  public:
+   public:
     ResponseImpl(kj::HttpMethod method,
                  kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller)
         : method(method), fulfiller(kj::mv(fulfiller)) {}
@@ -6932,7 +6932,7 @@ private:
       KJ_FAIL_REQUIRE("a WebSocket was not requested");
     }
 
-  private:
+   private:
     kj::HttpMethod method;
     kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller;
     kj::Promise<void> task = nullptr;
@@ -6942,7 +6942,7 @@ private:
     // A WebSocket wrapper that, when it reaches Close (in both directions), delays the final close
     // operation until some promise completes.
 
-  public:
+   public:
     DelayedCloseWebSocket(kj::Own<kj::WebSocket> inner, kj::Promise<void> completionTask)
         : inner(kj::mv(inner)), completionTask(kj::mv(completionTask)) {}
 
@@ -6990,7 +6990,7 @@ private:
       return inner->getPreferredExtensions(ctx);
     };
 
-  private:
+   private:
     kj::Own<kj::WebSocket> inner;
     kj::Maybe<kj::Promise<void>> completionTask;
 
@@ -7021,7 +7021,7 @@ private:
   };
 
   class WebSocketResponseImpl final: public HttpService::Response, public kj::Refcounted {
-  public:
+   public:
     WebSocketResponseImpl(kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller)
         : fulfiller(kj::mv(fulfiller)) {}
 
@@ -7095,13 +7095,13 @@ private:
       return kj::mv(pipe.ends[1]);
     }
 
-  private:
+   private:
     kj::Own<kj::PromiseFulfiller<HttpClient::WebSocketResponse>> fulfiller;
     kj::Promise<void> task = nullptr;
   };
 
   class ConnectResponseImpl final: public HttpService::ConnectResponse, public kj::Refcounted {
-  public:
+   public:
     ConnectResponseImpl(
         kj::Own<kj::PromiseFulfiller<HttpClient::ConnectRequest::Status>> fulfiller,
         kj::Own<kj::AsyncIoStream> stream)
@@ -7138,7 +7138,7 @@ private:
       return kj::mv(pipe.out);
     }
 
-  private:
+   private:
     struct StreamsAndFulfiller {
       // guarded is the wrapped/guarded stream that wraps a reference to
       // the underlying stream but blocks reads until the connection is accepted
@@ -7223,7 +7223,7 @@ kj::Own<HttpClient> newHttpClient(HttpService& service) {
 namespace {
 
 class HttpServiceAdapter final: public HttpService {
-public:
+ public:
   HttpServiceAdapter(HttpClient& client): client(client) {}
 
   kj::Promise<void> request(
@@ -7335,7 +7335,7 @@ public:
     }).attach(kj::mv(io));
   }
 
-private:
+ private:
   HttpClient& client;
 };
 
@@ -7371,7 +7371,7 @@ kj::Promise<void> HttpService::connect(
 class HttpServer::Connection final: private HttpService::Response,
                                     private HttpService::ConnectResponse,
                                     private HttpServerErrorHandler {
-public:
+ public:
   Connection(HttpServer& server, kj::AsyncIoStream& stream,
              SuspendableHttpServiceFactory factory, kj::Maybe<SuspendedRequest> suspendedRequest,
              bool wantCleanDrain)
@@ -7391,7 +7391,7 @@ public:
     }
   }
 
-public:
+ public:
   // Each iteration of the loop decides if it wants to continue, or break the loop and return.
   enum LoopResult {
     CONTINUE_LOOP,
@@ -7443,7 +7443,7 @@ public:
     };
   }
 
-private:
+ private:
   HttpServer& server;
   kj::AsyncIoStream& stream;
 

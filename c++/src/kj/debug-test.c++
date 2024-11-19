@@ -47,7 +47,7 @@ namespace {
 class MockException {};
 
 class MockExceptionCallback: public ExceptionCallback {
-public:
+ public:
   ~MockExceptionCallback() {}
 
   std::string text;

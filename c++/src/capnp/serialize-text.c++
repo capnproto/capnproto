@@ -37,7 +37,7 @@ namespace {
 
 class ThrowingErrorReporter final: public capnp::compiler::ErrorReporter {
   // Throws all errors as assertion failures.
-public:
+ public:
   ThrowingErrorReporter(kj::StringPtr input): input(input) {}
 
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
@@ -59,13 +59,13 @@ public:
 
   bool hadErrors() override { return false; }
 
-private:
+ private:
   kj::StringPtr input;
 };
 
 class ExternalResolver final: public capnp::compiler::ValueTranslator::Resolver {
   // Throws all external resolution requests as assertion failures.
-public:
+ public:
   kj::Maybe<capnp::DynamicValue::Reader>
   resolveConstant(capnp::compiler::Expression::Reader name) override {
     KJ_FAIL_REQUIRE("External constants not allowed.");

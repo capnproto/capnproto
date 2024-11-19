@@ -35,7 +35,7 @@ class TypeIdGenerator {
   // else just to avoid people freaking out about it, but changing the algorithm now would break
   // backwards-compatibility.
 
-public:
+ public:
   TypeIdGenerator();
 
   void update(kj::ArrayPtr<const kj::byte> data);
@@ -48,7 +48,7 @@ public:
 
   kj::ArrayPtr<const kj::byte> finish();
 
-private:
+ private:
   bool finished = false;
 
   struct {

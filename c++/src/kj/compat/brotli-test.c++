@@ -42,7 +42,7 @@ static const byte FOOBAR_BR_LARGE_WIN[] = {
 };
 
 class MockInputStream: public InputStream {
-public:
+ public:
   MockInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
@@ -61,13 +61,13 @@ public:
     return n;
   }
 
-private:
+ private:
   kj::ArrayPtr<const byte> bytes;
   size_t blockSize;
 };
 
 class MockAsyncInputStream: public AsyncInputStream {
-public:
+ public:
   MockAsyncInputStream(kj::ArrayPtr<const byte> bytes, size_t blockSize)
       : bytes(bytes), blockSize(blockSize) {}
 
@@ -86,13 +86,13 @@ public:
     return n;
   }
 
-private:
+ private:
   kj::ArrayPtr<const byte> bytes;
   size_t blockSize;
 };
 
 class MockOutputStream: public OutputStream {
-public:
+ public:
   kj::Vector<byte> bytes;
 
   kj::String decompress() {
@@ -105,7 +105,7 @@ public:
 };
 
 class MockAsyncOutputStream: public AsyncOutputStream {
-public:
+ public:
   kj::Vector<byte> bytes;
 
   kj::String decompress(WaitScope& ws) {

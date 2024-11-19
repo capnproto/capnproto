@@ -30,7 +30,7 @@ static constexpr uint64_t JSON_NAME_ANNOTATION_ID = 0xfa5b1fd61c2e7c3dull;
 static constexpr uint64_t JSON_NOTIFICATION_ANNOTATION_ID = 0xa0a054dea32fd98cull;
 
 class JsonRpc::CapabilityImpl final: public DynamicCapability::Server {
-public:
+ public:
   CapabilityImpl(JsonRpc& parent, InterfaceSchema schema)
       : DynamicCapability::Server(schema), parent(parent) {}
 
@@ -94,7 +94,7 @@ public:
     }
   }
 
-private:
+ private:
   JsonRpc& parent;
 };
 

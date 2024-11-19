@@ -35,7 +35,7 @@ namespace std {
 
 class StdOutputStream: public kj::OutputStream {
 
-public:
+ public:
   explicit StdOutputStream(::std::ostream& stream) : stream_(stream) {}
   ~StdOutputStream() noexcept(false) {}
 
@@ -53,14 +53,14 @@ public:
     }
   }
   
-private:
+ private:
   ::std::ostream& stream_;
 
 };
 
 class StdInputStream: public kj::InputStream {
 
-public:
+ public:
   explicit StdInputStream(::std::istream& stream) : stream_(stream) {}
   ~StdInputStream() noexcept(false) {}
 
@@ -70,7 +70,7 @@ public:
     return stream_.gcount();
   }
 
-private:
+ private:
   ::std::istream& stream_;
 
 };

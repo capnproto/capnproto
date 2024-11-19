@@ -309,13 +309,13 @@ inline double unmask<double>(uint64_t value, uint64_t mask) {
 // -------------------------------------------------------------------
 
 class CapTableReader {
-public:
+ public:
   virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
   // Extract the capability at the given index.  If the index is invalid, returns null.
 };
 
 class CapTableBuilder: public CapTableReader {
-public:
+ public:
   virtual uint injectCap(kj::Own<ClientHook>&& cap) = 0;
   // Add the capability to the message and return its index.  If the same ClientHook is injected
   // twice, this may return the same index both times, but in this case dropCap() needs to be
@@ -330,7 +330,7 @@ public:
 class PointerBuilder: public kj::DisallowConstCopy {
   // Represents a single pointer, usually embedded in a struct or a list.
 
-public:
+ public:
   inline PointerBuilder(): segment(nullptr), capTable(nullptr), pointer(nullptr) {}
 
   static inline PointerBuilder getRoot(
@@ -398,7 +398,7 @@ public:
   PointerBuilder imbue(CapTableBuilder* capTable);
   // Return a copy of this builder except using the given capability context.
 
-private:
+ private:
   SegmentBuilder* segment;     // Memory segment in which the pointer resides.
   CapTableBuilder* capTable;   // Table of capability indexes.
   WirePointer* pointer;        // Pointer to the pointer.
@@ -412,7 +412,7 @@ private:
 };
 
 class PointerReader {
-public:
+ public:
   inline PointerReader()
       : segment(nullptr), capTable(nullptr), pointer(nullptr), nestingLimit(0x7fffffff) {}
 
@@ -467,7 +467,7 @@ public:
   // * All pointers in preorder have already been checked
   // * This pointer is in the first and only segment of the message
 
-private:
+ private:
   SegmentReader* segment;      // Memory segment in which the pointer resides.
   CapTableReader* capTable;    // Table of capability indexes.
   const WirePointer* pointer;  // Pointer to the pointer.  null = treat as null pointer.
@@ -489,7 +489,7 @@ private:
 // -------------------------------------------------------------------
 
 class StructBuilder: public kj::DisallowConstCopy {
-public:
+ public:
   inline StructBuilder(): segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr) {}
 
   inline word* getLocation() { return reinterpret_cast<word*>(data); }
@@ -553,7 +553,7 @@ public:
   StructBuilder imbue(CapTableBuilder* capTable);
   // Return a copy of this builder except using the given capability context.
 
-private:
+ private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
   CapTableBuilder* capTable;   // Table of capability indexes.
   void* data;                  // Pointer to the encoded data.
@@ -577,7 +577,7 @@ private:
 };
 
 class StructReader {
-public:
+ public:
   inline StructReader()
       : segment(nullptr), capTable(nullptr), data(nullptr), pointers(nullptr),
         dataSize(ZERO * BITS), pointerCount(ZERO * POINTERS), nestingLimit(0x7fffffff) {}
@@ -640,7 +640,7 @@ public:
   // * If it is derived from a struct pointer, it is canonical if
   //   dataTrunc = 1 AND ptrTrunc = 1
 
-private:
+ private:
   SegmentReader* segment;    // Memory segment in which the struct resides.
   CapTableReader* capTable;  // Table of capability indexes.
 
@@ -674,7 +674,7 @@ private:
 // -------------------------------------------------------------------
 
 class ListBuilder: public kj::DisallowConstCopy {
-public:
+ public:
   inline explicit ListBuilder(ElementSize elementSize)
       : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(ZERO * ELEMENTS),
         step(ZERO * BITS / ELEMENTS), structDataSize(ZERO * BITS),
@@ -723,7 +723,7 @@ public:
   ListBuilder imbue(CapTableBuilder* capTable);
   // Return a copy of this builder except using the given capability context.
 
-private:
+ private:
   SegmentBuilder* segment;    // Memory segment in which the list resides.
   CapTableBuilder* capTable;  // Table of capability indexes.
 
@@ -758,7 +758,7 @@ private:
 };
 
 class ListReader {
-public:
+ public:
   inline explicit ListReader(ElementSize elementSize)
       : segment(nullptr), capTable(nullptr), ptr(nullptr), elementCount(ZERO * ELEMENTS),
         step(ZERO * BITS / ELEMENTS), structDataSize(ZERO * BITS),
@@ -799,7 +799,7 @@ public:
   // * All pointers in preorder have already been checked
   // * This pointer is in the first and only segment of the message
 
-private:
+ private:
   SegmentReader* segment;    // Memory segment in which the list resides.
   CapTableReader* capTable;  // Table of capability indexes.
 
@@ -842,7 +842,7 @@ private:
 // -------------------------------------------------------------------
 
 class OrphanBuilder {
-public:
+ public:
   inline OrphanBuilder(): segment(nullptr), capTable(nullptr), location(nullptr) {
     memset(&tag, 0, sizeof(tag));
   }
@@ -914,7 +914,7 @@ public:
   void truncateText(ElementCount size);
   // Versions of truncate() that know how to allocate a new list if needed.
 
-private:
+ private:
   static_assert(ONE * POINTERS * WORDS_PER_POINTER == ONE * WORDS,
                 "This struct assumes a pointer is one word.");
   word tag;

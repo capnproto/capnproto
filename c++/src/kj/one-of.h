@@ -360,7 +360,7 @@ class OneOf {
   // Has a member type called "Success" if and only if all of `OtherVariants` are types that
   // appear in `Variants`. Used with SFINAE to enable subset constructors.
 
-public:
+ public:
   inline OneOf(): tag(0) {}
 
   OneOf(const OneOf& other) { copyFrom(other); }
@@ -462,7 +462,7 @@ public:
   const OneOf* _switchSubject() const& { return this; }
   _::NullableValue<OneOf> _switchSubject() && { return kj::mv(*this); }
 
-private:
+ private:
   uint tag;
 
   static inline constexpr size_t maxSize(size_t a) {

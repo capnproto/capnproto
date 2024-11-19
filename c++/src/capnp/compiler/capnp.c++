@@ -80,7 +80,7 @@ namespace compiler {
 static const char VERSION_STRING[] = "Cap'n Proto version " VERSION;
 
 class CompilerMain final: public GlobalErrorReporter {
-public:
+ public:
   explicit CompilerMain(kj::ProcessContext& context)
       : context(context), disk(kj::newDiskFilesystem()), loader(*this) {}
 
@@ -378,7 +378,7 @@ public:
     return true;
   }
 
-public:
+ public:
   // =====================================================================================
   // "id" command
 
@@ -658,7 +658,7 @@ public:
   // =====================================================================================
   // "convert" command
 
-private:
+ private:
   enum class Format {
     BINARY,
     PACKED,
@@ -719,7 +719,7 @@ private:
     }
   }
 
-public:
+ public:
   kj::MainBuilder::Validity setConversion(kj::StringPtr conversion) {
     KJ_IF_SOME(colon, conversion.findFirst(':')) {
       auto from = kj::str(conversion.first(colon));
@@ -780,7 +780,7 @@ public:
     KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
-private:
+ private:
   kj::Vector<byte> readAll(kj::BufferedInputStreamWrapper& input) {
     kj::Vector<byte> allBytes;
     for (;;) {
@@ -974,7 +974,7 @@ private:
   }
 
   class ParseErrorCatcher: public kj::ExceptionCallback {
-  public:
+   public:
     ParseErrorCatcher(kj::ProcessContext& context): context(context) {}
     ~ParseErrorCatcher() noexcept(false) {
       if (!unwindDetector.isUnwinding()) {
@@ -998,7 +998,7 @@ private:
       }
     }
 
-  private:
+   private:
     kj::ProcessContext& context;
     kj::Maybe<kj::Exception> exception;
     kj::UnwindDetector unwindDetector;
@@ -1137,7 +1137,7 @@ private:
     KJ_UNREACHABLE;
   }
 
-public:
+ public:
 
   // =====================================================================================
   // "decode" command
@@ -1180,7 +1180,7 @@ public:
     KJ_ASSERT(sourceFiles.size() == 1);
 
     class CliArgumentErrorReporter: public ErrorReporter {
-    public:
+     public:
       void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
         if (startByte < endByte) {
           error = kj::str(startByte + 1, "-", endByte, ": ", message);
@@ -1203,7 +1203,7 @@ public:
         }
       }
 
-    private:
+     private:
       kj::Maybe<kj::String> error;
     };
 
@@ -1264,7 +1264,7 @@ public:
     return convert();
   }
 
-private:
+ private:
   enum Plausibility {
     IMPOSSIBLE,
     IMPLAUSIBLE,
@@ -1639,7 +1639,7 @@ private:
     KJ_UNREACHABLE;
   }
 
-public:
+ public:
   // -----------------------------------------------------------------
 
   kj::MainBuilder::Validity encode() {
@@ -1803,7 +1803,7 @@ public:
     KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
-public:
+ public:
   // =====================================================================================
 
   void addError(const kj::ReadableDirectory& directory, kj::PathPtr path,
@@ -1833,7 +1833,7 @@ public:
     return hadErrors_;
   }
 
-private:
+ private:
   kj::ProcessContext& context;
   kj::Own<kj::Filesystem> disk;
   ModuleLoader loader;

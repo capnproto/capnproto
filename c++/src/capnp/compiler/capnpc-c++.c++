@@ -176,7 +176,7 @@ class CppTypeName {
   // Used to build a C++ type name string. This is complicated in the presence of templates,
   // because we must add the "typename" and "template" disambiguator keywords as needed.
 
-public:
+ public:
   inline CppTypeName(): isArgDependent(false), needsTypename(false),
                         hasInterfaces_(false), hasDisambiguatedTemplate_(false) {}
   CppTypeName(CppTypeName&& other) = default;
@@ -262,7 +262,7 @@ public:
   kj::StringTree strNoTypename() && { return kj::mv(name); }
   // Stringify but never prefix with `typename`. Use in contexts where `typename` is implicit.
 
-private:
+ private:
   kj::StringTree name;
 
   bool isArgDependent;
@@ -351,7 +351,7 @@ CppTypeName whichKind(Type type) {
 // =======================================================================================
 
 class CapnpcCppMain {
-public:
+ public:
   CapnpcCppMain(kj::ProcessContext& context): context(context) {}
 
   kj::MainFunc getMain() {
@@ -363,7 +363,7 @@ public:
         .build();
   }
 
-private:
+ private:
   kj::ProcessContext& context;
   SchemaLoader schemaLoader;
   std::unordered_set<uint64_t> usedImports;
@@ -628,7 +628,7 @@ private:
   // -----------------------------------------------------------------
 
   class TemplateContext {
-  public:
+   public:
     TemplateContext(): parent(kj::none) {}
     explicit TemplateContext(schema::Node::Reader node)
         : parent(kj::none), node(node) {}
@@ -728,7 +728,7 @@ private:
       }
     }
 
-  private:
+   private:
     kj::Maybe<const TemplateContext&> parent;
     kj::StringPtr name;
     schema::Node::Reader node;
@@ -1880,7 +1880,7 @@ private:
     return kj::strTree(
         templateContext.allDecls(),
         "class ", fullName, "::Reader {\n"
-        "public:\n"
+        " public:\n"
         "  typedef ", unqualifiedParentType, " Reads;\n"
         "\n"
         "  Reader() = default;\n"
@@ -1899,7 +1899,7 @@ private:
         makeAsGenericDef(AsGenericRole::READER, templateContext, unqualifiedParentType),
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
-        "private:\n"
+        " private:\n"
         "  ::capnp::_::StructReader _reader;\n"
         "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
@@ -1919,7 +1919,7 @@ private:
     return kj::strTree(
         templateContext.allDecls(),
         "class ", fullName, "::Builder {\n"
-        "public:\n"
+        " public:\n"
         "  typedef ", unqualifiedParentType, " Builds;\n"
         "\n"
         "  Builder() = delete;  // Deleted to discourage incorrect usage.\n"
@@ -1937,7 +1937,7 @@ private:
         makeAsGenericDef(AsGenericRole::BUILDER, templateContext, unqualifiedParentType),
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
-        "private:\n"
+        " private:\n"
         "  ::capnp::_::StructBuilder _builder;\n"
         "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
@@ -1955,7 +1955,7 @@ private:
         "#if !CAPNP_LITE\n",
         templateContext.allDecls(),
         "class ", fullName, "::Pipeline {\n"
-        "public:\n"
+        " public:\n"
         "  typedef ", unqualifiedParentType, " Pipelines;\n"
         "\n"
         "  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}\n"
@@ -1963,7 +1963,7 @@ private:
         "      : _typeless(kj::mv(typeless)) {}\n"
         "\n",
         kj::mv(methodDecls),
-        "private:\n"
+        " private:\n"
         "  ::capnp::AnyPointer::Pipeline _typeless;\n"
         "  friend class ::capnp::PipelineHook;\n"
         "  template <typename, ::capnp::Kind>\n"
@@ -2436,7 +2436,7 @@ private:
           KJ_MAP(s, superclasses) {
             return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Client");
           }, " {\n"
-          "public:\n"
+          " public:\n"
           "  typedef ", name, " Calls;\n"
           "  typedef ", name, " Reads;\n"
           "\n"
@@ -2457,7 +2457,7 @@ private:
           makeAsGenericDef(AsGenericRole::CLIENT, templateContext, name),
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"
-          "protected:\n"
+          " protected:\n"
           "  Client() = default;\n"
           "};\n"
           "\n",
@@ -2467,7 +2467,7 @@ private:
           KJ_MAP(s, superclasses) {
             return kj::strTree(",\n      public virtual ", s.typeName.strNoTypename(), "::Server");
           }, " {\n"
-          "public:\n",
+          " public:\n",
           "  typedef ", name, " Serves;\n"
           "\n"
           "  ::capnp::Capability::Server::DispatchCallResult dispatchCall(\n"
@@ -2475,7 +2475,7 @@ private:
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)\n"
           "      override;\n"
           "\n"
-          "protected:\n",
+          " protected:\n",
           KJ_MAP(m, methods) { return kj::mv(m.serverDecls); },
           "\n"
           "  inline ", clientName, " thisCap() {\n"

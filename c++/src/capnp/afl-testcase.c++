@@ -30,7 +30,7 @@ namespace _ {
 namespace {
 
 class AflTestMain {
-public:
+ public:
   explicit AflTestMain(kj::ProcessContext& context)
       : context(context) {}
 
@@ -132,7 +132,7 @@ public:
     return true;
   }
 
-private:
+ private:
   kj::ProcessContext& context;
 };
 

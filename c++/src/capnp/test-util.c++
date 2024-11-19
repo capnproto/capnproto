@@ -1153,11 +1153,11 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
 }
 
 class HandleImpl final: public test::TestHandle::Server {
-public:
+ public:
   HandleImpl(int& count): count(count) { ++count; }
   ~HandleImpl() { --count; }
 
-private:
+ private:
   int& count;
 };
 

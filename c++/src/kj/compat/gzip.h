@@ -34,7 +34,7 @@ namespace _ {  // private
 constexpr size_t KJ_GZ_BUF_SIZE = 4096;
 
 class GzipOutputContext final {
-public:
+ public:
   GzipOutputContext(kj::Maybe<int> compressionLevel);
   ~GzipOutputContext() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipOutputContext);
@@ -42,7 +42,7 @@ public:
   void setInput(const void* in, size_t size);
   kj::Tuple<bool, kj::ArrayPtr<const byte>> pumpOnce(int flush);
 
-private:
+ private:
   bool compressing;
   z_stream ctx = {};
   byte buffer[_::KJ_GZ_BUF_SIZE];
@@ -53,14 +53,14 @@ private:
 }  // namespace _ (private)
 
 class GzipInputStream final: public InputStream {
-public:
+ public:
   GzipInputStream(InputStream& inner);
   ~GzipInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipInputStream);
 
   size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
-private:
+ private:
   InputStream& inner;
   z_stream ctx = {};
   bool atValidEndpoint = false;
@@ -71,7 +71,7 @@ private:
 };
 
 class GzipOutputStream final: public OutputStream {
-public:
+ public:
   enum { DECOMPRESS };
 
   GzipOutputStream(OutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
@@ -87,7 +87,7 @@ public:
     pump(Z_SYNC_FLUSH);
   }
 
-private:
+ private:
   OutputStream& inner;
   _::GzipOutputContext ctx;
 
@@ -95,14 +95,14 @@ private:
 };
 
 class GzipAsyncInputStream final: public AsyncInputStream {
-public:
+ public:
   GzipAsyncInputStream(AsyncInputStream& inner);
   ~GzipAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncInputStream);
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
-private:
+ private:
   AsyncInputStream& inner;
   z_stream ctx = {};
   bool atValidEndpoint = false;
@@ -113,7 +113,7 @@ private:
 };
 
 class GzipAsyncOutputStream final: public AsyncOutputStream {
-public:
+ public:
   enum { DECOMPRESS };
 
   GzipAsyncOutputStream(AsyncOutputStream& inner, int compressionLevel = Z_DEFAULT_COMPRESSION);
@@ -137,7 +137,7 @@ public:
   //
   // TODO(cleanup): This should be a virtual method on AsyncOutputStream.
 
-private:
+ private:
   AsyncOutputStream& inner;
   _::GzipOutputContext ctx;
 

@@ -31,7 +31,7 @@ namespace _ {  // private
 namespace {
 
 class TestPipe: public kj::BufferedInputStream, public kj::OutputStream {
-public:
+ public:
   TestPipe()
       : preferredReadSize(kj::maxValue), readPos(0) {}
   explicit TestPipe(size_t preferredReadSize)
@@ -81,7 +81,7 @@ public:
     return kj::arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount);
   }
 
-private:
+ private:
   size_t preferredReadSize;
   std::string data;
   std::string::size_type readPos;
@@ -227,7 +227,7 @@ class TestMessageBuilder: public MallocMessageBuilder {
   // minimum-size segments until it reaches the number, then allocating one large segment to
   // finish.
 
-public:
+ public:
   explicit TestMessageBuilder(uint desiredSegmentCount)
       : MallocMessageBuilder(0, AllocationStrategy::FIXED_SIZE),
         desiredSegmentCount(desiredSegmentCount) {}
@@ -249,7 +249,7 @@ public:
     }
   }
 
-private:
+ private:
   uint desiredSegmentCount;
 };
 

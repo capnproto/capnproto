@@ -35,7 +35,7 @@ namespace kj {
 // Abstract interfaces
 
 class InputStream {
-public:
+ public:
   virtual ~InputStream() noexcept(false);
 
   size_t read(ArrayPtr<byte> buffer, size_t minBytes);
@@ -75,7 +75,7 @@ public:
 };
 
 class OutputStream {
-public:
+ public:
   virtual ~OutputStream() noexcept(false);
 
   virtual void write(ArrayPtr<const byte> data) = 0;
@@ -93,7 +93,7 @@ class BufferedInputStream: public InputStream {
   // An input stream that actually reads from some in-memory data structure and wants to give its
   // caller a direct pointer to that memory to potentially avoid a copy.
 
-public:
+ public:
   virtual ~BufferedInputStream() noexcept(false);
 
   ArrayPtr<const byte> getReadBuffer();
@@ -111,7 +111,7 @@ class BufferedOutputStream: public OutputStream {
   // An output stream that actually writes into some in-memory data structure and wants to give its
   // caller a direct pointer to that memory to potentially avoid a copy.
 
-public:
+ public:
   virtual ~BufferedOutputStream() noexcept(false);
 
   virtual ArrayPtr<byte> getWriteBuffer() = 0;
@@ -132,7 +132,7 @@ class BufferedInputStreamWrapper: public BufferedInputStream {
   // implements an artificial EOF at the desired point.  Such a stream should be trivial to write
   // but is not provided by the library at this time.
 
-public:
+ public:
   explicit BufferedInputStreamWrapper(InputStream& inner, ArrayPtr<byte> buffer = nullptr);
   // Creates a buffered stream wrapping the given non-buffered stream.  No guarantee is made about
   // the position of the inner stream after a buffered wrapper has been created unless the entire
@@ -149,7 +149,7 @@ public:
   size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
   void skip(size_t bytes) override;
 
-private:
+ private:
   InputStream& inner;
   Array<byte> ownedBuffer;
   ArrayPtr<byte> buffer;
@@ -160,7 +160,7 @@ class BufferedOutputStreamWrapper: public BufferedOutputStream {
   // Implements BufferedOutputStream in terms of an OutputStream.  Note that writes to the
   // underlying stream may be delayed until flush() is called or the wrapper is destroyed.
 
-public:
+ public:
   explicit BufferedOutputStreamWrapper(OutputStream& inner, ArrayPtr<byte> buffer = nullptr);
   // Creates a buffered stream wrapping the given non-buffered stream.
   //
@@ -180,7 +180,7 @@ public:
 
   void write(ArrayPtr<const byte> data) override;
 
-private:
+ private:
   OutputStream& inner;
   Array<byte> ownedBuffer;
   ArrayPtr<byte> buffer;
@@ -193,7 +193,7 @@ private:
 // Array I/O
 
 class ArrayInputStream: public BufferedInputStream {
-public:
+ public:
   explicit ArrayInputStream(ArrayPtr<const byte> array);
   KJ_DISALLOW_COPY_AND_MOVE(ArrayInputStream);
   ~ArrayInputStream() noexcept(false);
@@ -203,12 +203,12 @@ public:
   size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
   void skip(size_t bytes) override;
 
-private:
+ private:
   ArrayPtr<const byte> array;
 };
 
 class ArrayOutputStream: public BufferedOutputStream {
-public:
+ public:
   explicit ArrayOutputStream(ArrayPtr<byte> array);
   KJ_DISALLOW_COPY_AND_MOVE(ArrayOutputStream);
   ~ArrayOutputStream() noexcept(false);
@@ -223,14 +223,14 @@ public:
 
   void write(ArrayPtr<const byte> data) override;
 
-private:
+ private:
   ArrayPtr<byte> array;
   byte* fillPos;
 
 };
 
 class VectorOutputStream: public BufferedOutputStream {
-public:
+ public:
   explicit VectorOutputStream(size_t initialCapacity = 4096);
   KJ_DISALLOW_COPY_AND_MOVE(VectorOutputStream);
   ~VectorOutputStream() noexcept(false);
@@ -247,7 +247,7 @@ public:
 
   void write(ArrayPtr<const byte> data) override;
 
-private:
+ private:
   Array<byte> vector;
   byte* fillPos;
 
@@ -266,7 +266,7 @@ class AutoCloseFd {
   // If your code is not exception-safe, you should not use AutoCloseFd.  In this case you will
   // have to call close() yourself and handle errors appropriately.
 
-public:
+ public:
   inline AutoCloseFd(): fd(-1) {}
   inline AutoCloseFd(decltype(nullptr)): fd(-1) {}
   inline explicit AutoCloseFd(int fd): fd(fd) {}
@@ -302,7 +302,7 @@ public:
     return result;
   }
 
-private:
+ private:
   int fd;
 };
 
@@ -314,7 +314,7 @@ inline auto KJ_STRINGIFY(const AutoCloseFd& fd)
 class FdInputStream: public InputStream {
   // An InputStream wrapping a file descriptor.
 
-public:
+ public:
   explicit FdInputStream(int fd): fd(fd) {}
   explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY_AND_MOVE(FdInputStream);
@@ -324,7 +324,7 @@ public:
 
   inline int getFd() const { return fd; }
 
-private:
+ private:
   int fd;
   AutoCloseFd autoclose;
 };
@@ -332,7 +332,7 @@ private:
 class FdOutputStream: public OutputStream {
   // An OutputStream wrapping a file descriptor.
 
-public:
+ public:
   explicit FdOutputStream(int fd): fd(fd) {}
   explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY_AND_MOVE(FdOutputStream);
@@ -343,7 +343,7 @@ public:
 
   inline int getFd() const { return fd; }
 
-private:
+ private:
   int fd;
   AutoCloseFd autoclose;
 };
@@ -362,7 +362,7 @@ class AutoCloseHandle {
   // If your code is not exception-safe, you should not use AutoCloseHandle.  In this case you will
   // have to call close() yourself and handle errors appropriately.
 
-public:
+ public:
   inline AutoCloseHandle(): handle((void*)-1) {}
   inline AutoCloseHandle(decltype(nullptr)): handle((void*)-1) {}
   inline explicit AutoCloseHandle(void* handle): handle(handle) {}
@@ -400,14 +400,14 @@ public:
     return result;
   }
 
-private:
+ private:
   void* handle;  // -1 (aka INVALID_HANDLE_VALUE) if not valid.
 };
 
 class HandleInputStream: public InputStream {
   // An InputStream wrapping a Win32 HANDLE.
 
-public:
+ public:
   explicit HandleInputStream(void* handle): handle(handle) {}
   explicit HandleInputStream(AutoCloseHandle handle): handle(handle), autoclose(mv(handle)) {}
   KJ_DISALLOW_COPY_AND_MOVE(HandleInputStream);
@@ -415,7 +415,7 @@ public:
 
   size_t tryRead(ArrayPtr<byte> buffer, size_t minBytes) override;
 
-private:
+ private:
   void* handle;
   AutoCloseHandle autoclose;
 };
@@ -423,7 +423,7 @@ private:
 class HandleOutputStream: public OutputStream {
   // An OutputStream wrapping a Win32 HANDLE.
 
-public:
+ public:
   explicit HandleOutputStream(void* handle): handle(handle) {}
   explicit HandleOutputStream(AutoCloseHandle handle): handle(handle), autoclose(mv(handle)) {}
   KJ_DISALLOW_COPY_AND_MOVE(HandleOutputStream);
@@ -431,7 +431,7 @@ public:
 
   void write(ArrayPtr<const byte> data) override;
 
-private:
+ private:
   void* handle;
   AutoCloseHandle autoclose;
 };

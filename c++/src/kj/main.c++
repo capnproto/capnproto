@@ -381,12 +381,12 @@ MainBuilder& MainBuilder::callAfterParsing(Function<Validity()> callback) {
 }
 
 class MainBuilder::MainImpl {
-public:
+ public:
   MainImpl(Own<Impl>&& impl): impl(kj::mv(impl)) {}
 
   void operator()(StringPtr programName, ArrayPtr<const StringPtr> params);
 
-private:
+ private:
   Own<Impl> impl;
 
   KJ_NORETURN(void usageError(StringPtr programName, StringPtr message));
@@ -612,7 +612,7 @@ void MainBuilder::MainImpl::usageError(StringPtr programName, StringPtr message)
 }
 
 class MainBuilder::Impl::OptionDisplayOrder {
-public:
+ public:
   bool operator()(const Option* a, const Option* b) const {
     if (a == b) return false;
 

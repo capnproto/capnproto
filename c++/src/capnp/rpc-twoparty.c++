@@ -127,7 +127,7 @@ kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::acc
 
 class TwoPartyVatNetwork::OutgoingMessageImpl final
     : public OutgoingRpcMessage, public kj::Refcounted {
-public:
+ public:
   OutgoingMessageImpl(TwoPartyVatNetwork& network, uint firstSegmentWordSize)
       : network(network),
         message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
@@ -211,7 +211,7 @@ public:
     return message.sizeInWords();
   }
 
-private:
+ private:
   TwoPartyVatNetwork& network;
   MallocMessageBuilder message;
   kj::Array<int> fds;
@@ -226,7 +226,7 @@ kj::Duration TwoPartyVatNetwork::getOutgoingMessageWaitTime() {
 }
 
 class TwoPartyVatNetwork::IncomingMessageImpl final: public IncomingRpcMessage {
-public:
+ public:
   IncomingMessageImpl(kj::Own<MessageReader> message): message(kj::mv(message)) {}
 
   IncomingMessageImpl(MessageReaderAndFds init, kj::Array<kj::AutoCloseFd> fdSpace)
@@ -248,7 +248,7 @@ public:
     return message->sizeInWords();
   }
 
-private:
+ private:
   kj::Own<MessageReader> message;
   kj::Array<kj::AutoCloseFd> fdSpace;
   kj::ArrayPtr<kj::AutoCloseFd> fds;

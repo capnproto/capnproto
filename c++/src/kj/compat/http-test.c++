@@ -403,7 +403,7 @@ KJ_TEST("HttpHeaders Set-Cookie handling") {
 // =======================================================================================
 
 class ReadFragmenter final: public kj::AsyncIoStream {
-public:
+ public:
   ReadFragmenter(AsyncIoStream& inner, size_t limit): inner(inner), limit(limit) {}
 
   Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -454,14 +454,14 @@ public:
     return inner.getsockname(addr, length);
   }
 
-private:
+ private:
   kj::AsyncIoStream& inner;
   size_t limit;
 };
 
 template <typename T>
 class InitializeableArray: public Array<T> {
-public:
+ public:
   InitializeableArray(std::initializer_list<T> init)
       : Array<T>(kj::heapArray(init)) {}
 };
@@ -668,7 +668,7 @@ void testHttpClient(kj::WaitScope& waitScope, HttpHeaderTable& table,
 }
 
 class TestHttpService final: public HttpService {
-public:
+ public:
   TestHttpService(const HttpRequestTestCase& expectedRequest,
                   const HttpResponseTestCase& response,
                   HttpHeaderTable& table)
@@ -728,7 +728,7 @@ public:
     });
   }
 
-private:
+ private:
   const HttpRequestTestCase* singleExpectedRequest;
   const HttpResponseTestCase* singleResponse;
   kj::ArrayPtr<const HttpTestCase> testCases;
@@ -1825,7 +1825,7 @@ KJ_TEST("WebSocket compressed fragment") {
 #endif // KJ_HAS_ZLIB
 
 class FakeEntropySource final: public EntropySource {
-public:
+ public:
   void generate(kj::ArrayPtr<byte> buffer) override {
     static constexpr byte DUMMY[4] = { 12, 34, 56, 78 };
 
@@ -1863,7 +1863,7 @@ KJ_TEST("WebSocket masked") {
 }
 
 class WebSocketErrorCatcher : public WebSocketErrorHandler {
-public:
+ public:
   kj::Vector<kj::WebSocket::ProtocolError> errors;
 
   kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) override {
@@ -2171,7 +2171,7 @@ KJ_TEST("WebSocket ping mid-send") {
 class InputOutputPair final: public kj::AsyncIoStream {
   // Creates an AsyncIoStream out of an AsyncInputStream and an AsyncOutputStream.
 
-public:
+ public:
   InputOutputPair(kj::Own<kj::AsyncInputStream> in, kj::Own<kj::AsyncOutputStream> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
 
@@ -2211,7 +2211,7 @@ public:
     out = nullptr;
   }
 
-private:
+ private:
   kj::Own<kj::AsyncInputStream> in;
   kj::Own<kj::AsyncOutputStream> out;
 };
@@ -2530,7 +2530,7 @@ KJ_TEST("WebSocket maximum compressed message size") {
 #endif
 
 class TestWebSocketService final: public HttpService, private kj::TaskSet::ErrorHandler {
-public:
+ public:
   TestWebSocketService(HttpHeaderTable& headerTable, HttpHeaderId hMyHeader)
       : headerTable(headerTable), hMyHeader(hMyHeader), tasks(*this) {}
 
@@ -2555,7 +2555,7 @@ public:
     }
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
   HttpHeaderId hMyHeader;
   kj::TaskSet tasks;
@@ -3973,7 +3973,7 @@ KJ_TEST("HttpServer WebSocket with application error after accept") {
   class WebSocketApplicationErrorService: public HttpService, public HttpServerErrorHandler {
     // Accepts a WebSocket, receives a message, and throws an exception (application error).
 
-  public:
+   public:
     Promise<void> request(
         HttpMethod method, kj::StringPtr, const HttpHeaders&,
         AsyncInputStream&, Response& response) override {
@@ -4090,7 +4090,7 @@ KJ_TEST("HttpServer pipeline timeout") {
 
 class BrokenHttpService final: public HttpService {
   // HttpService that doesn't send a response.
-public:
+ public:
   BrokenHttpService() = default;
   explicit BrokenHttpService(kj::Exception&& exception): exception(kj::mv(exception)) {}
 
@@ -4106,7 +4106,7 @@ public:
     });
   }
 
-private:
+ private:
   kj::Maybe<kj::Exception> exception;
 };
 
@@ -4324,7 +4324,7 @@ KJ_TEST("HttpServer bad requests") {
 KJ_UNUSED static constexpr HttpServerSettings STATIC_CONSTEXPR_SETTINGS {};
 
 class TestErrorHandler: public HttpServerErrorHandler {
-public:
+ public:
   kj::Promise<void> handleClientProtocolError(
       HttpHeaders::ProtocolError protocolError, kj::HttpService::Response& response) override {
     // In a real error handler, you should redact `protocolError.rawContent`.
@@ -4345,7 +4345,7 @@ public:
 
   static TestErrorHandler instance;
 
-private:
+ private:
   kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText, String message,
       Maybe<HttpService::Response&> response) {
     KJ_IF_SOME(r, response) {
@@ -4452,7 +4452,7 @@ KJ_TEST("HttpServer bad request, custom error handler") {
 
 class PartialResponseService final: public HttpService {
   // HttpService that sends a partial response then throws.
-public:
+ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
@@ -4467,7 +4467,7 @@ public:
     });
   }
 
-private:
+ private:
   kj::Maybe<kj::Exception> exception;
   HttpHeaderTable table;
 };
@@ -4501,7 +4501,7 @@ KJ_TEST("HttpServer threw exception after starting response") {
 
 class PartialResponseNoThrowService final: public HttpService {
   // HttpService that sends a partial response then returns without throwing.
-public:
+ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
@@ -4514,7 +4514,7 @@ public:
     });
   }
 
-private:
+ private:
   kj::Maybe<kj::Exception> exception;
   HttpHeaderTable table;
 };
@@ -4547,7 +4547,7 @@ KJ_TEST("HttpServer failed to write complete response but didn't throw") {
 class SimpleInputStream final: public kj::AsyncInputStream {
   // An InputStream that returns bytes out of a static string.
 
-public:
+ public:
   SimpleInputStream(kj::StringPtr text)
       : unread(text.asBytes()) {}
 
@@ -4558,14 +4558,14 @@ public:
     return amount;
   }
 
-private:
+ private:
   kj::ArrayPtr<const byte> unread;
 };
 
 class PumpResponseService final: public HttpService {
   // HttpService that uses pumpTo() to write a response, without carefully specifying how much to
   // pump, but the stream happens to be the right size.
-public:
+ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
@@ -4584,7 +4584,7 @@ public:
     });
   }
 
-private:
+ private:
   kj::Maybe<kj::Exception> exception;
   HttpHeaderTable table;
 };
@@ -4617,7 +4617,7 @@ KJ_TEST("HttpFixedLengthEntityWriter correctly implements tryPumpFrom") {
 
 class HangingHttpService final: public HttpService {
   // HttpService that hangs forever.
-public:
+ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
@@ -4640,7 +4640,7 @@ public:
 
   uint inFlight = 0;
 
-private:
+ private:
   kj::Maybe<kj::Exception> exception;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> onCancelFulfiller;
 };
@@ -4676,7 +4676,7 @@ class SuspendAfter: private HttpService {
   // A SuspendableHttpServiceFactory which responds to the first `n` requests with 200 OK, then
   // suspends all subsequent requests until its counter is reset.
 
-public:
+ public:
   void suspendAfter(uint countdownParam) { countdown = countdownParam; }
 
   kj::Maybe<kj::Own<HttpService>> operator()(HttpServer::SuspendableRequest& sr) {
@@ -4693,7 +4693,7 @@ public:
     return kj::mv(suspendedRequest);
   }
 
-private:
+ private:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
@@ -5007,7 +5007,7 @@ KJ_TEST("HttpServer::listenHttpCleanDrain() factory-created services outlive req
   // A factory which returns a service whose request() function responds asynchronously.
   auto factory = [&](HttpServer::SuspendableRequest&) -> kj::Own<HttpService> {
     class ServiceImpl final: public HttpService {
-    public:
+     public:
       explicit ServiceImpl(uint& serviceCount): serviceCount(++serviceCount) {}
       ~ServiceImpl() noexcept(false) { --serviceCount; }
       KJ_DISALLOW_COPY_AND_MOVE(ServiceImpl);
@@ -5024,7 +5024,7 @@ KJ_TEST("HttpServer::listenHttpCleanDrain() factory-created services outlive req
         });
       }
 
-    private:
+     private:
       HttpHeaderTable table;
 
       uint& serviceCount;
@@ -5304,7 +5304,7 @@ KJ_TEST("adapted client/server propagates request exceptions like non-adapted cl
   HttpHeaders headers(table);
 
   class FailingHttpClient final: public HttpClient {
-  public:
+   public:
     Request request(
         HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
@@ -5331,7 +5331,7 @@ KJ_TEST("adapted client/server propagates request exceptions like non-adapted cl
 }
 
 class DelayedCompletionHttpService final: public HttpService {
-public:
+ public:
   DelayedCompletionHttpService(HttpHeaderTable& table, kj::Maybe<uint64_t> expectedLength)
       : table(table), expectedLength(expectedLength) {}
 
@@ -5347,7 +5347,7 @@ public:
 
   kj::PromiseFulfiller<void>& getFulfiller() { return *paf.fulfiller; }
 
-private:
+ private:
   HttpHeaderTable& table;
   kj::Maybe<uint64_t> expectedLength;
   kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>();
@@ -5413,7 +5413,7 @@ KJ_TEST("adapted client propagates throw from service after chunked response bod
 }
 
 class DelayedCompletionWebSocketHttpService final: public HttpService {
-public:
+ public:
   DelayedCompletionWebSocketHttpService(HttpHeaderTable& table, bool closeUpstreamFirst)
       : table(table), closeUpstreamFirst(closeUpstreamFirst) {}
 
@@ -5442,7 +5442,7 @@ public:
 
   kj::PromiseFulfiller<void>& getFulfiller() { return *paf.fulfiller; }
 
-private:
+ private:
   HttpHeaderTable& table;
   bool closeUpstreamFirst;
   kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>();
@@ -5523,7 +5523,7 @@ class CountingIoStream final: public kj::AsyncIoStream {
   // An AsyncIoStream wrapper which decrements a counter when destroyed (allowing us to count how
   // many connections are open).
 
-public:
+ public:
   CountingIoStream(kj::Own<kj::AsyncIoStream> inner, uint& count)
       : inner(kj::mv(inner)), count(count) {}
   ~CountingIoStream() noexcept(false) {
@@ -5562,13 +5562,13 @@ public:
     return inner->abortRead();
   }
 
-public:
+ public:
   kj::Own<AsyncIoStream> inner;
   uint& count;
 };
 
 class CountingNetworkAddress final: public kj::NetworkAddress {
-public:
+ public:
   CountingNetworkAddress(kj::NetworkAddress& inner, uint& count, uint& cumulative)
       : inner(inner), count(count), addrCount(ownAddrCount), cumulative(cumulative) {}
   CountingNetworkAddress(kj::Own<kj::NetworkAddress> inner, uint& count, uint& addrCount)
@@ -5591,7 +5591,7 @@ public:
   kj::Own<kj::NetworkAddress> clone() override { KJ_UNIMPLEMENTED("test"); }
   kj::String toString() override { KJ_UNIMPLEMENTED("test"); }
 
-private:
+ private:
   kj::NetworkAddress& inner;
   kj::Own<kj::NetworkAddress> ownInner;
   uint& count;
@@ -5602,7 +5602,7 @@ private:
 };
 
 class ConnectionCountingNetwork final: public kj::Network {
-public:
+ public:
   ConnectionCountingNetwork(kj::Network& inner, uint& count, uint& addrCount)
       : inner(inner), count(count), addrCount(addrCount) {}
 
@@ -5622,14 +5622,14 @@ public:
     KJ_UNIMPLEMENTED("test");
   }
 
-private:
+ private:
   kj::Network& inner;
   uint& count;
   uint& addrCount;
 };
 
 class DummyService final: public HttpService {
-public:
+ public:
   DummyService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
 
   kj::Promise<void> request(
@@ -5658,7 +5658,7 @@ public:
     }
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
 };
 
@@ -6225,7 +6225,7 @@ KJ_TEST("HttpClient to capnproto.org") {
 
 class ReadCancelHttpService final: public HttpService {
   // HttpService that tries to read all request data but cancels after 1ms and sends a response.
-public:
+ public:
   ReadCancelHttpService(kj::Timer& timer, HttpHeaderTable& headerTable)
       : timer(timer), headerTable(headerTable) {}
 
@@ -6251,7 +6251,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::Timer& timer;
   HttpHeaderTable& headerTable;
 };
@@ -6506,7 +6506,7 @@ KJ_TEST("drain() when NOT using listenHttpCleanDrain() sends Connection: close h
 }
 
 class BrokenConnectionListener final: public kj::ConnectionReceiver {
-public:
+ public:
   void fulfillOne(kj::Own<kj::AsyncIoStream> stream) {
     fulfiller->fulfill(kj::mv(stream));
   }
@@ -6521,12 +6521,12 @@ public:
     KJ_UNIMPLEMENTED("not used");
   }
 
-private:
+ private:
   kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncIoStream>>> fulfiller;
 };
 
 class BrokenConnection final: public kj::AsyncIoStream {
-public:
+ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return KJ_EXCEPTION(FAILED, "broken");
   }
@@ -6578,7 +6578,7 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
 
   class SendErrorHttpService final: public HttpService {
     // HttpService that serves an error page via sendError().
-  public:
+   public:
     SendErrorHttpService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
     kj::Promise<void> request(
         HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -6586,12 +6586,12 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
       return responseSender.sendError(404, "Not Found", headerTable);
     }
 
-  private:
+   private:
     HttpHeaderTable& headerTable;
   };
 
   class DisconnectingAsyncIoStream final: public kj::AsyncIoStream {
-  public:
+   public:
     DisconnectingAsyncIoStream(AsyncIoStream& inner): inner(inner) {}
 
     Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -6657,12 +6657,12 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
 
     int writeCount = 0;
 
-  private:
+   private:
     kj::AsyncIoStream& inner;
   };
 
   class TestErrorHandler: public HttpServerErrorHandler {
-  public:
+   public:
     kj::Promise<void> handleApplicationError(
         kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response) override {
       applicationErrorCount++;
@@ -6715,7 +6715,7 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
 class ConnectEchoService final: public HttpService {
     // A simple CONNECT echo. It will always accept, and whatever data it
     // receives will be echoed back.
-public:
+ public:
   ConnectEchoService(HttpHeaderTable& headerTable, uint statusCodeToSend = 200)
       : headerTable(headerTable),
         statusCodeToSend(statusCodeToSend) {
@@ -6740,14 +6740,14 @@ public:
     return connection.pumpTo(connection).ignoreResult();
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
   uint statusCodeToSend;
 };
 
 class ConnectRejectService final: public HttpService {
   // A simple CONNECT implementation that always rejects.
-public:
+ public:
   ConnectRejectService(HttpHeaderTable& headerTable, uint statusCodeToSend = 400)
       : headerTable(headerTable),
         statusCodeToSend(statusCodeToSend) {
@@ -6772,7 +6772,7 @@ public:
     return out->write("boom"_kjb).attach(kj::mv(out));
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
   uint statusCodeToSend;
 };
@@ -6780,7 +6780,7 @@ private:
 class ConnectCancelReadService final: public HttpService {
     // A simple CONNECT server that will accept a connection then immediately
     // cancel reading from it to test handling of abrupt termination.
-public:
+ public:
   ConnectCancelReadService(HttpHeaderTable& headerTable)
       : headerTable(headerTable) {}
 
@@ -6800,14 +6800,14 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
 };
 
 class ConnectCancelWriteService final: public HttpService {
     // A simple CONNECT server that will accept a connection then immediately
     // cancel writing to it to test handling of abrupt termination.
-public:
+ public:
   ConnectCancelWriteService(HttpHeaderTable& headerTable)
       : headerTable(headerTable) {}
 
@@ -6828,19 +6828,19 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
 };
 
 class ConnectHttpService final: public HttpService {
   // A CONNECT service that tunnels HTTP requests just to verify that, yes, the CONNECT
   // impl can actually tunnel actual protocols.
-public:
+ public:
   ConnectHttpService(HttpHeaderTable& table)
       : timer(kj::origin<kj::TimePoint>()),
         tunneledService(table),
         server(timer, table, tunneledService) {}
-private:
+ private:
 
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -6858,7 +6858,7 @@ private:
   }
 
   class SimpleHttpService final: public HttpService {
-  public:
+   public:
     SimpleHttpService(HttpHeaderTable& table) : table(table) {}
     kj::Promise<void> request(
         HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -6878,7 +6878,7 @@ private:
 class ConnectCloseService final: public HttpService {
   // A simple CONNECT server that will accept a connection then immediately
   // shutdown the write side of the AsyncIoStream to simulate socket disconnection.
-public:
+ public:
   ConnectCloseService(HttpHeaderTable& headerTable)
       : headerTable(headerTable) {}
 
@@ -6898,7 +6898,7 @@ public:
     return kj::READY_NOW;
   }
 
-private:
+ private:
   HttpHeaderTable& headerTable;
 };
 

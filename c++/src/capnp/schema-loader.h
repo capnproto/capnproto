@@ -40,9 +40,9 @@ class SchemaLoader {
   // properly catch exceptions, you should be OK -- assuming no bugs in the Cap'n Proto
   // implementation, of course.
 
-public:
+ public:
   class LazyLoadCallback {
-  public:
+   public:
     virtual void load(const SchemaLoader& loader, uint64_t id) const = 0;
     // Request that the schema node with the given ID be loaded into the given SchemaLoader.  If
     // the callback is able to find a schema for this ID, it should invoke `loadOnce()` on
@@ -162,7 +162,7 @@ public:
   // TODO(someday): Perhaps we could dynamically initialize the hints on-demand, but it would be
   //   much more work to implement.
 
-private:
+ private:
   class Validator;
   class CompatibilityChecker;
   class Impl;

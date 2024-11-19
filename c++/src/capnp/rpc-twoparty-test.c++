@@ -60,14 +60,14 @@ namespace _ {
 namespace {
 
 class TestMonotonicClock final: public kj::MonotonicClock {
-public:
+ public:
   kj::TimePoint now() const override {
     return time;
   }
 
   void reset() { time = kj::systemCoarseMonotonicClock().now(); }
   void increment(kj::Duration d) { time += d; }
-private:
+ private:
   kj::TimePoint time = kj::systemCoarseMonotonicClock().now();
 };
 
@@ -443,23 +443,23 @@ TEST(TwoPartyNetwork, HugeMessage) {
 
 class TestAuthenticatedBootstrapImpl final
     : public test::TestAuthenticatedBootstrap<rpc::twoparty::VatId>::Server {
-public:
+ public:
   TestAuthenticatedBootstrapImpl(rpc::twoparty::VatId::Reader clientId) {
     this->clientId.setRoot(clientId);
   }
 
-protected:
+ protected:
   kj::Promise<void> getCallerId(GetCallerIdContext context) override {
     context.getResults().setCaller(clientId.getRoot<rpc::twoparty::VatId>());
     return kj::READY_NOW;
   }
 
-private:
+ private:
   MallocMessageBuilder clientId;
 };
 
 class TestBootstrapFactory: public BootstrapFactory<rpc::twoparty::VatId> {
-public:
+ public:
   Capability::Client createFor(rpc::twoparty::VatId::Reader clientId) override {
     called = true;
     EXPECT_EQ(rpc::twoparty::Side::CLIENT, clientId.getSide());
@@ -591,7 +591,7 @@ KJ_TEST("FD per message limit") {
 // =======================================================================================
 
 class MockSndbufStream final: public kj::AsyncIoStream {
-public:
+ public:
   MockSndbufStream(kj::Own<AsyncIoStream> inner, size_t& window, size_t& written)
       : inner(kj::mv(inner)), window(window), written(written) {}
 
@@ -632,7 +632,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::Own<AsyncIoStream> inner;
   size_t& window;
   size_t& written;
@@ -955,7 +955,7 @@ KJ_TEST("write error propagates to read error") {
 }
 
 class TestStreamingCancellationBug final: public test::TestStreaming::Server {
-public:
+ public:
   uint iSum = 0;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 
@@ -1023,7 +1023,7 @@ KJ_TEST("Dropping capability during call doesn't destroy server") {
     // An object which increments a count in the constructor and decrements it in the destructor,
     // to detect when it is destroyed. The object's foo() method also sets a fulfiller to use to
     // cause the method to complete.
-  public:
+   public:
     TestInterfaceImpl(uint& count, kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot)
         : count(count), fulfillerSlot(fulfillerSlot) { ++count; }
     ~TestInterfaceImpl() noexcept(false) { --count; }
@@ -1034,14 +1034,14 @@ KJ_TEST("Dropping capability during call doesn't destroy server") {
       return kj::mv(paf.promise);
     }
 
-  private:
+   private:
     uint& count;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot;
   };
 
   class TestBootstrapImpl final: public test::TestMoreStuff::Server {
     // Bootstrap object which just vends instances of `TestInterfaceImpl`.
-  public:
+   public:
     TestBootstrapImpl(uint& count, kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot)
         : count(count), fulfillerSlot(fulfillerSlot) {}
 
@@ -1050,7 +1050,7 @@ KJ_TEST("Dropping capability during call doesn't destroy server") {
       return kj::READY_NOW;
     }
 
-  private:
+   private:
     uint& count;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>>& fulfillerSlot;
   };
@@ -1160,7 +1160,7 @@ class TestCallOrderImplAsPromise final: public test::TestCallOrder::Server {
   // This is an implementation of TestCallOrder that presents itself as a promise by implementing
   // `shortenPath()`, although it never resolves to anything (`shortenPath()` never completes).
   // This tests deeper code paths in promise resolution and embargo code.
-public:
+ public:
   template <typename... Params>
   TestCallOrderImplAsPromise(Params&&... params): inner(kj::fwd<Params>(params)...) {}
 
@@ -1173,7 +1173,7 @@ public:
     return kj::Promise<Capability::Client>(kj::NEVER_DONE);
   }
 
-private:
+ private:
   TestCallOrderImpl inner;
 };
 

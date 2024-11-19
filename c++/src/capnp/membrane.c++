@@ -32,7 +32,7 @@ static constexpr const void* MEMBRANE_BRAND = &DUMMY;
 kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, MembranePolicy& policy, bool reverse);
 
 class MembraneCapTableReader final: public _::CapTableReader {
-public:
+ public:
   MembraneCapTableReader(MembranePolicy& policy, bool reverse)
       : policy(policy), reverse(reverse) {}
 
@@ -67,14 +67,14 @@ public:
     });
   }
 
-private:
+ private:
   _::CapTableReader* inner = nullptr;
   MembranePolicy& policy;
   bool reverse;
 };
 
 class MembraneCapTableBuilder final: public _::CapTableBuilder {
-public:
+ public:
   MembraneCapTableBuilder(MembranePolicy& policy, bool reverse)
       : policy(policy), reverse(reverse) {}
 
@@ -109,14 +109,14 @@ public:
     inner->dropCap(index);
   }
 
-private:
+ private:
   _::CapTableBuilder* inner = nullptr;
   MembranePolicy& policy;
   bool reverse;
 };
 
 class MembranePipelineHook final: public PipelineHook, public kj::Refcounted {
-public:
+ public:
   MembranePipelineHook(
       kj::Own<PipelineHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse) {}
@@ -133,28 +133,28 @@ public:
     return membrane(inner->getPipelinedCap(kj::mv(ops)), *policy, reverse);
   }
 
-private:
+ private:
   kj::Own<PipelineHook> inner;
   kj::Own<MembranePolicy> policy;
   bool reverse;
 };
 
 class MembraneResponseHook final: public ResponseHook {
-public:
+ public:
   MembraneResponseHook(
       kj::Own<ResponseHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), capTable(*this->policy, reverse) {}
 
   AnyPointer::Reader imbue(AnyPointer::Reader reader) { return capTable.imbue(reader); }
 
-private:
+ private:
   kj::Own<ResponseHook> inner;
   kj::Own<MembranePolicy> policy;
   MembraneCapTableReader capTable;
 };
 
 class MembraneRequestHook final: public RequestHook {
-public:
+ public:
   MembraneRequestHook(kj::Own<RequestHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
       : RequestHook(&MEMBRANE_BRAND),
         inner(kj::mv(inner)), policy(kj::mv(policy)),
@@ -237,7 +237,7 @@ public:
         PipelineHook::from(inner->sendForPipeline()), policy->addRef(), reverse));
   }
 
-private:
+ private:
   kj::Own<RequestHook> inner;
   kj::Own<MembranePolicy> policy;
   bool reverse;
@@ -245,7 +245,7 @@ private:
 };
 
 class MembraneCallContextHook final: public CallContextHook, public kj::Refcounted {
-public:
+ public:
   MembraneCallContextHook(kj::Own<CallContextHook>&& inner,
                           kj::Own<MembranePolicy>&& policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse),
@@ -309,7 +309,7 @@ public:
     return kj::addRef(*this);
   }
 
-private:
+ private:
   kj::Own<CallContextHook> inner;
   kj::Own<MembranePolicy> policy;
   bool reverse;
@@ -325,7 +325,7 @@ private:
 }  // namespace
 
 class MembraneHook final: public ClientHook, public kj::Refcounted {
-public:
+ public:
   MembraneHook(kj::Own<ClientHook>&& inner, kj::Own<MembranePolicy>&& policyParam, bool reverse)
       : ClientHook(MEMBRANE_BRAND), inner(kj::mv(inner)), policy(kj::mv(policyParam)),
         reverse(reverse) {
@@ -535,7 +535,7 @@ public:
     return kj::none;
   }
 
-private:
+ private:
   kj::Own<ClientHook> inner;
   kj::Own<MembranePolicy> policy;
   bool reverse;

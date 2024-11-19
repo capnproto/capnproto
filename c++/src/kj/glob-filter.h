@@ -29,13 +29,13 @@ namespace kj {
 class GlobFilter {
   // Implements glob filters for the --filter flag.
 
-public:
+ public:
   explicit GlobFilter(const char* pattern);
   explicit GlobFilter(ArrayPtr<const char> pattern);
 
   bool matches(StringPtr name);
 
-private:
+ private:
   String pattern;
   Vector<uint> states;
 

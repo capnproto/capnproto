@@ -285,7 +285,7 @@ void reportOldNewComparisonHeader() {
 }
 
 class Gain {
-public:
+ public:
   Gain(double oldValue, double newValue)
       : amount(newValue / oldValue) {}
 
@@ -298,7 +298,7 @@ public:
     }
   }
 
-private:
+ private:
   double amount;
 };
 

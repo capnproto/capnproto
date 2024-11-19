@@ -513,7 +513,7 @@ struct ParsedFile {
 // =======================================================================================
 
 class LocatedText::Reader {
-public:
+ public:
   typedef LocatedText Reads;
 
   Reader() = default;
@@ -536,7 +536,7 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -549,7 +549,7 @@ private:
 };
 
 class LocatedText::Builder {
-public:
+ public:
   typedef LocatedText Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -577,7 +577,7 @@ public:
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -588,14 +588,14 @@ private:
 
 #if !CAPNP_LITE
 class LocatedText::Pipeline {
-public:
+ public:
   typedef LocatedText Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -604,7 +604,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class LocatedInteger::Reader {
-public:
+ public:
   typedef LocatedInteger Reads;
 
   Reader() = default;
@@ -626,7 +626,7 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -639,7 +639,7 @@ private:
 };
 
 class LocatedInteger::Builder {
-public:
+ public:
   typedef LocatedInteger Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -663,7 +663,7 @@ public:
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -674,14 +674,14 @@ private:
 
 #if !CAPNP_LITE
 class LocatedInteger::Pipeline {
-public:
+ public:
   typedef LocatedInteger Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -690,7 +690,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class LocatedFloat::Reader {
-public:
+ public:
   typedef LocatedFloat Reads;
 
   Reader() = default;
@@ -712,7 +712,7 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -725,7 +725,7 @@ private:
 };
 
 class LocatedFloat::Builder {
-public:
+ public:
   typedef LocatedFloat Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -749,7 +749,7 @@ public:
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -760,14 +760,14 @@ private:
 
 #if !CAPNP_LITE
 class LocatedFloat::Pipeline {
-public:
+ public:
   typedef LocatedFloat Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -776,7 +776,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Expression::Reader {
-public:
+ public:
   typedef Expression Reads;
 
   Reader() = default;
@@ -847,7 +847,7 @@ public:
   inline bool hasEmbed() const;
   inline  ::capnp::compiler::LocatedText::Reader getEmbed() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -860,7 +860,7 @@ private:
 };
 
 class Expression::Builder {
-public:
+ public:
   typedef Expression Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -970,7 +970,7 @@ public:
   inline void adoptEmbed(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::LocatedText> disownEmbed();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -981,14 +981,14 @@ private:
 
 #if !CAPNP_LITE
 class Expression::Pipeline {
-public:
+ public:
   typedef Expression Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -997,7 +997,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Expression::Param::Reader {
-public:
+ public:
   typedef Param Reads;
 
   Reader() = default;
@@ -1024,7 +1024,7 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::compiler::Expression::Reader getValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1037,7 +1037,7 @@ private:
 };
 
 class Expression::Param::Builder {
-public:
+ public:
   typedef Param Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1072,7 +1072,7 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::compiler::Expression>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1083,7 +1083,7 @@ private:
 
 #if !CAPNP_LITE
 class Expression::Param::Pipeline {
-public:
+ public:
   typedef Param Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -1091,7 +1091,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Expression::Pipeline getValue();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1100,7 +1100,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Expression::Application::Reader {
-public:
+ public:
   typedef Application Reads;
 
   Reader() = default;
@@ -1122,7 +1122,7 @@ public:
   inline bool hasParams() const;
   inline  ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>::Reader getParams() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1135,7 +1135,7 @@ private:
 };
 
 class Expression::Application::Builder {
-public:
+ public:
   typedef Application Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1164,7 +1164,7 @@ public:
   inline void adoptParams(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression::Param,  ::capnp::Kind::STRUCT>> disownParams();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1175,7 +1175,7 @@ private:
 
 #if !CAPNP_LITE
 class Expression::Application::Pipeline {
-public:
+ public:
   typedef Application Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -1183,7 +1183,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Expression::Pipeline getFunction();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1192,7 +1192,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Expression::Member::Reader {
-public:
+ public:
   typedef Member Reads;
 
   Reader() = default;
@@ -1214,7 +1214,7 @@ public:
   inline bool hasName() const;
   inline  ::capnp::compiler::LocatedText::Reader getName() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1227,7 +1227,7 @@ private:
 };
 
 class Expression::Member::Builder {
-public:
+ public:
   typedef Member Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1256,7 +1256,7 @@ public:
   inline void adoptName(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::LocatedText> disownName();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1267,7 +1267,7 @@ private:
 
 #if !CAPNP_LITE
 class Expression::Member::Pipeline {
-public:
+ public:
   typedef Member Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -1276,7 +1276,7 @@ public:
 
   inline  ::capnp::compiler::Expression::Pipeline getParent();
   inline  ::capnp::compiler::LocatedText::Pipeline getName();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1285,7 +1285,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Reader {
-public:
+ public:
   typedef Declaration Reads;
 
   Reader() = default;
@@ -1427,7 +1427,7 @@ public:
   inline bool isBuiltinCapability() const;
   inline  ::capnp::Void getBuiltinCapability() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1440,7 +1440,7 @@ private:
 };
 
 class Declaration::Builder {
-public:
+ public:
   typedef Declaration Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1644,7 +1644,7 @@ public:
   inline  ::capnp::Void getBuiltinCapability();
   inline void setBuiltinCapability( ::capnp::Void value = ::capnp::VOID);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1655,7 +1655,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Pipeline {
-public:
+ public:
   typedef Declaration Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -1664,7 +1664,7 @@ public:
 
   inline  ::capnp::compiler::LocatedText::Pipeline getName();
   inline typename Id::Pipeline getId();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1673,7 +1673,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::BrandParameter::Reader {
-public:
+ public:
   typedef BrandParameter Reads;
 
   Reader() = default;
@@ -1696,7 +1696,7 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1709,7 +1709,7 @@ private:
 };
 
 class Declaration::BrandParameter::Builder {
-public:
+ public:
   typedef BrandParameter Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1737,7 +1737,7 @@ public:
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1748,14 +1748,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::BrandParameter::Pipeline {
-public:
+ public:
   typedef BrandParameter Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1764,7 +1764,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::AnnotationApplication::Reader {
-public:
+ public:
   typedef AnnotationApplication Reads;
 
   Reader() = default;
@@ -1785,7 +1785,7 @@ public:
 
   inline typename Value::Reader getValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1798,7 +1798,7 @@ private:
 };
 
 class Declaration::AnnotationApplication::Builder {
-public:
+ public:
   typedef AnnotationApplication Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1823,7 +1823,7 @@ public:
   inline typename Value::Builder getValue();
   inline typename Value::Builder initValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1834,7 +1834,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::AnnotationApplication::Pipeline {
-public:
+ public:
   typedef AnnotationApplication Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -1843,7 +1843,7 @@ public:
 
   inline  ::capnp::compiler::Expression::Pipeline getName();
   inline typename Value::Pipeline getValue();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1852,7 +1852,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::AnnotationApplication::Value::Reader {
-public:
+ public:
   typedef Value Reads;
 
   Reader() = default;
@@ -1876,7 +1876,7 @@ public:
   inline bool hasExpression() const;
   inline  ::capnp::compiler::Expression::Reader getExpression() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1889,7 +1889,7 @@ private:
 };
 
 class Declaration::AnnotationApplication::Value::Builder {
-public:
+ public:
   typedef Value Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -1917,7 +1917,7 @@ public:
   inline void adoptExpression(::capnp::Orphan< ::capnp::compiler::Expression>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownExpression();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1928,14 +1928,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::AnnotationApplication::Value::Pipeline {
-public:
+ public:
   typedef Value Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -1944,7 +1944,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::ParamList::Reader {
-public:
+ public:
   typedef ParamList Reads;
 
   Reader() = default;
@@ -1976,7 +1976,7 @@ public:
   inline bool isStream() const;
   inline  ::capnp::Void getStream() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -1989,7 +1989,7 @@ private:
 };
 
 class Declaration::ParamList::Builder {
-public:
+ public:
   typedef ParamList Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2031,7 +2031,7 @@ public:
   inline  ::capnp::Void getStream();
   inline void setStream( ::capnp::Void value = ::capnp::VOID);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2042,14 +2042,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::ParamList::Pipeline {
-public:
+ public:
   typedef ParamList Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2058,7 +2058,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Param::Reader {
-public:
+ public:
   typedef Param Reads;
 
   Reader() = default;
@@ -2089,7 +2089,7 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2102,7 +2102,7 @@ private:
 };
 
 class Declaration::Param::Builder {
-public:
+ public:
   typedef Param Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2147,7 +2147,7 @@ public:
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2158,7 +2158,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Param::Pipeline {
-public:
+ public:
   typedef Param Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -2168,7 +2168,7 @@ public:
   inline  ::capnp::compiler::LocatedText::Pipeline getName();
   inline  ::capnp::compiler::Expression::Pipeline getType();
   inline typename DefaultValue::Pipeline getDefaultValue();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2177,7 +2177,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Param::DefaultValue::Reader {
-public:
+ public:
   typedef DefaultValue Reads;
 
   Reader() = default;
@@ -2201,7 +2201,7 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::compiler::Expression::Reader getValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2214,7 +2214,7 @@ private:
 };
 
 class Declaration::Param::DefaultValue::Builder {
-public:
+ public:
   typedef DefaultValue Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2242,7 +2242,7 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::compiler::Expression>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2253,14 +2253,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Param::DefaultValue::Pipeline {
-public:
+ public:
   typedef DefaultValue Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2269,7 +2269,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Id::Reader {
-public:
+ public:
   typedef Id Reads;
 
   Reader() = default;
@@ -2297,7 +2297,7 @@ public:
   inline bool hasOrdinal() const;
   inline  ::capnp::compiler::LocatedInteger::Reader getOrdinal() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2310,7 +2310,7 @@ private:
 };
 
 class Declaration::Id::Builder {
-public:
+ public:
   typedef Id Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2346,7 +2346,7 @@ public:
   inline void adoptOrdinal(::capnp::Orphan< ::capnp::compiler::LocatedInteger>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::LocatedInteger> disownOrdinal();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2357,14 +2357,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Id::Pipeline {
-public:
+ public:
   typedef Id Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2373,7 +2373,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Using::Reader {
-public:
+ public:
   typedef Using Reads;
 
   Reader() = default;
@@ -2392,7 +2392,7 @@ public:
   inline bool hasTarget() const;
   inline  ::capnp::compiler::Expression::Reader getTarget() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2405,7 +2405,7 @@ private:
 };
 
 class Declaration::Using::Builder {
-public:
+ public:
   typedef Using Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2427,7 +2427,7 @@ public:
   inline void adoptTarget(::capnp::Orphan< ::capnp::compiler::Expression>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownTarget();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2438,7 +2438,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Using::Pipeline {
-public:
+ public:
   typedef Using Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -2446,7 +2446,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Expression::Pipeline getTarget();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2455,7 +2455,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Const::Reader {
-public:
+ public:
   typedef Const Reads;
 
   Reader() = default;
@@ -2477,7 +2477,7 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::compiler::Expression::Reader getValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2490,7 +2490,7 @@ private:
 };
 
 class Declaration::Const::Builder {
-public:
+ public:
   typedef Const Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2519,7 +2519,7 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::compiler::Expression>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2530,7 +2530,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Const::Pipeline {
-public:
+ public:
   typedef Const Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -2539,7 +2539,7 @@ public:
 
   inline  ::capnp::compiler::Expression::Pipeline getType();
   inline  ::capnp::compiler::Expression::Pipeline getValue();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2548,7 +2548,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Field::Reader {
-public:
+ public:
   typedef Field Reads;
 
   Reader() = default;
@@ -2569,7 +2569,7 @@ public:
 
   inline typename DefaultValue::Reader getDefaultValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2582,7 +2582,7 @@ private:
 };
 
 class Declaration::Field::Builder {
-public:
+ public:
   typedef Field Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2607,7 +2607,7 @@ public:
   inline typename DefaultValue::Builder getDefaultValue();
   inline typename DefaultValue::Builder initDefaultValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2618,7 +2618,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Field::Pipeline {
-public:
+ public:
   typedef Field Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -2627,7 +2627,7 @@ public:
 
   inline  ::capnp::compiler::Expression::Pipeline getType();
   inline typename DefaultValue::Pipeline getDefaultValue();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2636,7 +2636,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Field::DefaultValue::Reader {
-public:
+ public:
   typedef DefaultValue Reads;
 
   Reader() = default;
@@ -2660,7 +2660,7 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::compiler::Expression::Reader getValue() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2673,7 +2673,7 @@ private:
 };
 
 class Declaration::Field::DefaultValue::Builder {
-public:
+ public:
   typedef DefaultValue Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2701,7 +2701,7 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::compiler::Expression>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Expression> disownValue();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2712,14 +2712,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Field::DefaultValue::Pipeline {
-public:
+ public:
   typedef DefaultValue Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2728,7 +2728,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Interface::Reader {
-public:
+ public:
   typedef Interface Reads;
 
   Reader() = default;
@@ -2747,7 +2747,7 @@ public:
   inline bool hasSuperclasses() const;
   inline  ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>::Reader getSuperclasses() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2760,7 +2760,7 @@ private:
 };
 
 class Declaration::Interface::Builder {
-public:
+ public:
   typedef Interface Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2782,7 +2782,7 @@ public:
   inline void adoptSuperclasses(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Expression,  ::capnp::Kind::STRUCT>> disownSuperclasses();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2793,14 +2793,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Interface::Pipeline {
-public:
+ public:
   typedef Interface Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2809,7 +2809,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Method::Reader {
-public:
+ public:
   typedef Method Reads;
 
   Reader() = default;
@@ -2830,7 +2830,7 @@ public:
 
   inline typename Results::Reader getResults() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2843,7 +2843,7 @@ private:
 };
 
 class Declaration::Method::Builder {
-public:
+ public:
   typedef Method Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2868,7 +2868,7 @@ public:
   inline typename Results::Builder getResults();
   inline typename Results::Builder initResults();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2879,7 +2879,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Method::Pipeline {
-public:
+ public:
   typedef Method Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -2888,7 +2888,7 @@ public:
 
   inline  ::capnp::compiler::Declaration::ParamList::Pipeline getParams();
   inline typename Results::Pipeline getResults();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2897,7 +2897,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Method::Results::Reader {
-public:
+ public:
   typedef Results Reads;
 
   Reader() = default;
@@ -2921,7 +2921,7 @@ public:
   inline bool hasExplicit() const;
   inline  ::capnp::compiler::Declaration::ParamList::Reader getExplicit() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2934,7 +2934,7 @@ private:
 };
 
 class Declaration::Method::Results::Builder {
-public:
+ public:
   typedef Results Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -2962,7 +2962,7 @@ public:
   inline void adoptExplicit(::capnp::Orphan< ::capnp::compiler::Declaration::ParamList>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Declaration::ParamList> disownExplicit();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -2973,14 +2973,14 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Method::Results::Pipeline {
-public:
+ public:
   typedef Results Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -2989,7 +2989,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class Declaration::Annotation::Reader {
-public:
+ public:
   typedef Annotation Reads;
 
   Reader() = default;
@@ -3032,7 +3032,7 @@ public:
 
   inline bool getTargetsAnnotation() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -3045,7 +3045,7 @@ private:
 };
 
 class Declaration::Annotation::Builder {
-public:
+ public:
   typedef Annotation Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -3103,7 +3103,7 @@ public:
   inline bool getTargetsAnnotation();
   inline void setTargetsAnnotation(bool value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -3114,7 +3114,7 @@ private:
 
 #if !CAPNP_LITE
 class Declaration::Annotation::Pipeline {
-public:
+ public:
   typedef Annotation Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -3122,7 +3122,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Expression::Pipeline getType();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -3131,7 +3131,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class ParsedFile::Reader {
-public:
+ public:
   typedef ParsedFile Reads;
 
   Reader() = default;
@@ -3150,7 +3150,7 @@ public:
   inline bool hasRoot() const;
   inline  ::capnp::compiler::Declaration::Reader getRoot() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -3163,7 +3163,7 @@ private:
 };
 
 class ParsedFile::Builder {
-public:
+ public:
   typedef ParsedFile Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -3185,7 +3185,7 @@ public:
   inline void adoptRoot(::capnp::Orphan< ::capnp::compiler::Declaration>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::Declaration> disownRoot();
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -3196,7 +3196,7 @@ private:
 
 #if !CAPNP_LITE
 class ParsedFile::Pipeline {
-public:
+ public:
   typedef ParsedFile Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -3204,7 +3204,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Declaration::Pipeline getRoot();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>

@@ -207,7 +207,7 @@ template <typename Id, typename T>
 class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
 
-public:
+ public:
   bool empty() {
     return slots.size() == freeIds.size() && highSlots.size() == 0;
   }
@@ -295,7 +295,7 @@ public:
     { auto drop = kj::mv(highSlots); }
   }
 
-private:
+ private:
   kj::Vector<T> slots;
   std::priority_queue<Id, std::vector<Id>, std::greater<Id>> freeIds;
 
@@ -307,7 +307,7 @@ template <typename Id, typename T>
 class ImportTable {
   // Table mapping integers to T, where the integers are chosen remotely.
 
-public:
+ public:
   bool empty() {
     return presenceBits == 0 && high.size() == 0;
   }
@@ -386,7 +386,7 @@ public:
     }
   }
 
-private:
+ private:
   T low[16];
   uint presenceBits = 0;
   kj::HashMap<Id, T> high;
@@ -398,7 +398,7 @@ private:
 
 class RpcSystemBase::RpcConnectionState final
     : public kj::TaskSet::ErrorHandler, public kj::Refcounted {
-public:
+ public:
   RpcConnectionState(RpcSystemBase::Impl& rpcSystem,
                      BootstrapFactoryBase& bootstrapFactory,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
@@ -597,7 +597,7 @@ public:
     maybeUnblockFlow();
   }
 
-private:
+ private:
   class RpcClient;
   class ImportClient;
   class PromiseClient;
@@ -862,7 +862,7 @@ private:
   // ClientHook implementations
 
   class RpcClient: public ClientHook, public kj::Refcounted {
-  public:
+   public:
     RpcClient(RpcConnectionState& connectionState)
         : ClientHook(connectionState.brand.get()),
           connectionState(kj::addRef(connectionState)) {}
@@ -981,7 +981,7 @@ private:
   class ImportClient final: public RpcClient {
     // A ClientHook that wraps an entry in the import table.
 
-  public:
+   public:
     ImportClient(RpcConnectionState& connectionState, ImportId importId,
                  kj::Maybe<kj::AutoCloseFd> fd)
         : RpcClient(connectionState), importId(importId), fd(kj::mv(fd)) {}
@@ -1052,7 +1052,7 @@ private:
       return fd.map([](auto& f) { return f.get(); });
     }
 
-  private:
+   private:
     ImportId importId;
     kj::Maybe<kj::AutoCloseFd> fd;
 
@@ -1065,7 +1065,7 @@ private:
   class PipelineClient final: public RpcClient {
     // A ClientHook representing a pipelined promise.  Always wrapped in PromiseClient.
 
-  public:
+   public:
     PipelineClient(RpcConnectionState& connectionState,
                    kj::Own<QuestionRef>&& questionRef,
                    kj::Array<PipelineOp>&& ops)
@@ -1106,7 +1106,7 @@ private:
       return kj::none;
     }
 
-  private:
+   private:
     kj::Own<QuestionRef> questionRef;
     kj::Array<PipelineOp> ops;
   };
@@ -1115,7 +1115,7 @@ private:
     // A ClientHook that initially wraps one client (in practice, an ImportClient or a
     // PipelineClient) and then, later on, redirects to some other client.
 
-  public:
+   public:
     PromiseClient(RpcConnectionState& connectionState,
                   kj::Own<RpcClient> initial,
                   kj::Promise<kj::Own<ClientHook>> eventual,
@@ -1240,7 +1240,7 @@ private:
       }
     }
 
-  private:
+   private:
     kj::Own<ClientHook> cap;
 
     kj::Maybe<ImportId> importId;
@@ -1705,7 +1705,7 @@ private:
     //   that both knows what to do with future incoming messages to that export ID, but also knows
     //   what to do when that export is the subject of a `Resolve`.
 
-  public:
+   public:
     TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
 
     Request<AnyPointer, AnyPointer> newCall(
@@ -1734,7 +1734,7 @@ private:
       return inner->getFd();
     }
 
-  private:
+   private:
     kj::Own<ClientHook> inner;
   };
 
@@ -1809,7 +1809,7 @@ private:
     // A reference to an entry on the question table.  Used to detect when the `Finish` message
     // can be sent.
 
-  public:
+   public:
     inline QuestionRef(
         RpcConnectionState& connectionState, QuestionId id,
         kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>>> fulfiller)
@@ -1886,14 +1886,14 @@ private:
       connectionState = kj::none;
     }
 
-  private:
+   private:
     kj::Maybe<kj::Own<RpcConnectionState>> connectionState;
     QuestionId id;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<kj::Own<RpcResponse>>>>> fulfiller;
   };
 
   class RpcRequest final: public RequestHook {
-  public:
+   public:
     RpcRequest(RpcConnectionState& connectionState, VatNetworkBase::Connection& connection,
                kj::Maybe<MessageSize> sizeHint, kj::Own<RpcClient>&& target)
         : RequestHook(connectionState.brand.get()),
@@ -2059,7 +2059,7 @@ private:
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
     }
 
-  private:
+   private:
     kj::Own<RpcConnectionState> connectionState;
 
     kj::Own<RpcClient> target;
@@ -2210,7 +2210,7 @@ private:
   };
 
   class RpcPipeline final: public PipelineHook, public kj::Refcounted {
-  public:
+   public:
     RpcPipeline(RpcConnectionState& connectionState, kj::Own<QuestionRef>&& questionRef,
                 kj::Promise<kj::Own<RpcResponse>>&& redirectLaterParam)
         : connectionState(kj::addRef(connectionState)),
@@ -2289,7 +2289,7 @@ private:
       })->addRef();
     }
 
-  private:
+   private:
     kj::Own<RpcConnectionState> connectionState;
     kj::Maybe<kj::ForkedPromise<kj::Own<RpcResponse>>> redirectLater;
 
@@ -2320,13 +2320,13 @@ private:
   };
 
   class RpcResponse: public ResponseHook {
-  public:
+   public:
     virtual AnyPointer::Reader getResults() = 0;
     virtual kj::Own<RpcResponse> addRef() = 0;
   };
 
   class RpcResponseImpl final: public RpcResponse, public kj::Refcounted {
-  public:
+   public:
     RpcResponseImpl(RpcConnectionState& connectionState,
                     kj::Own<QuestionRef>&& questionRef,
                     kj::Own<IncomingRpcMessage>&& message,
@@ -2346,7 +2346,7 @@ private:
       return kj::addRef(*this);
     }
 
-  private:
+   private:
     kj::Own<RpcConnectionState> connectionState;
     kj::Own<IncomingRpcMessage> message;
     ReaderCapabilityTable capTable;
@@ -2378,12 +2378,12 @@ private:
   // CallContextHook implementation
 
   class RpcServerResponse {
-  public:
+   public:
     virtual AnyPointer::Builder getResultsBuilder() = 0;
   };
 
   class RpcServerResponseImpl final: public RpcServerResponse {
-  public:
+   public:
     RpcServerResponseImpl(RpcConnectionState& connectionState,
                           kj::Own<OutgoingRpcMessage>&& message,
                           rpc::Payload::Builder payload)
@@ -2450,7 +2450,7 @@ private:
       return { kj::mv(returnedCap), kj::mv(unwrapped) };
     }
 
-  private:
+   private:
     RpcConnectionState& connectionState;
     kj::Own<OutgoingRpcMessage> message;
     BuilderCapabilityTable capTable;
@@ -2468,7 +2468,7 @@ private:
 
   class LocallyRedirectedRpcResponse final
       : public RpcResponse, public RpcServerResponse, public kj::Refcounted{
-  public:
+   public:
     LocallyRedirectedRpcResponse(kj::Maybe<MessageSize> sizeHint)
         : message(sizeHint.map([](MessageSize size) { return size.wordCount; })
                           .orDefault(SUGGESTED_FIRST_SEGMENT_WORDS)) {}
@@ -2485,7 +2485,7 @@ private:
       return kj::addRef(*this);
     }
 
-  private:
+   private:
     MallocMessageBuilder message;
   };
 
@@ -2496,7 +2496,7 @@ private:
     // pipelined calls received targeting those capabilities (as well as any Disembargo messages)
     // will resolve to the same network capability forever, *even if* that network capability is
     // itself a promise which later resolves to somewhere else.
-  public:
+   public:
     PostReturnRpcPipeline(kj::Own<PipelineHook> inner,
                           RpcServerResponseImpl& response,
                           kj::Own<RpcCallContext> context)
@@ -2518,7 +2518,7 @@ private:
       return getResolutionAtReturnTime(kj::mv(original), kj::mv(resolved));
     }
 
-  private:
+   private:
     kj::Own<PipelineHook> inner;
     RpcServerResponseImpl& response;
     kj::Own<RpcCallContext> context;  // owns `response`
@@ -2560,7 +2560,7 @@ private:
   };
 
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
-  public:
+   public:
     RpcCallContext(RpcConnectionState& connectionState, AnswerId answerId,
                    kj::Own<IncomingRpcMessage>&& request,
                    kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTableArray,
@@ -2853,7 +2853,7 @@ private:
       return kj::addRef(*this);
     }
 
-  private:
+   private:
     kj::Own<RpcConnectionState> connectionState;
     AnswerId answerId;
 
@@ -3149,7 +3149,7 @@ private:
   // Level 0
 
   class SingleCapPipeline: public PipelineHook, public kj::Refcounted {
-  public:
+   public:
     SingleCapPipeline(kj::Own<ClientHook>&& cap)
         : cap(kj::mv(cap)) {}
 
@@ -3165,7 +3165,7 @@ private:
       }
     }
 
-  private:
+   private:
     kj::Own<ClientHook> cap;
   };
 
@@ -3733,7 +3733,7 @@ private:
 // =======================================================================================
 
 class RpcSystemBase::Impl final: private BootstrapFactoryBase, private kj::TaskSet::ErrorHandler {
-public:
+ public:
   Impl(VatNetworkBase& network, kj::Maybe<Capability::Client> bootstrapInterface)
       : network(network), bootstrapInterface(kj::mv(bootstrapInterface)),
         bootstrapFactory(*this), tasks(*this) {
@@ -3792,7 +3792,7 @@ public:
     tasks.add(kj::mv(shutdownTask));
   }
 
-private:
+ private:
   VatNetworkBase& network;
   kj::Maybe<Capability::Client> bootstrapInterface;
   BootstrapFactoryBase& bootstrapFactory;
@@ -3880,7 +3880,7 @@ void RpcSystemBase::dropConnection(RpcSystemBase::Impl& impl,
 namespace {
 
 class WindowFlowController final: public RpcFlowController, private kj::TaskSet::ErrorHandler {
-public:
+ public:
   WindowFlowController(RpcFlowController::WindowGetter& windowGetter)
       : windowGetter(windowGetter), tasks(*this) {
     state.init<Running>();
@@ -3949,7 +3949,7 @@ public:
     return tasks.onEmpty();
   }
 
-private:
+ private:
   RpcFlowController::WindowGetter& windowGetter;
   size_t inFlight = 0;
   size_t maxMessageSize = 0;
@@ -3989,7 +3989,7 @@ private:
 
 class FixedWindowFlowController final
     : public RpcFlowController, public RpcFlowController::WindowGetter {
-public:
+ public:
   FixedWindowFlowController(size_t windowSize): windowSize(windowSize), inner(*this) {}
 
   kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
@@ -4002,7 +4002,7 @@ public:
 
   size_t getWindow() override { return windowSize; }
 
-private:
+ private:
   size_t windowSize;
   WindowFlowController inner;
 };

@@ -32,7 +32,7 @@ class WebSocketMessageStream final : public MessageStream {
   // An implementation of MessageStream that sends messages over a websocket.
   //
   // Each capnproto message is sent in a single binary websocket frame.
-public:
+ public:
   WebSocketMessageStream(kj::WebSocket& socket);
 
   // Implements MessageStream
@@ -48,7 +48,7 @@ public:
     KJ_WARN_UNUSED_RESULT;
   kj::Maybe<int> getSendBufferSize() override;
   kj::Promise<void> end() override;
-private:
+ private:
   kj::WebSocket& socket;
 };
 

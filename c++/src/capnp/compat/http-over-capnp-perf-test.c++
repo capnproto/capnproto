@@ -62,7 +62,7 @@ void* malloc(size_t size) {
 #endif  // KJ_BENCHMARK_MALLOC
 
 class Metrics {
-public:
+ public:
   Metrics()
       : startMallocCount(globalMallocCount), startMallocBytes(globalMallocBytes),
         upBandwidth(0), downBandwidth(0),
@@ -86,7 +86,7 @@ public:
   class StreamWrapper final: public kj::AsyncIoStream {
     // Wrap a stream and count metrics.
 
-  public:
+   public:
     StreamWrapper(Metrics& metrics, kj::AsyncIoStream& inner, Side side)
         : metrics(metrics), inner(inner), side(side) {}
 
@@ -163,7 +163,7 @@ public:
       inner.abortRead();
     }
 
-  private:
+   private:
     Metrics& metrics;
     kj::AsyncIoStream& inner;
     Side side;
@@ -187,7 +187,7 @@ public:
     }
   };
 
-private:
+ private:
   size_t startMallocCount KJ_UNUSED;
   size_t startMallocBytes KJ_UNUSED;
   size_t upBandwidth;
@@ -205,7 +205,7 @@ private:
 static constexpr auto HELLO_WORLD = "Hello, world!"_kj;
 
 class NullInputStream final: public kj::AsyncInputStream {
-public:
+ public:
   NullInputStream(kj::Maybe<size_t> expectedLength = size_t(0))
       : expectedLength(expectedLength) {}
 
@@ -221,12 +221,12 @@ public:
     return uint64_t(0);
   }
 
-private:
+ private:
   kj::Maybe<size_t> expectedLength;
 };
 
 class VectorOutputStream: public kj::AsyncOutputStream {
-public:
+ public:
   kj::String consume() {
     chars.add('\0');
     return kj::String(chars.releaseAsArray());
@@ -248,12 +248,12 @@ public:
     return kj::NEVER_DONE;
   }
 
-private:
+ private:
   kj::Vector<char> chars;
 };
 
 class MockService: public kj::HttpService {
-public:
+ public:
   MockService(kj::HttpHeaderTable::Builder& headerTableBuilder)
       : headerTable(headerTableBuilder.getFutureTable()),
         customHeaderId(headerTableBuilder.add("X-Custom-Header")) {}
@@ -273,13 +273,13 @@ public:
     return promise.attach(kj::mv(stream));
   }
 
-private:
+ private:
   const kj::HttpHeaderTable& headerTable;
   kj::HttpHeaderId customHeaderId;
 };
 
 class MockSender: private kj::HttpService::Response {
-public:
+ public:
   MockSender(kj::HttpHeaderTable::Builder& headerTableBuilder)
       : headerTable(headerTableBuilder.getFutureTable()),
         customHeaderId(headerTableBuilder.add("X-Custom-Header")) {}
@@ -306,7 +306,7 @@ public:
     KJ_ASSERT(responseBody.consume() == HELLO_WORLD);
   }
 
-private:
+ private:
   const kj::HttpHeaderTable& headerTable;
   kj::HttpHeaderId customHeaderId;
 

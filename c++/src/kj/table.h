@@ -76,7 +76,7 @@ class Table {
   // Each index is a class that looks like:
   //
   //   class Index {
-  //   public:
+  //    public:
   //     void reserve(size_t size);
   //     // Called when Table::reserve() is called.
   //
@@ -135,7 +135,7 @@ class Table {
   //     // Optional. Implements Table::ordered<Index>().
   //   };
 
-public:
+ public:
   Table();
   Table(Indexes&&... indexes);
 
@@ -290,7 +290,7 @@ public:
   //   the findOrCreate() definitions from earlier won't actually work. These ones will, but we
   //   have to do some annoying things inside to regroup the arguments.
 
-private:
+ private:
   Vector<Row> rows;
   Tuple<Indexes...> indexes;
 
@@ -322,7 +322,7 @@ class HashIndex;
 // The `Callbacks` type defines how to compute hash codes and equality. It should be defined like:
 //
 //   class Callbacks {
-//   public:
+//    public:
 //     // In this interface, `SearchParams...` means whatever parameters you want to support in
 //     // a call to table.find(...). By overloading the calls to support various inputs, you can
 //     // affect what table.find(...) accepts.
@@ -353,7 +353,7 @@ class TreeIndex;
 // The `Callbacks` type defines how to compare rows. It should be defined like:
 //
 //   class Callbacks {
-//   public:
+//    public:
 //     // In this interface, `SearchParams...` means whatever parameters you want to support in
 //     // a call to table.find(...). By overloading the calls to support various inputs, you can
 //     // affect what table.find(...) accepts.
@@ -385,33 +385,33 @@ inline void tryReserveSize(Params&&...) {}
 
 template <typename Row>
 class TableMapping {
-public:
+ public:
   TableMapping(Row* table): table(table) {}
   Row& map(size_t i) const { return table[i]; }
 
-private:
+ private:
   Row* table;
 };
 
 template <typename Row>
 class TableUnmapping {
-public:
+ public:
   TableUnmapping(Row* table): table(table) {}
   size_t map(Row& row) const { return &row - table; }
   size_t map(Row* row) const { return row - table; }
 
-private:
+ private:
   Row* table;
 };
 
 template <typename Iterator>
 class IterRange {
-public:
+ public:
   inline IterRange(Iterator b, Iterator e): b(b), e(e) {}
 
   inline Iterator begin() const { return b; }
   inline Iterator end() const { return e; }
-private:
+ private:
   Iterator b;
   Iterator e;
 };
@@ -426,7 +426,7 @@ inline IterRange<Decay<Iterator>> iterRange(Iterator b, Iterator e) {
 template <typename Row, typename... Indexes>
 template <size_t index>
 class Table<Row, Indexes...>::Impl<index, false> {
-public:
+ public:
   static void reserve(Table<Row, Indexes...>& table, size_t size) {
     get<index>(table.indexes).reserve(size);
     Impl<index + 1>::reserve(table, size);
@@ -471,7 +471,7 @@ public:
 template <typename Row, typename... Indexes>
 template <size_t index>
 class Table<Row, Indexes...>::Impl<index, true> {
-public:
+ public:
   static void reserve(Table<Row, Indexes...>& table, size_t size) {}
   static void clear(Table<Row, Indexes...>& table) {}
   static kj::Maybe<size_t> insert(Table<Row, Indexes...>& table, size_t pos, Row& row, uint skip) {
@@ -604,7 +604,7 @@ kj::Maybe<const Row&> Table<Row, Indexes...>::find(Params&&... params) const {
 template <typename Row, typename... Indexes>
 template <typename Func, typename... Params>
 class Table<Row, Indexes...>::FindOrCreateImpl {
-public:
+ public:
   template <size_t index>
   static Row& apply(Table<Row, Indexes...>& table, Params&&... params, Func&& createFunc) {
     auto pos = table.rows.size();
@@ -898,7 +898,7 @@ inline uint chooseBucket(uint hash, uint count) {
 
 template <typename Callbacks>
 class HashIndex {
-public:
+ public:
   HashIndex() = default;
   template <typename... Params>
   HashIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
@@ -1019,7 +1019,7 @@ public:
 
   // No begin() nor end() because hash tables are not usefully ordered.
 
-private:
+ private:
   Callbacks cb;
   size_t erasedCount = 0;
   Array<_::HashBucket> buckets;
@@ -1058,7 +1058,7 @@ inline void azero(T* ptr, size_t size) { memset(ptr, 0, size * sizeof(T)); }
 // TODO(cleanup): These are generally useful, put them somewhere.
 
 class BTreeImpl {
-public:
+ public:
   class Iterator;
   class MaybeUint;
   struct NodeUnion;
@@ -1073,7 +1073,7 @@ public:
     // this interface so that it only needs to be called once per tree node, rather than once per
     // comparison.
 
-  public:
+   public:
     virtual uint search(const Parent& parent) const = 0;
     virtual uint search(const Leaf& leaf) const = 0;
     // Binary search for the first key/row in the parent/leaf that is equal to or comes after the
@@ -1115,7 +1115,7 @@ public:
 
   void verify(size_t size, FunctionParam<bool(uint, uint)>);
 
-private:
+ private:
   NodeUnion* tree;        // allocated with aligned_alloc aligned to cache lines
   uint treeCapacity;
   uint height;            // height of *parent* tree -- does not include the leaf level
@@ -1161,7 +1161,7 @@ private:
 
 class BTreeImpl::MaybeUint {
   // A nullable uint, using the value zero to mean null and shifting all other values up by 1.
-public:
+ public:
   MaybeUint() = default;
   inline MaybeUint(uint i): i(i + 1) {}
   inline MaybeUint(decltype(nullptr)): i(0) {}
@@ -1181,7 +1181,7 @@ public:
 
   kj::String toString() const;
 
-private:
+ private:
   uint i;
 };
 
@@ -1355,7 +1355,7 @@ bool BTreeImpl::Parent::isHalfFull() const {
 }
 
 class BTreeImpl::Iterator {
-public:
+ public:
   Iterator(const NodeUnion* tree, const Leaf* leaf, uint row)
       : tree(tree), leaf(leaf), row(row) {}
 
@@ -1423,7 +1423,7 @@ public:
     const_cast<Leaf*>(leaf)->rows[row] = newRow;
   }
 
-private:
+ private:
   const NodeUnion* tree;
   const Leaf* leaf;
   uint row;
@@ -1441,7 +1441,7 @@ inline BTreeImpl::Iterator BTreeImpl::end() const {
 
 template <typename Callbacks>
 class TreeIndex {
-public:
+ public:
   TreeIndex() = default;
   template <typename... Params>
   TreeIndex(Params&&... params): cb(kj::fwd<Params>(params)...) {}
@@ -1501,13 +1501,13 @@ public:
     return impl.search(searchKey(table, params...));
   }
 
-private:
+ private:
   Callbacks cb;
   _::BTreeImpl impl;
 
   template <typename Predicate>
   class SearchKeyImpl: public _::BTreeImpl::SearchKey {
-  public:
+   public:
     SearchKeyImpl(Predicate&& predicate)
         : predicate(kj::mv(predicate)) {}
 
@@ -1521,7 +1521,7 @@ private:
       return predicate(rowIndex);
     }
 
-  private:
+   private:
     Predicate predicate;
   };
 
@@ -1550,7 +1550,7 @@ class InsertionOrderIndex {
   // be used for Table::find(), but can be used for Table::ordered().
 
   struct Link;
-public:
+ public:
   InsertionOrderIndex();
   InsertionOrderIndex(const InsertionOrderIndex&) = delete;
   InsertionOrderIndex& operator=(const InsertionOrderIndex&) = delete;
@@ -1559,7 +1559,7 @@ public:
   ~InsertionOrderIndex() noexcept(false);
 
   class Iterator {
-  public:
+   public:
     Iterator(const Link* links, uint pos)
         : links(links), pos(pos) {}
 
@@ -1591,7 +1591,7 @@ public:
       return pos == other.pos;
     }
 
-  private:
+   private:
     const Link* links;
     uint pos;
   };
@@ -1619,7 +1619,7 @@ public:
     return moveImpl(oldPos, newPos);
   }
 
-private:
+ private:
   struct Link {
     uint next;
     uint prev;

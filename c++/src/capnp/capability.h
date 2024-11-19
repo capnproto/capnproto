@@ -48,7 +48,7 @@ class RemotePromise: public kj::Promise<Response<T>>, public T::Pipeline {
   // The promise is for an owned pointer so that the RPC system can allocate the MessageReader
   // itself.
 
-public:
+ public:
   inline RemotePromise(kj::Promise<Response<T>>&& promise, typename T::Pipeline&& pipeline)
       : kj::Promise<Response<T>>(kj::mv(promise)),
         T::Pipeline(kj::mv(pipeline)) {}
@@ -113,7 +113,7 @@ class Request: public Params::Builder {
   // a method `Request<FooParams, C> fooRequest()` (as well as a convenience method
   // `RemotePromise<C> foo(A::Reader a, B::Reader b)`).
 
-public:
+ public:
   inline Request(typename Params::Builder builder, kj::Own<RequestHook>&& hook)
       : Params::Builder(builder), hook(kj::mv(hook)) {}
   inline Request(decltype(nullptr)): Params::Builder(nullptr) {}
@@ -139,7 +139,7 @@ public:
   //   returning a capability that points back to the caller's vat, calls on the pipelined
   //   capability may continue to proxy through the callee.
 
-private:
+ private:
   kj::Own<RequestHook> hook;
 
   friend class Capability::Client;
@@ -153,14 +153,14 @@ template <typename Params>
 class StreamingRequest: public Params::Builder {
   // Like `Request` but for streaming requests.
 
-public:
+ public:
   inline StreamingRequest(typename Params::Builder builder, kj::Own<RequestHook>&& hook)
       : Params::Builder(builder), hook(kj::mv(hook)) {}
   inline StreamingRequest(decltype(nullptr)): Params::Builder(nullptr) {}
 
   kj::Promise<void> send() KJ_WARN_UNUSED_RESULT;
 
-private:
+ private:
   kj::Own<RequestHook> hook;
 
   friend class Capability::Client;
@@ -175,11 +175,11 @@ class Response: public Results::Reader {
   // A completed call.  This class extends a Reader for the call's answer structure.  The Response
   // is move-only -- once it goes out-of-scope, the underlying message will be freed.
 
-public:
+ public:
   inline Response(typename Results::Reader reader, kj::Own<ResponseHook>&& hook)
       : Results::Reader(reader), hook(kj::mv(hook)) {}
 
-private:
+ private:
   kj::Own<ResponseHook> hook;
 
   template <typename, typename>
@@ -190,7 +190,7 @@ private:
 class Capability::Client {
   // Base type for capability clients.
 
-public:
+ public:
   typedef Capability Reads;
   typedef Capability Calls;
 
@@ -287,7 +287,7 @@ public:
 
   // TODO(someday):  method(s) for Join
 
-protected:
+ protected:
   Client() = default;
 
   template <typename Params, typename Results>
@@ -297,7 +297,7 @@ protected:
   StreamingRequest<Params> newStreamingCall(uint64_t interfaceId, uint16_t methodId,
                                             kj::Maybe<MessageSize> sizeHint, CallHints hints);
 
-private:
+ private:
   kj::Own<ClientHook> hook;
 
   static kj::Own<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
@@ -334,7 +334,7 @@ class CallContext: public kj::DisallowConstCopy {
   //
   // The CallContext becomes invalid as soon as the call reports completion.
 
-public:
+ public:
   explicit CallContext(CallContextHook& hook);
 
   typename Params::Reader getParams();
@@ -440,7 +440,7 @@ public:
           "to DynamicCapability). This change was made to gain a significant performance boost -- "
           "dynamically allowing cancellation required excessive bookkeeping.");
 
-private:
+ private:
   CallContextHook* hook;
 
   friend class Capability::Server;
@@ -452,7 +452,7 @@ template <typename Params>
 class StreamingCallContext: public kj::DisallowConstCopy {
   // Like CallContext but for streaming calls.
 
-public:
+ public:
   explicit StreamingCallContext(CallContextHook& hook);
 
   typename Params::Reader getParams();
@@ -471,7 +471,7 @@ public:
           "to DynamicCapability). This change was made to gain a significant performance boost -- "
           "dynamically allowing cancellation required excessive bookkeeping.");
 
-private:
+ private:
   CallContextHook* hook;
 
   friend class Capability::Server;
@@ -484,7 +484,7 @@ class Capability::Server {
   // will instead subclass a typed Server interface which will take care of implementing
   // dispatchCall().
 
-public:
+ public:
   typedef Capability Serves;
 
   struct DispatchCallResult {
@@ -535,7 +535,7 @@ public:
   // TODO(someday):  Method which can optionally be overridden to implement Join when the object is
   //   a proxy.
 
-protected:
+ protected:
   Capability::Client thisCap();
   // Get a capability pointing to this object, much like the `this` keyword.
   //
@@ -560,7 +560,7 @@ protected:
   kj::Promise<void> internalUnimplemented(const char* interfaceName, const char* methodName,
                                           uint64_t typeId, uint16_t methodId);
 
-private:
+ private:
   kj::Maybe<ClientHook&> thisHook;
   friend class LocalClient;
   friend class Capability::Client;
@@ -582,7 +582,7 @@ class RevocableServer {
   //
   // The RevocableServer object can be moved (as long as the server outlives it).
 
-public:
+ public:
   RevocableServer(typename T::Server& server);
   RevocableServer(RevocableServer&&) = default;
   RevocableServer& operator=(RevocableServer&&) = default;
@@ -596,7 +596,7 @@ public:
   // Revokes the capability immediately, rather than waiting for the destructor. This can also
   // be used to specify a custom exception to use when revoking.
 
-private:
+ private:
   kj::Own<ClientHook> hook;
 };
 
@@ -612,7 +612,7 @@ class PipelineBuilder: public T::Builder {
   //
   // See the docs for `CallContext::setPipeline()` for an example.
 
-public:
+ public:
   PipelineBuilder(uint firstSegmentWords = 64);
   // Construct a builder, allocating the given number of words for the first segment of the backing
   // message. Since `PipelineBuilder` is typically used with small RPC messages, the default size
@@ -622,7 +622,7 @@ public:
   // Constructs a `Pipeline` object backed by the current content of this builder. Calling this
   // consumes the `PipelineBuilder`; no further methods can be invoked.
 
-private:
+ private:
   kj::Own<PipelineHook> hook;
 
   PipelineBuilder(_::PipelineBuilderPair pair);
@@ -644,7 +644,7 @@ class ReaderCapabilityTable: private _::CapTableReader {
   //
   // Note that when using Cap'n Proto's RPC system, this is handled automatically.
 
-public:
+ public:
   explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> table);
   KJ_DISALLOW_COPY_AND_MOVE(ReaderCapabilityTable);
 
@@ -653,7 +653,7 @@ public:
   // Return a reader equivalent to `reader` except that when reading capability-valued fields,
   // the capabilities are looked up in this table.
 
-private:
+ private:
   kj::Array<kj::Maybe<kj::Own<ClientHook>>> table;
 
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
@@ -665,7 +665,7 @@ class BuilderCapabilityTable: private _::CapTableBuilder {
   // This is much like ReaderCapabilityTable, except for builders. The table starts out empty,
   // but capabilities can be added to it over time.
 
-public:
+ public:
   BuilderCapabilityTable();
   KJ_DISALLOW_COPY_AND_MOVE(BuilderCapabilityTable);
 
@@ -676,7 +676,7 @@ public:
   // Return a builder equivalent to `builder` except that when reading capability-valued fields,
   // the capabilities are looked up in this table.
 
-private:
+ private:
   kj::Vector<kj::Maybe<kj::Own<ClientHook>>> table;
 
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
@@ -689,7 +689,7 @@ private:
 namespace _ {  // private
 
 class CapabilityServerSetBase {
-public:
+ public:
   Capability::Client addInternal(kj::Own<Capability::Server>&& server, void* ptr);
   kj::Promise<void*> getLocalServerInternal(Capability::Client& client);
 };
@@ -710,7 +710,7 @@ class CapabilityServerSet: private _::CapabilityServerSetBase {
   // static_cast (or kj::downcast) to cast to it after calling getLocalServer(). (If you compile
   // with RTTI, then you can freely dynamic_cast and ignore this issue!)
 
-public:
+ public:
   CapabilityServerSet() = default;
   KJ_DISALLOW_COPY_AND_MOVE(CapabilityServerSet);
 
@@ -732,7 +732,7 @@ public:
 class RequestHook {
   // Hook interface implemented by RPC system representing a request being built.
 
-public:
+ public:
   RequestHook(const void* brand = nullptr): brand(brand) {}
 
   virtual RemotePromise<AnyPointer> send() = 0;
@@ -754,7 +754,7 @@ public:
     return kj::mv(request.hook);
   }
 
-private:
+ private:
   const void* brand;
 };
 
@@ -764,7 +764,7 @@ class ResponseHook {
   // At present this class has no methods.  It exists only for garbage collection -- when the
   // ResponseHook is destroyed, the results can be freed.
 
-public:
+ public:
   virtual ~ResponseHook() noexcept(false);
   // Just here to make sure the type is dynamic.
 
@@ -777,7 +777,7 @@ public:
 // class PipelineHook is declared in any.h because it is needed there.
 
 class ClientHook {
-public:
+ public:
   ClientHook(const void* brand = nullptr);
 
   using CallHints = Capability::Client::CallHints;
@@ -856,12 +856,12 @@ public:
 
   static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
 
-private:
+ private:
   const void* brand;
 };
 
 class RevocableClientHook: public ClientHook {
-public:
+ public:
   virtual void revoke() = 0;
   virtual void revoke(kj::Exception&& reason) = 0;
 };
@@ -870,7 +870,7 @@ class CallContextHook {
   // Hook interface implemented by RPC system to manage a call on the server side.  See
   // CallContext<T>.
 
-public:
+ public:
   virtual AnyPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
   virtual AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) = 0;
@@ -957,7 +957,7 @@ struct List<T, Kind::INTERFACE> {
   List() = delete;
 
   class Reader {
-  public:
+   public:
     typedef List<T> Reads;
 
     Reader() = default;
@@ -978,7 +978,7 @@ struct List<T, Kind::INTERFACE> {
       return reader.totalSize().asPublic();
     }
 
-  private:
+   private:
     _::ListReader reader;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -990,7 +990,7 @@ struct List<T, Kind::INTERFACE> {
   };
 
   class Builder {
-  public:
+   public:
     typedef List<T> Builds;
 
     Builder() = delete;
@@ -1023,14 +1023,14 @@ struct List<T, Kind::INTERFACE> {
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
-  private:
+   private:
     _::ListBuilder builder;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
   };
 
-private:
+ private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initList(ElementSize::POINTER, bounded(size) * ELEMENTS);
   }

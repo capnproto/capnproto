@@ -37,12 +37,12 @@ class TemporaryPointer {
   // (by value).  The compiler then invokes operator->() on the TemporaryPointer, which itself is
   // able to return a real pointer to its member.
 
-public:
+ public:
   TemporaryPointer(T&& value): value(kj::mv(value)) {}
   TemporaryPointer(const T& value): value(value) {}
 
   inline T* operator->() { return &value; }
-private:
+ private:
   T value;
 };
 
@@ -50,7 +50,7 @@ private:
 // KJ_STD_COMPAT at the top of your compilation unit or include capnp/compat/std-iterator.h.
 template <typename Container, typename Element>
 class IndexingIterator {
-public:
+ public:
   IndexingIterator() = default;
 
   inline Element operator*() const { return (*container)[index]; }
@@ -85,7 +85,7 @@ public:
   inline bool operator< (const IndexingIterator& other) const { return index <  other.index; }
   inline bool operator> (const IndexingIterator& other) const { return index >  other.index; }
 
-private:
+ private:
   Container* container;
   uint index;
 
@@ -103,7 +103,7 @@ struct List<T, Kind::PRIMITIVE> {
   List() = delete;
 
   class Reader {
-  public:
+   public:
     typedef List<T> Reads;
 
     inline Reader(): reader(_::elementSizeForType<T>()) {}
@@ -123,7 +123,7 @@ struct List<T, Kind::PRIMITIVE> {
       return reader.totalSize().asPublic();
     }
 
-  private:
+   private:
     _::ListReader reader;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -135,7 +135,7 @@ struct List<T, Kind::PRIMITIVE> {
   };
 
   class Builder {
-  public:
+   public:
     typedef List<T> Builds;
 
     inline Builder(): builder(_::elementSizeForType<T>()) {}
@@ -164,7 +164,7 @@ struct List<T, Kind::PRIMITIVE> {
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
-  private:
+   private:
     _::ListBuilder builder;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -175,7 +175,7 @@ struct List<T, Kind::PRIMITIVE> {
 
   class Pipeline {};
 
-private:
+ private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initList(_::elementSizeForType<T>(), bounded(size) * ELEMENTS);
   }
@@ -203,7 +203,7 @@ struct List<T, Kind::STRUCT> {
   List() = delete;
 
   class Reader {
-  public:
+   public:
     typedef List<T> Reads;
 
     inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
@@ -223,7 +223,7 @@ struct List<T, Kind::STRUCT> {
       return reader.totalSize().asPublic();
     }
 
-  private:
+   private:
     _::ListReader reader;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -235,7 +235,7 @@ struct List<T, Kind::STRUCT> {
   };
 
   class Builder {
-  public:
+   public:
     typedef List<T> Builds;
 
     inline Builder(): builder(ElementSize::INLINE_COMPOSITE) {}
@@ -293,7 +293,7 @@ struct List<T, Kind::STRUCT> {
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
-  private:
+   private:
     _::ListBuilder builder;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -304,7 +304,7 @@ struct List<T, Kind::STRUCT> {
 
   class Pipeline {};
 
-private:
+ private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initStructList(bounded(size) * ELEMENTS, _::structSize<T>());
   }
@@ -329,7 +329,7 @@ struct List<List<T>, Kind::LIST> {
   List() = delete;
 
   class Reader {
-  public:
+   public:
     typedef List<List<T>> Reads;
 
     inline Reader(): reader(ElementSize::POINTER) {}
@@ -350,7 +350,7 @@ struct List<List<T>, Kind::LIST> {
       return reader.totalSize().asPublic();
     }
 
-  private:
+   private:
     _::ListReader reader;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -362,7 +362,7 @@ struct List<List<T>, Kind::LIST> {
   };
 
   class Builder {
-  public:
+   public:
     typedef List<List<T>> Builds;
 
     inline Builder(): builder(ElementSize::POINTER) {}
@@ -408,7 +408,7 @@ struct List<List<T>, Kind::LIST> {
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
-  private:
+   private:
     _::ListBuilder builder;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -419,7 +419,7 @@ struct List<List<T>, Kind::LIST> {
 
   class Pipeline {};
 
-private:
+ private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initList(ElementSize::POINTER, bounded(size) * ELEMENTS);
   }
@@ -442,7 +442,7 @@ struct List<T, Kind::BLOB> {
   List() = delete;
 
   class Reader {
-  public:
+   public:
     typedef List<T> Reads;
 
     inline Reader(): reader(ElementSize::POINTER) {}
@@ -463,7 +463,7 @@ struct List<T, Kind::BLOB> {
       return reader.totalSize().asPublic();
     }
 
-  private:
+   private:
     _::ListReader reader;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -475,7 +475,7 @@ struct List<T, Kind::BLOB> {
   };
 
   class Builder {
-  public:
+   public:
     typedef List<T> Builds;
 
     inline Builder(): builder(ElementSize::POINTER) {}
@@ -513,7 +513,7 @@ struct List<T, Kind::BLOB> {
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
-  private:
+   private:
     _::ListBuilder builder;
     template <typename U, Kind K>
     friend struct _::PointerHelpers;
@@ -524,7 +524,7 @@ struct List<T, Kind::BLOB> {
 
   class Pipeline {};
 
-private:
+ private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
     return builder.initList(ElementSize::POINTER, bounded(size) * ELEMENTS);
   }

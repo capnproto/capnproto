@@ -87,7 +87,7 @@ inline Indent KJ_STRINGIFY(const Indent& indent) {
 // =======================================================================================
 
 class CapnpcCapnpMain {
-public:
+ public:
   CapnpcCapnpMain(kj::ProcessContext& context): context(context) {}
 
   kj::MainFunc getMain() {
@@ -100,7 +100,7 @@ public:
         .build();
   }
 
-private:
+ private:
   kj::ProcessContext& context;
   SchemaLoader schemaLoader;
 

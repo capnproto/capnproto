@@ -44,13 +44,13 @@ class RpcDumper {
   // TODO(cleanup):  Clean this code up and move it to someplace reusable, so it can be used as
   //   a packet inspector / debugging tool for Cap'n Proto network traffic.
 
-public:
+ public:
   void addSchema(InterfaceSchema schema) {
     schemas.insert(schema.getProto().getId(), schema);
   }
 
   class Sender {
-  public:
+   public:
     explicit Sender(RpcDumper& parent, kj::StringPtr name)
         : parent(parent), name(name) {}
 
@@ -180,7 +180,7 @@ public:
       return kj::str(name, "->", partnerName, ": ", message, '\n');
     }
 
-  private:
+   private:
     RpcDumper& parent;
     kj::StringPtr name;
 
@@ -193,7 +193,7 @@ public:
     // corresponding `Call`.
   };
 
-private:
+ private:
   kj::HashMap<uint64_t, InterfaceSchema> schemas;
 };
 
@@ -202,7 +202,7 @@ private:
 class TestVat;
 
 class TestNetwork {
-public:
+ public:
   TestNetwork() {
     dumper.addSchema(Schema::from<test::TestInterface>());
     dumper.addSchema(Schema::from<test::TestExtends>());
@@ -226,7 +226,7 @@ public:
 
   RpcDumper dumper;
 
-private:
+ private:
   kj::HashMap<kj::StringPtr, kj::Own<TestVat>> map;
 };
 
@@ -235,7 +235,7 @@ typedef VatNetwork<
     test::TestThirdPartyToContact, test::TestJoinResult> TestVatBase;
 
 class TestVat final: public TestVatBase {
-public:
+ public:
   TestVat(TestNetwork& network, kj::StringPtr self)
       : network(network), self(self) {}
 
@@ -259,7 +259,7 @@ public:
 
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
-  public:
+   public:
     ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name)
         : vat(vat), peerVat(peerVat), dumper(vat.network.dumper, name),
           tasks(kj::heap<kj::TaskSet>(*this)) {
@@ -298,7 +298,7 @@ public:
     }
 
     class IncomingRpcMessageImpl final: public IncomingRpcMessage, public kj::Refcounted {
-    public:
+     public:
       IncomingRpcMessageImpl(kj::Array<word> data)
           : data(kj::mv(data)),
             message(this->data) {}
@@ -316,7 +316,7 @@ public:
     };
 
     class OutgoingRpcMessageImpl final: public OutgoingRpcMessage {
-    public:
+     public:
       OutgoingRpcMessageImpl(ConnectionImpl& connection, uint firstSegmentWordSize)
           : connection(connection),
             message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS
@@ -354,7 +354,7 @@ public:
         return message.sizeInWords();
       }
 
-    private:
+     private:
       ConnectionImpl& connection;
       MallocMessageBuilder message;
     };
@@ -426,7 +426,7 @@ public:
       ADD_FAILURE() << kj::str(exception).cStr();
     }
 
-  private:
+   private:
     TestVat& vat;
     TestVat& peerVat;
     RpcDumper::Sender dumper;
@@ -478,7 +478,7 @@ public:
     }
   }
 
-private:
+ private:
   TestNetwork& network;
   kj::StringPtr self;
   uint sent = 0;
@@ -503,7 +503,7 @@ class TestRestorer {
   // The name of this class is historical. It used to implement an interface called
   // SturdyRefRestorer, but that interface was deprecated and removed in favor of singleton
   // bootstrap objects. So now this just holds the boostrap object.
-public:
+ public:
   int callCount = 0;
   int handleCount = 0;
 
@@ -806,7 +806,7 @@ KJ_TEST("tail call") {
 }
 
 class TestHangingTailCallee final: public test::TestTailCallee::Server {
-public:
+ public:
   TestHangingTailCallee(int& callCount, int& cancelCount)
       : callCount(callCount), cancelCount(cancelCount) {}
 
@@ -816,13 +816,13 @@ public:
         .attach(kj::defer([&cancelCount = cancelCount]() { ++cancelCount; }));
   }
 
-private:
+ private:
   int& callCount;
   int& cancelCount;
 };
 
 class TestRacingTailCaller final: public test::TestTailCaller::Server {
-public:
+ public:
   TestRacingTailCaller(kj::Promise<void> unblock): unblock(kj::mv(unblock)) {}
 
   kj::Promise<void> foo(FooContext context) override {
@@ -832,7 +832,7 @@ public:
     });
   }
 
-private:
+ private:
   kj::Promise<void> unblock;
 };
 

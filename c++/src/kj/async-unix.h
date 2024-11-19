@@ -87,7 +87,7 @@ class UnixEventPort: public EventPort, private TimerImpl::SleepHooks {
   //   keeping it that way? Note it's still unsafe to fork() and then use UnixEventPort from both
   //   processes!
 
-public:
+ public:
   UnixEventPort();
 
   ~UnixEventPort() noexcept(false);
@@ -241,7 +241,7 @@ public:
   void setRunnable(bool runnable) override;
 #endif
 
-private:
+ private:
   class SignalPromiseAdapter;
   class ChildExitPromiseAdapter;
 
@@ -318,7 +318,7 @@ class UnixEventPort::FdObserver: private AsyncObject {
   //   vary wildly. Be sure to read the documentation carefully and avoid depending on unspecified
   //   behavior. If at all possible, use the higher-level AsyncInputStream interface instead.
 
-public:
+ public:
   enum Flags {
     OBSERVE_READ = 1,
     OBSERVE_WRITE = 2,
@@ -408,7 +408,7 @@ public:
   Promise<void> whenWriteDisconnected();
   // Resolves when poll() on the file descriptor reports POLLHUP or POLLERR.
 
-private:
+ private:
   UnixEventPort& eventPort;
   int fd;
   uint flags;

@@ -46,7 +46,7 @@ class Orphan {
   // contents are zero'd out (and possibly reused, if we ever implement the ability to reuse space
   // in a message arena).
 
-public:
+ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
@@ -84,7 +84,7 @@ public:
   // Any existing readers or builders pointing at the object are invalidated by this call (even if
   // it doesn't move). You must call `get()` or `getReader()` again to get the new, valid pointer.
 
-private:
+ private:
   _::OrphanBuilder builder;
 
   template <typename, Kind>
@@ -101,7 +101,7 @@ class Orphanage: private kj::DisallowConstCopy {
   // Use to directly allocate Orphan objects, without having a parent object allocate and then
   // disown the object.
 
-public:
+ public:
   inline Orphanage(): arena(nullptr) {}
 
   template <typename BuilderType>
@@ -171,7 +171,7 @@ public:
   // into the message tree without copying it.  This is particularly useful when referencing very
   // large blobs, such as whole mmap'd files.
 
-private:
+ private:
   _::BuilderArena* arena;
   _::CapTableBuilder* capTable;
 

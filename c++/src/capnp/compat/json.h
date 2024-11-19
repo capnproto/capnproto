@@ -64,7 +64,7 @@ class JsonCodec {
   //   no obvious default behavior.
   // - When decoding, fields with unknown names are ignored by default to allow schema evolution.
 
-public:
+ public:
   JsonCodec();
   ~JsonCodec() noexcept(false);
 
@@ -232,7 +232,7 @@ public:
     return decodeRaw(kj::arrayPtr(input, size - 1), kj::fwd<Params>(params)...);
   }
 
-private:
+ private:
   class HandlerBase;
   class AnnotatedHandler;
   class AnnotatedEnumHandler;
@@ -346,7 +346,7 @@ inline DynamicEnum JsonCodec::decode(JsonValue::Reader input, EnumSchema type) c
 
 class JsonCodec::HandlerBase {
   // Internal helper; ignore.
-public:
+ public:
   virtual void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                           JsonValue::Builder output) const = 0;
   virtual Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
@@ -357,13 +357,13 @@ public:
 
 template <typename T>
 class JsonCodec::Handler<T, Style::POINTER>: private JsonCodec::HandlerBase {
-public:
+ public:
   virtual void encode(const JsonCodec& codec, ReaderFor<T> input,
                       JsonValue::Builder output) const = 0;
   virtual Orphan<T> decode(const JsonCodec& codec, JsonValue::Reader input,
                            Orphanage orphanage) const = 0;
 
-private:
+ private:
   void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
@@ -377,7 +377,7 @@ private:
 
 template <typename T>
 class JsonCodec::Handler<T, Style::STRUCT>: private JsonCodec::HandlerBase {
-public:
+ public:
   virtual void encode(const JsonCodec& codec, ReaderFor<T> input,
                       JsonValue::Builder output) const = 0;
   virtual void decode(const JsonCodec& codec, JsonValue::Reader input,
@@ -390,7 +390,7 @@ public:
     return result;
   }
 
-private:
+ private:
   void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
@@ -410,7 +410,7 @@ template <>
 class JsonCodec::Handler<DynamicStruct>: private JsonCodec::HandlerBase {
   // Almost identical to Style::STRUCT except that we pass the struct type to decode().
 
-public:
+ public:
   virtual void encode(const JsonCodec& codec, DynamicStruct::Reader input,
                       JsonValue::Builder output) const = 0;
   virtual void decode(const JsonCodec& codec, JsonValue::Reader input,
@@ -423,7 +423,7 @@ public:
     return result;
   }
 
-private:
+ private:
   void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<DynamicStruct>(), output);
@@ -441,11 +441,11 @@ private:
 
 template <typename T>
 class JsonCodec::Handler<T, Style::PRIMITIVE>: private JsonCodec::HandlerBase {
-public:
+ public:
   virtual void encode(const JsonCodec& codec, T input, JsonValue::Builder output) const = 0;
   virtual T decode(const JsonCodec& codec, JsonValue::Reader input) const = 0;
 
-private:
+ private:
   void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
@@ -459,12 +459,12 @@ private:
 
 template <typename T>
 class JsonCodec::Handler<T, Style::CAPABILITY>: private JsonCodec::HandlerBase {
-public:
+ public:
   virtual void encode(const JsonCodec& codec, typename T::Client input,
                       JsonValue::Builder output) const = 0;
   virtual typename T::Client decode(const JsonCodec& codec, JsonValue::Reader input) const = 0;
 
-private:
+ private:
   void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);

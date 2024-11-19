@@ -128,7 +128,7 @@ template <> inline constexpr Style style<DynamicCapability>() { return Style::CA
 // -------------------------------------------------------------------
 
 class DynamicEnum {
-public:
+ public:
   DynamicEnum() = default;
   inline DynamicEnum(EnumSchema::Enumerant enumerant)
       : schema(enumerant.getContainingEnum()), value(enumerant.getOrdinal()) {}
@@ -152,7 +152,7 @@ public:
   inline uint16_t getRaw() const { return value; }
   // Returns the raw underlying enum value.
 
-private:
+ private:
   EnumSchema schema;
   uint16_t value;
 
@@ -183,7 +183,7 @@ enum class HasMode: uint8_t {
 };
 
 class DynamicStruct::Reader {
-public:
+ public:
   typedef DynamicStruct Reads;
 
   Reader() = default;
@@ -220,7 +220,7 @@ public:
   bool has(kj::StringPtr name, HasMode mode = HasMode::NON_NULL) const;
   // Shortcuts to access fields by name.  These throw exceptions if no such field exists.
 
-private:
+ private:
   StructSchema schema;
   _::StructReader reader;
 
@@ -250,7 +250,7 @@ private:
 };
 
 class DynamicStruct::Builder {
-public:
+ public:
   typedef DynamicStruct Builds;
 
   Builder() = default;
@@ -314,7 +314,7 @@ public:
 
   Reader asReader() const;
 
-private:
+ private:
   StructSchema schema;
   _::StructBuilder builder;
 
@@ -341,7 +341,7 @@ private:
 };
 
 class DynamicStruct::Pipeline {
-public:
+ public:
   typedef DynamicStruct Pipelines;
 
   inline Pipeline(decltype(nullptr)): typeless(nullptr) {}
@@ -358,7 +358,7 @@ public:
   DynamicValue::Pipeline get(kj::StringPtr name);
   // Get by string name.
 
-private:
+ private:
   StructSchema schema;
   AnyPointer::Pipeline typeless;
 
@@ -371,7 +371,7 @@ private:
 // -------------------------------------------------------------------
 
 class DynamicList::Reader {
-public:
+ public:
   typedef DynamicList Reads;
 
   inline Reader(): reader(ElementSize::VOID) {}
@@ -395,7 +395,7 @@ public:
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
-private:
+ private:
   ListSchema schema;
   _::ListReader reader;
 
@@ -415,7 +415,7 @@ private:
 };
 
 class DynamicList::Builder {
-public:
+ public:
   typedef DynamicList Builds;
 
   inline Builder(): builder(ElementSize::VOID) {}
@@ -448,7 +448,7 @@ public:
 
   Reader asReader() const;
 
-private:
+ private:
   ListSchema schema;
   _::ListBuilder builder;
 
@@ -471,7 +471,7 @@ private:
 // -------------------------------------------------------------------
 
 class DynamicCapability::Client: public Capability::Client {
-public:
+ public:
   typedef DynamicCapability Calls;
   typedef DynamicCapability Reads;
 
@@ -499,7 +499,7 @@ public:
   Request<DynamicStruct, DynamicStruct> newRequest(
       kj::StringPtr methodName, kj::Maybe<MessageSize> sizeHint = kj::none);
 
-private:
+ private:
   InterfaceSchema schema;
 
   Client(InterfaceSchema schema, kj::Own<ClientHook>&& hook)
@@ -520,7 +520,7 @@ private:
 };
 
 class DynamicCapability::Server: public Capability::Server {
-public:
+ public:
   typedef DynamicCapability Serves;
 
   struct Options {
@@ -542,7 +542,7 @@ public:
 
   inline InterfaceSchema getSchema() const { return schema; }
 
-private:
+ private:
   InterfaceSchema schema;
   Options options;
 };
@@ -551,7 +551,7 @@ template <>
 class Request<DynamicStruct, DynamicStruct>: public DynamicStruct::Builder {
   // Specialization of `Request<T, U>` for DynamicStruct.
 
-public:
+ public:
   inline Request(DynamicStruct::Builder builder, kj::Own<RequestHook>&& hook,
                  StructSchema resultSchema)
       : DynamicStruct::Builder(builder), hook(kj::mv(hook)), resultSchema(resultSchema) {}
@@ -563,7 +563,7 @@ public:
   // Use when the caller is aware that the response type is StreamResult and wants to invoke
   // streaming behavior. It is an error to call this if the response type is not StreamResult.
 
-private:
+ private:
   kj::Own<RequestHook> hook;
   StructSchema resultSchema;
 
@@ -581,7 +581,7 @@ class CallContext<DynamicStruct, DynamicStruct>: public kj::DisallowConstCopy {
   // Methods of this class may only be called from within the server's event loop, not from other
   // threads.
 
-public:
+ public:
   explicit CallContext(CallContextHook& hook, StructSchema paramType, StructSchema resultType);
 
   DynamicStruct::Reader getParams();
@@ -597,7 +597,7 @@ public:
   StructSchema getParamsType() const { return paramType; }
   StructSchema getResultsType() const { return resultType; }
 
-private:
+ private:
   CallContextHook* hook;
   StructSchema paramType;
   StructSchema resultType;
@@ -621,7 +621,7 @@ template <> struct BuilderFor_<DynamicCapability, Kind::OTHER> { typedef Dynamic
 template <> struct PipelineFor_<DynamicCapability, Kind::OTHER> { typedef DynamicCapability::Client Type; };
 
 class DynamicValue::Reader {
-public:
+ public:
   typedef DynamicValue Reads;
 
   inline Reader(decltype(nullptr) n = nullptr);  // UNKNOWN
@@ -694,7 +694,7 @@ public:
   inline Type getType() const { return type; }
   // Get the type of this value.
 
-private:
+ private:
   Type type;
 
   union {
@@ -725,7 +725,7 @@ private:
 };
 
 class DynamicValue::Builder {
-public:
+ public:
   typedef DynamicValue Builds;
 
   inline Builder(decltype(nullptr) n = nullptr);  // UNKNOWN
@@ -773,7 +773,7 @@ public:
 
   Reader asReader() const;
 
-private:
+ private:
   Type type;
 
   union {
@@ -801,7 +801,7 @@ private:
 };
 
 class DynamicValue::Pipeline {
-public:
+ public:
   typedef DynamicValue Pipelines;
 
   inline Pipeline(decltype(nullptr) n = nullptr);
@@ -818,7 +818,7 @@ public:
   inline Type getType() { return type; }
   // Get the type of this value.
 
-private:
+ private:
   Type type;
   union {
     DynamicStruct::Pipeline structValue;
@@ -843,7 +843,7 @@ kj::StringTree KJ_STRINGIFY(const DynamicList::Builder& value);
 
 template <>
 class Orphan<DynamicStruct> {
-public:
+ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
@@ -863,7 +863,7 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
 
-private:
+ private:
   StructSchema schema;
   _::OrphanBuilder builder;
 
@@ -881,7 +881,7 @@ private:
 
 template <>
 class Orphan<DynamicList> {
-public:
+ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
@@ -903,7 +903,7 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
 
-private:
+ private:
   ListSchema schema;
   _::OrphanBuilder builder;
 
@@ -920,7 +920,7 @@ private:
 
 template <>
 class Orphan<DynamicCapability> {
-public:
+ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
@@ -940,7 +940,7 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
 
-private:
+ private:
   InterfaceSchema schema;
   _::OrphanBuilder builder;
 
@@ -957,7 +957,7 @@ private:
 
 template <>
 class Orphan<DynamicValue> {
-public:
+ public:
   inline Orphan(decltype(nullptr) n = nullptr): type(DynamicValue::UNKNOWN) {}
   inline Orphan(Void value);
   inline Orphan(bool value);
@@ -995,7 +995,7 @@ public:
   // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
   // transferred to the returned Orphan<T>.
 
-private:
+ private:
   DynamicValue::Type type;
   union {
     Void voidValue;

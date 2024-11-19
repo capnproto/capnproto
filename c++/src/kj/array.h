@@ -35,7 +35,7 @@ namespace kj {
 class ArrayDisposer {
   // Much like Disposer from memory.h.
 
-protected:
+ protected:
   // Do not declare a destructor, as doing so will force a global initializer for
   // HeapArrayDisposer::instance.
 
@@ -46,7 +46,7 @@ protected:
   // allocated while `elementCount` is the number of elements that were actually constructed;
   // these are always the same number for Array<T> but may be different when using ArrayBuilder<T>.
 
-public:
+ public:
 
   template <typename T>
   void dispose(T* firstElement, size_t elementCount, size_t capacity) const;
@@ -55,7 +55,7 @@ public:
   // Callers must not call dispose() on the same array twice, even if the first call throws
   // an exception.
 
-private:
+ private:
   template <typename T, bool hasTrivialDestructor = KJ_HAS_TRIVIAL_DESTRUCTOR(T)>
   struct Dispose_;
 };
@@ -68,7 +68,7 @@ class ExceptionSafeArrayUtil {
   // to use UnwindDetector to detect unwind and avoid exceptions in this case.  Therefore, no more
   // than one exception will be thrown (and the program will not terminate).
 
-public:
+ public:
   inline ExceptionSafeArrayUtil(void* ptr, size_t elementSize, size_t constructedElementCount,
                                 void (*destroyElement)(void*))
       : pos(reinterpret_cast<byte*>(ptr) + elementSize * constructedElementCount),
@@ -92,7 +92,7 @@ public:
   // Prevent ExceptionSafeArrayUtil's destructor from destroying the constructed elements.
   // Call this after you've successfully finished constructing.
 
-private:
+ private:
   byte* pos;
   size_t elementSize;
   size_t constructedElementCount;
@@ -100,7 +100,7 @@ private:
 };
 
 class DestructorOnlyArrayDisposer: public ArrayDisposer {
-public:
+ public:
   static const DestructorOnlyArrayDisposer instance;
 
   void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
@@ -111,7 +111,7 @@ class NullArrayDisposer: public ArrayDisposer {
   // An ArrayDisposer that does nothing.  Can be used to construct a fake Arrays that doesn't
   // actually own its content.
 
-public:
+ public:
   static const NullArrayDisposer instance;
 
   void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
@@ -127,7 +127,7 @@ class Array {
   // destructor.  Can be moved, but not copied.  Much like Own<T>, but for arrays rather than
   // single objects.
 
-public:
+ public:
   inline Array(): ptr(nullptr), size_(0), disposer(nullptr) {}
   inline Array(decltype(nullptr)): ptr(nullptr), size_(0), disposer(nullptr) {}
   inline Array(Array&& other) noexcept
@@ -255,7 +255,7 @@ public:
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
 
-private:
+ private:
   T* ptr;
   size_t size_;
   const ArrayDisposer* disposer;
@@ -283,7 +283,7 @@ static_assert(!canMemcpy<Array<char>>(), "canMemcpy<>() is broken");
 namespace _ {  // private
 
 class HeapArrayDisposer final: public ArrayDisposer {
-public:
+ public:
   template <typename T>
   static T* allocate(size_t count);
   template <typename T>
@@ -291,7 +291,7 @@ public:
 
   static const HeapArrayDisposer instance;
 
-private:
+ private:
   static void* allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
                             void (*constructElement)(void*), void (*destroyElement)(void*));
   // Allocates and constructs the array.  Both function pointers are null if the constructor is
@@ -344,7 +344,7 @@ class ArrayBuilder {
   // Class which lets you build an Array<T> specifying the exact constructor arguments for each
   // element, rather than starting by default-constructing them.
 
-public:
+ public:
   ArrayBuilder(): ptr(nullptr), pos(nullptr), endPtr(nullptr) {}
   ArrayBuilder(decltype(nullptr)): ptr(nullptr), pos(nullptr), endPtr(nullptr) {}
   explicit ArrayBuilder(RemoveConst<T>* firstElement, size_t capacity,
@@ -512,7 +512,7 @@ public:
     return pos == endPtr;
   }
 
-private:
+ private:
   T* ptr;
   RemoveConst<T>* pos;
   T* endPtr;
@@ -549,7 +549,7 @@ template <typename T, size_t fixedSize>
 class FixedArray {
   // A fixed-width array whose storage is allocated inline rather than on the heap.
 
-public:
+ public:
   inline constexpr size_t size() const { return fixedSize; }
   inline constexpr T* begin() KJ_LIFETIMEBOUND { return content; }
   inline constexpr T* end() KJ_LIFETIMEBOUND { return content + fixedSize; }
@@ -573,7 +573,7 @@ public:
 
   inline void fill(T t) { asPtr().fill(t); }
 
-private:
+ private:
   T content[fixedSize];
 };
 
@@ -584,7 +584,7 @@ class CappedArray {
   //
   // TODO(someday):  Don't construct elements past currentSize?
 
-public:
+ public:
   inline KJ_CONSTEXPR() CappedArray(): currentSize(fixedSize) {}
   inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
 
@@ -605,7 +605,7 @@ public:
 
   inline void fill(T t) { asPtr().fill(t); }
 
-private:
+ private:
   size_t currentSize;
   T content[fixedSize];
 };

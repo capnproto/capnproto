@@ -547,22 +547,22 @@ TEST(Common, MaybeUnwrapOrReturn) {
 #endif
 
 class Foo {
-public:
+ public:
   KJ_DISALLOW_COPY_AND_MOVE(Foo);
   virtual ~Foo() {}
-protected:
+ protected:
   Foo() = default;
 };
 
 class Bar: public Foo {
-public:
+ public:
   Bar() = default;
   KJ_DISALLOW_COPY_AND_MOVE(Bar);
   virtual ~Bar() {}
 };
 
 class Baz: public Foo {
-public:
+ public:
   Baz() = delete;
   KJ_DISALLOW_COPY_AND_MOVE(Baz);
   virtual ~Baz() {}
@@ -1179,11 +1179,11 @@ struct DisallowedInCoroutineStruct {
   KJ_DISALLOW_AS_COROUTINE_PARAM;
 };
 class DisallowedInCoroutinePublic {
-public:
+ public:
   KJ_DISALLOW_AS_COROUTINE_PARAM;
 };
 class DisallowedInCoroutinePrivate {
-private:
+ private:
   KJ_DISALLOW_AS_COROUTINE_PARAM;
 };
 struct AllowedInCoroutine {};

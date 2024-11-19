@@ -39,7 +39,7 @@ class JsonRpc: private kj::TaskSet::ErrorHandler {
   // Of course, JSON-RPC does not support capabilities. So, the client and server each expose
   // exactly one object to the other.
 
-public:
+ public:
   class Transport;
   class ContentLengthTransport;
 
@@ -55,7 +55,7 @@ public:
 
   kj::Promise<void> onError() { return errorPromise.addBranch(); }
 
-private:
+ private:
   JsonCodec codec;
   Transport& transport;
   DynamicCapability::Client interface;
@@ -88,7 +88,7 @@ private:
 };
 
 class JsonRpc::Transport {
-public:
+ public:
   virtual kj::Promise<void> send(kj::StringPtr text) = 0;
   virtual kj::Promise<kj::String> receive() = 0;
 };
@@ -97,7 +97,7 @@ class JsonRpc::ContentLengthTransport: public Transport {
   // The transport used by Visual Studio Code: Each message is composed like an HTTP message
   // without the first line. That is, a list of headers, followed by a blank line, followed by the
   // content whose length is determined by the content-length header.
-public:
+ public:
   explicit ContentLengthTransport(kj::AsyncIoStream& stream);
   ~ContentLengthTransport() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(ContentLengthTransport);
@@ -105,7 +105,7 @@ public:
   kj::Promise<void> send(kj::StringPtr text) override;
   kj::Promise<kj::String> receive() override;
 
-private:
+ private:
   kj::AsyncIoStream& stream;
   kj::Own<kj::HttpInputStream> input;
   kj::ArrayPtr<const byte> parts[2];

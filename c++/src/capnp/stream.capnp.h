@@ -43,7 +43,7 @@ struct StreamResult {
 // =======================================================================================
 
 class StreamResult::Reader {
-public:
+ public:
   typedef StreamResult Reads;
 
   Reader() = default;
@@ -59,7 +59,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -72,7 +72,7 @@ private:
 };
 
 class StreamResult::Builder {
-public:
+ public:
   typedef StreamResult Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -87,7 +87,7 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -98,14 +98,14 @@ private:
 
 #if !CAPNP_LITE
 class StreamResult::Pipeline {
-public:
+ public:
   typedef StreamResult Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>

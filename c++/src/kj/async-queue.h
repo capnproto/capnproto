@@ -35,7 +35,7 @@ namespace kj {
 
 template <typename T>
 class WaiterQueue {
-public:
+ public:
   // A WaiterQueue creates Nodes that blend newAdaptedPromise<T, Adaptor> and List<Node>.
 
   WaiterQueue() = default;
@@ -65,7 +65,7 @@ public:
     return queue.empty();
   }
 
-private:
+ private:
   struct BaseNode {
     // This is a separate structure because List requires a predefined memory layout but
     // newAdaptedPromise() only provides access to the Adaptor type in the ctor.
@@ -104,7 +104,7 @@ template <typename T>
 class ProducerConsumerQueue {
   // ProducerConsumerQueue is an async FIFO queue.
 
-public:
+ public:
   void push(T v) {
     // Push an existing value onto the queue.
 
@@ -146,7 +146,7 @@ public:
     }
   }
 
-private:
+ private:
   std::list<T> values;
   WaiterQueue<T> waiters;
 };

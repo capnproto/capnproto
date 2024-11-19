@@ -48,7 +48,7 @@ class Data::Reader: public kj::ArrayPtr<const byte> {
   // Points to a blob of bytes.  The usual Reader rules apply -- Data::Reader behaves like a simple
   // pointer which does not own its target, can be passed by value, etc.
 
-public:
+ public:
   typedef Data Reads;
 
   Reader() = default;
@@ -68,7 +68,7 @@ class Text::Reader: public kj::StringPtr {
   // the Text::Reader must guarantee this, so that the consumer need not check.  The data SHOULD
   // also be valid UTF-8, but this is NOT guaranteed -- the consumer must verify if it cares.
 
-public:
+ public:
   typedef Text Reads;
 
   Reader() = default;
@@ -92,7 +92,7 @@ public:
 class Data::Builder: public kj::ArrayPtr<byte> {
   // Like Data::Reader except the pointers aren't const.
 
-public:
+ public:
   typedef Data Builds;
 
   Builder() = default;
@@ -110,7 +110,7 @@ public:
 class Text::Builder: public kj::DisallowConstCopy {
   // Basically identical to kj::StringPtr, except that the contents are non-const.
 
-public:
+ public:
   inline Builder(): content(nulstr, 1) {}
   inline Builder(decltype(nullptr)): content(nulstr, 1) {}
   inline Builder(char* value): content(value, strlen(value) + 1) {}
@@ -161,7 +161,7 @@ public:
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
-private:
+ private:
   inline explicit Builder(kj::ArrayPtr<char> content): content(content) {}
 
   kj::ArrayPtr<char> content;

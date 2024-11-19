@@ -273,7 +273,7 @@ TEST(SchemaLoader, EnumerateNoPlaceholders) {
 }
 
 class FakeLoaderCallback: public SchemaLoader::LazyLoadCallback {
-public:
+ public:
   FakeLoaderCallback(const schema::Node::Reader node): node(node), loaded(false) {}
 
   bool isLoaded() { return loaded; }
@@ -290,7 +290,7 @@ public:
     loader.loadOnce(node);
   }
 
-private:
+ private:
   const schema::Node::Reader node;
   mutable bool loaded = false;
 };

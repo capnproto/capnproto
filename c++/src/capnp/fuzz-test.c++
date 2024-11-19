@@ -49,7 +49,7 @@ class DisableStackTraces: public kj::ExceptionCallback {
   // This test generates a lot of exceptions. Performing a backtrace on each one can be slow,
   // especially on Windows (where it is very, very slow). So, disable them.
 
-public:
+ public:
   StackTraceMode stackTraceMode() override {
     return StackTraceMode::NONE;
   }

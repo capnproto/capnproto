@@ -37,13 +37,13 @@ namespace compiler {
 typedef std::unordered_map<uint64_t, Orphan<schema::Node::SourceInfo::Reader>> SourceInfoMap;
 
 class Compiler::Alias {
-public:
+ public:
   Alias(CompiledModule& module, Node& parent, const Expression::Reader& targetName)
       : module(module), parent(parent), targetName(targetName) {}
 
   kj::Maybe<Resolver::ResolveResult> compile();
 
-private:
+ private:
   CompiledModule& module;
   Node& parent;
   Expression::Reader targetName;
@@ -62,7 +62,7 @@ class Compiler::Node final: public Resolver {
   // - Bootstrap:  A NodeTranslator has been built and advanced to the bootstrap phase.
   // - Finished:  A final Schema object has been constructed.
 
-public:
+ public:
   explicit Node(CompiledModule& module);
   // Create a root node representing the given file.  May
 
@@ -104,7 +104,7 @@ public:
   kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr name) override;
   kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) override;
 
-private:
+ private:
   CompiledModule* module;  // null iff isBuiltin is true
   kj::Maybe<Node&> parent;
 
@@ -232,7 +232,7 @@ private:
 };
 
 class Compiler::CompiledModule {
-public:
+ public:
   CompiledModule(Compiler::Impl& compiler, Module& parserModule);
 
   Compiler::Impl& getCompiler() { return compiler; }
@@ -248,7 +248,7 @@ public:
   Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
       getFileImportTable(Orphanage orphanage);
 
-private:
+ private:
   Compiler::Impl& compiler;
   Module& parserModule;
   MallocMessageBuilder contentArena;
@@ -257,7 +257,7 @@ private:
 };
 
 class Compiler::Impl final : public SchemaLoader::LazyLoadCallback {
-public:
+ public:
   explicit Impl(AnnotationFlag annotationFlag);
   virtual ~Impl() noexcept(false);
 
@@ -326,7 +326,7 @@ public:
   void loadFinal(const SchemaLoader& loader, uint64_t id);
   // Called from the SchemaLoader callback for the final loader.
 
-private:
+ private:
   AnnotationFlag annotationFlag;
 
   kj::Arena nodeArena;
@@ -1359,7 +1359,7 @@ void Compiler::load(const SchemaLoader& loader, uint64_t id) const {
 // -----------------------------------------------------------------------------
 
 class Compiler::ErrorIgnorer: public ErrorReporter {
-public:
+ public:
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {}
   bool hadErrors() override { return false; }
 

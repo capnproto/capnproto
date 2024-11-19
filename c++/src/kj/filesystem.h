@@ -67,7 +67,7 @@ class Path {
   //     Path p = ...;
   //     p = kj::mv(p).append("bar");  // in-place update, avoids string copying
 
-public:
+ public:
   Path(decltype(nullptr));  // empty path
 
   explicit Path(StringPtr name);
@@ -223,7 +223,7 @@ public:
   // Since such Win32 API calls generally return a length, this function inputs an array slice.
   // The slice should not include any NUL terminator.
 
-private:
+ private:
   Array<String> parts;
 
   // TODO(perf): Consider unrolling one element from `parts`, so that a one-element path doesn't
@@ -251,7 +251,7 @@ class PathPtr {
   //
   // PathPtr is to Path as ArrayPtr is to Array and StringPtr is to String.
 
-public:
+ public:
   PathPtr(decltype(nullptr));
   PathPtr(const Path& path);
 
@@ -284,7 +284,7 @@ public:
   Array<wchar_t> forWin32Api(bool absolute) const;
   // Equivalent to the corresponding methods of `Path`.
 
-private:
+ private:
   ArrayPtr<const String> parts;
 
   explicit PathPtr(ArrayPtr<const String> parts);
@@ -313,7 +313,7 @@ private:
 class FsNode {
   // Base class for filesystem node types.
 
-public:
+ public:
   Own<const FsNode> clone() const;
   // Creates a new object of exactly the same type as this one, pointing at exactly the same
   // external object.
@@ -393,14 +393,14 @@ public:
   // other processes. (In practice this works by writing into a temporary file and then rename()ing
   // it.)
 
-protected:
+ protected:
   virtual Own<const FsNode> cloneFsNode() const = 0;
   // Implements clone(). Required to return an object with exactly the same type as this one.
   // Hence, every subclass must implement this.
 };
 
 class ReadableFile: public FsNode {
-public:
+ public:
   Own<const ReadableFile> clone() const;
 
   String readAllText() const;
@@ -442,14 +442,14 @@ public:
 };
 
 class AppendableFile: public FsNode, public OutputStream {
-public:
+ public:
   Own<const AppendableFile> clone() const;
 
   // All methods are inherited.
 };
 
 class WritableFileMapping {
-public:
+ public:
   virtual ArrayPtr<byte> get() const = 0;
   // Gets the mapped bytes. The returned array can be modified, and those changes may be written to
   // the underlying file, but there is no guarantee that they are written unless you subsequently
@@ -476,7 +476,7 @@ public:
 };
 
 class File: public ReadableFile {
-public:
+ public:
   Own<const File> clone() const;
 
   void writeAll(ArrayPtr<const byte> bytes) const;
@@ -517,7 +517,7 @@ public:
 class ReadableDirectory: public FsNode {
   // Read-only subset of `Directory`.
 
-public:
+ public:
   Own<const ReadableDirectory> clone() const;
 
   virtual Array<String> listNames() const = 0;
@@ -701,7 +701,7 @@ class Directory: public ReadableDirectory {
   // handle-relative paths, KJ may stop locking directories in this way, so do not rely on this
   // behavior.
 
-public:
+ public:
   Own<const Directory> clone() const;
 
   template <typename T>
@@ -727,7 +727,7 @@ public:
     // the conventions of the filesystem. Additionally, the implementation of Directory will avoid
     // returning these temporary files from its list*() methods, in order to avoid observable
     // inconsistencies across platforms.
-  public:
+   public:
     explicit Replacer(WriteMode mode);
 
     virtual const T& get() = 0;
@@ -777,7 +777,7 @@ public:
     //   reasons, it has the critical problem that it cannot be used when the source file has open
     //   file handles, which is generally the case when using Replacer.
 
-  protected:
+   protected:
     const WriteMode mode;
   };
 
@@ -894,12 +894,12 @@ public:
   // - sendfile?
   // - fadvise and such
 
-private:
+ private:
   static void commitFailed(WriteMode mode);
 };
 
 class Filesystem {
-public:
+ public:
   virtual const Directory& getRoot() const = 0;
   // Get the filesystem's root directory, as of the time the Filesystem object was created.
 
@@ -929,7 +929,7 @@ public:
 
 class InMemoryFileFactory {
   // Used to customize the File implementation used by InMemoryDirectory.
-public:
+ public:
   virtual kj::Own<const File> create(const Clock& clock) const = 0;
 };
 

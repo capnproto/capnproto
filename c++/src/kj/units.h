@@ -94,7 +94,7 @@ class UnitRatio {
   static_assert(isIntegralOrBounded<Number>(),
       "Underlying type for UnitRatio must be integer.");
 
-public:
+ public:
   inline UnitRatio() {}
 
   constexpr UnitRatio(Number unit1PerUnit2, decltype(unsafe)): unit1PerUnit2(unit1PerUnit2) {}
@@ -159,7 +159,7 @@ public:
     return unit1PerUnit2 == other.unit1PerUnit2;
   }
 
-private:
+ private:
   Number unit1PerUnit2;
 
   template <typename OtherNumber, typename OtherUnit>
@@ -226,7 +226,7 @@ class Quantity {
   static_assert(isIntegralOrBounded<Number>(),
       "Underlying type for Quantity must be integer.");
 
-public:
+ public:
   inline constexpr Quantity() = default;
 
   inline constexpr Quantity(MaxValue_): value(maxValue) {}
@@ -348,7 +348,7 @@ public:
     return *this;
   }
 
-private:
+ private:
   Number value;
 
   template <typename OtherNumber, typename OtherUnit>
@@ -405,7 +405,7 @@ class Absolute {
   //   would implicitly allow things like multiplying an Absolute by a UnitRatio to change its
   //   units, which is actually totally logical and kind of neat.
 
-public:
+ public:
   inline constexpr Absolute(MaxValue_): value(maxValue) {}
   inline constexpr Absolute(MinValue_): value(minValue) {}
   // Allow initialization from maxValue and minValue.
@@ -426,7 +426,7 @@ public:
   inline constexpr bool operator< (const Absolute& other) const { return value <  other.value; }
   inline constexpr bool operator> (const Absolute& other) const { return value >  other.value; }
 
-private:
+ private:
   T value;
 
   explicit constexpr Absolute(T value): value(value) {}
@@ -488,7 +488,7 @@ template <uint value>
 class BoundedConst {
   // A constant integer value on which we can do bit size analysis.
 
-public:
+ public:
   BoundedConst() = default;
 
   inline constexpr uint unwrap() const { return value; }
@@ -577,7 +577,7 @@ inline constexpr BoundedConst<kj::max(a, b)> max(BoundedConst<a>, BoundedConst<b
 
 template <uint64_t maxN, typename T>
 class Bounded {
-public:
+ public:
   static_assert(maxN <= T(kj::maxValue), "possible overflow detected");
 
   Bounded() = default;
@@ -704,7 +704,7 @@ public:
   //
   // Only use these as a last resort, with ample commentary on why you think it's safe.
 
-private:
+ private:
   T value;
 
   template <uint64_t, typename>
@@ -975,7 +975,7 @@ inline constexpr Bounded<kj::max(aN, b), A> max(BoundedConst<b>, Bounded<aN, A> 
 
 template <uint64_t maxN, typename T>
 class SafeUnwrapper {
-public:
+ public:
   inline explicit constexpr SafeUnwrapper(Bounded<maxN, T> value): value(value.unwrap()) {}
 
   template <typename U, typename = EnableIf<isIntegral<U>()>>
@@ -989,7 +989,7 @@ public:
     return value;
   }
 
-private:
+ private:
   T value;
 };
 
@@ -1002,7 +1002,7 @@ inline constexpr SafeUnwrapper<maxN, T> unbound(Bounded<maxN, T> bounded) {
 
 template <uint64_t value>
 class SafeConstUnwrapper {
-public:
+ public:
   template <typename T, typename = EnableIf<isIntegral<T>()>>
   inline constexpr operator T() const {
     static_assert(value <= T(maxValue), "this operation will truncate");
@@ -1086,14 +1086,14 @@ OP(>)
 
 template <uint64_t maxN, typename T>
 class Range<Bounded<maxN, T>> {
-public:
+ public:
   inline constexpr Range(Bounded<maxN, T> begin, Bounded<maxN, T> end)
       : inner(unbound(begin), unbound(end)) {}
   inline explicit constexpr Range(Bounded<maxN, T> end)
       : inner(unbound(end)) {}
 
   class Iterator {
-  public:
+   public:
     Iterator() = default;
     inline explicit Iterator(typename Range<T>::Iterator inner): inner(inner) {}
 
@@ -1102,27 +1102,27 @@ public:
 
     inline bool operator==(const Iterator& other) const { return inner == other.inner; }
 
-  private:
+   private:
     typename Range<T>::Iterator inner;
   };
 
   inline Iterator begin() const { return Iterator(inner.begin()); }
   inline Iterator end() const { return Iterator(inner.end()); }
 
-private:
+ private:
   Range<T> inner;
 };
 
 template <typename T, typename U>
 class Range<Quantity<T, U>> {
-public:
+ public:
   inline constexpr Range(Quantity<T, U> begin, Quantity<T, U> end)
       : inner(begin / unit<Quantity<T, U>>(), end / unit<Quantity<T, U>>()) {}
   inline explicit constexpr Range(Quantity<T, U> end)
       : inner(end / unit<Quantity<T, U>>()) {}
 
   class Iterator {
-  public:
+   public:
     Iterator() = default;
     inline explicit Iterator(typename Range<T>::Iterator inner): inner(inner) {}
 
@@ -1131,14 +1131,14 @@ public:
 
     inline bool operator==(const Iterator& other) const { return inner == other.inner; }
 
-  private:
+   private:
     typename Range<T>::Iterator inner;
   };
 
   inline Iterator begin() const { return Iterator(inner.begin()); }
   inline Iterator end() const { return Iterator(inner.end()); }
 
-private:
+ private:
   Range<T> inner;
 };
 

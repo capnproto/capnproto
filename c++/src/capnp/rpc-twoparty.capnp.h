@@ -136,7 +136,7 @@ struct JoinResult {
 // =======================================================================================
 
 class VatId::Reader {
-public:
+ public:
   typedef VatId Reads;
 
   Reader() = default;
@@ -154,7 +154,7 @@ public:
 
   inline  ::capnp::rpc::twoparty::Side getSide() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -167,7 +167,7 @@ private:
 };
 
 class VatId::Builder {
-public:
+ public:
   typedef VatId Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -185,7 +185,7 @@ public:
   inline  ::capnp::rpc::twoparty::Side getSide();
   inline void setSide( ::capnp::rpc::twoparty::Side value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -196,14 +196,14 @@ private:
 
 #if !CAPNP_LITE
 class VatId::Pipeline {
-public:
+ public:
   typedef VatId Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -212,7 +212,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class ThirdPartyCompletion::Reader {
-public:
+ public:
   typedef ThirdPartyCompletion Reads;
 
   Reader() = default;
@@ -230,7 +230,7 @@ public:
 
   inline  ::uint32_t getJoinId() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -243,7 +243,7 @@ private:
 };
 
 class ThirdPartyCompletion::Builder {
-public:
+ public:
   typedef ThirdPartyCompletion Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -261,7 +261,7 @@ public:
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -272,14 +272,14 @@ private:
 
 #if !CAPNP_LITE
 class ThirdPartyCompletion::Pipeline {
-public:
+ public:
   typedef ThirdPartyCompletion Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -288,7 +288,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class ThirdPartyToAwait::Reader {
-public:
+ public:
   typedef ThirdPartyToAwait Reads;
 
   Reader() = default;
@@ -304,7 +304,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -317,7 +317,7 @@ private:
 };
 
 class ThirdPartyToAwait::Builder {
-public:
+ public:
   typedef ThirdPartyToAwait Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -332,7 +332,7 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -343,14 +343,14 @@ private:
 
 #if !CAPNP_LITE
 class ThirdPartyToAwait::Pipeline {
-public:
+ public:
   typedef ThirdPartyToAwait Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -359,7 +359,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class ThirdPartyToContact::Reader {
-public:
+ public:
   typedef ThirdPartyToContact Reads;
 
   Reader() = default;
@@ -375,7 +375,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -388,7 +388,7 @@ private:
 };
 
 class ThirdPartyToContact::Builder {
-public:
+ public:
   typedef ThirdPartyToContact Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -403,7 +403,7 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -414,14 +414,14 @@ private:
 
 #if !CAPNP_LITE
 class ThirdPartyToContact::Pipeline {
-public:
+ public:
   typedef ThirdPartyToContact Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -430,7 +430,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class JoinKeyPart::Reader {
-public:
+ public:
   typedef JoinKeyPart Reads;
 
   Reader() = default;
@@ -452,7 +452,7 @@ public:
 
   inline  ::uint16_t getPartNum() const;
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -465,7 +465,7 @@ private:
 };
 
 class JoinKeyPart::Builder {
-public:
+ public:
   typedef JoinKeyPart Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -489,7 +489,7 @@ public:
   inline  ::uint16_t getPartNum();
   inline void setPartNum( ::uint16_t value);
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -500,14 +500,14 @@ private:
 
 #if !CAPNP_LITE
 class JoinKeyPart::Pipeline {
-public:
+ public:
   typedef JoinKeyPart Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>
@@ -516,7 +516,7 @@ private:
 #endif  // !CAPNP_LITE
 
 class JoinResult::Reader {
-public:
+ public:
   typedef JoinResult Reads;
 
   Reader() = default;
@@ -541,7 +541,7 @@ public:
   inline  ::capnp::Capability::Client getCap() const;
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -554,7 +554,7 @@ private:
 };
 
 class JoinResult::Builder {
-public:
+ public:
   typedef JoinResult Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
@@ -584,7 +584,7 @@ public:
   inline ::capnp::Orphan< ::capnp::Capability> disownCap();
 #endif  // !CAPNP_LITE
 
-private:
+ private:
   ::capnp::_::StructBuilder _builder;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
@@ -595,7 +595,7 @@ private:
 
 #if !CAPNP_LITE
 class JoinResult::Pipeline {
-public:
+ public:
   typedef JoinResult Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
@@ -603,7 +603,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::Capability::Client getCap();
-private:
+ private:
   ::capnp::AnyPointer::Pipeline _typeless;
   friend class ::capnp::PipelineHook;
   template <typename, ::capnp::Kind>

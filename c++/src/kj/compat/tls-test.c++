@@ -383,7 +383,7 @@ static constexpr char SELF_SIGNED_CERT[] =
 class ErrorNexus {
   // Helper class that wraps various promises such that if one throws an exception, they all do.
 
-public:
+ public:
   ErrorNexus(): ErrorNexus(kj::newPromiseAndFulfiller<void>()) {}
 
   template <typename T>
@@ -394,7 +394,7 @@ public:
     }).exclusiveJoin(failurePromise.addBranch().then([]() -> T { KJ_UNREACHABLE; }));
   }
 
-private:
+ private:
   kj::ForkedPromise<void> failurePromise;
   kj::Own<kj::PromiseFulfiller<void>> fulfiller;
 
@@ -686,7 +686,7 @@ KJ_TEST("TLS full duplex") {
 }
 
 class TestSniCallback: public TlsSniCallback {
-public:
+ public:
   kj::Maybe<TlsKeypair> getKey(kj::StringPtr hostname) override {
     ++callCount;
 
@@ -929,7 +929,7 @@ class MockConnectionReceiver final: public ConnectionReceiver {
     Own<PromiseFulfiller<Own<AsyncIoStream>>> clientFulfiller;
   };
 
-public:
+ public:
   MockConnectionReceiver(AsyncIoProvider& provider): provider(provider) {}
 
   Promise<Own<AsyncIoStream>> accept() override {
@@ -958,7 +958,7 @@ public:
     return connectImpl(KJ_EXCEPTION(DISCONNECTED, "Pipes are leaky")).ignoreResult();
   }
 
-private:
+ private:
   Promise<Own<AsyncIoStream>> acceptImpl() {
     if (clientRequests.empty()) {
       KJ_ASSERT(!serverFulfiller);
@@ -1002,7 +1002,7 @@ private:
 
 class TlsReceiverTest final: public TlsTest {
   // TlsReceiverTest augments TlsTest to test TlsConnectionReceiver.
-public:
+ public:
   TlsReceiverTest(): TlsTest() {
     auto baseReceiverPtr = kj::heap<MockConnectionReceiver>(*io.provider);
     baseReceiver = baseReceiverPtr.get();

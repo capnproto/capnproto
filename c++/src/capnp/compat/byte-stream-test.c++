@@ -111,7 +111,7 @@ KJ_TEST("KJ -> ByteStream -> KJ without shortening") {
 }
 
 class ExactPointerWriter: public kj::AsyncOutputStream {
-public:
+ public:
   kj::ArrayPtr<const kj::byte> receivedBuffer;
 
   void fulfill() {
@@ -138,7 +138,7 @@ public:
     KJ_EXPECT(receivedBuffer == expected.asArray(), receivedBuffer, expected);
   }
 
-private:
+ private:
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
 };
 
@@ -706,7 +706,7 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ promise stream -> ByteStream -> KJ") {
 }
 
 class ExplicitEndTest final: public ExplicitEndOutputStream {
-public:
+ public:
   kj::Vector<byte> bytes;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> endFulfiller;
 
@@ -739,7 +739,7 @@ public:
 };
 
 class PathProbeBlocker final: public ExplicitEndOutputStream {
-public:
+ public:
   PathProbeBlocker(kj::Own<ExplicitEndOutputStream> inner): inner(kj::mv(inner)) {}
   PathProbeBlocker(kj::Own<kj::AsyncOutputStream> inner)
       : inner(inner.downcast<ExplicitEndOutputStream>()) {}
@@ -760,7 +760,7 @@ public:
 
   // Don't implement tryPumpFrom(), to block path shortening through this wrapper.
 
-private:
+ private:
   kj::Own<ExplicitEndOutputStream> inner;
 };
 

@@ -33,7 +33,7 @@ class ReadyInputStreamWrapper {
   //
   // Unfortunately this requires buffering, so is not very efficient.
 
-public:
+ public:
   ReadyInputStreamWrapper(AsyncInputStream& input);
   ~ReadyInputStreamWrapper() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(ReadyInputStreamWrapper);
@@ -48,7 +48,7 @@ public:
   bool isAtEnd() { return eof; }
   // Returns true if read() would return zero.
 
-private:
+ private:
   AsyncInputStream& input;
   kj::ForkedPromise<void> pumpTask = nullptr;
   bool isPumping = false;
@@ -64,7 +64,7 @@ class ReadyOutputStreamWrapper {
   //
   // Unfortunately this requires buffering, so is not very efficient.
 
-public:
+ public:
   ReadyOutputStreamWrapper(AsyncOutputStream& output);
   ~ReadyOutputStreamWrapper() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(ReadyOutputStreamWrapper);
@@ -88,7 +88,7 @@ public:
   // TODO(perf): This is an ugly hack to avoid sending lots of tiny packets when using TLS, which
   // has to work around OpenSSL's readiness-based I/O layer. We could certainly do better here.
 
-private:
+ private:
   AsyncOutputStream& output;
   ArrayPtr<const byte> segments[2];
   kj::ForkedPromise<void> pumpTask = nullptr;
@@ -108,7 +108,7 @@ private:
 
 class ReadyOutputStreamWrapper::Cork {
   // An object that, when destructed, will uncork its parent stream.
-public:
+ public:
   ~Cork() {
     KJ_IF_SOME(p, parent) {
       p.uncork();
@@ -119,7 +119,7 @@ public:
   }
   KJ_DISALLOW_COPY(Cork);
 
-private:
+ private:
   Cork(ReadyOutputStreamWrapper& parent) : parent(parent) {}
 
   kj::Maybe<ReadyOutputStreamWrapper&> parent;

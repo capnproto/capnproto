@@ -40,7 +40,7 @@ class Exception {
   // Actually, a subclass of this which also implements std::exception will be thrown, but we hide
   // that fact from the interface to avoid #including <exception>.
 
-public:
+ public:
   enum class Type {
     // What kind of failure?
 
@@ -158,7 +158,7 @@ public:
   // KJ / Cap'n Proto. In particular, Cloudflare Workers commonly has to convert a JavaScript
   // exception to KJ and back. The exception is serialized using V8 serialization.
 
-private:
+ private:
   String ownFile;
   const char* file;
   int line;
@@ -225,7 +225,7 @@ class ExceptionCallback {
   // behave a lot like try/catch blocks, except that they are called before any stack unwinding
   // occurs.
 
-public:
+ public:
   ExceptionCallback();
   KJ_DISALLOW_COPY_AND_MOVE(ExceptionCallback);
   virtual ~ExceptionCallback() noexcept(false);
@@ -280,10 +280,10 @@ public:
   // be invoked inside the new thread to initialize the thread's ExceptionCallback. The initializer
   // function itself receives, as its parameter, the thread's main function, which it must call.
 
-protected:
+ protected:
   ExceptionCallback& next;
 
-private:
+ private:
   ExceptionCallback(ExceptionCallback& next);
 
   class RootExceptionCallback;
@@ -341,7 +341,7 @@ class UnwindDetector {
   // an object that was actually constructed during exception unwind, it will behave as if no
   // unwind is taking place.  This is usually the desired behavior.
 
-public:
+ public:
   UnwindDetector();
 
   bool isUnwinding() const;
@@ -354,7 +354,7 @@ public:
   // caught and treated as secondary faults, meaning they are considered to be side-effects of the
   // exception that is unwinding the stack.  Otherwise, exceptions are passed through normally.
 
-private:
+ private:
   uint uncaughtCount;
 
   void catchThrownExceptionAsSecondaryFault() const;
@@ -454,12 +454,12 @@ class InFlightExceptionIterator {
   //
   // This class is safe to use in a signal handler.
 
-public:
+ public:
   InFlightExceptionIterator();
 
   Maybe<const Exception&> next();
 
-private:
+ private:
   const Exception* ptr;
 };
 

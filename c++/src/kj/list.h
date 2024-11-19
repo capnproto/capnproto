@@ -82,7 +82,7 @@ class List {
   // points to without breaking the iteration. However, removing any *other* element could
   // invalidate the iterator.
 
-public:
+ public:
   List() = default;
   KJ_DISALLOW_COPY_AND_MOVE(List);
 
@@ -140,7 +140,7 @@ public:
   T& front() { return *begin(); }
   const T& front() const { return *begin(); }
 
-private:
+ private:
   Maybe<T&> head;
   Maybe<T&>* tail = &head;
   size_t listSize = 0;
@@ -148,7 +148,7 @@ private:
 
 template <typename T>
 class ListLink {
-public:
+ public:
   ListLink(): next(kj::none), prev(nullptr) {}
   ~ListLink() noexcept {
     // Intentionally `noexcept` because we want to crash if a dangling pointer was left in a list.
@@ -158,7 +158,7 @@ public:
 
   bool isLinked() const { return prev != nullptr; }
 
-private:
+ private:
   Maybe<T&> next;
   Maybe<T&>* prev;
 
@@ -170,7 +170,7 @@ private:
 
 template <typename T, typename MaybeConstT, ListLink<T> T::*link>
 class ListIterator {
-public:
+ public:
   ListIterator() = default;
 
   MaybeConstT& operator*() {
@@ -206,7 +206,7 @@ public:
     return _::readMaybe(current) == _::readMaybe(other.current);
   }
 
-private:
+ private:
   Maybe<MaybeConstT&> current;
 
   Maybe<MaybeConstT&> next;

@@ -58,7 +58,7 @@ bool hasDiscriminantValue(const schema::Field::Reader& reader) {
 }
 
 class SchemaLoader::InitializerImpl: public _::RawSchema::Initializer {
-public:
+ public:
   inline explicit InitializerImpl(const SchemaLoader& loader): loader(loader), callback(kj::none) {}
   inline InitializerImpl(const SchemaLoader& loader, const LazyLoadCallback& callback)
       : loader(loader), callback(callback) {}
@@ -69,23 +69,23 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return callback == kj::none; }
 
-private:
+ private:
   const SchemaLoader& loader;
   kj::Maybe<const LazyLoadCallback&> callback;
 };
 
 class SchemaLoader::BrandedInitializerImpl: public _::RawBrandedSchema::Initializer {
-public:
+ public:
   inline explicit BrandedInitializerImpl(const SchemaLoader& loader): loader(loader) {}
 
   void init(const _::RawBrandedSchema* schema) const override;
 
-private:
+ private:
   const SchemaLoader& loader;
 };
 
 class SchemaLoader::Impl {
-public:
+ public:
   inline explicit Impl(const SchemaLoader& loader)
       : initializer(loader), brandedInitializer(loader) {}
   inline Impl(const SchemaLoader& loader, const LazyLoadCallback& callback)
@@ -125,7 +125,7 @@ public:
 
   kj::Arena arena;
 
-private:
+ private:
   kj::HashSet<kj::ArrayPtr<const byte>> dedupTable;
   // Records raw segments of memory in the arena against which we my want to de-dupe later
   // additions. Specifically, RawBrandedSchema binding tables are de-duped.
@@ -213,7 +213,7 @@ inline static void verifyVoid(Void value) {}
 // when the code needs updating.
 
 class SchemaLoader::Validator {
-public:
+ public:
   Validator(SchemaLoader::Impl& loader): loader(loader) {}
 
   bool validate(const schema::Node::Reader& node) {
@@ -282,7 +282,7 @@ public:
     return membersByDiscriminant.begin();
   }
 
-private:
+ private:
   SchemaLoader::Impl& loader;
   Text::Reader nodeName;
   bool isValid;
@@ -622,7 +622,7 @@ private:
 // =======================================================================================
 
 class SchemaLoader::CompatibilityChecker {
-public:
+ public:
   CompatibilityChecker(SchemaLoader::Impl& loader): loader(loader) {}
 
   bool shouldReplace(const schema::Node::Reader& existingNode,
@@ -645,7 +645,7 @@ public:
     return preferReplacementIfEquivalent ? compatibility != OLDER : compatibility == NEWER;
   }
 
-private:
+ private:
   SchemaLoader::Impl& loader;
   Text::Reader nodeName;
   schema::Node::Reader existingNode;

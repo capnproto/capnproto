@@ -105,7 +105,7 @@ void NullStream::shutdownWrite() {}
 namespace {
 
 class AsyncPump {
-public:
+ public:
   AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit, uint64_t doneSoFar)
       : input(input), output(output), limit(limit), doneSoFar(doneSoFar) {}
 
@@ -126,7 +126,7 @@ public:
     });
   }
 
-private:
+ private:
   AsyncInputStream& input;
   AsyncOutputStream& output;
   uint64_t limit;
@@ -158,7 +158,7 @@ Promise<uint64_t> AsyncInputStream::pumpTo(
 namespace {
 
 class AllReader {
-public:
+ public:
   AllReader(AsyncInputStream& input): input(input) {}
 
   Promise<Array<byte>> readAllBytes(uint64_t limit) {
@@ -178,7 +178,7 @@ public:
     });
   }
 
-private:
+ private:
   AsyncInputStream& input;
   Vector<Array<byte>> parts;
 
@@ -231,7 +231,7 @@ Maybe<Promise<uint64_t>> AsyncOutputStream::tryPumpFrom(
 namespace {
 
 class AsyncPipe final: public AsyncCapabilityStream, public Refcounted {
-public:
+ public:
   ~AsyncPipe() noexcept(false) {
     KJ_REQUIRE(state == kj::none || ownState.get() != nullptr,
         "destroying AsyncPipe with operation still in-progress; probably going to segfault") {
@@ -400,7 +400,7 @@ public:
     }
   }
 
-private:
+ private:
   Maybe<AsyncCapabilityStream&> state;
   // Object-oriented state! If any method call is blocked waiting on activity from the other end,
   // then `state` is non-null and method calls should be forwarded to it. If no calls are
@@ -476,7 +476,7 @@ private:
   class BlockedWrite final: public AsyncCapabilityStream {
     // AsyncPipe state when a write() is currently waiting for a corresponding read().
 
-  public:
+   public:
     BlockedWrite(PromiseFulfiller<void>& fulfiller, AsyncPipe& pipe,
                  ArrayPtr<const byte> writeBuffer,
                  ArrayPtr<const ArrayPtr<const byte>> morePieces,
@@ -704,7 +704,7 @@ private:
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
 
-  private:
+   private:
     PromiseFulfiller<void>& fulfiller;
     AsyncPipe& pipe;
     ArrayPtr<const byte> writeBuffer;
@@ -764,7 +764,7 @@ private:
   class BlockedPumpFrom final: public AsyncCapabilityStream {
     // AsyncPipe state when a tryPumpFrom() is currently waiting for a corresponding read().
 
-  public:
+   public:
     BlockedPumpFrom(PromiseFulfiller<uint64_t>& fulfiller, AsyncPipe& pipe,
                     AsyncInputStream& input, uint64_t amount)
         : fulfiller(fulfiller), pipe(pipe), input(input), amount(amount) {
@@ -899,7 +899,7 @@ private:
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
 
-  private:
+   private:
     PromiseFulfiller<uint64_t>& fulfiller;
     AsyncPipe& pipe;
     AsyncInputStream& input;
@@ -912,7 +912,7 @@ private:
   class BlockedRead final: public AsyncCapabilityStream {
     // AsyncPipe state when a tryRead() is currently waiting for a corresponding write().
 
-  public:
+   public:
     BlockedRead(
         PromiseFulfiller<ReadResult>& fulfiller, AsyncPipe& pipe,
         ArrayPtr<byte> readBuffer, size_t minBytes,
@@ -1146,7 +1146,7 @@ private:
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
 
-  private:
+   private:
     PromiseFulfiller<ReadResult>& fulfiller;
     AsyncPipe& pipe;
     ArrayPtr<byte> readBuffer;
@@ -1204,7 +1204,7 @@ private:
   class BlockedPumpTo final: public AsyncCapabilityStream {
     // AsyncPipe state when a pumpTo() is currently waiting for a corresponding write().
 
-  public:
+   public:
     BlockedPumpTo(PromiseFulfiller<uint64_t>& fulfiller, AsyncPipe& pipe,
                   AsyncOutputStream& output, uint64_t amount)
         : fulfiller(fulfiller), pipe(pipe), output(output), amount(amount) {
@@ -1407,7 +1407,7 @@ private:
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
 
-  private:
+   private:
     PromiseFulfiller<uint64_t>& fulfiller;
     AsyncPipe& pipe;
     AsyncOutputStream& output;
@@ -1419,7 +1419,7 @@ private:
   class AbortedRead final: public AsyncCapabilityStream {
     // AsyncPipe state when abortRead() has been called.
 
-  public:
+   public:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
@@ -1492,7 +1492,7 @@ private:
   class ShutdownedWrite final: public AsyncCapabilityStream {
     // AsyncPipe state when shutdownWrite() has been called.
 
-  public:
+   public:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
       return constPromise<size_t, 0>();
     }
@@ -1542,7 +1542,7 @@ private:
 };
 
 class PipeReadEnd final: public AsyncInputStream {
-public:
+ public:
   PipeReadEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeReadEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
@@ -1558,13 +1558,13 @@ public:
     return pipe->pumpTo(output, amount);
   }
 
-private:
+ private:
   Own<AsyncPipe> pipe;
   UnwindDetector unwind;
 };
 
 class PipeWriteEnd final: public AsyncOutputStream {
-public:
+ public:
   PipeWriteEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeWriteEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
@@ -1589,13 +1589,13 @@ public:
     return pipe->whenWriteDisconnected();
   }
 
-private:
+ private:
   Own<AsyncPipe> pipe;
   UnwindDetector unwind;
 };
 
 class TwoWayPipeEnd final: public AsyncCapabilityStream {
-public:
+ public:
   TwoWayPipeEnd(kj::Own<AsyncPipe> in, kj::Own<AsyncPipe> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
   ~TwoWayPipeEnd() noexcept(false) {
@@ -1651,14 +1651,14 @@ public:
     out->shutdownWrite();
   }
 
-private:
+ private:
   kj::Own<AsyncPipe> in;
   kj::Own<AsyncPipe> out;
   UnwindDetector unwind;
 };
 
 class LimitedInputStream final: public AsyncInputStream {
-public:
+ public:
   LimitedInputStream(kj::Own<AsyncInputStream> inner, uint64_t limit)
       : inner(kj::mv(inner)), limit(limit) {
     if (limit == 0) {
@@ -1689,7 +1689,7 @@ public:
     });
   }
 
-private:
+ private:
   Own<AsyncInputStream> inner;
   uint64_t limit;
 
@@ -1737,7 +1737,7 @@ namespace {
 
 class AsyncTee final: public Refcounted {
   class Buffer {
-  public:
+   public:
     Buffer() = default;
 
     uint64_t consume(ArrayPtr<byte>& readBuffer, size_t& minBytes);
@@ -1774,7 +1774,7 @@ class AsyncTee final: public Refcounted {
       return Buffer{mv(deque)};
     }
 
-  private:
+   private:
     Buffer(std::deque<Array<byte>>&& buffer) : bufferList(mv(buffer)) {}
 
     std::deque<Array<byte>> bufferList;
@@ -1782,9 +1782,9 @@ class AsyncTee final: public Refcounted {
 
   class Sink;
 
-public:
+ public:
   class Branch final: public AsyncInputStream {
-  public:
+   public:
     Branch(Own<AsyncTee> teeArg): tee(mv(teeArg)) {
       tee->branches.add(*this);
     }
@@ -1830,7 +1830,7 @@ public:
       return kj::heap<Branch>(addRef(*tee), *this);
     }
 
-  private:
+   private:
     Own<AsyncTee> tee;
     ListLink<Branch> link;
 
@@ -1909,12 +1909,12 @@ public:
     return mv(promise);
   }
 
-private:
+ private:
   struct Eof {};
   using Stoppage = OneOf<Eof, Exception>;
 
   class Sink {
-  public:
+   public:
     struct Need {
       // We use uint64_t here because:
       // - pumpTo() accepts it as the `amount` parameter.
@@ -1949,7 +1949,7 @@ private:
     //
     // A bit of a Frankenstein, avert your eyes. For one thing, it's more of a mixin than a base...
 
-  public:
+   public:
     explicit SinkBase(PromiseFulfiller<T>& fulfiller, Maybe<Sink&>& sinkLink)
         : fulfiller(fulfiller), sinkLink(sinkLink) {
       KJ_ASSERT(sinkLink == kj::none, "sink initiated with sink already in flight");
@@ -1967,14 +1967,14 @@ private:
       detach();
     }
 
-  protected:
+   protected:
     template <typename U>
     void fulfill(U value) {
       fulfiller.fulfill(fwd<U>(value));
       detach();
     }
 
-  private:
+   private:
     void detach() {
       KJ_IF_SOME(sink, sinkLink) {
         if (&sink == this) {
@@ -1988,7 +1988,7 @@ private:
   };
 
   class ReadSink final: public SinkBase<size_t> {
-  public:
+   public:
     explicit ReadSink(PromiseFulfiller<size_t>& fulfiller, Maybe<Sink&>& registration,
                       ArrayPtr<byte> buffer, size_t minBytes, size_t readSoFar)
         : SinkBase(fulfiller, registration), buffer(buffer),
@@ -2022,7 +2022,7 @@ private:
 
     Need need() override { return Need { minBytes, buffer.size() }; }
 
-  private:
+   private:
     ArrayPtr<byte> buffer;
     size_t minBytes;
     // Arguments to the outer tryRead() call, sliced/decremented after every buffer consumption.
@@ -2032,7 +2032,7 @@ private:
   };
 
   class PumpSink final: public SinkBase<uint64_t> {
-  public:
+   public:
     explicit PumpSink(PromiseFulfiller<uint64_t>& fulfiller, Maybe<Sink&>& registration,
                       AsyncOutputStream& output, uint64_t limit)
         : SinkBase(fulfiller, registration), output(output), limit(limit) {}
@@ -2081,7 +2081,7 @@ private:
 
     Need need() override { return Need { 1, limit }; }
 
-  private:
+   private:
     AsyncOutputStream& output;
     uint64_t limit;
     // Arguments to the outer pumpTo() call, decremented after every buffer consumption.
@@ -2162,7 +2162,7 @@ private:
   Promise<void> pullPromise = READY_NOW;
   bool pulling = false;
 
-private:
+ private:
   Promise<void> pullLoop() {
     // Use evalLater() so that two pump sinks added on the same turn of the event loop will not
     // cause buffering.
@@ -2368,7 +2368,7 @@ class PromisedAsyncIoStream final: public kj::AsyncIoStream, private kj::TaskSet
   // An AsyncIoStream which waits for a promise to resolve then forwards all calls to the promised
   // stream.
 
-public:
+ public:
   PromisedAsyncIoStream(kj::Promise<kj::Own<AsyncIoStream>> promise)
       : promise(promise.then([this](kj::Own<AsyncIoStream> result) {
           stream = kj::mv(result);
@@ -2491,7 +2491,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::ForkedPromise<void> promise;
   kj::Maybe<kj::Own<AsyncIoStream>> stream;
   kj::TaskSet tasks;
@@ -2507,7 +2507,7 @@ class PromisedAsyncOutputStream final: public kj::AsyncOutputStream {
   //
   // TODO(cleanup): Can this share implementation with PromiseIoStream? Seems hard.
 
-public:
+ public:
   PromisedAsyncOutputStream(kj::Promise<kj::Own<AsyncOutputStream>> promise)
       : promise(promise.then([this](kj::Own<AsyncOutputStream> result) {
           stream = kj::mv(result);
@@ -2560,7 +2560,7 @@ public:
     }
   }
 
-private:
+ private:
   kj::ForkedPromise<void> promise;
   kj::Maybe<kj::Own<AsyncOutputStream>> stream;
 };
@@ -2754,7 +2754,7 @@ Own<DatagramPort> LowLevelAsyncIoProvider::wrapDatagramSocketFd(OwnFd&& fd, uint
 namespace {
 
 class DummyNetworkFilter: public kj::LowLevelAsyncIoProvider::NetworkFilter {
-public:
+ public:
   bool shouldAllow(const struct sockaddr* addr, uint addrlen) override { return true; }
 };
 
@@ -2853,7 +2853,7 @@ Promise<void> FileOutputStream::whenWriteDisconnected() {
 namespace {
 
 class AggregateConnectionReceiver final: public ConnectionReceiver {
-public:
+ public:
   AggregateConnectionReceiver(Array<Own<ConnectionReceiver>> receiversParam)
       : receivers(kj::mv(receiversParam)),
         acceptTasks(kj::heapArray<Maybe<Promise<void>>>(receivers.size())) {}
@@ -2907,7 +2907,7 @@ public:
     return receivers[0]->getsockname(addr, length);
   }
 
-private:
+ private:
   Array<Own<ConnectionReceiver>> receivers;
   Array<Maybe<Promise<void>>> acceptTasks;
 
@@ -3234,18 +3234,18 @@ bool NetworkFilter::shouldAllowParse(const struct sockaddr* addr, uint addrlen) 
 namespace {
 
 class NetworkPeerIdentityImpl final: public NetworkPeerIdentity {
-public:
+ public:
   NetworkPeerIdentityImpl(kj::Own<NetworkAddress> addr): addr(kj::mv(addr)) {}
 
   kj::String toString() override { return addr->toString(); }
   NetworkAddress& getAddress() override { return *addr; }
 
-private:
+ private:
   kj::Own<NetworkAddress> addr;
 };
 
 class LocalPeerIdentityImpl final: public LocalPeerIdentity {
-public:
+ public:
   LocalPeerIdentityImpl(Credentials creds): creds(creds) {}
 
   kj::String toString() override {
@@ -3266,12 +3266,12 @@ public:
 
   Credentials getCredentials() override { return creds; }
 
-private:
+ private:
   Credentials creds;
 };
 
 class UnknownPeerIdentityImpl final: public UnknownPeerIdentity {
-public:
+ public:
   kj::String toString() override {
     return kj::str("(unknown peer)");
   }

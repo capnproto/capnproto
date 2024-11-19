@@ -545,7 +545,7 @@ Orphan<DynamicValue> JsonCodec::decode(
 namespace {
 
 class Input {
-public:
+ public:
   Input(kj::ArrayPtr<const char> input) : wrapped(input) {}
 
   bool exhausted() {
@@ -635,13 +635,13 @@ public:
   }
 
 
-private:
+ private:
   kj::ArrayPtr<const char> wrapped;
 
 };  // class Input
 
 class Parser {
-public:
+ public:
   Parser(size_t maxNestingDepth, kj::ArrayPtr<const char> input) :
     maxNestingDepth(maxNestingDepth), input(input), nestingDepth(0) {}
 
@@ -756,7 +756,7 @@ public:
 
   bool inputExhausted() { return input.exhausted(); }
 
-private:
+ private:
   kj::String consumeQuotedString() {
     input.consume('"');
     // TODO(perf): Get statistics on string size and preallocate?
@@ -912,7 +912,7 @@ static constexpr uint64_t JSON_BASE64_ANNOTATION_ID = 0xd7d879450a253e4bull;
 static constexpr uint64_t JSON_HEX_ANNOTATION_ID = 0xf061e22f0ae5c7b5ull;
 
 class JsonCodec::Base64Handler final: public JsonCodec::Handler<capnp::Data> {
-public:
+ public:
   void encode(const JsonCodec& codec, capnp::Data::Reader input,
               JsonValue::Builder output) const override {
     output.setString(kj::encodeBase64(input));
@@ -925,7 +925,7 @@ public:
 };
 
 class JsonCodec::HexHandler final: public JsonCodec::Handler<capnp::Data> {
-public:
+ public:
   void encode(const JsonCodec& codec, capnp::Data::Reader input,
               JsonValue::Builder output) const override {
     output.setString(kj::encodeHex(input));
@@ -938,7 +938,7 @@ public:
 };
 
 class JsonCodec::AnnotatedHandler final: public JsonCodec::Handler<DynamicStruct> {
-public:
+ public:
   AnnotatedHandler(JsonCodec& codec, StructSchema schema,
                    kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
                    kj::Maybe<kj::StringPtr> unionDeclName,
@@ -1170,7 +1170,7 @@ public:
     }
   }
 
-private:
+ private:
   struct FieldInfo {
     kj::StringPtr name;
     kj::StringPtr nameForDiscriminant;
@@ -1358,7 +1358,7 @@ private:
 };
 
 class JsonCodec::AnnotatedEnumHandler final: public JsonCodec::Handler<DynamicEnum> {
-public:
+ public:
   AnnotatedEnumHandler(EnumSchema schema): schema(schema) {
     auto enumerants = schema.getEnumerants();
     auto builder = kj::heapArrayBuilder<kj::StringPtr>(enumerants.size());
@@ -1401,14 +1401,14 @@ public:
     }
   }
 
-private:
+ private:
   EnumSchema schema;
   kj::Array<kj::StringPtr> valueToName;
   kj::HashMap<kj::StringPtr, uint16_t> nameToValue;
 };
 
 class JsonCodec::JsonValueHandler final: public JsonCodec::Handler<DynamicStruct> {
-public:
+ public:
   void encode(const JsonCodec& codec, DynamicStruct::Reader input,
               JsonValue::Builder output) const override {
 #if _MSC_VER && !defined(__clang__)
@@ -1424,7 +1424,7 @@ public:
     rawCopy(input, kj::mv(output));
   }
 
-private:
+ private:
   void rawCopy(AnyStruct::Reader input, AnyStruct::Builder output) const {
     // HACK: Manually copy using AnyStruct, so that if JsonValue's definition changes, this code
     //   doesn't need to be updated. However, note that if JsonValue ever adds new fields that

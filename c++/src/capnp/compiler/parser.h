@@ -57,7 +57,7 @@ class CapnpParser {
   // Advanced parser interface.  This interface exposes the inner parsers so that you can embed
   // them into your own parsers.
 
-public:
+ public:
   CapnpParser(Orphanage orphanage, ErrorReporter& errorReporter);
   // `orphanage` is used to allocate Cap'n Proto message objects in the result.  `inputStart` is
   // a pointer to the beginning of the input, used to compute byte offsets.
@@ -135,7 +135,7 @@ public:
 
   const Parsers& getParsers() { return parsers; }
 
-private:
+ private:
   Orphanage orphanage;
   ErrorReporter& errorReporter;
   kj::Arena arena;

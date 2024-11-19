@@ -184,7 +184,7 @@ void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
 #if !CAPNP_LITE
 
 class TestInterfaceImpl final: public test::TestInterface::Server {
-public:
+ public:
   TestInterfaceImpl(int& callCount, kj::Maybe<int&> handleCount = kj::none);
 
   kj::Promise<void> foo(FooContext context) override;
@@ -196,67 +196,67 @@ public:
   kj::Promise<void> getTestTailCaller(GetTestTailCallerContext context) override;
   kj::Promise<void> getTestMoreStuff(GetTestMoreStuffContext context) override;
 
-private:
+ private:
   int& callCount;
   kj::Maybe<int&> handleCount;
 };
 
 class TestExtendsImpl final: public test::TestExtends2::Server {
-public:
+ public:
   TestExtendsImpl(int& callCount);
 
   kj::Promise<void> foo(FooContext context) override;
 
   kj::Promise<void> grault(GraultContext context) override;
 
-private:
+ private:
   int& callCount;
 };
 
 class TestPipelineImpl final: public test::TestPipeline::Server {
-public:
+ public:
   TestPipelineImpl(int& callCount);
 
   kj::Promise<void> getCap(GetCapContext context) override;
   kj::Promise<void> getAnyCap(GetAnyCapContext context) override;
   kj::Promise<void> getCapPipelineOnly(GetCapPipelineOnlyContext context) override;
 
-private:
+ private:
   int& callCount;
 };
 
 class TestCallOrderImpl final: public test::TestCallOrder::Server {
-public:
+ public:
   kj::Promise<void> getCallSequence(GetCallSequenceContext context) override;
 
   uint getCount() { return count; }
 
-private:
+ private:
   uint count = 0;
 };
 
 class TestTailCallerImpl final: public test::TestTailCaller::Server {
-public:
+ public:
   TestTailCallerImpl(int& callCount);
 
   kj::Promise<void> foo(FooContext context) override;
 
-private:
+ private:
   int& callCount;
 };
 
 class TestTailCalleeImpl final: public test::TestTailCallee::Server {
-public:
+ public:
   TestTailCalleeImpl(int& callCount);
 
   kj::Promise<void> foo(FooContext context) override;
 
-private:
+ private:
   int& callCount;
 };
 
 class TestMoreStuffImpl final: public test::TestMoreStuff::Server {
-public:
+ public:
   TestMoreStuffImpl(int& callCount, int& handleCount);
 
   kj::Promise<void> getCallSequence(GetCallSequenceContext context) override;
@@ -291,7 +291,7 @@ public:
 
   kj::Promise<void> throwExceptionWithDetail(ThrowExceptionWithDetailContext context) override;
 
-private:
+ private:
   int& callCount;
   int& handleCount;
   test::TestInterface::Client clientToHold = nullptr;
@@ -302,7 +302,7 @@ private:
 class TestCapDestructor final: public test::TestInterface::Server {
   // Implementation of TestInterface that notifies when it is destroyed.
 
-public:
+ public:
   TestCapDestructor(kj::Own<kj::PromiseFulfiller<void>>&& fulfiller)
       : fulfiller(kj::mv(fulfiller)), impl(dummy) {}
 
@@ -314,7 +314,7 @@ public:
     return impl.foo(context);
   }
 
-private:
+ private:
   kj::Own<kj::PromiseFulfiller<void>> fulfiller;
   int dummy = 0;
   TestInterfaceImpl impl;
@@ -323,17 +323,17 @@ private:
 class TestFdCap final: public test::TestInterface::Server {
   // Implementation of TestInterface that wraps a file descriptor.
 
-public:
+ public:
   TestFdCap(kj::AutoCloseFd fd): fd(kj::mv(fd)) {}
 
   kj::Maybe<int> getFd() override { return fd.get(); }
 
-private:
+ private:
   kj::AutoCloseFd fd;
 };
 
 class TestStreamingImpl final: public test::TestStreaming::Server {
-public:
+ public:
   uint iSum = 0;
   uint jSum = 0;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;

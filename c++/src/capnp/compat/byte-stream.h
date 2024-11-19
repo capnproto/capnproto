@@ -48,7 +48,7 @@ class ExplicitEndOutputStream: public kj::AsyncOutputStream {
   //
   //   Additionally, if `kjToCapnp()` is given an `ExplicitEndOutputStream`, and the application
   //   is built with RTTI enabled, then its `end()` method will be used when appropriate.
-public:
+ public:
   virtual kj::Promise<void> end() = 0;
 };
 
@@ -56,7 +56,7 @@ class ByteStreamFactory {
   // In order to allow path-shortening through KJ, a common factory must be used for converting
   // between RPC ByteStreams and KJ streams.
 
-public:
+ public:
   capnp::ByteStream::Client kjToCapnp(kj::Own<kj::AsyncOutputStream> kjStream);
   capnp::ByteStream::Client kjToCapnp(
       kj::Own<kj::AsyncOutputStream> kjStream, kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter);
@@ -64,7 +64,7 @@ public:
 
   kj::Own<ExplicitEndOutputStream> capnpToKjExplicitEnd(capnp::ByteStream::Client capnpStream);
 
-private:
+ private:
   CapabilityServerSet<capnp::ByteStream> streamSet;
 
   class StreamServerBase;

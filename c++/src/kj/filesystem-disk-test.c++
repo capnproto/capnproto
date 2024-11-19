@@ -111,7 +111,7 @@ static Array<wchar_t> join16(ArrayPtr<const wchar_t> path, const wchar_t* file) 
 }
 
 class TempDir {
-public:
+ public:
   TempDir(): filename(newTemp([](Array<wchar_t> candidatePath) -> Maybe<Array<wchar_t>> {
         KJ_WIN32_HANDLE_ERRORS(CreateDirectoryW(candidatePath.begin(), NULL)) {
           case ERROR_ALREADY_EXISTS:
@@ -140,7 +140,7 @@ public:
     recursiveDelete(filename);
   }
 
-private:
+ private:
   Array<wchar_t> filename;
 
   static void recursiveDelete(ArrayPtr<const wchar_t> path) {
@@ -224,7 +224,7 @@ static Own<File> newTempFile() {
 }
 
 class TempDir {
-public:
+ public:
   TempDir() {
   const char* tmpDir = getenv("TEST_TMPDIR");
     filename = str(tmpDir != nullptr ? tmpDir : VAR_TMP, "/kj-filesystem-test.XXXXXX");
@@ -243,7 +243,7 @@ public:
     recursiveDelete(filename);
   }
 
-private:
+ private:
   String filename;
 
   static void recursiveDelete(StringPtr path) {

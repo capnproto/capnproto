@@ -31,7 +31,7 @@ namespace _ {
 namespace {
 
 class TestInterfaceImpl final: public test::TestInterface::Server {
-public:
+ public:
   TestInterfaceImpl(uint generation): generation(generation) {}
 
   void setError(kj::Exception e) {
@@ -44,7 +44,7 @@ public:
     return kj::mv(paf.fulfiller);
   }
 
-protected:
+ protected:
   kj::Promise<void> foo(FooContext context) override {
     KJ_IF_SOME(e, error) {
       return kj::cp(e);
@@ -54,7 +54,7 @@ protected:
     return blocker.addBranch();
   }
 
-private:
+ private:
   uint generation;
   kj::Maybe<kj::Exception> error;
   kj::ForkedPromise<void> blocker = kj::Promise<void>(kj::READY_NOW).fork();
