@@ -53,6 +53,9 @@ struct PromiseFulfillerPair;
 template <typename Func>
 class FunctionParam;
 
+template <typename T>
+class EventLoopLocal;
+
 template <typename Func, typename T>
 using PromiseForResult = _::ReducePromises<_::ReturnType<Func, T>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
@@ -468,7 +471,12 @@ Promise<void> yield();
 
 Promise<void> yieldUntilQueueEmpty();
 // Like `evalLast()`, but without a function to be evaluated. Useful for yielding control until the
-// event queue is otherwise completely empty and the thread is about to suspend waiting for I/O.
+// event queue is otherwise completely empty and the thread is about to check for new I/O events
+// from the OS.
+
+Promise<void> yieldUntilWouldSleep();
+// Like `yieldUntilQueueEmpty()`, but also waits until the I/O event queue from the OS is also
+// empty, such that the event loop has nothing left to do except to go to sleep.
 
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
 kj::String getAsyncTrace();
@@ -1218,6 +1226,10 @@ public:
   // Note that this is only needed for cross-thread scheduling. To schedule code to run later in
   // the current thread, use `kj::evalLater()`, which will be more efficient.
 
+  void cancelAllDetached();
+  // Same as WaitScope::cancelAllDetached(). Sometimes it's easier to call on the EventLoop. (A
+  // WaitScope still must exist, i.e., this EventLoop must be current.)
+
 private:
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
@@ -1233,9 +1245,19 @@ private:
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
   _::Event** breadthFirstInsertPoint = &head;
+  // Main event queue.
+
+  _::Event* wouldSleepHead = nullptr;
+  _::Event** wouldSleepTail = &wouldSleepHead;
+  // A totally separate list of events to run if we get to the point where we otherwise would
+  // sleep. (See yieldUntilWouldSleep().)
 
   kj::Maybe<Own<Executor>> executor;
   // Allocated the first time getExecutor() is requested, making cross-thread request possible.
+
+  struct LocalMap;
+  kj::Maybe<Own<LocalMap>> localMap;
+  // For EventLoopLocal. Allocated separately to avoid including HashMap here.
 
   Own<TaskSet> daemons;
 
@@ -1249,6 +1271,8 @@ private:
   void wait();
   void poll();
 
+  static void* getLocal(const void* key, kj::Own<void>(*allocate)());
+
   friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
@@ -1261,6 +1285,8 @@ private:
   friend class _::FiberBase;
   friend class _::FiberStack;
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
+  template <typename T>
+  friend class EventLoopLocal;
 };
 
 class WaitScope {
@@ -1343,6 +1369,23 @@ private:
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
+};
+
+template <typename T>
+class EventLoopLocal {
+  // Like thread-local storage, but attached to the current EventLoop instead. Value is
+  // default-initialized on first access and then destroyed when the EventLoop is destroyed.
+  //
+  // EventLoopLocal MUST be declared as a global or static variable. It cannot be allocated
+  // dynamically at runtime.
+public:
+  T* get() const {
+    return static_cast<T*>(EventLoop::getLocal(this,
+        []() -> kj::Own<void> { return kj::heap<T>(); }));
+  }
+
+  T& operator*() const { return *get(); }
+  T* operator->() const { return get(); }
 };
 
 }  // namespace kj

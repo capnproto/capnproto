@@ -46,6 +46,7 @@
 #include "one-of.h"
 #include "function.h"
 #include "list.h"
+#include "map.h"
 #include <deque>
 #include <atomic>
 
@@ -1728,12 +1729,12 @@ void FiberBase::onReady(_::Event* event) noexcept {
 
 void FiberBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   if (stopAtNextEvent) return;
-  currentInner->tracePromise(builder, false);
+  currentInner->get()->tracePromise(builder, false);
   stack->trace(builder);
 }
 
 void FiberBase::traceEvent(TraceBuilder& builder) {
-  currentInner->tracePromise(builder, true);
+  currentInner->get()->tracePromise(builder, true);
   stack->trace(builder);
   onReadyEvent.traceEvent(builder);
 }
@@ -1876,6 +1877,13 @@ void EventLoop::leaveScope() {
 }
 
 void EventLoop::wait() {
+  if (wouldSleepHead != nullptr) {
+    // Oh, someone wants to know when we are going to sleep. Use poll() instead so that we don't
+    // actually sleep. poll() will queue the would-sleep waiter if needed.
+    poll();
+    return;
+  }
+
   KJ_IF_SOME(p, port) {
     if (p.wait()) {
       // Another thread called wake(). Check for cross-thread events.
@@ -1900,6 +1908,13 @@ void EventLoop::poll() {
     }
   } else KJ_IF_SOME(e, executor) {
     e->poll();
+  }
+
+  if (head == nullptr && wouldSleepHead != nullptr) {
+    // We got nothing by polling. So, enqueue the next would-sleep event instead.
+    _::Event* event = wouldSleepHead;
+    event->disarm();
+    event->armDepthFirst();
   }
 }
 
@@ -1929,15 +1944,45 @@ uint WaitScope::poll(uint maxTurnCount) {
   return turnCount;
 }
 
+void EventLoop::cancelAllDetached() {
+  KJ_REQUIRE(this == threadLocalEventLoop,
+      "can't call cancelAllDetached() on an EventLoop that isn't current in the thread");
+
+  while (!daemons->isEmpty()) {
+    auto oldDaemons = kj::mv(daemons);
+    daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
+    // Destroying `oldDaemons` could theoretically add new ones.
+  }
+}
+
 void WaitScope::cancelAllDetached() {
   KJ_REQUIRE(fiber == kj::none,
       "can't call cancelAllDetached() on a fiber WaitScope, only top-level");
 
-  while (!loop.daemons->isEmpty()) {
-    auto oldDaemons = kj::mv(loop.daemons);
-    loop.daemons = kj::heap<TaskSet>(_::LoggingErrorHandler::instance);
-    // Destroying `oldDaemons` could theoretically add new ones.
+  loop.cancelAllDetached();
+}
+
+struct EventLoop::LocalMap {
+  kj::HashMap<const void*, kj::Own<void>> map;
+};
+
+void* EventLoop::getLocal(const void* key, kj::Own<void>(*allocate)()) {
+  EventLoop* loop = threadLocalEventLoop;
+  KJ_REQUIRE(loop != nullptr, "there is no current EventLoop in this thread");
+
+  LocalMap* localMap;
+  KJ_IF_SOME(m, loop->localMap) {
+    localMap = m;
+  } else {
+    localMap = loop->localMap.emplace(kj::heap<LocalMap>());
   }
+
+  return localMap->map.findOrCreate(key, [&]() -> decltype(localMap->map)::Entry {
+    return {
+      .key = key,
+      .value = allocate()
+    };
+  }).get();
 }
 
 namespace _ {  // private
@@ -1964,7 +2009,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
     node->setSelfPointer(&node);
     node->onReady(&fiber);
 
-    fiber.currentInner = node;
+    fiber.currentInner = &node;
     KJ_DEFER(fiber.currentInner = nullptr);
 
     // Switch to the main stack to run the event loop.
@@ -2220,6 +2265,32 @@ void Event::armLast() {
   }
 }
 
+void Event::armWhenWouldSleep() {
+  KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
+             "Event armed from different thread than it was created in.  You must use "
+             "Executor to queue events cross-thread.");
+  if (live != MAGIC_LIVE_VALUE) {
+    ([this]() noexcept {
+      KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
+    })();
+  }
+
+  if (prev == nullptr) {
+    next = loop.wouldSleepHead;
+    prev = &loop.wouldSleepHead;
+    *prev = this;
+    if (next != nullptr) {
+      next->prev = &next;
+    }
+
+    if (loop.wouldSleepTail == prev) {
+      loop.wouldSleepTail = &next;
+    }
+
+    loop.setRunnable(true);
+  }
+}
+
 bool Event::isNext() {
   return loop.running && loop.head == this;
 }
@@ -2240,6 +2311,9 @@ void Event::disarm() noexcept {
     }
     if (loop.breadthFirstInsertPoint == &next) {
       loop.breadthFirstInsertPoint = prev;
+    }
+    if (loop.wouldSleepTail == &next) {
+      loop.wouldSleepTail = prev;
     }
 
     *prev = next;
@@ -2965,6 +3039,26 @@ Promise<void> yieldUntilQueueEmpty() {
   };
 
   static YieldUntilQueueEmptyPromiseNode NODE;
+  return _::PromiseNode::to<Promise<void>>(_::OwnPromiseNode(&NODE));
+}
+
+Promise<void> yieldUntilWouldSleep() {
+  class YieldUntilWouldSleepPromiseNode final: public _::PromiseNode {
+  public:
+    void destroy() override {}
+
+    void onReady(_::Event* event) noexcept override {
+      if (event) event->armWhenWouldSleep();
+    }
+    void get(_::ExceptionOrValue& output) noexcept override {
+      output.as<_::Void>() = _::Void();
+    }
+    void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
+      builder.add(reinterpret_cast<void*>(&kj::yieldUntilWouldSleep));
+    }
+  };
+
+  static YieldUntilWouldSleepPromiseNode NODE;
   return _::PromiseNode::to<Promise<void>>(_::OwnPromiseNode(&NODE));
 }
 

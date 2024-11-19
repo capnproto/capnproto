@@ -1299,6 +1299,69 @@ KJ_TEST("m:n threads:EventLoops") {
 }
 #endif
 
+KJ_TEST("yieldUntilWouldSleep") {
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  bool resolved = false;
+  auto yield = yieldUntilWouldSleep()
+      .then([&]() { resolved = true; })
+      .eagerlyEvaluate(nullptr);
+
+  KJ_EXPECT(!resolved);
+
+  // yieldUntilQueueEmpty() doesn't sleep.
+  yieldUntilQueueEmpty().wait(waitScope);
+  KJ_EXPECT(!resolved);
+
+  // Receiving an I/O event doesn't sleep.
+  {
+    int pair[2]{};
+    KJ_SYSCALL(pipe(pair));
+    kj::AutoCloseFd in(pair[0]);
+    kj::AutoCloseFd out(pair[1]);
+
+    kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
+    auto promise = observer.whenBecomesReadable();
+
+    FdOutputStream(out.get()).write("foo"_kj.asBytes());
+    KJ_ASSERT(promise.poll(waitScope));
+    promise.wait(waitScope);
+  }
+
+  // We didn't sleep.
+  KJ_EXPECT(!resolved);
+
+  // Receiving an already-ready timer event doesn't sleep.
+  {
+    auto& timer = port.getTimer();
+    auto target = timer.now() + 1 * kj::MILLISECONDS;
+
+    // Splin until `target` is actually in the past.
+    while (kj::systemPreciseMonotonicClock().now() < target) {}
+
+    // Now wait. This should not cause any sleep.
+    timer.atTime(target).wait(waitScope);
+  }
+
+  // We still haven't slept.
+  KJ_EXPECT(!resolved);
+
+  // Receiving a cross-thread event doesn't sleep.
+  {
+    auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+    paf.fulfiller->fulfill();
+    paf.promise.wait(waitScope);
+  }
+
+  // We still haven't slept.
+  KJ_EXPECT(!resolved);
+
+  // Now actually sleep. We wake up right away.
+  yield.wait(waitScope);
+}
+
 }  // namespace
 }  // namespace kj
 
