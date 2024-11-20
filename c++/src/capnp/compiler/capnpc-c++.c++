@@ -520,11 +520,16 @@ private:
 
       case schema::Type::LIST: {
         CppTypeName result = CppTypeName::makeNamespace("capnp");
-        auto params = kj::heapArrayBuilder<CppTypeName>(2);
+        const char* listType = "List";
         auto list = type.asList();
+        if (list.getElementType().which() == schema::Type::ANY_POINTER) {
+          KJ_IF_SOME(param, list.getElementType().getBrandParameter()) {
+            listType = "TypedAnyList";
+          }
+        }
+        auto params = kj::heapArrayBuilder<CppTypeName>(1);
         params.add(typeName(list.getElementType(), method));
-        params.add(whichKind(list.getElementType()));
-        result.addMemberTemplate("List", params.finish());
+        result.addMemberTemplate(listType, params.finish());
         return result;
       }
 
@@ -1589,6 +1594,7 @@ private:
       bool shouldIncludePipelineGetter = !hasDiscriminantValue(proto) &&
           (kind == FieldKind::STRUCT || kind == FieldKind::BRAND_PARAMETER);
       bool shouldIncludeArrayInitializer = false;
+      bool shouldIncludeCheckedArrayInitializer = false;
       bool shouldExcludeInLiteMode = type.hasInterfaces();
       bool shouldTemplatizeInit = typeSchema.which() == schema::Type::ANY_POINTER &&
           kind != FieldKind::BRAND_PARAMETER;
@@ -1625,7 +1631,7 @@ private:
 
           case schema::Type::ANY_POINTER:
             primitiveElement = false;
-            shouldIncludeArrayInitializer = elementType.getBrandParameter() != kj::none;
+            shouldIncludeCheckedArrayInitializer = elementType.getBrandParameter() != kj::none;
             break;
 
           case schema::Type::INTERFACE:
@@ -1638,7 +1644,8 @@ private:
             break;
         }
         elementReaderType = typeName(elementType, kj::none);
-        if (!primitiveElement) {
+        // The checked array initializer uses a differnt codepath that removes itself if the template argument is an interface.
+        if (!primitiveElement && !shouldIncludeCheckedArrayInitializer) {
           if (interface) {
             elementReaderType.addMemberType("Client");
           } else {
@@ -1685,6 +1692,8 @@ private:
             "  inline void set", titleCase, "(", readerType, " value);\n",
             COND(shouldIncludeArrayInitializer,
               "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
+            COND(shouldIncludeCheckedArrayInitializer,
+              "  template<typename U = ", elementReaderType, ", typename = typename U::Reader> inline void set", titleCase, "(::kj::ArrayPtr<const typename U::Reader> value);\n"),
             COND(shouldIncludeStructInit,
               COND(shouldTemplatizeInit,
                 "  template <typename T_>\n"
@@ -1749,6 +1758,13 @@ private:
             COND(shouldIncludeArrayInitializer,
               templateContext.allDecls(),
               "inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value) {\n",
+              unionDiscrim.set,
+              "  ::capnp::_::PointerHelpers<", type, ">::set(_builder.getPointerField(\n"
+            "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), value);\n"
+              "}\n"),
+            COND(shouldIncludeCheckedArrayInitializer,
+              templateContext.allDecls(),
+              "template<typename U, typename> inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const typename U::Reader> value) {\n",
               unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), value);\n"
