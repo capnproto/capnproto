@@ -738,12 +738,13 @@ public:
   }
 
   bool exists(PathPtr path) const {
-    KJ_SYSCALL_HANDLE_ERRORS(faccessat(fd, path.toString().cStr(), F_OK, 0)) {
+    struct stat stats;
+    KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd, path.toString().cStr(), &stats, 0)) {
       case ENOENT:
       case ENOTDIR:
         return false;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return false; }
+        KJ_FAIL_SYSCALL("fstatat(fd, path)", error, path) { return false; }
     }
     return true;
   }
@@ -755,7 +756,7 @@ public:
       case ENOTDIR:
         return nullptr;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return nullptr; }
+        KJ_FAIL_SYSCALL("fstatat(fd, path)", error, path) { return nullptr; }
     }
     return statToMetadata(stats);
   }
