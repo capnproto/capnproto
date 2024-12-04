@@ -1315,8 +1315,8 @@ typename DynamicTypeFor<FromServer<T>>::Client toDynamic(kj::Own<T>&& value) {
   return typename FromServer<T>::Client(kj::mv(value));
 }
 
-inline DynamicValue::Reader::Reader(std::nullptr_t n): type(UNKNOWN) {}
-inline DynamicValue::Builder::Builder(std::nullptr_t n): type(UNKNOWN) {}
+inline DynamicValue::Reader::Reader(decltype(nullptr)): type(UNKNOWN) {}
+inline DynamicValue::Builder::Builder(decltype(nullptr)): type(UNKNOWN) {}
 
 #define CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
 inline DynamicValue::Reader::Reader(cppType value) \
@@ -1480,7 +1480,7 @@ struct DynamicValue::Builder::AsImpl<DynamicValue> {
   }
 };
 
-inline DynamicValue::Pipeline::Pipeline(std::nullptr_t n): type(UNKNOWN) {}
+inline DynamicValue::Pipeline::Pipeline(decltype(nullptr)): type(UNKNOWN) {}
 inline DynamicValue::Pipeline::Pipeline(DynamicStruct::Pipeline&& value)
     : type(STRUCT), structValue(kj::mv(value)) {}
 inline DynamicValue::Pipeline::Pipeline(DynamicCapability::Client&& value)
