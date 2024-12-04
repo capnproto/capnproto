@@ -159,7 +159,7 @@ KJ_TEST("Path exceptions") {
   KJ_EXPECT_THROW_MESSAGE("root path has no parent", Path(nullptr).parent());
 }
 
-constexpr kj::ArrayPtr<const wchar_t> operator "" _a(const wchar_t* str, size_t n) {
+constexpr kj::ArrayPtr<const wchar_t> operator ""_a(const wchar_t* str, size_t n) {
   return { str, n };
 }
 
