@@ -38,6 +38,16 @@
 #include <kj/debug.h>
 #include <kj/vector.h>
 
+#ifdef _WIN32
+#include <kj/win32-api-version.h>
+#include <windows.h>
+#include <cryptuiapi.h>
+#include <wincrypt.h>
+#undef CONST
+#undef X509_NAME
+#include <kj/windows-sanity.h>
+#endif
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define BIO_set_init(x,v)          (x->init=v)
 #define BIO_get_data(x)            (x->ptr)
@@ -79,6 +89,31 @@ void throwOpensslError() {
 
   kj::throwFatalException(getOpensslError());
 }
+
+#ifdef _WIN32
+// Adds windows CA store certificates to OpenSSL's ca store
+// Taken from https://stackoverflow.com/questions/9507184/can-openssl-on-windows-use-the-system-certificate-store
+void updateOpenSSLCAStoreWithWindowsCertificates(SSL_CTX* ctx) {
+  X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+  if (store == nullptr) {
+    throwOpensslError();
+  }
+  HCERTSTORE hStore;
+  KJ_WIN32(hStore = CertOpenSystemStoreA(NULL, "ROOT"));
+  KJ_DEFER(KJ_WIN32(CertCloseStore(hStore, 0)));
+  PCCERT_CONTEXT pContext = nullptr;
+  KJ_DEFER(CertFreeCertificateContext(pContext));
+  while ((pContext = CertEnumCertificatesInStore(hStore, pContext))) {
+    X509* x509 = d2i_X509(nullptr, (const unsigned char**)&pContext->pbCertEncoded, pContext->cbCertEncoded);
+    if (x509) {
+      KJ_DEFER(X509_free(x509));
+      if (!X509_STORE_add_cert(store, x509)) {
+        throwOpensslError();
+      }
+    }
+  }
+}
+#endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(OPENSSL_IS_BORINGSSL)
 // Older versions of OpenSSL don't define _up_ref() functions.
@@ -744,6 +779,9 @@ TlsContext::TlsContext(Options options) {
     if (!SSL_CTX_set_default_verify_paths(ctx)) {
       throwOpensslError();
     }
+#ifdef _WIN32
+    updateOpenSSLCAStoreWithWindowsCertificates(ctx);
+#endif
   }
 
   // honor options.trustedCertificates

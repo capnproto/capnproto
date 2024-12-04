@@ -11,6 +11,12 @@ cc_library(
         "tls.h",
     ],
     include_prefix = "kj/compat",
+    linkopts = select({
+        "@platforms//os:windows": [
+            "Crypt32.lib",
+        ],
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "//src/kj:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
