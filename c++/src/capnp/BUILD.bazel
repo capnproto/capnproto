@@ -141,6 +141,10 @@ cc_binary(
     srcs = [
         "compiler/capnpc-c++.c++",
     ],
+    defines = select({
+        "//src/capnp:capnpc_generate_stubbed_includes_true": ["CAPNPC_GENERATE_STUBBED_INCLUDES"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnpc",
