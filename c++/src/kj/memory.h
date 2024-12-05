@@ -847,7 +847,7 @@ public:
   Ptr(const Ptr& other) : ptr(other.ptr) {}
 #endif
 
-  inline void operator=(std::nullptr_t other) { 
+  inline void operator=(decltype(nullptr)) {
     if (ptr != nullptr) {
 #ifdef KJ_ASSERT_PTR_COUNTERS
       counter->dec();

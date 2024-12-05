@@ -37,7 +37,7 @@ namespace kj {
   class StringTree;   // string-tree.h
 }
 
-constexpr kj::StringPtr operator "" _kj(const char* str, size_t n);
+constexpr kj::StringPtr operator ""_kj(const char* str, size_t n);
 // You can append _kj to a string literal to make its type be StringPtr. There are a few cases
 // where you must do this for correctness:
 // - When you want to declare a constexpr StringPtr. Without _kj, this is a compile error.
@@ -53,7 +53,7 @@ constexpr kj::StringPtr operator "" _kj(const char* str, size_t n);
 // string literal vs. one with _kj (assuming the compiler is able to optimize away strlen() on a
 // string literal).
 
-constexpr kj::LiteralStringConst operator "" _kjc(const char* str, size_t n);
+constexpr kj::LiteralStringConst operator ""_kjc(const char* str, size_t n);
 
 namespace kj {
 
@@ -186,7 +186,7 @@ public:
 
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
-  friend constexpr StringPtr (::operator "" _kj)(const char* str, size_t n);
+  friend constexpr StringPtr (::operator ""_kj)(const char* str, size_t n);
   friend class LiteralStringConst;
 
   ArrayPtr<const char> content;
@@ -227,7 +227,7 @@ public:
 
 private:
   inline explicit constexpr LiteralStringConst(ArrayPtr<const char> content): StringPtr(content) {}
-  friend constexpr LiteralStringConst (::operator "" _kjc)(const char* str, size_t n);
+  friend constexpr LiteralStringConst (::operator ""_kjc)(const char* str, size_t n);
 };
 
 // =======================================================================================
@@ -923,11 +923,11 @@ _::Delimited<T> delimited(T&& arr, kj::StringPtr delim) {
 
 }  // namespace kj
 
-constexpr kj::StringPtr operator "" _kj(const char* str, size_t n) {
+constexpr kj::StringPtr operator ""_kj(const char* str, size_t n) {
   return kj::StringPtr(kj::ArrayPtr<const char>(str, n + 1));
 };
 
-constexpr kj::LiteralStringConst operator "" _kjc(const char* str, size_t n) {
+constexpr kj::LiteralStringConst operator ""_kjc(const char* str, size_t n) {
   return kj::LiteralStringConst(kj::ArrayPtr<const char>(str, n + 1));
 };
 

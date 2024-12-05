@@ -2281,7 +2281,7 @@ struct ByteLiteral<1ul> {
 }  // namespace kj
 
 template <kj::_::ByteLiteral s>
-constexpr kj::ArrayPtr<const kj::byte> operator "" _kjb() {
+constexpr kj::ArrayPtr<const kj::byte> operator ""_kjb() {
   // "string"_kjb creates constexpr byte array pointer to the content of the string
   // WITHOUT the trailing 0.
   return kj::ArrayPtr<const kj::byte>(s.begin(), s.size());
