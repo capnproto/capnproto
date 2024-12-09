@@ -513,7 +513,7 @@ public:
       }
     }
 
-    kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    kj::Promise<size_t> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
       // If this is called, it means the tryPumpFrom() in probeForShorterPath() eventually invoked
       // code that tries to read manually from the source. We don't know what this code is doing
       // exactly, but we do know for sure that the endpoint is not a KjToCapnpStreamAdapter, so
@@ -1113,7 +1113,7 @@ private:
 
         WriteRequestAndBuffer wrab = { kj::mv(req), kj::mv(buffer) };
 
-        return input.tryRead(wrab.buffer.get().begin(), 1, size)
+        return input.tryRead(wrab.buffer.get().first(size), 1)
             .then([this, &input, completed, remaining, size, wrab = kj::mv(wrab)]
                   (size_t actual) mutable -> kj::Promise<uint64_t> {
           if (actual == 0) {
