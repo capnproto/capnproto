@@ -26,7 +26,6 @@
 #include "array.h"
 #include "exception.h"
 #include <stdint.h>
-#include <climits>
 
 KJ_BEGIN_HEADER
 
@@ -343,11 +342,6 @@ public:
 private:
   int fd;
   AutoCloseFd autoclose;
-
-#if __APPLE__
-  static constexpr ssize_t macosMaxBytes = INT_MAX;
-  // According to newer macOS manpages write and writev don't accept buffers bigger than INT_MAX bytes
-#endif
 };
 
 // =======================================================================================

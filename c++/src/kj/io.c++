@@ -32,6 +32,7 @@
 #include "miniposix.h"
 #include <algorithm>
 #include <numeric>
+#include <climits>
 #include <errno.h>
 #include "vector.h"
 
@@ -363,8 +364,8 @@ void FdOutputStream::write(const void* buffer, size_t size) {
 
   while (size > 0) {
     miniposix::ssize_t n;
-#if __APPLE__
-    KJ_SYSCALL(n = miniposix::write(fd, pos, std::min<size_t> (size, macosMaxBytes)), fd);
+#if defined(__APPLE__) || defined(_WIN32)
+    KJ_SYSCALL(n = miniposix::write(fd, pos, std::min<size_t> (size, INT_MAX)), fd);
 #else
     KJ_SYSCALL(n = miniposix::write(fd, pos, size), fd);
 #endif
@@ -394,19 +395,19 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   // Therefore slicing of the input might be required in case the sum of the bytes exceeds the threshold
   const auto bytesSum = std::accumulate (pieces.begin(), pieces.end(), size_t (0), [] (auto sum, auto& piece) { return sum + piece.size(); });
 
-  if (bytesSum > macosMaxBytes)
+  if (bytesSum > INT_MAX)
   {
     Vector<Vector<ArrayPtr<const byte>>> sizeLimitedPieces;
     sizeLimitedPieces.add (Vector<ArrayPtr<const byte>>());
 
-    auto currentBytesRemaining = macosMaxBytes;
+    size_t currentBytesRemaining = INT_MAX;
     for (auto piece : pieces)
     {
       while (piece.size() > currentBytesRemaining)
       {
         sizeLimitedPieces.back().add (piece.slice (0, currentBytesRemaining));
         piece = piece.slice (currentBytesRemaining, piece.size());
-        currentBytesRemaining = macosMaxBytes;
+        currentBytesRemaining = INT_MAX;
         sizeLimitedPieces.add (Vector<ArrayPtr<const byte>>());
       }
 
