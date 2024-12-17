@@ -1133,11 +1133,13 @@ private:
   DiscriminantChecks makeDiscriminantChecks(kj::StringPtr scope,
                                             kj::StringPtr memberName,
                                             StructSchema containingStruct,
-                                            const TemplateContext& templateContext) {
+                                            const TemplateContext& templateContext,
+                                            bool inplace = false) {
     auto discrimOffset = containingStruct.getProto().getStruct().getDiscriminantOffset();
 
     kj::String titleCase = toTitleCase(memberName);
     kj::String upperCase = toUpperCase(memberName);
+    kj::StringPtr maybeInline = inplace ? ""_kjc : "inline "_kjc;
 
     return DiscriminantChecks {
         kj::str(
@@ -1152,15 +1154,15 @@ private:
             "  _builder.setDataField<", scope, "Which>(\n"
             "      ::capnp::bounded<", discrimOffset, ">() * ::capnp::ELEMENTS, ",
                       scope, upperCase, ");\n"),
-        kj::strTree("  inline bool is", titleCase, "() const;\n"),
-        kj::strTree("  inline bool is", titleCase, "();\n"),
+        kj::strTree("  ", maybeInline, "bool is", titleCase, "() const;\n"),
+        kj::strTree("  ", maybeInline, "bool is", titleCase, "();\n"),
         kj::strTree(
             templateContext.allDecls(),
-            "inline bool ", scope, "Reader::is", titleCase, "() const {\n"
+            maybeInline, "bool ", scope, "Reader::is", titleCase, "() const {\n"
             "  return which() == ", scope, upperCase, ";\n"
             "}\n",
             templateContext.allDecls(),
-            "inline bool ", scope, "Builder::is", titleCase, "() {\n"
+            maybeInline, "bool ", scope, "Builder::is", titleCase, "() {\n"
             "  return which() == ", scope, upperCase, ";\n"
             "}\n")
     };
@@ -1173,6 +1175,7 @@ private:
     kj::StringTree builderMethodDecls;
     kj::StringTree pipelineMethodDecls;
     kj::StringTree inlineMethodDefs;
+    kj::StringTree sourceMethodDefs;
   };
 
   enum class FieldKind {
@@ -1258,7 +1261,8 @@ private:
                   KJ_UNREACHABLE;
                 },
                 "  return typename ", scope, titleCase, "::Builder(_builder);\n"
-                "}\n")
+                "}\n"),
+                kj::strTree()
           };
       }
     }
@@ -1392,16 +1396,25 @@ private:
     uint offset = slot.getOffset();
 
     if (kind == FieldKind::PRIMITIVE) {
-      return FieldText {
+#if CAPNP_NO_INLINE_ACCESSORS
+      bool isTemplated = templateContext.isGeneric();
+      kj::StringPtr maybeInline = !isTemplated ? ""_kjc : "inline "_kjc;
+      if (!isTemplated && hasDiscriminantValue(proto)) {
+        unionDiscrim = makeDiscriminantChecks(scope, baseName, field.getContainingStruct(), templateContext, true);
+      }
+#else
+      kj::StringPtr maybeInline = "inline "_kjc;
+#endif
+      auto field = FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
-            "  inline ", type, " get", titleCase, "() const;\n"
+            "  ", maybeInline, type, " get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
-            "  inline ", type, " get", titleCase, "();\n"
-            "  inline void set", titleCase, "(", type, " value", setterDefault, ");\n"
+            "  ", maybeInline, type, " get", titleCase, "();\n"
+            "  ", maybeInline, "void set", titleCase, "(", type, " value", setterDefault, ");\n"
             "\n"),
 
         kj::strTree(),
@@ -1409,26 +1422,37 @@ private:
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
             templateContext.allDecls(),
-            "inline ", type, " ", scope, "Reader::get", titleCase, "() const {\n",
+            maybeInline, type, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return _reader.getDataField<", type, ">(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::ELEMENTS", defaultMaskParam, ");\n",
             "}\n"
             "\n",
             templateContext.allDecls(),
-            "inline ", type, " ", scope, "Builder::get", titleCase, "() {\n",
+            maybeInline, type, " ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return _builder.getDataField<", type, ">(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::ELEMENTS", defaultMaskParam, ");\n",
             "}\n",
             templateContext.allDecls(),
-            "inline void ", scope, "Builder::set", titleCase, "(", type, " value) {\n",
+            maybeInline, "void ", scope, "Builder::set", titleCase, "(", type, " value) {\n",
             unionDiscrim.set,
             "  _builder.setDataField<", type, ">(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::ELEMENTS, value", defaultMaskParam, ");\n",
             "}\n"
-            "\n")
+            "\n"),
+            kj::strTree()
       };
+
+#if CAPNP_NO_INLINE_ACCESSORS
+      // If field is not templated, we make method definitions non-inline and move them to the
+      // source file, reducing header sizes and parsing overhead significantly.
+      if (!isTemplated) {
+        field.sourceMethodDefs = kj::mv(field.inlineMethodDefs);
+        field.inlineMethodDefs = kj::strTree();
+      }
+#endif
+      return field;
 
     } else if (kind == FieldKind::INTERFACE) {
       CppTypeName clientType = type;
@@ -1517,7 +1541,8 @@ private:
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS));\n"
             "}\n"
             "#endif  // !CAPNP_LITE\n"
-            "\n")
+            "\n"),
+        kj::strTree()
       };
 
     } else if (kind == FieldKind::ANY_POINTER) {
@@ -1571,7 +1596,8 @@ private:
             "  result.clear();\n"
             "  return result;\n"
             "}\n"
-            "\n")
+            "\n"),
+        kj::strTree(),
       };
 
     } else {
@@ -1592,6 +1618,17 @@ private:
       bool shouldExcludeInLiteMode = type.hasInterfaces();
       bool shouldTemplatizeInit = typeSchema.which() == schema::Type::ANY_POINTER &&
           kind != FieldKind::BRAND_PARAMETER;
+
+#if CAPNP_NO_INLINE_ACCESSORS
+      bool isTemplated = templateContext.isGeneric();
+      if (!isTemplated && hasDiscriminantValue(proto)) {
+        unionDiscrim = makeDiscriminantChecks(scope, baseName, field.getContainingStruct(),
+                                              templateContext, true);
+      }
+      kj::StringPtr maybeInline = isTemplated ? "inline "_kjc : ""_kjc;
+#else
+      kj::StringPtr maybeInline = "inline "_kjc;
+#endif
 
       CppTypeName elementReaderType;
       if (typeSchema.isList()) {
@@ -1668,67 +1705,89 @@ private:
 
       #define COND(cond, ...) ((cond) ? kj::strTree(__VA_ARGS__) : kj::strTree())
 
-      return FieldText {
+      auto templatedMethodDefs = kj::strTree(
+          COND(shouldIncludeStructInit && shouldTemplatizeInit,
+              templateContext.allDecls(),
+              "template <typename T_>\n",
+              "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As() {\n",
+              "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::STRUCT,\n"
+              "                \"", proto.getName(), " must be a struct\");\n",
+              unionDiscrim.set,
+              "  return ::capnp::_::PointerHelpers<T_>::init(_builder.getPointerField(\n"
+              "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS));\n"
+              "}\n"),
+          COND(shouldIncludeSizedInit && shouldTemplatizeInit,
+              templateContext.allDecls(),
+              "template <typename T_>\n",
+              "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As(unsigned int size) {\n",
+              "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::LIST,\n"
+              "                \"", proto.getName(), " must be a list\");\n",
+              unionDiscrim.set,
+              "  return ::capnp::_::PointerHelpers<T_>::init(_builder.getPointerField(\n"
+              "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), size);\n"
+              "}\n")
+      );
+      auto field = FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
-            "  inline bool has", titleCase, "() const;\n",
+            "  ", maybeInline, "bool has", titleCase, "() const;\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
-            "  inline ", readerType, " get", titleCase, "() const;\n",
+            "  ", maybeInline, readerType, " get", titleCase, "() const;\n",
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
-            "  inline bool has", titleCase, "();\n",
+            "  ", maybeInline, "bool has", titleCase, "();\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
-            "  inline ", builderType, " get", titleCase, "();\n"
-            "  inline void set", titleCase, "(", readerType, " value);\n",
+            "  ", maybeInline, builderType, " get", titleCase, "();\n"
+            "  ", maybeInline, "void set", titleCase, "(", readerType, " value);\n",
             COND(shouldIncludeArrayInitializer,
-              "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
+              "  ", maybeInline, "void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
             COND(shouldIncludeStructInit,
               COND(shouldTemplatizeInit,
                 "  template <typename T_>\n"
                 "  inline ::capnp::BuilderFor<T_> init", titleCase, "As();\n"),
               COND(!shouldTemplatizeInit,
-                "  inline ", builderType, " init", titleCase, "();\n")),
+                "  ", maybeInline, builderType, " init", titleCase, "();\n")),
             COND(shouldIncludeSizedInit,
               COND(shouldTemplatizeInit,
                 "  template <typename T_>\n"
                 "  inline ::capnp::BuilderFor<T_> init", titleCase, "As(unsigned int size);\n"),
               COND(!shouldTemplatizeInit,
-                "  inline ", builderType, " init", titleCase, "(unsigned int size);\n")),
-            "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
-            "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n",
+                "  ", maybeInline, builderType, " init", titleCase, "(unsigned int size);\n")),
+            "  ", maybeInline, "void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
+            "  ", maybeInline, "::capnp::Orphan<", type, "> disown", titleCase, "();\n",
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
         kj::strTree(
             COND(shouldIncludePipelineGetter,
-              "  inline ", pipelineType, " get", titleCase, "();\n")),
+              "  ", maybeInline, pipelineType, " get", titleCase, "();\n")),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
             templateContext.allDecls(),
-            "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
+            maybeInline, "bool ", scope, "Reader::has", titleCase, "() const {\n",
             unionDiscrim.has,
             "  return !_reader.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS).isNull();\n"
             "}\n",
             templateContext.allDecls(),
-            "inline bool ", scope, "Builder::has", titleCase, "() {\n",
+            maybeInline, "bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
             "  return !_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS).isNull();\n"
             "}\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
             templateContext.allDecls(),
-            "inline ", readerType, " ", scope, "Reader::get", titleCase, "() const {\n",
+            maybeInline, readerType, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(_reader.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS)", defaultParam, ");\n"
             "}\n",
             templateContext.allDecls(),
-            "inline ", builderType, " ", scope, "Builder::get", titleCase, "() {\n",
+            maybeInline, builderType, " ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS)", defaultParam, ");\n"
@@ -1736,61 +1795,39 @@ private:
             COND(shouldIncludePipelineGetter,
               "#if !CAPNP_LITE\n",
               templateContext.allDecls(),
-              "inline ", pipelineType, " ", scope, "Pipeline::get", titleCase, "() {\n",
+              maybeInline, pipelineType, " ", scope, "Pipeline::get", titleCase, "() {\n",
               "  return ", pipelineType, "(_typeless.getPointerField(", offset, "));\n"
               "}\n"
               "#endif  // !CAPNP_LITE\n"),
             templateContext.allDecls(),
-            "inline void ", scope, "Builder::set", titleCase, "(", readerType, " value) {\n",
+            maybeInline, "void ", scope, "Builder::set", titleCase, "(", readerType, " value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), value);\n"
             "}\n",
             COND(shouldIncludeArrayInitializer,
               templateContext.allDecls(),
-              "inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value) {\n",
+              maybeInline, "void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value) {\n",
               unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), value);\n"
               "}\n"),
-            COND(shouldIncludeStructInit,
-              COND(shouldTemplatizeInit,
+            COND(shouldIncludeStructInit && !shouldTemplatizeInit,
                 templateContext.allDecls(),
-                "template <typename T_>\n"
-                "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As() {\n",
-                "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::STRUCT,\n"
-                "                \"", proto.getName(), " must be a struct\");\n",
-                unionDiscrim.set,
-                "  return ::capnp::_::PointerHelpers<T_>::init(_builder.getPointerField(\n"
-                "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS));\n"
-                "}\n"),
-              COND(!shouldTemplatizeInit,
-                templateContext.allDecls(),
-                "inline ", builderType, " ", scope, "Builder::init", titleCase, "() {\n",
+                maybeInline, builderType, " ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 "  return ::capnp::_::PointerHelpers<", type, ">::init(_builder.getPointerField(\n"
                 "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS));\n"
-                "}\n")),
-            COND(shouldIncludeSizedInit,
-              COND(shouldTemplatizeInit,
-                templateContext.allDecls(),
-                "template <typename T_>\n"
-                "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As(unsigned int size) {\n",
-                "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::LIST,\n"
-                "                \"", proto.getName(), " must be a list\");\n",
-                unionDiscrim.set,
-                "  return ::capnp::_::PointerHelpers<T_>::init(_builder.getPointerField(\n"
-                "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), size);\n"
                 "}\n"),
-              COND(!shouldTemplatizeInit,
+            COND(shouldIncludeSizedInit && !shouldTemplatizeInit,
                 templateContext.allDecls(),
-                "inline ", builderType, " ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
+                maybeInline, builderType, " ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
                 unionDiscrim.set,
                 "  return ::capnp::_::PointerHelpers<", type, ">::init(_builder.getPointerField(\n"
                 "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS), size);\n"
-                "}\n")),
+                "}\n"),
             templateContext.allDecls(),
-            "inline void ", scope, "Builder::adopt", titleCase, "(\n"
+            maybeInline, "void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::adopt(_builder.getPointerField(\n"
@@ -1800,15 +1837,26 @@ private:
                 "#if !defined(_MSC_VER) || defined(__clang__)\n"
                 "// Excluded under MSVC because bugs may make it unable to compile this method.\n"),
             templateContext.allDecls(),
-            "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
+            maybeInline, "::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(_builder.getPointerField(\n"
             "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS));\n"
             "}\n",
             COND(type.hasDisambiguatedTemplate(), "#endif  // !_MSC_VER || __clang__\n"),
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
-            "\n")
+            "\n"),
+            kj::strTree()
       };
+
+#if CAPNP_NO_INLINE_ACCESSORS
+      if (!isTemplated) {
+        field.sourceMethodDefs = kj::mv(field.inlineMethodDefs);
+        field.inlineMethodDefs = kj::strTree();
+      }
+#endif
+      // templated definitions are always inline
+      field.inlineMethodDefs = kj::strTree(kj::mv(field.inlineMethodDefs), kj::mv(templatedMethodDefs));
+      return field;
 
       #undef COND
     }
@@ -1870,6 +1918,7 @@ private:
     kj::StringTree outerTypeDecl;
     kj::StringTree outerTypeDef;
     kj::StringTree readerBuilderDefs;
+    kj::StringTree sourceMethodDefs;
     kj::StringTree inlineMethodDefs;
     kj::StringTree sourceDefs;
   };
@@ -2114,6 +2163,7 @@ private:
           makePipelineDef(fullName, name, templateContext, structNode.getDiscriminantCount() != 0,
                           KJ_MAP(f, fieldTexts) { return kj::mv(f.pipelineMethodDecls); })),
 
+      kj::strTree(KJ_MAP(f, fieldTexts) { return kj::mv(f.sourceMethodDefs); }),
       kj::strTree(
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
               templateContext.allDecls(),
@@ -2138,7 +2188,7 @@ private:
   struct MethodText {
     kj::StringTree clientDecls;
     kj::StringTree serverDecls;
-    kj::StringTree inlineDefs;
+    kj::StringTree headerInlineDefs;
     kj::StringTree sourceDefs;
     kj::StringTree dispatchCase;
   };
@@ -2525,7 +2575,7 @@ private:
           "  return *this;\n"
           "}\n"
           "\n",
-          KJ_MAP(m, methods) { return kj::mv(m.inlineDefs); },
+          KJ_MAP(m, methods) { return kj::mv(m.headerInlineDefs); },
           "#endif  // !CAPNP_LITE\n"),
 
       kj::strTree(
@@ -2679,6 +2729,7 @@ private:
     kj::StringTree outerTypeDecl;
     kj::StringTree outerTypeDef;
     kj::StringTree readerBuilderDefs;
+    kj::StringTree sourceMethodDefs;
     kj::StringTree inlineMethodDefs;
     kj::StringTree capnpSchemaDecls;
     kj::StringTree capnpSchemaDefs;
@@ -2840,6 +2891,10 @@ private:
           KJ_MAP(n, nestedTexts) { return kj::mv(n.readerBuilderDefs); }),
 
       kj::strTree(
+          kj::mv(top.sourceMethodDefs),
+          KJ_MAP(n, nestedTexts) { return kj::mv(n.sourceMethodDefs); }),
+
+      kj::strTree(
           kj::mv(top.inlineMethodDefs),
           KJ_MAP(n, nestedTexts) { return kj::mv(n.inlineMethodDefs); }),
 
@@ -2891,6 +2946,7 @@ private:
           kj::mv(structText.outerTypeDecl),
           kj::mv(structText.outerTypeDef),
           kj::mv(structText.readerBuilderDefs),
+          kj::mv(structText.sourceMethodDefs),
           kj::mv(structText.inlineMethodDefs),
 
           kj::strTree(),
@@ -2912,6 +2968,7 @@ private:
               "typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
               "\n"),
 
+          kj::strTree(),
           kj::strTree(),
           kj::strTree(),
 
@@ -2941,6 +2998,7 @@ private:
           kj::mv(interfaceText.outerTypeDecl),
           kj::mv(interfaceText.outerTypeDef),
           kj::mv(interfaceText.clientServerDefs),
+          kj::strTree(),
           kj::mv(interfaceText.inlineMethodDefs),
 
           kj::strTree(),
@@ -2961,6 +3019,7 @@ private:
 
           kj::strTree(),
           kj::strTree(),
+          kj::strTree(),
 
           kj::mv(constText.def),
         };
@@ -2968,6 +3027,7 @@ private:
 
       case schema::Node::ANNOTATION: {
         return NodeText {
+          kj::strTree(),
           kj::strTree(),
           kj::strTree(),
           kj::strTree(),
@@ -3041,6 +3101,8 @@ private:
 
     kj::StringTree sourceDefs = kj::strTree(
         KJ_MAP(n, nodeTexts) { return kj::mv(n.sourceFileDefs); });
+    kj::StringTree sourceMethodDefs = kj::strTree(
+        KJ_MAP(n, nodeTexts) { return kj::mv(n.sourceMethodDefs); });
 
     return FileText {
       kj::strTree(
@@ -3105,11 +3167,16 @@ private:
           KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
           "}  // namespace schemas\n"
           "}  // namespace capnp\n",
-          sourceDefs.size() == 0 ? kj::strTree() : kj::strTree(
+          (sourceMethodDefs.size() == 0 && sourceDefs.size() == 0) ? kj::strTree() : kj::strTree(
               "\n", separator, "\n",
               KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
-              kj::mv(sourceDefs), "\n",
-              KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }, "\n"))
+
+              kj::mv(sourceDefs),
+              (sourceMethodDefs.size() == 0 || sourceDefs.size() == 0) ? kj::strTree() :
+              kj::strTree("\n", separator, "\n"),
+              // Non-templated method definitions that can be defined in header
+              kj::mv(sourceMethodDefs), "\n",
+              KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }))
     };
   }
 
