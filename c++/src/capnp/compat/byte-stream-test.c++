@@ -30,9 +30,9 @@ namespace {
 kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
   if (expected.size() == 0) return kj::READY_NOW;
 
-  auto buffer = kj::heapArray<char>(expected.size());
+  auto buffer = kj::heapArray<byte>(expected.size());
 
-  auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
+  auto promise = in.tryRead(buffer, 1);
   return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
     if (amount == 0) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
