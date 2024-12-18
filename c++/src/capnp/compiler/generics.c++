@@ -567,9 +567,9 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
         auto result = interpretResolve(resolver, *r, source);
         if (r->is<Resolver::ResolvedDecl>()){
           errorReporter.reportResolution(Resolution {
-            .startByte = source.getStartByte(),
-            .endByte = source.getEndByte(),
-            .target = Resolution::Type { r->get<Resolver::ResolvedDecl>().id },
+            /* .startByte = */ source.getStartByte(),
+            /* .endByte = */ source.getEndByte(),
+            /* .target = */ Resolution::Type { r->get<Resolver::ResolvedDecl>().id },
           });
         }
         return kj::mv(result);
@@ -585,9 +585,9 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
         auto result = interpretResolve(resolver, *r, source);
         if (r->is<Resolver::ResolvedDecl>()){
           errorReporter.reportResolution(Resolution {
-            .startByte = source.getStartByte(),
-            .endByte = source.getEndByte(),
-            .target = Resolution::Type { r->get<Resolver::ResolvedDecl>().id },
+            /* .startByte = */ source.getStartByte(),
+            /* .endByte = */ source.getEndByte(),
+            /* .target = */ Resolution::Type { r->get<Resolver::ResolvedDecl>().id },
           });
         }
         return kj::mv(result);
@@ -601,9 +601,9 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
       auto filename = source.getImport();
       KJ_IF_MAYBE(decl, resolver.resolveImport(filename.getValue())) {
         errorReporter.reportResolution(Resolution {
-          .startByte = source.getStartByte(),
-          .endByte = source.getEndByte(),
-          .target = Resolution::Type { decl->id },
+          /* .startByte = */ source.getStartByte(),
+          /* .endByte = */ source.getEndByte(),
+          /* .target = */ Resolution::Type { decl->id },
         });
         // Import is always a root scope, so create a fresh BrandScope.
         return BrandedDecl(*decl, kj::refcounted<BrandScope>(
