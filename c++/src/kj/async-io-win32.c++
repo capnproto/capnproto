@@ -352,7 +352,7 @@ public:
     *length = socklen;
   }
 
-  Maybe<void*> getWin32Handle() const {
+  Maybe<void*> getWin32Handle() const override {
     return reinterpret_cast<void*>(fd);
   }
 
