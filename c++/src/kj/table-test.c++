@@ -580,8 +580,7 @@ KJ_TEST("benchmark: std::unordered_set<StringPtr>") {
 
 KJ_TEST("B-tree internals") {
   {
-    BTreeImpl::Leaf leaf;
-    memset(&leaf, 0, sizeof(leaf));
+    BTreeImpl::Leaf leaf{};
 
     for (auto i: kj::indices(leaf.rows)) {
       KJ_CONTEXT(i);
@@ -617,8 +616,7 @@ KJ_TEST("B-tree internals") {
   }
 
   {
-    BTreeImpl::Parent parent;
-    memset(&parent, 0, sizeof(parent));
+    BTreeImpl::Parent parent{};
 
     for (auto i: kj::indices(parent.keys)) {
       KJ_CONTEXT(i);
