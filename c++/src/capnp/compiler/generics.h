@@ -141,6 +141,17 @@ public:
   kj::String toString();
   kj::String toDebugString();
 
+  kj::Maybe<uint64_t> getGenericTypeId() {
+    // If this declaration points to a type, gets its type ID. Keep in mind that this
+    // drops the brand, that is, if the type is the result of applying a generic to
+    // some type parameters, this returns only the ID of the underlying generic type,
+    // which loses information about the type parameters.
+    if (body.is<Resolver::ResolvedDecl>()) {
+      return body.get<Resolver::ResolvedDecl>().id;
+    }
+    return nullptr;
+  }
+
 private:
   Resolver::ResolveResult body;
   kj::Own<BrandScope> brand;  // null if parameter
