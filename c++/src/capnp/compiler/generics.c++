@@ -658,9 +658,9 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
         KJ_IF_MAYBE(memberDecl, decl->getMember(name.getValue(), source)) {
           KJ_IF_MAYBE(id, memberDecl->getGenericTypeId()) {
             errorReporter.reportResolution(Resolution {
-              .startByte = source.getStartByte(),
-              .endByte = source.getEndByte(),
-              .target = Resolution::Type { *id },
+              /* .startByte = */ source.getStartByte(),
+              /* .endByte = */ source.getEndByte(),
+              /* .target = */ Resolution::Type { *id },
             });
           }
           return kj::mv(*memberDecl);
