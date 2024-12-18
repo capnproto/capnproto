@@ -16,8 +16,8 @@
 #      cmake ../c++/samples
 #      cmake --build .
 
-project("Cap'n Proto Samples" CXX)
 cmake_minimum_required(VERSION 3.1)
+project("Cap'n Proto Samples" CXX)
 
 find_package(CapnProto CONFIG REQUIRED)
 
