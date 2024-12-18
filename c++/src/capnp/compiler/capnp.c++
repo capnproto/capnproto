@@ -502,6 +502,26 @@ public:
       requestedFile.setFilename(sourceFiles[i].name);
       requestedFile.adoptImports(compiler->getFileImportTable(
           *sourceFiles[i].module, Orphanage::getForMessageContaining(requestedFile)));
+      // Populate FileSourceInfo with identifier resolutions, including type IDs and member details.
+      auto fileSourceInfo = requestedFile.initFileSourceInfo();
+      const auto resolutions = sourceFiles[i].module->getResolutions();
+      auto identifiers = fileSourceInfo.initIdentifiers(resolutions.size());
+      for (size_t j = 0; j < resolutions.size(); j++) {
+        auto identifier = identifiers[j];
+        identifier.setStartByte(resolutions[j].startByte);
+        identifier.setEndByte(resolutions[j].endByte);
+        KJ_SWITCH_ONEOF(resolutions[j].target) {
+          KJ_CASE_ONEOF(type, Resolution::Type) {
+            identifier.setTypeId(type.typeId);
+          }
+          KJ_CASE_ONEOF(member, Resolution::Member) {
+            identifier.initMember();
+            auto identifier_member = identifier.getMember();
+            identifier_member.setParentTypeId(member.parentTypeId);
+            identifier_member.setOrdinal(member.ordinal);
+          }
+        }
+      }
     }
 
     for (auto& output: outputs) {
