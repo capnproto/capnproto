@@ -222,21 +222,21 @@ public:
         observer(eventPort.observeIo(reinterpret_cast<HANDLE>(fd))) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
-  Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
+  Promise<size_t> read(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
+    return tryRead(buffer, minBytes).then([=](size_t result) mutable {
       KJ_REQUIRE(result >= minBytes, "Premature EOF") {
         // Pretend we read zeros from the input.
-        memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
+        buffer.first(minBytes).slice(result).fill(0);
         return minBytes;
       }
       return result;
     });
   }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryRead(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
     auto bufs = heapArray<WSABUF>(1);
-    bufs[0].buf = reinterpret_cast<char*>(buffer);
-    bufs[0].len = maxBytes;
+    bufs[0].buf = buffer.asChars().begin();
+    bufs[0].len = buffer.size();
 
     ArrayPtr<WSABUF> ref = bufs;
     return tryReadInternal(ref, minBytes, 0).attach(kj::mv(bufs));
