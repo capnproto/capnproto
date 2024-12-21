@@ -1236,7 +1236,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
       struct addrinfo hints;
       memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
-#if __BIONIC__
+#if __BIONIC__ || !defined(AI_V4MAPPED)
       // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
       hints.ai_flags = AI_ADDRCONFIG;
 #else
