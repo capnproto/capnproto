@@ -378,7 +378,11 @@ bool systemSupportsAddress(StringPtr addr, StringPtr service = nullptr) {
   struct addrinfo hints;
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = 0;
+#if !defined(AI_V4MAPPED)
+  hints.ai_flags = AI_ADDRCONFIG;
+#else
   hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+#endif
   hints.ai_protocol = 0;
   hints.ai_canonname = nullptr;
   hints.ai_addr = nullptr;
