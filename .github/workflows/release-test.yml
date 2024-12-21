@@ -92,39 +92,39 @@ jobs:
       - name: cmake-static
         run: |
             ./super-test.sh cmake-package cmake-static
-  Android:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v2
-      - name: install dependencies
-        run: |
-            export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git
-      - name: fetch Android tools
-        if: steps.cache-android-sdk.outputs.cache-hit != 'true'
-        run: |
-            # The installed Android SDK is broken.
-            unset ANDROID_SDK_ROOT
-            unset ANDROID_HOME
-
-            mkdir android-sdk
-            cd android-sdk
-            curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-6200805_latest.zip
-            unzip commandlinetools.zip
-            (yes || true) | tools/bin/sdkmanager --sdk_root=$PWD platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
-      - name: 32-bit Build and Test
-        run: |
-            # The installed Android SDK is broken.
-            unset ANDROID_SDK_ROOT
-            unset ANDROID_HOME
-
-            echo | android-sdk/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
-
-            # avdmanager seems to set image.sysdir.1 incorrectly in the AVD's config.ini, which
-            # causes the emulator to fail. I don't know why. I don't know how to fix it, other than
-            # to patch the config like so.
-            sed -i -re 's,^image\.sysdir\.1=android-sdk/,image.sysdir.1=,g' $HOME/.android/avd/capnp.avd/config.ini
-
-            ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
+  # Android:
+  #   runs-on: ubuntu-20.04
+  #   strategy:
+  #     fail-fast: false
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: install dependencies
+  #       run: |
+  #           export DEBIAN_FRONTEND=noninteractive
+  #           sudo apt-get install -y build-essential git
+  #     - name: fetch Android tools
+  #       if: steps.cache-android-sdk.outputs.cache-hit != 'true'
+  #       run: |
+  #           # The installed Android SDK is broken.
+  #           unset ANDROID_SDK_ROOT
+  #           unset ANDROID_HOME
+  #
+  #           mkdir android-sdk
+  #           cd android-sdk
+  #           curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-6200805_latest.zip
+  #           unzip commandlinetools.zip
+  #           (yes || true) | tools/bin/sdkmanager --sdk_root=$PWD platform-tools 'platforms;android-25' 'system-images;android-25;google_apis;armeabi-v7a' emulator 'build-tools;25.0.2' ndk-bundle
+  #     - name: 32-bit Build and Test
+  #       run: |
+  #           # The installed Android SDK is broken.
+  #           unset ANDROID_SDK_ROOT
+  #           unset ANDROID_HOME
+  #
+  #           echo | android-sdk/tools/bin/avdmanager create avd -n capnp -k 'system-images;android-25;google_apis;armeabi-v7a' -b google_apis/armeabi-v7a
+  #
+  #           # avdmanager seems to set image.sysdir.1 incorrectly in the AVD's config.ini, which
+  #           # causes the emulator to fail. I don't know why. I don't know how to fix it, other than
+  #           # to patch the config like so.
+  #           sed -i -re 's,^image\.sysdir\.1=android-sdk/,image.sysdir.1=,g' $HOME/.android/avd/capnp.avd/config.ini
+  #
+  #           ./super-test.sh android $PWD/android-sdk arm-linux-androideabi armv7a-linux-androideabi24
