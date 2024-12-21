@@ -564,7 +564,15 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
       }
 
       KJ_IF_SOME(r, resolver.resolve(nameValue)) {
-        return interpretResolve(resolver, r, source);
+        auto result = interpretResolve(resolver, r, source);
+        if (r.is<Resolver::ResolvedDecl>()){
+          errorReporter.reportResolution(Resolution {
+            /* .startByte = */ source.getStartByte(),
+            /* .endByte = */ source.getEndByte(),
+            /* .target = */ Resolution::Type { r.get<Resolver::ResolvedDecl>().id },
+          });
+        }
+        return kj::mv(result);
       } else {
         errorReporter.addErrorOn(name, kj::str("Not defined: ", nameValue));
         return kj::none;
@@ -574,7 +582,15 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
     case Expression::ABSOLUTE_NAME: {
       auto name = source.getAbsoluteName();
       KJ_IF_SOME(r, resolver.getTopScope().resolver->resolveMember(name.getValue())) {
-        return interpretResolve(resolver, r, source);
+        auto result = interpretResolve(resolver, r, source);
+        if (r.is<Resolver::ResolvedDecl>()){
+          errorReporter.reportResolution(Resolution {
+            /* .startByte = */ source.getStartByte(),
+            /* .endByte = */ source.getEndByte(),
+            /* .target = */ Resolution::Type { r.get<Resolver::ResolvedDecl>().id },
+          });
+        }
+        return kj::mv(result);
       } else {
         errorReporter.addErrorOn(name, kj::str("Not defined: ", name.getValue()));
         return kj::none;
@@ -584,6 +600,11 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
     case Expression::IMPORT: {
       auto filename = source.getImport();
       KJ_IF_SOME(decl, resolver.resolveImport(filename.getValue())) {
+        errorReporter.reportResolution(Resolution {
+          /* .startByte = */ source.getStartByte(),
+          /* .endByte = */ source.getEndByte(),
+          /* .target = */ Resolution::Type { decl.id },
+        });
         // Import is always a root scope, so create a fresh BrandScope.
         return BrandedDecl(decl, kj::refcounted<BrandScope>(
             errorReporter, decl.id, decl.genericParamCount, *decl.resolver), source);
@@ -635,6 +656,13 @@ kj::Maybe<BrandedDecl> BrandScope::compileDeclExpression(
       KJ_IF_SOME(decl, compileDeclExpression(member.getParent(), resolver, implicitMethodParams)) {
         auto name = member.getName();
         KJ_IF_SOME(memberDecl, decl.getMember(name.getValue(), source)) {
+          KJ_IF_SOME(id, memberDecl.getGenericTypeId()) {
+            errorReporter.reportResolution(Resolution {
+              /* .startByte = */ source.getStartByte(),
+              /* .endByte = */ source.getEndByte(),
+              /* .target = */ Resolution::Type { id },
+            });
+          }
           return kj::mv(memberDecl);
         } else {
           errorReporter.addErrorOn(name, kj::str(
