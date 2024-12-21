@@ -68,14 +68,14 @@ build_packages() {
   cd c++
   doit autoreconf -i
   doit ./configure
-  doit make -j$(nproc) distcheck
+  doit make -j6 distcheck
   doit mv capnproto-c++-$VERSION.tar.gz ..
   doit make distclean
 
   # build windows executables
   doit ./configure --host=i686-w64-mingw32 --with-external-capnp \
       --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
-  doit make -j$(nproc) capnp.exe capnpc-c++.exe capnpc-capnp.exe
+  doit make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit i686-w64-mingw32-strip capnp.exe capnpc-c++.exe capnpc-capnp.exe
   doit mkdir capnproto-tools-win32-$VERSION
   doit mv capnp.exe capnpc-c++.exe capnpc-capnp.exe capnproto-tools-win32-$VERSION
