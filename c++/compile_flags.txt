@@ -1,9 +1,6 @@
 -std=c++20
 -Isrc
 -Itmp
--isystem/usr/local/include
--isystem/usr/include/x86_64-linux-gnu
--isystem/usr/include
 -DKJ_HEADER_WARNINGS
 -DCAPNP_HEADER_WARNINGS
 -DCAPNP_DEBUG_TYPES
