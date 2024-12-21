@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <errno.h>
 #include "vector.h"
+#include <limits.h>
 
 #if _WIN32
 #include <windows.h>
@@ -357,12 +358,27 @@ size_t FdInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
 
 FdOutputStream::~FdOutputStream() noexcept(false) {}
 
+#if _WIN32 || __APPLE__
+// On platforms that can't handle writes of more than INT_MAX (e.g. Windows, Mac), we will clamp
+// writes to this size. We use 1GB rather than INT_MAX since INT_MAX is 2GB minus 1 byte. Being
+// off by one from a big round number feels rude (alignment issues may harm performance), and 1GB
+// should be plenty in any case.
+static constexpr size_t WRITE_CLAMP_SIZE = 1u << 30;
+#endif
+
 void FdOutputStream::write(const void* buffer, size_t size) {
   const char* pos = reinterpret_cast<const char*>(buffer);
 
   while (size > 0) {
     miniposix::ssize_t n;
+#if _WIN32 || __APPLE__
+    // Windows and Mac suffer from bugs in which they will fail if given more than INT_MAX bytes
+    // in a single write operation. We can just clamp the size since the loop will then handle
+    // writing the rest. I don't know why these platforms don't just do this themselves.
+    KJ_SYSCALL(n = miniposix::write(fd, pos, kj::min(size, WRITE_CLAMP_SIZE)), fd);
+#else
     KJ_SYSCALL(n = miniposix::write(fd, pos, size), fd);
+#endif
     KJ_ASSERT(n > 0, "write() returned zero.");
     pos += n;
     size -= n;
@@ -400,10 +416,46 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 
   while (current < iov.end()) {
+    size_t iovCount = iov.end() - current;
+
+#if __APPLE__
+    // MacOS will fail if you give it more than INT_MAX bytes to write at once. We can solve this
+    // by carefully truncating the list to a lesser number. Why the OS doesn't just return a short
+    // write itself, I don't know.
+    size_t totalSize = 0;
+    struct iovec* editedPiece = nullptr;
+    size_t editedPieceOriginalLen = 0;
+    for (auto i: kj::zeroTo(iovCount)) {
+      auto& piece = *(current + i);
+      totalSize += piece.iov_len;
+      if (totalSize >= WRITE_CLAMP_SIZE) {
+        // Truncate the list after this piece.
+        iovCount = i + 1;
+
+        if (totalSize > WRITE_CLAMP_SIZE) {
+          // We also have to truncate this piece. Patch it in-place and plan to fix it later.
+          editedPiece = &piece;
+          editedPieceOriginalLen = piece.iov_len;
+          size_t overage = totalSize - WRITE_CLAMP_SIZE;
+          piece.iov_len -= overage;
+        }
+
+        break;
+      }
+    }
+#endif
+
     // Issue the write.
     ssize_t n = 0;
-    KJ_SYSCALL(n = ::writev(fd, current, iov.end() - current), fd);
+    KJ_SYSCALL(n = ::writev(fd, current, iovCount), fd);
     KJ_ASSERT(n > 0, "writev() returned zero.");
+
+#if __APPLE__
+    // If we patched the list above, unpatch now.
+    if (editedPiece != nullptr) {
+      editedPiece->iov_len = editedPieceOriginalLen;
+    }
+#endif
 
     // Advance past all buffers that were fully-written.
     while (current < iov.end() && static_cast<size_t>(n) >= current->iov_len) {
