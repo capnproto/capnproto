@@ -306,6 +306,10 @@ private:
   int fd;
 };
 
+using AutoCloseFd = OwnFd;
+// Historically, this class was called `kj::AutoCloseFd`. For now we define this alias for
+// backwards-compatibility.
+
 inline auto KJ_STRINGIFY(const OwnFd& fd)
     -> decltype(kj::toCharSequence(implicitCast<int>(fd))) {
   return kj::toCharSequence(implicitCast<int>(fd));

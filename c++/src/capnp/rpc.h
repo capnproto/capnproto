@@ -26,7 +26,10 @@
 
 CAPNP_BEGIN_HEADER
 
-namespace kj { class OwnFd; }
+namespace kj {
+  class OwnFd;
+  using AutoCloseFd = OwnFd;
+}
 
 namespace capnp {
 

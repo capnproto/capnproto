@@ -40,6 +40,7 @@ class UnixEventPort;
 #endif
 
 class OwnFd;
+using AutoCloseFd = OwnFd;
 class NetworkAddress;
 class AsyncOutputStream;
 class AsyncIoStream;
@@ -835,9 +836,13 @@ public:
   // On Windows, the `fd` parameter to each of these methods must be a SOCKET, and must have the
   // flag WSA_FLAG_OVERLAPPED (which socket() uses by default, but WSASocket() wants you to specify
   // explicitly).
+  //
+  // TODO(cleanup): This alias was created when `kj::OwnFd` was called `kj::AutoCloseFd`. Later
+  //   `AutoCloseFd` itself was renamed `OwnFd`, which means this alias now shadows `kj::OwnFd`,
+  //   which is a little weird.
 #else
   typedef int Fd;
-  typedef OwnFd OwnFd;
+  typedef kj::OwnFd OwnFd;
   // On Unix, any arbitrary file descriptor is supported.
 #endif
 
