@@ -983,7 +983,7 @@ private:
 
   public:
     ImportClient(RpcConnectionState& connectionState, ImportId importId,
-                 kj::Maybe<kj::AutoCloseFd> fd)
+                 kj::Maybe<kj::OwnFd> fd)
         : RpcClient(connectionState), importId(importId), fd(kj::mv(fd)) {}
 
     ~ImportClient() noexcept(false) {
@@ -1011,7 +1011,7 @@ private:
       });
     }
 
-    void setFdIfMissing(kj::Maybe<kj::AutoCloseFd> newFd) {
+    void setFdIfMissing(kj::Maybe<kj::OwnFd> newFd) {
       if (fd == kj::none) {
         fd = kj::mv(newFd);
       }
@@ -1054,7 +1054,7 @@ private:
 
   private:
     ImportId importId;
-    kj::Maybe<kj::AutoCloseFd> fd;
+    kj::Maybe<kj::OwnFd> fd;
 
     uint remoteRefcount = 0;
     // Number of times we've received this import from the peer.
@@ -1605,7 +1605,7 @@ private:
   // =====================================================================================
   // Interpreting CapDescriptor
 
-  kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::AutoCloseFd> fd) {
+  kj::Own<ClientHook> import(ImportId importId, bool isPromise, kj::Maybe<kj::OwnFd> fd) {
     // Receive a new import.
 
     auto& import = imports.findOrCreate(importId);
@@ -1739,9 +1739,9 @@ private:
   };
 
   kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
-                                            kj::ArrayPtr<kj::AutoCloseFd> fds) {
+                                            kj::ArrayPtr<kj::OwnFd> fds) {
     uint fdIndex = descriptor.getAttachedFd();
-    kj::Maybe<kj::AutoCloseFd> fd;
+    kj::Maybe<kj::OwnFd> fd;
     if (fdIndex < fds.size() && fds[fdIndex] != nullptr) {
       fd = kj::mv(fds[fdIndex]);
     }
@@ -1794,7 +1794,7 @@ private:
   }
 
   kj::Array<kj::Maybe<kj::Own<ClientHook>>> receiveCaps(List<rpc::CapDescriptor>::Reader capTable,
-                                                        kj::ArrayPtr<kj::AutoCloseFd> fds) {
+                                                        kj::ArrayPtr<kj::OwnFd> fds) {
     auto result = kj::heapArrayBuilder<kj::Maybe<kj::Own<ClientHook>>>(capTable.size());
     for (auto cap: capTable) {
       result.add(receiveCap(cap, fds));

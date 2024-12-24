@@ -981,7 +981,7 @@ Own<AppendableFile> newFileAppender(Own<const File> inner);
 #if _WIN32
 typedef AutoCloseHandle OsFileHandle;
 #else
-typedef AutoCloseFd OsFileHandle;
+typedef OwnFd OsFileHandle;
 #endif
 
 Own<ReadableFile> newDiskReadableFile(OsFileHandle fd);

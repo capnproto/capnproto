@@ -160,14 +160,14 @@ public:
   }
 
   Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                     AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                     OwnFd* fdBuffer, size_t maxFds) override {
     return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, {0,0});
   }
 
   Promise<ReadResult> tryReadWithStreams(
       void* buffer, size_t minBytes, size_t maxBytes,
       Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) override {
-    auto fdBuffer = kj::heapArray<AutoCloseFd>(maxStreams);
+    auto fdBuffer = kj::heapArray<OwnFd>(maxStreams);
     auto promise = tryReadInternal(buffer, minBytes, maxBytes, fdBuffer.begin(), maxStreams, {0,0});
 
     return promise.then([this, fdBuffer = kj::mv(fdBuffer), streamBuffer]
@@ -416,7 +416,7 @@ private:
         KJ_FAIL_SYSCALL("pipe2()", error);
     }
 
-    AutoCloseFd pipeIn(pipeFds[0]), pipeOut(pipeFds[1]);
+    OwnFd pipeIn(pipeFds[0]), pipeOut(pipeFds[1]);
 
     return splicePumpLoop(input, pipeFds[0], pipeFds[1], readSoFar, limit, 0)
         .attach(kj::mv(pipeIn), kj::mv(pipeOut));
@@ -557,7 +557,7 @@ private:
   Maybe<Function<void(ArrayPtr<AncillaryMessage>)>> ancillaryMsgCallback;
 
   Promise<ReadResult> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
-                                      AutoCloseFd* fdBuffer, size_t maxFds,
+                                      OwnFd* fdBuffer, size_t maxFds,
                                       ReadResult alreadyRead) {
     // `alreadyRead` is the number of bytes we have already received via previous reads -- minBytes,
     // maxBytes, and buffer have already been adjusted to account for them, but this count must
@@ -669,9 +669,9 @@ private:
             auto len = kj::min(cmsg->cmsg_len, spaceLeft);
             auto data = arrayPtr(reinterpret_cast<int*>(CMSG_DATA(cmsg)),
                                  (len - CMSG_LEN(0)) / sizeof(int));
-            kj::Vector<kj::AutoCloseFd> trashFds;
+            kj::Vector<kj::OwnFd> trashFds;
             for (auto fd: data) {
-              kj::AutoCloseFd ownFd(fd);
+              kj::OwnFd ownFd(fd);
               if (nfds < maxFds) {
                 fdBuffer[nfds++] = kj::mv(ownFd);
               } else {
@@ -909,7 +909,7 @@ public:
   const struct sockaddr* getRaw() const { return &addr.generic; }
   socklen_t getRawSize() const { return addrlen; }
 
-  kj::AutoCloseFd socket(int type) const {
+  kj::OwnFd socket(int type) const {
     bool isStream = type == SOCK_STREAM;
 
 #if __linux__ && !__BIONIC__
@@ -1342,7 +1342,7 @@ public:
 #endif
 
     if (newFd >= 0) {
-      kj::AutoCloseFd ownFd(newFd);
+      kj::OwnFd ownFd(newFd);
       if (!filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), addrlen)) {
         // Ignore disallowed address.
         return acceptImpl(authenticated);

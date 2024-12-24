@@ -376,7 +376,7 @@ KJ includes special variants of its assertion macros that convert traditional C 
 
 ```c++
 // For a syscall returning a file descriptor, use KJ_SYSCALL_FD.
-kj::AutoCloseFd fd = KJ_SYSCALL_FD(
+kj::OwnFd fd = KJ_SYSCALL_FD(
     open(filename, O_RDONLY), "couldn't open the document", filename);
 
 // For a syscall returning anything else, use KJ_SYSCALL.
@@ -402,7 +402,7 @@ KJ_SYSCALL_HANDLE_ERRORS(fd = open(filename, O_RDONLY)) {
     KJ_FAIL_SYSCALL("open()", error, "couldn't open the document", filename);
 } else {
   // The `else` clause runs if the system call succeeded.
-  return kj::AutoCloseFd(fd);
+  return kj::OwnFd(fd);
 }
 ```
 
@@ -1030,7 +1030,7 @@ Although most complex KJ applications use async I/O, sometimes you want somethin
 
 `kj/io.h` provides some more basic, synchronous streaming interfaces, like `kj::InputStream` and `kj::OutputStream`. Implementations are provided on top of file descriptors and Windows `HANDLE`s.
 
-Additionally, the important utility class `kj::AutoCloseFd` (and `kj::AutoCloseHandle` for Windows) can be found here. This is an RAII wrapper around a file descriptor (or `HANDLE`), which you will likely want to use any time you are manipulating raw file descriptors (or `HANDLE`s) in KJ code.
+Additionally, the important utility class `kj::OwnFd` (and `kj::AutoCloseHandle` for Windows) can be found here. This is an RAII wrapper around a file descriptor (or `HANDLE`), which you will likely want to use any time you are manipulating raw file descriptors (or `HANDLE`s) in KJ code.
 
 ### Filesystem
 

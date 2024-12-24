@@ -31,7 +31,7 @@ namespace capnp {
 
 struct MessageReaderAndFds {
   kj::Own<MessageReader> reader;
-  kj::ArrayPtr<kj::AutoCloseFd> fds;
+  kj::ArrayPtr<kj::OwnFd> fds;
 };
 
 struct MessageAndFds {
@@ -44,7 +44,7 @@ class MessageStream {
   // the functionality above.
 public:
   virtual kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      kj::ArrayPtr<kj::OwnFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) = 0;
   // Read a message that may also have file descriptors attached, e.g. from a Unix socket with
   // SCM_RIGHTS. Returns null on EOF.
@@ -57,7 +57,7 @@ public:
   // Equivalent to the above with fdSpace = nullptr.
 
   kj::Promise<MessageReaderAndFds> readMessage(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      kj::ArrayPtr<kj::OwnFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
   kj::Promise<kj::Own<MessageReader>> readMessage(
       ReaderOptions options = ReaderOptions(),
@@ -114,7 +114,7 @@ public:
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      kj::ArrayPtr<kj::OwnFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
@@ -139,7 +139,7 @@ public:
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      kj::ArrayPtr<kj::OwnFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
@@ -180,7 +180,7 @@ public:
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      kj::ArrayPtr<kj::OwnFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
@@ -209,25 +209,25 @@ private:
   // Pointer to the location in `buffer` where unused buffer space begins, i.e. immediately after
   // the last byte read.
 
-  kj::Vector<kj::AutoCloseFd> leftoverFds;
+  kj::Vector<kj::OwnFd> leftoverFds;
   // FDs which were accidentally read too early. These are always connected to the last message
   // in the buffer, since the OS would not have allowed us to read past that point.
 
   bool hasOutstandingShortLivedMessage = false;
 
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessageImpl(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+      kj::ArrayPtr<kj::OwnFd> fdSpace, size_t fdsSoFar,
       ReaderOptions options, kj::ArrayPtr<word> scratchSpace);
 
   kj::Promise<kj::Maybe<MessageReaderAndFds>> readEntireMessage(
       kj::ArrayPtr<const byte> prefix, size_t expectedSizeInWords,
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+      kj::ArrayPtr<kj::OwnFd> fdSpace, size_t fdsSoFar,
       ReaderOptions options);
   // Given a message prefix and expected size of the whole message, read the entire message into
   // a single array and return it.
 
   kj::Promise<kj::AsyncCapabilityStream::ReadResult> tryReadWithFds(
-      void* buffer, size_t minBytes, size_t maxBytes, kj::AutoCloseFd* fdBuffer, size_t maxFds);
+      void* buffer, size_t minBytes, size_t maxBytes, kj::OwnFd* fdBuffer, size_t maxFds);
   // Executes AsyncCapabilityStream::tryReadWithFds() on the underlying stream, or falls back to
   // AsyncIoStream::tryRead() if it's not a capability stream.
 
@@ -265,11 +265,11 @@ kj::Promise<void> writeMessage(kj::AsyncOutputStream& output, MessageBuilder& bu
 // `AsyncCapabilityMessageStream(stream).foo(...)`.
 
 kj::Promise<MessageReaderAndFds> readMessage(
-    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr);
 
 kj::Promise<void> writeMessage(kj::AsyncCapabilityStream& output, kj::ArrayPtr<const int> fds,

@@ -257,32 +257,32 @@ private:
 // =======================================================================================
 // File descriptor I/O
 
-class AutoCloseFd {
+class OwnFd {
   // A wrapper around a file descriptor which automatically closes the descriptor when destroyed.
   // The wrapper supports move construction for transferring ownership of the descriptor.  If
   // close() returns an error, the destructor throws an exception, UNLESS the destructor is being
   // called during unwind from another exception, in which case the close error is ignored.
   //
-  // If your code is not exception-safe, you should not use AutoCloseFd.  In this case you will
+  // If your code is not exception-safe, you should not use OwnFd.  In this case you will
   // have to call close() yourself and handle errors appropriately.
 
 public:
-  inline AutoCloseFd(): fd(-1) {}
-  inline AutoCloseFd(decltype(nullptr)): fd(-1) {}
-  inline explicit AutoCloseFd(int fd): fd(fd) {}
-  inline AutoCloseFd(AutoCloseFd&& other) noexcept: fd(other.fd) { other.fd = -1; }
-  KJ_DISALLOW_COPY(AutoCloseFd);
-  ~AutoCloseFd() noexcept(false);
+  inline OwnFd(): fd(-1) {}
+  inline OwnFd(decltype(nullptr)): fd(-1) {}
+  inline explicit OwnFd(int fd): fd(fd) {}
+  inline OwnFd(OwnFd&& other) noexcept: fd(other.fd) { other.fd = -1; }
+  KJ_DISALLOW_COPY(OwnFd);
+  ~OwnFd() noexcept(false);
 
-  inline AutoCloseFd& operator=(AutoCloseFd&& other) {
-    AutoCloseFd old(kj::mv(*this));
+  inline OwnFd& operator=(OwnFd&& other) {
+    OwnFd old(kj::mv(*this));
     fd = other.fd;
     other.fd = -1;
     return *this;
   }
 
-  inline AutoCloseFd& operator=(decltype(nullptr)) {
-    AutoCloseFd old(kj::mv(*this));
+  inline OwnFd& operator=(decltype(nullptr)) {
+    OwnFd old(kj::mv(*this));
     return *this;
   }
 
@@ -306,7 +306,7 @@ private:
   int fd;
 };
 
-inline auto KJ_STRINGIFY(const AutoCloseFd& fd)
+inline auto KJ_STRINGIFY(const OwnFd& fd)
     -> decltype(kj::toCharSequence(implicitCast<int>(fd))) {
   return kj::toCharSequence(implicitCast<int>(fd));
 }
@@ -316,7 +316,7 @@ class FdInputStream: public InputStream {
 
 public:
   explicit FdInputStream(int fd): fd(fd) {}
-  explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
+  explicit FdInputStream(OwnFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY_AND_MOVE(FdInputStream);
   ~FdInputStream() noexcept(false);
 
@@ -326,7 +326,7 @@ public:
 
 private:
   int fd;
-  AutoCloseFd autoclose;
+  OwnFd autoclose;
 };
 
 class FdOutputStream: public OutputStream {
@@ -334,7 +334,7 @@ class FdOutputStream: public OutputStream {
 
 public:
   explicit FdOutputStream(int fd): fd(fd) {}
-  explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
+  explicit FdOutputStream(OwnFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY_AND_MOVE(FdOutputStream);
   ~FdOutputStream() noexcept(false);
 
@@ -345,7 +345,7 @@ public:
 
 private:
   int fd;
-  AutoCloseFd autoclose;
+  OwnFd autoclose;
 };
 
 // =======================================================================================

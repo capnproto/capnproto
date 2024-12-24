@@ -539,8 +539,8 @@ TEST(AsyncIo, InMemoryCapabilityPipeFds) {
 
   int socketFds[2]{};
   KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
-  kj::AutoCloseFd socketClient(socketFds[0]);
-  kj::AutoCloseFd sokcetServer(socketFds[1]);
+  kj::OwnFd socketClient(socketFds[0]);
+  kj::OwnFd sokcetServer(socketFds[1]);
 
   auto pipe2 = newCapabilityPipe();
   char receiveBuffer1[4]{};
@@ -549,7 +549,7 @@ TEST(AsyncIo, InMemoryCapabilityPipeFds) {
   // Expect to receive an FD, then read "foo" from it, then write "bar" to it.
   Own<AsyncCapabilityStream> receivedStream;
   auto promise = pipe2.ends[1]->receiveFd()
-      .then([&](AutoCloseFd fd) {
+      .then([&](OwnFd fd) {
     receivedStream = io.lowLevelProvider->wrapUnixSocketFd(kj::mv(fd));
     return receivedStream->tryRead(receiveBuffer2, 3, 4);
   }).then([&](size_t n) {
@@ -587,8 +587,8 @@ TEST(AsyncIo, InMemoryCapabilityPipeFdsReverse) {
 
   int socketFds[2]{};
   KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
-  kj::AutoCloseFd socketClient(socketFds[0]);
-  kj::AutoCloseFd sokcetServer(socketFds[1]);
+  kj::OwnFd socketClient(socketFds[0]);
+  kj::OwnFd sokcetServer(socketFds[1]);
 
   auto pipe2 = newCapabilityPipe();
   char receiveBuffer1[4]{};
@@ -610,7 +610,7 @@ TEST(AsyncIo, InMemoryCapabilityPipeFdsReverse) {
   // Expect to receive an FD, then read "foo" from it, then write "bar" to it.
   Own<AsyncCapabilityStream> receivedStream;
   auto promise2 = pipe2.ends[1]->receiveFd()
-      .then([&](AutoCloseFd fd) {
+      .then([&](OwnFd fd) {
     receivedStream = io.lowLevelProvider->wrapUnixSocketFd(kj::mv(fd));
     return receivedStream->tryRead(receiveBuffer2, 3, 4);
   }).then([&](size_t n) {
@@ -752,21 +752,21 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
 
   int pipeFds[2]{};
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in1(pipeFds[0]);
-  kj::AutoCloseFd out1(pipeFds[1]);
+  kj::OwnFd in1(pipeFds[0]);
+  kj::OwnFd out1(pipeFds[1]);
 
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in2(pipeFds[0]);
-  kj::AutoCloseFd out2(pipeFds[1]);
+  kj::OwnFd in2(pipeFds[0]);
+  kj::OwnFd out2(pipeFds[1]);
 
   {
-    AutoCloseFd sendFds[2] = { kj::mv(out1), kj::mv(out2) };
+    OwnFd sendFds[2] = { kj::mv(out1), kj::mv(out2) };
     capPipe.ends[0]->writeWithFds("foo"_kjb, nullptr, sendFds).wait(io.waitScope);
   }
 
   {
     char buffer[4]{};
-    AutoCloseFd fdBuffer[1];
+    OwnFd fdBuffer[1];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 1).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 1);
     kj::FdOutputStream(fdBuffer[0].get()).write("bar"_kjb);
@@ -824,25 +824,25 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
 
   int pipeFds[2]{};
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in1(pipeFds[0]);
-  kj::AutoCloseFd out1(pipeFds[1]);
+  kj::OwnFd in1(pipeFds[0]);
+  kj::OwnFd out1(pipeFds[1]);
 
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in2(pipeFds[0]);
-  kj::AutoCloseFd out2(pipeFds[1]);
+  kj::OwnFd in2(pipeFds[0]);
+  kj::OwnFd out2(pipeFds[1]);
 
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in3(pipeFds[0]);
-  kj::AutoCloseFd out3(pipeFds[1]);
+  kj::OwnFd in3(pipeFds[0]);
+  kj::OwnFd out3(pipeFds[1]);
 
   {
-    AutoCloseFd sendFds[3] = { kj::mv(out1), kj::mv(out2), kj::mv(out3) };
+    OwnFd sendFds[3] = { kj::mv(out1), kj::mv(out2), kj::mv(out3) };
     capPipe.ends[0]->writeWithFds("foo"_kjb, nullptr, sendFds).wait(io.waitScope);
   }
 
   {
     char buffer[4]{};
-    AutoCloseFd fdBuffer[2];
+    OwnFd fdBuffer[2];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 2).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 2);
     kj::FdOutputStream(fdBuffer[0].get()).write("bar"_kjb);

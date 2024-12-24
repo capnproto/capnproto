@@ -507,11 +507,11 @@ KJ_TEST("send FD over RPC") {
 
   int pipeFds[2]{};
   KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in1(pipeFds[0]);
-  kj::AutoCloseFd out1(pipeFds[1]);
+  kj::OwnFd in1(pipeFds[0]);
+  kj::OwnFd out1(pipeFds[1]);
   KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in2(pipeFds[0]);
-  kj::AutoCloseFd out2(pipeFds[1]);
+  kj::OwnFd in2(pipeFds[0]);
+  kj::OwnFd out2(pipeFds[1]);
 
   capnp::RemotePromise<test::TestMoreStuff::WriteToFdResults> promise = nullptr;
   {
@@ -554,11 +554,11 @@ KJ_TEST("FD per message limit") {
 
   int pipeFds[2]{};
   KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in1(pipeFds[0]);
-  kj::AutoCloseFd out1(pipeFds[1]);
+  kj::OwnFd in1(pipeFds[0]);
+  kj::OwnFd out1(pipeFds[1]);
   KJ_SYSCALL(kj::miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in2(pipeFds[0]);
-  kj::AutoCloseFd out2(pipeFds[1]);
+  kj::OwnFd in2(pipeFds[0]);
+  kj::OwnFd out2(pipeFds[1]);
 
   capnp::RemotePromise<test::TestMoreStuff::WriteToFdResults> promise = nullptr;
   {

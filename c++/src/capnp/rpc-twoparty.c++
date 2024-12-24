@@ -229,7 +229,7 @@ class TwoPartyVatNetwork::IncomingMessageImpl final: public IncomingRpcMessage {
 public:
   IncomingMessageImpl(kj::Own<MessageReader> message): message(kj::mv(message)) {}
 
-  IncomingMessageImpl(MessageReaderAndFds init, kj::Array<kj::AutoCloseFd> fdSpace)
+  IncomingMessageImpl(MessageReaderAndFds init, kj::Array<kj::OwnFd> fdSpace)
       : message(kj::mv(init.reader)),
         fdSpace(kj::mv(fdSpace)),
         fds(init.fds) {
@@ -240,7 +240,7 @@ public:
     return message->getRoot<AnyPointer>();
   }
 
-  kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() override {
+  kj::ArrayPtr<kj::OwnFd> getAttachedFds() override {
     return fds;
   }
 
@@ -250,8 +250,8 @@ public:
 
 private:
   kj::Own<MessageReader> message;
-  kj::Array<kj::AutoCloseFd> fdSpace;
-  kj::ArrayPtr<kj::AutoCloseFd> fds;
+  kj::Array<kj::OwnFd> fdSpace;
+  kj::ArrayPtr<kj::OwnFd> fds;
 };
 
 kj::Own<RpcFlowController> TwoPartyVatNetwork::newStream() {
@@ -308,9 +308,9 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
       return kj::cp(e);
     }
 
-    kj::Array<kj::AutoCloseFd> fdSpace = nullptr;
+    kj::Array<kj::OwnFd> fdSpace = nullptr;
     if(maxFdsPerMessage > 0) {
-      fdSpace = kj::heapArray<kj::AutoCloseFd>(maxFdsPerMessage);
+      fdSpace = kj::heapArray<kj::OwnFd>(maxFdsPerMessage);
     }
     auto promise = readCanceler.wrap(getStream().tryReadMessage(fdSpace, receiveOptions));
     return promise.then([fdSpace = kj::mv(fdSpace)]

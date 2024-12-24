@@ -324,12 +324,12 @@ class TestFdCap final: public test::TestInterface::Server {
   // Implementation of TestInterface that wraps a file descriptor.
 
 public:
-  TestFdCap(kj::AutoCloseFd fd): fd(kj::mv(fd)) {}
+  TestFdCap(kj::OwnFd fd): fd(kj::mv(fd)) {}
 
   kj::Maybe<int> getFd() override { return fd.get(); }
 
 private:
-  kj::AutoCloseFd fd;
+  kj::OwnFd fd;
 };
 
 class TestStreamingImpl final: public test::TestStreaming::Server {

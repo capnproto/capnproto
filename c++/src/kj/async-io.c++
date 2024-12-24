@@ -253,7 +253,7 @@ public:
   }
 
   Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                     AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                     OwnFd* fdBuffer, size_t maxFds) override {
     if (minBytes == 0) {
       return ReadResult { 0, 0 };
     } else KJ_IF_SOME(s, state) {
@@ -505,7 +505,7 @@ private:
     }
 
     Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                       AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                       OwnFd* fdBuffer, size_t maxFds) override {
       size_t capCount = 0;
       {  // TODO(cleanup): Remove redundant braces when we update to C++17.
         KJ_SWITCH_ONEOF(capBuffer) {
@@ -805,7 +805,7 @@ private:
     }
 
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
-                                       AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                       OwnFd* fdBuffer, size_t maxFds) override {
       // Pumps drop all capabilities, so fall back to regular read. (We don't even know if the
       // destination is an AsyncCapabilityStream...)
       return tryRead(readBuffer, minBytes, maxBytes)
@@ -914,7 +914,7 @@ private:
     BlockedRead(
         PromiseFulfiller<ReadResult>& fulfiller, AsyncPipe& pipe,
         ArrayPtr<byte> readBuffer, size_t minBytes,
-        kj::OneOf<ArrayPtr<AutoCloseFd>, ArrayPtr<Own<AsyncCapabilityStream>>> capBuffer = {})
+        kj::OneOf<ArrayPtr<OwnFd>, ArrayPtr<Own<AsyncCapabilityStream>>> capBuffer = {})
         : fulfiller(fulfiller), pipe(pipe), readBuffer(readBuffer), minBytes(minBytes),
           capBuffer(capBuffer) {
       KJ_REQUIRE(pipe.state == kj::none);
@@ -929,7 +929,7 @@ private:
       KJ_FAIL_REQUIRE("can't read() again until previous read() completes");
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
-                                       AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                       OwnFd* fdBuffer, size_t maxFds) override {
       KJ_FAIL_REQUIRE("can't read() again until previous read() completes");
     }
     Promise<ReadResult> tryReadWithStreams(
@@ -1013,7 +1013,7 @@ private:
 
       {  // TODO(cleanup): Remove redundant braces when we update to C++17.
         KJ_SWITCH_ONEOF(capBuffer) {
-          KJ_CASE_ONEOF(fdBuffer, ArrayPtr<AutoCloseFd>) {
+          KJ_CASE_ONEOF(fdBuffer, ArrayPtr<OwnFd>) {
             size_t count = kj::max(fdBuffer.size(), fds.size());
             // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
             // by default.
@@ -1057,7 +1057,7 @@ private:
 
       {  // TODO(cleanup): Remove redundant braces when we update to C++17.
         KJ_SWITCH_ONEOF(capBuffer) {
-          KJ_CASE_ONEOF(fdBuffer, ArrayPtr<AutoCloseFd>) {
+          KJ_CASE_ONEOF(fdBuffer, ArrayPtr<OwnFd>) {
             if (fdBuffer.size() > 0 && streams.size() > 0) {
               // TODO(someday): We could let people pass a LowLevelAsyncIoProvider to newTwoWayPipe()
               //   if we wanted to auto-wrap FDs, but does anyone care?
@@ -1147,7 +1147,7 @@ private:
     AsyncPipe& pipe;
     ArrayPtr<byte> readBuffer;
     size_t minBytes;
-    kj::OneOf<ArrayPtr<AutoCloseFd>, ArrayPtr<Own<AsyncCapabilityStream>>> capBuffer;
+    kj::OneOf<ArrayPtr<OwnFd>, ArrayPtr<Own<AsyncCapabilityStream>>> capBuffer;
     ReadResult readSoFar = {0, 0};
     Canceler canceler;
 
@@ -1216,7 +1216,7 @@ private:
       KJ_FAIL_REQUIRE("can't read() again until previous pumpTo() completes");
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
-                                       AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                       OwnFd* fdBuffer, size_t maxFds) override {
       KJ_FAIL_REQUIRE("can't read() again until previous pumpTo() completes");
     }
     Promise<ReadResult> tryReadWithStreams(
@@ -1420,7 +1420,7 @@ private:
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
-                                       AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                       OwnFd* fdBuffer, size_t maxFds) override {
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Promise<ReadResult> tryReadWithStreams(
@@ -1493,7 +1493,7 @@ private:
       return constPromise<size_t, 0>();
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
-                                       AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                       OwnFd* fdBuffer, size_t maxFds) override {
       return ReadResult { 0, 0 };
     }
     Promise<ReadResult> tryReadWithStreams(
@@ -1605,7 +1605,7 @@ public:
     return in->tryRead(buffer, minBytes, maxBytes);
   }
   Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                      AutoCloseFd* fdBuffer, size_t maxFds) override {
+                                      OwnFd* fdBuffer, size_t maxFds) override {
     return in->tryReadWithFds(buffer, minBytes, maxBytes, fdBuffer, maxFds);
   }
   Promise<ReadResult> tryReadWithStreams(
@@ -2572,10 +2572,10 @@ Own<AsyncIoStream> newPromisedStream(Promise<Own<AsyncIoStream>> promise) {
 
 Promise<void> AsyncCapabilityStream::writeWithFds(
     ArrayPtr<const byte> data, ArrayPtr<const ArrayPtr<const byte>> moreData,
-    ArrayPtr<const AutoCloseFd> fds) {
-  // HACK: AutoCloseFd actually contains an `int` under the hood. We can reinterpret_cast to avoid
+    ArrayPtr<const OwnFd> fds) {
+  // HACK: OwnFd actually contains an `int` under the hood. We can reinterpret_cast to avoid
   //   unnecessary memory allocation.
-  static_assert(sizeof(AutoCloseFd) == sizeof(int), "this optimization won't work");
+  static_assert(sizeof(OwnFd) == sizeof(int), "this optimization won't work");
   auto intArray = arrayPtr(reinterpret_cast<const int*>(fds.begin()), fds.size());
 
   // Be extra-paranoid about aliasing rules by injecting a compiler barrier here. Probably
@@ -2630,8 +2630,8 @@ Promise<void> AsyncCapabilityStream::sendStream(Own<AsyncCapabilityStream> strea
   return writeWithStreams(arrayPtr(&b, 1), nullptr, kj::mv(streams));
 }
 
-Promise<AutoCloseFd> AsyncCapabilityStream::receiveFd() {
-  return tryReceiveFd().then([](Maybe<AutoCloseFd>&& result) -> Promise<AutoCloseFd> {
+Promise<OwnFd> AsyncCapabilityStream::receiveFd() {
+  return tryReceiveFd().then([](Maybe<OwnFd>&& result) -> Promise<OwnFd> {
     KJ_IF_SOME(r, result) {
       return kj::mv(r);
     } else {
@@ -2640,15 +2640,15 @@ Promise<AutoCloseFd> AsyncCapabilityStream::receiveFd() {
   });
 }
 
-kj::Promise<kj::Maybe<AutoCloseFd>> AsyncCapabilityStream::tryReceiveFd() {
+kj::Promise<kj::Maybe<OwnFd>> AsyncCapabilityStream::tryReceiveFd() {
   struct ResultHolder {
     byte b;
-    AutoCloseFd fd;
+    OwnFd fd;
   };
   auto result = kj::heap<ResultHolder>();
   auto promise = tryReadWithFds(&result->b, 1, 1, &result->fd, 1);
   return promise.then([result = kj::mv(result)](ReadResult actual) mutable
-                      -> Maybe<AutoCloseFd> {
+                      -> Maybe<OwnFd> {
     if (actual.byteCount == 0) {
       return kj::none;
     }

@@ -367,7 +367,7 @@ TEST(AsyncUnixTest, ReadObserver) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
 
   UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -463,7 +463,7 @@ TEST(AsyncUnixTest, ReadObserverAndSignals) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
 
   UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -560,7 +560,7 @@ TEST(AsyncUnixTest, WriteObserver) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
   setNonblocking(outfd);
   setNonblocking(infd);
 
@@ -940,7 +940,7 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
 
   int fds_[2]{};
   KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds_));
-  kj::AutoCloseFd fds[2] = { kj::AutoCloseFd(fds_[0]), kj::AutoCloseFd(fds_[1]) };
+  kj::OwnFd fds[2] = { kj::OwnFd(fds_[0]), kj::OwnFd(fds_[1]) };
 
   UnixEventPort::FdObserver observer(port, fds[0], UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -986,7 +986,7 @@ KJ_TEST("UnixEventPort FdObserver(..., flags=0)::whenWriteDisconnected()") {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
 
   UnixEventPort::FdObserver observer(port, outfd, 0);
 
@@ -1134,8 +1134,8 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
   {
     int pair[2]{};
     KJ_SYSCALL(pipe(pair));
-    kj::AutoCloseFd in(pair[0]);
-    kj::AutoCloseFd out(pair[1]);
+    kj::OwnFd in(pair[0]);
+    kj::OwnFd out(pair[1]);
 
     kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
     auto promise = observer.whenBecomesReadable();
@@ -1312,8 +1312,8 @@ KJ_TEST("yieldUntilWouldSleep") {
   {
     int pair[2]{};
     KJ_SYSCALL(pipe(pair));
-    kj::AutoCloseFd in(pair[0]);
-    kj::AutoCloseFd out(pair[1]);
+    kj::OwnFd in(pair[0]);
+    kj::OwnFd out(pair[1]);
 
     kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
     auto promise = observer.whenBecomesReadable();

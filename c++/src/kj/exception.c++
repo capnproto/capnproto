@@ -232,14 +232,14 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
 namespace {
 
 struct PipePair {
-  kj::AutoCloseFd readEnd;
-  kj::AutoCloseFd writeEnd;
+  kj::OwnFd readEnd;
+  kj::OwnFd writeEnd;
 };
 
 PipePair raiiPipe() {
   int fds[2];
   KJ_SYSCALL(pipe(fds));
-  return PipePair { AutoCloseFd(fds[0]), AutoCloseFd(fds[1]) };
+  return PipePair { OwnFd(fds[0]), OwnFd(fds[1]) };
 }
 
 // A simple subprocess wrapper with in/out pipes.
@@ -283,8 +283,8 @@ struct Subprocess {
   }
 
   pid_t pid;
-  kj::AutoCloseFd in;
-  kj::AutoCloseFd out;
+  kj::OwnFd in;
+  kj::OwnFd out;
 };
 
 String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {

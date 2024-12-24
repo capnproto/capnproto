@@ -90,15 +90,15 @@
 //   would have caused an exception to be thrown.
 //
 // * `KJ_SYSCALL_FD(code, ...)` provides shorthand for the common case that the syscall returns
-//   a file descriptor and you want to wrap that file descirptor in `kj::AutoCloseFd`.
+//   a file descriptor and you want to wrap that file descirptor in `kj::OwnFd`.
 //   `KJ_SYSCALL_FD` is like `KJ_SYSCALL`, but:
 //     * The syscall must return a file descriptor.
-//     * The whole macro evaluates to a `kj::AutoCloseFd`.
+//     * The whole macro evaluates to a `kj::OwnFd`.
 //     * It cannot have a recovery block.
 //
 //   Example:
 //
-//       kj::AutoCloseFd fd = KJ_SYSCALL_FD(open(filename, O_RDONLY), filename);
+//       kj::OwnFd fd = KJ_SYSCALL_FD(open(filename, O_RDONLY), filename);
 //
 // * `KJ_CONTEXT(...)`:  Notes additional contextual information relevant to any exceptions thrown
 //   from within the current scope.  That is, until control exits the block in which KJ_CONTEXT()
@@ -373,7 +373,7 @@ namespace kj {
   ([&]{ \
     int _kj_fd; \
     KJ_SYSCALL(_kj_fd = __VA_ARGS__); \
-    return kj::AutoCloseFd(_kj_fd); \
+    return kj::OwnFd(_kj_fd); \
   }())
 
 #else
@@ -382,7 +382,7 @@ namespace kj {
   ({ \
     int _kj_fd; \
     KJ_SYSCALL(_kj_fd = __VA_ARGS__); \
-    (kj::AutoCloseFd(_kj_fd)); \
+    (kj::OwnFd(_kj_fd)); \
   })
 
 #endif

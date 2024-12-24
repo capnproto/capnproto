@@ -1253,8 +1253,8 @@ UnixEventPort::UnixEventPort()
   // Allocate a pipe to which we'll write a byte in order to wake this thread.
   int fds[2];
   KJ_SYSCALL(pipe(fds));
-  wakePipeIn = kj::AutoCloseFd(fds[0]);
-  wakePipeOut = kj::AutoCloseFd(fds[1]);
+  wakePipeIn = kj::OwnFd(fds[0]);
+  wakePipeOut = kj::OwnFd(fds[1]);
   KJ_SYSCALL(fcntl(wakePipeIn, F_SETFD, FD_CLOEXEC));
   KJ_SYSCALL(fcntl(wakePipeOut, F_SETFD, FD_CLOEXEC));
 #else
