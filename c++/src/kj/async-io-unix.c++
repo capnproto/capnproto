@@ -909,14 +909,13 @@ public:
   const struct sockaddr* getRaw() const { return &addr.generic; }
   socklen_t getRawSize() const { return addrlen; }
 
-  int socket(int type) const {
+  kj::AutoCloseFd socket(int type) const {
     bool isStream = type == SOCK_STREAM;
 
-    int result;
 #if __linux__ && !__BIONIC__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
-    KJ_SYSCALL(result = ::socket(addr.generic.sa_family, type, 0));
+    auto result = KJ_SYSCALL_FD(::socket(addr.generic.sa_family, type, 0));
 
     if (isStream && (addr.generic.sa_family == AF_INET ||
                      addr.generic.sa_family == AF_INET6)) {
@@ -1566,11 +1565,9 @@ public:
 
   Own<ConnectionReceiver> listen() override {
     auto makeReceiver = [&](SocketAddress& addr) {
-      int fd = addr.socket(SOCK_STREAM);
+      auto fd = addr.socket(SOCK_STREAM);
 
       {
-        KJ_ON_SCOPE_FAILURE(close(fd));
-
         // We always enable SO_REUSEADDR because having to take your server down for five minutes
         // before it can restart really sucks.
         int optval = 1;
@@ -1582,7 +1579,7 @@ public:
         KJ_SYSCALL(::listen(fd, SOMAXCONN));
       }
 
-      return lowLevel.wrapListenSocketFd(fd, filter, NEW_FD_FLAGS);
+      return lowLevel.wrapListenSocketFd(kj::mv(fd), filter, NEW_FD_FLAGS);
     };
 
     if (addrs.size() == 1) {
@@ -1599,11 +1596,9 @@ public:
           "in the future.", addrs[0].toString());
     }
 
-    int fd = addrs[0].socket(SOCK_DGRAM);
+    auto fd = addrs[0].socket(SOCK_DGRAM);
 
     {
-      KJ_ON_SCOPE_FAILURE(close(fd));
-
       // We always enable SO_REUSEADDR because having to take your server down for five minutes
       // before it can restart really sucks.
       int optval = 1;
@@ -1612,7 +1607,7 @@ public:
       addrs[0].bind(fd);
     }
 
-    return lowLevel.wrapDatagramSocketFd(fd, filter, NEW_FD_FLAGS);
+    return lowLevel.wrapDatagramSocketFd(kj::mv(fd), filter, NEW_FD_FLAGS);
   }
 
   Own<NetworkAddress> clone() override {
@@ -1645,9 +1640,9 @@ private:
       if (!addrs[0].allowedBy(filter)) {
         return KJ_EXCEPTION(FAILED, "connect() blocked by restrictPeers()");
       } else {
-        int fd = addrs[0].socket(SOCK_STREAM);
+        auto fd = addrs[0].socket(SOCK_STREAM);
         return lowLevel.wrapConnectingSocketFd(
-            fd, addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
+            kj::mv(fd), addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
       }
     }).then([&lowLevel,&filter,addrs,authenticated](Own<AsyncIoStream>&& stream)
         -> Promise<AuthenticatedStream> {

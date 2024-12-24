@@ -515,9 +515,7 @@ private:
             // by default.
             // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
             for (auto i: kj::zeroTo(capCount)) {
-              int duped;
-              KJ_SYSCALL(duped = dup(fds[i]));
-              fdBuffer[i] = kj::AutoCloseFd(duped);
+              fdBuffer[i] = KJ_SYSCALL_FD(dup(fds[i]));
             }
             fdBuffer += capCount;
             maxFds -= capCount;
@@ -1021,9 +1019,7 @@ private:
             // by default.
             // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
             for (auto i: kj::zeroTo(count)) {
-              int duped;
-              KJ_SYSCALL(duped = dup(fds[i]));
-              fdBuffer[i] = kj::AutoCloseFd(duped);
+              fdBuffer[i] = KJ_SYSCALL_FD(dup(fds[i]));
             }
             capBuffer = fdBuffer.slice(count, fdBuffer.size());
             readSoFar.capCount += count;

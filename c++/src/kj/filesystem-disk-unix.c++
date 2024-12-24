@@ -281,8 +281,8 @@ public:
   // OsHandle ------------------------------------------------------------------
 
   AutoCloseFd clone() const {
-    int fd2;
 #ifdef F_DUPFD_CLOEXEC
+    int fd2;
     KJ_SYSCALL_HANDLE_ERRORS(fd2 = fcntl(fd, F_DUPFD_CLOEXEC, 3)) {
       case EINVAL:
       case EOPNOTSUPP:
@@ -296,8 +296,7 @@ public:
     }
 #endif
 
-    KJ_SYSCALL(fd2 = ::dup(fd));
-    AutoCloseFd result(fd2);
+    auto result = KJ_SYSCALL_FD(::dup(fd));
     setCloexec(result);
     return result;
   }
@@ -1676,9 +1675,7 @@ private:
   Path currentPath;
 
   static AutoCloseFd openDir(const char* dir) {
-    int newFd;
-    KJ_SYSCALL(newFd = open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
-    AutoCloseFd result(newFd);
+    auto result = KJ_SYSCALL_FD(open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif

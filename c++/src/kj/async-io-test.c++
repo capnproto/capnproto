@@ -962,9 +962,7 @@ bool isMsgTruncBroken() {
   // Detect if the kernel fails to set MSG_TRUNC on recvmsg(). This seems to be the case at least
   // when running an arm64 binary under qemu.
 
-  int fd;
-  KJ_SYSCALL(fd = socket(AF_INET, SOCK_DGRAM, 0));
-  KJ_DEFER(close(fd));
+  auto fd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_DGRAM, 0));
 
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -1172,9 +1170,7 @@ TEST(AsyncIo, AbstractUnixSocket) {
   Own<ConnectionReceiver> listener = addr->listen();
   // chdir proves no filesystem dependence. Test fails for regular unix socket
   // but passes for abstract unix socket.
-  int originalDirFd;
-  KJ_SYSCALL(originalDirFd = open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
-  KJ_DEFER(close(originalDirFd));
+  auto originalDirFd = KJ_SYSCALL_FD(open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
   KJ_SYSCALL(chdir("/"));
   KJ_DEFER(KJ_SYSCALL(fchdir(originalDirFd)));
 

@@ -118,9 +118,7 @@ bool checkForQemuEpollPwaitBug() {
 
   KJ_SYSCALL(sigaction(SIGURG, &action, nullptr));
 
-  int efd;
-  KJ_SYSCALL(efd = epoll_create1(EPOLL_CLOEXEC));
-  KJ_DEFER(close(efd));
+  auto efd = KJ_SYSCALL_FD(epoll_create1(EPOLL_CLOEXEC));
 
   kill(getpid(), SIGURG);
   KJ_ASSERT(!qemuBugTestSignalHandlerRan);
@@ -612,12 +610,10 @@ TEST(AsyncUnixTest, UrgentObserver) {
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
-  int tmpFd;
   char c;
 
   // Spawn a TCP server
-  KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
-  kj::AutoCloseFd serverFd(tmpFd);
+  auto serverFd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_STREAM, 0));
   sockaddr_in saddr;
   memset(&saddr, 0, sizeof(saddr));
   saddr.sin_family = AF_INET;
@@ -637,13 +633,11 @@ TEST(AsyncUnixTest, UrgentObserver) {
 
   // Accept one connection, send in-band and OOB byte, wait for a quit message
   Thread thread([&]() {
-    int tmpFd;
     char c;
 
     sockaddr_in caddr;
     socklen_t caddrLen = sizeof(caddr);
-    KJ_SYSCALL(tmpFd = accept(serverFd, reinterpret_cast<sockaddr*>(&caddr), &caddrLen));
-    kj::AutoCloseFd clientFd(tmpFd);
+    auto clientFd = KJ_SYSCALL_FD(accept(serverFd, reinterpret_cast<sockaddr*>(&caddr), &caddrLen));
     delay();
 
     // Workaround: OS X won't signal POLLPRI without POLLIN. Also enqueue some in-band data.
@@ -664,8 +658,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
   });
   KJ_DEFER({ shutdown(serverFd, SHUT_RDWR); serverFd = nullptr; });
 
-  KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
-  kj::AutoCloseFd clientFd(tmpFd);
+  auto clientFd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_STREAM, 0));
   KJ_SYSCALL(connect(clientFd, reinterpret_cast<sockaddr*>(&saddr), saddrLen));
 
   UnixEventPort::FdObserver observer(port, clientFd,

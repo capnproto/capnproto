@@ -27,6 +27,7 @@
 #include "type-id.h"
 #include <capnp/dynamic.h>
 #include <kj/debug.h>
+#include <kj/io.h>
 #include <kj/encoding.h>
 #if !_MSC_VER
 #include <unistd.h>
@@ -57,9 +58,7 @@ uint64_t generateRandomId() {
   KJ_ASSERT(CryptGenRandom(handle, sizeof(result), reinterpret_cast<BYTE*>(&result)));
 
 #else
-  int fd;
-  KJ_SYSCALL(fd = open("/dev/urandom", O_RDONLY));
-  KJ_DEFER(close(fd));
+  auto fd = KJ_SYSCALL_FD(open("/dev/urandom", O_RDONLY));
 
   ssize_t n;
   KJ_SYSCALL(n = read(fd, &result, sizeof(result)), "/dev/urandom");

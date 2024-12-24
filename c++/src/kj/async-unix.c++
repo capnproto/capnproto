@@ -417,12 +417,8 @@ UnixEventPort::UnixEventPort()
       timerImpl(clock.now()) {
   ignoreSigpipe();
 
-  int fd;
-  KJ_SYSCALL(fd = epoll_create1(EPOLL_CLOEXEC));
-  epollFd = AutoCloseFd(fd);
-
-  KJ_SYSCALL(fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
-  eventFd = AutoCloseFd(fd);
+  epollFd = KJ_SYSCALL_FD(epoll_create1(EPOLL_CLOEXEC));
+  eventFd = KJ_SYSCALL_FD(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
 
   struct epoll_event event;
   memset(&event, 0, sizeof(event));
@@ -781,8 +777,8 @@ void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
   KJ_IF_SOME(f, timerFd) {
     tfd = f;
   } else {
-    KJ_SYSCALL(tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
-    timerFd = kj::AutoCloseFd(tfd);
+    tfd = timerFd.emplace(
+        KJ_SYSCALL_FD(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK)));
 
     struct epoll_event event;
     memset(&event, 0, sizeof(event));
@@ -820,9 +816,7 @@ UnixEventPort::UnixEventPort()
       timerImpl(clock.now()) {
   ignoreSigpipe();
 
-  int fd;
-  KJ_SYSCALL(fd = kqueue());
-  kqueueFd = AutoCloseFd(fd);
+  kqueueFd = KJ_SYSCALL_FD(kqueue());
 
   // NetBSD has kqueue1() which can set CLOEXEC atomically, but FreeBSD, MacOS, and others don't
   // have this... oh well.
