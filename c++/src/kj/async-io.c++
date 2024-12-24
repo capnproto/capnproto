@@ -517,7 +517,7 @@ private:
             for (auto i: kj::zeroTo(capCount)) {
               int duped;
               KJ_SYSCALL(duped = dup(fds[i]));
-              fdBuffer[i] = kj::AutoCloseFd(fds[i]);
+              fdBuffer[i] = kj::AutoCloseFd(duped);
             }
             fdBuffer += capCount;
             maxFds -= capCount;

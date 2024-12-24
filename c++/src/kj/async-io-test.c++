@@ -529,6 +529,104 @@ TEST(AsyncIo, InMemoryCapabilityPipe) {
 }
 
 #if !_WIN32 && !__CYGWIN__
+TEST(AsyncIo, InMemoryCapabilityPipeFds) {
+  // Test passing file descirptors over an in-memory capability pipe.
+  //
+  // This is identical to `TEST(AsyncIo, InMemoryCapabilityPipe)` above except we use sendFd() and
+  // receiveFd().
+
+  auto io = setupAsyncIo();
+
+  int socketFds[2]{};
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
+  kj::AutoCloseFd socketClient(socketFds[0]);
+  kj::AutoCloseFd sokcetServer(socketFds[1]);
+
+  auto pipe2 = newCapabilityPipe();
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
+
+  // Expect to receive an FD, then read "foo" from it, then write "bar" to it.
+  Own<AsyncCapabilityStream> receivedStream;
+  auto promise = pipe2.ends[1]->receiveFd()
+      .then([&](AutoCloseFd fd) {
+    receivedStream = io.lowLevelProvider->wrapUnixSocketFd(kj::mv(fd));
+    return receivedStream->tryRead(receiveBuffer2, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return receivedStream->write("bar"_kjb).then([&receiveBuffer2,n]() {
+      return heapString(receiveBuffer2, n);
+    });
+  });
+
+  // Send an FD, then write "foo" to the other end of the sent stream, then receive "bar"
+  // from it.
+  auto clientStream = io.lowLevelProvider->wrapSocketFd(kj::mv(socketClient));
+  kj::String result = pipe2.ends[0]->sendFd(kj::mv(sokcetServer))
+      .then([&]() {
+    return clientStream->write("foo"_kjb);
+  }).then([&]() {
+    return clientStream->tryRead(receiveBuffer1, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer1, n);
+  }).wait(io.waitScope);
+
+  kj::String result2 = promise.wait(io.waitScope);
+
+  EXPECT_EQ("bar", result);
+  EXPECT_EQ("foo", result2);
+}
+
+TEST(AsyncIo, InMemoryCapabilityPipeFdsReverse) {
+  // Same as above, except we do sendFd() first, then receiveFd(). This hits `BlockedWrite` instead
+  // of `BlockedRead`. At one time there was a bug in that code that mishandled the file
+  // descriptors.
+
+  auto io = setupAsyncIo();
+
+  int socketFds[2]{};
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
+  kj::AutoCloseFd socketClient(socketFds[0]);
+  kj::AutoCloseFd sokcetServer(socketFds[1]);
+
+  auto pipe2 = newCapabilityPipe();
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
+
+  // Send an FD, then write "foo" to the other end of the sent stream, then receive "bar"
+  // from it.
+  auto clientStream = io.lowLevelProvider->wrapSocketFd(kj::mv(socketClient));
+  auto promise = pipe2.ends[0]->sendFd(kj::mv(sokcetServer))
+      .then([&]() {
+    return clientStream->write("foo"_kjb);
+  }).then([&]() {
+    return clientStream->tryRead(receiveBuffer1, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer1, n);
+  });
+
+  // Expect to receive an FD, then read "foo" from it, then write "bar" to it.
+  Own<AsyncCapabilityStream> receivedStream;
+  auto promise2 = pipe2.ends[1]->receiveFd()
+      .then([&](AutoCloseFd fd) {
+    receivedStream = io.lowLevelProvider->wrapUnixSocketFd(kj::mv(fd));
+    return receivedStream->tryRead(receiveBuffer2, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return receivedStream->write("bar"_kjb).then([&receiveBuffer2,n]() {
+      return heapString(receiveBuffer2, n);
+    });
+  });
+
+  kj::String result = promise.wait(io.waitScope);
+  kj::String result2 = promise2.wait(io.waitScope);
+
+  EXPECT_EQ("bar", result);
+  EXPECT_EQ("foo", result2);
+}
+
 TEST(AsyncIo, CapabilityPipe) {
   auto ioContext = setupAsyncIo();
 
