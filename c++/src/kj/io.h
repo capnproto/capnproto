@@ -365,6 +365,8 @@ class AutoCloseHandle {
   //
   // If your code is not exception-safe, you should not use AutoCloseHandle.  In this case you will
   // have to call close() yourself and handle errors appropriately.
+  //
+  // TODO(cleanup): Rename this to OwnWin32Handle.
 
 public:
   inline AutoCloseHandle(): handle((void*)-1) {}

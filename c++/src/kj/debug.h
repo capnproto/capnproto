@@ -387,6 +387,8 @@ namespace kj {
 
 #endif
 
+// TODO(someday): Add KJ_WIN32_HANDLE(), similar to KJ_SYSCALL_FD().
+
 #define KJ_ASSERT KJ_REQUIRE
 #define KJ_FAIL_ASSERT KJ_FAIL_REQUIRE
 #define KJ_ASSERT_NONNULL KJ_REQUIRE_NONNULL
