@@ -79,7 +79,7 @@ public:
   // Note that if you want to reuse the descriptor after the reader is destroyed, you'll need to
   // seek it, since otherwise the position is unspecified.
 
-  PackedFdMessageReader(kj::AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
+  PackedFdMessageReader(kj::OwnFd fd, ReaderOptions options = ReaderOptions(),
                         kj::ArrayPtr<word> scratchSpace = nullptr);
   // Read a message from a file descriptor, taking ownership of the descriptor.
 

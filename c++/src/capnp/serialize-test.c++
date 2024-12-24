@@ -406,7 +406,7 @@ TEST(Serialize, FileDescriptors) {
 #else
   char filename[] = "/tmp/capnproto-serialize-test-XXXXXX";
 #endif
-  kj::AutoCloseFd tmpfile(mkstemp(filename));
+  kj::OwnFd tmpfile(mkstemp(filename));
   ASSERT_GE(tmpfile.get(), 0);
 
 #if !_WIN32

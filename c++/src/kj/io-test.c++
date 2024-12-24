@@ -38,8 +38,8 @@ TEST(Io, WriteVec) {
   int fds[2]{};
   KJ_SYSCALL(miniposix::pipe(fds));
 
-  FdInputStream in((AutoCloseFd(fds[0])));
-  FdOutputStream out((AutoCloseFd(fds[1])));
+  FdInputStream in((OwnFd(fds[0])));
+  FdOutputStream out((OwnFd(fds[1])));
 
   ArrayPtr<const byte> pieces[5] = {
     arrayPtr(implicitCast<const byte*>(nullptr), 0),
@@ -56,10 +56,10 @@ TEST(Io, WriteVec) {
   EXPECT_EQ("foobar"_kjb, arrayPtr(buf));
 }
 
-KJ_TEST("stringify AutoCloseFd") {
+KJ_TEST("stringify OwnFd") {
   int fds[2]{};
   KJ_SYSCALL(miniposix::pipe(fds));
-  AutoCloseFd in(fds[0]), out(fds[1]);
+  OwnFd in(fds[0]), out(fds[1]);
 
   KJ_EXPECT(kj::str(in) == kj::str(fds[0]), in, fds[0]);
 }

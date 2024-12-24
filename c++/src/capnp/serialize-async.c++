@@ -51,7 +51,7 @@ public:
 
   kj::Promise<kj::Maybe<size_t>> readWithFds(
       kj::AsyncCapabilityStream& inputStream,
-      kj::ArrayPtr<kj::AutoCloseFd> fds, kj::ArrayPtr<word> scratchSpace);
+      kj::ArrayPtr<kj::OwnFd> fds, kj::ArrayPtr<word> scratchSpace);
 
   // implements MessageReader ----------------------------------------
 
@@ -98,7 +98,7 @@ kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
 }
 
 kj::Promise<kj::Maybe<size_t>> AsyncMessageReader::readWithFds(
-    kj::AsyncCapabilityStream& inputStream, kj::ArrayPtr<kj::AutoCloseFd> fds,
+    kj::AsyncCapabilityStream& inputStream, kj::ArrayPtr<kj::OwnFd> fds,
     kj::ArrayPtr<word> scratchSpace) {
   return inputStream.tryReadWithFds(firstWord, sizeof(firstWord), sizeof(firstWord),
                                     fds.begin(), fds.size())
@@ -213,7 +213,7 @@ kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
 }
 
 kj::Promise<MessageReaderAndFds> readMessage(
-    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   auto reader = kj::heap<AsyncMessageReader>(options);
   auto promise = reader->readWithFds(input, fdSpace, scratchSpace);
@@ -229,7 +229,7 @@ kj::Promise<MessageReaderAndFds> readMessage(
 }
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::AsyncCapabilityStream& input, kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   auto reader = kj::heap<AsyncMessageReader>(options);
   auto promise = reader->readWithFds(input, fdSpace, scratchSpace);
@@ -432,7 +432,7 @@ AsyncIoMessageStream::AsyncIoMessageStream(kj::AsyncIoStream& stream)
   : stream(stream) {};
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncIoMessageStream::tryReadMessage(
-    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
   return capnp::tryReadMessage(stream, options, scratchSpace)
@@ -491,7 +491,7 @@ AsyncCapabilityMessageStream::AsyncCapabilityMessageStream(kj::AsyncCapabilitySt
   : stream(stream) {};
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> AsyncCapabilityMessageStream::tryReadMessage(
-    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options,
     kj::ArrayPtr<word> scratchSpace) {
   return capnp::tryReadMessage(stream, fdSpace, options, scratchSpace);
@@ -544,7 +544,7 @@ kj::Promise<kj::Maybe<kj::Own<MessageReader>>> MessageStream::tryReadMessage(
 }
 
 kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
-    kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+    kj::ArrayPtr<kj::OwnFd> fdSpace,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   return tryReadMessage(fdSpace, options, scratchSpace).then([](auto maybeResult) {
       KJ_IF_SOME(result, maybeResult) {
@@ -598,7 +598,7 @@ BufferedMessageStream::BufferedMessageStream(
       beginData(buffer.begin()), beginAvailable(buffer.asBytes().begin()) {}
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessage(
-    kj::ArrayPtr<kj::AutoCloseFd> fdSpace, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+    kj::ArrayPtr<kj::OwnFd> fdSpace, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   return tryReadMessageImpl(fdSpace, 0, options, scratchSpace);
 }
 
@@ -627,7 +627,7 @@ kj::Promise<void> BufferedMessageStream::end() {
 }
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessageImpl(
-    kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+    kj::ArrayPtr<kj::OwnFd> fdSpace, size_t fdsSoFar,
     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   KJ_REQUIRE(!hasOutstandingShortLivedMessage,
       "can't read another message while the previous short-lived message still exists");
@@ -787,7 +787,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessag
 
 kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::readEntireMessage(
     kj::ArrayPtr<const byte> prefix, size_t expectedSizeInWords,
-    kj::ArrayPtr<kj::AutoCloseFd> fdSpace, size_t fdsSoFar,
+    kj::ArrayPtr<kj::OwnFd> fdSpace, size_t fdsSoFar,
     ReaderOptions options) {
   KJ_REQUIRE(expectedSizeInWords <= options.traversalLimitInWords,
       "incoming RPC message exceeds size limit");
@@ -841,7 +841,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::readEntireMes
 }
 
 kj::Promise<kj::AsyncCapabilityStream::ReadResult> BufferedMessageStream::tryReadWithFds(
-    void* buffer, size_t minBytes, size_t maxBytes, kj::AutoCloseFd* fdBuffer, size_t maxFds) {
+    void* buffer, size_t minBytes, size_t maxBytes, kj::OwnFd* fdBuffer, size_t maxFds) {
   KJ_IF_SOME(cs, capStream) {
     return cs.tryReadWithFds(buffer, minBytes, maxBytes, fdBuffer, maxFds);
   } else {

@@ -1194,8 +1194,8 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
 
   int pair[2]{};
   KJ_SYSCALL(kj::miniposix::pipe(pair));
-  kj::AutoCloseFd in(pair[0]);
-  kj::AutoCloseFd out(pair[1]);
+  kj::OwnFd in(pair[0]);
+  kj::OwnFd out(pair[1]);
 
   kj::FdOutputStream(kj::mv(out)).write("baz"_kjb);
   context.getResults().setFdCap3(kj::heap<TestFdCap>(kj::mv(in)));

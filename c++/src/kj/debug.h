@@ -89,6 +89,17 @@
 //   indicates an error; in this case, it can assume the error was EAGAIN because any other error
 //   would have caused an exception to be thrown.
 //
+// * `KJ_SYSCALL_FD(code, ...)` provides shorthand for the common case that the syscall returns
+//   a file descriptor and you want to wrap that file descirptor in `kj::OwnFd`.
+//   `KJ_SYSCALL_FD` is like `KJ_SYSCALL`, but:
+//     * The syscall must return a file descriptor.
+//     * The whole macro evaluates to a `kj::OwnFd`.
+//     * It cannot have a recovery block.
+//
+//   Example:
+//
+//       kj::OwnFd fd = KJ_SYSCALL_FD(open(filename, O_RDONLY), filename);
+//
 // * `KJ_CONTEXT(...)`:  Notes additional contextual information relevant to any exceptions thrown
 //   from within the current scope.  That is, until control exits the block in which KJ_CONTEXT()
 //   is used, if any exception is generated, it will contain the given information in its context
@@ -355,6 +366,28 @@ namespace kj {
 //     }
 
 #endif
+
+#if _MSC_VER && !defined(__clang__)
+
+#define KJ_SYSCALL_FD(...) \
+  ([&]{ \
+    int _kj_fd; \
+    KJ_SYSCALL(_kj_fd = __VA_ARGS__); \
+    return kj::OwnFd(_kj_fd); \
+  }())
+
+#else
+
+#define KJ_SYSCALL_FD(...) \
+  ({ \
+    int _kj_fd; \
+    KJ_SYSCALL(_kj_fd = __VA_ARGS__); \
+    (kj::OwnFd(_kj_fd)); \
+  })
+
+#endif
+
+// TODO(someday): Add KJ_WIN32_HANDLE(), similar to KJ_SYSCALL_FD().
 
 #define KJ_ASSERT KJ_REQUIRE
 #define KJ_FAIL_ASSERT KJ_FAIL_REQUIRE

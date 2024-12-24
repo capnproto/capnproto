@@ -375,8 +375,13 @@ KJ_DBG("hi", foo, bar, baz.qux)
 KJ includes special variants of its assertion macros that convert traditional C API error conventions into exceptions.
 
 ```c++
-int fd;
-KJ_SYSCALL(fd = open(filename, O_RDONLY), "couldn't open the document", filename);
+// For a syscall returning a file descriptor, use KJ_SYSCALL_FD.
+kj::OwnFd fd = KJ_SYSCALL_FD(
+    open(filename, O_RDONLY), "couldn't open the document", filename);
+
+// For a syscall returning anything else, use KJ_SYSCALL.
+ssize_t n;
+KJ_SYSCALL(n = read(fd, buffer, sizeof(buffer)));
 ```
 
 This macro evaluates the first parameter, which is expected to be a system call. If it returns a negative value, indicating an error, then an exception is thrown. The exception description incorporates a description of the error code communicated by `errno`, as well as the other parameters passed to the macro (stringified in the same manner as other assertion/logging macros do).
@@ -395,6 +400,9 @@ KJ_SYSCALL_HANDLE_ERRORS(fd = open(filename, O_RDONLY)) {
     // Some other error. The error code (from errno) is in a local variable `error`.
     // `KJ_FAIL_SYSCALL` expects its second parameter to be this integer error code.
     KJ_FAIL_SYSCALL("open()", error, "couldn't open the document", filename);
+} else {
+  // The `else` clause runs if the system call succeeded.
+  return kj::OwnFd(fd);
 }
 ```
 
@@ -1022,7 +1030,7 @@ Although most complex KJ applications use async I/O, sometimes you want somethin
 
 `kj/io.h` provides some more basic, synchronous streaming interfaces, like `kj::InputStream` and `kj::OutputStream`. Implementations are provided on top of file descriptors and Windows `HANDLE`s.
 
-Additionally, the important utility class `kj::AutoCloseFd` (and `kj::AutoCloseHandle` for Windows) can be found here. This is an RAII wrapper around a file descriptor (or `HANDLE`), which you will likely want to use any time you are manipulating raw file descriptors (or `HANDLE`s) in KJ code.
+Additionally, the important utility class `kj::OwnFd` (and `kj::AutoCloseHandle` for Windows) can be found here. This is an RAII wrapper around a file descriptor (or `HANDLE`), which you will likely want to use any time you are manipulating raw file descriptors (or `HANDLE`s) in KJ code.
 
 ### Filesystem
 

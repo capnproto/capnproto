@@ -327,7 +327,7 @@ void VectorOutputStream::grow(size_t minSize) {
 
 // =======================================================================================
 
-AutoCloseFd::~AutoCloseFd() noexcept(false) {
+OwnFd::~OwnFd() noexcept(false) {
   if (fd >= 0) {
     // Don't use SYSCALL() here because close() should not be repeated on EINTR.
     if (miniposix::close(fd) < 0) {
