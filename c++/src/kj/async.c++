@@ -3230,8 +3230,6 @@ Maybe<Own<Event>> CoroutineBase::fire() {
   // already know where it's going. But, we don't really know: the `co_await` might be in a
   // try-catch block, so we have no choice but to resume and throw later.
 
-  promiseNodeForTrace = kj::none;
-
   coroutine.resume();
 
   return kj::none;
@@ -3289,14 +3287,13 @@ void CoroutineBase::destroy() {
   }
 }
 
-CoroutineBase::AwaiterBase::AwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
-CoroutineBase::AwaiterBase::AwaiterBase(AwaiterBase&&) = default;
-CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
+PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node)
+    : coroutine(coroutine), node(kj::mv(node)) {}
+PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
+PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
   // destroyed.
-  KJ_IF_SOME(coroutineEvent, maybeCoroutineEvent) {
-    coroutineEvent.promiseNodeForTrace = kj::none;
-  }
+  coroutine.awaitEnd();
 
   unwindDetector.catchExceptionsIfUnwinding([this]() {
     // No need to check for a moved-from state, node will just ignore the nullification.
@@ -3304,7 +3301,30 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
+bool PromiseAwaiterBase::await_ready() {
+  node->setSelfPointer(&node);
+  node->onReady(&coroutine);
+
+  if (coroutine.canImmediatelyResume()) {
+    // The result is immediately ready and this coroutine is running on the event loop's stack, not
+    // a user code stack. Let's cancel our event and immediately resume. It's important that we
+    // don't perform this optimization if this is the first suspension, because our caller may
+    // depend on running code before this promise's continuations fire.
+    coroutine.disarm();
+
+    return true;
+  } else {
+    // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
+    // tracing purposes; coroutine.fire() and/or ~Adapter() will null this out via awaitEnd().
+    coroutine.awaitBegin(node);
+
+    return false;
+  }
+}
+
+void PromiseAwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
+  coroutine.awaitEnd();
+
   node->get(result);
 
   KJ_IF_SOME(exception, result.exception) {
@@ -3318,32 +3338,6 @@ void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaited
     // added above, as the rest of the trace will always be async framework stuff that no one wants
     // to see.
     kj::throwFatalException(kj::mv(exception), kj::maxValue);
-  }
-}
-
-bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent) {
-  node->setSelfPointer(&node);
-  node->onReady(&coroutineEvent);
-
-  if (coroutineEvent.hasSuspendedAtLeastOnce && coroutineEvent.isNext()) {
-    // The result is immediately ready and this coroutine is running on the event loop's stack, not
-    // a user code stack. Let's cancel our event and immediately resume. It's important that we
-    // don't perform this optimization if this is the first suspension, because our caller may
-    // depend on running code before this promise's continuations fire.
-    coroutineEvent.disarm();
-
-    // We can resume ourselves by returning false. This accomplishes the same thing as if we had
-    // returned true from await_ready().
-    return false;
-  } else {
-    // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
-    coroutineEvent.promiseNodeForTrace = node;
-    maybeCoroutineEvent = coroutineEvent;
-
-    coroutineEvent.hasSuspendedAtLeastOnce = true;
-
-    return true;
   }
 }
 
