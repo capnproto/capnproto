@@ -334,6 +334,8 @@ protected:
     // Arms the event if init() has already been called and makes future calls to init()
     // automatically arm the event.
 
+    bool armed() const;
+
     inline void traceEvent(TraceBuilder& builder) {
       if (event != nullptr && !builder.full()) event->traceEvent(builder);
     }
@@ -2249,14 +2251,14 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
-class CoroutineBase: public PromiseNode,
-                     public Event {
+template<typename T>
+class CoroutinePromiseNode;
+
+class CoroutineBase: public Event {
 public:
-  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
-                SourceLocation location);
+  CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
-  void destroy() override;
 
   auto initial_suspend() { return stdcoro::suspend_never(); }
   auto final_suspend() noexcept {
@@ -2275,35 +2277,32 @@ public:
   // The final suspension point is useful to delay deallocation of the coroutine frame to match the
   // lifetime of the enclosing promise.
 
-  void unhandled_exception();
-
 protected:
   class AwaiterBase;
 
-  bool isWaiting() { return waiting; }
-  void scheduleResumption() {
-    onReadyEvent.arm();
-    waiting = false;
-  }
+  void traceEvent(TraceBuilder& builder) override;
+
+  struct DisposalResults {
+    bool destructorRan = false;
+    Maybe<Exception> exception;
+  };
+
+  Maybe<DisposalResults&> maybeDisposalResults;
+  // Only non-null during destruction. Before calling coroutine.destroy(), our disposer sets this
+  // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
+  // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
+  // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 
 private:
-  // -------------------------------------------------------
-  // PromiseNode implementation
-
-  void onReady(Event* event) noexcept override;
-  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
-
+  void destroy();
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent);
+  
   // -------------------------------------------------------
   // Event implementation
 
   Maybe<Own<Event>> fire() override;
-  void traceEvent(TraceBuilder& builder) override;
 
   stdcoro::coroutine_handle<> coroutine;
-  ExceptionOrValue& resultRef;
-
-  OnReadyEvent onReadyEvent;
-  bool waiting = true;
 
   bool hasSuspendedAtLeastOnce = false;
 
@@ -2326,20 +2325,60 @@ private:
 
   UnwindDetector unwindDetector;
 
-  struct DisposalResults {
-    bool destructorRan = false;
-    Maybe<Exception> exception;
-  };
-  Maybe<DisposalResults&> maybeDisposalResults;
-  // Only non-null during destruction. Before calling coroutine.destroy(), our disposer sets this
-  // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
-  // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
-  // coroutine.destroy() has returned. Our disposer then rethrows as needed.
+  template<typename> friend class CoroutinePromiseNode;
 };
 
 template <typename Self, typename T>
 class CoroutineMixin;
 // CRTP mixin, covered later.
+
+
+template<typename T>
+class CoroutinePromiseNode final: public PromiseNode {
+public:
+  CoroutinePromiseNode(CoroutineBase* base): base(base) { }
+
+  ~CoroutinePromiseNode() { }
+
+  void fulfill(FixVoid<T>&& value) {
+    result = kj::mv(value);
+    onReadyEvent.arm();
+  }
+
+  void addException(Exception&& exception) {
+    result.addException(kj::mv(exception));
+    if (!onReadyEvent.armed()) {
+      onReadyEvent.arm();
+    }
+  }
+
+  void onReady(Event* event) noexcept override { 
+    onReadyEvent.init(event);
+  }
+
+  void get(ExceptionOrValue& output) noexcept override { 
+    output.as<FixVoid<T>>() = kj::mv(result);
+  }
+
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override { 
+    if (stopAtNextEvent) return;
+    base->tracePromise(builder, stopAtNextEvent);
+  }
+
+  // Called by PromiseDisposer to delete the object. Basically a wrapper around coroutine.destroy()
+  // with some stuff to propagate exceptions appropriately.
+  void destroy() override { 
+    base->destroy();
+  }
+
+  void traceEvent(TraceBuilder& builder) {
+    onReadyEvent.traceEvent(builder);
+  }
+
+  CoroutineBase* base;
+  ExceptionOr<FixVoid<T>> result;
+  OnReadyEvent onReadyEvent;
+};
 
 template <typename T>
 class Coroutine final: public CoroutineBase,
@@ -2363,17 +2402,17 @@ class Coroutine final: public CoroutineBase,
 public:
   using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
 
-  Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
+  Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) { }
 
   Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
-      : CoroutineBase(handle, result, location) {}
+      : CoroutineBase(handle, location), node(this) { }
 
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
     // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
     // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
     // coroutine in a suspended state.
-    return PromiseNode::to<Promise<T>>(OwnPromiseNode(this));
+    return PromiseNode::to<Promise<T>>(OwnPromiseNode(&node));
   }
 
 public:
@@ -2409,24 +2448,35 @@ public:
     return ForkedPromiseAwaiter<U>(promise);
   }
 
+  // Called by the return_value()/return_void() functions in our mixin class.
   void fulfill(FixVoid<T>&& value) {
-    // Called by the return_value()/return_void() functions in our mixin class.
+    node.fulfill(kj::mv(value));
+  }
+  
+  void traceEvent(TraceBuilder& builder) override {
+    CoroutineBase::traceEvent(builder);
+    node.traceEvent(builder);
+  }
 
-    if (isWaiting()) {
-      result = kj::mv(value);
-      scheduleResumption();
+  void unhandled_exception() {
+    // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
+    // we're being destroyed, in which case we propagate it back to our disposer. Note that all
+    // unhandled exceptions end up here, not just ones after the first co_await.
+
+    auto exception = getCaughtExceptionAsKj();
+
+    KJ_IF_SOME(disposalResults, maybeDisposalResults) {
+      // Exception during coroutine destruction. Only record the first one.
+      if (disposalResults.exception == kj::none) {
+        disposalResults.exception = kj::mv(exception);
+      }
+    } else {
+      node.addException(kj::mv(exception));
     }
   }
 
 private:
-  // -------------------------------------------------------
-  // PromiseNode implementation
-
-  void get(ExceptionOrValue& output) noexcept override {
-    output.as<FixVoid<T>>() = kj::mv(result);
-  }
-
-  ExceptionOr<FixVoid<T>> result;
+  CoroutinePromiseNode<T> node;
 };
 
 template <typename Self, typename T>
