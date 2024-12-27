@@ -26,7 +26,10 @@
 
 CAPNP_BEGIN_HEADER
 
-namespace kj { class AutoCloseFd; }
+namespace kj {
+  class OwnFd;
+  using AutoCloseFd = OwnFd;
+}
 
 namespace capnp {
 
@@ -213,13 +216,13 @@ public:
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
 
-  virtual kj::ArrayPtr<kj::AutoCloseFd> getAttachedFds() { return nullptr; }
+  virtual kj::ArrayPtr<kj::OwnFd> getAttachedFds() { return nullptr; }
   // If the transport supports attached file descriptors and some were attached to this message,
   // returns them. Otherwise returns an empty array. It is intended that the caller will move the
   // FDs out of this table when they are consumed, possibly leaving behind a null slot. Callers
   // should be careful to check if an FD was already consumed by comparing the slot with `nullptr`.
   // (We don't use Maybe here because moving from a Maybe doesn't make it null, so it would only
-  // add confusion. Moving from an AutoCloseFd does in fact make it null.)
+  // add confusion. Moving from an OwnFd does in fact make it null.)
 
   virtual size_t sizeInWords() = 0;
   // Get the total size of the message, for flow control purposes. Although the caller could

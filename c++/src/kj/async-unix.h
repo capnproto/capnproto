@@ -259,9 +259,9 @@ private:
 
 #if KJ_USE_EPOLL
   sigset_t originalMask;
-  AutoCloseFd epollFd;
-  AutoCloseFd eventFd;   // Used for cross-thread wakeups.
-  kj::Maybe<AutoCloseFd> timerFd;   // Used if preparePollableFdForSleep() is ever called.
+  OwnFd epollFd;
+  OwnFd eventFd;   // Used for cross-thread wakeups.
+  kj::Maybe<OwnFd> timerFd;   // Used if preparePollableFdForSleep() is ever called.
 
   bool sleeping = false;  // Was preparePollableFdForSleep() called?
   bool runnable = false;  // Last value passed to setRunnable().
@@ -269,7 +269,7 @@ private:
 
   bool processEpollEvents(struct epoll_event events[], int n);
 #elif KJ_USE_KQUEUE
-  AutoCloseFd kqueueFd;
+  OwnFd kqueueFd;
 
   bool doKqueueWait(struct timespec* timeout);
 #else
@@ -279,8 +279,8 @@ private:
   FdObserver** observersTail = &observersHead;
 
 #if KJ_USE_PIPE_FOR_WAKEUP
-  AutoCloseFd wakePipeIn;
-  AutoCloseFd wakePipeOut;
+  OwnFd wakePipeIn;
+  OwnFd wakePipeOut;
 #else
   unsigned long long threadId;  // actually pthread_t
 #endif

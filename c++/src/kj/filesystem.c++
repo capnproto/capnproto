@@ -1807,7 +1807,7 @@ public:
   }
 
 private:
-  
+
   Own<const File> file;
 };
 
@@ -1839,9 +1839,7 @@ const InMemoryFileFactory& defaultInMemoryFileFactory() {
 #if __linux__
 
 Own<File> newMemfdFile(uint flags) {
-  int fd;
-  KJ_SYSCALL(fd = memfd_create("kj-memfd", flags | MFD_CLOEXEC));
-  return newDiskFile(AutoCloseFd(fd));
+  return newDiskFile(KJ_SYSCALL_FD(memfd_create("kj-memfd", flags | MFD_CLOEXEC)));
 }
 
 const InMemoryFileFactory& memfdInMemoryFileFactory() {

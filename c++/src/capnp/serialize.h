@@ -181,7 +181,7 @@ public:
       : FdInputStream(fd), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read message from a file descriptor, without taking ownership of the descriptor.
 
-  StreamFdMessageReader(kj::AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
+  StreamFdMessageReader(kj::OwnFd fd, ReaderOptions options = ReaderOptions(),
                         kj::ArrayPtr<word> scratchSpace = nullptr)
       : FdInputStream(kj::mv(fd)), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read a message from a file descriptor, taking ownership of the descriptor.

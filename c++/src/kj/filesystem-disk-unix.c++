@@ -276,13 +276,13 @@ class DiskHandle {
   // it. Ugly, but works.
 
 public:
-  DiskHandle(AutoCloseFd&& fd): fd(kj::mv(fd)) {}
+  DiskHandle(OwnFd&& fd): fd(kj::mv(fd)) {}
 
   // OsHandle ------------------------------------------------------------------
 
-  AutoCloseFd clone() const {
-    int fd2;
+  OwnFd clone() const {
 #ifdef F_DUPFD_CLOEXEC
+    int fd2;
     KJ_SYSCALL_HANDLE_ERRORS(fd2 = fcntl(fd, F_DUPFD_CLOEXEC, 3)) {
       case EINVAL:
       case EOPNOTSUPP:
@@ -292,12 +292,11 @@ public:
         KJ_FAIL_SYSCALL("fnctl(fd, F_DUPFD_CLOEXEC, 3)", error) { break; }
         break;
     } else {
-      return AutoCloseFd(fd2);
+      return OwnFd(fd2);
     }
 #endif
 
-    KJ_SYSCALL(fd2 = ::dup(fd));
-    AutoCloseFd result(fd2);
+    auto result = KJ_SYSCALL_FD(::dup(fd));
     setCloexec(result);
     return result;
   }
@@ -306,7 +305,7 @@ public:
     return fd.get();
   }
 
-  void setFd(AutoCloseFd newFd) {
+  void setFd(OwnFd newFd) {
     // Used for one hack in DiskFilesystem's constructor...
     fd = kj::mv(newFd);
   }
@@ -771,7 +770,7 @@ public:
         KJ_FAIL_SYSCALL("openat(fd, path, O_RDONLY)", error, path) { return kj::none; }
     }
 
-    kj::AutoCloseFd result(newFd);
+    kj::OwnFd result(newFd);
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif
@@ -779,7 +778,7 @@ public:
     return newDiskReadableFile(kj::mv(result));
   }
 
-  Maybe<AutoCloseFd> tryOpenSubdirInternal(PathPtr path) const {
+  Maybe<OwnFd> tryOpenSubdirInternal(PathPtr path) const {
     int newFd;
     KJ_SYSCALL_HANDLE_ERRORS(newFd = openat(
         fd, path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
@@ -797,7 +796,7 @@ public:
         KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path) { return kj::none; }
     }
 
-    kj::AutoCloseFd result(newFd);
+    kj::OwnFd result(newFd);
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif
@@ -994,7 +993,7 @@ public:
     }
   }
 
-  Maybe<AutoCloseFd> tryOpenFileInternal(PathPtr path, WriteMode mode, bool append) const {
+  Maybe<OwnFd> tryOpenFileInternal(PathPtr path, WriteMode mode, bool append) const {
     uint flags = O_RDWR | MAYBE_O_CLOEXEC;
     mode_t acl = 0666;
     if (has(mode, WriteMode::CREATE)) {
@@ -1063,7 +1062,7 @@ public:
         KJ_FAIL_SYSCALL("openat(fd, path, O_RDWR | ...)", error, path) { return kj::none; }
     }
 
-    kj::AutoCloseFd result(newFd);
+    kj::OwnFd result(newFd);
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif
@@ -1329,7 +1328,7 @@ public:
       return newFd_ = openat(fd, candidatePath.cStr(),
                              O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, acl);
     });
-    AutoCloseFd newFd(newFd_);
+    OwnFd newFd(newFd_);
 #ifndef O_CLOEXEC
     setCloexec(newFd);
 #endif
@@ -1354,7 +1353,7 @@ public:
         KJ_FAIL_SYSCALL("open(O_TMPFILE)", error) { break; }
         break;
     } else {
-      AutoCloseFd newFd(newFd_);
+      OwnFd newFd(newFd_);
 #ifndef O_CLOEXEC
       setCloexec(newFd);
 #endif
@@ -1366,7 +1365,7 @@ public:
         [&](StringPtr path) {
       return newFd_ = openat(fd, path.cStr(), O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0600);
     });
-    AutoCloseFd newFd(newFd_);
+    OwnFd newFd(newFd_);
 #ifndef O_CLOEXEC
     setCloexec(newFd);
 #endif
@@ -1403,7 +1402,7 @@ public:
         return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(nullClock()));
     }
 
-    AutoCloseFd subdirFd(subdirFd_);
+    OwnFd subdirFd(subdirFd_);
 #ifndef O_CLOEXEC
     setCloexec(subdirFd);
 #endif
@@ -1475,7 +1474,7 @@ public:
   }
 
 protected:
-  AutoCloseFd fd;
+  OwnFd fd;
 };
 
 #define FSNODE_METHODS(classname)                                   \
@@ -1491,7 +1490,7 @@ protected:
 
 class DiskReadableFile final: public ReadableFile, public DiskHandle {
 public:
-  DiskReadableFile(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
+  DiskReadableFile(OwnFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskReadableFile);
 
@@ -1508,7 +1507,7 @@ public:
 
 class DiskAppendableFile final: public AppendableFile, public DiskHandle, public FdOutputStream {
 public:
-  DiskAppendableFile(AutoCloseFd&& fd)
+  DiskAppendableFile(OwnFd&& fd)
       : DiskHandle(kj::mv(fd)),
         FdOutputStream(DiskHandle::fd.get()) {}
 
@@ -1524,7 +1523,7 @@ public:
 
 class DiskFile final: public File, public DiskHandle {
 public:
-  DiskFile(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
+  DiskFile(OwnFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskFile);
 
@@ -1562,7 +1561,7 @@ public:
 
 class DiskReadableDirectory final: public ReadableDirectory, public DiskHandle {
 public:
-  DiskReadableDirectory(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
+  DiskReadableDirectory(OwnFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskReadableDirectory);
 
@@ -1583,7 +1582,7 @@ public:
 
 class DiskDirectory final: public Directory, public DiskHandle {
 public:
-  DiskDirectory(AutoCloseFd&& fd): DiskHandle(kj::mv(fd)) {}
+  DiskDirectory(OwnFd&& fd): DiskHandle(kj::mv(fd)) {}
 
   FSNODE_METHODS(DiskDirectory);
 
@@ -1675,10 +1674,8 @@ private:
   DiskDirectory current;
   Path currentPath;
 
-  static AutoCloseFd openDir(const char* dir) {
-    int newFd;
-    KJ_SYSCALL(newFd = open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
-    AutoCloseFd result(newFd);
+  static OwnFd openDir(const char* dir) {
+    auto result = KJ_SYSCALL_FD(open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif
@@ -1745,19 +1742,19 @@ private:
 
 } // namespace
 
-Own<ReadableFile> newDiskReadableFile(kj::AutoCloseFd fd) {
+Own<ReadableFile> newDiskReadableFile(kj::OwnFd fd) {
   return heap<DiskReadableFile>(kj::mv(fd));
 }
-Own<AppendableFile> newDiskAppendableFile(kj::AutoCloseFd fd) {
+Own<AppendableFile> newDiskAppendableFile(kj::OwnFd fd) {
   return heap<DiskAppendableFile>(kj::mv(fd));
 }
-Own<File> newDiskFile(kj::AutoCloseFd fd) {
+Own<File> newDiskFile(kj::OwnFd fd) {
   return heap<DiskFile>(kj::mv(fd));
 }
-Own<ReadableDirectory> newDiskReadableDirectory(kj::AutoCloseFd fd) {
+Own<ReadableDirectory> newDiskReadableDirectory(kj::OwnFd fd) {
   return heap<DiskReadableDirectory>(kj::mv(fd));
 }
-Own<Directory> newDiskDirectory(kj::AutoCloseFd fd) {
+Own<Directory> newDiskDirectory(kj::OwnFd fd) {
   return heap<DiskDirectory>(kj::mv(fd));
 }
 

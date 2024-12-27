@@ -217,10 +217,9 @@ bool isWine() { return false; }
 static Own<File> newTempFile() {
   const char* tmpDir = getenv("TEST_TMPDIR");
   auto filename = str(tmpDir != nullptr ? tmpDir : VAR_TMP, "/kj-filesystem-test.XXXXXX");
-  int fd;
-  KJ_SYSCALL(fd = mkstemp(filename.begin()));
+  auto fd = KJ_SYSCALL_FD(mkstemp(filename.begin()));
   KJ_DEFER(KJ_SYSCALL(unlink(filename.cStr())));
-  return newDiskFile(AutoCloseFd(fd));
+  return newDiskFile(kj::mv(fd));
 }
 
 class TempDir {
@@ -234,9 +233,8 @@ public:
   }
 
   Own<Directory> get() {
-    int fd;
-    KJ_SYSCALL(fd = open(filename.cStr(), O_RDONLY));
-    return newDiskDirectory(AutoCloseFd(fd));
+    auto fd = KJ_SYSCALL_FD(open(filename.cStr(), O_RDONLY));
+    return newDiskDirectory(kj::mv(fd));
   }
 
   ~TempDir() noexcept(false) {

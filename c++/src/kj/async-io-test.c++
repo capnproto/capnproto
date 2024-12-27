@@ -529,6 +529,104 @@ TEST(AsyncIo, InMemoryCapabilityPipe) {
 }
 
 #if !_WIN32 && !__CYGWIN__
+TEST(AsyncIo, InMemoryCapabilityPipeFds) {
+  // Test passing file descirptors over an in-memory capability pipe.
+  //
+  // This is identical to `TEST(AsyncIo, InMemoryCapabilityPipe)` above except we use sendFd() and
+  // receiveFd().
+
+  auto io = setupAsyncIo();
+
+  int socketFds[2]{};
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
+  kj::OwnFd socketClient(socketFds[0]);
+  kj::OwnFd sokcetServer(socketFds[1]);
+
+  auto pipe2 = newCapabilityPipe();
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
+
+  // Expect to receive an FD, then read "foo" from it, then write "bar" to it.
+  Own<AsyncCapabilityStream> receivedStream;
+  auto promise = pipe2.ends[1]->receiveFd()
+      .then([&](OwnFd fd) {
+    receivedStream = io.lowLevelProvider->wrapUnixSocketFd(kj::mv(fd));
+    return receivedStream->tryRead(receiveBuffer2, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return receivedStream->write("bar"_kjb).then([&receiveBuffer2,n]() {
+      return heapString(receiveBuffer2, n);
+    });
+  });
+
+  // Send an FD, then write "foo" to the other end of the sent stream, then receive "bar"
+  // from it.
+  auto clientStream = io.lowLevelProvider->wrapSocketFd(kj::mv(socketClient));
+  kj::String result = pipe2.ends[0]->sendFd(kj::mv(sokcetServer))
+      .then([&]() {
+    return clientStream->write("foo"_kjb);
+  }).then([&]() {
+    return clientStream->tryRead(receiveBuffer1, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer1, n);
+  }).wait(io.waitScope);
+
+  kj::String result2 = promise.wait(io.waitScope);
+
+  EXPECT_EQ("bar", result);
+  EXPECT_EQ("foo", result2);
+}
+
+TEST(AsyncIo, InMemoryCapabilityPipeFdsReverse) {
+  // Same as above, except we do sendFd() first, then receiveFd(). This hits `BlockedWrite` instead
+  // of `BlockedRead`. At one time there was a bug in that code that mishandled the file
+  // descriptors.
+
+  auto io = setupAsyncIo();
+
+  int socketFds[2]{};
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
+  kj::OwnFd socketClient(socketFds[0]);
+  kj::OwnFd sokcetServer(socketFds[1]);
+
+  auto pipe2 = newCapabilityPipe();
+  char receiveBuffer1[4]{};
+  char receiveBuffer2[4]{};
+
+  // Send an FD, then write "foo" to the other end of the sent stream, then receive "bar"
+  // from it.
+  auto clientStream = io.lowLevelProvider->wrapSocketFd(kj::mv(socketClient));
+  auto promise = pipe2.ends[0]->sendFd(kj::mv(sokcetServer))
+      .then([&]() {
+    return clientStream->write("foo"_kjb);
+  }).then([&]() {
+    return clientStream->tryRead(receiveBuffer1, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer1, n);
+  });
+
+  // Expect to receive an FD, then read "foo" from it, then write "bar" to it.
+  Own<AsyncCapabilityStream> receivedStream;
+  auto promise2 = pipe2.ends[1]->receiveFd()
+      .then([&](OwnFd fd) {
+    receivedStream = io.lowLevelProvider->wrapUnixSocketFd(kj::mv(fd));
+    return receivedStream->tryRead(receiveBuffer2, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return receivedStream->write("bar"_kjb).then([&receiveBuffer2,n]() {
+      return heapString(receiveBuffer2, n);
+    });
+  });
+
+  kj::String result = promise.wait(io.waitScope);
+  kj::String result2 = promise2.wait(io.waitScope);
+
+  EXPECT_EQ("bar", result);
+  EXPECT_EQ("foo", result2);
+}
+
 TEST(AsyncIo, CapabilityPipe) {
   auto ioContext = setupAsyncIo();
 
@@ -654,21 +752,21 @@ TEST(AsyncIo, ScmRightsTruncatedOdd) {
 
   int pipeFds[2]{};
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in1(pipeFds[0]);
-  kj::AutoCloseFd out1(pipeFds[1]);
+  kj::OwnFd in1(pipeFds[0]);
+  kj::OwnFd out1(pipeFds[1]);
 
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in2(pipeFds[0]);
-  kj::AutoCloseFd out2(pipeFds[1]);
+  kj::OwnFd in2(pipeFds[0]);
+  kj::OwnFd out2(pipeFds[1]);
 
   {
-    AutoCloseFd sendFds[2] = { kj::mv(out1), kj::mv(out2) };
+    OwnFd sendFds[2] = { kj::mv(out1), kj::mv(out2) };
     capPipe.ends[0]->writeWithFds("foo"_kjb, nullptr, sendFds).wait(io.waitScope);
   }
 
   {
     char buffer[4]{};
-    AutoCloseFd fdBuffer[1];
+    OwnFd fdBuffer[1];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 1).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 1);
     kj::FdOutputStream(fdBuffer[0].get()).write("bar"_kjb);
@@ -726,25 +824,25 @@ TEST(AsyncIo, ScmRightsTruncatedEven) {
 
   int pipeFds[2]{};
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in1(pipeFds[0]);
-  kj::AutoCloseFd out1(pipeFds[1]);
+  kj::OwnFd in1(pipeFds[0]);
+  kj::OwnFd out1(pipeFds[1]);
 
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in2(pipeFds[0]);
-  kj::AutoCloseFd out2(pipeFds[1]);
+  kj::OwnFd in2(pipeFds[0]);
+  kj::OwnFd out2(pipeFds[1]);
 
   KJ_SYSCALL(miniposix::pipe(pipeFds));
-  kj::AutoCloseFd in3(pipeFds[0]);
-  kj::AutoCloseFd out3(pipeFds[1]);
+  kj::OwnFd in3(pipeFds[0]);
+  kj::OwnFd out3(pipeFds[1]);
 
   {
-    AutoCloseFd sendFds[3] = { kj::mv(out1), kj::mv(out2), kj::mv(out3) };
+    OwnFd sendFds[3] = { kj::mv(out1), kj::mv(out2), kj::mv(out3) };
     capPipe.ends[0]->writeWithFds("foo"_kjb, nullptr, sendFds).wait(io.waitScope);
   }
 
   {
     char buffer[4]{};
-    AutoCloseFd fdBuffer[2];
+    OwnFd fdBuffer[2];
     auto result = capPipe.ends[1]->tryReadWithFds(buffer, 3, 3, fdBuffer, 2).wait(io.waitScope);
     KJ_ASSERT(result.capCount == 2);
     kj::FdOutputStream(fdBuffer[0].get()).write("bar"_kjb);
@@ -864,9 +962,7 @@ bool isMsgTruncBroken() {
   // Detect if the kernel fails to set MSG_TRUNC on recvmsg(). This seems to be the case at least
   // when running an arm64 binary under qemu.
 
-  int fd;
-  KJ_SYSCALL(fd = socket(AF_INET, SOCK_DGRAM, 0));
-  KJ_DEFER(close(fd));
+  auto fd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_DGRAM, 0));
 
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -1074,9 +1170,7 @@ TEST(AsyncIo, AbstractUnixSocket) {
   Own<ConnectionReceiver> listener = addr->listen();
   // chdir proves no filesystem dependence. Test fails for regular unix socket
   // but passes for abstract unix socket.
-  int originalDirFd;
-  KJ_SYSCALL(originalDirFd = open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
-  KJ_DEFER(close(originalDirFd));
+  auto originalDirFd = KJ_SYSCALL_FD(open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
   KJ_SYSCALL(chdir("/"));
   KJ_DEFER(KJ_SYSCALL(fchdir(originalDirFd)));
 

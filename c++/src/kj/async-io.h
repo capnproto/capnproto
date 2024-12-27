@@ -39,7 +39,8 @@ class AutoCloseHandle;
 class UnixEventPort;
 #endif
 
-class AutoCloseFd;
+class OwnFd;
+using AutoCloseFd = OwnFd;
 class NetworkAddress;
 class AsyncOutputStream;
 class AsyncIoStream;
@@ -239,7 +240,7 @@ public:
                                      ArrayPtr<const int> fds) = 0;
   Promise<void> writeWithFds(ArrayPtr<const byte> data,
                              ArrayPtr<const ArrayPtr<const byte>> moreData,
-                             ArrayPtr<const AutoCloseFd> fds);
+                             ArrayPtr<const OwnFd> fds);
   // Write some data to the stream with some file descriptors attached to it.
   //
   // The maximum number of FDs that can be sent at a time is usually subject to an OS-imposed
@@ -252,7 +253,7 @@ public:
   };
 
   virtual Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
-                                             AutoCloseFd* fdBuffer, size_t maxFds) = 0;
+                                             OwnFd* fdBuffer, size_t maxFds) = 0;
   // Read data from the stream that may have file descriptors attached. Any attached descriptors
   // will be placed in `fdBuffer`. If multiple bundles of FDs are encountered in the course of
   // reading the amount of data requested by minBytes/maxBytes, then they will be concatenated. If
@@ -281,8 +282,8 @@ public:
   Promise<void> sendStream(Own<AsyncCapabilityStream> stream);
   // Transfer a single stream.
 
-  Promise<AutoCloseFd> receiveFd();
-  Promise<Maybe<AutoCloseFd>> tryReceiveFd();
+  Promise<OwnFd> receiveFd();
+  Promise<Maybe<OwnFd>> tryReceiveFd();
   Promise<void> sendFd(int fd);
   // Transfer a single raw file descriptor.
 };
@@ -835,9 +836,13 @@ public:
   // On Windows, the `fd` parameter to each of these methods must be a SOCKET, and must have the
   // flag WSA_FLAG_OVERLAPPED (which socket() uses by default, but WSASocket() wants you to specify
   // explicitly).
+  //
+  // TODO(cleanup): This alias was created when `kj::OwnFd` was called `kj::AutoCloseFd`. Later
+  //   `AutoCloseFd` itself was renamed `OwnFd`, which means this alias now shadows `kj::OwnFd`,
+  //   which is a little weird.
 #else
   typedef int Fd;
-  typedef AutoCloseFd OwnFd;
+  typedef kj::OwnFd OwnFd;
   // On Unix, any arbitrary file descriptor is supported.
 #endif
 
@@ -917,7 +922,7 @@ public:
   Own<ConnectionReceiver> wrapListenSocketFd(OwnFd&& fd, uint flags = 0);
   Own<DatagramPort> wrapDatagramSocketFd(OwnFd&& fd, NetworkFilter& filter, uint flags = 0);
   Own<DatagramPort> wrapDatagramSocketFd(OwnFd&& fd, uint flags = 0);
-  // Convenience wrappers which transfer ownership via AutoCloseFd (Unix) or AutoCloseHandle
+  // Convenience wrappers which transfer ownership via OwnFd (Unix) or AutoCloseHandle
   // (Windows). TAKE_OWNERSHIP will be implicitly added to `flags`.
 };
 

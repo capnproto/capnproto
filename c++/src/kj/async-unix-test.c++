@@ -118,9 +118,7 @@ bool checkForQemuEpollPwaitBug() {
 
   KJ_SYSCALL(sigaction(SIGURG, &action, nullptr));
 
-  int efd;
-  KJ_SYSCALL(efd = epoll_create1(EPOLL_CLOEXEC));
-  KJ_DEFER(close(efd));
+  auto efd = KJ_SYSCALL_FD(epoll_create1(EPOLL_CLOEXEC));
 
   kill(getpid(), SIGURG);
   KJ_ASSERT(!qemuBugTestSignalHandlerRan);
@@ -369,7 +367,7 @@ TEST(AsyncUnixTest, ReadObserver) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
 
   UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -465,7 +463,7 @@ TEST(AsyncUnixTest, ReadObserverAndSignals) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
 
   UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -562,7 +560,7 @@ TEST(AsyncUnixTest, WriteObserver) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
   setNonblocking(outfd);
   setNonblocking(infd);
 
@@ -612,12 +610,10 @@ TEST(AsyncUnixTest, UrgentObserver) {
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
-  int tmpFd;
   char c;
 
   // Spawn a TCP server
-  KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
-  kj::AutoCloseFd serverFd(tmpFd);
+  auto serverFd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_STREAM, 0));
   sockaddr_in saddr;
   memset(&saddr, 0, sizeof(saddr));
   saddr.sin_family = AF_INET;
@@ -637,13 +633,11 @@ TEST(AsyncUnixTest, UrgentObserver) {
 
   // Accept one connection, send in-band and OOB byte, wait for a quit message
   Thread thread([&]() {
-    int tmpFd;
     char c;
 
     sockaddr_in caddr;
     socklen_t caddrLen = sizeof(caddr);
-    KJ_SYSCALL(tmpFd = accept(serverFd, reinterpret_cast<sockaddr*>(&caddr), &caddrLen));
-    kj::AutoCloseFd clientFd(tmpFd);
+    auto clientFd = KJ_SYSCALL_FD(accept(serverFd, reinterpret_cast<sockaddr*>(&caddr), &caddrLen));
     delay();
 
     // Workaround: OS X won't signal POLLPRI without POLLIN. Also enqueue some in-band data.
@@ -664,8 +658,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
   });
   KJ_DEFER({ shutdown(serverFd, SHUT_RDWR); serverFd = nullptr; });
 
-  KJ_SYSCALL(tmpFd = socket(AF_INET, SOCK_STREAM, 0));
-  kj::AutoCloseFd clientFd(tmpFd);
+  auto clientFd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_STREAM, 0));
   KJ_SYSCALL(connect(clientFd, reinterpret_cast<sockaddr*>(&saddr), saddrLen));
 
   UnixEventPort::FdObserver observer(port, clientFd,
@@ -947,7 +940,7 @@ KJ_TEST("UnixEventPort whenWriteDisconnected()") {
 
   int fds_[2]{};
   KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds_));
-  kj::AutoCloseFd fds[2] = { kj::AutoCloseFd(fds_[0]), kj::AutoCloseFd(fds_[1]) };
+  kj::OwnFd fds[2] = { kj::OwnFd(fds_[0]), kj::OwnFd(fds_[1]) };
 
   UnixEventPort::FdObserver observer(port, fds[0], UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -993,7 +986,7 @@ KJ_TEST("UnixEventPort FdObserver(..., flags=0)::whenWriteDisconnected()") {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
 
   UnixEventPort::FdObserver observer(port, outfd, 0);
 
@@ -1141,8 +1134,8 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
   {
     int pair[2]{};
     KJ_SYSCALL(pipe(pair));
-    kj::AutoCloseFd in(pair[0]);
-    kj::AutoCloseFd out(pair[1]);
+    kj::OwnFd in(pair[0]);
+    kj::OwnFd out(pair[1]);
 
     kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
     auto promise = observer.whenBecomesReadable();
@@ -1319,8 +1312,8 @@ KJ_TEST("yieldUntilWouldSleep") {
   {
     int pair[2]{};
     KJ_SYSCALL(pipe(pair));
-    kj::AutoCloseFd in(pair[0]);
-    kj::AutoCloseFd out(pair[1]);
+    kj::OwnFd in(pair[0]);
+    kj::OwnFd out(pair[1]);
 
     kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
     auto promise = observer.whenBecomesReadable();

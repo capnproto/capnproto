@@ -37,7 +37,7 @@ public:
 
   // Implements MessageStream
   kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
-      kj::ArrayPtr<kj::AutoCloseFd> fdSpace,
+      kj::ArrayPtr<kj::OwnFd> fdSpace,
       ReaderOptions options = ReaderOptions(), kj::ArrayPtr<word> scratchSpace = nullptr) override;
   kj::Promise<void> writeMessage(
       kj::ArrayPtr<const int> fds,
