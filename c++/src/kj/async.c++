@@ -1167,6 +1167,8 @@ void XThreadEvent::onReady(Event* event) noexcept {
 
 XThreadPaf::XThreadPaf()
     : state(WAITING), executor(getCurrentThreadExecutor()) {}
+XThreadPaf::XThreadPaf(const Executor& executor)
+    : state(WAITING), executor(executor) {}
 XThreadPaf::~XThreadPaf() noexcept(false) {}
 
 void XThreadPaf::destroy() {

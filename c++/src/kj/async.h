@@ -41,6 +41,8 @@ namespace kj {
 class EventLoop;
 class WaitScope;
 
+class Executor;
+
 template <typename T>
 class Promise;
 template <typename T>
@@ -834,6 +836,11 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
 // not just the one that called this method. Note that the Promise is still tied to the calling
 // thread's event loop and *cannot* be used from another thread -- only the PromiseFulfiller is
 // cross-thread.
+
+template <typename T>
+PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller(const Executor& executor);
+// Like `newPromiseAndCrossThreadFulfiller()`, but the Promise is tied to the event loop associated
+// with `executor`, which may not necessarily be active on the current thread.
 
 // =======================================================================================
 // Canceler

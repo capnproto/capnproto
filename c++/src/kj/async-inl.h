@@ -2015,6 +2015,7 @@ class XThreadFulfiller;
 class XThreadPaf: public PromiseNode {
 public:
   XThreadPaf();
+  XThreadPaf(const Executor& loop);
   virtual ~XThreadPaf() noexcept(false);
   void destroy() override;
 
@@ -2080,6 +2081,8 @@ private:
 template <typename T>
 class XThreadPafImpl final: public XThreadPaf {
 public:
+  using XThreadPaf::XThreadPaf;
+
   // implements PromiseNode ----------------------------------------------------
   void get(ExceptionOrValue& output) noexcept override {
     output.as<FixVoid<T>>() = kj::mv(result);
@@ -2168,6 +2171,13 @@ public:
 template <typename T>
 PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
   kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(new _::XThreadPafImpl<T>);
+  auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
+  return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };
+}
+
+template <typename T>
+PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller(const Executor& executor) {
+  kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(new _::XThreadPafImpl<T>(executor));
   auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
   return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };
 }
