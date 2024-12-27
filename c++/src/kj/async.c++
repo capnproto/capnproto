@@ -1055,6 +1055,9 @@ void XThreadEvent::sendReply() noexcept {
         // Calling thread exited without cancelling the promise. This is UB. In fact,
         // `replyExecutor` is probably already destroyed and we are in use-after-free territory
         // already. Better abort. (sendReply() is noexcept so that this aborts.)
+        //
+        // TODO(someday): XThreadPaf had a similar UB case in ~FulfillScope(), but we got rid of it
+        //   by holding a strong reference to the Executor. Can we do the same here?
         KJ_FAIL_ASSERT(
             "the thread which called kj::Executor::executeAsync() apparently exited its own "
             "event loop without canceling the cross-thread promise first; this is undefined "
@@ -1165,8 +1168,8 @@ void XThreadEvent::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-XThreadPaf::XThreadPaf()
-    : state(WAITING), executor(getCurrentThreadExecutor()) {}
+XThreadPaf::XThreadPaf(Own<const Executor> executor)
+    : state(WAITING), executor(kj::mv(executor)) {}
 XThreadPaf::~XThreadPaf() noexcept(false) {}
 
 void XThreadPaf::destroy() {
@@ -1182,7 +1185,7 @@ void XThreadPaf::destroy() {
   } else {
     // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
     // wait for it to finish and transition the state to FULFILLED.
-    executor.impl->state.when([&](auto&) {
+    executor->impl->state.when([&](auto&) {
       return state == FULFILLED || state == DISPATCHED;
     }, [&](Executor::Impl::State& exState) {
       if (state == FULFILLED) {
@@ -1226,24 +1229,21 @@ XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
     obj = nullptr;
   }
 }
-XThreadPaf::FulfillScope::~FulfillScope() noexcept {  // intentionally noexcept
+XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
   if (obj != nullptr) {
-    auto lock = obj->executor.impl->state.lockExclusive();
+    auto lock = obj->executor->impl->state.lockExclusive();
+    lock->fulfilled.add(*obj);
+    __atomic_store_n(&obj->state, FULFILLED, __ATOMIC_RELEASE);
     KJ_IF_SOME(l, lock->loop) {
-      lock->fulfilled.add(*obj);
-      __atomic_store_n(&obj->state, FULFILLED, __ATOMIC_RELEASE);
       KJ_IF_SOME(p, l.port) {
         // TODO(perf): It's annoying we have to call wake() with the lock held, but we have to
         //   prevent the destination EventLoop from being destroyed first.
         p.wake();
       }
     } else {
-      // This will abort due to the method being `noexcept`, which is what we want because this
-      // is UB.
-      KJ_FAIL_REQUIRE(
-          "the thread which called kj::newPromiseAndCrossThreadFulfiller<T>() apparently exited "
-          "its own event loop without canceling the cross-thread promise first; this is "
-          "undefined behavior so I will crash now");
+      // The thread which called kj::newPromiseAndCrossThreadFulfiller<T>() apparently exited its
+      // own event loop without canceling the cross-thread promise first. Whoever now owns the
+      // promise can only do one thing with it safely: destroy it.
     }
   }
 }

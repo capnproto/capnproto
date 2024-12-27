@@ -2014,7 +2014,7 @@ class XThreadFulfiller;
 
 class XThreadPaf: public PromiseNode {
 public:
-  XThreadPaf();
+  XThreadPaf(Own<const Executor> executor);
   virtual ~XThreadPaf() noexcept(false);
   void destroy() override;
 
@@ -2057,9 +2057,9 @@ private:
     // object.
   } state;
 
-  const Executor& executor;
-  // Executor of the waiting thread. Only guaranteed to be valid when state is `WAITING` or
-  // `FULFILLING`. After any other state has been reached, this reference may be invalidated.
+  Own<const Executor> executor;
+  // Executor of the waiting thread. We hold a strong reference to it so that we have no risk of UB
+  // if the waiting thread exits before the promise is fulfilled.
 
   ListLink<XThreadPaf> link;
   // In the FULFILLING/FULFILLED states, the object is placed in a linked list within the waiting
@@ -2080,6 +2080,8 @@ private:
 template <typename T>
 class XThreadPafImpl final: public XThreadPaf {
 public:
+  using XThreadPaf::XThreadPaf;
+
   // implements PromiseNode ----------------------------------------------------
   void get(ExceptionOrValue& output) noexcept override {
     output.as<FixVoid<T>>() = kj::mv(result);
@@ -2101,7 +2103,7 @@ public:
   FulfillScope(XThreadPaf** pointer);
   // Atomically nulls out *pointer and takes ownership of the pointer.
 
-  ~FulfillScope() noexcept;
+  ~FulfillScope() noexcept(false);
 
   KJ_DISALLOW_COPY_AND_MOVE(FulfillScope);
 
@@ -2167,7 +2169,12 @@ public:
 
 template <typename T>
 PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
-  kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(new _::XThreadPafImpl<T>);
+  return getCurrentThreadExecutor().newPromiseAndCrossThreadFulfiller<T>();
+}
+
+template <typename T>
+PromiseCrossThreadFulfillerPair<T> Executor::newPromiseAndCrossThreadFulfiller() const {
+  kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(new _::XThreadPafImpl<T>(addRef()));
   auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
   return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };
 }
