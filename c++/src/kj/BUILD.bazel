@@ -116,6 +116,8 @@ cc_library(
         "//conditions:default": ["async-unix.h"],
     }),
     include_prefix = "kj",
+    # Disable header parsing based on async-inl.h
+    features = ["-parse_headers"],
     linkopts = select({
         "@platforms//os:windows": [
             "Ws2_32.lib",
