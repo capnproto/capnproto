@@ -87,39 +87,24 @@ using RefOrVoid = typename RefOrVoid_<T>::Type;
 //
 // This is a hack needed to avoid defining Own<void> as a totally separate class.
 
-template <typename T, bool isPolymorphic = _kj_internal_isPolymorphic((T*)nullptr)>
-struct CastToVoid_;
-
-template <typename T>
-struct CastToVoid_<T, false> {
-  static void* apply(T* ptr) {
-    return static_cast<void*>(ptr);
-  }
-  static const void* applyConst(T* ptr) {
-    const T* cptr = ptr;
-    return static_cast<const void*>(cptr);
-  }
-};
-
-template <typename T>
-struct CastToVoid_<T, true> {
-  static void* apply(T* ptr) {
-    return dynamic_cast<void*>(ptr);
-  }
-  static const void* applyConst(T* ptr) {
-    const T* cptr = ptr;
-    return dynamic_cast<const void*>(cptr);
-  }
-};
-
 template <typename T>
 void* castToVoid(T* ptr) {
-  return CastToVoid_<T>::apply(ptr);
+  if constexpr (_kj_internal_isPolymorphic((T*)nullptr)) {
+    return dynamic_cast<void*>(ptr);
+  } else {
+    return static_cast<void*>(ptr);
+  }
 }
 
 template <typename T>
 const void* castToConstVoid(T* ptr) {
-  return CastToVoid_<T>::applyConst(ptr);
+  if constexpr (_kj_internal_isPolymorphic((T*)nullptr)) {
+    const T* cptr = ptr;
+    return dynamic_cast<const void*>(cptr);
+  } else {
+    const T* cptr = ptr;
+    return static_cast<const void*>(cptr);
+  }
 }
 
 void throwWrongDisposerError();
