@@ -53,6 +53,10 @@
 #include <sys/sendfile.h>
 #endif
 
+#if __APPLE__
+#include <sys/stdio.h> // renameat
+#endif
+
 namespace kj {
 namespace {
 
