@@ -652,6 +652,36 @@ void OneOf<Variants...>::allHandled() {
 // - _kj_switch_done is really used as a boolean flag to prevent the for() loop from actually
 //   looping, but it's defined as a pointer since that's all we can define in this context.
 
+namespace _ {
+
+// Helper that tries comparing a and b as type T, but only if a.is<T>().
+template <typename T, typename ...Variants>
+bool compareIfIs(const OneOf<Variants...>& a, const OneOf<Variants...>& b) {
+  if (a.template is<T>()) {
+    // We know a.which() == b.which(), so b is also T.
+    return a.template get<T>() == b.template get<T>();
+  } else {
+    return false;
+  }
+}
+
+}
+
+template <typename ...Variants>
+bool operator==(const OneOf<Variants...>& a, const OneOf<Variants...>& b) {
+  if (a == nullptr && b == nullptr) return true;
+  if ((a == nullptr) != (b == nullptr)) return false;
+
+  if (a.which() != b.which()) return false;
+
+  return (_::compareIfIs<Variants>(a, b) || ...);
+}
+
+template <typename ...Variants>
+bool operator!=(const OneOf<Variants...>& a, const OneOf<Variants...>& b) {
+  return !(a == b);
+}
+
 }  // namespace kj
 
 KJ_END_HEADER
