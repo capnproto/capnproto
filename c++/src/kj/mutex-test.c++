@@ -87,7 +87,7 @@ TEST(Mutex, MutexGuarded) {
     // would hang.
     const auto threadStartTime = systemPreciseMonotonicClock().now();
     Thread lockTimeoutThread([&]() {
-      // try to timeout during 2X 10 ms delay() call below
+      // try to timeout during the multiple 10 ms delay() calls below
       auto timeout = MILLISECONDS * 8;
       Maybe<Locked<uint>> maybeLock = value.lockExclusiveWithTimeout(timeout);
       auto duration = systemPreciseMonotonicClock().now() - threadStartTime;
@@ -102,8 +102,12 @@ TEST(Mutex, MutexGuarded) {
       *threadLock = 789;
     });
 
-    delay();
-    delay();
+    // HACK: As currently written, this test depends on timing, which makes it inherently flaky.
+    // It'd be nice to make it impossible to flake, but in the meantime, adding more `delay()` calls
+    // here makes it less flaky. https://github.com/capnproto/capnproto/issues/2208
+    for ([[maybe_unused]] auto i: zeroTo(4)) {
+      delay();
+    }
     EXPECT_EQ(123u, *lock);
     *lock = 456;
     auto earlyRelease = kj::mv(lock);
