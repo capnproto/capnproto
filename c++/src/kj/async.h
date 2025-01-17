@@ -466,8 +466,9 @@ PromiseForResult<Func, void> evalLast(Func&& func) KJ_WARN_UNUSED_RESULT;
 // drained.
 
 Promise<void> yield();
-// Like `eval()`, but without a function to be evaluated. Useful for yielding control temporarily
-// to serialize actions or schedule other actions for a later time using promise continuations.
+// Like `evalLater()`, but without a function to be evaluated. Useful for yielding control
+// temporarily to serialize actions or schedule other actions for a later time using promise
+// continuations.
 
 Promise<void> yieldUntilQueueEmpty();
 // Like `evalLast()`, but without a function to be evaluated. Useful for yielding control until the

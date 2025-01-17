@@ -197,7 +197,7 @@ public:
   virtual void traceEvent(TraceBuilder& builder) = 0;
   // Build a trace of the callers leading up to this event. `builder` will be populated with
   // "return addresses" of the promise chain waiting on this event. The return addresses may
-  // actually the addresses of lambdas passed to .then(), but in any case, feeding them into
+  // actually be the addresses of lambdas passed to .then(), but in any case, feeding them into
   // addr2line should produce useful source code locations.
   //
   // `traceEvent()` may be called from an async signal handler while `fire()` is executing. It
@@ -298,7 +298,7 @@ public:
   // when it is ready, and then TransformPromiseNode applies the .then() transformation during the
   // call to .get().
   //
-  // So, when we trace the chain of Events backwards, we end up hoping over segments of
+  // So, when we trace the chain of Events backwards, we end up hopping over segments of
   // TransformPromiseNodes (and other similar types). In order to get those added to the trace,
   // each Event must call back down the PromiseNode chain in the opposite direction, using this
   // method.
