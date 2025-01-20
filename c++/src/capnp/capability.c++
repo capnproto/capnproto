@@ -921,6 +921,9 @@ kj::Own<ClientHook> Capability::Client::makeRevocableLocalClient(Capability::Ser
       kj::Own<Capability::Server>(&server, kj::NullDisposer::instance), true /* revocable */);
   return result;
 }
+bool Capability::Client::isLocalClientShared(ClientHook& hook) {
+  return kj::downcast<LocalClient>(hook).isShared();
+}
 void Capability::Client::revokeLocalClientIfShared(ClientHook& hook) {
   if (kj::downcast<LocalClient>(hook).isShared()) {
     revokeLocalClient(hook);
