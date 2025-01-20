@@ -43,16 +43,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-12, clang-14]
+        configuration:
+          - compiler: g++-12
+          - compiler: clang-14
+            dependencies: libc++-14-dev libc++abi-14-dev
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
+            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.configuration.compiler }} ${{ matrix.configuration.dependencies }}
       - name: super-test
         run: |
-            ./super-test.sh quick ${{ matrix.compiler }}
+            ./super-test.sh quick ${{ matrix.configuration.compiler }}
   Linux-lock-tracking:
     runs-on: ubuntu-20.04
     strategy:
