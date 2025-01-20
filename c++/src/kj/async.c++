@@ -3292,8 +3292,8 @@ CoroutineBase::AwaiterBase::AwaiterBase(AwaiterBase&&) = default;
 CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
   // destroyed.
-  KJ_IF_SOME(coroutineEvent, maybeCoroutineEvent) {
-    coroutineEvent.clearPromiseNodeForTrace();
+  KJ_IF_SOME(coroutine, maybeCoroutine) {
+    coroutine.clearPromiseNodeForTrace();
   }
 
   unwindDetector.catchExceptionsIfUnwinding([this]() {
@@ -3302,9 +3302,9 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
-  KJ_IF_SOME(coroutineEvent, maybeCoroutineEvent) {
-    coroutineEvent.clearPromiseNodeForTrace();
+void CoroutineBase::AwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
+  KJ_IF_SOME(coroutine, maybeCoroutine) {
+    coroutine.clearPromiseNodeForTrace();
   }
 
   node->get(result);
@@ -3323,16 +3323,16 @@ void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaited
   }
 }
 
-bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent) {
+bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
   node->setSelfPointer(&node);
-  node->onReady(&coroutineEvent);
+  node->onReady(&coroutine);
 
-  if (coroutineEvent.canImmediatelyResume()) {
+  if (coroutine.canImmediatelyResume()) {
     // The result is immediately ready and this coroutine is running on the event loop's stack, not
     // a user code stack. Let's cancel our event and immediately resume. It's important that we
     // don't perform this optimization if this is the first suspension, because our caller may
     // depend on running code before this promise's continuations fire.
-    coroutineEvent.disarm();
+    coroutine.disarm();
 
     // We can resume ourselves by returning false. This accomplishes the same thing as if we had
     // returned true from await_ready().
@@ -3341,8 +3341,8 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
     // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
     // tracing purposes; await_resume() and/or ~AwaiterBase() will clear it using the
     // CoroutineBase& reference we save.
-    coroutineEvent.setPromiseNodeForTrace(node);
-    maybeCoroutineEvent = coroutineEvent;
+    coroutine.setPromiseNodeForTrace(node);
+    maybeCoroutine = coroutine;
 
     return true;
   }

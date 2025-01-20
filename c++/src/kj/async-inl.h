@@ -2480,14 +2480,14 @@ public:
   // suspension-less co_awaits.
 
 protected:
-  void getImpl(ExceptionOrValue& result, void* awaitedAt);
-  bool awaitSuspendImpl(CoroutineBase& coroutineEvent);
+  void awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt);
+  bool awaitSuspendImpl(CoroutineBase& coroutine);
 
 private:
   UnwindDetector unwindDetector;
   OwnPromiseNode node;
 
-  Maybe<CoroutineBase&> maybeCoroutineEvent;
+  Maybe<CoroutineBase&> maybeCoroutine;
   // If we do suspend waiting for our wrapped promise, we store a reference to `node` in our
   // enclosing Coroutine for tracing purposes. To guard against any edge cases where an async stack
   // trace is generated when an Awaiter was destroyed without Coroutine::fire() having been called,
@@ -2514,9 +2514,9 @@ public:
     // traces to break. (I also tried always-inline, but this did not appear to cause the compiler
     // to inline the method -- perhaps a limitation of coroutines?)
 #if __GNUC__
-    getImpl(result, __builtin_return_address(0));
+    awaitResumeImpl(result, __builtin_return_address(0));
 #elif _MSC_VER
-    getImpl(result, _ReturnAddress());
+    awaitResumeImpl(result, _ReturnAddress());
 #else
     #error "please implement for your compiler"
 #endif
