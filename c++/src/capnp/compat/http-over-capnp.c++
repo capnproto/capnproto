@@ -517,6 +517,37 @@ public:
         // DISCONNECTED exception here so that the server side doesn't log a spurious error.
         revocableContext.revoke(KJ_EXCEPTION(DISCONNECTED,
             "client disconnected before HTTP-over-capnp response was sent"));
+      } else if (revocableContext.isInUse()) {
+        // Since someone still holds a capability to the `ClientRequestContext`, the destructor
+        // of `RevocableServer` will revoke it with a FAILED-type exception with the description
+        // "capability was revoked  (RevocableServer was destroyed)", unless we revoke with some
+        // other exception first.
+        //
+        // But, since `hasSentResponse()` is true, the server must have already made its one RPC
+        // call to the context, to deliver the response headers. So, we don't expect any more
+        // calls anyway, so it shouldn't really matter what revocation exception we use.
+        //
+        // However, somehow, we've observed in production the "capability was revoked" exception
+        // being logged in `dontWaitForRpc()` on the server side. In fact, it is logged a lot. This
+        // doesn't make sense because `HttpServiceResponseImpl` on the server side is very careful
+        // to ensure that it only makes one call. I stared at the code for a while and couldn't
+        // figure out how this is possible. But we have no report of there being any actual
+        // problem as a result of the error, so I'm inclined to believe it's just a spurrious side
+        // effect of a canceled request.
+        //
+        // To make the log stop happening, we will use a DISCONNECTED exception here, which
+        // `dontWaitForRpc()` won't log.
+        //
+        // TODO(perf): On another note, I observe in Workers Runtime process-sandboxing tests we
+        //   commonly do hit this branch on requests that have bodies and complete successfully.
+        //   Those test cases do NOT have the problem where they log the exception on the server
+        //   side; the only problem is that `isInUse()` apparently returns true even after the
+        //   whole request has successfully completed, which leads us to construct an exception
+        //   object for no reason. (And if we didn't do it here, ~RevocableServer would do it
+        //   instead.) Might be worth investigating in order to optimize?
+        revocableContext.revoke(KJ_EXCEPTION(DISCONNECTED,
+            "client disconnected before HTTP-over-capnp response completed (but after it "
+            "started)"));
       }
     });
 

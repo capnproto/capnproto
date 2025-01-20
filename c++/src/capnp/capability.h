@@ -302,6 +302,7 @@ private:
 
   static kj::Own<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
   static kj::Own<ClientHook> makeRevocableLocalClient(Capability::Server& server);
+  static bool isLocalClientShared(ClientHook& hook);
   static void revokeLocalClientIfShared(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook, kj::Exception&& reason);
@@ -590,6 +591,9 @@ public:
   KJ_DISALLOW_COPY(RevocableServer);
 
   typename T::Client getClient();
+
+  bool isInUse();
+  // Returns whether the capability returned by getClient() still has references outstanding.
 
   void revoke();
   void revoke(kj::Exception&& reason);
@@ -1227,6 +1231,11 @@ RevocableServer<T>::~RevocableServer() noexcept(false) {
 template <typename T>
 typename T::Client RevocableServer<T>::getClient() {
   return typename T::Client(hook->addRef());
+}
+
+template <typename T>
+bool RevocableServer<T>::isInUse() {
+  return Capability::Client::isLocalClientShared(*hook);
 }
 
 template <typename T>

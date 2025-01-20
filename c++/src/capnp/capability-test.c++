@@ -1405,19 +1405,34 @@ KJ_TEST("RevocableServer") {
   ServerImpl server;
 
   RevocableServer<test::TestMembrane> revocable(server);
+  KJ_EXPECT(!revocable.isInUse());
+
+  {
+    auto client = revocable.getClient();
+    KJ_EXPECT(revocable.isInUse());
+  }
+  KJ_EXPECT(!revocable.isInUse());
 
   auto promise = revocable.getClient().waitForeverRequest().send();
+  KJ_EXPECT(revocable.isInUse());
   KJ_EXPECT(!promise.poll(waitScope));
+  KJ_EXPECT(revocable.isInUse());
 
   revocable.revoke();
+
+  KJ_EXPECT(revocable.isInUse());
 
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
       "capability was revoked",
       promise.ignoreResult().wait(waitScope));
 
+  KJ_EXPECT(!revocable.isInUse());
+
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
       "capability was revoked",
       revocable.getClient().waitForeverRequest().send().ignoreResult().wait(waitScope));
+
+  KJ_EXPECT(!revocable.isInUse());
 }
 
 KJ_TEST("servers can be refcounted") {
