@@ -2277,6 +2277,22 @@ public:
 
   void unhandled_exception();
 
+  // Called from Awaiter implementations to integrate with async tracing during suspension.
+  void setPromiseNodeForTrace(OwnPromiseNode& node) {
+    promiseNodeForTrace = node;
+    hasSuspendedAtLeastOnce = true;
+  }
+
+  // Called from Awaiter implementations to end tracing during resumption/cancellation.
+  void clearPromiseNodeForTrace() {
+    promiseNodeForTrace = kj::none;
+  }
+
+  // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
+  bool canImmediatelyResume() {
+    return hasSuspendedAtLeastOnce && isNext();
+  }
+
 protected:
   class AwaiterBase;
 

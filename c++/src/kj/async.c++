@@ -3230,8 +3230,6 @@ Maybe<Own<Event>> CoroutineBase::fire() {
   // already know where it's going. But, we don't really know: the `co_await` might be in a
   // try-catch block, so we have no choice but to resume and throw later.
 
-  promiseNodeForTrace = kj::none;
-
   coroutine.resume();
 
   return kj::none;
@@ -3295,7 +3293,7 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
   // destroyed.
   KJ_IF_SOME(coroutineEvent, maybeCoroutineEvent) {
-    coroutineEvent.promiseNodeForTrace = kj::none;
+    coroutineEvent.clearPromiseNodeForTrace();
   }
 
   unwindDetector.catchExceptionsIfUnwinding([this]() {
@@ -3305,6 +3303,10 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
 }
 
 void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
+  KJ_IF_SOME(coroutineEvent, maybeCoroutineEvent) {
+    coroutineEvent.clearPromiseNodeForTrace();
+  }
+
   node->get(result);
 
   KJ_IF_SOME(exception, result.exception) {
@@ -3325,7 +3327,7 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
   node->setSelfPointer(&node);
   node->onReady(&coroutineEvent);
 
-  if (coroutineEvent.hasSuspendedAtLeastOnce && coroutineEvent.isNext()) {
+  if (coroutineEvent.canImmediatelyResume()) {
     // The result is immediately ready and this coroutine is running on the event loop's stack, not
     // a user code stack. Let's cancel our event and immediately resume. It's important that we
     // don't perform this optimization if this is the first suspension, because our caller may
@@ -3337,11 +3339,10 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent)
     return false;
   } else {
     // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
-    coroutineEvent.promiseNodeForTrace = node;
+    // tracing purposes; await_resume() and/or ~AwaiterBase() will clear it using the
+    // CoroutineBase& reference we save.
+    coroutineEvent.setPromiseNodeForTrace(node);
     maybeCoroutineEvent = coroutineEvent;
-
-    coroutineEvent.hasSuspendedAtLeastOnce = true;
 
     return true;
   }
