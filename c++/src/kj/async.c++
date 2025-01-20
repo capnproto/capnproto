@@ -3221,9 +3221,9 @@ void CoroutineBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 };
 
 Maybe<Own<Event>> CoroutineBase::fire() {
-  // Call Awaiter::await_resume() and proceed with the coroutine. Note that this will not destroy
-  // the coroutine if control flows off the end of it, because we return suspend_always() from
-  // final_suspend().
+  // Call PromiseAwaiter::await_resume() and proceed with the coroutine. Note that this will not
+  // destroy the coroutine if control flows off the end of it, because we return suspend_always()
+  // from final_suspend().
   //
   // It's tempting to arrange to check for exceptions right now and reject the promise that owns
   // us without resuming the coroutine, which would save us from throwing an exception when we
@@ -3287,9 +3287,9 @@ void CoroutineBase::destroy() {
   }
 }
 
-CoroutineBase::AwaiterBase::AwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
-CoroutineBase::AwaiterBase::AwaiterBase(AwaiterBase&&) = default;
-CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
+PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
+PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
+PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
   // destroyed.
   KJ_IF_SOME(coroutine, maybeCoroutine) {
@@ -3302,7 +3302,7 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
+void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
   KJ_IF_SOME(coroutine, maybeCoroutine) {
     coroutine.clearPromiseNodeForTrace();
   }
@@ -3323,7 +3323,7 @@ void CoroutineBase::AwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void*
   }
 }
 
-bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
+bool PromiseAwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
   node->setSelfPointer(&node);
   node->onReady(&coroutine);
 
@@ -3339,7 +3339,7 @@ bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
     return false;
   } else {
     // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; await_resume() and/or ~AwaiterBase() will clear it using the
+    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it using the
     // CoroutineBase& reference we save.
     coroutine.setPromiseNodeForTrace(node);
     maybeCoroutine = coroutine;
