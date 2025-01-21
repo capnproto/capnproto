@@ -48,7 +48,7 @@ new languages.
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 * [VS Code Syntax Highlighter](https://marketplace.visualstudio.com/items?itemName=xmonader.vscode-capnp) by [@xmonader](https://github.com/xmonader)
 * [IntelliJ Syntax Highlighter](https://github.com/xmonader/sercapnp) by [@xmonader](https://github.com/xmonader)
-* [RPC Tracer](https://github.com/toyota-digital-cockpit-pf/capnp-trace) by [@t-kondo-tmc](https://github.com/t-kondo-tmc)
+* [RPC Tracer](https://github.com/Toyota/capnp-trace) by [@t-kondo-tmc](https://github.com/t-kondo-tmc)
 * [Flow-IPC](https://github.com/Flow-IPC) (shared memory IPC transport in C++) by [Akamai](https://www.akamai.com) / [@ygoldfeld](https://github.com/ygoldfeld)
 
 ## Contribute Your Own!
