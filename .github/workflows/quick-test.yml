@@ -208,3 +208,23 @@ jobs:
         run: |
             cd c++
             bazel test --verbose_failures --test_output=errors //...
+  FreeBSD:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['13.4', '14.2', '15.0']
+    steps:
+      - uses: actions/checkout@v2
+      - name: Start FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: ${{ matrix.release }}
+          sync: rsync
+          copyback: false
+          prepare: pkg install -y autoconf automake bash cmake libtool pkgconf
+      - name: super-test
+        shell: freebsd {0}
+        run: |
+            cd ${{ github.workspace }}
+            ./super-test.sh quick nowerror clang
