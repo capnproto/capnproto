@@ -858,6 +858,18 @@ private:
     }
   }
 
+  void waitAllAckedInBackground(kj::Own<RpcFlowController> flowController) {
+    // Calls `waitAllAcked()` on `flowController` as a background task. This is needed when an
+    // `RpcFlowController` is being abandoned but we don't actually intend to cancel the calls
+    // that were made on it.
+
+    // If we're disconnected, there's no need to wait for anything, so we'll just drop the
+    // flowController in that case.
+    if (connection.is<Connected>()) {
+      tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+    }
+  }
+
   // =====================================================================================
   // ClientHook implementations
 
@@ -870,7 +882,13 @@ private:
     ~RpcClient() noexcept(false) {
       KJ_IF_SOME(f, this->flowController) {
         // Destroying the client should not cancel outstanding streaming calls.
-        connectionState->tasks.add(f->waitAllAcked().attach(kj::mv(f)));
+        // TODO(someday): Is this right? If the application didn't bother to make and await a
+        //   non-streaming call after the streaming calls, then that suggests the app doesn't
+        //   really care if the streaming calls succeeded or not, which in turn suggests the app
+        //   is dropping the stream abruptly because it wants to abort it, in which case we
+        //   probably should cancel the calls. But at this very moment I'm not prepared to do the
+        //   testing necessary to change this...
+        connectionState->waitAllAckedInBackground(kj::mv(f));
       }
     }
 
@@ -917,7 +935,7 @@ private:
         // normally call for there to be only one client. But, it's certainly possible, and we need
         // to handle it. We'll do the conservative thing and just make sure that all the calls
         // finish. This may mean we'll over-buffer temporarily; oh well.
-        connectionState->tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+        connectionState->waitAllAckedInBackground(kj::mv(flowController));
       }
     }
 
@@ -1177,7 +1195,7 @@ private:
       } else {
         // We resolved to a capability that isn't another RPC capability. We should simply make
         // sure that all the calls complete.
-        connectionState->tasks.add(flowController->waitAllAcked().attach(kj::mv(flowController)));
+        connectionState->waitAllAckedInBackground(kj::mv(flowController));
       }
     }
 
@@ -1350,7 +1368,7 @@ private:
           // The new target is something else. The best we can do is wait for the controller to
           // drain. New calls will be flow-controlled in a new way without knowing about the old
           // controller.
-          connectionState->tasks.add(f->waitAllAcked().attach(kj::mv(f)));
+          connectionState->waitAllAckedInBackground(kj::mv(f));
         }
       }
 
