@@ -303,4 +303,22 @@ KJ_TEST("Arc Own interop") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Arc disown / reown") {
+  bool b = false;
+  AtomicSetTrueInDestructor* ptr = nullptr;
+
+  {
+    kj::Arc<AtomicSetTrueInDestructor> ref = kj::arc<AtomicSetTrueInDestructor>(&b);
+    ptr = ref.disown();
+  }
+
+  KJ_EXPECT(b == false);
+
+  {
+    auto ref = kj::Arc<AtomicSetTrueInDestructor>::reown(ptr);
+  }
+
+  KJ_EXPECT(b == true);
+}
+
 }  // namespace kj
