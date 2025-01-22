@@ -1040,5 +1040,113 @@ KJ_TEST("cross-thread fulfiller multiple fulfills") {
   kj::Thread thread4(func);
 }
 
+KJ_TEST("cross-thread fulfiller created using Executor") {
+  MutexGuarded<Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  MutexGuarded<Maybe<Promise<int>>>  promise;     // to pass the Promise to the other thread
+
+  constexpr auto MAGIC_VALUE = 123;
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    // Give our Executor to the main thread.
+    *executor.lockExclusive() = getCurrentThreadExecutor();
+
+    // Get our Promise from the main thread.
+    Promise<int>* promisePtr;
+    {
+      auto lock = promise.lockExclusive();
+      lock.wait([&](const Maybe<Promise<int>>& value) { return value != kj::none; });
+      promisePtr = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    // Wait for the main thread to send us the MAGIC_VALUE.
+    KJ_EXPECT(promisePtr->wait(waitScope) == MAGIC_VALUE);
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    // Get the other thread's Executor.
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](Maybe<const Executor&> value) { return value != kj::none; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    KJ_EXPECT(exec->isLive());
+
+    // Use the Executor to create a Promise, and give it to the other thread.
+    auto paf = exec->newPromiseAndCrossThreadFulfiller<int>();
+    *promise.lockExclusive() = kj::mv(paf.promise);
+
+    paf.fulfiller->fulfill(kj::cp(MAGIC_VALUE));
+  })();
+}
+
+// Helper to create an Executor whose event loop has already exited.
+Own<const Executor> makeDeadExecutor() {
+  MutexGuarded<Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+
+  // The other thread's executor, owned by the main thread.
+  Maybe<Own<const Executor>> ownExecutor;
+
+  {
+    Thread thread([&]() noexcept {
+      KJ_XTHREAD_TEST_SETUP_LOOP;
+
+      auto lock = executor.lockExclusive();
+
+      // Give our Executor to the main thread.
+      *lock = getCurrentThreadExecutor();
+
+      // Wait for the main thread to tell us it addRef-ed the Executor, then exit.
+      lock.wait([&](const Maybe<const Executor&>& value) { return value == kj::none; });
+    });
+
+    ([&]() noexcept {
+      auto lock = executor.lockExclusive();
+
+      // Get the other thread's Executor.
+      lock.wait([&](Maybe<const Executor&> value) { return value != kj::none; });
+      ownExecutor = (KJ_ASSERT_NONNULL(*lock)).addRef();
+
+      KJ_EXPECT(KJ_ASSERT_NONNULL(ownExecutor)->isLive());
+
+      // Tell the other thread it can exit now.
+      *lock = kj::none;
+    })();
+  }
+
+  return KJ_ASSERT_NONNULL(kj::mv(ownExecutor));
+}
+
+KJ_TEST("cross-thread fulfiller created using Executor, used after Executor dies") {
+  ([&]() noexcept {
+    auto exec = makeDeadExecutor();
+    KJ_ASSERT(!exec->isLive());
+
+    auto paf = exec->newPromiseAndCrossThreadFulfiller<void>();
+
+    // Destroy fulfiller before promise. This implicitly rejects the promise, which is a no-op
+    // because the event loop has already exited.
+    paf.fulfiller = nullptr;
+    paf.promise = nullptr;
+  })();
+
+  ([&]() noexcept {
+    auto exec = makeDeadExecutor();
+    KJ_ASSERT(!exec->isLive());
+
+    auto paf = exec->newPromiseAndCrossThreadFulfiller<void>();
+
+    // Destroy promise before fulfiller. This cancels the promise, making the fulfiller destruction
+    // a no-op (besides freeing memory).
+    paf.promise = nullptr;
+    paf.fulfiller = nullptr;
+  })();
+}
+
 }  // namespace
 }  // namespace kj

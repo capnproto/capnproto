@@ -835,6 +835,9 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller();
 // not just the one that called this method. Note that the Promise is still tied to the calling
 // thread's event loop and *cannot* be used from another thread -- only the PromiseFulfiller is
 // cross-thread.
+//
+// There is also a member function of the same name on the Executor class. This function here is
+// equivalent to writing: `getCurrentThreadExecutor().newPromiseAndCrossThreadfulfiller()`.
 
 // =======================================================================================
 // Canceler
@@ -1093,6 +1096,17 @@ public:
   //
   // As with `executeAsync()`, `func` is always destroyed on the requesting thread, after the
   // executor thread has signaled completion. The return value is transferred between threads.
+
+  template <typename T>
+  PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() const;
+  // Like `newPromiseAndCrossThreadFulfiller()`, but the Promise is tied to the event loop
+  // associated with this Executor. This allows the caller to construct Promises associated with
+  // other threads. The caller will have to arrange to move the constructed Promise to its home
+  // thread somehow in order to await or cancel (destroy) it.
+  //
+  // It is not an error to create a promise and cross-thread-fulfiller pair on an Executor whose
+  // event loop has already exited. However, the only thing you can do with the promise is destroy
+  // it. Fulfilling or rejecting it via the fulfiller is a no-op.
 
 private:
   struct Impl;
