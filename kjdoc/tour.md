@@ -210,31 +210,28 @@ When constructing very large, complex strings -- for example, when writing a cod
 
 `kj::Maybe<T>` is either `nullptr`, or contains a `T`. In KJ-based code, nullable values should always be expressed using `kj::Maybe`. Primitive pointers should never be null. Use `kj::Maybe<T&>` instead of `T*` to express that the pointer/reference can be null.
 
-In order to dereference a `kj::Maybe`, you must use the `KJ_IF_MAYBE` macro, which behaves like an `if` statement.
+In order to dereference a `kj::Maybe`, you must use the `KJ_IF_SOME` macro, which behaves like an `if` statement.
 
 ```c++
 kj::Maybe<int> maybeI = 123;
 kj::Maybe<int> maybeJ = nullptr;
 
-KJ_IF_MAYBE(i, maybeI) {
+KJ_IF_SOME(i, maybeI) {
   // This block will execute, with `i` being a
-  // pointer into `maybeI`'s value. In a better world,
-  // `i` would be a reference rather than a pointer,
-  // but we couldn't find a way to trick the compiler
-  // into that.
-  KJ_ASSERT(*i == 123);
+  // reference to `maybeI`'s value.
+  KJ_ASSERT(i == 123);
 } else {
   KJ_FAIL_ASSERT("can't get here");
 }
 
-KJ_IF_MAYBE(j, maybeJ) {
+KJ_IF_SOME(j, maybeJ) {
   KJ_FAIL_ASSERT("can't get here");
 } else {
   // This block will execute.
 }
 ```
 
-Note that `KJ_IF_MAYBE` forces you to think about the null case. This differs from `std::optional`, which can be dereferenced using `*`, resulting in undefined behavior if the value is null.
+Note that `KJ_IF_SOME` forces you to think about the null case. This differs from `std::optional`, which can be dereferenced using `*`, resulting in undefined behavior if the value is null.
 
 Similarly, `map()` and `orDefault()` allow transforming and retrieving the stored value in a safe manner without complex control flows.
 
@@ -249,8 +246,7 @@ void handle(kj::OneOf<int, kj::String> value) {
   KJ_SWITCH_ONEOF(value) {
     KJ_CASE_ONEOF(i, int) {
       // Note that `i` is an lvalue reference to the content
-      // of the OneOf. This differs from `KJ_IF_MAYBE` where
-      // the variable is a pointer.
+      // of the OneOf, similar to `KJ_IF_SOME`.
       handleInt(i);
     }
     KJ_CASE_ONEOF(s, kj::String) {
@@ -431,7 +427,7 @@ kj::throwFatalException(kj::mv(e));
 kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
   doSomething();
 });
-KJ_IF_MAYBE(e, maybeException) {
+KJ_IF_SOME(e, maybeException) {
   // handle exception
 }
 ```

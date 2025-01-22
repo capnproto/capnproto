@@ -690,7 +690,7 @@ public:
   inline Maybe<Bounded<maxN - otherValue, T>> trySubtract(BoundedConst<otherValue>) const {
     // Subtract a number, calling func() if the result would underflow.
     if (value < otherValue) {
-      return nullptr;
+      return kj::none;
     } else {
       return Bounded<maxN - otherValue, T>(value - otherValue, unsafe);
     }
