@@ -404,7 +404,7 @@ kj::Maybe<kj::Own<const T>> atomicAddRefWeak(const T& object) {
   if (refcounted->addRefWeakInternal()) {
     return kj::Own<const T>(&object, *refcounted);
   } else {
-    return nullptr;
+    return kj::none;
   }
 }
 
