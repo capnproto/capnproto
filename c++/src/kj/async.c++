@@ -3221,16 +3221,14 @@ void CoroutineBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 };
 
 Maybe<Own<Event>> CoroutineBase::fire() {
-  // Call Awaiter::await_resume() and proceed with the coroutine. Note that this will not destroy
-  // the coroutine if control flows off the end of it, because we return suspend_always() from
-  // final_suspend().
+  // Call PromiseAwaiter::await_resume() and proceed with the coroutine. Note that this will not
+  // destroy the coroutine if control flows off the end of it, because we return suspend_always()
+  // from final_suspend().
   //
   // It's tempting to arrange to check for exceptions right now and reject the promise that owns
   // us without resuming the coroutine, which would save us from throwing an exception when we
   // already know where it's going. But, we don't really know: the `co_await` might be in a
   // try-catch block, so we have no choice but to resume and throw later.
-
-  promiseNodeForTrace = kj::none;
 
   coroutine.resume();
 
@@ -3289,13 +3287,13 @@ void CoroutineBase::destroy() {
   }
 }
 
-CoroutineBase::AwaiterBase::AwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
-CoroutineBase::AwaiterBase::AwaiterBase(AwaiterBase&&) = default;
-CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
+PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
+PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
+PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
   // destroyed.
-  KJ_IF_SOME(coroutineEvent, maybeCoroutineEvent) {
-    coroutineEvent.promiseNodeForTrace = kj::none;
+  KJ_IF_SOME(coroutine, maybeCoroutine) {
+    coroutine.clearPromiseNodeForTrace();
   }
 
   unwindDetector.catchExceptionsIfUnwinding([this]() {
@@ -3304,7 +3302,11 @@ CoroutineBase::AwaiterBase::~AwaiterBase() noexcept(false) {
   });
 }
 
-void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaitedAt) {
+void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
+  KJ_IF_SOME(coroutine, maybeCoroutine) {
+    coroutine.clearPromiseNodeForTrace();
+  }
+
   node->get(result);
 
   KJ_IF_SOME(exception, result.exception) {
@@ -3321,27 +3323,26 @@ void CoroutineBase::AwaiterBase::getImpl(ExceptionOrValue& result, void* awaited
   }
 }
 
-bool CoroutineBase::AwaiterBase::awaitSuspendImpl(CoroutineBase& coroutineEvent) {
+bool PromiseAwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
   node->setSelfPointer(&node);
-  node->onReady(&coroutineEvent);
+  node->onReady(&coroutine);
 
-  if (coroutineEvent.hasSuspendedAtLeastOnce && coroutineEvent.isNext()) {
+  if (coroutine.canImmediatelyResume()) {
     // The result is immediately ready and this coroutine is running on the event loop's stack, not
     // a user code stack. Let's cancel our event and immediately resume. It's important that we
     // don't perform this optimization if this is the first suspension, because our caller may
     // depend on running code before this promise's continuations fire.
-    coroutineEvent.disarm();
+    coroutine.disarm();
 
     // We can resume ourselves by returning false. This accomplishes the same thing as if we had
     // returned true from await_ready().
     return false;
   } else {
     // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; coroutineEvent.fire() and/or ~Adapter() will null this out.
-    coroutineEvent.promiseNodeForTrace = node;
-    maybeCoroutineEvent = coroutineEvent;
-
-    coroutineEvent.hasSuspendedAtLeastOnce = true;
+    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it using the
+    // CoroutineBase& reference we save.
+    coroutine.setPromiseNodeForTrace(node);
+    maybeCoroutine = coroutine;
 
     return true;
   }
