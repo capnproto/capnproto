@@ -26,6 +26,7 @@ function test_samples() {
 
 QUICK=
 CPP_FEATURES=
+WERROR="-Werror"
 EXTRA_LIBS=
 
 PARALLEL=$(nproc 2>/dev/null || echo 1)
@@ -54,6 +55,9 @@ while [ $# -gt 0 ]; do
       fi
       CPP_FEATURES="$2"
       shift
+      ;;
+    nowerror )
+      WERROR="-Wno-error"
       ;;
     extra-libs )
       if [ "$#" -lt 2 ] || [ -n "$EXTRA_LIBS" ]; then
@@ -350,7 +354,7 @@ done
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
 # real problem. Disable unused parameters because it's stupidly noisy and never a real problem.
 # Enable expensive release-gating tests.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1 ${CPP_FEATURES}"
+export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra ${WERROR} -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1 ${CPP_FEATURES}"
 export LIBS="$EXTRA_LIBS"
 
 if [ "${CXX:-}" != "g++-5" ]; then
