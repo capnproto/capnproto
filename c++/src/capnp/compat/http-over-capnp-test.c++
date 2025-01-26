@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "http-over-capnp.h"
+#include <kj/async.h>
 #include <kj/test.h>
 
 #ifndef TEST_PEER_OPTIMIZATION_LEVEL
@@ -30,8 +31,8 @@ namespace capnp {
 namespace {
 
 KJ_TEST("KJ and RPC HTTP method enums match") {
-#define EXPECT_MATCH(METHOD) \
-  KJ_EXPECT(static_cast<uint>(kj::HttpMethod::METHOD) == \
+#define EXPECT_MATCH(METHOD)                                                   \
+  KJ_EXPECT(static_cast<uint>(kj::HttpMethod::METHOD) ==                       \
             static_cast<uint>(capnp::HttpMethod::METHOD));
 
   KJ_HTTP_FOR_EACH_METHOD(EXPECT_MATCH);
@@ -40,290 +41,273 @@ KJ_TEST("KJ and RPC HTTP method enums match") {
 
 // =======================================================================================
 
-kj::Promise<void> expectRead(kj::AsyncInputStream& in, kj::StringPtr expected) {
-  if (expected.size() == 0) return kj::READY_NOW;
+kj::Promise<void> expectRead(kj::AsyncInputStream &in, kj::StringPtr expected) {
+  if (expected.size() == 0)
+    return kj::READY_NOW;
 
   auto buffer = kj::heapArray<char>(expected.size());
 
   auto promise = in.tryRead(buffer.begin(), 1, buffer.size());
-  return promise.then([&in,expected,buffer=kj::mv(buffer)](size_t amount) {
+  return promise.then([&in, expected, buffer = kj::mv(buffer)](size_t amount) {
     if (amount == 0) {
       KJ_FAIL_ASSERT("expected data never sent", expected);
     }
 
     auto actual = buffer.first(amount);
     if (actual != expected.first(amount)) {
-      KJ_FAIL_ASSERT("data from stream doesn't match expected", expected, actual);
+      KJ_FAIL_ASSERT("data from stream doesn't match expected", expected,
+                     actual);
     }
 
     return expectRead(in, expected.slice(amount));
   });
 }
 
-enum Direction {
-  CLIENT_TO_SERVER,
-  SERVER_TO_CLIENT
-};
+enum Direction { CLIENT_TO_SERVER, SERVER_TO_CLIENT };
 
 struct TestStep {
   Direction direction;
   kj::StringPtr send;
   kj::StringPtr receive;
 
-  constexpr TestStep(Direction direction, kj::StringPtr send, kj::StringPtr receive)
+  constexpr TestStep(Direction direction, kj::StringPtr send,
+                     kj::StringPtr receive)
       : direction(direction), send(send), receive(receive) {}
   constexpr TestStep(Direction direction, kj::StringPtr data)
       : direction(direction), send(data), receive(data) {}
 };
 
 constexpr TestStep TEST_STEPS[] = {
-  // Test basic request.
-  {
-    CLIENT_TO_SERVER,
+    // Test basic request.
+    {
+        CLIENT_TO_SERVER,
 
-    "GET / HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "GET / HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "\r\n"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Length: 3\r\n"
-    "\r\n"
-    "foo"_kj
-  },
+     "HTTP/1.1 200 OK\r\n"
+     "Content-Length: 3\r\n"
+     "\r\n"
+     "foo"_kj},
 
-  // Try PUT, vary path, vary status
-  {
-    CLIENT_TO_SERVER,
+    // Try PUT, vary path, vary status
+    {
+        CLIENT_TO_SERVER,
 
-    "PUT /foo/bar HTTP/1.1\r\n"
-    "Content-Length: 5\r\n"
-    "Host: example.com\r\n"
-    "\r\n"
-    "corge"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "PUT /foo/bar HTTP/1.1\r\n"
+        "Content-Length: 5\r\n"
+        "Host: example.com\r\n"
+        "\r\n"
+        "corge"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "HTTP/1.1 403 Unauthorized\r\n"
-    "Content-Length: 4\r\n"
-    "\r\n"
-    "nope"_kj
-  },
+     "HTTP/1.1 403 Unauthorized\r\n"
+     "Content-Length: 4\r\n"
+     "\r\n"
+     "nope"_kj},
 
-  // HEAD request
-  {
-    CLIENT_TO_SERVER,
+    // HEAD request
+    {
+        CLIENT_TO_SERVER,
 
-    "HEAD /foo/bar HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "HEAD /foo/bar HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "\r\n"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Length: 4\r\n"
-    "\r\n"_kj
-  },
+     "HTTP/1.1 200 OK\r\n"
+     "Content-Length: 4\r\n"
+     "\r\n"_kj},
 
-  // Empty-body response
-  {
-    CLIENT_TO_SERVER,
+    // Empty-body response
+    {
+        CLIENT_TO_SERVER,
 
-    "GET /foo/bar HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "GET /foo/bar HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "\r\n"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "HTTP/1.1 304 Not Modified\r\n"
-    "Server: foo\r\n"
-    "\r\n"_kj
-  },
+     "HTTP/1.1 304 Not Modified\r\n"
+     "Server: foo\r\n"
+     "\r\n"_kj},
 
-  // Chonky body
-  {
-    CLIENT_TO_SERVER,
+    // Chonky body
+    {
+        CLIENT_TO_SERVER,
 
-    "POST / HTTP/1.1\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Host: example.com\r\n"
-    "\r\n"
-    "3\r\n"
-    "foo\r\n"
-    "5\r\n"
-    "corge\r\n"
-    "0\r\n"
-    "\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "POST / HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "Host: example.com\r\n"
+        "\r\n"
+        "3\r\n"
+        "foo\r\n"
+        "5\r\n"
+        "corge\r\n"
+        "0\r\n"
+        "\r\n"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "\r\n"
-    "6\r\n"
-    "barbaz\r\n"
-    "6\r\n"
-    "garply\r\n"
-    "0\r\n"
-    "\r\n"_kj
-  },
+     "HTTP/1.1 200 OK\r\n"
+     "Transfer-Encoding: chunked\r\n"
+     "\r\n"
+     "6\r\n"
+     "barbaz\r\n"
+     "6\r\n"
+     "garply\r\n"
+     "0\r\n"
+     "\r\n"_kj},
 
-  // Streaming
-  {
-    CLIENT_TO_SERVER,
+    // Streaming
+    {
+        CLIENT_TO_SERVER,
 
-    "POST / HTTP/1.1\r\n"
-    "Content-Length: 9\r\n"
-    "Host: example.com\r\n"
-    "\r\n"_kj,
-  },
-  {
-    CLIENT_TO_SERVER,
+        "POST / HTTP/1.1\r\n"
+        "Content-Length: 9\r\n"
+        "Host: example.com\r\n"
+        "\r\n"_kj,
+    },
+    {
+        CLIENT_TO_SERVER,
 
-    "foo"_kj,
-  },
-  {
-    CLIENT_TO_SERVER,
+        "foo"_kj,
+    },
+    {
+        CLIENT_TO_SERVER,
 
-    "bar"_kj,
-  },
-  {
-    CLIENT_TO_SERVER,
+        "bar"_kj,
+    },
+    {
+        CLIENT_TO_SERVER,
 
-    "baz"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "baz"_kj,
+    },
+    {
+        SERVER_TO_CLIENT,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"_kj,
+    },
+    {
+        SERVER_TO_CLIENT,
 
-    "6\r\n"
-    "barbaz\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "6\r\n"
+        "barbaz\r\n"_kj,
+    },
+    {
+        SERVER_TO_CLIENT,
 
-    "6\r\n"
-    "garply\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "6\r\n"
+        "garply\r\n"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "0\r\n"
-    "\r\n"_kj
-  },
+     "0\r\n"
+     "\r\n"_kj},
 
-  // Bidirectional.
-  {
-    CLIENT_TO_SERVER,
+    // Bidirectional.
+    {
+        CLIENT_TO_SERVER,
 
-    "POST / HTTP/1.1\r\n"
-    "Content-Length: 9\r\n"
-    "Host: example.com\r\n"
-    "\r\n"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "POST / HTTP/1.1\r\n"
+        "Content-Length: 9\r\n"
+        "Host: example.com\r\n"
+        "\r\n"_kj,
+    },
+    {
+        SERVER_TO_CLIENT,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "\r\n"_kj,
-  },
-  {
-    CLIENT_TO_SERVER,
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"_kj,
+    },
+    {
+        CLIENT_TO_SERVER,
 
-    "foo"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "foo"_kj,
+    },
+    {
+        SERVER_TO_CLIENT,
 
-    "6\r\n"
-    "barbaz\r\n"_kj,
-  },
-  {
-    CLIENT_TO_SERVER,
+        "6\r\n"
+        "barbaz\r\n"_kj,
+    },
+    {
+        CLIENT_TO_SERVER,
 
-    "bar"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "bar"_kj,
+    },
+    {
+        SERVER_TO_CLIENT,
 
-    "6\r\n"
-    "garply\r\n"_kj,
-  },
-  {
-    CLIENT_TO_SERVER,
+        "6\r\n"
+        "garply\r\n"_kj,
+    },
+    {
+        CLIENT_TO_SERVER,
 
-    "baz"_kj,
-  },
-  {
-    SERVER_TO_CLIENT,
+        "baz"_kj,
+    },
+    {SERVER_TO_CLIENT,
 
-    "0\r\n"
-    "\r\n"_kj
-  },
+     "0\r\n"
+     "\r\n"_kj},
 
-  // Test headers being re-ordered by KJ. This isn't necessary behavior, but it does prove that
-  // we're not testing a pure streaming pass-through...
-  {
-    CLIENT_TO_SERVER,
+    // Test headers being re-ordered by KJ. This isn't necessary behavior, but
+    // it does prove that
+    // we're not testing a pure streaming pass-through...
+    {CLIENT_TO_SERVER,
 
-    "GET / HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "Accept: text/html\r\n"
-    "Foo-Header: 123\r\n"
-    "User-Agent: kj\r\n"
-    "Accept-Language: en\r\n"
-    "\r\n"_kj,
+     "GET / HTTP/1.1\r\n"
+     "Host: example.com\r\n"
+     "Accept: text/html\r\n"
+     "Foo-Header: 123\r\n"
+     "User-Agent: kj\r\n"
+     "Accept-Language: en\r\n"
+     "\r\n"_kj,
 
-    "GET / HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "Accept-Language: en\r\n"
-    "Accept: text/html\r\n"
-    "User-Agent: kj\r\n"
-    "Foo-Header: 123\r\n"
-    "\r\n"_kj
-  },
-  {
-    SERVER_TO_CLIENT,
+     "GET / HTTP/1.1\r\n"
+     "Host: example.com\r\n"
+     "Accept-Language: en\r\n"
+     "Accept: text/html\r\n"
+     "User-Agent: kj\r\n"
+     "Foo-Header: 123\r\n"
+     "\r\n"_kj},
+    {SERVER_TO_CLIENT,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Server: kj\r\n"
-    "Bar: 321\r\n"
-    "Content-Length: 3\r\n"
-    "\r\n"
-    "foo"_kj,
+     "HTTP/1.1 200 OK\r\n"
+     "Server: kj\r\n"
+     "Bar: 321\r\n"
+     "Content-Length: 3\r\n"
+     "\r\n"
+     "foo"_kj,
 
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Length: 3\r\n"
-    "Server: kj\r\n"
-    "Bar: 321\r\n"
-    "\r\n"
-    "foo"_kj
-  },
+     "HTTP/1.1 200 OK\r\n"
+     "Content-Length: 3\r\n"
+     "Server: kj\r\n"
+     "Bar: 321\r\n"
+     "\r\n"
+     "foo"_kj},
 
-  // We finish up a request with no response, to test cancellation.
-  {
-    CLIENT_TO_SERVER,
+    // We finish up a request with no response, to test cancellation.
+    {
+        CLIENT_TO_SERVER,
 
-    "GET / HTTP/1.1\r\n"
-    "Host: example.com\r\n"
-    "\r\n"_kj,
-  },
+        "GET / HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "\r\n"_kj,
+    },
 };
 
-class OneConnectNetworkAddress final: public kj::NetworkAddress {
+class OneConnectNetworkAddress final : public kj::NetworkAddress {
 public:
   OneConnectNetworkAddress(kj::Own<kj::AsyncIoStream> stream)
       : stream(kj::mv(stream)) {}
@@ -334,7 +318,9 @@ public:
     return kj::mv(result);
   }
 
-  kj::Own<kj::ConnectionReceiver> listen() override { KJ_UNIMPLEMENTED("test"); }
+  kj::Own<kj::ConnectionReceiver> listen() override {
+    KJ_UNIMPLEMENTED("test");
+  }
   kj::Own<kj::NetworkAddress> clone() override { KJ_UNIMPLEMENTED("test"); }
   kj::String toString() override { KJ_UNIMPLEMENTED("test"); }
 
@@ -342,9 +328,10 @@ private:
   kj::Maybe<kj::Own<kj::AsyncIoStream>> stream;
 };
 
-void runEndToEndTests(kj::Timer& timer, kj::HttpHeaderTable& headerTable,
-                      HttpOverCapnpFactory& clientFactory, HttpOverCapnpFactory& serverFactory,
-                      kj::WaitScope& waitScope) {
+void runEndToEndTests(kj::Timer &timer, kj::HttpHeaderTable &headerTable,
+                      HttpOverCapnpFactory &clientFactory,
+                      HttpOverCapnpFactory &serverFactory,
+                      kj::WaitScope &waitScope) {
   auto clientPipe = kj::newTwoWayPipe();
   auto serverPipe = kj::newTwoWayPipe();
 
@@ -354,24 +341,25 @@ void runEndToEndTests(kj::Timer& timer, kj::HttpHeaderTable& headerTable,
   auto backCapnp = serverFactory.kjToCapnp(kj::newHttpService(*backHttp));
   auto frontCapnp = clientFactory.capnpToKj(backCapnp);
   kj::HttpServer frontKj(timer, headerTable, *frontCapnp);
-  auto listenTask = frontKj.listenHttp(kj::mv(clientPipe.ends[1]))
-      .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
+  auto listenTask =
+      frontKj.listenHttp(kj::mv(clientPipe.ends[1]))
+          .eagerlyEvaluate([](kj::Exception &&e) { KJ_LOG(ERROR, e); });
 
-  for (auto& step: TEST_STEPS) {
+  for (auto &step : TEST_STEPS) {
     KJ_CONTEXT(step.send);
 
-    kj::AsyncOutputStream* out;
-    kj::AsyncInputStream* in;
+    kj::AsyncOutputStream *out;
+    kj::AsyncInputStream *in;
 
     switch (step.direction) {
-      case CLIENT_TO_SERVER:
-        out = clientPipe.ends[0];
-        in = serverPipe.ends[1];
-        break;
-      case SERVER_TO_CLIENT:
-        out = serverPipe.ends[1];
-        in = clientPipe.ends[0];
-        break;
+    case CLIENT_TO_SERVER:
+      out = clientPipe.ends[0];
+      in = serverPipe.ends[1];
+      break;
+    case SERVER_TO_CLIENT:
+      out = serverPipe.ends[1];
+      in = clientPipe.ends[0];
+      break;
     }
 
     auto writePromise = out->write(step.send.asBytes());
@@ -390,8 +378,9 @@ void runEndToEndTests(kj::Timer& timer, kj::HttpHeaderTable& headerTable,
     readPromise.wait(waitScope);
   }
 
-  // The last test message was a request with no response. If we now close the client end, this
-  // should propagate all the way through to close the server end!
+  // The last test message was a request with no response. If we now close the
+  // client end, this should propagate all the way through to close the server
+  // end!
   clientPipe.ends[0] = nullptr;
   auto lastRead = serverPipe.ends[1]->readAllText();
   KJ_ASSERT(lastRead.poll(waitScope), "last read hung");
@@ -406,8 +395,10 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, no path shortening") {
   ByteStreamFactory streamFactory1;
   ByteStreamFactory streamFactory2;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
-  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder,
+                                TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder,
+                                TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runEndToEndTests(timer, *headerTable, factory1, factory2, waitScope);
@@ -420,21 +411,24 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, with path shortening") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+                               TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runEndToEndTests(timer, *headerTable, factory, factory, waitScope);
 }
 
 KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
-  // Test that a 205 with a hanging body doesn't prevent headers from being delivered. (This was
-  // a bug at one point. See, 205 responses are supposed to have empty bodies. But they must
-  // explicitly indicate an empty body. http-over-capnp, though, *assumed* an empty body when it
-  // saw a 205. But, on the client side, when HttpClientAdapter sees an empty body, it blocks
-  // delivery of the *headers* until the service promise resolves, in order to avoid prematurely
-  // cancelling the service. But on the server side, the service method is left hanging because
-  // it's waiting for the 205 to actually produce its empty body. If that didn't make any sense,
-  // consider yourself lucky.)
+  // Test that a 205 with a hanging body doesn't prevent headers from being
+  // delivered. (This was a bug at one point. See, 205 responses are supposed to
+  // have empty bodies. But they must explicitly indicate an empty body.
+  // http-over-capnp, though, *assumed* an empty body when it saw a 205. But, on
+  // the client side, when HttpClientAdapter sees an empty body, it blocks
+  // delivery of the *headers* until the service promise resolves, in order to
+  // avoid prematurely cancelling the service. But on the server side, the
+  // service method is left hanging because it's waiting for the 205 to actually
+  // produce its empty body. If that didn't make any sense, consider yourself
+  // lucky.)
 
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);
@@ -442,7 +436,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+                               TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   auto pipe = kj::newTwoWayPipe();
@@ -455,7 +450,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
 
   auto frontClient = kj::newHttpClient(*frontCapnp);
 
-  auto req = frontClient->request(kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable));
+  auto req = frontClient->request(kj::HttpMethod::GET, "/",
+                                  kj::HttpHeaders(*headerTable));
 
   {
     auto readPromise = expectRead(*pipe.ends[1], "GET / HTTP/1.1\r\n\r\n");
@@ -466,10 +462,12 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
   KJ_EXPECT(!req.response.poll(waitScope));
 
   {
-    // A 205 response with no content-length or transfer-encoding is terminated by EOF (but also
-    // the body is required to be empty). We don't send the EOF yet, just the response line and
-    // empty headers.
-    pipe.ends[1]->write("HTTP/1.1 205 Reset Content\r\n\r\n"_kjb).wait(waitScope);
+    // A 205 response with no content-length or transfer-encoding is terminated
+    // by EOF (but also the body is required to be empty). We don't send the EOF
+    // yet, just the response line and empty headers.
+    pipe.ends[1]
+        ->write("HTTP/1.1 205 Reset Content\r\n\r\n"_kjb)
+        .wait(waitScope);
   }
 
   // On the client end, we should get a response now!
@@ -492,16 +490,19 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
 
 // =======================================================================================
 
-class WebSocketAccepter final: public kj::HttpService {
+class WebSocketAccepter final : public kj::HttpService {
 public:
-  WebSocketAccepter(kj::HttpHeaderTable& headerTable,
-                    kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller,
-                    kj::Promise<void> done)
-      : headerTable(headerTable), fulfiller(kj::mv(fulfiller)), done(kj::mv(done)) {}
+  WebSocketAccepter(
+      kj::HttpHeaderTable &headerTable,
+      kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller,
+      kj::Promise<void> done)
+      : headerTable(headerTable), fulfiller(kj::mv(fulfiller)),
+        done(kj::mv(done)) {}
 
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, Response& response) override {
+  kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
+                            const kj::HttpHeaders &headers,
+                            kj::AsyncInputStream &requestBody,
+                            Response &response) override {
     kj::HttpHeaders respHeaders(headerTable);
     respHeaders.add("X-Foo", "bar");
     fulfiller->fulfill(response.acceptWebSocket(respHeaders));
@@ -509,13 +510,13 @@ public:
   }
 
 private:
-  kj::HttpHeaderTable& headerTable;
+  kj::HttpHeaderTable &headerTable;
   kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller;
   kj::Promise<void> done;
 };
 
-void runWebSocketBasicTestCase(
-    kj::WebSocket& clientWs, kj::WebSocket& serverWs, kj::WaitScope& waitScope) {
+void runWebSocketBasicTestCase(kj::WebSocket &clientWs, kj::WebSocket &serverWs,
+                               kj::WaitScope &waitScope) {
   // Called by `runWebSocketTests()`.
 
   {
@@ -533,7 +534,23 @@ void runWebSocketBasicTestCase(
     KJ_ASSERT(message.is<kj::Array<kj::byte>>());
     KJ_EXPECT(kj::str(message.get<kj::Array<kj::byte>>().asChars()) == "bar");
   }
-
+  KJ_DBG("1");
+  {
+    auto promise = serverWs.send(kj::heapArray<kj::byte>(1u << 25));
+    auto message = clientWs.receive(1u << 25).wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::Array<kj::byte>>());
+    KJ_EXPECT(message.get<kj::Array<kj::byte>>().size() == 1u << 25);
+  }
+  KJ_DBG("2");
+  {
+    auto promise = clientWs.send(kj::heapArray<kj::byte>(1u << 25));
+    auto message = serverWs.receive(1u << 25).wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::Array<kj::byte>>());
+    KJ_EXPECT(message.get<kj::Array<kj::byte>>().size() == 1u << 25);
+  }
+  KJ_DBG("3");
   {
     auto promise = clientWs.close(1234, "baz"_kj);
     auto message = serverWs.receive().wait(waitScope);
@@ -551,8 +568,8 @@ void runWebSocketBasicTestCase(
   }
 }
 
-void runWebSocketAbortTestCase(
-    kj::WebSocket& clientWs, kj::WebSocket& serverWs, kj::WaitScope& waitScope) {
+void runWebSocketAbortTestCase(kj::WebSocket &clientWs, kj::WebSocket &serverWs,
+                               kj::WaitScope &waitScope) {
   auto onAbort = serverWs.whenAborted();
   KJ_EXPECT(!onAbort.poll(waitScope));
   clientWs.abort();
@@ -562,25 +579,27 @@ void runWebSocketAbortTestCase(
   onAbort.wait(waitScope);
 }
 
-void runWebSocketTests(kj::HttpHeaderTable& headerTable,
-                       HttpOverCapnpFactory& clientFactory, HttpOverCapnpFactory& serverFactory,
-                       kj::WaitScope& waitScope) {
-  // We take a different approach here, because writing out raw WebSocket frames is a pain.
-  // It's easier to test WebSockets at the KJ API level.
+void runWebSocketTests(kj::HttpHeaderTable &headerTable,
+                       HttpOverCapnpFactory &clientFactory,
+                       HttpOverCapnpFactory &serverFactory,
+                       kj::WaitScope &waitScope) {
+  // We take a different approach here, because writing out raw WebSocket
+  // frames is a pain. It's easier to test WebSockets at the KJ API level.
 
-  for (auto testCase: {
-    runWebSocketBasicTestCase,
-    runWebSocketAbortTestCase,
-  }) {
+  for (auto testCase : {
+           runWebSocketBasicTestCase,
+           runWebSocketAbortTestCase,
+       }) {
     auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
     auto donePaf = kj::newPromiseAndFulfiller<void>();
 
     auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
-      headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
+        headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
     auto front = clientFactory.capnpToKj(back);
     auto client = kj::newHttpClient(*front);
 
-    auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable)).wait(waitScope);
+    auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable))
+                    .wait(waitScope);
     KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
 
     auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
@@ -597,8 +616,10 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, no path shortening") {
   ByteStreamFactory streamFactory1;
   ByteStreamFactory streamFactory2;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
-  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder,
+                                TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder,
+                                TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory1, factory2, waitScope);
@@ -610,7 +631,8 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+                               TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   runWebSocketTests(*headerTable, factory, factory, waitScope);
@@ -619,24 +641,23 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
 // =======================================================================================
 // bug fixes
 
-class HangingHttpService final: public kj::HttpService {
+class HangingHttpService final : public kj::HttpService {
 public:
-  HangingHttpService(bool& called, bool& destroyed)
+  HangingHttpService(bool &called, bool &destroyed)
       : called(called), destroyed(destroyed) {}
-  ~HangingHttpService() noexcept(false) {
-    destroyed = true;
-  }
+  ~HangingHttpService() noexcept(false) { destroyed = true; }
 
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, Response& response) override {
+  kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
+                            const kj::HttpHeaders &headers,
+                            kj::AsyncInputStream &requestBody,
+                            Response &response) override {
     called = true;
     return kj::NEVER_DONE;
   }
 
 private:
-  bool& called;
-  bool& destroyed;
+  bool &called;
+  bool &destroyed;
 };
 
 KJ_TEST("HttpService isn't destroyed while call outstanding") {
@@ -645,12 +666,14 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+                               TEST_PEER_OPTIMIZATION_LEVEL);
   auto headerTable = tableBuilder.build();
 
   bool called = false;
   bool destroyed = false;
-  auto service = factory.kjToCapnp(kj::heap<HangingHttpService>(called, destroyed));
+  auto service =
+      factory.kjToCapnp(kj::heap<HangingHttpService>(called, destroyed));
 
   KJ_EXPECT(!called);
   KJ_EXPECT(!destroyed);
@@ -668,49 +691,48 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
   KJ_EXPECT(!destroyed);
 }
 
-
-class ConnectWriteCloseService final: public kj::HttpService {
-  // A simple CONNECT server that will accept a connection, write some data and close the
-  // connection.
+class ConnectWriteCloseService final : public kj::HttpService {
+  // A simple CONNECT server that will accept a connection, write some data
+  // and close the connection.
 public:
-  ConnectWriteCloseService(kj::HttpHeaderTable& headerTable)
+  ConnectWriteCloseService(kj::HttpHeaderTable &headerTable)
       : headerTable(headerTable) {}
 
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
+  kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
+                            const kj::HttpHeaders &headers,
+                            kj::AsyncInputStream &requestBody,
+                            kj::HttpService::Response &response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response,
-      kj::HttpConnectSettings settings) override {
+  kj::Promise<void> connect(kj::StringPtr host, const kj::HttpHeaders &headers,
+                            kj::AsyncIoStream &io,
+                            kj::HttpService::ConnectResponse &response,
+                            kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
-    return io.write("test"_kjb).then([&io]() mutable {
-      io.shutdownWrite();
-    });
+    return io.write("test"_kjb).then([&io]() mutable { io.shutdownWrite(); });
   }
 
 private:
-  kj::HttpHeaderTable& headerTable;
+  kj::HttpHeaderTable &headerTable;
 };
 
-class ConnectWriteRespService final: public kj::HttpService {
+class ConnectWriteRespService final : public kj::HttpService {
 public:
-  ConnectWriteRespService(kj::HttpHeaderTable& headerTable)
+  ConnectWriteRespService(kj::HttpHeaderTable &headerTable)
       : headerTable(headerTable) {}
 
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
+  kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
+                            const kj::HttpHeaders &headers,
+                            kj::AsyncInputStream &requestBody,
+                            kj::HttpService::Response &response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response,
-      kj::HttpConnectSettings settings) override {
+  kj::Promise<void> connect(kj::StringPtr host, const kj::HttpHeaders &headers,
+                            kj::AsyncIoStream &io,
+                            kj::HttpService::ConnectResponse &response,
+                            kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
     // TODO(later): `io.pumpTo(io).ignoreResult;` doesn't work here,
     // it causes startTls to come back in a loop. The below avoids this.
@@ -718,42 +740,48 @@ public:
     return manualPumpLoop(buffer, io).attach(kj::mv(buffer));
   }
 
-  kj::Promise<void> manualPumpLoop(kj::ArrayPtr<byte> buffer, kj::AsyncIoStream& io) {
-    return io.tryRead(buffer.begin(), 1, buffer.size()).then(
-        [this,&io,buffer](size_t amount) mutable -> kj::Promise<void> {
-      if (amount == 0) { return kj::READY_NOW; }
-      return io.write(buffer.first(amount)).then([this,&io,buffer]() mutable -> kj::Promise<void>  {
-        return manualPumpLoop(buffer, io);
-      });
-    });
+  kj::Promise<void> manualPumpLoop(kj::ArrayPtr<byte> buffer,
+                                   kj::AsyncIoStream &io) {
+    return io.tryRead(buffer.begin(), 1, buffer.size())
+        .then([this, &io, buffer](size_t amount) mutable -> kj::Promise<void> {
+          if (amount == 0) {
+            return kj::READY_NOW;
+          }
+          return io.write(buffer.first(amount))
+              .then([this, &io, buffer]() mutable -> kj::Promise<void> {
+                return manualPumpLoop(buffer, io);
+              });
+        });
   }
 
 private:
-  kj::HttpHeaderTable& headerTable;
+  kj::HttpHeaderTable &headerTable;
 };
 
-class ConnectRejectService final: public kj::HttpService {
+class ConnectRejectService final : public kj::HttpService {
   // A simple CONNECT server that will reject a connection.
 public:
-  ConnectRejectService(kj::HttpHeaderTable& headerTable)
+  ConnectRejectService(kj::HttpHeaderTable &headerTable)
       : headerTable(headerTable) {}
 
-  kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-      kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
+  kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
+                            const kj::HttpHeaders &headers,
+                            kj::AsyncInputStream &requestBody,
+                            kj::HttpService::Response &response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response,
-      kj::HttpConnectSettings settings) override {
-    auto body = response.reject(500, "Internal Server Error", kj::HttpHeaders(headerTable), 5);
+  kj::Promise<void> connect(kj::StringPtr host, const kj::HttpHeaders &headers,
+                            kj::AsyncIoStream &io,
+                            kj::HttpService::ConnectResponse &response,
+                            kj::HttpConnectSettings settings) override {
+    auto body = response.reject(500, "Internal Server Error",
+                                kj::HttpHeaders(headerTable), 5);
     return body->write("Error"_kjb).attach(kj::mv(body));
   }
 
 private:
-  kj::HttpHeaderTable& headerTable;
+  kj::HttpHeaderTable &headerTable;
 };
 
 KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
@@ -766,7 +794,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+                               TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectWriteCloseService service(*table);
   kj::HttpServer server(timer, *table, service);
@@ -775,61 +804,66 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
 
   auto client = newHttpClient(*table, *pipe.ends[1]);
 
-  capnp::HttpService::Client httpService = factory.kjToCapnp(newHttpService(*client));
+  capnp::HttpService::Client httpService =
+      factory.kjToCapnp(newHttpService(*client));
   auto frontCapnpHttpService = factory.capnpToKj(httpService);
 
-  struct ResponseImpl final: public kj::HttpService::ConnectResponse {
-    kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller;
-    ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller)
-      : fulfiller(kj::mv(fulfiller)) {}
-    void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
-      KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
-      fulfiller->fulfill(
-        kj::HttpClient::ConnectRequest::Status(
-          statusCode,
-          kj::str(statusText),
-          kj::heap(headers.clone()),
-          kj::none
-        )
-      );
+  struct ResponseImpl final : public kj::HttpService::ConnectResponse {
+    kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>>
+        fulfiller;
+    ResponseImpl(
+        kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>>
+            fulfiller)
+        : fulfiller(kj::mv(fulfiller)) {}
+    void accept(uint statusCode, kj::StringPtr statusText,
+                const kj::HttpHeaders &headers) override {
+      KJ_REQUIRE(statusCode >= 200 && statusCode < 300,
+                 "the statusCode must be 2xx for accept");
+      fulfiller->fulfill(kj::HttpClient::ConnectRequest::Status(
+          statusCode, kj::str(statusText), kj::heap(headers.clone()),
+          kj::none));
     }
 
-    kj::Own<kj::AsyncOutputStream> reject(
-        uint statusCode,
-        kj::StringPtr statusText,
-        const kj::HttpHeaders& headers,
-        kj::Maybe<uint64_t> expectedBodySize) override {
+    kj::Own<kj::AsyncOutputStream>
+    reject(uint statusCode, kj::StringPtr statusText,
+           const kj::HttpHeaders &headers,
+           kj::Maybe<uint64_t> expectedBodySize) override {
       KJ_UNREACHABLE;
     }
   };
 
   auto clientPipe = kj::newTwoWayPipe();
-  auto paf = kj::newPromiseAndFulfiller<kj::HttpClient::ConnectRequest::Status>();
+  auto paf =
+      kj::newPromiseAndFulfiller<kj::HttpClient::ConnectRequest::Status>();
   ResponseImpl response(kj::mv(paf.fulfiller));
 
-  auto promise = frontCapnpHttpService->connect(
-      "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
-      response, {}).attach(kj::mv(clientPipe.ends[0]));
+  auto promise =
+      frontCapnpHttpService
+          ->connect("https://example.org"_kj, kj::HttpHeaders(*table),
+                    *clientPipe.ends[0], response, {})
+          .attach(kj::mv(clientPipe.ends[0]));
 
-  paf.promise.then(
-      [io = kj::mv(clientPipe.ends[1])](auto status) mutable {
-    KJ_ASSERT(status.statusCode == 200);
-    KJ_ASSERT(status.statusText == "OK"_kj);
+  paf.promise
+      .then([io = kj::mv(clientPipe.ends[1])](auto status) mutable {
+        KJ_ASSERT(status.statusCode == 200);
+        KJ_ASSERT(status.statusText == "OK"_kj);
 
-    auto buf = kj::heapArray<char>(4);
-    return io->tryRead(buf.begin(), 4, 4).then(
-        [buf = kj::mv(buf), io = kj::mv(io)](size_t count) mutable {
-      KJ_ASSERT(count == 4, "Expecting the stream to read 4 chars.");
-      return io->tryRead(buf.begin(), 1, 1).then(
-          [buf = kj::mv(buf)](size_t count) mutable {
-        KJ_ASSERT(count == 0, "Expecting the stream to get disconnected.");
-      }).attach(kj::mv(io));
-    });
-  }).wait(waitScope);
+        auto buf = kj::heapArray<char>(4);
+        return io->tryRead(buf.begin(), 4, 4)
+            .then([buf = kj::mv(buf), io = kj::mv(io)](size_t count) mutable {
+              KJ_ASSERT(count == 4, "Expecting the stream to read 4 chars.");
+              return io->tryRead(buf.begin(), 1, 1)
+                  .then([buf = kj::mv(buf)](size_t count) mutable {
+                    KJ_ASSERT(count == 0,
+                              "Expecting the stream to get disconnected.");
+                  })
+                  .attach(kj::mv(io));
+            });
+      })
+      .wait(waitScope);
 
   listenTask.wait(waitScope);
 }
-
 
 KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
   kj::EventLoop eventLoop;
@@ -841,7 +875,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 
   ByteStreamFactory streamFactory;
   kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+                               TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectRejectService service(*table);
   kj::HttpServer server(timer, *table, service);
@@ -850,22 +885,24 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 
   auto client = newHttpClient(*table, *pipe.ends[1]);
 
-  capnp::HttpService::Client httpService = factory.kjToCapnp(newHttpService(*client));
+  capnp::HttpService::Client httpService =
+      factory.kjToCapnp(newHttpService(*client));
   auto frontCapnpHttpService = factory.capnpToKj(httpService);
 
-  struct ResponseImpl final: public kj::HttpService::ConnectResponse {
+  struct ResponseImpl final : public kj::HttpService::ConnectResponse {
     kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller;
-    ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller)
-      : fulfiller(kj::mv(fulfiller)) {}
-    void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+    ResponseImpl(
+        kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller)
+        : fulfiller(kj::mv(fulfiller)) {}
+    void accept(uint statusCode, kj::StringPtr statusText,
+                const kj::HttpHeaders &headers) override {
       KJ_UNREACHABLE;
     }
 
-    kj::Own<kj::AsyncOutputStream> reject(
-        uint statusCode,
-        kj::StringPtr statusText,
-        const kj::HttpHeaders& headers,
-        kj::Maybe<uint64_t> expectedBodySize) override {
+    kj::Own<kj::AsyncOutputStream>
+    reject(uint statusCode, kj::StringPtr statusText,
+           const kj::HttpHeaders &headers,
+           kj::Maybe<uint64_t> expectedBodySize) override {
       KJ_ASSERT(statusCode == 500);
       KJ_ASSERT(statusText == "Internal Server Error");
       KJ_ASSERT(expectedBodySize.orDefault(5));
@@ -879,108 +916,232 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
   auto paf = kj::newPromiseAndFulfiller<kj::Own<kj::AsyncInputStream>>();
   ResponseImpl response(kj::mv(paf.fulfiller));
 
-  auto promise = frontCapnpHttpService->connect(
-      "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
-      response, {}).attach(kj::mv(clientPipe.ends[0]));
+  auto promise =
+      frontCapnpHttpService
+          ->connect("https://example.org"_kj, kj::HttpHeaders(*table),
+                    *clientPipe.ends[0], response, {})
+          .attach(kj::mv(clientPipe.ends[0]));
 
-  paf.promise.then(
-      [](auto body) mutable {
-    auto buf = kj::heapArray<char>(5);
-    return body->tryRead(buf.begin(), 5, 5).then(
-        [buf = kj::mv(buf), body = kj::mv(body)](size_t count) mutable {
-      KJ_ASSERT(count == 5, "Expecting the stream to read 5 chars.");
-    });
-  }).attach(kj::mv(promise)).wait(waitScope);
+  paf.promise
+      .then([](auto body) mutable {
+        auto buf = kj::heapArray<char>(5);
+        return body->tryRead(buf.begin(), 5, 5)
+            .then([buf = kj::mv(buf),
+                   body = kj::mv(body)](size_t count) mutable {
+              KJ_ASSERT(count == 5, "Expecting the stream to read 5 chars.");
+            });
+      })
+      .attach(kj::mv(promise))
+      .wait(waitScope);
 
   listenTask.wait(waitScope);
 }
 
-kj::Promise<void> expectEnd(kj::AsyncInputStream& in) {
+kj::Promise<void> expectEnd(kj::AsyncInputStream &in) {
   static char buffer;
 
   auto promise = in.tryRead(&buffer, 1, 1);
-  return promise.then([](size_t amount) {
-    KJ_ASSERT(amount == 0, "expected EOF");
-  });
+  return promise.then(
+      [](size_t amount) { KJ_ASSERT(amount == 0, "expected EOF"); });
 }
+class DummyService final : public kj::HttpService {
+public:
+  DummyService(kj::HttpHeaderTable &headerTable,
+               kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller)
+      : headerTable(headerTable), fulfiller(kj::mv(fulfiller)) {}
 
-KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
+  kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
+                            const kj::HttpHeaders &headers,
+                            kj::AsyncInputStream &requestBody,
+                            Response &response) override {
+    auto ws = response.acceptWebSocket(kj::HttpHeaders(headerTable));
 
-  auto pipe = kj::newTwoWayPipe();
+    ByteStreamFactory streamFactory1;
+    ByteStreamFactory streamFactory2;
+    kj::HttpHeaderTable::Builder tableBuilder;
+    HttpOverCapnpFactory clientFactory(streamFactory1, tableBuilder,
+                                       TEST_PEER_OPTIMIZATION_LEVEL);
+    HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder,
+                                       TEST_PEER_OPTIMIZATION_LEVEL);
+    auto headerTable = tableBuilder.build();
+    auto donePaf = kj::newPromiseAndFulfiller<void>();
+    auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
+        *headerTable, kj::mv(fulfiller), kj::mv(donePaf.promise)));
+    auto front = clientFactory.capnpToKj(back);
+    auto client = kj::newHttpClient(*front);
+    auto resp =
+        co_await client->openWebSocket("/ws", kj::HttpHeaders(*headerTable));
+    KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
+    auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
 
-  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+    auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+    promises.add(ws->pumpTo(*clientWs));
+    promises.add(clientWs->pumpTo(*ws));
+    co_return co_await kj::joinPromises(promises.finish());
+  }
 
-  ByteStreamFactory streamFactory;
-  kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
-  kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
-  ConnectWriteRespService service(*table);
-  kj::HttpServer server(timer, *table, service);
+private:
+  kj::HttpHeaderTable &headerTable;
+  kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller;
+};
 
-  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+// Run the test using in-process two-way pipes.
+#define KJ_HTTP_TEST_SETUP_IO                                                  \
+  auto io = kj::setupAsyncIo();                                                \
+  auto &waitScope KJ_UNUSED = io.waitScope
+#define KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR                          \
+  auto capPipe = kj::newCapabilityPipe();                                      \
+  auto listener =                                                              \
+      kj::heap<kj::CapabilityStreamConnectionReceiver>(*capPipe.ends[0]);      \
+  auto addr =                                                                  \
+      kj::heap<kj::CapabilityStreamNetworkAddress>(kj::none, *capPipe.ends[1])
 
-  auto client = newHttpClient(*table, *pipe.ends[1]);
+class FakeEntropySource final : public kj::EntropySource {
+public:
+  void generate(kj::ArrayPtr<byte> buffer) override {
+    static constexpr byte DUMMY[4] = {12, 34, 56, 78};
 
-  class WrapperHttpClient final: public kj::HttpClient {
-  public:
-    kj::HttpClient& inner;
-
-    WrapperHttpClient(kj::HttpClient& client) : inner(client) {};
-
-    kj::Promise<WebSocketResponse> openWebSocket(
-      kj::StringPtr url, const kj::HttpHeaders& headers) override { KJ_UNREACHABLE; }
-    Request request(kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override { KJ_UNREACHABLE; }
-
-    ConnectRequest connect(kj::StringPtr host, const kj::HttpHeaders& headers,
-        kj::HttpConnectSettings settings) override {
-      KJ_IF_SOME(starter, settings.tlsStarter) {
-        starter = [](kj::StringPtr) {
-          return kj::READY_NOW;
-        };
-      }
-
-      return inner.connect(host, headers, settings);
+    for (auto i : kj::indices(buffer)) {
+      buffer[i] = DUMMY[i % sizeof(DUMMY)];
     }
-  };
+  }
+};
 
-  // Only need this wrapper to define a dummy tlsStarter.
-  auto wrappedClient = kj::heap<WrapperHttpClient>(*client);
-  capnp::HttpService::Client httpService = factory.kjToCapnp(newHttpService(*wrappedClient));
-  auto frontCapnpHttpService = factory.capnpToKj(httpService);
+KJ_TEST("HTTP-over-Cap'n passthrough websockets") {
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
 
-  auto frontCapnpHttpClient = kj::newHttpClient(*frontCapnpHttpService);
+  kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  kj::HttpHeaderTable headerTable;
 
-  kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
-  kj::HttpConnectSettings settings = { .useTls = false, .tlsStarter = kj::none };
-  settings.tlsStarter = tlsStarter;
+  auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
+  DummyService service(headerTable, kj::mv(wsPaf.fulfiller));
+  kj::HttpServerSettings serverSettings;
+  kj::HttpServer server(serverTimer, headerTable, service, serverSettings);
+  auto listenTask = server.listenHttp(*listener);
+  FakeEntropySource entropySource;
+  kj::HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  auto client = newHttpClient(clientTimer, headerTable, *addr, clientSettings);
+  auto resp =
+      client->openWebSocket(kj::str("/websocket"), kj::HttpHeaders(headerTable))
+          .wait(waitScope);
+  auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
+  auto serverWs = wsPaf.promise.wait(waitScope);
 
-  auto request = frontCapnpHttpClient->connect(
-      "https://example.org"_kj, kj::HttpHeaders(*table), settings);
+  // ByteStreamFactory streamFactory1;
+  // ByteStreamFactory streamFactory2;
+  // kj::HttpHeaderTable::Builder tableBuilder;
+  // HttpOverCapnpFactory clientFactory(streamFactory1, tableBuilder,
+  //                                    TEST_PEER_OPTIMIZATION_LEVEL);
+  // HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder,
+  //                                    TEST_PEER_OPTIMIZATION_LEVEL);
+  // auto headerTable = tableBuilder.build();
 
-  KJ_ASSERT_NONNULL(*tlsStarter);
+  // auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
+  // auto donePaf = kj::newPromiseAndFulfiller<void>();
 
-  request.status.then(
-      [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {
-    KJ_ASSERT(status.statusCode == 200);
-    KJ_ASSERT(status.statusText == "OK"_kj);
+  // auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
+  //     *headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
+  // auto front = clientFactory.capnpToKj(back);
+  // auto client = kj::newHttpClient(*front);
 
-    return KJ_ASSERT_NONNULL(*tlsStarter)("example.com").then([io = kj::mv(io)]() mutable {
-      return io->write("hello"_kjb).then([io = kj::mv(io)]() mutable {
-        auto buffer = kj::heapArray<byte>(5);
-        return io->tryRead(buffer.begin(), 5, 5).then(
-            [io = kj::mv(io), buffer = kj::mv(buffer)](size_t) mutable {
-          io->shutdownWrite();
-          return expectEnd(*io).attach(kj::mv(io));
-        });
-      });
-    });
-  }).wait(waitScope);
+  // auto resp = client->openWebSocket("/ws", kj::HttpHeaders(*headerTable))
+  //                 .wait(waitScope);
+  // KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
 
-  listenTask.wait(waitScope);
+  // auto clientWs =
+  // kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>()); auto serverWs
+  // = wsPaf.promise.wait(waitScope);
+
+  runWebSocketBasicTestCase(*clientWs, *serverWs, waitScope);
 }
 
-}  // namespace
-}  // namespace capnp
+// KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
+//   kj::EventLoop eventLoop;
+//   kj::WaitScope waitScope(eventLoop);
+
+//   auto pipe = kj::newTwoWayPipe();
+
+//   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+//   ByteStreamFactory streamFactory;
+//   kj::HttpHeaderTable::Builder tableBuilder;
+//   HttpOverCapnpFactory factory(streamFactory, tableBuilder,
+//   TEST_PEER_OPTIMIZATION_LEVEL); kj::Own<kj::HttpHeaderTable> table =
+//   tableBuilder.build(); ConnectWriteRespService service(*table);
+//   kj::HttpServer server(timer, *table, service);
+
+//   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+//   auto client = newHttpClient(*table, *pipe.ends[1]);
+
+//   class WrapperHttpClient final: public kj::HttpClient {
+//   public:
+//     kj::HttpClient& inner;
+
+//     WrapperHttpClient(kj::HttpClient& client) : inner(client) {};
+
+//     kj::Promise<WebSocketResponse> openWebSocket(
+//       kj::StringPtr url, const kj::HttpHeaders& headers) override {
+//       KJ_UNREACHABLE; }
+//     Request request(kj::HttpMethod method, kj::StringPtr url, const
+//     kj::HttpHeaders& headers,
+//                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override
+//                   { KJ_UNREACHABLE; }
+
+//     ConnectRequest connect(kj::StringPtr host, const kj::HttpHeaders&
+//     headers,
+//         kj::HttpConnectSettings settings) override {
+//       KJ_IF_SOME(starter, settings.tlsStarter) {
+//         starter = [](kj::StringPtr) {
+//           return kj::READY_NOW;
+//         };
+//       }
+
+//       return inner.connect(host, headers, settings);
+//     }
+//   };
+
+//   // Only need this wrapper to define a dummy tlsStarter.
+//   auto wrappedClient = kj::heap<WrapperHttpClient>(*client);
+//   capnp::HttpService::Client httpService =
+//   factory.kjToCapnp(newHttpService(*wrappedClient)); auto
+//   frontCapnpHttpService = factory.capnpToKj(httpService);
+
+//   auto frontCapnpHttpClient = kj::newHttpClient(*frontCapnpHttpService);
+
+//   kj::Own<kj::TlsStarterCallback> tlsStarter =
+//   kj::heap<kj::TlsStarterCallback>(); kj::HttpConnectSettings settings = {
+//   .useTls = false, .tlsStarter = kj::none }; settings.tlsStarter =
+//   tlsStarter;
+
+//   auto request = frontCapnpHttpClient->connect(
+//       "https://example.org"_kj, kj::HttpHeaders(*table), settings);
+
+//   KJ_ASSERT_NONNULL(*tlsStarter);
+
+//   request.status.then(
+//       [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {
+//     KJ_ASSERT(status.statusCode == 200);
+//     KJ_ASSERT(status.statusText == "OK"_kj);
+
+//     return KJ_ASSERT_NONNULL(*tlsStarter)("example.com").then([io =
+//     kj::mv(io)]() mutable {
+//       return io->write("hello"_kjb).then([io = kj::mv(io)]() mutable {
+//         auto buffer = kj::heapArray<byte>(5);
+//         return io->tryRead(buffer.begin(), 5, 5).then(
+//             [io = kj::mv(io), buffer = kj::mv(buffer)](size_t) mutable {
+//           io->shutdownWrite();
+//           return expectEnd(*io).attach(kj::mv(io));
+//         });
+//       });
+//     });
+//   }).wait(waitScope);
+
+//   listenTask.wait(waitScope);
+// }
+
+} // namespace
+} // namespace capnp
