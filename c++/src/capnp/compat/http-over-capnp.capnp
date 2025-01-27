@@ -84,6 +84,10 @@ interface HttpService {
     #
     # Client -> Server WebSocket frames will be sent via method calls on `upSocket`, while
     # Server -> Client will be sent as calls to `downSocket`.
+
+    startOptimizedWebSocket @2 (headers :List(HttpHeader), upStream :ByteStream)
+                            -> (downStream :ByteStream);
+  # TODO(now): comment
   }
 
   interface ConnectClientRequestContext {

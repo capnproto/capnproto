@@ -76,7 +76,8 @@ public:
   // this option, you will need to roll back to an older version of Cap'n Proto for now, until you
   // can update all code in production to pass LEVEL_2 here.
 
-  kj::Own<kj::HttpService> capnpToKj(capnp::HttpService::Client rpcService);
+  kj::Own<kj::HttpService> capnpToKj(capnp::HttpService::Client rpcService,
+                                     kj::EntropySource& entropySource);
   capnp::HttpService::Client kjToCapnp(kj::Own<kj::HttpService> service);
 
   kj::HttpHeaders capnpToKj(capnp::List<capnp::HttpHeader>::Reader capnpHeaders) const;
