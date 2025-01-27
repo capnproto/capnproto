@@ -1049,9 +1049,9 @@ public:
     ByteStreamFactory streamFactory2;
     kj::HttpHeaderTable::Builder tableBuilder;
     HttpOverCapnpFactory clientFactory(streamFactory1, tableBuilder,
-                                       TEST_PEER_OPTIMIZATION_LEVEL);
+                                       HttpOverCapnpFactory::LEVEL_2);
     HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder,
-                                       TEST_PEER_OPTIMIZATION_LEVEL);
+                                       HttpOverCapnpFactory::LEVEL_2);
     auto headerTable = tableBuilder.build();
     auto donePaf = kj::newPromiseAndFulfiller<void>();
     auto back = serverFactory.kjToCapnp(kj::heap<DummyWebSocketAccepter>(
