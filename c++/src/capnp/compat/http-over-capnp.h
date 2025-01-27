@@ -63,9 +63,17 @@ public:
     // LEVEL_2, then your clients will have to stick to Cap'n Proto 1.x until those servers are all
     // updated.
 
-    LEVEL_2
+    LEVEL_2,
     // Use request(). This is more efficient than startRequest() but won't work with old peers that
     // only implement startRequest().
+
+    LEVEL_3,
+    // Enable optimized WebSocket pumping via direct ByteStreams. This optimization improves
+    // performance for large WebSocket messages by bypassing message size limitations in the
+    // standard WebSocket API. It creates a direct ByteStream connection for WebSocket data,
+    // reducing overhead and enabling streaming of very large messages (>1MB) without buffering
+    // the entire message in memory. Only WebSockets without extensions are optimized.
+    // This level requires both peers to implement the optimized WebSocket pumping protocol.
   };
 
   HttpOverCapnpFactory(ByteStreamFactory& streamFactory, HeaderIdBundle headerIds,
