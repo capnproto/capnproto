@@ -101,8 +101,8 @@ KJ_TEST("WebSocketMessageStreamByteCount") {
   msgStreamB.tryReadMessage(nullptr).wait(waitScope);
   pumpTask.wait(waitScope);
   endPromise.wait(waitScope);
-  KJ_EXPECT(pipe1.ends[0]->sentByteCount() == 2585);
-  KJ_EXPECT(pipe1.ends[1]->receivedByteCount() == 2585);
-  KJ_EXPECT(pipe2.ends[0]->sentByteCount() == 2585);
-  KJ_EXPECT(pipe2.ends[1]->receivedByteCount() == 2585);
+  KJ_EXPECT(pipe1.ends[0]->sentByteCount() == 2566);
+  KJ_EXPECT(pipe1.ends[1]->receivedByteCount() == 2566);
+  KJ_EXPECT(pipe2.ends[0]->sentByteCount() == 2566);
+  KJ_EXPECT(pipe2.ends[1]->receivedByteCount() == 2566);
 }

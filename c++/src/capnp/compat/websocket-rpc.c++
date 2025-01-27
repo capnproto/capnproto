@@ -118,10 +118,7 @@ kj::Promise<void> WebSocketMessageStream::end() {
           //
           // * https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close
           // * https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
-
-    "Capnp connection closed" // Similarly not much information to go on here,
-                              // but this at least lets us trace this back to
-                              // capnp.
+    nullptr
   );
 };
 
