@@ -39,6 +39,17 @@ KJ_TEST("KJ and RPC HTTP method enums match") {
 #undef EXPECT_MATCH
 }
 
+class FakeEntropySource final : public kj::EntropySource {
+public:
+  void generate(kj::ArrayPtr<byte> buffer) override {
+    static constexpr byte DUMMY[4] = {12, 34, 56, 78};
+
+    for (auto i : kj::indices(buffer)) {
+      buffer[i] = DUMMY[i % sizeof(DUMMY)];
+    }
+  }
+};
+
 // =======================================================================================
 
 kj::Promise<void> expectRead(kj::AsyncInputStream &in, kj::StringPtr expected) {
@@ -336,10 +347,11 @@ void runEndToEndTests(kj::Timer &timer, kj::HttpHeaderTable &headerTable,
   auto serverPipe = kj::newTwoWayPipe();
 
   OneConnectNetworkAddress oneConnectAddr(kj::mv(serverPipe.ends[0]));
+  FakeEntropySource entropySource;
 
   auto backHttp = kj::newHttpClient(timer, headerTable, oneConnectAddr);
   auto backCapnp = serverFactory.kjToCapnp(kj::newHttpService(*backHttp));
-  auto frontCapnp = clientFactory.capnpToKj(backCapnp);
+  auto frontCapnp = clientFactory.capnpToKj(backCapnp, entropySource);
   kj::HttpServer frontKj(timer, headerTable, *frontCapnp);
   auto listenTask =
       frontKj.listenHttp(kj::mv(clientPipe.ends[1]))
@@ -443,10 +455,11 @@ KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
   auto pipe = kj::newTwoWayPipe();
 
   OneConnectNetworkAddress oneConnectAddr(kj::mv(pipe.ends[0]));
+  FakeEntropySource entropySource;
 
   auto backHttp = kj::newHttpClient(timer, *headerTable, oneConnectAddr);
   auto backCapnp = factory.kjToCapnp(kj::newHttpService(*backHttp));
-  auto frontCapnp = factory.capnpToKj(backCapnp);
+  auto frontCapnp = factory.capnpToKj(backCapnp, entropySource);
 
   auto frontClient = kj::newHttpClient(*frontCapnp);
 
@@ -572,7 +585,9 @@ void runWebSocketAbortTestCase(kj::WebSocket &clientWs, kj::WebSocket &serverWs,
                                kj::WaitScope &waitScope) {
   auto onAbort = serverWs.whenAborted();
   KJ_EXPECT(!onAbort.poll(waitScope));
+  KJ_DBG("Before abort");
   clientWs.abort();
+  KJ_DBG("After abort");
 
   // At one time, this promise hung forever.
   KJ_EXPECT(onAbort.poll(waitScope));
@@ -585,17 +600,17 @@ void runWebSocketTests(kj::HttpHeaderTable &headerTable,
                        kj::WaitScope &waitScope) {
   // We take a different approach here, because writing out raw WebSocket
   // frames is a pain. It's easier to test WebSockets at the KJ API level.
-
   for (auto testCase : {
            runWebSocketBasicTestCase,
            runWebSocketAbortTestCase,
        }) {
+    FakeEntropySource entropySource;
     auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
     auto donePaf = kj::newPromiseAndFulfiller<void>();
 
     auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
         headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
-    auto front = clientFactory.capnpToKj(back);
+    auto front = clientFactory.capnpToKj(back, entropySource);
     auto client = kj::newHttpClient(*front);
 
     auto resp = client->openWebSocket("/ws", kj::HttpHeaders(headerTable))
@@ -798,6 +813,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
                                TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectWriteCloseService service(*table);
+  FakeEntropySource entropySource;
   kj::HttpServer server(timer, *table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
@@ -806,7 +822,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
 
   capnp::HttpService::Client httpService =
       factory.kjToCapnp(newHttpService(*client));
-  auto frontCapnpHttpService = factory.capnpToKj(httpService);
+  auto frontCapnpHttpService = factory.capnpToKj(httpService, entropySource);
 
   struct ResponseImpl final : public kj::HttpService::ConnectResponse {
     kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>>
@@ -879,6 +895,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
                                TEST_PEER_OPTIMIZATION_LEVEL);
   kj::Own<kj::HttpHeaderTable> table = tableBuilder.build();
   ConnectRejectService service(*table);
+  FakeEntropySource entropySource;
   kj::HttpServer server(timer, *table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
@@ -887,7 +904,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
 
   capnp::HttpService::Client httpService =
       factory.kjToCapnp(newHttpService(*client));
-  auto frontCapnpHttpService = factory.capnpToKj(httpService);
+  auto frontCapnpHttpService = factory.capnpToKj(httpService, entropySource);
 
   struct ResponseImpl final : public kj::HttpService::ConnectResponse {
     kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller;
@@ -937,24 +954,20 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
   listenTask.wait(waitScope);
 }
 
-kj::Promise<void> expectEnd(kj::AsyncInputStream &in) {
-  static char buffer;
-
-  auto promise = in.tryRead(&buffer, 1, 1);
-  return promise.then(
-      [](size_t amount) { KJ_ASSERT(amount == 0, "expected EOF"); });
-}
 class DummyService final : public kj::HttpService {
 public:
   DummyService(kj::HttpHeaderTable &headerTable,
-               kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller)
-      : headerTable(headerTable), fulfiller(kj::mv(fulfiller)) {}
+               kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller,
+               kj::Own<kj::PromiseFulfiller<void>> readyFulfiller)
+      : headerTable(headerTable), fulfiller(kj::mv(fulfiller)), readyFulfiller(kj::mv(readyFulfiller)) {}
 
   kj::Promise<void> request(kj::HttpMethod method, kj::StringPtr url,
                             const kj::HttpHeaders &headers,
                             kj::AsyncInputStream &requestBody,
                             Response &response) override {
+    KJ_DBG("111");
     auto ws = response.acceptWebSocket(kj::HttpHeaders(headerTable));
+    KJ_DBG("222");
 
     ByteStreamFactory streamFactory1;
     ByteStreamFactory streamFactory2;
@@ -963,26 +976,34 @@ public:
                                        TEST_PEER_OPTIMIZATION_LEVEL);
     HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder,
                                        TEST_PEER_OPTIMIZATION_LEVEL);
+    FakeEntropySource entropySource;
     auto headerTable = tableBuilder.build();
     auto donePaf = kj::newPromiseAndFulfiller<void>();
     auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
         *headerTable, kj::mv(fulfiller), kj::mv(donePaf.promise)));
-    auto front = clientFactory.capnpToKj(back);
+    auto front = clientFactory.capnpToKj(back, entropySource);
     auto client = kj::newHttpClient(*front);
+    KJ_DBG("333");
     auto resp =
         co_await client->openWebSocket("/ws", kj::HttpHeaders(*headerTable));
+    KJ_DBG("444");
     KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
     auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
 
     auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
+    KJ_DBG("Pumps1");
     promises.add(ws->pumpTo(*clientWs));
+    KJ_DBG("Pumps2");
     promises.add(clientWs->pumpTo(*ws));
+    KJ_DBG("Pumps3");
+    readyFulfiller->fulfill();
     co_return co_await kj::joinPromises(promises.finish());
   }
 
 private:
   kj::HttpHeaderTable &headerTable;
   kj::Own<kj::PromiseFulfiller<kj::Own<kj::WebSocket>>> fulfiller;
+  kj::Own<kj::PromiseFulfiller<void>> readyFulfiller;
 };
 
 // Run the test using in-process two-way pipes.
@@ -996,16 +1017,6 @@ private:
   auto addr =                                                                  \
       kj::heap<kj::CapabilityStreamNetworkAddress>(kj::none, *capPipe.ends[1])
 
-class FakeEntropySource final : public kj::EntropySource {
-public:
-  void generate(kj::ArrayPtr<byte> buffer) override {
-    static constexpr byte DUMMY[4] = {12, 34, 56, 78};
-
-    for (auto i : kj::indices(buffer)) {
-      buffer[i] = DUMMY[i % sizeof(DUMMY)];
-    }
-  }
-};
 
 KJ_TEST("HTTP-over-Cap'n passthrough websockets") {
   KJ_HTTP_TEST_SETUP_IO;
@@ -1016,7 +1027,8 @@ KJ_TEST("HTTP-over-Cap'n passthrough websockets") {
   kj::HttpHeaderTable headerTable;
 
   auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
-  DummyService service(headerTable, kj::mv(wsPaf.fulfiller));
+  auto readyPaf = kj::newPromiseAndFulfiller<void>();
+  DummyService service(headerTable, kj::mv(wsPaf.fulfiller), kj::mv(readyPaf.fulfiller));
   kj::HttpServerSettings serverSettings;
   kj::HttpServer server(serverTimer, headerTable, service, serverSettings);
   auto listenTask = server.listenHttp(*listener);
@@ -1029,6 +1041,8 @@ KJ_TEST("HTTP-over-Cap'n passthrough websockets") {
           .wait(waitScope);
   auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
   auto serverWs = wsPaf.promise.wait(waitScope);
+  readyPaf.promise.wait(waitScope);
+  KJ_DBG("Done creating sockets");
 
   // ByteStreamFactory streamFactory1;
   // ByteStreamFactory streamFactory2;
@@ -1058,6 +1072,13 @@ KJ_TEST("HTTP-over-Cap'n passthrough websockets") {
   runWebSocketBasicTestCase(*clientWs, *serverWs, waitScope);
 }
 
+// kj::Promise<void> expectEnd(kj::AsyncInputStream &in) {
+//   static char buffer;
+
+//   auto promise = in.tryRead(&buffer, 1, 1);
+//   return promise.then(
+//       [](size_t amount) { KJ_ASSERT(amount == 0, "expected EOF"); });
+// }
 // KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
 //   kj::EventLoop eventLoop;
 //   kj::WaitScope waitScope(eventLoop);

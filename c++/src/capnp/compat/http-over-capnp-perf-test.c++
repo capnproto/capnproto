@@ -61,6 +61,17 @@ void* malloc(size_t size) {
 
 #endif  // KJ_BENCHMARK_MALLOC
 
+class FakeEntropySource final : public kj::EntropySource {
+public:
+  void generate(kj::ArrayPtr<byte> buffer) override {
+    static constexpr byte DUMMY[4] = {12, 34, 56, 78};
+
+    for (auto i : kj::indices(buffer)) {
+      buffer[i] = DUMMY[i % sizeof(DUMMY)];
+    }
+  }
+};
+
 class Metrics {
 public:
   Metrics()
@@ -385,6 +396,7 @@ KJ_TEST("Benchmark HTTP-over-capnp local call") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   Metrics metrics;
+  FakeEntropySource entropySource;
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
@@ -399,7 +411,7 @@ KJ_TEST("Benchmark HTTP-over-capnp local call") {
   HttpOverCapnpFactory hocFactory2(bsFactory2, kj::mv(headerIds), HttpOverCapnpFactory::LEVEL_2);
 
   auto cap = hocFactory.kjToCapnp(kj::attachRef(service));
-  auto roundTrip = hocFactory2.capnpToKj(kj::mv(cap));
+  auto roundTrip = hocFactory2.capnpToKj(kj::mv(cap), entropySource);
 
   doBenchmark([&]() {
     sender.sendRequest(*roundTrip).wait(waitScope);
@@ -411,6 +423,7 @@ KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
   kj::WaitScope waitScope(loop);
   Metrics metrics;
   Metrics::StreamPair pair(metrics);
+  FakeEntropySource entropySource;
 
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
@@ -431,7 +444,7 @@ KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
 
   TwoPartyClient client(pair.client);
 
-  auto roundTrip = hocFactory2.capnpToKj(client.bootstrap().castAs<capnp::HttpService>());
+  auto roundTrip = hocFactory2.capnpToKj(client.bootstrap().castAs<capnp::HttpService>(), entropySource);
 
   doBenchmark([&]() {
     sender.sendRequest(*roundTrip).wait(waitScope);
