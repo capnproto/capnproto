@@ -22,7 +22,13 @@
 #pragma once
 
 #include "common.h"
-#ifdef KJ_DEBUG
+
+#if defined(KJ_DEBUG) && !defined(KJ_ASSERT_PTR_COUNTERS)
+#define KJ_ASSERT_PTR_COUNTERS
+// When defined, keeps track of active Ptr<T> instances and asserts validity of their ownership
+#endif
+
+#ifdef KJ_ASSERT_PTR_COUNTERS
 #include <atomic>  // std::atomic for KJ_ASSERT_PTR_COUNTERS
 #endif
 
@@ -177,16 +183,11 @@ public:
 // =======================================================================================
 // Ptr Counters
 
-#ifdef KJ_DEBUG
-#define KJ_ASSERT_PTR_COUNTERS
-// When defined, keeps track of active Ptr<T> instances and asserts validity of their ownership
-#endif
-
 namespace _ {
-#ifdef KJ_ASSERT_PTR_COUNTERS
 
 void atomicPtrCounterAssertionFailed(const char* const);
 
+#ifdef KJ_ASSERT_PTR_COUNTERS
 class AtomicPtrCounter {
   // AtomicPtrCounter uses atomic operations to keep track of active pointers.
   // Since no other memory location is observed, memory_order_relaxed is used.

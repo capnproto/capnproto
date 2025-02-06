@@ -274,3 +274,13 @@ cc_test(
         ":kj-test",
     ],
 )
+
+cc_test(
+    name = "memory-with-ptr-counters-test",
+    srcs = ["memory-test.c++"],
+    deps = [
+        ":kj",
+        ":kj-test",
+    ],
+    defines = ["KJ_ASSERT_PTR_COUNTERS"],
+)
