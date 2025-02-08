@@ -35,27 +35,21 @@ compiler plugins](otherlang.html#how-to-write-compiler-plugins).
 Note that some Cap'n Proto implementations (especially for interpreted languages) do not require
 generating source code.
 
-## Decoding Messages
+## Converting Messages
 
-    capnp decode myschema.capnp MyType < message.bin > message.txt
+    capnp convert json:binary addressbook.capnp AddressBook < addressbook.json > addressbook.bin
 
-`capnp decode` reads a binary Cap'n Proto message from standard input and decodes it to a
-human-readable text format (specifically, the format used for specifying constants and default
-values in [the schema language](language.html)).  By default it
-expects an unpacked message, but you can decode a
-[packed](encoding.html#packing) message with the `--packed` flag.
+`capnp convert` reads a Cap'n Proto message from standard input encoded in one format and writes
+the message to standard output in another format. The example above is converting from json to
+binary format. The Cap'n Proto schema file and type must be specified when converting either to
+or from a text encoding. These arguments are ignored and can be omitted for binary-to-binary
+conversions as in the example below.
 
-## Encoding Messages
+    capnp convert binary:packed < addressbook.bin > addressbook.packed
 
-    capnp encode myschema.capnp MyType < message.txt > message.bin
-
-`capnp encode` is the opposite of `capnp decode`: it takes a text-format message on stdin and
-encodes it to binary (possibly [packed](encoding.html#packing),
-with the `--packed` flag).
-
-This is mainly useful for debugging purposes, to build test data or to apply tweaks to data
-decoded with `capnp decode`.  You should not rely on `capnp encode` for encoding data written
-and maintained in text format long-term -- instead, use `capnp eval`, which is much more powerful.
+This is mainly useful for debugging purposes, to build test data or to apply tweaks to data while
+text encoded. You should not rely on `capnp convert` for encoding data written and maintained in
+text format long-term -- instead, use `capnp eval`, which is much more powerful.
 
 ## Evaluating Constants
 
