@@ -41,9 +41,11 @@ public:
   WaiterQueue() = default;
   KJ_DISALLOW_COPY_AND_MOVE(WaiterQueue);
 
-  ~WaiterQueue() {
+  ~WaiterQueue() noexcept(false) {
     while (!empty()) {
-      reject(KJ_EXCEPTION(FAILED, "WaiterQueue destroyed"));
+      reject(KJ_EXCEPTION(FAILED, "WaiterQueue destroyed while some promises returned by wait()"
+        " are still outstanding. This is undefined behavior. You must cancel all promises before"
+        " destroying the WaiterQueue."));
     }
   }
 
