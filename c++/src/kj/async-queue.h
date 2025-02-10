@@ -41,6 +41,12 @@ public:
   WaiterQueue() = default;
   KJ_DISALLOW_COPY_AND_MOVE(WaiterQueue);
 
+  ~WaiterQueue() {
+    while (!empty()) {
+      reject(KJ_EXCEPTION(FAILED, "WaiterQueue destroyed"));
+    }
+  }
+
   Promise<T> wait() {
     return newAdaptedPromise<T, Node>(queue);
   }

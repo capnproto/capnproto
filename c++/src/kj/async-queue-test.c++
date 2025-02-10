@@ -147,5 +147,32 @@ KJ_TEST("ProducerConsumerQueue with rejectAll()") {
   }
 }
 
+KJ_TEST("WaiterQueue destroyed with unfulfilled promises") {
+  kj::AsyncIoContext io = setupAsyncIo();
+
+  for (auto numWaiters: { 1, 5, 10 }) {
+    KJ_LOG(INFO, "Testing with a number of waiters on the queue", numWaiters);
+
+    auto promises = Vector<Promise<int>>();
+
+    {
+      WaiterQueue<int> test;
+
+      for (auto i KJ_UNUSED : kj::zeroTo(numWaiters)) {
+        promises.add(test.wait());
+      }
+
+      for (auto& promise: promises) {
+        KJ_EXPECT(!promise.poll(io.waitScope), "All of our waiters should be waiting");
+      }
+    }
+
+    // All promises should have been rejected.
+    for (auto& promise: promises) {
+      KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("WaiterQueue destroyed", promise.wait(io.waitScope));
+    }
+  }
+}
+
 }  // namespace
 }  // namespace kj
