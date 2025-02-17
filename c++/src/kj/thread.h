@@ -24,6 +24,7 @@
 #include "common.h"
 #include "function.h"
 #include "exception.h"
+#include "time.h"
 
 KJ_BEGIN_HEADER
 
@@ -47,6 +48,13 @@ public:
 
   void detach();
   // Don't join the thread in ~Thread().
+
+#if !__APPLE__  // Mac doesn't implement pthread_getcpuclockid().
+  kj::Duration getCpuTime() const;
+  // Get the total CPU time consumed by the thread.
+  //
+  // This may fail if the thread has already exited.
+#endif  // !__APPLE__
 
 private:
   struct ThreadState {
