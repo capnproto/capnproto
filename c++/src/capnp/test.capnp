@@ -946,11 +946,25 @@ interface TestAuthenticatedBootstrap(VatId) {
 
 struct TestSturdyRefHostId {
   host @0 :Text;
+
+  unique @1 :Bool = false;
+  # Set true (in rpc-test) to open a new connection even if one already exists.
 }
 
-struct TestThirdPartyCompletion {}
-struct TestThirdPartyToAwait {}
-struct TestThirdPartyToContact {}
+struct TestThirdPartyCompletion {
+  token @0 :UInt64;
+}
+struct TestThirdPartyToAwait {
+  token @0 :UInt64;
+}
+struct TestThirdPartyToContact {
+  path @0 :TestSturdyRefHostId;
+  token @1 :UInt64;
+
+  sentBy @2 :Text;
+  # Host who sent this, used to verify we didn't just forward by copying the contact, we used
+  # forwardThirdPartyToContact() to rewrite it.
+}
 struct TestJoinResult {}
 
 struct TestNameAnnotation $Cxx.name("RenamedStruct") {

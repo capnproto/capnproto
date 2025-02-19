@@ -153,7 +153,7 @@ public:
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
             return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
-                           " caps:[", kj::strArray(capTable, ", "), "]");
+                           " caps:[", kj::strArray(capTable, ", "), "]\n");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
             return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
@@ -224,10 +224,25 @@ public:
     }
   }
 
+  uint64_t newToken() {
+    // Make a unique token for three-party handoffs.
+    //
+    // In the real world, we'd be using cryptographically unguessable strings, but for testing
+    // purposes a counter will do just fine.
+
+    return ++tokenCounter;
+  }
+
   RpcDumper dumper;
+
+  bool forwardingEnabled = false;
+  uint forwardCount = 0;
+  uint deniedForwardCount = 0;
 
 private:
   kj::HashMap<kj::StringPtr, kj::Own<TestVat>> map;
+
+  uint64_t tokenCounter = 0;
 };
 
 typedef VatNetwork<
@@ -260,17 +275,21 @@ public:
   class ConnectionImpl final
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
-    ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name)
-        : vat(vat), peerVat(peerVat), dumper(vat.network.dumper, name),
+    ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name, bool unique)
+        : vat(vat), peerVat(peerVat), unique(unique), dumper(vat.network.dumper, name),
           tasks(kj::heap<kj::TaskSet>(*this)) {
-      vat.connections.insert(&peerVat, this);
+      if (!unique) {
+        vat.connections.insert(&peerVat, this);
+      }
     }
 
     ~ConnectionImpl() noexcept(false) {
       KJ_IF_SOME(p, partner) {
         p.partner = kj::none;
       }
-      vat.connections.erase(&peerVat);
+      if (!unique) {
+        vat.connections.erase(&peerVat);
+      }
     }
 
     bool isIdle() { return idle; }
@@ -279,7 +298,9 @@ public:
       KJ_REQUIRE(partner == kj::none);
       KJ_REQUIRE(other.partner == kj::none);
       partner = other;
+      partnerName = other.vat.self;
       other.partner = *this;
+      other.partnerName = vat.self;
       dumper.setPartner(other.dumper);
     }
 
@@ -422,6 +443,65 @@ public:
       this->idle = idle;
     }
 
+    bool canIntroduceTo(Connection& other) override {
+      return true;
+    }
+
+    void introduceTo(Connection& other,
+        test::TestThirdPartyToContact::Builder otherContactInfo,
+        test::TestThirdPartyToAwait::Builder thisAwaitInfo) override {
+      uint64_t token = vat.network.newToken();
+      otherContactInfo.initPath().setHost(kj::downcast<ConnectionImpl>(other).partnerName);
+      otherContactInfo.setToken(token);
+      otherContactInfo.setSentBy(vat.self);
+      thisAwaitInfo.setToken(token);
+    }
+
+    kj::Maybe<kj::Own<Connection>> connectToIntroduced(
+        test::TestThirdPartyToContact::Reader contact,
+        test::TestThirdPartyCompletion::Builder completion) override {
+      KJ_EXPECT(contact.getSentBy() == partnerName);
+      completion.setToken(contact.getToken());
+      return vat.connect(contact.getPath());
+    }
+
+    bool canForwardThirdPartyToContact(
+        test::TestThirdPartyToContact::Reader contact, Connection& destination) override {
+      if (!vat.network.forwardingEnabled) {
+        ++vat.network.deniedForwardCount;
+      }
+      return vat.network.forwardingEnabled;
+    }
+
+    void forwardThirdPartyToContact(
+        test::TestThirdPartyToContact::Reader contact, Connection& destination,
+        test::TestThirdPartyToContact::Builder result) override {
+      KJ_EXPECT(vat.network.forwardingEnabled);
+      KJ_EXPECT(contact.getSentBy() == partnerName);
+      ++vat.network.forwardCount;
+      result.setPath(contact.getPath());
+      result.setToken(contact.getToken());
+      result.setSentBy(vat.self);
+    }
+
+    kj::Own<void> awaitThirdParty(
+        test::TestThirdPartyToAwait::Reader party,
+        kj::Rc<kj::Refcounted> value) override {
+      uint64_t token = party.getToken();
+      auto& xchg = vat.getTphExchange(token);
+      xchg.fulfiller->fulfill(kj::mv(value));
+
+      return kj::heap(kj::defer([this, token]() {
+        vat.tphExchanges.erase(token);
+      }));
+    }
+
+    kj::Promise<kj::Rc<kj::Refcounted>> completeThirdParty(
+        test::TestThirdPartyCompletion::Reader completion) override {
+      auto& xchg = vat.getTphExchange(completion.getToken());
+      return xchg.promise.addBranch();
+    }
+
     void taskFailed(kj::Exception&& exception) override {
       ADD_FAILURE() << kj::str(exception).cStr();
     }
@@ -429,8 +509,10 @@ public:
   private:
     TestVat& vat;
     TestVat& peerVat;
+    bool unique;
     RpcDumper::Sender dumper;
     kj::Maybe<ConnectionImpl&> partner;
+    kj::StringPtr partnerName;
 
     kj::Maybe<kj::Exception> networkException;
 
@@ -450,16 +532,21 @@ public:
 
     TestVat& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
-    KJ_IF_SOME(conn, connections.find(&dst)) {
-      return kj::Own<Connection>(kj::addRef(*conn));
-    } else {
-      auto local = kj::refcounted<ConnectionImpl>(*this, dst, self);
-      auto remote = kj::refcounted<ConnectionImpl>(dst, *this, dst.self);
-      local->attach(*remote);
-
-      dst.acceptQueue.push(kj::mv(remote));
-      return kj::Own<Connection>(kj::mv(local));
+    bool unique = hostId.getUnique();
+    if (!unique) {
+      KJ_IF_SOME(conn, connections.find(&dst)) {
+        // Return existing connection.
+        return kj::Own<Connection>(kj::addRef(*conn));
+      }
     }
+
+    // Create new connection.
+    auto local = kj::refcounted<ConnectionImpl>(*this, dst, self, unique);
+    auto remote = kj::refcounted<ConnectionImpl>(dst, *this, dst.self, unique);
+    local->attach(*remote);
+
+    dst.acceptQueue.push(kj::mv(remote));
+    return kj::Own<Connection>(kj::mv(local));
   }
 
   kj::Promise<kj::Own<Connection>> accept() override {
@@ -489,6 +576,22 @@ private:
   kj::ProducerConsumerQueue<kj::Own<Connection>> acceptQueue;
 
   kj::Function<bool(MessageBuilder& message)> sendCallback = [](MessageBuilder&) { return true; };
+
+  struct ThirdPartyExchange {
+    kj::ForkedPromise<kj::Rc<kj::Refcounted>> promise;
+    kj::Own<kj::PromiseFulfiller<kj::Rc<kj::Refcounted>>> fulfiller;
+
+    ThirdPartyExchange(kj::PromiseFulfillerPair<kj::Rc<kj::Refcounted>> paf =
+                       kj::newPromiseAndFulfiller<kj::Rc<kj::Refcounted>>())
+        : promise(paf.promise.fork()), fulfiller(kj::mv(paf.fulfiller)) {}
+  };
+  kj::HashMap<uint64_t, ThirdPartyExchange> tphExchanges;
+
+  ThirdPartyExchange& getTphExchange(uint64_t token) {
+    return tphExchanges.findOrCreate(token, [&]() -> decltype(tphExchanges)::Entry {
+      return {token, ThirdPartyExchange()};
+    });
+  }
 };
 
 TestNetwork::~TestNetwork() noexcept(false) {}
@@ -528,10 +631,11 @@ struct TestContext {
         : vatNetwork(vatNetwork), rpcSystem(makeRpcServer(vatNetwork, kj::mv(bootstrap))) {}
 
     template <typename T = test::TestInterface>
-    typename T::Client connect(kj::StringPtr to) {
+    typename T::Client connect(kj::StringPtr to, bool unique = false) {
       MallocMessageBuilder refMessage(128);
       auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
       hostId.setHost(to);
+      hostId.setUnique(unique);
       return rpcSystem.bootstrap(hostId).castAs<T>();
     }
   };
@@ -1764,6 +1868,284 @@ KJ_TEST("clean connection shutdown") {
   // No more messages should have been sent during shutdown (not even errors).
   KJ_EXPECT(context.alice.vatNetwork.getSentCount() == sent);
   KJ_EXPECT(context.alice.vatNetwork.getReceivedCount() == received);
+}
+
+KJ_TEST("basic three-party handoff") {
+  TestContext context;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  auto& carol = context.initVat("carol",
+      kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  // Alice connects to Bob and Carol.
+  auto bobCap = context.alice.connect<test::TestInterface>("bob");
+  auto carolCap = context.alice.connect<test::TestMoreStuff>("carol");
+
+  // Alice should be connected to Bob. Get the connection for further inspection.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  // Alice -> Bob connection is not idle.
+  KJ_EXPECT(!aliceToBob.isIdle());
+
+  // Carol is not connected to Bob.
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Send `bobCap` to Carol.
+  {
+    auto req = carolCap.holdRequest();
+    req.setCap(kj::mv(bobCap));
+    req.send().wait(context.waitScope);
+  }
+
+  // Pump event loop to allow things to settle.
+  context.waitScope.poll();
+
+  // Bob hasn't been called yet but Carol has.
+  KJ_EXPECT(context.restorer.callCount == 0);
+  KJ_EXPECT(carolCallCount == 1);
+
+  // Carol is not connected to Bob yet because Carol accepts the capability lazily on first
+  // invocation.
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Tell Carol to invoke the held capability. This forces Carol to connect to Bob.
+  {
+    auto resp = carolCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Bob has been called.
+  KJ_EXPECT(context.restorer.callCount == 1);
+
+  // Carol is now connected to Bob, and not idle.
+  auto& carolToBob = KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
+  KJ_EXPECT(!carolToBob.isIdle());
+
+  // Alice -> Bob connection is idle, since we moved away `bobCap`.
+  KJ_EXPECT(aliceToBob.isIdle());
+
+  // Let's shut it down, even, to prove it isn't needed.
+  aliceToBob.initiateIdleShutdown();
+  context.waitScope.poll();
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Do another call to prove shutting down the connection didn't hurt.
+  {
+    auto resp = carolCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Bob has been called again.
+  KJ_EXPECT(context.restorer.callCount == 2);
+
+  // Carol -> Bob connection is still not idle.
+  KJ_EXPECT(!carolToBob.isIdle());
+
+  // Tell Carol to drop the cap to Bob, by sending a hold request but leaving the capability null.
+  carolCap.holdRequest().send().wait(context.waitScope);
+
+  // Now Carol -> Bob connection is idle.
+  KJ_EXPECT(carolToBob.isIdle());
+
+  // Alice is still notn connected to Bob.
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // No forwarding should have occurred in this test.
+  KJ_EXPECT(context.network.forwardCount == 0);
+  KJ_EXPECT(context.network.deniedForwardCount == 0);
+}
+
+KJ_TEST("three-party handoff introduce to self") {
+  TestContext context;
+
+  // Create a CapabilityServerSet with a TestInterfaceImpl in it.
+  CapabilityServerSet<test::TestInterface> capSet;
+  TestInterfaceImpl* ptr;
+  test::TestInterface::Client cap = nullptr;
+  int callCount = 0;
+  {
+    auto obj = kj::heap<TestInterfaceImpl>(callCount);
+    ptr = obj;
+    cap = capSet.add(kj::mv(obj));
+  }
+
+  // Create Carol, whose bootstrap is a TestMoreStuffImpl. (Can't use Bob because calling
+  // getTestMoreStuff() returns a new instance each time, but we want a single shared instance.)
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  context.initVat("carol", kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  // Connect to Carol by two different means, getting the same capability back.
+  auto carolCap1 = context.alice.connect<test::TestMoreStuff>("carol", true);
+  auto carolCap2 = context.alice.connect<test::TestMoreStuff>("carol", true);
+
+  // Pass a capability to Carol over the first connection.
+  {
+    auto req = carolCap1.holdRequest();
+    req.setCap(cap);
+    req.send().wait(context.waitScope);
+  }
+
+  // Receive it back over the second.
+  auto roundTripCap = carolCap2.getHeldRequest().send().wait(context.waitScope).getCap();
+
+  // We should be able to unwrap that.
+  auto& roundTripObj = KJ_ASSERT_NONNULL(
+      capSet.getLocalServer(roundTripCap).wait(context.waitScope));
+
+  // It should have unwrapped to the same original object.
+  KJ_EXPECT(&roundTripObj == ptr);
+}
+
+class TestNoTailForwarder final: public test::TestMoreStuff::Server {
+  // Capability which just forwards to some other capability, but without using a tail call.
+  //
+  // If `holdBouncer` is provided, then calls to `hold()` will additionally round-trip the
+  // capability to the bouncer and back, adding a leg that should get path-shortened away if
+  // everything is working correctly.
+
+public:
+  TestNoTailForwarder(test::TestMoreStuff::Client next,
+                      kj::Maybe<test::TestMoreStuff::Client> holdBouncer)
+      : next(kj::mv(next)), holdBouncer(kj::mv(holdBouncer)) {}
+
+  DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                  CallContext<AnyPointer, AnyPointer> context) override {
+    if (interfaceId == capnp::typeId<test::TestMoreStuff>() && methodId == 3) {
+      // Calling TestMoreStuff.hold(). Dispatch normally.
+      return test::TestMoreStuff::Server::dispatchCall(interfaceId, methodId, context);
+    }
+
+    auto params = context.getParams();
+    auto req = next.typelessRequest(interfaceId, methodId, params.targetSize(), {});
+    req.set(params);
+    auto promise = req.send().then([context](Response<AnyPointer> resp) mutable {
+      context.getResults(resp.targetSize()).set(resp);
+    });
+    return { .promise = kj::mv(promise), .isStreaming = false };
+  }
+
+private:
+  test::TestMoreStuff::Client next;
+  kj::Maybe<test::TestMoreStuff::Client> holdBouncer;
+
+  kj::Promise<void> hold(HoldContext context) override {
+    auto cap = context.getParams().getCap();
+
+    // If we have a holdBouncer, bounce the capability through it first before forwarding on.
+    KJ_IF_SOME(hb, holdBouncer) {
+      auto req = hb.echoRequest();
+
+      // HACK: echo() just reflects the cap back, but it was written to expect TestCallOrder
+      //   specifically. We'll just pretend that's what we have, it doesn't matter.
+      // TODO(cleanup): Change echo() to take `Capability` or maybe even be a generic.
+      req.setCap(cap.castAs<test::TestCallOrder>());
+      auto resp = co_await req.send();
+      cap = resp.getCap().castAs<test::TestInterface>();
+    }
+
+    auto req = next.holdRequest();
+    req.setCap(kj::mv(cap));
+    co_await req.send();
+
+    // (hold() has no results)
+  }
+};
+
+void doForwardingTest(bool allowForwarding, bool addReflectionLeg) {
+  TestContext context;
+  context.network.forwardingEnabled = allowForwarding;
+
+  // Set up Alice, Bob, Carol, and Dave.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  auto& carol = context.initVat("carol",
+      kj::heap<TestMoreStuffImpl>(carolCallCount, carolHandleCount));
+
+  int eveCallCount = 0;
+  int eveHandleCount = 0;
+
+  // Arrange for Dave to forward all calls to Carol.
+  auto& dave = [&]() -> TestContext::Vat& {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& dave = context.initVat("dave", kj::mv(paf.promise));
+
+    kj::Maybe<test::TestMoreStuff::Client> holdBouncer = kj::none;
+    if (addReflectionLeg) {
+      // Add a `holdBouncer`, so the capability gets bounced from Dave to Eve and back to Dave
+      // again before forwarding on to Carol.
+      context.initVat("eve", kj::heap<TestMoreStuffImpl>(eveCallCount, eveHandleCount));
+      holdBouncer = dave.connect<test::TestMoreStuff>("eve");
+    }
+
+    paf.fulfiller->fulfill(kj::heap<TestNoTailForwarder>(
+        dave.connect<test::TestMoreStuff>("carol"), kj::mv(holdBouncer)));
+    return dave;
+  }();
+
+  // Alice connects to Bob and Dave.
+  auto bobCap = context.alice.connect<test::TestInterface>("bob");
+  auto daveCap = context.alice.connect<test::TestMoreStuff>("dave");
+
+  // Send `bobCap` to Dave, who sends it on to Carol.
+  {
+    auto req = daveCap.holdRequest();
+    req.setCap(kj::mv(bobCap));
+    req.send().wait(context.waitScope);
+  }
+
+  // Pump event loop to allow things to settle.
+  context.waitScope.poll();
+
+  // Tell Dave to invoke the held capability. Dave forwards to Carol. This forces Carol to connect
+  // to Bob.
+  {
+    auto resp = daveCap.callHeldRequest().send().wait(context.waitScope);
+    KJ_EXPECT(resp.getS() == "bar");
+  }
+
+  // Dave is connected to Carol, who is connected to Bob.
+  KJ_EXPECT(dave.vatNetwork.getConnectionTo(carol.vatNetwork) != kj::none);
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(bob.vatNetwork) != kj::none);
+
+  // Carol never connected to Alice.
+  KJ_EXPECT(carol.vatNetwork.getConnectionTo(alice.vatNetwork) == kj::none);
+
+  if (allowForwarding) {
+    // Dave never connected to Bob.
+    KJ_EXPECT(dave.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+    // Forwarding occurred.
+    KJ_EXPECT(context.network.forwardCount == addReflectionLeg ? 3 : 1);
+    KJ_EXPECT(context.network.deniedForwardCount == 0);
+  } else {
+    // Dave had to accept the capability from Bob before forwarding it, so had to connect to bob.
+    KJ_EXPECT(dave.vatNetwork.getConnectionTo(bob.vatNetwork) != kj::none);
+
+    // No forwarding occurred.
+    KJ_EXPECT(context.network.forwardCount == 0);
+    KJ_EXPECT(context.network.deniedForwardCount == 1);
+  }
+}
+
+KJ_TEST("four-party handoff with forwarding") {
+  doForwardingTest(true, false);
+}
+
+KJ_TEST("four-party handoff without forwarding") {
+  doForwardingTest(false, false);
+}
+
+KJ_TEST("four-party handoff with forwarding through a reflected path") {
+  doForwardingTest(true, true);
 }
 
 }  // namespace
