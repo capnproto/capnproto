@@ -2545,7 +2545,7 @@ void ForkBranchBase::onReady(Event* event) noexcept {
 void ForkBranchBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   if (stopAtNextEvent) return;
 
-  if (hub.get() != nullptr) {
+  if (hub.get() != nullptr && hub->inner.get() != nullptr) {
     hub->inner->tracePromise(builder, false);
   }
 
