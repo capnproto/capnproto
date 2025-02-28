@@ -1124,7 +1124,7 @@ public:
           // Presumably because the target path doesn't exist.
           if (has(mode, WriteMode::CREATE)) {
             KJ_FAIL_ASSERT("rename(tmp, path) claimed path exists but "
-                "renameat2(fromPath, toPath, EXCHANGE) said it doest; concurrent modification?",
+                "renameat2(fromPath, toPath, EXCHANGE) said it doesn't; concurrent modification?",
                 fromPath, toPath) { return false; }
           } else {
             // Assume target doesn't exist.
