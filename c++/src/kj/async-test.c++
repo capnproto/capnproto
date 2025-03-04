@@ -1224,6 +1224,43 @@ KJ_TEST("TaskSet::clear()") {
   });
 }
 
+KJ_TEST("TaskSet::trace() on forked promise") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  ErrorHandlerImpl errorHandler;
+  TaskSet tasks(errorHandler);
+
+  int counter = 0;
+
+  auto forked = evalLater([&]() {
+    EXPECT_EQ(0, counter++);
+  }).fork();
+
+  auto branch1 = forked.addBranch().then([&](){
+    EXPECT_EQ(1, counter++);
+  });
+  auto branch2 = forked.addBranch().then([](){
+    KJ_FAIL_ASSERT("this branch shouldn't run");
+  });
+
+  tasks.add(kj::mv(branch1));
+  tasks.add(kj::mv(branch2));
+
+  // Ensure only 1 branch has run
+  loop.run(2);
+
+  EXPECT_EQ(counter, 2);
+
+  // trace() shouldn't throw
+  auto trace = tasks.trace();
+  uint lines = 0;
+  for (char c: trace) {
+    lines += c == '\n';
+  }
+
+  EXPECT_LT(lines, 10);
+}
+
 class DestructorDetector {
 public:
   DestructorDetector(bool& setTrue): setTrue(setTrue) {}

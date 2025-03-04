@@ -28,6 +28,7 @@
 #else
 #include <pthread.h>
 #include <signal.h>
+#include <time.h>
 #endif
 
 namespace kj {
@@ -59,6 +60,20 @@ Thread::~Thread() noexcept(false) {
 void Thread::detach() {
   KJ_ASSERT(CloseHandle(threadHandle));
   detached = true;
+}
+
+kj::Duration Thread::getCpuTime() const {
+  FILETIME creationTime;
+  FILETIME exitTime;
+  FILETIME kernelTime;
+  FILETIME userTime;
+
+  KJ_WIN32(GetThreadTimes(threadHandle, &creationTime, &exitTime, &kernelTime, &userTime));
+
+  // FILETIME is a 64-bit integer split into two 32-bit pieces, with a base unit of 100ns.
+  int64_t utime = (static_cast<uint64_t>(userTime.dwHighDateTime) << 32) | userTime.dwLowDateTime;
+  int64_t ktime = (static_cast<uint64_t>(kernelTime.dwHighDateTime) << 32) | kernelTime.dwLowDateTime;
+  return (utime + ktime) * 100 * kj::NANOSECONDS;
 }
 
 #else  // _WIN32
@@ -107,6 +122,22 @@ void Thread::detach() {
   detached = true;
   state->unref();
 }
+
+#if !__APPLE__  // Mac doesn't implement pthread_getcpuclockid().
+kj::Duration Thread::getCpuTime() const {
+  clockid_t clockId;
+  int pthreadResult = pthread_getcpuclockid(
+      *reinterpret_cast<const pthread_t*>(&threadId), &clockId);
+  if (pthreadResult != 0) {
+    KJ_FAIL_SYSCALL("pthread_getcpuclockid", pthreadResult);
+  }
+
+  struct timespec ts;
+  KJ_SYSCALL(clock_gettime(clockId, &ts));
+
+  return ts.tv_sec * kj::SECONDS + ts.tv_nsec * kj::NANOSECONDS;
+}
+#endif  // !__APPLE__
 
 #endif  // _WIN32, else
 
