@@ -29,13 +29,13 @@ jobs:
     # a libc++ package (based on LLVM 15), but building capnproto failed when I tried it.
     # Alpine Linux 3.18's libc++ package is from LLVM 16, however, and worked out-of-the-box, so
     # Clang 16 appears to be the earliest Clang version we can run easily on Alpine Linux.
-    container: alpine:3.18.2
+    container: alpine:3.19
     steps:
       - uses: actions/checkout@v4
       - name: install dependencies
-        run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang16 libc++-dev
+        run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang17 libc++-dev
       - name: super-test
-        run: ./super-test.sh quick clang-16
+        run: ./super-test.sh quick clang-17
   Linux-clang:
     runs-on: ubuntu-24.04
     strategy:
