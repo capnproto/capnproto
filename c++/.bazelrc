@@ -1,6 +1,11 @@
 common --noenable_bzlmod
 common --enable_platform_specific_config
 
+# Bazel 8: Need to manually enable WORKSPACE logic. With a future release, we'll have to transition
+# to bzlmod and manually load starlarkified dependencies like rules_cc.
+common --enable_workspace
+common --incompatible_autoload_externally=
+
 build:unix --cxxopt='-std=c++20' --host_cxxopt='-std=c++20' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'
@@ -36,9 +41,9 @@ build:macos --config=unix
 # See https://bazel.build/configure/windows#symlink
 startup --windows_enable_symlinks
 # We use LLVM's MSVC-compatible compiler driver to compile our code on Windows under Bazel. MSVC is
-# natively supported when using CMake builds. This does not support toolchain resolution yet.
-build:windows --noincompatible_enable_cc_toolchain_resolution
-build:windows --compiler=clang-cl
+# natively supported when using CMake builds.
+build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-clang-cl
+build:windows --extra_execution_platforms=//:x64_windows-clang-cl
 
 build:windows --cxxopt='/std:c++20' --host_cxxopt='/std:c++20' --verbose_failures
 # The `/std:c++20` argument is unused during boringssl compilation and we don't
