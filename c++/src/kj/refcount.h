@@ -472,6 +472,15 @@ public:
     }
   }
 
+  kj::Arc<const T> addRef() const {
+    const T* refcounted = own.get();
+    if (refcounted != nullptr) {
+      return AtomicRefcounted::addRcRefInternal(refcounted);
+    } else {
+      return kj::Arc<T>();
+    }
+  }
+  
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
   // is its own Disposer.

@@ -321,4 +321,12 @@ KJ_TEST("Arc disown / reown") {
   KJ_EXPECT(b == true);
 }
 
+
+KJ_TEST("Arc<const T>") {
+  bool b = false;
+
+  const kj::Arc<AtomicSetTrueInDestructor> ref1 = kj::arc<AtomicSetTrueInDestructor>(&b);
+  kj::Arc<const AtomicSetTrueInDestructor> ref2 = ref1.addRef();
+}
+
 }  // namespace kj
