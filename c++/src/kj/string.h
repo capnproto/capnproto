@@ -80,7 +80,7 @@ public:
   }
   inline constexpr StringPtr(const char* begin KJ_LIFETIMEBOUND, const char* end KJ_LIFETIMEBOUND): StringPtr(begin, end - begin) {}
   inline constexpr StringPtr(String&& value KJ_LIFETIMEBOUND) : StringPtr(value) {}
-  inline constexpr StringPtr(const String& value KJ_LIFETIMEBOUND);
+  inline constexpr StringPtr(const String& value);
   inline constexpr StringPtr(const ConstString& value KJ_LIFETIMEBOUND);
   StringPtr& operator=(String&& value) = delete;
   inline StringPtr& operator=(decltype(nullptr)) {
