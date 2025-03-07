@@ -18,7 +18,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
-        "@ssl",
+        "@boringssl//:ssl",
     ],
 )
 
