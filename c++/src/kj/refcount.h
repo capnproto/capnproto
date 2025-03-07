@@ -354,9 +354,7 @@ private:
   friend kj::Own<T> atomicRefcounted(Params&&... params);
 
   template <typename T>
-  static kj::Arc<T> addRcRefInternal(T* object);
-  template <typename T>
-  static kj::Arc<const T> addRcRefInternal(const T* object);
+  static kj::Arc<T> addRcRefInternal(const T* object);
 
   template <typename T>
   friend class Arc;
@@ -431,22 +429,18 @@ kj::Own<const T> AtomicRefcounted::addRefInternal(const T* object) {
 }
 
 template <typename T>
-kj::Arc<T> AtomicRefcounted::addRcRefInternal(T* object) {
+kj::Arc<T> AtomicRefcounted::addRcRefInternal(const T* object) {
   static_assert(kj::canConvert<T&, AtomicRefcounted&>());
   return kj::Arc<T>(addRefInternal(object));
-}
-
-template <typename T>
-kj::Arc<const T> AtomicRefcounted::addRcRefInternal(const T* object) {
-  static_assert(kj::canConvert<T&, AtomicRefcounted&>());
-  return kj::Arc<const T>(addRefInternal(object));
 }
 
 template<typename T>
 class Arc {
   // Smart pointer for atomic reference counted objects. 
   //
-  // Usage is similar to kj::Rc<T>.
+  // The usage is similar to `kj::Rc<T>` but with a "const"-ness twist:
+  // since in kj multithreaded code "const" means "thread-safe", `Arc<T>`
+  // exposes only `const` members of T and thus is closer to `kj::Rc<const T>`.
 
 public:
   KJ_DISALLOW_COPY(Arc);
@@ -457,14 +451,14 @@ public:
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Arc(Arc<U>&& other) noexcept : own(kj::mv(other.own)) { }
 
-  kj::Own<T> toOwn() {
-    // Convert Arc<T> to Own<T>.
+  kj::Own<const T> toOwn() {
+    // Convert Arc<T> to Own<const T>.
     // Nullifies the original Arc<T>.
     return kj::mv(own);
   }
 
-  kj::Arc<T> addRef() {
-    T* refcounted = own.get();
+  kj::Arc<T> addRef() const {
+    const T* refcounted = own.get();
     if (refcounted != nullptr) {
       return AtomicRefcounted::addRcRefInternal(refcounted);
     } else {
@@ -475,12 +469,12 @@ public:
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
   // is its own Disposer.
-  T* disown() {
+  const T* disown() {
     return own.disown(own.get());
   }
 
   // Assume ownership of an object without incrementing its refcount. Opposite of disown().
-  static Arc reown(T* ptr) {
+  static Arc reown(const T* ptr) {
     return Arc(ptr);
   }
 
@@ -500,17 +494,14 @@ public:
   inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return own.get() != nullptr; }
 
-  inline T* operator->() { return own.get(); }
   inline const T* operator->() const { return own.get(); }
-
-  inline T* get() { return own.get(); }
   inline const T* get() const { return own.get(); }
 
 private:
-  Arc(T* t) : own(t, *t) { }
-  Arc(Own<T>&& t) : own(kj::mv(t)) { }
+  Arc(const T* t) : own(t, *t) { }
+  Arc(Own<const T>&& t) : own(kj::mv(t)) { }
 
-  Own<T> own;
+  Own<const T> own;
 
   friend class AtomicRefcounted;
 
