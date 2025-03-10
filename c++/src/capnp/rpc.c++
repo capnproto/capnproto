@@ -653,6 +653,8 @@ private:
     }
   };
 
+  struct ThirdPartyExchangeValue;
+
   struct Answer {
     Answer() = default;
     Answer(const Answer&) = delete;
@@ -666,8 +668,9 @@ private:
     using Running = kj::Promise<void>;
     struct Finished {};
     using Redirected = kj::Promise<kj::Own<RpcResponse>>;
+    using Provide = kj::Rc<ThirdPartyExchangeValue>;
 
-    kj::OneOf<Running, Finished, Redirected> task;
+    kj::OneOf<Running, Finished, Redirected, Provide> task;
     // While the RPC is running locally, `task` is a `Promise` representing the task to execute
     // the RPC.
     //
@@ -686,6 +689,21 @@ private:
     // will need to be released.
   };
 
+  struct VineInfo {
+    // Metadata possibly attached to an export describing the 3PH vine it represents.
+
+    using Provision = kj::Own<QuestionRef>;
+    // This is the root of the vine. The `QuestionRef` is the `Provide` operation initiated from
+    // this node.
+
+    using Contact = kj::Own<AnyPointer::Reader>;
+    // This vine was passed over one or more connections. The `AnyPointer` contains the
+    // `ThirdPartyToContact` value as received to create this import.
+
+    kj::OneOf<Provision, Contact> info;
+    // The info is one of the two above things.
+  };
+
   struct Export {
     uint refcount = 0;
     // When this reaches 0, drop `clientHook` and free this export.
@@ -699,6 +717,9 @@ private:
     kj::Maybe<kj::Promise<void>> resolveOp = kj::none;
     // If this export is a promise (not a settled capability), the `resolveOp` represents the
     // ongoing operation to wait for that promise to resolve and then send a `Resolve` message.
+
+    kj::Maybe<kj::Own<VineInfo>> vineInfo = kj::none;
+    // If this export is a 3PH vine, we need to remember some info about it.
 
     inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
   };
@@ -896,18 +917,38 @@ private:
       return connectionState.get() == &expected;
     }
 
-    virtual kj::Maybe<PromiseClient&> tryDowncastToPromiseClient() { return kj::none; }
-    // Returns a reference to this same object if it's a PromiseClient specifically.
+    virtual void promiseResolvedToThis(bool receivedCall) {}
+    // Called to indicate that an RPC promise was resolved (via a `Resolve` message we received)
+    // to point to this client (i.e. the `CapDescriptor` for the resolution pointed to another
+    // import table entry). `receivedCall` is true if the resolving promise had received calls
+    // in the past, which had been pipelined. Some RpcClient derivatives need to know when this
+    // happens in order to arrange to use embargoes where appropriate. Others don't care, so can
+    // use the default implementation.
 
-    virtual kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                                kj::Vector<int>& fds) = 0;
+    struct WriteDescriptorResult {
+      kj::Maybe<ExportId> exportId;
+      // If writing the descriptor adds a new export to the export table, or increments the refcount
+      // on an existing one, then this indicates the export ID. The caller is responsible for
+      // ensuring the refcount is decremented when this descriptor is released.
+
+      ClientHook& described;
+      // The underlying ClientHook which this descriptor actually described. In particular, if the
+      // capability turns out to be an RPC PromiseClient which is not yet resolved, then
+      // `described` will point at the temporary object that represents the promise pipeline.
+      // This client will not resolve later when the promise resolves; it'll keep going to the
+      // pipeline.
+      //
+      // This is needed to handle the Tribble 4-way race condition. If some other promise resolved
+      // to *this* promise, then we need to replace the original promise's export table entry
+      // with a direct link to the new promise's pipeline, which cannot further resolve.
+      // `described` is the correct capability to use for this purpose.
+    };
+
+    virtual WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                                  kj::Vector<int>& fds) = 0;
     // Writes a CapDescriptor referencing this client.  The CapDescriptor must be sent as part of
     // the very next message sent on the connection, as it may become invalid if other things
     // happen.
-    //
-    // If writing the descriptor adds a new export to the export table, or increments the refcount
-    // on an existing one, then the ID is returned and the caller is responsible for removing it
-    // later.
 
     virtual kj::Maybe<kj::Own<ClientHook>> writeTarget(
         rpc::MessageTarget::Builder target) = 0;
@@ -917,11 +958,6 @@ private:
     //
     // If calls have been redirected to some other local ClientHook, returns that hook instead.
     // This can happen if the capability represents a promise that has been resolved.
-
-    virtual kj::Own<ClientHook> getInnermostClient() = 0;
-    // If this client just wraps some other client -- even if it is only *temporarily* wrapping
-    // that other client -- return a reference to the other client, transitively.  Otherwise,
-    // return a new reference to *this.
 
     virtual void adoptFlowController(kj::Own<RpcFlowController> flowController) {
       // Called when a PromiseClient resolves to another RpcClient. If streaming calls were
@@ -942,7 +978,23 @@ private:
       }
     }
 
-    virtual kj::Own<ClientHook> writeThirdPartyDescriptor(
+    struct VineToExport {
+      kj::Own<ClientHook> vine;
+      // Capability to export as the "vine" in the ThirdPartyCapDescriptor.
+
+      kj::Maybe<kj::Own<VineInfo>> vineInfo;
+      // VineInfo to attach to the vine export.
+    };
+
+    using WriteThirdPartyDescriptorResult = kj::OneOf<VineToExport, kj::Own<ClientHook>>;
+    // If a three-party handoff was successfully initiated, returns VineToExport.
+    //
+    // If this is a ClientHook instead, then it was discovered while attempting to write the
+    // descriptor that some other capability should be described instead, so nothing was written.
+    // In this case, the caller should proceed by attempting to write that capability's descriptor
+    // instead.
+
+    virtual WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
           VatNetworkBase::Connection& provider,
           VatNetworkBase::Connection& recipient,
           AnyPointer::Builder contact) {
@@ -961,11 +1013,6 @@ private:
       // a stand-in for the object. It also needs to hold open the `Provide` operation until the
       // returned reference is dropped. Note that `addRef()`s on the returned reference do NOT have
       // to hold open the Provide; the Provide can be held open by an attachment on the ref itself.
-      //
-      // If this function returns *without* filling in `contact` (i.e. `contact.isNull()`), then
-      // this indicates that the return value is actually a redirect (not the vine). The caller
-      // will have to start over writing a descriptor for this new capability instead.
-      // TODO(cleanup): This is is an ugly API, consider making it better.
       //
       // The default implementation of this method is appropriate most of the time. It is
       // overridded for the specific case of `DeferredThirdPartyClient`.
@@ -990,7 +1037,10 @@ private:
       recipient.introduceTo(provider, contact, provide.initRecipient());
       otherMsg->send();
 
-      return addRef().attach(kj::mv(questionRef));
+      return VineToExport {
+        .vine = addRef(),
+        .vineInfo = kj::heap(VineInfo { .info = kj::mv(questionRef) })
+      };
     }
 
     // implements ClientHook -----------------------------------------
@@ -1097,20 +1147,19 @@ private:
       ++remoteRefcount;
     }
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                        kj::Vector<int>& fds) override {
+    WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                          kj::Vector<int>& fds) override {
       descriptor.setReceiverHosted(importId);
-      return kj::none;
+      return {
+        .exportId = kj::none,
+        .described = *this,
+      };
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
         rpc::MessageTarget::Builder target) override {
       target.setImportedCap(importId);
       return kj::none;
-    }
-
-    kj::Own<ClientHook> getInnermostClient() override {
-      return kj::addRef(*this);
     }
 
     // implements ClientHook -----------------------------------------
@@ -1146,13 +1195,16 @@ private:
                    kj::Array<PipelineOp>&& ops)
         : RpcClient(connectionState), questionRef(kj::mv(questionRef)), ops(kj::mv(ops)) {}
 
-   kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                       kj::Vector<int>& fds) override {
+    WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                          kj::Vector<int>& fds) override {
       auto promisedAnswer = descriptor.initReceiverAnswer();
       promisedAnswer.setQuestionId(questionRef->getId());
       promisedAnswer.adoptTransform(fromPipelineOps(
           Orphanage::getForMessageContaining(descriptor), ops));
-      return kj::none;
+      return {
+        .exportId = kj::none,
+        .described = *this,
+      };
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
@@ -1161,10 +1213,6 @@ private:
       builder.setQuestionId(questionRef->getId());
       builder.adoptTransform(fromPipelineOps(Orphanage::getForMessageContaining(builder), ops));
       return kj::none;
-    }
-
-    kj::Own<ClientHook> getInnermostClient() override {
-      return kj::addRef(*this);
     }
 
     // implements ClientHook -----------------------------------------
@@ -1228,10 +1276,20 @@ private:
       }
     }
 
-    kj::Maybe<PromiseClient&> tryDowncastToPromiseClient() override { return *this; }
+    void promiseResolvedToThis(bool receivedCall) override {
+      // Some other promise resolved to *this* promise.
+      KJ_REQUIRE(!isResolved,
+          "peer committed RPC protocol error: a promise cannot resolve to another promise "
+          "where the latter promise is itself already resolved; see "
+          "`CapDescriptor.senderPromise`.");
+      this->receivedCall = this->receivedCall || receivedCall;
+    }
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                        kj::Vector<int>& fds) override {
+    WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                          kj::Vector<int>& fds) override {
+      // TODO(now): Setting receivedCall = true seems wrong here, writing a descriptor does not
+      //   imply that the capability is being called, and so does not imply that an embargo is
+      //   needed when the capability is resolved.
       receivedCall = true;
       return connectionState->writeDescriptor(*cap, descriptor, fds);
     }
@@ -1240,11 +1298,6 @@ private:
         rpc::MessageTarget::Builder target) override {
       receivedCall = true;
       return connectionState->writeTarget(*cap, target);
-    }
-
-    kj::Own<ClientHook> getInnermostClient() override {
-      receivedCall = true;
-      return connectionState->getInnermostClient(*cap);
     }
 
     void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
@@ -1263,7 +1316,7 @@ private:
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
         CallHints hints) override {
-      if (isResolved()) {
+      if (isResolved) {
         // Go directly to the resolved capability.
         //
         // If we don't do this now, then we'll return an RpcRequest which, as soon as send() is
@@ -1292,7 +1345,7 @@ private:
     }
 
     kj::Maybe<ClientHook&> getResolved() override {
-      if (isResolved()) {
+      if (isResolved) {
         return *cap;
       } else {
         return kj::none;
@@ -1304,7 +1357,7 @@ private:
     }
 
     kj::Maybe<int> getFd() override {
-      if (isResolved()) {
+      if (isResolved) {
         return cap->getFd();
       } else {
         // In theory, before resolution, the ImportClient for the promise could have an FD
@@ -1324,88 +1377,48 @@ private:
     kj::ForkedPromise<kj::Own<ClientHook>> fork;
 
     bool receivedCall = false;
-
-    enum {
-      UNRESOLVED,
-      // Not resolved at all yet.
-
-      REMOTE,
-      // Remote promise resolved to a remote settled capability (or null/error).
-
-      REFLECTED,
-      // Remote promise resolved to one of our own exports.
-
-      MERGED,
-      // Remote promise resolved to another remote promise which itself wasn't resolved yet, so we
-      // merged them. In this case, `cap` is guaranteed to point to another PromiseClient.
-
-      BROKEN
-      // Resolved to null or error.
-    } resolutionType = UNRESOLVED;
-
-    inline bool isResolved() {
-      return resolutionType != UNRESOLVED;
-    }
+    bool isResolved = false;
 
     kj::Promise<kj::Own<ClientHook>> resolve(kj::Own<ClientHook> replacement) {
-      KJ_DASSERT(!isResolved());
+      KJ_ASSERT(!isResolved, "peer committed RPC protocol error: resolved a promise that was "
+          "already resolved");
+      KJ_ASSERT(replacement.get() != this, "can't resolve promise to itself");
 
       bool isSameConnection = false;
-      KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameConnection(*replacement)) {
-        isSameConnection = true;
+      bool needsEmbargo = false;
+      KJ_IF_SOME(rpcReplacement, connectionState->unwrapIfSameNetwork(*replacement)) {
+        if (rpcReplacement.isOnConnection(*connectionState)) {
+          isSameConnection = true;
 
-        // We resolved to some other RPC capability hosted by the same peer.
-        KJ_IF_SOME(promiseReplacement, rpcReplacement.tryDowncastToPromiseClient()) {
-          // We resolved to another remote promise. If *that* promise eventually resolves back
-          // to us, we'll need a disembargo. Possibilities:
-          // 1. The other promise hasn't resolved at all yet. In that case we can simply set its
-          //    `receivedCall` flag and let it handle the disembargo later.
-          // 2. The other promise has received a Resolve message and decided to initiate a
-          //    disembargo which it is still waiting for. In that case we will certainly also need
-          //    a disembargo for the same reason that the other promise did. And, we can't simply
-          //    wait for their disembargo; we need to start a new one of our own.
-          // 3. The other promise has resolved already (with or without a disembargo). In this
-          //    case we should treat it as if we resolved directly to the other promise's result,
-          //    possibly requiring a disembargo under the same conditions.
-
-          PromiseClient* other = &promiseReplacement;
-          while (other->resolutionType == MERGED) {
-            // There's no need to resolve to a thing that's just going to resolve to another thing.
-            replacement = other->cap->addRef();
-            other = &kj::downcast<PromiseClient>(*replacement);
-
-            // We'd only merge with other PromiseClients on the same connection.
-            KJ_DASSERT(connectionState->unwrapIfSameConnection(*replacement) != kj::none);
-          }
-
-          if (other->isResolved()) {
-            // The other capability resolved already. If it determined that it resolved as
-            // reflected, then we determine the same.
-            resolutionType = other->resolutionType;
-          } else {
-            // The other capability hasn't resolved yet, so we can safely merge with it and do a
-            // single combined disembargo if needed later.
-            other->receivedCall = other->receivedCall || receivedCall;
-            resolutionType = MERGED;
-          }
+          // We resolved to some other RPC capability hosted by the same peer.
+          //
+          // It's possible we resolved to a remote promise. If *that* promise eventually resolves
+          // back to us, we'll need a disembargo. Luckily, we know that the other promise cannot have
+          // resolved yet, due to the requirement that a `CapDescriptor` cannot reference an
+          // already-resolved promise. So, we don't need to start a disembargo now; we can simply
+          // rely on the other promise applying a disembargo later. To make sure that happens,
+          // we need to propagate our `receivedCall` flag to it.
+          //
+          // (And if `rpcReplacement` is *not* a promise then no embargo is needed because the
+          // capability cannot resolve back to point to us later. It's remote over the same
+          // connection and therefore calls will stay ordered naturally.)
+          rpcReplacement.promiseResolvedToThis(receivedCall);
         } else {
-          resolutionType = REMOTE;
+          // Resolved to a thard-party capability. The three-party handoff mechanism takes care
+          // of embargoing this.
         }
       } else {
         if (replacement->isNull() || replacement->isError()) {
-          // We don't consider null or broken capabilities as "reflected" because they may have
-          // been communicated to us literally as a null pointer or an exception on the wire,
-          // rather than as a reference to one of our exports, in which case a disembargo won't
-          // work. But also, call ordering is completely irrelevant with these so there's no need
-          // to disembargo anyway.
-          resolutionType = BROKEN;
+          // Null or broken capabilities appear to be local capabilities, but they aren't really.
+          // Rather, they are capabilities that are "passed by value". Sending a disembargo to them
+          // wouldn't work since the other end doesn't see these capabilities as pointing back to
+          // us so wouldn't reflect the disembargo. Luckily, there's no need: call ordering is
+          // irrelevant for these since they are just going to reject all calls anyway, so we
+          // do not need to worry about embargoing them.
         } else {
-          resolutionType = REFLECTED;
+          needsEmbargo = receivedCall;
         }
       }
-
-      // Every branch above ends by setting resolutionType to something other than UNRESOLVED.
-      KJ_DASSERT(isResolved());
 
       // If the promise was used for streaming calls, it will have a `flowController` that might
       // still be shepherding those calls. We'll need make sure that it doesn't get thrown away.
@@ -1429,8 +1442,7 @@ private:
         }
       }
 
-      if (resolutionType == REFLECTED && receivedCall &&
-          connectionState->connection.is<Connected>()) {
+      if (needsEmbargo && connectionState->connection.is<Connected>()) {
         // The new capability is hosted locally, not on the remote machine.  And, we had made calls
         // to the promise.  We need to make sure those calls echo back to us before we allow new
         // calls to go directly to the local capability, so we need to set a local embargo and send
@@ -1469,6 +1481,7 @@ private:
       }
 
       cap = replacement->addRef();
+      isResolved = true;
 
       return kj::mv(replacement);
     }
@@ -1486,9 +1499,37 @@ private:
         kj::Own<AnyPointer::Reader> contact, kj::Own<RpcClient> vine)
         : RpcClient(connectionState), state(Deferred {kj::mv(contact), kj::mv(vine)}) {}
 
+    void promiseResolvedToThis(bool receivedCall) override {
+      if (receivedCall) {
+        // A promise resolved to us, and it had received calls that were pipelined. If we end up
+        // accepting this capability locally, we will need to use an embargo.
+        needEmbargo = true;
 
-    kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                        kj::Vector<int>& fds) override {
+        // promiseResolvedToThis() is always called immediately after the resolution capability was
+        // received off the wire, so there should not have been a chance for it to have been
+        // accepted yet. This is good, because we need to make sure we embargo it on accept.
+        //
+        // Note that we know for sure that the resolution message could only have created a new
+        // `DeferredThirdPartyClient` -- not referred to an existing one -- because:
+        // - If the type was `senderHosted` or `senderPromise`, it refers to an import, and we
+        //   never place `DeferredThirdPartyClient` directly on the import table. (Its vine is on
+        //   the import table, but the `DeferredThirdPartyClient` object itself is not.)
+        // - If the type was `receiverHosted` or `receiverAnswer` then promiseResolvedToThis()
+        //   would not have been called on it, because `unwrapIfSameConnection()` would have
+        //   returned kj::none.
+        // - Therefore the only possibility is that the resolve message contained a
+        //   `ThirdPartyCapDescriptor`, which casued a fresh `DeferredThirdPartyClient` to be
+        //   created.
+        //
+        // It's good that this all works out, because otherwise we'd probably need to change the
+        // embargo protocol so that an embargo could be established *after* accepting the
+        // capability.
+        KJ_ASSERT(state.is<Deferred>());
+      }
+    }
+
+    WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                          kj::Vector<int>& fds) override {
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(deferred, Deferred) {
           // A ThirdPartyCapDescriptor was sent to us, and we are sending it *back* over the same
@@ -1512,38 +1553,13 @@ private:
       return connectionState->writeTarget(ensureAccepted(), target);
     }
 
-    kj::Own<ClientHook> getInnermostClient() override {
-      // getInnermostClient() is used as part of the tribble 4-way race condition.
-      //
-      // That is: Say there's a promise on the export table. It resolves, and it resolves to
-      // *this* capability. If there are calls in-flight to that promise, where do we forward
-      // them to? Similarly, if a disembargo is received, where do we forward it to?
-
-      KJ_SWITCH_ONEOF(state) {
-        KJ_CASE_ONEOF(deferred, Deferred) {
-          // At present, `getInnermostClient()` is only actually called when sending the capability
-          // back on the same connection it came from. Well, in that case, we just use the vine.
-          //
-          // TODO(now): When implementing embargos for three-party handoff, presumably
-          //   getInnermostClient() needs to change somehow.
-          return deferred.vine->addRef();
-        }
-        KJ_CASE_ONEOF(cap, kj::Own<ClientHook>) {
-          // Since we already accepted the capability, the accepted version now counts as the
-          // innermost client.
-          return connectionState->getInnermostClient(*cap);
-        }
-      }
-      KJ_UNREACHABLE;
-    }
-
     // NOTE: We don't need to implement adoptFlowController() since flow controllers are tied to
     //   specific connections, so presumably the old flow controller won't be able to be adopted
     //   by the new capability on the new connection anyway. Additionally, it just makes sense to
     //   recompute the flow from scratch since the new connection probably has different latency
     //   and throughput.
 
-    kj::Own<ClientHook> writeThirdPartyDescriptor(
+    WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
           VatNetworkBase::Connection& provider,
           VatNetworkBase::Connection& recipient,
           AnyPointer::Builder contact) override {
@@ -1554,24 +1570,10 @@ private:
         auto& deferred = state.get<Deferred>();
         provider.forwardThirdPartyToContact(*deferred.contact, recipient, contact);
 
-        // This gets tricky: The vine we return has to have two properties:
-        // 1. Its existence holds open the upstream vine, since the recipient of the forward is
-        //    depending on the Provide operation remaining available until the vine is dropped.
-        // 2. If the recipient forwards the capability *back* to us, it can do so by specifynig the
-        //    vine itself (see `writeDescriptor()`, above).
-        //
-        // If we only needed to solve (1), we could just return vine->addRef() here. But then if
-        // the capability got reflected back, we'd lose the ability to forward it further, because
-        // we would have lost the `DeferredThirdPartyClient` and would be holding only the vine at
-        // that point.
-        //
-        // If we only needed to solve (2), we'd return a reference to ourselves. But then if
-        // ensureAccepted() was subsequently called on this object, which could cancel the provide
-        // operation before the recipient of the forward got a chance to accept it.
-        //
-        // We can solve both at once by returning a reference to ourselves with the vine reference
-        // attached!
-        return addRef().attach(deferred.vine->addRef());
+        return VineToExport {
+          .vine = deferred.vine->addRef(),
+          .vineInfo = kj::heap(VineInfo {.info = capnp::clone(*deferred.contact)}),
+        };
       } else {
         // Either:
         // a. We already accepted this cap, so we should treat this as a normal three-party handoff
@@ -1660,6 +1662,8 @@ private:
 
     kj::OneOf<Deferred, kj::Own<ClientHook>> state;
 
+    bool needEmbargo = false;
+
     ClientHook& ensureAccepted() {
       // Call when this capability is actually used locally. If it's the first use, the Accept
       // message will be sent to actually accept it.
@@ -1667,7 +1671,8 @@ private:
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(deferred, Deferred) {
           return *state.init<kj::Own<ClientHook>>(
-              connectionState->acceptThirdParty(*deferred.contact, kj::mv(deferred.vine)));
+              connectionState->acceptThirdParty(
+                  *deferred.contact, kj::mv(deferred.vine), needEmbargo));
         }
         KJ_CASE_ONEOF(cap, kj::Own<ClientHook>) {
           return *cap;
@@ -1677,11 +1682,13 @@ private:
     }
   };
 
-  kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor,
-                                      kj::Vector<int>& fds) {
+  RpcClient::WriteDescriptorResult writeDescriptor(
+      ClientHook& cap, rpc::CapDescriptor::Builder descriptor, kj::Vector<int>& fds) {
     // Write a descriptor for the given capability.
 
-    // Find the innermost wrapped capability.
+    // Follow all promise resolutions before writing the descriptor. This is important to comply
+    // with the rule that a promise cannot resolve to another promise, where the latter promise is
+    // itself already resolved (see docs for `CapDescriptor.senderPromise`).
     ClientHook* inner = &cap;
     for (;;) {
       KJ_IF_SOME(resolved, inner->getResolved()) {
@@ -1709,41 +1716,49 @@ private:
             auto tph = descriptor.initThirdPartyHosted();
 
             auto id = tph.initId();
-            auto vine = rpcInner.writeThirdPartyDescriptor(otherConn, conn, id);
+            auto result = rpcInner.writeThirdPartyDescriptor(otherConn, conn, id);
 
-            if (id.isNull()) {
-              // writeThirdPartyDescriptor() ended up deciding that it's not pointing at a
-              // third party after all, oops. This is unusual, but DeferredThirdPartyClient has
-              // some edge cases where this happens.
+            KJ_SWITCH_ONEOF(result) {
+              KJ_CASE_ONEOF(vine, RpcClient::VineToExport) {
+                // We always have to add a new export to the table to use as the "vine"; we cannot
+                // share an existing export pointing to the same capability. The reason is, the
+                // vine represents not just the capability but *this specific handoff* of the
+                // capability; when it is dropped, we can clean up the handoff. This is
+                // accomplished by attaching the `vineInfo` to the export.
+                //
+                // Additionally, the vine is never treated as a promise, even if the capability
+                // backing it is a promise.
+                ExportId exportId;
+                auto& exp = exports.next(exportId);
+                exp.canonical = false;
+                exp.refcount = 1;
+                exp.clientHook = kj::mv(vine.vine);
+                exp.vineInfo = kj::mv(vine.vineInfo);
 
-              // Unfortunately, this will leave a hole in the message. This should be rare.
-              // TODO(perf): Since we're removing the last object allocated, the segment ought
-              //   to be able to reclaim the memory, but this doesn't appear to be implemented
-              //   at present. Fix that?
-              descriptor.disownThirdPartyHosted();
-              descriptor.setNone();
+                tph.setVineId(exportId);
+                return {
+                  .exportId = exportId,
 
-              // Recursively apply to the client returned by `writeThirdPartyDescriptor()` (which
-              // is not actually a vine in this case).
-              return writeDescriptor(*vine, descriptor, fds);
+                  // The vine is the correct inner cap to use for disembargo purposes.
+                  .described = *exp.clientHook,
+                };
+              }
+              KJ_CASE_ONEOF(redirect, kj::Own<ClientHook>) {
+                // writeThirdPartyDescriptor() ended up deciding that it's not pointing at a
+                // third party after all, oops. This is unusual, but DeferredThirdPartyClient has
+                // some edge cases where this happens.
+
+                // Unfortunately, this will leave a hole in the message. This should be rare.
+                // TODO(perf): Since we're removing the last object allocated, the segment ought
+                //   to be able to reclaim the memory, but this doesn't appear to be implemented
+                //   at present. Fix that?
+                descriptor.disownThirdPartyHosted();
+                descriptor.setNone();
+
+                // Recursively apply to the redirected client.
+                return writeDescriptor(*redirect, descriptor, fds);
+              }
             }
-
-            // We always have to add a new export to the table to use as the "vine"; we cannot
-            // share an existing export pointing to the same capability. The reason is, the vine
-            // represents not just the capability but *this specific handoff* of the capability;
-            // when it is dropped, we can clean up the handoff. This is accomplished by attaching
-            // the `questionRef` to the export, below.
-            //
-            // Additionally, the vine is never treated as a promise, even if the capability backing
-            // it is a promise.
-            ExportId exportId;
-            auto& exp = exports.next(exportId);
-            exp.canonical = false;
-            exp.refcount = 1;
-            exp.clientHook = kj::mv(vine);
-
-            tph.setVineId(exportId);
-            return exportId;
           }
         }
       }
@@ -1758,7 +1773,10 @@ private:
       } else {
         descriptor.setSenderPromise(exportId);
       }
-      return exportId;
+      return {
+        .exportId = exportId,
+        .described = *inner,
+      };
     } else {
       // This is the first time we've seen this capability.
       ExportId exportId;
@@ -1776,12 +1794,24 @@ private:
         descriptor.setSenderHosted(exportId);
       }
 
-      return exportId;
+      return {
+        .exportId = exportId,
+        .described = *inner,
+      };
     }
   }
 
-  kj::Array<ExportId> writeDescriptors(kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
-                                       rpc::Payload::Builder payload, kj::Vector<int>& fds) {
+  kj::Array<ExportId> writeDescriptors(
+      kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
+      rpc::Payload::Builder payload, kj::Vector<int>& fds,
+      kj::Maybe<kj::HashMap<ClientHook*, kj::Own<ClientHook>>&> describedMap = kj::none) {
+    // Write all descriptors for a cap table.
+    //
+    // If `describedMap` is non-null, then if writing a descriptor of some capability returns
+    // a `WriteDescriptorResult::described` that points to a different ClientHook  than the one
+    // in the cap table, it'll be added to the table. This is needed specifically when writing
+    // the cap table for returned results, to handle embargoes correctly.
+
     if (capTable.size() == 0) {
       // Calling initCapTable(0) will still allocate a 1-word tag, which we'd like to avoid...
       return nullptr;
@@ -1791,8 +1821,17 @@ private:
     kj::Vector<ExportId> exports(capTable.size());
     for (uint i: kj::indices(capTable)) {
       KJ_IF_SOME(cap, capTable[i]) {
-        KJ_IF_SOME(exportId, writeDescriptor(*cap, capTableBuilder[i], fds)) {
+        auto result = writeDescriptor(*cap, capTableBuilder[i], fds);
+        KJ_IF_SOME(exportId, result.exportId) {
           exports.add(exportId);
+        }
+        KJ_IF_SOME(m, describedMap) {
+          if (&result.described != cap.get()) {
+            m.upsert(cap, result.described.addRef(),
+                [&](kj::Own<ClientHook>& existing, kj::Own<ClientHook>&& replacement) {
+              KJ_ASSERT(existing.get() == replacement.get());
+            });
+          }
         }
       } else {
         capTableBuilder[i].setNone();
@@ -1819,23 +1858,6 @@ private:
     }
   }
 
-  kj::Own<ClientHook> getInnermostClient(ClientHook& client) {
-    ClientHook* ptr = &client;
-    for (;;) {
-      KJ_IF_SOME(inner, ptr->getResolved()) {
-        ptr = &inner;
-      } else {
-        break;
-      }
-    }
-
-    KJ_IF_SOME(rpcPtr, unwrapIfSameConnection(*ptr)) {
-      return rpcPtr.getInnermostClient();
-    } else {
-      return ptr->addRef();
-    }
-  }
-
   kj::Promise<void> resolveExportedPromise(
       ExportId exportId, kj::Promise<kj::Own<ClientHook>>&& promise) {
     // Implements exporting of a promise.  The promise has been exported under the given ID, and is
@@ -1851,13 +1873,19 @@ private:
         return kj::READY_NOW;
       }
 
-      // Get the innermost ClientHook backing the resolved client.  This includes traversing
-      // PromiseClients that haven't resolved yet to their underlying ImportClient or
-      // PipelineClient, so that we get a remote promise that might resolve later.  This is
-      // important to make sure that if the peer sends a `Disembargo` back to us, it bounces back
-      // correctly instead of going to the result of some future resolution.  See the documentation
-      // for `Disembargo` in `rpc.capnp`.
-      resolution = getInnermostClient(*resolution);
+      // If we're resolving to anonther promise that is itself already resolved, skip past it.
+      //
+      // Note that `writeDescriptor()`, below, will also do this. However, before we call
+      // `writeDescriptor()`, we're going to implemnet an optimization where if we resolve to
+      // another promise (which is itself *not* resolved), we may reuse the same table entry
+      // without sending a `Resolve` at all (see below).
+      for (;;) {
+        KJ_IF_SOME(inner, resolution->getResolved()) {
+          resolution = inner.addRef();
+        } else {
+          break;
+        }
+      }
 
       // Update the export table to point at this object instead.  We know that our entry in the
       // export table is still live because when it is destroyed the asynchronous resolution task
@@ -1875,7 +1903,7 @@ private:
       // bit...)
       exp.canonical = false;
 
-      if (unwrapIfSameConnection(*exp.clientHook) == kj::none) {
+      if (unwrapIfSameNetwork(*exp.clientHook) == kj::none) {
         // We're resolving to a local capability.  If we're resolving to a promise, we might be
         // able to reuse our export table entry and avoid sending a message.
 
@@ -1906,9 +1934,20 @@ private:
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
       kj::Vector<int> fds;
-      writeDescriptor(*exp.clientHook, resolve.initCap(), fds);
+      auto writeDescResult = writeDescriptor(*exp.clientHook, resolve.initCap(), fds);
       message->setFds(fds.releaseAsArray());
       message->send();
+
+      // `writeDescriptor()` can create new exports, invalidating the `exp` reference. Look it up
+      // again.
+      auto& exp2 = KJ_ASSERT_NONNULL(exports.find(exportId));
+      if (&writeDescResult.described != exp2.clientHook.get()) {
+        // Apparently, we actually resolved to another RPC promise, and the descriptor we wrote
+        // was for the temporary destination for pipelined calls. To resolve the Tribble 4-way
+        // race condition, we must make sure our existing export table entry permanently points
+        // strictly to the pipeline, not the promise.
+        exp2.clientHook = writeDescResult.described.addRef();
+      }
 
       return kj::READY_NOW;
     }, [this,exportId](kj::Exception&& exception) {
@@ -2085,6 +2124,20 @@ private:
       case rpc::CapDescriptor::RECEIVER_HOSTED:
         KJ_IF_SOME(exp, exports.find(descriptor.getReceiverHosted())) {
           auto result = exp.clientHook->addRef();
+          KJ_IF_SOME(vineInfo, exp.vineInfo) {
+            KJ_IF_SOME(contact, vineInfo->info.tryGet<VineInfo::Contact>()) {
+              // This is a vine, and not the root of the vine. We previously forwarded a
+              // three-party handoff to the peer, and the peer reflected it back to us. We need
+              // to wrap this in a new `DeferredThirdPartyClient` so that if it is sent to yet
+              // another party, it will be handed off correctly. If we just pass along the vine
+              // itself, then three-party handoff will stop working.
+              KJ_ASSERT(isSameNetwork(*result));
+              kj::Own<RpcClient> vine = result.downcast<RpcClient>();
+              auto& vineConnection = *vine->connectionState;
+              result = kj::refcounted<DeferredThirdPartyClient>(
+                  vineConnection, capnp::clone(*contact), kj::mv(vine));
+            }
+          }
           if (unwrapIfSameConnection(*result) != kj::none) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
@@ -2128,7 +2181,8 @@ private:
     }
   }
 
-  kj::Own<ClientHook> acceptThirdParty(AnyPointer::Reader contact, kj::Own<RpcClient> vine) {
+  kj::Own<ClientHook> acceptThirdParty(AnyPointer::Reader contact, kj::Own<RpcClient> vine,
+                                       bool embargo) {
     KJ_SWITCH_ONEOF(connection) {
       KJ_CASE_ONEOF(state, Connected) {
         // Allocate temporary message to hold ThirdPartyCompletion. Unfortunately we need a temp
@@ -2139,6 +2193,23 @@ private:
         memset(scratch, 0, sizeof(scratch));
         MallocMessageBuilder message(scratch);
         auto completion = message.getRoot<AnyPointer>();
+
+        kj::Maybe<kj::Array<byte>> embargoId;
+        if (embargo) {
+          // Oh, this accept should be embargoed. Generate embargo ID.
+          auto eid = state.connection->generateEmbargoId();
+
+          // Send the Disembargo message to the vine.
+          auto disembargoMsg = state.connection->newOutgoingMessage(
+              messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT +
+              eid.size() / sizeof(word) + 1);
+          auto disembargo = disembargoMsg->getBody().getAs<rpc::Message>().initDisembargo();
+          vine->writeTarget(disembargo.initTarget());
+          disembargo.getContext().setAccept(eid);
+          disembargoMsg->send();
+
+          embargoId = kj::mv(eid);
+        }
 
         // Call connectToIntroduced() and get the other connection state.
         KJ_IF_SOME(ownOtherConn, state.connection->connectToIntroduced(contact, completion)) {
@@ -2158,11 +2229,16 @@ private:
           // Send the Accept message.
           {
             auto acceptMsg = otherConn.newOutgoingMessage(messageSizeHint<rpc::Accept>() +
-                completion.targetSize().wordCount);
+                completion.targetSize().wordCount + (embargo ? 8 : 0));
             auto accept = acceptMsg->getBody().getAs<rpc::Message>().initAccept();
             accept.setQuestionId(questionId);
             accept.getProvision().set(completion.asReader());
-            // TODO(now): accept.setEmbargo();
+
+            KJ_IF_SOME(eid, embargoId) {
+              // And finally adopt the embargo ID into the accept message.
+              accept.setEmbargo(eid);
+            }
+
             acceptMsg->send();
           }
 
@@ -2179,13 +2255,7 @@ private:
         } else {
           // We've been introduced to ourselves. A corresponding `Provide` message will come
           // directly to us via another connection.
-          return newLocalPromiseClient(state.connection->completeThirdParty(completion)
-              .then([](kj::Rc<kj::Refcounted> holder) mutable {
-            // TODO(now): Await embargo if needed.
-
-            return kj::mv(KJ_ASSERT_NONNULL(
-                holder.downcast<ThirdPartyExchangeValue>()->value.tryGet<kj::Own<ClientHook>>()));
-          }));
+          return newLocalPromiseClient(doAccept(state, completion, kj::mv(embargoId)));
         }
       }
       KJ_CASE_ONEOF(error, Disconnected) {
@@ -2286,6 +2356,14 @@ private:
 
     void disconnect() {
       connectionState = kj::none;
+    }
+
+    kj::Maybe<VatNetworkBase::Connection&> tryGetConnection() {
+      KJ_IF_SOME(c, connectionState) {
+        return c->tryGetConnection();
+      } else {
+        return kj::none;
+      }
     }
 
   private:
@@ -2783,6 +2861,10 @@ private:
     return kj::none;
   }
 
+  bool isSameNetwork(ClientHook& hook) {
+    return hook.isBrand(brand.get());
+  }
+
   kj::Maybe<RpcRequest&> unwrapIfSameNetwork(RequestHook& hook) {
     if (hook.isBrand(brand.get())) {
       return kj::downcast<RpcRequest>(hook);
@@ -2830,21 +2912,9 @@ private:
       // Build the cap table.
       auto capTable = this->capTable.getTable();
       kj::Vector<int> fds;
-      auto exports = connectionState.writeDescriptors(capTable, payload, fds);
+      auto exports = connectionState.writeDescriptors(
+          capTable, payload, fds, resolutionsAtReturnTime);
       message->setFds(fds.releaseAsArray());
-
-      // Populate `resolutionsAtReturnTime`.
-      for (auto& slot: capTable) {
-        KJ_IF_SOME(cap, slot) {
-          auto inner = connectionState.getInnermostClient(*cap);
-          if (inner.get() != cap) {
-            resolutionsAtReturnTime.upsert(cap, kj::mv(inner),
-                [&](kj::Own<ClientHook>& existing, kj::Own<ClientHook>&& replacement) {
-              KJ_ASSERT(existing.get() == replacement.get());
-            });
-          }
-        }
-      }
 
       message->send();
       if (capTable.size() == 0) {
@@ -3466,6 +3536,14 @@ private:
       //   resolution of `PromiseClient`s based on returned capabilities does not occur in a
       //   depth-first way, when it should. If we could fix that then we can probably remove this
       //   `yield()`. However, the `yield()` is not that bad and solves the problem...
+      //
+      //   Another possible solution would be to make resolutions not be promise-based. That is,
+      //   when a `Resolve` message is received, the appropriate RpcPromise::resolve() should be
+      //   invoked synchronously from `handleResolve()`. But also, when a `Return` is received,
+      //   the `RpcPipeline` needs to synchronously resolve everything in its `clientMap`. This
+      //   would be a large-ish refactoring, but would probably be good for performance as there
+      //   would be far fewer event loop tasks needed on each Return / Resolve (and a lot less
+      //   allocation).
       co_await kj::yield();
     }
   }
@@ -3651,8 +3729,10 @@ private:
       auto capTableArray = capTable.getTable();
       KJ_DASSERT(capTableArray.size() == 1);
       kj::Vector<int> fds;
-      resultExports = writeDescriptors(capTableArray, payload, fds);
+      kj::HashMap<ClientHook*, kj::Own<ClientHook>> resolutionsAtReturnTime;
+      resultExports = writeDescriptors(capTableArray, payload, fds, resolutionsAtReturnTime);
       response->setFds(fds.releaseAsArray());
+      capHook = kj::mv(KJ_ASSERT_NONNULL(capTableArray[0]));
 
       // If we're returning a capability that turns out to be an PromiseClient pointing back on
       // this same network, it's important we remove the `PromiseClient` layer and use the inner
@@ -3660,7 +3740,9 @@ private:
       // regular call returns.
       //
       // This single line of code represents two hours of my life.
-      capHook = getInnermostClient(*KJ_ASSERT_NONNULL(capTableArray[0]));
+      KJ_IF_SOME(replacement, resolutionsAtReturnTime.find(capHook)) {
+        capHook = replacement->addRef();
+      }
     })) {
       fromException(exception, ret.initException());
       capHook = newBrokenCap(kj::mv(exception));
@@ -4168,6 +4250,86 @@ private:
         break;
       }
 
+      case rpc::Disembargo::Context::ACCEPT: {
+        kj::ArrayPtr<const byte> embargoId = context.getAccept();
+        auto target = disembargo.getTarget();
+
+        switch (target.which()) {
+          case rpc::MessageTarget::IMPORTED_CAP: {
+            auto& exp = KJ_REQUIRE_NONNULL(exports.find(target.getImportedCap()),
+                "Message target is not a current export ID.");
+
+            auto& vineInfo = KJ_REQUIRE_NONNULL(exp.vineInfo, "Disembargo target is not a vine.");
+
+            kj::Maybe<VatNetworkBase::Connection&> nextConn;
+            kj::OneOf<QuestionRef*, RpcClient*> nextTarget;
+
+            KJ_SWITCH_ONEOF(vineInfo->info) {
+              KJ_CASE_ONEOF(provision, VineInfo::Provision) {
+                nextConn = provision->tryGetConnection();
+                nextTarget = provision.get();
+              }
+              KJ_CASE_ONEOF(contact, VineInfo::Contact) {
+                // This is a forwarded vine.
+                RpcClient& client = KJ_ASSERT_NONNULL(unwrapIfSameNetwork(*exp.clientHook));
+                nextConn = client.connectionState->tryGetConnection();
+                nextTarget = &client;
+              }
+            }
+
+            KJ_IF_SOME(c, nextConn) {
+              auto nextMsg = c.newOutgoingMessage(messageSizeHint<rpc::Disembargo>() +
+                  embargoId.size() / sizeof(word) + MESSAGE_TARGET_SIZE_HINT + 1);
+
+              auto nextDisembargo = nextMsg->getBody().initAs<rpc::Message>().initDisembargo();
+              nextDisembargo.getContext().setAccept(embargoId);
+
+              KJ_SWITCH_ONEOF(nextTarget) {
+                KJ_CASE_ONEOF(question, QuestionRef*) {
+                  nextDisembargo.initTarget().initPromisedAnswer()
+                      .setQuestionId(question->getId());
+                }
+                KJ_CASE_ONEOF(import, RpcClient*) {
+                  KJ_ASSERT(import->writeTarget(nextDisembargo.initTarget()) == kj::none);
+                }
+              }
+
+              nextMsg->send();
+            } else {
+              // Ugh the connection was lost. Hopefully the vine will be dropped causing the
+              // disembargo to fail, at least.
+            }
+
+            break;
+          }
+
+          case rpc::MessageTarget::PROMISED_ANSWER: {
+            auto promisedAnswer = target.getPromisedAnswer();
+            KJ_REQUIRE(!promisedAnswer.hasTransform(),
+                "Disembargo sent to Provide operation cannot include a transformation.");
+
+            auto& answer = KJ_REQUIRE_NONNULL(answers.find(promisedAnswer.getQuestionId()),
+                "Disembargo specified a provision ID (question ID) that doesn't exist.");
+
+            auto& provision = KJ_REQUIRE_NONNULL(answer.task.tryGet<Answer::Provide>(),
+                "Disembargo specified a question ID that didn't belong to a Provide operation.");
+
+            auto& embargo =
+                KJ_ASSERT_NONNULL(provision->value.tryGet<ThirdPartyExchangeValue::Provide>())
+                .findOrCreateThirdPartyEmbargo(embargoId);
+
+            embargo.fulfiller->fulfill();
+
+            break;
+          }
+
+          default:
+            KJ_FAIL_REQUIRE("Unknown message target type.", target);
+        }
+
+        break;
+      }
+
       default:
         KJ_FAIL_REQUIRE("Unimplemented Disembargo type.", disembargo);
     }
@@ -4176,13 +4338,49 @@ private:
   // ---------------------------------------------------------------------------
   // Level 3
 
-  struct ThirdPartyExchangeValue: public kj::Refcounted {
-    kj::OneOf<kj::Own<ClientHook>> value;
-    // For Provide/Accept, the value is a ClientHook.
-    //
-    // (Eventually this will be extended with another type for ThirdPartyAnswer.)
+  struct ThirdPartyEmbargo {
+    // For handling the `Disembargo` message for three-party handoff.
 
-    ThirdPartyExchangeValue(kj::Own<ClientHook> value): value(kj::mv(value)) {}
+    kj::Maybe<kj::Promise<void>> promise;
+    kj::Own<kj::PromiseFulfiller<void>> fulfiller;
+    // Both are filled in when the embargo is created, and then each of the Accept and Disembargo
+    // messages consume their respective side of the pair.
+  };
+
+  struct ThirdPartyExchangeValue: public kj::Refcounted {
+    struct Provide {
+      // Exchanged content for a Provide/Accept operation.
+
+      kj::Own<ClientHook> client;
+      kj::HashMap<kj::Array<byte>, ThirdPartyEmbargo> embargoes;
+
+      explicit Provide(kj::Own<ClientHook> client): client(kj::mv(client)) {}
+      ~Provide() noexcept(false) {
+        for (auto& e: embargoes) {
+          if (e.value.fulfiller->isWaiting()) {
+            e.value.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED,
+                "Three-party handoff failed because a connection was lost along the introducing "
+                "route before the embargo could clear."));
+          }
+        }
+      }
+
+      ThirdPartyEmbargo& findOrCreateThirdPartyEmbargo(kj::ArrayPtr<const byte> id) {
+        return embargoes.findOrCreate(id, [&]() -> decltype(embargoes)::Entry {
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          return {
+            .key = kj::heapArray<byte>(id),
+            .value = {
+              .promise = kj::mv(paf.promise),
+              .fulfiller = kj::mv(paf.fulfiller),
+            }
+          };
+        });
+      }
+    };
+
+    kj::OneOf<Provide> value;
+    // (Eventually this will be extended with another type for ThirdPartyAnswer.)
   };
 
   void handleProvide(const rpc::Provide::Reader& provide) {
@@ -4192,18 +4390,21 @@ private:
     }
 
     kj::Own<ClientHook> target = getMessageTarget(provide.getTarget());
-    auto xcghValue = kj::rc<ThirdPartyExchangeValue>(kj::mv(target));
+    auto xchgValue = kj::rc<ThirdPartyExchangeValue>();
+    xchgValue->value.init<ThirdPartyExchangeValue::Provide>(kj::mv(target));
 
     AnswerId answerId = provide.getQuestionId();
     auto& answer = KJ_ASSERT_NONNULL(answers.create(answerId),
                                      "questionId is already in use", answerId);
+
+    answer.task = xchgValue.addRef();
 
     // NOTE: We don't need an RpcCallContext since we don't need to send a `Return`. We can just
     // leave `answer.context` null.
 
     // Register that we're awaiting an Accept.
     auto awaiter = connection.get<Connected>().connection
-        ->awaitThirdParty(provide.getRecipient(), kj::mv(xcghValue));
+        ->awaitThirdParty(provide.getRecipient(), kj::mv(xchgValue));
 
     // Use a `pipeline` that'll throw exceptions if anyone actually tries to use it.
     //
@@ -4248,20 +4449,18 @@ private:
     //   refcount, but both will be destroyed at the same time anyway.
     RpcCallContext& contextRef = *context;
 
-    // Wait for `Provide` message and expect it to give us a ClientHook.
-    kj::ForkedPromise<Capability::Client> promise = connection.get<Connected>().connection
-        ->completeThirdParty(accept.getProvision())
-        .then([](kj::Rc<kj::Refcounted> holder) mutable {
-      // TODO(now): Await embargo if needed.
+    kj::Maybe<kj::Array<byte>> embargoId;
+    if (accept.hasEmbargo()) {
+      embargoId = kj::heapArray<byte>(accept.getEmbargo());
+    }
 
-      return Capability::Client(kj::mv(KJ_ASSERT_NONNULL(
-          holder.downcast<ThirdPartyExchangeValue>()->value.tryGet<kj::Own<ClientHook>>())));
-    }).fork();
+    kj::ForkedPromise<kj::Own<ClientHook>> promise =
+        doAccept(connection.get<Connected>(), accept.getProvision(), kj::mv(embargoId)).fork();
 
     // Set `answer.task` to a promise that eventually sends `Return`.
     answer.task = promise.addBranch()
-        .then([context = kj::mv(context)](Capability::Client cap) mutable {
-      context->getResults(MessageSize {4, 1}).setAs<Capability>(kj::mv(cap));
+        .then([context = kj::mv(context)](kj::Own<ClientHook> cap) mutable {
+      context->getResults(MessageSize {4, 1}).setAs<Capability>(Capability::Client(kj::mv(cap)));
       context->sendReturn();
     }, [&contextRef](kj::Exception&& exception) {
       contextRef.sendErrorReturn(kj::mv(exception));
@@ -4272,7 +4471,44 @@ private:
 
     // Set `answer.pipeline` to a single-cap pipeline.
     answer.pipeline = kj::refcounted<SingleCapPipeline>(
-        ClientHook::from(Capability::Client(promise.addBranch())));
+        newLocalPromiseClient(promise.addBranch()));
+  }
+
+  kj::Promise<kj::Own<ClientHook>> doAccept(
+      Connected& connectedState, AnyPointer::Reader thirdPartyCompletion,
+      kj::Maybe<kj::Array<byte>> embargoId) {
+    // `connectedState` and `thirdPartyCompletion` are temporary, can't pass them to a coroutine.
+    // But we can consume them here and pass on the rest. We should also wrap this promise in the
+    // canceler in case we get disconnected.
+    auto completionPromise = connectedState.canceler->wrap(
+        connectedState.connection->completeThirdParty(thirdPartyCompletion));
+    return doAccept(kj::mv(completionPromise), kj::mv(embargoId));
+  }
+
+  kj::Promise<kj::Own<ClientHook>> doAccept(
+      kj::Promise<kj::Rc<kj::Refcounted>> completionPromise,
+      kj::Maybe<kj::Array<byte>> embargoId) {
+    // Part of handleAccept() implementation that benefits greatly from coroutines.
+
+    kj::Rc<ThirdPartyExchangeValue> xcghValue =
+        (co_await completionPromise).downcast<ThirdPartyExchangeValue>();
+
+    auto& provide = KJ_REQUIRE_NONNULL(
+        xcghValue->value.tryGet<ThirdPartyExchangeValue::Provide>(),
+        "ThirdPartyCompletion given in Accept did not match a Provide operation.");
+
+    KJ_IF_SOME(e, embargoId) {
+      auto& embargo = provide.findOrCreateThirdPartyEmbargo(e);
+      auto embargoPromise = kj::mv(KJ_REQUIRE_NONNULL(embargo.promise,
+          "Duplicate embargo ID in Accept message."));
+      embargo.promise = kj::none;
+      co_await embargoPromise;
+
+      // This embargo is complete, so we can erase it.
+      provide.embargoes.erase(e);
+    }
+
+    co_return provide.client->addRef();
   }
 };
 
