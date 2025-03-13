@@ -61,6 +61,16 @@ public:
 
   Promise<void> read(void* buffer, size_t bytes);
 
+  Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) { 
+    return read(buffer.begin(), minBytes, buffer.size()); 
+  }
+  Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) {
+    return tryRead(buffer.begin(), minBytes, buffer.size()); 
+  }
+  Promise<void> read(ArrayPtr<byte> buffer) {
+    return read(buffer.begin(), buffer.size());
+  }
+
   virtual Maybe<uint64_t> tryGetLength();
   // Get the remaining number of bytes that will be produced by this stream, if known.
   //
