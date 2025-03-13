@@ -236,7 +236,7 @@ struct AtomicSetTrueInDestructor: public AtomicRefcounted,
   AtomicSetTrueInDestructor(bool* ptr): ptr(ptr) {}
   ~AtomicSetTrueInDestructor() { *ptr = true; }
 
-  kj::Arc<AtomicSetTrueInDestructor> newRef() { return addRefToThis(); }
+  kj::Arc<AtomicSetTrueInDestructor> newRef() const { return addRefToThis(); }
 
   bool* ptr;
 };
@@ -305,7 +305,7 @@ KJ_TEST("Arc Own interop") {
 
 KJ_TEST("Arc disown / reown") {
   bool b = false;
-  AtomicSetTrueInDestructor* ptr = nullptr;
+  const AtomicSetTrueInDestructor* ptr = nullptr;
 
   {
     kj::Arc<AtomicSetTrueInDestructor> ref = kj::arc<AtomicSetTrueInDestructor>(&b);
