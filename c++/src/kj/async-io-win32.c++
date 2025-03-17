@@ -95,8 +95,6 @@ int win32Socketpair(SOCKET socks[2]) {
 
   // Note: This function is called from some Cap'n Proto unit tests, despite not having a public
   //   header declaration.
-  // TODO(cleanup): Consider putting this somewhere public? Note that since it depends on Winsock,
-  //   it needs to be in the kj-async library.
 
   initWinsockOnce();
 
@@ -960,6 +958,12 @@ private:
   WaitScope waitScope;
 };
 
+Socketpair newSocketpair() {
+  Socketpair socketpair;
+  KJ_WINSOCK(_::win32Socketpair(socketpair.fds));
+  return socketpair;
+}
+
 // =======================================================================================
 
 class NetworkAddressImpl final: public NetworkAddress {
@@ -1119,20 +1123,18 @@ public:
       : lowLevel(lowLevel), network(lowLevel) {}
 
   OneWayPipe newOneWayPipe() override {
-    SOCKET fds[2];
-    KJ_WINSOCK(_::win32Socketpair(fds));
-    auto in = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
-    auto out = lowLevel.wrapOutputFd(fds[1], NEW_FD_FLAGS);
+    const auto socketpair = newSocketpair();
+    auto in = lowLevel.wrapSocketFd(socketpair.fds[0], NEW_FD_FLAGS);
+    auto out = lowLevel.wrapOutputFd(socketpair.fds[1], NEW_FD_FLAGS);
     in->shutdownWrite();
     return { kj::mv(in), kj::mv(out) };
   }
 
   TwoWayPipe newTwoWayPipe() override {
-    SOCKET fds[2];
-    KJ_WINSOCK(_::win32Socketpair(fds));
+    const auto socketpair = newSocketpair();
     return TwoWayPipe { {
-      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapSocketFd(socketpair.fds[0], NEW_FD_FLAGS),
+      lowLevel.wrapSocketFd(socketpair.fds[1], NEW_FD_FLAGS)
     } };
   }
 
@@ -1142,13 +1144,12 @@ public:
 
   PipeThread newPipeThread(
       Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
-    SOCKET fds[2];
-    KJ_WINSOCK(_::win32Socketpair(fds));
+    const auto socketpair = newSocketpair();
 
-    int threadFd = fds[1];
+    auto threadFd = socketpair.fds[1];
     KJ_ON_SCOPE_FAILURE(closesocket(threadFd));
 
-    auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
+    auto pipe = lowLevel.wrapSocketFd(socketpair.fds[0], NEW_FD_FLAGS);
 
     auto thread = heap<Thread>([threadFd,startFunc=kj::mv(startFunc)]() mutable {
       LowLevelAsyncIoProviderImpl lowLevel;

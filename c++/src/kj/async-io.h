@@ -900,6 +900,14 @@ public:
   // (Windows). TAKE_OWNERSHIP will be implicitly added to `flags`.
 };
 
+struct Socketpair {
+  LowLevelAsyncIoProvider::Fd fds[2];
+};
+Socketpair newOsSocketpair();
+// Creates a socket pair, using socketpair(2) on Unix-like systems.
+// On Windows, which doesn't have a built-in socketpair(), a loopback
+// TCP connection is used.
+
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
 // Make a new AsyncIoProvider wrapping a `LowLevelAsyncIoProvider`.
 
