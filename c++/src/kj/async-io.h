@@ -68,7 +68,7 @@ public:
     return tryRead(buffer.begin(), minBytes, buffer.size()); 
   }
   Promise<void> read(ArrayPtr<byte> buffer) {
-    return read(buffer.begin(), buffer.size());
+    return read(buffer, buffer.size()).ignoreResult();
   }
 
   virtual Maybe<uint64_t> tryGetLength();

@@ -132,7 +132,7 @@ kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& i
   if (segmentCount() > 1) {
     // Read sizes for all segments except the first.  Include padding if necessary.
     moreSizes = kj::heapArray<_::WireValue<uint32_t>>(segmentCount() & ~1);
-    return inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]))
+    return inputStream.read(moreSizes.asBytes())
         .then([this,&inputStream,KJ_CPCAP(scratchSpace)]() mutable {
           return readSegments(inputStream, scratchSpace);
         });
@@ -180,7 +180,7 @@ kj::Promise<void> AsyncMessageReader::readSegments(kj::AsyncInputStream& inputSt
     }
   }
 
-  return inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
+  return inputStream.read(scratchSpace.first(totalWords).asBytes());
 }
 
 

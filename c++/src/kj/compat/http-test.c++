@@ -2382,8 +2382,8 @@ KJ_TEST("WebSocket pump disconnect on send") {
   auto sendTask = client1->send("hello"_kj);
 
   // Endpoint reads three bytes and then disconnects.
-  char buffer[3]{};
-  pipe2.ends[1]->read(buffer, 3).wait(waitScope);
+  byte buffer[3]{};
+  pipe2.ends[1]->read(buffer).wait(waitScope);
   pipe2.ends[1] = nullptr;
 
   // Pump throws disconnected.
@@ -6238,8 +6238,8 @@ public:
       // Actually, we can't literally cancel mid-read, because this leaves the stream in an
       // unknown state which requires closing the connection. Instead, we know that the sender
       // will send 5 bytes, so we read that, then pause.
-      static char junk[5];
-      return requestBody.read(junk, 5)
+      static byte junk[5];
+      return requestBody.read(junk)
           .then([]() -> kj::Promise<void> { return kj::NEVER_DONE; })
           .exclusiveJoin(timer.afterDelay(1 * kj::MILLISECONDS))
           .then([this, &responseSender]() {
