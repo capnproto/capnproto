@@ -1987,28 +1987,18 @@ public:
   }
 
   TwoWayPipe newTwoWayPipe() override {
-    int fds[2]{};
-    int type = SOCK_STREAM;
-#if __linux__ && !__BIONIC__
-    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    auto socketpair = newOsSocketpair();
     return TwoWayPipe { {
-      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapSocketFd(kj::mv(socketpair.fds[0]), NEW_FD_FLAGS),
+      lowLevel.wrapSocketFd(kj::mv(socketpair.fds[1]), NEW_FD_FLAGS)
     } };
   }
 
   CapabilityPipe newCapabilityPipe() override {
-    int fds[2]{};
-    int type = SOCK_STREAM;
-#if __linux__ && !__BIONIC__
-    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    auto socketpair = newOsSocketpair();
     return CapabilityPipe { {
-      lowLevel.wrapUnixSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapUnixSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapUnixSocketFd(kj::mv(socketpair.fds[0]), NEW_FD_FLAGS),
+      lowLevel.wrapUnixSocketFd(kj::mv(socketpair.fds[1]), NEW_FD_FLAGS)
     } };
   }
 
@@ -2018,24 +2008,16 @@ public:
 
   PipeThread newPipeThread(
       Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
-    int fds[2]{};
-    int type = SOCK_STREAM;
-#if __linux__ && !__BIONIC__
-    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    auto socketpair = newOsSocketpair();
 
-    int threadFd = fds[1];
-    KJ_ON_SCOPE_FAILURE(close(threadFd));
-
-    auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
-
-    auto thread = heap<Thread>([threadFd,startFunc=kj::mv(startFunc)]() mutable {
+    auto pipe = lowLevel.wrapSocketFd(kj::mv(socketpair.fds[0]), NEW_FD_FLAGS);
+    auto thread = heap<Thread>([threadFd=kj::mv(socketpair.fds[1]),startFunc=kj::mv(startFunc)]() mutable {
       UnixEventPort eventPort;
       EventLoop eventLoop(eventPort);
       WaitScope waitScope(eventLoop);
-      LowLevelAsyncIoProviderImpl lowLevel(eventPort);
-      auto stream = lowLevel.wrapSocketFd(threadFd, NEW_FD_FLAGS);
+      LowLevelAsyncIoProviderImpl lowLevelImpl(eventPort);
+      LowLevelAsyncIoProvider& lowLevel = lowLevelImpl;
+      auto stream = lowLevel.wrapSocketFd(kj::mv(threadFd), NEW_FD_FLAGS);
       AsyncIoProviderImpl ioProvider(lowLevel);
       startFunc(ioProvider, *stream, waitScope);
     });
@@ -2051,6 +2033,17 @@ private:
 };
 
 }  // namespace
+
+Socketpair newOsSocketpair() {
+  LowLevelAsyncIoProvider::Fd socketpairFds[2]{};
+  int type = SOCK_STREAM;
+#if __linux__ && !__BIONIC__
+  type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
+#endif
+  KJ_SYSCALL(socketpair(AF_UNIX, type, 0, socketpairFds));
+  return Socketpair{{LowLevelAsyncIoProvider::OwnFd{socketpairFds[0]},
+                     LowLevelAsyncIoProvider::OwnFd{socketpairFds[1]}}};
+}
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
   return kj::heap<AsyncIoProviderImpl>(lowLevel);

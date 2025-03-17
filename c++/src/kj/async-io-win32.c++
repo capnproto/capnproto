@@ -95,8 +95,6 @@ int win32Socketpair(SOCKET socks[2]) {
 
   // Note: This function is called from some Cap'n Proto unit tests, despite not having a public
   //   header declaration.
-  // TODO(cleanup): Consider putting this somewhere public? Note that since it depends on Winsock,
-  //   it needs to be in the kj-async library.
 
   initWinsockOnce();
 
@@ -1108,20 +1106,18 @@ public:
       : lowLevel(lowLevel), network(lowLevel) {}
 
   OneWayPipe newOneWayPipe() override {
-    SOCKET fds[2];
-    KJ_WINSOCK(_::win32Socketpair(fds));
-    auto in = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
-    auto out = lowLevel.wrapOutputFd(fds[1], NEW_FD_FLAGS);
+    auto socketpair = newOsSocketpair();
+    auto in = lowLevel.wrapSocketFd(kj::mv(socketpair.fds[0]), NEW_FD_FLAGS);
+    auto out = lowLevel.wrapOutputFd(kj::mv(socketpair.fds[1]), NEW_FD_FLAGS);
     in->shutdownWrite();
     return { kj::mv(in), kj::mv(out) };
   }
 
   TwoWayPipe newTwoWayPipe() override {
-    SOCKET fds[2];
-    KJ_WINSOCK(_::win32Socketpair(fds));
+    auto socketpair = newOsSocketpair();
     return TwoWayPipe { {
-      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapSocketFd(kj::mv(socketpair.fds[0]), NEW_FD_FLAGS),
+      lowLevel.wrapSocketFd(kj::mv(socketpair.fds[1]), NEW_FD_FLAGS)
     } };
   }
 
@@ -1131,20 +1127,17 @@ public:
 
   PipeThread newPipeThread(
       Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
-    SOCKET fds[2];
-    KJ_WINSOCK(_::win32Socketpair(fds));
+    auto socketpair = newOsSocketpair();
 
-    int threadFd = fds[1];
-    KJ_ON_SCOPE_FAILURE(closesocket(threadFd));
+    auto pipe = lowLevel.wrapSocketFd(kj::mv(socketpair.fds[0]), NEW_FD_FLAGS);
 
-    auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
-
-    auto thread = heap<Thread>([threadFd,startFunc=kj::mv(startFunc)]() mutable {
+    auto thread = heap<Thread>([threadFd=kj::mv(socketpair.fds[1]),startFunc=kj::mv(startFunc)]() mutable {
       Win32IocpEventPort eventPort;
       EventLoop eventLoop(eventPort);
       WaitScope waitScope(eventLoop);
-      LowLevelAsyncIoProviderImpl lowLevel(eventPort);
-      auto stream = lowLevel.wrapSocketFd(threadFd, NEW_FD_FLAGS);
+      LowLevelAsyncIoProviderImpl lowLevelImpl(eventPort);
+      LowLevelAsyncIoProvider& lowLevel = lowLevelImpl;
+      auto stream = lowLevel.wrapSocketFd(kj::mv(threadFd), NEW_FD_FLAGS);
       AsyncIoProviderImpl ioProvider(lowLevel);
       startFunc(ioProvider, *stream, waitScope);
     });
@@ -1160,6 +1153,13 @@ private:
 };
 
 }  // namespace
+
+Socketpair newOsSocketpair() {
+  LowLevelAsyncIoProvider::Fd socketpairFds[2]{};
+  KJ_WINSOCK(_::win32Socketpair(socketpairFds));
+  return Socketpair{{LowLevelAsyncIoProvider::OwnFd{reinterpret_cast<void*>(socketpairFds[0])},
+                     LowLevelAsyncIoProvider::OwnFd{reinterpret_cast<void*>(socketpairFds[1])}}};
+}
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
   return kj::heap<AsyncIoProviderImpl>(lowLevel);
