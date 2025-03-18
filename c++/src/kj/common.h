@@ -1914,7 +1914,7 @@ public:
 
   inline constexpr bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;
-#if __has_feature(cxx_constexpr_string_builtins)
+#if KJ_HAS_COMPILER_FEATURE(cxx_constexpr_string_builtins)
     if (isIntegral<RemoveConst<T>>()) {
       if (size_ == 0) return true;
       return __builtin_memcmp(ptr, other.ptr, size_ * sizeof(T)) == 0;
@@ -1938,7 +1938,7 @@ public:
   inline constexpr bool operator<(const ArrayPtr& other) const {
     size_t comparisonSize = kj::min(size_, other.size_);
     if constexpr (isSameType<RemoveConst<T>, char>() || isSameType<RemoveConst<T>, unsigned char>()) {
-#if __has_feature(cxx_constexpr_string_builtins)
+#if KJ_HAS_COMPILER_FEATURE(cxx_constexpr_string_builtins)
       int ret = __builtin_memcmp(ptr, other.ptr, comparisonSize * sizeof(T));
       if (ret != 0) {
         return ret < 0;
