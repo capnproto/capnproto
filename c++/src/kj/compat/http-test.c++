@@ -1709,10 +1709,10 @@ KJ_TEST("WebSocket core protocol") {
   auto client = newWebSocket(kj::mv(pipe.ends[0]), kj::none);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none);
 
-  auto mediumString = kj::strArray(kj::repeat(kj::StringPtr("123456789"), 30), "");
-  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("123456789"), 10000), "");
+  auto mediumString = kj::strArray(kj::repeat("123456789"_kj, 30), "");
+  auto bigString = kj::strArray(kj::repeat("123456789"_kj, 10000), "");
 
-  auto clientTask = client->send(kj::StringPtr("hello"))
+  auto clientTask = client->send("hello"_kj)
       .then([&]() { return client->send(mediumString); })
       .then([&]() { return client->send(bigString); })
       .then([&]() { return client->send("world"_kjb); })
@@ -1848,7 +1848,7 @@ KJ_TEST("WebSocket masked") {
   };
 
   auto clientTask = client->write(DATA);
-  auto serverTask = server->send(kj::StringPtr("hello "));
+  auto serverTask = server->send("hello "_kj);
 
   {
     auto message = server->receive().wait(waitScope);
@@ -2101,7 +2101,7 @@ void doWebSocketPingTest(kj::Maybe<EntropySource&> maskGenerator) {
     KJ_EXPECT(message.get<kj::String>() == "hello world");
   }
 
-  auto serverTask = server->send(kj::StringPtr("bar"));
+  auto serverTask = server->send("bar"_kj);
 
   kj::ArrayPtr<const byte> expected;
 
@@ -2141,7 +2141,7 @@ KJ_TEST("WebSocket ping mid-send") {
   auto client = kj::mv(pipe.ends[0]);
   auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none);
 
-  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto bigString = kj::strArray(kj::repeat("12345678"_kj, 65536), "");
   auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
 
   byte DATA[] = {
@@ -2225,7 +2225,7 @@ KJ_TEST("WebSocket double-ping mid-send") {
   auto server = newWebSocket(kj::heap<InputOutputPair>(kj::mv(upPipe.in), kj::mv(downPipe.out)),
                              kj::none);
 
-  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto bigString = kj::strArray(kj::repeat("12345678"_kj, 65536), "");
   auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
 
   byte DATA[] = {
@@ -2278,7 +2278,7 @@ KJ_TEST("WebSocket multiple ping outside of send") {
     KJ_EXPECT(message.get<kj::String>() == "other");
   }
 
-  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto bigString = kj::strArray(kj::repeat("12345678"_kj, 65536), "");
   auto serverTask = server->send(bigString).eagerlyEvaluate(nullptr);
 
   // We expect to receive pongs for only the first and last pings, because the server has the
@@ -2308,7 +2308,7 @@ KJ_TEST("WebSocket ping received during pong send") {
   // Send a very large ping so that sending the pong takes a while. Then send a second ping
   // immediately after.
   byte PREFIX[] = { 0x89, 0x7f, 0, 0, 0, 0, 0, 8, 0, 0 };
-  auto bigString = kj::strArray(kj::repeat(kj::StringPtr("12345678"), 65536), "");
+  auto bigString = kj::strArray(kj::repeat("12345678"_kj, 65536), "");
   byte POSTFIX[] = {
     0x89, 0x03, 'f', 'o', 'o',
     0x81, 0x03, 'b', 'a', 'r',
@@ -2452,8 +2452,8 @@ KJ_TEST("WebSocket maximum message size") {
   auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, kj::none, errorCatcher);
 
   size_t maxSize = 100;
-  auto biggestAllowedString = kj::strArray(kj::repeat(kj::StringPtr("A"), maxSize), "");
-  auto tooBigString = kj::strArray(kj::repeat(kj::StringPtr("B"), maxSize + 1), "");
+  auto biggestAllowedString = kj::strArray(kj::repeat("A"_kj, maxSize), "");
+  auto tooBigString = kj::strArray(kj::repeat("B"_kj, maxSize + 1), "");
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->send(biggestAllowedString)
@@ -2501,8 +2501,8 @@ KJ_TEST("WebSocket maximum compressed message size") {
   }, errorCatcher);
 
   size_t maxSize = 100;
-  auto biggestAllowedString = kj::strArray(kj::repeat(kj::StringPtr("A"), maxSize), "");
-  auto tooBigString = kj::strArray(kj::repeat(kj::StringPtr("B"), maxSize + 1), "");
+  auto biggestAllowedString = kj::strArray(kj::repeat("A"_kj, maxSize), "");
+  auto tooBigString = kj::strArray(kj::repeat("B"_kj, maxSize + 1), "");
 
   auto rawCloseMessage = kj::heapArray<kj::byte>(129);
   auto clientTask = client->send(biggestAllowedString)
@@ -2710,7 +2710,7 @@ void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
     KJ_EXPECT(message.get<kj::String>() == "start-inline");
   }
 
-  ws->send(kj::StringPtr("bar")).wait(waitScope);
+  ws->send("bar"_kj).wait(waitScope);
   {
     auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
@@ -2749,14 +2749,14 @@ void testWebSocketTwoMessageCompression(kj::WaitScope& waitScope, HttpHeaderTabl
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hello");
   }
-  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+  ws->send("Hello"_kj).wait(waitScope);
 
   {
     auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hello");
   }
-  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+  ws->send("Hello"_kj).wait(waitScope);
 
   ws->close(0x1234, "qux").wait(waitScope);
   {
@@ -2792,7 +2792,7 @@ void testWebSocketThreeMessageCompression(kj::WaitScope& waitScope, HttpHeaderTa
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hello");
   }
-  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+  ws->send("Hello"_kj).wait(waitScope);
 
   // The message we receive is not compressed, but the one we send is.
   {
@@ -2800,7 +2800,7 @@ void testWebSocketThreeMessageCompression(kj::WaitScope& waitScope, HttpHeaderTa
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hi");
   }
-  ws->send(kj::StringPtr("Hi")).wait(waitScope);
+  ws->send("Hi"_kj).wait(waitScope);
 
   // Compressed message.
   {
@@ -2808,7 +2808,7 @@ void testWebSocketThreeMessageCompression(kj::WaitScope& waitScope, HttpHeaderTa
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hello");
   }
-  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+  ws->send("Hello"_kj).wait(waitScope);
 
   ws->close(0x1234, "qux").wait(waitScope);
   {
@@ -2841,21 +2841,21 @@ void testWebSocketEmptyMessageCompression(kj::WaitScope& waitScope, HttpHeaderTa
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hello");
   }
-  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+  ws->send("Hello"_kj).wait(waitScope);
 
   {
     auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "");
   }
-  ws->send(kj::StringPtr("")).wait(waitScope);
+  ws->send(""_kj).wait(waitScope);
 
   {
     auto message = ws->receive().wait(waitScope);
     KJ_ASSERT(message.is<kj::String>());
     KJ_EXPECT(message.get<kj::String>() == "Hello");
   }
-  ws->send(kj::StringPtr("Hello")).wait(waitScope);
+  ws->send("Hello"_kj).wait(waitScope);
 
   ws->close(0x1234, "qux").wait(waitScope);
   {

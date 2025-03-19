@@ -427,7 +427,7 @@ String Url::toString(Context context) const {
 
   if (context != HTTP_REQUEST) {
     chars.addAll(scheme);
-    chars.addAll(StringPtr("://"));
+    chars.addAll("://"_kj);
 
     if (context == REMOTE_HREF) {
       KJ_IF_SOME(user, userInfo) {
@@ -451,7 +451,7 @@ String Url::toString(Context context) const {
       chars.addAll(host);
     } else {
       KJ_FAIL_REQUIRE("invalid hostname when stringifying URL", host) {
-        chars.addAll(StringPtr("invalid-host"));
+        chars.addAll("invalid-host"_kj);
         break;
       }
     }

@@ -196,7 +196,7 @@ StringPtr Stringifier::operator*(decltype(nullptr)) const {
 }
 
 StringPtr Stringifier::operator*(bool b) const {
-  return b ? StringPtr("true") : StringPtr("false");
+  return b ? "true"_kj : "false"_kj;
 }
 
 template <typename T, typename Unsigned>
