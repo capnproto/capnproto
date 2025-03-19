@@ -2566,7 +2566,7 @@ public:
     auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
     parts[0] = header.asBytes();
     parts[1] = buffer;
-    parts[2] = kj::StringPtr("\r\n").asBytes();
+    parts[2] = "\r\n"_kjb;
 
     auto promise = getInner().writeBodyData(parts.asPtr());
     return promise.attach(kj::mv(header), kj::mv(parts));
@@ -2584,7 +2584,7 @@ public:
     for (auto& piece: pieces) {
       partsBuilder.add(piece);
     }
-    partsBuilder.add(kj::StringPtr("\r\n").asBytes());
+    partsBuilder.add("\r\n"_kjb);
 
     auto parts = partsBuilder.finish();
     auto promise = getInner().writeBodyData(parts.asPtr());

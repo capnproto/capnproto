@@ -293,13 +293,13 @@ KJ_TEST("DiskFile") {
   file->writeAll("foo");
   KJ_EXPECT(file->readAllText() == "foo");
 
-  file->write(3, StringPtr("bar").asBytes());
+  file->write(3, "bar"_kjb);
   KJ_EXPECT(file->readAllText() == "foobar");
 
-  file->write(3, StringPtr("baz").asBytes());
+  file->write(3, "baz"_kjb);
   KJ_EXPECT(file->readAllText() == "foobaz");
 
-  file->write(9, StringPtr("qux").asBytes());
+  file->write(9, "qux"_kjb);
   KJ_EXPECT(file->readAllText() == kj::StringPtr("foobaz\0\0\0qux", 12));
 
   file->truncate(6);
@@ -344,12 +344,12 @@ KJ_TEST("DiskFile") {
     KJ_EXPECT(kj::str(writableMapping->get().first(6).asChars()) == "fDobaz");
     KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "Foobaz");
 
-    file->write(0, StringPtr("qux").asBytes());
+    file->write(0, "qux"_kjb);
     KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "quxbaz");
     KJ_EXPECT(kj::str(writableMapping->get().first(6).asChars()) == "quxbaz");
     KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "Foobaz");
 
-    file->write(12, StringPtr("corge").asBytes());
+    file->write(12, "corge"_kjb);
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == "corge");
 
 #if !_WIN32 && !__CYGWIN__  // Windows doesn't allow the file size to change while mapped.
@@ -482,7 +482,7 @@ KJ_TEST("DiskDirectory") {
   KJ_EXPECT(dir->openFile(Path({"corge", "grault"}))->readAllText() == "garply");
 
   dir->openFile(Path({"corge", "grault"}), WriteMode::CREATE | WriteMode::MODIFY)
-     ->write(0, StringPtr("rag").asBytes());
+     ->write(0, "rag"_kjb);
   KJ_EXPECT(dir->openFile(Path({"corge", "grault"}))->readAllText() == "ragply");
 
   KJ_EXPECT(dir->openSubdir(Path("corge"))->listNames().size() == 1);
@@ -883,7 +883,7 @@ KJ_TEST("DiskFile holes") {
 #endif
 
   file->writeAll("foobar");
-  file->write(1 << 20, StringPtr("foobar").asBytes());
+  file->write(1 << 20, "foobar"_kjb);
 
   // Some filesystems, like BTRFS, report zero `spaceUsed` until synced.
   file->datasync();

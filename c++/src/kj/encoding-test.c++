@@ -415,13 +415,13 @@ KJ_TEST("C escape encoding/decoding") {
 
 KJ_TEST("base64 encoding/decoding") {
   {
-    auto encoded = encodeBase64(StringPtr("").asBytes(), false);
+    auto encoded = encodeBase64(""_kjb, false);
     KJ_EXPECT(encoded == "", encoded, encoded.size());
     KJ_EXPECT(heapString(decodeBase64(encoded.asArray()).asChars()) == "");
   }
 
   {
-    auto encoded = encodeBase64(StringPtr("foo").asBytes(), false);
+    auto encoded = encodeBase64("foo"_kjb, false);
     KJ_EXPECT(encoded == "Zm9v", encoded, encoded.size());
     auto decoded = decodeBase64(encoded.asArray());
     KJ_EXPECT(!decoded.hadErrors);
@@ -429,13 +429,13 @@ KJ_TEST("base64 encoding/decoding") {
   }
 
   {
-    auto encoded = encodeBase64(StringPtr("quux").asBytes(), false);
+    auto encoded = encodeBase64("quux"_kjb, false);
     KJ_EXPECT(encoded == "cXV1eA==", encoded, encoded.size());
     KJ_EXPECT(heapString(decodeBase64(encoded.asArray()).asChars()) == "quux");
   }
 
   {
-    auto encoded = encodeBase64(StringPtr("corge").asBytes(), false);
+    auto encoded = encodeBase64("corge"_kjb, false);
     KJ_EXPECT(encoded == "Y29yZ2U=", encoded);
     auto decoded = decodeBase64(encoded.asArray());
     KJ_EXPECT(!decoded.hadErrors);
@@ -468,7 +468,7 @@ KJ_TEST("base64 encoding/decoding") {
   KJ_EXPECT(decodeBase64("ab=c").hadErrors);
 
   {
-    auto encoded = encodeBase64(StringPtr("corge").asBytes(), true);
+    auto encoded = encodeBase64("corge"_kjb, true);
     KJ_EXPECT(encoded == "Y29yZ2U=\n", encoded);
   }
 
@@ -505,21 +505,21 @@ KJ_TEST("base64 encoding/decoding") {
 KJ_TEST("base64 url encoding") {
   {
     // Handles empty.
-    auto encoded = encodeBase64Url(StringPtr("").asBytes());
+    auto encoded = encodeBase64Url(""_kjb);
     KJ_EXPECT(encoded == "", encoded, encoded.size());
   }
 
   {
     // Handles paddingless encoding.
-    auto encoded = encodeBase64Url(StringPtr("foo").asBytes());
+    auto encoded = encodeBase64Url("foo"_kjb);
     KJ_EXPECT(encoded == "Zm9v", encoded, encoded.size());
   }
 
   {
     // Handles padded encoding.
-    auto encoded1 = encodeBase64Url(StringPtr("quux").asBytes());
+    auto encoded1 = encodeBase64Url("quux"_kjb);
     KJ_EXPECT(encoded1 == "cXV1eA", encoded1, encoded1.size());
-    auto encoded2 = encodeBase64Url(StringPtr("corge").asBytes());
+    auto encoded2 = encodeBase64Url("corge"_kjb);
     KJ_EXPECT(encoded2 == "Y29yZ2U", encoded2, encoded2.size());
   }
 

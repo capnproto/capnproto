@@ -1715,7 +1715,7 @@ KJ_TEST("WebSocket core protocol") {
   auto clientTask = client->send(kj::StringPtr("hello"))
       .then([&]() { return client->send(mediumString); })
       .then([&]() { return client->send(bigString); })
-      .then([&]() { return client->send(kj::StringPtr("world").asBytes()); })
+      .then([&]() { return client->send("world"_kjb); })
       .then([&]() { return client->close(1234, "bored"); })
       .then([&]() { KJ_EXPECT(client->sentByteCount() == 90307)});
 
