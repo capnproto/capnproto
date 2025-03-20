@@ -303,15 +303,15 @@ KJ_TEST("InMemoryFile") {
   clock.expectChanged(*file);
   KJ_EXPECT(file->readAllText() == "foo");
 
-  file->write(3, StringPtr("bar").asBytes());
+  file->write(3, "bar"_kjb);
   clock.expectChanged(*file);
   KJ_EXPECT(file->readAllText() == "foobar");
 
-  file->write(3, StringPtr("baz").asBytes());
+  file->write(3, "baz"_kjb);
   clock.expectChanged(*file);
   KJ_EXPECT(file->readAllText() == "foobaz");
 
-  file->write(9, StringPtr("qux").asBytes());
+  file->write(9, "qux"_kjb);
   clock.expectChanged(*file);
   KJ_EXPECT(file->readAllText() == kj::StringPtr("foobaz\0\0\0qux", 12));
 
@@ -341,12 +341,12 @@ KJ_TEST("InMemoryFile") {
     KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "foobaz");
     clock.expectUnchanged(*file);
 
-    file->write(0, StringPtr("qux").asBytes());
+    file->write(0, "qux"_kjb);
     clock.expectChanged(*file);
     KJ_EXPECT(kj::str(mapping.first(6).asChars()) == "quxbaz");
     KJ_EXPECT(kj::str(privateMapping.first(6).asChars()) == "foobaz");
 
-    file->write(12, StringPtr("corge").asBytes());
+    file->write(12, "corge"_kjb);
     KJ_EXPECT(kj::str(mapping.slice(12, 17).asChars()) == "corge");
 
     // Can shrink.
@@ -553,7 +553,7 @@ KJ_TEST("InMemoryDirectory") {
   KJ_EXPECT(dir->openFile(Path({"corge", "grault"}))->readAllText() == "garply");
 
   dir->openFile(Path({"corge", "grault"}), WriteMode::CREATE | WriteMode::MODIFY)
-     ->write(0, StringPtr("rag").asBytes());
+     ->write(0, "rag"_kjb);
   KJ_EXPECT(dir->openFile(Path({"corge", "grault"}))->readAllText() == "ragply");
   clock.expectUnchanged(*dir);
 

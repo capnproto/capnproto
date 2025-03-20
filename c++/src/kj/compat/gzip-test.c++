@@ -318,10 +318,7 @@ KJ_TEST("async gzip compression") {
     MockAsyncOutputStream rawOutput;
     GzipAsyncOutputStream gzip(rawOutput);
 
-    ArrayPtr<const byte> pieces[] = {
-      kj::StringPtr("foo").asBytes(),
-      kj::StringPtr("bar").asBytes(),
-    };
+    ArrayPtr<const byte> pieces[] = { "foo"_kjb, "bar"_kjb };
     gzip.write(pieces).wait(io.waitScope);
     gzip.end().wait(io.waitScope);
 

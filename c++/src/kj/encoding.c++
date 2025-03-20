@@ -546,16 +546,16 @@ String encodeCEscapeImpl(ArrayPtr<const byte> bytes, bool isBinary) {
 
   for (byte b: bytes) {
     switch (b) {
-      case '\a': escaped.addAll(StringPtr("\\a")); break;
-      case '\b': escaped.addAll(StringPtr("\\b")); break;
-      case '\f': escaped.addAll(StringPtr("\\f")); break;
-      case '\n': escaped.addAll(StringPtr("\\n")); break;
-      case '\r': escaped.addAll(StringPtr("\\r")); break;
-      case '\t': escaped.addAll(StringPtr("\\t")); break;
-      case '\v': escaped.addAll(StringPtr("\\v")); break;
-      case '\'': escaped.addAll(StringPtr("\\\'")); break;
-      case '\"': escaped.addAll(StringPtr("\\\"")); break;
-      case '\\': escaped.addAll(StringPtr("\\\\")); break;
+      case '\a': escaped.addAll("\\a"_kj); break;
+      case '\b': escaped.addAll("\\b"_kj); break;
+      case '\f': escaped.addAll("\\f"_kj); break;
+      case '\n': escaped.addAll("\\n"_kj); break;
+      case '\r': escaped.addAll("\\r"_kj); break;
+      case '\t': escaped.addAll("\\t"_kj); break;
+      case '\v': escaped.addAll("\\v"_kj); break;
+      case '\'': escaped.addAll("\\\'"_kj); break;
+      case '\"': escaped.addAll("\\\""_kj); break;
+      case '\\': escaped.addAll("\\\\"_kj); break;
       default:
         if (b < 0x20 || b == 0x7f || (isBinary && b > 0x7f)) {
           // Use octal escape, not hex, because hex escapes technically have no length limit and

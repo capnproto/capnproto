@@ -34,7 +34,7 @@ KJ_TEST("readiness IO: write small") {
   auto readPromise = pipe.in->read(buf, 3, 4);
 
   ReadyOutputStreamWrapper out(*pipe.out);
-  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("foo").asBytes())) == 3);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("foo"_kjb)) == 3);
 
   KJ_ASSERT(readPromise.wait(io.waitScope) == 3);
   buf[3] = '\0';
@@ -49,7 +49,7 @@ KJ_TEST("readiness IO: write many odd") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_SOME(n, out.write(kj::StringPtr("bar").asBytes())) {
+    KJ_IF_SOME(n, out.write("bar"_kjb)) {
       totalWritten += n;
       if (n < 3) {
         break;
@@ -75,7 +75,7 @@ KJ_TEST("readiness IO: write even") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_SOME(n, out.write(kj::StringPtr("ba").asBytes())) {
+    KJ_IF_SOME(n, out.write("ba"_kjb)) {
       totalWritten += n;
       if (n < 2) {
         KJ_FAIL_ASSERT("pipe buffer is not divisible by 2? really?");
@@ -102,13 +102,13 @@ KJ_TEST("readiness IO: write while corked") {
 
   ReadyOutputStreamWrapper out(*pipe.out);
   auto cork = out.cork();
-  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("foo").asBytes())) == 3);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("foo"_kjb)) == 3);
 
   // Data hasn't been written yet.
   KJ_ASSERT(!readPromise.poll(io.waitScope));
 
   // Write some more, and observe it still isn't flushed out yet.
-  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("bar").asBytes())) == 3);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("bar"_kjb)) == 3);
   KJ_ASSERT(!readPromise.poll(io.waitScope));
 
   // After reenabling pumping, the full read should succeed.
@@ -133,7 +133,7 @@ KJ_TEST("readiness IO: write many odd while corked") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_SOME(n, out.write(kj::StringPtr("bar").asBytes())) {
+    KJ_IF_SOME(n, out.write("bar"_kjb)) {
       totalWritten += n;
       if (n < 3) {
         break;
@@ -151,7 +151,7 @@ KJ_TEST("readiness IO: write many odd while corked") {
   }
 
   // Eager pumping should still be corked.
-  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("bar").asBytes())) == 3);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("bar"_kjb)) == 3);
   auto readPromise = pipe.in->read(buf.begin(), 3, buf.size());
   KJ_ASSERT(!readPromise.poll(io.waitScope));
 }
@@ -165,7 +165,7 @@ KJ_TEST("readiness IO: write many even while corked") {
 
   size_t totalWritten = 0;
   for (;;) {
-    KJ_IF_SOME(n, out.write(kj::StringPtr("ba").asBytes())) {
+    KJ_IF_SOME(n, out.write("ba"_kjb)) {
       totalWritten += n;
       if (n < 2) {
         KJ_FAIL_ASSERT("pipe buffer is not divisible by 2? really?");
@@ -183,7 +183,7 @@ KJ_TEST("readiness IO: write many even while corked") {
   }
 
   // Eager pumping should still be corked.
-  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write(kj::StringPtr("ba").asBytes())) == 2);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("ba"_kjb)) == 2);
   auto readPromise = pipe.in->read(buf.begin(), 2, buf.size());
   KJ_ASSERT(!readPromise.poll(io.waitScope));
 }

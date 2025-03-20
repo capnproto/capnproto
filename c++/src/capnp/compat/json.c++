@@ -110,16 +110,16 @@ struct JsonCodec::Impl {
     escaped.add('"');
     for (char c: chars) {
       switch (c) {
-        case '\"': escaped.addAll(kj::StringPtr("\\\"")); break;
-        case '\\': escaped.addAll(kj::StringPtr("\\\\")); break;
-        case '\b': escaped.addAll(kj::StringPtr("\\b")); break;
-        case '\f': escaped.addAll(kj::StringPtr("\\f")); break;
-        case '\n': escaped.addAll(kj::StringPtr("\\n")); break;
-        case '\r': escaped.addAll(kj::StringPtr("\\r")); break;
-        case '\t': escaped.addAll(kj::StringPtr("\\t")); break;
+        case '\"': escaped.addAll("\\\""_kj); break;
+        case '\\': escaped.addAll("\\\\"_kj); break;
+        case '\b': escaped.addAll("\\b"_kj); break;
+        case '\f': escaped.addAll("\\f"_kj); break;
+        case '\n': escaped.addAll("\\n"_kj); break;
+        case '\r': escaped.addAll("\\r"_kj); break;
+        case '\t': escaped.addAll("\\t"_kj); break;
         default:
           if (static_cast<uint8_t>(c) < 0x20) {
-            escaped.addAll(kj::StringPtr("\\u00"));
+            escaped.addAll("\\u00"_kj);
             uint8_t c2 = c;
             escaped.add(HEXDIGITS[c2 / 16]);
             escaped.add(HEXDIGITS[c2 % 16]);
@@ -652,9 +652,9 @@ public:
     KJ_REQUIRE(!input.exhausted(), "JSON message ends prematurely.");
 
     switch (input.nextChar()) {
-      case 'n': input.consume(kj::StringPtr("null"));  output.setNull();         break;
-      case 'f': input.consume(kj::StringPtr("false")); output.setBoolean(false); break;
-      case 't': input.consume(kj::StringPtr("true"));  output.setBoolean(true);  break;
+      case 'n': input.consume("null"_kj);  output.setNull();         break;
+      case 'f': input.consume("false"_kj); output.setBoolean(false); break;
+      case 't': input.consume("true"_kj);  output.setBoolean(true);  break;
       case '"': parseString(output); break;
       case '[': parseArray(output);  break;
       case '{': parseObject(output); break;

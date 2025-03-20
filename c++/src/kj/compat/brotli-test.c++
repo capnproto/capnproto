@@ -359,10 +359,7 @@ KJ_TEST("async brotli compression") {
     MockAsyncOutputStream rawOutput;
     BrotliAsyncOutputStream brotli(rawOutput);
 
-    ArrayPtr<const byte> pieces[] = {
-      kj::StringPtr("foo").asBytes(),
-      kj::StringPtr("bar").asBytes(),
-    };
+    ArrayPtr<const byte> pieces[] = { "foo"_kjb, "bar"_kjb };
     brotli.write(pieces).wait(io.waitScope);
     brotli.end().wait(io.waitScope);
 

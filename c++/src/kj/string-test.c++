@@ -69,183 +69,183 @@ TEST(String, Nullptr) {
 }
 
 TEST(String, StartsEndsWith) {
-  EXPECT_TRUE(StringPtr("foobar").startsWith("foo"));
-  EXPECT_FALSE(StringPtr("foobar").startsWith("bar"));
-  EXPECT_FALSE(StringPtr("foobar").endsWith("foo"));
-  EXPECT_TRUE(StringPtr("foobar").endsWith("bar"));
+  EXPECT_TRUE("foobar"_kj.startsWith("foo"));
+  EXPECT_FALSE("foobar"_kj.startsWith("bar"));
+  EXPECT_FALSE("foobar"_kj.endsWith("foo"));
+  EXPECT_TRUE("foobar"_kj.endsWith("bar"));
 
-  EXPECT_FALSE(StringPtr("fo").startsWith("foo"));
-  EXPECT_FALSE(StringPtr("fo").endsWith("foo"));
+  EXPECT_FALSE("fo"_kj.startsWith("foo"));
+  EXPECT_FALSE("fo"_kj.endsWith("foo"));
 
-  EXPECT_TRUE(StringPtr("foobar").startsWith(""));
-  EXPECT_TRUE(StringPtr("foobar").endsWith(""));
+  EXPECT_TRUE("foobar"_kj.startsWith(""));
+  EXPECT_TRUE("foobar"_kj.endsWith(""));
 }
 
 TEST(String, parseAs) {
-  EXPECT_EQ(StringPtr("0").parseAs<double>(), 0.0);
-  EXPECT_EQ(StringPtr("0.0").parseAs<double>(), 0.0);
-  EXPECT_EQ(StringPtr("1").parseAs<double>(), 1.0);
-  EXPECT_EQ(StringPtr("1.0").parseAs<double>(), 1.0);
-  EXPECT_EQ(StringPtr("1e100").parseAs<double>(), 1e100);
-  EXPECT_EQ(StringPtr("inf").parseAs<double>(), inf());
-  EXPECT_EQ(StringPtr("infinity").parseAs<double>(), inf());
-  EXPECT_EQ(StringPtr("INF").parseAs<double>(), inf());
-  EXPECT_EQ(StringPtr("INFINITY").parseAs<double>(), inf());
-  EXPECT_EQ(StringPtr("1e100000").parseAs<double>(), inf());
-  EXPECT_EQ(StringPtr("-inf").parseAs<double>(), -inf());
-  EXPECT_EQ(StringPtr("-infinity").parseAs<double>(), -inf());
-  EXPECT_EQ(StringPtr("-INF").parseAs<double>(), -inf());
-  EXPECT_EQ(StringPtr("-INFINITY").parseAs<double>(), -inf());
-  EXPECT_EQ(StringPtr("-1e100000").parseAs<double>(), -inf());
-  EXPECT_TRUE(isNaN(StringPtr("nan").parseAs<double>()));
-  EXPECT_TRUE(isNaN(StringPtr("NAN").parseAs<double>()));
-  EXPECT_TRUE(isNaN(StringPtr("NaN").parseAs<double>()));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("").parseAs<double>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("a").parseAs<double>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("1a").parseAs<double>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("+-1").parseAs<double>());
+  EXPECT_EQ("0"_kj.parseAs<double>(), 0.0);
+  EXPECT_EQ("0.0"_kj.parseAs<double>(), 0.0);
+  EXPECT_EQ("1"_kj.parseAs<double>(), 1.0);
+  EXPECT_EQ("1.0"_kj.parseAs<double>(), 1.0);
+  EXPECT_EQ("1e100"_kj.parseAs<double>(), 1e100);
+  EXPECT_EQ("inf"_kj.parseAs<double>(), inf());
+  EXPECT_EQ("infinity"_kj.parseAs<double>(), inf());
+  EXPECT_EQ("INF"_kj.parseAs<double>(), inf());
+  EXPECT_EQ("INFINITY"_kj.parseAs<double>(), inf());
+  EXPECT_EQ("1e100000"_kj.parseAs<double>(), inf());
+  EXPECT_EQ("-inf"_kj.parseAs<double>(), -inf());
+  EXPECT_EQ("-infinity"_kj.parseAs<double>(), -inf());
+  EXPECT_EQ("-INF"_kj.parseAs<double>(), -inf());
+  EXPECT_EQ("-INFINITY"_kj.parseAs<double>(), -inf());
+  EXPECT_EQ("-1e100000"_kj.parseAs<double>(), -inf());
+  EXPECT_TRUE(isNaN("nan"_kj.parseAs<double>()));
+  EXPECT_TRUE(isNaN("NAN"_kj.parseAs<double>()));
+  EXPECT_TRUE(isNaN("NaN"_kj.parseAs<double>()));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", ""_kj.parseAs<double>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "a"_kj.parseAs<double>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "1a"_kj.parseAs<double>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "+-1"_kj.parseAs<double>());
 
-  EXPECT_EQ(StringPtr("1").parseAs<float>(), 1.0);
+  EXPECT_EQ("1"_kj.parseAs<float>(), 1.0);
 
-  EXPECT_EQ(StringPtr("1").parseAs<int64_t>(), 1);
-  EXPECT_EQ(StringPtr("9223372036854775807").parseAs<int64_t>(), 9223372036854775807LL);
-  EXPECT_EQ(StringPtr("-9223372036854775808").parseAs<int64_t>(), -9223372036854775808ULL);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("9223372036854775808").parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("-9223372036854775809").parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("").parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("a").parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("1a").parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("+-1").parseAs<int64_t>());
-  EXPECT_EQ(StringPtr("010").parseAs<int64_t>(), 10);
-  EXPECT_EQ(StringPtr("0010").parseAs<int64_t>(), 10);
-  EXPECT_EQ(StringPtr("0x10").parseAs<int64_t>(), 16);
-  EXPECT_EQ(StringPtr("0X10").parseAs<int64_t>(), 16);
-  EXPECT_EQ(StringPtr("-010").parseAs<int64_t>(), -10);
-  EXPECT_EQ(StringPtr("-0x10").parseAs<int64_t>(), -16);
-  EXPECT_EQ(StringPtr("-0X10").parseAs<int64_t>(), -16);
+  EXPECT_EQ("1"_kj.parseAs<int64_t>(), 1);
+  EXPECT_EQ("9223372036854775807"_kj.parseAs<int64_t>(), 9223372036854775807LL);
+  EXPECT_EQ("-9223372036854775808"_kj.parseAs<int64_t>(), -9223372036854775808ULL);
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "9223372036854775808"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-9223372036854775809"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", ""_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "a"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "1a"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "+-1"_kj.parseAs<int64_t>());
+  EXPECT_EQ("010"_kj.parseAs<int64_t>(), 10);
+  EXPECT_EQ("0010"_kj.parseAs<int64_t>(), 10);
+  EXPECT_EQ("0x10"_kj.parseAs<int64_t>(), 16);
+  EXPECT_EQ("0X10"_kj.parseAs<int64_t>(), 16);
+  EXPECT_EQ("-010"_kj.parseAs<int64_t>(), -10);
+  EXPECT_EQ("-0x10"_kj.parseAs<int64_t>(), -16);
+  EXPECT_EQ("-0X10"_kj.parseAs<int64_t>(), -16);
 
-  EXPECT_EQ(StringPtr("1").parseAs<uint64_t>(), 1);
-  EXPECT_EQ(StringPtr("0").parseAs<uint64_t>(), 0);
-  EXPECT_EQ(StringPtr("18446744073709551615").parseAs<uint64_t>(), 18446744073709551615ULL);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("-1").parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("18446744073709551616").parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("").parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("a").parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("1a").parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", StringPtr("+-1").parseAs<uint64_t>());
+  EXPECT_EQ("1"_kj.parseAs<uint64_t>(), 1);
+  EXPECT_EQ("0"_kj.parseAs<uint64_t>(), 0);
+  EXPECT_EQ("18446744073709551615"_kj.parseAs<uint64_t>(), 18446744073709551615ULL);
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-1"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "18446744073709551616"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", ""_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "a"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "1a"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "+-1"_kj.parseAs<uint64_t>());
 
-  EXPECT_EQ(StringPtr("1").parseAs<int32_t>(), 1);
-  EXPECT_EQ(StringPtr("2147483647").parseAs<int32_t>(), 2147483647);
-  EXPECT_EQ(StringPtr("-2147483648").parseAs<int32_t>(), -2147483648);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("2147483648").parseAs<int32_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("-2147483649").parseAs<int32_t>());
+  EXPECT_EQ("1"_kj.parseAs<int32_t>(), 1);
+  EXPECT_EQ("2147483647"_kj.parseAs<int32_t>(), 2147483647);
+  EXPECT_EQ("-2147483648"_kj.parseAs<int32_t>(), -2147483648);
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "2147483648"_kj.parseAs<int32_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-2147483649"_kj.parseAs<int32_t>());
 
-  EXPECT_EQ(StringPtr("1").parseAs<uint32_t>(), 1);
-  EXPECT_EQ(StringPtr("0").parseAs<uint32_t>(), 0U);
-  EXPECT_EQ(StringPtr("4294967295").parseAs<uint32_t>(), 4294967295U);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("-1").parseAs<uint32_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", StringPtr("4294967296").parseAs<uint32_t>());
+  EXPECT_EQ("1"_kj.parseAs<uint32_t>(), 1);
+  EXPECT_EQ("0"_kj.parseAs<uint32_t>(), 0U);
+  EXPECT_EQ("4294967295"_kj.parseAs<uint32_t>(), 4294967295U);
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-1"_kj.parseAs<uint32_t>());
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "4294967296"_kj.parseAs<uint32_t>());
 
-  EXPECT_EQ(StringPtr("1").parseAs<int16_t>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<uint16_t>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<int8_t>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<uint8_t>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<char>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<signed char>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<unsigned char>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<short>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<unsigned short>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<int>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<unsigned>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<long>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<unsigned long>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<long long>(), 1);
-  EXPECT_EQ(StringPtr("1").parseAs<unsigned long long>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<int16_t>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<uint16_t>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<int8_t>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<uint8_t>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<char>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<signed char>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<unsigned char>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<short>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<unsigned short>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<int>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<unsigned>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<long>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<unsigned long>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<long long>(), 1);
+  EXPECT_EQ("1"_kj.parseAs<unsigned long long>(), 1);
 
   EXPECT_EQ(heapString("1").parseAs<int>(), 1);
 }
 
 TEST(String, tryParseAs) {
-  KJ_EXPECT(StringPtr("0").tryParseAs<double>() == 0.0);
-  KJ_EXPECT(StringPtr("0").tryParseAs<double>() == 0.0);
-  KJ_EXPECT(StringPtr("0.0").tryParseAs<double>() == 0.0);
-  KJ_EXPECT(StringPtr("1").tryParseAs<double>() == 1.0);
-  KJ_EXPECT(StringPtr("1.0").tryParseAs<double>() == 1.0);
-  KJ_EXPECT(StringPtr("1e100").tryParseAs<double>() == 1e100);
-  KJ_EXPECT(StringPtr("inf").tryParseAs<double>() == inf());
-  KJ_EXPECT(StringPtr("infinity").tryParseAs<double>() == inf());
-  KJ_EXPECT(StringPtr("INF").tryParseAs<double>() == inf());
-  KJ_EXPECT(StringPtr("INFINITY").tryParseAs<double>() == inf());
-  KJ_EXPECT(StringPtr("1e100000").tryParseAs<double>() == inf());
-  KJ_EXPECT(StringPtr("-inf").tryParseAs<double>() == -inf());
-  KJ_EXPECT(StringPtr("-infinity").tryParseAs<double>() == -inf());
-  KJ_EXPECT(StringPtr("-INF").tryParseAs<double>() == -inf());
-  KJ_EXPECT(StringPtr("-INFINITY").tryParseAs<double>() == -inf());
-  KJ_EXPECT(StringPtr("-1e100000").tryParseAs<double>() == -inf());
-  KJ_EXPECT(isNaN(StringPtr("nan").tryParseAs<double>().orDefault(0.0)) == true);
-  KJ_EXPECT(isNaN(StringPtr("NAN").tryParseAs<double>().orDefault(0.0)) == true);
-  KJ_EXPECT(isNaN(StringPtr("NaN").tryParseAs<double>().orDefault(0.0)) == true);
-  KJ_EXPECT(StringPtr("").tryParseAs<double>() == kj::none);
-  KJ_EXPECT(StringPtr("a").tryParseAs<double>() == kj::none);
-  KJ_EXPECT(StringPtr("1a").tryParseAs<double>() == kj::none);
-  KJ_EXPECT(StringPtr("+-1").tryParseAs<double>() == kj::none);
+  KJ_EXPECT("0"_kj.tryParseAs<double>() == 0.0);
+  KJ_EXPECT("0"_kj.tryParseAs<double>() == 0.0);
+  KJ_EXPECT("0.0"_kj.tryParseAs<double>() == 0.0);
+  KJ_EXPECT("1"_kj.tryParseAs<double>() == 1.0);
+  KJ_EXPECT("1.0"_kj.tryParseAs<double>() == 1.0);
+  KJ_EXPECT("1e100"_kj.tryParseAs<double>() == 1e100);
+  KJ_EXPECT("inf"_kj.tryParseAs<double>() == inf());
+  KJ_EXPECT("infinity"_kj.tryParseAs<double>() == inf());
+  KJ_EXPECT("INF"_kj.tryParseAs<double>() == inf());
+  KJ_EXPECT("INFINITY"_kj.tryParseAs<double>() == inf());
+  KJ_EXPECT("1e100000"_kj.tryParseAs<double>() == inf());
+  KJ_EXPECT("-inf"_kj.tryParseAs<double>() == -inf());
+  KJ_EXPECT("-infinity"_kj.tryParseAs<double>() == -inf());
+  KJ_EXPECT("-INF"_kj.tryParseAs<double>() == -inf());
+  KJ_EXPECT("-INFINITY"_kj.tryParseAs<double>() == -inf());
+  KJ_EXPECT("-1e100000"_kj.tryParseAs<double>() == -inf());
+  KJ_EXPECT(isNaN("nan"_kj.tryParseAs<double>().orDefault(0.0)) == true);
+  KJ_EXPECT(isNaN("NAN"_kj.tryParseAs<double>().orDefault(0.0)) == true);
+  KJ_EXPECT(isNaN("NaN"_kj.tryParseAs<double>().orDefault(0.0)) == true);
+  KJ_EXPECT(""_kj.tryParseAs<double>() == kj::none);
+  KJ_EXPECT("a"_kj.tryParseAs<double>() == kj::none);
+  KJ_EXPECT("1a"_kj.tryParseAs<double>() == kj::none);
+  KJ_EXPECT("+-1"_kj.tryParseAs<double>() == kj::none);
 
-  KJ_EXPECT(StringPtr("1").tryParseAs<float>() == 1.0);
+  KJ_EXPECT("1"_kj.tryParseAs<float>() == 1.0);
 
-  KJ_EXPECT(StringPtr("1").tryParseAs<int64_t>() == 1);
-  KJ_EXPECT(StringPtr("9223372036854775807").tryParseAs<int64_t>() == 9223372036854775807LL);
-  KJ_EXPECT(StringPtr("-9223372036854775808").tryParseAs<int64_t>() == -9223372036854775808ULL);
-  KJ_EXPECT(StringPtr("9223372036854775808").tryParseAs<int64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("-9223372036854775809").tryParseAs<int64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("").tryParseAs<int64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("a").tryParseAs<int64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("1a").tryParseAs<int64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("+-1").tryParseAs<int64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("010").tryParseAs<int64_t>() == 10);
-  KJ_EXPECT(StringPtr("0010").tryParseAs<int64_t>() == 10);
-  KJ_EXPECT(StringPtr("0x10").tryParseAs<int64_t>() == 16);
-  KJ_EXPECT(StringPtr("0X10").tryParseAs<int64_t>() == 16);
-  KJ_EXPECT(StringPtr("-010").tryParseAs<int64_t>() == -10);
-  KJ_EXPECT(StringPtr("-0x10").tryParseAs<int64_t>() == -16);
-  KJ_EXPECT(StringPtr("-0X10").tryParseAs<int64_t>() == -16);
+  KJ_EXPECT("1"_kj.tryParseAs<int64_t>() == 1);
+  KJ_EXPECT("9223372036854775807"_kj.tryParseAs<int64_t>() == 9223372036854775807LL);
+  KJ_EXPECT("-9223372036854775808"_kj.tryParseAs<int64_t>() == -9223372036854775808ULL);
+  KJ_EXPECT("9223372036854775808"_kj.tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT("-9223372036854775809"_kj.tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT(""_kj.tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT("a"_kj.tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT("1a"_kj.tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT("+-1"_kj.tryParseAs<int64_t>() == kj::none);
+  KJ_EXPECT("010"_kj.tryParseAs<int64_t>() == 10);
+  KJ_EXPECT("0010"_kj.tryParseAs<int64_t>() == 10);
+  KJ_EXPECT("0x10"_kj.tryParseAs<int64_t>() == 16);
+  KJ_EXPECT("0X10"_kj.tryParseAs<int64_t>() == 16);
+  KJ_EXPECT("-010"_kj.tryParseAs<int64_t>() == -10);
+  KJ_EXPECT("-0x10"_kj.tryParseAs<int64_t>() == -16);
+  KJ_EXPECT("-0X10"_kj.tryParseAs<int64_t>() == -16);
 
-  KJ_EXPECT(StringPtr("1").tryParseAs<uint64_t>() == 1);
-  KJ_EXPECT(StringPtr("0").tryParseAs<uint64_t>() == 0);
-  KJ_EXPECT(StringPtr("18446744073709551615").tryParseAs<uint64_t>() == 18446744073709551615ULL);
-  KJ_EXPECT(StringPtr("-1").tryParseAs<uint64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("18446744073709551616").tryParseAs<uint64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("").tryParseAs<uint64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("a").tryParseAs<uint64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("1a").tryParseAs<uint64_t>() == kj::none);
-  KJ_EXPECT(StringPtr("+-1").tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT("1"_kj.tryParseAs<uint64_t>() == 1);
+  KJ_EXPECT("0"_kj.tryParseAs<uint64_t>() == 0);
+  KJ_EXPECT("18446744073709551615"_kj.tryParseAs<uint64_t>() == 18446744073709551615ULL);
+  KJ_EXPECT("-1"_kj.tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT("18446744073709551616"_kj.tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT(""_kj.tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT("a"_kj.tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT("1a"_kj.tryParseAs<uint64_t>() == kj::none);
+  KJ_EXPECT("+-1"_kj.tryParseAs<uint64_t>() == kj::none);
 
-  KJ_EXPECT(StringPtr("1").tryParseAs<int32_t>() == 1);
-  KJ_EXPECT(StringPtr("2147483647").tryParseAs<int32_t>() == 2147483647);
-  KJ_EXPECT(StringPtr("-2147483648").tryParseAs<int32_t>() == -2147483648);
-  KJ_EXPECT(StringPtr("2147483648").tryParseAs<int32_t>() == kj::none);
-  KJ_EXPECT(StringPtr("-2147483649").tryParseAs<int32_t>() == kj::none);
+  KJ_EXPECT("1"_kj.tryParseAs<int32_t>() == 1);
+  KJ_EXPECT("2147483647"_kj.tryParseAs<int32_t>() == 2147483647);
+  KJ_EXPECT("-2147483648"_kj.tryParseAs<int32_t>() == -2147483648);
+  KJ_EXPECT("2147483648"_kj.tryParseAs<int32_t>() == kj::none);
+  KJ_EXPECT("-2147483649"_kj.tryParseAs<int32_t>() == kj::none);
 
-  KJ_EXPECT(StringPtr("1").tryParseAs<uint32_t>() == 1);
-  KJ_EXPECT(StringPtr("0").tryParseAs<uint32_t>() == 0U);
-  KJ_EXPECT(StringPtr("4294967295").tryParseAs<uint32_t>() == 4294967295U);
-  KJ_EXPECT(StringPtr("-1").tryParseAs<uint32_t>() == kj::none);
-  KJ_EXPECT(StringPtr("4294967296").tryParseAs<uint32_t>() == kj::none);
+  KJ_EXPECT("1"_kj.tryParseAs<uint32_t>() == 1);
+  KJ_EXPECT("0"_kj.tryParseAs<uint32_t>() == 0U);
+  KJ_EXPECT("4294967295"_kj.tryParseAs<uint32_t>() == 4294967295U);
+  KJ_EXPECT("-1"_kj.tryParseAs<uint32_t>() == kj::none);
+  KJ_EXPECT("4294967296"_kj.tryParseAs<uint32_t>() == kj::none);
 
-  KJ_EXPECT(StringPtr("1").tryParseAs<int16_t>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<uint16_t>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<int8_t>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<uint8_t>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<char>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<signed char>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<unsigned char>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<short>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<unsigned short>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<int>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<unsigned>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<long>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<unsigned long>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<long long>() == 1);
-  KJ_EXPECT(StringPtr("1").tryParseAs<unsigned long long>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<int16_t>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<uint16_t>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<int8_t>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<uint8_t>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<char>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<signed char>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<unsigned char>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<short>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<unsigned short>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<int>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<unsigned>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<long>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<unsigned long>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<long long>() == 1);
+  KJ_EXPECT("1"_kj.tryParseAs<unsigned long long>() == 1);
 
   KJ_EXPECT(heapString("1").tryParseAs<int>() == 1);
 }
@@ -271,6 +271,17 @@ TEST(String, ToString) {
   EXPECT_EQ("foo", kj::str(Stringable()));
 }
 #endif
+
+KJ_TEST("StringPtr constructors") {
+  KJ_EXPECT(StringPtr("") == "");
+  KJ_EXPECT(StringPtr(nullptr) == "");
+  KJ_EXPECT(StringPtr("abc") == "abc");
+  KJ_EXPECT(StringPtr("abc", 3) == "abc");
+
+#ifdef KJ_DEBUG
+  KJ_EXPECT_THROW_MESSAGE("StringPtr must be NUL-terminated", StringPtr("abc", 2));
+#endif  
+}
 
 KJ_TEST("string literals with _kj suffix") {
   static constexpr StringPtr FOO = "foo"_kj;
@@ -307,12 +318,12 @@ KJ_TEST("parsing 'nan' returns canonical NaN value") {
   // There are many representations of NaN. We would prefer that parsing "NaN" produces exactly the
   // same bits that kj::nan() returns.
   {
-    double parsedNan = StringPtr("NaN").parseAs<double>();
+    double parsedNan = "NaN"_kj.parseAs<double>();
     double canonicalNan = kj::nan();
     KJ_EXPECT(kj::arrayPtr(parsedNan).asBytes() == kj::arrayPtr(canonicalNan).asBytes());
   }
   {
-    float parsedNan = StringPtr("NaN").parseAs<float>();
+    float parsedNan = "NaN"_kj.parseAs<float>();
     float canonicalNan = kj::nan();
     KJ_EXPECT(kj::arrayPtr(parsedNan).asBytes() == kj::arrayPtr(canonicalNan).asBytes());
   }

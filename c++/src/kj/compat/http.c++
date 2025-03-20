@@ -1057,13 +1057,13 @@ bool HttpHeaders::parseHeaders(char* ptr, char* end) {
 kj::String HttpHeaders::serializeRequest(
     HttpMethod method, kj::StringPtr url,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
-  return serialize(kj::toCharSequence(method), url, kj::StringPtr("HTTP/1.1"), connectionHeaders);
+  return serialize(kj::toCharSequence(method), url, "HTTP/1.1"_kj, connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeConnectRequest(
     kj::StringPtr authority,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
-  return serialize("CONNECT"_kj, authority, kj::StringPtr("HTTP/1.1"), connectionHeaders);
+  return serialize("CONNECT"_kj, authority, "HTTP/1.1"_kj, connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeResponse(
@@ -1071,7 +1071,7 @@ kj::String HttpHeaders::serializeResponse(
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
   auto statusCodeStr = kj::toCharSequence(statusCode);
 
-  return serialize(kj::StringPtr("HTTP/1.1"), statusCodeStr, statusText, connectionHeaders);
+  return serialize("HTTP/1.1"_kj, statusCodeStr, statusText, connectionHeaders);
 }
 
 kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
@@ -2566,7 +2566,7 @@ public:
     auto parts = kj::heapArray<ArrayPtr<const byte>>(3);
     parts[0] = header.asBytes();
     parts[1] = buffer;
-    parts[2] = kj::StringPtr("\r\n").asBytes();
+    parts[2] = "\r\n"_kjb;
 
     auto promise = getInner().writeBodyData(parts.asPtr());
     return promise.attach(kj::mv(header), kj::mv(parts));
@@ -2584,7 +2584,7 @@ public:
     for (auto& piece: pieces) {
       partsBuilder.add(piece);
     }
-    partsBuilder.add(kj::StringPtr("\r\n").asBytes());
+    partsBuilder.add("\r\n"_kjb);
 
     auto parts = partsBuilder.finish();
     auto promise = getInner().writeBodyData(parts.asPtr());

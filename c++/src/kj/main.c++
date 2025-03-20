@@ -687,25 +687,25 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
       }
     }
   } else {
-    text.addAll(StringPtr(" <command> [<arg>...]"));
+    text.addAll(" <command> [<arg>...]"_kj);
   }
-  text.addAll(StringPtr("\n\n"));
+  text.addAll("\n\n"_kj);
 
   wrapText(text, "", impl->briefDescription);
 
   if (!impl->subCommands.empty()) {
-    text.addAll(StringPtr("\nCommands:\n"));
+    text.addAll("\nCommands:\n"_kj);
     size_t maxLen = 0;
     for (auto& command: impl->subCommands) {
       maxLen = kj::max(maxLen, command.first.size());
     }
     for (auto& command: impl->subCommands) {
-      text.addAll(StringPtr("  "));
+      text.addAll("  "_kj);
       text.addAll(command.first);
       for (size_t i = command.first.size(); i < maxLen; i++) {
         text.add(' ');
       }
-      text.addAll(StringPtr("  "));
+      text.addAll("  "_kj);
       text.addAll(command.second.helpText);
       text.add('\n');
     }
@@ -714,16 +714,16 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
   }
 
   if (!sortedOptions.empty()) {
-    text.addAll(StringPtr("\nOptions:\n"));
+    text.addAll("\nOptions:\n"_kj);
 
     for (auto opt: sortedOptions) {
-      text.addAll(StringPtr("    "));
+      text.addAll("    "_kj);
       bool isFirst = true;
       for (auto& name: opt->names) {
         if (isFirst) {
           isFirst = false;
         } else {
-          text.addAll(StringPtr(", "));
+          text.addAll(", "_kj);
         }
         if (name.isLong) {
           text.addAll(str("--", name.longName));
@@ -741,7 +741,7 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
       wrapText(text, "        ", opt->helpText);
     }
 
-    text.addAll(StringPtr("    --help\n        Display this help text and exit.\n"));
+    text.addAll("    --help\n        Display this help text and exit.\n"_kj);
   }
 
   if (impl->extendedDescription.size() > 0) {
