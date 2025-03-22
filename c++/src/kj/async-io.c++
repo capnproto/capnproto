@@ -52,10 +52,6 @@
 
 namespace kj {
 
-Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
-  return read(buffer, bytes, bytes).then([](size_t) {});
-}
-
 Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
   return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
     if (result >= minBytes) {
