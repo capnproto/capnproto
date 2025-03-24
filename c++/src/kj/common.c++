@@ -44,6 +44,13 @@ void unreachable() {
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
+
 }  // namespace _ (private)
+
+namespace { static thread_local bool currentThreadId; }
+
+ThreadId ThreadId::current() { return ThreadId(&currentThreadId); }
+
+void ThreadId::assertCurrentThread() const { KJ_ASSERT(id == &currentThreadId); }
 
 }  // namespace kj

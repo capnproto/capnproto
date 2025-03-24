@@ -2278,6 +2278,25 @@ struct ByteLiteral<1ul> {
 
 }
 
+class ThreadId {
+  // Unique thread identifier.
+  // Implemented as thread_local address, so could be efficient even for production
+  // environments especially with LTO.
+
+public:  
+  static ThreadId current();
+  // Obtain current thread id
+
+  inline bool operator==(const ThreadId& other) const { return id == other.id; }
+
+  void assertCurrentThread() const;
+  // KJ_ASSERTs that current thread matches this identifier.
+
+private:
+  inline ThreadId(void* id) : id(id) {}
+  void* id;  
+};
+
 }  // namespace kj
 
 template <kj::_::ByteLiteral s>
