@@ -36,6 +36,11 @@ def kj_configure():
         name = "deprecate_empty_maybe_from_nullptr",
         build_setting_default = True,
     )
+     
+    bool_flag(
+        name = "debug_memory",
+        build_setting_default = False,
+    )
 
     # Settings to use in select() expressions
     native.config_setting(
@@ -69,6 +74,11 @@ def kj_configure():
         flag_values = {"deprecate_empty_maybe_from_nullptr": "True"},
     )
 
+    native.config_setting(
+        name = "use_debug_memory",
+        flag_values = {"debug_memory": "True"},
+    )
+
     native.cc_library(
         name = "kj-defines",
         defines = select({
@@ -89,5 +99,8 @@ def kj_configure():
         }) + select({
             "//src/kj:use_deprecate_empty_maybe_from_nullptr": ["KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR=1"],
             "//conditions:default": ["KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR=0"],
+        }) + select({
+            "//src/kj:use_debug_memory": ["KJ_DEBUG_MEMORY=1"],
+            "//conditions:default": [],
         }),
     )

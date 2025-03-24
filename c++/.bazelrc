@@ -6,6 +6,12 @@ common --enable_platform_specific_config
 common --enable_workspace
 common --incompatible_autoload_externally=
 
+# Debug build configuration with maximum runtime checks
+build:dbg -c dbg --//src/kj:debug_memory=True
+
+# Opt build
+build:opt -c opt
+
 build:unix --cxxopt='-std=c++20' --host_cxxopt='-std=c++20' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'
