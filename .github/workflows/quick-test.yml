@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [14, 15, 16, 17, 18]
+        clang: [14, 15, 16, 17, 18, 19, 20]
         driver: [bazel, super-test]
         include:
           - driver: bazel
