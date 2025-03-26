@@ -27,8 +27,9 @@ namespace kj {
 
 const NullDisposer NullDisposer::instance = NullDisposer();
 
-#ifdef KJ_ASSERT_PTR_COUNTERS
 namespace _ {
+
+#if KJ_ASSERT_PTR_COUNTERS
 
 void atomicPtrCounterAssertionFailed(char const* reason) {
   KJ_FAIL_ASSERT("ptr counter contract violated", reason);
@@ -37,11 +38,12 @@ void atomicPtrCounterAssertionFailed(char const* reason) {
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
+#endif // KJ_ASSERT_PTR_COUNTERS
+
 void throwWrongDisposerError() {
   KJ_FAIL_REQUIRE("When disowning an object, disposer must be equal to Own's disposer");
 }
 
 }
-#endif
 
 }  // namespace kj

@@ -22,9 +22,24 @@
 #pragma once
 
 #include "common.h"
-#ifdef KJ_DEBUG
-#include <atomic>  // std::atomic for KJ_ASSERT_PTR_COUNTERS
+
+// KJ_DEBUG_MEMORY == 1 enables variety of checks designed to catch memory usage errors.
+// KJ_DEBUG_MEMORY undefined or KJ_DEBUG_MEMORY == 0 disables all such checks.
+#if !defined(KJ_DEBUG_MEMORY)
+#define KJ_DEBUG_MEMORY 0
 #endif
+
+// KJ_ASSERT_PTR_COUNTERS == 1 keeps track of active Ptr<T> instances and asserts validity
+// of their ownership.
+// Matches KJ_DEBUG_MEMORY by default.
+#if !defined(KJ_ASSERT_PTR_COUNTERS)
+#define KJ_ASSERT_PTR_COUNTERS KJ_DEBUG_MEMORY
+#endif // KJ_ASSERT_PTR_COUNTERS
+
+#if KJ_ASSERT_PTR_COUNTERS
+#include <atomic>
+#endif // KJ_ASSERT_PTR_COUNTERS
+
 
 KJ_BEGIN_HEADER
 
@@ -177,13 +192,8 @@ public:
 // =======================================================================================
 // Ptr Counters
 
-#ifdef KJ_DEBUG
-#define KJ_ASSERT_PTR_COUNTERS
-// When defined, keeps track of active Ptr<T> instances and asserts validity of their ownership
-#endif
-
 namespace _ {
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
 
 void atomicPtrCounterAssertionFailed(const char* const);
 
@@ -217,7 +227,7 @@ private:
 using PtrCounter = AtomicPtrCounter;
 // Default counter type to use
 
-#endif
+#endif // KJ_ASSERT_PTR_COUNTERS
 }
 
 // =======================================================================================
@@ -753,7 +763,7 @@ public:
   inline Pin(Pin<T>&& other): t(kj::mv(other.t)) {
     // Move T's ownership.
     // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
     other.ptrCounter.assertEmpty();
 #endif
   }
@@ -761,7 +771,7 @@ public:
   inline ~Pin() {
     // Destroy a Pin with underlying object. 
     // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
     ptrCounter.assertEmpty();
 #endif
   }
@@ -793,7 +803,7 @@ private:
   inline Pin(T&& t): t(kj::mv(t)) {}
 
   T t;
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   _::PtrCounter ptrCounter;
 #endif
 
@@ -821,18 +831,18 @@ public:
       // the value was moved out
       return;
     }
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
     counter->dec();
 #endif
   }
 
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   Ptr(Ptr&& other) : ptr(other.ptr), counter(other.counter) { other.ptr = nullptr; }
 #else
   Ptr(Ptr&& other) : ptr(other.ptr) { other.ptr = nullptr; }
 #endif
 
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   Ptr(Ptr<U>&& other) : ptr(other.ptr), counter(other.counter) { other.ptr = nullptr; }
 #else
@@ -841,7 +851,7 @@ public:
 #endif
 
 // Ptr<T> can be freely copied.
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   Ptr(const Ptr& other) : ptr(other.ptr), counter(other.counter) { counter->inc(); }
 #else
   Ptr(const Ptr& other) : ptr(other.ptr) {}
@@ -849,7 +859,7 @@ public:
 
   inline void operator=(decltype(nullptr)) {
     if (ptr != nullptr) {
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
       counter->dec();
       counter = nullptr;
 #endif
@@ -878,14 +888,14 @@ public:
 
 private:
 
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   inline Ptr(Pin<T>* pin) : ptr(pin->get()), counter(&pin->ptrCounter) { counter->inc(); }
 #else
   inline Ptr(Pin<T>* pin) : ptr(pin->get()) {}
 #endif
 
 
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Ptr(Pin<U>* pin) : ptr(pin->get()), counter(&pin->ptrCounter) { counter->inc(); }
 #else
@@ -894,7 +904,7 @@ private:
 #endif
 
   T *ptr;
-#ifdef KJ_ASSERT_PTR_COUNTERS
+#if KJ_ASSERT_PTR_COUNTERS
   _::PtrCounter* counter;
 #endif
 

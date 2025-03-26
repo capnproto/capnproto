@@ -616,7 +616,7 @@ KJ_TEST("kj::Ptr<T> subtyping") {
   KJ_EXPECT(ptr3 == pin);
 }
 
-#ifdef KJ_ASSERT_PTR_COUNTERS  
+#if KJ_ASSERT_PTR_COUNTERS
 KJ_TEST("kj::Pin<T> destroyed with active ptrs crashed") {
   PtrHolder* holder = nullptr;
   

@@ -42,10 +42,12 @@ jobs:
       fail-fast: false
       matrix:
         clang: [15, 16, 17, 18, 19]
-        driver: [bazel, super-test]
+        driver: [bazel-dbg, bazel-opt, super-test]
         include:
-          - driver: bazel
-            run-test: cd c++ && bazel test --verbose_failures --test_output=errors -k --cxxopt='-Werror' //... && bazel test -c opt --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
+          - driver: bazel-dbg
+            run-test: cd c++ && bazel test --config=dbg --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
+          - driver: bazel-opt
+            run-test: cd c++ && bazel test --config=opt --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
           - driver: super-test
             run-test: ./super-test.sh quick
     steps:
