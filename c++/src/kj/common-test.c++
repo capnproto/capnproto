@@ -24,6 +24,7 @@
 #include <inttypes.h>
 #include <kj/compat/gtest.h>
 #include <span>
+#include "thread.h"
 
 namespace kj {
 namespace {
@@ -1273,6 +1274,23 @@ KJ_TEST("memzero<T>()") {
   for (auto& t: arr) {
     KJ_EXPECT(t.pi == 0);
   }
+}
+
+KJ_TEST("ThreadId") {
+  auto id1 = ThreadId::current();
+  id1.assertCurrentThread();
+
+  auto id2 = ThreadId::current();
+  KJ_ASSERT(id2 == id1);
+  
+  Thread thread([&]() {
+    auto id3 = ThreadId::current();
+    id3.assertCurrentThread();
+    KJ_ASSERT(id1 != id3);
+    KJ_ASSERT(id2 != id3);
+
+    KJ_EXPECT_THROW_MESSAGE("expected id == &currentThreadId", id1.assertCurrentThread());
+  });
 }
 
 }  // namespace
