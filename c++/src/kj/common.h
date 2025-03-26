@@ -1369,6 +1369,11 @@ static constexpr None none;
 // compare equal to all empty Maybes, and will compare not-equal to all non-empty Maybes. If you
 // construct or assign to a Maybe from `kj::none`, the constructed/assigned Maybe will be empty.
 
+template <typename T>
+inline Maybe<T> some(T&& t) { return Maybe<T>(kj::mv(t)); }
+// Helper function to auto-deduce maybe argument.
+// Useful when there is a complicated conversion chain to T to avoid spelling types out.
+
 #if __GNUC__ || __clang__
 // These two macros provide a friendly syntax to extract the value of a Maybe or return early.
 //
