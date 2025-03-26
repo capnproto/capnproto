@@ -430,6 +430,25 @@ TEST(Common, Maybe) {
     KJ_EXPECT(m4 == m5);
     KJ_EXPECT(m4 != m1);
   }
+
+  {
+    // type deduction in various circumstances
+    struct IntWrapper {
+      IntWrapper(int i): i(i) {}
+      int i;
+    
+      static int twice(Maybe<IntWrapper> i) {
+        return i.orDefault(0).i * 2;
+      }
+    };
+    
+    // You can't write twice(5), you need to specify some of the types
+    KJ_EXPECT(10 == IntWrapper::twice(Maybe<IntWrapper>(5)));
+    KJ_EXPECT(10 == IntWrapper::twice(IntWrapper(5)));
+
+    // kj::some solves this problem elegantly
+    KJ_EXPECT(10 == IntWrapper::twice(kj::some(5)));
+  }
 }
 
 TEST(Common, MaybeConstness) {
