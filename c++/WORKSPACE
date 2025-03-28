@@ -17,7 +17,7 @@ load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
 bazel_skylib_workspace()
 
 http_archive(
-    name = "ssl",
+    name = "boringssl",
     sha256 = "873ec711658f65192e9c58554ce058d1cfa4e57e13ab5366ee16f76d1c757efc",
     strip_prefix = "google-boringssl-ed2e74e",
     type = "tgz",
