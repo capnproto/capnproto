@@ -47,6 +47,11 @@ cc_library(
         "serialize-packed.h",
         "serialize-text.h",
         "stream.capnp.h",
+        # This is just to make it avaible if `KJ_STD_COMPAT` is defined.
+        # This is an unfortunate hack, but if we would make `std-iterator.h`
+        # its own `cc_library()` we would have a circular dependency between
+        # `//src/capnp` and `//src/capnp/compat:std-iterator``.
+        "//src/capnp/compat:std-iterator.h",
     ],
     include_prefix = "capnp",
     visibility = ["//visibility:public"],
