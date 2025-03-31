@@ -2,6 +2,7 @@ load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
 
 exports_files([
     "json.capnp",
+    "std-iterator.h",
 ])
 
 # because git contains generated artifacts (which are used to bootstrap the compiler)
