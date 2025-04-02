@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.10)
 project("Cap'n Proto" CXX)
 set(VERSION 1.1-dev)
 
