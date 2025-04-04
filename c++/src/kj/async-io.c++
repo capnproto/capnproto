@@ -59,7 +59,7 @@ Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t max
     } else {
       kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream disconnected prematurely"));
       // Pretend we read zeros from the input.
-      memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
+      kj::arrayPtr(reinterpret_cast<byte*>(buffer), minBytes).slice(result).fill(0);
       return minBytes;
     }
   });
