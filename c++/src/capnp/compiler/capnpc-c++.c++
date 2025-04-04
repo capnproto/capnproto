@@ -1274,7 +1274,7 @@ private:
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
     size_t defaultSize = 0;      // blobs only: byte size of the default value.
 
-    auto defaultBody = slot.getDefaultValue();
+    auto defaultBody = field.getDefaultValueProto();
     switch (typeSchema.which()) {
       case schema::Type::VOID:
         kind = FieldKind::PRIMITIVE;
