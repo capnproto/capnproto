@@ -1547,6 +1547,16 @@ private:
   WaitScope waitScope;
 };
 
+Socketpair newSocketpair() {
+  Socketpair socketpairFds;
+  int type = SOCK_STREAM;
+#if __linux__ && !__BIONIC__
+  type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
+#endif
+  KJ_SYSCALL(socketpair(AF_UNIX, type, 0, socketpairFds.fds));
+  return socketpairFds;
+}
+
 // =======================================================================================
 
 class NetworkAddressImpl final: public NetworkAddress {
@@ -1987,28 +1997,18 @@ public:
   }
 
   TwoWayPipe newTwoWayPipe() override {
-    int fds[2];
-    int type = SOCK_STREAM;
-#if __linux__ && !__BIONIC__
-    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    const auto socketpair = newSocketpair();
     return TwoWayPipe { {
-      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapSocketFd(socketpair.fds[0], NEW_FD_FLAGS),
+      lowLevel.wrapSocketFd(socketpair.fds[1], NEW_FD_FLAGS)
     } };
   }
 
   CapabilityPipe newCapabilityPipe() override {
-    int fds[2];
-    int type = SOCK_STREAM;
-#if __linux__ && !__BIONIC__
-    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    const auto socketpair = newSocketpair();
     return CapabilityPipe { {
-      lowLevel.wrapUnixSocketFd(fds[0], NEW_FD_FLAGS),
-      lowLevel.wrapUnixSocketFd(fds[1], NEW_FD_FLAGS)
+      lowLevel.wrapUnixSocketFd(socketpair.fds[0], NEW_FD_FLAGS),
+      lowLevel.wrapUnixSocketFd(socketpair.fds[1], NEW_FD_FLAGS)
     } };
   }
 
@@ -2018,17 +2018,12 @@ public:
 
   PipeThread newPipeThread(
       Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
-    int fds[2];
-    int type = SOCK_STREAM;
-#if __linux__ && !__BIONIC__
-    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    const auto socketpair = newSocketpair();
 
-    int threadFd = fds[1];
+    auto threadFd = socketpair.fds[1];
     KJ_ON_SCOPE_FAILURE(close(threadFd));
 
-    auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
+    auto pipe = lowLevel.wrapSocketFd(socketpair.fds[0], NEW_FD_FLAGS);
 
     auto thread = heap<Thread>([threadFd,startFunc=kj::mv(startFunc)]() mutable {
       LowLevelAsyncIoProviderImpl lowLevel;
