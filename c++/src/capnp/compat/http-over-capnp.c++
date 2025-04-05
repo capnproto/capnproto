@@ -850,12 +850,6 @@ public:
       : factory(factory), inner(kj::mv(inner)) {}
 
   kj::Promise<void> request(RequestContext context) override {
-    // Common implementation of request() and startRequest(). callback() performs the
-    // method-specific stuff at the end.
-    //
-    // TODO(cleanup): When we move to C++17 or newer we can use `if constexpr` instead of a
-    //   callback.
-
     auto params = context.getParams();
     auto metadata = params.getRequest();
 
