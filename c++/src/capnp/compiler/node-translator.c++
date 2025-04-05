@@ -691,10 +691,8 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
       break;
   }
 
-  if (decl.which() != Declaration::ANNOTATION) {
-    builder.setStartByte(decl.getStartByte());
-    builder.setEndByte(decl.getEndByte());
-  }
+  builder.setStartByte(decl.getStartByte());
+  builder.setEndByte(decl.getEndByte());
 
   builder.adoptAnnotations(compileAnnotationApplications(decl.getAnnotations(), targetsFlagName));
 
@@ -942,9 +940,12 @@ void NodeTranslator::compileEnum(Void decl,
 
     dupDetector.check(enumerantDecl.getId().getOrdinal());
 
+    auto sourceInfo = sourceInfoList[i];
     if (enumerantDecl.hasDocComment()) {
-      sourceInfoList[i].setDocComment(enumerantDecl.getDocComment());
+      sourceInfo.setDocComment(enumerantDecl.getDocComment());
     }
+    sourceInfo.setStartByte(enumerantDecl.getStartByte());
+    sourceInfo.setEndByte(enumerantDecl.getEndByte());
 
     auto enumerantBuilder = list[i++];
     enumerantBuilder.setName(enumerantDecl.getName().getValue());
@@ -1124,6 +1125,8 @@ private:
         KJ_IF_SOME(dc, docComment) {
           builderPair.sourceInfo.setDocComment(dc);
         }
+        builderPair.sourceInfo.setStartByte(startByte);
+        builderPair.sourceInfo.setEndByte(endByte);
 
         schema = builder;
         return builder;
@@ -1586,9 +1589,12 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
     dupDetector.check(ordinalDecl);
     uint16_t ordinal = ordinalDecl.getValue();
 
+    auto sourceInfo = sourceInfoList[i];
     if (methodDecl.hasDocComment()) {
-      sourceInfoList[i].setDocComment(methodDecl.getDocComment());
+      sourceInfo.setDocComment(methodDecl.getDocComment());
     }
+    sourceInfo.setStartByte(methodDecl.getStartByte());
+    sourceInfo.setEndByte(methodDecl.getEndByte());
 
     auto methodBuilder = list[i++];
     methodBuilder.setName(methodDecl.getName().getValue());
