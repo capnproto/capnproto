@@ -2556,10 +2556,6 @@ private:
     struct SetupSendResult: public SendInternalResult {
       QuestionId questionId;
       Question& question;
-
-      SetupSendResult(SendInternalResult&& super, QuestionId questionId, Question& question)
-          : SendInternalResult(kj::mv(super)), questionId(questionId), question(question) {}
-      // TODO(cleanup): This constructor is implicit in C++17.
     };
 
     SetupSendResult setupSend(bool isTailCall) {
