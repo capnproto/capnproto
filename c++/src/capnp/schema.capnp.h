@@ -161,7 +161,7 @@ struct Node::SourceInfo::Member {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(c2ba9038898e1fa2, 0, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(c2ba9038898e1fa2, 1, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -1237,6 +1237,10 @@ public:
   inline bool hasDocComment() const;
   inline  ::capnp::Text::Reader getDocComment() const;
 
+  inline  ::uint32_t getStartByte() const;
+
+  inline  ::uint32_t getEndByte() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -1271,6 +1275,12 @@ public:
   inline  ::capnp::Text::Builder initDocComment(unsigned int size);
   inline void adoptDocComment(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownDocComment();
+
+  inline  ::uint32_t getStartByte();
+  inline void setStartByte( ::uint32_t value);
+
+  inline  ::uint32_t getEndByte();
+  inline void setEndByte( ::uint32_t value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -5278,6 +5288,34 @@ inline void Node::SourceInfo::Member::Builder::adoptDocComment(
 inline ::capnp::Orphan< ::capnp::Text> Node::SourceInfo::Member::Builder::disownDocComment() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline  ::uint32_t Node::SourceInfo::Member::Reader::getStartByte() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t Node::SourceInfo::Member::Builder::getStartByte() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS);
+}
+inline void Node::SourceInfo::Member::Builder::setStartByte( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint32_t Node::SourceInfo::Member::Reader::getEndByte() const {
+  return _reader.getDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t Node::SourceInfo::Member::Builder::getEndByte() {
+  return _builder.getDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS);
+}
+inline void Node::SourceInfo::Member::Builder::setEndByte( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint16_t Node::Struct::Reader::getDataWordCount() const {

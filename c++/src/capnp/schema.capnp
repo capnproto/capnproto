@@ -195,6 +195,8 @@ struct Node {
     struct Member {
       docComment @0 :Text;
       # Doc comment on the member.
+      startByte @1 :UInt32;
+      endByte @2 :UInt32;
     }
 
     startByte @3 :UInt32;
