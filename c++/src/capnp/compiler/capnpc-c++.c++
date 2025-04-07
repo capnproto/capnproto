@@ -1834,7 +1834,7 @@ private:
         case AsGenericRole::READER:
           self = kj::strTree(
               "  ", templateContext.decl(true, "2"),
-              "  typename ", returnType(), "::Reader ", kj::mv(asGeneric), " {\n"
+              "  typename ", returnType(), "::Reader ", kj::mv(asGeneric), " const {\n"
               "    return typename ", returnType(), "::Reader(_reader);\n"
               "  }\n"
               "\n");
