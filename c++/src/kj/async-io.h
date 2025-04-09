@@ -22,6 +22,7 @@
 #pragma once
 
 #include "async.h"
+#include "kj/memory.h"
 #include <kj/function.h>
 #include <kj/thread.h>
 #include <kj/timer.h>
@@ -903,6 +904,16 @@ public:
   // Convenience wrappers which transfer ownership via AutoCloseFd (Unix) or AutoCloseHandle
   // (Windows). TAKE_OWNERSHIP will be implicitly added to `flags`.
 };
+
+struct Socketpair {
+  kj::Own<LowLevelAsyncIoProvider::OwnFd> fds[2];
+};
+Socketpair newOsSocketpair();
+
+
+// Creates a socket pair, using socketpair(2) on Unix-like systems.
+// On Windows, which doesn't have a built-in socketpair(), a loopback
+// TCP connection is used.
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
 // Make a new AsyncIoProvider wrapping a `LowLevelAsyncIoProvider`.
