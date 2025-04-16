@@ -919,6 +919,23 @@ To perform an inclusive join, use `kj::joinPromises()` or `kj::joinPromisesFailF
 
 `kj::joinPromisesFailFast()` addresses the gotchas described above: promise continuations are evaluated eagerly, and if any promise results in an exception, the join promise is immediately rejected with that exception.
 
+For cases where you need to process promises in the order they complete and implement arbitrary logic between those completions, use `kj::PromisesUnordered<T>`. This class lets you add multiple promises and then consume them as they become ready using standard C++ iteration semantics:
+
+```c++
+PromisesUnordered<int> promises;
+promises.add(longRunningOperation());
+promises.add(quickOperation());
+promises.add(mediumOperation());
+
+// Process results in completion order (likely quickOperation first)
+for (Promise<int> promise : promises) {
+  int value = promise.wait(waitScope);
+  processResult(value);
+}
+```
+
+`PromisesUnordered<T>` is particularly useful for implementing custom promise joins with fine-grained control over exception handling.
+
 ### Threads
 
 The KJ async framework is designed around single-threaded event loops. However, you can have multiple threads, with each running its own loop.
