@@ -205,7 +205,6 @@ public:
 
   inline bool operator==(const Rc<T>& other) const { return own.get() == other.own.get(); }
   inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return own.get() != nullptr; }
 
   inline T* operator->() { return own.get(); }
   inline const T* operator->() const { return own.get(); }
@@ -492,7 +491,6 @@ public:
 
   inline bool operator==(const Arc<T>& other) const { return own.get() == other.own.get(); }
   inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return own.get() != nullptr; }
 
   inline const T* operator->() const { return own.get(); }
   inline const T* get() const { return own.get(); }

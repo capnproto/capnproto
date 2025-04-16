@@ -856,11 +856,11 @@ public:
     inline Iterator  operator- (ptrdiff_t amount) const { return Iterator(value - amount); }
     inline ptrdiff_t operator- (const Iterator& other) const { return value - other.value; }
 
-    inline bool operator==(const Iterator& other) const { return value == other.value; }
-    inline bool operator<=(const Iterator& other) const { return value <= other.value; }
-    inline bool operator>=(const Iterator& other) const { return value >= other.value; }
-    inline bool operator< (const Iterator& other) const { return value <  other.value; }
-    inline bool operator> (const Iterator& other) const { return value >  other.value; }
+    inline bool operator==(const Iterator& other) const = default;
+    inline bool operator<=(const Iterator& other) const = default;
+    inline bool operator>=(const Iterator& other) const = default;
+    inline bool operator< (const Iterator& other) const = default;
+    inline bool operator> (const Iterator& other) const = default;
 
   private:
     T value;
@@ -2292,7 +2292,7 @@ public:
   static ThreadId current();
   // Obtain current thread id
 
-  inline bool operator==(const ThreadId& other) const { return id == other.id; }
+  inline bool operator==(const ThreadId& other) const = default;
 
   void assertCurrentThread() const;
   // KJ_ASSERTs that current thread matches this identifier.

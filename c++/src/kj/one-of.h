@@ -670,11 +670,6 @@ bool operator==(const OneOf<Variants...>& a, const OneOf<Variants...>& b) {
   return (_::compareIfIs<Variants>(a, b) || ...);
 }
 
-template <typename ...Variants>
-bool operator!=(const OneOf<Variants...>& a, const OneOf<Variants...>& b) {
-  return !(a == b);
-}
-
 }  // namespace kj
 
 KJ_END_HEADER
