@@ -1070,5 +1070,581 @@ KJ_TEST("PromisesUnordered isEmpty returns false with never-done promise") {
   KJ_EXPECT(!pui.isEmpty());
 }
 
+// =======================================================================================
+// DEMONSTRATION: Building Higher-Level Promise Combinators with PromisesUnordered
+// =======================================================================================
+//
+// The following section demonstrates how PromisesUnordered can be used as a building block
+// to implement various promise combinators with different semantics. These implementations
+// are provided as proof-of-concept examples only, not for production use.
+//
+// IMPORTANT: The code in this section (both implementations and tests) is not intended to
+// provide test coverage for PromisesUnordered itself. The actual test coverage for
+// PromisesUnordered is provided by the tests above. The code and tests in this section
+// can be safely deleted without affecting the test coverage of PromisesUnordered.
+//
+// This demonstration implements:
+// - puJoinPromises: Like kj::joinPromises - wait for all promises, propagate exceptions after all complete
+// - puJoinPromisesFailFast: Like kj::joinPromisesFailFast - propagate exceptions immediately
+// - puRaceSuccessful: Like kj::raceSuccessful - return first successful promise, or last exception
+//
+// Note that other combinators like exclusiveJoin() (wait for exactly one promise to succeed) or
+// TaskSet-like semantics (fire-and-forget tasks that report exceptions to a handler) could also
+// be implemented using PromisesUnordered.
+//
+// The test cases below are included only to exercise these proof-of-concept implementations
+// and demonstrate their behavior.
+
+// Implementation of joinPromises() using PromisesUnordered in a coroutine
+template <typename T>
+Promise<Array<T>> puJoinPromises(Array<Promise<T>>&& promises, SourceLocation location = {}) {
+  // This function implements the same semantics as kj::joinPromises() but uses
+  // PromisesUnordered and coroutines instead of the built-in promise joining mechanism.
+  //
+  // Like joinPromises(), this function:
+  // - Returns a Promise<Array<T>> that resolves when all input promises have settled
+  // - Preserves the order of results to match the input promises
+  // - Propagates exceptions only after all promises have settled
+
+  // Structure to track a promise's result and its original index
+  struct IndexedValue {
+    size_t index;
+    T value;
+  };
+
+  // Skip the work if there are no promises
+  if (promises.size() == 0) {
+    co_return Array<T>(0);
+  }
+
+  // Create the array to hold results, initialized with default values
+  auto results = kj::heapArray<T>(promises.size());
+
+  // Keep track of exceptions that occur
+  Maybe<kj::Exception> firstException;
+
+  // Create a PromisesUnordered to process promises as they complete
+  PromisesUnordered<IndexedValue> pui(location);
+
+  // Add all the promises with their indices
+  for (size_t i = 0; i < promises.size(); i++) {
+    // Move out the promise and chain with the index
+    pui.add(kj::mv(promises[i]).then([i](T&& result) -> IndexedValue {
+      // Return the index along with the result
+      return IndexedValue { i, kj::mv(result) };
+    }));
+  }
+
+  // Process each promise as it completes
+  size_t completedCount = 0;
+
+  // Use range-based for loop to consume promises in completion order
+  for (Promise<IndexedValue> promise : pui) {
+    try {
+      // Get the index and result of the completed promise
+      IndexedValue indexedValue = co_await promise;
+
+      // Store the result at the correct index
+      results[indexedValue.index] = kj::mv(indexedValue.value);
+      completedCount++;
+    } catch (kj::Exception& e) {
+      // Save the first exception but continue processing
+      if (firstException == kj::none) {
+        firstException = kj::mv(e);
+      }
+      completedCount++;
+    }
+  }
+
+  // All promises have completed
+  KJ_ASSERT(completedCount == promises.size());
+
+  // If there was an exception, throw it now
+  KJ_IF_SOME(exception, firstException) {
+    kj::throwFatalException(kj::mv(exception));
+  }
+
+  // Return the complete array of results
+  co_return kj::mv(results);
+}
+
+// Test puJoinPromises implementation
+KJ_TEST("puJoinPromises with mixed ready and delayed promises") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create promise fulfillers
+  auto paf1 = kj::newPromiseAndFulfiller<int>();
+  auto paf2 = kj::newPromiseAndFulfiller<int>();
+  auto paf3 = kj::newPromiseAndFulfiller<int>();
+
+  // Create an array of promises using an initializer
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+  builder.add(kj::Promise<int>(123));              // Already fulfilled
+  builder.add(kj::mv(paf2.promise));               // Will fulfill later
+  builder.add(kj::mv(paf3.promise));               // Will fulfill later
+  auto promises = builder.finish();
+
+  // Start joining the promises
+  auto joinedPromise = puJoinPromises(kj::mv(promises));
+
+  // Fulfill the remaining promises
+  paf2.fulfiller->fulfill(456);
+  paf3.fulfiller->fulfill(789);
+
+  // Wait for the joined promise
+  auto results = joinedPromise.wait(waitScope);
+
+  // Verify results
+  KJ_EXPECT(results.size() == 3);
+  KJ_EXPECT(results[0] == 123);
+  KJ_EXPECT(results[1] == 456);
+  KJ_EXPECT(results[2] == 789);
+}
+
+// Test puJoinPromises with exceptions
+KJ_TEST("puJoinPromises with exception handling") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create an array of promises using a builder
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+
+  // First promise is already fulfilled
+  builder.add(kj::Promise<int>(123));
+
+  // Second promise will throw an exception
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "test exception")));
+
+  // Third promise will be fulfilled
+  builder.add(kj::Promise<int>(789));
+
+  auto promises = builder.finish();
+
+  // Join the promises
+  auto joinedPromise = puJoinPromises(kj::mv(promises));
+
+  // Wait should throw the exception from the second promise
+  KJ_EXPECT_THROW_MESSAGE("test exception", joinedPromise.wait(waitScope));
+}
+
+// Implementation of joinPromisesFailFast() using PromisesUnordered in a coroutine
+template <typename T>
+Promise<Array<T>> puJoinPromisesFailFast(Array<Promise<T>>&& promises, SourceLocation location = {}) {
+  // This function implements the same semantics as kj::joinPromisesFailFast() but uses
+  // PromisesUnordered and coroutines instead of the built-in promise joining mechanism.
+  //
+  // Like joinPromisesFailFast(), this function:
+  // - Returns a Promise<Array<T>> that resolves when all input promises have settled
+  // - Preserves the order of results to match the input promises
+  // - Immediately propagates the first exception encountered without waiting for other promises
+
+  // Structure to track a promise's result and its original index
+  struct IndexedValue {
+    size_t index;
+    T value;
+  };
+
+  // Skip the work if there are no promises
+  if (promises.size() == 0) {
+    co_return Array<T>(0);
+  }
+
+  // Create the array to hold results, initialized with default values
+  auto results = kj::heapArray<T>(promises.size());
+
+  // Create a PromisesUnordered to process promises as they complete
+  PromisesUnordered<IndexedValue> pui(location);
+
+  // Add all the promises with their indices
+  for (size_t i = 0; i < promises.size(); i++) {
+    // Move out the promise and chain with the index
+    pui.add(kj::mv(promises[i]).then([i](T&& result) -> IndexedValue {
+      // Return the index along with the result
+      return IndexedValue { i, kj::mv(result) };
+    }));
+  }
+
+  // Process each promise as it completes
+  // Use range-based for loop to consume promises in completion order
+  for (Promise<IndexedValue> promise : pui) {
+    try {
+      // Get the index and result of the completed promise
+      IndexedValue indexedValue = co_await promise;
+
+      // Store the result at the correct index
+      results[indexedValue.index] = kj::mv(indexedValue.value);
+    } catch (kj::Exception& e) {
+      // Fail fast: immediately propagate the first exception encountered
+      kj::throwFatalException(kj::mv(e));
+    }
+  }
+
+  // Return the complete array of results
+  co_return kj::mv(results);
+}
+
+// Test puJoinPromisesFailFast implementation with mixed ready and delayed promises
+KJ_TEST("puJoinPromisesFailFast with mixed ready and delayed promises") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create promise fulfillers
+  auto paf1 = kj::newPromiseAndFulfiller<int>();
+  auto paf2 = kj::newPromiseAndFulfiller<int>();
+  auto paf3 = kj::newPromiseAndFulfiller<int>();
+
+  // Create an array of promises using an initializer
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+  builder.add(kj::Promise<int>(123));              // Already fulfilled
+  builder.add(kj::mv(paf2.promise));               // Will fulfill later
+  builder.add(kj::mv(paf3.promise));               // Will fulfill later
+  auto promises = builder.finish();
+
+  // Start joining the promises
+  auto joinedPromise = puJoinPromisesFailFast(kj::mv(promises));
+
+  // Fulfill the remaining promises
+  paf2.fulfiller->fulfill(456);
+  paf3.fulfiller->fulfill(789);
+
+  // Wait for the joined promise
+  auto results = joinedPromise.wait(waitScope);
+
+  // Verify results
+  KJ_EXPECT(results.size() == 3);
+  KJ_EXPECT(results[0] == 123);
+  KJ_EXPECT(results[1] == 456);
+  KJ_EXPECT(results[2] == 789);
+}
+
+// Test puJoinPromisesFailFast with exceptions - should fail fast
+KJ_TEST("puJoinPromisesFailFast with exception handling - fails fast") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Counter to track how many promises are resolved
+  uint resolvedCount = 0;
+
+  // Create an array of promises using a builder
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+
+  // First promise resolves with a delay and increments counter
+  auto paf1 = kj::newPromiseAndFulfiller<int>();
+  builder.add(paf1.promise.then([&](int result) {
+    resolvedCount++;
+    return result;
+  }));
+
+  // Second promise will throw an exception immediately
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "fail fast exception")));
+
+  // Third promise resolves with a delay and increments counter
+  auto paf3 = kj::newPromiseAndFulfiller<int>();
+  builder.add(paf3.promise.then([&](int result) {
+    resolvedCount++;
+    return result;
+  }));
+
+  auto promises = builder.finish();
+
+  // Join the promises with fail-fast behavior
+  auto joinedPromise = puJoinPromisesFailFast(kj::mv(promises));
+
+  // Wait should throw the exception immediately, before other promises are resolved
+  KJ_EXPECT_THROW_MESSAGE("fail fast exception", joinedPromise.wait(waitScope));
+
+  // Resolve the other promises
+  paf1.fulfiller->fulfill(123);
+  paf3.fulfiller->fulfill(789);
+
+  // Run the event loop to allow remaining promises to complete if they will
+  loop.run();
+
+  // The key test: If fail-fast is working, the counter should still be 0
+  // because the exception short-circuited before the other promises were processed
+  KJ_EXPECT(resolvedCount == 0, "The other promises should not have been resolved");
+}
+
+// Test comparing puJoinPromises and puJoinPromisesFailFast behaviors with exceptions
+KJ_TEST("puJoinPromises vs puJoinPromisesFailFast with exceptions") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create counters to track promise resolution
+  uint regularResolvedCount = 0;
+  uint failFastResolvedCount = 0;
+
+  // For the regular join test, create promises with a counter
+  {
+    auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+
+    // First promise resolves and increments counter
+    builder.add(kj::Promise<int>(123).then([&](int result) {
+      regularResolvedCount++;
+      return result;
+    }));
+
+    // Second promise will throw an exception
+    builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "test exception")));
+
+    // Third promise resolves and increments counter
+    builder.add(kj::Promise<int>(789).then([&](int result) {
+      regularResolvedCount++;
+      return result;
+    }));
+
+    auto promises = builder.finish();
+
+    // Join with regular behavior
+    auto joinedPromise = puJoinPromises(kj::mv(promises));
+
+    // Wait should throw the exception
+    KJ_EXPECT_THROW_MESSAGE("test exception", joinedPromise.wait(waitScope));
+  }
+
+  // For the fail-fast test, create promises with a separate counter
+  {
+    auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+
+    // First promise resolves and increments counter
+    builder.add(kj::Promise<int>(123).then([&](int result) {
+      failFastResolvedCount++;
+      return result;
+    }));
+
+    // Second promise will throw an exception
+    builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "test exception")));
+
+    // Third promise resolves and increments counter
+    builder.add(kj::Promise<int>(789).then([&](int result) {
+      failFastResolvedCount++;
+      return result;
+    }));
+
+    auto promises = builder.finish();
+
+    // Join with fail-fast behavior
+    auto joinedPromise = puJoinPromisesFailFast(kj::mv(promises));
+
+    // Wait should throw the exception
+    KJ_EXPECT_THROW_MESSAGE("test exception", joinedPromise.wait(waitScope));
+  }
+
+  // Run the event loop to allow any lingering promises to complete
+  loop.run();
+
+  // Compare the behaviors:
+  // - Regular join should have processed all non-failing promises (count = 2)
+  // - Fail-fast join should have short-circuited (count = 0 or 1 depending on timing)
+  KJ_EXPECT(regularResolvedCount == 2, "Regular join should process all promises");
+  KJ_EXPECT(failFastResolvedCount < 2, "Fail-fast join should not process all promises");
+}
+
+// Implementation of raceSuccessful() using PromisesUnordered in a coroutine
+template <typename T>
+Promise<T> puRaceSuccessful(Array<Promise<T>>&& promises, SourceLocation location = {}) {
+  // This function implements the same semantics as kj::raceSuccessful() but uses
+  // PromisesUnordered and coroutines instead of the built-in mechanism.
+  //
+  // Like raceSuccessful(), this function:
+  // - Returns the first successful promise result (and cancels the rest)
+  // - In case of every promise failing, the result fails with the last error
+
+  // Skip the work if there are no promises
+  if (promises.size() == 0) {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "Cannot race zero promises"));
+  }
+
+  // Create a PromisesUnordered to process promises as they complete
+  PromisesUnordered<T> pui(location);
+
+  // Add all the promises
+  for (auto& promise : promises) {
+    pui.add(kj::mv(promise));
+  }
+
+  // Keep track of the last exception encountered
+  Maybe<kj::Exception> lastException;
+
+  // Process each promise as it completes
+  for (Promise<T> promise : pui) {
+    try {
+      // Try to await the promise and return its value immediately if successful
+      co_return co_await promise;
+    } catch (...) {
+      // This promise failed - store the exception and continue to the next one
+      lastException = kj::getCaughtExceptionAsKj();
+    }
+  }
+
+  // If we reached here, all promises failed
+  // Throw the last exception we encountered
+  KJ_IF_SOME(exception, lastException) {
+    kj::throwFatalException(kj::mv(exception));
+  } else {
+    // This should never happen because we checked for zero promises above
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "Impossible: No exceptions encountered but all promises failed"));
+  }
+}
+
+// Test puRaceSuccessful with a successful promise
+KJ_TEST("puRaceSuccessful with successful promises") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create an array of promises with some succeeding and some failing
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+
+  // First promise resolves with a delay
+  auto paf1 = kj::newPromiseAndFulfiller<int>();
+  builder.add(kj::mv(paf1.promise));
+
+  // Second promise resolves immediately
+  builder.add(kj::Promise<int>(456));
+
+  // Third promise will throw an exception
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "test exception")));
+
+  auto promises = builder.finish();
+
+  // Race the promises
+  auto racedPromise = puRaceSuccessful(kj::mv(promises));
+
+  // The second promise should win since it's already fulfilled
+  int result = racedPromise.wait(waitScope);
+  KJ_EXPECT(result == 456, "Expected 456 but got", result);
+
+  // Fulfill the first promise (too late to matter)
+  paf1.fulfiller->fulfill(123);
+}
+
+// Test puRaceSuccessful with delayed promises
+KJ_TEST("puRaceSuccessful with delayed promises") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Counter to track which promises complete
+  uint completionCounter = 0;
+  uint* counterPtr = &completionCounter;
+
+  // Create promise fulfillers
+  auto paf1 = kj::newPromiseAndFulfiller<int>();
+  auto paf2 = kj::newPromiseAndFulfiller<int>();
+  auto paf3 = kj::newPromiseAndFulfiller<int>();
+
+  // Create an array of promises that each increment the counter
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+  builder.add(paf1.promise.then([counterPtr](int value) {
+    (*counterPtr)++;
+    return value;
+  }));
+  builder.add(paf2.promise.then([counterPtr](int value) {
+    (*counterPtr)++;
+    return value;
+  }));
+  builder.add(paf3.promise.then([counterPtr](int value) {
+    (*counterPtr)++;
+    return value;
+  }));
+
+  auto promises = builder.finish();
+
+  // Race the promises
+  auto racedPromise = puRaceSuccessful(kj::mv(promises));
+
+  // Fulfill the second promise first
+  paf2.fulfiller->fulfill(456);
+
+  // The result should be from the second promise
+  int result = racedPromise.wait(waitScope);
+  KJ_EXPECT(result == 456);
+
+  // Only one promise should have completed
+  KJ_EXPECT(completionCounter == 1);
+
+  // Other promises should be canceled, but let's fulfill them anyway to be sure
+  paf1.fulfiller->fulfill(123);
+  paf3.fulfiller->fulfill(789);
+
+  // Run the event loop to allow any callbacks to complete
+  loop.run();
+
+  // Counter should still be 1 because the other promises were canceled
+  KJ_EXPECT(completionCounter == 1);
+}
+
+// Test puRaceSuccessful with all promises failing
+KJ_TEST("puRaceSuccessful with all promises failing") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create an array of promises that all fail
+  auto builder = kj::heapArrayBuilder<Promise<int>>(3);
+
+  // All promises will fail with different error messages
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "first error")));
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "second error")));
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "third error")));
+
+  auto promises = builder.finish();
+
+  // Race the promises - all will fail
+  auto racedPromise = puRaceSuccessful(kj::mv(promises));
+
+  // Should fail with the last exception encountered (unpredictable which one)
+  // We can't check the exact error message because the order of completion is non-deterministic
+  KJ_EXPECT_THROW_MESSAGE("error", racedPromise.wait(waitScope));
+}
+
+// Test puRaceSuccessful with mixed failing and delayed promises
+KJ_TEST("puRaceSuccessful with mixed failing and delayed promises") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Create promise fulfiller and trackers
+  auto paf = kj::newPromiseAndFulfiller<int>();
+  bool failingCompleted = false;
+  bool delayedCompleted = false;
+
+  // Create an array of promises
+  auto builder = kj::heapArrayBuilder<Promise<int>>(2);
+
+  // First promise fails immediately
+  builder.add(kj::Promise<int>(KJ_EXCEPTION(FAILED, "immediate failure")).then(
+    [&](int) -> int {
+      failingCompleted = true;
+      return 0; // Never reached
+    }, [&](kj::Exception&& e) -> int {
+      failingCompleted = true;
+      throw kj::mv(e);
+    }));
+
+  // Second promise is delayed but succeeds
+  builder.add(paf.promise.then([&](int value) {
+    delayedCompleted = true;
+    return value;
+  }));
+
+  auto promises = builder.finish();
+
+  // Race the promises
+  auto racedPromise = puRaceSuccessful(kj::mv(promises));
+
+  // Trigger the event loop to process the failing promise
+  loop.run();
+
+  // Now fulfill the delayed promise
+  paf.fulfiller->fulfill(789);
+
+  // The successful promise should win
+  int result = racedPromise.wait(waitScope);
+  KJ_EXPECT(result == 789);
+
+  // The failing promise should have completed but the result is ignored
+  KJ_EXPECT(failingCompleted);
+  KJ_EXPECT(delayedCompleted);
+}
+
 }  // namespace
 }  // namespace kj
