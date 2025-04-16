@@ -54,11 +54,11 @@ struct Id {
   inline constexpr Id(): value(0) {}
   inline constexpr explicit Id(int value): value(value) {}
 
-  inline constexpr bool operator==(const Id& other) const { return value == other.value; }
-  inline constexpr bool operator<=(const Id& other) const { return value <= other.value; }
-  inline constexpr bool operator>=(const Id& other) const { return value >= other.value; }
-  inline constexpr bool operator< (const Id& other) const { return value <  other.value; }
-  inline constexpr bool operator> (const Id& other) const { return value >  other.value; }
+  inline constexpr bool operator==(const Id& other) const = default;
+  inline constexpr bool operator<=(const Id& other) const = default;
+  inline constexpr bool operator>=(const Id& other) const = default;
+  inline constexpr bool operator< (const Id& other) const = default;
+  inline constexpr bool operator> (const Id& other) const = default;
 };
 
 // =======================================================================================
@@ -420,7 +420,7 @@ public:
   inline Absolute& operator+=(const T& other) { value += other; return *this; }
   inline Absolute& operator-=(const T& other) { value -= other; return *this; }
 
-  inline constexpr bool operator==(const Absolute& other) const { return value == other.value; }
+  inline constexpr bool operator==(const Absolute& other) const = default;
   inline constexpr bool operator<=(const Absolute& other) const { return value <= other.value; }
   inline constexpr bool operator>=(const Absolute& other) const { return value >= other.value; }
   inline constexpr bool operator< (const Absolute& other) const { return value <  other.value; }
@@ -1100,7 +1100,7 @@ public:
     inline Bounded<maxN, T> operator* () const { return Bounded<maxN, T>(*inner, unsafe); }
     inline Iterator& operator++() { ++inner; return *this; }
 
-    inline bool operator==(const Iterator& other) const { return inner == other.inner; }
+    inline bool operator==(const Iterator& other) const = default;
 
   private:
     typename Range<T>::Iterator inner;
@@ -1129,7 +1129,7 @@ public:
     inline Quantity<T, U> operator* () const { return *inner * unit<Quantity<T, U>>(); }
     inline Iterator& operator++() { ++inner; return *this; }
 
-    inline bool operator==(const Iterator& other) const { return inner == other.inner; }
+    inline bool operator==(const Iterator& other) const = default;
 
   private:
     typename Range<T>::Iterator inner;
