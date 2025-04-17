@@ -1147,7 +1147,8 @@ Promise<Array<T>> puJoinPromises(Array<Promise<T>>&& promises, SourceLocation lo
       // Store the result at the correct index
       results[indexedValue.index] = kj::mv(indexedValue.value);
       completedCount++;
-    } catch (kj::Exception& e) {
+    } catch (const kj::Exception& e) {
+      KJ_DBG(&e);
       // Save the first exception but continue processing
       if (firstException == kj::none) {
         firstException = kj::cp(e);
