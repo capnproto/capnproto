@@ -1150,7 +1150,7 @@ Promise<Array<T>> puJoinPromises(Array<Promise<T>>&& promises, SourceLocation lo
     } catch (kj::Exception& e) {
       // Save the first exception but continue processing
       if (firstException == kj::none) {
-        firstException = kj::mv(e);
+        firstException = kj::cp(e);
       }
       completedCount++;
     }
