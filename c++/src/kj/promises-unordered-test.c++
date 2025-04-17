@@ -1129,9 +1129,13 @@ Promise<Array<T>> puJoinPromises(Array<Promise<T>>&& promises, SourceLocation lo
   // Add all the promises with their indices
   for (size_t i = 0; i < promises.size(); i++) {
     // Move out the promise and chain with the index
-    pui.add(kj::mv(promises[i]).then([i](T&& result) -> IndexedValue {
+    pui.add(kj::mv(promises[i]).then([i](T&& result) {
       // Return the index along with the result
-      return IndexedValue { i, kj::mv(result) };
+      return kj::Promise<IndexedValue>(IndexedValue { i, kj::mv(result) });
+    },
+    [](kj::Exception&& exception) {
+      KJ_DBG(&exception, exception);
+      return kj::Promise<IndexedValue>(kj::mv(exception));
     }));
   }
 
