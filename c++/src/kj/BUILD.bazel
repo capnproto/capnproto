@@ -110,6 +110,7 @@ cc_library(
         "async-io-internal.h",
         "async-prelude.h",
         "async-queue.h",
+        "promises-unordered.h",
         "timer.h",
     ] + select({
         "@platforms//os:windows": ["async-win32.h"],
@@ -186,6 +187,7 @@ cc_library(
     "time-test.c++",
     "tuple-test.c++",
     "units-test.c++",
+    "promises-unordered-test.c++",
 ]]
 
 cc_test(
