@@ -921,6 +921,12 @@ _::Delimited<T> delimited(T&& arr, kj::StringPtr delim) {
   return _::Delimited<T>(kj::fwd<T>(arr), delim);
 }
 
+
+template <typename T>
+concept Stringifiable = requires(_::Stringifier s, T&& t) {
+  { s * kj::fwd<T>(t) };
+};
+
 }  // namespace kj
 
 constexpr kj::StringPtr operator ""_kj(const char* str, size_t n) {

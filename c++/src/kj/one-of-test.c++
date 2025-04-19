@@ -248,6 +248,17 @@ KJ_TEST("OneOf equality") {
   }
 }
 
+KJ_TEST("OneOf stringification") {
+  {
+    OneOf<int, bool> a = 0;
+    OneOf<int, bool> b = false;
+    OneOf<int, bool> uninit;
+    KJ_EXPECT(kj::str(a) == kj::str(0));
+    KJ_EXPECT(kj::str(b) == kj::str(false));
+    KJ_EXPECT(kj::str(uninit) == kj::str("(null OneOf)"));
+  }
+}
+
 template<unsigned int N>
 struct T {
   unsigned int n = N;

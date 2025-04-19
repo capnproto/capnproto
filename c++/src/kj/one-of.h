@@ -22,6 +22,7 @@
 #pragma once
 
 #include "common.h"
+#include "string.h"
 
 KJ_BEGIN_HEADER
 
@@ -668,6 +669,27 @@ bool operator==(const OneOf<Variants...>& a, const OneOf<Variants...>& b) {
   if (a.which() != b.which()) return false;
 
   return (_::compareIfIs<Variants>(a, b) || ...);
+}
+
+// TODO(someday) an ideal implementation would use kj::toCharSequence instead of kj::str,
+// producing a OneOf all the possible result types, and then would implement kj::_::fill()
+// for such a OneOf. This would avoid an extra copy and allocation when the OneOf is embedded
+// in a larger string.
+template <typename... Ts>
+requires (kj::Stringifiable<Ts> && ...)
+kj::String KJ_STRINGIFY(const kj::OneOf<Ts...>& o) {
+  kj::String result;
+  bool handled = false;
+
+  (( o.template is<Ts>() &&
+      ( result = kj::str(o.template get<Ts>()),
+        handled = true )
+    ), ...);
+
+  if (handled == false) {
+    return kj::str("(null OneOf)");
+  }
+  return result;
 }
 
 }  // namespace kj
