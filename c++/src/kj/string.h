@@ -927,6 +927,18 @@ concept Stringifiable = requires(_::Stringifier s, T&& t) {
   { s * kj::fwd<T>(t) };
 };
 
+// TODO(someday) an ideal implementation would use kj::toCharSequence instead of kj::str,
+// This would avoid an extra copy and allocation when the Maybe is embedded in a larger string.
+template <typename T>
+requires Stringifiable<T>
+kj::String KJ_STRINGIFY(const kj::Maybe<T>& maybe) {
+  KJ_IF_SOME(val, maybe) {
+    return str(val);
+  } else {
+    return str("(none)");
+  }
+}
+
 }  // namespace kj
 
 constexpr kj::StringPtr operator ""_kj(const char* str, size_t n) {
