@@ -1226,7 +1226,7 @@ private:
 
             memberInfo = &arena.allocate<MemberInfo>(
                 parent, codeOrder++, member,
-                newGroupNode(parent.node, member.getName().getValue()),
+                newGroupNode(parent.node, member),
                 true);
             allMembers.add(memberInfo);
             memberInfo->unionScope = &unionLayout;
@@ -1243,7 +1243,7 @@ private:
           StructLayout::Group& group = arena.allocate<StructLayout::Group>(layout);
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member,
-              newGroupNode(parent.node, member.getName().getValue()),
+              newGroupNode(parent.node, member),
               true);
           allMembers.add(memberInfo);
           traverseGroup(member.getNestedDecls(), *memberInfo, group);
@@ -1301,7 +1301,7 @@ private:
             parent.childCount++;
             memberInfo = &arena.allocate<MemberInfo>(
                 parent, codeOrder++, member,
-                newGroupNode(parent.node, member.getName().getValue()),
+                newGroupNode(parent.node, member),
                 false);
             allMembers.add(memberInfo);
           }
@@ -1317,7 +1317,7 @@ private:
           parent.childCount++;
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member,
-              newGroupNode(parent.node, member.getName().getValue()),
+              newGroupNode(parent.node, member),
               false);
           allMembers.add(memberInfo);
 
@@ -1350,19 +1350,25 @@ private:
     }
   }
 
-  NodeSourceInfoBuilderPair newGroupNode(schema::Node::Reader parent, kj::StringPtr name) {
+  NodeSourceInfoBuilderPair newGroupNode(schema::Node::Reader parent, Declaration::Reader decl) {
     AuxNode aux {
       translator.orphanage.newOrphan<schema::Node>(),
       translator.orphanage.newOrphan<schema::Node::SourceInfo>()
     };
     auto node = aux.node.get();
     auto sourceInfo = aux.sourceInfo.get();
+    auto name = decl.getName().getValue();
 
     // We'll set the ID and scope ID later.
     node.setDisplayName(kj::str(parent.getDisplayName(), '.', name));
     node.setDisplayNamePrefixLength(node.getDisplayName().size() - name.size());
     node.setIsGeneric(parent.getIsGeneric());
     node.initStruct().setIsGroup(true);
+    node.setStartByte(decl.getStartByte());
+    node.setEndByte(decl.getEndByte());
+
+    sourceInfo.setStartByte(decl.getStartByte());
+    sourceInfo.setEndByte(decl.getEndByte());
 
     // The remaining contents of node.struct will be filled in later.
 
@@ -1654,8 +1660,19 @@ uint64_t NodeTranslator::compileParamList(
       builder.setDisplayNamePrefixLength(builder.getDisplayName().size() - typeName.size());
       builder.setIsGeneric(parent.getIsGeneric() || implicitParams.size() > 0);
       builder.setScopeId(0);  // detached struct type
+      builder.setStartByte(paramList.getStartByte());
+      builder.setEndByte(paramList.getEndByte());
 
       builder.initStruct();
+
+      // Put `sourceInfoBuilder` is a smaller scope since we move `newSourceInfo` later.
+      {
+        auto sourceInfoBuilder = newSourceInfo.get();
+
+        sourceInfoBuilder.setId(builder.getId());
+        sourceInfoBuilder.setStartByte(paramList.getStartByte());
+        sourceInfoBuilder.setEndByte(paramList.getEndByte());
+      }
 
       // Note that the struct we create here has a brand parameter list mirrioring the method's
       // implicit parameter list. Of course, fields inside the struct using the method's implicit
