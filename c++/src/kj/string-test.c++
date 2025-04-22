@@ -264,7 +264,7 @@ TEST(String, StlInterop) {
 }
 
 struct Stringable {
-  kj::StringPtr toString() { return "foo"; }
+  kj::StringPtr toString() const { return "foo"; }
 };
 
 TEST(String, ToString) {
@@ -512,6 +512,28 @@ KJ_TEST("as<Std>") {
   StringPtr ptr = "bar"_kj;
   std::string stdPtr = ptr.as<Std>();
   KJ_EXPECT(stdPtr == "bar");
+}
+
+KJ_TEST("kj::Maybe stringification") {
+  {
+    Maybe<int> a = 0;
+    Maybe<int> an;
+    Maybe<int&> ar = a;
+    Maybe<bool> b = false;
+    Maybe<bool> bn;
+    Maybe<bool&> br = b;
+    KJ_EXPECT(kj::str(a) == kj::str(0));
+    KJ_EXPECT(kj::str(ar) == kj::str(0));
+    KJ_EXPECT(kj::str(b) == kj::str(false));
+    KJ_EXPECT(kj::str(br) == kj::str(false));
+    KJ_EXPECT(kj::str(an) == kj::str("(none)"));
+    KJ_EXPECT(kj::str(bn) == kj::str("(none)"));
+
+    Maybe<Stringable> s = Stringable();
+    Maybe<Stringable> sn;
+    KJ_EXPECT(kj::str(s) == kj::str("foo"));
+    KJ_EXPECT(kj::str(sn) == kj::str("(none)"));
+  }
 }
 
 // Supports constexpr
