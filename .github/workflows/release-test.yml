@@ -9,7 +9,7 @@ on:
 
 jobs:
   Linux:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -42,7 +42,7 @@ jobs:
         run: |
             ./super-test.sh
   MinGW-Wine:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
@@ -55,7 +55,7 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get update -qq
-          sudo apt-get install -yqq --allow-downgrades libgd3/focal libpcre2-8-0/focal libpcre2-16-0/focal libpcre2-32-0/focal libpcre2-posix2/focal
+          sudo apt-get install -yqq --allow-downgrades libgd3/jammy libpcre2-8-0/jammy libpcre2-16-0/jammy libpcre2-32-0/jammy libpcre2-posix2/jammy
           sudo apt-get purge -yqq libmono* moby* mono* php* libgdiplus libpcre2-posix3 libzip4
       - name: install dependencies
         run: |
@@ -71,7 +71,7 @@ jobs:
         run: |
             ./super-test.sh mingw i686-w64-mingw32
   cmake-packaging:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
@@ -93,7 +93,7 @@ jobs:
         run: |
             ./super-test.sh cmake-package cmake-static
   # Android:
-  #   runs-on: ubuntu-20.04
+  #   runs-on: ubuntu-22.04
   #   strategy:
   #     fail-fast: false
   #   steps:
