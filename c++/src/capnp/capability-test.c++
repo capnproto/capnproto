@@ -1430,7 +1430,7 @@ KJ_TEST("RevocableServer") {
 
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
       "capability was revoked",
-      revocable.getClient().waitForeverRequest().send().ignoreResult().wait(waitScope));
+      revocable.getClient().waitForeverRequest().sendIgnoringResult().wait(waitScope));
 
   KJ_EXPECT(!revocable.isInUse());
 }

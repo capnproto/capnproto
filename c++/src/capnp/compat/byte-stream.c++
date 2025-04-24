@@ -141,7 +141,7 @@ public:
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(redirected, Redirected) {
         // Ugh I guess we need to send a real end() request here.
-        return redirected.replacement.endRequest(MessageSize {2, 0}).send().ignoreResult();
+        return redirected.replacement.endRequest(MessageSize {2, 0}).sendIgnoringResult();
       }
       KJ_CASE_ONEOF(e, Ended) {
         // whatever
@@ -154,7 +154,7 @@ public:
       KJ_CASE_ONEOF(streaming, Streaming) {
         auto req = streaming.callback.endedRequest(MessageSize {4, 0});
         req.setByteCount(completed);
-        auto promise = req.send().ignoreResult();
+        auto promise = req.sendIgnoringResult();
         streaming.parent.returnStream(completed);
         state = Ended();
         return promise;
@@ -236,7 +236,7 @@ public:
 
         auto req = streaming.callback.endedRequest(MessageSize {4, 0});
         req.setByteCount(completed);
-        auto result = req.send().ignoreResult();
+        auto result = req.sendIgnoringResult();
         streaming.parent.returnStream(completed);
         state = Ended();
         return result;
@@ -437,7 +437,7 @@ public:
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
         // Ugh I guess we need to send a real end() request here.
-        return capnpStream.endRequest(MessageSize {2, 0}).send().ignoreResult();
+        return capnpStream.endRequest(MessageSize {2, 0}).sendIgnoringResult();
       }
       KJ_CASE_ONEOF(b, Borrowed) {
         // Fine, ignore.
@@ -858,7 +858,7 @@ public:
     KJ_IF_SOME(o, optimized) {
       return o.directExplicitEnd();
     } else {
-      return inner.endRequest(MessageSize {2, 0}).send().ignoreResult();
+      return inner.endRequest(MessageSize {2, 0}).sendIgnoringResult();
     }
   }
 

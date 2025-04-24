@@ -426,12 +426,12 @@ TEST(TwoPartyNetwork, HugeMessage) {
     req.initA(100000000);  // 100 MB
 
     KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("larger than our single-message size limit",
-        req.send().ignoreResult().wait(ioContext.waitScope));
+        req.sendIgnoringResult().wait(ioContext.waitScope));
   }
 
   // Oversized response fails.
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("larger than our single-message size limit",
-      client.getEnormousStringRequest().send().ignoreResult().wait(ioContext.waitScope));
+      client.getEnormousStringRequest().sendIgnoringResult().wait(ioContext.waitScope));
 
   // Connection is still up.
   {

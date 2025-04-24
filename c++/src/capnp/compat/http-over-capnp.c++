@@ -232,7 +232,7 @@ public:
     req.setCode(code);
     req.setReason(reason);
     sentBytes += reason.size() + 2;
-    return req.send().ignoreResult();
+    return req.sendIgnoringResult();
   }
 
   void disconnect() override {
@@ -802,7 +802,7 @@ public:
     rpcResponse.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(rpcResponse)));
 
-    replyTask = req.send().ignoreResult();
+    replyTask = req.sendIgnoringResult();
   }
 
   kj::Own<kj::AsyncOutputStream> reject(

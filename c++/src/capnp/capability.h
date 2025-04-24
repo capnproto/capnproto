@@ -121,6 +121,9 @@ public:
   RemotePromise<Results> send() KJ_WARN_UNUSED_RESULT;
   // Send the call and return a promise for the results.
 
+  kj::Promise<void> sendIgnoringResult();
+  // Equivalent to send().ignoreResult(), but is a bit more efficient.
+
   typename Results::Pipeline sendForPipeline();
   // Send the call in pipeline-only mode. The returned object can be used to make pipelined calls,
   // but there is no way to wait for the completion of the original call. This allows some
@@ -1090,6 +1093,13 @@ RemotePromise<Results> Request<Params, Results>::send() {
       kj::mv(kj::implicitCast<AnyPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
+}
+
+template <typename Params, typename Results>
+kj::Promise<void> Request<Params, Results>::sendIgnoringResult() {
+  auto typelessPromise = hook->send();
+  hook = nullptr;  // prevent reuse
+  return kj::mv(typelessPromise).ignoreResult();
 }
 
 template <typename Params, typename Results>

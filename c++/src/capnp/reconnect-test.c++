@@ -200,7 +200,7 @@ KJ_TEST("lazyAutoReconnect() initializes lazily") {
     auto req = client.fooRequest();
     req.setI(i);
     req.setJ(j);
-    req.send().ignoreResult().wait(ws);
+    req.sendIgnoringResult().wait(ws);
   };
 
   KJ_EXPECT(connectCount == 1);
