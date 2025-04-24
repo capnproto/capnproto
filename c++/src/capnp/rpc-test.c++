@@ -1580,7 +1580,7 @@ KJ_TEST("method throws exception") {
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
-  client.throwExceptionRequest().send().ignoreResult()
+  client.throwExceptionRequest().sendIgnoringResult()
       .catch_([&](kj::Exception&& e) {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
@@ -1596,7 +1596,7 @@ KJ_TEST("method throws exception won't redundantly add remote exception prefix")
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
-  client.throwRemoteExceptionRequest().send().ignoreResult()
+  client.throwRemoteExceptionRequest().sendIgnoringResult()
       .catch_([&](kj::Exception&& e) {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
@@ -1616,7 +1616,7 @@ KJ_TEST("method throws exception with trace encoder") {
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
-  client.throwExceptionRequest().send().ignoreResult()
+  client.throwExceptionRequest().sendIgnoringResult()
       .catch_([&](kj::Exception&& e) {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
@@ -1632,7 +1632,7 @@ KJ_TEST("method throws exception with detail") {
   auto client = context.connect().getTestMoreStuffRequest().send().getCap();
 
   kj::Maybe<kj::Exception> maybeException;
-  client.throwExceptionWithDetailRequest().send().ignoreResult()
+  client.throwExceptionWithDetailRequest().sendIgnoringResult()
       .catch_([&](kj::Exception&& e) {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
@@ -2059,7 +2059,7 @@ KJ_TEST("three-party handoff introduce to self") {
     req.setI(123);
     req.setJ(true);
     req.setExpectedCallCount(0);
-    call1 = req.send().ignoreResult();
+    call1 = req.sendIgnoringResult();
 
     roundTripCap = pipeline.wait(context.waitScope).getCap();
   }
