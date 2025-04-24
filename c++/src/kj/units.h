@@ -517,7 +517,6 @@ public:
   OP(|, true)   // bitwise ops can't overflow
 
   COMPARE_OP(==)
-  COMPARE_OP(!=)
   COMPARE_OP(< )
   COMPARE_OP(> )
   COMPARE_OP(<=)
@@ -641,7 +640,6 @@ public:
   // subtraction requires proof that subtrahend is not greater than the minuend.
 
   COMPARE_OP(==)
-  COMPARE_OP(!=)
   COMPARE_OP(< )
   COMPARE_OP(> )
   COMPARE_OP(<=)
@@ -927,7 +925,6 @@ OP(|, maxN | cvalue)
 REVERSE_OP(|, maxN | cvalue)
 
 COMPARE_OP(==)
-COMPARE_OP(!=)
 COMPARE_OP(< )
 COMPARE_OP(> )
 COMPARE_OP(<=)
@@ -1074,7 +1071,6 @@ OP(>>)
 OP(&)
 OP(|)
 OP(==)
-OP(!=)
 OP(<=)
 OP(>=)
 OP(<)

@@ -2390,7 +2390,7 @@ KJ_TEST("WebSocket pump disconnect on send") {
   KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, pumpTask.wait(waitScope));
 
   // client1 may or may not have been able to send its whole message depending on buffering.
-  sendTask.then([]() {}, [](kj::Exception&& e) {
+  sendTask.catch_([](kj::Exception&& e) {
     KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
   }).wait(waitScope);
 }
