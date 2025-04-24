@@ -55,8 +55,8 @@ public:
   // Callers must not call dispose() on the same array twice, even if the first call throws
   // an exception.
 
-private:
-  template <typename T, bool hasTrivialDestructor = KJ_HAS_TRIVIAL_DESTRUCTOR(T)>
+protected:
+  template <typename T>
   struct Dispose_;
 };
 
@@ -300,8 +300,7 @@ private:
   virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                            size_t capacity, void (*destroyElement)(void*)) const override;
 
-  template <typename T, bool hasTrivialConstructor = KJ_HAS_TRIVIAL_CONSTRUCTOR(T),
-                        bool hasNothrowConstructor = KJ_HAS_NOTHROW_CONSTRUCTOR(T)>
+  template <typename T>
   struct Allocate_;
 };
 
@@ -442,7 +441,7 @@ public:
 
     T* target = ptr + size;
     if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-      // const_cast is safe here because the member won't ever be dereferenced because it 
+      // const_cast is safe here because the member won't ever be dereferenced because it
       // points to the end of the segment.
       pos = const_cast<RemoveConst<T>*>(target);
     } else {
@@ -454,7 +453,7 @@ public:
 
   void clear() {
     if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-      // const_cast is safe here because the member won't ever be dereferenced because it 
+      // const_cast is safe here because the member won't ever be dereferenced because it
       // points to the end of the segment.
       pos = const_cast<RemoveConst<T>*>(ptr);
     } else {
@@ -471,7 +470,7 @@ public:
     if (target > pos) {
       // expand
       if (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
-        // const_cast is safe here because the member won't ever be dereferenced because it 
+        // const_cast is safe here because the member won't ever be dereferenced because it
         // points to the end of the segment.
         pos = const_cast<RemoveConst<T>*>(target);
       } else {
@@ -482,7 +481,7 @@ public:
     } else {
       // truncate
       if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-        // const_cast is safe here because the member won't ever be dereferenced because it 
+        // const_cast is safe here because the member won't ever be dereferenced because it
         // points to the end of the segment.
         pos = const_cast<RemoveConst<T>*>(target);
       } else {
@@ -661,72 +660,49 @@ struct Mapper<T(&)[s]> {
 // Inline implementation details
 
 template <typename T>
-struct ArrayDisposer::Dispose_<T, true> {
-  static void dispose(T* firstElement, size_t elementCount, size_t capacity,
-                      const ArrayDisposer& disposer) {
-    disposer.disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
-                         sizeof(T), elementCount, capacity, nullptr);
-  }
-};
-template <typename T>
-struct ArrayDisposer::Dispose_<T, false> {
+struct ArrayDisposer::Dispose_ {
   static void destruct(void* ptr) {
     kj::dtor(*reinterpret_cast<T*>(ptr));
-  }
-
-  static void dispose(T* firstElement, size_t elementCount, size_t capacity,
-                      const ArrayDisposer& disposer) {
-    disposer.disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
-                         sizeof(T), elementCount, capacity, &destruct);
   }
 };
 
 template <typename T>
 void ArrayDisposer::dispose(T* firstElement, size_t elementCount, size_t capacity) const {
-  Dispose_<T>::dispose(firstElement, elementCount, capacity, *this);
+  if constexpr (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
+    disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
+                         sizeof(T), elementCount, capacity, nullptr);
+  } else {
+    disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
+                         sizeof(T), elementCount, capacity, &Dispose_<T>::destruct);
+  }
 }
 
 namespace _ {  // private
 
 template <typename T>
-struct HeapArrayDisposer::Allocate_<T, true, true> {
-  static T* allocate(size_t elementCount, size_t capacity) {
-    return reinterpret_cast<T*>(allocateImpl(
-        sizeof(T), elementCount, capacity, nullptr, nullptr));
-  }
-};
-template <typename T>
-struct HeapArrayDisposer::Allocate_<T, false, true> {
+struct HeapArrayDisposer::Allocate_ {
   static void construct(void* ptr) {
     kj::ctor(*reinterpret_cast<T*>(ptr));
-  }
-  static T* allocate(size_t elementCount, size_t capacity) {
-    return reinterpret_cast<T*>(allocateImpl(
-        sizeof(T), elementCount, capacity, &construct, nullptr));
-  }
-};
-template <typename T>
-struct HeapArrayDisposer::Allocate_<T, false, false> {
-  static void construct(void* ptr) {
-    kj::ctor(*reinterpret_cast<T*>(ptr));
-  }
-  static void destruct(void* ptr) {
-    kj::dtor(*reinterpret_cast<T*>(ptr));
-  }
-  static T* allocate(size_t elementCount, size_t capacity) {
-    return reinterpret_cast<T*>(allocateImpl(
-        sizeof(T), elementCount, capacity, &construct, &destruct));
   }
 };
 
 template <typename T>
 T* HeapArrayDisposer::allocate(size_t count) {
-  return Allocate_<T>::allocate(count, count);
+  if constexpr (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
+    return reinterpret_cast<T*>(allocateImpl(sizeof(T), count, count, nullptr, nullptr));
+  } else if (KJ_HAS_NOTHROW_CONSTRUCTOR(T)) {
+    return reinterpret_cast<T*>(allocateImpl(
+      sizeof(T), count, count, &Allocate_<T>::construct, nullptr));
+  } else {
+    return reinterpret_cast<T*>(allocateImpl(
+      sizeof(T), count, count, &Allocate_<T>::construct, &Dispose_<T>::destruct));
+  }
 }
 
 template <typename T>
 T* HeapArrayDisposer::allocateUninitialized(size_t count) {
-  return Allocate_<T, true, true>::allocate(0, count);
+  return reinterpret_cast<T*>(allocateImpl(sizeof(T), 0, count, nullptr, nullptr));
+
 }
 
 template <typename Element, typename Iterator, bool move, bool = canMemcpy<Element>()>

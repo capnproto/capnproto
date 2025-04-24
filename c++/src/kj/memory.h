@@ -143,10 +143,6 @@ public:
   //
   // Callers must not call dispose() on the same pointer twice, even if the first call throws
   // an exception.
-
-private:
-  template <typename T, bool polymorphic = _kj_internal_isPolymorphic((T*)nullptr)>
-  struct Dispose_;
 };
 
 template <typename T>
@@ -312,8 +308,8 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
-  // Surrenders ownership of the underlying object to the caller. The caller must pass in the 
-  // correct disposer to prove that they know how the object is meant to be disposed of. 
+  // Surrenders ownership of the underlying object to the caller. The caller must pass in the
+  // correct disposer to prove that they know how the object is meant to be disposed of.
   inline T* disown(const Disposer* d) {
     if (d != disposer) _::throwWrongDisposerError();
     T* ptrCopy = ptr;
@@ -435,8 +431,8 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
-  // Surrenders ownership of the underlying object to the caller. The caller must pass in the 
-  // correct disposer to prove that they know how the object is meant to be disposed of. 
+  // Surrenders ownership of the underlying object to the caller. The caller must pass in the
+  // correct disposer to prove that they know how the object is meant to be disposed of.
   template<typename SD>
   inline T* disown() {
     static_assert(kj::isSameType<StaticDisposer, SD>(), "disposer must be the same as Own's disposer");
@@ -730,13 +726,13 @@ class Ptr;
 
 template <typename T>
 class Pin {
-  // Pin<T> is a smart, in-place storage for T. 
+  // Pin<T> is a smart, in-place storage for T.
   //
-  // Pin<T> should be created on the stack or used as a data member. It should not be 
+  // Pin<T> should be created on the stack or used as a data member. It should not be
   // allocated on the heap.
   // Pin<T> is integrated with Ptr<T>, and is legal to move/destroy only when there are no active
-  // pointers. 
-  // When KJ_ASSERT_PTR_COUNTERS is defined, pointers are tracked and validity of these 
+  // pointers.
+  // When KJ_ASSERT_PTR_COUNTERS is defined, pointers are tracked and validity of these
   // operations are asserted.
   // Zero-overhead replacement for T if KJ_ASSERT_PTR_COUNTERS is not defined.
 
@@ -754,7 +750,7 @@ public:
   }
 
   inline ~Pin() {
-    // Destroy a Pin with underlying object. 
+    // Destroy a Pin with underlying object.
     // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
 #if KJ_ASSERT_PTR_COUNTERS
     ptrCounter.assertEmpty();
@@ -805,7 +801,7 @@ private:
 template <typename T>
 class Ptr {
   // Ptr<T> is a smart alternative to T&.
-  // 
+  //
   // When used together with Pin<T> it keeps track of active pointers.
   // Asserts lifetime constraints when KJ_ASSERT_PTR_COUNTERS is defined.
   // Zero-overhead alternative for T& if KJ_ASSERT_PTR_COUNTERS is not defined.
@@ -906,24 +902,15 @@ private:
 // Inline implementation details
 
 template <typename T>
-struct Disposer::Dispose_<T, true> {
-  static void dispose(T* object, const Disposer& disposer) {
+void Disposer::dispose(T* object) const {
+  if constexpr (_kj_internal_isPolymorphic((T*)nullptr)) {
     // Note that dynamic_cast<void*> does not require RTTI to be enabled, because the offset to
     // the top of the object is in the vtable -- as it obviously needs to be to correctly implement
     // operator delete.
-    disposer.disposeImpl(dynamic_cast<void*>(object));
+    disposeImpl(dynamic_cast<void*>(object));
+  } else {
+    disposeImpl(static_cast<void*>(object));
   }
-};
-template <typename T>
-struct Disposer::Dispose_<T, false> {
-  static void dispose(T* object, const Disposer& disposer) {
-    disposer.disposeImpl(static_cast<void*>(object));
-  }
-};
-
-template <typename T>
-void Disposer::dispose(T* object) const {
-  Dispose_<T>::dispose(object, *this);
 }
 
 namespace _ {  // private
