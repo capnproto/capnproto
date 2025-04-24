@@ -568,8 +568,7 @@ public:
     auto& dyingConnectionRef = *dyingConnection;
     auto shutdownPromise = dyingConnection->shutdown()
         .attach(kj::mv(dyingConnection))
-        .then([]() -> kj::Promise<void> { return kj::READY_NOW; },
-              [self = kj::addRef(*this), origException = kj::mv(exception)](
+        .catch_([self = kj::addRef(*this), origException = kj::mv(exception)](
                   kj::Exception&& shutdownException) -> kj::Promise<void> {
           // Don't report disconnects as an error.
           if (shutdownException.getType() == kj::Exception::Type::DISCONNECTED) {
