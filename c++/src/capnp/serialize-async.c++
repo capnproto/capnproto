@@ -297,7 +297,7 @@ kj::Promise<void> writeMessageImpl(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
   auto promise = writeFunc(arrays.pieces);
 
   // Make sure the arrays aren't freed until the write completes.
-  return promise.then([arrays=kj::mv(arrays)]() {});
+  return promise.attach(kj::mv(arrays));
 }
 
 template <typename WriteFunc>

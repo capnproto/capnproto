@@ -1537,8 +1537,7 @@ template <typename T>
 template <typename ErrorFunc>
 Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation location) {
   // See catch_() for commentary.
-  return Promise(false, _::spark<_::FixVoid<T>>(then(
-      _::IdentityFunc<decltype(errorHandler(instance<Exception&&>()))>(),
+  return Promise(false, _::spark<_::FixVoid<T>>(catch_(
       kj::fwd<ErrorFunc>(errorHandler)).node, location));
 }
 
@@ -1650,7 +1649,8 @@ void Promise<T>::detach(ErrorFunc&& errorHandler) {
 template <>
 template <typename ErrorFunc>
 void Promise<void>::detach(ErrorFunc&& errorHandler) {
-  return _::detach(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
+  // For Promise<void>, we can apply catch_ as an optimization.
+  return _::detach(catch_(kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 template <typename T>
