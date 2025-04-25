@@ -514,6 +514,11 @@ KJ_TEST("as<Std>") {
   KJ_EXPECT(stdPtr == "bar");
 }
 
+struct OnlyMoves {
+  kj::String toString() const && { return kj::str("OnlyMoves"); }
+  bool operator==(const OnlyMoves&) const = default;
+};
+
 KJ_TEST("kj::Maybe stringification") {
   {
     Maybe<int> a = 0;
@@ -533,6 +538,13 @@ KJ_TEST("kj::Maybe stringification") {
     Maybe<Stringable> sn;
     KJ_EXPECT(kj::str(s) == kj::str("foo"));
     KJ_EXPECT(kj::str(sn) == kj::str("(none)"));
+
+    // This is here to test that KJ_EXPECT doesn't try to generate/use a non-conforming toString
+    // implementation. Effectively this is a test of the correct specification of the Stringifiable
+    // concept in string.h
+    OnlyMoves o(OnlyMoves{});
+    kj::Maybe<OnlyMoves> m(o);
+    KJ_EXPECT(m == m);
   }
 }
 

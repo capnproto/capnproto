@@ -923,8 +923,8 @@ _::Delimited<T> delimited(T&& arr, kj::StringPtr delim) {
 
 
 template <typename T>
-concept Stringifiable = requires(_::Stringifier s, T&& t) {
-  { s * kj::fwd<T>(t) };
+concept Stringifiable = requires(_::Stringifier s, const T& t) {
+  { s * t };
 };
 
 // TODO(someday) an ideal implementation would use kj::toCharSequence instead of kj::str,
