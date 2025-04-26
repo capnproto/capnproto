@@ -81,7 +81,7 @@ enum class Equality {
   UNKNOWN_CONTAINS_CAPS
 };
 
-kj::StringPtr KJ_STRINGIFY(Equality res);
+kj::StringPtr KJ_STRINGIFY(const Equality res);
 
 struct AnyPointer {
   // Reader/Builder for the `AnyPointer` field type, i.e. a pointer that can point to an arbitrary

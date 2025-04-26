@@ -95,7 +95,7 @@ class MockOutputStream: public OutputStream {
 public:
   kj::Vector<byte> bytes;
 
-  kj::String decompress() {
+  kj::String decompress() const {
     MockInputStream rawInput(bytes, kj::maxValue);
     BrotliInputStream brotli(rawInput);
     return brotli.readAllText();
@@ -108,7 +108,7 @@ class MockAsyncOutputStream: public AsyncOutputStream {
 public:
   kj::Vector<byte> bytes;
 
-  kj::String decompress(WaitScope& ws) {
+  kj::String decompress(WaitScope& ws) const {
     MockAsyncInputStream rawInput(bytes, kj::maxValue);
     BrotliAsyncInputStream brotli(rawInput);
     return brotli.readAllText().wait(ws);

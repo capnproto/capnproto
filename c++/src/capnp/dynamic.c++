@@ -1016,7 +1016,7 @@ void DynamicStruct::Builder::set(kj::StringPtr name,
                                  std::initializer_list<DynamicValue::Reader> value) {
   auto list = init(name, value.size()).as<DynamicList>();
   uint i = 0;
-  for (auto element: value) {
+  for (const auto& element: value) {
     list.set(i++, element);
   }
 }
@@ -1418,7 +1418,7 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
 void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> value) {
   KJ_REQUIRE(value.size() == size(), "DynamicList::copyFrom() argument had different size.");
   uint i = 0;
-  for (auto element: value) {
+  for (const auto& element: value) {
     set(i++, element);
   }
 }

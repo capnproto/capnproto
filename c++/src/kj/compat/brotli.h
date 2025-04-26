@@ -55,7 +55,7 @@ constexpr size_t KJ_BROTLI_BUF_SIZE = 8192;
 
 class BrotliOutputContext final {
 public:
-  BrotliOutputContext(kj::Maybe<int> compressionLevel, kj::Maybe<int> windowBits = kj::none);
+  BrotliOutputContext(kj::Maybe<int> compressionLevel, const kj::Maybe<int>& windowBits = kj::none);
   ~BrotliOutputContext() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliOutputContext);
 
@@ -78,7 +78,7 @@ private:
 
 class BrotliInputStream final: public InputStream {
 public:
-  BrotliInputStream(InputStream& inner, kj::Maybe<int> windowBits = kj::none);
+  BrotliInputStream(InputStream& inner, const kj::Maybe<int>& windowBits = kj::none);
   ~BrotliInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliInputStream);
 
@@ -130,7 +130,7 @@ private:
 
 class BrotliAsyncInputStream final: public AsyncInputStream {
 public:
-  BrotliAsyncInputStream(AsyncInputStream& inner, kj::Maybe<int> windowBits = kj::none);
+  BrotliAsyncInputStream(AsyncInputStream& inner, const kj::Maybe<int>& windowBits = kj::none);
   ~BrotliAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncInputStream);
 

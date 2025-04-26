@@ -95,7 +95,7 @@ public:
   // Encode any Cap'n Proto value to JSON, including primitives and
   // Dynamic{Enum,Struct,List,Capability}, but not DynamicValue (see below).
 
-  kj::String encode(DynamicValue::Reader value, Type type) const;
+  kj::String encode(const DynamicValue::Reader& value, Type type) const;
   // Encode a DynamicValue to JSON. `type` is needed because `DynamicValue` itself does
   // not distinguish between e.g. int32 and int64, which in JSON are handled differently. Most
   // of the time, though, you can use the single-argument templated version of `encode()` instead.
@@ -136,25 +136,25 @@ public:
   // You can separate text <-> JsonValue from JsonValue <-> T. These are particularly useful
   // for calling from Handler implementations.
 
-  kj::String encodeRaw(JsonValue::Reader value) const;
+  kj::String encodeRaw(const JsonValue::Reader& value) const;
   void decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder output) const;
   // Translate JsonValue <-> text.
 
   template <typename T>
   void encode(T&& value, JsonValue::Builder output) const;
-  void encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const;
-  void decode(JsonValue::Reader input, DynamicStruct::Builder output) const;
+  void encode(const DynamicValue::Reader& input, Type type, JsonValue::Builder output) const;
+  void decode(const JsonValue::Reader& input, DynamicStruct::Builder output) const;
   template <typename T>
-  Orphan<T> decode(JsonValue::Reader input, Orphanage orphanage) const;
+  Orphan<T> decode(const JsonValue::Reader& input, Orphanage orphanage) const;
   template <typename T>
-  ReaderFor<T> decode(JsonValue::Reader input) const;
+  ReaderFor<T> decode(const JsonValue::Reader& input) const;
 
-  Orphan<DynamicValue> decode(JsonValue::Reader input, Type type, Orphanage orphanage) const;
-  Orphan<DynamicList> decode(JsonValue::Reader input, ListSchema type, Orphanage orphanage) const;
+  Orphan<DynamicValue> decode(const JsonValue::Reader& input, Type type, Orphanage orphanage) const;
+  Orphan<DynamicList> decode(const JsonValue::Reader& input, ListSchema type, Orphanage orphanage) const;
   Orphan<DynamicStruct> decode(
-      JsonValue::Reader input, StructSchema type, Orphanage orphanage) const;
-  DynamicCapability::Client decode(JsonValue::Reader input, InterfaceSchema type) const;
-  DynamicEnum decode(JsonValue::Reader input, EnumSchema type) const;
+      const JsonValue::Reader& input, StructSchema type, Orphanage orphanage) const;
+  DynamicCapability::Client decode(const JsonValue::Reader& input, InterfaceSchema type) const;
+  DynamicEnum decode(const JsonValue::Reader& input, EnumSchema type) const;
 
   // ---------------------------------------------------------------------------
   // specializing particular types
@@ -243,11 +243,11 @@ private:
 
   kj::Own<Impl> impl;
 
-  void encodeField(StructSchema::Field field, DynamicValue::Reader input,
+  void encodeField(StructSchema::Field field, const DynamicValue::Reader& input,
                    JsonValue::Builder output) const;
-  Orphan<DynamicList> decodeArray(List<JsonValue>::Reader input, ListSchema type, Orphanage orphanage) const;
-  void decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const;
-  void decodeField(StructSchema::Field fieldSchema, JsonValue::Reader fieldValue,
+  Orphan<DynamicList> decodeArray(const List<JsonValue>::Reader& input, ListSchema type, Orphanage orphanage) const;
+  void decodeObject(const JsonValue::Reader& input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const;
+  void decodeField(StructSchema::Field fieldSchema, const JsonValue::Reader& fieldValue,
                    Orphanage orphanage, DynamicStruct::Builder output) const;
   void addTypeHandlerImpl(Type type, HandlerBase& handler);
   void addFieldHandlerImpl(StructSchema::Field field, Type type, HandlerBase& handler);
@@ -315,30 +315,30 @@ inline void JsonCodec::encode<DynamicStruct::Reader>(
 }
 
 template <typename T>
-inline Orphan<T> JsonCodec::decode(JsonValue::Reader input, Orphanage orphanage) const {
+inline Orphan<T> JsonCodec::decode(const JsonValue::Reader& input, Orphanage orphanage) const {
   return decode(input, Type::from<T>(), orphanage).template releaseAs<T>();
 }
 
 template <typename T>
-inline ReaderFor<T> JsonCodec::decode(JsonValue::Reader input) const {
+inline ReaderFor<T> JsonCodec::decode(const JsonValue::Reader& input) const {
   static_assert(style<T>() == Style::PRIMITIVE || style<T>() == Style::CAPABILITY,
                 "must specify an orphanage to decode an object type");
   return decode(input, Type::from<T>(), Orphanage()).getReader().template as<T>();
 }
 
 inline Orphan<DynamicList> JsonCodec::decode(
-    JsonValue::Reader input, ListSchema type, Orphanage orphanage) const {
+    const JsonValue::Reader& input, ListSchema type, Orphanage orphanage) const {
   return decode(input, Type(type), orphanage).releaseAs<DynamicList>();
 }
 inline Orphan<DynamicStruct> JsonCodec::decode(
-    JsonValue::Reader input, StructSchema type, Orphanage orphanage) const {
+    const JsonValue::Reader& input, StructSchema type, Orphanage orphanage) const {
   return decode(input, Type(type), orphanage).releaseAs<DynamicStruct>();
 }
 inline DynamicCapability::Client JsonCodec::decode(
-    JsonValue::Reader input, InterfaceSchema type) const {
+    const JsonValue::Reader& input, InterfaceSchema type) const {
   return decode(input, Type(type), Orphanage()).getReader().as<DynamicCapability>();
 }
-inline DynamicEnum JsonCodec::decode(JsonValue::Reader input, EnumSchema type) const {
+inline DynamicEnum JsonCodec::decode(const JsonValue::Reader& input, EnumSchema type) const {
   return decode(input, Type(type), Orphanage()).getReader().as<DynamicEnum>();
 }
 
@@ -347,28 +347,28 @@ inline DynamicEnum JsonCodec::decode(JsonValue::Reader input, EnumSchema type) c
 class JsonCodec::HandlerBase {
   // Internal helper; ignore.
 public:
-  virtual void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+  virtual void encodeBase(const JsonCodec& codec, const DynamicValue::Reader& input,
                           JsonValue::Builder output) const = 0;
-  virtual Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+  virtual Orphan<DynamicValue> decodeBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                           Type type, Orphanage orphanage) const;
-  virtual void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
+  virtual void decodeStructBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                 DynamicStruct::Builder output) const;
 };
 
 template <typename T>
 class JsonCodec::Handler<T, Style::POINTER>: private JsonCodec::HandlerBase {
 public:
-  virtual void encode(const JsonCodec& codec, ReaderFor<T> input,
+  virtual void encode(const JsonCodec& codec, const ReaderFor<T>& input,
                       JsonValue::Builder output) const = 0;
-  virtual Orphan<T> decode(const JsonCodec& codec, JsonValue::Reader input,
+  virtual Orphan<T> decode(const JsonCodec& codec, const JsonValue::Reader& input,
                            Orphanage orphanage) const = 0;
 
 private:
-  void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+  void encodeBase(const JsonCodec& codec, const DynamicValue::Reader& input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
   }
-  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                   Type type, Orphanage orphanage) const override final {
     return decode(codec, input, orphanage);
   }
@@ -391,15 +391,15 @@ public:
   }
 
 private:
-  void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+  void encodeBase(const JsonCodec& codec, const DynamicValue::Reader& input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
   }
-  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                   Type type, Orphanage orphanage) const override final {
     return decode(codec, input, orphanage);
   }
-  void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
+  void decodeStructBase(const JsonCodec& codec, const JsonValue::Reader& input,
                         DynamicStruct::Builder output) const override final {
     decode(codec, input, output.as<T>());
   }
@@ -411,11 +411,11 @@ class JsonCodec::Handler<DynamicStruct>: private JsonCodec::HandlerBase {
   // Almost identical to Style::STRUCT except that we pass the struct type to decode().
 
 public:
-  virtual void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+  virtual void encode(const JsonCodec& codec, const DynamicStruct::Reader& input,
                       JsonValue::Builder output) const = 0;
-  virtual void decode(const JsonCodec& codec, JsonValue::Reader input,
+  virtual void decode(const JsonCodec& codec, const JsonValue::Reader& input,
                       DynamicStruct::Builder output) const = 0;
-  virtual Orphan<DynamicStruct> decode(const JsonCodec& codec, JsonValue::Reader input,
+  virtual Orphan<DynamicStruct> decode(const JsonCodec& codec, const JsonValue::Reader& input,
                                        StructSchema type, Orphanage orphanage) const {
     // If subclass does not override, fall back to regular version.
     auto result = orphanage.newOrphan(type);
@@ -424,15 +424,15 @@ public:
   }
 
 private:
-  void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+  void encodeBase(const JsonCodec& codec, const DynamicValue::Reader& input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<DynamicStruct>(), output);
   }
-  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                   Type type, Orphanage orphanage) const override final {
     return decode(codec, input, type.asStruct(), orphanage);
   }
-  void decodeStructBase(const JsonCodec& codec, JsonValue::Reader input,
+  void decodeStructBase(const JsonCodec& codec, const JsonValue::Reader& input,
                         DynamicStruct::Builder output) const override final {
     decode(codec, input, output.as<DynamicStruct>());
   }
@@ -446,11 +446,11 @@ public:
   virtual T decode(const JsonCodec& codec, JsonValue::Reader input) const = 0;
 
 private:
-  void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+  void encodeBase(const JsonCodec& codec, const DynamicValue::Reader& input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
   }
-  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                   Type type, Orphanage orphanage) const override final {
     return decode(codec, input);
   }
@@ -462,14 +462,14 @@ class JsonCodec::Handler<T, Style::CAPABILITY>: private JsonCodec::HandlerBase {
 public:
   virtual void encode(const JsonCodec& codec, typename T::Client input,
                       JsonValue::Builder output) const = 0;
-  virtual typename T::Client decode(const JsonCodec& codec, JsonValue::Reader input) const = 0;
+  virtual typename T::Client decode(const JsonCodec& codec, const JsonValue::Reader& input) const = 0;
 
 private:
-  void encodeBase(const JsonCodec& codec, DynamicValue::Reader input,
+  void encodeBase(const JsonCodec& codec, const DynamicValue::Reader& input,
                   JsonValue::Builder output) const override final {
     encode(codec, input.as<T>(), output);
   }
-  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<DynamicValue> decodeBase(const JsonCodec& codec, const JsonValue::Reader& input,
                                   Type type, Orphanage orphanage) const override final {
     return orphanage.newOrphanCopy(decode(codec, input));
   }

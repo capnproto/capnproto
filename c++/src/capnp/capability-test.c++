@@ -1023,17 +1023,17 @@ TEST(Capability, CapabilityServerSet) {
 
   bool resolved1 = false, resolved2 = false, resolved3 = false;
   auto promise1 = set1.getLocalServer(clientPromise)
-      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+      .then([&](const kj::Maybe<test::TestInterface::Server&>& server) {
     resolved1 = true;
     EXPECT_EQ(&server1, &KJ_ASSERT_NONNULL(server));
   });
   auto promise2 = set2.getLocalServer(clientPromise)
-      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+      .then([&](const kj::Maybe<test::TestInterface::Server&>& server) {
     resolved2 = true;
     EXPECT_TRUE(server == kj::none);
   });
   auto promise3 = set1.getLocalServer(errorPromise)
-      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+      .then([&](const kj::Maybe<test::TestInterface::Server&>& server) {
     KJ_FAIL_EXPECT("getLocalServer() on error promise should have thrown");
   }, [&](kj::Exception&& e) {
     resolved3 = true;

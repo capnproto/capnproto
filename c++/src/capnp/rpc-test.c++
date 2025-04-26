@@ -261,8 +261,8 @@ public:
     }
   }
 
-  uint getSentCount() { return sent; }
-  uint getReceivedCount() { return received; }
+  uint getSentCount() const { return sent; }
+  uint getReceivedCount() const { return received; }
 
   void onSend(kj::Function<bool(MessageBuilder& message)> callback) {
     // Invokes the given callback every time a message is sent. Callback can return false to cause
@@ -292,7 +292,7 @@ public:
       }
     }
 
-    bool isIdle() { return idle; }
+    bool isIdle() const { return idle; }
 
     void attach(ConnectionImpl& other) {
       KJ_REQUIRE(partner == kj::none);
@@ -1326,7 +1326,7 @@ KJ_TEST("embargos block CapabilityServerSet") {
   auto pipeline = echo.getCap();
 
   auto unwrap = capSet.getLocalServer(pipeline)
-      .then([](kj::Maybe<test::TestCallOrder::Server&> unwrapped) {
+      .then([](const kj::Maybe<test::TestCallOrder::Server&>& unwrapped) {
     return kj::downcast<TestCallOrderImpl>(KJ_ASSERT_NONNULL(unwrapped)).getCount();
   }).eagerlyEvaluate(nullptr);
 

@@ -690,7 +690,7 @@ inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
 
 template <typename Left, typename Right>
 struct DebugComparison {
-  Left left;
+  const RemoveConst<RemoveReference<Left>>& left;
   Right right;
   StringPtr op;
   bool result;
@@ -703,7 +703,7 @@ struct DebugComparison {
 };
 
 template <typename Left, typename Right>
-String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
+String KJ_STRINGIFY(const DebugComparison<Left, Right>& cmp) {
   return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
 }
 
@@ -715,9 +715,9 @@ struct DebugExpression {
   // Handle comparison operations by constructing a DebugComparison value.
 #define DEFINE_OPERATOR(OP) \
   template <typename U> \
-  DebugComparison<T, U> operator OP(U&& other) { \
+  DebugComparison<T, U> operator OP(U&& other) const { \
     bool result = value OP other; \
-    return { kj::fwd<T>(value), kj::fwd<U>(other), " " #OP " "_kj, result }; \
+    return { value, kj::fwd<U>(other), " " #OP " "_kj, result }; \
   }
   DEFINE_OPERATOR(==);
   DEFINE_OPERATOR(!=);
@@ -730,9 +730,9 @@ struct DebugExpression {
   // Handle binary operators that have equal or lower precedence than comparisons by performing
   // the operation and wrapping the result.
 #define DEFINE_OPERATOR(OP) \
-  template <typename U> inline auto operator OP(U&& other) { \
-    return DebugExpression<decltype(kj::fwd<T>(value) OP kj::fwd<U>(other))>(\
-        kj::fwd<T>(value) OP kj::fwd<U>(other)); \
+  template <typename U> inline auto operator OP(U&& other) const { \
+    return DebugExpression<decltype(value OP kj::fwd<U>(other))>(\
+        value OP kj::fwd<U>(other)); \
   }
   DEFINE_OPERATOR(<<);
   DEFINE_OPERATOR(>>);
@@ -741,7 +741,7 @@ struct DebugExpression {
   DEFINE_OPERATOR(|);
 #undef DEFINE_OPERATOR
 
-  inline operator bool() {
+  inline operator bool() const {
     // No comparison performed, we're just asserting the expression is truthy. This also covers
     // the case of the logic operators && and || -- we cannot overload those because doing so would
     // break short-circuiting behavior.

@@ -27,7 +27,7 @@
 #include "debug.h"
 
 #if !_WIN32 && !__CYGWIN__
-#include <time.h>
+#include <ctime>
 #include <errno.h>
 #endif
 

@@ -38,7 +38,7 @@
 #include <kj/function.h>
 #include <kj/debug.h>
 #include <stdlib.h>
-#include <time.h>
+#include <ctime>
 #include <kj/main.h>
 #include <kj/io.h>
 #include <kj/miniposix.h>
@@ -512,7 +512,7 @@ Orphan<DynamicValue> makeExampleValue(
   }
 }
 
-void checkExampleValue(DynamicValue::Reader value, uint ordinal, schema::Type::Reader type,
+void checkExampleValue(const DynamicValue::Reader& value, uint ordinal, schema::Type::Reader type,
                        uint sharedOrdinalCount) {
   switch (type.which()) {
     case schema::Type::INT32: KJ_ASSERT(value.as<int32_t>() == ordinal * 47327); break;

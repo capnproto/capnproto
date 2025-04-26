@@ -135,7 +135,7 @@ void doAutoReconnectTest(kj::WaitScope& ws,
   // the newly-reconnected destination.
   req3.send().then([](Response<test::TestInterface::FooResults> resp) {
     KJ_EXPECT(resp.getX() == "5656 true 3");
-  }, [](kj::Exception e) {
+  }, [](const kj::Exception& e) {
     KJ_EXPECT(e.getDescription().endsWith("test3 disconnect"));
   }).wait(ws);
 

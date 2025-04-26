@@ -77,7 +77,7 @@ KJ_TEST("synchronous simple cross-thread events") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -129,7 +129,7 @@ KJ_TEST("asynchronous simple cross-thread events") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -188,7 +188,7 @@ KJ_TEST("synchronous promise cross-thread events") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -249,7 +249,7 @@ KJ_TEST("asynchronous promise cross-thread events") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -294,7 +294,7 @@ KJ_TEST("cancel cross-thread event before it runs") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -337,7 +337,7 @@ KJ_TEST("cancel cross-thread event while it runs") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -381,7 +381,7 @@ KJ_TEST("cross-thread cancellation in both directions at once") {
     const Executor* exec;
     {
       auto lock = otherExecutor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -503,13 +503,13 @@ KJ_TEST("cross-thread cancellation cycle") {
     const Executor* exec1;
     {
       auto lock = child1Executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec1 = &KJ_ASSERT_NONNULL(*lock);
     }
     const Executor* exec2;
     {
       auto lock = child2Executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec2 = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -597,7 +597,7 @@ KJ_TEST("synchronous cross-thread event disconnected") {
     Own<const Executor> exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = KJ_ASSERT_NONNULL(*lock).addRef();
     }
 
@@ -653,7 +653,7 @@ KJ_TEST("asynchronous cross-thread event disconnected") {
     Own<const Executor> exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = KJ_ASSERT_NONNULL(*lock).addRef();
     }
 
@@ -699,7 +699,7 @@ KJ_TEST("cross-thread event disconnected before it runs") {
     Own<const Executor> exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = KJ_ASSERT_NONNULL(*lock).addRef();
     }
 
@@ -751,7 +751,7 @@ KJ_TEST("cross-thread event disconnected without holding Executor ref") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -800,7 +800,7 @@ KJ_TEST("detached cross-thread event doesn't cause crash") {
       const Executor* exec;
       {
         auto lock = executor.lockExclusive();
-        lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+        lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
         exec = &KJ_ASSERT_NONNULL(*lock);
       }
 
@@ -864,7 +864,7 @@ KJ_TEST("cross-thread event cancel requested while destination thread being dest
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const kj::Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -1071,7 +1071,7 @@ KJ_TEST("cross-thread fulfiller created using Executor") {
     const Executor* exec;
     {
       auto lock = executor.lockExclusive();
-      lock.wait([&](Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const Maybe<const Executor&>& value) { return value != kj::none; });
       exec = &KJ_ASSERT_NONNULL(*lock);
     }
 
@@ -1109,7 +1109,7 @@ Own<const Executor> makeDeadExecutor() {
       auto lock = executor.lockExclusive();
 
       // Get the other thread's Executor.
-      lock.wait([&](Maybe<const Executor&> value) { return value != kj::none; });
+      lock.wait([&](const Maybe<const Executor&>& value) { return value != kj::none; });
       ownExecutor = (KJ_ASSERT_NONNULL(*lock)).addRef();
 
       KJ_EXPECT(KJ_ASSERT_NONNULL(ownExecutor)->isLive());

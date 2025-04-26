@@ -169,7 +169,7 @@ private:
   static char nulstr[1];
 };
 
-inline kj::StringPtr KJ_STRINGIFY(Text::Builder builder) {
+inline kj::StringPtr KJ_STRINGIFY(const Text::Builder& builder) {
   return builder.asString();
 }
 

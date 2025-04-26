@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #if !defined(_WIN32)
-#include <string.h>
+#include <cstring>
 #endif
 
 namespace kj {

@@ -593,7 +593,7 @@ public:
   inline kj::ArrayPtr<const byte> getDataSectionAsBlob() const;
   inline _::ListReader getPointerSectionAsList() const;
 
-  kj::Array<word> canonicalize();
+  kj::Array<word> canonicalize() const;
 
   template <typename T>
   KJ_ALWAYS_INLINE(bool hasDataField(StructDataOffset offset) const);

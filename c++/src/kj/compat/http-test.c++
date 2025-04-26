@@ -682,7 +682,7 @@ public:
         testCases(testCases),
         responseHeaders(table) {}
 
-  uint getRequestCount() { return requestCount; }
+  uint getRequestCount() const { return requestCount; }
 
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
@@ -3981,7 +3981,7 @@ KJ_TEST("HttpServer WebSocket with application error after accept") {
       HttpHeaderTable headerTable;
       HttpHeaders responseHeaders(headerTable);
       auto webSocket = response.acceptWebSocket(responseHeaders);
-      return webSocket->receive().then([](WebSocket::Message) {
+      return webSocket->receive().then([](const WebSocket::Message&) {
         throwRecoverableException(KJ_EXCEPTION(FAILED, "test exception"));
       }).attach(kj::mv(webSocket));
     }
@@ -4347,7 +4347,7 @@ public:
 
 private:
   kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText, String message,
-      Maybe<HttpService::Response&> response) {
+      const Maybe<HttpService::Response&>& response) {
     KJ_IF_SOME(r, response) {
       HttpHeaderTable headerTable;
       HttpHeaders headers(headerTable);
@@ -5218,7 +5218,7 @@ KJ_TEST("HttpClient WebSocket: client can have a custom WebSocket error handler"
     auto wsClientPromise = httpClient->openWebSocket("/websocket", HttpHeaders(table))
       .then([&](kj::HttpClient::WebSocketResponse resp) { return kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>()); })
       .then([](kj::Own<kj::WebSocket> webSocket) -> kj::Promise<kj::WebSocket::Message> { return webSocket->receive().attach(kj::mv(webSocket)); })
-      .eagerlyEvaluate([](kj::Exception e) -> kj::WebSocket::Message { return kj::str("irrelevant value"); });
+      .eagerlyEvaluate([](const kj::Exception& e) -> kj::WebSocket::Message { return kj::str("irrelevant value"); });
 
     wsClientPromise.wait(waitScope);
     KJ_EXPECT(errorCatcher.errors.size() == 1);

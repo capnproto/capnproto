@@ -30,7 +30,7 @@
 #if _WIN32
 #include <windows.h>
 #else
-#include <time.h>
+#include <ctime>
 #endif
 
 namespace kj {

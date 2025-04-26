@@ -991,7 +991,7 @@ private:
     // If the capnp stream turns out to resolve back to this process, shorten the path.
     // Also, implement whenWriteDisconnected() based on this.
     return factory.streamSet.getLocalServer(capnpClient)
-        .then([this](kj::Maybe<capnp::ByteStream::Server&> server) -> kj::Promise<void> {
+        .then([this](const kj::Maybe<capnp::ByteStream::Server&>&& server) -> kj::Promise<void> {
       KJ_IF_SOME(s, server) {
         // Yay, we discovered that the ByteStream actually points back to a local KJ stream.
         // We can use this to shorten the path by skipping the RPC machinery.

@@ -336,14 +336,14 @@ KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 #undef METHOD_NAME
 };
 
-kj::StringPtr KJ_STRINGIFY(HttpMethod method) {
+kj::StringPtr KJ_STRINGIFY(const HttpMethod& method) {
   auto index = static_cast<uint>(method);
   KJ_ASSERT(index < size(METHOD_NAMES), "invalid HTTP method");
 
   return METHOD_NAMES[index];
 }
 
-kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method) {
+kj::StringPtr KJ_STRINGIFY(const HttpConnectMethod& method) {
   return "CONNECT"_kj;
 }
 
@@ -1231,7 +1231,7 @@ static kj::Maybe<HttpByteRange> consumeRangeSpec(const char*& ptr, uint64_t cont
 
 }  // namespace
 
-kj::String KJ_STRINGIFY(HttpByteRange range) {
+kj::String KJ_STRINGIFY(const HttpByteRange& range) {
   return kj::str(range.start, "-", range.end);
 }
 
@@ -1393,7 +1393,7 @@ public:
     messageReadQueue = kj::mv(paf.promise);
   }
 
-  bool canReuse() {
+  bool canReuse() const {
     return !broken && pendingMessageCount == 0;
   }
 
@@ -2242,19 +2242,19 @@ class HttpOutputStream: public WrappableStreamMixin<HttpOutputStream> {
 public:
   HttpOutputStream(AsyncOutputStream& inner): inner(inner) {}
 
-  bool isInBody() {
+  bool isInBody() const {
     return inBody;
   }
 
-  bool canReuse() {
+  bool canReuse() const {
     return !inBody && !broken && !writeInProgress;
   }
 
-  bool canWriteBodyData() {
+  bool canWriteBodyData() const {
     return !writeInProgress && inBody;
   }
 
-  bool isBroken() {
+  bool isBroken() const {
     return broken;
   }
 
@@ -2362,7 +2362,7 @@ public:
     return inner.whenWriteDisconnected();
   }
 
-  bool isWriteInProgress() { return writeInProgress; }
+  bool isWriteInProgress() const { return writeInProgress; }
 
 private:
   AsyncOutputStream& inner;
@@ -2885,7 +2885,7 @@ public:
               // We must reset context on each message.
               decompressor.reset();
             }
-            
+
             auto decompressedOrError = decompressor.processMessage(message, originalMaxSize);
             KJ_SWITCH_ONEOF(decompressedOrError) {
               KJ_CASE_ONEOF(protocolError, ProtocolError) {
@@ -3055,7 +3055,7 @@ private:
     Mask(): maskBytes { 0, 0, 0, 0 } {}
     Mask(const byte* ptr) { memcpy(maskBytes, ptr, 4); }
 
-    Mask(kj::Maybe<EntropySource&> generator) {
+    Mask(const kj::Maybe<EntropySource&>& generator) {
       KJ_IF_SOME(g, generator) {
         g.generate(maskBytes);
       } else {
@@ -3539,7 +3539,7 @@ private:
           // We must reset context on each message.
           compressor.reset();
         }
-        
+
         KJ_SWITCH_ONEOF(compressor.processMessage(message)) {
           KJ_CASE_ONEOF(error, ProtocolError) {
             KJ_FAIL_REQUIRE("Error compressing websocket message: ", error.description);
@@ -5146,7 +5146,7 @@ kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers) {
 }
 
 kj::Maybe<CompressionParameters> tryParseAllExtensionOffers(StringPtr offers,
-    CompressionParameters manualConfig) {
+    const CompressionParameters& manualConfig) {
   // Similar to `tryParseExtensionOffers()`, however, this function is called when parsing in
   // `MANUAL_COMPRESSION` mode. In some cases, the server's configuration might not support the
   // `server_no_context_takeover` or `server_max_window_bits` parameters. Essentially, this function
@@ -5921,11 +5921,11 @@ void PausableReadAsyncIoStream::unpause() {
   }
 }
 
-bool PausableReadAsyncIoStream::getCurrentlyReading() {
+bool PausableReadAsyncIoStream::getCurrentlyReading() const {
   return currentlyReading;
 }
 
-bool PausableReadAsyncIoStream::getCurrentlyWriting() {
+bool PausableReadAsyncIoStream::getCurrentlyWriting() const{
   return currentlyWriting;
 }
 

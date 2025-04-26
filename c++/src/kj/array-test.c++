@@ -516,7 +516,7 @@ TEST(Array, AttachFromArrayPtr) {
 
 struct Std {
   template<typename T>
-  static std::span<T> from(Array<T>* arr) {
+  static std::span<T> from(Array<T>* arr)  {
     return std::span<T>(arr->begin(), arr->size());
   }
 };

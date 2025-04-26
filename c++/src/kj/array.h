@@ -251,6 +251,9 @@ public:
   // Like Own<T>::attach(), but attaches to an Array.
 
   template <typename U>
+  inline auto as() const { return U::from(this); }
+
+  template <typename U>
   inline auto as() { return U::from(this); }
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
@@ -442,7 +445,7 @@ public:
 
     T* target = ptr + size;
     if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-      // const_cast is safe here because the member won't ever be dereferenced because it 
+      // const_cast is safe here because the member won't ever be dereferenced because it
       // points to the end of the segment.
       pos = const_cast<RemoveConst<T>*>(target);
     } else {
@@ -454,7 +457,7 @@ public:
 
   void clear() {
     if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-      // const_cast is safe here because the member won't ever be dereferenced because it 
+      // const_cast is safe here because the member won't ever be dereferenced because it
       // points to the end of the segment.
       pos = const_cast<RemoveConst<T>*>(ptr);
     } else {
@@ -471,7 +474,7 @@ public:
     if (target > pos) {
       // expand
       if (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
-        // const_cast is safe here because the member won't ever be dereferenced because it 
+        // const_cast is safe here because the member won't ever be dereferenced because it
         // points to the end of the segment.
         pos = const_cast<RemoveConst<T>*>(target);
       } else {
@@ -482,7 +485,7 @@ public:
     } else {
       // truncate
       if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-        // const_cast is safe here because the member won't ever be dereferenced because it 
+        // const_cast is safe here because the member won't ever be dereferenced because it
         // points to the end of the segment.
         pos = const_cast<RemoveConst<T>*>(target);
       } else {
@@ -637,7 +640,7 @@ struct Mapper {
     }
     return builder.finish();
   }
-  typedef decltype(*kj::instance<T>().begin()) Element;
+  typedef const decltype(*kj::instance<T>().begin())& Element;
 };
 
 template <typename T, size_t s>

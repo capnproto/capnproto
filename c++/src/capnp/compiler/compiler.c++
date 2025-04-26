@@ -73,9 +73,9 @@ public:
        List<Declaration::BrandParameter>::Reader genericParams);
   // Create a dummy node representing a built-in declaration, like "Int32" or "true".
 
-  uint64_t getId() { return id; }
-  uint getParameterCount() { return genericParamCount; }
-  Declaration::Which getKind() { return kind; }
+  uint64_t getId() const { return id; }
+  uint getParameterCount() const { return genericParamCount; }
+  Declaration::Which getKind() const { return kind; }
 
   kj::Maybe<Schema> getBootstrapSchema();
   kj::Maybe<schema::Node::Reader> getFinalSchema();
@@ -145,7 +145,7 @@ private:
     State state;
     // Indicates which fields below are valid.
 
-    inline bool stateHasReached(State minimumState) {
+    inline bool stateHasReached(State minimumState) const {
       return state >= minimumState;
     }
     inline void advanceState(State newState) {

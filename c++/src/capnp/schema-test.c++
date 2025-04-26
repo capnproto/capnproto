@@ -28,7 +28,7 @@
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
 namespace capnp {
 namespace schema {
-inline kj::String KJ_STRINGIFY(Type::Which which) {
+inline kj::String KJ_STRINGIFY(const Type::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
 }  // namespace schema

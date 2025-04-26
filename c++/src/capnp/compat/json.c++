@@ -192,7 +192,7 @@ void JsonCodec::setHasMode(HasMode mode) { impl->hasMode = mode; }
 
 void JsonCodec::setRejectUnknownFields(bool enabled) { impl->rejectUnknownFields = enabled; }
 
-kj::String JsonCodec::encode(DynamicValue::Reader value, Type type) const {
+kj::String JsonCodec::encode(const DynamicValue::Reader& value, Type type) const {
   MallocMessageBuilder message(128);
   // Use a smaller initial segment size, this significantly improves performance when encoding
   // short strings.
@@ -217,12 +217,12 @@ Orphan<DynamicValue> JsonCodec::decode(
   return decode(json, type, orphanage);
 }
 
-kj::String JsonCodec::encodeRaw(JsonValue::Reader value) const {
+kj::String JsonCodec::encodeRaw(const JsonValue::Reader& value) const {
   bool multiline = false;
   return impl->encodeRaw(value, 0, multiline, false).flatten();
 }
 
-void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder output) const {
+void JsonCodec::encode(const DynamicValue::Reader& input, Type type, JsonValue::Builder output) const {
   // TODO(someday): For interfaces, check for handlers on superclasses, per documentation...
   // TODO(someday): For branded types, should we check for handlers on the generic?
   // TODO(someday): Allow registering handlers for "all structs", "all lists", etc?
@@ -371,7 +371,7 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
   }
 }
 
-void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader input,
+void JsonCodec::encodeField(StructSchema::Field field, const DynamicValue::Reader& input,
                             JsonValue::Builder output) const {
   KJ_IF_SOME(handler, impl->fieldHandlers.find(field)) {
     handler->encodeBase(*this, input, output);
@@ -381,7 +381,7 @@ void JsonCodec::encodeField(StructSchema::Field field, DynamicValue::Reader inpu
   encode(input, field.getType(), output);
 }
 
-Orphan<DynamicList> JsonCodec::decodeArray(List<JsonValue>::Reader input, ListSchema type, Orphanage orphanage) const {
+Orphan<DynamicList> JsonCodec::decodeArray(const List<JsonValue>::Reader& input, ListSchema type, Orphanage orphanage) const {
   auto orphan = orphanage.newOrphan(type, input.size());
   auto output = orphan.get();
   for (auto i: kj::indices(input)) {
@@ -390,7 +390,7 @@ Orphan<DynamicList> JsonCodec::decodeArray(List<JsonValue>::Reader input, ListSc
   return orphan;
 }
 
-void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const {
+void JsonCodec::decodeObject(const JsonValue::Reader& input, StructSchema type, Orphanage orphanage, DynamicStruct::Builder output) const {
   KJ_REQUIRE(input.isObject(), "Expected object value") { return; }
   for (auto field: input.getObject()) {
     KJ_IF_SOME(fieldSchema, type.findFieldByName(field.getName())) {
@@ -401,11 +401,11 @@ void JsonCodec::decodeObject(JsonValue::Reader input, StructSchema type, Orphana
   }
 }
 
-bool isPointerToJsonNull(JsonValue::Reader input, Type type) {
+bool isPointerToJsonNull(const JsonValue::Reader& input, Type type) {
   return input.isNull() && (type.isText() || type.isData() || type.isList() || type.isStruct());
 }
 
-void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader fieldValue,
+void JsonCodec::decodeField(StructSchema::Field fieldSchema, const JsonValue::Reader& fieldValue,
                             Orphanage orphanage, DynamicStruct::Builder output) const {
   auto fieldType = fieldSchema.getType();
 
@@ -420,7 +420,7 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
   }
 }
 
-void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) const {
+void JsonCodec::decode(const JsonValue::Reader& input, DynamicStruct::Builder output) const {
   auto type = output.getSchema();
 
   KJ_IF_SOME(handler, impl->typeHandlers.find(type)) {
@@ -431,7 +431,7 @@ void JsonCodec::decode(JsonValue::Reader input, DynamicStruct::Builder output) c
 }
 
 Orphan<DynamicValue> JsonCodec::decode(
-    JsonValue::Reader input, Type type, Orphanage orphanage) const {
+    const JsonValue::Reader& input, Type type, Orphanage orphanage) const {
   KJ_IF_SOME(handler, impl->typeHandlers.find(type)) {
     return handler->decodeBase(*this, input, type, orphanage);
   }
@@ -881,11 +881,11 @@ void JsonCodec::decodeRaw(kj::ArrayPtr<const char> input, JsonValue::Builder out
 // -----------------------------------------------------------------------------
 
 Orphan<DynamicValue> JsonCodec::HandlerBase::decodeBase(
-    const JsonCodec& codec, JsonValue::Reader input, Type type, Orphanage orphanage) const {
+    const JsonCodec& codec, const JsonValue::Reader& input, Type type, Orphanage orphanage) const {
   KJ_FAIL_ASSERT("JSON decoder handler type / value type mismatch");
 }
 void JsonCodec::HandlerBase::decodeStructBase(
-    const JsonCodec& codec, JsonValue::Reader input, DynamicStruct::Builder output) const {
+    const JsonCodec& codec, const JsonValue::Reader& input, DynamicStruct::Builder output) const {
   KJ_FAIL_ASSERT("JSON decoder handler type / value type mismatch");
 }
 
@@ -913,12 +913,12 @@ static constexpr uint64_t JSON_HEX_ANNOTATION_ID = 0xf061e22f0ae5c7b5ull;
 
 class JsonCodec::Base64Handler final: public JsonCodec::Handler<capnp::Data> {
 public:
-  void encode(const JsonCodec& codec, capnp::Data::Reader input,
+  void encode(const JsonCodec& codec, const capnp::Data::Reader& input,
               JsonValue::Builder output) const override {
     output.setString(kj::encodeBase64(input));
   }
 
-  Orphan<capnp::Data> decode(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<capnp::Data> decode(const JsonCodec& codec, const JsonValue::Reader& input,
                              Orphanage orphanage) const override {
     return orphanage.newOrphanCopy(capnp::Data::Reader(kj::decodeBase64(input.getString())));
   }
@@ -926,12 +926,12 @@ public:
 
 class JsonCodec::HexHandler final: public JsonCodec::Handler<capnp::Data> {
 public:
-  void encode(const JsonCodec& codec, capnp::Data::Reader input,
+  void encode(const JsonCodec& codec, const capnp::Data::Reader& input,
               JsonValue::Builder output) const override {
     output.setString(kj::encodeHex(input));
   }
 
-  Orphan<capnp::Data> decode(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<capnp::Data> decode(const JsonCodec& codec, const JsonValue::Reader& input,
                              Orphanage orphanage) const override {
     return orphanage.newOrphanCopy(capnp::Data::Reader(kj::decodeHex(input.getString())));
   }
@@ -1124,7 +1124,7 @@ public:
 
   const StructSchema schema;
 
-  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+  void encode(const JsonCodec& codec, const DynamicStruct::Reader& input,
               JsonValue::Builder output) const override {
     kj::Vector<FlattenedField> flattenedFields;
     gatherForEncode(codec, input, nullptr, nullptr, flattenedFields);
@@ -1145,7 +1145,7 @@ public:
     }
   }
 
-  void decode(const JsonCodec& codec, JsonValue::Reader input,
+  void decode(const JsonCodec& codec, const JsonValue::Reader& input,
               DynamicStruct::Builder output) const override {
     KJ_REQUIRE(input.isObject());
     kj::HashSet<const void*> unionsSeen;
@@ -1236,10 +1236,10 @@ private:
                    kj::OneOf<StructSchema::Field, Type> type, DynamicValue::Reader value)
         : ownName(prefix.size() > 0 ? kj::str(prefix, name) : nullptr),
           name(prefix.size() > 0 ? ownName : name),
-          type(type), value(value) {}
+          type(type), value(kj::mv(value)) {}
   };
 
-  void gatherForEncode(const JsonCodec& codec, DynamicValue::Reader input,
+  void gatherForEncode(const JsonCodec& codec, const DynamicValue::Reader& input,
                        kj::StringPtr prefix, kj::StringPtr morePrefix,
                        kj::Vector<FlattenedField>& flattenedFields) const {
     kj::String ownPrefix;
@@ -1409,7 +1409,7 @@ private:
 
 class JsonCodec::JsonValueHandler final: public JsonCodec::Handler<DynamicStruct> {
 public:
-  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+  void encode(const JsonCodec& codec, const DynamicStruct::Reader& input,
               JsonValue::Builder output) const override {
 #if _MSC_VER && !defined(__clang__)
     // TODO(msvc): Hack to work around missing AnyStruct::Builder constructor on MSVC.
@@ -1419,13 +1419,13 @@ public:
 #endif
   }
 
-  void decode(const JsonCodec& codec, JsonValue::Reader input,
+  void decode(const JsonCodec& codec, const JsonValue::Reader& input,
               DynamicStruct::Builder output) const override {
     rawCopy(input, kj::mv(output));
   }
 
 private:
-  void rawCopy(AnyStruct::Reader input, AnyStruct::Builder output) const {
+  void rawCopy(const AnyStruct::Reader& input, AnyStruct::Builder output) const {
     // HACK: Manually copy using AnyStruct, so that if JsonValue's definition changes, this code
     //   doesn't need to be updated. However, note that if JsonValue ever adds new fields that
     //   change its size, and the input struct is a newer version than the output, we may lose

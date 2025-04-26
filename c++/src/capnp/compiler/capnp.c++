@@ -714,7 +714,7 @@ private:
     KJ_UNREACHABLE;
   }
 
-  Format formatFromDeprecatedFlags(Format defaultFormat) {
+  Format formatFromDeprecatedFlags(Format defaultFormat) const {
     // For deprecated commands "decode" and "encode".
     if (flat) {
       if (packed) {

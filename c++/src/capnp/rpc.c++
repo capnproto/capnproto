@@ -31,7 +31,6 @@
 #include <queue>
 #include <capnp/rpc.capnp.h>
 #include <kj/io.h>
-#include <kj/map.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -137,7 +136,7 @@ kj::Exception toException(const rpc::Exception::Reader& exception) {
 }
 
 void fromException(const kj::Exception& exception, rpc::Exception::Builder builder,
-                   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder) {
+                   const kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&>& traceEncoder) {
   kj::StringPtr description = exception.getDescription();
 
   // Include context, if any.
@@ -1804,7 +1803,7 @@ private:
   kj::Array<ExportId> writeDescriptors(
       kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
       rpc::Payload::Builder payload, kj::Vector<int>& fds,
-      kj::Maybe<kj::HashMap<ClientHook*, kj::Own<ClientHook>>&> describedMap = kj::none) {
+      const kj::Maybe<kj::HashMap<ClientHook*, kj::Own<ClientHook>>&>& describedMap = kj::none) {
     // Write all descriptors for a cap table.
     //
     // If `describedMap` is non-null, then if writing a descriptor of some capability returns

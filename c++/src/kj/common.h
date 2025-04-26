@@ -454,6 +454,11 @@ template <typename T> using NoInfer = typename NoInfer_<T>::Type;
 // Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of
 // the type based on the parameter value.
 
+template<typename T> struct RemoveReference_ { using type = T; };
+template<typename T> struct RemoveReference_<T&> { using type = T; };
+template<typename T> struct RemoveReference_<T&&> { using type = T; };
+template<typename T> using RemoveReference = typename RemoveReference_<T>::type;
+
 template <typename T> struct RemoveConst_ { typedef T Type; };
 template <typename T> struct RemoveConst_<const T> { typedef T Type; };
 template <typename T> using RemoveConst = typename RemoveConst_<T>::Type;
@@ -1980,6 +1985,9 @@ public:
   // You must include kj/array.h to call this.
 
   template <typename U>
+  inline auto as() const { return U::from(this); }
+
+  template <typename U>
   inline auto as() { return U::from(this); }
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
@@ -2109,6 +2117,27 @@ To implicitCast(From&& from) {
   // `implicitCast<T>(value)` casts `value` to type `T` only if the conversion is implicit.  Useful
   // for e.g. resolving ambiguous overloads without sacrificing type-safety.
   return kj::fwd<From>(from);
+}
+
+template <typename To, typename From>
+Maybe<const To&> dynamicDowncastIfAvailable(const From& from) {
+  // If RTTI is disabled, always returns kj::none.  Otherwise, works like dynamic_cast.  Useful
+  // in situations where dynamic_cast could allow an optimization, but isn't strictly necessary
+  // for correctness.  It is highly recommended that you try to arrange all your dynamic_casts
+  // this way, as a dynamic_cast that is necessary for correctness implies a flaw in the interface
+  // design.
+
+  // Force a compile error if To is not a subtype of From.  Cross-casting is rare; if it is needed
+  // we should have a separate cast function like dynamicCrosscastIfAvailable().
+  if (false) {
+    kj::implicitCast<const From*>(kj::implicitCast<const To*>(nullptr));
+  }
+
+#if KJ_NO_RTTI
+  return kj::none;
+#else
+  return dynamic_cast<const To*>(&from);
+#endif
 }
 
 template <typename To, typename From>
@@ -2288,7 +2317,7 @@ class ThreadId {
   // Implemented as thread_local address, so could be efficient even for production
   // environments especially with LTO.
 
-public:  
+public:
   static ThreadId current();
   // Obtain current thread id
 
@@ -2299,7 +2328,7 @@ public:
 
 private:
   inline ThreadId(void* id) : id(id) {}
-  void* id;  
+  void* id;
 };
 
 }  // namespace kj

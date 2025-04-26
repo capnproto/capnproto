@@ -3238,7 +3238,7 @@ private:
 
 class LocalPeerIdentityImpl final: public LocalPeerIdentity {
 public:
-  LocalPeerIdentityImpl(Credentials creds): creds(creds) {}
+  LocalPeerIdentityImpl(Credentials creds): creds(kj::mv(creds)) {}
 
   kj::String toString() override {
     char pidBuffer[16]{};

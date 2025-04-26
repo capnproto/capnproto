@@ -193,7 +193,7 @@ struct CanceledException { };
 // should almost never catch this exception, unless you need to modify stack unwinding for some
 // reason. kj::runCatchingExceptions() does not catch it.
 
-StringPtr KJ_STRINGIFY(Exception::Type type);
+StringPtr KJ_STRINGIFY(const Exception::Type& type);
 String KJ_STRINGIFY(const Exception& e);
 
 // =======================================================================================
@@ -210,7 +210,7 @@ enum class LogSeverity {
   // Make sure to update the stringifier if you add a new severity level.
 };
 
-StringPtr KJ_STRINGIFY(LogSeverity severity);
+StringPtr KJ_STRINGIFY(const LogSeverity& severity);
 
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order

@@ -2989,7 +2989,7 @@ MessageSizeCounts StructReader::totalSize() const {
   return result;
 }
 
-kj::Array<word> StructReader::canonicalize() {
+kj::Array<word> StructReader::canonicalize() const {
   auto size = totalSize().wordCount + POINTER_SIZE_IN_WORDS;
   kj::Array<word> backing = kj::heapArray<word>(unbound(size / WORDS));
   WireHelpers::zeroMemory(backing.asPtr());

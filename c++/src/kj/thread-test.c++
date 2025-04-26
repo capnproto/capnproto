@@ -60,7 +60,7 @@ KJ_TEST("detaching thread doesn't delete function") {
     }
     Functor& operator=(Functor&& other) = delete;
 
-    void operator()() {
+    void operator()() const {
       while (!*canExit) delay();
     }
   };

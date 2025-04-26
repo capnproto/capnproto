@@ -407,7 +407,7 @@ KJ_TEST("Can trace through coroutines") {
   // Get an async trace when the promise is fulfilled. We eagerlyEvaluate() to make sure the
   // continuation executes while the event loop is running.
   paf.promise = paf.promise.then([]() {
-    void* scratch[16];
+    void* scratch[16]{};
     auto trace = getAsyncTrace(scratch);
     // We expect one entry for waitImpl(), one for the coroutine, and one for this continuation.
     // When building in debug mode with CMake, I observed this count can be 2. The missing frame is

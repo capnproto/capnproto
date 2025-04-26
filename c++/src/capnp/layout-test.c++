@@ -28,7 +28,7 @@
 #if CAPNP_DEBUG_TYPES
 namespace kj {
   template <typename T, typename U>
-  String KJ_STRINGIFY(kj::Quantity<T, U> value) {
+  String KJ_STRINGIFY(const kj::Quantity<T, U>& value) {
     return kj::str(unboundAs<uint64_t>(value / kj::unit<kj::Quantity<T, U>>()));
   }
 

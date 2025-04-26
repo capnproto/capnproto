@@ -90,7 +90,7 @@ class MockOutputStream: public OutputStream {
 public:
   kj::Vector<byte> bytes;
 
-  kj::String decompress() {
+  kj::String decompress() const {
     MockInputStream rawInput(bytes, kj::maxValue);
     GzipInputStream gzip(rawInput);
     return gzip.readAllText();
@@ -103,7 +103,7 @@ class MockAsyncOutputStream: public AsyncOutputStream {
 public:
   kj::Vector<byte> bytes;
 
-  kj::String decompress(WaitScope& ws) {
+  kj::String decompress(WaitScope& ws) const {
     MockAsyncInputStream rawInput(bytes, kj::maxValue);
     GzipAsyncInputStream gzip(rawInput);
     return gzip.readAllText().wait(ws);

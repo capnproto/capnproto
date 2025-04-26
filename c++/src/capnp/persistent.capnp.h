@@ -174,7 +174,7 @@ public:
 #endif  // !CAPNP_LITE
 
   template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
-  typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader asPersistentGeneric() {
+  typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader asPersistentGeneric() const {
     return typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader(_reader);
   }
 
@@ -182,7 +182,7 @@ public:
   inline  ::capnp::ReaderFor<Owner> getSealFor() const;
 
 private:
-  ::capnp::_::StructReader _reader;
+  const ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   template <typename, ::capnp::Kind>

@@ -26,7 +26,7 @@
 #include "time.h"
 #include "debug.h"
 #include <kj/test.h>
-#include <time.h>
+#include <ctime>
 
 #if _WIN32
 #include <windows.h>

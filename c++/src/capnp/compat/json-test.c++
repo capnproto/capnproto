@@ -705,7 +705,7 @@ KJ_TEST("unknown fields") {
 
 class TestCallHandler: public JsonCodec::Handler<Text> {
 public:
-  void encode(const JsonCodec& codec, Text::Reader input,
+  void encode(const JsonCodec& codec, const Text::Reader& input,
               JsonValue::Builder output) const override {
     auto call = output.initCall();
     call.setFunction("Frob");
@@ -714,7 +714,7 @@ public:
     params[1].setString(input);
   }
 
-  Orphan<Text> decode(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<Text> decode(const JsonCodec& codec, const JsonValue::Reader& input,
                       Orphanage orphanage) const override {
     KJ_UNIMPLEMENTED("TestHandler::decode");
   }
@@ -722,7 +722,7 @@ public:
 
 class TestDynamicStructHandler: public JsonCodec::Handler<DynamicStruct> {
 public:
-  void encode(const JsonCodec& codec, DynamicStruct::Reader input,
+  void encode(const JsonCodec& codec, const DynamicStruct::Reader& input,
               JsonValue::Builder output) const override {
     auto fields = input.getSchema().getFields();
     auto items = output.initArray(fields.size());
@@ -737,7 +737,7 @@ public:
     }
   }
 
-  void decode(const JsonCodec& codec, JsonValue::Reader input,
+  void decode(const JsonCodec& codec, const JsonValue::Reader& input,
               DynamicStruct::Builder output) const override {
     auto orphanage = Orphanage::getForMessageContaining(output);
     auto fields = output.getSchema().getFields();
@@ -868,7 +868,7 @@ public:
   }
 
   test::TestInterface::Client decode(
-      const JsonCodec& codec, JsonValue::Reader input) const override {
+      const JsonCodec& codec, const JsonValue::Reader& input) const override {
     return nullptr;
   }
 };
@@ -936,12 +936,12 @@ R"({
 
 class PrefixAdder: public JsonCodec::Handler<capnp::Text> {
 public:
-  void encode(const JsonCodec& codec, capnp::Text::Reader input,
+  void encode(const JsonCodec& codec, const capnp::Text::Reader& input,
               JsonValue::Builder output) const override {
     output.setString(kj::str("add-prefix-", input));
   }
 
-  Orphan<capnp::Text> decode(const JsonCodec& codec, JsonValue::Reader input,
+  Orphan<capnp::Text> decode(const JsonCodec& codec, const JsonValue::Reader& input,
                              Orphanage orphanage) const override {
     return orphanage.newOrphanCopy(capnp::Text::Reader(input.getString().slice(11)));
   }

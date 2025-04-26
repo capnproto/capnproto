@@ -34,7 +34,6 @@
 #endif
 
 #if KJ_USE_FIBERS && __linux__
-#include <errno.h>
 #include <ucontext.h>
 #endif
 
@@ -1140,7 +1139,7 @@ TEST(Async, TaskSet) {
       // It had better be canceled too!
       tasks.add(kj::Promise<void>(kj::READY_NOW)
           .then([]() { KJ_FAIL_EXPECT("shouldn't get here"); },
-                [](auto) { KJ_FAIL_EXPECT("shouldn't get here"); })
+                [](const auto&) { KJ_FAIL_EXPECT("shouldn't get here"); })
           .attach(kj::defer([&]() {
         destroyed = true;
       })));

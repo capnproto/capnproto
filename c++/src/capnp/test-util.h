@@ -37,25 +37,25 @@ CAPNP_BEGIN_HEADER
 namespace capnproto_test {
 namespace capnp {
 namespace test {
-inline kj::String KJ_STRINGIFY(TestUnion::Union0::Which which) {
+inline kj::String KJ_STRINGIFY(const TestUnion::Union0::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
-inline kj::String KJ_STRINGIFY(TestUnion::Union1::Which which) {
+inline kj::String KJ_STRINGIFY(const TestUnion::Union1::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
-inline kj::String KJ_STRINGIFY(TestUnion::Union2::Which which) {
+inline kj::String KJ_STRINGIFY(const TestUnion::Union2::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
-inline kj::String KJ_STRINGIFY(TestUnion::Union3::Which which) {
+inline kj::String KJ_STRINGIFY(const TestUnion::Union3::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
-inline kj::String KJ_STRINGIFY(TestUnnamedUnion::Which which) {
+inline kj::String KJ_STRINGIFY(const TestUnnamedUnion::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
-inline kj::String KJ_STRINGIFY(TestGroups::Groups::Which which) {
+inline kj::String KJ_STRINGIFY(const TestGroups::Groups::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
-inline kj::String KJ_STRINGIFY(TestInterleavedGroups::Group1::Which which) {
+inline kj::String KJ_STRINGIFY(const TestInterleavedGroups::Group1::Which& which) {
   return kj::str(static_cast<uint16_t>(which));
 }
 }  // namespace test

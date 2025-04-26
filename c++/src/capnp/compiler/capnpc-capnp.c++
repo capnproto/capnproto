@@ -60,7 +60,7 @@ struct Indent {
   Indent() = default;
   inline Indent(int amount): amount(amount) {}
 
-  Indent next() {
+  Indent next() const {
     return Indent(amount + 2);
   }
 

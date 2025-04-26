@@ -49,11 +49,11 @@ class Indent {
 public:
   explicit Indent(bool enable): amount(enable ? 1 : 0) {}
 
-  Indent next() {
+  Indent next() const {
     return Indent(amount == 0 ? 0 : amount + 1);
   }
 
-  kj::StringTree delimit(kj::Array<kj::StringTree> items, PrintMode mode, PrintKind kind) {
+  kj::StringTree delimit(kj::Array<kj::StringTree> items, PrintMode mode, PrintKind kind) const {
     if (amount == 0 || canPrintAllInline(items, kind)) {
       return kj::StringTree(kj::mv(items), ", ");
     } else {
@@ -224,7 +224,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
   KJ_UNREACHABLE;
 }
 
-kj::StringTree stringify(DynamicValue::Reader value) {
+kj::StringTree stringify(const DynamicValue::Reader& value) {
   return print(value, schema::Type::STRUCT, Indent(false), BARE);
 }
 
@@ -243,7 +243,7 @@ kj::StringTree prettyPrint(DynamicList::Builder value) { return prettyPrint(valu
 
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value) { return stringify(value.asReader()); }
-kj::StringTree KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicEnum& value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }
@@ -251,7 +251,7 @@ kj::StringTree KJ_STRINGIFY(const DynamicList::Builder& value) { return stringif
 
 namespace _ {  // private
 
-kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema) {
+kj::StringTree structString(const StructReader& reader, const RawBrandedSchema& schema) {
   return stringify(DynamicStruct::Reader(Schema(&schema).asStruct(), reader));
 }
 

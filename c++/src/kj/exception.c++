@@ -108,7 +108,7 @@ inline T* lsanIgnoreObjectAndReturn(T* ptr) {
 
 namespace kj {
 
-StringPtr KJ_STRINGIFY(LogSeverity severity) {
+StringPtr KJ_STRINGIFY(const LogSeverity& severity) {
   static const char* SEVERITY_STRINGS[] = {
     "info",
     "warning",
@@ -276,7 +276,7 @@ struct Subprocess {
     }
   }
 
-  int wait() {
+  int wait() const {
     int status;
     KJ_SYSCALL(waitpid(pid, &status, 0));
     return status;
@@ -894,7 +894,7 @@ void resetCrashHandlers() {
   std::set_terminate(nullptr);
 }
 
-StringPtr KJ_STRINGIFY(Exception::Type type) {
+StringPtr KJ_STRINGIFY(const Exception::Type& type) {
   static const char* TYPE_STRINGS[] = {
     "failed",
     "overloaded",

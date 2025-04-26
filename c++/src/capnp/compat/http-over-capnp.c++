@@ -403,7 +403,7 @@ public:
     }
   }
 
-  bool hasSentResponse() {
+  bool hasSentResponse() const {
     return sentResponse;
   }
 

@@ -140,7 +140,7 @@ public:
   GlobalErrorReporter& getErrorReporter() { return errorReporter; }
 
   void setFileIdsRequired(bool value) { fileIdsRequired = value; }
-  bool areFileIdsRequired() { return fileIdsRequired; }
+  bool areFileIdsRequired() const { return fileIdsRequired; }
 
 private:
   GlobalErrorReporter& errorReporter;

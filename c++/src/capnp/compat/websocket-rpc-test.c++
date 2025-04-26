@@ -64,7 +64,7 @@ KJ_TEST("WebSocketMessageStream") {
 
   // Close the websocket, and make sure the other end gets kj::none when reading.
   auto endPromise = msgStreamA.end();
-  msgStreamB.tryReadMessage(nullptr).then([](auto maybe) -> kj::Promise<void> {
+  msgStreamB.tryReadMessage(nullptr).then([](auto&& maybe) -> kj::Promise<void> {
     if (maybe != kj::none) {
       KJ_FAIL_ASSERT("Should have gotten kj::none after websocket was closed");
     }

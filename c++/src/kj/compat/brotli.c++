@@ -57,7 +57,7 @@ int getBrotliWindowBits(kj::byte peek) {
 namespace _ {  // private
 
 BrotliOutputContext::BrotliOutputContext(kj::Maybe<int> compressionLevel,
-                                         kj::Maybe<int> windowBitsParam)
+                                         const kj::Maybe<int>& windowBitsParam)
                                          : nextIn(nullptr), availableIn(0) {
   KJ_IF_SOME(level, compressionLevel) {
     // Emulate zlib's behavior of using -1 to signify the default quality
@@ -152,7 +152,7 @@ kj::Tuple<bool, kj::ArrayPtr<const byte>> BrotliOutputContext::pumpOnce(
 
 // =======================================================================================
 
-BrotliInputStream::BrotliInputStream(InputStream& inner, kj::Maybe<int> windowBitsParam)
+BrotliInputStream::BrotliInputStream(InputStream& inner, const kj::Maybe<int>& windowBitsParam)
     : inner(inner), windowBits(windowBitsParam.orDefault(_::KJ_BROTLI_MAX_DEC_WBITS)),
     nextIn(nullptr), availableIn(0) {
   KJ_REQUIRE(windowBits >= BROTLI_MIN_WINDOW_BITS && windowBits <= BROTLI_MAX_WINDOW_BITS,
@@ -247,7 +247,7 @@ void BrotliOutputStream::pump(BrotliEncoderOperation flush) {
 // =======================================================================================
 
 BrotliAsyncInputStream::BrotliAsyncInputStream(AsyncInputStream& inner,
-                                               kj::Maybe<int> windowBitsParam)
+                                               const kj::Maybe<int>& windowBitsParam)
     : inner(inner), windowBits(windowBitsParam.orDefault(_::KJ_BROTLI_MAX_DEC_WBITS)),
     nextIn(nullptr), availableIn(0) {
   KJ_REQUIRE(windowBits >= BROTLI_MIN_WINDOW_BITS && windowBits <= BROTLI_MAX_WINDOW_BITS,

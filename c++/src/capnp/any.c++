@@ -134,7 +134,7 @@ Equality AnyStruct::Reader::equals(AnyStruct::Reader right) const {
   return eqResult;
 }
 
-kj::StringPtr KJ_STRINGIFY(Equality res) {
+kj::StringPtr KJ_STRINGIFY(const Equality res) {
   switch(res) {
     case Equality::NOT_EQUAL:
       return "NOT_EQUAL";

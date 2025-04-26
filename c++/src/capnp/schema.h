@@ -196,7 +196,7 @@ private:
   friend class SchemaLoader;
   friend class Type;
   friend kj::StringTree _::structString(
-      _::StructReader reader, const _::RawBrandedSchema& schema);
+      const _::StructReader& reader, const _::RawBrandedSchema& schema);
   friend kj::String _::enumString(uint16_t value, const _::RawBrandedSchema& schema);
 };
 

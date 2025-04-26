@@ -225,7 +225,7 @@ public:
     needsTypename = false;
   }
 
-  bool hasDisambiguatedTemplate() {
+  bool hasDisambiguatedTemplate() const {
     return hasDisambiguatedTemplate_;
   }
 
@@ -254,7 +254,7 @@ public:
     hasInterfaces_ = true;
   }
 
-  bool hasInterfaces() {
+  bool hasInterfaces() const {
     return hasInterfaces_;
   }
 

@@ -42,7 +42,7 @@
 #elif KJ_USE_KQUEUE
 #include <sys/event.h>
 #include <fcntl.h>
-#include <time.h>
+#include <ctime>
 #if !__APPLE__ && !__OpenBSD__
 // MacOS and OpenBSD are missing this, which means we have to do ugly hacks instead on those.
 #define KJ_HAS_SIGTIMEDWAIT 1

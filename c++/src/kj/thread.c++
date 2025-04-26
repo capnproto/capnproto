@@ -28,7 +28,7 @@
 #else
 #include <pthread.h>
 #include <signal.h>
-#include <time.h>
+#include <ctime>
 #endif
 
 namespace kj {

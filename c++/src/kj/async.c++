@@ -814,7 +814,7 @@ struct Executor::Impl {
   kj::MutexGuarded<State> state;
   // After modifying state from another thread, the loop's port.wake() must be called.
 
-  void processAsyncCancellations(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
+  void processAsyncCancellations(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) const {
     // After calling dispatchAll() or dispatchCancels() with the lock held, it may be that some
     // cancellations require dropping the lock before destroying the promiseNode. In that case
     // those cancellations will be added to the eventsToCancelOutsideLock Vector passed to the

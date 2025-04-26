@@ -187,17 +187,17 @@ constexpr RawBrandedSchema::Binding brandBindingFor() {
   return BrandBindingFor_<T>::get(0);
 }
 
-kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema);
+kj::StringTree structString(const StructReader& reader, const RawBrandedSchema& schema);
 kj::String enumString(uint16_t value, const RawBrandedSchema& schema);
 // Declared here so that we can declare inline stringify methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
 
 template <typename T>
-inline kj::StringTree structString(StructReader reader) {
+inline kj::StringTree structString(const StructReader& reader) {
   return structString(reader, rawBrandedSchema<T>());
 }
 template <typename T>
-inline kj::String enumString(T value) {
+inline kj::String enumString(const T value) {
   return enumString(static_cast<uint16_t>(value), rawBrandedSchema<T>());
 }
 
@@ -339,7 +339,7 @@ inline constexpr uint sizeInWords() {
     extern ::capnp::word const* const bp_##id
 
 #define CAPNP_DECLARE_ENUM(type, id) \
-    inline ::kj::String KJ_STRINGIFY(type##_##id value) { \
+    inline ::kj::String KJ_STRINGIFY(const type##_##id value) { \
       return ::kj::str(static_cast<uint16_t>(value)); \
     } \
     template <> struct EnumInfo<type##_##id> { \
@@ -362,7 +362,7 @@ inline constexpr uint sizeInWords() {
     extern const ::capnp::_::RawSchema s_##id
 
 #define CAPNP_DECLARE_ENUM(type, id) \
-    inline ::kj::String KJ_STRINGIFY(type##_##id value) { \
+    inline ::kj::String KJ_STRINGIFY(const type##_##id value) { \
       return ::capnp::_::enumString(value); \
     } \
     template <> struct EnumInfo<type##_##id> { \

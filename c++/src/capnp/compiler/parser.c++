@@ -735,8 +735,8 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
   auto& ordinalOrColon = arena.copy(p::oneOf(
       p::transform(p::sequence(parsers.ordinal, p::optional(op("!")), p::optional(op(":"))),
           [](Orphan<LocatedInteger>&& ordinal,
-                 kj::Maybe<kj::Tuple<>> exclamation,
-                 kj::Maybe<kj::Tuple<>> colon)
+                 const kj::Maybe<kj::Tuple<>>& exclamation,
+                 const kj::Maybe<kj::Tuple<>>& colon)
                    -> kj::Tuple<kj::Maybe<Orphan<LocatedInteger>>, bool, bool> {
             return kj::tuple(kj::mv(ordinal), exclamation == kj::none, colon == kj::none);
           }),

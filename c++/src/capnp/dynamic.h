@@ -241,7 +241,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend kj::StringTree _::structString(
-      _::StructReader reader, const _::RawBrandedSchema& schema);
+      const _::StructReader& reader, const _::RawBrandedSchema& schema);
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
   friend class Orphan<DynamicValue>;
@@ -832,7 +832,7 @@ private:
 
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value);
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value);
-kj::StringTree KJ_STRINGIFY(DynamicEnum value);
+kj::StringTree KJ_STRINGIFY(const DynamicEnum& value);
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value);
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value);
 kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value);

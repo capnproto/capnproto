@@ -437,12 +437,12 @@ TEST(Common, Maybe) {
     struct IntWrapper {
       IntWrapper(int i): i(i) {}
       int i;
-    
-      static int twice(Maybe<IntWrapper> i) {
+
+      static int twice(const Maybe<IntWrapper>& i) {
         return i.orDefault(0).i * 2;
       }
     };
-    
+
     // You can't write twice(5), you need to specify some of the types
     KJ_EXPECT(10 == IntWrapper::twice(Maybe<IntWrapper>(5)));
     KJ_EXPECT(10 == IntWrapper::twice(IntWrapper(5)));
@@ -1301,7 +1301,7 @@ KJ_TEST("ThreadId") {
 
   auto id2 = ThreadId::current();
   KJ_ASSERT(id2 == id1);
-  
+
   Thread thread([&]() {
     auto id3 = ThreadId::current();
     id3.assertCurrentThread();

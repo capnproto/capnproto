@@ -276,7 +276,7 @@ class FakeLoaderCallback: public SchemaLoader::LazyLoadCallback {
 public:
   FakeLoaderCallback(const schema::Node::Reader node): node(node), loaded(false) {}
 
-  bool isLoaded() { return loaded; }
+  bool isLoaded() const { return loaded; }
 
   void load(const SchemaLoader& loader, uint64_t id) const override {
     if (id == 1234) {

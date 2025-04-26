@@ -96,8 +96,8 @@ KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 struct HttpConnectMethod {};
 // CONNECT is handled specially and separately from the other HttpMethods.
 
-kj::StringPtr KJ_STRINGIFY(HttpMethod method);
-kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method);
+kj::StringPtr KJ_STRINGIFY(const HttpMethod& method);
+kj::StringPtr KJ_STRINGIFY(const HttpConnectMethod& method);
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name);
 kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> tryParseHttpMethodAllowingConnect(
     kj::StringPtr name);
@@ -504,7 +504,7 @@ struct HttpByteRange {
   }
 };
 
-kj::String KJ_STRINGIFY(HttpByteRange range);
+kj::String KJ_STRINGIFY(const HttpByteRange& range);
 
 struct HttpEverythingRange {};
 struct HttpUnsatisfiableRange {};
@@ -779,9 +779,9 @@ public:
 
   void unpause();
 
-  bool getCurrentlyReading();
+  bool getCurrentlyReading() const;
 
-  bool getCurrentlyWriting();
+  bool getCurrentlyWriting() const;
 
   kj::Own<kj::AsyncIoStream> takeStream();
 
@@ -1521,7 +1521,7 @@ kj::String generateExtensionRequest(const ArrayPtr<CompressionParameters>& exten
 kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers);
 
 kj::Maybe<CompressionParameters> tryParseAllExtensionOffers(StringPtr offers,
-    CompressionParameters manualConfig);
+  const CompressionParameters& manualConfig);
 
 kj::Maybe<CompressionParameters> compareClientAndServerConfigs(CompressionParameters requestConfig,
     CompressionParameters manualConfig);
