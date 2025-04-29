@@ -76,12 +76,15 @@ cc_library(
     # these once we no longer need to support older platforms, -lpthread is duplicated many times in
     # downstream project targets and bazel is unable to deduplicate it itself.
     linkopts = select({
-        "@platforms//os:windows": [],
-        ":use_libdl": [
-            "-lpthread",
-            "-ldl",
-        ],
+        ":use_libdl": ["-ldl"],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//os:windows": ["/DEFAULTLIB:Ws2_32.lib"],
         "//conditions:default": ["-lpthread"],
+    }),
+    linkstatic = select({
+        "@platforms//os:windows": True,
+        "//conditions:default": False,
     }),
     visibility = ["//visibility:public"],
     deps = [":kj-defines"],
@@ -124,6 +127,10 @@ cc_library(
             "Advapi32.lib",
         ],
         "//conditions:default": [],
+    }),
+    linkstatic = select({
+        "@platforms//os:windows": True,
+        "//conditions:default": False,
     }),
     visibility = ["//visibility:public"],
     deps = [":kj"],
