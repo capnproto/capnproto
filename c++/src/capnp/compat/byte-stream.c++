@@ -23,7 +23,61 @@
 #include <kj/one-of.h>
 #include <kj/debug.h>
 
+namespace {
+
+class Wrapper final: public capnp::ExplicitEndOutputStream {
+  public:
+  Wrapper(kj::Own<kj::AsyncOutputStream> inner, kj::Function<void()> uncleanEnd)
+      : state(State{kj::mv(inner), kj::mv(uncleanEnd)}) {}
+  ~Wrapper() noexcept(false) {
+    KJ_IF_SOME(s, state) {
+      s.uncleanEnd();
+    }
+  }
+
+  kj::Promise<void> end() override {
+    getInner();  // check end() only called once
+    state = kj::none;
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const kj::byte> buffer) override {
+    return getInner().write(buffer);
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const kj::byte>> pieces) override {
+    return getInner().write(pieces);
+  }
+
+  kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
+      kj::AsyncInputStream& input, uint64_t amount) override {
+    return input.pumpTo(getInner(), amount);
+  }
+
+  kj::Promise<void> whenWriteDisconnected() override {
+    return getInner().whenWriteDisconnected();
+  }
+
+  private:
+  struct State {
+    kj::Own<kj::AsyncOutputStream> inner;
+    kj::Function<void()> uncleanEnd;
+  };
+  kj::Maybe<State> state;
+
+  kj::AsyncOutputStream& getInner() {
+    return *KJ_REQUIRE_NONNULL(state, "already called end()").inner;
+  }
+};
+
+}  // namespace
+
 namespace capnp {
+
+kj::Own<ExplicitEndOutputStream> ExplicitEndOutputStream::wrap(
+    kj::Own<kj::AsyncOutputStream> inner, kj::Function<void()> uncleanEnd) {
+  return kj::heap<Wrapper>(kj::mv(inner), kj::mv(uncleanEnd));
+}
 
 const uint MAX_BYTES_PER_WRITE = 1 << 16;
 

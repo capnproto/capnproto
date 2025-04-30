@@ -50,6 +50,12 @@ class ExplicitEndOutputStream: public kj::AsyncOutputStream {
   //   is built with RTTI enabled, then its `end()` method will be used when appropriate.
 public:
   virtual kj::Promise<void> end() = 0;
+
+  static kj::Own<ExplicitEndOutputStream> wrap(
+    kj::Own<kj::AsyncOutputStream> inner, kj::Function<void()> uncleanEnd);
+  // Wraps a regular stream with an `end()` method that drops the inner stream.
+  //
+  // If end() is not called, uncleanEnd() is invoked in the destructor, before destroying `inner`.
 };
 
 class ByteStreamFactory {
