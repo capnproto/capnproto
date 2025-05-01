@@ -830,6 +830,59 @@ KJ_TEST("ExplicitEndOutputStream round trip") {
                   factories[0].kjToCapnp(kj::attachRef(endpoint))))));
 }
 
+namespace {
+
+class DummyStream final: public kj::AsyncOutputStream {
+public:
+  kj::Vector<byte> written;
+
+  kj::Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
+    written.addAll(buffer);
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    for (auto piece: pieces) {
+      written.addAll(piece);
+    }
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> whenWriteDisconnected() override {
+    return kj::NEVER_DONE;
+  }
+};
+
+}  // namespace
+
+KJ_TEST("ExplicitEndOutputStream::wrap") {
+  // Test that uncleanEnd is called iff end is not called.
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  bool uncleanEndCalled = false;
+
+  {
+    auto stream = ExplicitEndOutputStream::wrap(
+        kj::heap<DummyStream>(),
+        [&] { uncleanEndCalled = true; });
+    stream->write("Hello, world!"_kjb).wait(waitScope);
+    stream->end().wait(waitScope);
+  }
+
+  KJ_EXPECT(!uncleanEndCalled, "uncleanEnd should not be called when end was called");
+
+  {
+    auto stream = ExplicitEndOutputStream::wrap(
+        kj::heap<DummyStream>(),
+        [&] { uncleanEndCalled = true; });
+    stream->write("world"_kjb).wait(waitScope);
+    KJ_EXPECT(!uncleanEndCalled, "uncleanEnd should not be called until stream goes out of scope");
+  }
+
+  KJ_EXPECT(uncleanEndCalled, "uncleanEnd should be called when end was not called");
+}
+
 // TODO:
 // - Parallel writes (requires streaming)
 // - Write to KJ -> capnp -> RPC -> capnp -> KJ loopback without shortening, verify we can write
