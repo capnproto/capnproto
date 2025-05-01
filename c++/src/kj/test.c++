@@ -270,7 +270,7 @@ public:
           }
           auto end = readClock();
 
-          auto message = kj::str(name, " (", (end - start) / kj::MICROSECONDS, " μs)");
+          auto message = kj::str(name, " (", end - start, ")");
 
           if (currentFailed) {
             write(RED, "[ FAIL ]", message);
