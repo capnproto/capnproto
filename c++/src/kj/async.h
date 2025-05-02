@@ -202,6 +202,11 @@ public:
   template <typename Func>
   PromiseForResult<Func, T> then(Func&& func) KJ_WARN_UNUSED_RESULT;
 
+  // Specialized variants for Promise<void> continuations. This results in substantial code size
+  // improvements.
+  Promise<void> thenV(kj::Function<void()>&& func) requires std::is_void_v<T> KJ_WARN_UNUSED_RESULT;
+  Promise<void> thenVP(kj::Function<Promise<void>()>&& func) requires std::is_void_v<T> KJ_WARN_UNUSED_RESULT;
+
   template <typename Func, typename ErrorFunc>
   PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler,
                                  SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
