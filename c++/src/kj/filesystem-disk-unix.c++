@@ -73,6 +73,19 @@ namespace {
 #define MAYBE_O_DIRECTORY 0
 #endif
 
+#ifdef O_PATH
+#define MAYBE_O_PATH O_PATH
+  #if __FreeBSD__
+    #define KJ_HAS_PROC_FD_PATH
+    #define KJ_PROC_FD_PATH "/proc/curproc/fd"
+  #else // assuming __linux__
+    #define KJ_HAS_PROC_FD_PATH
+    #define KJ_PROC_FD_PATH "/proc/self/fd"
+  #endif
+#else
+#define MAYBE_O_PATH O_RDONLY
+#endif
+
 #if __APPLE__
 // Mac OSX defines SEEK_HOLE, but it doesn't work. ("Inappropriate ioctl for device", it says.)
 #undef SEEK_HOLE
@@ -204,8 +217,47 @@ static void rmrfChildrenAndClose(int fd) {
 }
 
 static bool rmrf(int fd, StringPtr path) {
+  int readableFd = fd;
+  int tempFd = -1;
+
+#ifdef O_PATH
+  // Check if this is an O_PATH file descriptor
+  int flags = fcntl(fd, F_GETFL);
+  bool isOPathFd = (flags != -1) && ((flags & O_PATH) == O_PATH);
+
+  if (isOPathFd) {
+#ifdef KJ_HAS_PROC_FD_PATH
+    // Similar to DiskHandle::getReadableFdImpl()
+    char procPath[64];
+    snprintf(procPath, sizeof(procPath), KJ_PROC_FD_PATH "/%d", fd);
+
+    // Check if /proc is actually mounted and the path exists
+    struct stat st;
+    if (stat(procPath, &st) != -1) {
+      char pathBuf[PATH_MAX];
+      ssize_t len = readlink(procPath, pathBuf, sizeof(pathBuf) - 1);
+      if (len != -1) {
+        pathBuf[len] = '\0';
+
+        // Try to open with read permissions
+        tempFd = open(pathBuf, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY);
+        if (tempFd != -1) {
+          readableFd = tempFd;
+        }
+      }
+    }
+#endif
+  }
+#endif
+
+  KJ_DEFER({
+    if (tempFd != -1) {
+      close(tempFd);
+    }
+  });
+
   struct stat stats;
-  KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd, path.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
+  KJ_SYSCALL_HANDLE_ERRORS(fstatat(readableFd, path.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
     case ENOENT:
     case ENOTDIR:
       // Doesn't exist.
@@ -217,13 +269,13 @@ static bool rmrf(int fd, StringPtr path) {
   if (S_ISDIR(stats.st_mode)) {
     int subdirFd;
     KJ_SYSCALL(subdirFd = openat(
-        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW)) {
+        readableFd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW)) {
       return false;
     }
     rmrfChildrenAndClose(subdirFd);
-    KJ_SYSCALL(unlinkat(fd, path.cStr(), AT_REMOVEDIR)) { return false; }
+    KJ_SYSCALL(unlinkat(readableFd, path.cStr(), AT_REMOVEDIR)) { return false; }
   } else {
-    KJ_SYSCALL(unlinkat(fd, path.cStr(), 0)) { return false; }
+    KJ_SYSCALL(unlinkat(readableFd, path.cStr(), 0)) { return false; }
   }
 
   return true;
@@ -280,6 +332,22 @@ public:
 
   // OsHandle ------------------------------------------------------------------
 
+  int getReadableFd() const {
+#ifdef O_PATH
+    // Check if this is an O_PATH file descriptor
+    int flags = fcntl(fd.get(), F_GETFL);
+    bool isOPathFd = (flags != -1) && ((flags & O_PATH) == O_PATH);
+
+    if (isOPathFd) {
+      // We're using an O_PATH fd which can't be used for reading
+      KJ_IF_SOME(readFd, getReadableFdImpl()) {
+        return readFd;
+      }
+    }
+#endif
+    return fd.get();
+  }
+
   OwnFd clone() const {
 #ifdef F_DUPFD_CLOEXEC
     int fd2;
@@ -325,7 +393,7 @@ public:
     // the right thing. Why they don't just make fsync() do the right thing, I do not know.
     KJ_SYSCALL(fcntl(fd, F_FULLFSYNC));
 #else
-    KJ_SYSCALL(fsync(fd));
+    KJ_SYSCALL(fsync(getReadableFd()));
 #endif
   }
 
@@ -333,7 +401,7 @@ public:
     // The presence of the _POSIX_SYNCHRONIZED_IO define is supposed to tell us that fdatasync()
     // exists. But Apple defines this yet doesn't offer fdatasync(). Thanks, Apple.
 #if _POSIX_SYNCHRONIZED_IO && !__APPLE__
-    KJ_SYSCALL(fdatasync(fd));
+    KJ_SYSCALL(fdatasync(getReadableFd()));
 #else
     this->sync();
 #endif
@@ -348,7 +416,7 @@ public:
     size_t total = 0;
     while (buffer.size() > 0) {
       ssize_t n;
-      KJ_SYSCALL(n = pread(fd, buffer.begin(), buffer.size(), offset));
+      KJ_SYSCALL(n = pread(getReadableFd(), buffer.begin(), buffer.size(), offset));
       if (n == 0) break;
       total += n;
       offset += n;
@@ -360,7 +428,7 @@ public:
   Array<const byte> mmap(uint64_t offset, uint64_t size) const {
     if (size == 0) return nullptr;  // zero-length mmap() returns EINVAL, so avoid it
     auto range = getMmapRange(offset, size);
-    const void* mapping = ::mmap(NULL, range.size, PROT_READ, MAP_SHARED, fd, range.offset);
+    const void* mapping = ::mmap(NULL, range.size, PROT_READ, MAP_SHARED, getReadableFd(), range.offset);
     if (mapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap", errno);
     }
@@ -371,7 +439,7 @@ public:
   Array<byte> mmapPrivate(uint64_t offset, uint64_t size) const {
     if (size == 0) return nullptr;  // zero-length mmap() returns EINVAL, so avoid it
     auto range = getMmapRange(offset, size);
-    void* mapping = ::mmap(NULL, range.size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, range.offset);
+    void* mapping = ::mmap(NULL, range.size, PROT_READ | PROT_WRITE, MAP_PRIVATE, getReadableFd(), range.offset);
     if (mapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap", errno);
     }
@@ -387,7 +455,7 @@ public:
 
     while (data.size() > 0) {
       ssize_t n;
-      KJ_SYSCALL(n = pwrite(fd, data.begin(), data.size(), offset));
+      KJ_SYSCALL(n = pwrite(getReadableFd(), data.begin(), data.size(), offset));
       KJ_ASSERT(n > 0, "pwrite() returned zero?");
       offset += n;
       data = data.slice(n, data.size());
@@ -402,7 +470,7 @@ public:
     // have to explicitly test for that case.
 #if defined(FALLOC_FL_PUNCH_HOLE) && !(__ANDROID__ && __BIONIC__ && __ANDROID_API__ < 21)
     KJ_SYSCALL_HANDLE_ERRORS(
-        fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
+        fallocate(getReadableFd(), FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size)) {
       case EOPNOTSUPP:
         // fall back to below
         break;
@@ -447,7 +515,7 @@ public:
       }
 
       ssize_t n;
-      KJ_SYSCALL(n = pwritev(fd, iov.begin(), count, offset));
+      KJ_SYSCALL(n = pwritev(getReadableFd(), iov.begin(), count, offset));
       KJ_ASSERT(n > 0, "pwrite() returned zero?");
 
       offset += n;
@@ -457,7 +525,7 @@ public:
   }
 
   void truncate(uint64_t size) const {
-    KJ_SYSCALL(ftruncate(fd, size));
+    KJ_SYSCALL(ftruncate(getReadableFd(), size));
   }
 
   class WritableFileMappingImpl final: public WritableFileMapping {
@@ -500,7 +568,7 @@ public:
       return heap<WritableFileMappingImpl>(nullptr);
     }
     auto range = getMmapRange(offset, size);
-    void* mapping = ::mmap(NULL, range.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, range.offset);
+    void* mapping = ::mmap(NULL, range.size, PROT_READ | PROT_WRITE, MAP_SHARED, getReadableFd(), range.offset);
     if (mapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap", errno);
     }
@@ -515,12 +583,13 @@ public:
 
 #if __linux__
     {
-      KJ_SYSCALL(lseek(fd, offset, SEEK_SET));
+      auto rfd = getReadableFd();
+      KJ_SYSCALL(lseek(rfd, offset, SEEK_SET));
       off_t fromPos = fromOffset;
       off_t end = fromOffset + size;
       while (fromPos < end) {
         ssize_t n;
-        KJ_SYSCALL_HANDLE_ERRORS(n = sendfile(fd, fromFd, &fromPos, end - fromPos)) {
+        KJ_SYSCALL_HANDLE_ERRORS(n = sendfile(rfd, fromFd, &fromPos, end - fromPos)) {
           case EINVAL:
           case ENOSYS:
             goto sendfileNotAvailable;
@@ -554,7 +623,7 @@ public:
     KJ_IF_SOME(otherFd, from.getFd()) {
 #ifdef FICLONE
       if (offset == 0 && fromOffset == 0 && size == kj::maxValue && stat().size == 0) {
-        if (ioctl(fd, FICLONE, otherFd) >= 0) {
+        if (ioctl(getReadableFd(), FICLONE, otherFd) >= 0) {
           return stat().size;
         }
       } else if (size > 0) {    // src_length = 0 has special meaning for the syscall, so avoid.
@@ -564,7 +633,7 @@ public:
         range.dest_offset = offset;
         range.src_offset = fromOffset;
         range.src_length = size == kj::maxValue ? 0 : size;
-        if (ioctl(fd, FICLONERANGE, &range) >= 0) {
+        if (ioctl(getReadableFd(), FICLONERANGE, &range) >= 0) {
           // TODO(someday): What does FICLONERANGE actually do if the range goes past EOF? The docs
           //   don't say. Maybe it only copies the parts that exist. Maybe it punches holes for the
           //   rest. Where does the destination file's EOF marker end up? Who knows?
@@ -598,7 +667,7 @@ public:
               // Past EOF. Stop here.
               return fromPos - fromOffset;
             default:
-              KJ_FAIL_SYSCALL("lseek(fd, pos, SEEK_HOLE)", error) { return fromPos - fromOffset; }
+              KJ_FAIL_SYSCALL("lseek(getReadableFd(), pos, SEEK_HOLE)", error) { return fromPos - fromOffset; }
           }
 #else
           // SEEK_HOLE not supported. Assume no holes.
@@ -642,7 +711,7 @@ public:
               }
               break;
             default:
-              KJ_FAIL_SYSCALL("lseek(fd, pos, SEEK_HOLE)", error) { return fromPos - fromOffset; }
+              KJ_FAIL_SYSCALL("lseek(getReadableFd(), pos, SEEK_HOLE)", error) { return fromPos - fromOffset; }
           }
 
           // Write zeros.
@@ -672,12 +741,12 @@ public:
   auto list(bool needTypes, Func&& func) const
       -> Array<Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))>> {
     // Seek to start of directory.
-    KJ_SYSCALL(lseek(fd, 0, SEEK_SET));
+    KJ_SYSCALL(lseek(getReadableFd(), 0, SEEK_SET));
 
     // Unfortunately, fdopendir() takes ownership of the file descriptor. Therefore we need to
     // make a duplicate.
     int duped;
-    KJ_SYSCALL(duped = dup(fd));
+    KJ_SYSCALL(duped = dup(getReadableFd()));
     DIR* dir = fdopendir(duped);
     if (dir == nullptr) {
       close(duped);
@@ -710,7 +779,7 @@ public:
           if (needTypes) {
             // Unknown type. Fall back to stat.
             struct stat stats;
-            KJ_SYSCALL(fstatat(fd, name.cStr(), &stats, AT_SYMLINK_NOFOLLOW));
+            KJ_SYSCALL(fstatat(getReadableFd(), name.cStr(), &stats, AT_SYMLINK_NOFOLLOW));
             entries.add(func(name, modeToType(stats.st_mode)));
           } else {
             entries.add(func(name, FsNode::Type::OTHER));
@@ -737,24 +806,24 @@ public:
   }
 
   bool exists(PathPtr path) const {
-    KJ_SYSCALL_HANDLE_ERRORS(faccessat(fd, path.toString().cStr(), F_OK, 0)) {
+    KJ_SYSCALL_HANDLE_ERRORS(faccessat(getReadableFd(), path.toString().cStr(), F_OK, 0)) {
       case ENOENT:
       case ENOTDIR:
         return false;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return false; }
+        KJ_FAIL_SYSCALL("faccessat(getReadableFd(), path)", error, path) { return false; }
     }
     return true;
   }
 
   Maybe<FsNode::Metadata> tryLstat(PathPtr path) const {
     struct stat stats;
-    KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd, path.toString().cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
+    KJ_SYSCALL_HANDLE_ERRORS(fstatat(getReadableFd(), path.toString().cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
       case ENOENT:
       case ENOTDIR:
         return kj::none;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("faccessat(getReadableFd(), path)", error, path) { return kj::none; }
     }
     return statToMetadata(stats);
   }
@@ -762,12 +831,12 @@ public:
   Maybe<Own<const ReadableFile>> tryOpenFile(PathPtr path) const {
     int newFd;
     KJ_SYSCALL_HANDLE_ERRORS(newFd = openat(
-        fd, path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC)) {
+        getReadableFd(), path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC)) {
       case ENOENT:
       case ENOTDIR:
         return kj::none;
       default:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_RDONLY)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("openat(getReadableFd(), path, O_RDONLY)", error, path) { return kj::none; }
     }
 
     kj::OwnFd result(newFd);
@@ -781,7 +850,7 @@ public:
   Maybe<OwnFd> tryOpenSubdirInternal(PathPtr path) const {
     int newFd;
     KJ_SYSCALL_HANDLE_ERRORS(newFd = openat(
-        fd, path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
+        getReadableFd(), path.toString().cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
       case ENOENT:
         return kj::none;
       case ENOTDIR:
@@ -793,7 +862,7 @@ public:
         }
         KJ_FALLTHROUGH;
       default:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("openat(getReadableFd(), path, O_DIRECTORY)", error, path) { return kj::none; }
     }
 
     kj::OwnFd result(newFd);
@@ -812,7 +881,7 @@ public:
     size_t trySize = 256;
     for (;;) {
       KJ_STACK_ARRAY(char, buf, trySize, 256, 4096);
-      ssize_t n = readlinkat(fd, path.toString().cStr(), buf.begin(), buf.size());
+      ssize_t n = readlinkat(getReadableFd(), path.toString().cStr(), buf.begin(), buf.size());
       if (n < 0) {
         int error = errno;
         switch (error) {
@@ -823,7 +892,7 @@ public:
           case EINVAL:    // not a link
             return kj::none;
           default:
-            KJ_FAIL_SYSCALL("readlinkat(fd, path)", error, path) { return kj::none; }
+            KJ_FAIL_SYSCALL("readlinkat(getReadableFd(), path)", error, path) { return kj::none; }
         }
       }
 
@@ -845,7 +914,7 @@ public:
     auto filename = path.toString();
     mode_t acl = has(mode, WriteMode::PRIVATE) ? 0700 : 0777;
 
-    KJ_SYSCALL_HANDLE_ERRORS(mkdirat(fd, filename.cStr(), acl)) {
+    KJ_SYSCALL_HANDLE_ERRORS(mkdirat(getReadableFd(), filename.cStr(), acl)) {
       case EEXIST: {
         // Apparently this path exists.
         if (!has(mode, WriteMode::MODIFY)) {
@@ -855,7 +924,7 @@ public:
 
         // MODIFY is allowed, so we just need to check whether the existing entry is a directory.
         struct stat stats;
-        KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd, filename.cStr(), &stats, 0)) {
+        KJ_SYSCALL_HANDLE_ERRORS(fstatat(getReadableFd(), filename.cStr(), &stats, 0)) {
           default:
             // mkdir() says EEXIST but we can't stat it. Maybe it's a dangling link, or maybe
             // we can't access it for some reason. Assume failure.
@@ -881,7 +950,7 @@ public:
           // Caller requested no throwing.
           return false;
         } else {
-          KJ_FAIL_SYSCALL("mkdirat(fd, path)", error, path);
+          KJ_FAIL_SYSCALL("mkdirat(getReadableFd(), path)", error, path);
         }
     }
 
@@ -979,15 +1048,15 @@ public:
     // replacement instead.
 
     auto tempPath = createNamedTemporary(path, mode, kj::mv(tryCreate));
-    if (tryCommitReplacement(filename, fd, tempPath, mode)) {
+    if (tryCommitReplacement(filename, getReadableFd(), tempPath, mode)) {
       return true;
     } else {
-      KJ_SYSCALL_HANDLE_ERRORS(unlinkat(fd, tempPath.cStr(), 0)) {
+      KJ_SYSCALL_HANDLE_ERRORS(unlinkat(getReadableFd(), tempPath.cStr(), 0)) {
         case ENOENT:
           // meh
           break;
         default:
-          KJ_FAIL_SYSCALL("unlinkat(fd, tempPath, 0)", error, tempPath);
+          KJ_FAIL_SYSCALL("unlinkat(getReadableFd(), tempPath, 0)", error, tempPath);
       }
       return false;
     }
@@ -1019,7 +1088,7 @@ public:
     auto filename = path.toString();
 
     int newFd;
-    KJ_SYSCALL_HANDLE_ERRORS(newFd = openat(fd, filename.cStr(), flags, acl)) {
+    KJ_SYSCALL_HANDLE_ERRORS(newFd = openat(getReadableFd(), filename.cStr(), flags, acl)) {
       case ENOENT:
         if (has(mode, WriteMode::CREATE)) {
           // Either:
@@ -1034,7 +1103,7 @@ public:
 
           // Check for broken link.
           if (!has(mode, WriteMode::MODIFY) &&
-              faccessat(fd, filename.cStr(), F_OK, AT_SYMLINK_NOFOLLOW) >= 0) {
+              faccessat(getReadableFd(), filename.cStr(), F_OK, AT_SYMLINK_NOFOLLOW) >= 0) {
             // Yep. We treat this as already-exists, which means in CREATE-only mode this is a
             // simple failure.
             return kj::none;
@@ -1059,7 +1128,7 @@ public:
         goto failed;
       default:
       failed:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_RDWR | ...)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("openat(getReadableFd(), path, O_RDWR | ...)", error, path) { return kj::none; }
     }
 
     kj::OwnFd result(newFd);
@@ -1074,7 +1143,7 @@ public:
                             int* errorReason = nullptr) const {
     if (has(mode, WriteMode::CREATE) && has(mode, WriteMode::MODIFY)) {
       // Always clobber. Try it.
-      KJ_SYSCALL_HANDLE_ERRORS(renameat(fromDirFd, fromPath.cStr(), fd.get(), toPath.cStr())) {
+      KJ_SYSCALL_HANDLE_ERRORS(renameat(fromDirFd, fromPath.cStr(), getReadableFd(), toPath.cStr())) {
         case EISDIR:
         case ENOTDIR:
         case ENOTEMPTY:
@@ -1106,7 +1175,7 @@ public:
       // exchange.
 
       KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_renameat2,
-          fromDirFd, fromPath.cStr(), fd.get(), toPath.cStr(), RENAME_EXCHANGE)) {
+          fromDirFd, fromPath.cStr(), getReadableFd(), toPath.cStr(), RENAME_EXCHANGE)) {
         case ENOSYS:  // Syscall not supported by kernel.
         case EINVAL:  // Maybe we screwed up, or maybe the syscall is not supported by the
                       // filesystem. Unfortunately, there's no way to tell, so assume the latter.
@@ -1138,7 +1207,7 @@ public:
       }
     } else if (has(mode, WriteMode::CREATE)) {
       KJ_SYSCALL_HANDLE_ERRORS(syscall(SYS_renameat2,
-          fromDirFd, fromPath.cStr(), fd.get(), toPath.cStr(), RENAME_NOREPLACE)) {
+          fromDirFd, fromPath.cStr(), getReadableFd(), toPath.cStr(), RENAME_NOREPLACE)) {
         case ENOSYS:  // Syscall not supported by kernel.
         case EINVAL:  // Maybe we screwed up, or maybe the syscall is not supported by the
                       // filesystem. Unfortunately, there's no way to tell, so assume the latter.
@@ -1169,7 +1238,7 @@ public:
 
       // Find out what kind of file exists at the target path.
       struct stat stats;
-      KJ_SYSCALL(fstatat(fd, toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) { return false; }
+      KJ_SYSCALL(fstatat(getReadableFd(), toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) { return false; }
 
       // Create a temporary location to move the existing object to. Note that rename() allows a
       // non-directory to replace a non-directory, and allows a directory to replace an empty
@@ -1178,35 +1247,36 @@ public:
       String away = createNamedTemporary(toPathParsed, WriteMode::CREATE,
           [&](StringPtr candidatePath) {
         if (S_ISDIR(stats.st_mode)) {
-          return mkdirat(fd, candidatePath.cStr(), 0700);
+          return mkdirat(getReadableFd(), candidatePath.cStr(), 0700);
         } else {
 #if __APPLE__ || __FreeBSD__
           // - No mknodat() on OSX, gotta open() a file, ugh.
           // - On a modern FreeBSD, mknodat() is reserved strictly for device nodes,
           //   you cannot create a regular file using it (EINVAL).
-          int newFd = openat(fd, candidatePath.cStr(),
+          int newFd = openat(getReadableFd(), candidatePath.cStr(),
                              O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0700);
           if (newFd >= 0) close(newFd);
           return newFd;
 #else
-          return mknodat(fd, candidatePath.cStr(), S_IFREG | 0600, dev_t());
+          return mknodat(getReadableFd(), candidatePath.cStr(), S_IFREG | 0600, dev_t());
 #endif
         }
       });
 
       // OK, now move the target object to replace the thing we just created.
-      KJ_SYSCALL(renameat(fd, toPath.cStr(), fd, away.cStr())) {
+      auto rfd = getReadableFd();
+      KJ_SYSCALL(renameat(rfd, toPath.cStr(), rfd, away.cStr())) {
         // Something went wrong. Remove the thing we just created.
-        unlinkat(fd, away.cStr(), S_ISDIR(stats.st_mode) ? AT_REMOVEDIR : 0);
+        unlinkat(rfd, away.cStr(), S_ISDIR(stats.st_mode) ? AT_REMOVEDIR : 0);
         return false;
       }
 
       // Now move the source object to the target location.
-      KJ_SYSCALL_HANDLE_ERRORS(renameat(fromDirFd, fromPath.cStr(), fd, toPath.cStr())) {
+      KJ_SYSCALL_HANDLE_ERRORS(renameat(fromDirFd, fromPath.cStr(), rfd, toPath.cStr())) {
         default:
           // Try to put things back where they were. If this fails, though, then we have little
           // choice but to leave things broken.
-          KJ_SYSCALL_HANDLE_ERRORS(renameat(fd, away.cStr(), fd, toPath.cStr())) {
+          KJ_SYSCALL_HANDLE_ERRORS(renameat(rfd, away.cStr(), rfd, toPath.cStr())) {
             default: break;
           }
 
@@ -1221,30 +1291,30 @@ public:
       }
 
       // OK, success. Delete the old content.
-      rmrf(fd, away);
+      rmrf(rfd, away);
       return true;
     } else {
       // Only one of CREATE or MODIFY is specified, so we need to verify non-atomically that the
       // corresponding precondition (must-not-exist or must-exist, respectively) is held.
       if (has(mode, WriteMode::CREATE)) {
         struct stat stats;
-        KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd.get(), toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
+        KJ_SYSCALL_HANDLE_ERRORS(fstatat(getReadableFd(), toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
           case ENOENT:
           case ENOTDIR:
             break;  // doesn't exist; continue
           default:
-            KJ_FAIL_SYSCALL("fstatat(fd, toPath)", error, toPath) { return false; }
+            KJ_FAIL_SYSCALL("fstatat(getReadableFd(), toPath)", error, toPath) { return false; }
         } else {
           return false;  // already exists; fail
         }
       } else if (has(mode, WriteMode::MODIFY)) {
         struct stat stats;
-        KJ_SYSCALL_HANDLE_ERRORS(fstatat(fd.get(), toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
+        KJ_SYSCALL_HANDLE_ERRORS(fstatat(getReadableFd(), toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) {
           case ENOENT:
           case ENOTDIR:
             return false;  // doesn't exist; fail
           default:
-            KJ_FAIL_SYSCALL("fstatat(fd, toPath)", error, toPath) { return false; }
+            KJ_FAIL_SYSCALL("fstatat(getReadableFd(), toPath)", error, toPath) { return false; }
         } else {
           // already exists; continue
         }
@@ -1325,7 +1395,7 @@ public:
     int newFd_;
     auto temp = createNamedTemporary(path, mode,
         [&](StringPtr candidatePath) {
-      return newFd_ = openat(fd, candidatePath.cStr(),
+      return newFd_ = openat(getReadableFd(), candidatePath.cStr(),
                              O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, acl);
     });
     OwnFd newFd(newFd_);
@@ -1343,7 +1413,7 @@ public:
     // Use syscall() to work around glibc bug with O_TMPFILE:
     //     https://sourceware.org/bugzilla/show_bug.cgi?id=17523
     KJ_SYSCALL_HANDLE_ERRORS(newFd_ = syscall(
-        SYS_openat, fd.get(), ".", O_RDWR | O_TMPFILE, 0700)) {
+        SYS_openat, getReadableFd(), ".", O_RDWR | O_TMPFILE, 0700)) {
       case EOPNOTSUPP:
       case EINVAL:
       case EISDIR:
@@ -1363,14 +1433,14 @@ public:
 
     auto temp = createNamedTemporary(Path("unnamed"), WriteMode::CREATE,
         [&](StringPtr path) {
-      return newFd_ = openat(fd, path.cStr(), O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0600);
+      return newFd_ = openat(getReadableFd(), path.cStr(), O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0600);
     });
     OwnFd newFd(newFd_);
 #ifndef O_CLOEXEC
     setCloexec(newFd);
 #endif
     auto result = newDiskFile(kj::mv(newFd));
-    KJ_SYSCALL(unlinkat(fd, temp.cStr(), 0)) { break; }
+    KJ_SYSCALL(unlinkat(getReadableFd(), temp.cStr(), 0)) { break; }
     return kj::mv(result);
   }
 
@@ -1392,11 +1462,11 @@ public:
 
     auto temp = createNamedTemporary(path, mode,
         [&](StringPtr candidatePath) {
-      return mkdirat(fd, candidatePath.cStr(), acl);
+      return mkdirat(getReadableFd(), candidatePath.cStr(), acl);
     });
     int subdirFd_;
     KJ_SYSCALL_HANDLE_ERRORS(subdirFd_ = openat(
-        fd, temp.cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
+        getReadableFd(), temp.cStr(), O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
       default:
         KJ_FAIL_SYSCALL("open(just-created-temporary)", error);
         return heap<BrokenReplacer<Directory>>(newInMemoryDirectory(nullClock()));
@@ -1412,7 +1482,7 @@ public:
 
   bool trySymlink(PathPtr linkpath, StringPtr content, WriteMode mode) const {
     return tryReplaceNode(linkpath, mode, [&](StringPtr candidatePath) {
-      return symlinkat(content.cStr(), fd, candidatePath.cStr());
+      return symlinkat(content.cStr(), getReadableFd(), candidatePath.cStr());
     });
   }
 
@@ -1425,7 +1495,7 @@ public:
       KJ_IF_SOME(fromFd, fromDirectory.getFd()) {
         // Other is a disk directory, so we can hopefully do an efficient move/link.
         return tryReplaceNode(toPath, toMode, [&](StringPtr candidatePath) {
-          return linkat(fromFd, fromPath.toString().cStr(), fd, candidatePath.cStr(), 0);
+          return linkat(fromFd, fromPath.toString().cStr(), getReadableFd(), candidatePath.cStr(), 0);
         });
       };
     } else if (mode == TransferMode::MOVE) {
@@ -1470,11 +1540,46 @@ public:
   }
 
   bool tryRemove(PathPtr path) const {
-    return rmrf(fd, path.toString());
+    return rmrf(getReadableFd(), path.toString());
+  }
+
+  Maybe<int> getReadableFdImpl() const {
+#ifdef KJ_HAS_PROC_FD_PATH
+    if (cachedReadFd == kj::none) {
+      // Get the path this O_PATH fd refers to using /proc
+      char procPath[64];
+      snprintf(procPath, sizeof(procPath), KJ_PROC_FD_PATH "/%d", fd.get());
+
+      // Check if /proc is actually mounted and the path exists
+      struct stat st;
+      if (::stat(procPath, &st) == -1) {
+        return kj::none;
+      }
+
+      char pathBuf[PATH_MAX];
+      ssize_t len = readlink(procPath, pathBuf, sizeof(pathBuf) - 1);
+      if (len == -1) {
+        return kj::none;
+      }
+      pathBuf[len] = '\0';
+
+      // Try to open with read permissions
+      int readFd = open(pathBuf, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY);
+      if (readFd == -1) {
+        return kj::none;
+      }
+
+      cachedReadFd = kj::OwnFd(readFd);
+    }
+    return cachedReadFd.orDefault([&]() { return fd.get(); });
+#else
+    return kj::none;
+#endif
   }
 
 protected:
   OwnFd fd;
+  mutable kj::Maybe<kj::OwnFd> cachedReadFd;
 };
 
 #define FSNODE_METHODS(classname)                                   \
@@ -1675,7 +1780,7 @@ private:
   Path currentPath;
 
   static OwnFd openDir(const char* dir) {
-    auto result = KJ_SYSCALL_FD(open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
+    auto result = KJ_SYSCALL_FD(open(dir, MAYBE_O_PATH | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif
