@@ -163,8 +163,8 @@ Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
 
 template <typename Func>
 kj::Promise<void> Timer::repeatedly(kj::Duration interval, Func&& func) {
-  return afterDelay(interval).then([this, interval, action = kj::mv(func)() mutable {
-    return func().then([this, interval, action = kj::mv(func)]() mutable {
+  return afterDelay(interval).then([this, interval, func = kj::mv(func)() mutable {
+    return func().then([this, interval, func = kj::mv(func)]() mutable {
        return repeatedly(interval, kj::mv(func));
     });
   });
