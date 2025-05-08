@@ -73,6 +73,10 @@ public:
   // original promise) if it hasn't completed after `delay` from now. The thrown exception is of
   // type "OVERLOADED".
 
+  template <typename Func>
+  kj::Promise<void> repeatedly(kj::Duration interval, Func&& func);
+  // Returns a promise that calls `func` repeatedly with a delay of `interval`.
+
 private:
   static kj::Exception makeTimeoutException();
 };
@@ -155,6 +159,15 @@ Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
   return promise.exclusiveJoin(afterDelay(delay).then([]() -> kj::Promise<T> {
     return makeTimeoutException();
   }));
+}
+
+template <typename Func>
+kj::Promise<void> Timer::repeatedly(kj::Duration interval, Func&& func) {
+  return afterDelay(interval).then([this, interval, action = kj::mv(func)() mutable {
+    return func().then([this, interval, action = kj::mv(func)]() mutable {
+       return repeatedly(interval, kj::mv(func));
+    });
+  });
 }
 
 }  // namespace kj
