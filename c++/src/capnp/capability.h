@@ -867,12 +867,6 @@ private:
   const void* brand;
 };
 
-class RevocableClientHook: public ClientHook {
-public:
-  virtual void revoke() = 0;
-  virtual void revoke(kj::Exception&& reason) = 0;
-};
-
 class CallContextHook {
   // Hook interface implemented by RPC system to manage a call on the server side.  See
   // CallContext<T>.
