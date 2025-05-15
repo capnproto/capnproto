@@ -60,16 +60,42 @@ private:
   kj::ForkedPromise<void> blocker = kj::Promise<void>(kj::READY_NOW).fork();
 };
 
-void doAutoReconnectTest(kj::WaitScope& ws,
-    kj::Function<test::TestInterface::Client(test::TestInterface::Client)> wrapClient) {
+using WrapClientFn = kj::Function<test::TestInterface::Client(test::TestInterface::Client)>;
+
+enum class AutoReconnectFn {
+  AUTO_RECONNECT,
+  LAZY_AUTO_RECONNECT,
+  LAZY_AUTO_RECONNECT_WITH_CONTROLLER,
+};
+
+void doAutoReconnectTestImpl(kj::WaitScope& ws, WrapClientFn wrapClient, AutoReconnectFn autoReconnectFn) {
   TestInterfaceImpl* currentServer = nullptr;
   uint connectCount = 0;
 
-  test::TestInterface::Client client = wrapClient(autoReconnect([&]() {
-    auto server = kj::heap<TestInterfaceImpl>(connectCount++);
+  auto connect = [&]() {
+    auto server = kj::heap<TestInterfaceImpl>(++connectCount);
     currentServer = server;
     return test::TestInterface::Client(kj::mv(server));
-  }));
+  };
+  test::TestInterface::Client client = nullptr;
+  kj::Own<AutoReconnectController> controller;
+  switch (autoReconnectFn) {
+    case AutoReconnectFn::AUTO_RECONNECT:
+      client = autoReconnect(kj::mv(connect));
+      KJ_EXPECT(connectCount == 1);
+      break;
+    case AutoReconnectFn::LAZY_AUTO_RECONNECT:
+      client = lazyAutoReconnect(kj::mv(connect));
+      KJ_EXPECT(connectCount == 0);
+      break;
+    case AutoReconnectFn::LAZY_AUTO_RECONNECT_WITH_CONTROLLER:
+      auto result = lazyAutoReconnectWithController(kj::mv(connect));
+      client = kj::mv(result.cap);
+      controller = kj::mv(result.controller);
+      KJ_EXPECT(connectCount == 0);
+      break;
+  }
+  client = wrapClient(kj::mv(client));
 
   auto testPromise = [&](uint i, bool j) {
     auto req = client.fooRequest();
@@ -82,14 +108,22 @@ void doAutoReconnectTest(kj::WaitScope& ws,
     return kj::str(testPromise(i, j).wait(ws).getX());
   };
 
-  KJ_EXPECT(test(123, true) == "123 true 0");
+  KJ_EXPECT(test(123, true) == "123 true 1");
+  KJ_EXPECT(connectCount == 1);
 
   currentServer->setError(KJ_EXCEPTION(DISCONNECTED, "test1 disconnect"));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect",
-      testPromise(456, true).ignoreResult().wait(ws));
+  if (autoReconnectFn == AutoReconnectFn::LAZY_AUTO_RECONNECT_WITH_CONTROLLER) {
+    controller->reset();
+    KJ_EXPECT(connectCount == 1);
+    KJ_EXPECT(test(456, true) == "456 true 2");
+  } else {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect",
+        testPromise(456, true).ignoreResult().wait(ws));
+  }
+  KJ_EXPECT(connectCount == 2);
 
-  KJ_EXPECT(test(789, false) == "789 false 1");
-  KJ_EXPECT(test(21, true) == "21 true 1");
+  KJ_EXPECT(test(789, false) == "789 false 2");
+  KJ_EXPECT(test(21, true) == "21 true 2");
 
   {
     // We cause two disconnect promises to be thrown concurrently. This should only cause the
@@ -103,8 +137,9 @@ void doAutoReconnectTest(kj::WaitScope& ws,
     KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise1.ignoreResult().wait(ws));
     KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise2.ignoreResult().wait(ws));
   }
+  KJ_EXPECT(connectCount == 3);
 
-  KJ_EXPECT(test(43, false) == "43 false 2");
+  KJ_EXPECT(test(43, false) == "43 false 3");
 
   // Start a couple calls that will block at the server end, plus an unsent request.
   auto fulfiller = currentServer->block();
@@ -127,14 +162,16 @@ void doAutoReconnectTest(kj::WaitScope& ws,
   // onto their own ref.
   client = nullptr;
 
+  KJ_EXPECT(connectCount == 3);
   // Everything we initiated should still finish.
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test3 disconnect", promise4.ignoreResult().wait(ws));
+  KJ_EXPECT(connectCount == 4);
 
   // Send the request which we created before the disconnect. There are two behaviors we accept
   // as correct here: it may throw the disconnect exception, or it may automatically redirect to
   // the newly-reconnected destination.
   req3.send().then([](Response<test::TestInterface::FooResults> resp) {
-    KJ_EXPECT(resp.getX() == "5656 true 3");
+    KJ_EXPECT(resp.getX() == "5656 true 4");
   }, [](kj::Exception e) {
     KJ_EXPECT(e.getDescription().endsWith("test3 disconnect"));
   }).wait(ws);
@@ -142,8 +179,20 @@ void doAutoReconnectTest(kj::WaitScope& ws,
   KJ_EXPECT(!promise1.poll(ws));
   KJ_EXPECT(!promise2.poll(ws));
   fulfiller->fulfill();
-  KJ_EXPECT(promise1.wait(ws).getX() == "1212 true 2");
-  KJ_EXPECT(promise2.wait(ws).getX() == "3434 false 2");
+  KJ_EXPECT(promise1.wait(ws).getX() == "1212 true 3");
+  KJ_EXPECT(promise2.wait(ws).getX() == "3434 false 3");
+}
+
+void doAutoReconnectTest(kj::WaitScope& ws, WrapClientFn wrapClient) {
+  doAutoReconnectTestImpl(ws, kj::mv(wrapClient), AutoReconnectFn::AUTO_RECONNECT);
+}
+
+void doLazyAutoReconnectTest(kj::WaitScope& ws, WrapClientFn wrapClient) {
+  doAutoReconnectTestImpl(ws, kj::mv(wrapClient), AutoReconnectFn::LAZY_AUTO_RECONNECT);
+}
+
+void doLazyAutoReconnectWithControllerTest(kj::WaitScope& ws, WrapClientFn wrapClient) {
+  doAutoReconnectTestImpl(ws, kj::mv(wrapClient), AutoReconnectFn::LAZY_AUTO_RECONNECT_WITH_CONTROLLER);
 }
 
 KJ_TEST("autoReconnect() direct call (exercises newCall() / RequestHook)") {
@@ -173,54 +222,46 @@ KJ_TEST("lazyAutoReconnect() direct call (exercises newCall() / RequestHook)") {
   kj::EventLoop loop;
   kj::WaitScope ws(loop);
 
-  doAutoReconnectTest(ws, [](auto c) {return kj::mv(c);});
+  doLazyAutoReconnectTest(ws, [](auto c) {return kj::mv(c);});
 }
 
-KJ_TEST("lazyAutoReconnect() initializes lazily") {
+KJ_TEST("lazyAutoReconnect() through RPC (exercises call() / CallContextHook)") {
   kj::EventLoop loop;
   kj::WaitScope ws(loop);
 
-  int connectCount = 0;
-  TestInterfaceImpl* currentServer = nullptr;
-  auto connectCounter = [&]() {
-    auto server = kj::heap<TestInterfaceImpl>(connectCount++);
-    currentServer = server;
-    return test::TestInterface::Client(kj::mv(server));
-  };
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
 
-  test::TestInterface::Client client = autoReconnect(connectCounter);
+  auto pipe = kj::newTwoWayPipe();
+  TwoPartyClient client(*pipe.ends[0]);
+  TwoPartyClient server(*pipe.ends[1], kj::mv(paf.promise), rpc::twoparty::Side::SERVER);
 
-  auto test = [&](uint i, bool j) {
-    auto req = client.fooRequest();
-    req.setI(i);
-    req.setJ(j);
-    return kj::str(req.send().wait(ws).getX());
-  };
-  auto testIgnoreResult = [&](uint i, bool j) {
-    auto req = client.fooRequest();
-    req.setI(i);
-    req.setJ(j);
-    req.sendIgnoringResult().wait(ws);
-  };
+  doLazyAutoReconnectTest(ws, [&](test::TestInterface::Client c) {
+    paf.fulfiller->fulfill(kj::mv(c));
+    return client.bootstrap().castAs<test::TestInterface>();
+  });
+}
 
-  KJ_EXPECT(connectCount == 1);
-  KJ_EXPECT(test(123, true) == "123 true 0");
-  KJ_EXPECT(connectCount == 1);
+KJ_TEST("lazyAutoReconnectWithController() direct call (exercises newCall() / RequestHook)") {
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
 
-  client = lazyAutoReconnect(connectCounter);
-  KJ_EXPECT(connectCount == 1);
-  KJ_EXPECT(test(123, true) == "123 true 1");
-  KJ_EXPECT(connectCount == 2);
-  KJ_EXPECT(test(234, false) == "234 false 1");
-  KJ_EXPECT(connectCount == 2);
+  doLazyAutoReconnectWithControllerTest(ws, [](auto c) {return kj::mv(c);});
+}
 
-  currentServer->setError(KJ_EXCEPTION(DISCONNECTED, "test1 disconnect"));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect", testIgnoreResult(345, true));
+KJ_TEST("lazyAutoReconnectWithController() through RPC (exercises call() / CallContextHook)") {
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
 
-  // lazyAutoReconnect is only lazy on the first request, not on reconnects.
-  KJ_EXPECT(connectCount == 3);
-  KJ_EXPECT(test(456, false) == "456 false 2");
-  KJ_EXPECT(connectCount == 3);
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+
+  auto pipe = kj::newTwoWayPipe();
+  TwoPartyClient client(*pipe.ends[0]);
+  TwoPartyClient server(*pipe.ends[1], kj::mv(paf.promise), rpc::twoparty::Side::SERVER);
+
+  doLazyAutoReconnectWithControllerTest(ws, [&](test::TestInterface::Client c) {
+    paf.fulfiller->fulfill(kj::mv(c));
+    return client.bootstrap().castAs<test::TestInterface>();
+  });
 }
 
 }  // namespace

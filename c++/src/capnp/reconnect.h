@@ -28,6 +28,19 @@ CAPNP_BEGIN_HEADER
 
 namespace capnp {
 
+class AutoReconnectController {
+public:
+  // Reset the reconnect client to its initial state.
+  virtual void reset() = 0;
+};
+
+template <typename T>
+requires std::is_convertible_v<T, Capability::Client>
+struct AutoReconnectClient {
+  T cap;
+  kj::Own<AutoReconnectController> controller;
+};
+
 template <typename ConnectFunc>
 auto autoReconnect(ConnectFunc&& connect);
 // Creates a capability that reconstructs itself every time it becomes disconnected.
@@ -58,6 +71,14 @@ auto lazyAutoReconnect(ConnectFunc&& connect);
 // time the capability is used. Note that only the initial connection is lazy -- upon
 // disconnected errors this will still reconnect eagerly.
 
+template <typename ConnectFunc>
+auto lazyAutoReconnectWithController(ConnectFunc&& connect);
+// The same as lazyAutoReconnect, but returns an AutoReconnectClient exposing a controller which
+// allows the caller to "reset" the capability.
+//
+// This resets the capability to its original state such that the capability will be lazily
+// reconstructed upon the next RPC call. In-flight RPC calls are not affected.
+
 // =======================================================================================
 // inline implementation details
 
@@ -73,6 +94,19 @@ template <typename ConnectFunc>
 auto lazyAutoReconnect(ConnectFunc&& connect) {
   return lazyAutoReconnect(kj::Function<Capability::Client()>(kj::fwd<ConnectFunc>(connect)))
       .castAs<FromClient<kj::Decay<decltype(connect())>>>();
+}
+
+AutoReconnectClient<Capability::Client> lazyAutoReconnectWithController(
+    kj::Function<Capability::Client()> connect);
+template <typename ConnectFunc>
+auto lazyAutoReconnectWithController(ConnectFunc&& connect) {
+  auto result = lazyAutoReconnectWithController(
+      kj::Function<Capability::Client()>(kj::fwd<ConnectFunc>(connect)));
+  using ClientT = kj::Decay<decltype(connect())>;
+  return AutoReconnectClient<ClientT>{
+    .cap = result.cap.castAs<FromClient<ClientT>>(),
+    .controller = kj::mv(result.controller),
+  };
 }
 
 }  // namespace capnp
