@@ -25,7 +25,7 @@ namespace capnp {
 
 namespace {
 
-class ReconnectHook final: public ClientHook, public kj::Refcounted {
+class ReconnectHook final: public ClientHook, public AutoReconnectController, public kj::Refcounted  {
 public:
   ReconnectHook(kj::Function<Capability::Client()> connectParam, bool lazy = false)
       : connect(kj::mv(connectParam)),
@@ -74,6 +74,10 @@ public:
     // change or go away over time, but this one could whenever we reconnect. If there's a use
     // case for being able to access the FD here, we'll need a different interface to do it.
     return kj::none;
+  }
+
+  void reset() override {
+    current = kj::none;
   }
 
 private:
@@ -149,5 +153,14 @@ Capability::Client autoReconnect(kj::Function<Capability::Client()> connect) {
 
 Capability::Client lazyAutoReconnect(kj::Function<Capability::Client()> connect) {
   return Capability::Client(kj::refcounted<ReconnectHook>(kj::mv(connect), true));
+}
+
+AutoReconnectClient<Capability::Client> lazyAutoReconnectWithController(
+    kj::Function<Capability::Client()> connect) {
+  auto hook = kj::rc<ReconnectHook>(kj::mv(connect), true);
+  return AutoReconnectClient<Capability::Client>{
+    .cap = Capability::Client(hook.addRef().toOwn()),
+    .controller = hook.toOwn(),
+  };
 }
 }  // namespace capnp
