@@ -1675,7 +1675,25 @@ private:
   Path currentPath;
 
   static OwnFd openDir(const char* dir) {
-    auto result = KJ_SYSCALL_FD(open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
+    int fd;
+    KJ_SYSCALL_HANDLE_ERRORS(fd = open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
+      case EACCES:
+        // If we don't have read permission, fall back to O_PATH if available
+#ifdef O_PATH
+        {
+          auto result = KJ_SYSCALL_FD(open(dir, O_PATH | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
+#ifndef O_CLOEXEC
+          setCloexec(result);
+#endif
+          return result;
+        }
+	KJ_FALLTHROUGH;
+#endif
+      default:
+        KJ_FAIL_SYSCALL("open(dir, O_RDONLY)", error, dir);
+    }
+
+    auto result = OwnFd(fd);
 #ifndef O_CLOEXEC
     setCloexec(result);
 #endif
