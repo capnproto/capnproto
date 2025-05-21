@@ -422,21 +422,24 @@ public:
     // We _could_ use the compiler here and reach into it for its schema loader
     // but we are then dependent on the implementation of the compiler when
     // we don't need to be.
-    if (!schemaLoaderConstructed) {
-      schemaLoader = schemaLoaderSpace.construct();
-      schemaLoaderConstructed = true;
+    if (schemaLoader == kj::none) {
+      schemaLoader.emplace();
     }
 
-    // Now we start to actually load the schema files.
-    capnp::SchemaParser parser;
-    DirPathPair dirPathPair = interpretSourceFile(file);
-    parser.parseFromDirectory(dirPathPair.dir, dirPathPair.path.clone(), nullptr);
+    KJ_IF_SOME(loader, schemaLoader) {
+      // Now we start to actually load the schema files.
+      capnp::SchemaParser parser;
+      DirPathPair dirPathPair = interpretSourceFile(file);
+      parser.parseFromDirectory(dirPathPair.dir, dirPathPair.path.clone(), nullptr);
 
-    for (capnp::Schema loadedSchema: parser.getAllLoaded()) {
-      schemaLoader->load(loadedSchema.getProto());
+      for (capnp::Schema loadedSchema: parser.getAllLoaded()) {
+        loader.load(loadedSchema.getProto());
+      }
+
+      return true;
+    } else {
+      throw std::logic_error("schemaLoader was not initialized.");
     }
-
-    return true;
   }
 
 public:
@@ -1933,9 +1936,7 @@ private:
   kj::SpaceFor<Compiler> compilerSpace;
   bool compilerConstructed = false;
   kj::Own<Compiler> compiler;
-  kj::SpaceFor<SchemaLoader> schemaLoaderSpace;
-  bool schemaLoaderConstructed = false;
-  kj::Own<SchemaLoader> schemaLoader;
+  kj::Maybe<SchemaLoader> schemaLoader;
 
   Compiler::AnnotationFlag annotationFlag = Compiler::COMPILE_ANNOTATIONS;
 
