@@ -23,7 +23,7 @@ new version of a well-supported compiler. The minimum versions are:
 
 * GCC 10.0*
 * Clang 14.0
-* Visual C++ 2019
+* Visual C++ 2022
 
 *: Cap'n Proto 2.0 and above cannot currently compile with GCC due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051
 
@@ -42,7 +42,7 @@ as well as on Windows. We test every Cap'n Proto release on the following platfo
 * Windows - MinGW-w64
 * Windows - Visual C++
 
-**Windows users:** Cap'n Proto requires Visual Studio 2019 or newer. All features
+**Windows users:** Cap'n Proto requires Visual Studio 2022 or newer. All features
 of Cap'n Proto -- including serialization, dynamic API, RPC, and schema parser -- are now supported.
 
 **Mac OS X users:** You should use the latest Xcode with the Xcode command-line
@@ -114,7 +114,7 @@ provided by projects implementing Cap'n Proto in other languages.
 
 If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 
-1. Make sure that you are using Visual Studio 2019 or newer, with all updates installed. Cap'n
+1. Make sure that you are using Visual Studio 2022 or newer, with all updates installed. Cap'n
    Proto uses C++20 language features that did not work in previous versions of Visual Studio,
    and the updates include many bug fixes that Cap'n Proto requires.
 
@@ -123,7 +123,7 @@ If you want to use Cap'n Proto in C++ with Visual Studio, do the following:
 3. Use CMake to generate Visual Studio project files under `capnproto-c++-0.0.0` in the zip file.
    You can use the CMake UI for this or run this shell command:
 
-       cmake -G "Visual Studio 16 2019"
+       cmake -G "Visual Studio 17 2022"
 
 3. Open the "Cap'n Proto" solution in Visual Studio.
 
