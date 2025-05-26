@@ -63,7 +63,7 @@ struct timespec;
 
 namespace kj {
 
-class UnixEventPort: public EventPort, private TimerImpl::SleepHooks {
+class UnixEventPort final: public EventPort, private TimerImpl::SleepHooks {
   // An EventPort implementation which can wait for events on file descriptors as well as signals.
   // This API only makes sense on Unix.
   //

@@ -156,7 +156,7 @@ private:
   ArrayPtr<const byte> bufferAvailable;
 };
 
-class BufferedOutputStreamWrapper: public BufferedOutputStream {
+class BufferedOutputStreamWrapper final: public BufferedOutputStream {
   // Implements BufferedOutputStream in terms of an OutputStream.  Note that writes to the
   // underlying stream may be delayed until flush() is called or the wrapper is destroyed.
 
@@ -207,7 +207,7 @@ private:
   ArrayPtr<const byte> array;
 };
 
-class ArrayOutputStream: public BufferedOutputStream {
+class ArrayOutputStream final: public BufferedOutputStream {
 public:
   explicit ArrayOutputStream(ArrayPtr<byte> array);
   KJ_DISALLOW_COPY_AND_MOVE(ArrayOutputStream);
@@ -229,7 +229,7 @@ private:
 
 };
 
-class VectorOutputStream: public BufferedOutputStream {
+class VectorOutputStream final: public BufferedOutputStream {
 public:
   explicit VectorOutputStream(size_t initialCapacity = 4096);
   KJ_DISALLOW_COPY_AND_MOVE(VectorOutputStream);

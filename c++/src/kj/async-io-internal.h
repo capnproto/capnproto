@@ -45,7 +45,7 @@ kj::ArrayPtr<const char> safeUnixPath(const struct sockaddr_un* addr, uint addrl
 // paths MUST be read using this function.
 #endif
 
-class NetworkFilter: public LowLevelAsyncIoProvider::NetworkFilter {
+class NetworkFilter final: public LowLevelAsyncIoProvider::NetworkFilter {
 public:
   NetworkFilter();
   NetworkFilter(ArrayPtr<const StringPtr> allow, ArrayPtr<const StringPtr> deny,
