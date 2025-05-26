@@ -81,11 +81,8 @@ KJ_BEGIN_HEADER
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
                "-stdlib=libc++ to your CXXFLAGS."
     #endif
-  #else
-    #error "This library does not currently support GCC due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051."
-    // #if __GNUC__ < 10
-    //   #warning "This library requires at least GCC 10.0."
-    // #endif
+  #elif (__GNUC__ < 14) || (__GNUC__ == 14 && __GNUC_MINOR__ < 3)
+    #warning "This library requires at least GCC 14.3 due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051."
   #endif
 #elif defined(_MSC_VER)
   #if _MSC_VER < 1930 && !defined(__clang__)
