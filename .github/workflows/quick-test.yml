@@ -25,10 +25,8 @@ jobs:
   Linux-musl:
     # Docker images are no longer cached on the 24.04 runner, use 22.04 instead
     runs-on: ubuntu-22.04
-    # We depend on both clang and libc++. Alpine Linux 3.17 seems to be the first version to include
-    # a libc++ package (based on LLVM 15), but building capnproto failed when I tried it.
-    # Alpine Linux 3.18's libc++ package is from LLVM 16, however, and worked out-of-the-box, so
-    # Clang 16 appears to be the earliest Clang version we can run easily on Alpine Linux.
+    # We depend on both clang and libc++. We use Alpine Linux 3.19 which is cached on the
+    # ubuntu-22.04 build image and supports LLVM 17.
     container: alpine:3.19
     steps:
       - uses: actions/checkout@v4
