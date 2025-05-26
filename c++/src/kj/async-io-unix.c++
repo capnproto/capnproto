@@ -1889,10 +1889,6 @@ public:
         // when truncated. On other platforms (Linux) the length in cmsghdr will itself be
         // truncated to fit within the buffer.
 
-#if __APPLE__
-// On MacOS, `CMSG_SPACE(0)` triggers a bogus warning.
-#pragma GCC diagnostic ignored "-Wnull-pointer-arithmetic"
-#endif
         const byte* pos = reinterpret_cast<const byte*>(cmsg);
         size_t available = ancillaryBuffer.end() - pos;
         if (available < CMSG_SPACE(0)) {
