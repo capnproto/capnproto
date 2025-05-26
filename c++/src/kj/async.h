@@ -593,7 +593,7 @@ Promise<T> raceSuccessful(Array<Promise<T>>&& promises, SourceLocation location 
 
 namespace _ {
 
-void throwMultipleCoCaptureInvocations();
+KJ_NORETURN(void throwMultipleCoCaptureInvocations());
 
 template<typename Functor>
 struct CaptureForCoroutine {
