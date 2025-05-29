@@ -887,9 +887,9 @@ As mentioned above, `.then()` and similar functions consume the promise on which
 ```c++
 kj::Promise<int> promise = ...;
 kj::ForkedPromise<int> forked = promise.fork();
-kj::Promise<int> branch1 = promise.addBranch();
-kj::Promise<int> branch2 = promise.addBranch();
-kj::Promise<int> branch3 = promise.addBranch();
+kj::Promise<int> branch1 = forked.addBranch();
+kj::Promise<int> branch2 = forked.addBranch();
+kj::Promise<int> branch3 = forked.addBranch();
 ```
 
 A forked promise can have any number of "branches" which represent different consumers waiting for the same result.
