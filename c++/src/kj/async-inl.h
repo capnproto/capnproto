@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include <type_traits>  // For std::is_same_v
+
 #ifndef KJ_ASYNC_H_INCLUDED
 #error "Do not include this directly; include kj/async.h."
 #include "async.h"  // help IDE parse this file
@@ -35,6 +37,7 @@
 #include <intrin.h>  // _ReturnAddress
 #endif
 
+#include <kj/function.h>
 #include <kj/list.h>
 
 KJ_BEGIN_HEADER
@@ -704,6 +707,8 @@ private:
   friend class TransformPromiseNode;
   template <typename, typename>
   friend class SimpleTransformPromiseNode;
+  template <typename>
+  friend class VoidTransformPromiseNode;
 };
 
 template <typename _DepT, typename Func, typename ErrorFunc>
@@ -1407,17 +1412,33 @@ Promise<T>::Promise(kj::Exception&& exception)
 template <typename T>
 template <typename Func>
 PromiseForResult<Func, T> Promise<T>::then(Func&& func) {
-  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
+  // for Promise<void>, add specialized variants for continuation functions returning void or
+  // Promise<void>.
+  if constexpr (std::is_same_v<_::ReturnType<Func, T>, void> && std::is_same_v<void, T>) {
+    // We don't inline these functions manually so that this common code path only needs to be
+    // compiled once in async.c++.
+    return thenV(kj::mv(func));
+  } else if constexpr (std::is_same_v<_::ReturnType<Func, T>, Promise<void>> &&
+        std::is_same_v<void, T>) {
+    return thenVP(kj::mv(func));
+  } else {
+    typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
-  void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
+    void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
 
-  _::OwnPromiseNode intermediate =
-      _::PromiseDisposer::appendPromise<_::SimpleTransformPromiseNode<T, Func>>(
-      kj::mv(node), kj::fwd<Func>(func), continuationTracePtr);
+    _::OwnPromiseNode intermediate =
+        _::PromiseDisposer::appendPromise<_::SimpleTransformPromiseNode<T, Func>>(
+        kj::mv(node), kj::fwd<Func>(func), continuationTracePtr);
 
-  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
-      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), {}));
-  return _::maybeReduce(kj::mv(result), false);
+    // If function does not return a promise, no need to reduce or chain.
+    if constexpr (!std::is_same_v<PromiseForResult<Func, T>, _::ReturnType<Func, T>>) {
+        return _::PromiseNode::to<Promise<_::ReturnType<Func, T>>>(kj::mv(intermediate));
+    } else {
+      auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+        _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), {}));
+      return _::maybeReduce(kj::mv(result), false);
+      }
+    }
 }
 
 template <typename T>
@@ -1431,9 +1452,14 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
       _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
           kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
           continuationTracePtr);
-  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
-      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
-  return _::maybeReduce(kj::mv(result), false);
+
+  if constexpr (!std::is_same_v<PromiseForResult<Func, T>, _::ReturnType<Func, T>>) {
+    return _::PromiseNode::to<Promise<_::ReturnType<Func, T>>>(kj::mv(intermediate));
+  } else {
+    auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+        _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
+    return _::maybeReduce(kj::mv(result), false);
+  }
 }
 
 namespace _ {  // private
