@@ -156,7 +156,7 @@ private:
   Expression::Reader source;
 };
 
-class BrandScope: public kj::Refcounted {
+class BrandScope final: public kj::Refcounted {
   // Tracks the brand parameter bindings affecting the scope specified by some expression. For
   // example, if we are interpreting the type expression "Foo(Text).Bar", we would start with the
   // current scope's BrandScope, create a new child BrandScope representing "Foo", add the "(Text)"

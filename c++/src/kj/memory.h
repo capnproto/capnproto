@@ -107,7 +107,7 @@ const void* castToConstVoid(T* ptr) {
   }
 }
 
-void throwWrongDisposerError();
+KJ_NORETURN(void throwWrongDisposerError());
 
 }  // namespace _ (private)
 
