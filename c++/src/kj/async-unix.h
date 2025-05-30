@@ -37,8 +37,9 @@ KJ_BEGIN_HEADER
 #if __linux__
 // Default to epoll on Linux.
 #define KJ_USE_EPOLL 1
-#elif __APPLE__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __DragonFly__
-// MacOS and BSDs prefer kqueue() for event notification.
+#elif __APPLE__ || __FreeBSD__ || __NetBSD__ || __DragonFly__
+// MacOS and most BSDs prefer kqueue() for event notification.
+// (Note that OpenBSD's kqueue(2) doesn't support user event filters yet)
 #define KJ_USE_KQUEUE 1
 #endif
 #endif
