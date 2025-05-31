@@ -473,7 +473,7 @@ TEST(Packed, RoundTripAllZeroEvenSegmentCountLazy) {
 
 TEST(Packed, RoundTripHugeString) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(1);
   builder.initRoot<TestAllTypes>().setTextField(huge);
@@ -489,7 +489,7 @@ TEST(Packed, RoundTripHugeString) {
 
 TEST(Packed, RoundTripHugeStringScratchSpace) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(1);
   builder.initRoot<TestAllTypes>().setTextField(huge);
@@ -506,7 +506,7 @@ TEST(Packed, RoundTripHugeStringScratchSpace) {
 
 TEST(Packed, RoundTripHugeStringLazy) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(1);
   builder.initRoot<TestAllTypes>().setTextField(huge);
@@ -522,7 +522,7 @@ TEST(Packed, RoundTripHugeStringLazy) {
 
 TEST(Packed, RoundTripHugeStringOddSegmentCount) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(3);
   builder.initRoot<TestAllTypes>().setTextField(huge);
@@ -538,7 +538,7 @@ TEST(Packed, RoundTripHugeStringOddSegmentCount) {
 
 TEST(Packed, RoundTripHugeStringOddSegmentCountLazy) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(3);
   builder.initRoot<TestAllTypes>().setTextField(huge);
@@ -554,7 +554,7 @@ TEST(Packed, RoundTripHugeStringOddSegmentCountLazy) {
 
 TEST(Packed, RoundTripHugeStringEvenSegmentCount) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(2);
   builder.initRoot<TestAllTypes>().setTextField(huge);
@@ -570,7 +570,7 @@ TEST(Packed, RoundTripHugeStringEvenSegmentCount) {
 
 TEST(Packed, RoundTripHugeStringEvenSegmentCountLazy) {
   kj::String huge = kj::heapString(5023);
-  memset(huge.begin(), 'x', 5023);
+  huge.asBytes().fill('x');
 
   TestMessageBuilder builder(2);
   builder.initRoot<TestAllTypes>().setTextField(huge);
