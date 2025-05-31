@@ -367,6 +367,49 @@ TEST(AsyncIo, AncillaryMessageHandler) {
 }
 #endif
 
+#if __linux__
+TEST(AsyncIo, VmSocket) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<ConnectionReceiver> listener;
+  Own<AsyncIoStream> server;
+  Own<AsyncIoStream> client;
+
+  char receiveBuffer[4];
+
+  int port = ((getpid() >> 10) % (0xffff - 1024 + 1)) + 1024; // wrap to dynamic port range
+  auto ready = newPromiseAndFulfiller<void>();
+
+  ready.promise.then([&]() {
+    return network.parseAddress(kj::str("vsock:2:", port));
+  }).then([&](Own<NetworkAddress>&& addr) {
+    auto promise = addr->connect();
+    return promise.then([&,addr=kj::mv(addr)](auto result) mutable {
+      client = kj::mv(result);
+      return client->write("foo", 3);
+    });
+  }).detach([](kj::Exception&& exception) {
+    KJ_FAIL_EXPECT(exception);
+  });
+
+  kj::String result = network.parseAddress(kj::str("vsock:2:", port))
+      .then([&](Own<NetworkAddress>&& result) {
+    listener = result->listen();
+    ready.fulfiller->fulfill();
+    return listener->accept();
+  }).then([&](auto result) {
+    server = kj::mv(result);
+    return server->tryRead(receiveBuffer, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait(ioContext.waitScope);
+
+  EXPECT_EQ("foo", result);
+}
+#endif
+
 String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint portHint = 0) {
   return network.parseAddress(text, portHint).wait(waitScope)->toString();
 }
@@ -411,6 +454,10 @@ TEST(AsyncIo, AddressParsing) {
 #if !_WIN32
   EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
   EXPECT_EQ("unix-abstract:foo/bar/baz", tryParse(w, network, "unix-abstract:foo/bar/baz"));
+#endif
+
+#if __linux__
+  EXPECT_EQ("vsock:4294967295:1234", tryParse(w, network, "vsock:-1:1234"));
 #endif
 
   // We can parse services by name...
@@ -1380,6 +1427,9 @@ KJ_TEST("Network::restrictPeers()") {
   KJ_EXPECT(tryParse(w, *restrictedNetwork, "8.8.8.8") == "8.8.8.8:0");
 #if !_WIN32
   KJ_EXPECT_THROW_MESSAGE("restrictPeers", tryParse(w, *restrictedNetwork, "unix:/foo"));
+#endif
+#if __linux__
+  KJ_EXPECT_THROW_MESSAGE("restrictPeers", tryParse(w, *restrictedNetwork, "vsock:-1:80"));
 #endif
 
   auto addr = restrictedNetwork->parseAddress("127.0.0.1").wait(w);
