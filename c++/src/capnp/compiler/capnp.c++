@@ -433,7 +433,11 @@ public:
       parser.parseFromDirectory(dirPathPair.dir, dirPathPair.path.clone(), nullptr);
 
       for (capnp::Schema loadedSchema: parser.getAllLoaded()) {
-        loader.load(loadedSchema.getProto());
+        try {
+          loader.load(loadedSchema.getProto());
+        } catch (const kj::Exception& exception) {
+          return kj::str("Backwards compatibility check failed:\n", exception);
+        }
       }
 
       return true;
