@@ -434,7 +434,7 @@ public:
 
       for (capnp::Schema loadedSchema: parser.getAllLoaded()) {
         try {
-          loader.load(loadedSchema.getProto());
+          loader.load(loadedSchema.getProto(), true);
         } catch (const kj::Exception& exception) {
           return kj::str("Backwards compatibility check failed:\n", exception);
         }
