@@ -251,7 +251,7 @@ public:
   kj::MainFunc getLintUpdateMain() {
     kj::MainBuilder builder(context, VERSION_STRING,
           "Compares <old-schema-file> and <new-schema-file> to check whether <new-schema-file> "
-          "is backwards comparible with <old-schema-file>. If so then this command will exit with "
+          "is backwards compatible with <old-schema-file>. If so then this command will exit with "
           "code 0, otherwise a non-zero exit code will be returned. Note that only the data types "
           "used within these files are checked, so if the schemas import data types from schemas "
           "that export other data types that are not used in either <new-schema-file> or <old-schema-file> "
