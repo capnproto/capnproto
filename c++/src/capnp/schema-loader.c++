@@ -91,7 +91,9 @@ public:
   inline Impl(const SchemaLoader& loader, const LazyLoadCallback& callback)
       : initializer(loader, callback), brandedInitializer(loader) {}
 
-  _::RawSchema* load(const schema::Node::Reader& reader, bool isPlaceholder);
+  _::RawSchema* load(const schema::Node::Reader& reader,
+                     bool isPlaceholder,
+                     bool replacementExpectedToBeNewer = false);
 
   _::RawSchema* loadNative(const _::RawSchema* nativeSchema);
 
@@ -627,7 +629,8 @@ public:
 
   bool shouldReplace(const schema::Node::Reader& existingNode,
                      const schema::Node::Reader& replacement,
-                     bool preferReplacementIfEquivalent) {
+                     bool preferReplacementIfEquivalent,
+                     bool replacementExpectedToBeNewer) {
     this->existingNode = existingNode;
     this->replacementNode = replacement;
 
@@ -639,10 +642,17 @@ public:
     nodeName = existingNode.getDisplayName();
     compatibility = EQUIVALENT;
 
-    checkCompatibility(existingNode, replacement);
+    checkCompatibility(existingNode, replacement, replacementExpectedToBeNewer);
 
     // Prefer the newer schema.
     return preferReplacementIfEquivalent ? compatibility != OLDER : compatibility == NEWER;
+  }
+
+  // Must only be called after a call to `CompatibilityChecker::shouldReplace`.
+  // Returns `true` if the schema that was just checked was determined to be
+  // either newer than the previously seen schema or at least was equivalent.
+  bool lastCheckWasNewerOrEquivalent() {
+    return this->compatibility == NEWER || this->compatibility == EQUIVALENT;
   }
 
 private:
@@ -697,7 +707,8 @@ private:
   }
 
   void checkCompatibility(const schema::Node::Reader& node,
-                          const schema::Node::Reader& replacement) {
+                          const schema::Node::Reader& replacement,
+                          bool replacementExpectedToBeNewer) {
     // Returns whether `replacement` is equivalent, older than, newer than, or incompatible with
     // `node`.  If exceptions are enabled, this will throw an exception on INCOMPATIBLE.
 
@@ -720,13 +731,14 @@ private:
         break;
       case schema::Node::STRUCT:
         checkCompatibility(node.getStruct(), replacement.getStruct(),
-                           node.getScopeId(), replacement.getScopeId());
+                           node.getScopeId(), replacement.getScopeId(),
+                          replacementExpectedToBeNewer);
         break;
       case schema::Node::ENUM:
-        checkCompatibility(node.getEnum(), replacement.getEnum());
+        checkCompatibility(node.getEnum(), replacement.getEnum(), replacementExpectedToBeNewer);
         break;
       case schema::Node::INTERFACE:
-        checkCompatibility(node.getInterface(), replacement.getInterface());
+        checkCompatibility(node.getInterface(), replacement.getInterface(), replacementExpectedToBeNewer);
         break;
       case schema::Node::CONST:
         checkCompatibility(node.getConst(), replacement.getConst());
@@ -739,7 +751,8 @@ private:
 
   void checkCompatibility(const schema::Node::Struct::Reader& structNode,
                           const schema::Node::Struct::Reader& replacement,
-                          uint64_t scopeId, uint64_t replacementScopeId) {
+                          uint64_t scopeId, uint64_t replacementScopeId,
+                          bool replacementExpectedToBeNewer) {
     if (replacement.getDataWordCount() > structNode.getDataWordCount()) {
       replacementIsNewer();
     } else if (replacement.getDataWordCount() < structNode.getDataWordCount()) {
@@ -777,6 +790,24 @@ private:
       checkCompatibility(fields[i], replacementFields[i]);
     }
 
+    // This check is perfomed here rather than in the previous check for removals because the
+    // per-field check performed above will catch removals that leave gaps in field ordinals
+    // as well as removals where ordinals have been updated but have resulted in incompatible
+    // fields in place of the original fields, both of which result in more helpful errors than
+    // the best we can do here; which is to say that the number of field present does not match.
+    //
+    // We _could_ take a guess at which fields were removed by looking at field names and types,
+    // but we risk giving inaccurate information in complex cases where deletions, renames, and additions
+    // have all occurred. 
+    if (replacementExpectedToBeNewer && replacementFields.size() < fields.size()) {
+      auto deletedCount = fields.size() - replacementFields.size();      
+      if (deletedCount == 1) {
+        FAIL_VALIDATE_SCHEMA("A field was removed");
+      } else {
+        FAIL_VALIDATE_SCHEMA(kj::str(deletedCount, " fields were removed"));
+      }
+    }
+
     // For the moment, we allow "upgrading" from non-group to group, mainly so that the
     // placeholders we generate for group parents (which in the absence of more info, we assume to
     // be non-groups) can be replaced with groups.
@@ -787,7 +818,12 @@ private:
       if (replacement.getIsGroup()) {
         VALIDATE_SCHEMA(replacementScopeId == scopeId, "group node's scope changed");
       } else {
-        replacementIsOlder();
+        // We allow "upgrading" to a group only, not "downgrading".
+        if (replacementExpectedToBeNewer) {
+          FAIL_VALIDATE_SCHEMA("Struct changed from group to a non-group");
+        } else {
+          replacementIsOlder();
+        }
       }
     } else {
       if (replacement.getIsGroup()) {
@@ -849,7 +885,8 @@ private:
   }
 
   void checkCompatibility(const schema::Node::Enum::Reader& enumNode,
-                          const schema::Node::Enum::Reader& replacement) {
+                          const schema::Node::Enum::Reader& replacement,
+                          bool replacementExpectedToBeNewer) {
     uint size = enumNode.getEnumerants().size();
     uint replacementSize = replacement.getEnumerants().size();
     if (replacementSize > size) {
@@ -857,10 +894,20 @@ private:
     } else if (replacementSize < size) {
       replacementIsOlder();
     }
+
+    if (replacementExpectedToBeNewer && replacementSize < size) {      
+      auto deletedCount = size - replacementSize;
+      if (deletedCount == 1) {
+        FAIL_VALIDATE_SCHEMA("An enumerant was removed");
+      } else {
+        FAIL_VALIDATE_SCHEMA(kj::str(deletedCount, " enumerants were removed"));
+      }
+    }
   }
 
   void checkCompatibility(const schema::Node::Interface::Reader& interfaceNode,
-                          const schema::Node::Interface::Reader& replacement) {
+                          const schema::Node::Interface::Reader& replacement,
+                          bool replacementExpectedToBeNewer) {
     {
       // Check superclasses.
 
@@ -911,6 +958,25 @@ private:
 
     for (uint i = 0; i < count; i++) {
       checkCompatibility(methods[i], replacementMethods[i]);
+    }
+
+    // This check is perfomed here rather than in the previous check for removals because the
+    // per-method check performed above will catch removals that leave gaps in method ordinals
+    // as well as removals where ordinals have been updated but have resulted in incompatible
+    // method calls in place of the original methods, both of which result in more helpful
+    // errors than the best we can do here; which is to say that the number of methods present
+    // does not match.
+    //
+    // We _could_ take a guess at which methods were removed by looking at method names and signatures,
+    // but we risk giving inaccurate information in complex cases where deletions, renames, and additions
+    // have all occurred. 
+    if (replacementExpectedToBeNewer && replacementMethods.size() < methods.size()) {
+      auto deletedCount = methods.size() - replacementMethods.size();      
+      if (deletedCount == 1) {
+        FAIL_VALIDATE_SCHEMA("A method was removed");
+      } else {
+        FAIL_VALIDATE_SCHEMA(kj::str(deletedCount, " methods were removed"));
+      }
     }
   }
 
@@ -1228,7 +1294,9 @@ private:
 
 // =======================================================================================
 
-_::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool isPlaceholder) {
+_::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader,
+                                       bool isPlaceholder,
+                                       bool replacementExpectedToBeNewer) {
   // Make a copy of the node which can be used unchecked.
   kj::ArrayPtr<word> validated = makeUncheckedNodeEnforcingSizeRequirements(reader);
 
@@ -1263,7 +1331,10 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     // Prefer to replace the existing schema if the existing schema is a placeholder.  Otherwise,
     // prefer to keep the existing schema.
     shouldReplace = checker.shouldReplace(
-        existing, validatedReader, schema->lazyInitializer != nullptr);
+        existing, validatedReader, schema->lazyInitializer != nullptr, replacementExpectedToBeNewer);
+    if (replacementExpectedToBeNewer && !checker.lastCheckWasNewerOrEquivalent()) {
+      KJ_FAIL_REQUIRE("Schema was expected to be considered to be an upgrade, but was determined to be a downgrade");
+    }
   } else {
     // Nope, allocate a new RawSchema.
     schema = &arena.allocate<_::RawSchema>();
@@ -1332,7 +1403,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
       auto existing = readMessageUnchecked<schema::Node>(schema->encodedNode);
       auto native = readMessageUnchecked<schema::Node>(nativeSchema->encodedNode);
       CompatibilityChecker checker(*this);
-      shouldReplace = checker.shouldReplace(existing, native, true);
+      shouldReplace = checker.shouldReplace(existing, native, true, false);
       shouldClearInitializer = schema->lazyInitializer != nullptr;
     }
   } else {
@@ -2237,8 +2308,8 @@ Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
   KJ_UNREACHABLE;
 }
 
-Schema SchemaLoader::load(const schema::Node::Reader& reader) {
-  return Schema(&impl.lockExclusive()->get()->load(reader, false)->defaultBrand);
+Schema SchemaLoader::load(const schema::Node::Reader& reader, bool replacementExpectedToBeNewer) {
+  return Schema(&impl.lockExclusive()->get()->load(reader, false, replacementExpectedToBeNewer)->defaultBrand);
 }
 
 Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
