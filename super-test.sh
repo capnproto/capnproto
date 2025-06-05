@@ -28,6 +28,7 @@ QUICK=
 CPP_FEATURES=
 WERROR="-Werror"
 EXTRA_LIBS=
+CXXFLAGS=
 
 PARALLEL=$(nproc 2>/dev/null || echo 1)
 
@@ -75,6 +76,9 @@ while [ $# -gt 0 ]; do
       # Re-run preventing sleep.
       shift
       exec caffeinate -ims $0 $@
+      ;;
+    no-fiber )
+      CXXFLAGS="$CXXFLAGS -DKJ_USE_FIBERS=0"
       ;;
     tmpdir )
       # Clone to a temp directory.
@@ -354,7 +358,7 @@ done
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
 # real problem. Disable unused parameters because it's stupidly noisy and never a real problem.
 # Enable expensive release-gating tests.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra ${WERROR} -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1 ${CPP_FEATURES}"
+export CXXFLAGS="$CXXFLAGS -O2 -DDEBUG -Wall -Wextra ${WERROR} -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter -DCAPNP_EXPENSIVE_TESTS=1 ${CPP_FEATURES}"
 export LIBS="$EXTRA_LIBS"
 
 if [ "${CXX:-}" != "g++-5" ]; then
@@ -433,7 +437,7 @@ else
   # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
   # uninitialized memory usage later on. GCC 4 also emits strange bogus warnings with
   # -Wstrict-overflow, so we disable it.
-  CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized -Wno-strict-overflow"
+  CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized -Wno-strict-overflow -Wno-misleading-indentation"
 
   # TODO(someday): Enable coroutines in g++ if supported.
 fi
