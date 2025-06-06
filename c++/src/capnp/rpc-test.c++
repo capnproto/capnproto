@@ -51,8 +51,8 @@ public:
 
   class Sender {
   public:
-    explicit Sender(RpcDumper& parent, kj::StringPtr name)
-        : parent(parent), name(name) {}
+    explicit Sender(RpcDumper& parent, kj::StringPtr name, bool unique)
+        : parent(parent), name(name), unique(unique) {}
 
     ~Sender() noexcept(false) {
       KJ_IF_SOME(p, partner) {
@@ -113,8 +113,8 @@ public:
 
           auto sendResultsTo = call.getSendResultsTo();
 
-          return kj::str(name, "->", partnerName, ": call ", call.getQuestionId(), ": ",
-                         call.getTarget(), " <- ", interfaceName, ".",
+          return kj::str(name, unique ? "=>" : "->", partnerName, ": call ", call.getQuestionId(),
+                         ": ", call.getTarget(), " <- ", interfaceName, ".",
                          methodProto.getName(), params,
                          " caps:[", kj::strArray(capTable, ", "), "]",
                          sendResultsTo.isCaller() ? kj::str()
@@ -152,12 +152,12 @@ public:
           if (schema.getProto().isStruct()) {
             auto results = content.getAs<DynamicStruct>(schema.asStruct());
 
-            return kj::str(name, "->", partnerName, ": return ", ret.getAnswerId(), ": ", results,
-                           " caps:[", kj::strArray(capTable, ", "), "]\n");
+            return kj::str(name, unique ? "=>" : "->", partnerName, ": return ", ret.getAnswerId(),
+                           ": ", results, " caps:[", kj::strArray(capTable, ", "), "]\n");
           } else if (schema.getProto().isInterface()) {
             content.getAs<DynamicCapability>(schema.asInterface());
-            return kj::str(name, "->", partnerName, "(", ret.getAnswerId(), "): return cap ",
-                           kj::strArray(capTable, ", "), '\n');
+            return kj::str(name, unique ? "=>" : "->", partnerName, "(", ret.getAnswerId(),
+                           "): return cap ", kj::strArray(capTable, ", "), '\n');
           } else {
             break;
           }
@@ -183,6 +183,7 @@ public:
   private:
     RpcDumper& parent;
     kj::StringPtr name;
+    bool unique;
 
     kj::Maybe<Sender&> partner;
     kj::StringPtr partnerName;
@@ -236,7 +237,11 @@ public:
   RpcDumper dumper;
 
   bool forwardingEnabled = false;
+  bool callHandoffEnabled = false;
+  uint introCount = 0;
+  uint callIntroCount = 0;
   uint forwardCount = 0;
+  uint callForwardCount = 0;
   uint deniedForwardCount = 0;
 
 private:
@@ -276,7 +281,7 @@ public:
       : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
     ConnectionImpl(TestVat& vat, TestVat& peerVat, kj::StringPtr name, bool unique)
-        : vat(vat), peerVat(peerVat), unique(unique), dumper(vat.network.dumper, name),
+        : vat(vat), peerVat(peerVat), unique(unique), dumper(vat.network.dumper, name, unique),
           tasks(kj::heap<kj::TaskSet>(*this)) {
       if (!unique) {
         vat.connections.insert(&peerVat, this);
@@ -478,13 +483,24 @@ public:
       this->idle = idle;
     }
 
-    bool canIntroduceTo(Connection& other) override {
-      return true;
+    bool canIntroduceTo(Connection& other, ThreePartyHandoffPurpose purpose) override {
+      return vat.network.callHandoffEnabled ||
+          purpose != ThreePartyHandoffPurpose::CALL_FORWARDING;
     }
 
-    void introduceTo(Connection& other,
+    void introduceTo(Connection& other, ThreePartyHandoffPurpose purpose,
         test::TestThirdPartyToContact::Builder otherContactInfo,
         test::TestThirdPartyToAwait::Builder thisAwaitInfo) override {
+      switch (purpose) {
+        case ThreePartyHandoffPurpose::CAPABILITY_PASSING:
+          ++vat.network.introCount;
+          break;
+        case ThreePartyHandoffPurpose::CALL_FORWARDING:
+          KJ_ASSERT(vat.network.callHandoffEnabled);
+          ++vat.network.callIntroCount;
+          break;
+      }
+
       uint64_t token = vat.network.newToken();
       otherContactInfo.initPath().setHost(kj::downcast<ConnectionImpl>(other).partnerName);
       otherContactInfo.setToken(token);
@@ -501,7 +517,8 @@ public:
     }
 
     bool canForwardThirdPartyToContact(
-        test::TestThirdPartyToContact::Reader contact, Connection& destination) override {
+        test::TestThirdPartyToContact::Reader contact, Connection& destination,
+        ThreePartyHandoffPurpose purpose) override {
       if (!vat.network.forwardingEnabled) {
         ++vat.network.deniedForwardCount;
       }
@@ -510,10 +527,18 @@ public:
 
     void forwardThirdPartyToContact(
         test::TestThirdPartyToContact::Reader contact, Connection& destination,
-        test::TestThirdPartyToContact::Builder result) override {
+        ThreePartyHandoffPurpose purpose, test::TestThirdPartyToContact::Builder result) override {
       KJ_EXPECT(vat.network.forwardingEnabled);
       KJ_EXPECT(contact.getSentBy() == partnerName);
-      ++vat.network.forwardCount;
+      switch (purpose) {
+        case ThreePartyHandoffPurpose::CAPABILITY_PASSING:
+          ++vat.network.forwardCount;
+          break;
+        case ThreePartyHandoffPurpose::CALL_FORWARDING:
+          KJ_ASSERT(vat.network.callHandoffEnabled);
+          ++vat.network.callForwardCount;
+          break;
+      }
       result.setPath(contact.getPath());
       result.setToken(contact.getToken());
       result.setSentBy(vat.self);
@@ -2323,6 +2348,427 @@ KJ_TEST("three-party handoff with embargos") {
   call1.wait(context.waitScope);
   call2.wait(context.waitScope);
   KJ_EXPECT(context.restorer.callCount == 3);
+}
+
+class TestTailForwarder final: public Capability::Server {
+  // Capability which just forwards to some other capability, always using a tail call.
+  //
+  // This prevents three-party capability handoff from simply shortening the path, but causes
+  // calls through it to use three-party call forwarding.
+
+public:
+  TestTailForwarder(Capability::Client next): next(kj::mv(next)) {}
+
+  DispatchCallResult dispatchCall(uint64_t interfaceId, uint16_t methodId,
+                                  CallContext<AnyPointer, AnyPointer> context) override {
+    auto params = context.getParams();
+    auto req = next.typelessRequest(interfaceId, methodId, params.targetSize(), {});
+    req.set(params);
+    auto promise = context.tailCall(kj::mv(req));
+    return { .promise = kj::mv(promise), .isStreaming = false };
+  }
+
+private:
+  Capability::Client next;
+};
+
+KJ_TEST("basic three-party call handoff") {
+  TestContext context;
+  context.network.callHandoffEnabled = true;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  // Arrange that Carol always tail-calls to Bob, without actually path-shortening to Bob.
+  {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& carol = context.initVat("carol", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(carol.connect<Capability>("bob")));
+  }
+
+  auto carolCap = alice.connect<test::TestInterface>("carol");
+
+  context.waitScope.poll();
+
+  // Alice has not connected to Bob.
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Call carol
+  {
+    auto req = carolCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(0);
+    auto resp = req.send().wait(context.waitScope);
+    KJ_EXPECT(resp.getX() == "foo");
+  }
+
+  // Bob got a call.
+  KJ_EXPECT(context.restorer.callCount == 1);
+
+  // Alice now HAS connected to Bob.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  // The connection is idle at this point.
+  KJ_EXPECT(aliceToBob.isIdle());
+
+  // The introduction was for calls, not caps.
+  KJ_EXPECT(context.network.introCount == 0);
+  KJ_EXPECT(context.network.callIntroCount == 1);
+}
+
+KJ_TEST("complex three-party call handoff") {
+  // Like previous test but we're going to do some pipelining and capability-passing.
+
+  TestContext context;
+  context.network.callHandoffEnabled = true;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  // Arrange that Carol always tail-calls to Bob, without actually path-shortening to Bob.
+  {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& carol = context.initVat("carol", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(carol.connect<Capability>("bob")));
+  }
+
+  auto carolCap = alice.connect<test::TestInterface>("carol");
+
+  context.waitScope.poll();
+
+  // Alice has not connected to Bob.
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  int callCount = 0;
+  test::TestInterface::Client cap = kj::heap<TestInterfaceImpl>(callCount);
+
+  // Call Carol, make a pipeline call, and pass a capability to call back.
+  {
+    auto moreStuff = carolCap.getTestMoreStuffRequest().send().getCap();
+
+    auto req = moreStuff.callFooRequest();
+    req.setCap(cap);
+    req.send().wait(context.waitScope);
+  }
+
+  KJ_EXPECT(callCount == 1);
+
+  // Alice now HAS connected to Bob.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  // Pump event loop to give a chance to detect idleness.
+  context.waitScope.poll();
+
+  // The Alice -> Bob connection is idle at this point.
+  KJ_EXPECT(aliceToBob.isIdle());
+
+  // Two calls were forwarded (getTestMoreStuff() and callFoo()), and a capability (passed to
+  // callFoo()).
+  KJ_EXPECT(context.network.introCount == 1);
+  KJ_EXPECT(context.network.callIntroCount == 2);
+}
+
+KJ_TEST("call handoff introduction to self") {
+  // Like previous test but we're going to involve an introduction-to-self.
+
+  TestContext context;
+  context.network.callHandoffEnabled = true;
+
+  auto& bob = context.bob;
+
+  // Arrange that Carol always tail-calls to Bob, without actually path-shortening to Bob.
+  {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& carol = context.initVat("carol", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(carol.connect<Capability>("bob")));
+  }
+
+  // Now have Bob connect to Carol through a unique connection -- separate from the existing
+  // connection.
+  auto carolCap = bob.connect<test::TestInterface>("carol", true);
+
+  context.waitScope.poll();
+
+  int callCount = 0;
+  test::TestInterface::Client cap = kj::heap<TestInterfaceImpl>(callCount);
+
+  // Call Carol from Bob, make a pipeline call, and pass a capability to call back.
+  {
+    auto moreStuff = carolCap.getTestMoreStuffRequest().send().getCap();
+
+    auto req = moreStuff.callFooRequest();
+    req.setCap(cap);
+    req.send().wait(context.waitScope);
+  }
+
+  KJ_EXPECT(callCount == 1);
+
+  // Two calls were forwarded (getTestMoreStuff() and callFoo()), and a capability (passed to
+  // callFoo()).
+  KJ_EXPECT(context.network.introCount == 1);
+  KJ_EXPECT(context.network.callIntroCount == 2);
+}
+
+void doCallForwardingTest(bool allowForwarding) {
+  TestContext context;
+  context.network.callHandoffEnabled = true;
+  context.network.forwardingEnabled = allowForwarding;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  // Arrange that Carol always tail-calls to Bob, without actually path-shortening to Bob.
+  auto& carol = [&]() -> TestContext::Vat& {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& carol = context.initVat("carol", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(carol.connect<Capability>("bob")));
+    return carol;
+  }();
+
+  // Arrange that Dave similarly tail-calls to Carol.
+  {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& dave = context.initVat("dave", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(dave.connect<Capability>("carol")));
+  }
+
+  auto daveCap = alice.connect<test::TestInterface>("dave");
+
+  context.waitScope.poll();
+
+  // Alice has not connected to Bob.
+  KJ_EXPECT(alice.vatNetwork.getConnectionTo(bob.vatNetwork) == kj::none);
+
+  // Call Dave
+  {
+    auto req = daveCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(0);
+    auto resp = req.send().wait(context.waitScope);
+    KJ_EXPECT(resp.getX() == "foo");
+  }
+
+  // Bob got a call.
+  KJ_EXPECT(context.restorer.callCount == 1);
+
+  // Alice now HAS connected to Bob.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  // The connection is idle at this point.
+  KJ_EXPECT(aliceToBob.isIdle());
+
+  if (allowForwarding) {
+    // With forwarding, Alice never should have received a connection from Carol.
+    KJ_EXPECT(alice.vatNetwork.getConnectionTo(carol.vatNetwork) == kj::none);
+
+    KJ_EXPECT(context.network.introCount == 0);
+    KJ_EXPECT(context.network.callIntroCount == 1);
+    KJ_EXPECT(context.network.callForwardCount == 1);
+  } else {
+    // Without forwarding, Carol had to connect to Alice just to tell Alice to expect another
+    // connection from Bob.
+    auto& aliceToCarol = KJ_ASSERT_NONNULL(alice.vatNetwork.getConnectionTo(carol.vatNetwork));
+    KJ_EXPECT(aliceToCarol.isIdle());
+
+    KJ_EXPECT(context.network.introCount == 0);
+    KJ_EXPECT(context.network.callIntroCount == 2);
+    KJ_EXPECT(context.network.callForwardCount == 0);
+  }
+}
+
+KJ_TEST("three-party call handoff with forwarding") {
+  doCallForwardingTest(true);
+}
+
+KJ_TEST("three-party call handoff with forwarding blocked") {
+  doCallForwardingTest(false);
+}
+
+enum EmbargoTestArrangement {
+  THREE_PARTY,
+  SELF_INTRODUCTION,
+  FOUR_PARTY_BLOCK_CAROL,
+  FOUR_PARTY_BLOCK_DAVE,
+};
+
+void doEmbargoTest(EmbargoTestArrangement arrangement,
+                   bool forwardingEnabled,
+                   bool disconnect) {
+  // Like previous test but we're going to do some pipelining and capability-passing.
+
+  TestContext context;
+  context.network.callHandoffEnabled = true;
+  context.network.forwardingEnabled = forwardingEnabled;
+
+  // Set up Alice, Bob, and Carol.
+  auto& alice = context.alice;
+  auto& bob = context.bob;
+
+  // Arrange that Carol always tail-calls to Bob, without actually path-shortening to Bob.
+  auto& carol = [&]() -> TestContext::Vat& {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& carol = context.initVat("carol", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(carol.connect<Capability>("bob")));
+    return carol;
+  }();
+
+  // Arrange that Dave tail-calls to Carol.
+  auto& dave = [&]() -> TestContext::Vat& {
+    auto paf = kj::newPromiseAndFulfiller<Capability::Client>();
+    auto& dave = context.initVat("dave", kj::mv(paf.promise));
+    paf.fulfiller->fulfill(kj::heap<TestTailForwarder>(dave.connect<Capability>("carol")));
+    return dave;
+  }();
+
+  auto clientCap =
+      arrangement == SELF_INTRODUCTION ? bob.connect<test::TestInterface>("carol", true)
+    : arrangement == THREE_PARTY       ? alice.connect<test::TestInterface>("carol")
+                                       : alice.connect<test::TestInterface>("dave");
+
+  context.waitScope.poll();
+
+  int callCount = 0;
+  test::TestInterface::Client cap = kj::heap<TestInterfaceImpl>(callCount);
+
+  // Arrange to block the Carol -> Bob connection immediately after the `Call` message for
+  // `echo()` goes through. (Or Dave -> Carol if desired.)
+  auto& connToBlock = arrangement == FOUR_PARTY_BLOCK_DAVE
+      ? KJ_ASSERT_NONNULL(dave.vatNetwork.getConnectionTo(carol.vatNetwork))
+      : KJ_ASSERT_NONNULL(carol.vatNetwork.getConnectionTo(bob.vatNetwork));
+
+  connToBlock.blockAfter([](rpc::Message::Reader msg) {
+    if (!msg.isCall()) return false;
+    auto call = msg.getCall();
+    return call.getInterfaceId() == capnp::typeId<test::TestMoreStuff>() &&
+           call.getMethodId() == 6;
+  });
+
+  // Bounce our capability through the carol->bob path and immediately make a pipelined call on
+  // it.
+  kj::Promise<void> promise = nullptr;
+  test::TestInterface::Client echoCap = nullptr;
+  {
+    auto moreStuff = clientCap.getTestMoreStuffRequest().send().getCap();
+
+    // Echo `cap` through `echo()`.
+    echoCap = [&]() {
+      auto req = moreStuff.echoRequest();
+
+      // HACK: echo() just reflects the cap back, but it was written to expect TestCallOrder
+      //   specifically. We'll just pretend that's what we have, it doesn't matter.
+      // TODO(cleanup): Change echo() to take `Capability` or maybe even be a generic.
+      req.setCap(cap.castAs<test::TestCallOrder>());
+      return req.send().getCap().castAs<test::TestInterface>();
+    }();
+
+    // Make a pipelined call.
+    auto req = echoCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(0);
+    promise = req.send().ignoreResult();
+  }
+
+  // The pipelined call doesn't complete yet.
+  KJ_EXPECT(!promise.poll(context.waitScope));
+
+  // echoCap doesn't resolve yet.
+  KJ_EXPECT(!echoCap.whenResolved().poll(context.waitScope));
+
+  // A second call doesn't complete yet.
+  auto promise2 = [&]() {
+    auto req = echoCap.fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.setExpectedCallCount(1);
+    return req.send();
+  }();
+  KJ_EXPECT(!promise2.poll(context.waitScope));
+
+  if (disconnect) {
+    connToBlock.disconnect(KJ_EXCEPTION(DISCONNECTED, "test disconnect"));
+  } else {
+    connToBlock.unblock();
+  }
+
+  if (disconnect) {
+    kj::StringPtr expectedMessage = "Peer disconnected";
+    if (arrangement == FOUR_PARTY_BLOCK_DAVE && forwardingEnabled) {
+      expectedMessage = "Embargo failed because a connection along the call forwarding path";
+    }
+
+    KJ_EXPECT_THROW_MESSAGE(expectedMessage, echoCap.whenResolved().wait(context.waitScope));
+
+    // TODO(someday): Unfortunately, `promise` does not resolve, becauese Carol already send a
+    //   `Return` to Alice telling her to await a result from a third party, but Bob never received
+    //   the message from Carol saying that he should take over the call. Hence, there's no way
+    //   for Carol to communicate to Alice that the handoff failed. Should we add a special message
+    //   for this?
+    KJ_EXPECT(!promise.poll(context.waitScope));
+
+    KJ_EXPECT_THROW_MESSAGE(expectedMessage, promise2.wait(context.waitScope));
+
+    KJ_EXPECT(callCount == 0);
+  } else {
+    echoCap.whenResolved().wait(context.waitScope);
+    promise.wait(context.waitScope);
+    promise2.wait(context.waitScope);
+
+    KJ_EXPECT(callCount == 2);
+  }
+}
+
+KJ_TEST("three-party call handoff embargo") {
+  doEmbargoTest(THREE_PARTY, false, false);
+}
+
+KJ_TEST("four-party call handoff embargo, no forwarding") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, false, false);
+}
+
+KJ_TEST("four-party call handoff embargo, no forwarding, block dave") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, false, false);
+}
+
+KJ_TEST("four-party call handoff embargo, with forwarding") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, true, false);
+}
+
+KJ_TEST("four-party call handoff embargo, with forwarding, block dave") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, true, false);
+}
+
+KJ_TEST("self-introduction call handoff embargo") {
+  doEmbargoTest(SELF_INTRODUCTION, false, false);
+}
+
+KJ_TEST("three-party call handoff embargo disconnected") {
+  doEmbargoTest(THREE_PARTY, false, true);
+}
+
+KJ_TEST("four-party call handoff embargo carol disconnected") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, false, true);
+}
+
+KJ_TEST("four-party call handoff embargo carol disconnected, with forwarding") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_CAROL, true, true);
+}
+
+KJ_TEST("four-party call handoff embargo dave disconnected") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, false, true);
+}
+
+KJ_TEST("four-party call handoff embargo dave disconnected, with forwarding") {
+  doEmbargoTest(FOUR_PARTY_BLOCK_DAVE, true, true);
+}
+
+KJ_TEST("self-introduction call handoff embargo disconnected") {
+  doEmbargoTest(SELF_INTRODUCTION, false, true);
 }
 
 }  // namespace
