@@ -558,8 +558,7 @@ public:
           return stat().size;
         }
       } else if (size > 0) {    // src_length = 0 has special meaning for the syscall, so avoid.
-        struct file_clone_range range;
-        memset(&range, 0, sizeof(range));
+        struct file_clone_range range{};
         range.src_fd = otherFd;
         range.dest_offset = offset;
         range.src_offset = fromOffset;
