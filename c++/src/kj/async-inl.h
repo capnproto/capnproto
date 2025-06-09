@@ -1428,9 +1428,17 @@ inline PromiseForResult<Func, void> evalLater(Func&& func) {
   return _::yield().then(kj::fwd<Func>(func), _::PropagateException());
 }
 
+inline Promise<void> evalLater() {
+  return _::yield();
+}
+
 template <typename Func>
 inline PromiseForResult<Func, void> evalLast(Func&& func) {
   return _::yieldHarder().then(kj::fwd<Func>(func), _::PropagateException());
+}
+
+inline Promise<void> evalLast() {
+  return _::yieldHarder();
 }
 
 template <typename Func>
