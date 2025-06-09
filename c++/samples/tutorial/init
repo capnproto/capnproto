@@ -1,0 +1,5 @@
+#!/bin/bash
+mkdir .pch
+ln pch.h .pch/pch.h
+./build_capnp
+meson out
