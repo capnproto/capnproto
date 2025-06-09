@@ -527,8 +527,7 @@ bool StructSchema::isStreamResult() const {
   return raw->generic == &streamRaw || raw->generic->canCastTo == &streamRaw;
 }
 
-Type StructSchema::Field::getType() const {
-  auto proto = getProto();
+Type StructSchema::Field::resolveType() {
   uint location = _::RawBrandedSchema::makeDepLocation(_::RawBrandedSchema::DepKind::FIELD, index);
 
   switch (proto.which()) {
@@ -542,7 +541,7 @@ Type StructSchema::Field::getType() const {
 }
 
 uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
-  return parent.getSchemaOffset(proto.getSlot().getDefaultValue());
+  return parent.getSchemaOffset(getDefaultValueProto());
 }
 
 kj::StringPtr KJ_STRINGIFY(const StructSchema::Field& field) {
