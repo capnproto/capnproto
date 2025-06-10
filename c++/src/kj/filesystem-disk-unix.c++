@@ -1687,6 +1687,7 @@ private:
 #endif
           return result;
         }
+#else
 	KJ_FALLTHROUGH;
 #endif
       default:
