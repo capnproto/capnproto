@@ -406,8 +406,8 @@ class ReadFragmenter final: public kj::AsyncIoStream {
 public:
   ReadFragmenter(AsyncIoStream& inner, size_t limit): inner(inner), limit(limit) {}
 
-  Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner.read(buffer, minBytes, kj::max(minBytes, kj::min(limit, maxBytes)));
+  Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner.read(buffer.first(kj::max(minBytes, kj::min(limit, minBytes))), minBytes);
   }
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return inner.tryRead(buffer, minBytes, kj::max(minBytes, kj::min(limit, maxBytes)));
@@ -2175,8 +2175,8 @@ public:
   InputOutputPair(kj::Own<kj::AsyncInputStream> in, kj::Own<kj::AsyncOutputStream> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
 
-  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return in->read(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return in->read(buffer, minBytes);
   }
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return in->tryRead(buffer, minBytes, maxBytes);
@@ -5530,8 +5530,8 @@ public:
     --count;
   }
 
-  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner->read(buffer, minBytes, maxBytes);
+  kj::Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner->read(buffer, minBytes);
   }
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return inner->tryRead(buffer, minBytes, maxBytes);
@@ -6594,8 +6594,8 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
   public:
     DisconnectingAsyncIoStream(AsyncIoStream& inner): inner(inner) {}
 
-    Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner.read(buffer, minBytes, maxBytes);
+    Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
+      return inner.read(buffer, minBytes);
     }
     Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
       return inner.tryRead(buffer, minBytes, maxBytes);
