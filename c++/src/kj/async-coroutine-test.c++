@@ -444,9 +444,8 @@ Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
 Promise<String> receiveDataCoroutine(Own<ConnectionReceiver> listener) {
   auto server = co_await listener->accept();
   char buffer[4]{};
-  auto n = co_await server->read(buffer, 3, 4);
-  KJ_EXPECT(3u == n);
-  co_return heapString(buffer, n);
+  co_await server->read(kj::arrayPtr(buffer).first(3).asBytes());
+  co_return heapString(buffer, 3);
 }
 
 KJ_TEST("Simple network test with coroutine") {
