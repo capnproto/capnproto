@@ -22,6 +22,7 @@
 
 #include "timer.h"
 #include "debug.h"
+#include <algorithm>
 #include <set>
 
 namespace kj {
