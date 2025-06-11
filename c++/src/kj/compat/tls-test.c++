@@ -438,7 +438,7 @@ struct TlsTest {
   Promise<void> readFromClient(AsyncIoStream& server) {
     auto buf = heapArray<byte>(4);
 
-    auto readPromise = server.read(buf);
+    auto readPromise = server.readFully(buf);
 
     auto checkBuffer = [buf = kj::mv(buf)]() {
       KJ_ASSERT(buf == "foo\x00"_kjb);
@@ -510,7 +510,7 @@ KJ_TEST("TLS half-duplex") {
   for (uint i = 0; i < 100; i++) {
     byte buffer[6]{};
     auto writePromise = server->write("foobar"_kjb);
-    auto readPromise = client->read(buffer);
+    auto readPromise = client->readFully(buffer);
     writePromise.wait(test.io.waitScope);
     readPromise.wait(test.io.waitScope);
     KJ_ASSERT(buffer == "foobar"_kjb);
@@ -577,19 +577,19 @@ KJ_TEST("TLS multiple messages") {
 
   byte buf[3]{};
 
-  server->read(buf).wait(test.io.waitScope);
+  server->readFully(buf).wait(test.io.waitScope);
   KJ_ASSERT(buf == "foo"_kjb);
 
   writePromise = writePromise
       .then([&]() { return client->write("baz"_kjb); });
 
-  server->read(buf).wait(test.io.waitScope);
+  server->readFully(buf).wait(test.io.waitScope);
   KJ_ASSERT(buf == "bar"_kjb);
 
-  server->read(buf).wait(test.io.waitScope);
+  server->readFully(buf).wait(test.io.waitScope);
   KJ_ASSERT(buf == "baz"_kjb);
 
-  auto readPromise = server->read(buf);
+  auto readPromise = server->readFully(buf);
   KJ_EXPECT(!readPromise.poll(test.io.waitScope));
 
   writePromise = writePromise
@@ -612,7 +612,7 @@ KJ_TEST("TLS zero-sized write") {
   auto server = serverPromise.wait(test.io.waitScope);
 
   byte buf[6]{};
-  auto readPromise = server->read(buf);
+  auto readPromise = server->readFully(buf);
 
   client->write(""_kjb).wait(test.io.waitScope);
   client->write("foo"_kjb).wait(test.io.waitScope);
@@ -636,7 +636,7 @@ kj::Promise<void> readN(kj::AsyncIoStream& stream, kj::StringPtr text, size_t co
   if (count == 0) return kj::READY_NOW;
   --count;
   auto buf = kj::heapString(text.size());
-  auto promise = stream.read(buf.asBytes());
+  auto promise = stream.readFully(buf.asBytes());
   return promise.then([&stream, text, buf=kj::mv(buf), count]() {
     KJ_ASSERT(buf == text, buf, text, count);
     return readN(stream, text, count);

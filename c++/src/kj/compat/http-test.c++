@@ -2383,7 +2383,7 @@ KJ_TEST("WebSocket pump disconnect on send") {
 
   // Endpoint reads three bytes and then disconnects.
   byte buffer[3]{};
-  pipe2.ends[1]->read(buffer).wait(waitScope);
+  pipe2.ends[1]->readFully(buffer).wait(waitScope);
   pipe2.ends[1] = nullptr;
 
   // Pump throws disconnected.
@@ -6239,7 +6239,7 @@ public:
       // unknown state which requires closing the connection. Instead, we know that the sender
       // will send 5 bytes, so we read that, then pause.
       static byte junk[5];
-      return requestBody.read(junk)
+      return requestBody.readFully(junk)
           .then([]() -> kj::Promise<void> { return kj::NEVER_DONE; })
           .exclusiveJoin(timer.afterDelay(1 * kj::MILLISECONDS))
           .then([this, &responseSender]() {

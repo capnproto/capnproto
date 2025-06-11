@@ -65,8 +65,23 @@ public:
   Promise<size_t> tryRead(ArrayPtr<byte> buffer, size_t minBytes) {
     return tryRead(buffer.begin(), minBytes, buffer.size()); 
   }
+  
+  KJ_DEPRECATED("use readFully() method")
   Promise<void> read(ArrayPtr<byte> buffer) {
     return read(buffer, buffer.size()).ignoreResult();
+  }
+
+  Promise<void> readFully(ArrayPtr<byte> buffer) {
+    // Read full contents of the buffer from the stream.
+    // Throws an exception if the stream doesn't have enough data.
+    return read(buffer, buffer.size()).ignoreResult();
+  }
+
+  Promise<size_t> tryReadFully(ArrayPtr<byte> buffer) {
+    // Attempts to read full contents of the buffer from the stream. 
+    // Returns number of bytes read.
+    // Partial read indicates stream EOF.
+    return tryRead(buffer, buffer.size());
   }
 
   virtual Maybe<uint64_t> tryGetLength();
