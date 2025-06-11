@@ -56,7 +56,7 @@ class AsyncInputStream: private AsyncObject {
   // Asynchronous equivalent of InputStream (from io.h).
 
 public:
-  virtual Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes);
+  Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes);
   // Reads at least `minBytes` from the stream.
   // Throws an exception if there is not enough data.
 
