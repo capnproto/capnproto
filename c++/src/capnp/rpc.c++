@@ -4164,7 +4164,7 @@ private:
         }
 
         if (answerIsInitialized) {
-          // HACK: Move the answer task to the local TaskSet, becaues it's no cancelable by a
+          // HACK: Move the answer task to the local TaskSet, because it's no cancelable by a
           //   Finish message. It should be completing promptly anyway, since a tail call has
           //   occurred.
           connectionState->tasks.add(

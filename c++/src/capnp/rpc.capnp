@@ -972,7 +972,7 @@ struct ThirdPartyAnswerEmbargo {
   # * Carol receives the call from Bob and establishes a direct connection to Alice, sending a
   #   `ThirdPartyAnswer`.
   # * Alice recives the `ThirdPartyAnswer` and redirects her original `foo()` call and all
-  #   pipelined capabilities to point at Carol. This inludes redirecting `bar`, so further
+  #   pipelined capabilities to point at Carol. This includes redirecting `bar`, so further
   #   pipelined calls on `bar` will go directly to Carol.
   # * However, since Alice had called `bar.baz()`, she must ensure that that call is delivered
   #   before any new pipelined calls, even though `bar.baz()` is travelling a different path
