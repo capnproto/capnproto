@@ -75,7 +75,15 @@ inline constexpr bool _kj_internal_isPolymorphic(T*) {
 //     template <typename X, typename Y>
 //     KJ_DECLARE_NON_POLYMORPHIC(MyType<X, Y>)
 
+class AtomicRefcounted;
+class Refcounted;
+
 namespace _ {  // private
+
+template <typename T, typename U>
+concept DerivedFrom = requires(const T* t) { static_cast<const U*>(t); };
+template <typename T>
+concept IsRefcounted = DerivedFrom<T, Refcounted> || DerivedFrom<T, AtomicRefcounted>;
 
 template <typename T> struct RefOrVoid_ { typedef T& Type; };
 template <> struct RefOrVoid_<void> { typedef void Type; };
@@ -273,7 +281,7 @@ public:
     return *this;
   }
 
-  template <typename... Attachments>
+  template <typename... Attachments> requires (!::kj::_::IsRefcounted<T>)
   Own<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // Returns an Own<T> which points to the same object but which also ensures that all values
   // passed to `attachments` remain alive until after this object is destroyed. Normally
@@ -281,6 +289,20 @@ public:
   //
   // Note that attachments will eventually be destroyed in the order they are listed. Hence,
   // foo.attach(bar, baz) is equivalent to (but more efficient than) foo.attach(bar).attach(baz).
+
+  template <typename... Attachments> requires (::kj::_::IsRefcounted<T>)
+  KJ_DEPRECATED("using attach() with refcounted objects can be a bug; if intentional, use attachToThisReference()")
+  Own<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+
+  template <typename... Attachments> requires (::kj::_::IsRefcounted<T>)
+  Own<T> attachToThisReference(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
+  // Like attach(), but only for objects deriving from kj::Refcounted or kj::AtomicRefcounted.
+  // attach() is commonly used to keep dependencies alive for a T value, but this is only reliable
+  // if T has a single kj::Own<T>. Refcounted objects can have multiple kj::Own<T>s, so using
+  // attach() for their dependencies is a potential source of memory errors.
+  //
+  // When an attachment only needs to live as long as a single reference to a refcounted
+  // object, attachToThisReference() can be called to explicitly opt into this behavior.
 
   template <typename U>
   Own<U> downcast() {
@@ -342,6 +364,9 @@ private:
         "Casting owned pointers requires that the target type is polymorphic.");
     return ptr;
   }
+
+  template <typename... Attachments>
+  Own<T> attachImpl(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
 
   template <typename, typename>
   friend class Own;
@@ -956,8 +981,27 @@ const StaticDisposerAdapter<T, D> StaticDisposerAdapter<T, D>::instance =
 }  // namespace _ (private)
 
 template <typename T>
-template <typename... Attachments>
+template <typename... Attachments> requires (!::kj::_::IsRefcounted<T>)
 Own<T> Own<T>::attach(Attachments&&... attachments) {
+  return attachImpl(kj::fwd<Attachments>(attachments)...);
+}
+
+template <typename T>
+template <typename... Attachments> requires (::kj::_::IsRefcounted<T>)
+Own<T> Own<T>::attach(Attachments&&... attachments) {
+  // TODO(someday): statically assert against IsRefcounted().
+  return attachImpl(kj::fwd<Attachments>(attachments)...);
+}
+
+template <typename T>
+template <typename... Attachments> requires (::kj::_::IsRefcounted<T>)
+Own<T> Own<T>::attachToThisReference(Attachments&&... attachments) {
+  return attachImpl(kj::fwd<Attachments>(attachments)...);
+}
+
+template <typename T>
+template <typename... Attachments>
+Own<T> Own<T>::attachImpl(Attachments&&... attachments) {
   T* ptrCopy = ptr;
 
   KJ_IREQUIRE(ptrCopy != nullptr, "cannot attach to null pointer");
@@ -974,12 +1018,14 @@ Own<T> Own<T>::attach(Attachments&&... attachments) {
 
 template <typename T, typename... Attachments>
 Own<T> attachRef(T& value, Attachments&&... attachments) {
+  // TODO(someday): maybe also assert against T deriving from kj::Refcounted here?
   auto bundle = new _::DisposableOwnedBundle<Attachments...>(kj::fwd<Attachments>(attachments)...);
   return Own<T>(&value, *bundle);
 }
 
 template <typename T, typename... Attachments>
 Own<Decay<T>> attachVal(T&& value, Attachments&&... attachments) {
+  // TODO(someday): maybe also assert against T deriving from kj::Refcounted here?
   auto bundle = new _::DisposableOwnedBundle<T, Attachments...>(
       kj::fwd<T>(value), kj::fwd<Attachments>(attachments)...);
   return Own<Decay<T>>(&bundle->first, *bundle);

@@ -21,6 +21,7 @@
 
 #include "kj/common.h"
 #include "kj/string.h"
+#include "kj/refcount.h"
 #include "kj/test.h"
 #include "function.h"
 #include "memory.h"
@@ -139,6 +140,89 @@ TEST(Memory, AttachNested) {
   KJ_EXPECT(destroyed1 == 1, destroyed1);
   KJ_EXPECT(destroyed2 == 2, destroyed2);
   KJ_EXPECT(destroyed3 == 3, destroyed3);
+}
+
+KJ_TEST("attach Refcounted") {
+  {
+    struct RcDerived: public Refcounted {};
+    struct RcDerived2: public RcDerived {};
+    struct ArcDerived: public AtomicRefcounted {};
+    struct ArcDerived2: public ArcDerived {};
+
+    auto obj1 = kj::refcounted<Refcounted>();
+    auto obj2 = kj::refcounted<RcDerived>();
+    auto obj3 = kj::refcounted<RcDerived2>();
+    auto obj4 = kj::atomicRefcounted<AtomicRefcounted>();
+    auto obj5 = kj::atomicRefcounted<ArcDerived>();
+    auto obj6 = kj::atomicRefcounted<ArcDerived2>();
+
+#if 0
+    // Manually observed that these trigger output a deprecation warning during compilation, but
+    // need to disable their compilation, since the CI build forbids deprecation warnings.
+    obj1 = obj1.attach(kj::heap<bool>());
+    obj2 = obj2.attach(kj::heap<bool>());
+    obj3 = obj3.attach(kj::heap<bool>());
+    obj4 = obj4.attach(kj::heap<bool>());
+    obj5 = obj5.attach(kj::heap<bool>());
+    obj6 = obj6.attach(kj::heap<bool>());
+#endif
+
+    // No deprecation warning:
+    obj1 = obj1.attachToThisReference(kj::heap<bool>());
+    obj2 = obj2.attachToThisReference(kj::heap<bool>());
+    obj3 = obj3.attachToThisReference(kj::heap<bool>());
+    obj4 = obj4.attachToThisReference(kj::heap<bool>());
+    obj5 = obj5.attachToThisReference(kj::heap<bool>());
+    obj6 = obj6.attachToThisReference(kj::heap<bool>());
+  }
+
+  // Confirming attachToThisReference() works similarly to attach():
+  {
+    uint counter = 0;
+    uint destroyed1 = 0;
+    uint destroyed2 = 0;
+    uint destroyed3 = 0;
+    uint destroyed4 = 0;
+    uint destroyed5 = 0;
+    uint destroyed6 = 0;
+
+    auto obj1 = kj::heap<DestructionOrderRecorder>(counter, destroyed1);
+    auto obj2 = kj::heap<DestructionOrderRecorder>(counter, destroyed2);
+    auto obj3 = kj::heap<DestructionOrderRecorder>(counter, destroyed3);
+    auto obj4 = kj::heap<DestructionOrderRecorder>(counter, destroyed4);
+    auto obj5 = kj::heap<DestructionOrderRecorder>(counter, destroyed5);
+    auto obj6 = kj::heap<DestructionOrderRecorder>(counter, destroyed6);
+    auto combined = kj::refcounted<Refcounted>().attachToThisReference(kj::mv(obj1), kj::mv(obj2),
+        kj::mv(obj3));
+    auto otherRef = kj::addRef(*combined).attachToThisReference(kj::mv(obj4), kj::mv(obj5),
+        kj::mv(obj6));
+
+    KJ_EXPECT(combined.get() == otherRef.get());
+    KJ_EXPECT(destroyed1 == 0);
+    KJ_EXPECT(destroyed2 == 0);
+    KJ_EXPECT(destroyed3 == 0);
+    KJ_EXPECT(destroyed4 == 0);
+    KJ_EXPECT(destroyed5 == 0);
+    KJ_EXPECT(destroyed6 == 0);
+
+    combined = nullptr;
+
+    KJ_EXPECT(destroyed1 == 1);
+    KJ_EXPECT(destroyed2 == 2);
+    KJ_EXPECT(destroyed3 == 3);
+    KJ_EXPECT(destroyed4 == 0);
+    KJ_EXPECT(destroyed5 == 0);
+    KJ_EXPECT(destroyed6 == 0);
+
+    otherRef = nullptr;
+
+    KJ_EXPECT(destroyed1 == 1);
+    KJ_EXPECT(destroyed2 == 2);
+    KJ_EXPECT(destroyed3 == 3);
+    KJ_EXPECT(destroyed4 == 4);
+    KJ_EXPECT(destroyed5 == 5);
+    KJ_EXPECT(destroyed6 == 6);
+  }
 }
 
 KJ_TEST("attachRef") {
