@@ -143,7 +143,7 @@ void TimerImpl::advanceTo(TimePoint newTime) {
 
   // It has been observed that clock_gettime 
   // may return non monotonic time, even when CLOCK_MONOTONIC is used.
-  // We use std::max to guard against this rare issue.
+  // We use kj::max to guard against this rare issue.
   // - on mac: https://github.com/capnproto/capnproto/issues/1693
   // - on linux: https://github.com/capnproto/capnproto/issues/2261
   time = kj::max(time, newTime);
