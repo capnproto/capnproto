@@ -2367,15 +2367,6 @@ public:
         }).fork()),
         tasks(*this) {}
 
-  kj::Promise<size_t> read(ArrayPtr<byte> buffer, size_t minBytes) override {
-    KJ_IF_SOME(s, stream) {
-      return s->read(buffer, minBytes);
-    } else {
-      return promise.addBranch().then([this,buffer,minBytes]() mutable {
-        return KJ_ASSERT_NONNULL(stream)->read(buffer, minBytes);
-      });
-    }
-  }
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_IF_SOME(s, stream) {
       return s->tryRead(buffer, minBytes, maxBytes);
