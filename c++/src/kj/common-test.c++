@@ -27,6 +27,9 @@
 namespace kj {
 namespace {
 
+KJ_ASSERT_CAN_MEMCPY(char);
+KJ_ASSERT_CAN_MEMCPY(byte);
+
 KJ_TEST("kj::size() on native arrays") {
   int arr[] = {12, 34, 56, 78};
 

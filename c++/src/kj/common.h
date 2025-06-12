@@ -653,7 +653,7 @@ constexpr bool canMemcpy() {
   // Returns true if T can be copied using memcpy instead of using the copy constructor or
   // assignment operator.
 
-  return __is_trivially_constructible(T, const T&) && __is_trivially_assignable(T, const T&);
+  return __is_trivially_constructible(T, const T&) && __is_trivially_assignable(T&, const T&);
 }
 #define KJ_ASSERT_CAN_MEMCPY(T) \
   static_assert(kj::canMemcpy<T>(), "this code expects this type to be memcpy()-able");
