@@ -29,6 +29,12 @@
 #define KJ_DEBUG_MEMORY 0
 #endif
 
+// KJ_WARN_REFCOUNTED_ATTACH == 1 enables deprecation warnings when using kj::Own<T>::attach() on
+// refcounted objects.
+#if !defined(KJ_WARN_REFCOUNTED_ATTACH)
+#define KJ_WARN_REFCOUNTED_ATTACH 0
+#endif
+
 // KJ_ASSERT_PTR_COUNTERS == 1 keeps track of active Ptr<T> instances and asserts validity
 // of their ownership.
 // Matches KJ_DEBUG_MEMORY by default.
@@ -291,7 +297,9 @@ public:
   // foo.attach(bar, baz) is equivalent to (but more efficient than) foo.attach(bar).attach(baz).
 
   template <typename... Attachments> requires (::kj::_::IsRefcounted<T>)
+#if KJ_WARN_REFCOUNTED_ATTACH
   KJ_DEPRECATED("using attach() with refcounted objects can be a bug; if intentional, use attachToThisReference()")
+#endif
   Own<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
 
   template <typename... Attachments> requires (::kj::_::IsRefcounted<T>)
