@@ -25,6 +25,8 @@
 #include <kj/debug.h>
 #include <capnp/test.capnp.h>
 
+#include <type_traits>
+
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -32,6 +34,8 @@
 namespace capnp {
 namespace {
 
+KJ_ASSERT_CAN_MEMCPY(capnp::word);
+  
 TEST(Common, Version) {
 #ifdef VERSION
   auto expectedVersion =
