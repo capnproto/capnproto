@@ -25,6 +25,8 @@
 #include <kj/debug.h>
 #include <capnp/test.capnp.h>
 
+#include <type_traits>
+
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif
