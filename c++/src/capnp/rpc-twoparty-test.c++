@@ -595,9 +595,6 @@ public:
   MockSndbufStream(kj::Own<AsyncIoStream> inner, size_t& window, size_t& written)
       : inner(kj::mv(inner)), window(window), written(written) {}
 
-  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return inner->read(buffer, minBytes, maxBytes);
-  }
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return inner->tryRead(buffer, minBytes, maxBytes);
   }

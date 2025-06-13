@@ -30,15 +30,13 @@ KJ_TEST("readiness IO: write small") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  char buf[4]{};
-  auto readPromise = pipe.in->read(buf, 3, 4);
+  byte buf[3]{};
+  auto readPromise = pipe.in->read(buf);
 
   ReadyOutputStreamWrapper out(*pipe.out);
   KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("foo"_kjb)) == 3);
-
-  KJ_ASSERT(readPromise.wait(io.waitScope) == 3);
-  buf[3] = '\0';
-  KJ_ASSERT(kj::StringPtr(buf) == "foo");
+  readPromise.wait(io.waitScope);
+  KJ_ASSERT(buf == "foo"_kjb);
 }
 
 KJ_TEST("readiness IO: write many odd") {
@@ -59,11 +57,11 @@ KJ_TEST("readiness IO: write many odd") {
     }
   }
 
-  auto buf = kj::heapArray<char>(totalWritten + 1);
-  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+  auto buf = kj::heapArray<byte>(totalWritten + 1);
+  size_t n = pipe.in->read(buf, totalWritten).wait(io.waitScope);
   KJ_ASSERT(n == totalWritten);
   for (size_t i = 0; i < totalWritten; i++) {
-    KJ_ASSERT(buf[i] == "bar"[i%3]);
+    KJ_ASSERT(buf[i] == "bar"_kjb[i%3]);
   }
 }
 
@@ -86,7 +84,7 @@ KJ_TEST("readiness IO: write even") {
   }
 
   auto buf = kj::heapArray<char>(totalWritten + 1);
-  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+  size_t n = pipe.in->read(buf.asBytes(), totalWritten).wait(io.waitScope);
   KJ_ASSERT(n == totalWritten);
   for (size_t i = 0; i < totalWritten; i++) {
     KJ_ASSERT(buf[i] == "ba"[i%2]);
@@ -97,8 +95,8 @@ KJ_TEST("readiness IO: write while corked") {
   auto io = setupAsyncIo();
   auto pipe = io.provider->newOneWayPipe();
 
-  char buf[7]{};
-  auto readPromise = pipe.in->read(buf, 3, 7);
+  byte buf[6]{};
+  auto readPromise = pipe.in->read(buf, 3);
 
   ReadyOutputStreamWrapper out(*pipe.out);
   auto cork = out.cork();
@@ -118,8 +116,7 @@ KJ_TEST("readiness IO: write while corked") {
     auto tmp = kj::mv(cork);
   }
   KJ_ASSERT(readPromise.wait(io.waitScope) == 6);
-  buf[6] = '\0';
-  KJ_ASSERT(kj::StringPtr(buf) == "foobar");
+  KJ_ASSERT(buf == "foobar"_kjb);
 }
 
 KJ_TEST("readiness IO: write many odd while corked") {
@@ -143,16 +140,16 @@ KJ_TEST("readiness IO: write many odd while corked") {
     }
   }
 
-  auto buf = kj::heapArray<char>(totalWritten + 1);
-  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+  auto buf = kj::heapArray<byte>(totalWritten + 1);
+  size_t n = pipe.in->read(buf, totalWritten).wait(io.waitScope);
   KJ_ASSERT(n == totalWritten);
   for (size_t i = 0; i < totalWritten; i++) {
-    KJ_ASSERT(buf[i] == "bar"[i%3]);
+    KJ_ASSERT(buf[i] == "bar"_kjb[i%3]);
   }
 
   // Eager pumping should still be corked.
   KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("bar"_kjb)) == 3);
-  auto readPromise = pipe.in->read(buf.begin(), 3, buf.size());
+  auto readPromise = pipe.in->read(buf, 3);
   KJ_ASSERT(!readPromise.poll(io.waitScope));
 }
 
@@ -175,16 +172,16 @@ KJ_TEST("readiness IO: write many even while corked") {
     }
   }
 
-  auto buf = kj::heapArray<char>(totalWritten + 1);
-  size_t n = pipe.in->read(buf.begin(), totalWritten, buf.size()).wait(io.waitScope);
+  auto buf = kj::heapArray<byte>(totalWritten + 1);
+  size_t n = pipe.in->read(buf, totalWritten).wait(io.waitScope);
   KJ_ASSERT(n == totalWritten);
   for (size_t i = 0; i < totalWritten; i++) {
-    KJ_ASSERT(buf[i] == "ba"[i%2]);
+    KJ_ASSERT(buf[i] == "ba"_kjb[i%2]);
   }
 
   // Eager pumping should still be corked.
   KJ_ASSERT(KJ_ASSERT_NONNULL(out.write("ba"_kjb)) == 2);
-  auto readPromise = pipe.in->read(buf.begin(), 2, buf.size());
+  auto readPromise = pipe.in->read(buf, 2);
   KJ_ASSERT(!readPromise.poll(io.waitScope));
 }
 
