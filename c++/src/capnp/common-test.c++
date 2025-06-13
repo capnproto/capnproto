@@ -32,6 +32,8 @@
 namespace capnp {
 namespace {
 
+KJ_ASSERT_CAN_MEMCPY(capnp::word);
+  
 TEST(Common, Version) {
 #ifdef VERSION
   auto expectedVersion =
