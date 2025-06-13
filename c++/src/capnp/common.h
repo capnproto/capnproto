@@ -747,4 +747,9 @@ inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, T size) {
 
 }  // namespace capnp
 
+namespace kj {
+template <> constexpr bool canMemcpy<capnp::word>() { return true; }
+// capnp::word can (and should) be copied with memcpy.
+}  // namespace kj
+
 CAPNP_END_HEADER
