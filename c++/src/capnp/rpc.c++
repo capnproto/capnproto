@@ -2664,9 +2664,9 @@ private:
     void setDropWhenDone(kj::Own<void> obj) {
       // Arrange that the given object will be dropped when this question completes or is canceled.
       KJ_IF_SOME(d, dropWhenDone) {
-        // Oops, we alerady have a drop-when-done... we can chain them.
+        // Oops, we already have a drop-when-done... we can chain them.
         // (I don't think this ever happens, just being safe.)
-        obj = obj.attach(kj::mv(d));
+        obj = obj.attachToThisReference(kj::mv(d));
       }
       dropWhenDone = kj::mv(obj);
     }
@@ -4838,7 +4838,7 @@ private:
             // Make sure if we're canceled, we null out `question` is `xchangeValue`, just in
             // case the value is in the process of being delivered (i.e. in the event loop) so
             // canceling the exchange doesn't actually halt the delivery.
-            handle = handle.attach(kj::defer([xchgValue = kj::mv(xchgValue)]() mutable {
+            handle = handle.attachToThisReference(kj::defer([xchgValue = kj::mv(xchgValue)]() mutable {
               xchgValue->value.get<ThirdPartyExchangeValue::Call>().question = kj::none;
             }));
 
