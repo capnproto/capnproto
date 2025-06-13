@@ -1505,7 +1505,7 @@ DynamicValue::Reader::Reader(const Reader& other) {
       return;
   }
 
-  memcpy(this, &other, sizeof(*this));
+  memcpy((void*)this, &other, sizeof(*this));
 }
 DynamicValue::Reader::Reader(Reader&& other) noexcept {
   switch (other.type) {
@@ -1535,7 +1535,7 @@ DynamicValue::Reader::Reader(Reader&& other) noexcept {
       return;
   }
 
-  memcpy(this, &other, sizeof(*this));
+  memcpy((void*)this, &other, sizeof(*this));
 }
 DynamicValue::Reader::~Reader() noexcept(false) {
   if (type == CAPABILITY) {
@@ -1590,7 +1590,7 @@ DynamicValue::Builder::Builder(Builder& other) {
       return;
   }
 
-  memcpy(this, &other, sizeof(*this));
+  memcpy((void*)this, &other, sizeof(*this));
 }
 DynamicValue::Builder::Builder(Builder&& other) noexcept {
   switch (other.type) {
@@ -1624,7 +1624,7 @@ DynamicValue::Builder::Builder(Builder&& other) noexcept {
       return;
   }
 
-  memcpy(this, &other, sizeof(*this));
+  memcpy((void*)this, &other, sizeof(*this));
 }
 DynamicValue::Builder::~Builder() noexcept(false) {
   if (type == CAPABILITY) {
