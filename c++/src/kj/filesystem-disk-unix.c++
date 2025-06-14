@@ -1702,7 +1702,16 @@ private:
 
   static AutoCloseFd openDir(const char* dir) {
     int newFd;
-    KJ_SYSCALL(newFd = open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
+    KJ_SYSCALL_HANDLE_ERRORS(newFd = open(dir, O_RDONLY | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY)) {
+#ifdef O_PATH
+      case EACCES:
+        // If we don't have read permission, fall back to O_PATH if available
+        KJ_SYSCALL(newFd = open(dir, O_PATH | MAYBE_O_CLOEXEC | MAYBE_O_DIRECTORY));
+        break;
+#endif
+      default:
+        KJ_FAIL_SYSCALL("open(dir, O_RDONLY)", error, dir);
+    }
     AutoCloseFd result(newFd);
 #ifndef O_CLOEXEC
     setCloexec(result);
