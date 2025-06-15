@@ -9,7 +9,7 @@ on:
 
 jobs:
   Linux:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -42,12 +42,12 @@ jobs:
         run: |
             ./super-test.sh
   MinGW-Wine:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
-      # See: https://github.com/actions/virtual-environments/issues/4589#issuecomment-1100899313
+      # See: https://github.com/actions/runner-images/issues/4589#issuecomment-1260157764
       # GitHub's Ubuntu image installs all kinds of stuff from non-Ubuntu repositories which cause
       # conflicts with Ubuntu packages ultimately preventing installation of wine32. Let's try to
       # fix that...
@@ -55,8 +55,7 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get update -qq
-          sudo apt-get install -yqq --allow-downgrades libgd3/focal libpcre2-8-0/focal libpcre2-16-0/focal libpcre2-32-0/focal libpcre2-posix2/focal
-          sudo apt-get purge -yqq libmono* moby* mono* php* libgdiplus libpcre2-posix3 libzip4
+          sudo apt-get remove -qq libmono* moby* mono* nginx* php* libgdiplus libpcre2-posix3 libzip4
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
@@ -71,7 +70,7 @@ jobs:
         run: |
             ./super-test.sh mingw i686-w64-mingw32
   cmake-packaging:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
@@ -93,7 +92,7 @@ jobs:
         run: |
             ./super-test.sh cmake-package cmake-static
   # Android:
-  #   runs-on: ubuntu-20.04
+  #   runs-on: ubuntu-22.04
   #   strategy:
   #     fail-fast: false
   #   steps:

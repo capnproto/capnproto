@@ -11,7 +11,7 @@ on:
 
 jobs:
   Linux-musl:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     # We depend on both clang and libc++. Alpine Linux 3.17 seems to be the first version to include
     # a libc++ package (based on LLVM 15), but building capnproto failed when I tried it.
     # Alpine Linux 3.18's libc++ package is from LLVM 16, however, and worked out-of-the-box, so
@@ -24,20 +24,23 @@ jobs:
       - name: super-test
         run: ./super-test.sh quick clang-16
   Linux-old:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-7, clang-6.0]
+        configuration:
+          - compiler: g++-9
+          - compiler: clang-11
+            dependencies: libc++-11-dev libc++abi-11-dev
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
+            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.configuration.compiler }} ${{ matrix.configuration.dependencies }}
       - name: super-test
         run: |
-            ./super-test.sh quick ${{ matrix.compiler }}
+            ./super-test.sh quick ${{ matrix.configuration.compiler }}
   Linux:
     runs-on: ubuntu-latest
     strategy:
@@ -45,8 +48,8 @@ jobs:
       matrix:
         configuration:
           - compiler: g++-12
-          - compiler: clang-14
-            dependencies: libc++-14-dev libc++abi-14-dev
+          - compiler: clang-15
+            dependencies: libc++-15-dev libc++abi-15-dev
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
@@ -57,24 +60,24 @@ jobs:
         run: |
             ./super-test.sh quick ${{ matrix.configuration.compiler }}
   Linux-lock-tracking:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        compiler: [clang-9]
+        compiler: [clang]
         features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1 -DKJ_CONTENTION_WARNING_THRESHOLD=200"]
     steps:
       - uses: actions/checkout@v2
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev ${{ matrix.compiler }}
+            sudo apt-get install -y build-essential git zlib1g-dev cmake libssl-dev g++ ${{ matrix.compiler }}
       - name: super-test
         run: |
             # librt is used for timer_create in the unit tests for lock tracking (mutex-test.c++).
             ./super-test.sh quick ${{ matrix.compiler }} cpp-features "${{matrix.features}}" extra-libs "-lrt"
   ManyLinux:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -90,7 +93,7 @@ jobs:
             chmod +x ./dockcross
       - name: super-test
         run: |
-            ./dockcross ./super-test.sh quick g++
+            ./dockcross ./super-test.sh quick no-fiber g++
   MacOS:
     runs-on: macos-latest
     strategy:
@@ -187,14 +190,13 @@ jobs:
   #       run: |
   #         C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh quick'
   Linux-bazel-clang:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         clang_version: [16]
     steps:
       - uses: actions/checkout@v3
-      - uses: bazelbuild/setup-bazelisk@v2
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
