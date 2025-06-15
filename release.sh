@@ -154,6 +154,15 @@ case "${1-}:$BRANCH" in
     update_version $HEAD_VERSION $NEW_VERSION "mainline"
     ;;
 
+  bump-minor:* )
+    echo "Bump minor version number on HEAD."
+    HEAD_VERSION=$(get_version '^[0-9]+[.][0-9]+-dev$')
+    RELEASE_VERSION=${HEAD_VERSION%%-dev}.0
+    declare -a VERSION_ARR=(${RELEASE_VERSION//./ })
+    NEXT_VERSION=${VERSION_ARR[0]}.$((VERSION_ARR[1] + 1))
+    update_version $HEAD_VERSION $NEXT_VERSION-dev "mainline"
+    ;;
+
   # ======================================================================================
   candidate:master )
     echo "New major release."
