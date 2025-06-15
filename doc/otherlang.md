@@ -50,6 +50,7 @@ new languages.
 * [IntelliJ Syntax Highlighter](https://github.com/xmonader/sercapnp) by [@xmonader](https://github.com/xmonader)
 * [RPC Tracer](https://github.com/Toyota/capnp-trace) by [@t-kondo-tmc](https://github.com/t-kondo-tmc)
 * [Flow-IPC](https://github.com/Flow-IPC) (shared memory IPC transport in C++) by [Akamai](https://www.akamai.com) / [@ygoldfeld](https://github.com/ygoldfeld)
+* [Cap'n Proto Language Server](https://github.com/trickstar0301/capnp-ls) by [@trickstar0301](https://github.com/trickstar0301)
 
 ## Contribute Your Own!
 
