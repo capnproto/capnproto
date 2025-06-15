@@ -1907,11 +1907,13 @@ public:
   constexpr ArrayPtr<PropagateConst<T, byte>> asBytes() const {
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.
+    KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
     return { reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T) };
   }
   inline ArrayPtr<PropagateConst<T, char>> asChars() const {
     // Reinterpret the array as a char array. This is explicitly legal under C++ aliasing
     // rules.
+    KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
     return { reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T) };
   }
 
