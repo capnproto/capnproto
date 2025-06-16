@@ -259,7 +259,7 @@ private:
 class Compiler::Impl final : public SchemaLoader::LazyLoadCallback {
 public:
   explicit Impl(AnnotationFlag annotationFlag);
-  virtual ~Impl() noexcept(false);
+  ~Impl() noexcept(false);
 
   uint64_t add(Module& module);
   kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName);
