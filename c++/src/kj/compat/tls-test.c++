@@ -427,7 +427,7 @@ struct TlsTest {
     static TlsCertificate caCert(CA_CERT);
     TlsContext::Options options;
     options.useSystemTrustStore = false;
-    options.trustedCertificates = kj::arrayPtr(&caCert, 1);
+    options.trustedCertificates = kj::arrayPtr(caCert);
     return options;
   }
 

@@ -857,7 +857,7 @@ private:
     } else {
       // TODO(perf): This is sorta malloc-heavy...
       char16_t u = codePoint;
-      target.addAll(kj::decodeUtf16(kj::arrayPtr(&u, 1)));
+      target.addAll(kj::decodeUtf16(kj::arrayPtr(u)));
     }
   }
 

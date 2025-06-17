@@ -1068,7 +1068,7 @@ private:
         capnp::_::PackedInputStream unpacker(input);
         unpacker.read(words.asBytes());
         word dummy;
-        KJ_ASSERT(unpacker.tryRead(kj::arrayPtr(&dummy, 1).asBytes(), sizeof(dummy)) == 0);
+        KJ_ASSERT(unpacker.tryRead(kj::arrayPtr(dummy).asBytes(), sizeof(dummy)) == 0);
 
         kj::ArrayPtr<const word> segments[1] = { words };
         SegmentArrayMessageReader message(segments, options);

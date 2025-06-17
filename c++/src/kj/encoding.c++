@@ -653,7 +653,7 @@ EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool 
               break;
             }
           }
-          auto utf = decodeUtf16(arrayPtr(&value, 1));
+          auto utf = decodeUtf16(arrayPtr(value));
           if (utf.hadErrors) hadErrors = true;
           result.addAll(utf.asBytes());
           break;
@@ -673,7 +673,7 @@ EncodingResult<Array<byte>> decodeBinaryCEscape(ArrayPtr<const char> text, bool 
               break;
             }
           }
-          auto utf = decodeUtf32(arrayPtr(&value, 1));
+          auto utf = decodeUtf32(arrayPtr(value));
           if (utf.hadErrors) hadErrors = true;
           result.addAll(utf.asBytes());
           break;

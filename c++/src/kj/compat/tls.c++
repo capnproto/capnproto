@@ -1077,7 +1077,7 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const kj::ArrayPtr<const byte>> asn1
 }
 
 TlsCertificate::TlsCertificate(kj::ArrayPtr<const byte> asn1)
-    : TlsCertificate(kj::arrayPtr(&asn1, 1)) {}
+    : TlsCertificate(kj::arrayPtr(asn1)) {}
 
 TlsCertificate::TlsCertificate(kj::StringPtr pem) {
   ensureOpenSslInitialized();

@@ -505,7 +505,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
             // Run the sub-command with "--help" as the argument.
             MainFunc subMain = iter->second.func();
             StringPtr dummyArg = "--help";
-            subMain(str(programName, ' ', params[i + 1]), arrayPtr(&dummyArg, 1));
+            subMain(str(programName, ' ', params[i + 1]), arrayPtr(dummyArg));
             return;
           } else if (params[i + 1] == "help") {
             uint count = 0;

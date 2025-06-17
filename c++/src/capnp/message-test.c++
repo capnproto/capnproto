@@ -134,7 +134,7 @@ TEST(Message, MessageBuilderInitSpaceAvailable) {
   MessageBuilder::SegmentInit init = { kj::ArrayPtr<word>(buffer), segs[0].size() };
 
   // Init a new builder from the old segments.
-  TestInitMessageBuilder builder2(kj::arrayPtr(&init, 1));
+  TestInitMessageBuilder builder2(kj::arrayPtr(init));
   checkTestMessage(builder2.getRoot<TestAllTypes>());
 
   // Verify that they're really using the same underlying memory.

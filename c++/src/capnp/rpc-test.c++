@@ -540,7 +540,7 @@ public:
     kj::Array<byte> generateEmbargoId() override {
       static uint counter = 0;
       auto result = kj::heapArray<byte>(sizeof(counter));
-      result.asPtr().copyFrom(kj::arrayPtr(&counter, 1).asBytes());
+      result.asPtr().copyFrom(kj::arrayPtr(counter).asBytes());
       ++counter;
       return result;
     }

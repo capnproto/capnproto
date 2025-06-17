@@ -719,7 +719,7 @@ TEST(AsyncIo, CapabilityPipeMultiStreamMessage) {
   streams.add(kj::mv(pipe3.ends[0]));
 
   ArrayPtr<const byte> secondBuf = "bar"_kjb;
-  pipe.ends[0]->writeWithStreams("foo"_kjb, arrayPtr(&secondBuf, 1), streams.finish())
+  pipe.ends[0]->writeWithStreams("foo"_kjb, arrayPtr(secondBuf), streams.finish())
       .wait(ioContext.waitScope);
 
   char receiveBuffer[7]{};
