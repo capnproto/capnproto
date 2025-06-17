@@ -170,7 +170,7 @@ InputStreamMessageReader::InputStreamMessageReader(
     : MessageReader(options), inputStream(inputStream), readPos(nullptr) {
   _::WireValue<uint32_t> firstWord[2];
 
-  inputStream.read(kj::arrayPtr(firstWord).asBytes());
+  inputStream.read(kj::asBytes(firstWord));
 
   uint segmentCount = firstWord[0].get() + 1;
   uint segment0Size = segmentCount == 0 ? 0 : firstWord[1].get();
@@ -274,7 +274,7 @@ void readMessageCopy(kj::InputStream& input, MessageBuilder& target,
 // -------------------------------------------------------------------
 kj::Array<word> serializeSegmentTable(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
-  
+
   auto result = kj::heapArray<word>(segments.size() / 2 + 1);
   auto table = reinterpret_cast<_::WireValue<uint32_t>*>(result.begin());
 

@@ -280,7 +280,7 @@ KJ_TEST("StringPtr constructors") {
 
 #ifdef KJ_DEBUG
   KJ_EXPECT_THROW_MESSAGE("StringPtr must be NUL-terminated", StringPtr("abc", 2));
-#endif  
+#endif
 }
 
 KJ_TEST("string literals with _kj suffix") {
@@ -320,12 +320,12 @@ KJ_TEST("parsing 'nan' returns canonical NaN value") {
   {
     double parsedNan = "NaN"_kj.parseAs<double>();
     double canonicalNan = kj::nan();
-    KJ_EXPECT(kj::arrayPtr(parsedNan).asBytes() == kj::arrayPtr(canonicalNan).asBytes());
+    KJ_EXPECT(kj::asBytes(parsedNan) == kj::asBytes(canonicalNan));
   }
   {
     float parsedNan = "NaN"_kj.parseAs<float>();
     float canonicalNan = kj::nan();
-    KJ_EXPECT(kj::arrayPtr(parsedNan).asBytes() == kj::arrayPtr(canonicalNan).asBytes());
+    KJ_EXPECT(kj::asBytes(parsedNan) == kj::asBytes(canonicalNan));
   }
 }
 
