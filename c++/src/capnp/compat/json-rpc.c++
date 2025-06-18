@@ -212,7 +212,7 @@ kj::Promise<void> JsonRpc::readLoop() {
           if (rpcMessage.hasId()) {
             auto id = rpcMessage.getId();
             auto idCopy = kj::heapArray<word>(id.totalSize().wordCount + 1);
-            memset(idCopy.begin(), 0, idCopy.asBytes().size());
+            idCopy.asBytes().fill(0);
             copyToUnchecked(id, idCopy);
             auto idPtr = readMessageUnchecked<json::Value>(idCopy.begin());
 
