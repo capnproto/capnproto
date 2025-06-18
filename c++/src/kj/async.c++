@@ -3355,6 +3355,70 @@ void throwMultipleCoCaptureInvocations() {
   KJ_FAIL_REQUIRE("Attempted to invoke CaptureForCoroutine functor multiple times");
 }
 
+template <typename T>
+class VoidTransformPromiseNode final: public TransformPromiseNodeBase {
+  // TransformPromiseNodeBase variant using default error handler to reduce templating for the
+  // common case of void promise continuations.
+
+public:
+  VoidTransformPromiseNode(OwnPromiseNode&& dependency,
+                       void* continuationTracePtr, kj::Function<T()>&& func)
+      : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
+        func(kj::mv(func)) {}
+
+  void destroy() override {
+    freePromise(this);
+  }
+
+  ~VoidTransformPromiseNode() noexcept(false) {
+    // We need to make sure the dependency is deleted before we delete the continuations because it
+    // is a common pattern for the continuations to hold ownership of objects that might be in-use
+    // by the dependency.
+    dropDependency();
+  }
+
+private:
+  kj::Function<T()> func;
+
+  void getImpl(ExceptionOrValue& output) override {
+    typedef _::FixVoid<T> __T;
+    ExceptionOr<Void> depResult;
+    getDepResult(depResult);
+    KJ_IF_SOME(depException, depResult.exception) {
+      output.as<__T>() = ExceptionOr<__T>(false, kj::mv(depException));
+    } else KJ_IF_SOME(depValue, depResult.value) {
+      output.as<__T>() = handle(MaybeVoidCaller<Void, __T>::apply(func, kj::mv(depValue)));
+    }
+  }
+};
 }  // namespace _ (private)
+
+template <typename T>
+Promise<void> Promise<T>::thenVP(kj::Function<Promise<void>()>&& func) requires std::is_void_v<T> {
+  void* continuationTracePtr = _::GetFunctorStartAddress<>::apply(func);
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::VoidTransformPromiseNode<Promise<void>>>(
+      kj::mv(node), continuationTracePtr, kj::mv(func));
+
+  auto result = _::PromiseNode::to<Promise<void>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<Promise<void>*>(nullptr), {}));
+
+  // This is for Promise<void> only, so no promise reduction is needed.
+  return kj::mv(result);
+}
+
+template <typename T>
+Promise<void> Promise<T>::thenV(kj::Function<void()>&& func) requires std::is_void_v<T> {
+  void* continuationTracePtr = _::GetFunctorStartAddress<>::apply(func);
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::VoidTransformPromiseNode<void>>(
+      kj::mv(node), continuationTracePtr, kj::mv(func));
+  return _::PromiseNode::to<Promise<void>>(kj::mv(intermediate));
+}
+
+// Explicitly instantiate templated functions for Promise<void>, the only case where they are
+// needed (using C++20's requires is used to ensure this is not declared otherwise).
+template Promise<void> Promise<void>::thenVP(kj::Function<Promise<void>()>&& func);
+template Promise<void> Promise<void>::thenV(kj::Function<void()>&& func);
 
 }  // namespace kj
