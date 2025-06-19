@@ -52,14 +52,14 @@
 
 namespace kj {
 
-Promise<size_t> AsyncInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
-  return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
+Promise<size_t> AsyncInputStream::read(ArrayPtr<byte> buffer, size_t minBytes) {
+  return tryRead(buffer.begin(), minBytes, buffer.size()).then([=](size_t result) mutable {
     if (result >= minBytes) {
       return result;
     } else {
       kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream disconnected prematurely"));
       // Pretend we read zeros from the input.
-      memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
+      buffer.first(minBytes).slice(result).fill(0);
       return minBytes;
     }
   });
@@ -2367,15 +2367,6 @@ public:
         }).fork()),
         tasks(*this) {}
 
-  kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    KJ_IF_SOME(s, stream) {
-      return s->read(buffer, minBytes, maxBytes);
-    } else {
-      return promise.addBranch().then([this,buffer,minBytes,maxBytes]() {
-        return KJ_ASSERT_NONNULL(stream)->read(buffer, minBytes, maxBytes);
-      });
-    }
-  }
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_IF_SOME(s, stream) {
       return s->tryRead(buffer, minBytes, maxBytes);

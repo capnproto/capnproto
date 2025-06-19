@@ -105,14 +105,6 @@ public:
       }
     }
 
-    kj::Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-      return inner.read(buffer, minBytes, maxBytes)
-          .then([this](size_t n) {
-        ++readCount;
-        readBytes += n;
-        return n;
-      });
-    }
     kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
       return inner.tryRead(buffer, minBytes, maxBytes)
           .then([this](size_t n) {

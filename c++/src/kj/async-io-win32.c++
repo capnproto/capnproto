@@ -222,17 +222,6 @@ public:
         observer(eventPort.observeIo(reinterpret_cast<HANDLE>(fd))) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
-  Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    return tryRead(buffer, minBytes, maxBytes).then([=](size_t result) {
-      KJ_REQUIRE(result >= minBytes, "Premature EOF") {
-        // Pretend we read zeros from the input.
-        memset(reinterpret_cast<byte*>(buffer) + result, 0, minBytes - result);
-        return minBytes;
-      }
-      return result;
-    });
-  }
-
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     auto bufs = heapArray<WSABUF>(1);
     bufs[0].buf = reinterpret_cast<char*>(buffer);
