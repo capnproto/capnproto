@@ -323,7 +323,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
     } else {
       // We have only one segment so far.
       segment0ForOutput = segment0.currentlyAllocated();
-      return kj::arrayPtr(&segment0ForOutput, 1);
+      return kj::arrayPtr(segment0ForOutput);
     }
   }
 }

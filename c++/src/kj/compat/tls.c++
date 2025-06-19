@@ -429,7 +429,7 @@ private:
   static int bioRead(BIO* b, char* out, int outl) {
     BIO_clear_retry_flags(b);
     KJ_IF_SOME(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->readBuffer
-        .read(kj::arrayPtr(out, outl).asBytes())) {
+        .read(kj::asBytes(out, outl))) {
       return n;
     } else {
       BIO_set_retry_read(b);
@@ -440,7 +440,7 @@ private:
   static int bioWrite(BIO* b, const char* in, int inl) {
     BIO_clear_retry_flags(b);
     KJ_IF_SOME(n, reinterpret_cast<TlsConnection*>(BIO_get_data(b))->writeBuffer
-        .write(kj::arrayPtr(in, inl).asBytes())) {
+        .write(kj::asBytes(in, inl))) {
       return n;
     } else {
       BIO_set_retry_write(b);
@@ -1077,7 +1077,7 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const kj::ArrayPtr<const byte>> asn1
 }
 
 TlsCertificate::TlsCertificate(kj::ArrayPtr<const byte> asn1)
-    : TlsCertificate(kj::arrayPtr(&asn1, 1)) {}
+    : TlsCertificate(kj::arrayPtr(asn1)) {}
 
 TlsCertificate::TlsCertificate(kj::StringPtr pem) {
   ensureOpenSslInitialized();

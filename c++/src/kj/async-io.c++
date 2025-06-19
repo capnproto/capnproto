@@ -2623,7 +2623,7 @@ Promise<void> AsyncCapabilityStream::sendStream(Own<AsyncCapabilityStream> strea
   static constexpr byte b = 0;
   auto streams = kj::heapArray<Own<AsyncCapabilityStream>>(1);
   streams[0] = kj::mv(stream);
-  return writeWithStreams(arrayPtr(&b, 1), nullptr, kj::mv(streams));
+  return writeWithStreams(arrayPtr(b), nullptr, kj::mv(streams));
 }
 
 Promise<OwnFd> AsyncCapabilityStream::receiveFd() {
@@ -2662,7 +2662,7 @@ Promise<void> AsyncCapabilityStream::sendFd(int fd) {
   static constexpr byte b = 0;
   auto fds = kj::heapArray<int>(1);
   fds[0] = fd;
-  auto promise = writeWithFds(arrayPtr(&b, 1), nullptr, fds);
+  auto promise = writeWithFds(arrayPtr(b), nullptr, fds);
   return promise.attach(kj::mv(fds));
 }
 
