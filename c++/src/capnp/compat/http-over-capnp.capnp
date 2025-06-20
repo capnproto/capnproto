@@ -184,6 +184,8 @@ enum HttpMethod {
   notify @23;
   subscribe @24;
   unsubscribe @25;
+
+  query @26;
 }
 
 annotation commonText @0x857745131db6fc83(enumerant) :Text;
