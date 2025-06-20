@@ -21,6 +21,7 @@
 
 #include "http-over-capnp.h"
 #include <kj/debug.h>
+#include <kj/async-io.h>
 #include <capnp/schema.h>
 #include <capnp/message.h>
 
@@ -301,6 +302,14 @@ private:
 
 // =======================================================================================
 
+namespace {
+class FakeEntropySource final : public kj::EntropySource {
+public:
+  void generate(kj::ArrayPtr<byte> buffer) override {
+    KJ_FAIL_ASSERT("HttpOverCapnp WS FakeEntropySource should never be used");
+  }
+};
+}
 class HttpOverCapnpFactory::ClientRequestContextImpl final
     : public capnp::HttpService::ClientRequestContext::Server {
 public:
@@ -384,6 +393,53 @@ public:
     return kj::READY_NOW;
   }
 
+  kj::Promise<void> startOptimizedWebSocket(StartOptimizedWebSocketContext context) override {
+    KJ_REQUIRE(!sentResponse, "already called startResponse() or startWebSocket()");
+    sentResponse = true;
+
+    auto params = context.getParams();
+    auto wsPipe = kj::newTwoWayPipe();
+    auto connection = kj::mv(wsPipe.ends[0]);
+    auto tunnelWs = kj::newWebSocket(kj::mv(wsPipe.ends[1]), entropySource);
+
+    auto pipeToRemote = kj::newOneWayPipe();
+    auto fromRemote = kj::mv(pipeToRemote.in);
+    context.getResults().setDownStream(factory.streamFactory.kjToCapnp(kj::mv(pipeToRemote.out)));
+    auto toRemoteCap = context.getParams().getUpStream();
+    auto toRemote = factory.streamFactory.capnpToKjExplicitEnd(toRemoteCap);
+
+    auto responsePumpTask1 = (connection->pumpTo(*toRemote)
+      .then([&toRemote = *toRemote](uint64_t) mutable {
+        return toRemote.end();
+      }, [&toRemote = *toRemote](kj::Exception&& e) mutable -> kj::Promise<void> {
+        return toRemote.end().then([e = kj::mv(e)]() mutable -> kj::Promise<void> {
+          return kj::mv(e);
+        });
+      })).eagerlyEvaluate(nullptr)
+      .exclusiveJoin(fromRemote->pumpTo(*connection).then([&connection = *connection](uint64_t)
+        -> kj::Promise<void> {
+        connection.shutdownWrite();
+        return kj::READY_NOW;
+      }).eagerlyEvaluate(nullptr))
+      .attach(kj::mv(connection), kj::mv(toRemote), kj::mv(fromRemote));
+
+    auto webSocket = kjResponse.acceptWebSocket(factory.capnpToKj(params.getHeaders()));
+    auto responsePumpTask2 = tunnelWs->pumpTo(*webSocket)
+      .exclusiveJoin(webSocket->pumpTo(*tunnelWs)).catch_(
+        [&webSocket = *webSocket, &tunnelWs = *tunnelWs](kj::Exception&& e) -> kj::Promise<void> {
+        webSocket.abort();
+        tunnelWs.abort();
+        return kj::mv(e);
+      }).attach(kj::mv(tunnelWs));
+    ownWebSocket = kj::mv(webSocket);
+
+    responsePumpTask = kj::joinPromises(kj::arr(
+      kj::mv(responsePumpTask1).eagerlyEvaluate(nullptr),
+      kj::mv(responsePumpTask2).eagerlyEvaluate(nullptr)
+    ));
+    return kj::READY_NOW;
+  }
+
   kj::Promise<void> finishPump() {
     if (sentResponse) {
       return finishPumpInner();
@@ -415,6 +471,7 @@ private:
 
   kj::HttpService::Response& kjResponse;
   bool sentResponse = false;
+  FakeEntropySource entropySource{};
 
   kj::Promise<void> finishPumpInner() {
     KJ_IF_SOME(r, responsePumpTask) {
@@ -731,26 +788,67 @@ public:
     KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
     responseSent = true;
 
-    auto req = clientContext.startWebSocketRequest();
+    // TODO(now): deep compare headers
+    if (headers.isWebSocket() &&
+        headers.get(kj::HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS) ==
+        this->headers.get(kj::HttpHeaderId::SEC_WEBSOCKET_EXTENSIONS)) {
+      auto req = clientContext.startOptimizedWebSocketRequest();
 
-    req.adoptHeaders(factory.headersToCapnp(
+      req.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(
-            capnp::HttpService::ClientRequestContext::StartWebSocketParams::Builder(req))));
+          capnp::HttpService::ClientRequestContext::StartOptimizedWebSocketParams::Builder(req))));
 
-    auto pipe = kj::newWebSocketPipe();
-    auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
+      auto wsPipe = kj::newTwoWayPipe();
+      auto connection = kj::mv(wsPipe.ends[0]);
 
-    // Note that since CapnpToKjWebSocketAdapter takes ownership of the pipe end, we don't need
-    // to cancel it later. Dropping the other end of the pipe will have the same effect.
-    req.setUpSocket(kj::heap<CapnpToKjWebSocketAdapter>(
-        kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise)));
+      auto pipeToRemote = kj::newOneWayPipe();
+      req.setUpStream(factory.streamFactory.kjToCapnp(kj::mv(pipeToRemote.out)));
+      auto pipeline = req.send();
+      auto fromRemote = kj::mv(pipeToRemote.in);
 
-    auto pipeline = req.send();
-    auto result = kj::heap<KjToCapnpWebSocketAdapter>(
-        kj::mv(pipe.ends[1]), pipeline.getDownSocket(), kj::mv(shorteningPaf.fulfiller));
-    dontWaitForRpc(kj::mv(pipeline));
+      auto toRemoteCap = pipeline.getDownStream();
+      auto toRemote = factory.streamFactory.capnpToKjExplicitEnd(toRemoteCap);
 
-    return result;
+      auto pumpTask = (connection->pumpTo(*toRemote)
+        .then([&toRemote = *toRemote](uint64_t) mutable {
+          return toRemote.end();
+        }, [&toRemote = *toRemote](kj::Exception&& e) mutable -> kj::Promise<void> {
+          return toRemote.end().then([e = kj::mv(e)]() mutable -> kj::Promise<void> {
+            return kj::mv(e);
+          });
+        })).eagerlyEvaluate(nullptr)
+        .exclusiveJoin(fromRemote->pumpTo(*connection).then([&connection = *connection](uint64_t)
+          -> kj::Promise<void> {
+          connection.shutdownWrite();
+          return kj::READY_NOW;
+        }).eagerlyEvaluate(nullptr))
+        .attach(kj::mv(toRemote), kj::mv(fromRemote), kj::mv(connection));
+
+      dontWaitForRpc(kj::mv(pipeline));
+      auto result = kj::newWebSocket(kj::mv(wsPipe.ends[1]), kj::none);
+      return result.attach(kj::mv(pumpTask));
+    } else {
+      auto req = clientContext.startWebSocketRequest();
+
+      req.adoptHeaders(factory.headersToCapnp(
+          headers, Orphanage::getForMessageContaining(
+              capnp::HttpService::ClientRequestContext::StartWebSocketParams::Builder(req))));
+
+      auto pipe = kj::newWebSocketPipe();
+      auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
+
+      // Note that since CapnpToKjWebSocketAdapter takes ownership of the pipe end, we don't need
+      // to cancel it later. Dropping the other end of the pipe will have the same effect.
+      req.setUpSocket(kj::heap<CapnpToKjWebSocketAdapter>(
+          kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise)));
+
+      auto pipeline = req.send();
+      auto result = kj::heap<KjToCapnpWebSocketAdapter>(
+          kj::mv(pipe.ends[1]), pipeline.getDownSocket(), kj::mv(shorteningPaf.fulfiller));
+      dontWaitForRpc(kj::mv(pipeline));
+
+      return result;
+    }
   }
 
   HttpOverCapnpFactory& factory;

@@ -84,6 +84,12 @@ interface HttpService {
     #
     # Client -> Server WebSocket frames will be sent via method calls on `upSocket`, while
     # Server -> Client will be sent as calls to `downSocket`.
+
+    startOptimizedWebSocket @2 (headers :List(HttpHeader), upStream :ByteStream)
+                            -> (downStream :ByteStream);
+    # Server calls this method when the request is a valid WebSocket handshake and it wishes to
+    # accept it as a WebSocket but optimized pumping should be enabled, this is useful to enable
+    # pumping large messages back and forth over http-over-capnp.
   }
 
   interface ConnectClientRequestContext {
