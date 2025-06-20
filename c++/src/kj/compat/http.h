@@ -79,7 +79,8 @@ namespace kj {
   MACRO(MSEARCH) \
   MACRO(NOTIFY) \
   MACRO(SUBSCRIBE) \
-  MACRO(UNSUBSCRIBE)
+  MACRO(UNSUBSCRIBE) \
+  MACRO(QUERY)
   /* UPnP */
 
 enum class HttpMethod {
