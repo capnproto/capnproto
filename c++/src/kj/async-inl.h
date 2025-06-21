@@ -606,6 +606,7 @@ class PtmfHelper {
     if (voff & 1) {
       voff &= ~1;
 #endif
+      // NOLINTNEXTLINE(clang-analyzer-core.UndefinedBinaryOperatorResult)
       return *(void**)(*(char**)obj + voff);
     } else {
       return ptr;
