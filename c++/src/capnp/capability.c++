@@ -512,10 +512,9 @@ kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops)
 
 class LocalPipeline final: public PipelineHook, public kj::Refcounted {
 public:
-  inline LocalPipeline(kj::Own<void> owner, AnyPointer::Reader results)
-      : owner(kj::mv(owner)), results(results) {}
-  inline LocalPipeline(kj::Own<CallContextHook> context)
-      : LocalPipeline(kj::mv(context), *context) {}
+  inline LocalPipeline(kj::Own<CallContextHook>&& contextParam)
+      : context(kj::mv(contextParam)),
+        results(context->getResults(MessageSize { 0, 0 })) {}
 
   kj::Own<PipelineHook> addRef() override {
     return kj::addRef(*this);
@@ -526,14 +525,8 @@ public:
   }
 
 private:
-  kj::Own<void> owner;
+  kj::Own<CallContextHook> context;
   AnyPointer::Reader results;
-
-  // It's important this constructor takes `context` by `&&` reference, so that it isn't moved
-  // away before being dereferenced in the caller (above).
-  inline LocalPipeline(kj::Own<CallContextHook>&& context, CallContextHook& contextRef)
-      : owner(kj::mv(context)),
-        results(contextRef.getResults(MessageSize { 0, 0 })) {}
 };
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
@@ -950,10 +943,6 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
 
 kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise) {
   return kj::refcounted<QueuedPipeline>(kj::mv(promise));
-}
-
-kj::Own<PipelineHook> newLocalPipeline(kj::Own<void> owner, AnyPointer::Reader results) {
-  return kj::refcounted<LocalPipeline>(kj::mv(owner), results);
 }
 
 // =======================================================================================
