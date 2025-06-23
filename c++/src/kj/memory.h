@@ -580,7 +580,7 @@ public:
       return ptr;
     }
   }
-  const Own<T, D>& orDefault(const Own<T, D>& defaultValue) const {
+  const Own<T, D>& orDefault(const Own<T, D>& defaultValue KJ_LIFETIMEBOUND) const {
     if (ptr == nullptr) {
       return defaultValue;
     } else {

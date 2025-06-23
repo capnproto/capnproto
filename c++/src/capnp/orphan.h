@@ -396,7 +396,7 @@ struct Orphanage::GetInnerReader<T, Kind::LIST> {
 
 template <typename T>
 struct Orphanage::GetInnerReader<T, Kind::BLOB> {
-  static inline const typename T::Reader& apply(const typename T::Reader& t) {
+  static inline const typename T::Reader& apply(const typename T::Reader& t KJ_LIFETIMEBOUND) {
     return t;
   }
 };

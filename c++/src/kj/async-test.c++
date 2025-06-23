@@ -34,7 +34,6 @@
 #endif
 
 #if KJ_USE_FIBERS && __linux__
-#include <errno.h>
 #include <ucontext.h>
 #endif
 

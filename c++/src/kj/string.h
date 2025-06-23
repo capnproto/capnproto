@@ -912,7 +912,7 @@ char* fillLimited(char* __restrict__ target, char* limit, Delimited<T>& first, R
 template <typename T>
 inline Delimited<T>&& KJ_STRINGIFY(Delimited<T>&& delimited) { return kj::mv(delimited); }
 template <typename T>
-inline const Delimited<T>& KJ_STRINGIFY(const Delimited<T>& delimited) { return delimited; }
+inline const Delimited<T>& KJ_STRINGIFY(const Delimited<T>& delimited KJ_LIFETIMEBOUND) { return delimited; }
 
 }  // namespace _ (private)
 

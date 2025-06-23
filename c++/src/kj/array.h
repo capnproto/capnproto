@@ -512,7 +512,7 @@ public:
     // check might catch bugs.  Probably people should use Vector if they want to build arrays
     // without knowing the final size in advance.
     KJ_IREQUIRE(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
-    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, *disposer);
+    Array<T> result(ptr, pos - ptr, *disposer);
     ptr = nullptr;
     pos = nullptr;
     endPtr = nullptr;

@@ -31,7 +31,6 @@
 #include <queue>
 #include <capnp/rpc.capnp.h>
 #include <kj/io.h>
-#include <kj/map.h>
 
 namespace capnp {
 namespace _ {  // private

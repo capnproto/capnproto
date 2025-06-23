@@ -36,7 +36,7 @@ TEST(StdIoStream, WriteVec) {
   StdInputStream in(ss);
   StdOutputStream out(ss);
 
-  ArrayPtr<const byte> pieces[5] = { nullptr, "foo"_kjb, nullptr, "bar"_kjb, nullptr, };
+  const ArrayPtr<const byte> pieces[5] = { nullptr, "foo"_kjb, nullptr, "bar"_kjb, nullptr, };
 
   out.write(pieces);
 
