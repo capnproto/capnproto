@@ -1771,7 +1771,7 @@ public:
     if (alreadyDone()) return constPromise<size_t, 0>();
 
     return getInner().tryRead(buffer, minBytes, maxBytes)
-        .then([=](size_t amount) {
+        .then([=,this](size_t amount) {
       if (amount < minBytes) {
         doneReading();
       }
@@ -1813,7 +1813,7 @@ private:
     // We have to set minBytes to 1 here so that if we read any data at all, we update our
     // counter immediately, so that we still know where we are in case of cancellation.
     return getInner().tryRead(buffer, 1, kj::min(maxBytes, length))
-        .then([=](size_t amount) -> kj::Promise<size_t> {
+        .then([=,this](size_t amount) -> kj::Promise<size_t> {
       length -= amount;
       if (length > 0) {
         // We haven't reached the end of the entity body yet.
@@ -1859,7 +1859,7 @@ private:
       return alreadyRead;
     } else if (chunkSize == 0) {
       // Read next chunk header.
-      return getInner().readChunkHeader().then([=](uint64_t nextChunkSize) {
+      return getInner().readChunkHeader().then([=,this](uint64_t nextChunkSize) {
         if (nextChunkSize == 0) {
           doneReading();
         }
@@ -1872,7 +1872,7 @@ private:
       // We have to set minBytes to 1 here so that if we read any data at all, we update our
       // counter immediately, so that we still know where we are in case of cancellation.
       return getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize))
-          .then([=](size_t amount) -> kj::Promise<size_t> {
+          .then([=,this](size_t amount) -> kj::Promise<size_t> {
         chunkSize -= amount;
         if (amount == 0) {
           kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "premature EOF in HTTP chunk"));

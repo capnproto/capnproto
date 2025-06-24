@@ -199,7 +199,7 @@ public:
 
     if (n < 0) {
       // EAGAIN -- need to wait for writability and try again.
-      return observer.whenBecomesWritable().then([=]() {
+      return observer.whenBecomesWritable().then([=,this]() {
         return write(buffer, size);
       });
     } else if (n == size) {
@@ -717,7 +717,7 @@ private:
 
     if (n < 0) {
       // Read would block.
-      return observer.whenBecomesReadable().then([=]() {
+      return observer.whenBecomesReadable().then([=,this]() {
         return tryReadInternal(buffer, minBytes, maxBytes, fdBuffer, maxFds, alreadyRead);
       });
     } else if (n == 0) {
@@ -830,7 +830,7 @@ private:
 
     if (n < 0) {
       // Got EAGAIN. Nothing was written.
-      return observer.whenBecomesWritable().then([=]() {
+      return observer.whenBecomesWritable().then([=,this]() {
         return writeInternal(firstPiece, morePieces, fds);
       });
     } else if (n == 0) {
@@ -1232,16 +1232,18 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     // So we instead resort to de-duping results.
     std::set<SocketAddress> result;
 
+#if __BIONIC__ || !defined(AI_V4MAPPED)
+// AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
+#define AI_FLAGS AI_ADDRCONFIG
+#else
+#define AI_FLAGS AI_V4MAPPED | AI_ADDRCONFIG
+#endif
+
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       struct addrinfo hints;
       memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
-#if __BIONIC__ || !defined(AI_V4MAPPED)
-      // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
-      hints.ai_flags = AI_ADDRCONFIG;
-#else
-      hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-#endif
+      hints.ai_flags = AI_FLAGS;
       struct addrinfo* list;
       int status = getaddrinfo(
           params.host == "*" ? nullptr : params.host.cStr(),
