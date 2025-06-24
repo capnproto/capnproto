@@ -39,7 +39,6 @@
 #include <kj/memory.h>
 #include <kj/one-of.h>
 #include <kj/async-io.h>
-#include <kj/debug.h>
 
 KJ_BEGIN_HEADER
 

@@ -25,7 +25,6 @@
 #include "io.h"
 #include <inttypes.h>
 #include "time.h"
-#include "function.h"
 #include "hash.h"
 
 KJ_BEGIN_HEADER

@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include <capnp/compat/websocket-rpc.h>
+#include <kj/debug.h>
 #include <kj/io.h>
 #include <capnp/serialize.h>
 

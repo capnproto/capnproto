@@ -23,7 +23,6 @@
 
 #include <atomic>
 
-#include "array.h"
 #include "string.h"
 #include "function.h"
 

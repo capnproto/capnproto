@@ -27,7 +27,6 @@
 
 #include <kj/common.h>
 #include <kj/mutex.h>
-#include <kj/exception.h>
 #include <kj/vector.h>
 #include <kj/units.h>
 #include "common.h"

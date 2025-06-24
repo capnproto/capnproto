@@ -25,7 +25,6 @@
 #pragma once
 
 #include <capnp/capability.h>
-#include "persistent.capnp.h"
 
 CAPNP_BEGIN_HEADER
 

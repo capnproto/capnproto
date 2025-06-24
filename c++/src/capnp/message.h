@@ -24,8 +24,6 @@
 #include <kj/common.h>
 #include <kj/memory.h>
 #include <kj/mutex.h>
-#include <kj/debug.h>
-#include "pointer-helpers.h"
 #include <kj/vector.h>
 #include "common.h"
 #include "layout.h"

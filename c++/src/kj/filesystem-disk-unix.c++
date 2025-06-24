@@ -32,6 +32,7 @@
 #endif
 
 #include "filesystem.h"
+#include "function.h"
 #include "debug.h"
 #include <sys/types.h>
 #include <sys/stat.h>

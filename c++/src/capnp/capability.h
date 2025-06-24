@@ -29,7 +29,6 @@
 #include <kj/vector.h>
 #include "raw-schema.h"
 #include "any.h"
-#include "pointer-helpers.h"
 
 CAPNP_BEGIN_HEADER
 

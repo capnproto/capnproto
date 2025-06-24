@@ -22,7 +22,6 @@
 #pragma once
 
 #include <kj/string.h>
-#include <kj/array.h>
 #include <capnp/common.h>
 
 CAPNP_BEGIN_HEADER
