@@ -83,6 +83,22 @@ namespace {
 #undef DT_UNKNOWN
 #endif
 
+static int
+mknodat_wrapper(int dirfd, const char *pathname)
+{
+#if __APPLE__ || __FreeBSD__
+  // - No mknodat() on OSX, gotta open() a file, ugh.
+  // - On a modern FreeBSD, mknodat() is reserved strictly for device nodes,
+  //   you cannot create a regular file using it (EINVAL).
+  int newFd = openat(dirfd, pathname,
+                     O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0700);
+  if (newFd >= 0) close(newFd);
+  return newFd;
+#else
+  return mknodat(dirfd, pathname, S_IFREG | 0600, dev_t());
+#endif
+}
+
 static void setCloexec(int fd) KJ_UNUSED;
 static void setCloexec(int fd) {
   // Set the O_CLOEXEC flag on the given fd.
@@ -1189,17 +1205,7 @@ public:
         if (S_ISDIR(stats.st_mode)) {
           return mkdirat(fd, candidatePath.cStr(), 0700);
         } else {
-#if __APPLE__ || __FreeBSD__
-          // - No mknodat() on OSX, gotta open() a file, ugh.
-          // - On a modern FreeBSD, mknodat() is reserved strictly for device nodes,
-          //   you cannot create a regular file using it (EINVAL).
-          int newFd = openat(fd, candidatePath.cStr(),
-                             O_RDWR | O_CREAT | O_EXCL | MAYBE_O_CLOEXEC, 0700);
-          if (newFd >= 0) close(newFd);
-          return newFd;
-#else
-          return mknodat(fd, candidatePath.cStr(), S_IFREG | 0600, dev_t());
-#endif
+          return mknodat_wrapper(fd, candidatePath.cStr());
         }
       })) {
         away = kj::mv(*awayPath);
