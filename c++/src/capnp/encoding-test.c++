@@ -1828,7 +1828,8 @@ TEST(Encoding, NameAnnotation) {
   EXPECT_EQ(true, root.getGoodFieldName());
   EXPECT_TRUE(root.isGoodFieldName());
 
-  root.setBar(0xff);
+  // should the following set 255 (unsigned char) or -1 (signed char)?
+  root.setBar(static_cast<signed char>(0xff));
   EXPECT_FALSE(root.isGoodFieldName());
 
   root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
