@@ -208,7 +208,7 @@ bool isWine() { return false; }
 #define HOLES_NOT_SUPPORTED 1
 #endif
 
-#if __ANDROID__
+#if __ANDROID__ || __OHOS__
 #define VAR_TMP "/data/local/tmp"
 #else
 #define VAR_TMP "/var/tmp"
