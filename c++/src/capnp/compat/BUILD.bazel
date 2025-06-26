@@ -21,7 +21,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "capnp/compat",
     visibility = ["//visibility:public"],
     deps = [
         "//src/capnp",
@@ -34,7 +33,6 @@ cc_capnp_library(
         "byte-stream.capnp",
         "http-over-capnp.capnp",
     ],
-    include_prefix = "capnp/compat",
     src_prefix = "src",
     visibility = ["//visibility:public"],
 )
@@ -53,7 +51,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "capnp/compat",
     visibility = ["//visibility:public"],
     deps = [
         ":http-over-capnp_capnp",
@@ -73,7 +70,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "capnp/compat",
     visibility = ["//visibility:public"],
     deps = [
         "//src/capnp",

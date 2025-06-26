@@ -14,7 +14,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj/compat",
     target_compatible_with = select({
         "//src/kj:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -40,7 +39,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
@@ -56,7 +54,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
@@ -72,7 +69,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj/compat",
     target_compatible_with = select({
         "//src/kj:use_brotli": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -88,7 +84,6 @@ cc_library(
 cc_library(
     name = "gtest",
     hdrs = ["gtest.h"],
-    include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = ["//src/kj"],
 )

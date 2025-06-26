@@ -73,7 +73,7 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj",
+    includes = [".."],
     linkopts = select({
         "@platforms//os:windows": [],
         ":use_libdl": [
@@ -112,7 +112,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj",
     linkopts = select({
         "@platforms//os:windows": [
             "Ws2_32.lib",
@@ -133,7 +132,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "kj",
     visibility = ["//visibility:public"],
     deps = [
         ":kj",

@@ -57,7 +57,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "capnp",
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
@@ -93,7 +92,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "capnp",
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -132,7 +130,6 @@ cc_library(
         "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
         "//conditions:default": [],
     }),
-    include_prefix = "capnp",
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -227,7 +224,6 @@ cc_capnp_library(
         "stream.capnp",
         ":testdata",
     ],
-    include_prefix = "capnp",
     src_prefix = "src",
 )
 
