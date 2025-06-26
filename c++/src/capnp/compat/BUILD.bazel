@@ -17,6 +17,10 @@ cc_library(
         "json.capnp.h",
         "json.h",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     include_prefix = "capnp/compat",
     visibility = ["//visibility:public"],
     deps = [
@@ -45,6 +49,10 @@ cc_library(
         "byte-stream.h",
         "http-over-capnp.h",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     include_prefix = "capnp/compat",
     visibility = ["//visibility:public"],
     deps = [
@@ -61,6 +69,10 @@ cc_library(
     hdrs = [
         "websocket-rpc.h",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     include_prefix = "capnp/compat",
     visibility = ["//visibility:public"],
     deps = [
@@ -72,10 +84,14 @@ cc_library(
 [cc_test(
     name = f.removesuffix(".c++"),
     srcs = [f],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [
-        ":websocket-rpc",
         ":http-over-capnp",
-        "//src/capnp:capnp-test"
+        ":websocket-rpc",
+        "//src/capnp:capnp-test",
     ],
 ) for f in [
     "byte-stream-test.c++",
@@ -92,8 +108,8 @@ cc_test(
     name = "http-over-capnp-old-test",
     srcs = ["http-over-capnp-old-test.c++"],
     deps = [
-        ":http-over-capnp-test-as-header",
         ":http-over-capnp",
-        "//src/capnp:capnp-test"
+        ":http-over-capnp-test-as-header",
+        "//src/capnp:capnp-test",
     ],
 )

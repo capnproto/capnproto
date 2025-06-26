@@ -69,6 +69,10 @@ cc_library(
         "win32-api-version.h",
         "windows-sanity.h",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     include_prefix = "kj",
     linkopts = select({
         "@platforms//os:windows": [],
@@ -104,6 +108,10 @@ cc_library(
         "async-win32.h",
         "timer.h",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     include_prefix = "kj",
     linkopts = select({
         "@platforms//os:windows": [
@@ -121,6 +129,10 @@ cc_library(
     srcs = [
         "test.c++",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     include_prefix = "kj",
     visibility = ["//visibility:public"],
     deps = [
@@ -132,6 +144,10 @@ cc_library(
 [cc_test(
     name = f.removesuffix(".c++"),
     srcs = [f],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [
         ":kj",
         ":kj-async",
@@ -174,6 +190,10 @@ cc_library(
 cc_test(
     name = "async-coroutine-test",
     srcs = ["async-coroutine-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         ":use_coroutines": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -195,24 +215,32 @@ cc_library(
 cc_test(
     name = "filesystem-disk-generic-test",
     srcs = ["filesystem-disk-generic-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         ":filesystem-disk-test-base",
         ":kj-test",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux",
     ],
 )
 
 cc_test(
     name = "filesystem-disk-old-kernel-test",
     srcs = ["filesystem-disk-old-kernel-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         ":filesystem-disk-test-base",
         ":kj-test",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux",
     ],
 )
 
@@ -221,6 +249,10 @@ cc_test(
     srcs = select({
         "@platforms//os:windows": ["async-win32-test.c++"],
         "//conditions:default": ["async-unix-test.c++"],
+    }),
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
     }),
     deps = [
         ":kj",
@@ -250,12 +282,16 @@ cc_test(
 cc_test(
     name = "exception-override-symbolizer-test",
     srcs = ["exception-override-symbolizer-test.c++"],
-    deps = [
-        ":kj",
-        ":kj-test",
-    ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     linkstatic = True,
     target_compatible_with = [
         "@platforms//os:linux",
+    ],
+    deps = [
+        ":kj",
+        ":kj-test",
     ],
 )
