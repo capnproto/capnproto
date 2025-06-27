@@ -86,6 +86,7 @@ def cc_capnp_library(
         srcs = [],
         data = [],
         deps = [],
+        copts = [],
         src_prefix = "",
         visibility = None,
         target_compatible_with = None,
@@ -98,6 +99,7 @@ def cc_capnp_library(
         data: additional files to provide to the compiler - data files and includes that need not to
             be compiled
         deps: other cc_capnp_library rules to depend on
+        copts: options for the compilation of the library
         src_prefix: src_prefix for capnp compiler to the source root
         visibility: rule visibility
         target_compatible_with: target compatibility
@@ -124,5 +126,9 @@ def cc_capnp_library(
         deps = deps + ["@capnp-cpp//src/capnp:capnp_runtime"],
         visibility = visibility,
         target_compatible_with = target_compatible_with,
+        copts = select({
+            "@platforms//os:windows": ["/TP"], # compile .c++ files as .cpp files
+            "//conditions:default": [],
+        }) + copts,
         **kwargs
     )

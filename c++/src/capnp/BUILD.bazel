@@ -53,7 +53,10 @@ cc_library(
         # `//src/capnp` and `//src/capnp/compat:std-iterator``.
         "//src/capnp/compat:std-iterator.h",
     ],
-    include_prefix = "capnp",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
@@ -85,7 +88,10 @@ cc_library(
         "rpc-twoparty.capnp.h",
         "rpc-twoparty.h",
     ],
-    include_prefix = "capnp",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -120,7 +126,10 @@ cc_library(
         "compiler/resolver.h",
         "compiler/type-id.h",
     ],
-    include_prefix = "capnp",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -133,6 +142,10 @@ cc_binary(
         "compiler/capnp.c++",
         "compiler/module-loader.c++",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnpc",
@@ -145,6 +158,10 @@ cc_binary(
     srcs = [
         "compiler/capnpc-c++.c++",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnpc",
@@ -156,6 +173,10 @@ cc_binary(
     srcs = [
         "compiler/capnpc-capnp.c++",
     ],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnpc",
@@ -203,7 +224,6 @@ cc_capnp_library(
         "stream.capnp",
         ":testdata",
     ],
-    include_prefix = "capnp",
     src_prefix = "src",
 )
 
@@ -211,18 +231,26 @@ cc_library(
     name = "capnp-test",
     srcs = ["test-util.c++"],
     hdrs = ["test-util.h"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
+    visibility = [":__subpackages__"],
     deps = [
         ":capnp-rpc",
         ":capnp_test",
         ":capnpc",
         "//src/kj:kj-test",
     ],
-    visibility = [":__subpackages__" ]
 )
 
 [cc_test(
     name = f.removesuffix(".c++"),
     srcs = [f],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [":capnp-test"],
 ) for f in [
     "any-test.c++",
@@ -256,22 +284,34 @@ cc_library(
 cc_test(
     name = "endian-reverse-test",
     srcs = ["endian-reverse-test.c++"],
-    deps = [":capnp-test"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+    deps = [":capnp-test"],
 )
 
 cc_library(
     name = "endian-test-base",
     hdrs = ["endian-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [":capnp-test"],
 )
 
 cc_test(
     name = "endian-fallback-test",
     srcs = ["endian-fallback-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [":endian-test-base"],
 )
 
@@ -279,5 +319,9 @@ cc_test(
     name = "fuzz-test",
     size = "large",
     srcs = ["fuzz-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [":capnp-test"],
 )
