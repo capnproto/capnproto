@@ -1986,6 +1986,11 @@ public:
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
 
+  template <typename U>
+  inline auto as() const { return U::from(this); }
+  // Syntax sugar for invoking U::from.
+  // Used to chain conversion calls rather than wrap with function.
+
   inline void fill(T t) {
     // Fill the area by copying t over every element.
 
