@@ -267,6 +267,11 @@ public:
   // Syntax sugar for invoking U::from.
   // Used to chain conversion calls rather than wrap with function.
 
+  template <typename U>
+  inline auto as() const { return U::from(this); }
+  // Syntax sugar for invoking U::from.
+  // Used to chain conversion calls rather than wrap with function.
+
 private:
   T* ptr;
   size_t size_;

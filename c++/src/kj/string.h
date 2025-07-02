@@ -184,6 +184,11 @@ public:
   // Syntax sugar for invoking T::from.
   // Used to chain conversion calls rather than wrap with function.
 
+  template <typename T>
+  inline auto as() const { return T::from(this); }
+  // Syntax sugar for invoking T::from.
+  // Used to chain conversion calls rather than wrap with function.
+
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
   friend constexpr StringPtr (::operator ""_kj)(const char* str, size_t n);
@@ -336,6 +341,11 @@ public:
   // Syntax sugar for invoking T::from.
   // Used to chain conversion calls rather than wrap with function.
 
+  template <typename T>
+  inline auto as() const { return T::from(this); }
+  // Syntax sugar for invoking T::from.
+  // Used to chain conversion calls rather than wrap with function.
+
 private:
   Array<char> content;
 };
@@ -433,6 +443,16 @@ public:
 
   template <typename T>
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
+
+  template <typename T>
+  inline auto as() { return T::from(this); }
+  // Syntax sugar for invoking T::from.
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename T>
+  inline auto as() const { return T::from(this); }
+  // Syntax sugar for invoking T::from.
+  // Used to chain conversion calls rather than wrap with function.
 
 private:
   Array<const char> content;
