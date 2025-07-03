@@ -3483,8 +3483,6 @@ private:
             co_return;
           }
 
-          Connected& state = connection.get<Connected>();
-
           // At this point, the last reference to this connection state *should* be the one in
           // the RpcSystem's map. The refcount should therefore be 1, and `isShared()`.
           if (isShared()) {
@@ -3501,6 +3499,12 @@ private:
                 "reference still existing."));
             co_return;
           }
+
+          // Make sure to mark ourselves as Disconnected so if the shutdown task fails it doesn't
+          // cause us to call shutdown() again.
+          Connected state = kj::mv(connection.get<Connected>());
+          connection.init<Disconnected>(KJ_EXCEPTION(DISCONNECTED, "Peer disconnected idle session."));
+          state.canceler->cancel("Peer disconnected idle session.");
 
           // Remove ourselves from the RpcSystem's table *now*. But have it create a shutdown
           // task which will keep this object alive until `tasks` is empty. Note that
