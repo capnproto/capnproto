@@ -77,6 +77,8 @@ public:
   kj::Maybe<Value&> find(KeyLike&& key);
   template <typename KeyLike>
   kj::Maybe<const Value&> find(KeyLike&& key) const;
+  template <typename KeyLike>
+  bool contains(KeyLike&& key) const;
   // Search for a matching key. The input does not have to be of type `Key`; it merely has to
   // be something that the Hasher accepts.
   //
@@ -378,6 +380,12 @@ template <typename Key, typename Value>
 template <typename KeyLike>
 kj::Maybe<const Value&> HashMap<Key, Value>::find(KeyLike&& key) const {
   return table.find(key).map([](const Entry& e) -> const Value& { return e.value; });
+}
+
+template <typename Key, typename Value>
+template <typename KeyLike>
+bool HashMap<Key, Value>::contains(KeyLike&& key) const {
+  return table.find(key) != kj::none;
 }
 
 template <typename Key, typename Value>
