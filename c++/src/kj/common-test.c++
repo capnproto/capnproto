@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "common.h"
+#include "vector.h"
 #include "test.h"
 #include <inttypes.h>
 #include <kj/compat/gtest.h>
@@ -1270,6 +1271,12 @@ KJ_TEST("single item arrayPtr()") {
   kj::asBytes(obj).fill(0);
   KJ_EXPECT(obj.i == 0);
   KJ_EXPECT(obj.d == 0);
+}
+
+KJ_TEST("ArrayPtr:split") {
+  auto buffer = "abc def ghij"_kjb;
+  auto buffers = buffer.split(' ');
+  KJ_EXPECT(buffers.size() == 3);
 }
 
 KJ_TEST("memzero<T>()") {
