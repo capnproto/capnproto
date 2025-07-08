@@ -248,12 +248,16 @@ public:
   kj::StringPtr idToString(HttpHeaderId id) const;
   // Get the canonical string name for the given ID.
 
+  kj::StringPtr idToLowerString(HttpHeaderId id) const;
+  // Get the lowercase string name for the given ID.
+
   bool isReady() const;
   // Returns true if this HttpHeaderTable either was default constructed or its Builder has
   // invoked `build()` and released it.
 
 private:
   kj::Vector<kj::StringPtr> namesById;
+  kj::Vector<kj::String> lowercaseNamesById;
   kj::Own<IdsByNameMap> idsByName;
 
   enum class BuildStatus {
@@ -272,6 +276,11 @@ class HttpHeaders {
   // exception.
 
 public:
+  struct Header {
+    kj::StringPtr name;
+    kj::StringPtr lowcaseName;
+    kj::StringPtr value;
+  };
   explicit HttpHeaders(const HttpHeaderTable& table);
 
   static bool isValidHeaderValue(kj::StringPtr value);
@@ -329,6 +338,16 @@ public:
   // Calls `func1(id, value)` for each header in the set that has a registered HttpHeaderId, and
   // `func2(name, value)` for each header that does not. All calls to func1() precede all calls to
   // func2().
+
+  template <typename Func>
+  void forEachHeader(Func&& func) const;
+  // Calls `func(header)` for each header in the set, where header is a Header struct containing
+  // name, lowcaseName, and value. Includes both indexed and unindexed headers.
+
+  template <typename Func1, typename Func2>
+  void forEachHeader(Func1&& func1, Func2&& func2) const;
+  // Calls `func1(id, header)` for each header with a registered HttpHeaderId, and
+  // `func2(header)` for each header without one. All calls to func1() precede all calls to func2().
 
   void set(HttpHeaderId id, kj::StringPtr value);
   void set(HttpHeaderId id, kj::String&& value);
@@ -470,10 +489,6 @@ private:
   kj::Array<kj::StringPtr> indexedHeaders;
   // Size is always table->idCount().
 
-  struct Header {
-    kj::StringPtr name;
-    kj::StringPtr value;
-  };
   kj::Vector<Header> unindexedHeaders;
 
   kj::Vector<kj::Array<char>> ownedStrings;
@@ -1447,6 +1462,11 @@ inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
   return namesById[id.id];
 }
 
+inline kj::StringPtr HttpHeaderTable::idToLowerString(HttpHeaderId id) const {
+  id.requireFrom(*this);
+  return lowercaseNamesById[id.id];
+}
+
 inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
   id.requireFrom(*table);
   auto result = indexedHeaders[id.id];
@@ -1481,6 +1501,38 @@ inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
 
   for (auto& header: unindexedHeaders) {
     func2(header.name, header.value);
+  }
+}
+
+template <typename Func>
+inline void HttpHeaders::forEachHeader(Func&& func) const {
+  for (auto i: kj::indices(indexedHeaders)) {
+    if (indexedHeaders[i] != nullptr) {
+      Header h{table->idToString(HttpHeaderId(table, i)), 
+               table->idToLowerString(HttpHeaderId(table, i)), 
+               indexedHeaders[i]};
+      func(h);
+    }
+  }
+
+  for (auto& header: unindexedHeaders) {
+    func(header);
+  }
+}
+
+template <typename Func1, typename Func2>
+inline void HttpHeaders::forEachHeader(Func1&& func1, Func2&& func2) const {
+  for (auto i: kj::indices(indexedHeaders)) {
+    if (indexedHeaders[i] != nullptr) {
+      Header h{table->idToString(HttpHeaderId(table, i)), 
+               table->idToLowerString(HttpHeaderId(table, i)), 
+               indexedHeaders[i]};
+      func1(HttpHeaderId(table, i), h);
+    }
+  }
+
+  for (auto& header: unindexedHeaders) {
+    func2(header);
   }
 }
 
