@@ -576,6 +576,7 @@ HttpHeaderId HttpHeaderTable::Builder::add(kj::StringPtr name) {
   auto insertResult = table->idsByName->map.insert(std::make_pair(name, table->namesById.size()));
   if (insertResult.second) {
     table->namesById.add(name);
+    table->lowercaseNamesById.add(toLowercase(name));
   }
   return HttpHeaderId(table, insertResult.first->second);
 }
@@ -584,6 +585,7 @@ HttpHeaderTable::HttpHeaderTable()
     : idsByName(kj::heap<IdsByNameMap>()) {
 #define ADD_HEADER(id, name) \
   namesById.add(name); \
+  lowercaseNamesById.add(toLowercase(name)); \
   idsByName->map.insert(std::make_pair(name, HttpHeaders::BuiltinIndices::id));
   KJ_HTTP_FOR_EACH_BUILTIN_HEADER(ADD_HEADER);
 #undef ADD_HEADER
@@ -740,7 +742,9 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
         // Uh-oh, Set-Cookie will be corrupted if we try to concatenate it. We'll make it an
         // unindexed header, which is weird, but the alternative is guaranteed corruption, so...
         // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
-        unindexedHeaders.add(Header {name, value});
+        auto lowercaseName = toLowercase(name);
+        unindexedHeaders.add(Header {name, lowercaseName, value});
+        ownedStrings.add(lowercaseName.releaseArray());
       } else {
         auto concat = kj::str(indexedHeaders[id.id], ", ", value);
         indexedHeaders[id.id] = concat;
@@ -748,7 +752,9 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
       }
     }
   } else {
-    unindexedHeaders.add(Header {name, value});
+    auto lowercaseName = toLowercase(name);
+    unindexedHeaders.add(Header {name, lowercaseName, value});
+    ownedStrings.add(lowercaseName.releaseArray());
   }
 }
 
