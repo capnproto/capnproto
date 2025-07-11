@@ -179,6 +179,9 @@ public:
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
   // If no function is provided, the default is to simply replace the value (but not the key).
 
+  template<typename KeyLike>
+  bool contains(KeyLike&& key) const;
+
   template <typename KeyLike>
   kj::Maybe<Value&> find(KeyLike&& key);
   template <typename KeyLike>
@@ -502,6 +505,12 @@ typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::upsert(
       [&](Entry& existingEntry, Entry&& newEntry) {
     existingEntry.value = kj::mv(newEntry.value);
   });
+}
+
+template <typename Key, typename Value>
+template <typename KeyLike>
+bool TreeMap<Key, Value>::contains(KeyLike&& key) const {
+  return table.find(key) != kj::none;
 }
 
 template <typename Key, typename Value>
