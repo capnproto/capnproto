@@ -395,7 +395,7 @@ namespace kj {
 // Use "ASSERT" in place of "REQUIRE" when the problem is local to the immediate surrounding code.
 // That is, if the assert ever fails, it indicates that the immediate surrounding code is broken.
 
-#define KJ_ASSERT_SOME KJ_REQUIRE_NONNULL
+#define KJ_ASSERT_SOME KJ_ASSERT_NONNULL
 #define KJ_REQUIRE_SOME KJ_REQUIRE_NONNULL
 // SOME is a better wording since KJ_REQUIRE_NONNULL checks for kj::Maybe.
 
