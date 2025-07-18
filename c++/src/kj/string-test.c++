@@ -62,6 +62,16 @@ TEST(String, Str) {
   EXPECT_EQ("foo", str(mv(f)));
 }
 
+TEST(String, Shrink) {
+  auto value = String(str("foo"_kj));
+  EXPECT_EQ(value.size(), 3);
+  value.shrink(1);
+  EXPECT_EQ(value.size(), 1);
+  value.shrink(0);
+  EXPECT_EQ(value.size(), 0);
+  EXPECT_ANY_THROW(value.shrink(100));
+}
+
 TEST(String, Nullptr) {
   EXPECT_EQ(String(nullptr), "");
   EXPECT_EQ(StringPtr(String(nullptr)).size(), 0u);
