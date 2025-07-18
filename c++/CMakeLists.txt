@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
+include_guard(GLOBAL)
+
 project("Cap'n Proto" CXX)
 set(VERSION 2.0-dev)
 
