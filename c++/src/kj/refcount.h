@@ -148,7 +148,7 @@ Rc<T> Refcounted::addRcRefInternal(T* object) {
 
 template<typename T>
 class Rc {
-  // Smart pointer for reference counted objects. 
+  // Smart pointer for reference counted objects.
   //
   // There are only three ways to obtain new Rc instances:
   // - use kj::rc<T>(...) function to create new T.
@@ -156,15 +156,15 @@ class Rc {
   // - use EnableAddRefToThis to allow T instance to add new references to itself.
   //
   // Suggested usage patterns are:
-  // - return kj::Rc as value from factory functions: 
+  // - return kj::Rc as value from factory functions:
   //     kj::Rc<MyService> createMyService();
   // - pass kj::Rc as rvalue to functions that need to extend T's lifetime:
   //     void setMyService(kj::Rc<MyService>&& service)
   // - store kj::Rc as data member:
   //     struct MyComputation { kj::Rc<MyService> service; };
   // - use toOwn to convert kj::Rc<T> instance to kj::Own<T> and use it
-  //     without being concerned of reference counting behavior. 
-  //     To improve the transparency of the code, kj::Own<T> shouldn't be used 
+  //     without being concerned of reference counting behavior.
+  //     To improve the transparency of the code, kj::Own<T> shouldn't be used
   //     to call addRef() without kj::Rc.
 
 public:
@@ -435,7 +435,7 @@ kj::Arc<T> AtomicRefcounted::addRcRefInternal(const T* object) {
 
 template<typename T>
 class Arc {
-  // Smart pointer for atomic reference counted objects. 
+  // Smart pointer for atomic reference counted objects.
   //
   // The usage is similar to `kj::Rc<T>` but with a "const"-ness twist:
   // since in kj multithreaded code "const" means "thread-safe", `Arc<T>`
