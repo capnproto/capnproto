@@ -486,7 +486,7 @@ public:
 
   template <typename U>
   Arc<U> downcast() {
-    return Arc<U>(own.template downcast<U>());
+    return Arc<U>(own.template downcast<const U>());
   }
 
   inline bool operator==(const Arc<T>& other) const { return own.get() == other.own.get(); }
