@@ -34,6 +34,9 @@
 #include <coroutine>
 #define KJ_COROUTINE_STD_NAMESPACE std
 #elif (__cpp_coroutines >= 201703L) && __has_include(<experimental/coroutine>)
+#if _MSC_VER && defined(__clang__)
+#error "clang-cl does not support Coroutines TS"
+#endif
 // Coroutines TS detected.
 #include <experimental/coroutine>
 #define KJ_COROUTINE_STD_NAMESPACE std::experimental
