@@ -342,7 +342,14 @@ protected:
 
     // Call the error handler if there was an exception.
     KJ_IF_SOME(e, result.exception) {
-      taskSet.errorHandler.taskFailed(kj::mv(e));
+      // If we throw an exception here, self will be dropped, which means we're cancelling
+      // ourselves, which will crash. Even if that were not the case, throwing here will unwind
+      // straight out of the event loop. Hence, taskFailed() callbacks really shouldn't throw.
+      // But if one does, it's better that we just crash here rather than try to unwind. So, wrap
+      // the whole thing in a noexcept IIFE.
+      ([&]() noexcept {
+        taskSet.errorHandler.taskFailed(kj::mv(e));
+      })();
     }
 
     return Own<Event>(mv(self));
