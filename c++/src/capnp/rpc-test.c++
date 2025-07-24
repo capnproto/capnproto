@@ -1644,6 +1644,32 @@ KJ_TEST("method throws exception with detail") {
   KJ_EXPECT(kj::str(detail.asChars()) == "foo");
 }
 
+KJ_TEST("disconnection exception retains details") {
+  TestContext context;
+
+  auto client = context.connect();
+
+  // Disconnect the client with an exception that contains a detail.
+  auto& clientConn = KJ_ASSERT_NONNULL(
+      context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork));
+  auto originalException = KJ_EXCEPTION(FAILED, "a_disconnection_exception");
+  originalException.setDetail(1, kj::heapArray("foo"_kj.asBytes()));
+  clientConn.disconnect(kj::mv(originalException));
+
+  // Catch the resulting "disconnected" exception when attempting to send a request.
+  kj::Maybe<kj::Exception> caughtExceptionMaybe{};
+  client.fooRequest().sendIgnoringResult()
+      .catch_([&caughtExceptionMaybe] (kj::Exception&& e) {
+    caughtExceptionMaybe = kj::mv(e);
+  }).wait(context.waitScope);
+
+  // The exception should be of the "disconnected" type but still contain the detail.
+  auto caughtException = KJ_ASSERT_NONNULL(kj::mv(caughtExceptionMaybe));
+  auto detail = KJ_ASSERT_NONNULL(caughtException.getDetail(1));
+  KJ_EXPECT(caughtException.getType() == kj::Exception::Type::DISCONNECTED);
+  KJ_EXPECT(kj::str(detail.asChars()) == "foo");
+}
+
 KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
   // When OutgoingRpcMessage::send() throws an exception on a Call message, we need to clean up
   // anything that had been added to the export table as part of the call. At one point this
