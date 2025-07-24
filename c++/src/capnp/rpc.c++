@@ -481,6 +481,11 @@ public:
     // all future calls on this connection.
     networkException.addTraceHere();
 
+    // Retain details from the original exception.
+    for (auto& detail : exception.getDetails()) {
+      networkException.setDetail(detail.id, kj::heapArray<kj::byte>(detail.value));
+    }
+
     // Set our connection state to Disconnected now so that no one tries to write any messages to
     // it in their destructors.
     auto& rpcSystem = connection.get<Connected>().rpcSystem;
