@@ -1,10 +1,13 @@
-;;; capnp-mode.el --- Major mode for editing Capn' Proto Files
+;;; capnp-mode.el --- Major mode for editing Capn' Proto Files -*- lexical-binding: t; -*-
 
 ;; This is free and unencumbered software released into the public domain.
 
 ;; Author: Brian Taylor <el.wubo@gmail.com>
-;; Version: 1.0.0
+;; Author: Rohit Goswami (HaoZeke) <rgoswami[at]inventati[dot]org>
+;; Version: 1.1.0
+;; Keywords: languages, faces
 ;; URL: https://github.com/capnproto/capnproto
+;; Package-Requires: ((emacs "24.3"))
 
 ;;; Commentary:
 
@@ -30,50 +33,78 @@ For detail, see `comment-dwim' for ARG explanation."
         (comment-start "#") (comment-end ""))
     (comment-dwim arg)))
 
-(defvar capnp--syntax-table
-  (let ((syn-table (make-syntax-table)))
-
-    ;; bash style comment: “# …”
-    (modify-syntax-entry ?# "< b" syn-table)
-    (modify-syntax-entry ?\n "> b" syn-table)
-
-    syn-table)
-  "Syntax table for `capnp-mode'.")
-
-(defvar capnp--keywords
+;; Define keywords for Cap'n Proto
+(defvar capnp-keywords
   '("struct" "enum" "interface" "union" "import"
     "using" "const" "annotation" "extends" "in"
-    "of" "on" "as" "with" "from" "fixed")
-  "Keywords in `capnp-mode'.")
+    "of" "on" "as" "with" "from" "fixed"))
 
-(defvar capnp--types
+;; Define built-in types for Cap'n Proto
+(defvar capnp-builtins
   '("union" "group" "Void" "Bool" "Int8" "Int16"
     "Int32" "Int64" "UInt8" "UInt16" "UInt32"
     "UInt64" "Float32" "Float64" "Text" "Data"
-    "AnyPointer" "AnyStruct" "Capability" "List")
-  "Types in `capnp-mode'.")
+    "AnyPointer" "AnyStruct" "Capability" "List"))
 
-(defvar capnp--font-lock-keywords
-  `(
-    (,(regexp-opt capnp--keywords 'words) . font-lock-keyword-face)
-    (,(regexp-opt capnp--types 'words) . font-lock-type-face)
-    ("@\\w+" . font-lock-constant-face))
-  "Font lock definitions in `capnp-mode'.")
+;; Define constants (e.g., boolean literals) for Cap'n Proto
+(defvar capnp-constants
+  '("true" "false" "inf"))
 
-;;;###autoload
-(define-derived-mode capnp-mode prog-mode
-  "capn-mode is a major mode for editing capnp protocol files"
-  :syntax-table capnp--syntax-table
+;; Define regex for comments (single line starting with #)
+(defvar capnp-comment-regexp "#.*$")
 
-  (setq font-lock-defaults '((capnp--font-lock-keywords)))
+;; Define regex for types (starting with a letter or underscore)
+(defvar capnp-type-regexp "\\_<\\([A-Za-z_][A-Za-z0-9_]*\\)\\_>")
 
+;; Define regex for numbers
+(defvar capnp-number-regexp "\\_<[0-9]+\\_>")
 
-  (setq mode-name "capnp")
+;; Define regex for floating-point numbers
+(defvar capnp-float-regexp "\\_<[0-9]+\\.[0-9]*\\([eE][-+]?[0-9]+\\)?\\_>")
+
+;; Define regex for Cap'n Proto unique IDs (e.g., @0xbd1f89fa17369103)
+(defvar capnp-unique-id-regexp "@0x[0-9A-Fa-f]+\\b")
+
+;; Extend keywords to include annotation-related targets
+(defvar capnp-annotation-targets
+  '("file" "struct" "field" "union" "group" "enum" "enumerant" "interface" "method" "param" "annotation" "const" "*"))
+
+;; Define regex for annotations (e.g., $foo("bar"))
+(defvar capnp-annotation-regexp "\\([$]\\w+\\)(\\([^)]+\\))?")
+
+;; Define syntax table to manage comments
+(defvar capnp-mode-syntax-table
+  (let ((table (make-syntax-table)))
+    ;; '#' starts a comment
+    (modify-syntax-entry ?# "<" table)
+    (modify-syntax-entry ?\n ">" table)
+    table))
+
+;; Define font lock (syntax highlighting) rules
+(defvar capnp-font-lock-keywords
+  `((,(regexp-opt capnp-keywords 'words) . font-lock-keyword-face)
+    (,(regexp-opt capnp-builtins 'words) . font-lock-type-face)
+    (,(regexp-opt capnp-constants 'words) . font-lock-constant-face)
+    (,capnp-type-regexp . font-lock-variable-name-face)
+    (,capnp-number-regexp . font-lock-constant-face)
+    (,capnp-float-regexp . font-lock-constant-face)
+    (,capnp-unique-id-regexp . font-lock-constant-face)
+    (,capnp-comment-regexp . font-lock-comment-face)
+    (,capnp-annotation-regexp . ((1 font-lock-preprocessor-face) (2 font-lock-string-face)))
+    (,(regexp-opt capnp-annotation-targets 'words) . font-lock-builtin-face)))
+
+;; Define the major mode itself
+(define-derived-mode capnp-mode c-mode "Cap'n Proto"
+  "Major mode for editing Cap'n Proto schema files."
+  :syntax-table capnp-mode-syntax-table
+  (setq-local font-lock-defaults '((capnp-font-lock-keywords)))
+  (setq-local comment-start "# ")
+  (setq-local comment-end "")
+  (setq-local indent-line-function 'c-indent-line)
   (define-key capnp-mode-map [remap comment-dwim] 'capnp-comment-dwim))
 
-;;;###autoload
+;; Automatically use capnp-mode for .capnp files
 (add-to-list 'auto-mode-alist '("\\.capnp\\'" . capnp-mode))
 
 (provide 'capnp-mode)
 ;;; capnp-mode.el ends here
-
