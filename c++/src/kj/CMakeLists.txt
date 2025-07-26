@@ -83,6 +83,9 @@ target_compile_features(kj PUBLIC cxx_std_17)
 if(UNIX AND NOT ANDROID)
   target_link_libraries(kj PUBLIC pthread)
 endif()
+if (WIN32)
+  target_link_libraries(kj PUBLIC ws2_32)
+endif()
 #make sure the lite flag propagates to all users (internal + external) of this library
 target_compile_definitions(kj PUBLIC ${CAPNP_LITE_FLAG})
 #make sure external consumers don't need to manually set the include dirs
