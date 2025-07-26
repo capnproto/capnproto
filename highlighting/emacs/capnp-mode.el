@@ -13,6 +13,12 @@
 
 ;; Provides basic syntax highlighting for capnp files.
 ;;
+;; Now includes translation of keywords and highlighting from vim [1] and [2]
+;; textmate and another variant [3]
+;; [1] https://github.com/cstrahan/vim-capnp
+;; [2] https://github.com/textmate/capnproto.tmbundle/blob/master/Syntaxes/Cap%E2%80%99n%20Proto.tmLanguage
+;; [3] https://github.com/popham/capnp-mode/blob/master/capnp-mode.el
+;;
 ;; To use:
 ;;
 ;; Add something like this to your .emacs file:
@@ -20,6 +26,12 @@
 ;; (add-to-list 'load-path "~/src/capnproto/highlighting/emacs")
 ;; (require 'capnp-mode)
 ;;
+;; To enable autoloading and recognition of "*.capnp" files:
+;;
+;; (autoload 'capnp-mode "capnp-mode.el" "CAPNP mode." t)
+;; (setq auto-mode-alist (append auto-mode-alist
+;;                               '(("\\.capnp\\'" . capnp-mode))
+;;                               ))
 
 ;;; Code:
 
