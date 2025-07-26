@@ -355,13 +355,28 @@ public:
         KJ_CONCAT(CAPNP_INCLUDE_DIR, _kj),
 #endif
       };
-      for (auto path: STANDARD_IMPORT_PATHS) {
+      auto add = [this](kj::StringPtr path) {
         KJ_IF_MAYBE(dir, getSourceDirectory(path, false)) {
           loader.addImportPath(*dir);
         } else {
           // ignore standard path that doesn't exist
         }
+      };
+      for (auto path : STANDARD_IMPORT_PATHS) {
+          add(path);
       }
+#if _WIN32
+      char exePath[MAX_PATH + 1];
+      KJ_SYSCALL(GetModuleFileNameA(nullptr, exePath, kj::size(exePath)));
+      kj::ArrayPtr path = exePath;
+      KJ_IF_MAYBE(slashPos, path.findLast('\\')) {
+        path = path.slice(0, *slashPos);
+        KJ_IF_MAYBE(slashPos, path.findLast('\\')) {
+          path = path.slice(0, *slashPos + 1);
+          add(kj::str(path, "include\\"));
+        }
+      }
+#endif
 
       addStandardImportPaths = false;
     }
