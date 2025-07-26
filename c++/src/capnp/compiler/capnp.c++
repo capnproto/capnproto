@@ -348,6 +348,34 @@ public:
     }
 
     if (addStandardImportPaths) {
+      auto add = [this](kj::StringPtr path) {
+        KJ_IF_MAYBE(dir, getSourceDirectory(path, false)) {
+          loader.addImportPath(*dir);
+        } else {
+          // ignore standard path that doesn't exist
+        }
+      };
+#if _WIN32
+#ifdef CAPNP_INCLUDE_DIR
+      add(KJ_CONCAT(CAPNP_INCLUDE_DIR, _kj));
+#endif
+#ifdef ADD_IMPORT_PATH_FROM_BINARY
+      char exePath[MAX_PATH + 1] = {};
+      KJ_SYSCALL(GetModuleFileNameA(nullptr, exePath, kj::size(exePath)));
+      kj::ArrayPtr path = exePath;
+      KJ_IF_MAYBE(slashPos, path.findLast('\\')) {
+        path = path.slice(0, *slashPos);
+        if (path.endsWith("bin"_kj)) {
+          KJ_IF_MAYBE(slashPos, path.findLast('\\')) {
+            path = path.slice(0, *slashPos + 1);
+            add(kj::str(path, "include\\"));
+          }
+        } else {
+          add(kj::str(path));
+        }
+      }
+#endif
+#else // _WIN32
       static constexpr kj::StringPtr STANDARD_IMPORT_PATHS[] = {
         "/usr/local/include"_kj,
         "/usr/include"_kj,
@@ -355,13 +383,10 @@ public:
         KJ_CONCAT(CAPNP_INCLUDE_DIR, _kj),
 #endif
       };
-      for (auto path: STANDARD_IMPORT_PATHS) {
-        KJ_IF_MAYBE(dir, getSourceDirectory(path, false)) {
-          loader.addImportPath(*dir);
-        } else {
-          // ignore standard path that doesn't exist
-        }
+      for (auto path : STANDARD_IMPORT_PATHS) {
+          add(path);
       }
+#endif // !_WIN32
 
       addStandardImportPaths = false;
     }
