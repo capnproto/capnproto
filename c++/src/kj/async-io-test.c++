@@ -3574,5 +3574,146 @@ KJ_TEST("pump file to socket") {
   doTest(fs->getCurrent().createTemporary());
 }
 
+// ---------------------------------------------------------------------------------------------
+// accept() skips aborted connection – IPv4-only listener
+// ---------------------------------------------------------------------------------------------
+// An IPv4 client (AF_INET) connects and immediately resets (RST).  On BSD / macOS the kernel
+// removes the half-open connection from the backlog *during* the three-way handshake, so the
+// server observes the failure as an ECONNABORTED coming directly out of accept().  The test
+// verifies that KJ's accept loop eats the error and returns the next healthy connection.
+
+KJ_TEST("accept() skips aborted IPv4 connection") {
+  // -- async-io boilerplate ---------------------------------------------------
+  auto io = kj::setupAsyncIo();
+  auto& net = io.provider->getNetwork();
+
+  auto listenerAddr = net.parseAddress("127.0.0.1", 0).wait(io.waitScope);
+  auto listener = listenerAddr->listen();
+  uint16_t port = listener->getPort();
+
+  // -- Thread that opens Conn A (RST) ----------------------------------------
+  kj::Thread abortThread([&] {
+    int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    KJ_ASSERT(s >= 0);
+    // KJ_DEFER(::close(s));
+
+    // Force RST on close.
+    struct linger lg = {1, 0};
+    KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
+
+    sockaddr_in a {};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    a.sin_addr.s_addr = htonl(0x7f000001);
+    KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
+
+    // Conn A is now in SYN-RECV on the server; close() sends RST.
+    KJ_SYSCALL(::close(s));
+  });
+
+  // Give Conn A time to reach the accept queue *first*.
+  io.provider->getTimer().afterDelay(2 * kj::MILLISECONDS)
+                        .wait(io.waitScope);
+
+  // -- Conn B: real client, stays alive --------------------------------------
+  auto clientP = net.parseAddress("127.0.0.1", port)
+      .then([](Own<NetworkAddress> addr) { return addr->connect(); });
+
+  // -- Expect listener->accept() to yield Conn B and *not* throw -------------
+  auto serverP = listener->accept();
+  auto serverCon = serverP.wait(io.waitScope);   // must not throw / abort
+  auto clientCon = clientP.wait(io.waitScope);   // make sure Conn B is fine
+  KJ_ASSERT(serverCon);
+
+  // Test sending/receiving data
+  auto writePromise = clientCon->write(kj::StringPtr("hello").asBytes());
+  char buffer[16];
+  auto readPromise = serverCon->read(kj::arrayPtr(reinterpret_cast<kj::byte*>(buffer), sizeof(buffer)), 5);
+ 
+  writePromise.wait(io.waitScope);
+  auto amount = readPromise.wait(io.waitScope);
+  KJ_ASSERT(amount == 5);
+  KJ_ASSERT(memcmp(buffer, "hello", 5) == 0);
+
+  // Wait for abort thread to complete
+  abortThread.detach();
+}
+
+// ---------------------------------------------------------------------------------------------
+// accept() skips aborted connection – dual-stack listener (IPv6 + IPv4-mapped)
+// ---------------------------------------------------------------------------------------------
+// A dual-stack listener (AF_INET6 bound to "::") accepts both IPv6 and IPv4-mapped connections.
+// When an IPv4 client connects and immediately resets, macOS sometimes still queues the socket
+// and hands it to accept(), but with addrlen == 0.  The socket is already dead, so the first
+// setsockopt(TCP_NODELAY) fails with EINVAL.  KJ detects that, closes the fd, and loops back to
+// accept() which then yields the healthy connection.
+//
+// The race is arranged the same way as above: an "abort thread" creates the RST connection first,
+// we wait 2 ms so it is at the head of the backlog, then a normal client connects.
+//
+// Linux appears to purge the aborted entry before it can be accepted, in which case accept()
+// simply blocks.  Therefore the test is expected to run only on platforms that exhibit the
+// addrlen == 0 behaviour (macOS / BSD).
+
+KJ_TEST("accept() skips aborted dual-stack connection") {
+  if (!systemSupportsAddress("::")) {
+    KJ_LOG(WARNING, "system does not support ipv6; skipping test");
+    return;
+  }
+  // -- async-io boilerplate ---------------------------------------------------
+  auto io = kj::setupAsyncIo();
+  auto& net = io.provider->getNetwork();
+
+  auto listenerAddr = net.parseAddress("::", 0).wait(io.waitScope);
+  auto listener = listenerAddr->listen();
+  uint16_t port = listener->getPort();
+
+  // -- Thread that opens Conn A (RST) ----------------------------------------
+  kj::Thread abortThread([&] {
+    int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    KJ_ASSERT(s >= 0);
+
+    // Force RST on close.
+    struct linger lg = {1, 0};
+    KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
+
+    sockaddr_in a {};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    a.sin_addr.s_addr = htonl(0x7f000001);
+    KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
+
+    // Conn A is now in SYN-RECV on the server; close() sends RST.
+    KJ_SYSCALL(::close(s));
+  });
+
+  // Give Conn A time to reach the accept queue *first*.
+  io.provider->getTimer().afterDelay(2 * kj::MILLISECONDS)
+                         .wait(io.waitScope);
+
+  // -- Conn B: real client, stays alive --------------------------------------
+  auto clientP = net.parseAddress("::1", port)
+      .then([](Own<NetworkAddress> addr) { return addr->connect(); });
+
+  // -- Expect listener->accept() to yield Conn B and *not* throw -------------
+  auto serverP = listener->accept();
+  auto serverCon = serverP.wait(io.waitScope);   // must not throw / abort
+  auto clientCon = clientP.wait(io.waitScope);   // make sure Conn B is fine
+  KJ_ASSERT(serverCon);
+
+  // Test sending/receiving data
+  auto writePromise = clientCon->write(kj::StringPtr("hello").asBytes());
+  char buffer[16];
+  auto readPromise = serverCon->read(kj::arrayPtr(reinterpret_cast<kj::byte*>(buffer), sizeof(buffer)), 5);
+
+  writePromise.wait(io.waitScope);
+  auto amount = readPromise.wait(io.waitScope);
+  KJ_ASSERT(amount == 5);
+  KJ_ASSERT(memcmp(buffer, "hello", 5) == 0);
+
+  // Wait for abort thread to complete
+  abortThread.detach();
+}
+
 }  // namespace
 }  // namespace kj
