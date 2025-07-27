@@ -1343,6 +1343,13 @@ public:
 
     if (newFd >= 0) {
       kj::OwnFd ownFd(newFd);
+
+      // Some kernels (e.g. macOS dual-stack listeners) queue connections that were already reset
+      // and report an address length of zero. Treat these like ECONNABORTED and retry accept().
+      if (addrlen == 0) {
+        return acceptImpl(authenticated);
+      }
+
       if (!filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), addrlen)) {
         // Ignore disallowed address.
         return acceptImpl(authenticated);
@@ -1355,6 +1362,10 @@ public:
         int one = 1;
         KJ_SYSCALL_HANDLE_ERRORS(::setsockopt(
               ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
+#if __APPLE__
+          case EINVAL:  // macOS: fd already dead (RST race)
+            return acceptImpl(authenticated);   // retry accept()
+#endif
           case EOPNOTSUPP:
           case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
 #if __FreeBSD__
