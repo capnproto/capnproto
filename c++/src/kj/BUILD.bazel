@@ -7,7 +7,6 @@ cc_library(
     srcs = [
         "arena.c++",
         "array.c++",
-        "cidr.c++",
         "common.c++",
         "debug.c++",
         "encoding.c++",
@@ -35,7 +34,6 @@ cc_library(
     hdrs = [
         "arena.h",
         "array.h",
-        "cidr.h",
         "common.h",
         "debug.h",
         "encoding.h",
@@ -91,6 +89,7 @@ cc_library(
         "async-io-win32.c++",
         "async-unix.c++",
         "async-win32.c++",
+        "cidr.c++",
         "timer.c++",
     ],
     hdrs = [
@@ -102,6 +101,7 @@ cc_library(
         "async-queue.h",
         "async-unix.h",
         "async-win32.h",
+        "cidr.h",
         "timer.h",
     ],
     include_prefix = "kj",
