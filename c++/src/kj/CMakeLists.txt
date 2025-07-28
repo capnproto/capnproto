@@ -3,7 +3,6 @@
 
 set(kj_sources_lite
   array.c++
-  cidr.c++
   list.c++
   common.c++
   debug.c++
@@ -38,7 +37,6 @@ else()
 endif()
 
 set(kj_headers
-  cidr.h
   common.h
   units.h
   memory.h
@@ -123,6 +121,7 @@ set(kj-async_sources
   async-io-win32.c++
   async-io.c++
   async-io-unix.c++
+  cidr.c++
   timer.c++
 )
 set(kj-async_headers

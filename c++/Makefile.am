@@ -266,7 +266,6 @@ endif
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_la_SOURCES=                                              \
-  src/kj/cidr.c++                                              \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
   src/kj/memory.c++                                            \
@@ -307,6 +306,7 @@ libkj_async_la_SOURCES=                                        \
   src/kj/async-io.c++                                          \
   src/kj/async-io-unix.c++                                     \
   src/kj/async-io-win32.c++                                    \
+  src/kj/cidr.c++                                              \
   src/kj/timer.c++
 
 if BUILD_KJ_GZIP
