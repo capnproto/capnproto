@@ -1344,9 +1344,14 @@ public:
     if (newFd >= 0) {
       kj::OwnFd ownFd(newFd);
 
-      // Some kernels (e.g. macOS dual-stack listeners) queue connections that were already reset
-      // and report an address length of zero. Treat these like ECONNABORTED and retry accept().
       if (addrlen == 0) {
+#if __APPLE__
+        // A bug in XNU (the macOS kernel) can cause accept() to return a socket but addrlen=0
+        // The socket is already dead and should be discarded 
+        // https://github.com/apple-oss-distributions/xnu/blob/e3723e1f17661b24996789d8afc084c0c3303b26/bsd/kern/uipc_syscalls.c#L663-L691
+#else
+        KJ_LOG(ERROR, "accept() returned zero-size address?");
+#endif
         return acceptImpl(authenticated);
       }
 
