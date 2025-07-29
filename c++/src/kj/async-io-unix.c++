@@ -1367,14 +1367,12 @@ public:
         int one = 1;
         KJ_SYSCALL_HANDLE_ERRORS(::setsockopt(
               ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
-#if __APPLE__
-          case EINVAL:  // macOS: fd already dead (RST race)
-            return acceptImpl(authenticated);   // retry accept()
-#endif
           case EOPNOTSUPP:
           case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
-#if __FreeBSD__
-          case EINVAL: // (returned for AF_UNIX in FreeBSD)
+#if __APPLE__ || __FreeBSD__
+          case EINVAL:
+            // On FreeBSD, EINVAL is returned for AF_UNIX sockets.
+            // On macOS, EINVAL may be returned for sockets that are already dead (due to a race with RST).
 #endif
             break;
           default:
