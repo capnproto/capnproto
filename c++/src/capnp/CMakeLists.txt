@@ -222,6 +222,10 @@ if(NOT CAPNP_LITE)
   endif()
 endif()  # NOT CAPNP_LITE
 
+if (ADD_IMPORT_PATH_FROM_BINARY)
+  add_compile_definitions(ADD_IMPORT_PATH_FROM_BINARY)
+endif()
+
 # Tests ========================================================================
 
 if(BUILD_TESTING)
