@@ -77,6 +77,8 @@ public:
   kj::Maybe<Value&> find(KeyLike&& key);
   template <typename KeyLike>
   kj::Maybe<const Value&> find(KeyLike&& key) const;
+  template <typename KeyLike>
+  bool contains(KeyLike&& key) const;
   // Search for a matching key. The input does not have to be of type `Key`; it merely has to
   // be something that the Hasher accepts.
   //
@@ -176,6 +178,9 @@ public:
   // Tries to insert a new entry. However, if a duplicate already exists (according to some index),
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
   // If no function is provided, the default is to simply replace the value (but not the key).
+
+  template<typename KeyLike>
+  bool contains(KeyLike&& key) const;
 
   template <typename KeyLike>
   kj::Maybe<Value&> find(KeyLike&& key);
@@ -381,6 +386,12 @@ kj::Maybe<const Value&> HashMap<Key, Value>::find(KeyLike&& key) const {
 }
 
 template <typename Key, typename Value>
+template <typename KeyLike>
+bool HashMap<Key, Value>::contains(KeyLike&& key) const {
+  return table.find(key) != kj::none;
+}
+
+template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
 Value& HashMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
   return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
@@ -494,6 +505,12 @@ typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::upsert(
       [&](Entry& existingEntry, Entry&& newEntry) {
     existingEntry.value = kj::mv(newEntry.value);
   });
+}
+
+template <typename Key, typename Value>
+template <typename KeyLike>
+bool TreeMap<Key, Value>::contains(KeyLike&& key) const {
+  return table.find(key) != kj::none;
 }
 
 template <typename Key, typename Value>

@@ -44,6 +44,7 @@ KJ_TEST("HashMap") {
     old = 4321;
   });
 
+  KJ_EXPECT(map.contains("foo"_kj));
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
 
@@ -61,6 +62,7 @@ KJ_TEST("HashMap") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
 
   KJ_EXPECT(map.erase("bar"_kj));
+  KJ_EXPECT(!map.contains("base"_kj));
   KJ_EXPECT(map.erase("baz"_kj));
   KJ_EXPECT(!map.erase("qux"_kj));
 
@@ -93,6 +95,7 @@ KJ_TEST("TreeMap") {
     old = 4321;
   });
 
+  KJ_EXPECT(map.contains("foo"_kj));
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
 
@@ -110,6 +113,7 @@ KJ_TEST("TreeMap") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
 
   KJ_EXPECT(map.erase("bar"_kj));
+  KJ_EXPECT(!map.contains("bar"_kj));
   KJ_EXPECT(map.erase("baz"_kj));
   KJ_EXPECT(!map.erase("qux"_kj));
 
