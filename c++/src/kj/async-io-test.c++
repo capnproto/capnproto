@@ -167,7 +167,7 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
 
 #if !_WIN32 && !__CYGWIN__  // TODO(someday): Debug why this deadlocks on Cygwin.
 
-#if __ANDROID__
+#if __ANDROID__ || __OHOS__
 #define TMPDIR "/data/local/tmp"
 #else
 #define TMPDIR "/tmp"
@@ -305,7 +305,7 @@ TEST(AsyncIo, AncillaryMessageHandlerNoMsg) {
 // rewrite the test to use some other message type that is widely supported on streams. But for
 // now we just limit the test to Linux. Also, it doesn't work on Android for some reason, and it
 // isn't worth investigating, so we skip it there.
-#if __linux__ && !__ANDROID__
+#if __linux__ && !__ANDROID__ && !__OHOS__
 TEST(AsyncIo, AncillaryMessageHandler) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();
