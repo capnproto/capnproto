@@ -565,6 +565,17 @@ static_assert(StringPtr(HELLO_WORLD.begin(), HELLO_WORLD.size()).size() == 11);
 static_assert(HELLO_WORLD > StringPtr());
 static_assert(StringPtr("const"_kj).size() == 5);
 
+KJ_TEST("toLowercase") {
+  KJ_EXPECT(toLowercase("") == "");
+  KJ_EXPECT(toLowercase("hello") == "hello");
+  KJ_EXPECT(toLowercase("HELLO") == "hello");
+  KJ_EXPECT(toLowercase("HeLLo WoRLd") == "hello world");
+  KJ_EXPECT(toLowercase("Content-Type") == "content-type");
+  KJ_EXPECT(toLowercase("X-CUSTOM-HEADER") == "x-custom-header");
+  KJ_EXPECT(toLowercase("123-ABC-xyz") == "123-abc-xyz");
+  KJ_EXPECT(toLowercase("café") == "café");  // Non-ASCII unchanged
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

@@ -153,6 +153,16 @@ String heapString(const char* value, size_t size) {
   return String(buffer, size, _::HeapArrayDisposer::instance);
 }
 
+String toLowercase(StringPtr str) {
+  char* buffer = _::HeapArrayDisposer::allocate<char>(str.size() + 1);
+  for (size_t i = 0; i < str.size(); i++) {
+    char c = str[i];
+    buffer[i] = (c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c;
+  }
+  buffer[str.size()] = '\0';
+  return String(buffer, str.size(), _::HeapArrayDisposer::instance);
+}
+
 template <typename T>
 static CappedArray<char, sizeof(T) * 2 + 1> hexImpl(T i) {
   // We don't use sprintf() because it's not async-signal-safe (for strPreallocated()).

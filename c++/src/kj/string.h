@@ -469,6 +469,10 @@ String heapString(const String& value);
 String heapString(ArrayPtr<const char> value);
 // Allocates a copy of the given value on the heap.
 
+String toLowercase(StringPtr str);
+// Returns a new String with all ASCII uppercase letters (A-Z) converted to lowercase (a-z).
+// Non-ASCII characters are left unchanged.
+
 // =======================================================================================
 // Magic str() function which transforms parameters to text and concatenates them into one big
 // String.
