@@ -298,6 +298,21 @@ KJ_TEST("exception details") {
   KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e2.getDetail(456)).asChars()) == "bar");
 }
 
+KJ_TEST("copy constructor") {
+  auto e = new kj::Exception(kj::Exception::Type::FAILED, kj::str("src/bar.cc"),
+                             35, kj::str("test_exception"));
+  KJ_EXPECT(e->getFile() == "bar.cc"_kj);
+  KJ_EXPECT(e->getLine() == 35);
+  KJ_EXPECT(e->getDescription() == "test_exception"_kj);
+
+  kj::Exception e1(*e);
+  delete e;
+
+  KJ_EXPECT(e1.getFile() == "bar.cc"_kj);
+  KJ_EXPECT(e1.getLine() == 35);
+  KJ_EXPECT(e1.getDescription() == "test_exception"_kj);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

@@ -955,9 +955,9 @@ Exception::Exception(Type type, String file, int line, String description) noexc
 Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), type(other.type),
       description(heapString(other.description)), traceCount(other.traceCount) {
-  if (file == other.ownFile.cStr()) {
+  if (other.ownFile != nullptr) {
     ownFile = heapString(other.ownFile);
-    file = ownFile.cStr();
+    file = trimSourceFilename(ownFile).cStr();
   }
 
   if (other.remoteTrace != nullptr) {
