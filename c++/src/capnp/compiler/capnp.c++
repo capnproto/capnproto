@@ -52,6 +52,7 @@
 #include <capnp/serialize.h>
 #include <capnp/serialize-packed.h>
 #include <capnp/serialize-text.h>
+#include <capnp/schema-parser.h>
 #include <capnp/compat/json.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -107,6 +108,8 @@ public:
                             "DEPRECATED (use `convert`)")
              .addSubCommand("encode", KJ_BIND_METHOD(*this, getEncodeMain),
                             "DEPRECATED (use `convert`)")
+             .addSubCommand("lint-update", KJ_BIND_METHOD(*this, getLintUpdateMain),
+                            "Check that a schema is backwards compatible with another schema")
              .addSubCommand("eval", KJ_BIND_METHOD(*this, getEvalMain),
                             "Evaluate a const from a schema file.");
       addGlobalOptions(builder);
@@ -244,6 +247,24 @@ public:
     return builder.build();
   }
 
+  // Handler for the `lint-update` command.
+  kj::MainFunc getLintUpdateMain() {
+    kj::MainBuilder builder(context, VERSION_STRING,
+          "Compares <old-schema-file> and <new-schema-file> to check whether <new-schema-file> "
+          "is backwards compatible with <old-schema-file>. If so then this command will exit with "
+          "code 0, otherwise a non-zero exit code will be returned. Note that only the data types "
+          "used within these files are checked, so if the schemas import data types from schemas "
+          "that export other data types that are not used in either <new-schema-file> or <old-schema-file> "
+          "then these additional data types will not be evaluated. As such, if it is desired to check the "
+          "whole contents of a set of schemas within a directory, this command should be called for all of the old "
+          "and new file pairs from said directory to ensure full coverage.");
+    addGlobalOptions(builder);
+    builder.expectArg("<old-schema-file>", KJ_BIND_METHOD(*this, addSchema))
+          .expectArg("<new-schema-file>", KJ_BIND_METHOD(*this, addSchema))
+          .callAfterParsing(KJ_BIND_METHOD(*this, confirmSchemaIsCompatible));
+    return builder.build();
+  }
+
   kj::MainFunc getEvalMain() {
     // Only parse the schemas we actually need for decoding.
     compileEagerness = Compiler::NODE;
@@ -376,6 +397,53 @@ public:
     }
 
     return true;
+  }
+
+  // Adds a schema file to our `schemaLoader`.
+  // Will resolve all references within the schema.
+  // This is primarily useful for cases such as checking backwards compatibility
+  // where the additional safety checks provided by the compiler are undesirable
+  // (e.g. we want to load two _different_ schema files that happen to have the same
+  // Id in order to compare two versions of the schema.)
+  //
+  // If a schema is loaded that is incompatible with an already loaded schema, this
+  // function will fail, which is itself enough for a surface-level check of backwards
+  // compatibility, where the most recently loaded schema is not compatible with all
+  // previously loaded schemas.
+  //
+  // Note that only types in the top-level schema and types relied on by the top-level
+  // schema will be validated. For example, if we add `a.capnp` which depends on `Blorp`
+  // form `b.capnp` then the compatibility of `Blorp` will be checked when a newer version
+  // of `a.capnp` is loaded (and imports a newer version of `b.capnp`). However, if
+  // `b.capnp` also declares `Blarp` but `a.capnp` does not use `Blarp` then `Blarp`
+  // will not be evaluated for compatibility.
+  kj::MainBuilder::Validity addSchema(kj::StringPtr file) {
+    // schemaLoader is lazy-loaded as it's not needed for all commands.
+    // We _could_ use the compiler here and reach into it for its schema loader
+    // but we are then dependent on the implementation of the compiler when
+    // we don't need to be.
+    if (schemaLoader == kj::none) {
+      schemaLoader.emplace();
+    }
+
+    KJ_IF_SOME(loader, schemaLoader) {
+      // Now we start to actually load the schema files.
+      capnp::SchemaParser parser;
+      DirPathPair dirPathPair = interpretSourceFile(file);
+      parser.parseFromDirectory(dirPathPair.dir, dirPathPair.path.clone(), nullptr);
+
+      for (capnp::Schema loadedSchema: parser.getAllLoaded()) {
+        try {
+          loader.load(loadedSchema.getProto(), true);
+        } catch (const kj::Exception& exception) {
+          return kj::str("Backwards compatibility check failed:\n", exception);
+        }
+      }
+
+      return true;
+    } else {
+      throw std::logic_error("schemaLoader was not initialized.");
+    }
   }
 
 public:
@@ -1668,6 +1736,18 @@ public:
     return convert();
   }
 
+  // Should be called after validating that a set of schemas are compatible
+  // with each other. Primarily exists to satisfy the requirement of building
+  // commands for the CLI.
+  kj::MainBuilder::Validity confirmSchemaIsCompatible() {
+    // If we've made it to this point then the schemas have been
+    // successfully loaded and thus the new schema is backwards
+    // compatible with the old. If there are compatibility errors
+    // then we will not make it this far.
+    context.exitInfo("Schemas are compatible!");
+    return true;
+  }
+
   kj::MainBuilder::Validity setEvalOutputFormat(kj::StringPtr format) {
     KJ_IF_SOME(f, parseFormatName(format)) {
       convertTo = f;
@@ -1860,6 +1940,7 @@ private:
   kj::SpaceFor<Compiler> compilerSpace;
   bool compilerConstructed = false;
   kj::Own<Compiler> compiler;
+  kj::Maybe<SchemaLoader> schemaLoader;
 
   Compiler::AnnotationFlag annotationFlag = Compiler::COMPILE_ANNOTATIONS;
 
