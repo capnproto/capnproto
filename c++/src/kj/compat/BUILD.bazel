@@ -10,7 +10,10 @@ cc_library(
         "readiness-io.h",
         "tls.h",
     ],
-    include_prefix = "kj/compat",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "//src/kj:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -32,7 +35,10 @@ cc_library(
         "http.h",
         "url.h",
     ],
-    include_prefix = "kj/compat",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
@@ -44,7 +50,10 @@ cc_library(
     name = "kj-gzip",
     srcs = ["gzip.c++"],
     hdrs = ["gzip.h"],
-    include_prefix = "kj/compat",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
@@ -56,23 +65,25 @@ cc_library(
     name = "kj-brotli",
     srcs = ["brotli.c++"],
     hdrs = ["brotli.h"],
-    include_prefix = "kj/compat",
-    visibility = ["//visibility:public"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "//src/kj:use_brotli": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
+    visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
-        "@brotli//:brotlienc",
         "@brotli//:brotlidec",
+        "@brotli//:brotlienc",
     ],
 )
 
 cc_library(
     name = "gtest",
     hdrs = ["gtest.h"],
-    include_prefix = "kj/compat",
     visibility = ["//visibility:public"],
     deps = ["//src/kj"],
 )
@@ -85,6 +96,10 @@ kj_tests = [
 [cc_test(
     name = f.removesuffix(".c++"),
     srcs = [f],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [
         ":kj-http",
         "//src/kj:kj-test",
@@ -99,13 +114,17 @@ cc_library(
 cc_test(
     name = "http-socketpair-test",
     srcs = ["http-socketpair-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
+    target_compatible_with = [
+        "@platforms//os:linux",  # TODO: Investigate why this fails on macOS
+    ],
     deps = [
         ":http-socketpair-test-base",
         ":kj-http",
         "//src/kj:kj-test",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux", # TODO: Investigate why this fails on macOS
     ],
 )
 
@@ -117,13 +136,17 @@ kj_tls_tests = [
 [cc_test(
     name = f.removesuffix(".c++"),
     srcs = [f],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "//src/kj:use_openssl": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
-        ":kj-tls",
         ":kj-http",
+        ":kj-tls",
         "//src/kj:kj-test",
     ],
 ) for f in kj_tls_tests]
@@ -131,6 +154,10 @@ kj_tls_tests = [
 cc_test(
     name = "gzip-test",
     srcs = ["gzip-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "//src/kj:use_zlib": [],
         "//conditions:default": ["@platforms//:incompatible"],
@@ -144,6 +171,10 @@ cc_test(
 cc_test(
     name = "brotli-test",
     srcs = ["brotli-test.c++"],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     target_compatible_with = select({
         "//src/kj:use_brotli": [],
         "//conditions:default": ["@platforms//:incompatible"],

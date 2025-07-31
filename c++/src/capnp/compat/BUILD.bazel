@@ -17,7 +17,10 @@ cc_library(
         "json.capnp.h",
         "json.h",
     ],
-    include_prefix = "capnp/compat",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         "//src/capnp",
@@ -30,7 +33,6 @@ cc_capnp_library(
         "byte-stream.capnp",
         "http-over-capnp.capnp",
     ],
-    include_prefix = "capnp/compat",
     src_prefix = "src",
     visibility = ["//visibility:public"],
 )
@@ -45,7 +47,10 @@ cc_library(
         "byte-stream.h",
         "http-over-capnp.h",
     ],
-    include_prefix = "capnp/compat",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":http-over-capnp_capnp",
@@ -61,7 +66,10 @@ cc_library(
     hdrs = [
         "websocket-rpc.h",
     ],
-    include_prefix = "capnp/compat",
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         "//src/capnp",
@@ -72,10 +80,14 @@ cc_library(
 [cc_test(
     name = f.removesuffix(".c++"),
     srcs = [f],
+    copts = select({
+        "@platforms//os:windows": ["/TP"],  # compile .c++ files as .cpp files
+        "//conditions:default": [],
+    }),
     deps = [
-        ":websocket-rpc",
         ":http-over-capnp",
-        "//src/capnp:capnp-test"
+        ":websocket-rpc",
+        "//src/capnp:capnp-test",
     ],
 ) for f in [
     "byte-stream-test.c++",
@@ -92,8 +104,8 @@ cc_test(
     name = "http-over-capnp-old-test",
     srcs = ["http-over-capnp-old-test.c++"],
     deps = [
-        ":http-over-capnp-test-as-header",
         ":http-over-capnp",
-        "//src/capnp:capnp-test"
+        ":http-over-capnp-test-as-header",
+        "//src/capnp:capnp-test",
     ],
 )
