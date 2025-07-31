@@ -70,9 +70,17 @@ build:no-omit-frame-pointer --copt="-mno-omit-leaf-frame-pointer"
 build:sanitizers-common --copt="-Og"
 build:sanitizers-common --copt="-fno-optimize-sibling-calls"
 build:sanitizers-common --config=no-omit-frame-pointer
+build:sanitizers-common --linkopt="-fsanitize-link-c++-runtime"
 # sanitizers often do work on shutdown, do it cleanly
 build:sanitizers-common --test_env=KJ_CLEAN_SHUTDOWN=1
 
 build:asan --config=sanitizers-common
 build:asan --copt="-fsanitize=address" --linkopt="-fsanitize=address"
 build:asan --test_env=ASAN_OPTIONS=abort_on_error=1
+
+build:ubsan --config=sanitizers-common
+build:ubsan --copt="-fsanitize=undefined" --linkopt="-fsanitize=undefined"
+# additional non-default checks (https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html#available-checks)
+build:ubsan --copt="-fsanitize=float-divide-by-zero" --linkopt="-fsanitize=float-divide-by-zero"
+build:ubsan --copt="-fsanitize=local-bounds" --linkopt="-fsanitize=local-bounds"
+build:ubsan --copt="-fsanitize=nullability" --linkopt="-fsanitize=nullability"
