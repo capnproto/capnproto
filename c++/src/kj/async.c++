@@ -3322,6 +3322,8 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
     // comment there).
     exception.addTrace(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(awaitedAt) - 1));
 
+    KJ_DBG("Throwing from awaitResumeImpl", exception);
+
     // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` doesn't try to
     // extend the stack trace. There's no point in extending the trace beyond the single frame we
     // added above, as the rest of the trace will always be async framework stuff that no one wants
