@@ -466,6 +466,18 @@ public:
       return;
     }
 
+    if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
+      // We're going to convert this exception's type to DISCONNECTED before reporting it anywhere.
+      // However, lots of logging ignores DISCONNECTED errors. If the error here was not
+      // DISCONNECTED, it's probably a bug in the RPC system itself, and we need to see those.
+      // So log it directly here.
+      // TODO(soon): This is not a great solution (especilaly the NOSENTRY part, which is
+      //   recognized specifically by the Cloudflare Workers runtime's error reporting). Once we
+      //   get a handle on what kind of errors are being reported, we should do something better
+      //   here.
+      KJ_LOG(WARNING, "NOSENTRY RPC connection broken for non-DISCONNECTED reason.", exception);
+    }
+
     kj::Exception networkException(kj::Exception::Type::DISCONNECTED,
         exception.getFile(), exception.getLine(), kj::heapString(exception.getDescription()));
 
@@ -3111,6 +3123,12 @@ private:
               // The pipeline could still be valid and in-use in this case.
               shouldFreePipeline = false;
             } else {
+              if (!receivedFinish) {
+                // TODO(soon): Logging added temporarily to debug production issue. We're seeing
+                //   a lot of "Return message falsely claims call was canceled."
+                KJ_LOG(ERROR, "NOSENTRY Destroying RpcCallContext without Return nor Finish?",
+                    kj::getStackTrace());
+              }
               builder.setCanceled();
             }
 
