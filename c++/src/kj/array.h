@@ -201,21 +201,21 @@ public:
   inline ArrayPtr<T> first(size_t count) KJ_LIFETIMEBOUND { return slice(0, count); }
   inline ArrayPtr<const T> first(size_t count) const KJ_LIFETIMEBOUND { return slice(0, count); }
 
-  inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND { 
+  inline ArrayPtr<const byte> asBytes() const KJ_LIFETIMEBOUND {
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
-    return asPtr().asBytes(); 
+    return asPtr().asBytes();
   }
-  inline ArrayPtr<PropagateConst<T, byte>> asBytes() KJ_LIFETIMEBOUND { 
+  inline ArrayPtr<PropagateConst<T, byte>> asBytes() KJ_LIFETIMEBOUND {
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
-    return asPtr().asBytes(); 
+    return asPtr().asBytes();
   }
-  inline ArrayPtr<const char> asChars() const KJ_LIFETIMEBOUND { 
+  inline ArrayPtr<const char> asChars() const KJ_LIFETIMEBOUND {
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
-    return asPtr().asChars(); 
+    return asPtr().asChars();
   }
-  inline ArrayPtr<PropagateConst<T, char>> asChars() KJ_LIFETIMEBOUND { 
+  inline ArrayPtr<PropagateConst<T, char>> asChars() KJ_LIFETIMEBOUND {
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
-    return asPtr().asChars(); 
+    return asPtr().asChars();
   }
 
   inline Array<PropagateConst<T, byte>> releaseAsBytes() {

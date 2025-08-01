@@ -2295,7 +2295,7 @@ class ThreadId {
   // Implemented as thread_local address, so could be efficient even for production
   // environments especially with LTO.
 
-public:  
+public:
   static ThreadId current();
   // Obtain current thread id
 
@@ -2306,7 +2306,7 @@ public:
 
 private:
   inline ThreadId(void* id) : id(id) {}
-  void* id;  
+  void* id;
 };
 
 }  // namespace kj
