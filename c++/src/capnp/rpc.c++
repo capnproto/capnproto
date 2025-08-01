@@ -3106,6 +3106,12 @@ private:
               // The pipeline could still be valid and in-use in this case.
               shouldFreePipeline = false;
             } else {
+              if (!receivedFinish) {
+                // TODO(soon): Logging added temporarily to debug production issue. We're seeing
+                //   a lot of "Return message falsely claims call was canceled."
+                KJ_LOG(ERROR, "NOSENTRY Destroying RpcCallContext without Return nor Finish?",
+                    kj::getStackTrace());
+              }
               builder.setCanceled();
             }
 
