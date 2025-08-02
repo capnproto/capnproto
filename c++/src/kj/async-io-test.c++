@@ -3574,5 +3574,203 @@ KJ_TEST("pump file to socket") {
   doTest(fs->getCurrent().createTemporary());
 }
 
+// ---------------------------------------------------------------------------------------------
+// accept() with aborted connection - IPv4 listener
+// ---------------------------------------------------------------------------------------------
+// Test accept() behavior when connections are aborted (send RST) before being accepted.
+// Creates an aborted IPv4 connection followed by a valid one, then verifies proper handling.
+//
+// On Unix platforms, accept() typically returns the aborted connection, which fails on first
+// read (throws "Connection reset by peer" or returns 0 bytes). The test then calls accept()
+// again to get the valid connection. Some platforms may filter out aborted connections.
+
+#if !_WIN32
+KJ_TEST("accept() with aborted connection - IPv4") {
+  // -- async-io boilerplate ---------------------------------------------------
+  auto io = kj::setupAsyncIo();
+  auto& net = io.provider->getNetwork();
+
+  auto listenerAddr = net.parseAddress("127.0.0.1", 0).wait(io.waitScope);
+  auto listener = listenerAddr->listen();
+  uint16_t port = listener->getPort();
+
+  // Create a connection that will be aborted (sends RST packet)
+  kj::Thread abortThread([&] {
+    int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    KJ_ASSERT(s >= 0);
+
+    // Configure socket to send RST on close instead of FIN
+    struct linger lg = {1, 0};
+    KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
+
+    sockaddr_in a {};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    a.sin_addr.s_addr = htonl(0x7f000001);
+    KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
+
+    // Close immediately to send RST packet
+    KJ_SYSCALL(::close(s));
+  });
+
+  // Allow aborted connection to reach accept queue first
+  io.provider->getTimer().afterDelay(2 * kj::MILLISECONDS)
+                        .wait(io.waitScope);
+
+  // Create a valid connection that should work
+  auto clientP = net.parseAddress("127.0.0.1", port)
+      .then([](Own<NetworkAddress> addr) { return addr->connect(); });
+  // Accept first connection - this should be the aborted one
+  auto firstConnection = listener->accept().wait(io.waitScope);
+  KJ_ASSERT(firstConnection);
+
+  char buffer[16];
+  bool firstConnectionAborted = false;
+  
+  // Test if first connection is aborted by attempting to read
+  if (kj::runCatchingExceptions([&]() {
+    auto readPromise = firstConnection->tryRead(buffer, 1, sizeof(buffer));
+    auto bytesRead = readPromise.wait(io.waitScope);
+    if (bytesRead == 0) {
+      firstConnectionAborted = true;
+    }
+  }) != kj::none) {
+    // Read failed with exception (connection was aborted)
+    firstConnectionAborted = true;
+  }
+
+  kj::Own<AsyncIoStream> serverCon;
+  if (firstConnectionAborted) {
+    // First connection was aborted as expected - accept the second (valid) connection
+    serverCon = listener->accept().wait(io.waitScope);
+  } else {
+    // Unexpected: first connection was valid (kernel filtered out aborted one)
+    KJ_LOG(WARNING, "Platform filtered out aborted connection - using first connection");
+    serverCon = kj::mv(firstConnection);
+  }
+  // Verify we have a working connection
+  auto clientCon = clientP.wait(io.waitScope);
+  KJ_ASSERT(serverCon);
+
+  // Test data transfer on the valid connection
+  auto writePromise = clientCon->write(kj::StringPtr("hello").asBytes());
+  auto readPromise2 = serverCon->read(kj::arrayPtr(reinterpret_cast<kj::byte*>(buffer), sizeof(buffer)), 5);
+
+  writePromise.wait(io.waitScope);
+  auto amount = readPromise2.wait(io.waitScope);
+  KJ_ASSERT(amount == 5);
+  KJ_ASSERT(memcmp(buffer, "hello", 5) == 0);
+
+  abortThread.detach();
+}
+#endif  // !_WIN32
+
+// ---------------------------------------------------------------------------------------------
+// accept() with aborted connection - dual-stack IPv4/IPv6 listener
+// ---------------------------------------------------------------------------------------------
+// Test accept() behavior with aborted cross-protocol connections on dual-stack listeners.
+// Creates an aborted IPv4 connection to an IPv6 listener, followed by a valid IPv6 connection.
+//
+// Expected behavior:
+// - Darwin/macOS: When IPv4 connects to IPv6 listener and gets aborted, accept() returns
+//   a socket with addrlen=0. KJ's accept loop detects this Darwin quirk and discards the
+//   socket automatically, so first accept() returns the valid connection.
+// - Linux/other Unix: accept() returns the aborted connection, which fails on first
+//   read (throws exception or returns 0 bytes). Test then calls accept() again for the
+//   valid connection.
+//
+// This test specifically exercises the Darwin addrlen==0 bug workaround in KJ's accept loop.
+
+#if !_WIN32
+KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
+  if (!systemSupportsAddress("::")) {
+    KJ_LOG(WARNING, "system does not support ipv6; skipping test");
+    return;
+  }
+  char buffer[16];
+  // -- async-io boilerplate ---------------------------------------------------
+  auto io = kj::setupAsyncIo();
+  auto& net = io.provider->getNetwork();
+
+  auto listenerAddr = net.parseAddress("::", 0).wait(io.waitScope);
+  auto listener = listenerAddr->listen();
+  uint16_t port = listener->getPort();
+
+  // Create IPv4 connection that will be aborted (sends RST packet)
+  kj::Thread abortThread([&] {
+    int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    KJ_ASSERT(s >= 0);
+
+    // Configure socket to send RST on close instead of FIN
+    struct linger lg = {1, 0};
+    KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
+
+    sockaddr_in a {};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    a.sin_addr.s_addr = htonl(0x7f000001);
+    KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
+
+    // Close immediately to send RST packet
+    KJ_SYSCALL(::close(s));
+  });
+
+  // Allow aborted connection to reach accept queue first
+  io.provider->getTimer().afterDelay(2 * kj::MILLISECONDS)
+                         .wait(io.waitScope);
+
+  // Create valid IPv6 connection
+  auto clientP = net.parseAddress("::1", port)
+      .then([](Own<NetworkAddress> addr) { return addr->connect(); });
+  // Accept connection - behavior differs by platform
+  auto serverCon = listener->accept().wait(io.waitScope);
+  KJ_ASSERT(serverCon);
+
+#if __APPLE__
+  // On Apple platforms: IPv4->IPv6 aborted connections return addrlen=0,
+  // which KJ detects and discards, so first accept() returns the valid connection
+  auto clientCon = clientP.wait(io.waitScope);
+  KJ_ASSERT(clientCon);
+#else
+  // On other platforms: aborted connection is returned by accept(),
+  // need to test if it's valid by attempting to read
+  bool connectionAborted = false;
+  
+  if (kj::runCatchingExceptions([&]() {
+    auto readPromise = serverCon->tryRead(buffer, 1, sizeof(buffer));
+    auto bytesRead = readPromise.wait(io.waitScope);
+    if (bytesRead == 0) {
+      connectionAborted = true;
+    }
+  }) != kj::none) {
+    // Read failed with exception (connection was aborted)
+    connectionAborted = true;
+  }
+  
+  if (connectionAborted) {
+    // First connection was aborted as expected - accept the second (valid) connection
+    serverCon = listener->accept().wait(io.waitScope);
+  } else {
+    // Unexpected: first connection was valid (kernel filtered out aborted one)
+    KJ_LOG(WARNING, "Platform filtered out aborted connection - using first connection");
+  }
+  
+  auto clientCon = clientP.wait(io.waitScope);
+  KJ_ASSERT(clientCon);
+#endif
+
+  // Test data transfer on the valid connection
+  auto writePromise = clientCon->write(kj::StringPtr("hello").asBytes());
+  auto readPromise = serverCon->read(kj::arrayPtr(reinterpret_cast<kj::byte*>(buffer), sizeof(buffer)), 5);
+
+  writePromise.wait(io.waitScope);
+  auto amount = readPromise.wait(io.waitScope);
+  KJ_ASSERT(amount == 5);
+  KJ_ASSERT(memcmp(buffer, "hello", 5) == 0);
+
+  abortThread.detach();
+}
+#endif  // !_WIN32
+
 }  // namespace
 }  // namespace kj
