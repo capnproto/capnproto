@@ -358,14 +358,14 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
 Debug::Fault::~Fault() noexcept(false) {
   if (exception != nullptr) {
     Exception copy = mv(*exception);
-    delete exception;
+    operator delete(exception, sizeof(Exception));
     throwRecoverableException(mv(copy), 1);
   }
 }
 
 void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
-  delete exception;
+  operator delete(exception, sizeof(Exception));
   exception = nullptr;
   throwFatalException(mv(copy), 1);
   KJ_KNOWN_UNREACHABLE(abort());

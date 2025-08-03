@@ -797,7 +797,7 @@ InsertionOrderIndex& InsertionOrderIndex::operator=(InsertionOrderIndex&& other)
   return *this;
 }
 InsertionOrderIndex::~InsertionOrderIndex() noexcept(false) {
-  if (links != &EMPTY_LINK) delete[] links;
+  if (links != &EMPTY_LINK) operator delete[](links, capacity);
 }
 
 void InsertionOrderIndex::reserve(size_t size) {
@@ -821,7 +821,7 @@ void InsertionOrderIndex::reserve(size_t size) {
     memset(newLinks, 0xff, allocation * sizeof(Link));
 #endif
     _::acopy(newLinks, links, capacity + 1);
-    if (links != &EMPTY_LINK) delete[] links;
+    if (links != &EMPTY_LINK) operator delete[](links, capacity);
     links = newLinks;
     capacity = allocation - 1;
   }

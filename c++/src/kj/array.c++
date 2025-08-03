@@ -63,15 +63,16 @@ namespace _ {  // private
 
 struct AutoDeleter {
   void* ptr;
+  size_t size;
   inline void* release() { void* result = ptr; ptr = nullptr; return result; }
-  inline AutoDeleter(void* ptr): ptr(ptr) {}
-  inline ~AutoDeleter() { operator delete(ptr); }
+  inline AutoDeleter(void* ptr, size_t size): ptr(ptr), size(size) {}
+  inline ~AutoDeleter() { if (ptr != nullptr) {operator delete(ptr, size);} }
 };
 
 void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
                                       void (*constructElement)(void*),
                                       void (*destroyElement)(void*)) {
-  AutoDeleter result(operator new(elementSize * capacity));
+  AutoDeleter result(operator new(elementSize * capacity), elementSize * capacity);
 
   if (constructElement == nullptr) {
     // Nothing to do.
@@ -94,8 +95,7 @@ void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, s
 void HeapArrayDisposer::disposeImpl(
     void* firstElement, size_t elementSize, size_t elementCount, size_t capacity,
     void (*destroyElement)(void*)) const {
-  // Note that capacity is ignored since operator delete() doesn't care about it.
-  AutoDeleter deleter(firstElement);
+  AutoDeleter deleter(firstElement, elementSize * capacity);
 
   if (destroyElement != nullptr) {
     ExceptionSafeArrayUtil guard(firstElement, elementSize, elementCount, destroyElement);

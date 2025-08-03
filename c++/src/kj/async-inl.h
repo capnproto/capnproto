@@ -356,7 +356,7 @@ public:
     PromiseArena* arena = node->arena;
     // Defer the `delete` to protect against exception in `destroy()`.
     // Reminder: `delete` automatically ignores null pointers
-    KJ_DEFER(delete arena);
+    KJ_DEFER(if (arena != nullptr) {operator delete(arena, sizeof(PromiseArena));} );
     node->destroy();
   }
 
@@ -440,7 +440,7 @@ static void freePromise(T* ptr) {
     kj::dtor(*ptr);
   } else {
     // The object will have been allocated separately on the heap.
-    return delete ptr;
+    operator delete(ptr, sizeof(T));
   }
 }
 
