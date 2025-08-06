@@ -716,6 +716,23 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<Node*, uint>& s
   }
 }
 
+namespace {
+
+struct OrderByCodeOrder {
+  template <typename T> inline bool operator()(const T &a, const T &b) const {
+    return a.getCodeOrder() < b.getCodeOrder();
+  }
+};
+
+template <typename MemberList>
+kj::Array<decltype(kj::instance<MemberList>()[0])> sortByCodeOrder(MemberList &&list) {
+  auto sorted = KJ_MAP(item, list) { return item; };
+  std::sort(sorted.begin(), sorted.end(), OrderByCodeOrder());
+  return kj::mv(sorted);
+}
+
+} // namespace
+
 void Compiler::Node::traverseNodeDependencies(
     const schema::Node::Reader& schemaNode, uint eagerness,
     std::unordered_map<Node*, uint>& seen,
@@ -723,7 +740,7 @@ void Compiler::Node::traverseNodeDependencies(
     kj::Vector<schema::Node::SourceInfo::Reader>& sourceInfo) {
   switch (schemaNode.which()) {
     case schema::Node::STRUCT:
-      for (auto field: schemaNode.getStruct().getFields()) {
+      for (auto field: sortByCodeOrder(schemaNode.getStruct().getFields())) {
         switch (field.which()) {
           case schema::Field::SLOT:
             traverseType(field.getSlot().getType(), eagerness, seen, finalLoader, sourceInfo);
@@ -738,7 +755,7 @@ void Compiler::Node::traverseNodeDependencies(
       break;
 
     case schema::Node::ENUM:
-      for (auto enumerant: schemaNode.getEnum().getEnumerants()) {
+      for (auto enumerant: sortByCodeOrder(schemaNode.getEnum().getEnumerants())) {
         traverseAnnotations(enumerant.getAnnotations(), eagerness, seen, finalLoader, sourceInfo);
       }
       break;
@@ -752,7 +769,7 @@ void Compiler::Node::traverseNodeDependencies(
         }
         traverseBrand(superclass.getBrand(), eagerness, seen, finalLoader, sourceInfo);
       }
-      for (auto method: interface.getMethods()) {
+      for (auto method: sortByCodeOrder(interface.getMethods())) {
         traverseDependency(
             method.getParamStructType(), eagerness, seen, finalLoader, sourceInfo, true);
         traverseBrand(method.getParamBrand(), eagerness, seen, finalLoader, sourceInfo);
