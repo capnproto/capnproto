@@ -76,6 +76,7 @@ def _lib_rs_content(crate_name, deps, outs):
 {outs}
 }}
 // re-export names to be accessible directly
+#[allow(unused_imports)] 
 pub use {crate_name}::*;
 // use dependencies
 {deps}
