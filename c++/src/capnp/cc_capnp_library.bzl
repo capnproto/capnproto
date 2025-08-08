@@ -1,4 +1,5 @@
 """Bazel rule to compile .capnp files into c++."""
+
 load(":capnp_gen.bzl", "capnp_gen", _capnp_provider = "capnp_provider")
 
 # re-export for backward compatibility

@@ -36,7 +36,7 @@ def kj_configure():
         name = "deprecate_empty_maybe_from_nullptr",
         build_setting_default = True,
     )
-     
+
     bool_flag(
         name = "debug_memory",
         build_setting_default = False,

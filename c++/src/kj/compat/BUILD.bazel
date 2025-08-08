@@ -63,15 +63,15 @@ cc_library(
     srcs = ["brotli.c++"],
     hdrs = ["brotli.h"],
     include_prefix = "kj/compat",
-    visibility = ["//visibility:public"],
     target_compatible_with = select({
         "//src/kj:use_brotli": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
+    visibility = ["//visibility:public"],
     deps = [
         "//src/kj:kj-async",
-        "@brotli//:brotlienc",
         "@brotli//:brotlidec",
+        "@brotli//:brotlienc",
     ],
 )
 
@@ -105,13 +105,13 @@ cc_library(
 cc_test(
     name = "http-socketpair-test",
     srcs = ["http-socketpair-test.c++"],
+    target_compatible_with = [
+        "@platforms//os:linux",  # TODO: Investigate why this fails on macOS
+    ],
     deps = [
         ":http-socketpair-test-base",
         ":kj-http",
         "//src/kj:kj-test",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux", # TODO: Investigate why this fails on macOS
     ],
 )
 
@@ -128,8 +128,8 @@ kj_tls_tests = [
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     deps = [
-        ":kj-tls",
         ":kj-http",
+        ":kj-tls",
         "//src/kj:kj-test",
     ],
 ) for f in kj_tls_tests]
