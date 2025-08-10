@@ -216,6 +216,8 @@ AS_IF([test "$with_fibers" != no], [
   ])
 ])
 
+ASYNC_REQUIRES_PRIVATE=""
+
 # Check for library support necessary for fibers.
 AS_IF([test "$with_fibers" != no], [
   case "${host_os}" in
@@ -241,6 +243,7 @@ AS_IF([test "$with_fibers" != no], [
         ])
         AS_IF([test "$ucontext_supports_fibers" = yes], [
           ASYNC_LIBS="$ASYNC_LIBS -lucontext"
+          ASYNC_REQUIRES_PRIVATE="$ASYNC_REQUIRES_PRIVATE libucontext"
           with_fibers=yes
         ], [
           AS_IF([test "$with_fibers" = yes], [
@@ -259,6 +262,7 @@ AS_IF([test "$with_fibers" = yes], [
 ], [
   CXXFLAGS="$CXXFLAGS -DKJ_USE_FIBERS=0"
 ])
+AC_SUBST(ASYNC_REQUIRES_PRIVATE, $ASYNC_REQUIRES_PRIVATE)
 
 # CapnProtoConfig.cmake.in needs these variables,
 # we force them to NO because we don't need the CMake dependency for them,
