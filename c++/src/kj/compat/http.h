@@ -80,8 +80,12 @@ namespace kj {
   MACRO(NOTIFY) \
   MACRO(SUBSCRIBE) \
   MACRO(UNSUBSCRIBE) \
-  MACRO(QUERY)
-  /* UPnP */
+  /* UPnP */ \
+  \
+  MACRO(QUERY) \
+  /* https://www.ietf.org/archive/id/draft-ietf-httpbis-safe-method-w-body-05.html */ \
+  MACRO(BAN) \
+  /* Non-standard method name requested by a Cloudflare customer. */
 
 enum class HttpMethod {
   // Enum of known HTTP methods.

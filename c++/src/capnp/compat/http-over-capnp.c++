@@ -761,7 +761,7 @@ public:
   bool responseSent = false;
 
   static kj::HttpMethod validateMethod(capnp::HttpMethod method) {
-    KJ_REQUIRE(method <= capnp::HttpMethod::QUERY, "unknown method", method);
+    KJ_REQUIRE(method <= capnp::HttpMethod::BAN, "unknown method", method);
     return static_cast<kj::HttpMethod>(method);
   }
 
