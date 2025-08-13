@@ -18,13 +18,3 @@ register_toolchains(
     "@local_config_cc_toolchains//:all",
     dev_dependency = True,
 )
-
-# While the build should succeed with the default toolchain configuration from rules_cc,
-# apple_support is more tailored to macOS and allows us to cross-compile easily.
-bazel_dep(name = "apple_support", version = "1.22.1")
-
-# Toolchain registration adapted from apple_suport's MODULE.bazel
-apple_cc_configure = use_extension("@apple_support//crosstool:setup.bzl", "apple_cc_configure_extension")
-use_repo(apple_cc_configure, "local_config_apple_cc", "local_config_apple_cc_toolchains")
-
-register_toolchains("@local_config_apple_cc_toolchains//:all")
