@@ -509,6 +509,10 @@ KJ_TEST("as<Std>") {
   std::string stdStr = str.as<Std>();
   KJ_EXPECT(stdStr == "foo");
 
+  const String str2 = kj::str("foo"_kj);
+  std::string stdStr2 = str2.as<Std>();
+  KJ_EXPECT(stdStr2 == "foo");
+
   StringPtr ptr = "bar"_kj;
   std::string stdPtr = ptr.as<Std>();
   KJ_EXPECT(stdPtr == "bar");

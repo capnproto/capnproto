@@ -1174,12 +1174,25 @@ struct Std {
   static std::span<T> from(ArrayPtr<T>* arr) {
     return std::span<T>(arr->begin(), arr->size());
   }
+
+  template<typename T>
+  static std::span<const T> from(const ArrayPtr<T>* arr) {
+    return std::span<const T>(arr->begin(), arr->size());
+  }
 };
 
 KJ_TEST("ArrayPtr::as<Std>") {
   int rawArray[] = {12, 34, 56, 34, 12};
   ArrayPtr<int> arr(rawArray);
   std::span<int> stdPtr = arr.as<Std>();
+  KJ_EXPECT(stdPtr.size() == 5);
+}
+
+
+KJ_TEST("const ArrayPtr::as<Std>") {
+  int rawArray[] = {12, 34, 56, 34, 12};
+  const ArrayPtr<int> arr(rawArray);
+  std::span<const int> stdPtr = arr.as<Std>();
   KJ_EXPECT(stdPtr.size() == 5);
 }
 

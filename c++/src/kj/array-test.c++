@@ -516,14 +516,24 @@ TEST(Array, AttachFromArrayPtr) {
 
 struct Std {
   template<typename T>
+  static std::span<const T> from(const Array<T>* arr) {
+    return std::span<const T>(arr->begin(), arr->size());
+  }
+
+  template<typename T>
   static std::span<T> from(Array<T>* arr) {
     return std::span<T>(arr->begin(), arr->size());
-  }
-};
+  }};
 
 KJ_TEST("Array::as<Std>") {
   kj::Array<int> arr = kj::arr(1, 2, 4);
   std::span<int> stdArr = arr.as<Std>();
+  KJ_EXPECT(stdArr.size() == 3);
+}
+
+KJ_TEST("const Array::as<Std>") {
+  const kj::Array<int> arr = kj::arr(1, 2, 4);
+  std::span<int const> stdArr = arr.as<Std>();
   KJ_EXPECT(stdArr.size() == 3);
 }
 

@@ -180,14 +180,10 @@ public:
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
 
   template <typename T>
-  inline auto as() { return T::from(this); }
+  inline auto as(this auto self) { return T::from(&self); }
   // Syntax sugar for invoking T::from.
   // Used to chain conversion calls rather than wrap with function.
 
-  template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
-  // Used to chain conversion calls rather than wrap with function.
 
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
@@ -337,12 +333,7 @@ public:
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
-  // Used to chain conversion calls rather than wrap with function.
-
-  template <typename T>
-  inline auto as() const { return T::from(this); }
+  inline auto as(this auto const& self) { return T::from(&self); }
   // Syntax sugar for invoking T::from.
   // Used to chain conversion calls rather than wrap with function.
 
@@ -445,12 +436,12 @@ public:
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
   template <typename T>
-  inline auto as() { return T::from(this); }
+  inline auto as(this auto& self) { return T::from(&self); }
   // Syntax sugar for invoking T::from.
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
+  inline auto as(this auto const& self) { return T::from(&self); }
   // Syntax sugar for invoking T::from.
   // Used to chain conversion calls rather than wrap with function.
 
