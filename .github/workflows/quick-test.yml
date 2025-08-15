@@ -18,7 +18,7 @@ env:
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
-      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev
     }
 
 jobs:
@@ -27,19 +27,19 @@ jobs:
     runs-on: ubuntu-22.04
     # We depend on both clang and libc++. We use Alpine Linux 3.19 which is cached on the
     # ubuntu-22.04 build image and supports LLVM 17.
-    container: alpine:3.19
+    container: alpine:3.22
     steps:
       - uses: actions/checkout@v4
       - name: install dependencies
-        run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang17 libc++-dev
+        run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang20 libc++-dev llvm-libunwind-dev
       - name: super-test
-        run: ./super-test.sh quick clang-17
+        run: ./super-test.sh quick clang-20
   Linux-clang:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        clang: [15, 16, 17, 18, 19]
+        clang: [18, 19]
         driver: [bazel-dbg, bazel-opt, super-test]
         include:
           - driver: bazel-dbg
@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [18]
+        clang: [19]
         config: [asan]
     steps:
       - uses: actions/checkout@v4
