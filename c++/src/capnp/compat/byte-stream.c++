@@ -975,7 +975,7 @@ public:
           });
         } else {
           // ughhhhhhhhhh, we need to split the pieces.
-          return splitAndWrite(pieces, kjStream.limit,
+          return splitAndWrite(pieces, limit,
               [kjStream,limit](kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) mutable {
             return kjStream.stream.write(pieces).then([kjStream,limit]() mutable {
               kjStream.lender.returnStream(limit);
