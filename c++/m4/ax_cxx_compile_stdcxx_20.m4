@@ -15,7 +15,7 @@
 #   standard; if necessary, add switches to CXXFLAGS to enable support.
 #   Errors out if no mode that supports C++20 baseline syntax can be found.
 #   The argument, if specified, indicates whether you insist on an extended
-#   mode (e.g. -std=gnu++20) or a strict conformance mode (e.g. -std=c++20).
+#   mode (e.g. -std=gnu++20) or a strict conformance mode (e.g. -std=c++23).
 #   If neither is specified, you get whatever works, with preference for an
 #   extended mode.
 #
@@ -141,7 +141,7 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_20], [dnl
 
   m4_if([$1], [ext], [], [dnl
   if test x$ac_success = xno; then
-    for switch in -std=c++20 -std=c++2a; do
+    for switch in -std=c++23 -std=c++2a; do
       cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx20_$switch])
       AC_CACHE_CHECK(whether $CXX supports C++20 features with $switch,
                      $cachevar,
