@@ -10,12 +10,12 @@ include(CTest)
 include(CheckIncludeFileCXX)
 include(GNUInstallDirs)
 if(MSVC)
-  check_include_file_cxx(coroutine HAS_CXX20 "/std:c++20")
+  check_include_file_cxx(coroutine HAS_CXX23 "/std:c++23preview")
 else()
-  check_include_file_cxx(coroutine HAS_CXX20 "-std=gnu++20")
+  check_include_file_cxx(coroutine HAS_CXX23 "-std=gnu++23")
 endif()
-if(NOT HAS_CXX20)
-  message(SEND_ERROR "Requires a C++20 compiler and standard library.")
+if(NOT HAS_CXX23)
+  message(SEND_ERROR "Requires a C++23 compiler and standard library.")
 endif()
 
 # these arguments are passed to all install(TARGETS) calls
@@ -133,6 +133,8 @@ if (WITH_FIBERS OR WITH_FIBERS STREQUAL "AUTO")
 endif()
 
 if(MSVC)
+  add_compile_options(/std:c++23preview)
+
   # TODO(cleanup): Enable higher warning level in MSVC, but make sure to test
   #   build with that warning level and clean out false positives.
 
@@ -156,7 +158,7 @@ else()
   add_compile_options(-Wall -Wextra -Wsuggest-override -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter)
 
   if(DEFINED CMAKE_CXX_EXTENSIONS AND NOT CMAKE_CXX_EXTENSIONS)
-    message(SEND_ERROR "Cap'n Proto requires compiler-specific extensions (e.g., -std=gnu++20). Please leave CMAKE_CXX_EXTENSIONS undefined or ON.")
+    message(SEND_ERROR "Cap'n Proto requires compiler-specific extensions (e.g., -std=gnu++23). Please leave CMAKE_CXX_EXTENSIONS undefined or ON.")
   endif()
 
   if (NOT ANDROID)

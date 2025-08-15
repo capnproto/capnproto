@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [15, 16, 17, 18, 19]
+        clang: [19]
         driver: [bazel-dbg, bazel-opt, super-test]
         include:
           - driver: bazel-dbg
@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [18]
+        clang: [19]
         config: [asan]
     steps:
       - uses: actions/checkout@v4

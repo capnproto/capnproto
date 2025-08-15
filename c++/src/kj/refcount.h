@@ -169,8 +169,7 @@ class Rc {
 
 public:
   KJ_DISALLOW_COPY(Rc);
-  Rc() { }
-  Rc(decltype(nullptr)) { }
+
   inline Rc(Rc&& other) noexcept = default;
 
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
@@ -187,7 +186,7 @@ public:
     if (refcounted != nullptr) {
       return Refcounted::addRcRefInternal(refcounted);
     } else {
-      return kj::Rc<T>();
+      return kj::Rc<T>(nullptr);
     }
   }
 
@@ -443,8 +442,7 @@ class Arc {
 
 public:
   KJ_DISALLOW_COPY(Arc);
-  Arc() { }
-  Arc(decltype(nullptr)) { }
+
   inline Arc(Arc&& other) noexcept = default;
 
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
@@ -461,7 +459,7 @@ public:
     if (refcounted != nullptr) {
       return AtomicRefcounted::addRcRefInternal(refcounted);
     } else {
-      return kj::Arc<T>();
+      return kj::Arc<T>(nullptr);
     }
   }
 
