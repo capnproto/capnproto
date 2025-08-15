@@ -123,6 +123,12 @@ const void* castToConstVoid(T* ptr) {
 
 KJ_NORETURN(void throwWrongDisposerError());
 
+inline size_t requireValidAllocSize(size_t size) {
+  constexpr const std::size_t highest_bit = std::size_t(1) << (sizeof(std::size_t) * 8 - 1);
+  KJ_IREQUIRE(!(size & highest_bit), "Invalid allocation size (negative)");
+  return size;
+}
+
 }  // namespace _ (private)
 
 // =======================================================================================

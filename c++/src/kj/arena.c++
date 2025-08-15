@@ -135,7 +135,7 @@ void* Arena::allocateBytesInternal(size_t amount, uint alignment) {
   }
 
   // Allocate.
-  byte* bytes = reinterpret_cast<byte*>(operator new(nextChunkSize));
+  byte* bytes = reinterpret_cast<byte*>(operator new(_::requireValidAllocSize(nextChunkSize)));
 
   // Set up the ChunkHeader at the beginning of the allocation.
   ChunkHeader* newChunk = reinterpret_cast<ChunkHeader*>(bytes);

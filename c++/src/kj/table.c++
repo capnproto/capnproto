@@ -815,7 +815,7 @@ void InsertionOrderIndex::reserve(size_t size) {
     // Round first allocation up to 8.
     allocation = kj::max(allocation, 8);
 
-    Link* newLinks = new Link[allocation];
+    Link* newLinks = new Link[_::requireValidAllocSize(allocation)];
 #ifdef KJ_DEBUG
     // To catch bugs, fill unused links with 0xff.
     memset(newLinks, 0xff, allocation * sizeof(Link));

@@ -71,7 +71,7 @@ struct AutoDeleter {
 void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
                                       void (*constructElement)(void*),
                                       void (*destroyElement)(void*)) {
-  AutoDeleter result(operator new(elementSize * capacity));
+  AutoDeleter result(operator new(_::requireValidAllocSize(elementSize * capacity)));
 
   if (constructElement == nullptr) {
     // Nothing to do.
