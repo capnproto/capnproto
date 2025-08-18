@@ -1343,6 +1343,18 @@ public:
 
     if (newFd >= 0) {
       kj::OwnFd ownFd(newFd);
+
+      if (addrlen == 0) {
+#if __APPLE__
+        // A bug in XNU (the macOS kernel) can cause accept() to return a socket but addrlen=0
+        // The socket is already dead and should be discarded 
+        // https://github.com/apple-oss-distributions/xnu/blob/e3723e1f17661b24996789d8afc084c0c3303b26/bsd/kern/uipc_syscalls.c#L663-L691
+#else
+        KJ_LOG(ERROR, "accept() returned zero-size address?");
+#endif
+        return acceptImpl(authenticated);
+      }
+
       if (!filter.shouldAllow(reinterpret_cast<struct sockaddr*>(&addr), addrlen)) {
         // Ignore disallowed address.
         return acceptImpl(authenticated);
@@ -1357,8 +1369,10 @@ public:
               ownFd.get(), IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one))) {
           case EOPNOTSUPP:
           case ENOPROTOOPT: // (returned for AF_UNIX in cygwin)
-#if __FreeBSD__
-          case EINVAL: // (returned for AF_UNIX in FreeBSD)
+#if __APPLE__ || __FreeBSD__
+          case EINVAL:
+            // On FreeBSD, EINVAL is returned for AF_UNIX sockets.
+            // On macOS, EINVAL may be returned for sockets that are already dead (due to a race with RST).
 #endif
             break;
           default:
