@@ -2182,6 +2182,18 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     if (fastCaseCmp<'c','h','u','n','k','e','d'>(te.cStr())) {
       // #3¶1
       return kj::heap<HttpChunkedEntityReader>(*this);
+    } else if (fastCaseCmp<'c','h','u','n','k','e','d',',',
+                      ' ','c','h','u','n','k','e','d'>(te.cStr()) ||
+               fastCaseCmp<'c','h','u','n','k','e','d',',',
+                      'c','h','u','n','k','e','d'>(te.cStr())) {
+      // Handle "chunked, chunked" (with or without space) as equivalent to "chunked"
+      // This is technically invalid per HTTP spec, but we treat it as single chunked encoding
+      // to avoid breaking compatibility with misconfigured clients/proxies
+      // Note that this does not create a risk for request smuggling because, in the worst case,
+      // if the sender actually did double-chunk the stream, we'll merely end up delivering a
+      // corrupted stream (the body will contain chunk framing).
+      // We would not end up misinterpreting the outer framing, so we won't desync.
+      return kj::heap<HttpChunkedEntityReader>(*this);
     } else if (fastCaseCmp<'i','d','e','n','t','i','t','y'>(te.cStr())) {
       // #3¶2
       KJ_REQUIRE(type != REQUEST, "request body cannot have Transfer-Encoding other than chunked");

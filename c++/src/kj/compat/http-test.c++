@@ -1180,6 +1180,64 @@ KJ_TEST("HttpClient chunked body pump from fixed length stream") {
                     "b\r\nfoo bar baz\r\n0\r\n\r\n", text);
 }
 
+KJ_TEST("HttpServer handles 'chunked, chunked' as 'chunked'") {
+  // Test that "Transfer-Encoding: chunked, chunked" is treated as equivalent to "chunked"
+  // This is technically invalid per HTTP spec but needed for compatibility
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  
+  HttpRequestTestCase REQUEST_WITH_CHUNKED_CHUNKED = {
+    "POST /foo HTTP/1.1\r\n"
+    "Transfer-Encoding: chunked, chunked\r\n"
+    "\r\n"
+    "6\r\n"
+    "foobar\r\n"
+    "0\r\n"
+    "\r\n",
+    
+    HttpMethod::POST,
+    "/foo",
+    {},
+    kj::none,  // chunked encoding, no fixed length
+    { "foobar" }
+  };
+  
+  HttpRequestTestCase REQUEST_WITH_CHUNKED_CHUNKED_NO_SPACE = {
+    "POST /bar HTTP/1.1\r\n"
+    "Transfer-Encoding: chunked,chunked\r\n"
+    "\r\n"
+    "3\r\n"
+    "baz\r\n"
+    "0\r\n"
+    "\r\n",
+    
+    HttpMethod::POST,
+    "/bar",
+    {},
+    kj::none,  // chunked encoding, no fixed length
+    { "baz" }
+  };
+  
+  HttpResponseTestCase RESPONSE = {
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Length: 2\r\n"
+    "\r\n"
+    "ok",
+    
+    200, "OK",
+    {},
+    2, {"ok"}
+  };
+  
+  // Test with "chunked, chunked" (with space)
+  testHttpServerRequest(waitScope, timer, REQUEST_WITH_CHUNKED_CHUNKED, RESPONSE,
+                        KJ_HTTP_TEST_CREATE_2PIPE);
+  
+  // Test with "chunked,chunked" (no space)
+  testHttpServerRequest(waitScope, timer, REQUEST_WITH_CHUNKED_CHUNKED_NO_SPACE, RESPONSE,
+                        KJ_HTTP_TEST_CREATE_2PIPE);
+}
+
 KJ_TEST("HttpServer requests") {
   HttpResponseTestCase RESPONSE = {
     "HTTP/1.1 200 OK\r\n"
