@@ -42,6 +42,11 @@ def kj_configure():
         build_setting_default = False,
     )
 
+    bool_flag(
+        name = "kj_enable_irequire",
+        build_setting_default = False,
+    )
+
     # Settings to use in select() expressions
     native.config_setting(
         name = "use_openssl",
@@ -79,6 +84,11 @@ def kj_configure():
         flag_values = {"debug_memory": "True"},
     )
 
+    native.config_setting(
+        name = "use_kj_enable_irequire",
+        flag_values = {"kj_enable_irequire": "True"},
+    )
+
     native.cc_library(
         name = "kj-defines",
         defines = select({
@@ -101,6 +111,9 @@ def kj_configure():
             "//conditions:default": ["KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR=0"],
         }) + select({
             "//src/kj:use_debug_memory": ["KJ_DEBUG_MEMORY=1"],
+            "//conditions:default": [],
+        }) + select({
+            "//src/kj:use_kj_enable_irequire": ["KJ_ENABLE_IREQUIRE=1"],
             "//conditions:default": [],
         }),
     )
