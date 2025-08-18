@@ -1976,6 +1976,14 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     if (fastCaseCmp<'c','h','u','n','k','e','d'>(te->cStr())) {
       // #3¶1
       return kj::heap<HttpChunkedEntityReader>(*this);
+    } else if (fastCaseCmp<'c','h','u','n','k','e','d',',',
+                      ' ','c','h','u','n','k','e','d'>(te->cStr()) ||
+               fastCaseCmp<'c','h','u','n','k','e','d',',',
+                      'c','h','u','n','k','e','d'>(te->cStr())) {
+      // Handle "chunked, chunked" (with or without space) as equivalent to "chunked"
+      // This is technically invalid per HTTP spec, but we treat it as single chunked encoding
+      // to avoid breaking compatibility with misconfigured clients/proxies
+      return kj::heap<HttpChunkedEntityReader>(*this);
     } else if (fastCaseCmp<'i','d','e','n','t','i','t','y'>(te->cStr())) {
       // #3¶2
       KJ_REQUIRE(type != REQUEST, "request body cannot have Transfer-Encoding other than chunked");
