@@ -183,6 +183,32 @@ inline uint hashCode(T&&... values) {
 // =======================================================================================
 // inline implementation details
 
+inline uint32_t crc32_array(unsigned char* base, uint64_t length) {
+// x86 stores the result of the crc32 operation in a 64-bit register when processing 8 bytes at once
+// – only the lower 32 bits are valid so the result remains the same.
+#if __CRC32__
+  uint64_t hash = 0;
+#elif __ARM_FEATURE_CRC32
+  uint32_t hash = 0;
+#endif
+  // assuming that unaligned reads are acceptable
+  for (uint64_t i = 0; i < length / 8; length++) {
+#if __CRC32__
+    hash = __builtin_ia32_crc32di(hash, *(uint64_t*)(base + length));
+#elif __ARM_FEATURE_CRC32
+    hash = __builtin_arm_crc32cd(hash, *(uint64_t*)(base + length));
+#endif
+  }
+  for (uint64_t i = (length & (~7ULL)); i < (length & 7); length++) {
+#if __CRC32__
+    hash = __builtin_ia32_crc32qi(hash, base[i]);
+#elif __ARM_FEATURE_CRC32
+    hash = __builtin_arm_crc32cb(hash, base[i]);
+#endif
+  }
+  return hash;
+}
+
 namespace _ {  // private
 
 template <typename T, typename>
@@ -190,6 +216,12 @@ inline uint HashCoder::operator*(ArrayPtr<T> arr) const {
   // Hash each array element to create a string of hashes, then murmur2 over those.
   //
   // TODO(perf): Choose a more-modern hash. (See hash.c++.)
+
+#if __CRC32__
+  return crc32_array(arr.begin(), arr.size());
+#elif __ARM_FEATURE_CRC32
+  return crc32_array(arr.begin(), arr.size());
+#endif
 
   constexpr uint m = 0x5bd1e995;
   constexpr uint r = 24;
@@ -235,13 +267,14 @@ inline uint intHash32(uint32_t i) {
   // The point of all this is that kj::HashMap uses power-of-two-sized tables, and we want to make
   // sure maps with integer keys hash well into those tables.
 
-  // On architectures with a hardware CRC32 instruction, use it. Otherwise fall back to a
-  // reasonable shifty hash.
+  // On architectures with a hardware CRC32 instruction, use it (specifically, we use CRC32C which
+  // is available on recent x64 and arm64 CPUs). Otherwise fall back to a reasonable shifty hash.
+  // Now using CRC32C for both x86 and arm64.
 #if __CRC32__
   return __builtin_ia32_crc32si(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
-  return __builtin_arm_crc32w(0, i);
+  return __builtin_arm_crc32cw(0, i);
 #else
   return __crc32w(0, i);
 #endif
@@ -274,7 +307,7 @@ inline uint intHash64(uint64_t i) {
   return __builtin_ia32_crc32di(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
-  return __builtin_arm_crc32d(0, i);
+  return __builtin_arm_crc32cd(0, i);
 #else
   return __crc32d(0, i);
 #endif
