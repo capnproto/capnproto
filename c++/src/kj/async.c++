@@ -284,6 +284,11 @@ void Canceler::AdapterImpl<void>::cancel(kj::Exception&& e) {
 TaskSet::TaskSet(TaskSet::ErrorHandler& errorHandler, SourceLocation location)
   : errorHandler(errorHandler), location(location) {}
 
+template <>
+void Promise<void>::abandon() {
+  return _::detach(then([](){}, [](Exception&& e){}));
+}
+
 class TaskSet::Task final: public _::PromiseArenaMember, public _::Event {
 public:
   Task(_::OwnPromiseNode&& nodeParam, TaskSet& taskSet)

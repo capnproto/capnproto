@@ -1462,6 +1462,17 @@ struct IdentityFunc<Promise<void>> {
   // dependency.
 };
 
+
+template <typename T, typename V>
+struct NoIdentityFunc {
+  inline T operator()(V&& value) const {
+  }
+};
+template <typename T>
+struct NoIdentityFunc<T, void> {
+  inline T operator()() const {}
+};
+
 }  // namespace _ (private)
 
 template <typename T>
@@ -1640,6 +1651,14 @@ inline PromiseForResult<Func, WaitScope&> FiberPool::startFiber(
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
   return _::maybeReduce(kj::mv(result), false);
 }
+
+template <typename T>
+void Promise<T>::abandon() {
+  return _::detach(then([](T&&) {}, [](Exception&& e){}));
+}
+
+template <>
+void Promise<void>::abandon();
 
 template <typename T>
 template <typename ErrorFunc>

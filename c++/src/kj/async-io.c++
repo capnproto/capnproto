@@ -2969,7 +2969,7 @@ private:
         //   dispose of this promise later after we've returned.
         // TODO(cleanup): This pattern has come up several times, we need a better way to handle
         //   it.
-        KJ_ASSERT_NONNULL(acceptTasks[index]).detach([](auto&&) {});
+        KJ_ASSERT_NONNULL(acceptTasks[index]).abandon();
         acceptTasks[index] = kj::none;
         return READY_NOW;
       } else {

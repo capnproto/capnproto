@@ -372,6 +372,8 @@ public:
   // This function exists mainly to implement the Cap'n Proto requirement that RPC calls cannot be
   // canceled unless the callee explicitly permits it.
 
+  void abandon();
+
   kj::String trace();
   // Returns a dump of debug info about this promise.  Not for production use.  Requires RTTI.
   // This method does NOT consume the promise as other methods do.

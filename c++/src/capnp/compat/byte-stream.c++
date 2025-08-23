@@ -173,7 +173,7 @@ public:
     KJ_SWITCH_ONEOF(state) {
       KJ_CASE_ONEOF(redirected, Redirected) {
         // Ugh I guess we need to send a real end() request here.
-        redirected.replacement.endRequest(MessageSize {2, 0}).send().detach([](kj::Exception&&){});
+        redirected.replacement.endRequest(MessageSize {2, 0}).send().abandon();
       }
       KJ_CASE_ONEOF(e, Ended) {
         // whatever
@@ -184,7 +184,7 @@ public:
       KJ_CASE_ONEOF(streaming, Streaming) {
         auto req = streaming.callback.endedRequest(MessageSize {4, 0});
         req.setByteCount(completed);
-        req.send().detach([](kj::Exception&&){});
+        req.send().abandon();
         streaming.parent.returnStream(completed);
         state = Ended();
       }
@@ -459,7 +459,7 @@ public:
       }
       KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
         // Ugh I guess we need to send a real end() request here.
-        capnpStream.endRequest(MessageSize {2, 0}).send().detach([](kj::Exception&&){});
+        capnpStream.endRequest(MessageSize {2, 0}).send().abandon();
       }
       KJ_CASE_ONEOF(b, Borrowed) {
         // Fine, ignore.
@@ -614,7 +614,7 @@ public:
             // HACK: If we overwrite the Probing state now, we'll delete ourselves and delete
             //   this task promise, which is an error... let the event loop do it later by
             //   detaching.
-            task.attach(kj::mv(prober)).detach([](kj::Exception&&){});
+            task.attach(kj::mv(prober)).abandon();
             parent = kj::none;
 
             // OK, now we can change the parent state and signal it to proceed.
@@ -896,7 +896,7 @@ public:
       KJ_IF_SOME(o, optimized) {
         o.directEnd();
       } else {
-        inner.endRequest(MessageSize {2, 0}).send().detach([](kj::Exception&&){});
+        inner.endRequest(MessageSize {2, 0}).send().abandon();
       }
     }
   }
