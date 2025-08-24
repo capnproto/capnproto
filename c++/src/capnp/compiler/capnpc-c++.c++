@@ -2835,6 +2835,7 @@ private:
 
     auto brandDeps = makeBrandDepInitializers(
         makeBrandDepMap(templateContext, schema.getGeneric()));
+    auto brandDepsSize = brandDeps.size();
 
     bool mayContainCapabilities = proto.isStruct() && schema.asStruct().mayContainCapabilities();
 
@@ -2858,7 +2859,7 @@ private:
             "static const uint16_t i_", hexId, "[] = {",
             kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
             "};\n"),
-        brandDeps.size() == 0 ? kj::strTree() : kj::strTree(
+        brandDepsSize == 0 ? kj::strTree() : kj::strTree(
             "KJ_CONSTEXPR(const) ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ",
             kj::mv(brandDeps), ";\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
@@ -2868,7 +2869,7 @@ private:
         "  ", deps.size(), ", ", membersByName.size(), ", ",
         membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
         ", nullptr, nullptr, { &s_", hexId, ", nullptr, ",
-        brandDeps.size() == 0 ? kj::strTree("nullptr, 0, 0") : kj::strTree(
+        brandDepsSize == 0 ? kj::strTree("nullptr, 0, 0") : kj::strTree(
             "bd_", hexId, ", 0, " "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0])"),
         ", nullptr }, ", mayContainCapabilities, "\n"
         "};\n"
