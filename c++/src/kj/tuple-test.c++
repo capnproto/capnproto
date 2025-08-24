@@ -25,6 +25,7 @@
 #include <kj/compat/gtest.h>
 
 namespace kj {
+namespace {
 
 struct Foo { uint foo; Foo(uint i): foo(i) {} };
 struct Bar { uint bar; Bar(uint i): bar(i) {} };
@@ -109,4 +110,5 @@ TEST(Tuple, RefTuple) {
   EXPECT_EQ(get<3>(t), "bar");
 }
 
+}  // namespace
 }  // namespace kj

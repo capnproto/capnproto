@@ -23,7 +23,7 @@
 #include <kj/compat/gtest.h>
 
 namespace kj {
-
+namespace {
 struct SetTrueInDestructor: public Refcounted, EnableAddRefToThis<SetTrueInDestructor> {
   SetTrueInDestructor(bool* ptr): ptr(ptr) {}
   ~SetTrueInDestructor() { *ptr = true; }
@@ -320,5 +320,5 @@ KJ_TEST("Arc disown / reown") {
 
   KJ_EXPECT(b == true);
 }
-
+}  // namespace
 }  // namespace kj

@@ -24,6 +24,7 @@
 
 #include <capnp/test.capnp.h>
 
+namespace {
 KJ_TEST("WebSocketMessageStream") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
@@ -106,3 +107,6 @@ KJ_TEST("WebSocketMessageStreamByteCount") {
   KJ_EXPECT(pipe2.ends[0]->sentByteCount() == 2585);
   KJ_EXPECT(pipe2.ends[1]->receivedByteCount() == 2585);
 }
+
+} // namespace
+

@@ -47,7 +47,7 @@ namespace capnp {
 namespace compiler {
 namespace {
 
-static const kj::StringPtr RFC3092[] = {"foo", "bar", "baz", "qux"};
+static constexpr kj::StringPtr RFC3092[] = {"foo"_kj, "bar"_kj, "baz"_kj, "qux"_kj};
 
 template <typename T, size_t size>
 T& chooseFrom(T (&arr)[size]) {

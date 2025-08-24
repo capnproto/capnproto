@@ -24,7 +24,7 @@
 #include <kj/compat/gtest.h>
 
 namespace kj {
-
+namespace {
 TEST(OneOf, Basic) {
   OneOf<int, float, String> var;
 
@@ -279,5 +279,5 @@ TEST(OneOf, MaxVariants) {
   v = T<50>();
   EXPECT_TRUE(v.is<T<50>>());
 }
-
+}  // namespace
 }  // namespace kj
