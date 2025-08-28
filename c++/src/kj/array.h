@@ -263,13 +263,13 @@ public:
   // Like Own<T>::attach(), but attaches to an Array.
 
   template <typename U>
-  inline auto as() { return U::from(this); }
-  // Syntax sugar for invoking U::from.
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Array&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename U>
-  inline auto as() const { return U::from(this); }
-  // Syntax sugar for invoking U::from.
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const Array&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:

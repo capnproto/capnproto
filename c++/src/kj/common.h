@@ -1985,13 +1985,13 @@ public:
   // You must include kj/array.h to call this.
 
   template <typename U>
-  inline auto as() { return U::from(this); }
-  // Syntax sugar for invoking U::from.
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename U>
-  inline auto as() const { return U::from(this); }
-  // Syntax sugar for invoking U::from.
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   inline void fill(T t) {

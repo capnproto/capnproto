@@ -155,13 +155,13 @@ public:
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, const StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:
@@ -312,13 +312,13 @@ public:
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, String&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, const String&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:
@@ -420,13 +420,13 @@ public:
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, ConstString&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, const ConstString&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:

@@ -480,15 +480,15 @@ KJ_TEST("StringPtr contains") {
   KJ_EXPECT(foobar.slice(2).contains(foobar.slice(1)) == false);
 }
 
-struct Std {
-  static std::string from(const String* str) {
-    return std::string(str->cStr());
-  }
+struct Std {};
 
-  static std::string from(const StringPtr* str) {
-    return std::string(str->cStr());
-  }
-};
+static std::string asImpl(Std*, const String& str) {
+  return std::string(str.cStr());
+}
+
+static std::string asImpl(Std*, const StringPtr& str) {
+  return std::string(str.cStr());
+}
 
 KJ_TEST("as<Std>") {
   String str = kj::str("foo"_kj);

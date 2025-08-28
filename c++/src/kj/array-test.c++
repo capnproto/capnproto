@@ -611,12 +611,12 @@ TEST(Array, AttachFromArrayPtr) {
   KJ_EXPECT(destroyed1 == 3, destroyed1);
 }
 
-struct Std {
-  template<typename T>
-  static std::span<T> from(Array<T>* arr) {
-    return std::span<T>(arr->begin(), arr->size());
-  }
-};
+struct Std {};
+
+template<typename T>
+static std::span<T> asImpl(Std*, Array<T>& arr) {
+  return std::span<T>(arr.begin(), arr.size());
+}
 
 KJ_TEST("Array::as<Std>") {
   kj::Array<int> arr = kj::arr(1, 2, 4);
