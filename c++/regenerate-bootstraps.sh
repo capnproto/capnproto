@@ -1,15 +1,14 @@
 #! /usr/bin/env bash
-
-#TODO (later): Try to convert this to a bazel run command, although bazel's sandboxing might make
-# this difficult. For now, running `bazel-bin/src/capnp/capnp_tool compile -Isrc
-# --no-standard-import --src-prefix=src -obazel-bin/src/capnp/capnpc-c++:src <set of files>`
-# achieves the same.
+# Run this script every time compiler generated code changes to update checked-in generated code.
 
 set -euo pipefail
 
 export PATH=$PWD/bin:$PWD:$PATH
 
-capnp compile -Isrc --no-standard-import --src-prefix=src -oc++:src \
+bazel build src/capnp/capnp_tool src/capnp/capnpc-c++
+
+bazel-bin/src/capnp/capnp_tool compile -Isrc -Isrc --no-standard-import --src-prefix=src \
+    -obazel-bin/src/capnp/capnpc-c++:src \
     src/capnp/c++.capnp src/capnp/schema.capnp src/capnp/stream.capnp \
     src/capnp/compiler/lexer.capnp src/capnp/compiler/grammar.capnp \
     src/capnp/rpc.capnp src/capnp/rpc-twoparty.capnp src/capnp/persistent.capnp \
