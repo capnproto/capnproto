@@ -217,12 +217,24 @@ public:
   // boundaries, then move the end up to `to` and return true. Otherwise, do nothing and return
   // false.
 
+  void ensureZeroedRange(word* start, size_t words, bool allowSkipForDataInit = false);
+  // Ensure the word-range [start, start + words) is zeroed according to the arena options.
+  // If allowSkipForDataInit == true and the arena option skipZeroData is set, this may skip
+  // zeroing for data-initialization allocations.
+
+  bool isSegmentZeroed() const { return segmentZeroed_; }
+  void markSegmentZeroed(bool v = true) { segmentZeroed_ = v; }
+
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
   // next object should be allocated.
 
   bool readOnly;
+
+  bool segmentZeroed_ = true;
+  // Whether this segment has been (logically) zeroed. Default true for backwards
+  // Compatibility for externally-provided segments.
 
   [[noreturn]] void throwNotWritable();
 
@@ -322,7 +334,7 @@ public:
     word* words;
   };
 
-  AllocateResult allocate(SegmentWordCount amount);
+  AllocateResult allocate(SegmentWordCount amount, bool isDataInit = false);
   // Find a segment with at least the given amount of space available and allocate the space.
   // Note that allocating directly from a particular segment is much faster, but allocating from
   // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
@@ -343,9 +355,13 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
 
+  AllocOptions getAllocOptions() const { return allocOptions_; }
+  void setAllocOptions(AllocOptions options);
+
 private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
+  AllocOptions allocOptions_ = AllocOptions();
 
   class LocalCapTable final: public CapTableBuilder {
   public:

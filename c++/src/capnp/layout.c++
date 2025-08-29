@@ -458,7 +458,7 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
-      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena)) {
+      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena, bool isDataInit = false)) {
     // Allocate space in the message for a new object, creating far pointers if necessary. The
     // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
     // return zero'd memory).
@@ -1708,7 +1708,7 @@ struct WireHelpers {
       BuilderArena* orphanArena = nullptr)) {
     // Allocate the space.
     word* ptr = allocate(ref, segment, capTable, roundBytesUpToWords(size),
-                         WirePointer::LIST, orphanArena);
+                         WirePointer::LIST, orphanArena, /*isDataInit=*/true);
 
     // Initialize the pointer.
     ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));

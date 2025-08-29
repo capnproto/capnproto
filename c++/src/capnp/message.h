@@ -82,6 +82,14 @@ struct ReaderOptions {
   // stack overflow, yet high enough that it is never a problem in practice.
 };
 
+struct AllocOptions {
+    bool lazyZeroSegment = false;
+    // If true, don't zero whole segment at allocation time
+
+    bool skipZeroData     = false;
+    // If true and lazyZeroSegment==true, skip memset for DATA kinds
+  };
+
 class MessageReader {
   // Abstract interface for an object used to read a Cap'n Proto message.  Subclasses of
   // MessageReader are responsible for reading the raw, flat message content.  Callers should
@@ -190,6 +198,9 @@ public:
   //   not observe changes to the segment sizes nor newly-allocated segments caused by allocating
   //   new objects in this message.
 
+  explicit MessageBuilder(AllocOptions options);
+  // Construct MessageBuilder with allocation options.
+
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of zero'd words, throwing an exception or
   // crashing if this is not possible.  It is expected that this method will usually return more
@@ -240,6 +251,9 @@ public:
   size_t sizeInWords();
   // Add up the allocated space from all segments.
 
+  AllocOptions getAllocOptions() const { return allocOptions_; }
+  void setAllocOptions(AllocOptions options);
+
 private:
   alignas(8) void* arenaSpace[22];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
@@ -253,6 +267,8 @@ private:
   // call on the MessageBuilder.  We can't do such a call in the constructor since the subclass
   // isn't constructed yet.  This is kind of annoying because it means that getOrphanage() is
   // not thread-safe, but that shouldn't be a huge deal...
+
+  AllocOptions allocOptions_ = AllocOptions();
 
   _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
