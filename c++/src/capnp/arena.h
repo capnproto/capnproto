@@ -33,6 +33,7 @@
 #include "common.h"
 #include "message.h"
 #include "layout.h"
+#include "schema.h"
 #include <kj/map.h>
 
 #if !CAPNP_LITE
@@ -217,6 +218,11 @@ public:
   // boundaries, then move the end up to `to` and return true. Otherwise, do nothing and return
   // false.
 
+  void doLazyZeroSegment(word* start, size_t words, Type type = schema::Type::ANY_POINTER);
+  // Ensure the word-range [start, start + words) is zeroed according to the arena options.
+  // If allowSkipForDataInit == true and the arena option skipZeroData is set, this may skip
+  // zeroing for data-initialization allocations.
+
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
@@ -342,6 +348,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+
+  AllocOptions getAllocOptions() const;
 
 private:
   MessageBuilder* message;

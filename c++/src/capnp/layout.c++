@@ -458,7 +458,7 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
-      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena)) {
+      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena, Type type = schema::Type::ANY_POINTER)) {
     // Allocate space in the message for a new object, creating far pointers if necessary. The
     // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
     // return zero'd memory).
@@ -513,11 +513,14 @@ struct WireHelpers {
 
         // Initialize the landing pad to indicate that the data immediately follows the pad.
         ref = reinterpret_cast<WirePointer*>(ptr);
+        segment->doLazyZeroSegment(ptr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+        segment->doLazyZeroSegment(ptr + POINTER_SIZE_IN_WORDS, static_cast<size_t>(amount), /*type=*/type);
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
 
         // Allocated space follows new pointer.
         return ptr + POINTER_SIZE_IN_WORDS;
       } else {
+        segment->doLazyZeroSegment(ptr, static_cast<size_t>(amount), /*type=*/type);
         ref->setKindAndTarget(kind, ptr, segment);
         return ptr;
       }
@@ -1708,7 +1711,7 @@ struct WireHelpers {
       BuilderArena* orphanArena = nullptr)) {
     // Allocate the space.
     word* ptr = allocate(ref, segment, capTable, roundBytesUpToWords(size),
-                         WirePointer::LIST, orphanArena);
+                         WirePointer::LIST, orphanArena, /*type=*/schema::Type::DATA);
 
     // Initialize the pointer.
     ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));

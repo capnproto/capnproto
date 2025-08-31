@@ -62,6 +62,20 @@ void SegmentBuilder::throwNotWritable() {
       "referenced data, only Readers, because that data is const.");
 }
 
+void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, Type type) {
+  // Obtain the arena and options.
+  BuilderArena* arena = getArena();
+  if (arena == nullptr) {
+    return;
+  }
+  auto opts = arena->getAllocOptions();
+
+  if (! opts.lazyZeroSegment) return;
+  if (type == schema::Type::DATA && opts.skipZeroData) return;
+
+  memset(start, 0, words * sizeof(word));
+}
+
 // =======================================================================================
 
 static SegmentWordCount verifySegmentSize(size_t size) {
@@ -235,7 +249,9 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     kj::ctor(segment0, this, SegmentId(0), ptr.begin(), actualSize, &this->dummyLimiter);
 
     segmentWithSpace = &segment0;
-    return AllocateResult { &segment0, segment0.allocate(amount) };
+    word* wordPtr = segment0.allocate(amount);
+    segment0.doLazyZeroSegment(wordPtr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+    return AllocateResult { &segment0, wordPtr };
   } else {
     if (segmentWithSpace != nullptr) {
       // Check if there is space in an existing segment.
@@ -257,8 +273,11 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     // Check this new segment first the next time we need to allocate.
     segmentWithSpace = result;
 
+    word* wordPtr = result->allocate(amount);
+    result->doLazyZeroSegment(wordPtr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+
     // Allocating from the new segment is guaranteed to succeed since we made it big enough.
-    return AllocateResult { result, result->allocate(amount) };
+    return AllocateResult { result, wordPtr };
   }
 }
 
@@ -347,6 +366,11 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
     }
     return nullptr;
   }
+}
+
+AllocOptions BuilderArena::getAllocOptions() const {
+  if (message == nullptr) return AllocOptions();
+  return message->getAllocOptions();
 }
 
 void BuilderArena::reportReadLimitReached() {
