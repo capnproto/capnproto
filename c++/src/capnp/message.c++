@@ -148,11 +148,6 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
 
 void MessageBuilder::setAllocOptions(AllocOptions options) {
   allocOptions_ = options;
-  if (allocatedArena) {
-    // arena() returns a pointer to the already-constructed BuilderArena.
-    // BuilderArena exposes setAllocOptions(...) to update its internal copy.
-    arena()->setAllocOptions(allocOptions_);
-  }
 }
 
 AnyPointer::Builder MessageBuilder::getRootInternal() {

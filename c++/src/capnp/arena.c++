@@ -20,8 +20,6 @@
 // THE SOFTWARE.
 
 #define CAPNP_PRIVATE
-#include <iostream>
-#include <iomanip>
 #include "arena.h"
 #include "message.h"
 #include <kj/debug.h>
@@ -64,38 +62,18 @@ void SegmentBuilder::throwNotWritable() {
       "referenced data, only Readers, because that data is const.");
 }
 
-void SegmentBuilder::ensureZeroedRange(word* start, size_t words, bool allowSkipForDataInit) {
-  // Fast path: if already zeroed, nothing to do.
-//   if (segmentZeroed_) return;
-
-
+void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, Type type) {
   // Obtain the arena and options.
   BuilderArena* arena = getArena();
   if (arena == nullptr) {
-    // to delete
-    std::cerr << "found no arena segment" << std::endl;
-    // Defensive: if no arena, zero requested region and mark segment zeroed.
-    memset(start, 0, words * sizeof(word));
-    segmentZeroed_ = true;
     return;
   }
-
   auto opts = arena->getAllocOptions();
 
   if (! opts.lazyZeroSegment) return;
+  if (type == schema::Type::DATA && opts.skipZeroData) return;
 
-  // If this is a data-init allocation and skipping is allowed and configured, skip zeroing.
-  if (allowSkipForDataInit && opts.skipZeroData) {
-    // do not zero; segment remains unzeroed
-    return;
-  }
-
-  // Otherwise, perform the zeroing for requested range.
   memset(start, 0, words * sizeof(word));
-
-  // Bookkeeping: once we explicitly zero a portion, mark the whole segment zeroed to avoid
-  // repeated memsets. (Coarse-grained but simple.)
-  segmentZeroed_ = true;
 }
 
 // =======================================================================================
@@ -194,10 +172,7 @@ void ReaderArena::reportReadLimitReached() {
 // =======================================================================================
 
 BuilderArena::BuilderArena(MessageBuilder* message)
-    : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {
-      // Capture alloc options from MessageBuilder so arena/segment code can consult them
-      allocOptions_ = message->getAllocOptions();
-    }
+    : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
 
 BuilderArena::BuilderArena(MessageBuilder* message,
                            kj::ArrayPtr<MessageBuilder::SegmentInit> segments)
@@ -205,8 +180,6 @@ BuilderArena::BuilderArena(MessageBuilder* message,
       segment0(this, SegmentId(0), segments[0].space.begin(),
                verifySegment(segments[0].space),
                &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed)) {
-  allocOptions_ = message->getAllocOptions();
-
   if (segments.size() > 1) {
     kj::Vector<kj::Own<SegmentBuilder>> builders(segments.size() - 1);
 
@@ -264,25 +237,8 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   }
 }
 
-
-static inline void dumpWords(void* ptr, size_t wordCount, size_t maxWords = 8) {
-  auto* words = reinterpret_cast<uint64_t*>(ptr);
-
-  std::cerr << "dump at " << ptr << ": ";
-
-  size_t n = maxWords;
-  for (size_t i = 0; i < n; ++i) {
-    std::cerr << "0x" << std::hex << std::setw(16) << std::setfill('0')
-              << words[i] << " ";
-  }
-
-  std::cerr << std::dec << std::endl;
-}
-
-BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount, bool isDataInit) {
-    std::cerr << "BuilderArena::allocate start allocate, " << " amount=" << unbound(amount / WORDS) << std::endl;
+BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
   if (segment0.getArena() == nullptr) {
-    std::cerr << "segment0.getArena() is nullptr" << std::endl;
     // We're allocating the first segment.
     kj::ArrayPtr<word> ptr = message->allocateSegment(unbound(amount / WORDS));
     auto actualSize = verifySegment(ptr);
@@ -291,35 +247,11 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount, boo
     // pointers to this segment yet, so it should be fine.
     kj::dtor(segment0);
     kj::ctor(segment0, this, SegmentId(0), ptr.begin(), actualSize, &this->dummyLimiter);
-    std::cerr << "actual segment size: res=" << actualSize << std::endl;
-
-    // If the MessageBuilder requested lazyZeroSegment, this segment is probably unzeroed.
-    if (message->getAllocOptions().lazyZeroSegment) {
-      segment0.markSegmentZeroed(false);
-    }
 
     segmentWithSpace = &segment0;
-    word* res = segment0.allocate(amount);
-
-    // Ensure this allocated portion is zeroed according to options.
-    // allowSkipForDataInit set from caller's isDataInit param.
-
-    std::cerr << "allocate result 1: res=" << static_cast<void*>(res)
-              << " amount=" << amount
-              << " isDataInit=" << std::boolalpha << isDataInit
-              << std::endl;
-//     segment0.ensureZeroedRange(res, static_cast<size_t>(amount), /*allowSkipForDataInit=*/isDataInit);
-
-
-    std::cerr << "Before ensureZeroedRange:" << std::endl;
-    dumpWords(res, amount, 8);
-
-    segment0.ensureZeroedRange(res, static_cast<size_t>(amount), /*allowSkipForDataInit=*/isDataInit);
-
-    std::cerr << "After ensureZeroedRange:" << std::endl;
-    dumpWords(res, amount, 8);
-
-    return AllocateResult { &segment0, res };
+    word* wordPtr = segment0.allocate(amount);
+    segment0.doLazyZeroSegment(wordPtr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+    return AllocateResult { &segment0, wordPtr };
   } else {
     if (segmentWithSpace != nullptr) {
       // Check if there is space in an existing segment.
@@ -331,13 +263,6 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount, boo
       //   and shove them to the back of the queue if they have become too small.
       word* attempt = segmentWithSpace->allocate(amount);
       if (attempt != nullptr) {
-        // Ensure this allocated portion is zeroed (unless it's a data-init we allow to skip).
-        std::cerr << "allocate result 2: res=" << static_cast<void*>(attempt)
-                      << " amount=" << amount
-                      << " isDataInit=" << std::boolalpha << isDataInit
-                      << std::endl;
-        segmentWithSpace->ensureZeroedRange(attempt, static_cast<size_t>(amount),
-                                                  /*allowSkipForDataInit=*/isDataInit);
         return AllocateResult { segmentWithSpace, attempt };
       }
     }
@@ -345,29 +270,16 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount, boo
     // Need to allocate a new segment.
     SegmentBuilder* result = addSegmentInternal(message->allocateSegment(unbound(amount / WORDS)));
 
-    // Mark new segment's zeroed state per options:
-    if (message->getAllocOptions().lazyZeroSegment) {
-      result->markSegmentZeroed(false);
-    }
-
     // Check this new segment first the next time we need to allocate.
     segmentWithSpace = result;
 
+    word* wordPtr = result->allocate(amount);
+    result->doLazyZeroSegment(wordPtr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+
     // Allocating from the new segment is guaranteed to succeed since we made it big enough.
-    word* res = result->allocate(amount);
-    // Ensure zeroing for returned portion (respecting isDataInit)
-    std::cerr << "allocate result 3: res=" << static_cast<void*>(res)
-                  << " amount=" << amount
-                  << " isDataInit=" << std::boolalpha << isDataInit
-                  << std::endl;
-    result->ensureZeroedRange(res, static_cast<size_t>(amount), /*allowSkipForDataInit=*/isDataInit);
-    return AllocateResult { result, res };
+    return AllocateResult { result, wordPtr };
   }
 }
-
-void BuilderArena::setAllocOptions(AllocOptions options) {
-   allocOptions_ = options;
- }
 
 SegmentBuilder* BuilderArena::addExternalSegment(kj::ArrayPtr<const word> content) {
   return addSegmentInternal(content);
@@ -395,13 +307,6 @@ SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
       this, SegmentId(segmentState->builders.size() + 1),
       content.begin(), contentSize, &this->dummyLimiter);
   SegmentBuilder* result = newBuilder.get();
-
-  // If the MessageBuilder requested lazyZeroSegment, assume content may be un-zeroed.
-  // to delete
-  if (message->getAllocOptions().lazyZeroSegment) {
-    result->markSegmentZeroed(false);
-  }
-
   segmentState->builders.add(kj::mv(newBuilder));
 
   // Keep forOutput the right size so that we don't have to re-allocate during
@@ -461,6 +366,11 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
     }
     return nullptr;
   }
+}
+
+AllocOptions BuilderArena::getAllocOptions() const {
+  if (message == nullptr) return AllocOptions();
+  return message->getAllocOptions();
 }
 
 void BuilderArena::reportReadLimitReached() {
