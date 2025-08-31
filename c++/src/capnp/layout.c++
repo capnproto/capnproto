@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #define CAPNP_PRIVATE
+#include <iostream>
 #include "layout.h"
 #include <kj/debug.h>
 #include "arena.h"
@@ -481,20 +482,32 @@ struct WireHelpers {
     //   segment belonging to the arena.  `ref` will be initialized as a non-far pointer, but its
     //   target offset will be set to zero.
 
-    if (orphanArena == nullptr) {
-      if (!ref->isNull()) zeroObject(segment, capTable, ref);
+    std::cerr << "allocate function:, " << " amount=" << unbound(amount / WORDS) << std::endl;
 
+    if (orphanArena == nullptr) {
+      std::cerr << "allocate function 1" << std::endl;
+//       if (!ref->isNull()) zeroObject(segment, capTable, ref);
+      if (!ref->isNull()) {
+        std::cerr << "allocate function 1.01" << std::endl;
+        zeroObject(segment, capTable, ref);
+      }
+      std::cerr << "allocate function 1.1" << std::endl;
       if (amount == ZERO * WORDS && kind == WirePointer::STRUCT) {
+        std::cerr << "allocate function 1.2" << std::endl;
         // Note that the check for kind == WirePointer::STRUCT will hopefully cause this whole
         // branch to be optimized away from all the call sites that are allocating non-structs.
         ref->setKindAndTargetForEmptyStruct();
+        std::cerr << "allocate function 1.3" << std::endl;
         return reinterpret_cast<word*>(ref);
       }
-
+      std::cerr << "allocate function 1.4" << std::endl;
       KJ_ASSUME(segment != nullptr);
+      std::cerr << "allocate function 1.5" << std::endl;
       word* ptr = segment->allocate(amount);
 
+      std::cerr << "allocate function 2" << std::endl;
       if (ptr == nullptr) {
+        std::cerr << "allocate function 3" << std::endl;
 
         // Need to allocate in a new segment.  We'll need to allocate an extra pointer worth of
         // space to act as the landing pad for a far pointer.
@@ -513,15 +526,22 @@ struct WireHelpers {
 
         // Initialize the landing pad to indicate that the data immediately follows the pad.
         ref = reinterpret_cast<WirePointer*>(ptr);
+        std::cerr << "allocate function 4" << std::endl;
+        segment->ensureZeroedRange(ptr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+        segment->ensureZeroedRange(ptr + POINTER_SIZE_IN_WORDS, static_cast<size_t>(amount), /*allowSkipForDataInit=*/isDataInit);
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
+        std::cerr << "allocate function 5" << std::endl;
 
         // Allocated space follows new pointer.
         return ptr + POINTER_SIZE_IN_WORDS;
       } else {
+        std::cerr << "allocate function 6" << std::endl;
+        segment->ensureZeroedRange(ptr, static_cast<size_t>(amount), /*allowSkipForDataInit=*/isDataInit);
         ref->setKindAndTarget(kind, ptr, segment);
         return ptr;
       }
     } else {
+      std::cerr << "allocate function 7" << std::endl;
       // orphanArena is non-null.  Allocate an orphan.
       KJ_DASSERT(ref->isNull());
       auto allocation = orphanArena->allocate(amount);
