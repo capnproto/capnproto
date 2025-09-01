@@ -84,12 +84,12 @@ struct ReaderOptions {
 };
 
 struct AllocOptions {
-    bool lazyZeroSegment = false;
-    // If true, don't zero whole segment at allocation time
+  bool lazyZeroSegment = false;
+  // If true, don't zero whole segment at allocation time
 
-    bool skipZeroData     = false;
-    // If true and lazyZeroSegment==true, skip memset for DATA kinds
-  };
+  bool skipZeroData = false;
+  // If true and lazyZeroSegment==true, skip memset for DATA kinds
+};
 
 class MessageReader {
   // Abstract interface for an object used to read a Cap'n Proto message.  Subclasses of
@@ -199,7 +199,7 @@ public:
   //   not observe changes to the segment sizes nor newly-allocated segments caused by allocating
   //   new objects in this message.
 
-  explicit MessageBuilder(AllocOptions options);
+  explicit MessageBuilder(AllocOptions allocOptions);
   // Construct MessageBuilder with allocation options.
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
@@ -252,7 +252,7 @@ public:
   size_t sizeInWords();
   // Add up the allocated space from all segments.
 
-  AllocOptions getAllocOptions() const { return allocOptions_; }
+  AllocOptions getAllocOptions() const { return allocOptions; }
   void setAllocOptions(AllocOptions options);
 
 private:
@@ -269,7 +269,7 @@ private:
   // isn't constructed yet.  This is kind of annoying because it means that getOrphanage() is
   // not thread-safe, but that shouldn't be a huge deal...
 
-  AllocOptions allocOptions_ = AllocOptions();
+  AllocOptions allocOptions = AllocOptions();
 
   _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();

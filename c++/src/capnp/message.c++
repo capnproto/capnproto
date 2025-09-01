@@ -118,8 +118,8 @@ MessageBuilder::~MessageBuilder() noexcept(false) {
   }
 }
 
-MessageBuilder::MessageBuilder(AllocOptions options)
-    : allocatedArena(false), allocOptions_(options) {}
+MessageBuilder::MessageBuilder(AllocOptions allocOptions)
+    : allocatedArena(false), allocOptions(allocOptions) {}
 
 MessageBuilder::MessageBuilder(kj::ArrayPtr<SegmentInit> segments)
     : allocatedArena(false) {
@@ -147,7 +147,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
 }
 
 void MessageBuilder::setAllocOptions(AllocOptions options) {
-  allocOptions_ = options;
+  allocOptions = options;
 }
 
 AnyPointer::Builder MessageBuilder::getRootInternal() {
