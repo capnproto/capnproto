@@ -7,7 +7,7 @@ export PATH=$PWD/bin:$PWD:$PATH
 
 bazel build src/capnp/capnp_tool src/capnp/capnpc-c++
 
-bazel-bin/src/capnp/capnp_tool compile -Isrc -Isrc --no-standard-import --src-prefix=src \
+bazel-bin/src/capnp/capnp_tool compile -Isrc --no-standard-import --src-prefix=src \
     -obazel-bin/src/capnp/capnpc-c++:src \
     src/capnp/c++.capnp src/capnp/schema.capnp src/capnp/stream.capnp \
     src/capnp/compiler/lexer.capnp src/capnp/compiler/grammar.capnp \
