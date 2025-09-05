@@ -630,7 +630,7 @@ public:
   // consumes the `PipelineBuilder`; no further methods can be invoked.
 
 private:
-  kj::Own<PipelineHook> hook;
+  kj::Rc<PipelineHook> hook;
 
   PipelineBuilder(_::PipelineBuilderPair pair);
 };
@@ -797,7 +797,7 @@ public:
 
   struct VoidPromiseAndPipeline {
     kj::Promise<void> promise;
-    kj::Own<PipelineHook> pipeline;
+    kj::Rc<PipelineHook> pipeline;
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -877,7 +877,7 @@ public:
   virtual AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
 
-  virtual void setPipeline(kj::Own<PipelineHook>&& pipeline) = 0;
+  virtual void setPipeline(kj::Rc<PipelineHook>&& pipeline) = 0;
 
   virtual kj::Promise<AnyPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
@@ -901,7 +901,7 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
 // the new client.  This hook's `getResolved()` and `whenMoreResolved()` methods will reflect the
 // redirection to the eventual replacement client.
 
-kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise);
+kj::Rc<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Rc<PipelineHook>>&& promise);
 // Returns a PipelineHook that queues up calls until `promise` resolves, then forwards them to
 // the new pipeline.
 
@@ -909,14 +909,14 @@ kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
 kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 
-kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
+kj::Rc<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
 // Helper function that creates a pipeline which simply throws exceptions when called.
 
 Request<AnyPointer, AnyPointer> newBrokenRequest(
     kj::Exception&& reason, kj::Maybe<MessageSize> sizeHint);
 // Helper function that creates a Request object that simply throws exceptions when sent.
 
-kj::Own<PipelineHook> getDisabledPipeline();
+kj::Rc<PipelineHook> getDisabledPipeline();
 // Gets a PipelineHook appropriate to use when CallHints::noPromisePipelining is true. This will
 // throw from all calls. This does not actually allocate the object; a static global object is
 // returned with a null disposer.
@@ -1054,7 +1054,7 @@ private:
 
 template <typename T>
 RemotePromise<T> RemotePromise<T>::reducePromise(kj::Promise<RemotePromise>&& promise) {
-  kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Own<PipelineHook>>> splitPromise =
+  kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Rc<PipelineHook>>> splitPromise =
       promise.then([](RemotePromise&& inner) {
     // `inner` is multiply-inherited, and we want to move away each superclass separately.
     // Let's create two references to make clear what we're doing (though this is not strictly
@@ -1255,7 +1255,7 @@ namespace _ { // private
 
 struct PipelineBuilderPair {
   AnyPointer::Builder root;
-  kj::Own<PipelineHook> hook;
+  kj::Rc<PipelineHook> hook;
 };
 
 PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords);

@@ -115,15 +115,11 @@ private:
   bool reverse;
 };
 
-class MembranePipelineHook final: public PipelineHook, public kj::Refcounted {
+class MembranePipelineHook final: public PipelineHook {
 public:
   MembranePipelineHook(
-      kj::Own<PipelineHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
+      kj::Rc<PipelineHook>&& inner, kj::Own<MembranePolicy>&& policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse) {}
-
-  kj::Own<PipelineHook> addRef() override {
-    return kj::addRef(*this);
-  }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     return membrane(inner->getPipelinedCap(ops), *policy, reverse);
@@ -134,7 +130,7 @@ public:
   }
 
 private:
-  kj::Own<PipelineHook> inner;
+  kj::Rc<PipelineHook> inner;
   kj::Own<MembranePolicy> policy;
   bool reverse;
 };
@@ -196,7 +192,7 @@ public:
   RemotePromise<AnyPointer> send() override {
     auto promise = inner->send();
 
-    auto newPipeline = AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
+    auto newPipeline = AnyPointer::Pipeline(kj::rc<MembranePipelineHook>(
         PipelineHook::from(kj::mv(promise)), policy->addRef(), reverse));
 
     auto onRevoked = policy->onRevoked();
@@ -233,7 +229,7 @@ public:
   }
 
   AnyPointer::Pipeline sendForPipeline() override {
-    return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
+    return AnyPointer::Pipeline(kj::rc<MembranePipelineHook>(
         PipelineHook::from(inner->sendForPipeline()), policy->addRef(), reverse));
   }
 
@@ -279,8 +275,8 @@ public:
     }
   }
 
-  void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
-    inner->setPipeline(kj::refcounted<MembranePipelineHook>(
+  void setPipeline(kj::Rc<PipelineHook>&& pipeline) override {
+    inner->setPipeline(kj::rc<MembranePipelineHook>(
         kj::mv(pipeline), policy->addRef(), !reverse));
   }
 
@@ -290,7 +286,7 @@ public:
 
   kj::Promise<AnyPointer::Pipeline> onTailCall() override {
     return inner->onTailCall().then([this](AnyPointer::Pipeline&& innerPipeline) {
-      return AnyPointer::Pipeline(kj::refcounted<MembranePipelineHook>(
+      return AnyPointer::Pipeline(kj::rc<MembranePipelineHook>(
           PipelineHook::from(kj::mv(innerPipeline)), policy->addRef(), reverse));
     });
   }
@@ -301,7 +297,7 @@ public:
 
     return {
       kj::mv(pair.promise),
-      kj::refcounted<MembranePipelineHook>(kj::mv(pair.pipeline), policy->addRef(), reverse)
+      kj::rc<MembranePipelineHook>(kj::mv(pair.pipeline), policy->addRef(), reverse)
     };
   }
 
@@ -475,7 +471,7 @@ public:
 
       return {
         kj::mv(result.promise),
-        kj::refcounted<MembranePipelineHook>(kj::mv(result.pipeline), policy->addRef(), reverse)
+        kj::rc<MembranePipelineHook>(kj::mv(result.pipeline), policy->addRef(), reverse)
       };
     }
   }
