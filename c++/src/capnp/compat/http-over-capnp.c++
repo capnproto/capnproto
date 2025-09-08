@@ -689,7 +689,6 @@ public:
       : factory(factory),
         method(validateMethod(request.getMethod())),
         url(request.getUrl()),
-        headers(factory.capnpToKj(request.getHeaders())),
         clientContext(kj::mv(clientContext)) {}
 
   kj::Own<kj::AsyncOutputStream> send(
@@ -756,7 +755,6 @@ public:
   HttpOverCapnpFactory& factory;
   kj::HttpMethod method;
   kj::StringPtr url;
-  kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
   bool responseSent = false;
 
@@ -881,7 +879,8 @@ public:
     }
 
     HttpServiceResponseImpl impl(factory, metadata, params.getContext());
-    co_await inner->request(impl.method, impl.url, impl.headers, *requestBody, impl);
+    kj::HttpHeaders headers(factory.capnpToKj(metadata.getHeaders()));
+    co_await inner->request(impl.method, impl.url, kj::mv(headers), *requestBody, impl);
   }
 
   kj::Promise<void> connect(ConnectContext context) override {
@@ -953,7 +952,7 @@ public:
     { auto drop = kj::mv(refcounted); }
 
     HttpOverCapnpConnectResponseImpl response(factory, context.getParams().getContext());
-    co_await inner->connect(host, headers, *pipe.ends[0], response, settings)
+    co_await inner->connect(host, kj::mv(headers), *pipe.ends[0], response, settings)
         .exclusiveJoin(kj::mv(pumpTask));
   }
 
