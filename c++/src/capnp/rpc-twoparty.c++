@@ -172,7 +172,7 @@ public:
     auto& previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down");
     bool alreadyPendingSend = !network.queuedMessages.empty();
     network.currentQueueSize += message.sizeInWords() * sizeof(word);
-    network.queuedMessages.add(kj::addRef(*this));
+    network.queuedMessages.add(addRefToThis());
     if (alreadyPendingSend) {
       // The first send sets up an evalLast that will clear out pendingMessages when it's sent.
       // If pendingMessages is non-empty, then there must already be a callback waiting to send

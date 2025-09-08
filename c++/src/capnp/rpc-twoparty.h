@@ -137,7 +137,7 @@ private:
 
   kj::ForkedPromise<void> disconnectPromise = nullptr;
 
-  kj::Vector<kj::Own<OutgoingMessageImpl>> queuedMessages;
+  kj::Vector<kj::Rc<OutgoingMessageImpl>> queuedMessages;
   size_t currentQueueSize = 0;
   const kj::MonotonicClock& clock;
   kj::TimePoint currentOutgoingMessageSendTime;
