@@ -968,7 +968,7 @@ public:
   };
 
   virtual kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) = 0;
   // Perform an HTTP request.
   //
@@ -1006,7 +1006,7 @@ public:
   };
 
   virtual kj::Promise<void> connect(kj::StringPtr host,
-                                    const HttpHeaders& headers,
+                                    HttpHeaders headers,
                                     kj::AsyncIoStream& connection,
                                     ConnectResponse& response,
                                     HttpConnectSettings settings);

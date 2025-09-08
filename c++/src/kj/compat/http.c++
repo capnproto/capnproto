@@ -7262,7 +7262,7 @@ public:
   HttpServiceAdapter(HttpClient& client): client(client) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     if (!headers.isWebSocket()) {
       auto innerReq = client.request(method, url, headers, requestBody.tryGetLength());
@@ -7306,7 +7306,7 @@ public:
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             HttpConnectSettings settings) override {
@@ -7396,7 +7396,7 @@ kj::Promise<void> HttpService::Response::sendError(
 
 kj::Promise<void> HttpService::connect(
     kj::StringPtr host,
-    const HttpHeaders& headers,
+    HttpHeaders headers,
     kj::AsyncIoStream& connection,
     ConnectResponse& response,
     kj::HttpConnectSettings settings) {

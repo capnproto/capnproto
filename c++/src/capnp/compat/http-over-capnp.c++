@@ -481,7 +481,7 @@ public:
       : factory(factory), inner(kj::mv(inner)) {}
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
     auto rpcRequest = inner.requestRequest();
 
@@ -612,7 +612,7 @@ public:
   }
 
   kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      kj::StringPtr host, kj::HttpHeaders headers, kj::AsyncIoStream& connection,
       ConnectResponse& tunnel, kj::HttpConnectSettings settings) override {
     auto rpcRequest = inner.connectRequest();
     auto downPipe = kj::newOneWayPipe();
