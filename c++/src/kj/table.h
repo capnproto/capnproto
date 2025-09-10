@@ -870,7 +870,7 @@ struct HashBucket {
   inline const Row& getRow(ArrayPtr<const Row> table) const { return table[getPos()]; }
   inline bool isPos(uint pos) const { return pos + 2 == value; }
   inline uint getPos() const {
-    KJ_TABLE_IASSERT(value >= 2);
+    KJ_TABLE_IASSERT(value >= 2, "invalid HashBucket value in getPos", value);
     return value - 2;
   }
   inline void setEmpty() { value = 0; }
@@ -890,7 +890,7 @@ inline size_t probeHash(const kj::Array<HashBucket>& buckets, size_t i) {
 kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t targetSize);
 
 inline uint chooseBucket(uint hash, uint count) {
-  KJ_IASSERT(kj::popCount(count) == 1, "hash bucket count must be power of two!");
+  KJ_IASSERT(kj::popCount(count) == 1, "hash bucket count must be power of two!", count);
   return hash & (count - 1);
 }
 

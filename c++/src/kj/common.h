@@ -314,6 +314,18 @@ KJ_NORETURN(void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr));
 
+KJ_NORETURN(void inlineRequireFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message, size_t arg1));
+
+KJ_NORETURN(void inlineRequireFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message, size_t arg1, size_t arg2));
+
+KJ_NORETURN(void inlineRequireFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message, size_t arg1, size_t arg2, size_t arg3));
+
 KJ_NORETURN(void unreachable());
 
 }  // namespace _ (private)
@@ -1847,11 +1859,11 @@ public:
 
   inline constexpr size_t size() const { return size_; }
   inline constexpr const T& operator[](size_t index) const {
-    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.", index, size_);
     return ptr[index];
   }
   inline T& operator[](size_t index) {
-    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.", index, size_);
     return ptr[index];
   }
 
@@ -1865,19 +1877,21 @@ public:
   inline constexpr const T& back() const { return *(ptr + size_ - 1); }
 
   inline constexpr ArrayPtr<const T> slice(size_t start, size_t end) const {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
+        start, end, size_);
     return ArrayPtr<const T>(ptr + start, end - start);
   }
   inline constexpr ArrayPtr slice(size_t start, size_t end) {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
+        start, end, size_);
     return ArrayPtr(ptr + start, end - start);
   }
   inline constexpr ArrayPtr<const T> slice(size_t start) const {
-    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
     return ArrayPtr<const T>(ptr + start, size_ - start);
   }
   inline constexpr ArrayPtr slice(size_t start) {
-    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
     return ArrayPtr(ptr + start, size_ - start);
   }
   inline constexpr bool startsWith(const ArrayPtr<const T>& other) const {
@@ -2018,7 +2032,8 @@ public:
   inline void copyFrom(kj::ArrayPtr<const T> other) {
     // Copy data from the other array pointer.
     // Arrays have to be of the same size and memory area MUST NOT overlap.
-    KJ_IREQUIRE(size_ == other.size(), "copy requires arrays of the same size");
+    KJ_IREQUIRE(size_ == other.size(), "copy requires arrays of the same size",
+        size_, other.size());
     KJ_IREQUIRE(!intersects(other), "copy memory area must not overlap");
     T* __restrict__ dst = begin();
     const T* __restrict__ src = other.begin();

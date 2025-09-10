@@ -37,6 +37,30 @@ void inlineRequireFailure(const char* file, int line, const char* expectation,
   }
 }
 
+void inlineRequireFailure(const char* file, int line, const char* expectation,
+                          const char* macroArgs, const char* message, size_t arg1) {
+  const char* msg = message ? message : "";
+  Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs, msg, arg1);
+  f.fatal();
+}
+
+void inlineRequireFailure(const char* file, int line, const char* expectation,
+                          const char* macroArgs, const char* message, size_t arg1, size_t arg2) {
+  const char* msg = message ? message : "";
+  Debug::Fault f(
+      file, line, kj::Exception::Type::FAILED, expectation, macroArgs, msg, arg1, arg2);
+  f.fatal();
+}
+
+void inlineRequireFailure(const char* file, int line, const char* expectation,
+                          const char* macroArgs, const char* message, size_t arg1, size_t arg2,
+                          size_t arg3) {
+  const char* msg = message ? message : "";
+  Debug::Fault f(
+      file, line, kj::Exception::Type::FAILED, expectation, macroArgs, msg, arg1, arg2, arg3);
+  f.fatal();
+}
+
 void unreachable() {
   KJ_FAIL_ASSERT("Supposedly-unreachable branch executed.");
 

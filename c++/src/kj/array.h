@@ -161,11 +161,11 @@ public:
 
   inline constexpr size_t size() const { return size_; }
   inline constexpr T& operator[](size_t index) KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.", index, size_);
     return ptr[index];
   }
   inline constexpr const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.", index, size_);
     return ptr[index];
   }
 
@@ -182,19 +182,19 @@ public:
   inline bool operator==(const U& other) const { return asPtr() == other; }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().", start, end, size_);
     return ArrayPtr<T>(ptr + start, end - start);
   }
   inline ArrayPtr<const T> slice(size_t start, size_t end) const KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().", start, end, size_);
     return ArrayPtr<const T>(ptr + start, end - start);
   }
   inline ArrayPtr<T> slice(size_t start) KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
     return ArrayPtr<T>(ptr + start, size_ - start);
   }
   inline ArrayPtr<const T> slice(size_t start) const KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
     return ArrayPtr<const T>(ptr + start, size_ - start);
   }
 
@@ -399,11 +399,13 @@ public:
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
   inline T& operator[](size_t index) KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr),
+        "Out-of-bounds Array access.", index, pos-ptr);
     return ptr[index];
   }
   inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
-    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr),
+        "Out-of-bounds Array access.", index, pos-ptr);
     return ptr[index];
   }
 
