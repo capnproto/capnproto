@@ -909,8 +909,8 @@ public:
   }
 
   void reserve(size_t size) {
-    if (buckets.size() < size * 2) {
-      rehash(size);
+    if (buckets.size() < (size + erasedCount) * 2) {
+      rehash(size * 2);
     }
   }
 
