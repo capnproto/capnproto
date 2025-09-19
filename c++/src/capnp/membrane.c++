@@ -75,8 +75,8 @@ private:
 
 class MembraneCapTableBuilder final: public _::CapTableBuilder {
 public:
-  MembraneCapTableBuilder(kj::Rc<MembranePolicy> policy, bool reverse)
-      : policy(kj::mv(policy)), reverse(reverse) {}
+  MembraneCapTableBuilder(kj::Rc<MembranePolicy>& policy, bool reverse)
+      : policy(policy), reverse(reverse) {}
 
   AnyPointer::Builder imbue(AnyPointer::Builder builder) {
     KJ_REQUIRE(inner == nullptr, "can only call this once");
@@ -111,7 +111,7 @@ public:
 
 private:
   _::CapTableBuilder* inner = nullptr;
-  kj::Rc<MembranePolicy> policy;
+  kj::Rc<MembranePolicy>& policy;
   bool reverse;
 };
 
@@ -158,7 +158,7 @@ public:
   MembraneRequestHook(kj::Own<RequestHook>&& inner, kj::Rc<MembranePolicy> policy, bool reverse)
       : RequestHook(&MEMBRANE_BRAND),
         inner(kj::mv(inner)), policy(kj::mv(policy)),
-        reverse(reverse), capTable(this->policy.addRef(), reverse) {}
+        reverse(reverse), capTable(this->policy, reverse) {}
 
   static Request<AnyPointer, AnyPointer> wrap(
       Request<AnyPointer, AnyPointer>&& inner, kj::Rc<MembranePolicy> policy, bool reverse) {
@@ -250,7 +250,7 @@ public:
                           kj::Rc<MembranePolicy> policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse),
         paramsCapTable(this->policy.addRef(), reverse),
-        resultsCapTable(this->policy.addRef(), reverse) {}
+        resultsCapTable(this->policy, reverse) {}
 
   AnyPointer::Reader getParams() override {
     KJ_REQUIRE(!releasedParams);
