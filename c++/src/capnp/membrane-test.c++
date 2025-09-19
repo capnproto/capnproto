@@ -166,7 +166,7 @@ void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membrane
 struct TestEnv {
   kj::EventLoop loop;
   kj::WaitScope waitScope;
-  kj::Rc<MembranePolicyImpl> policy;
+  kj::Rc<MembranePolicy> policy;
   test::TestMembrane::Client membraned;
 
   TestEnv()
@@ -239,7 +239,7 @@ KJ_TEST("apply membrane using copyOutOfMembrane() on struct") {
     root.setCap(kj::heap<ThingImpl>("inside"));
     MallocMessageBuilder insideBuilder;
     insideBuilder.adoptRoot(copyOutOfMembrane(
-        root.asReader(), insideBuilder.getOrphanage(), env.policy.addRef()));
+        root.asReader(), insideBuilder.getOrphanage(), env.policy));
     return insideBuilder.getRoot<test::TestContainMembrane>().getCap();
   }, "inside", "inbound", "inside", "inside");
 }
@@ -253,7 +253,7 @@ KJ_TEST("apply membrane using copyOutOfMembrane() on list") {
     list.set(0, kj::heap<ThingImpl>("inside"));
     MallocMessageBuilder insideBuilder;
     insideBuilder.initRoot<test::TestContainMembrane>().adoptList(copyOutOfMembrane(
-        list.asReader(), insideBuilder.getOrphanage(), env.policy.addRef()));
+        list.asReader(), insideBuilder.getOrphanage(), env.policy));
     return insideBuilder.getRoot<test::TestContainMembrane>().getList()[0];
   }, "inside", "inbound", "inside", "inside");
 }
@@ -267,7 +267,7 @@ KJ_TEST("apply membrane using copyOutOfMembrane() on AnyPointer") {
     ptr.setAs<test::TestMembrane::Thing>(kj::heap<ThingImpl>("inside"));
     MallocMessageBuilder insideBuilder;
     insideBuilder.initRoot<test::TestAnyPointer>().getAnyPointerField().adopt(copyOutOfMembrane(
-        ptr.asReader(), insideBuilder.getOrphanage(), env.policy.addRef()));
+        ptr.asReader(), insideBuilder.getOrphanage(), env.policy));
     return insideBuilder.getRoot<test::TestAnyPointer>().getAnyPointerField()
         .getAs<test::TestMembrane::Thing>();
   }, "inside", "inbound", "inside", "inside");

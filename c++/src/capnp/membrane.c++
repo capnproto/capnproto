@@ -33,8 +33,8 @@ kj::Own<ClientHook> membrane(kj::Own<ClientHook> inner, kj::Rc<MembranePolicy> p
 
 class MembraneCapTableReader final: public _::CapTableReader {
 public:
-  MembraneCapTableReader(kj::Rc<MembranePolicy> policy, bool reverse)
-      : policy(kj::mv(policy)), reverse(reverse) {}
+  MembraneCapTableReader(kj::Rc<MembranePolicy>& policy, bool reverse)
+      : policy(policy), reverse(reverse) {}
 
   AnyPointer::Reader imbue(AnyPointer::Reader reader) {
     return AnyPointer::Reader(imbue(
@@ -69,7 +69,7 @@ public:
 
 private:
   _::CapTableReader* inner = nullptr;
-  kj::Rc<MembranePolicy> policy;
+  kj::Rc<MembranePolicy>& policy;
   bool reverse;
 };
 
@@ -143,7 +143,7 @@ class MembraneResponseHook final: public ResponseHook {
 public:
   MembraneResponseHook(
       kj::Own<ResponseHook>&& inner, kj::Rc<MembranePolicy> policy, bool reverse)
-      : inner(kj::mv(inner)), policy(kj::mv(policy)), capTable(this->policy.addRef(), reverse) {}
+      : inner(kj::mv(inner)), policy(kj::mv(policy)), capTable(this->policy, reverse) {}
 
   AnyPointer::Reader imbue(AnyPointer::Reader reader) { return capTable.imbue(reader); }
 
@@ -249,7 +249,7 @@ public:
   MembraneCallContextHook(kj::Own<CallContextHook>&& inner,
                           kj::Rc<MembranePolicy> policy, bool reverse)
       : inner(kj::mv(inner)), policy(kj::mv(policy)), reverse(reverse),
-        paramsCapTable(this->policy.addRef(), reverse),
+        paramsCapTable(this->policy, reverse),
         resultsCapTable(this->policy, reverse) {}
 
   AnyPointer::Reader getParams() override {
@@ -595,8 +595,8 @@ Capability::Client reverseMembrane(Capability::Client inner, kj::Rc<MembranePoli
 namespace _ {  // private
 
 _::OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
-                                   kj::Rc<MembranePolicy> policy, bool reverse) {
-  MembraneCapTableReader capTable(kj::mv(policy), reverse);
+                                   kj::Rc<MembranePolicy>& policy, bool reverse) {
+  MembraneCapTableReader capTable(policy, reverse);
   return _::OrphanBuilder::copy(
       OrphanageInternal::getArena(to),
       OrphanageInternal::getCapTable(to),
@@ -604,8 +604,8 @@ _::OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
 }
 
 _::OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
-                                   kj::Rc<MembranePolicy> policy, bool reverse) {
-  MembraneCapTableReader capTable(kj::mv(policy), reverse);
+                                   kj::Rc<MembranePolicy>& policy, bool reverse) {
+  MembraneCapTableReader capTable(policy, reverse);
   return _::OrphanBuilder::copy(
       OrphanageInternal::getArena(to),
       OrphanageInternal::getCapTable(to),
@@ -613,8 +613,8 @@ _::OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
 }
 
 _::OrphanBuilder copyOutOfMembrane(ListReader from, Orphanage to,
-                                   kj::Rc<MembranePolicy> policy, bool reverse) {
-  MembraneCapTableReader capTable(kj::mv(policy), reverse);
+                                   kj::Rc<MembranePolicy>& policy, bool reverse) {
+  MembraneCapTableReader capTable(policy, reverse);
   return _::OrphanBuilder::copy(
       OrphanageInternal::getArena(to),
       OrphanageInternal::getCapTable(to),

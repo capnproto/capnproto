@@ -221,13 +221,13 @@ typename ServerType::Serves::Client reverseMembrane(
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
-    Reader&& from, Orphanage to, kj::Rc<MembranePolicy> policy);
+    Reader&& from, Orphanage to, kj::Rc<MembranePolicy>& policy);
 // Copy a Cap'n Proto object (e.g. struct or list), adding the given membrane to any capabilities
 // found within it. `from` is interpreted as "outside" the membrane while `to` is "inside".
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
-    Reader&& from, Orphanage to, kj::Rc<MembranePolicy> policy);
+    Reader&& from, Orphanage to, kj::Rc<MembranePolicy>& policy);
 // Like copyIntoMembrane() except that `from` is "inside" the membrane and `to` is "outside".
 
 // =======================================================================================
@@ -266,28 +266,28 @@ typename ServerType::Serves::Client reverseMembrane(
 namespace _ {  // private
 
 OrphanBuilder copyOutOfMembrane(PointerReader from, Orphanage to,
-                                kj::Rc<MembranePolicy> policy, bool reverse);
+                                kj::Rc<MembranePolicy>& policy, bool reverse);
 OrphanBuilder copyOutOfMembrane(StructReader from, Orphanage to,
-                                kj::Rc<MembranePolicy> policy, bool reverse);
+                                kj::Rc<MembranePolicy>& policy, bool reverse);
 OrphanBuilder copyOutOfMembrane(ListReader from, Orphanage to,
-                                kj::Rc<MembranePolicy> policy, bool reverse);
+                                kj::Rc<MembranePolicy>& policy, bool reverse);
 
 }  // namespace _ (private)
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyIntoMembrane(
-    Reader&& from, Orphanage to, kj::Rc<MembranePolicy> policy) {
+    Reader&& from, Orphanage to, kj::Rc<MembranePolicy>& policy) {
   return _::copyOutOfMembrane(
       _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
-      to, kj::mv(policy), true);
+      to, policy, true);
 }
 
 template <typename Reader>
 Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
-    Reader&& from, Orphanage to, kj::Rc<MembranePolicy> policy) {
+    Reader&& from, Orphanage to, kj::Rc<MembranePolicy>& policy) {
   return _::copyOutOfMembrane(
       _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
-      to, kj::mv(policy), false);
+      to, policy, false);
 }
 
 } // namespace capnp
