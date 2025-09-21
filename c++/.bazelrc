@@ -19,7 +19,6 @@ build:unix --cxxopt='-Wsuggest-override'
 build:unix --cxxopt='-Wno-strict-aliasing' --host_cxxopt='-Wno-strict-aliasing'
 build:unix --cxxopt='-Wno-sign-compare' --host_cxxopt='-Wno-sign-compare'
 build:unix --cxxopt='-Wno-unused-parameter' --host_cxxopt='-Wno-unused-parameter'
-build:unix --cxxopt='-Wno-deprecated-this-capture' --host_cxxopt='-Wno-deprecated-this-capture'
 build:unix --cxxopt='-DKJ_HEADER_WARNINGS'
 build:unix --cxxopt='-DCAPNP_HEADER_WARNINGS'
 # enable libdl integration for stacktrace symbolization

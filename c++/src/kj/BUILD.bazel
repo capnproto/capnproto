@@ -210,6 +210,9 @@ cc_library(
         "filesystem-disk-test.c++",
         "filesystem-disk-unix.c++",
     ],
+    deps = [
+      ":kj-test",
+    ],
 )
 
 cc_test(

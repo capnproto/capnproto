@@ -18,7 +18,7 @@ env:
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
-      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang
     }
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
     # ubuntu-22.04 build image and supports LLVM 17.
     container: alpine:3.22
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install dependencies
         run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang20 libc++-dev llvm-libunwind-dev
       - name: super-test
@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [18, 19]
+        clang: [18, 19, 20]
         driver: [bazel-dbg, bazel-opt, super-test]
         include:
           - driver: bazel-dbg
@@ -49,7 +49,7 @@ jobs:
           - driver: super-test
             run-test: ./super-test.sh quick
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -62,10 +62,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [19]
+        clang: [20]
         config: [asan]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: install dependencies
         run: |
             brew install autoconf automake libtool pkg-config
@@ -96,7 +96,7 @@ jobs:
             target: 'Visual Studio 17 2022'
             arch: -A x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Include $CONDA in $PATH
         run: |
           echo "$Env:CONDA\condabin" >> $env:GITHUB_PATH
@@ -130,7 +130,7 @@ jobs:
             target: 'Visual Studio 17 2022'
             arch: -A x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: test
         run: |
             cd c++ && bazel test --verbose_failures --test_output=errors -k //...
