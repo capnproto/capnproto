@@ -67,7 +67,7 @@ KJ_BEGIN_HEADER
   #error "This code requires C++20. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.
-    #error "Pass -std=c++20 on the compiler command line to enable C++20."
+    #error "Pass -std=c++23 on the compiler command line to enable C++20."
   #endif
 #endif
 
@@ -313,6 +313,18 @@ namespace _ {  // private
 KJ_NORETURN(void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr));
+
+KJ_NORETURN(void inlineRequireFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message, size_t arg1));
+
+KJ_NORETURN(void inlineRequireFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message, size_t arg1, size_t arg2));
+
+KJ_NORETURN(void inlineRequireFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message, size_t arg1, size_t arg2, size_t arg3));
 
 KJ_NORETURN(void unreachable());
 
@@ -1847,11 +1859,11 @@ public:
 
   inline constexpr size_t size() const { return size_; }
   inline constexpr const T& operator[](size_t index) const {
-    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.", index, size_);
     return ptr[index];
   }
   inline T& operator[](size_t index) {
-    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.", index, size_);
     return ptr[index];
   }
 
@@ -1865,19 +1877,21 @@ public:
   inline constexpr const T& back() const { return *(ptr + size_ - 1); }
 
   inline constexpr ArrayPtr<const T> slice(size_t start, size_t end) const {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
+        start, end, size_);
     return ArrayPtr<const T>(ptr + start, end - start);
   }
   inline constexpr ArrayPtr slice(size_t start, size_t end) {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
+        start, end, size_);
     return ArrayPtr(ptr + start, end - start);
   }
   inline constexpr ArrayPtr<const T> slice(size_t start) const {
-    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
     return ArrayPtr<const T>(ptr + start, size_ - start);
   }
   inline constexpr ArrayPtr slice(size_t start) {
-    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
     return ArrayPtr(ptr + start, size_ - start);
   }
   inline constexpr bool startsWith(const ArrayPtr<const T>& other) const {
@@ -1985,13 +1999,13 @@ public:
   // You must include kj/array.h to call this.
 
   template <typename U>
-  inline auto as() { return U::from(this); }
-  // Syntax sugar for invoking U::from.
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename U>
-  inline auto as() const { return U::from(this); }
-  // Syntax sugar for invoking U::from.
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   inline void fill(T t) {
@@ -2018,7 +2032,8 @@ public:
   inline void copyFrom(kj::ArrayPtr<const T> other) {
     // Copy data from the other array pointer.
     // Arrays have to be of the same size and memory area MUST NOT overlap.
-    KJ_IREQUIRE(size_ == other.size(), "copy requires arrays of the same size");
+    KJ_IREQUIRE(size_ == other.size(), "copy requires arrays of the same size",
+        size_, other.size());
     KJ_IREQUIRE(!intersects(other), "copy memory area must not overlap");
     T* __restrict__ dst = begin();
     const T* __restrict__ src = other.begin();

@@ -250,19 +250,6 @@ TEST(String, tryParseAs) {
   KJ_EXPECT(heapString("1").tryParseAs<int>() == 1);
 }
 
-#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
-TEST(String, StlInterop) {
-  std::string foo = "foo";
-  StringPtr ptr = foo;
-  EXPECT_EQ("foo", ptr);
-
-  std::string bar = ptr;
-  EXPECT_EQ("foo", bar);
-
-  EXPECT_EQ("foo", kj::str(foo));
-  EXPECT_EQ("foo", kj::heapString(foo));
-}
-
 struct Stringable {
   kj::StringPtr toString() const { return "foo"; }
 };
@@ -270,7 +257,6 @@ struct Stringable {
 TEST(String, ToString) {
   EXPECT_EQ("foo", kj::str(Stringable()));
 }
-#endif
 
 KJ_TEST("StringPtr constructors") {
   KJ_EXPECT(StringPtr("") == "");
@@ -494,15 +480,15 @@ KJ_TEST("StringPtr contains") {
   KJ_EXPECT(foobar.slice(2).contains(foobar.slice(1)) == false);
 }
 
-struct Std {
-  static std::string from(const String* str) {
-    return std::string(str->cStr());
-  }
+struct Std {};
 
-  static std::string from(const StringPtr* str) {
-    return std::string(str->cStr());
-  }
-};
+static std::string asImpl(Std*, const String& str) {
+  return std::string(str.cStr());
+}
+
+static std::string asImpl(Std*, const StringPtr& str) {
+  return std::string(str.cStr());
+}
 
 KJ_TEST("as<Std>") {
   String str = kj::str("foo"_kj);

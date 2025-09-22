@@ -111,7 +111,7 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<cons
 
   if (pipe.getData() != std::string(packed.asChars().begin(), packed.asChars().size())) {
     KJ_FAIL_ASSERT("Tried to pack `unpacked`, expected `packed`, got `pipe.getData()`",
-                   unpacked, packed, pipe.getData());
+                   unpacked, packed, pipe.getData().c_str());
     return;
   }
 

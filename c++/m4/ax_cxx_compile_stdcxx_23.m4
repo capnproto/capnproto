@@ -3,19 +3,20 @@
 #  Additionally modified to detect -stdlib by Kenton Varda.
 #  Further modified for C++14 by Kenton Varda.
 #  Further Modified yet again for C++20 by Harris Hancock.
+#  Further Modified yet again for C++23 by Mike Aizatsky.
 # ============================================================================
 #
 # SYNOPSIS
 #
-#   AX_CXX_COMPILE_STDCXX_20([ext|noext])
+#   AX_CXX_COMPILE_STDCXX_23([ext|noext])
 #
 # DESCRIPTION
 #
-#   Check for baseline language coverage in the compiler for the C++20
+#   Check for baseline language coverage in the compiler for the C++23
 #   standard; if necessary, add switches to CXXFLAGS to enable support.
-#   Errors out if no mode that supports C++20 baseline syntax can be found.
+#   Errors out if no mode that supports C++23 baseline syntax can be found.
 #   The argument, if specified, indicates whether you insist on an extended
-#   mode (e.g. -std=gnu++20) or a strict conformance mode (e.g. -std=c++20).
+#   mode (e.g. -std=gnu++23) or a strict conformance mode (e.g. -std=c++23).
 #   If neither is specified, you get whatever works, with preference for an
 #   extended mode.
 #
@@ -44,7 +45,7 @@
 
 #serial 1
 
-m4_define([_AX_CXX_COMPILE_STDCXX_20_testbody], [[
+m4_define([_AX_CXX_COMPILE_STDCXX_23_testbody], [[
   template <typename T>
   struct check
   {
@@ -94,6 +95,11 @@ m4_define([_AX_CXX_COMPILE_STDCXX_20_testbody], [[
 
   // C++20 stuff
   constinit const char* aConstantString = "abcd";
+
+  // C++23 stuff
+  struct DeducingThis {
+    auto addRefToThis(this auto&& self) { return self; }
+  };
 ]])
 
 m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody_lib], [
@@ -103,31 +109,31 @@ m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody_lib], [
   #include <thread>
 ])
 
-AC_DEFUN([AX_CXX_COMPILE_STDCXX_20], [dnl
+AC_DEFUN([AX_CXX_COMPILE_STDCXX_23], [dnl
   m4_if([$1], [], [],
         [$1], [ext], [],
         [$1], [noext], [],
-        [m4_fatal([invalid argument `$1' to AX_CXX_COMPILE_STDCXX_20])])dnl
+        [m4_fatal([invalid argument `$1' to AX_CXX_COMPILE_STDCXX_23])])dnl
   AC_LANG_ASSERT([C++])dnl
   ac_success=no
-  AC_CACHE_CHECK(whether $CXX supports C++20 features by default,
-  ax_cv_cxx_compile_cxx20,
-  [AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_20_testbody])],
-    [ax_cv_cxx_compile_cxx20=yes],
-    [ax_cv_cxx_compile_cxx20=no])])
-  if test x$ax_cv_cxx_compile_cxx20 = xyes; then
+  AC_CACHE_CHECK(whether $CXX supports C++23 features by default,
+  aax_cv_cxx_compile_cxx23,
+  [AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_23_testbody])],
+    [aax_cv_cxx_compile_cxx23=yes],
+    [aax_cv_cxx_compile_cxx23=no])])
+  if test x$aax_cv_cxx_compile_cxx23 = xyes; then
     ac_success=yes
   fi
 
   m4_if([$1], [noext], [], [dnl
   if test x$ac_success = xno; then
-    for switch in -std=gnu++20 -std=gnu++2a; do
-      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx20_$switch])
-      AC_CACHE_CHECK(whether $CXX supports C++20 features with $switch,
+    for switch in -std=gnu++23 -std=gnu++2a; do
+      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx23_$switch])
+      AC_CACHE_CHECK(whether $CXX supports C++23 features with $switch,
                      $cachevar,
         [ac_save_CXX="$CXX"
          CXX="$CXX $switch"
-         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_20_testbody])],
+         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_23_testbody])],
           [eval $cachevar=yes],
           [eval $cachevar=no])
          CXX="$ac_save_CXX"])
@@ -141,13 +147,13 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_20], [dnl
 
   m4_if([$1], [ext], [], [dnl
   if test x$ac_success = xno; then
-    for switch in -std=c++20 -std=c++2a; do
-      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx20_$switch])
+    for switch in -std=c++23 -std=c++2a; do
+      cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx23_$switch])
       AC_CACHE_CHECK(whether $CXX supports C++20 features with $switch,
                      $cachevar,
         [ac_save_CXX="$CXX"
          CXX="$CXX $switch"
-         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_20_testbody])],
+         AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_23_testbody])],
           [eval $cachevar=yes],
           [eval $cachevar=no])
          CXX="$ac_save_CXX"])
@@ -160,7 +166,7 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_20], [dnl
   fi])
 
   if test x$ac_success = xno; then
-    AC_MSG_ERROR([*** A compiler with support for C++20 language features is required.])
+    AC_MSG_ERROR([*** A compiler with support for C++23 language features is required.])
   else
     ac_success=no
     AC_CACHE_CHECK(whether $CXX supports C++11 library features by default,

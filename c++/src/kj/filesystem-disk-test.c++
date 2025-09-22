@@ -990,8 +990,8 @@ KJ_TEST("DiskFilesystem::computeCurrentPath") {
   // Create a path which exceeds the 256 byte buffer used in
   // computeCurrentPath.
   auto subdir = dir->openSubdir(Path({
-    maxPathSegment,
-    maxPathSegment,
+    maxPathSegment.c_str(),
+    maxPathSegment.c_str(),
     "some_path_longer_than_256_bytes"
   }), WriteMode::CREATE | WriteMode::CREATE_PARENT);
 

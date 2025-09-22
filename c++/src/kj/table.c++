@@ -85,7 +85,7 @@ kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t t
   for (auto& oldBucket: oldBuckets) {
     if (oldBucket.isOccupied()) {
       ++entryCount;
-      for (uint i = oldBucket.hash % newBuckets.size();; i = probeHash(newBuckets, i)) {
+      for (uint i = chooseBucket(oldBucket.hash, newBuckets.size());; i = probeHash(newBuckets, i)) {
         auto& newBucket = newBuckets[i];
         if (newBucket.isEmpty()) {
           newBucket = oldBucket;

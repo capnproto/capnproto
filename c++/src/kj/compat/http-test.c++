@@ -1185,7 +1185,7 @@ KJ_TEST("HttpServer handles 'chunked, chunked' as 'chunked'") {
   // This is technically invalid per HTTP spec but needed for compatibility
   KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  
+
   HttpRequestTestCase REQUEST_WITH_CHUNKED_CHUNKED = {
     "POST /foo HTTP/1.1\r\n"
     "Transfer-Encoding: chunked, chunked\r\n"
@@ -1194,14 +1194,14 @@ KJ_TEST("HttpServer handles 'chunked, chunked' as 'chunked'") {
     "foobar\r\n"
     "0\r\n"
     "\r\n",
-    
+
     HttpMethod::POST,
     "/foo",
     {},
     kj::none,  // chunked encoding, no fixed length
     { "foobar" }
   };
-  
+
   HttpRequestTestCase REQUEST_WITH_CHUNKED_CHUNKED_NO_SPACE = {
     "POST /bar HTTP/1.1\r\n"
     "Transfer-Encoding: chunked,chunked\r\n"
@@ -1210,29 +1210,29 @@ KJ_TEST("HttpServer handles 'chunked, chunked' as 'chunked'") {
     "baz\r\n"
     "0\r\n"
     "\r\n",
-    
+
     HttpMethod::POST,
     "/bar",
     {},
     kj::none,  // chunked encoding, no fixed length
     { "baz" }
   };
-  
+
   HttpResponseTestCase RESPONSE = {
     "HTTP/1.1 200 OK\r\n"
     "Content-Length: 2\r\n"
     "\r\n"
     "ok",
-    
+
     200, "OK",
     {},
     2, {"ok"}
   };
-  
+
   // Test with "chunked, chunked" (with space)
   testHttpServerRequest(waitScope, timer, REQUEST_WITH_CHUNKED_CHUNKED, RESPONSE,
                         KJ_HTTP_TEST_CREATE_2PIPE);
-  
+
   // Test with "chunked,chunked" (no space)
   testHttpServerRequest(waitScope, timer, REQUEST_WITH_CHUNKED_CHUNKED_NO_SPACE, RESPONSE,
                         KJ_HTTP_TEST_CREATE_2PIPE);
@@ -4729,6 +4729,13 @@ class SuspendAfter: private HttpService {
   // suspends all subsequent requests until its counter is reset.
 
 public:
+  SuspendAfter(HttpHeaderTable::Builder builder = {})
+      : fooHeaderId(builder.add("Foo")),
+        barHeaderId(builder.add("Bar")),
+        table(builder.build()) {}
+
+  const HttpHeaderTable& getHeaderTable() { return *table; }
+
   void suspendAfter(uint countdownParam) { countdown = countdownParam; }
 
   kj::Maybe<kj::Own<HttpService>> operator()(HttpServer::SuspendableRequest& sr) {
@@ -4749,16 +4756,38 @@ private:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
-    HttpHeaders responseHeaders(table);
+    // Check headers made it through the transfer.
+    KJ_EXPECT(headers.get(fooHeaderId).orDefault("(nil)") == "foo");
+    KJ_EXPECT(headers.get(barHeaderId).orDefault("(nil)") == "bar1, bar2");
+    bool foundBaz = false;
+    headers.forEach([&](kj::StringPtr name, kj::StringPtr value) {
+      if (name == "Baz") {
+        KJ_EXPECT(!foundBaz);
+        KJ_EXPECT(value == "baz");
+        foundBaz = true;
+      }
+    });
+    KJ_EXPECT(foundBaz);
+
+    // Send response.
+    HttpHeaders responseHeaders(*table);
     response.send(200, "OK", responseHeaders);
     return requestBody.readAllBytes().ignoreResult();
   }
 
-  HttpHeaderTable table;
+  HttpHeaderId fooHeaderId;
+  HttpHeaderId barHeaderId;
+  kj::Own<HttpHeaderTable> table;
 
   uint countdown = kj::maxValue;
   kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
 };
+
+#define SUSPEND_AFTER_EXPECTED_HEADERS \
+  "Foo: foo\r\n" \
+  "Bar: bar1\r\n" \
+  "Bar: bar2\r\n" \
+  "Baz: baz\r\n"
 
 KJ_TEST("HttpServer can suspend a request") {
   // This test sends a single request to an HttpServer three times. First it writes the request to
@@ -4770,15 +4799,13 @@ KJ_TEST("HttpServer can suspend a request") {
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
-  HttpHeaderTable table;
   // This HttpService will not actually be used, because we're passing a factory in to
   // listenHttpCleanDrain().
   HangingHttpService service;
-  HttpServer server(timer, table, service);
+  SuspendAfter factory;
+  HttpServer server(timer, factory.getHeaderTable(), service);
 
   kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
-
-  SuspendAfter factory;
 
   {
     // Observe the HttpServer suspend.
@@ -4788,6 +4815,7 @@ KJ_TEST("HttpServer can suspend a request") {
 
     static constexpr kj::StringPtr REQUEST =
         "POST / HTTP/1.1\r\n"
+        SUSPEND_AFTER_EXPECTED_HEADERS
         "Transfer-Encoding: chunked\r\n"
         "\r\n"
         "6\r\n"
@@ -4863,24 +4891,25 @@ KJ_TEST("HttpServer can suspend and resume pipelined requests") {
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
 
-  HttpHeaderTable table;
   // This HttpService will not actually be used, because we're passing a factory in to
   // listenHttpCleanDrain().
   HangingHttpService service;
-  HttpServer server(timer, table, service);
+  SuspendAfter factory;
+  HttpServer server(timer, factory.getHeaderTable(), service);
 
   // We'll suspend the second request.
   kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
-  SuspendAfter factory;
 
   static auto LENGTHFUL_REQUEST =
       "POST / HTTP/1.1\r\n"
       "Content-Length: 6\r\n"
+      SUSPEND_AFTER_EXPECTED_HEADERS
       "\r\n"
       "foobar"_kjb;
   static auto CHUNKED_REQUEST =
       "POST / HTTP/1.1\r\n"
       "Transfer-Encoding: chunked\r\n"
+      SUSPEND_AFTER_EXPECTED_HEADERS
       "\r\n"
       "6\r\n"
       "foobar\r\n"
@@ -4972,11 +5001,10 @@ KJ_TEST("HttpServer can suspend a request with no leftover") {
   // This HttpService will not actually be used, because we're passing a factory in to
   // listenHttpCleanDrain().
   HangingHttpService service;
-  HttpServer server(timer, table, service);
+  SuspendAfter factory;
+  HttpServer server(timer, factory.getHeaderTable(), service);
 
   kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
-
-  SuspendAfter factory;
 
   {
     factory.suspendAfter(0);
@@ -4984,6 +5012,7 @@ KJ_TEST("HttpServer can suspend a request with no leftover") {
 
     static auto REQUEST_HEADERS =
         "POST / HTTP/1.1\r\n"
+        SUSPEND_AFTER_EXPECTED_HEADERS
         "Transfer-Encoding: chunked\r\n"
         "\r\n"_kjb;
     pipe.ends[1]->write(REQUEST_HEADERS).wait(waitScope);

@@ -113,17 +113,5 @@ TEST(Blob, Compare) {
   EXPECT_FALSE(Text::Reader("foo") >  Text::Reader("foobar"));
 }
 
-#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
-TEST(Blob, StlInterop) {
-  std::string foo = "foo";
-  Text::Reader reader = foo;
-
-  EXPECT_EQ("foo", reader);
-
-  std::string bar = reader;
-  EXPECT_EQ("foo", bar);
-}
-#endif
-
 }  // namespace
 }  // namespace capnp

@@ -57,12 +57,6 @@ constexpr kj::LiteralStringConst operator ""_kjc(const char* str, size_t n);
 
 namespace kj {
 
-// Our STL string SFINAE trick does not work with GCC 4.7, but it works with Clang and GCC 4.8, so
-// we'll just preprocess it out if not supported.
-#if __clang__ || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8) || _MSC_VER
-#define KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP 1
-#endif
-
 // =======================================================================================
 // StringPtr -- A NUL-terminated ArrayPtr<const char> containing UTF-8 text.
 //
@@ -95,25 +89,6 @@ public:
   inline StringPtr(const char8_t* begin KJ_LIFETIMEBOUND, const char8_t* end KJ_LIFETIMEBOUND)
       : StringPtr(reinterpret_cast<const char*>(begin), reinterpret_cast<const char*>(end)) {}
   // KJ strings are and always have been UTF-8, so screw this C++20 char8_t stuff.
-#endif
-
-#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
-  template <
-    typename T,
-    typename = EnableIf<canConvert<decltype(instance<T>().c_str()), const char*>()>,
-    typename = decltype(instance<T>().size())>
-  inline constexpr StringPtr(const T& t KJ_LIFETIMEBOUND): StringPtr(t.c_str(), t.size()) {}
-  // Allow implicit conversion from any class that has a c_str() and a size() method (namely, std::string).
-  // We use a template trick to detect std::string in order to avoid including the header for
-  // those who don't want it.
-  template <
-    typename T,
-    typename = EnableIf<canConvert<decltype(instance<T>().c_str()), const char*>()>,
-    typename = decltype(instance<T>().size())>
-  inline constexpr operator T() const { return {cStr(), size()}; }
-  // Allow implicit conversion to any class that has a c_str() method and a size() method (namely, std::string).
-  // We use a template trick to detect std::string in order to avoid including the header for
-  // those who don't want it.
 #endif
 
   inline constexpr operator ArrayPtr<const char>() const;
@@ -180,13 +155,13 @@ public:
   // attachment should be an object that somehow owns the String that the StringPtr is pointing at.
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, const StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:
@@ -337,13 +312,13 @@ public:
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, String&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, const String&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:
@@ -445,13 +420,13 @@ public:
   Maybe<T> tryParseAs() const { return StringPtr(*this).tryParseAs<T>(); }
 
   template <typename T>
-  inline auto as() { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, ConstString&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return T::from(this); }
-  // Syntax sugar for invoking T::from.
+  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(T*, const ConstString&).
   // Used to chain conversion calls rather than wrap with function.
 
 private:
@@ -610,10 +585,8 @@ struct Stringifier {
   CappedArray<char, 32> operator*(double f) const;
   CappedArray<char, sizeof(const void*) * 2 + 1> operator*(const void* s) const;
 
-#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
   template <typename T, typename Result = decltype(instance<T>().toString())>
   inline Result operator*(T&& value) const { return kj::fwd<T>(value).toString(); }
-#endif
 };
 static KJ_CONSTEXPR(const) Stringifier STR = Stringifier();
 

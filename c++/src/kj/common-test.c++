@@ -1169,12 +1169,12 @@ KJ_TEST("kj::ArrayPtr fill") {
   KJ_EXPECT("abcabcabca"_kjb == byteArray2);
 }
 
-struct Std {
-  template<typename T>
-  static std::span<T> from(ArrayPtr<T>* arr) {
-    return std::span<T>(arr->begin(), arr->size());
-  }
-};
+struct Std {};
+
+template<typename T>
+static std::span<T> asImpl(Std*, ArrayPtr<T>& arr) {
+  return std::span<T>(arr.begin(), arr.size());
+}
 
 KJ_TEST("ArrayPtr::as<Std>") {
   int rawArray[] = {12, 34, 56, 34, 12};

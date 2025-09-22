@@ -408,8 +408,8 @@ if [ $IS_CLANG = yes ]; then
   # Don't fail out on this ridiculous "argument unused during compilation" warning.
   export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
 
-  # Require C++20.
-  export CXXFLAGS="$CXXFLAGS -std=gnu++20"
+  # Require C++23.
+  export CXXFLAGS="$CXXFLAGS -std=gnu++23"
 
   # Embed -stdlib=libc++ into CXX instead of CXXFLAGS in order to work around an irritating libtool
   # bug.
@@ -420,7 +420,7 @@ else
   # -Wstrict-overflow, so we disable it.
   CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized -Wno-strict-overflow"
 
-  export CXXFLAGS="$CXXFLAGS -std=gnu++20"
+  export CXXFLAGS="$CXXFLAGS -std=gnu++23"
 fi
 
 cd c++
@@ -431,7 +431,7 @@ doit make -j$PARALLEL check
 if [ $IS_CLANG = no ]; then
   # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
   # as system headers so warnings in them are ignored.
-  doit ${CXX:-g++} -isystem src -std=c++20 -fno-permissive -pedantic -Wall -Wextra -Werror \
+  doit ${CXX:-g++} -isystem src -std=c++23 -fno-permissive -pedantic -Wall -Wextra -Werror \
       -c src/capnp/test.capnp.c++ -o /dev/null
 fi
 
@@ -447,13 +447,13 @@ test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 cd samples
 
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++20 addressbook.c++ addressbook.capnp.c++ -o addressbook \
+doit ${CXX:-g++} -std=c++23 addressbook.c++ addressbook.capnp.c++ -o addressbook \
     $CXXFLAGS $(pkg-config --cflags --libs capnp)
 
 doit capnp compile -oc++ calculator.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++20 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
+doit ${CXX:-g++} -std=c++23 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
-doit ${CXX:-g++} -std=c++20 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
+doit ${CXX:-g++} -std=c++23 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
     $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
 
 test_samples

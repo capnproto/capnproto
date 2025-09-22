@@ -37,9 +37,6 @@ namespace kj {
 template<typename T>
 class Rc;
 
-template<typename T>
-class EnableAddRefToThis;
-
 class Refcounted: private Disposer {
   // Subclass this to create a class that contains a reference count. Then, use
   // `kj::refcounted<T>()` to allocate a new refcounted pointer.
@@ -75,6 +72,11 @@ public:
   // Check if there are multiple references to this object. This is sometimes useful for deciding
   // whether it's safe to modify the object vs. make a copy.
 
+protected:
+  inline auto addRefToThis(this auto&& self) {
+    return addRcRefInternal(&self);
+  }
+
 private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
@@ -100,9 +102,6 @@ private:
 
   template <typename T>
   friend class Rc;
-
-  template <typename T>
-  friend class EnableAddRefToThis;
 };
 
 template <typename T, typename... Params>
@@ -153,7 +152,6 @@ class Rc {
   // There are only three ways to obtain new Rc instances:
   // - use kj::rc<T>(...) function to create new T.
   // - use kj::Rc::addRef() and the existing Rc instance.
-  // - use EnableAddRefToThis to allow T instance to add new references to itself.
   //
   // Suggested usage patterns are:
   // - return kj::Rc as value from factory functions:
@@ -222,27 +220,6 @@ private:
 
   template <typename>
   friend class Rc;
-
-  template <typename>
-  friend class EnableAddRefToThis;
-};
-
-template<typename Self>
-class EnableAddRefToThis {
-  // Exposes addRefToThis member function for objects to add
-  // references to themselves.
-  // Can be used both with Refcounted and AtomicRefcounted objects.
-
-protected:
-  auto addRefToThis() const {
-    const Self* self = static_cast<const Self*>(this);
-    return Self::addRcRefInternal(self);
-  }
-
-  auto addRefToThis() {
-    Self* self = static_cast<Self*>(this);
-    return Self::addRcRefInternal(self);
-  }
 };
 
 template <typename T>
@@ -328,6 +305,11 @@ public:
 #endif
   }
 
+protected:
+  inline auto addRefToThis(this auto&& self) {
+    return addRcRefInternal(&self);
+  }
+
 private:
 #if _MSC_VER && !defined(__clang__)
   mutable volatile long refcount = 0;
@@ -359,9 +341,6 @@ private:
   friend class Arc;
   template <typename T, typename... Params>
   friend kj::Arc<T> arc(Params&&... params);
-
-  template <typename>
-  friend class EnableAddRefToThis;
 };
 
 template <typename T, typename... Params>
@@ -505,9 +484,6 @@ private:
 
   template <typename>
   friend class Arc;
-
-  template <typename>
-  friend class EnableAddRefToThis;
 };
 
 

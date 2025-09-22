@@ -1679,8 +1679,15 @@ public:
     kj::ArrayPtr<byte> leftover;
   };
 
+  // Used when suspending a request, or when switching protocols (e.g. WebSocket, CONNENCT).
+  // HttpinputStream can no longer be used after this.
   ReleasedBuffer releaseBuffer() {
     return { headerBuffer.releaseAsBytes(), leftover.asBytes() };
+  }
+
+  // Used when suspending a request. HttpinputStream can no longer be used after this.
+  kj::HttpHeaders releaseHeaders() {
+    return kj::mv(headers);
   }
 
   kj::Promise<void> discard(AsyncOutputStream &output, size_t maxBytes) {
@@ -7462,12 +7469,13 @@ public:
         "suspend() may only be called before the request body is consumed");
     KJ_DEFER(suspended = true);
     auto released = httpInput.releaseBuffer();
+    auto headers = httpInput.releaseHeaders();
     return {
       kj::mv(released.buffer),
       released.leftover,
       suspendable.method,
       suspendable.url,
-      suspendable.headers.cloneShallow(),
+      kj::mv(headers),
     };
   }
 

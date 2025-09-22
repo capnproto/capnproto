@@ -279,7 +279,7 @@ TEST(Array, AraryBuilderAddAll) {
     builder.addAll(text, text + 3);
     builder.add('>');
     auto array = builder.finish();
-    EXPECT_EQ("<foo>", std::string(array.begin(), array.end()));
+    EXPECT_EQ(kj::str(array), "<foo>"_kj);
   }
 
   {
@@ -290,7 +290,7 @@ TEST(Array, AraryBuilderAddAll) {
     builder.addAll(text, text + 3);
     builder.add('>');
     auto array = builder.finish();
-    EXPECT_EQ("<foo>", std::string(array.begin(), array.end()));
+    EXPECT_EQ(kj::str(array), "<foo>"_kj);
   }
 
   {
@@ -301,22 +301,22 @@ TEST(Array, AraryBuilderAddAll) {
     builder.addAll(text);
     builder.add('>');
     auto array = builder.finish();
-    EXPECT_EQ("<foo>", std::string(array.begin(), array.end()));
+    EXPECT_EQ(kj::str(array), "<foo>"_kj);
   }
 
   {
     // Complex case.
-    std::string strs[] = {"foo", "bar", "baz"};
-    ArrayBuilder<std::string> builder = heapArrayBuilder<std::string>(5);
+    kj::StringPtr strs[] = {"foo"_kj, "bar"_kj, "baz"_kj};
+    ArrayBuilder<kj::StringPtr> builder = heapArrayBuilder<kj::StringPtr>(5);
     builder.add("qux");
     builder.addAll(strs, strs + 3);
     builder.add("quux");
     auto array = builder.finish();
-    EXPECT_EQ("qux", array[0]);
-    EXPECT_EQ("foo", array[1]);
-    EXPECT_EQ("bar", array[2]);
-    EXPECT_EQ("baz", array[3]);
-    EXPECT_EQ("quux", array[4]);
+    EXPECT_EQ(array[0], "qux"_kj);
+    EXPECT_EQ(array[1], "foo"_kj);
+    EXPECT_EQ(array[2], "bar"_kj);
+    EXPECT_EQ(array[3], "baz"_kj);
+    EXPECT_EQ(array[4], "quux"_kj);
   }
 
   {
@@ -389,18 +389,18 @@ TEST(Array, HeapCopy) {
   {
     Array<char> copy = heapArray("foo", 3);
     EXPECT_EQ(3u, copy.size());
-    EXPECT_EQ("foo", std::string(copy.begin(), 3));
+    EXPECT_EQ(kj::str(copy.first(3)), "foo"_kj);
   }
   {
     Array<char> copy = heapArray(ArrayPtr<const char>("bar", 3));
     EXPECT_EQ(3u, copy.size());
-    EXPECT_EQ("bar", std::string(copy.begin(), 3));
+    EXPECT_EQ(kj::str(copy.first(3)), "bar"_kj);
   }
   {
     const char* ptr = "baz";
     Array<char> copy = heapArray<char>(ptr, ptr + 3);
     EXPECT_EQ(3u, copy.size());
-    EXPECT_EQ("baz", std::string(copy.begin(), 3));
+    EXPECT_EQ(kj::str(copy.first(3)), "baz"_kj);
   }
 }
 
@@ -611,12 +611,12 @@ TEST(Array, AttachFromArrayPtr) {
   KJ_EXPECT(destroyed1 == 3, destroyed1);
 }
 
-struct Std {
-  template<typename T>
-  static std::span<T> from(Array<T>* arr) {
-    return std::span<T>(arr->begin(), arr->size());
-  }
-};
+struct Std {};
+
+template<typename T>
+static std::span<T> asImpl(Std*, Array<T>& arr) {
+  return std::span<T>(arr.begin(), arr.size());
+}
 
 KJ_TEST("Array::as<Std>") {
   kj::Array<int> arr = kj::arr(1, 2, 4);

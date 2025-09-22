@@ -2187,7 +2187,7 @@ Event::~Event() noexcept {  // intentionally noexcept
 void Event::armDepthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
-             "Executor to queue events cross-thread.");
+             "Executor to queue events cross-thread.", threadLocalEventLoop, &loop);
   if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
@@ -2218,7 +2218,7 @@ void Event::armDepthFirst() {
 void Event::armBreadthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
-             "Executor to queue events cross-thread.");
+             "Executor to queue events cross-thread.", threadLocalEventLoop, &loop);
   if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
@@ -2246,7 +2246,7 @@ void Event::armBreadthFirst() {
 void Event::armLast() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
-             "Executor to queue events cross-thread.");
+             "Executor to queue events cross-thread.", threadLocalEventLoop, &loop);
   if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
@@ -2275,7 +2275,7 @@ void Event::armLast() {
 void Event::armWhenWouldSleep() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
-             "Executor to queue events cross-thread.");
+             "Executor to queue events cross-thread.", threadLocalEventLoop, &loop);
   if (live != MAGIC_LIVE_VALUE) {
     ([this]() noexcept {
       KJ_FAIL_ASSERT("tried to arm Event after it was destroyed", location);
@@ -2307,7 +2307,8 @@ void Event::disarm() noexcept {
     if (threadLocalEventLoop != &loop && threadLocalEventLoop != nullptr) {
       // This will crash because the method is `noexcept`. That's good because otherwise we're
       // likely going to segfault later.
-      KJ_FAIL_ASSERT("Promise destroyed from a different thread than it was created in.");
+      KJ_FAIL_ASSERT("Promise destroyed from a different thread than it was created in.",
+          threadLocalEventLoop, &loop);
     }
 
     if (loop.tail == &next) {

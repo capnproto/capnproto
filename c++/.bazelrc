@@ -12,7 +12,7 @@ build:dbg -c dbg --//src/kj:debug_memory=True
 # Opt build
 build:opt -c opt
 
-build:unix --cxxopt='-std=c++20' --host_cxxopt='-std=c++20' --force_pic --verbose_failures
+build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'
 build:unix --cxxopt='-Wsuggest-override'
@@ -51,8 +51,8 @@ startup --windows_enable_symlinks
 build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-clang-cl
 build:windows --extra_execution_platforms=//:x64_windows-clang-cl
 
-build:windows --cxxopt='/std:c++20' --host_cxxopt='/std:c++20' --verbose_failures
-# The `/std:c++20` argument is unused during boringssl compilation and we don't
+build:windows --cxxopt='/std:c++23preview' --host_cxxopt='/std:c++23preview' --verbose_failures
+# The `/std:c++23preview` argument is unused during boringssl compilation and we don't
 # want a warning when compiling each file.
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'
 # MSVC disappointingly sets __cplusplus to 199711L by default. Defining /Zc:__cplusplus makes it
