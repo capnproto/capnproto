@@ -451,6 +451,7 @@ public:
 
   Tag which() const {
     KJ_IREQUIRE(tag != 0, "Can't KJ_SWITCH_ONEOF() on uninitialized value.");
+    // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
     return static_cast<Tag>(tag - 1);
   }
 

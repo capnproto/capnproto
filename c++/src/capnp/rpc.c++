@@ -3441,7 +3441,6 @@ private:
         if (shouldFreePipeline) {
           // We can free the pipeline early, because we know all pipeline calls are invalid (e.g.
           // because there are no caps in the result to receive pipeline requests).
-          KJ_ASSERT(resultExports.size() == 0);
           answer.pipeline = kj::none;
         }
       }

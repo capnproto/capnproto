@@ -1777,7 +1777,7 @@ template <typename T>
 class Array;
 
 template <typename T>
-class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
+class [[gsl::Pointer()]] ArrayPtr: public DisallowConstCopyIfNotConst<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
   // and passing by value only copies the pointer, not the target.
 

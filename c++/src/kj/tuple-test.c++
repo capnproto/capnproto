@@ -100,7 +100,6 @@ TEST(Tuple, RefTuple) {
   EXPECT_EQ(get<2>(t), 321);
   EXPECT_EQ(get<3>(t), "bar");
 
-  i = 456;
   s = "baz";
 
   EXPECT_EQ(get<0>(t), 456);

@@ -64,7 +64,7 @@ namespace kj {
 // a NUL byte appear immediately after the last byte of the content.  This terminator byte is not
 // counted in the string's size.
 
-class StringPtr {
+class [[gsl::Pointer()]] StringPtr {
 public:
   inline constexpr StringPtr(): content("", 1) {}
   inline constexpr StringPtr(decltype(nullptr)): content("", 1) {}

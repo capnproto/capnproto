@@ -842,7 +842,6 @@ String encodeBase64(ArrayPtr<const byte> input, bool breakLines) {
   /* since we have encoded the entire input string, we know that
      there is no more input data; finalise the encoding */
   cnt = base64_encode_blockend(c, &s, breakLines);
-  c += cnt;
   total += cnt;
   /*---------- STOP ENCODING  ----------*/
 

@@ -1157,6 +1157,8 @@ public:
     }
     while (!retries.empty()) {
       auto retriesCopy = kj::mv(retries);
+      // Explicitly re-initialize retries to avoid use-after-move
+      retries = nullptr;
       KJ_ASSERT(retries.empty());
       for (auto field: retriesCopy) {
         if (!decodeField(codec, field.getName(), field.getValue(), output, unionsSeen)) {

@@ -435,11 +435,9 @@ public:
     }
 
     while (size > 0) {
-      size_t iovCount;
       if (size >= iov.size() * sizeof(ZEROS)) {
-        iovCount = iov.size();
       } else {
-        iovCount = size / sizeof(ZEROS);
+        size_t iovCount = size / sizeof(ZEROS);
         size_t rem = size % sizeof(ZEROS);
         if (rem > 0) {
           iov[iovCount++].iov_len = rem;

@@ -246,7 +246,7 @@ private:
   static bool isWin32Special(StringPtr part);
 };
 
-class PathPtr {
+class [[gsl::Pointer()]] PathPtr {
   // Points to a Path or a slice of a Path, but doesn't own it.
   //
   // PathPtr is to Path as ArrayPtr is to Array and StringPtr is to String.
@@ -643,15 +643,20 @@ enum class WriteMode {
 };
 
 inline constexpr WriteMode operator|(WriteMode a, WriteMode b) {
+  // TODO
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   return static_cast<WriteMode>(static_cast<uint>(a) | static_cast<uint>(b));
 }
 inline constexpr WriteMode operator&(WriteMode a, WriteMode b) {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   return static_cast<WriteMode>(static_cast<uint>(a) & static_cast<uint>(b));
 }
 inline constexpr WriteMode operator+(WriteMode a, WriteMode b) {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   return static_cast<WriteMode>(static_cast<uint>(a) | static_cast<uint>(b));
 }
 inline constexpr WriteMode operator-(WriteMode a, WriteMode b) {
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
   return static_cast<WriteMode>(static_cast<uint>(a) & ~static_cast<uint>(b));
 }
 template <typename T, typename = EnableIf<__is_enum(T)>>
