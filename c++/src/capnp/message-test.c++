@@ -19,6 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include <cstdlib>
+#include <ctime>
 #include "message.h"
 #include "test-util.h"
 #include <kj/array.h>
@@ -211,6 +213,63 @@ KJ_TEST("MessageBuilder::sizeInWords()") {
   capnp::SegmentArrayMessageReader reader(segments);
   checkTestMessage(reader.getRoot<TestAllTypes>());
   KJ_EXPECT(reader.sizeInWords() == expected);
+}
+
+class MyCustomMessageBuilder : public MessageBuilder {
+public:
+  MyCustomMessageBuilder(BuilderOptions options): MessageBuilder(options) {
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
+  }
+
+  kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
+    auto array = kj::heapArray<word>(minimumSize);
+    auto bytes = array.asBytes();
+    // mock dirty memory
+    for (size_t i = 0; i < bytes.size(); ++i) {
+      bytes[i] = static_cast<uint8_t>(std::rand() % 256);
+    }
+    allocations.add(kj::mv(array));
+    return allocations.back();
+  }
+
+  kj::Vector<kj::Array<word>> allocations;
+};
+
+TEST(Message, CustomBuilder_LazyZeroSegmentAlloc_DataDirty_OthersZero) {
+  // Enable lazy-zero and skip zeroing for DATA type.
+  BuilderOptions options;
+  BuilderOptions::LazyZeroSegmentAlloc lazy;
+  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
+  options.lazyZeroSegmentAlloc = &lazy;
+
+  // Use the custom allocator that returns "dirty" memory.
+  MyCustomMessageBuilder builder(options);
+
+  // Init root
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Allocate a DATA field (size 64) — because we skipped zeroing for DATA,
+  // the returned buffer should contain the allocator's random bytes.
+  auto dataBuf = root.initDataField(64);
+
+  // Check DATA is not all zero (i.e., "dirty")
+  bool dataAllZero = true;
+  for (size_t i = 0; i < dataBuf.size(); ++i) {
+    if (dataBuf[i] != 0) { dataAllZero = false; break; }
+  }
+  EXPECT_FALSE(dataAllZero);
+
+  // Check other primitive/pointer fields are zero / not present by default.
+  // (These names follow the TestAllTypes generated accessors used elsewhere in tests.)
+  EXPECT_EQ(0u, root.getUInt32Field());
+  EXPECT_EQ(0, root.getInt64Field());
+  EXPECT_EQ(0.0, root.getFloat64Field());
+  EXPECT_FALSE(root.hasTextField());
+  EXPECT_FALSE(root.hasStructField()); // if there is a nested struct field, it should be null
+
+  // Also sanity-check that writing/reading doesn't crash: getSegmentsForOutput() is callable.
+  auto segs = builder.getSegmentsForOutput();
+  EXPECT_GE(segs.size(), 1u);
 }
 
 // TODO(test):  More tests.
