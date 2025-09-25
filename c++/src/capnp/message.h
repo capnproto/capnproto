@@ -21,14 +21,6 @@
 
 #pragma once
 
-#pragma push_macro("FILE")
-#pragma push_macro("INTERFACE")
-#pragma push_macro("CONST")
-
-#undef FILE
-#undef INTERFACE
-#undef CONST
-
 #include <kj/common.h>
 #include <kj/map.h>
 #include <kj/memory.h>
@@ -40,10 +32,10 @@
 #include "layout.h"
 #include "any.h"
 
+#pragma push_macro("CONST")
+#undef CONST
 #include "schema.capnp.h"
 #pragma pop_macro("CONST")
-#pragma pop_macro("INTERFACE")
-#pragma pop_macro("FILE")
 
 CAPNP_BEGIN_HEADER
 
@@ -194,11 +186,11 @@ struct BuilderOptions {
     // Current supported types for skipping zeroing includes: [schema::Type::DATA].
 
     kj::HashSet<schema::Type::Which> skipLazyZeroTypes;
-    // Types for which zeroing should be skipped at allocation time.
+    // Types for which lazy zeroing should be skipped at allocation time.
 
     static inline void validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc);
     // Validate that skipLazyZeroTypes contains only supported types; throws on unsupported entries.
-    // This should be called before using LazyZeroSegmentAlloc to ensure correctness.
+    // This will be called by `MessageBuilder` while setting `BuilderOptions` to ensure correctness.
   };
 
   LazyZeroSegmentAlloc* lazyZeroSegmentAlloc = nullptr;
