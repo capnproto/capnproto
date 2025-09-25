@@ -21,6 +21,14 @@
 
 #pragma once
 
+#pragma push_macro("FILE")
+#pragma push_macro("INTERFACE")
+#pragma push_macro("CONST")
+
+#undef FILE
+#undef INTERFACE
+#undef CONST
+
 #include <kj/common.h>
 #include <kj/map.h>
 #include <kj/memory.h>
@@ -31,7 +39,11 @@
 #include "common.h"
 #include "layout.h"
 #include "any.h"
+
 #include "schema.capnp.h"
+#pragma pop_macro("CONST")
+#pragma pop_macro("INTERFACE")
+#pragma pop_macro("FILE")
 
 CAPNP_BEGIN_HEADER
 
@@ -148,17 +160,51 @@ private:
 };
 
 struct BuilderOptions {
+
   struct LazyZeroSegmentAlloc {
+    // Configuration for lazy zero segment allocation.
+    //
+    // This struct allows callers to opt in to lazy zeroing behavior during segment allocation.
+    // By default, Cap’n Proto requires allocators (including custom overridden allocateSegment methods)
+    // to return zero-initialized memory. When the caller enables lazy zero segment allocation by setting
+    // `BuilderOptions::lazyZeroSegmentAlloc` and uses a custom/overridden `allocateSegment`, the allocator
+    // may return un-zeroed segments. In this case, Cap’n Proto takes responsibility for
+    // zeroing during message construction: it will lazily zero only the parts of the segment that must
+    // be zeroed, and skip the regions that are explicitly configured as safe to leave un-zeroed.
+    // This approach reduces unnecessary memset work for large allocations (e.g., big `DATA` type blobs).
+    //
+    // IMPORTANT:
+    //   - A customised message builder with an overridden `allocateSegment()` must be used together with
+    //     BuilderOptions::LazyZeroSegmentAlloc to safely enable this feature. When opted in,
+    //     the allocator should NOT zero the whole segment; Cap’n Proto handles zeroing as needed.
+    //   - Only types listed in `skipLazyZeroTypes` will skip zeroing. All other memory will be zeroed
+    //     by the builder as needed.
+    //   - Users must ensure correctness: if a lazily-skipped region is read before being fully
+    //     overwritten, the read will return uninitialized memory. Do not read skipped regions
+    //     until you have completely written them.
+    //
+    // Example usage:
+    //   BuilderOptions::LazyZeroSegmentAlloc lazyZero;
+    //   lazyZero.skipLazyZeroTypes.insert(schema::Type::DATA);
+    //   BuilderOptions options;
+    //   options.lazyZeroSegmentAlloc = &lazyZero;
+    //   MyCustomMessageBuilder builder(options); // Must override allocateSegment
+    //
+    // Supported types for skipping zeroing are validated at runtime.
+    // Current supported types for skipping zeroing includes: [schema::Type::DATA].
+
     kj::HashSet<schema::Type::Which> skipLazyZeroTypes;
     // Types for which zeroing should be skipped at allocation time.
 
     static inline void validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc);
     // Validate that skipLazyZeroTypes contains only supported types; throws on unsupported entries.
-
+    // This should be called before using LazyZeroSegmentAlloc to ensure correctness.
   };
 
   LazyZeroSegmentAlloc* lazyZeroSegmentAlloc = nullptr;
   // Optional lazy-zero configuration; nullptr means lazy zero disabled.
+  // If set, controls how segment memory is lazily zeroed during allocation.
+  // See `LazyZeroSegmentAlloc` for details and usage.
 };
 
 class MessageBuilder {
