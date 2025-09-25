@@ -22,6 +22,7 @@
 #pragma once
 
 #include <kj/common.h>
+#include <kj/map.h>
 #include <kj/memory.h>
 #include <kj/mutex.h>
 #include <kj/debug.h>
@@ -30,6 +31,7 @@
 #include "common.h"
 #include "layout.h"
 #include "any.h"
+#include "schema.capnp.h"
 
 CAPNP_BEGIN_HEADER
 
@@ -81,14 +83,6 @@ struct ReaderOptions {
   // overflow by sending a very-deeply-nested (or even cyclic) message, without the message even
   // being very large.  The default limit of 64 is probably low enough to prevent any chance of
   // stack overflow, yet high enough that it is never a problem in practice.
-};
-
-struct AllocOptions {
-  bool lazyZeroSegment = false;
-  // If true, don't zero whole segment at allocation time
-
-  bool skipZeroData = false;
-  // If true and lazyZeroSegment==true, skip memset for DATA kinds
 };
 
 class MessageReader {
@@ -153,6 +147,20 @@ private:
   AnyPointer::Reader getRootInternal();
 };
 
+struct BuilderOptions {
+  struct LazyZeroSegmentAlloc {
+    kj::HashSet<schema::Type::Which> skipLazyZeroTypes;
+    // Types for which zeroing should be skipped at allocation time.
+
+    static inline void validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc);
+    // Validate that skipLazyZeroTypes contains only supported types; throws on unsupported entries.
+
+  };
+
+  LazyZeroSegmentAlloc* lazyZeroSegmentAlloc = nullptr;
+  // Optional lazy-zero configuration; nullptr means lazy zero disabled.
+};
+
 class MessageBuilder {
   // Abstract interface for an object used to allocate and build a message.  Subclasses of
   // MessageBuilder are responsible for allocating the space in which the message will be written.
@@ -199,8 +207,8 @@ public:
   //   not observe changes to the segment sizes nor newly-allocated segments caused by allocating
   //   new objects in this message.
 
-  explicit MessageBuilder(AllocOptions allocOptions);
-  // Construct MessageBuilder with allocation options.
+  explicit MessageBuilder(BuilderOptions options);
+  // Create a MessageBuilder with builder options.
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of zero'd words, throwing an exception or
@@ -252,10 +260,15 @@ public:
   size_t sizeInWords();
   // Add up the allocated space from all segments.
 
-  AllocOptions getAllocOptions() const { return allocOptions; }
-  void setAllocOptions(AllocOptions options);
+  inline const BuilderOptions& getOptions();
+  // Get the options of message builder
+
+  inline void setOptions(BuilderOptions options);
+  // Set the options of message builder
 
 private:
+  BuilderOptions options;
+
   alignas(8) void* arenaSpace[22];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
@@ -268,8 +281,6 @@ private:
   // call on the MessageBuilder.  We can't do such a call in the constructor since the subclass
   // isn't constructed yet.  This is kind of annoying because it means that getOrphanage() is
   // not thread-safe, but that shouldn't be a huge deal...
-
-  AllocOptions allocOptions = AllocOptions();
 
   _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
@@ -476,6 +487,34 @@ inline typename RootType::Reader MessageReader::getRoot() {
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
   return getRootInternal().initAs<RootType>();
+}
+
+static inline const kj::HashSet<schema::Type::Which> LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES = []() {
+    kj::HashSet<schema::Type::Which> s;
+    s.insert(schema::Type::DATA);
+    return s;
+}();
+// Supported types for lazy zeroing. Future types can be added here.
+
+inline void BuilderOptions::LazyZeroSegmentAlloc::validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc) {
+  // Validate that skipLazyZeroTypes contains only supported types; throws on unsupported entries.
+
+  for (auto type : lazyZeroSegmentAlloc.skipLazyZeroTypes) {
+    if (!LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES.contains(type)) {
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "unsupported skip zero type for LazyZeroSegmentAlloc: ", type));
+    }
+  }
+}
+
+inline const BuilderOptions& MessageBuilder::getOptions() {
+  return options;
+}
+
+inline void MessageBuilder::setOptions(const BuilderOptions options) {
+  if (options.lazyZeroSegmentAlloc != nullptr) {
+    BuilderOptions::LazyZeroSegmentAlloc::validate(*options.lazyZeroSegmentAlloc);
+  }
+  this->options = options;
 }
 
 template <typename Reader>

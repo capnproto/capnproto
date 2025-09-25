@@ -63,17 +63,20 @@ void SegmentBuilder::throwNotWritable() {
 }
 
 void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, Type type) {
-  // Obtain the arena and options.
-  BuilderArena* arena = getArena();
-  if (arena == nullptr) {
-    return;
-  }
-  auto opts = arena->getAllocOptions();
+  // Get the current arena and lazyZeroSegmentAlloc options.
+  const BuilderArena* arena = getArena();
+  if (!arena) return;
 
-  if (! opts.lazyZeroSegment) return;
-  if (type == schema::Type::DATA && opts.skipZeroData) return;
+  const auto lazyZero = arena->getLazyZeroSegmentAlloc();
 
-  memset(start, 0, words * sizeof(word));
+  // Skip if lazy zero segment alloc is not enabled.
+  if (lazyZero == nullptr) return;
+
+  // Skip zeroing for types or fields that are configured to be skipped.
+  if (lazyZero->skipLazyZeroTypes.contains(type)) return;
+
+  // Perform memset for the remaining memory that requires zeroing.
+  if (words > 0 && start) memset(start, 0, words * sizeof(word));
 }
 
 // =======================================================================================
@@ -366,11 +369,6 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
     }
     return nullptr;
   }
-}
-
-AllocOptions BuilderArena::getAllocOptions() const {
-  if (message == nullptr) return AllocOptions();
-  return message->getAllocOptions();
 }
 
 void BuilderArena::reportReadLimitReached() {

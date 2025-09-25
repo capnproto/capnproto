@@ -118,8 +118,11 @@ MessageBuilder::~MessageBuilder() noexcept(false) {
   }
 }
 
-MessageBuilder::MessageBuilder(AllocOptions allocOptions)
-    : allocatedArena(false), allocOptions(allocOptions) {}
+MessageBuilder::MessageBuilder(BuilderOptions options): options(options), allocatedArena(false) {
+  if (options.lazyZeroSegmentAlloc != nullptr) {
+    BuilderOptions::LazyZeroSegmentAlloc::validate(*options.lazyZeroSegmentAlloc);
+  }
+}
 
 MessageBuilder::MessageBuilder(kj::ArrayPtr<SegmentInit> segments)
     : allocatedArena(false) {
@@ -144,10 +147,6 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
         "First allocated word of new arena was not the first word in its segment.");
     return allocation.segment;
   }
-}
-
-void MessageBuilder::setAllocOptions(AllocOptions options) {
-  allocOptions = options;
 }
 
 AnyPointer::Builder MessageBuilder::getRootInternal() {

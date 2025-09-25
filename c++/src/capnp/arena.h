@@ -219,9 +219,10 @@ public:
   // false.
 
   void doLazyZeroSegment(word* start, size_t words, Type type = schema::Type::ANY_POINTER);
-  // Ensure the word-range [start, start + words) is zeroed according to the arena options.
-  // If allowSkipForDataInit == true and the arena option skipZeroData is set, this may skip
-  // zeroing for data-initialization allocations.
+  // Ensures that the word range [start, start + words) is zeroed lazily.
+  // The zeroing is skipped if a LazyZeroSegmentAlloc is provided and `type` is listed in skipLazyZeroTypes.
+  // Otherwise, the range is guaranteed to be zeroed.
+
 
 private:
   word* pos;
@@ -349,7 +350,7 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
 
-  AllocOptions getAllocOptions() const;
+  inline BuilderOptions::LazyZeroSegmentAlloc* getLazyZeroSegmentAlloc() const;
 
 private:
   MessageBuilder* message;
@@ -523,6 +524,11 @@ inline bool SegmentBuilder::tryExtend(word* from, word* to) {
   } else {
     return false;
   }
+}
+
+inline BuilderOptions::LazyZeroSegmentAlloc* BuilderArena::getLazyZeroSegmentAlloc() const {
+  if (message == nullptr) return nullptr;
+  return message->getOptions().lazyZeroSegmentAlloc;
 }
 
 }  // namespace _ (private)

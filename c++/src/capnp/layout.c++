@@ -458,7 +458,8 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
-      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena, Type type = schema::Type::ANY_POINTER)) {
+      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena,
+      Type type = schema::Type::ANY_POINTER)) {
     // Allocate space in the message for a new object, creating far pointers if necessary. The
     // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
     // return zero'd memory).
@@ -480,6 +481,8 @@ struct WireHelpers {
     //   In this case, `segment` starts out null; the allocation takes place in an arbitrary
     //   segment belonging to the arena.  `ref` will be initialized as a non-far pointer, but its
     //   target offset will be set to zero.
+    // * `type` is an optional hint used for lazily zeroing memory. It is used together with
+    //  LazyZeroSegmentAlloc to skip or do lazy zero for certain schema types.
 
     if (orphanArena == nullptr) {
       if (!ref->isNull()) zeroObject(segment, capTable, ref);
@@ -513,13 +516,20 @@ struct WireHelpers {
 
         // Initialize the landing pad to indicate that the data immediately follows the pad.
         ref = reinterpret_cast<WirePointer*>(ptr);
+
+        // Help lazy zero out segment space for the newly allocated segment if LazyZeroSegmentAlloc is enabled.
+        // Zero the landing pad for a par pointer.
         segment->doLazyZeroSegment(ptr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
+        // Zero the actual object segment space following the landing pad.
         segment->doLazyZeroSegment(ptr + POINTER_SIZE_IN_WORDS, static_cast<size_t>(amount), /*type=*/type);
+
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
 
         // Allocated space follows new pointer.
         return ptr + POINTER_SIZE_IN_WORDS;
       } else {
+        // Help lazy zero the object's segment space if LazyZeroSegmentAlloc is enabled, ensures the
+        // object memory is clean before initialization.
         segment->doLazyZeroSegment(ptr, static_cast<size_t>(amount), /*type=*/type);
         ref->setKindAndTarget(kind, ptr, segment);
         return ptr;
