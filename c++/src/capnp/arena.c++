@@ -62,7 +62,7 @@ void SegmentBuilder::throwNotWritable() {
       "referenced data, only Readers, because that data is const.");
 }
 
-void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, Type type) {
+void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, schema::Type::Which type) {
   // Get the current arena and lazyZeroSegmentAlloc options.
   const BuilderArena* arena = getArena();
   if (!arena) return;

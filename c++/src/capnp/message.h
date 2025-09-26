@@ -523,7 +523,7 @@ inline typename RootType::Builder MessageBuilder::initRoot() {
   return getRootInternal().initAs<RootType>();
 }
 
-static inline const kj::HashSet<schema::Type::Which> LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES = []() {
+static const kj::HashSet<schema::Type::Which> LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES = []() {
     kj::HashSet<schema::Type::Which> s;
     s.insert(schema::Type::DATA);
     return s;

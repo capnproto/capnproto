@@ -459,7 +459,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
       SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena,
-      Type type = schema::Type::ANY_POINTER)) {
+      schema::Type::Which type = schema::Type::ANY_POINTER)) {
     // Allocate space in the message for a new object, creating far pointers if necessary. The
     // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
     // return zero'd memory).
