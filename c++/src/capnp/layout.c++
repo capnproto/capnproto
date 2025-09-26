@@ -518,9 +518,9 @@ struct WireHelpers {
         ref = reinterpret_cast<WirePointer*>(ptr);
 
         // Help lazy zero out segment space for the newly allocated segment if LazyZeroSegmentAlloc is enabled.
-        // Zero the landing pad for a par pointer.
+        // Zero the landing pad for a far pointer.
         segment->doLazyZeroSegment(ptr, static_cast<size_t>(POINTER_SIZE_IN_WORDS));
-        // Zero the actual object segment space following the landing pad.
+        // Zero the actual object segment space following the landing pad (may skip based on configuration).
         segment->doLazyZeroSegment(ptr + POINTER_SIZE_IN_WORDS, static_cast<size_t>(amount), /*type=*/type);
 
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
@@ -529,7 +529,7 @@ struct WireHelpers {
         return ptr + POINTER_SIZE_IN_WORDS;
       } else {
         // Help lazy zero the object's segment space if LazyZeroSegmentAlloc is enabled, ensures the
-        // object memory is clean before initialization.
+        // object memory is clean before initialization (may skip based on configuration).
         segment->doLazyZeroSegment(ptr, static_cast<size_t>(amount), /*type=*/type);
         ref->setKindAndTarget(kind, ptr, segment);
         return ptr;

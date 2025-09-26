@@ -31,11 +31,7 @@
 #include "common.h"
 #include "layout.h"
 #include "any.h"
-
-#pragma push_macro("CONST")
-#undef CONST
-#include "schema.capnp.h"
-#pragma pop_macro("CONST")
+#include "schema.h"
 
 CAPNP_BEGIN_HEADER
 

@@ -235,7 +235,7 @@ public:
   kj::Vector<kj::Array<word>> allocations;
 };
 
-TEST(Message, CustomBuilder_LazyZeroSegmentAlloc_DataDirty_OthersZero) {
+TEST(Message, LazyZeroCustomBuilder_DataDirty_OthersZero) {
   // Enable lazy-zero and skip zeroing for DATA type.
   BuilderOptions options;
   BuilderOptions::LazyZeroSegmentAlloc lazy;
@@ -272,7 +272,7 @@ TEST(Message, CustomBuilder_LazyZeroSegmentAlloc_DataDirty_OthersZero) {
   EXPECT_GE(segs.size(), 1u);
 }
 
-TEST(Message, CustomBuilder_MultipleDataFields_Dirty_OtherZero) {
+TEST(Message, LazyZeroCustomBuilder_MultipleDataFieldsDirty_OtherZero) {
   // Enable lazy-zero and skip zeroing for DATA type.
   BuilderOptions options;
   BuilderOptions::LazyZeroSegmentAlloc lazy;
@@ -283,7 +283,7 @@ TEST(Message, CustomBuilder_MultipleDataFields_Dirty_OtherZero) {
   auto root = builder.initRoot<TestAllTypes>();
 
   // Allocate two DATA fields with different sizes.
-  auto d1 = root.initDataField(16);
+  auto d1 = root.initDataField(64);
   auto d2 = root.initDataField(128);
 
   // Verify both DATA buffers are not all zero (i.e. "dirty").
@@ -302,7 +302,7 @@ TEST(Message, CustomBuilder_MultipleDataFields_Dirty_OtherZero) {
   EXPECT_FALSE(root.hasTextField());
 }
 
-TEST(Message, CustomBuilder_DataWriteAndReadback_Persists) {
+TEST(Message, LazyZeroCustomBuilder_DataWriteAndReadback_Persists) {
   // Setup builder with lazy-zero skip for DATA.
   BuilderOptions options;
   BuilderOptions::LazyZeroSegmentAlloc lazy;
@@ -329,7 +329,7 @@ TEST(Message, CustomBuilder_DataWriteAndReadback_Persists) {
   }
 }
 
-TEST(Message, CustomBuilder_ClonePreservesDirtyData_viaSegments) {
+TEST(Message, LazyZeroCustomBuilder_ClonePreservesDirtyData_ViaSegments) {
   // Use lazy-zero skipping for DATA to keep allocator's dirty bytes.
   BuilderOptions options;
   BuilderOptions::LazyZeroSegmentAlloc lazy;
@@ -360,7 +360,7 @@ TEST(Message, CustomBuilder_ClonePreservesDirtyData_viaSegments) {
   }
 }
 
-TEST(Message, CustomBuilder_ManySmallDataAllocations_Stress) {
+TEST(Message, LazyZeroCustomBuilder_ManySmallDataAllocations_Stress) {
   // Setup builder and lazy-zero skip for DATA.
   BuilderOptions options;
   BuilderOptions::LazyZeroSegmentAlloc lazy;
@@ -390,7 +390,7 @@ TEST(Message, CustomBuilder_ManySmallDataAllocations_Stress) {
   EXPECT_GE(segs.size(), 1u);
 }
 
-TEST(Message, CustomBuilder_PartialOverwriteLeavesRestDirtyForData) {
+TEST(Message, LazyZeroCustomBuilder_PartialOverwriteLeavesRestDirtyForData) {
   // Setup lazy-zero skip for DATA.
   BuilderOptions options;
   BuilderOptions::LazyZeroSegmentAlloc lazy;
