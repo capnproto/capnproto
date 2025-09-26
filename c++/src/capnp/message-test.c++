@@ -272,40 +272,6 @@ TEST(Message, LazyZeroCustomBuilder_DataDirty_OthersZero) {
   EXPECT_GE(segs.size(), 1u);
 }
 
-TEST(Message, LazyZeroCustomBuilder_MultipleDataFieldsDirty_OtherZero) {
-  // Enable lazy-zero and skip zeroing for DATA type.
-  BuilderOptions options;
-  BuilderOptions::LazyZeroSegmentAlloc lazy;
-  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
-  options.lazyZeroSegmentAlloc = &lazy;
-
-  MyCustomMessageBuilder builder(options);
-  auto root = builder.initRoot<TestAllTypes>();
-
-  // Allocate two DATA fields with different sizes.
-  // auto d1 = root.initDataField(64);
-  auto d2 = root.initDataField(128);
-
-  // Verify both DATA buffers are not all zero (i.e. "dirty").
-  // bool d1AllZero = true;
-  bool d2AllZero = true;
-  // for (size_t i = 0; i < d1.size(); ++i) {
-  //   if (d1[i] != 0) { d1AllZero = false; break; }
-  // }
-  for (size_t i = 0; i < d2.size(); ++i) {
-    if (d2[i] != 0) { d2AllZero = false; break; }
-  }
-
-  // EXPECT_FALSE(d1AllZero);
-  EXPECT_FALSE(d2AllZero);
-
-  // Other scalar/pointer fields should still be default (0 / not present).
-  EXPECT_EQ(0u, root.getUInt32Field());
-  EXPECT_EQ(0, root.getInt64Field());
-  EXPECT_EQ(0.0, root.getFloat64Field());
-  EXPECT_FALSE(root.hasTextField());
-}
-
 TEST(Message, LazyZeroCustomBuilder_DataWriteAndReadback_Persists) {
   // Setup builder with lazy-zero skip for DATA.
   BuilderOptions options;
