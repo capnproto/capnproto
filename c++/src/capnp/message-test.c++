@@ -272,6 +272,152 @@ TEST(Message, CustomBuilder_LazyZeroSegmentAlloc_DataDirty_OthersZero) {
   EXPECT_GE(segs.size(), 1u);
 }
 
+TEST(Message, CustomBuilder_MultipleDataFields_Dirty_OtherZero) {
+  // Enable lazy-zero and skip zeroing for DATA type.
+  BuilderOptions options;
+  BuilderOptions::LazyZeroSegmentAlloc lazy;
+  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
+  options.lazyZeroSegmentAlloc = &lazy;
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Allocate two DATA fields with different sizes.
+  auto d1 = root.initDataField(16);
+  auto d2 = root.initDataField(128);
+
+  // Verify both DATA buffers are not all zero (i.e. "dirty").
+  bool d1AllZero = true;
+  for (auto b : d1) { if (b != 0) { d1AllZero = false; break; } }
+  bool d2AllZero = true;
+  for (auto b : d2) { if (b != 0) { d2AllZero = false; break; } }
+
+  EXPECT_FALSE(d1AllZero);
+  EXPECT_FALSE(d2AllZero);
+
+  // Other scalar/pointer fields should still be default (0 / not present).
+  EXPECT_EQ(0u, root.getUInt32Field());
+  EXPECT_EQ(0, root.getInt64Field());
+  EXPECT_EQ(0.0, root.getFloat64Field());
+  EXPECT_FALSE(root.hasTextField());
+}
+
+TEST(Message, CustomBuilder_DataWriteAndReadback_Persists) {
+  // Setup builder with lazy-zero skip for DATA.
+  BuilderOptions options;
+  BuilderOptions::LazyZeroSegmentAlloc lazy;
+  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
+  options.lazyZeroSegmentAlloc = &lazy;
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Fill DATA with a recognizable pattern.
+  const size_t N = 64;
+  auto data = root.initDataField(N);
+  for (size_t i = 0; i < N; ++i) data[i] = static_cast<capnp::byte>(i & 0xFF);
+
+  // Read back by creating a SegmentArrayMessageReader from the builder segments.
+  auto segs = builder.getSegmentsForOutput();
+  capnp::SegmentArrayMessageReader readerFromSegments(segs);
+  auto readBack = readerFromSegments.getRoot<TestAllTypes>();
+  auto readData = readBack.getDataField();
+
+  ASSERT_EQ(readData.size(), N);
+  for (size_t i = 0; i < N; ++i) {
+    EXPECT_EQ(readData[i], static_cast<capnp::byte>(i & 0xFF));
+  }
+}
+
+TEST(Message, CustomBuilder_ClonePreservesDirtyData_viaSegments) {
+  // Use lazy-zero skipping for DATA to keep allocator's dirty bytes.
+  BuilderOptions options;
+  BuilderOptions::LazyZeroSegmentAlloc lazy;
+  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
+  options.lazyZeroSegmentAlloc = &lazy;
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Allocate DATA and capture original bytes.
+  const size_t SIZE = 100;
+  auto data = root.initDataField(SIZE);
+  kj::Vector<capnp::byte> original;
+  original.reserve(SIZE);
+  for (size_t i = 0; i < SIZE; ++i) {
+    original.add(data[i]);
+  }
+
+  // Export segments and re-read using SegmentArrayMessageReader to simulate clone/readback.
+  auto segs = builder.getSegmentsForOutput();
+  capnp::SegmentArrayMessageReader sar(segs);
+  auto readBack = sar.getRoot<TestAllTypes>();
+  auto copiedData = readBack.getDataField();
+
+  ASSERT_EQ(copiedData.size(), SIZE);
+  for (size_t i = 0; i < SIZE; ++i) {
+    EXPECT_EQ(copiedData[i], original[i]);
+  }
+}
+
+TEST(Message, CustomBuilder_ManySmallDataAllocations_Stress) {
+  // Setup builder and lazy-zero skip for DATA.
+  BuilderOptions options;
+  BuilderOptions::LazyZeroSegmentAlloc lazy;
+  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
+  options.lazyZeroSegmentAlloc = &lazy;
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Many small DATA allocations to stress allocation paths.
+  const int COUNT = 256;
+  kj::Vector< kj::ArrayPtr<capnp::byte> > allocated;
+  allocated.reserve(COUNT);
+
+  for (int i = 0; i < COUNT; ++i) {
+    auto d = root.initDataField(8 + (i % 16));
+    allocated.add(d);
+
+    // Quick check: each data allocation should have at least one non-zero byte.
+    bool allZero = true;
+    for (auto b : d) { if (b != 0) { allZero = false; break; } }
+    EXPECT_FALSE(allZero);
+  }
+
+  // Ensure at least one segment exists.
+  auto segs = builder.getSegmentsForOutput();
+  EXPECT_GE(segs.size(), 1u);
+}
+
+TEST(Message, CustomBuilder_PartialOverwriteLeavesRestDirtyForData) {
+  // Setup lazy-zero skip for DATA.
+  BuilderOptions options;
+  BuilderOptions::LazyZeroSegmentAlloc lazy;
+  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
+  options.lazyZeroSegmentAlloc = &lazy;
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const size_t SIZE = 64;
+  auto data = root.initDataField(SIZE);
+
+  // Overwrite only the first half with zeros, leave the second half untouched.
+  for (size_t i = 0; i < SIZE / 2; ++i) data[i] = 0;
+
+  // The second half should remain dirty (not all zero).
+  bool secondHalfAllZero = true;
+  for (size_t i = SIZE / 2; i < SIZE; ++i) {
+    if (data[i] != 0) { secondHalfAllZero = false; break; }
+  }
+  EXPECT_FALSE(secondHalfAllZero);
+
+  // Other fields remain default.
+  EXPECT_EQ(0u, root.getUInt32Field());
+  EXPECT_FALSE(root.hasTextField());
+}
+
 // TODO(test):  More tests.
 
 }  // namespace
