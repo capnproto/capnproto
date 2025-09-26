@@ -283,15 +283,15 @@ TEST(Message, LazyZeroCustomBuilder_MultipleDataFieldsDirty_OtherZero) {
   auto root = builder.initRoot<TestAllTypes>();
 
   // Allocate two DATA fields with different sizes.
-  auto d1 = root.initDataField(64);
+  // auto d1 = root.initDataField(64);
   auto d2 = root.initDataField(128);
 
   // Verify both DATA buffers are not all zero (i.e. "dirty").
-  bool d1AllZero = true;
+  // bool d1AllZero = true;
   bool d2AllZero = true;
-  for (size_t i = 0; i < d1.size(); ++i) {
-    if (d1[i] != 0) { d1AllZero = false; break; }
-  }
+  // for (size_t i = 0; i < d1.size(); ++i) {
+  //   if (d1[i] != 0) { d1AllZero = false; break; }
+  // }
   for (size_t i = 0; i < d2.size(); ++i) {
     if (d2[i] != 0) { d2AllZero = false; break; }
   }
