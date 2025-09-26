@@ -288,9 +288,13 @@ TEST(Message, LazyZeroCustomBuilder_MultipleDataFieldsDirty_OtherZero) {
 
   // Verify both DATA buffers are not all zero (i.e. "dirty").
   bool d1AllZero = true;
-  for (auto b : d1) { if (b != 0) { d1AllZero = false; break; } }
   bool d2AllZero = true;
-  for (auto b : d2) { if (b != 0) { d2AllZero = false; break; } }
+  for (size_t i = 0; i < d1.size(); ++i) {
+    if (d1[i] != 0) { d1AllZero = false; break; }
+  }
+  for (size_t i = 0; i < d2.size(); ++i) {
+    if (d2[i] != 0) { d2AllZero = false; break; }
+  }
 
   EXPECT_FALSE(d1AllZero);
   EXPECT_FALSE(d2AllZero);
