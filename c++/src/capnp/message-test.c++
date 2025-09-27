@@ -217,7 +217,7 @@ KJ_TEST("MessageBuilder::sizeInWords()") {
 
 class MyCustomMessageBuilder : public MessageBuilder {
 public:
-  MyCustomMessageBuilder(BuilderOptions options): MessageBuilder(options) {
+  MyCustomMessageBuilder(BuilderOptions options): MessageBuilder(kj::mv(options)) {
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
   }
 
@@ -238,9 +238,8 @@ public:
 TEST(Message, LazyZeroCustomBuilder_DataDirty_OthersZero) {
   // Enable lazy-zero and skip zeroing for DATA type.
   BuilderOptions options;
-  BuilderOptions::LazyZeroSegmentAlloc lazy;
-  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
-  options.lazyZeroSegmentAlloc = &lazy;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
 
   // Use the custom allocator that returns "dirty" memory.
   MyCustomMessageBuilder builder(options);
@@ -275,9 +274,8 @@ TEST(Message, LazyZeroCustomBuilder_DataDirty_OthersZero) {
 TEST(Message, LazyZeroCustomBuilder_DataWriteAndReadback_Persists) {
   // Setup builder with lazy-zero skip for DATA.
   BuilderOptions options;
-  BuilderOptions::LazyZeroSegmentAlloc lazy;
-  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
-  options.lazyZeroSegmentAlloc = &lazy;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
 
   MyCustomMessageBuilder builder(options);
   auto root = builder.initRoot<TestAllTypes>();
@@ -302,9 +300,8 @@ TEST(Message, LazyZeroCustomBuilder_DataWriteAndReadback_Persists) {
 TEST(Message, LazyZeroCustomBuilder_ClonePreservesDirtyData_ViaSegments) {
   // Use lazy-zero skipping for DATA to keep allocator's dirty bytes.
   BuilderOptions options;
-  BuilderOptions::LazyZeroSegmentAlloc lazy;
-  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
-  options.lazyZeroSegmentAlloc = &lazy;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
 
   MyCustomMessageBuilder builder(options);
   auto root = builder.initRoot<TestAllTypes>();
@@ -333,9 +330,8 @@ TEST(Message, LazyZeroCustomBuilder_ClonePreservesDirtyData_ViaSegments) {
 TEST(Message, LazyZeroCustomBuilder_ManySmallDataAllocations_Stress) {
   // Setup builder and lazy-zero skip for DATA.
   BuilderOptions options;
-  BuilderOptions::LazyZeroSegmentAlloc lazy;
-  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
-  options.lazyZeroSegmentAlloc = &lazy;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
 
   MyCustomMessageBuilder builder(options);
   auto root = builder.initRoot<TestAllTypes>();
@@ -363,9 +359,8 @@ TEST(Message, LazyZeroCustomBuilder_ManySmallDataAllocations_Stress) {
 TEST(Message, LazyZeroCustomBuilder_PartialOverwriteLeavesRestDirtyForData) {
   // Setup lazy-zero skip for DATA.
   BuilderOptions options;
-  BuilderOptions::LazyZeroSegmentAlloc lazy;
-  lazy.skipLazyZeroTypes.insert(schema::Type::DATA);
-  options.lazyZeroSegmentAlloc = &lazy;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
 
   MyCustomMessageBuilder builder(options);
   auto root = builder.initRoot<TestAllTypes>();

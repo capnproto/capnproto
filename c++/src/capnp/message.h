@@ -21,8 +21,8 @@
 
 #pragma once
 
+#include <set>
 #include <kj/common.h>
-#include <kj/map.h>
 #include <kj/memory.h>
 #include <kj/mutex.h>
 #include <kj/debug.h>
@@ -172,16 +172,18 @@ struct BuilderOptions {
     //     until you have completely written them.
     //
     // Example usage:
-    //   BuilderOptions::LazyZeroSegmentAlloc lazyZero;
-    //   lazyZero.skipLazyZeroTypes.insert(schema::Type::DATA);
     //   BuilderOptions options;
-    //   options.lazyZeroSegmentAlloc = &lazyZero;
-    //   MyCustomMessageBuilder builder(options); // Must override allocateSegment
+    //   options.lazyZeroSegmentAlloc.enableLazyZero = true;
+    //   options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
+    //   MyCustomMessageBuilder builder(options);  // Must override allocateSegment
     //
     // Supported types for skipping zeroing are validated at runtime.
     // Current supported types for skipping zeroing includes: [schema::Type::DATA].
 
-    kj::HashSet<schema::Type::Which> skipLazyZeroTypes;
+    bool enableLazyZero = false;
+    // Indicates whether lazy zero segment allocation is enabled.
+
+    std::set<schema::Type::Which> skipLazyZeroTypes;
     // Types for which lazy zeroing should be skipped at allocation time.
 
     static inline void validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc);
@@ -189,8 +191,8 @@ struct BuilderOptions {
     // This will be called by `MessageBuilder` while setting `BuilderOptions` to ensure correctness.
   };
 
-  LazyZeroSegmentAlloc* lazyZeroSegmentAlloc = nullptr;
-  // Optional lazy-zero configuration; nullptr means lazy zero disabled.
+  LazyZeroSegmentAlloc lazyZeroSegmentAlloc;
+  // Optional lazy zero segment allocation configuration; set `enableLazyZero` as true to enable.
   // If set, controls how segment memory is lazily zeroed during allocation.
   // See `LazyZeroSegmentAlloc` for details and usage.
 };
@@ -523,11 +525,9 @@ inline typename RootType::Builder MessageBuilder::initRoot() {
   return getRootInternal().initAs<RootType>();
 }
 
-static const kj::HashSet<schema::Type::Which> LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES = []() {
-    kj::HashSet<schema::Type::Which> s;
-    s.insert(schema::Type::DATA);
-    return s;
-}();
+static const std::set<schema::Type::Which> LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES {
+    schema::Type::DATA
+};
 // Supported types for lazy zeroing. Future types can be added here.
 
 inline void BuilderOptions::LazyZeroSegmentAlloc::validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc) {
@@ -544,9 +544,9 @@ inline const BuilderOptions& MessageBuilder::getOptions() {
   return options;
 }
 
-inline void MessageBuilder::setOptions(const BuilderOptions options) {
-  if (options.lazyZeroSegmentAlloc != nullptr) {
-    BuilderOptions::LazyZeroSegmentAlloc::validate(*options.lazyZeroSegmentAlloc);
+inline void MessageBuilder::setOptions(BuilderOptions options) {
+  if (options.lazyZeroSegmentAlloc.enableLazyZero) {
+    BuilderOptions::LazyZeroSegmentAlloc::validate(options.lazyZeroSegmentAlloc);
   }
   this->options = options;
 }

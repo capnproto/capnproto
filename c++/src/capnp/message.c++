@@ -119,8 +119,8 @@ MessageBuilder::~MessageBuilder() noexcept(false) {
 }
 
 MessageBuilder::MessageBuilder(BuilderOptions options): options(options), allocatedArena(false) {
-  if (options.lazyZeroSegmentAlloc != nullptr) {
-    BuilderOptions::LazyZeroSegmentAlloc::validate(*options.lazyZeroSegmentAlloc);
+  if (options.lazyZeroSegmentAlloc.enableLazyZero) {
+    BuilderOptions::LazyZeroSegmentAlloc::validate(options.lazyZeroSegmentAlloc);
   }
 }
 

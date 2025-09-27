@@ -67,13 +67,13 @@ void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, schema::Type::
   const BuilderArena* arena = getArena();
   if (!arena) return;
 
-  const auto lazyZero = arena->getLazyZeroSegmentAlloc();
+  const auto& lazyZero = arena->getLazyZeroSegmentAlloc();
 
   // Skip if lazy zero segment alloc is not enabled.
-  if (lazyZero == nullptr) return;
+  if (! lazyZero.enableLazyZero) return;
 
   // Skip zeroing for types or fields that are configured to be skipped.
-  if (lazyZero->skipLazyZeroTypes.contains(type)) return;
+  if (lazyZero.skipLazyZeroTypes.contains(type)) return;
 
   // Perform memset for the remaining memory that requires zeroing.
   if (words > 0 && start) memset(start, 0, words * sizeof(word));

@@ -350,7 +350,7 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
 
-  inline BuilderOptions::LazyZeroSegmentAlloc* getLazyZeroSegmentAlloc() const;
+  inline const BuilderOptions::LazyZeroSegmentAlloc& getLazyZeroSegmentAlloc() const;
 
 private:
   MessageBuilder* message;
@@ -526,8 +526,9 @@ inline bool SegmentBuilder::tryExtend(word* from, word* to) {
   }
 }
 
-inline BuilderOptions::LazyZeroSegmentAlloc* BuilderArena::getLazyZeroSegmentAlloc() const {
-  if (message == nullptr) return nullptr;
+static const BuilderOptions::LazyZeroSegmentAlloc defaultAlloc;
+inline const BuilderOptions::LazyZeroSegmentAlloc& BuilderArena::getLazyZeroSegmentAlloc() const {
+  if (message == nullptr) return defaultAlloc;
   return message->getOptions().lazyZeroSegmentAlloc;
 }
 
