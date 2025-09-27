@@ -219,8 +219,8 @@ public:
   // false.
 
   void doLazyZeroSegment(word* start, size_t words, schema::Type::Which type = schema::Type::ANY_POINTER);
-  // Ensures that the word range [start, start + words) is zeroed lazily.
-  // The zeroing is skipped if a LazyZeroSegmentAlloc is provided and `type` is listed in skipLazyZeroTypes.
+  // Ensures that the word range [start, start + words) is zeroed lazily
+  // The zeroing is skipped if LazyZeroSegmentAlloc is not enabled or `type` is listed in skipLazyZeroTypes.
   // Otherwise, the range is guaranteed to be zeroed.
 
 
