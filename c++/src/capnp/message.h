@@ -534,7 +534,7 @@ inline void BuilderOptions::LazyZeroSegmentAlloc::validate(const LazyZeroSegment
   // Validate that skipLazyZeroTypes contains only supported types; throws on unsupported entries.
 
   for (auto type : lazyZeroSegmentAlloc.skipLazyZeroTypes) {
-    if (!LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES.contains(type)) {
+    if (LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES.find(type) == LAZY_ZERO_SUPPORTED_SKIP_ZERO_TYPES.end()) {
       kj::throwFatalException(KJ_EXCEPTION(FAILED, "unsupported skip zero type for LazyZeroSegmentAlloc: ", type));
     }
   }

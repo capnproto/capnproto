@@ -223,7 +223,6 @@ public:
   // The zeroing is skipped if LazyZeroSegmentAlloc is not enabled or `type` is listed in skipLazyZeroTypes.
   // Otherwise, the range is guaranteed to be zeroed.
 
-
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the

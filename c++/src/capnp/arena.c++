@@ -73,7 +73,7 @@ void SegmentBuilder::doLazyZeroSegment(word* start, size_t words, schema::Type::
   if (! lazyZero.enableLazyZero) return;
 
   // Skip zeroing for types or fields that are configured to be skipped.
-  if (lazyZero.skipLazyZeroTypes.contains(type)) return;
+  if (lazyZero.skipLazyZeroTypes.find(type) != lazyZero.skipLazyZeroTypes.end()) return;
 
   // Perform memset for the remaining memory that requires zeroing.
   if (words > 0 && start) memset(start, 0, words * sizeof(word));
