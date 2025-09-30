@@ -383,6 +383,78 @@ TEST(Message, LazyZeroCustomBuilder_PartialOverwriteLeavesRestDirtyForData) {
   EXPECT_FALSE(root.hasTextField());
 }
 
+TEST(Message, LazyZeroCustomBuilder_NoSkipTypes_DataZero) {
+  // enableLazyZero = true, but skipLazyZeroTypes is empty -> DATA should be zeroed.
+  BuilderOptions options;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  // skipLazyZeroTypes left empty
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const size_t N = 32;
+  auto data = root.initDataField(N);
+
+  bool allZero = true;
+  for (size_t i = 0; i < data.size(); ++i) {
+    if (data[i] != 0) { allZero = false; break; }
+  }
+  EXPECT_TRUE(allZero);
+}
+
+TEST(Message, LazyZeroCustomBuilder_SkipText_ConstructionThrows) {
+  // enableLazyZero = true but skipLazyZeroTypes contains TEXT.
+  // Expect builder construction to fail (throw).
+  BuilderOptions options;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::TEXT);
+
+  // Use any-throw expectation to avoid depending on the exact exception type.
+  EXPECT_ANY_THROW({
+    MyCustomMessageBuilder builder(options);
+  });
+}
+
+TEST(Message, LazyZeroCustomBuilder_SkipData_ModifyDataAndOtherFields_Persist) {
+  // skip DATA for lazy-zero; modify DATA and other fields and verify persistence.
+  BuilderOptions options;
+  options.lazyZeroSegmentAlloc.enableLazyZero = true;
+  options.lazyZeroSegmentAlloc.skipLazyZeroTypes.insert(schema::Type::DATA);
+
+  MyCustomMessageBuilder builder(options);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Write pattern into DATA.
+  const size_t N = 24;
+  auto data = root.initDataField(N);
+  for (size_t i = 0; i < N; ++i) data[i] = static_cast<capnp::byte>((i * 7) & 0xFF);
+
+  // Modify other primitive/pointer fields.
+  root.setUInt32Field(0xDEADBEEF);
+  root.setInt64Field(-123456789);
+  root.setFloat64Field(3.14159);
+  root.setTextField("hello-world");
+
+  // Export segments and read back via reader to simulate serialization/clone.
+  auto segs = builder.getSegmentsForOutput();
+  capnp::SegmentArrayMessageReader reader(segs);
+  auto readBack = reader.getRoot<TestAllTypes>();
+
+  // Verify DATA persisted.
+  auto readData = readBack.getDataField();
+  ASSERT_EQ(readData.size(), N);
+  for (size_t i = 0; i < N; ++i) {
+    EXPECT_EQ(readData[i], static_cast<capnp::byte>((i * 7) & 0xFF));
+  }
+
+  // Verify other fields persisted.
+  EXPECT_EQ(readBack.getUInt32Field(), 0xDEADBEEF);
+  EXPECT_EQ(readBack.getInt64Field(), -123456789);
+  EXPECT_DOUBLE_EQ(readBack.getFloat64Field(), 3.14159);
+  EXPECT_TRUE(readBack.hasTextField());
+  EXPECT_EQ(readBack.getTextField(), "hello-world");
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

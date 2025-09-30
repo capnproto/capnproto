@@ -185,6 +185,11 @@ struct BuilderOptions {
 
     std::set<schema::Type::Which> skipLazyZeroTypes;
     // Types for which lazy zeroing should be skipped at allocation time.
+    //
+    // Use std::set to preserve conventional value semantics (copy-constructible /
+    // copy-assignable) at the public API boundary. kj::HashSet is move-oriented
+    // (requires kj::mv) and would force users to reason about ownership. The
+    // element type is a small enum, so copying the container is inexpensive.
 
     static inline void validate(const LazyZeroSegmentAlloc& lazyZeroSegmentAlloc);
     // Validate that skipLazyZeroTypes contains only supported types; throws on unsupported entries.
