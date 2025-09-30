@@ -1,6 +1,7 @@
 -std=c++23
 -Isrc
 -Itmp
+-Ibazel-bin/src
 -DKJ_HEADER_WARNINGS
 -DCAPNP_HEADER_WARNINGS
 -DCAPNP_DEBUG_TYPES

@@ -6805,14 +6805,12 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
-                            kj::AsyncIoStream& connection,
-                            ConnectResponse& response,
-                            kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, TlsSettings tlsSettings) override {
     connectCount++;
     response.accept(statusCodeToSend, "OK", HttpHeaders(headerTable));
-    return connection.pumpTo(connection).ignoreResult();
+    return {.connection = connection.pumpTo(connection).ignoreResult(), .tlsStarter = kj::Maybe<TlsStarterCallback>()};
   }
 
 private:
@@ -6837,14 +6835,13 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
-                            kj::AsyncIoStream& connection,
-                            ConnectResponse& response,
-                            kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, TlsSettings tlsSettings) override {
     connectCount++;
     auto out = response.reject(statusCodeToSend, "Failed"_kj, HttpHeaders(headerTable), 4);
-    return out->write("boom"_kjb).attach(kj::mv(out));
+    return {.connection = out->write("boom"_kjb).attach(kj::mv(out)),
+            .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
 private:
@@ -6865,14 +6862,12 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
-                            kj::AsyncIoStream& connection,
-                            ConnectResponse& response,
-                            kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, TlsSettings tlsSettings) override {
     response.accept(200, "OK", HttpHeaders(headerTable));
     // Return an immediately resolved promise and drop the connection
-    return kj::READY_NOW;
+    return {.connection = kj::READY_NOW, .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
 private:
@@ -6892,15 +6887,13 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
-                            kj::AsyncIoStream& connection,
-                            ConnectResponse& response,
-                            kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, TlsSettings tlsSettings) override {
     response.accept(200, "OK", HttpHeaders(headerTable));
     auto promise KJ_UNUSED = connection.write("hello"_kjb);
     // Return an immediately resolved promise and drop the io
-    return kj::READY_NOW;
+    return {.connection = kj::READY_NOW, .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
 private:
@@ -6923,13 +6916,13 @@ private:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
-                            kj::AsyncIoStream& connection,
-                            ConnectResponse& response,
-                            kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, TlsSettings tlsSettings) override {
     response.accept(200, "OK", HttpHeaders(tunneledService.table));
-    return server.listenHttp(kj::Own<kj::AsyncIoStream>(&connection, kj::NullDisposer::instance));
+    return {.connection = server.listenHttp(kj::Own<kj::AsyncIoStream>(
+                &connection, kj::NullDisposer::instance)),
+            .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
   class SimpleHttpService final: public HttpService {
@@ -6963,14 +6956,12 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
-                            kj::AsyncIoStream& connection,
-                            ConnectResponse& response,
-                            kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, TlsSettings tlsSettings) override {
     response.accept(200, "OK", HttpHeaders(headerTable));
     connection.shutdownWrite();
-    return kj::READY_NOW;
+    return {.connection = kj::READY_NOW, .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
 private:
@@ -7518,11 +7509,12 @@ KJ_TEST("CONNECT pipelined via an adapter") {
   HttpHeaderTable tunneledHeaderTable;
   HttpClientSettings settings;
 
-  auto promise = adaptedService->connect("https://example.org"_kj,
+  auto result = adaptedService->connect("https://example.org"_kj,
                                          HttpHeaders(connectHeaderTable),
                                          *clientPipe.ends[0],
                                          response,
-                                         {}).attach(kj::mv(clientPipe.ends[0]));
+                                         {});
+  auto connection = result.connection.attach(kj::mv(clientPipe.ends[0]));
 
   auto proxyClient = newHttpClient(tunneledHeaderTable, *clientPipe.ends[1], settings)
       .attach(kj::mv(clientPipe.ends[1]));
@@ -7591,11 +7583,13 @@ KJ_TEST("CONNECT pipelined via an adapter (reject)") {
   HttpHeaderTable tunneledHeaderTable;
   HttpClientSettings settings;
 
-  auto promise = adaptedService->connect("https://example.org"_kj,
+  auto result = adaptedService->connect("https://example.org"_kj,
                                          HttpHeaders(connectHeaderTable),
                                          *clientPipe.ends[0],
                                          response,
-                                         {}).attach(kj::mv(clientPipe.ends[0]));
+                                         {});
+  auto connection = result.connection.attach(kj::mv(clientPipe.ends[0]));
+
 
   auto proxyClient = newHttpClient(tunneledHeaderTable, *clientPipe.ends[1], settings)
       .attach(kj::mv(clientPipe.ends[1]));
