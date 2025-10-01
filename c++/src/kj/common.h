@@ -2327,6 +2327,13 @@ private:
   void* id;
 };
 
+template <typename U, typename T>
+decltype(auto) from(T&& t) {
+  // Helper method for uniform conversion of non-kj objects to kj.
+  // Usage: `kj::from<Something>(t)` that will translate into fromImpl((Something*)nullptr, t) call.
+  return fromImpl((U*)nullptr, kj::fwd<T>(t));
+}
+
 }  // namespace kj
 
 template <kj::_::ByteLiteral s>

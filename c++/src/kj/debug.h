@@ -122,6 +122,11 @@
 //   NDEBUG is defined), but you can also define it explicitly (e.g. -DKJ_DEBUG).  Generally,
 //   production builds should NOT use KJ_DEBUG as it may enable expensive checks that are unlikely
 //   to fail.
+// * Many of the macros have "_AT" variants -- like KJ_LOG_AT(), KJ_REQUIRE_AT(), etc. -- which
+//   accept a kj::SourceLocation value to use when reporting the file and line number of failures.
+//   These are useful for writing assertion functions for tests, to report failures at the source
+//   location within the test where the assertion function was called, rather than the location
+//   where the macro was called.
 
 #pragma once
 
@@ -153,16 +158,36 @@ namespace kj {
     ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
                         "" #__VA_ARGS__, __VA_ARGS__)
 
+#define KJ_LOG_AT(severity, location, ...) \
+  for (bool _kj_shouldLog = ::kj::_::Debug::shouldLog(::kj::LogSeverity::severity); \
+       _kj_shouldLog; _kj_shouldLog = false) \
+    ::kj::_::Debug::log(location.fileName, location.lineNumber, ::kj::LogSeverity::severity, \
+                        "" #__VA_ARGS__, __VA_ARGS__)
+
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
+
+// TODO(cleanup): It may be possible to reduce code duplication between the macros and their _AT
+// variants by making Debug::Fault take a SourceLocation instead of __FILE__/__LINE__.
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
     for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
         #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, __VA_ARGS__);; f.fatal())
 
+#define KJ_REQUIRE_AT(cond, location, ...) \
+  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
+    for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
+        ::kj::Exception::Type::FAILED, #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, \
+        __VA_ARGS__);; f.fatal())
+
 #define KJ_FAIL_REQUIRE(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                                nullptr, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
+
+#define KJ_FAIL_REQUIRE_AT(location, ...) \
+  for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
+                               ::kj::Exception::Type::FAILED, nullptr, "" #__VA_ARGS__, \
+                               __VA_ARGS__);; f.fatal())
 
 #define KJ_SYSCALL(call, ...) \
   if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, false)) {} else \
@@ -194,7 +219,7 @@ namespace kj {
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
            ::kj::_::Debug::Win32Result(errorNumber), code, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
-#endif
+#endif  // _WIN32 || __CYGWIN__
 
 #define KJ_UNIMPLEMENTED(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
@@ -221,16 +246,32 @@ namespace kj {
     return _kj_result; \
   }())
 
+#define KJ_REQUIRE_NONNULL_AT(value, location, ...) \
+  (*[&] { \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (KJ_UNLIKELY(!_kj_result)) { \
+      ::kj::_::Debug::Fault(location.fileName, location.lineNumber, ::kj::Exception::Type::FAILED, \
+                            #value " != nullptr", "" #__VA_ARGS__, __VA_ARGS__).fatal(); \
+    } \
+    return _kj_result; \
+  }())
+
 #define KJ_EXCEPTION(type, ...) \
   ::kj::Exception(::kj::Exception::Type::type, __FILE__, __LINE__, \
       ::kj::_::Debug::makeDescription("" #__VA_ARGS__, __VA_ARGS__))
 
-#else
+#else  // KJ_MSVC_TRADITIONAL_CPP
 
 #define KJ_LOG(severity, ...) \
   for (bool _kj_shouldLog = ::kj::_::Debug::shouldLog(::kj::LogSeverity::severity); \
        _kj_shouldLog; _kj_shouldLog = false) \
     ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
+                        #__VA_ARGS__, ##__VA_ARGS__)
+
+#define KJ_LOG_AT(severity, location, ...) \
+  for (bool _kj_shouldLog = ::kj::_::Debug::shouldLog(::kj::LogSeverity::severity); \
+       _kj_shouldLog; _kj_shouldLog = false) \
+    ::kj::_::Debug::log(location.fileName, location.lineNumber, ::kj::LogSeverity::severity, \
                         #__VA_ARGS__, ##__VA_ARGS__)
 
 #define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
@@ -240,9 +281,20 @@ namespace kj {
     for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
         #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, ##__VA_ARGS__);; f.fatal())
 
+#define KJ_REQUIRE_AT(cond, location, ...) \
+  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
+    for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
+        ::kj::Exception::Type::FAILED, #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, \
+        ##__VA_ARGS__);; f.fatal())
+
 #define KJ_FAIL_REQUIRE(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                                nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_FAIL_REQUIRE_AT(location, ...) \
+  for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
+                               ::kj::Exception::Type::FAILED, nullptr, #__VA_ARGS__, \
+                               ##__VA_ARGS__);; f.fatal())
 
 #define KJ_SYSCALL(call, ...) \
   if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, false)) {} else \
@@ -305,6 +357,17 @@ namespace kj {
     return _kj_result; \
   }()))
 
+#define KJ_REQUIRE_NONNULL_AT(value, location, ...) \
+  (*([&] { \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (KJ_UNLIKELY(!_kj_result)) { \
+      ::kj::_::Debug::Fault(location.fileName, location.lineNumber, \
+                            ::kj::Exception::Type::FAILED, #value " != nullptr", #__VA_ARGS__, \
+                            ##__VA_ARGS__).fatal(); \
+    } \
+    return _kj_result; \
+  }()))
+
 #else
 
 #define KJ_REQUIRE_NONNULL(value, ...) \
@@ -317,13 +380,24 @@ namespace kj {
     kj::mv(_kj_result); \
   }))
 
+#define KJ_REQUIRE_NONNULL_AT(value, location, ...) \
+  (*({ \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (KJ_UNLIKELY(!_kj_result)) { \
+      ::kj::_::Debug::Fault(location.fileName, location.lineNumber, \
+                            ::kj::Exception::Type::FAILED, #value " != nullptr", #__VA_ARGS__, \
+                            ##__VA_ARGS__).fatal(); \
+    } \
+    kj::mv(_kj_result); \
+  }))
+
 #endif
 
 #define KJ_EXCEPTION(type, ...) \
   ::kj::Exception(::kj::Exception::Type::type, __FILE__, __LINE__, \
       ::kj::_::Debug::makeDescription(#__VA_ARGS__, ##__VA_ARGS__))
 
-#endif
+#endif  // KJ_MSVC_TRADITIONAL_CPP, else
 
 #define KJ_SYSCALL_HANDLE_ERRORS(call) \
   if (int _kjSyscallError = ::kj::_::Debug::syscallError([&](){return (call);}, false)) \
@@ -392,6 +466,9 @@ namespace kj {
 #define KJ_ASSERT KJ_REQUIRE
 #define KJ_FAIL_ASSERT KJ_FAIL_REQUIRE
 #define KJ_ASSERT_NONNULL KJ_REQUIRE_NONNULL
+#define KJ_ASSERT_AT KJ_REQUIRE_AT
+#define KJ_FAIL_ASSERT_AT KJ_FAIL_REQUIRE_AT
+#define KJ_ASSERT_NONNULL_AT KJ_REQUIRE_NONNULL_AT
 // Use "ASSERT" in place of "REQUIRE" when the problem is local to the immediate surrounding code.
 // That is, if the assert ever fails, it indicates that the immediate surrounding code is broken.
 

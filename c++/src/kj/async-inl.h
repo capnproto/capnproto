@@ -412,6 +412,7 @@ public:
       //   code bloat to handle this case.
       next->arena = nullptr;
       T* ptr = reinterpret_cast<T*>(next.get()) - 1;
+      // NOLINTNEXTLINE(clang-analyzer-security.ArrayBound)
       ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
       ptr->arena = arena;
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
@@ -596,6 +597,7 @@ class PtmfHelper {
     if (voff & 1) {
       voff &= ~1;
 #endif
+      // NOLINTNEXTLINE(clang-analyzer-core.UndefinedBinaryOperatorResult)
       return *(void**)(*(char**)obj + voff);
     } else {
       return ptr;

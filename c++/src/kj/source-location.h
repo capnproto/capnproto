@@ -31,6 +31,9 @@ KJ_BEGIN_HEADER
 // Checking for clang version is problematic due to the way that XCode lies about __clang_major__.
 // Instead we use __has_builtin as the feature check to check clang.
 // Context: https://github.com/capnproto/capnproto/issues/1305
+//
+// TODO(someday): However, both gcc and msvc provide a <source_location> implementation starting
+// in C++20 that we could delegate to, or use directly.
 #ifdef __has_builtin
 #if __has_builtin(__builtin_COLUMN)
 #define KJ_CALLER_COLUMN() __builtin_COLUMN()
@@ -49,6 +52,12 @@ class SourceLocation {
   // this is a non-STL wrapper over the compiler primitives (these are the same across MSVC/clang/
   // gcc). Additionally this uses kj::StringPtr for holding the strings instead of const char* which
   // makes it integrate a little more nicely into KJ.
+  //
+  // NOTE: The primitives used by SourceLocation are designed for use in macro-free code; they may
+  // be inaccurate in macro-expanded code.  For example, if a macro call creates a SourceLocation,
+  // msvc and gcc will set its line and column to the beginning of the call, while clang will set
+  // it to the end.  This can be particularly confusing if a multiline lambda is passed as a
+  // macro parameter.
 
   struct Badge { explicit constexpr Badge() = default; };
   // Neat little trick to make sure we can never call SourceLocation with explicit arguments.

@@ -25,6 +25,7 @@
 
 #include "debug.h"
 #include "exception.h"
+#include "source-location.h"
 #include <kj/compat/gtest.h>
 #include <string>
 #include <stdio.h>
@@ -260,6 +261,99 @@ TEST(Debug, Log) {
   EXPECT_LOG_EQ([&](){
     EXPECT_FATAL(KJ_FAIL_ASSERT("foo")); line = __LINE__;
   }, kj::str("fatal exception: ", fileLine(__FILE__, line), ": failed: foo\n"));
+}
+
+// Testing KJ_LOG_AT, etc. macros:
+void myRequire(bool cond, kj::SourceLocation location = {}) {
+  KJ_REQUIRE_AT(cond, location, "a_message");
+}
+void myFailRequire(kj::SourceLocation location = {}) {
+  KJ_FAIL_REQUIRE_AT(location, "a_message");
+}
+void myRequireNonnull(kj::Maybe<int> value, kj::SourceLocation location = {}) {
+  KJ_REQUIRE_NONNULL_AT(value, location, "a_message");
+}
+void myAssert(bool cond, kj::SourceLocation location = {}) {
+  KJ_ASSERT_AT(cond, location, "a_message");
+}
+void myFailAssert(kj::SourceLocation location = {}) {
+  KJ_FAIL_ASSERT_AT(location, "a_message");
+}
+void myAssertNonnull(kj::Maybe<int> value, kj::SourceLocation location = {}) {
+  KJ_ASSERT_NONNULL_AT(value, location, "a_message");
+}
+void myLog(kj::SourceLocation location = {}) {
+  KJ_LOG_AT(WARNING, location, "a_message");
+}
+// Using functional versions of the utility macros used elsewhere, because the __builtin_LINE()
+// primitive used by SourceLocation is inaccurate in macros:
+void expectLogEq(auto&& f, auto&& expTextFunc) {
+  kj::String text;
+  {
+    MockExceptionCallback mockCallback;
+    f();
+    text = kj::mv(mockCallback.text);
+  }
+  kj::String expText = expTextFunc();
+  EXPECT_EQ(expText, text);
+};
+void expectFatal(auto&& f) {
+  try {
+    f();
+    KJ_FAIL_EXPECT("expected exception");
+  } catch (MockException e) {
+  } catch (...) {
+    KJ_FAIL_EXPECT("wrong exception");
+  }
+}
+TEST(Debug, LogAt) {
+  int line;
+
+  expectLogEq([&](){
+    myLog(); line = __LINE__;
+  }, [&](){
+    return kj::str("log message: ", fileLine(__FILE__, line), ":+0: warning: a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myRequire(1 == 2); }); line = __LINE__;
+  }, [&](){
+    return kj::str("fatal exception: ", fileLine(__FILE__, line), ": "
+        "failed: expected cond; a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myFailRequire(); }); line = __LINE__;
+  }, [&](){
+    return kj::str("fatal exception: ", fileLine(__FILE__, line), ": failed: a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myRequireNonnull(kj::none); }); line = __LINE__;
+  }, [&](){
+    return kj::str("fatal exception: ", fileLine(__FILE__, line), ": "
+        "failed: expected value != nullptr; a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myAssert(1 == 2); }); line = __LINE__;
+  }, [&](){
+    return kj::str("fatal exception: ", fileLine(__FILE__, line), ": "
+        "failed: expected cond; a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myFailAssert(); }); line = __LINE__;
+  }, [&](){
+    return kj::str("fatal exception: ", fileLine(__FILE__, line), ": failed: a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myAssertNonnull(kj::none); }); line = __LINE__;
+  }, [&](){
+    return kj::str("fatal exception: ", fileLine(__FILE__, line), ": "
+        "failed: expected value != nullptr; a_message\n");
+  });
 }
 
 TEST(Debug, Exception) {

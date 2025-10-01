@@ -22,6 +22,7 @@
 #include "string.h"
 #include <kj/compat/gtest.h>
 #include <string>
+#include <string_view>
 #include "vector.h"
 #include <locale.h>
 #include <stdint.h>
@@ -490,6 +491,14 @@ static std::string asImpl(Std*, const StringPtr& str) {
   return std::string(str.cStr());
 }
 
+inline kj::StringPtr fromImpl(Std*, const std::string& str) {
+  return kj::StringPtr(str.c_str(), str.length());
+}
+
+inline kj::ArrayPtr<const char> fromImpl(Std*, const std::string_view& str) {
+  return kj::arrayPtr(str.data(), str.length());
+}
+
 KJ_TEST("as<Std>") {
   String str = kj::str("foo"_kj);
   std::string stdStr = str.as<Std>();
@@ -498,6 +507,16 @@ KJ_TEST("as<Std>") {
   StringPtr ptr = "bar"_kj;
   std::string stdPtr = ptr.as<Std>();
   KJ_EXPECT(stdPtr == "bar");
+}
+
+KJ_TEST("from<Std>") {
+  std::string str("foo");
+  kj::StringPtr stdStr = kj::from<Std>(str);
+  KJ_EXPECT(stdStr == "foo"_kj);
+
+  std::string_view view(str);
+  kj::ArrayPtr<const char> stdView = kj::from<Std>(view);
+  KJ_EXPECT(stdView == "foo"_kjb);
 }
 
 struct OnlyMoves {
