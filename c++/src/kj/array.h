@@ -272,6 +272,10 @@ public:
   // Syntax sugar for invoking asImpl(U*, const Array&).
   // Used to chain conversion calls rather than wrap with function.
 
+  inline bool hasNullDisposer() const {return disposer == &NullArrayDisposer::instance; }
+  // Returns true if array uses NullArrayDisposer, intended for use with string literal
+  // ConstStrings.
+
 private:
   T* ptr;
   size_t size_;

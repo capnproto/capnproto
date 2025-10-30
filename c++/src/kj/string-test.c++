@@ -431,6 +431,22 @@ KJ_TEST("ConstString attachment lifetimes") {
   KJ_EXPECT(destroyed3 == 3, destroyed3);
 }
 
+KJ_TEST("ConstString clone") {
+  // Clone from string literal – cloned string points to same location
+  kj::ConstString literalConst = "foo"_kjc;
+  kj::ConstString literalClone = literalConst.clone();
+  KJ_EXPECT(literalClone == "foo");
+  KJ_EXPECT(literalConst.cStr() == literalClone.cStr());
+
+  // Clone from heap string – strings point to different locations
+  kj::ConstString heapConst = kj::ConstString(kj::str("bar"));
+  kj::ConstString heapClone = heapConst.clone();
+  KJ_EXPECT(heapConst.cStr() != heapClone.cStr());
+  // still valid after original string gets deallocated
+  heapConst = nullptr;
+  KJ_EXPECT(heapClone == "bar");
+}
+
 KJ_TEST("StringPtr find") {
   // Empty string doesn't find anything
   StringPtr empty("");
