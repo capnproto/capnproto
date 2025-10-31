@@ -822,7 +822,7 @@ private:
   public:
     BlockingScope(LocalClient& client): client(client) { client.blocked = true; }
     BlockingScope(): client(kj::none) {}
-    BlockingScope(BlockingScope&& other): client(other.client) { other.client = kj::none; }
+    BlockingScope(BlockingScope&& other): client(kj::mv(other.client)) {}
     KJ_DISALLOW_COPY(BlockingScope);
 
     ~BlockingScope() noexcept(false) {

@@ -581,7 +581,7 @@ public:
 
     // Wait for the server to indicate completion. Meanwhile, if the
     // promise is canceled from the client side, we propagate cancellation naturally.
-    co_await pipeline.ignoreResult();
+    co_await pipeline;
 
     // Once the server indicates it is done, then we can cancel pumping the request, because
     // obviously the server won't use it. We should not cancel pumping the response since there
@@ -665,7 +665,7 @@ public:
       return kj::NEVER_DONE;
     });
 
-    co_await pipeline.ignoreResult();
+    co_await pipeline;
   }
 
 

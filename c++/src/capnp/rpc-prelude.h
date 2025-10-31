@@ -104,6 +104,14 @@ public:
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
 
   kj::Promise<void> run();
+  // Listens for incoming RPC connections and handles them. Never returns normally, but could throw
+  // an exception if the system becomes unable to accept new connections (e.g. because the
+  // underlying listen socket becomes broken somehow).
+  //
+  // For historical reasons, the RpcSystem will actually run itself even if you do not call this.
+  // However, if an exception is thrown, the RpcSystem will log the exception to the console and
+  // then cease accepting new connections. In this case, your server may be in a broken state, but
+  // without restarting. All servers should therefore call run() and handle failures in some way.
 
 private:
   class Impl;

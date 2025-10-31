@@ -218,7 +218,8 @@ class ForkBranch;
 class PromiseBase {
 public:
   kj::String trace();
-  // Dump debug info about this promise.
+  // Returns a dump of debug info about this promise.  Not for production use.  Requires RTTI.
+  // This method does NOT consume the promise as other methods do.
 
 private:
   OwnPromiseNode node;
