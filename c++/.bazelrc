@@ -12,6 +12,14 @@ build:dbg -c dbg --//src/kj:debug_memory=True
 # Opt build
 build:opt -c opt
 
+build:thin-lto --config=opt
+build:thin-lto --cxxopt='-flto=thin'
+build:thin-lto --linkopt='-flto=thin'
+
+build:profile --config=thin-lto
+build:profile --copt='-O3'
+build:profile --linkopt="-Wl,-O3"
+
 build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'

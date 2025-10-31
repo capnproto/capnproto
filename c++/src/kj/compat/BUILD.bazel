@@ -159,3 +159,14 @@ cc_test(
         "//src/kj:kj-test",
     ],
 )
+
+cc_binary(
+    name = "http-bench",
+    srcs = ["http-bench.c++"],
+    deps = [
+        ":kj-http",
+        "//src/kj:kj-async",
+        "//src/capnp/compat:http-over-capnp",
+        "//src/capnp:capnp-rpc",
+    ],
+)
