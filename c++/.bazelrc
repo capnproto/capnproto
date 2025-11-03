@@ -1,9 +1,5 @@
-common --noenable_bzlmod
 common --enable_platform_specific_config
 
-# Bazel 8: Need to manually enable WORKSPACE logic. With a future release, we'll have to transition
-# to bzlmod and manually load starlarkified dependencies like rules_cc.
-common --enable_workspace
 common --incompatible_autoload_externally=
 
 # Debug build configuration with maximum runtime checks

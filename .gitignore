@@ -84,4 +84,5 @@
 /dockcross
 
 # bazel output
+/c++/MODULE.bazel.lock
 bazel-*
