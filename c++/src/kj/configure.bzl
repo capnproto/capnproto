@@ -1,4 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 def kj_configure():
     """Generates set of flag, settings for kj configuration.
@@ -88,8 +89,7 @@ def kj_configure():
         name = "use_kj_enable_irequire",
         flag_values = {"kj_enable_irequire": "True"},
     )
-
-    native.cc_library(
+    cc_library(
         name = "kj-defines",
         defines = select({
             "//src/kj:use_openssl": ["KJ_HAS_OPENSSL"],

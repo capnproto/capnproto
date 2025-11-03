@@ -1,5 +1,6 @@
 """Bazel rule to compile .capnp files into c++."""
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(":capnp_gen.bzl", "capnp_gen", _capnp_provider = "capnp_provider")
 
 # re-export for backward compatibility
@@ -43,7 +44,7 @@ def cc_capnp_library(
         capnpc_plugin = "@capnp-cpp//src/capnp:capnpc-c++",
         target_compatible_with = target_compatible_with,
     )
-    native.cc_library(
+    cc_library(
         name = name,
         srcs = srcs_cpp,
         hdrs = hdrs,
