@@ -75,16 +75,16 @@ public:
   Exception(Exception&& other) = default;
   ~Exception() noexcept;
 
-  const char* getFile() const { return file; }
-  int getLine() const { return line; }
-  Type getType() const { return type; }
-  StringPtr getDescription() const { return description; }
-  ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
+  const char* getFile() const { return storage->file; }
+  int getLine() const { return storage->line; }
+  Type getType() const { return storage->type; }
+  StringPtr getDescription() const { return storage->description; }
+  ArrayPtr<void* const> getStackTrace() const { return arrayPtr(storage->trace, storage->traceCount); }
 
-  void setDescription(kj::String&& desc) { description = kj::mv(desc); }
+  void setDescription(kj::String&& desc) { storage->description = kj::mv(desc); }
 
-  StringPtr getRemoteTrace() const { return remoteTrace; }
-  void setRemoteTrace(kj::String&& value) { remoteTrace = kj::mv(value); }
+  StringPtr getRemoteTrace() const { return storage->remoteTrace; }
+  void setRemoteTrace(kj::String&& value) { storage->remoteTrace = kj::mv(value); }
   // Additional stack trace data originating from a remote server. If present, then
   // `getStackTrace()` only traces up until entry into the RPC system, and the remote trace
   // contains any trace information returned over the wire. This string is human-readable but the
@@ -104,7 +104,7 @@ public:
   };
 
   inline Maybe<const Context&> getContext() const {
-    KJ_IF_SOME(c, context) {
+    KJ_IF_SOME(c, storage->context) {
       return *c;
     } else {
       return kj::none;
@@ -158,31 +158,40 @@ public:
   // KJ / Cap'n Proto. In particular, Cloudflare Workers commonly has to convert a JavaScript
   // exception to KJ and back. The exception is serialized using V8 serialization.
 
+  bool isValid() const { return storage != nullptr; }
+  // When exception is moved away from, it becomes invalid.
+
 private:
-  String ownFile;
-  const char* file;
-  int line;
-  Type type;
-  String description;
-  Maybe<Own<Context>> context;
-  String remoteTrace;
-  void* trace[32];
-  uint traceCount;
+  struct Storage {
+    String ownFile;
+    const char* file;
+    int line;
+    Type type;
+    String description;
+    Maybe<Own<Context>> context;
+    String remoteTrace;
+    void* trace[32];
+    uint traceCount = 0;
 
-  bool isFullTrace = false;
-  // Is `trace` a full trace to the top of the stack (or as close as we could get before we ran
-  // out of space)? If this is false, then `trace` is instead a partial trace covering just the
-  // frames between where the exception was thrown and where it was caught.
-  //
-  // extendTrace() transitions this to true, and truncateCommonTrace() changes it back to false.
-  //
-  // In theory, an exception should only hold a full trace when it is in the process of being
-  // thrown via the C++ exception handling mechanism -- extendTrace() is called before the throw
-  // and truncateCommonTrace() after it is caught. Note that when exceptions propagate through
-  // async promises, the trace is extended one frame at a time instead, so isFullTrace should
-  // remain false.
+    bool isFullTrace = false;
+    // Is `trace` a full trace to the top of the stack (or as close as we could get before we ran
+    // out of space)? If this is false, then `trace` is instead a partial trace covering just the
+    // frames between where the exception was thrown and where it was caught.
+    //
+    // extendTrace() transitions this to true, and truncateCommonTrace() changes it back to false.
+    //
+    // In theory, an exception should only hold a full trace when it is in the process of being
+    // thrown via the C++ exception handling mechanism -- extendTrace() is called before the throw
+    // and truncateCommonTrace() after it is caught. Note that when exceptions propagate through
+    // async promises, the trace is extended one frame at a time instead, so isFullTrace should
+    // remain false.
 
-  kj::Vector<Detail> details;
+    kj::Vector<Detail> details;
+  };
+
+  kj::Own<Storage> storage = kj::heap<Storage>();
+  // It is very important for sizeof(kj::Exception) to be small, since it is used in result types
+  // everywhere. Encapsulate all storage in a heap-allocated object.
 
   friend class ExceptionImpl;
 };
