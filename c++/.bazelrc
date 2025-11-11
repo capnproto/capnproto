@@ -7,6 +7,8 @@ build:dbg -c dbg --//src/kj:debug_memory=True
 
 # Opt build
 build:opt -c opt
+build:opt --copt='-O3'
+build:opt --linkopt="-Wl,-O3"
 
 build:thin-lto --config=opt
 build:thin-lto --cxxopt='-flto=thin'

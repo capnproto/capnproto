@@ -2206,6 +2206,38 @@ PromiseCrossThreadFulfillerPair<T> Executor::newPromiseAndCrossThreadFulfiller()
 
 namespace kj::_ {
 
+class CoroAllocator {
+  // Coro allocator is responsible for allocating and freeing memory for coroutine frames.
+  // There is an instance of CoroAllocator per thread.
+public:
+  
+  static CoroAllocator& instance();
+  // Obtain current instance of CoroAllocator.
+
+  void* alloc(size_t size);
+  // Allocate memory for a coroutine frame.
+
+  void free(void* ptr);
+  // Free coroutine frame previously allocated by `alloc`.
+
+  struct Stats {
+    size_t alloc_count;
+    size_t free_count;
+    size_t alloc_size;
+  };
+
+  kj::Own<Stats> resetStatistics();
+  // Reset statistics and return previous statistics.
+  // The allocator does not collect statistics until the first resetStatistics() call which will
+  // return nullptr.
+
+private:
+  kj::Own<Stats> stats;
+};
+
+inline static thread_local CoroAllocator threadCoroAllocator;
+inline CoroAllocator& CoroAllocator::instance() { return threadCoroAllocator; }
+
 template <typename T> class Coroutine;
 
 template <typename T>
@@ -2300,6 +2332,15 @@ public:
   // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
   bool canImmediatelyResume() {
     return hasSuspendedAtLeastOnce && isNext();
+  }
+
+  template <typename... Args>
+  inline void* operator new(std::size_t frameSize, Args&&... args) {
+    return CoroAllocator::instance().alloc(frameSize);
+  }
+
+  inline void operator delete(void* framePtr) { 
+    return CoroAllocator::instance().free(framePtr);
   }
 
 protected:

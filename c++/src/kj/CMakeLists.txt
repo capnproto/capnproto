@@ -277,6 +277,7 @@ if(BUILD_TESTING)
       async-win32-xthread-test.c++
       async-io-test.c++
       async-queue-test.c++
+      coro-allocator-test.c++
       refcount-test.c++
       string-tree-test.c++
       encoding-test.c++

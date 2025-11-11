@@ -524,6 +524,7 @@ heavy_tests =                                                  \
   src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
   src/kj/async-queue-test.c++                                  \
+  src/kj/coro-allocator-test.c++                               \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \

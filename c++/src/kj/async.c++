@@ -3363,6 +3363,31 @@ void throwMultipleCoCaptureInvocations() {
   KJ_FAIL_REQUIRE("Attempted to invoke CaptureForCoroutine functor multiple times");
 }
 
+// ---------------------------------------------------------
+// CoroAllocator
+
+kj::Own<CoroAllocator::Stats> CoroAllocator::resetStatistics() {
+  auto oldStats = kj::mv(stats);
+  stats = kj::heap<Stats>();
+  return kj::mv(oldStats);
+}
+
+void* CoroAllocator::alloc(size_t size) {
+  if (stats) {
+    stats->alloc_count++;
+    stats->alloc_size += size;
+  }
+  return new kj::byte[size];
+}
+
+void CoroAllocator::free(void* ptr) {
+  if (stats) {
+    stats->free_count++;
+  }
+  delete[] static_cast<kj::byte*>(ptr);
+}
+
+
 }  // namespace _ (private)
 
 }  // namespace kj
