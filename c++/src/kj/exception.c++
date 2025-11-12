@@ -1201,12 +1201,17 @@ InFlightExceptionIterator::InFlightExceptionIterator()
     : ptr(currentException) {}
 
 Maybe<const Exception&> InFlightExceptionIterator::next() {
-  if (ptr == nullptr) return kj::none;
+  while (ptr != nullptr) {
+    const ExceptionImpl *result = static_cast<const ExceptionImpl *>(ptr);
+    validateExceptionPointer(result);
+    ptr = result->nextCurrentException;
+    if (!result->isMovedAway()) {
+      return *result;
+    }
+    // this exception was by consumed kj::getCaughtExceptionAsKj, skip it
+  }
 
-  const ExceptionImpl* result = static_cast<const ExceptionImpl*>(ptr);
-  validateExceptionPointer(result);
-  ptr = result->nextCurrentException;
-  return *result;
+  return kj::none;
 }
 
 kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type defaultType,
@@ -1497,7 +1502,7 @@ kj::Exception getCaughtExceptionAsKj() {
   try {
     throw;
   } catch (Exception& e) {
-    KJ_REQUIRE(e.isValid(), "getCaughtExceptionAsKj should be called at most once per catch");
+    KJ_REQUIRE(!e.isMovedAway(), "getCaughtExceptionAsKj should be called at most once per catch");
     e.truncateCommonTrace();
     return kj::mv(e);
   } catch (CanceledException) {

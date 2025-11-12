@@ -313,6 +313,45 @@ KJ_TEST("copy constructor") {
   KJ_EXPECT(e1.getDescription() == "test_exception"_kj);
 }
 
+KJ_TEST("getDestructionReason returns default exception if exception wasn't thrown") {
+  auto e =
+      kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
+                               __LINE__, "default description"_kj);
+  KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
+  KJ_EXPECT(e.getDescription() == "default description"_kj);
+}
+
+KJ_TEST("getDestructionReason returns thrown exception if it wasn't consumed") {
+  try {
+    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
+    KJ_UNREACHABLE("no exception");
+  } catch (...) {
+    auto e =
+        kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
+                                 __LINE__, "default description"_kj);
+    KJ_EXPECT(e.getType() == kj::Exception::Type::DISCONNECTED);
+    KJ_EXPECT(e.getDescription() == "test exception"_kj);
+  }
+}
+
+KJ_TEST("getDestructionReason returns default exception if exception was "
+        "consumed") {
+  try {
+    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
+    KJ_UNREACHABLE("no exception");
+  } catch (...) {
+    auto caughtException = kj::getCaughtExceptionAsKj();
+    KJ_EXPECT(caughtException.getType() == kj::Exception::Type::DISCONNECTED);
+    KJ_EXPECT(caughtException.getDescription() == "test exception"_kj);
+
+    auto e =
+        kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
+                                 __LINE__, "default description"_kj);
+    KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
+    KJ_EXPECT(e.getDescription() == "default description"_kj);
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

@@ -158,8 +158,8 @@ public:
   // KJ / Cap'n Proto. In particular, Cloudflare Workers commonly has to convert a JavaScript
   // exception to KJ and back. The exception is serialized using V8 serialization.
 
-  bool isValid() const { return storage != nullptr; }
-  // When exception is moved away from, it becomes invalid.
+  bool isMovedAway() const { return storage == nullptr; }
+  // When exception is moved away from, accessing any of its data will throw.
 
 private:
   struct Storage {
