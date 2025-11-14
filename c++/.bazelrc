@@ -15,6 +15,7 @@ build:thin-lto --linkopt='-flto=thin'
 build:profile --config=thin-lto
 build:profile --copt='-O3'
 build:profile --linkopt="-Wl,-O3"
+build:profile --dynamic_mode=off
 
 build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
