@@ -279,3 +279,13 @@ cc_test(
         ":kj-test",
     ],
 )
+
+cc_test(
+    name = "async-bench",
+    srcs = ["async-bench.c++"],
+    tags = ["google_benchmark"],
+    deps = [
+        ":kj-async",
+        "@google_benchmark//:benchmark",
+    ],
+)
