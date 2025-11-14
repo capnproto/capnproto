@@ -101,6 +101,7 @@ set(kj-test_sources
   test.c++
 )
 set(kj-test_headers
+  benchmark.h
   test.h
 )
 set(kj-test-compat_headers
@@ -266,6 +267,7 @@ if(BUILD_TESTING)
 
   if(NOT CAPNP_LITE)
     add_executable(kj-heavy-tests
+      async-bench.c++
       async-test.c++
       async-xthread-test.c++
       async-coroutine-test.c++

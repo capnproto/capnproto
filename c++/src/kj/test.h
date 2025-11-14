@@ -57,6 +57,8 @@ protected:
     }
   }
 
+  static size_t iterCount();
+
 private:
   const char* file;
   uint line;
@@ -64,8 +66,6 @@ private:
   TestCase* next;
   TestCase** prev;
   bool matchedFilter;
-
-  static size_t iterCount();
 
   friend class TestRunner;
 };
