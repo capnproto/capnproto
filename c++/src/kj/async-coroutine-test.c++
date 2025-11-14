@@ -55,9 +55,9 @@ Promise<T> simpleCoroutine(kj::Promise<T> result, kj::Promise<bool> dontThrow = 
   // https://developercommunity.visualstudio.com/t/certain-coroutines-cause-error-C7587:-/10311276,
   // which caused a compile error here. This was supposed to be resolved with version 17.9, but
   // appears to still be happening as of 17.9.6. Clean up once this has been fixed.
-  auto resolved = co_await dontThrow;
+  auto resolved = co_await kj::mv(dontThrow);
   KJ_ASSERT(resolved);
-  co_return co_await result;
+  co_return co_await kj::mv(result);
 }
 
 KJ_TEST("Simple coroutine test") {
@@ -79,17 +79,12 @@ struct Counter {
 
 kj::Promise<void> countAroundAwait(size_t& wind, size_t& unwind, kj::Promise<void> promise) {
   Counter counter1(wind, unwind);
-  co_await promise;
+  co_await kj::mv(promise);
   Counter counter2(wind, unwind);
   co_return;
 };
 
-KJ_TEST("co_awaiting initial immediate promises suspends even if event loop is empty and running") {
-  // The coroutine PromiseNode implementation contains an optimization which allows us to avoid
-  // suspending the coroutine and instead immediately call PromiseNode::get() and proceed with
-  // execution, but only if the coroutine has suspended at least once. This test verifies that the
-  // optimization is disabled for this initial suspension.
-
+KJ_TEST("co_awaiting initial immediate does not suspend") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -103,24 +98,21 @@ KJ_TEST("co_awaiting initial immediate promises suspends even if event loop is e
     auto promise = kj::Promise<void>(kj::READY_NOW);
     auto coroPromise = countAroundAwait(wind, unwind, kj::READY_NOW);
 
-    // `coro` has not completed.
-    KJ_EXPECT(wind == 1);
-    KJ_EXPECT(unwind == 0);
+    // `coro` has completed.
+    KJ_EXPECT(wind == 2);
+    KJ_EXPECT(unwind == 2);
   }).eagerlyEvaluate(nullptr).wait(waitScope);
 
   kj::evalLater([&]() {
-    // If there are no background tasks in the queue, coroutines execute through an evalLater()
-    // without suspending.
-
     size_t wind = 0, unwind = 0;
     bool evalLaterRan = false;
 
     auto promise = kj::evalLater([&]() { evalLaterRan = true; });
     auto coroPromise = countAroundAwait(wind, unwind, kj::mv(promise));
 
-    KJ_EXPECT(evalLaterRan == false);
-    KJ_EXPECT(wind == 1);
-    KJ_EXPECT(unwind == 0);
+    KJ_EXPECT(evalLaterRan == true);
+    KJ_EXPECT(wind == 2);
+    KJ_EXPECT(unwind == 2);
   }).eagerlyEvaluate(nullptr).wait(waitScope);
 }
 
@@ -232,7 +224,7 @@ KJ_TEST("Coroutines can catch exceptions from co_await") {
 
   auto tryCatch = [&](kj::Promise<void> promise) -> kj::Promise<kj::String> {
     try {
-      co_await promise;
+      co_await kj::mv(promise);
     } catch (const kj::Exception& exception) {
       co_return kj::str(exception.getDescription());
     }
@@ -265,7 +257,7 @@ KJ_TEST("Coroutines can be canceled while suspended") {
     Counter counter1(wind, unwind);
     co_await kj::yield();
     Counter counter2(wind, unwind);
-    co_await promise;
+    co_await kj::mv(promise);
   };
 
   {
@@ -282,7 +274,7 @@ KJ_TEST("Coroutines can be canceled while suspended") {
 
 kj::Promise<void> deferredThrowCoroutine(kj::Promise<void> awaitMe) {
   KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind")));
-  co_await awaitMe;
+  co_await kj::mv(awaitMe);
   co_return;
 };
 
@@ -371,7 +363,7 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
   }));
 
   auto awaitPromise = [](kj::Promise<void> promise) -> kj::Promise<void> {
-    co_await promise;
+    co_await kj::mv(promise);
   };
 
   KJ_EXPECT_THROW_MESSAGE("thrown during unwind",
@@ -417,7 +409,7 @@ KJ_TEST("Can trace through coroutines") {
   }).eagerlyEvaluate(nullptr);
 
   auto coroPromise = [&]() -> kj::Promise<void> {
-    co_await paf.promise;
+    co_await kj::mv(paf.promise);
   }();
 
   {
@@ -436,7 +428,7 @@ KJ_TEST("Can trace through coroutines") {
 #endif  // !_MSC_VER || defined(__clang__)
 
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
-  auto address = co_await addressPromise;
+  auto address = co_await kj::mv(addressPromise);
   auto client = co_await address->connect();
   co_await client->write("foo"_kjb);
 }

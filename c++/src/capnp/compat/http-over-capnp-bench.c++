@@ -282,7 +282,7 @@ public:
     headers.setPtr(customHeaderId, "corge"_kj);
     auto req = client.request(kj::HttpMethod::GET, "http://foo"_kj, headers);
     req.body = nullptr;
-    auto resp = co_await req.response;
+    auto resp = co_await kj::mv(req.response);
     KJ_ASSERT(resp.statusCode == 200);
     KJ_ASSERT(resp.statusText == "OK"_kj);
     KJ_ASSERT(resp.headers->get(customHeaderId) == "foobar"_kj);
