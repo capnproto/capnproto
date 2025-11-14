@@ -3491,7 +3491,7 @@ private:
       if (callWordsInFlight > flowLimit) {
         auto paf = kj::newPromiseAndFulfiller<void>();
         flowWaiter = kj::mv(paf.fulfiller);
-        co_await paf.promise;
+        co_await kj::mv(paf.promise);
         continue;
       }
 
@@ -4547,7 +4547,7 @@ private:
     // Part of handleAccept() implementation that benefits greatly from coroutines.
 
     kj::Rc<ThirdPartyExchangeValue> xcghValue =
-        (co_await completionPromise).downcast<ThirdPartyExchangeValue>();
+        (co_await kj::mv(completionPromise)).downcast<ThirdPartyExchangeValue>();
 
     auto& provide = KJ_REQUIRE_NONNULL(
         xcghValue->value.tryGet<ThirdPartyExchangeValue::Provide>(),
@@ -4558,7 +4558,7 @@ private:
       auto embargoPromise = kj::mv(KJ_REQUIRE_NONNULL(embargo.promise,
           "Duplicate embargo ID in Accept message."));
       embargo.promise = kj::none;
-      co_await embargoPromise;
+      co_await kj::mv(embargoPromise);
 
       // This embargo is complete, so we can erase it.
       provide.embargoes.erase(e);

@@ -189,7 +189,7 @@ BENCHMARK(bm_Promise_Shift_20);
 // shifts x left by n bits.
 kj::Promise<size_t> coroShift(size_t n, kj::Promise<size_t> x) {
   if (n == 0)
-    co_return co_await x;
+    co_return co_await kj::mv(x);
   co_return (co_await coroShift(n - 1, kj::mv(x))) << 1;
 }
 

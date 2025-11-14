@@ -841,7 +841,7 @@ private:
       originalPumpfulfiller->fulfill(context.getParams().getByteCount());
 
       // Give the original pump task a chance to finish up.
-      co_await pathProber->task;
+      co_await kj::mv(pathProber->task);
 
       // If the PathProber originally wrapped a stream with an end() method, we need to call that
       // now.
