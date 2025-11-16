@@ -1,3 +1,4 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load(":configure.bzl", "kj_configure")
@@ -138,6 +139,7 @@ cc_library(
         "test-helpers.c++",
     ],
     hdrs = [
+        "benchmark.h",
         "test.h",
     ],
     include_prefix = "kj",
@@ -145,6 +147,7 @@ cc_library(
     deps = [
         ":kj",
         "//src/kj/compat:gtest",
+        "@google_benchmark//:benchmark",
     ],
 )
 
@@ -276,6 +279,16 @@ cc_test(
     }),
     deps = [
         ":kj",
+        ":kj-test",
+    ],
+)
+
+cc_test(
+    name = "async-bench",
+    srcs = ["async-bench.c++"],
+    tags = ["benchmark"],
+    deps = [
+        ":kj-async",
         ":kj-test",
     ],
 )

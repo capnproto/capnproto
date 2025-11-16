@@ -179,6 +179,7 @@ includekj_HEADERS =                                            \
   src/kj/async-queue.h                                         \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
+  src/kj/benchmark.h                                           \
   src/kj/win32-api-version.h                                   \
   src/kj/windows-sanity.h
 
@@ -513,6 +514,7 @@ if HAS_FUZZING_ENGINE
     check_PROGRAMS += capnp-llvm-fuzzer-testcase
 endif
 heavy_tests =                                                  \
+  src/kj/async-bench.c++                                       \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
   src/kj/async-coroutine-test.c++                              \
@@ -522,6 +524,7 @@ heavy_tests =                                                  \
   src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
   src/kj/async-queue-test.c++                                  \
+  src/kj/coro-allocator-test.c++                               \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \

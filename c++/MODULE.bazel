@@ -18,3 +18,5 @@ register_toolchains(
     "@local_config_cc_toolchains//:all",
     dev_dependency = True,
 )
+
+bazel_dep(name = "google_benchmark", version = "1.9.4")
