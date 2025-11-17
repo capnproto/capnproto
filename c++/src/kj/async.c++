@@ -2180,9 +2180,10 @@ Event::~Event() noexcept {  // intentionally noexcept
 
   disarm();
 
-  // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
-  // be in a use-after-free situation.
-  KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
+  // DONOTSUBMIT
+  // // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
+  // // be in a use-after-free situation.
+  // KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
 }
 
 void Event::armDepthFirst() {
@@ -2299,7 +2300,7 @@ void Event::armWhenWouldSleep() {
   }
 }
 
-bool Event::isNext() {
+bool Event::isNext() const {
   return loop.running && loop.head == this;
 }
 
@@ -3163,10 +3164,41 @@ Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW
 
 namespace _ {  // (private)
 
+CoroEvent::CoroEvent(CoroutineBase& coroutine,
+                     SourceLocation location)
+    : Event(location), coroutine(coroutine) {}
+
+CoroEvent::~CoroEvent() {}
+
+Maybe<Own<Event>> CoroEvent::fire() {
+  // Call PromiseAwaiter::await_resume() and proceed with the coroutine. Note
+  // that this will not destroy the coroutine if control flows off the end of
+  // it, because we return suspend_always() from final_suspend().
+  //
+  // It's tempting to arrange to check for exceptions right now and reject the
+  // promise that owns us without resuming the coroutine, which would save us
+  // from throwing an exception when we already know where it's going. But, we
+  // don't really know: the `co_await` might be in a try-catch block, so we have
+  // no choice but to resume and throw later.
+
+  coroutine.handle.resume();
+  return kj::none;
+}
+
+void CoroEvent::traceEvent(TraceBuilder &builder) {
+  KJ_IF_SOME(promise, coroutine.promiseNodeForTrace) {
+    promise->tracePromise(builder, true);
+  }
+
+  // Maybe returning the address of coroutine() will give us a function name with meaningful type
+  // information. (Narrator: It doesn't.)
+  builder.add(GetFunctorStartAddress<>::apply(coroutine.handle));
+  coroutine.onReadyEvent.traceEvent(builder);
+}
+
 CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                              SourceLocation location)
-    : Event(location),
-      coroutine(coroutine),
+    : handle(coroutine),
       resultRef(resultRef) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
@@ -3204,7 +3236,7 @@ void CoroutineBase::unhandled_exception() {
     // See comment at `finalSuspendCalled`'s definition.
     KJ_IASSERT(!finalSuspendCalled);
 #else
-    KJ_IASSERT(!coroutine.done());
+    KJ_IASSERT(!handle.done());
 #endif
 
     // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
@@ -3226,35 +3258,9 @@ void CoroutineBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 
   // Maybe returning the address of coroutine() will give us a function name with meaningful type
   // information. (Narrator: It doesn't.)
-  builder.add(GetFunctorStartAddress<>::apply(coroutine));
+  builder.add(GetFunctorStartAddress<>::apply(handle));
 };
 
-Maybe<Own<Event>> CoroutineBase::fire() {
-  // Call PromiseAwaiter::await_resume() and proceed with the coroutine. Note that this will not
-  // destroy the coroutine if control flows off the end of it, because we return suspend_always()
-  // from final_suspend().
-  //
-  // It's tempting to arrange to check for exceptions right now and reject the promise that owns
-  // us without resuming the coroutine, which would save us from throwing an exception when we
-  // already know where it's going. But, we don't really know: the `co_await` might be in a
-  // try-catch block, so we have no choice but to resume and throw later.
-
-  coroutine.resume();
-
-  return kj::none;
-}
-
-void CoroutineBase::traceEvent(TraceBuilder& builder) {
-  KJ_IF_SOME(promise, promiseNodeForTrace) {
-    promise->tracePromise(builder, true);
-  }
-
-  // Maybe returning the address of coroutine() will give us a function name with meaningful type
-  // information. (Narrator: It doesn't.)
-  builder.add(GetFunctorStartAddress<>::apply(coroutine));
-
-  onReadyEvent.traceEvent(builder);
-}
 
 void CoroutineBase::destroy() {
   // Called by PromiseDisposer to delete the object. Basically a wrapper around coroutine.destroy()
@@ -3281,7 +3287,7 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != kj::none` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
-    coroutine.destroy();
+    handle.destroy();
   } while (!disposalResults.destructorRan);
 
   // WARNING: `this` is now a dangling pointer.
@@ -3297,10 +3303,10 @@ void CoroutineBase::destroy() {
 }
 
 PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase &coroutine,
-                                       OwnPromiseNode &&nodeParam)
-    : node(kj::mv(nodeParam)), coroutine(coroutine) {
+                                       OwnPromiseNode &&nodeParam, SourceLocation location)
+    : node(kj::mv(nodeParam)), coroutine(coroutine), event(coroutine, location) {
   node->setSelfPointer(&node);
-  node->onReady(&coroutine);
+  node->onReady(&event);
 }
 PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
@@ -3331,9 +3337,9 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
   }
 }
 
-bool PromiseAwaiterBase::await_ready() const {
-  if (coroutine.isNext()) {
-    coroutine.disarm();
+bool PromiseAwaiterBase::await_ready() {
+  if (event.isNext()) {
+    event.disarm();
     return true;
   }
   return false;

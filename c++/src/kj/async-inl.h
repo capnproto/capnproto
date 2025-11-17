@@ -178,7 +178,7 @@ public:
   void armWhenWouldSleep();
   // Enqueues this event to a separate queue of events which should be promoted
 
-  bool isNext();
+  bool isNext() const;
   // True if the Event has been armed and is next in line to be fired. This can be used after
   // calling PromiseNode::onReady(event) to determine if a promise being waited is immediately
   // ready, in which case continuations may be optimistically run without returning to the event
@@ -2262,8 +2262,21 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
-class CoroutineBase: public PromiseNode,
-                     public Event {
+class CoroutineBase;
+
+class CoroEvent: public Event  {
+public:
+  CoroEvent(CoroutineBase& coroutine, SourceLocation location);
+  virtual ~CoroEvent();
+
+  Maybe<Own<Event>> fire() override;
+  void traceEvent(TraceBuilder& builder) override;
+
+private:
+  CoroutineBase& coroutine;
+};
+
+class CoroutineBase: public PromiseNode {
 public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
                 SourceLocation location);
@@ -2301,10 +2314,10 @@ public:
     promiseNodeForTrace = kj::none;
   }
 
-  // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
-  bool canImmediatelyResume() {
-    return hasSuspendedAtLeastOnce && isNext();
-  }
+  // // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
+  // bool canImmediatelyResume() {
+  //   return hasSuspendedAtLeastOnce && isNext();
+  // }
 
 protected:
   bool isWaiting() { return waiting; }
@@ -2320,13 +2333,8 @@ private:
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-  // -------------------------------------------------------
-  // Event implementation
 
-  Maybe<Own<Event>> fire() override;
-  void traceEvent(TraceBuilder& builder) override;
-
-  stdcoro::coroutine_handle<> coroutine;
+  stdcoro::coroutine_handle<> handle;
   ExceptionOrValue& resultRef;
 
   OnReadyEvent onReadyEvent;
@@ -2364,6 +2372,7 @@ private:
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 
   friend class PromiseAwaiterBase;
+  friend class CoroEvent;
 };
 
 template <typename Self, typename T>
@@ -2452,12 +2461,12 @@ public:
 
 class PromiseAwaiterBase {
 public:
-  explicit PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node);
+  explicit PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node, SourceLocation location);
 
   ~PromiseAwaiterBase() noexcept(false);
   KJ_DISALLOW_COPY(PromiseAwaiterBase);
 
-  bool await_ready() const;
+  bool await_ready();
   // This could return "`node->get()` is safe to call" instead, which would make suspension-less
   // co_awaits possible for immediately-fulfilled promises. However, we need an Event to figure that
   // out, and we won't have access to the Coroutine Event until await_suspend() is called. So, we
@@ -2473,6 +2482,7 @@ private:
   OwnPromiseNode node;
 
   CoroutineBase& coroutine;
+  CoroEvent event;
 };
 
 template <typename T>
@@ -2484,7 +2494,7 @@ class PromiseAwaiter: public PromiseAwaiterBase {
   // awaited promise result.
 
 public:
-  explicit PromiseAwaiter(CoroutineBase& coroutine, OwnPromiseNode&& node): PromiseAwaiterBase(coroutine, kj::mv(node)) {
+  explicit PromiseAwaiter(CoroutineBase& coroutine, OwnPromiseNode&& node, SourceLocation location): PromiseAwaiterBase(coroutine, kj::mv(node), location) {
   }
 
   KJ_NOINLINE T await_resume() {
@@ -2519,8 +2529,8 @@ private:
 template <typename T>
 class ForkedPromiseAwaiter {
 public:
-  ForkedPromiseAwaiter(CoroutineBase& coroutine, ForkedPromise<T>&& promise)
-      : node(promise), awaiter(coroutine, OwnPromiseNode(&node)) { }
+  ForkedPromiseAwaiter(CoroutineBase& coroutine, ForkedPromise<T>&& promise, SourceLocation location)
+      : node(promise), awaiter(coroutine, OwnPromiseNode(&node), location) { }
 
   template <typename U>
   inline bool await_suspend(stdcoro::coroutine_handle<U> coroutine) {
@@ -2529,7 +2539,7 @@ public:
 
   inline T await_resume() { return awaiter.await_resume(); }
 
-  inline bool await_ready() const { return awaiter.await_ready(); }
+  inline bool await_ready() { return awaiter.await_ready(); }
 
 private:
   ForkBranch<_::FixVoid<T>, false> node;
@@ -2539,13 +2549,13 @@ private:
 template <typename T>
 template <typename U>
 PromiseAwaiter<U> Coroutine<T>::await_transform(kj::Promise<U>&& awaitable) {
-  return PromiseAwaiter<U>(*this, _::PromiseNode::from(kj::mv(awaitable)));
+  return PromiseAwaiter<U>(*this, _::PromiseNode::from(kj::mv(awaitable)), {});
 }
 
 template <typename T>
 template <typename U>
 ForkedPromiseAwaiter<U> Coroutine<T>::await_transform(kj::ForkedPromise<U>&& awaitable) {
-  return ForkedPromiseAwaiter<U>(*this, kj::mv(awaitable));
+  return ForkedPromiseAwaiter<U>(*this, kj::mv(awaitable), {});
 }
 
 }  // namespace kj::_
