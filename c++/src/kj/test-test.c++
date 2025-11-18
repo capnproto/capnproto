@@ -30,10 +30,6 @@
 #include <unistd.h>
 #endif
 
-namespace kj {
-namespace _ {
-namespace {
-
 KJ_TEST("expect exit from exit") {
   KJ_EXPECT_EXIT(42, _exit(42));
   KJ_EXPECT_EXIT(kj::none, _exit(42));
@@ -51,7 +47,3 @@ KJ_TEST("expect signal from sigint") {
   KJ_EXPECT_SIGNAL(SIGINT, raise(SIGINT));
   KJ_EXPECT_SIGNAL(kj::none, raise(SIGINT));
 }
-
-}  // namespace
-}  // namespace _
-}  // namespace kj
