@@ -23,6 +23,7 @@
 
 #include "async-prelude.h"
 #include <kj/exception.h>
+#include <kj/function.h>
 #include <kj/refcount.h>
 
 KJ_BEGIN_HEADER
@@ -1302,6 +1303,9 @@ private:
   friend ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space);
   template <typename T>
   friend class EventLoopLocal;
+
+  template <typename T, bool Lazy>
+  friend class Fut;
 };
 
 class WaitScope {
@@ -1384,6 +1388,9 @@ private:
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
+
+  template <typename T, bool Lazy>
+  friend class Fut;
 };
 
 template <typename T>

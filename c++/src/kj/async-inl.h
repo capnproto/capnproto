@@ -35,6 +35,7 @@
 #include <intrin.h>  // _ReturnAddress
 #endif
 
+#include <kj/debug.h>
 #include <kj/list.h>
 
 KJ_BEGIN_HEADER
@@ -217,7 +218,7 @@ private:
   EventLoop& loop;
   Event* next;
   Event** prev;
-  bool firing = false;
+  // bool firing = false;
 
   static constexpr uint MAGIC_LIVE_VALUE = 0x1e366381u;
   uint live = MAGIC_LIVE_VALUE;
@@ -257,6 +258,24 @@ private:
   friend class PromiseDisposer;
 };
 
+class OnReadyEvent {
+  // Helper class for implementing onReady().
+
+public:
+  void init(Event* newEvent);
+
+  void arm();
+  void armBreadthFirst();
+  // Arms the event if init() has already been called and makes future calls to init()
+  // automatically arm the event.
+
+  inline void traceEvent(TraceBuilder& builder) {
+    if (event != nullptr && !builder.full()) event->traceEvent(builder);
+  }
+
+private:
+  Event* event = nullptr;
+};
 class PromiseNode: public PromiseArenaMember, private AsyncObject {
   // A Promise<T> contains a chain of PromiseNodes tracking the pending transformations.
   //
@@ -266,6 +285,8 @@ class PromiseNode: public PromiseArenaMember, private AsyncObject {
   // internal implementation details.
 
 public:
+  using OnReadyEvent = kj::_::OnReadyEvent;
+  
   virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
   //
@@ -323,24 +344,6 @@ public:
   }
 
 protected:
-  class OnReadyEvent {
-    // Helper class for implementing onReady().
-
-  public:
-    void init(Event* newEvent);
-
-    void arm();
-    void armBreadthFirst();
-    // Arms the event if init() has already been called and makes future calls to init()
-    // automatically arm the event.
-
-    inline void traceEvent(TraceBuilder& builder) {
-      if (event != nullptr && !builder.full()) event->traceEvent(builder);
-    }
-
-  private:
-    Event* event = nullptr;
-  };
 };
 
 class PromiseDisposer {
@@ -779,7 +782,9 @@ private:
     KJ_IF_SOME(depException, depResult.exception) {
       output.as<T>() = ExceptionOr<T>(false, kj::mv(depException));
     } else KJ_IF_SOME(depValue, depResult.value) {
-      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
+      auto x = MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue));
+      auto y = handle(kj::mv(x));
+      output.as<T>() = kj::mv(y);
     }
   }
 };

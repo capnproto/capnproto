@@ -459,6 +459,11 @@ public:
     kj::dtor(*--pos);
   }
 
+  T pop() {
+    KJ_IREQUIRE(pos > ptr, "No elements present to remove.");
+    return kj::mv(*--pos);
+  }
+
   void truncate(size_t size) {
     KJ_IREQUIRE(size <= this->size(), "can't use truncate() to expand");
 

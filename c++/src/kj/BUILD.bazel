@@ -286,6 +286,25 @@ cc_test(
     tags = ["google_benchmark"],
     deps = [
         ":kj-async",
+        ":fut",
         "@google_benchmark//:benchmark",
     ],
+)
+
+cc_test(
+    name = "fut-test",
+    srcs = ["fut-test.c++"],
+    deps = [
+        ":fut",
+        ":kj-test",
+    ],
+)
+
+cc_library(
+    name = "fut",
+    hdrs = ["fut.h"],
+    srcs = ["fut.c++"],
+    include_prefix = "kj",
+    deps = [":kj-async"],
+    visibility = ["//visibility:public"],
 )

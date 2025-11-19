@@ -1837,8 +1837,8 @@ bool EventLoop::turn() {
 
     Maybe<Own<_::Event>> eventToDestroy;
     {
-      event->firing = true;
-      KJ_DEFER(event->firing = false);
+      // event->firing = true;
+      // KJ_DEFER(event->firing = false);
       currentlyFiring = event;
       KJ_DEFER(currentlyFiring = nullptr);
       eventToDestroy = event->fire();
@@ -1901,6 +1901,7 @@ void EventLoop::wait() {
   } else KJ_IF_SOME(e, executor) {
     e->wait();
   } else {
+    KJ_DBG("Nothing to wait for; this thread would hang forever.");
     KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
   }
 }
@@ -2181,7 +2182,7 @@ Event::~Event() noexcept {  // intentionally noexcept
 
   // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
   // be in a use-after-free situation.
-  KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
+  // KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
 }
 
 void Event::armDepthFirst() {

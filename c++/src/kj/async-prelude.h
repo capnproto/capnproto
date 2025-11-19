@@ -45,6 +45,8 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
+template <typename T, bool Lazy = false> class Fut;
+
 class EventLoop;
 template <typename T>
 class Promise;
@@ -237,6 +239,11 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 OwnPromiseNode readyNow();
 OwnPromiseNode neverDone();
+
+template<typename T>
+void waitFutImpl(Fut<T>&& fut, _::ExceptionOrValue& result, WaitScope& waitScope,
+                 SourceLocation location);
+
 
 class ReadyNow {
 public:

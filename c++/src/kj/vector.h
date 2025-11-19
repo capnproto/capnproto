@@ -101,6 +101,10 @@ public:
     addAll(container.begin(), container.end());
   }
 
+  inline T pop() {
+    return builder.pop();
+  }
+
   inline void removeLast() {
     builder.removeLast();
   }
