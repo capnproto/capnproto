@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "http.h"
+#include "kj/async.h"
 #include "kj/exception.h"
 #include "url.h"
 #include <kj/debug.h>
@@ -34,6 +35,8 @@
 #if KJ_HAS_ZLIB
 #include <zlib.h>
 #endif // KJ_HAS_ZLIB
+
+#include <kj/fut.h>
 
 namespace kj {
 
@@ -1403,14 +1406,11 @@ public:
     // resume a SuspendedRequest is via an HttpServer, but HttpServers never call
     // `awaitNextMessage()` before fully reading request bodies, meaning we expect that
     // `messageReadQueue` will never be used.
-    ++pendingMessageCount;
-    auto paf = kj::newPromiseAndFulfiller<void>();
-    onMessageDone = kj::mv(paf.fulfiller);
-    messageReadQueue = kj::mv(paf.promise);
+    messageReadQueue.queueUp();
   }
 
   bool canReuse() {
-    return !broken && pendingMessageCount == 0;
+    return !broken && messageReadQueue.isEmpty();
   }
 
   bool canSuspend() {
@@ -1485,19 +1485,12 @@ public:
 
   void finishRead() {
     // Called when entire request has been read.
-
-    KJ_REQUIRE_NONNULL(onMessageDone)->fulfill();
-    onMessageDone = kj::none;
-    --pendingMessageCount;
+    messageReadQueue.finish();
   }
 
   void abortRead() {
     // Called when a body input stream was destroyed without reading to the end.
-
-    KJ_REQUIRE_NONNULL(onMessageDone)->reject(KJ_EXCEPTION(FAILED,
-        "application did not finish reading previous HTTP response body",
-        "can't read next pipelined request/response"));
-    onMessageDone = kj::none;
+    messageReadQueue.abort();
     broken = true;
   }
 
@@ -1516,11 +1509,9 @@ public:
       co_return true;
     }
 
-    if (onMessageDone != kj::none) {
+    if (messageReadQueue.isActive()) {
       // We're still working on reading the previous body.
-      auto fork = messageReadQueue.fork();
-      messageReadQueue = fork.addBranch();
-      co_await fork;
+      co_await messageReadQueue.join();
     }
 
     for (;;) {
@@ -1541,26 +1532,18 @@ public:
 
   bool isCleanDrain() {
     // Returns whether we can cleanly drain the stream at this point.
-    if (onMessageDone != kj::none) return false;
+    if (messageReadQueue.isActive()) return false;
     snarfBufferedLineBreak();
     return !lineBreakBeforeNextHeader && leftover == nullptr;
   }
 
   kj::Promise<kj::OneOf<kj::ArrayPtr<char>, HttpHeaders::ProtocolError>> readMessageHeaders() {
-    ++pendingMessageCount;
-    auto paf = kj::newPromiseAndFulfiller<void>();
-
-    auto nextMessageReady = kj::mv(messageReadQueue);
-    messageReadQueue = kj::mv(paf.promise);
-
-    co_await nextMessageReady;
-    onMessageDone = kj::mv(paf.fulfiller);
-
+    co_await messageReadQueue.queueAndWait();
     co_return co_await readHeader(HeaderType::MESSAGE, 0, 0);
   }
 
   kj::Promise<kj::OneOf<uint64_t, HttpHeaders::ProtocolError>> readChunkHeader() {
-    KJ_REQUIRE(onMessageDone != kj::none);
+    KJ_REQUIRE(messageReadQueue.isActive());
 
     // We use the portion of the header after the end of message headers.
     auto textOrError = co_await readHeader(HeaderType::CHUNK, messageHeaderEnd, messageHeaderEnd);
@@ -1636,7 +1619,7 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
     // Read message body data.
 
-    KJ_REQUIRE(onMessageDone != kj::none);
+    KJ_REQUIRE(messageReadQueue.isActive());
 
     if (leftover == nullptr) {
       // No leftovers. Forward directly to inner stream.
@@ -1720,23 +1703,74 @@ private:
   bool broken = false;
   // Becomes true if the caller failed to read the whole entity-body before closing the stream.
 
-  uint pendingMessageCount = 0;
-  // Number of reads we have queued up.
+  class Queue {
+  public:
+    void queueUp() {
+      ++pendingMessageCount;
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      onMessageDone = kj::mv(paf.fulfiller);
+      messageReadQueue = kj::mv(paf.promise);
+    }
 
-  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> onMessageDone;
-  // Fulfill once the current message has been completely read. Unblocks reading of the next
-  // message headers.
-  //
-  // Note this should be declared before `messageReadQueue`, because the promise in
-  // `messageReadQueue` may be waiting for `onMessageDone` to be fulfilled. If the whole object
-  // is torn down early, then the fulfiller ends up being deleted while a listener still exists,
-  // which causes various stack tracing for exception-handling purposes to be performed, only to
-  // be thrown away as the listener is immediately canceled thereafter. To avoid this wasted work,
-  // we want the listener to be canceled first.
+    kj::Promise<void> queueAndWait() {
+      ++pendingMessageCount;
+      auto paf = kj::newPromiseAndFulfiller<void>();
 
-  kj::Promise<void> messageReadQueue = kj::READY_NOW;
-  // Resolves when all previous HTTP messages have completed, allowing the next pipelined message
-  // to be read.
+      auto nextMessageReady = kj::mv(messageReadQueue);
+      messageReadQueue = kj::mv(paf.promise);
+
+      co_await nextMessageReady;
+      onMessageDone = kj::mv(paf.fulfiller);
+    }
+    
+    bool isEmpty() const {
+      return pendingMessageCount == 0;
+    }
+
+    bool isActive() const {
+      return onMessageDone != kj::none;
+    }
+
+    void finish() {
+      KJ_REQUIRE_NONNULL(onMessageDone)->fulfill();
+      onMessageDone = kj::none;
+      --pendingMessageCount;
+    }
+
+    void abort() {
+      KJ_REQUIRE_NONNULL(onMessageDone)->reject(KJ_EXCEPTION(FAILED,
+        "application did not finish reading previous HTTP response body",
+        "can't read next pipelined request/response"));
+      onMessageDone = kj::none;
+    }
+
+    kj::Promise<void> join() {
+      auto fork = messageReadQueue.fork();
+      messageReadQueue = fork.addBranch();
+      co_await fork;
+    }
+
+  private:
+    uint pendingMessageCount = 0;
+    // Number of reads we have queued up.
+
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> onMessageDone = kj::none;
+    // Fulfill once the current message has been completely read. Unblocks reading of the next
+    // message headers.
+    //
+    // Note this should be declared before `messageReadQueue`, because the promise in
+    // `messageReadQueue` may be waiting for `onMessageDone` to be fulfilled. If the whole object
+    // is torn down early, then the fulfiller ends up being deleted while a listener still exists,
+    // which causes various stack tracing for exception-handling purposes to be performed, only to
+    // be thrown away as the listener is immediately canceled thereafter. To avoid this wasted work,
+    // we want the listener to be canceled first.
+
+    kj::Promise<void> messageReadQueue = kj::READY_NOW;
+    // Resolves when all previous HTTP messages have completed, allowing the next pipelined message
+    // to be read.
+  };
+
+  Queue messageReadQueue = {};
 
   enum class HeaderType {
     MESSAGE,
@@ -7440,28 +7474,33 @@ public:
     co_return result == BREAK_LOOP_CONN_OK ? true : false;
   }
 
-  kj::Promise<LoopResult> startLoopImpl() {
-    return loop().catch_([this](kj::Exception&& e) {
-      // Exception; report 5xx.
+  kj::Fut<LoopResult> startLoopImpl() {
+    try {
+      co_return co_await loop();
+    } catch (...) {
+      KJ_UNIMPLEMENTED("TODO");
+    }
+    // return loop().catch_([this](kj::Exception&& e) {
+    //   // Exception; report 5xx.
 
-      KJ_IF_SOME(p, webSocketError) {
-        // sendWebSocketError() was called. Finish sending and close the connection. Don't log
-        // the exception because it's probably a side-effect of this.
-        auto promise = kj::mv(p);
-        webSocketError = kj::none;
-        return kj::mv(promise);
-      }
+    //   KJ_IF_SOME(p, webSocketError) {
+    //     // sendWebSocketError() was called. Finish sending and close the connection. Don't log
+    //     // the exception because it's probably a side-effect of this.
+    //     auto promise = kj::mv(p);
+    //     webSocketError = kj::none;
+    //     return kj::mv(promise);
+    //   }
 
-      KJ_IF_SOME(p, tunnelRejected) {
-        // reject() was called to reject a CONNECT request. Finish sending and close the connection.
-        // Don't log the exception because it's probably a side-effect of this.
-        auto promise = kj::mv(p);
-        tunnelRejected = kj::none;
-        return kj::mv(promise);
-      }
+    //   KJ_IF_SOME(p, tunnelRejected) {
+    //     // reject() was called to reject a CONNECT request. Finish sending and close the connection.
+    //     // Don't log the exception because it's probably a side-effect of this.
+    //     auto promise = kj::mv(p);
+    //     tunnelRejected = kj::none;
+    //     return kj::mv(promise);
+    //   }
 
-      return sendError(kj::mv(e));
-    });
+    //   return sendError(kj::mv(e));
+    // });
   }
 
   SuspendedRequest suspend(SuspendableRequest& suspendable) {
@@ -7517,7 +7556,7 @@ private:
     return HttpInputStreamImpl(stream, table);
   }
 
-  kj::Promise<LoopResult> loop() {
+  kj::Fut<LoopResult> loop() {
     bool firstRequest = true;
 
     while (true) {
@@ -7618,7 +7657,7 @@ private:
         receivedHeaders = receivedHeaders.exclusiveJoin(kj::mv(timeoutPromise));
       }
 
-      auto requestOrProtocolError = co_await receivedHeaders;
+      auto requestOrProtocolError = co_await kj::mv(receivedHeaders);
       auto loopResult = co_await onHeaders(kj::mv(requestOrProtocolError));
 
       switch (loopResult) {
@@ -7631,7 +7670,7 @@ private:
     }
   }
 
-  kj::Promise<LoopResult> onHeaders(HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError) {
+  kj::Fut<LoopResult> onHeaders(HttpHeaders::RequestConnectOrProtocolError&& requestOrProtocolError) {
     if (timedOut) {
       // Client took too long to send anything, so we're going to close the connection. In
       // theory, we should send back an HTTP 408 error -- it is designed exactly for this
@@ -7692,7 +7731,7 @@ private:
     KJ_UNREACHABLE;
   }
 
-  kj::Promise<LoopResult> onConnect(HttpHeaders::ConnectRequest& request) {
+  kj::Fut<LoopResult> onConnect(HttpHeaders::ConnectRequest& request) {
     auto& headers = httpInput.getHeaders();
 
     currentMethod = HttpConnectMethod();
@@ -7744,7 +7783,8 @@ private:
       // Finish sending and close the connection.
       auto promise = kj::mv(p);
       tunnelRejected = kj::none;
-      co_return co_await promise;
+      // co_return co_await promise;
+      KJ_UNIMPLEMENTED("TODO");
     }
 
     if (httpOutput.isBroken()) {
@@ -7755,7 +7795,7 @@ private:
     co_return BREAK_LOOP_CONN_ERR;
   }
 
-  kj::Promise<LoopResult> onRequest(HttpHeaders::Request& request) {
+  kj::Fut<LoopResult> onRequest(HttpHeaders::Request& request) {
     auto& headers = httpInput.getHeaders();
 
     currentMethod = request.method;
@@ -7786,7 +7826,8 @@ private:
       // sendWebSocketError() was called. Finish sending and close the connection.
       auto promise = kj::mv(p);
       webSocketError = kj::none;
-      co_return co_await promise;
+      // co_return co_await promise;
+      KJ_UNIMPLEMENTED("TODO");
     }
 
     if (upgraded) {
