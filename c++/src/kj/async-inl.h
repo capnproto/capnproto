@@ -2125,7 +2125,11 @@ public:
 
   ~XThreadFulfiller() noexcept(false) {
     if (target != nullptr) {
-      reject(XThreadPaf::unfulfilledException());
+      // reject() is inlined here to only allocate unfulfilled exception when needed
+      XThreadPaf::FulfillScope scope(&target);
+      if (scope.shouldFulfill()) {
+        scope.getTarget<T>()->result.addException(XThreadPaf::unfulfilledException());
+      }
     }
   }
   void fulfill(FixVoid<T>&& value) const override {
