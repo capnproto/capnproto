@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/compat/url.h"
 #include <capnp/compat/byte-stream.h>
 #include <capnp/compat/http-over-capnp.h>
 #include <capnp/rpc-twoparty.h>
@@ -36,14 +37,51 @@ class OkService final : public HttpService {
 public:
   OkService(HttpHeaderTable &table) : responseHeaders(table) {}
 
+  struct Params {
+    Params(kj::StringPtr url) {
+      auto parsedUrl = kj::Url::parse(url, Url::HTTP_REQUEST);
+      for (auto &param : parsedUrl.query) {
+        if (param.name == "bodySize") {
+          bodySize = param.value.parseAs<size_t>();
+        }
+      }
+    }
+
+    kj::Maybe<size_t> bodySize = kj::none;
+  };
+
   kj::Promise<void> request(HttpMethod method, kj::StringPtr url,
                             const HttpHeaders &headers,
                             kj::AsyncInputStream &requestBody,
                             Response &response) override {
     responseHeaders.clear();
-    responseHeaders.setPtr(HttpHeaderId::CONTENT_TYPE, "text/plain");
-    auto stream = response.send(200, "OK", responseHeaders);
-    co_await stream->write("OK"_kjb);
+
+    if (url.contains("?")) {
+      Params params(url);
+      responseHeaders.setPtr(HttpHeaderId::CONTENT_TYPE, "text/plain");
+      auto stream = response.send(200, "OK", responseHeaders);
+      
+      KJ_IF_SOME(size, params.bodySize) {
+        constexpr size_t chunkSize = 1024 * 1024;
+        static const auto chunk = kj::strArray(kj::repeat("x"_kj, chunkSize), "");
+        
+        size_t remaining = size;
+        while (remaining > 0) {
+          if (remaining >= chunkSize) {
+            co_await stream->write(chunk.asBytes());
+            remaining -= chunkSize;
+          } else {
+            auto lastChunk = kj::strArray(kj::repeat("x"_kj, remaining), "");
+            co_await stream->write(lastChunk.asBytes());
+            remaining = 0;
+          }
+        }
+      }
+    } else {
+      responseHeaders.setPtr(HttpHeaderId::CONTENT_TYPE, "text/plain");
+      auto stream = response.send(200, "OK", responseHeaders);
+      co_await stream->write("OK"_kjb);
+    }
   }
 
 private:
