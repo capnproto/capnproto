@@ -611,14 +611,14 @@ public:
     }
   }
 
-  kj::Promise<void> connect(
+  kj::HttpService::ConnectResult connect(
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
-      ConnectResponse& tunnel, kj::HttpConnectSettings settings) override {
+      ConnectResponse& tunnel, kj::TlsSettings tlsSettings) override {
     auto rpcRequest = inner.connectRequest();
     auto downPipe = kj::newOneWayPipe();
     rpcRequest.setHost(host);
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
-    rpcRequest.initSettings().setUseTls(settings.useTls);
+    rpcRequest.initSettings().setUseTls(tlsSettings == kj::TlsSettings::AUTO_TLS);
 
     ConnectClientRequestContextImpl context(factory, tunnel);
     RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(context);
@@ -643,8 +643,10 @@ public:
     // We write to `up` (the other side reads from it).
     auto up = pipeline.getUp();
 
+    kj::Maybe<kj::TlsStarterCallback> tlsStarter;
+
     // We need to create a tlsStarter callback which sends a startTls request to the capnp server.
-    KJ_IF_SOME(tlsStarter, settings.tlsStarter) {
+    if (tlsSettings == kj::TlsSettings::USE_TLS_STARTER) {
       kj::Function<kj::Promise<void>(kj::StringPtr)> cb =
           [upForStartTls = kj::cp(up)]
           (kj::StringPtr expectedServerHostname)
@@ -665,7 +667,7 @@ public:
       return kj::NEVER_DONE;
     });
 
-    co_await pipeline.ignoreResult();
+    return {.connection = pipeline.ignoreResult(), .tlsStarter = kj::mv(tlsStarter) };
   }
 
 
@@ -885,13 +887,9 @@ public:
   }
 
   kj::Promise<void> connect(ConnectContext context) override {
+    KJ_DBG("CONNECT");
     auto params = context.getParams();
     auto host = params.getHost();
-    kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
-    kj::HttpConnectSettings settings = {
-        .useTls = params.getSettings().getUseTls(),
-        .tlsStarter = kj::none };
-    settings.tlsStarter = tlsStarter;
     auto headers = factory.capnpToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 
@@ -940,10 +938,21 @@ public:
       return kj::NEVER_DONE;
     });
 
+    auto tlsSettings = params.getSettings().getUseTls()
+                           ? kj::TlsSettings::AUTO_TLS
+                           : kj::TlsSettings::USE_TLS_STARTER;
+    auto useTlsStarter = tlsSettings == kj::TlsSettings::USE_TLS_STARTER;
+    KJ_DBG(useTlsStarter);
+
+    auto tlsStarterPaf =
+        kj::newPromiseAndFulfiller<kj::Maybe<kj::TlsStarterCallback>>();
     {
       PipelineBuilder<ConnectResults> pb;
       auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
-      auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
+      auto up = factory.streamFactory.kjToCapnp(
+          kj::mv(eofWrapper), useTlsStarter
+                                  ? kj::mv(tlsStarterPaf.promise)
+                                  : kj::Maybe<kj::TlsStarterCallback>());
       pb.setUp(kj::cp(up));
 
       context.setPipeline(pb.build());
@@ -953,8 +962,17 @@ public:
     { auto drop = kj::mv(refcounted); }
 
     HttpOverCapnpConnectResponseImpl response(factory, context.getParams().getContext());
-    co_await inner->connect(host, headers, *pipe.ends[0], response, settings)
-        .exclusiveJoin(kj::mv(pumpTask));
+    auto result = inner->connect(host, headers, *pipe.ends[0], response, tlsSettings);
+
+    if (useTlsStarter) {
+      KJ_DBG("AWAITING TLS STARTER");
+      auto tlsStarter = co_await result.tlsStarter;
+      KJ_DBG("GOT TLS STARTER");
+      tlsStarterPaf.fulfiller->fulfill(kj::mv(tlsStarter));
+    }
+
+    auto connection = kj::mv(result.connection);
+    co_await connection.exclusiveJoin(kj::mv(pumpTask));
   }
 
 private:

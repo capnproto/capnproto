@@ -725,19 +725,24 @@ public:
   // an empty string indicates a preference for no extensions to be applied.
 };
 
-using TlsStarterCallback = kj::Maybe<kj::Function<kj::Promise<void>(kj::StringPtr)>>;
-struct HttpConnectSettings {
-  bool useTls = false;
+using TlsStarterCallback = kj::Function<kj::Promise<void>(kj::StringPtr)>;
+
+using TlsStarterPromise = kj::Promise<kj::Maybe<TlsStarterCallback>>;
+
+enum TlsSettings {
+  TLS_NONE,
+  // Requests to not use TLS.
+
+  AUTO_TLS,
   // Requests to automatically establish a TLS session over the connection. The remote party
   // will be expected to present a valid certificate matching the requested hostname.
-  kj::Maybe<TlsStarterCallback&> tlsStarter;
-  // This is an output parameter. It doesn't need to be set. But if it is set, then it may get
-  // filled with a callback function. It will get filled with `kj::none` if any of the following
-  // are true:
-  //
+
+  USE_TLS_STARTER,
+  // Request to return a `TlsStarterCallback` to be used to initiate a TLS handshake.
+  
+  // Returns `kj::none` if any of the following are true:
   // * kj is not built with TLS support
   // * the underlying HttpClient does not support the startTls mechanism
-  // * `useTls` has been set to `true` and so TLS has already been started
   //
   // The callback function itself can be called to initiate a TLS handshake on the connection in
   // between write() operations. It is not allowed to initiate a TLS handshake while a write
@@ -901,10 +906,11 @@ public:
 
     kj::Promise<Status> status;
     kj::Own<kj::AsyncIoStream> connection;
+    kj::TlsStarterPromise tlsStarter;
   };
 
   virtual ConnectRequest connect(
-      kj::StringPtr host, const HttpHeaders& headers, HttpConnectSettings settings);
+      kj::StringPtr host, const HttpHeaders& headers, TlsSettings tlsSettings);
   // Handles CONNECT requests.
   //
   // `host` must specify both the host and port (e.g. "example.org:1234").
@@ -1005,11 +1011,16 @@ public:
     // Signals rejection of the CONNECT tunnel.
   };
 
-  virtual kj::Promise<void> connect(kj::StringPtr host,
-                                    const HttpHeaders& headers,
-                                    kj::AsyncIoStream& connection,
-                                    ConnectResponse& response,
-                                    HttpConnectSettings settings);
+  struct ConnectResult {
+    kj::Promise<void> connection;
+    kj::TlsStarterPromise tlsStarter;
+  };
+
+  virtual ConnectResult connect(kj::StringPtr host,
+                                const HttpHeaders& headers,
+                                kj::AsyncIoStream& connection,
+                                ConnectResponse& response,
+                                TlsSettings tlsSettings);
   // Handles CONNECT requests.
   //
   // The `host` must include host and port.

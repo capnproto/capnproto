@@ -126,7 +126,7 @@ public:
                 kj::AsyncOutputStream& stream,
                 capnp::ByteStream::SubstreamCallback::Client callback,
                 uint64_t limit,
-                kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter,
+                kj::TlsStarterPromise tlsStarter,
                 kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>())
       : factory(factory),
         state(Streaming {parent, kj::mv(ownParent), stream, kj::mv(callback), kj::mv(tlsStarter)}),
@@ -342,7 +342,7 @@ private:
     capnp::ByteStream::Client ownParent;
     kj::AsyncOutputStream& stream;
     capnp::ByteStream::SubstreamCallback::Client callback;
-    kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter;
+    kj::TlsStarterPromise tlsStarter;
   };
   struct Borrowed {
     Streaming originalState;
@@ -385,13 +385,14 @@ public:
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
                          kj::Own<kj::AsyncOutputStream> inner)
       : factory(factory),
+        tlsStarter(kj::Maybe<kj::TlsStarterCallback>()),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
     state.get<kj::Own<PathProber>>()->startProbing();
   }
 
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
                          kj::Own<kj::AsyncOutputStream> inner,
-                         kj::Maybe<kj::Own<kj::TlsStarterCallback>> starter)
+                         kj::TlsStarterPromise starter)
       : factory(factory),
         tlsStarter(kj::mv(starter)),
         state(kj::heap<PathProber>(*this, kj::mv(inner))) {
@@ -401,6 +402,7 @@ public:
   CapnpToKjStreamAdapter(ByteStreamFactory& factory,
                          kj::Own<PathProber> pathProber)
       : factory(factory),
+        tlsStarter(kj::Maybe<kj::TlsStarterCallback>()),
         state(kj::mv(pathProber)) {
     state.get<kj::Own<PathProber>>()->setNewParent(*this);
   }
@@ -740,16 +742,19 @@ protected:
 
   kj::Promise<void> startTls(StartTlsContext context) override {
     auto params = context.getParams();
-    KJ_IF_SOME(s, tlsStarter) {
+    KJ_IF_SOME(s, co_await tlsStarter) {
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
-          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+          co_await s(params.getExpectedServerHostname());
+          co_return;
         }
         KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
-          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+          co_await s(params.getExpectedServerHostname());
+          co_return;
         }
         KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
-          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
+          co_await s(params.getExpectedServerHostname());
+          co_return;
         }
         KJ_CASE_ONEOF(e, Ended) {
           KJ_FAIL_REQUIRE("cannot call startTls on a bytestream that was ended");
@@ -804,7 +809,7 @@ protected:
 
 private:
   ByteStreamFactory& factory;
-  kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter;
+  kj::TlsStarterPromise tlsStarter;
 
   struct Borrowed { kj::Own<kj::AsyncOutputStream> stream; };
   struct Ended {};
@@ -1232,7 +1237,7 @@ capnp::ByteStream::Client ByteStreamFactory::kjToCapnp(kj::Own<kj::AsyncOutputSt
 }
 
 capnp::ByteStream::Client ByteStreamFactory::kjToCapnp(
-    kj::Own<kj::AsyncOutputStream> kjStream, kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter) {
+    kj::Own<kj::AsyncOutputStream> kjStream, kj::TlsStarterPromise tlsStarter) {
   return streamSet.add(
       kj::heap<CapnpToKjStreamAdapter>(*this, kj::mv(kjStream), kj::mv(tlsStarter)));
 }

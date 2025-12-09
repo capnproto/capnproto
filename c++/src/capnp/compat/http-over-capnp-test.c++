@@ -682,14 +682,16 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
+  kj::HttpService::ConnectResult connect(
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response,
-      kj::HttpConnectSettings settings) override {
+      ConnectResponse& response, kj::TlsSettings tlsSettings) override {
+    KJ_DBG("ConnectWriteCloseService::connect");
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
-    return io.write("test"_kjb).then([&io]() mutable {
-      io.shutdownWrite();
-    });
+    KJ_DBG("Response accepted");
+    return {.connection = io.write("test"_kjb).then([&io]() mutable {
+              io.shutdownWrite();
+            }),
+            .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
 private:
@@ -707,15 +709,16 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
+  kj::HttpService::ConnectResult connect(
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response,
-      kj::HttpConnectSettings settings) override {
+      ConnectResponse& response, kj::TlsSettings tlsSettings) override {
+    KJ_DBG("ConnectWriteRespService::connect");
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
     // TODO(later): `io.pumpTo(io).ignoreResult;` doesn't work here,
     // it causes startTls to come back in a loop. The below avoids this.
     auto buffer = kj::heapArray<byte>(4096);
-    return manualPumpLoop(buffer, io).attach(kj::mv(buffer));
+    return {.connection = manualPumpLoop(buffer, io).attach(kj::mv(buffer)),
+            .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
   kj::Promise<void> manualPumpLoop(kj::ArrayPtr<byte> buffer, kj::AsyncIoStream& io) {
@@ -744,12 +747,13 @@ public:
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
-  kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
-      kj::HttpService::ConnectResponse& response,
-      kj::HttpConnectSettings settings) override {
+  kj::HttpService::ConnectResult connect(
+      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& connection,
+      ConnectResponse& response, kj::TlsSettings tlsSettings) override {
+    KJ_DBG("ConnectRejectService::connect");
     auto body = response.reject(500, "Internal Server Error", kj::HttpHeaders(headerTable), 5);
-    return body->write("Error"_kjb).attach(kj::mv(body));
+    return {.connection = body->write("Error"_kjb).attach(kj::mv(body)),
+            .tlsStarter = kj::Maybe<kj::TlsStarterCallback>()};
   }
 
 private:
@@ -783,6 +787,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
     ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller)
       : fulfiller(kj::mv(fulfiller)) {}
     void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+      KJ_DBG("accept", statusCode);
       KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
       fulfiller->fulfill(
         kj::HttpClient::ConnectRequest::Status(
@@ -807,9 +812,10 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
   auto paf = kj::newPromiseAndFulfiller<kj::HttpClient::ConnectRequest::Status>();
   ResponseImpl response(kj::mv(paf.fulfiller));
 
-  auto promise = frontCapnpHttpService->connect(
+  auto result = frontCapnpHttpService->connect(
       "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
-      response, {}).attach(kj::mv(clientPipe.ends[0]));
+      response, {});
+  auto connection = result.connection.attach(kj::mv(clientPipe.ends[0]));
 
   paf.promise.then(
       [io = kj::mv(clientPipe.ends[1])](auto status) mutable {
@@ -879,9 +885,10 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
   auto paf = kj::newPromiseAndFulfiller<kj::Own<kj::AsyncInputStream>>();
   ResponseImpl response(kj::mv(paf.fulfiller));
 
-  auto promise = frontCapnpHttpService->connect(
+  auto result = frontCapnpHttpService->connect(
       "https://example.org"_kj, kj::HttpHeaders(*table), *clientPipe.ends[0],
-      response, {}).attach(kj::mv(clientPipe.ends[0]));
+      response, {});
+  auto connection = result.connection.attach(kj::mv(clientPipe.ends[0]));
 
   paf.promise.then(
       [](auto body) mutable {
@@ -890,7 +897,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
         [buf = kj::mv(buf), body = kj::mv(body)](size_t count) mutable {
       KJ_ASSERT(count == 5, "Expecting the stream to read 5 chars.");
     });
-  }).attach(kj::mv(promise)).wait(waitScope);
+  }).attach(kj::mv(connection)).wait(waitScope);
 
   listenTask.wait(waitScope);
 }
@@ -935,14 +942,13 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override { KJ_UNREACHABLE; }
 
     ConnectRequest connect(kj::StringPtr host, const kj::HttpHeaders& headers,
-        kj::HttpConnectSettings settings) override {
-      KJ_IF_SOME(starter, settings.tlsStarter) {
-        starter = [](kj::StringPtr) {
-          return kj::READY_NOW;
-        };
-      }
-
-      return inner.connect(host, headers, settings);
+        kj::TlsSettings settings) override {
+      KJ_DBG("TEST CONNECT");
+      auto request = inner.connect(host, headers, settings);
+      request.tlsStarter = kj::Maybe<kj::TlsStarterCallback>([](kj::StringPtr) {
+        return kj::READY_NOW;
+      });
+      return request;
     }
   };
 
@@ -953,21 +959,22 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
 
   auto frontCapnpHttpClient = kj::newHttpClient(*frontCapnpHttpService);
 
-  kj::Own<kj::TlsStarterCallback> tlsStarter = kj::heap<kj::TlsStarterCallback>();
-  kj::HttpConnectSettings settings = { .useTls = false, .tlsStarter = kj::none };
-  settings.tlsStarter = tlsStarter;
+  KJ_DBG("1");
 
   auto request = frontCapnpHttpClient->connect(
-      "https://example.org"_kj, kj::HttpHeaders(*table), settings);
+      "https://example.org"_kj, kj::HttpHeaders(*table), kj::TlsSettings::USE_TLS_STARTER);
 
-  KJ_ASSERT_NONNULL(*tlsStarter);
+  KJ_DBG("2");
+  auto tlsStarter = KJ_ASSERT_NONNULL(kj::mv(request.tlsStarter).wait(waitScope));
+  KJ_DBG("3");
 
   request.status.then(
-      [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {
+      [io=kj::mv(request.connection), tlsStarter = kj::mv(tlsStarter)](auto status) mutable {
+    KJ_DBG("4");
     KJ_ASSERT(status.statusCode == 200);
     KJ_ASSERT(status.statusText == "OK"_kj);
 
-    return KJ_ASSERT_NONNULL(*tlsStarter)("example.com").then([io = kj::mv(io)]() mutable {
+    return tlsStarter("example.com").then([io = kj::mv(io)]() mutable {
       return io->write("hello"_kjb).then([io = kj::mv(io)]() mutable {
         auto buffer = kj::heapArray<byte>(5);
         return io->tryRead(buffer.begin(), 5, 5).then(
@@ -978,6 +985,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
       });
     });
   }).wait(waitScope);
+  KJ_DBG("5");
 
   listenTask.wait(waitScope);
 }

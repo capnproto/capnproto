@@ -1235,13 +1235,10 @@ KJ_TEST("NetworkHttpClient connect with tlsStarter") {
   clientSettings.tlsContext = tls;
   auto client = newHttpClient(clientTimer, headerTable,
       io.provider->getNetwork(), *tlsNetwork, clientSettings);
-  kj::HttpConnectSettings httpConnectSettings = { false, kj::none };
-  kj::TlsStarterCallback tlsStarter;
-  httpConnectSettings.tlsStarter = tlsStarter;
   auto request = client->connect(
-      kj::str("127.0.0.1:", listener1->getPort()), HttpHeaders(headerTable), httpConnectSettings);
+      kj::str("127.0.0.1:", listener1->getPort()), HttpHeaders(headerTable), TlsSettings::USE_TLS_STARTER);
 
-  KJ_ASSERT(tlsStarter != kj::none);
+  KJ_ASSERT(request.tlsStarter.wait(io.waitScope) != kj::none);
 
   auto buf = kj::heapArray<char>(4);
 
