@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include "kj/async-prelude.h"
+#include "kj/debug.h"
 #ifndef KJ_ASYNC_H_INCLUDED
 #error "Do not include this directly; include kj/async.h."
 #include "async.h"  // help IDE parse this file
@@ -36,6 +38,7 @@
 #endif
 
 #include <kj/list.h>
+#include <typeinfo>
 
 KJ_BEGIN_HEADER
 
@@ -265,6 +268,62 @@ class PromiseNode: public PromiseArenaMember, private AsyncObject {
   // so down-cast in the few places that really need to be templated.  Luckily this is all
   // internal implementation details.
 
+  // PromiseNode state diagram:
+  //
+  //  +----------------------------------------------------+
+  //  |                     NOT_READY                      |
+  //  |                    +-----------+                   |
+  //  |                    | NO_EVENT  |                   |
+  //  |                    |           |                   |
+  //  |                    +-----------+                   |
+  //  |                      | | ^ | ^                     |
+  //  |    +-----------------+ | | | +----------+          |
+  //  |    |                   | | |            |          |
+  //  |    |         +---------+ | +-------+    |          |
+  //  |    |         |   onReady(nullptr)  |    |          |
+  //  |    |         |           |         |  false        |
+  //  |    |  onReady(event)     |         |    |          |
+  //  |    |         |           |     tryGet() |          |
+  //  |    |         |           |         |    |          |
+  //  |    |         +----+  +---+         |    |          |
+  //  |    |              |  |             v    |          |
+  //  |    |              v  |          /------------/     |
+  //  |    |           +--------+      /            /      |
+  //  |    |           | EVENT  |     /   TRY_GET  /       |
+  //  |    |           |        |    /____________/        |
+  //  |    |           +--------+                          |
+  //  |    |                |               |              |
+  //  +----|----------------|---------------|--------------+
+  //       |                |               |               
+  //       |                v               |               
+  //       |         +------------+         |               
+  //       |         |event.arm() |         |               
+  //       |         |            |         |               
+  //       |         +------------+         |               
+  //       |           |         ^          |               
+  //       |           |         |          |               
+  //       |           |  onReady(event)    |               
+  //       |           |         |          |               
+  //       |           |         |        true              
+  //       |           |         |          |               
+  //       +---------+ |  +------+          |               
+  //                 | |  |                 |               
+  //                 v v  |                 |               
+  //              +--------+                |               
+  //              | READY  |                |               
+  //              |        |                |               
+  //              +--------+                |               
+  //                   |                    |               
+  //              get(output)               |               
+  //                   |                    |               
+  //                   +------+   +---------+               
+  //                          |   |                         
+  //                          v   v                         
+  //                      +-----------+                     
+  //                      | CONSUMED  |                     
+  //                      |           |                     
+  //                      +-----------+                     
+
 public:
   virtual void onReady(Event* event) noexcept = 0;
   // Arms the given event when ready.
@@ -283,6 +342,13 @@ public:
   // Get the result.  `output` points to an ExceptionOr<T> into which the result will be written.
   // Can only be called once, and only after the node is ready.  Must be called directly from the
   // event loop, with no application code on the stack.
+
+  virtual bool tryGet(ExceptionOrValue& output) noexcept = 0;
+  // Can be called before `onReady` registration. The promise gives a chance to advance its own
+  // state without event loop assistance. 
+  // If the promise is ready, it should set `output` and return true. The promise will be consumed
+  // in this case.
+  // If the promise is not ready, it should return false and normal `onReady` handling is necessary.
 
   virtual void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) = 0;
   // Build a trace of this promise chain, showing what it is currently waiting on.
@@ -479,6 +545,8 @@ public:
     output.as<T>() = kj::mv(result);
   }
 
+  bool tryGet(ExceptionOrValue& output) noexcept override { get(output); return true; }
+
 private:
   ExceptionOr<T> result;
 };
@@ -489,6 +557,7 @@ public:
   void destroy() override;
 
   void get(ExceptionOrValue& output) noexcept override;
+  bool tryGet(ExceptionOrValue& output) noexcept override { get(output); return true; }
 
 private:
   Exception exception;
@@ -501,6 +570,7 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = value;
   }
+  bool tryGet(ExceptionOrValue& output) noexcept override { get(output); return true; }
 };
 
 // -------------------------------------------------------------------
@@ -511,6 +581,7 @@ public:
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
+  bool tryGet(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
@@ -682,6 +753,7 @@ public:
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
+  inline bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
@@ -853,6 +925,8 @@ public:
     output.exception = hubResult.exception;
     releaseHub(output);
   }
+
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 };
 
 template <typename T, size_t index>
@@ -876,6 +950,7 @@ public:
     output.exception = hubResult.exception;
     releaseHub(output);
   }
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 };
 
 // -------------------------------------------------------------------
@@ -974,6 +1049,7 @@ public:
   void onReady(Event* event) noexcept override;
   void setSelfPointer(OwnPromiseNode* selfPtr) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
+  bool tryGet(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
@@ -1025,6 +1101,7 @@ public:
 
   void onReady(Event* event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
+  bool tryGet(ExceptionOrValue& output) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
 private:
@@ -1036,6 +1113,7 @@ private:
 
     bool get(ExceptionOrValue& output);
     // Returns true if this is the side that finished.
+    bool tryGet(ExceptionOrValue& output);
 
     Maybe<Own<Event>> fire() override;
     void traceEvent(TraceBuilder& builder) override;
@@ -1069,6 +1147,7 @@ public:
 
   void onReady(Event* event) noexcept override final;
   void get(ExceptionOrValue& output) noexcept override final;
+  bool tryGet(ExceptionOrValue& output) noexcept override final;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override final;
 
 protected:
@@ -1155,6 +1234,7 @@ public:
 
   void onReady(Event *event) noexcept override final;
   void get(ExceptionOrValue &output) noexcept override final;
+  bool tryGet(ExceptionOrValue& output) noexcept override final;
   void tracePromise(TraceBuilder &builder, bool stopAtNextEvent) override final;
 
 protected:
@@ -1254,6 +1334,7 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
   }
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 
 private:
   ExceptionOr<T> result;
@@ -1296,6 +1377,14 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     KJ_IREQUIRE(!isWaiting());
     output.as<T>() = kj::mv(result);
+  }
+  
+  bool tryGet(ExceptionOrValue& output) noexcept override { 
+    if (!isWaiting()) {
+      get(output); 
+      return true; 
+    }
+    return false;
   }
 
 private:
@@ -1383,6 +1472,7 @@ public:
     KJ_IREQUIRE(isFinished());
     output.as<ResultType>() = kj::mv(result);
   }
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 
 private:
   Func func;
@@ -1951,6 +2041,7 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     output.as<ResultT>() = kj::mv(result);
   }
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 
 private:
   Func func;
@@ -1980,6 +2071,7 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     output.as<ResultT>() = kj::mv(result);
   }
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 
 private:
   Func func;
@@ -2088,6 +2180,8 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     output.as<FixVoid<T>>() = kj::mv(result);
   }
+
+  bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
 
 private:
   ExceptionOr<FixVoid<T>> result;
@@ -2325,7 +2419,7 @@ private:
 
   Maybe<Own<Event>> fire() override;
   void traceEvent(TraceBuilder& builder) override;
-
+public:
   stdcoro::coroutine_handle<> coroutine;
   ExceptionOrValue& resultRef;
 
@@ -2441,6 +2535,14 @@ private:
     output.as<FixVoid<T>>() = kj::mv(result);
   }
 
+  bool tryGet(ExceptionOrValue& output) noexcept override {
+    if (this->coroutine.done()) {
+      output.as<FixVoid<T>>() = kj::mv(result);
+      return true;
+    }
+    return false;
+  }
+
   ExceptionOr<FixVoid<T>> result;
 };
 
@@ -2471,18 +2573,10 @@ public:
   ~PromiseAwaiterBase() noexcept(false);
   KJ_DISALLOW_COPY(PromiseAwaiterBase);
 
-  bool await_ready() const { return false; }
-  // This could return "`node->get()` is safe to call" instead, which would make suspension-less
-  // co_awaits possible for immediately-fulfilled promises. However, we need an Event to figure that
-  // out, and we won't have access to the Coroutine Event until await_suspend() is called. So, we
-  // must return false here. Fortunately, await_suspend() has a trick up its sleeve to enable
-  // suspension-less co_awaits.
-
 protected:
-  void awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt);
   bool awaitSuspendImpl(CoroutineBase& coroutine);
 
-private:
+protected:
   UnwindDetector unwindDetector;
   OwnPromiseNode node;
 
@@ -2504,6 +2598,33 @@ class PromiseAwaiter: public PromiseAwaiterBase {
 
 public:
   explicit PromiseAwaiter(OwnPromiseNode&& node): PromiseAwaiterBase(kj::mv(node)) {}
+
+  bool await_ready() { 
+    return node->tryGet(result); 
+  }
+
+  void awaitResumeImpl(ExceptionOr<FixVoid<T>>& result, void* awaitedAt) {
+    KJ_IF_SOME(coroutine, maybeCoroutine) {
+      coroutine.clearPromiseNodeForTrace();
+    }
+
+    if (result.exception == kj::none && result.value == kj::none) {
+      node->get(result);
+    }
+
+    KJ_IF_SOME(exception, result.exception) {
+      // Manually extend the stack trace with the instruction address where the co_await occurred.
+      // Subtract 1 from the address to be consistent with `getStackTrace()` in `exception.c++` (see
+      // comment there).
+      exception.addTrace(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(awaitedAt) - 1));
+
+      // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` doesn't try to
+      // extend the stack trace. There's no point in extending the trace beyond the single frame we
+      // added above, as the rest of the trace will always be async framework stuff that no one wants
+      // to see.
+      kj::throwFatalException(kj::mv(exception), kj::maxValue);
+    }
+  }
 
   KJ_NOINLINE T await_resume() {
     // This is marked noinline in order to ensure __builtin_return_address() is accurate for stack
@@ -2547,7 +2668,7 @@ public:
 
   inline T await_resume() { return awaiter.await_resume(); }
 
-  inline bool await_ready() const { return awaiter.await_ready(); }
+  inline bool await_ready() { return awaiter.await_ready(); }
 
 private:
   ForkBranch<_::FixVoid<T>, false> node;
