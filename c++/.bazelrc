@@ -3,19 +3,26 @@ common --enable_platform_specific_config
 common --incompatible_autoload_externally=
 
 # Debug build configuration with maximum runtime checks
-build:dbg -c dbg --//src/kj:debug_memory=True
+build:dbg -c dbg 
+build:dbg --config=max-debug-info
+build:dbg --//src/kj:debug_memory=True
+
+# use this config for maximum possible debug information
+build:max-debug-info --copt='-g3'
+build:max-debug-info --copt='-fno-omit-frame-pointer'
+build:max-debug-info --copt='-mno-omit-leaf-frame-pointer'
 
 # Opt build
 build:opt -c opt
+build:opt --copt='-O3'
+build:opt --linkopt="-Wl,-O3"
 
 build:thin-lto --config=opt
 build:thin-lto --cxxopt='-flto=thin'
 build:thin-lto --linkopt='-flto=thin'
+build:thin-lto --dynamic_mode=off
 
 build:profile --config=thin-lto
-build:profile --copt='-O3'
-build:profile --linkopt="-Wl,-O3"
-build:profile --dynamic_mode=off
 
 build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
@@ -68,12 +75,9 @@ build --//src/kj:openssl=True
 build --//src/kj:zlib=True
 build --//src/kj:brotli=True
 
-build:no-omit-frame-pointer --copt="-fno-omit-frame-pointer"
-build:no-omit-frame-pointer --copt="-mno-omit-leaf-frame-pointer"
-
 build:sanitizers-common --copt="-Og"
 build:sanitizers-common --copt="-fno-optimize-sibling-calls"
-build:sanitizers-common --config=no-omit-frame-pointer
+build:sanitizers-common --config=max-debug-info
 # sanitizers often do work on shutdown, do it cleanly
 build:sanitizers-common --test_env=KJ_CLEAN_SHUTDOWN=1
 

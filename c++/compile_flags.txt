@@ -2,6 +2,9 @@
 -Isrc
 -Itmp
 -Ibazel-bin/src
+-Ibazel-out/../../../external/boringssl+/include
+-Ibazel-out/../../../external/codspeed_google_benchmark_compat+/include/
+-Ibazel-out/../../../external/zlib+/
 -DKJ_HEADER_WARNINGS
 -DCAPNP_HEADER_WARNINGS
 -DCAPNP_DEBUG_TYPES

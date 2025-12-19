@@ -19,4 +19,4 @@ register_toolchains(
     dev_dependency = True,
 )
 
-bazel_dep(name = "google_benchmark", version = "1.9.4")
+bazel_dep(name = "codspeed_google_benchmark_compat", version = "2.0.0", repo_name = "google_benchmark")
