@@ -162,9 +162,19 @@ cc_library(
 ) for f in [
     "byte-stream-test.c++",
     "http-over-capnp-test.c++",
-    "http-over-capnp-perf-test.c++",
     "websocket-rpc-test.c++",
 ]]
+
+cc_test(
+    name = "http-over-capnp-bench",
+    srcs = ["http-over-capnp-bench.c++"],
+    tags = ["google_benchmark"],
+    deps = [
+        ":http-over-capnp",
+        "//src/capnp:capnp-rpc",
+        "@google_benchmark//:benchmark",
+    ],
+)
 
 cc_test(
     name = "json-rpc-test",

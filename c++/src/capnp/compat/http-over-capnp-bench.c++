@@ -19,18 +19,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+
+#include <benchmark/benchmark.h>
 #include "http-over-capnp.h"
 #include <kj/compat/http.h>
-#include <kj/test.h>
+#include <kj/async.h>
 #include <kj/debug.h>
 #include <capnp/rpc-twoparty.h>
 #include <stdlib.h>
+
+
 #if KJ_BENCHMARK_MALLOC
 #include <dlfcn.h>
 #endif
-
-namespace capnp {
-namespace {
 
 // =======================================================================================
 // Metrics-gathering
@@ -118,12 +119,12 @@ public:
       return inner.tryGetLength();
     }
 
-    kj::Promise<void> write(kj::ArrayPtr<const byte> buffer)  override {
+    kj::Promise<void> write(kj::ArrayPtr<const kj::byte> buffer)  override {
       ++writeCount;
       writeBytes += buffer.size();
       return inner.write(buffer);
     }
-    kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const kj::byte>> pieces) override {
       ++writeCount;
       for (auto& piece: pieces) {
         writeBytes += piece.size();
@@ -224,12 +225,12 @@ public:
     return kj::String(chars.releaseAsArray());
   }
 
-  kj::Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
+  kj::Promise<void> write(kj::ArrayPtr<const kj::byte> buffer) override {
     chars.addAll(buffer);
     return kj::READY_NOW;
   }
 
-  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const kj::byte>> pieces) override {
     for (auto piece: pieces) {
       chars.addAll(piece.asChars());
     }
@@ -305,7 +306,7 @@ private:
   VectorOutputStream responseBody;
 
   kj::Own<kj::AsyncOutputStream> send(
-      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
+      kj::uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_ASSERT(statusCode == 200);
     KJ_ASSERT(statusText == "OK"_kj);
@@ -319,7 +320,7 @@ private:
   }
 };
 
-KJ_TEST("Benchmark baseline") {
+static void bm_Http_Baseline(benchmark::State &state) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   Metrics metrics;
@@ -329,12 +330,14 @@ KJ_TEST("Benchmark baseline") {
   MockSender sender(headerTableBuilder);
   auto headerTable = headerTableBuilder.build();
 
-  doBenchmark([&]() {
+  for (auto _ : state) {
     sender.sendRequest(service).wait(waitScope);
-  });
+  }
 }
 
-KJ_TEST("Benchmark KJ HTTP client wrapper") {
+BENCHMARK(bm_Http_Baseline);
+
+static void bm_Http_ClientWrapper(benchmark::State &state) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   Metrics metrics;
@@ -346,12 +349,14 @@ KJ_TEST("Benchmark KJ HTTP client wrapper") {
 
   auto client = kj::newHttpClient(service);
 
-  doBenchmark([&]() {
+  for (auto _ : state) {
     sender.sendRequest(*client).wait(waitScope);
-  });
+  }
 }
 
-KJ_TEST("Benchmark KJ HTTP full protocol") {
+BENCHMARK(bm_Http_ClientWrapper);
+
+static void bm_Http_FullProtocol(benchmark::State &state) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   Metrics metrics;
@@ -368,12 +373,14 @@ KJ_TEST("Benchmark KJ HTTP full protocol") {
       .eagerlyEvaluate([](kj::Exception&& e) noexcept { kj::throwFatalException(kj::mv(e)); });
   auto client = kj::newHttpClient(*headerTable, pair.client);
 
-  doBenchmark([&]() {
+  for (auto _ : state) {
     sender.sendRequest(*client).wait(waitScope);
-  });
+  } ;
 }
 
-KJ_TEST("Benchmark HTTP-over-capnp local call") {
+BENCHMARK(bm_Http_FullProtocol);
+
+static void bm_Http_OverCapnpLocalCall(benchmark::State &state) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   Metrics metrics;
@@ -381,24 +388,26 @@ KJ_TEST("Benchmark HTTP-over-capnp local call") {
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
   MockSender sender(headerTableBuilder);
-  HttpOverCapnpFactory::HeaderIdBundle headerIds(headerTableBuilder);
+  capnp::HttpOverCapnpFactory::HeaderIdBundle headerIds(headerTableBuilder);
   auto headerTable = headerTableBuilder.build();
 
   // Client and server use different HttpOverCapnpFactory instances to block path-shortening.
-  ByteStreamFactory bsFactory;
-  HttpOverCapnpFactory hocFactory(bsFactory, headerIds.clone(), HttpOverCapnpFactory::LEVEL_2);
-  ByteStreamFactory bsFactory2;
-  HttpOverCapnpFactory hocFactory2(bsFactory2, kj::mv(headerIds), HttpOverCapnpFactory::LEVEL_2);
+  capnp::ByteStreamFactory bsFactory;
+  capnp::HttpOverCapnpFactory hocFactory(bsFactory, headerIds.clone(), capnp::HttpOverCapnpFactory::LEVEL_2);
+  capnp::ByteStreamFactory bsFactory2;
+  capnp::HttpOverCapnpFactory hocFactory2(bsFactory2, kj::mv(headerIds), capnp::HttpOverCapnpFactory::LEVEL_2);
 
   auto cap = hocFactory.kjToCapnp(kj::attachRef(service));
   auto roundTrip = hocFactory2.capnpToKj(kj::mv(cap));
 
-  doBenchmark([&]() {
+  for (auto _ : state) {
     sender.sendRequest(*roundTrip).wait(waitScope);
-  });
+  }
 }
 
-KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
+BENCHMARK(bm_Http_OverCapnpLocalCall);
+
+static void bm_Http_OverCapnpFullRPC(benchmark::State &state) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
   Metrics metrics;
@@ -407,28 +416,29 @@ KJ_TEST("Benchmark HTTP-over-capnp full RPC") {
   kj::HttpHeaderTable::Builder headerTableBuilder;
   MockService service(headerTableBuilder);
   MockSender sender(headerTableBuilder);
-  HttpOverCapnpFactory::HeaderIdBundle headerIds(headerTableBuilder);
+  capnp::HttpOverCapnpFactory::HeaderIdBundle headerIds(headerTableBuilder);
   auto headerTable = headerTableBuilder.build();
 
   // Client and server use different HttpOverCapnpFactory instances to block path-shortening.
-  ByteStreamFactory bsFactory;
-  HttpOverCapnpFactory hocFactory(bsFactory, headerIds.clone(), HttpOverCapnpFactory::LEVEL_2);
-  ByteStreamFactory bsFactory2;
-  HttpOverCapnpFactory hocFactory2(bsFactory2, kj::mv(headerIds), HttpOverCapnpFactory::LEVEL_2);
+  capnp::ByteStreamFactory bsFactory;
+  capnp::HttpOverCapnpFactory hocFactory(bsFactory, headerIds.clone(), capnp::HttpOverCapnpFactory::LEVEL_2);
+  capnp::ByteStreamFactory bsFactory2;
+  capnp::HttpOverCapnpFactory hocFactory2(bsFactory2, kj::mv(headerIds), capnp::HttpOverCapnpFactory::LEVEL_2);
 
-  TwoPartyServer server(hocFactory.kjToCapnp(kj::attachRef(service)));
+  capnp::TwoPartyServer server(hocFactory.kjToCapnp(kj::attachRef(service)));
 
   auto pipe = kj::newTwoWayPipe();
   auto listenLoop = server.accept(pair.server);
 
-  TwoPartyClient client(pair.client);
+  capnp::TwoPartyClient client(pair.client);
 
   auto roundTrip = hocFactory2.capnpToKj(client.bootstrap().castAs<capnp::HttpService>());
 
-  doBenchmark([&]() {
+  for (auto _ : state) {
     sender.sendRequest(*roundTrip).wait(waitScope);
-  });
+  }
 }
 
-}  // namespace
-}  // namespace capnp
+BENCHMARK(bm_Http_OverCapnpFullRPC);
+
+BENCHMARK_MAIN();
