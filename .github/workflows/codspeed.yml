@@ -5,7 +5,7 @@ on:
   merge_group:
   push:
     branches:
-      - main
+      - v2
 
 concurrency:
   group: codspeed.yml-${{ github.event.pull_request.number || github.run_id }}
