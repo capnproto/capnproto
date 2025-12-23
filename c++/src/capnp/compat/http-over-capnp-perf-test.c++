@@ -251,7 +251,7 @@ public:
         customHeaderId(headerTableBuilder.add("X-Custom-Header")) {}
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_ASSERT(method == kj::HttpMethod::GET);
     KJ_ASSERT(url == "http://foo"_kj);
@@ -294,7 +294,7 @@ public:
     kj::HttpHeaders headers(headerTable);
     headers.setPtr(customHeaderId, "corge"_kj);
     NullInputStream requestBody;
-    co_await service.request(kj::HttpMethod::GET, "http://foo"_kj, headers, requestBody, *this);
+    co_await service.request(kj::HttpMethod::GET, "http://foo"_kj, kj::mv(headers), requestBody, *this);
     KJ_ASSERT(responseBody.consume() == HELLO_WORLD);
   }
 

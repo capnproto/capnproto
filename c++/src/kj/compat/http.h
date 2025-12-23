@@ -968,7 +968,7 @@ public:
   };
 
   virtual kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) = 0;
   // Perform an HTTP request.
   //
@@ -1006,7 +1006,7 @@ public:
   };
 
   virtual kj::Promise<void> connect(kj::StringPtr host,
-                                    const HttpHeaders& headers,
+                                    HttpHeaders headers,
                                     kj::AsyncIoStream& connection,
                                     ConnectResponse& response,
                                     HttpConnectSettings settings);
@@ -1287,6 +1287,10 @@ public:
   class SuspendableRequest;
   typedef kj::Function<kj::Maybe<kj::Own<HttpService>>(SuspendableRequest&)>
       SuspendableHttpServiceFactory;
+  // Returns none or calls SuspendableRequest.suspend() if it suspends the request.
+  // The reference is valid until the factory returns.
+  // TODO(maybe) .suspend() is not needed and we can totally do it through returning none.
+  // TODO(maybe) maybe pass it by value?
 
   HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable, HttpService& service,
              Settings settings = Settings());
@@ -1415,8 +1419,11 @@ class HttpServer::SuspendableRequest {
 public:
   kj::OneOf<HttpMethod,HttpConnectMethod> method;
   kj::StringPtr url;
-  const HttpHeaders& headers;
+
+  const HttpHeaders& getHeaders() { return headers; }
   // Parsed request front matter, so the implementer can decide whether to suspend the request.
+  // The lifetime of this header object _does not_ extend beyond the SuspendableRequest lifetime,
+  // i.e it becomes invalid after factory returns.
 
   SuspendedRequest suspend();
   // Signal to the HttpServer that the current request loop should be exited. Return a
@@ -1426,11 +1433,13 @@ public:
 
 private:
   explicit SuspendableRequest(
-      Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, const HttpHeaders& headers)
-      : method(method), url(url), headers(headers), connection(connection) {}
+      Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, HttpHeaders headers)
+      : method(method), url(url), headers(kj::mv(headers)), connection(connection) {}
   KJ_DISALLOW_COPY_AND_MOVE(SuspendableRequest);
 
+  HttpHeaders headers;
   Connection& connection;
+
 
   friend class Connection;
 };

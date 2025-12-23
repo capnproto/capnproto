@@ -500,7 +500,7 @@ public:
       : headerTable(headerTable), fulfiller(kj::mv(fulfiller)), done(kj::mv(done)) {}
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     kj::HttpHeaders respHeaders(headerTable);
     respHeaders.addPtrPtr("X-Foo", "bar");
@@ -628,7 +628,7 @@ public:
   }
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     called = true;
     return kj::NEVER_DONE;
@@ -677,13 +677,13 @@ public:
       : headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
+      kj::StringPtr host, kj::HttpHeaders headers, kj::AsyncIoStream& io,
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
@@ -702,13 +702,13 @@ public:
       : headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
+      kj::StringPtr host, kj::HttpHeaders headers, kj::AsyncIoStream& io,
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
     response.accept(200, "OK", kj::HttpHeaders(headerTable));
@@ -739,13 +739,13 @@ public:
       : headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::HttpMethod method, kj::StringPtr url, kj::HttpHeaders headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(
-      kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
+      kj::StringPtr host, kj::HttpHeaders headers, kj::AsyncIoStream& io,
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
     auto body = response.reject(500, "Internal Server Error", kj::HttpHeaders(headerTable), 5);

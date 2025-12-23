@@ -682,7 +682,7 @@ public:
   uint getRequestCount() { return requestCount; }
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
     auto& expectedRequest = testCases == nullptr ? *singleExpectedRequest :
         testCases[requestCount % testCases.size()].request;
@@ -2587,7 +2587,7 @@ public:
       : headerTable(headerTable), hMyHeader(hMyHeader), tasks(*this) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_ASSERT(headers.isWebSocket());
 
@@ -4027,7 +4027,7 @@ KJ_TEST("HttpServer WebSocket with application error after accept") {
 
   public:
     Promise<void> request(
-        HttpMethod method, kj::StringPtr, const HttpHeaders&,
+        HttpMethod method, kj::StringPtr, HttpHeaders,
         AsyncInputStream&, Response& response) override {
       KJ_ASSERT(method == HttpMethod::GET);
       HttpHeaderTable headerTable;
@@ -4147,7 +4147,7 @@ public:
   explicit BrokenHttpService(kj::Exception&& exception): exception(kj::mv(exception)) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
     return requestBody.readAllBytes().then([this](kj::Array<byte>&&) -> kj::Promise<void> {
       KJ_IF_SOME(e, exception) {
@@ -4506,7 +4506,7 @@ class PartialResponseService final: public HttpService {
   // HttpService that sends a partial response then throws.
 public:
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     return requestBody.readAllBytes()
         .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
@@ -4555,7 +4555,7 @@ class PartialResponseNoThrowService final: public HttpService {
   // HttpService that sends a partial response then returns without throwing.
 public:
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     return requestBody.readAllBytes()
         .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
@@ -4619,7 +4619,7 @@ class PumpResponseService final: public HttpService {
   // pump, but the stream happens to be the right size.
 public:
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     return requestBody.readAllBytes()
         .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
@@ -4671,7 +4671,7 @@ class HangingHttpService final: public HttpService {
   // HttpService that hangs forever.
 public:
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
     kj::Promise<void> result = kj::NEVER_DONE;
     ++inFlight;
@@ -4754,7 +4754,7 @@ public:
 
 private:
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     // Check headers made it through the transfer.
     KJ_EXPECT(headers.get(fooHeaderId).orDefault("(nil)") == "foo");
@@ -5094,7 +5094,7 @@ KJ_TEST("HttpServer::listenHttpCleanDrain() factory-created services outlive req
       KJ_DISALLOW_COPY_AND_MOVE(ServiceImpl);
 
       kj::Promise<void> request(
-          HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+          HttpMethod method, kj::StringPtr url, HttpHeaders headers,
           kj::AsyncInputStream& requestBody, Response& response) override {
         return evalLater([&serviceCount = serviceCount, &table = table, &requestBody, &response]() {
           // This KJ_EXPECT here is the entire point of this test.
@@ -5417,7 +5417,7 @@ public:
       : table(table), expectedLength(expectedLength) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     auto stream = response.send(200, "OK", HttpHeaders(table), expectedLength);
     auto promise = stream->write("foo"_kjb);
@@ -5499,7 +5499,7 @@ public:
       : table(table), closeUpstreamFirst(closeUpstreamFirst) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_ASSERT(headers.isWebSocket());
 
@@ -5711,7 +5711,7 @@ public:
   DummyService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     if (!headers.isWebSocket()) {
       if (url == "/throw") {
@@ -6308,7 +6308,7 @@ public:
       : timer(timer), headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
     if (method == HttpMethod::POST) {
       // Try to read all content, but cancel after 1ms.
@@ -6659,7 +6659,7 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
   public:
     SendErrorHttpService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
     kj::Promise<void> request(
-        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        HttpMethod method, kj::StringPtr url, HttpHeaders headers,
         kj::AsyncInputStream& requestBody, Response& responseSender) override {
       return responseSender.sendError(404, "Not Found", headerTable);
     }
@@ -6800,13 +6800,13 @@ public:
   uint connectCount = 0;
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
@@ -6832,13 +6832,13 @@ public:
   uint connectCount = 0;
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
@@ -6860,13 +6860,13 @@ public:
       : headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
@@ -6887,13 +6887,13 @@ public:
       : headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
@@ -6918,13 +6918,13 @@ public:
 private:
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
@@ -6936,7 +6936,7 @@ private:
   public:
     SimpleHttpService(HttpHeaderTable& table) : table(table) {}
     kj::Promise<void> request(
-        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        HttpMethod method, kj::StringPtr url, HttpHeaders headers,
         kj::AsyncInputStream& requestBody, Response& response) override {
       auto out = response.send(200, "OK"_kj, HttpHeaders(table));
       return out->write("hello there"_kjb).attach(kj::mv(out));
@@ -6958,13 +6958,13 @@ public:
       : headerTable(headerTable) {}
 
   kj::Promise<void> request(
-      HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      HttpMethod method, kj::StringPtr url, HttpHeaders headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
   }
 
   kj::Promise<void> connect(kj::StringPtr host,
-                            const HttpHeaders& headers,
+                            HttpHeaders headers,
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
