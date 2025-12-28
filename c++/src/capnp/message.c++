@@ -220,13 +220,19 @@ MallocMessageBuilder::MallocMessageBuilder(
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
   KJ_REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
 
-  if (initStrategy == InitializationStrategy::NO_ZERO_MEMORY) {
-    memset(firstSegment.begin(), 0, sizeof(word));
+  if (initStrategy == InitializationStrategy::ZERO_MEMORY) {
+    // Checking just the first word should catch most cases of failing to zero the segment.
+    KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+            "First segment must be zeroed.");
   }
 
-  // Checking just the first word should catch most cases of failing to zero the segment.
-  KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
-          "First segment must be zeroed.");
+  // if (initStrategy == InitializationStrategy::NO_ZERO_MEMORY) {
+  //   memset(firstSegment.begin(), 0, sizeof(word));
+  // }
+  //
+  // // Checking just the first word should catch most cases of failing to zero the segment.
+  // KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+  //         "First segment must be zeroed.");
 }
 
 // MallocMessageBuilder::MallocMessageBuilder(

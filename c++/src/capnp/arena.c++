@@ -238,7 +238,11 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     kj::ctor(segment0, this, SegmentId(0), ptr.begin(), actualSize, &this->dummyLimiter, ZERO * WORDS, dirty);
 
     segmentWithSpace = &segment0;
-    return AllocateResult { &segment0, segment0.allocate(amount) };
+
+    word* resultPtr = segment0.allocate(amount);
+    // Lazy zeroing: zero the first word if the memory is dirty.
+    if (dirty) memset(resultPtr, 0, static_cast<size_t>(POINTER_SIZE_IN_WORDS) * sizeof(word));
+    return AllocateResult { &segment0, resultPtr };
   } else {
     if (segmentWithSpace != nullptr) {
       // Check if there is space in an existing segment.
@@ -250,6 +254,8 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
       //   and shove them to the back of the queue if they have become too small.
       word* attempt = segmentWithSpace->allocate(amount);
       if (attempt != nullptr) {
+        // // Lazy zeroing: zero the first word if the memory is dirty.
+        // if (!message->isAllocationZeroed()) memset(attempt, 0, static_cast<size_t>(POINTER_SIZE_IN_WORDS) * sizeof(word));
         return AllocateResult { segmentWithSpace, attempt };
       }
     }
@@ -262,7 +268,10 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     segmentWithSpace = result;
 
     // Allocating from the new segment is guaranteed to succeed since we made it big enough.
-    return AllocateResult { result, result->allocate(amount) };
+    word* resultPtr = result->allocate(amount);
+    // Lazy zeroing: zero the first word if the memory is dirty.
+    if (dirty) memset(resultPtr, 0, static_cast<size_t>(POINTER_SIZE_IN_WORDS) * sizeof(word));
+    return AllocateResult { result, resultPtr };
   }
 }
 
