@@ -168,6 +168,8 @@ public:
     size_t wordsUsed;
     // Number of words in `space` which are used; the rest are free space in which additional
     // objects may be allocated.
+
+    bool isZeroed = true;
   };
 
   explicit MessageBuilder(kj::ArrayPtr<SegmentInit> segments);
@@ -201,6 +203,8 @@ public:
   // allocateSegment() is responsible for zeroing the memory before returning. This is required
   // because otherwise the Cap'n Proto implementation would have to zero the memory anyway, and
   // many allocators are able to provide already-zero'd memory more efficiently.
+
+  virtual bool isAllocationZeroed() const { return true; }
 
   template <typename RootType>
   typename RootType::Builder initRoot();
@@ -378,8 +382,14 @@ class MallocMessageBuilder: public MessageBuilder {
   // a specific location in memory.
 
 public:
+  enum class InitializationStrategy: uint8_t {
+    ZERO_MEMORY,
+    NO_ZERO_MEMORY
+  };
+
   explicit MallocMessageBuilder(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
-      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY,
+      InitializationStrategy initStrategy = InitializationStrategy::ZERO_MEMORY);
   // Creates a BuilderContext which allocates at least the given number of words for the first
   // segment, and then uses the given strategy to decide how much to allocate for subsequent
   // segments.  When choosing a value for firstSegmentWords, consider that:
@@ -393,13 +403,18 @@ public:
   // have reason to believe you need to.
 
   explicit MallocMessageBuilder(kj::ArrayPtr<word> firstSegment,
-      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY,
+      InitializationStrategy initStrategy = InitializationStrategy::ZERO_MEMORY);
   // This version always returns the given array for the first segment, and then proceeds with the
   // allocation strategy.  This is useful for optimization when building lots of small messages in
   // a tight loop:  you can reuse the space for the first segment.
   //
   // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
   // over any space that was used so that it can be reused.
+
+  virtual bool isAllocationZeroed() const override {
+    return initializationStrategy == InitializationStrategy::ZERO_MEMORY;
+  }
 
   KJ_DISALLOW_COPY_AND_MOVE(MallocMessageBuilder);
   virtual ~MallocMessageBuilder() noexcept(false);
@@ -409,6 +424,7 @@ public:
 private:
   uint nextSize;
   AllocationStrategy allocationStrategy;
+  InitializationStrategy initializationStrategy;
 
   bool ownFirstSegment;
   bool returnedFirstSegment;

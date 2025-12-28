@@ -210,20 +210,46 @@ kj::ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
 // -------------------------------------------------------------------
 
 MallocMessageBuilder::MallocMessageBuilder(
-    uint firstSegmentWords, AllocationStrategy allocationStrategy)
-    : nextSize(firstSegmentWords), allocationStrategy(allocationStrategy),
+    uint firstSegmentWords, AllocationStrategy allocationStrategy, InitializationStrategy initStrategy)
+    : nextSize(firstSegmentWords), allocationStrategy(allocationStrategy), initializationStrategy(initStrategy),
       ownFirstSegment(true), returnedFirstSegment(false), firstSegment(nullptr) {}
 
 MallocMessageBuilder::MallocMessageBuilder(
-    kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
-    : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
+    kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy, InitializationStrategy initStrategy)
+    : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy), initializationStrategy(initStrategy),
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
   KJ_REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
+
+  if (initStrategy == InitializationStrategy::NO_ZERO_MEMORY) {
+    memset(firstSegment.begin(), 0, sizeof(word));
+  }
 
   // Checking just the first word should catch most cases of failing to zero the segment.
   KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
           "First segment must be zeroed.");
 }
+
+// MallocMessageBuilder::MallocMessageBuilder(
+//     kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy, InitializationStrategy initStrategy)
+//     : MessageBuilder(kj::heapArray<SegmentInit>({
+//           SegmentInit {
+//               firstSegment,
+//               0,
+//               initStrategy == InitializationStrategy::ZERO_MEMORY
+//           }
+//       })),
+//       nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
+//       initializationStrategy(initStrategy),
+//       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
+//
+//   KJ_REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
+//
+//   if (initStrategy == InitializationStrategy::ZERO_MEMORY) {
+//     // Checking just the first word should catch most cases of failing to zero the segment.
+//     KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+//             "First segment must be zeroed.");
+//   }
+// }
 
 MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
   if (returnedFirstSegment) {
@@ -265,9 +291,19 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   uint size = kj::max(minimumSize, nextSize);
 
-  void* result = calloc(size, sizeof(word));
-  if (result == nullptr) {
-    KJ_FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
+  void* result;
+  // 根据策略选择分配方式
+  if (initializationStrategy == InitializationStrategy::ZERO_MEMORY) {
+    result = calloc(size, sizeof(word));
+    if (result == nullptr) {
+      KJ_FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
+    }
+  } else {
+    // NO_ZERO_MEMORY: 使用 malloc，不进行清零
+    result = malloc(size * sizeof(word));
+    if (result == nullptr) {
+      KJ_FAIL_SYSCALL("malloc(size * sizeof(word))", ENOMEM, size);
+    }
   }
 
   if (!returnedFirstSegment) {
