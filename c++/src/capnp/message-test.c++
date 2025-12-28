@@ -330,14 +330,16 @@ KJ_TEST("Corner Case: Uninitialized DATA with 1 byte padding") {
 
 // Helper class for the Custom Builder test.
 // Simulates a user-defined MessageBuilder that uses a custom allocator (e.g., malloc)
-// and does not zero memory, overriding isAllocationZeroed() to return false.
+// without zero-initializing memory. It overrides isAllocationZeroed() to return false,
+// ensuring that Cap'n Proto correctly sanitizes memory where necessary (e.g., Structs, padding)
+// while preserving performance optimizations (e.g., uninitialized Data).
 class DirtyMallocMessageBuilder : public MessageBuilder {
 public:
   DirtyMallocMessageBuilder()
-      : MessageBuilder(kj::heapArray<SegmentInit>({
-          // Initialize with nullptr. The Arena will call allocateSegment() on first use.
-          SegmentInit { nullptr, 0, false }
-        })) {}
+      // Initialize with an empty segment list. This forces the Builder to call
+      // allocateSegment() immediately when the first object is allocated, ensuring
+      // we get our "dirty" memory from the start rather than assuming Segment 0 exists.
+      : MessageBuilder() {}
 
   ~DirtyMallocMessageBuilder() {
     for (void* ptr : allocations) {
@@ -345,7 +347,8 @@ public:
     }
   }
 
-  // CRITICAL: Explicitly declare that this allocator provides dirty memory.
+  // Explicitly declare that this allocator provides dirty memory.
+  // This forces the MessageBuilder to proactively zero-out Structs upon initialization.
   bool isAllocationZeroed() const override { return false; }
 
   kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
@@ -353,7 +356,9 @@ public:
     void* ptr = malloc(sizeBytes);
     KJ_ASSERT(ptr != nullptr);
 
-    // Deliberately fill with garbage (0xEE) to verify lazy zeroing logic.
+    // Deliberately fill with garbage pattern (0xEE) to verify that Cap'n Proto
+    // correctly zeros out fields and padding, but leaves "uninitialized" data
+    // bodies untouched as an optimization.
     memset(ptr, 0xEE, sizeBytes);
 
     allocations.add(ptr);
@@ -367,22 +372,26 @@ private:
 KJ_TEST("CustomMessageBuilder: Lazy zeroing works with custom dirty allocator") {
   DirtyMallocMessageBuilder builder;
 
-  // 1. Verify Safety: Structs must be zeroed.
+  // 1. Verify Safety: Structs must be zero-initialized.
+  // Even though the underlying memory is filled with 0xEE, the Builder must clear it.
   auto root = builder.initRoot<TestAllTypes>();
   KJ_EXPECT(root.getInt64Field() == 0);
   KJ_EXPECT(root.getBoolField() == false);
 
   // 2. Verify Performance & Security for Data Blob.
-  // Allocate 3 bytes. Expect 0xEE in body, 0x00 in padding.
+  // Allocate 3 bytes of Data.
+  // Memory Layout (1 word): [Body: 0, 1, 2] [Padding: 3, 4, 5, 6, 7]
   auto data = root.initDataFieldUninitialized(3);
   const byte* ptr = data.begin();
 
-  // Check Body (Dirty / Performance)
+  // Check Body: Should remain dirty (0xEE) because we requested "Uninitialized".
+  // This confirms the performance optimization (skipping memset on the body).
   KJ_EXPECT(ptr[0] == 0xEE);
   KJ_EXPECT(ptr[1] == 0xEE);
   KJ_EXPECT(ptr[2] == 0xEE);
 
-  // Check Padding (Clean / Security)
+  // Check Padding: Must be zeroed (0x00).
+  // This confirms security (prevention of information leaks in padding bytes).
   KJ_EXPECT(ptr[3] == 0x00);
   KJ_EXPECT(ptr[4] == 0x00);
   KJ_EXPECT(ptr[5] == 0x00);
