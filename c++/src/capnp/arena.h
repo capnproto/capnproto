@@ -383,6 +383,8 @@ private:
 
   template <typename T>  // Can be `word` or `const word`.
   SegmentBuilder* addSegmentInternal(kj::ArrayPtr<T> content, bool notZeroed = false);
+
+  bool needLazyZero = false;
 };
 
 // =======================================================================================

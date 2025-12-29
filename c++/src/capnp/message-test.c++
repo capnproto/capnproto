@@ -349,7 +349,7 @@ public:
 
   // Explicitly declare that this allocator provides dirty memory.
   // This forces the MessageBuilder to proactively zero-out Structs upon initialization.
-  bool isAllocationZeroed() const override { return false; }
+  bool needLazyZero() const override { return true; }
 
   kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
     size_t sizeBytes = minimumSize * sizeof(word);

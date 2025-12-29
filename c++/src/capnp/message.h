@@ -204,7 +204,7 @@ public:
   // because otherwise the Cap'n Proto implementation would have to zero the memory anyway, and
   // many allocators are able to provide already-zero'd memory more efficiently.
 
-  virtual bool isAllocationZeroed() const { return true; }
+  virtual bool needLazyZero() const { return false; }
 
   template <typename RootType>
   typename RootType::Builder initRoot();
@@ -412,8 +412,8 @@ public:
   // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
   // over any space that was used so that it can be reused.
 
-  virtual bool isAllocationZeroed() const override {
-    return initializationStrategy == InitializationStrategy::PRE_ZERO_MEMORY;
+  bool needLazyZero() const override {
+    return initializationStrategy == InitializationStrategy::LAZY_ZERO_MEMORY;
   }
 
   KJ_DISALLOW_COPY_AND_MOVE(MallocMessageBuilder);
