@@ -515,9 +515,8 @@ struct WireHelpers {
         ref = reinterpret_cast<WirePointer*>(ptr);
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
 
-        // 如果需要清零，并且 segment 是 dirty 的，则清零 landing pad 之后的数据部分
-        // Landing pad (ptr) 已经被 setKindAndTarget 写过了，不需要清零
-        if (zeroMemory && segment->isPossiblyDirty()) {
+        // If zeroing is required and the segment is not pre-zeroed, zero the data portion after the landing pad.
+        if (zeroMemory && segment->isNotZeroed()) {
           WireHelpers::zeroMemory(ptr + POINTER_SIZE_IN_WORDS, amount);
         }
 
@@ -526,8 +525,8 @@ struct WireHelpers {
       } else {
         ref->setKindAndTarget(kind, ptr, segment);
 
-        // 如果需要清零且 segment 可能是脏的
-        if (zeroMemory && segment->isPossiblyDirty()) {
+        // If zeroing is required and the segment is not pre-zeroed.
+        if (zeroMemory && segment->isNotZeroed()) {
           WireHelpers::zeroMemory(ptr, amount);
         }
         return ptr;
@@ -538,8 +537,8 @@ struct WireHelpers {
       auto allocation = orphanArena->allocate(amount);
       segment = allocation.segment;
       ref->setKindForOrphan(kind);
-      // OrphanArena 分配的也需要检查 dirty
-      if (zeroMemory && segment->isPossiblyDirty()) {
+      // Check for not zeroed memory allocated by OrphanArena.
+      if (zeroMemory && segment->isNotZeroed()) {
         WireHelpers::zeroMemory(allocation.words, amount);
       }
       return allocation.words;
@@ -1732,10 +1731,10 @@ struct WireHelpers {
     return { segment, Data::Builder(reinterpret_cast<byte*>(ptr), unbound(size / BYTES)) };
   }
 
-  static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> initDataPointerUninitialized(
+  static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> uninitializedDataPointer(
       WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, BlobSize size,
       BuilderArena* orphanArena = nullptr)) {
-    // Allocate with zeroMemory = false for performance.
+    // Allocate the space with zeroMemory = false
     word* ptr = allocate(ref, segment, capTable, roundBytesUpToWords(size),
                          WirePointer::LIST, orphanArena, false);
 
@@ -1743,7 +1742,7 @@ struct WireHelpers {
     ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));
 
     // Security: Zero-out padding bytes if memory is dirty.
-    if (segment->isPossiblyDirty()) {
+    if (segment->isNotZeroed()) {
       size_t byteSize = unbound(size / BYTES);
       // Calculate the actual allocated size in bytes (aligned to Word boundary).
       size_t allocatedSize = unbound(roundBytesUpToWords(size)) * sizeof(word);
@@ -2636,8 +2635,8 @@ Data::Builder PointerBuilder::initBlob<Data>(ByteCount size) {
       assertMaxBits<BLOB_SIZE_BITS>(size, ThrowOverflow())).value;
 }
 template <>
-Data::Builder PointerBuilder::initBlobUninitialized<Data>(ByteCount size) {
-  return WireHelpers::initDataPointerUninitialized(pointer, segment, capTable,
+Data::Builder PointerBuilder::uninitializedBlob<Data>(ByteCount size) {
+  return WireHelpers::uninitializedDataPointer(pointer, segment, capTable,
       assertMaxBits<BLOB_SIZE_BITS>(size, ThrowOverflow())).value;
 }
 template <>

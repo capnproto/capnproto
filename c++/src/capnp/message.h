@@ -383,13 +383,13 @@ class MallocMessageBuilder: public MessageBuilder {
 
 public:
   enum class InitializationStrategy: uint8_t {
-    ZERO_MEMORY,
-    NO_ZERO_MEMORY
+    PRE_ZERO_MEMORY,
+    LAZY_ZERO_MEMORY
   };
 
   explicit MallocMessageBuilder(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
       AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY,
-      InitializationStrategy initStrategy = InitializationStrategy::ZERO_MEMORY);
+      InitializationStrategy initStrategy = InitializationStrategy::PRE_ZERO_MEMORY);
   // Creates a BuilderContext which allocates at least the given number of words for the first
   // segment, and then uses the given strategy to decide how much to allocate for subsequent
   // segments.  When choosing a value for firstSegmentWords, consider that:
@@ -404,7 +404,7 @@ public:
 
   explicit MallocMessageBuilder(kj::ArrayPtr<word> firstSegment,
       AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY,
-      InitializationStrategy initStrategy = InitializationStrategy::ZERO_MEMORY);
+      InitializationStrategy initStrategy = InitializationStrategy::PRE_ZERO_MEMORY);
   // This version always returns the given array for the first segment, and then proceeds with the
   // allocation strategy.  This is useful for optimization when building lots of small messages in
   // a tight loop:  you can reuse the space for the first segment.
@@ -413,7 +413,7 @@ public:
   // over any space that was used so that it can be reused.
 
   virtual bool isAllocationZeroed() const override {
-    return initializationStrategy == InitializationStrategy::ZERO_MEMORY;
+    return initializationStrategy == InitializationStrategy::PRE_ZERO_MEMORY;
   }
 
   KJ_DISALLOW_COPY_AND_MOVE(MallocMessageBuilder);

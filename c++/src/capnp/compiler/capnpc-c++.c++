@@ -1757,7 +1757,7 @@ private:
               COND(!shouldTemplatizeInit,
                 "  ", maybeInline, builderType, " init", titleCase, "(unsigned int size);\n")),
             COND(shouldIncludeSizedInit && !shouldTemplatizeInit && typeSchema.which() == schema::Type::DATA,
-                "  ", maybeInline, builderType, " init", titleCase, "Uninitialized(unsigned int size);\n"),
+              "  ", maybeInline, builderType, " uninitialized", titleCase, "(unsigned int size);\n"),
             "  ", maybeInline, "void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  ", maybeInline, "::capnp::Orphan<", type, "> disown", titleCase, "();\n",
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
@@ -1830,10 +1830,10 @@ private:
                 "}\n"),
             COND(shouldIncludeSizedInit && !shouldTemplatizeInit && typeSchema.which() == schema::Type::DATA,
                 templateContext.allDecls(),
-                maybeInline, builderType, " ", scope, "Builder::init", titleCase, "Uninitialized(unsigned int size) {\n",
+                maybeInline, builderType, " ", scope, "Builder::uninitialized", titleCase, "(unsigned int size) {\n",
                 unionDiscrim.set,
                 "  return _builder.getPointerField(\n"
-                "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS).initBlobUninitialized<", type, ">(size);\n"
+                "      ::capnp::bounded<", offset, ">() * ::capnp::POINTERS).uninitializedBlob<", type, ">(size);\n"
                 "}\n"),
             templateContext.allDecls(),
             maybeInline, "void ", scope, "Builder::adopt", titleCase, "(\n"

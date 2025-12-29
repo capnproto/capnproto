@@ -186,10 +186,10 @@ class SegmentBuilder: public SegmentReader {
 public:
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, word* ptr, SegmentWordCount size,
                         ReadLimiter* readLimiter, SegmentWordCount wordsUsed = ZERO * WORDS,
-                        bool possiblyDirty = false);
+                        bool notZeroed = false);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, const word* ptr, SegmentWordCount size,
                         ReadLimiter* readLimiter, SegmentWordCount wordsUsed = ZERO * WORDS,
-                        bool possiblyDirty = false);
+                        bool notZeroed = false);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
                         ReadLimiter* readLimiter);
 
@@ -210,7 +210,7 @@ public:
 
   inline bool isWritable() { return !readOnly; }
 
-  inline bool isPossiblyDirty() { return possiblyDirty; }
+  inline bool isNotZeroed() { return notZeroed; }
 
   inline void tryTruncate(word* from, word* to);
   // If `from` points just past the current end of the segment, then move the end back to `to`.
@@ -228,7 +228,7 @@ private:
 
   bool readOnly;
 
-  bool possiblyDirty;
+  bool notZeroed;
 
   [[noreturn]] void throwNotWritable();
 
@@ -382,7 +382,7 @@ private:
   // segment that is already-full, in which case we don't update this pointer.
 
   template <typename T>  // Can be `word` or `const word`.
-  SegmentBuilder* addSegmentInternal(kj::ArrayPtr<T> content, bool possiblyDirty = false);
+  SegmentBuilder* addSegmentInternal(kj::ArrayPtr<T> content, bool notZeroed = false);
 };
 
 // =======================================================================================
@@ -458,16 +458,16 @@ inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amou
 
 inline SegmentBuilder::SegmentBuilder(
     BuilderArena* arena, SegmentId id, word* ptr, SegmentWordCount size,
-    ReadLimiter* readLimiter, SegmentWordCount wordsUsed, bool possiblyDirty)
+    ReadLimiter* readLimiter, SegmentWordCount wordsUsed, bool notZeroed)
     : SegmentReader(arena, id, ptr, size, readLimiter),
-      pos(ptr + wordsUsed), readOnly(false), possiblyDirty(possiblyDirty) {}
+      pos(ptr + wordsUsed), readOnly(false), notZeroed(notZeroed) {}
 inline SegmentBuilder::SegmentBuilder(
     BuilderArena* arena, SegmentId id, const word* ptr, SegmentWordCount size,
-    ReadLimiter* readLimiter, SegmentWordCount /*wordsUsed*/, bool possiblyDirty)
+    ReadLimiter* readLimiter, SegmentWordCount /*wordsUsed*/, bool notZeroed)
     : SegmentReader(arena, id, ptr, size, readLimiter),
       // const_cast is safe here because the member won't ever be dereferenced because it appears
       // to point to the end of the segment anyway.
-      pos(const_cast<word*>(ptr + size)), readOnly(true), possiblyDirty(possiblyDirty) {}
+      pos(const_cast<word*>(ptr + size)), readOnly(true), notZeroed(notZeroed) {}
 inline SegmentBuilder::SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
                                       ReadLimiter* readLimiter)
     : SegmentReader(arena, id, nullptr, ZERO * WORDS, readLimiter),

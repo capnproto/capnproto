@@ -240,7 +240,7 @@ KJ_TEST("SECURITY: Uninitialized DATA zeroes padding bytes (Info Leak Prevention
   // Physical layout: 1 word (8 bytes) allocated.
   // Bytes [0, 1, 2] are the data body.
   // Bytes [3, 4, 5, 6, 7] are alignment padding.
-  auto data = root.initDataFieldUninitialized(3);
+  auto data = root.uninitializedDataField(3);
   const byte* rawPtr = data.begin();
 
   // CHECK 1: Performance verification.
@@ -292,7 +292,7 @@ KJ_TEST("Corner Case: Uninitialized DATA with exact word alignment") {
 
   // 8 bytes -> Exactly 1 word. Padding size is 0.
   // The padding zeroing logic must not crash or overwrite the next word.
-  auto data = root.initDataFieldUninitialized(8);
+  auto data = root.uninitializedDataField(8);
   const byte* rawPtr = data.begin();
 
   // Body is dirty (0xCC).
@@ -316,7 +316,7 @@ KJ_TEST("Corner Case: Uninitialized DATA with 1 byte padding") {
                                MallocMessageBuilder::InitializationStrategy::NO_ZERO_MEMORY);
   auto root = builder.initRoot<TestAllTypes>();
 
-  auto data = root.initDataFieldUninitialized(7);
+  auto data = root.uninitializedDataField(7);
   const byte* rawPtr = data.begin();
 
   // Body [0..6] is dirty.
@@ -381,7 +381,7 @@ KJ_TEST("CustomMessageBuilder: Lazy zeroing works with custom dirty allocator") 
   // 2. Verify Performance & Security for Data Blob.
   // Allocate 3 bytes of Data.
   // Memory Layout (1 word): [Body: 0, 1, 2] [Padding: 3, 4, 5, 6, 7]
-  auto data = root.initDataFieldUninitialized(3);
+  auto data = root.uninitializedDataField(3);
   const byte* ptr = data.begin();
 
   // Check Body: Should remain dirty (0xEE) because we requested "Uninitialized".
