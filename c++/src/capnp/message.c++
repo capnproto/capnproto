@@ -267,19 +267,21 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   uint size = kj::max(minimumSize, nextSize);
 
+  // Allocate memory based on strategy
   void* result;
-  // 根据策略选择分配方式
-  if (initializationStrategy == InitializationStrategy::PRE_ZERO_MEMORY) {
-    result = calloc(size, sizeof(word));
-    if (result == nullptr) {
-      KJ_FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
-    }
-  } else {
-    // NO_ZERO_MEMORY: 使用 malloc，不进行清零
-    result = malloc(size * sizeof(word));
-    if (result == nullptr) {
-      KJ_FAIL_SYSCALL("malloc(size * sizeof(word))", ENOMEM, size);
-    }
+  switch (initializationStrategy) {
+    case InitializationStrategy::PRE_ZERO_MEMORY:
+      result = calloc(size, sizeof(word));
+      break;
+    case InitializationStrategy::LAZY_ZERO_MEMORY:
+      result = malloc(size * sizeof(word));
+      break;
+    default:
+      KJ_FAIL_ASSERT("Unknown initialization strategy");
+  }
+
+  if (result == nullptr) {
+    KJ_FAIL_SYSCALL("memory allocation failed", ENOMEM, size);
   }
 
   if (!returnedFirstSegment) {

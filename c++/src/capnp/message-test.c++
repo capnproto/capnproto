@@ -214,10 +214,10 @@ KJ_TEST("MessageBuilder::sizeInWords()") {
   KJ_EXPECT(reader.sizeInWords() == expected);
 }
 
-KJ_TEST("MallocMessageBuilder with NO_ZERO_MEMORY strategy") {
+KJ_TEST("MallocMessageBuilder with LAZY_ZERO_MEMORY strategy") {
   // Verify that the new InitializationStrategy API works for basic usage.
   MallocMessageBuilder builder(1024, AllocationStrategy::FIXED_SIZE,
-                               MallocMessageBuilder::InitializationStrategy::NO_ZERO_MEMORY);
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
   auto root = builder.initRoot<TestAllTypes>();
   root.setInt64Field(12345);
   KJ_EXPECT(root.getInt64Field() == 12345);
@@ -232,7 +232,7 @@ KJ_TEST("SECURITY: Uninitialized DATA zeroes padding bytes (Info Leak Prevention
 
   // Create a builder that opts out of zeroing.
   MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
-                               MallocMessageBuilder::InitializationStrategy::NO_ZERO_MEMORY);
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
 
   auto root = builder.initRoot<TestAllTypes>();
 
@@ -260,17 +260,17 @@ KJ_TEST("SECURITY: Uninitialized DATA zeroes padding bytes (Info Leak Prevention
   KJ_EXPECT(rawPtr[7] == 0x00);
 }
 
-KJ_TEST("SAFETY: Structs are always zeroed even with NO_ZERO_MEMORY") {
+KJ_TEST("SAFETY: Structs are always zeroed even with LAZY_ZERO_MEMORY") {
   // Setup a dirty buffer (filled with 0xBB).
   byte dirtyBuffer[1024];
   memset(dirtyBuffer, 0xBB, sizeof(dirtyBuffer));
   kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
 
   MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
-                               MallocMessageBuilder::InitializationStrategy::NO_ZERO_MEMORY);
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
 
   // Initialize a Struct.
-  // Even though the builder is in NO_ZERO_MEMORY mode, Struct allocations must always
+  // Even though the builder is in LAZY_ZERO_MEMORY mode, Struct allocations must always
   // enforce zero-initialization to ensure pointer validity and default values.
   auto root = builder.initRoot<TestAllTypes>();
 
@@ -287,7 +287,7 @@ KJ_TEST("Corner Case: Uninitialized DATA with exact word alignment") {
   kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
 
   MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
-                               MallocMessageBuilder::InitializationStrategy::NO_ZERO_MEMORY);
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
   auto root = builder.initRoot<TestAllTypes>();
 
   // 8 bytes -> Exactly 1 word. Padding size is 0.
@@ -313,7 +313,7 @@ KJ_TEST("Corner Case: Uninitialized DATA with 1 byte padding") {
   kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
 
   MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
-                               MallocMessageBuilder::InitializationStrategy::NO_ZERO_MEMORY);
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
   auto root = builder.initRoot<TestAllTypes>();
 
   auto data = root.uninitializedDataField(7);
