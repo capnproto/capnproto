@@ -166,7 +166,7 @@ BuilderArena::BuilderArena(MessageBuilder* message,
     : message(message),
       segment0(this, SegmentId(0), segments[0].space.begin(),
                verifySegment(segments[0].space),
-               &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed), !segments[0].isZeroed),
+               &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed), segments[0].needLazyZero),
       needLazyZero(message->needLazyZero()){
   if (segments.size() > 1) {
     kj::Vector<kj::Own<SegmentBuilder>> builders(segments.size() - 1);
@@ -175,7 +175,7 @@ BuilderArena::BuilderArena(MessageBuilder* message,
     for (auto& segment: segments.slice(1, segments.size())) {
       builders.add(kj::heap<SegmentBuilder>(
           this, SegmentId(i++), segment.space.begin(), verifySegment(segment.space),
-          &this->dummyLimiter, verifySegmentSize(segment.wordsUsed), !segment.isZeroed));
+          &this->dummyLimiter, verifySegmentSize(segment.wordsUsed), segment.needLazyZero));
     }
 
     kj::Vector<kj::ArrayPtr<const word>> forOutput;

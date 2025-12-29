@@ -458,7 +458,7 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
-      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena, bool zeroMemory = true)) {
+      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena, bool requireCleanMemory = true)) {
     // Allocate space in the message for a new object, creating far pointers if necessary. The
     // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
     // return zero'd memory).
@@ -515,8 +515,9 @@ struct WireHelpers {
         ref = reinterpret_cast<WirePointer*>(ptr);
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
 
-        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion after the landing pad.
-        if (zeroMemory && segment->needLazyZero()) {
+        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion
+        // after the landing pad.
+        if (requireCleanMemory && segment->needLazyZero()) {
           WireHelpers::zeroMemory(ptr + POINTER_SIZE_IN_WORDS, amount);
         }
 
@@ -525,8 +526,9 @@ struct WireHelpers {
       } else {
         ref->setKindAndTarget(kind, ptr, segment);
 
-        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion after the landing pad.
-        if (zeroMemory && segment->needLazyZero()) {
+        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion
+        // after the landing pad.
+        if (requireCleanMemory && segment->needLazyZero()) {
           WireHelpers::zeroMemory(ptr, amount);
         }
         return ptr;
@@ -538,7 +540,7 @@ struct WireHelpers {
       segment = allocation.segment;
       ref->setKindForOrphan(kind);
       // Check for the need to lazy zero the segment allocated by OrphanArena.
-      if (zeroMemory && segment->needLazyZero()) {
+      if (requireCleanMemory && segment->needLazyZero()) {
         WireHelpers::zeroMemory(allocation.words, amount);
       }
       return allocation.words;
@@ -1734,14 +1736,14 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> uninitializedDataPointer(
       WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, BlobSize size,
       BuilderArena* orphanArena = nullptr)) {
-    // Allocate the space with zeroMemory = false
+    // Allocate the space with requireCleanMemory = false
     word* ptr = allocate(ref, segment, capTable, roundBytesUpToWords(size),
                          WirePointer::LIST, orphanArena, false);
 
     // Initialize the pointer.
     ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));
 
-    // Security: Zero-out padding bytes if memory is dirty.
+    // Zero-out padding bytes if memory is dirty for security reason.
     if (segment->needLazyZero()) {
       size_t byteSize = unbound(size / BYTES);
       // Calculate the actual allocated size in bytes (aligned to Word boundary).

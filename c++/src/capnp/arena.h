@@ -473,7 +473,7 @@ inline SegmentBuilder::SegmentBuilder(
 inline SegmentBuilder::SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
                                       ReadLimiter* readLimiter)
     : SegmentReader(arena, id, nullptr, ZERO * WORDS, readLimiter),
-      pos(nullptr), readOnly(false) {}
+      pos(nullptr), readOnly(false), needLazyZero_(false) {}
 
 inline word* SegmentBuilder::allocate(SegmentWordCount amount) {
   if (intervalLength(pos, ptr.end(), MAX_SEGMENT_WORDS) < amount) {

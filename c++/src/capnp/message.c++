@@ -269,11 +269,14 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   // Allocate memory based on strategy
   void* result;
+  const char* syscallName = "unknown";
   switch (initializationStrategy) {
     case InitializationStrategy::PRE_ZERO_MEMORY:
+      syscallName = "calloc(size, sizeof(word))";
       result = calloc(size, sizeof(word));
       break;
     case InitializationStrategy::LAZY_ZERO_MEMORY:
+      syscallName = "malloc(size * sizeof(word))";
       result = malloc(size * sizeof(word));
       break;
     default:
@@ -281,7 +284,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
   }
 
   if (result == nullptr) {
-    KJ_FAIL_SYSCALL("memory allocation failed", ENOMEM, size);
+    KJ_FAIL_SYSCALL(syscallName, ENOMEM, size);
   }
 
   if (!returnedFirstSegment) {
