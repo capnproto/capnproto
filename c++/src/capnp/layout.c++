@@ -515,8 +515,8 @@ struct WireHelpers {
         ref = reinterpret_cast<WirePointer*>(ptr);
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
 
-        // If zeroing is required and the segment is not pre-zeroed, zero the data portion after the landing pad.
-        if (zeroMemory && segment->isNotZeroed()) {
+        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion after the landing pad.
+        if (zeroMemory && segment->needLazyZero()) {
           WireHelpers::zeroMemory(ptr + POINTER_SIZE_IN_WORDS, amount);
         }
 
@@ -525,8 +525,8 @@ struct WireHelpers {
       } else {
         ref->setKindAndTarget(kind, ptr, segment);
 
-        // If zeroing is required and the segment is not pre-zeroed.
-        if (zeroMemory && segment->isNotZeroed()) {
+        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion after the landing pad.
+        if (zeroMemory && segment->needLazyZero()) {
           WireHelpers::zeroMemory(ptr, amount);
         }
         return ptr;
@@ -537,8 +537,8 @@ struct WireHelpers {
       auto allocation = orphanArena->allocate(amount);
       segment = allocation.segment;
       ref->setKindForOrphan(kind);
-      // Check for not zeroed memory allocated by OrphanArena.
-      if (zeroMemory && segment->isNotZeroed()) {
+      // Check for the need to lazy zero the segment allocated by OrphanArena.
+      if (zeroMemory && segment->needLazyZero()) {
         WireHelpers::zeroMemory(allocation.words, amount);
       }
       return allocation.words;
@@ -1742,7 +1742,7 @@ struct WireHelpers {
     ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));
 
     // Security: Zero-out padding bytes if memory is dirty.
-    if (segment->isNotZeroed()) {
+    if (segment->needLazyZero()) {
       size_t byteSize = unbound(size / BYTES);
       // Calculate the actual allocated size in bytes (aligned to Word boundary).
       size_t allocatedSize = unbound(roundBytesUpToWords(size)) * sizeof(word);
