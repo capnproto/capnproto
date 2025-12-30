@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include "kj/debug.h"
+#include "kj/source-location.h"
 #ifndef KJ_ASYNC_H_INCLUDED
 #error "Do not include this directly; include kj/async.h."
 #include "async.h"  // help IDE parse this file
@@ -2262,11 +2264,9 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
-class CoroutineBase: public PromiseNode,
-                     public Event {
+class CoroutineBase: public PromiseNode {
 public:
-  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
-                SourceLocation location);
+  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
@@ -2293,7 +2293,7 @@ public:
   // Called from Awaiter implementations to integrate with async tracing during suspension.
   void setPromiseNodeForTrace(OwnPromiseNode& node) {
     promiseNodeForTrace = node;
-    hasSuspendedAtLeastOnce = true;
+    hasSuspended = true;
   }
 
   // Called from Awaiter implementations to end tracing during resumption/cancellation.
@@ -2302,8 +2302,8 @@ public:
   }
 
   // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
-  bool canImmediatelyResume() {
-    return hasSuspendedAtLeastOnce && isNext();
+  bool hasSuspendedAtLeastOnce() {
+    return hasSuspended;
   }
 
 protected:
@@ -2320,19 +2320,13 @@ private:
   void onReady(Event* event) noexcept override;
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
 
-  // -------------------------------------------------------
-  // Event implementation
-
-  Maybe<Own<Event>> fire() override;
-  void traceEvent(TraceBuilder& builder) override;
-
   stdcoro::coroutine_handle<> coroutine;
   ExceptionOrValue& resultRef;
 
   OnReadyEvent onReadyEvent;
   bool waiting = true;
 
-  bool hasSuspendedAtLeastOnce = false;
+  bool hasSuspended = false;
 
 #if _MSC_VER && !defined(__clang__)
   bool finalSuspendCalled = false;
@@ -2362,6 +2356,8 @@ private:
   // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
   // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
+
+  friend class PromiseAwaiterBase;
 };
 
 template <typename Self, typename T>
@@ -2383,10 +2379,9 @@ class Coroutine final: public CoroutineBase,
 public:
   using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
 
-  Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
+  Coroutine(): Coroutine(Handle::from_promise(*this)) {}
 
-  Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
-      : CoroutineBase(handle, result, location) {}
+  Coroutine(stdcoro::coroutine_handle<> handle) : CoroutineBase(handle, result) {}
 
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
@@ -2463,11 +2458,11 @@ public:
 // both a `return_value()` and `return_void()`. No amount of EnableIffery can get around it, so
 // these return_* functions live in a CRTP mixin.
 
-class PromiseAwaiterBase {
+class PromiseAwaiterBase: public Event {
 public:
-  explicit PromiseAwaiterBase(OwnPromiseNode&& node);
+  explicit PromiseAwaiterBase(OwnPromiseNode&& node, SourceLocation location = {});
 
-  PromiseAwaiterBase(PromiseAwaiterBase&&);
+  // PromiseAwaiterBase(PromiseAwaiterBase&&);
   ~PromiseAwaiterBase() noexcept(false);
   KJ_DISALLOW_COPY(PromiseAwaiterBase);
 
@@ -2478,7 +2473,14 @@ public:
   // must return false here. Fortunately, await_suspend() has a trick up its sleeve to enable
   // suspension-less co_awaits.
 
-protected:
+
+  // -------------------------------------------------------
+  // Event implementation
+
+  Maybe<Own<Event>> fire() override;
+  void traceEvent(TraceBuilder& builder) override;
+
+  protected:
   void awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt);
   bool awaitSuspendImpl(CoroutineBase& coroutine);
 

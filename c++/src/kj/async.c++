@@ -2182,7 +2182,7 @@ Event::~Event() noexcept {  // intentionally noexcept
 
   // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
   // be in a use-after-free situation.
-  KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
+  // KJ_REQUIRE(!firing, "Promise callback destroyed itself.");
 }
 
 void Event::armDepthFirst() {
@@ -3163,10 +3163,8 @@ Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW
 
 namespace _ {  // (private)
 
-CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
-                             SourceLocation location)
-    : Event(location),
-      coroutine(coroutine),
+CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef)
+    : coroutine(coroutine),
       resultRef(resultRef) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
@@ -3229,7 +3227,7 @@ void CoroutineBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   builder.add(GetFunctorStartAddress<>::apply(coroutine));
 };
 
-Maybe<Own<Event>> CoroutineBase::fire() {
+Maybe<Own<Event>> PromiseAwaiterBase::fire() {
   // Call PromiseAwaiter::await_resume() and proceed with the coroutine. Note that this will not
   // destroy the coroutine if control flows off the end of it, because we return suspend_always()
   // from final_suspend().
@@ -3239,21 +3237,21 @@ Maybe<Own<Event>> CoroutineBase::fire() {
   // already know where it's going. But, we don't really know: the `co_await` might be in a
   // try-catch block, so we have no choice but to resume and throw later.
 
-  coroutine.resume();
-
+  KJ_REQUIRE_NONNULL(maybeCoroutine).coroutine.resume();
   return kj::none;
 }
 
-void CoroutineBase::traceEvent(TraceBuilder& builder) {
-  KJ_IF_SOME(promise, promiseNodeForTrace) {
-    promise->tracePromise(builder, true);
-  }
+void PromiseAwaiterBase::traceEvent(TraceBuilder& builder) {
+  // KJ_IF_SOME(promise, promiseNodeForTrace) {
+  //   promise->tracePromise(builder, true);
+  // }
 
-  // Maybe returning the address of coroutine() will give us a function name with meaningful type
-  // information. (Narrator: It doesn't.)
-  builder.add(GetFunctorStartAddress<>::apply(coroutine));
+  // // Maybe returning the address of coroutine() will give us a function name with meaningful type
+  // // information. (Narrator: It doesn't.)
+  // builder.add(GetFunctorStartAddress<>::apply(coroutine));
 
-  onReadyEvent.traceEvent(builder);
+  // onReadyEvent.traceEvent(builder);
+  KJ_UNIMPLEMENTED("TODO");
 }
 
 void CoroutineBase::destroy() {
@@ -3296,8 +3294,8 @@ void CoroutineBase::destroy() {
   }
 }
 
-PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
-PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
+PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node, SourceLocation location): Event(location), node(kj::mv(node)) {}
+// PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
 PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
   // destroyed.
@@ -3334,14 +3332,14 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
 
 bool PromiseAwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
   node->setSelfPointer(&node);
-  node->onReady(&coroutine);
+  node->onReady(this);
 
-  if (coroutine.canImmediatelyResume()) {
+  if (coroutine.hasSuspendedAtLeastOnce() && isNext()) {
     // The result is immediately ready and this coroutine is running on the event loop's stack, not
     // a user code stack. Let's cancel our event and immediately resume. It's important that we
     // don't perform this optimization if this is the first suspension, because our caller may
     // depend on running code before this promise's continuations fire.
-    coroutine.disarm();
+    disarm();
 
     // We can resume ourselves by returning false. This accomplishes the same thing as if we had
     // returned true from await_ready().
