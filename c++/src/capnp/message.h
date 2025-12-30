@@ -175,7 +175,7 @@ public:
     // If set to true, the builder assumes the segment is NOT zero-initialized. It will
     // apply the same lazy zeroing logic as described in `MessageBuilder::needLazyZero()`:
     // zeroing lazily as objects are allocated, while allowing specific fields (allocated
-    // via `initUninitializedFoo()`) to skip zeroing entirely.
+    // via `uninitializedFoo()`) to skip zeroing entirely.
     //
     // If false (default), Cap'n Proto assumes the segment is already zeroed, enabling
     // the standard, faster allocation path.
@@ -451,7 +451,7 @@ public:
     // This will opt in lazy zero segment allocation, please find detailed information above
     // in the MessageBuilder abstract class.
     //
-    // BENEFIT: This enables the use of `initUninitializedData()` to skip zeroing for specific
+    // BENEFIT: This enables the use of `uninitializedData()` to skip zeroing for specific
     // fields, avoiding the "double-write" (zeroing then writing/copying) for large payloads.
   };
 
