@@ -1250,10 +1250,8 @@ public:
   // Helper that builds a trace and stringifies it.
 
 protected:
-  virtual Maybe<Own<Event>> fire() = 0;
-  // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
-  // caller.  This is the only way that an event can delete itself as a result of firing, as
-  // doing so from within fire() will throw an exception.
+  virtual void fire() = 0;
+  // Fire the event. Possibly deletes itself, so event shoudn't be used after calling this.
 
 private:
   friend class kj::EventLoop;
@@ -1279,10 +1277,6 @@ private:
   Event* next;
   Event** prev;
 
-  bool firing = false;
-
-  static constexpr uint MAGIC_LIVE_VALUE = 0x1e366381u;
-  uint live = MAGIC_LIVE_VALUE;
   SourceLocation location;
 };
 
@@ -1386,7 +1380,7 @@ private:
       prev = nullptr;
     }
 
-    Maybe<Own<_::Event>> fire() override { KJ_UNREACHABLE; }
+    void fire() override { KJ_UNREACHABLE; }
     void traceEvent(_::TraceBuilder& builder) override { KJ_UNREACHABLE; }
   };
 
@@ -1428,8 +1422,6 @@ private:
   // For EventLoopLocal. Allocated separately to avoid including HashMap here.
 
   Own<TaskSet> daemons;
-
-  _::Event* currentlyFiring = nullptr;
 
   void resetDepthFirstQueue();
   bool turn();
