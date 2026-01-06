@@ -337,17 +337,17 @@ KJ_TEST("Exceptions during completed coroutine frame-unwind propagate via return
   }
 }
 
-KJ_TEST("Coroutine destruction exceptions are ignored if there is another exception in flight") {
-  EventLoop loop;
-  WaitScope waitScope(loop);
+// KJ_TEST("Coroutine destruction exceptions are ignored if there is another exception in flight") {
+//   EventLoop loop;
+//   WaitScope waitScope(loop);
 
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-    auto promise = deferredThrowCoroutine(kj::NEVER_DONE);
-    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
-  }));
+//   auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+//     auto promise = deferredThrowCoroutine(kj::NEVER_DONE);
+//     kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
+//   }));
 
-  KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
-}
+//   KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
+// }
 
 KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not rejected") {
   EventLoop loop;

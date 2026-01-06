@@ -3270,7 +3270,7 @@ void CoroutineBase::destroy() {
   maybeDisposalResults = &disposalResults;
 
   // Need to save this while `unwindDetector` is still valid.
-  bool shouldRethrow = !unwindDetector.isUnwinding();
+  bool shouldRethrow = true;
 
   do {
     // Clang's implementation of Coroutines does not destroy the Coroutine object or deallocate the
