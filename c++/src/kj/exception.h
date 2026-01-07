@@ -319,6 +319,220 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 
 // =======================================================================================
 
+// KJ_TRY / KJ_CATCH macros
+//
+// Convenient macros for exception handling that automatically coerce all catchable exceptions to
+// kj::Exception. These can replace both raw `try {} catch(...) { getCaughtExceptionAsKj() }` and
+// `runCatchingExceptions()` usage.
+//
+//   KJ_TRY {
+//     // code that may throw
+//   } KJ_CATCH(e) {
+//     // code that handles the exception `e`
+//     kj::throwFatalException(kj::mv(e));  // Optional: rethrow like so
+//   }
+//
+// KJ_TRY: Semantically equivalent to `try`. The user-provided code block following this macro
+// literally is a `try` block.
+//
+// KJ_CATCH(name): The parameter is a user-chosen name. `name` will be a `kj::Exception&` in the
+// catch handler's code block. If you want to catch an exception but don't need the exception
+// details, you can name the exception `_` to suppress the unused variable warning, or suffix it
+// with `[[maybe_unused]]`. You are free to move the exception away, if you want, e.g. to rethrow
+// it. As a reminder, if you want to rethrow the exception, you must use
+// `kj::throwFatalException()`, and not a naked `throw`, to ensure the exception's attached stack
+// trace is accurate.
+//
+// The user-provided code block following `KJ_CATCH(e)` IS NOT A TRUE CATCH HANDLER! In particular,
+// this means:
+// - YOU CANNOT RETHROW the current exception with `throw`, because there is none.
+// - You can jump into the "catch handler" blocks with `goto`, but that would be inadvisable.
+// - It doesn't have to be a braced block -- it can be just a semi-colon, like `KJ_CATCH(_);`.
+//
+// Advantages over raw try/catch:
+// - Automatically coerces all exceptions (including std::exceptions) to kj::Exception -- no need to
+//   `catch (...)` and call `kj::getCaughtExceptionAsKj()`.
+// - You can `co_await` inside the catch handlers!
+//
+// Advantages over runCatchingExceptions():
+// - No need for lambda wrapping: The potentially-throwy code block runs inline with the function
+//   body, meaning you can `co_await` in it if you're in a coroutine, `return` from the enclosing
+//   function, `break` an outer loop, etc.
+//
+// TODO(soon): Does KJ_CATCH need to do anything to adjust stack traces in the caught exceptions?
+//
+// MIGRATION GUIDE:
+//
+// Raw `try/catch(...)` blocks which immediately call `getCaughtExceptionAsKj()` can be mechanically
+// converted to `KJ_TRY / KJ_CATCH(e)` without putting any thought into the matter. This is because
+// `KJ_TRY / KJ_CATCH` is simply syntax sugar for immediately calling `getCaughtexceptionAsKj()` in
+// the catch handler. That is, the following are completely equivalent:
+//
+//   try {
+//     // code that may throw
+//   } catch (...) {
+//     auto e = kj::getCaughtexceptionAsKj();  // first line of catch handler
+//     // code that handles the exception `e`
+//   }
+//
+//   KJ_TRY {
+//     // code that may throw
+//   } KJ_CATCH(e) {
+//     // code that handles the exception `e`
+//   }
+//
+// Raw `try/catch(...)` blocks which DO NOT call, or do not immediately call,
+// `getCaughtExceptionAsKj()`, require a bit more thought. This is because such blocks will catch
+// KJ's special "uncatchable" exceptions, such as `CanceledException`, which are used to implement
+// features such as fiber cancellation. This means that any code in a `catch(...)` block which
+// appears before `getCaughtExceptionAsKj()` (if it appears at all) will run during fiber
+// cancellation. If such blocks do not ultimately rethrow their exception with a naked `throw`
+// statement, then they are almost certainly buggy, and will suppress fiber cancellation and similar
+// features. They should probably be converted to `KJ_TRY / KJ_CATCH`.
+//
+//   try {
+//     // code that may throw
+//   } catch (...) {
+//     // squelch all exceptions -- PROBABLY BUGGY, tread carefully
+//   }
+//
+// For raw `try/catch(...)` blocks which do not call `getCaughtExceptionAsKj()`, but DO rethrow
+// their exception  with a naked `throw`, it may be best to leave them alone, unless you know for
+// sure the code block should not run during events like fiber cancellation. That said, there is
+// also an alternative KJ utility you could convert them to: `KJ_ON_SCOPE_FAILURE`. That is, the
+// following are equivalent:
+//
+//   try {
+//     // code that may throw
+//   } catch (...) {
+//     // unconditional cleanup code
+//     throw;
+//   }
+//
+//   {
+//     KJ_ON_SCOPE_FAILURE(/* unconditional cleanup code */);
+//     // code that may throw
+//   }
+//
+// `KJ_ON_SCOPE_FAILURE` has slightly more overhead than `try/catch` (it saves the current exception
+// count on construction), and wraps your code block in a macro, so it is most appropriate in
+// non-hot path code with one-liner cleanup actions.
+//
+// Some raw `try/catch(...)` blocks store their caught exception in a Maybe in order to later
+// `KJ_IF_SOME` the Maybe to `co_await` some asynchronous operation outside the `catch` block. These
+// may either be mechanically converted as-is, or refactored to move the `co_await` operation
+// directly into the `KJ_CATCH` block, eliminating the need for the Maybe. That is, the following
+// are equivalent:
+//
+//   Maybe<Exception> maybeException;
+//   try {
+//     // code that may throw
+//   } catch (...) {
+//     maybeException = kj::getCaughtexceptionAsKj();
+//   }
+//   KJ_IF_SOME(e, maybeException) {
+//     co_await asyncExceptionHandler(kj::mv(e));
+//   }
+//
+//   KJ_TRY {
+//     // code that may throw
+//   } KJ_CATCH(e) {
+//     co_await asyncExceptionHandler(kj::mv(e));
+//   }
+//
+// Lastly, there is `kj::runCatchingExceptions(func)`. `runCatchingExceptions()` calls
+// `getCaughtExceptionAsKj()` under the hood, so there are no concerns about inadvertently catching
+// uncatchable exceptions. Instead, the main concerns are changes in semantics due to no longer
+// moving function objects around, or due to inlining the function object's body into the calling
+// function. An example of the former:
+//
+//   KJ_IF_SOME(e, runCatchingExceptions(kj::mv(func))) {
+//     // code that handles the exception `e`
+//   }
+//
+//   KJ_TRY {
+//     func();  // SUBTLE: No longer moves `func`!
+//   } KJ_CATCH(e) {
+//     // code that handles the exception `e`
+//   }
+//
+// A contrived example of a change in semantics due to inlining the function body:
+//
+//   KJ_IF_SOME(e, runCatchingExceptions([&]() {
+//     // code that may throw
+//     auto val = KJ_UNWRAP_OR_RETURN(maybeVal);
+//     // more code that may throw
+//   })) {
+//     // code that handles the exception `e`
+//   }
+//
+//   KJ_TRY {
+//     // code that may throw
+//     // SUBTLE: Cannot use KJ_UNWRAP_OR_RETURN anymore.
+//     KJ_IF_SOME(val, maybeVal) {
+//       // more code that may throw
+//     }
+//   } KJ_CATCH(e) {
+//     // code that handles the exception `e`
+//   }
+//
+// Since a common `runCatchingExceptions()` pattern is to immediately `KJ_IF_SOME` its result,
+// you may rarely encounter the following odd syntax:
+//
+//   KJ_IF_SOME(e, runCatchingExceptions(kj::mv(func))) {
+//     // Block A: code that handles the exception `e`
+//   } else {
+//     // Block B: un-"tried" code that runs only on success
+//   }
+//   // Block C: code that runs on success or exception handling, if they did not throw
+//
+// Such patterns could be expressed by setting a `failed` boolean in the `KJ_CATCH` handler, and
+// running Block B iff `!failed` after the `KJ_TRY / `KJ_CATCH`, or we could add a new
+// `KJ_IF_CATCH(e)` macro that supports a trailing `else` clause. That said, such patterns are
+// probably ill-advised to begin with.
+
+#if __GNUC__ || __clang__
+// Both clang and GCC understand the GCC set of pragma directives.
+#define KJ_SILENCE_SHADOWING_BEGIN \
+    _Pragma("GCC diagnostic push") \
+    _Pragma("GCC diagnostic ignored \"-Wshadow\"")
+#define KJ_SILENCE_SHADOWING_END \
+    _Pragma("GCC diagnostic pop")
+#elif defined(_MSC_VER)  // __GNUC__ || __clang__
+// https://learn.microsoft.com/en-us/previous-versions/visualstudio/visual-studio-2015/code-quality/c6244
+#define KJ_SILENCE_SHADOWING_BEGIN \
+    _Pragma("warning(push)") \
+    _Pragma("warning(suppress: 6244)")
+#define KJ_SILENCE_SHADOWING_END \
+    _Pragma("warning(pop)")
+#else  // defined(_MSC_VER)
+// We only support clang, gcc, and MSVC, but for consistency's sake, let's define empty macros here.
+#define KJ_SILENCE_SHADOWING_BEGIN
+#define KJ_SILENCE_SHADOWING_END
+#endif
+
+// Since we have two macros -- KJ_TRY and KJ_CATCH -- which must both access the same exception
+// storage variable, we must choose a hard-coded name for it. This will cause variable shadowing in
+// nested KJ_TRY/KJ_CATCHes, but that is benign, so we disable shadowing warnings. The `_kj` prefix
+// on the variable name should make name collision with user code extremely unlikely.
+#define KJ_TRY \
+    KJ_SILENCE_SHADOWING_BEGIN \
+    if (::kj::Maybe<::kj::Exception> _kjTryCatchException; true) \
+      try KJ_SILENCE_SHADOWING_END
+
+// TODO(soon): Inline getCaughtExceptionAsKj()'s logic here and use KJ_TRY / KJ_CATCH to implement
+//   getCaughtExceptionAsKj(). This should reduce sad path overhead by 50% (no re-throw), but may
+//   increase code size. Experiment with this after KJ_TRY / KJ_CATCH has been adopted at large.
+#define KJ_CATCH(exception) \
+      catch (...) { \
+        _kjTryCatchException = ::kj::getCaughtExceptionAsKj(); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } \
+    else \
+      KJ_UNIQUE_NAME(_kjTryCatchHandler): \
+      if (auto& exception = *::kj::_::readMaybe(_kjTryCatchException); false) {} \
+      else
+
 namespace _ { class Runnable; }
 
 template <typename Func>

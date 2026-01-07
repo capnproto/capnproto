@@ -424,6 +424,21 @@ kj::Exception e = ...;
 kj::throwFatalException(kj::mv(e));
 
 // Run some code catching exceptions.
+KJ_TRY {
+  doSomething();
+} KJ_CATCH(e) {
+  // handle exception
+}
+```
+
+These wrappers perform some extra bookkeeping:
+* `KJ_CATCH()` will catch any kind of exception, whether it derives from `kj::Exception` or not, and will do its best to convert it into a `kj::Exception`.
+* `kj::throwFatalException()` and `kj::throwRecoverableException()` invoke the thread's current `kj::ExceptionCallback` to throw the exception, allowing apps to customize how exceptions are handled. The default `ExceptionCallback` makes sure to throw the exception in such a way that it can be understood and caught by code looking for `std::exception`, such as the C++ library's standard termination handler.
+
+There is also an older utility, `kj::runCatchingExceptions()`, which performs the same exception conversion as `KJ_TRY` / `KJ_CATCH`.
+
+```c++
+// Run some code catching exceptions.
 kj::Maybe<kj::Exception> maybeException = kj::runCatchingExceptions([&]() {
   doSomething();
 });
@@ -432,10 +447,7 @@ KJ_IF_SOME(e, maybeException) {
 }
 ```
 
-These wrappers perform some extra bookkeeping:
-* `kj::runCatchingExceptions()` will catch any kind of exception, whether it derives from `kj::Exception` or not, and will do its best to convert it into a `kj::Exception`.
-* `kj::throwFatalException()` and `kj::throwRecoverableException()` invoke the thread's current `kj::ExceptionCallback` to throw the exception, allowing apps to customize how exceptions are handled. The default `ExceptionCallback` makes sure to throw the exception in such a way that it can be understood and caught by code looking for `std::exception`, such as the C++ library's standard termination handler.
-* These helpers also work, to some extent, even when compiled with `-fno-exceptions` -- see below. (Note that "fatal" vs. "recoverable" exceptions are only different in this case; when exceptions are enabled, they are handled the same.)
+* Code which does not use `KJ_TRY` / `KJ_CATCH`, but limits itself to `kj::runCatchingExceptions()` and `kj::throwFatalException()` / `kj::throwRecoverableException()` will work, to some extent, even when compiled with `-fno-exceptions` -- see below. (Note that "fatal" vs. "recoverable" exceptions are only different in this case; when exceptions are enabled, they are handled the same.)
 
 ### Supporting `-fno-exceptions`
 

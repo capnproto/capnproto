@@ -571,5 +571,226 @@ KJ_TEST("Verify coCapture() with continuation functors") {
   }
 }
 
+KJ_TEST("KJ_TRY/KJ_CATCH in coroutines basic functionality") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<bool> {
+    bool caught = false;
+
+    KJ_TRY {
+      KJ_FAIL_ASSERT("coroutine exception");
+    } KJ_CATCH(e) {
+      caught = true;
+      KJ_EXPECT(e.getDescription() == "coroutine exception");
+    }
+
+    co_return caught;
+  };
+
+  KJ_EXPECT(testCoro().wait(waitScope) == true);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH in coroutines with co_await") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<kj::String> {
+    kj::String result;
+
+    KJ_TRY {
+      co_await kj::yield();
+      KJ_FAIL_ASSERT("after co_await");
+    } KJ_CATCH(e) {
+      result = kj::str("caught: ", e.getDescription());
+    }
+
+    co_return kj::mv(result);
+  };
+
+  auto result = testCoro().wait(waitScope);
+  KJ_EXPECT(result == "caught: after co_await");
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH in coroutines handler can co_await") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<kj::String> {
+    kj::String result;
+
+    KJ_TRY {
+      KJ_FAIL_ASSERT("test exception");
+    } KJ_CATCH(e) {
+      co_await kj::yield();
+      result = kj::str("handled: ", e.getDescription());
+    }
+
+    co_return kj::mv(result);
+  };
+
+  auto result = testCoro().wait(waitScope);
+  KJ_EXPECT(result == "handled: test exception");
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH in coroutines with promise exceptions") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<bool> {
+    bool caught = false;
+
+    KJ_TRY {
+      auto promise = kj::Promise<void>(KJ_EXCEPTION(FAILED, "promise exception"));
+      co_await promise;
+    } KJ_CATCH(e) {
+      caught = true;
+      KJ_EXPECT(e.getDescription() == "promise exception");
+    }
+
+    co_return caught;
+  };
+
+  KJ_EXPECT(testCoro().wait(waitScope) == true);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH in coroutines nested with normal try-catch") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<kj::String> {
+    kj::String result;
+
+    KJ_TRY {
+      try {
+        KJ_FAIL_ASSERT("inner exception");
+      } catch (const kj::Exception& e2) {
+        KJ_FAIL_ASSERT("outer exception");
+      }
+    } KJ_CATCH(e1) {
+      result = kj::str("caught outer: ", e1.getDescription());
+    }
+
+    co_return kj::mv(result);
+  };
+
+  auto result = testCoro().wait(waitScope);
+  KJ_EXPECT(result == "caught outer: outer exception");
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH in coroutines with cancellation") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<void> {
+    KJ_TRY {
+      co_await kj::Promise<void>(kj::NEVER_DONE);
+    } KJ_CATCH(_) {
+      KJ_FAIL_EXPECT("Handler should not be called on cancellation");
+    }
+  };
+
+  {
+    auto promise = testCoro();
+    // Promise is destroyed here, causing cancellation
+  }
+
+  // Test passes if no exception is thrown
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch in coroutines") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<kj::String> {
+    bool kjCaught = false;
+    bool stdCaught = false;
+
+    try {
+      KJ_TRY {
+        co_await kj::yield();
+        KJ_FAIL_ASSERT("inner kj exception");
+      } KJ_CATCH(e) {
+        kjCaught = true;
+        co_await kj::yield();
+        KJ_EXPECT(e.getDescription() == "inner kj exception");
+      }
+    } catch (const kj::Exception& e) {
+      stdCaught = true;
+      KJ_FAIL_EXPECT("should not reach outer catch");
+    }
+
+    co_return kj::str("kj:", kjCaught ? "caught" : "not-caught",
+                      " std:", stdCaught ? "caught" : "not-caught");
+  };
+
+  auto result = testCoro().wait(waitScope);
+  KJ_EXPECT(result == "kj:caught std:not-caught");
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch with uncaught exception in coroutines") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<kj::String> {
+    bool kjCaught = false;
+    bool stdCaught = false;
+
+    try {
+      KJ_TRY {
+        co_await kj::yield();
+        // This should not throw
+        int x = 42;
+        (void)x;
+      } KJ_CATCH(_) {
+        kjCaught = true;
+        KJ_FAIL_EXPECT("handler should not be called");
+      }
+      // This throws after KJ_TRY/KJ_CATCH completes normally
+      co_await kj::yield();
+      KJ_FAIL_ASSERT("outer exception");
+    } catch (const kj::Exception& e) {
+      stdCaught = true;
+      KJ_EXPECT(e.getDescription() == "outer exception");
+    }
+
+    co_return kj::str("kj:", kjCaught ? "caught" : "not-caught",
+                      " std:", stdCaught ? "caught" : "not-caught");
+  };
+
+  auto result = testCoro().wait(waitScope);
+  KJ_EXPECT(result == "kj:not-caught std:caught");
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch with promise rejection in coroutines") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto testCoro = []() -> Promise<kj::String> {
+    bool kjCaught = false;
+    bool stdCaught = false;
+
+    try {
+      KJ_TRY {
+        auto promise = kj::Promise<void>(KJ_EXCEPTION(FAILED, "rejected promise"));
+        co_await promise;
+      } KJ_CATCH(e) {
+        kjCaught = true;
+        co_await kj::yield();
+        KJ_EXPECT(e.getDescription() == "rejected promise");
+      }
+    } catch (const kj::Exception& e) {
+      stdCaught = true;
+      KJ_FAIL_EXPECT("should not reach outer catch");
+    }
+
+    co_return kj::str("kj:", kjCaught ? "caught" : "not-caught",
+                      " std:", stdCaught ? "caught" : "not-caught");
+  };
+
+  auto result = testCoro().wait(waitScope);
+  KJ_EXPECT(result == "kj:caught std:not-caught");
+}
+
 }  // namespace
 }  // namespace kj

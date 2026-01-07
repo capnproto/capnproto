@@ -21,6 +21,7 @@
 
 #include "exception.h"
 #include "debug.h"
+#include "main.h"
 #include <kj/compat/gtest.h>
 #include <stdexcept>
 #include <stdint.h>
@@ -311,6 +312,229 @@ KJ_TEST("copy constructor") {
   KJ_EXPECT(e1.getFile() == "bar.cc"_kj);
   KJ_EXPECT(e1.getLine() == 35);
   KJ_EXPECT(e1.getDescription() == "test_exception"_kj);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH basic functionality") {
+  bool caughtException = false;
+
+  KJ_TRY {
+    KJ_FAIL_ASSERT("test exception");
+  } KJ_CATCH(e) {
+    caughtException = true;
+    KJ_EXPECT(e.getDescription() == "test exception");
+    KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
+  }
+
+  KJ_EXPECT(caughtException);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH with no exception") {
+  bool handlerCalled = false;
+  bool tryBlockCompleted = false;
+
+  KJ_TRY {
+    tryBlockCompleted = true;
+  } KJ_CATCH(_) {
+    handlerCalled = true;
+  }
+
+  KJ_EXPECT(tryBlockCompleted);
+  KJ_EXPECT(!handlerCalled);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH with std::exception") {
+  bool caughtException = false;
+
+  KJ_TRY {
+    throw std::runtime_error("std exception test");
+  } KJ_CATCH(e) {
+    caughtException = true;
+    KJ_EXPECT(e.getDescription().contains("std::exception: std exception test"));
+  }
+
+  KJ_EXPECT(caughtException);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH with multiple statements") {
+  bool caughtException = false;
+  int value = 0;
+
+  KJ_TRY {
+    value = 42;
+    KJ_FAIL_ASSERT("delayed exception");
+    value = 100;
+  } KJ_CATCH(e) {
+    caughtException = true;
+    KJ_EXPECT(e.getDescription() == "delayed exception");
+    KJ_EXPECT(value == 42);
+  }
+
+  KJ_EXPECT(caughtException);
+  KJ_EXPECT(value == 42);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH handler can access variables") {
+  int handlerValue = 0;
+  bool caughtException = false;
+
+  KJ_TRY {
+    KJ_FAIL_ASSERT("handler test");
+  } KJ_CATCH(ex) {
+    caughtException = true;
+    handlerValue = 123;
+    KJ_EXPECT(ex.getDescription() == "handler test");
+  }
+
+  KJ_EXPECT(caughtException);
+  KJ_EXPECT(handlerValue == 123);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH nested usage") {
+  bool outerCaught = false;
+  bool innerCaught = false;
+
+  KJ_TRY {
+    KJ_TRY {
+      KJ_FAIL_ASSERT("inner exception");
+    } KJ_CATCH(innerEx) {
+      innerCaught = true;
+      KJ_EXPECT(innerEx.getDescription() == "inner exception");
+      KJ_FAIL_ASSERT("outer exception");
+    }
+  } KJ_CATCH(outerEx) {
+    outerCaught = true;
+    KJ_EXPECT(outerEx.getDescription() == "outer exception");
+  }
+
+  KJ_EXPECT(innerCaught);
+  KJ_EXPECT(outerCaught);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH with different exception types") {
+  bool disconnectedCaught = false;
+  bool overloadedCaught = false;
+
+  KJ_TRY {
+    throw KJ_EXCEPTION(DISCONNECTED, "test disconnection");
+  } KJ_CATCH(e1) {
+    disconnectedCaught = true;
+    KJ_EXPECT(e1.getType() == kj::Exception::Type::DISCONNECTED);
+    KJ_EXPECT(e1.getDescription() == "test disconnection");
+  }
+
+  KJ_TRY {
+    throw KJ_EXCEPTION(OVERLOADED, "test overloaded");
+  } KJ_CATCH(e2) {
+    overloadedCaught = true;
+    KJ_EXPECT(e2.getType() == kj::Exception::Type::OVERLOADED);
+    KJ_EXPECT(e2.getDescription() == "test overloaded");
+  }
+
+  KJ_EXPECT(disconnectedCaught);
+  KJ_EXPECT(overloadedCaught);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch") {
+  bool kjCaught = false;
+  bool stdCaught = false;
+
+  try {
+    KJ_TRY {
+      KJ_FAIL_ASSERT("inner kj exception");
+    } KJ_CATCH(e) {
+      kjCaught = true;
+      KJ_EXPECT(e.getDescription() == "inner kj exception");
+    }
+  } catch (const kj::Exception& e) {
+    stdCaught = true;
+    KJ_FAIL_EXPECT("should not reach outer catch");
+  }
+
+  KJ_EXPECT(kjCaught);
+  KJ_EXPECT(!stdCaught);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch with uncaught exception") {
+  bool kjCaught = false;
+  bool stdCaught = false;
+
+  try {
+    KJ_TRY {
+      // This should not throw
+      int x = 42;
+      (void)x;
+    } KJ_CATCH(_) {
+      kjCaught = true;
+      KJ_FAIL_EXPECT("handler should not be called");
+    }
+    // This throws after KJ_TRY/KJ_CATCH completes normally
+    KJ_FAIL_ASSERT("outer exception");
+  } catch (const kj::Exception& e) {
+    stdCaught = true;
+    KJ_EXPECT(e.getDescription() == "outer exception");
+  }
+
+  KJ_EXPECT(!kjCaught);
+  KJ_EXPECT(stdCaught);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch with std::exception") {
+  bool kjCaught = false;
+  bool stdCaught = false;
+
+  try {
+    KJ_TRY {
+      throw std::logic_error("std exception in KJ_TRY/KJ_CATCH");
+    } KJ_CATCH(e) {
+      kjCaught = true;
+      KJ_EXPECT(e.getDescription().contains("std::exception: std exception in KJ_TRY/KJ_CATCH"));
+    }
+  } catch (const std::exception& e) {
+    stdCaught = true;
+    KJ_FAIL_EXPECT("should not reach outer catch");
+  }
+
+  KJ_EXPECT(kjCaught);
+  KJ_EXPECT(!stdCaught);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH does not catch CanceledException") {
+  bool kjCatchCalled = false;
+  bool outerCatchCalled = false;
+
+  try {
+    KJ_TRY {
+      throw kj::CanceledException();
+    } KJ_CATCH(_) {
+      kjCatchCalled = true;
+      KJ_FAIL_EXPECT("KJ_CATCH should not handle CanceledException");
+    }
+  } catch (const kj::CanceledException&) {
+    outerCatchCalled = true;
+  }
+
+  KJ_EXPECT(!kjCatchCalled);
+  KJ_EXPECT(outerCatchCalled);
+}
+
+KJ_TEST("KJ_TRY/KJ_CATCH does not catch CleanShutdownException") {
+  bool kjCatchCalled = false;
+  bool outerCatchCalled = false;
+
+  try {
+    KJ_TRY {
+      throw kj::TopLevelProcessContext::CleanShutdownException{42};
+    } KJ_CATCH(_) {
+      kjCatchCalled = true;
+      KJ_FAIL_EXPECT("KJ_CATCH should not handle CleanShutdownException");
+    }
+  } catch (const kj::TopLevelProcessContext::CleanShutdownException& e) {
+    outerCatchCalled = true;
+    KJ_EXPECT(e.exitCode == 42);
+  }
+
+  KJ_EXPECT(!kjCatchCalled);
+  KJ_EXPECT(outerCatchCalled);
 }
 
 KJ_TEST("getDestructionReason returns default exception if exception wasn't thrown") {
