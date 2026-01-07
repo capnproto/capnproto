@@ -1,4 +1,5 @@
 load("@capnp-cpp//src/capnp:cc_capnp_library.bzl", "cc_capnp_library")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 
 cc_capnp_library(
     name = "addressbook_capnp",
