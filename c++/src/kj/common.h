@@ -1361,7 +1361,7 @@ constexpr int KJ_IF_MAYBE_IS_DEPRECATED = 0;
     _Pragma("GCC diagnostic ignored \"-Wdangling-else\"")
 #define KJ_SILENCE_DANGLING_ELSE_END \
     _Pragma("GCC diagnostic pop")
-#else  // __GNUC__
+#else  // __GNUC__ || __clang__
 // I guess we'll find out if MSVC needs similar warning suppression.
 #define KJ_SILENCE_DANGLING_ELSE_BEGIN
 #define KJ_SILENCE_DANGLING_ELSE_END
