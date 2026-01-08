@@ -99,6 +99,7 @@ KJ_BEGIN_HEADER
 #include <cstring>
 #include <initializer_list>
 #include <string.h>
+#include <new>
 
 #if _WIN32
 // Windows likes to define macros for min() and max(). We just can't deal with this.
@@ -722,6 +723,13 @@ inline constexpr auto min(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
 template <typename T, typename U>
 inline constexpr auto max(T&& a, U&& b) -> WiderType<Decay<T>, Decay<U>> {
   return a > b ? WiderType<Decay<T>, Decay<U>>(a) : WiderType<Decay<T>, Decay<U>>(b);
+}
+
+template <typename T>
+constexpr bool isNoThrowMoveConstructible() {
+  // like std::is_nothrow_move_constructible but that ignores noexcept(false) destructors
+  void* buf = nullptr;
+  return noexcept(new (buf) T(instance<T&&>()));
 }
 
 template <typename T, size_t s>
@@ -1457,7 +1465,7 @@ public:
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) { other = kj::none; }
+  Maybe(Maybe&& other) noexcept(isNoThrowMoveConstructible<T>()): ptr(kj::mv(other.ptr)) { other = kj::none; }
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
@@ -1671,7 +1679,7 @@ public:
   constexpr Maybe(T& t): ptr(&t) {}
   constexpr Maybe(T* t): ptr(t) {}
 
-  inline constexpr Maybe(PropagateConst<T, Maybe>& other): ptr(other.ptr) {}
+  inline constexpr Maybe(PropagateConst<T, Maybe>& other) noexcept: ptr(other.ptr) {}
   // Allow const copy only if `T` itself is const. Otherwise allow only non-const copy, to
   // protect transitive constness. Clang is happy for this constructor to be declared `= default`
   // since, after evaluation of `PropagateConst`, it does end up being a default-able constructor.
@@ -1682,30 +1690,30 @@ public:
   // to override the move constructor, and if we override the move constructor then we must define
   // the copy constructor here.
 
-  inline constexpr Maybe(Maybe&& other): ptr(other.ptr) { other.ptr = nullptr; }
+  inline constexpr Maybe(Maybe&& other) noexcept: ptr(other.ptr) { other.ptr = nullptr; }
 
   template <typename U>
-  inline constexpr Maybe(Maybe<U&>& other): ptr(other.ptr) {}
+  inline constexpr Maybe(Maybe<U&>& other) noexcept: ptr(other.ptr) {}
   template <typename U>
-  inline constexpr Maybe(const Maybe<U&>& other): ptr(const_cast<const U*>(other.ptr)) {}
+  inline constexpr Maybe(const Maybe<U&>& other) noexcept: ptr(const_cast<const U*>(other.ptr)) {}
   template <typename U>
-  inline constexpr Maybe(Maybe<U&>&& other): ptr(other.ptr) { other.ptr = nullptr; }
+  inline constexpr Maybe(Maybe<U&>&& other) noexcept: ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U>
   inline constexpr Maybe(const Maybe<U&>&& other) = delete;
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  constexpr Maybe(Maybe<U>& other): ptr(other.ptr.operator U*()) {}
+  constexpr Maybe(Maybe<U>& other) noexcept: ptr(other.ptr.operator U*()) {}
   template <typename U, typename = EnableIf<canConvert<const U*, T*>()>>
-  constexpr Maybe(const Maybe<U>& other): ptr(other.ptr.operator const U*()) {}
+  constexpr Maybe(const Maybe<U>& other) noexcept: ptr(other.ptr.operator const U*()) {}
 
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
-  inline constexpr Maybe(decltype(nullptr)): ptr(nullptr) {}
+  inline constexpr Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
-  inline constexpr Maybe(kj::None): ptr(nullptr) {}
+  inline constexpr Maybe(kj::None) noexcept: ptr(nullptr) {}
 
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
-  inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
+  inline Maybe& operator=(decltype(nullptr)) noexcept { ptr = nullptr; return *this; }
 
-  inline Maybe& operator=(T& other) { ptr = &other; return *this; }
+  inline Maybe& operator=(T& other) noexcept { ptr = &other; return *this; }
   inline Maybe& operator=(T* other) { ptr = other; return *this; }
   inline Maybe& operator=(PropagateConst<T, Maybe>& other) { ptr = other.ptr; return *this; }
   inline Maybe& operator=(Maybe&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }

@@ -6644,7 +6644,7 @@ private:
         parent->fireCountChanged();
       }
     }
-    ConnectionCounter(ConnectionCounter&& other) : parent(other.parent) {
+    ConnectionCounter(ConnectionCounter&& other) noexcept : parent(other.parent) {
       other.parent = nullptr;
     }
     ConnectionCounter& operator=(ConnectionCounter&& other) {

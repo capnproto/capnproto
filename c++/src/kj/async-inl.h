@@ -72,11 +72,13 @@ protected:
 
 template <typename T>
 class ExceptionOr: public ExceptionOrValue {
+  static_assert(isNoThrowMoveConstructible<T>(), "move constructor must be noexcept");
+  
 public:
   ExceptionOr() = default;
-  ExceptionOr(T&& value): value(kj::mv(value)) {}
-  ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
-  ExceptionOr(ExceptionOr&&) = default;
+  ExceptionOr(T&& value) noexcept : value(kj::mv(value)) {}
+  ExceptionOr(bool, Exception&& exception) noexcept: ExceptionOrValue(false, kj::mv(exception)) {}
+  ExceptionOr(ExceptionOr&&) noexcept = default;
   ExceptionOr& operator=(ExceptionOr&&) = default;
 
   Maybe<T> value;

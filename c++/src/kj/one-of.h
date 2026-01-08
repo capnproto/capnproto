@@ -361,12 +361,13 @@ class OneOf {
   // Has a member type called "Success" if and only if all of `OtherVariants` are types that
   // appear in `Variants`. Used with SFINAE to enable subset constructors.
 
+  static constexpr bool noThrowMove = (isNoThrowMoveConstructible<Variants>() && ...);
 public:
   inline OneOf(): tag(0) {}
 
   OneOf(const OneOf& other) { copyFrom(other); }
   OneOf(OneOf& other) { copyFrom(other); }
-  OneOf(OneOf&& other) { moveFrom(other); }
+  OneOf(OneOf&& other) noexcept(noThrowMove) { moveFrom(other); }
   // Copy/move from same OneOf type.
 
   template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
@@ -525,13 +526,13 @@ private:
   }
 
   template <typename T>
-  inline bool moveVariantFrom(OneOf& other) {
+  inline bool moveVariantFrom(OneOf& other) noexcept(isNoThrowMoveConstructible<T>()) {
     if (other.is<T>()) {
       ctor(*reinterpret_cast<T*>(space), kj::mv(other.get<T>()));
     }
     return false;
   }
-  void moveFrom(OneOf& other) {
+  void moveFrom(OneOf& other) noexcept {
     // Initialize as a copy of `other`.  Expects that `this` starts out uninitialized, so the tag
     // is invalid.
     tag = other.tag;
