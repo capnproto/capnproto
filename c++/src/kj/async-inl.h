@@ -1573,9 +1573,9 @@ inline PromiseForResult<Func, void> evalLast(Func&& func) {
 template <typename Func>
 inline PromiseForResult<Func, void> evalNow(Func&& func) {
   PromiseForResult<Func, void> result = nullptr;
-  KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     result = func();
-  })) {
+  } KJ_CATCH(e) {
     result = kj::mv(e);
   }
   return result;
@@ -1783,21 +1783,23 @@ private:
 template <typename T>
 template <typename Func>
 bool PromiseFulfiller<T>::rejectIfThrows(Func&& func) {
-  KJ_IF_SOME(exception, kj::runCatchingExceptions(kj::mv(func))) {
+  KJ_TRY {
+    func();
+    return true;
+  } KJ_CATCH(exception) {
     reject(kj::mv(exception));
     return false;
-  } else {
-    return true;
   }
 }
 
 template <typename Func>
 bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
-  KJ_IF_SOME(exception, kj::runCatchingExceptions(kj::mv(func))) {
+  KJ_TRY {
+    func();
+    return true;
+  } KJ_CATCH(exception) {
     reject(kj::mv(exception));
     return false;
-  } else {
-    return true;
   }
 }
 

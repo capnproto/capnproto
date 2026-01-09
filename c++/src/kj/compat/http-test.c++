@@ -4353,12 +4353,11 @@ KJ_TEST("HttpServer bad requests") {
 
     auto request = testCase.request;
     auto writePromise = pipe.ends[1]->write(request.asBytes());
-    try {
+    KJ_TRY {
       auto response = pipe.ends[1]->readAllText().wait(waitScope);
       auto expectedResponse = testCase.expectedResponse;
       KJ_EXPECT(expectedResponse == response, expectedResponse, response);
-    } catch (...) {
-      auto ex = kj::getCaughtExceptionAsKj();
+    } KJ_CATCH(ex) {
       KJ_FAIL_REQUIRE("not supposed to happen", ex);
     }
 

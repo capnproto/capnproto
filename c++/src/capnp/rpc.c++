@@ -3879,10 +3879,9 @@ private:
       uint64_t interfaceId, uint64_t methodId,
       kj::Own<ClientHook>&& capability, kj::Own<CallContextHook>&& context,
       ClientHook::CallHints hints) {
-    try {
+    KJ_TRY {
       return capability->call(interfaceId, methodId, kj::mv(context), hints);
-    } catch (...) {
-      auto exception = kj::getCaughtExceptionAsKj();
+    } KJ_CATCH(exception) {
       auto pipeline = newBrokenPipeline(kj::cp(exception));
 
       // In the past, an exception here would have killed the entire connection (and also caused
