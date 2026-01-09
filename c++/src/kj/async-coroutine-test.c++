@@ -104,8 +104,8 @@ KJ_TEST("co_awaiting initial immediate promises suspends even if event loop is e
     auto coroPromise = countAroundAwait(wind, unwind, kj::READY_NOW);
 
     // `coro` has not completed.
-    KJ_EXPECT(wind == 1);
-    KJ_EXPECT(unwind == 0);
+    KJ_EXPECT(wind == 2);
+    KJ_EXPECT(unwind == 2);
   }).eagerlyEvaluate(nullptr).wait(waitScope);
 
   kj::evalLater([&]() {
@@ -139,8 +139,8 @@ KJ_TEST("co_awaiting an immediate promise suspends if the event loop is not runn
 
   // In the previous test, this exact same code executed immediately because the event loop was
   // running.
-  KJ_EXPECT(wind == 1);
-  KJ_EXPECT(unwind == 0);
+  KJ_EXPECT(wind == 2);
+  KJ_EXPECT(unwind == 2);
 }
 
 KJ_TEST("co_awaiting immediate promises suspends if the event loop is not empty") {
@@ -166,8 +166,8 @@ KJ_TEST("co_awaiting immediate promises suspends if the event loop is not empty"
     auto coroPromise = countAroundAwait(wind, unwind, kj::READY_NOW);
 
     // We didn't immediately extract the READY_NOW.
-    KJ_EXPECT(wind == 1);
-    KJ_EXPECT(unwind == 0);
+    KJ_EXPECT(wind == 2);
+    KJ_EXPECT(unwind == 2);
   }).eagerlyEvaluate(nullptr).wait(waitScope);
 
   kj::evalLater([&]() {

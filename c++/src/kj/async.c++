@@ -2123,6 +2123,7 @@ OwnPromiseNode readyNow() {
     void get(ExceptionOrValue& output) noexcept override {
       output.as<Void>() = Void();
     }
+    bool tryGet(ExceptionOrValue& output) noexcept override { get(output); return true; }
   };
 
   static ReadyNowPromiseNode NODE;
@@ -2140,6 +2141,7 @@ OwnPromiseNode neverDone() {
     void get(_::ExceptionOrValue& output) noexcept override {
       KJ_FAIL_REQUIRE("Not ready.");
     }
+    bool tryGet(ExceptionOrValue& output) noexcept override { return false; }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
       builder.add(_::getMethodStartAddress(kj::NEVER_DONE, &_::NeverDone::wait));
     }
@@ -2453,6 +2455,10 @@ void AttachmentPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   dependency->get(output);
 }
 
+bool AttachmentPromiseNodeBase::tryGet(ExceptionOrValue& output) noexcept {
+  return dependency->tryGet(output);
+}
+
 void AttachmentPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   dependency->tracePromise(builder, stopAtNextEvent);
 
@@ -2642,6 +2648,10 @@ void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
   return inner->get(output);
 }
 
+bool ChainPromiseNode::tryGet(ExceptionOrValue& output) noexcept {
+  return state == STEP2 && inner->tryGet(output);
+}
+
 void ChainPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   if (stopAtNextEvent && state == STEP1) {
     // In STEP1, we are an Event -- when the inner node resolves, it will arm *this* object.
@@ -2742,6 +2752,10 @@ void ExclusiveJoinPromiseNode::get(ExceptionOrValue& output) noexcept {
   KJ_REQUIRE(left.get(output) || right.get(output), "get() called before ready.");
 }
 
+bool ExclusiveJoinPromiseNode::tryGet(ExceptionOrValue& output) noexcept {
+  return left.tryGet(output) || right.tryGet(output);
+}
+
 void ExclusiveJoinPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   // TODO(debug): Maybe use __builtin_return_address to get the locations that called
   //   exclusiveJoin()?
@@ -2772,6 +2786,10 @@ bool ExclusiveJoinPromiseNode::Branch::get(ExceptionOrValue& output) {
   } else {
     return false;
   }
+}
+
+bool ExclusiveJoinPromiseNode::Branch::tryGet(ExceptionOrValue& output) {
+  return dependency && dependency->tryGet(output);
 }
 
 Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
@@ -2843,6 +2861,9 @@ void ArrayJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
     // No errors.  The template subclass will need to fill in the result.
     getNoError(output);
   }
+}
+bool ArrayJoinPromiseNodeBase::tryGet(ExceptionOrValue& output) noexcept {
+  return false;
 }
 
 void ArrayJoinPromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
@@ -2934,6 +2955,9 @@ void RaceSuccessfulPromiseNodeBase::get(ExceptionOrValue &output) noexcept {
     getNoError(output);
   }
 }
+bool RaceSuccessfulPromiseNodeBase::tryGet(ExceptionOrValue &output) noexcept {
+  return false;
+}
 
 void RaceSuccessfulPromiseNodeBase::tracePromise(TraceBuilder &builder,
                                                  bool stopAtNextEvent) {
@@ -3022,6 +3046,7 @@ Promise<void> yield() {
     void get(_::ExceptionOrValue& output) noexcept override {
       output.as<_::Void>() = _::Void();
     }
+    bool tryGet(_::ExceptionOrValue& output) noexcept override { return false; }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
       builder.add(reinterpret_cast<void*>(&kj::yield));
     }
@@ -3042,6 +3067,7 @@ Promise<void> yieldUntilQueueEmpty() {
     void get(_::ExceptionOrValue& output) noexcept override {
       output.as<_::Void>() = _::Void();
     }
+    bool tryGet(_::ExceptionOrValue& output) noexcept override { return false; }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
       builder.add(reinterpret_cast<void*>(&kj::yieldUntilQueueEmpty));
     }
@@ -3062,6 +3088,7 @@ Promise<void> yieldUntilWouldSleep() {
     void get(_::ExceptionOrValue& output) noexcept override {
       output.as<_::Void>() = _::Void();
     }
+    bool tryGet(_::ExceptionOrValue& output) noexcept override { return false; }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
       builder.add(reinterpret_cast<void*>(&kj::yieldUntilWouldSleep));
     }
@@ -3311,50 +3338,17 @@ PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   });
 }
 
-void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
-  KJ_IF_SOME(coroutine, maybeCoroutine) {
-    coroutine.clearPromiseNodeForTrace();
-  }
-
-  node->get(result);
-
-  KJ_IF_SOME(exception, result.exception) {
-    // Manually extend the stack trace with the instruction address where the co_await occurred.
-    // Subtract 1 from the address to be consistent with `getStackTrace()` in `exception.c++` (see
-    // comment there).
-    exception.addTrace(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(awaitedAt) - 1));
-
-    // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` doesn't try to
-    // extend the stack trace. There's no point in extending the trace beyond the single frame we
-    // added above, as the rest of the trace will always be async framework stuff that no one wants
-    // to see.
-    kj::throwFatalException(kj::mv(exception), kj::maxValue);
-  }
-}
-
 bool PromiseAwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
   node->setSelfPointer(&node);
   node->onReady(&coroutine);
 
-  if (coroutine.canImmediatelyResume()) {
-    // The result is immediately ready and this coroutine is running on the event loop's stack, not
-    // a user code stack. Let's cancel our event and immediately resume. It's important that we
-    // don't perform this optimization if this is the first suspension, because our caller may
-    // depend on running code before this promise's continuations fire.
-    coroutine.disarm();
-
-    // We can resume ourselves by returning false. This accomplishes the same thing as if we had
-    // returned true from await_ready().
-    return false;
-  } else {
-    // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it using the
-    // CoroutineBase& reference we save.
-    coroutine.setPromiseNodeForTrace(node);
-    maybeCoroutine = coroutine;
-
-    return true;
-  }
+  // tryGet returned false, we must suspend. 
+  // Store a reference to the OwnPromiseNode we're waiting on for tracing purposes; 
+  // await_resume() and/or ~PromiseAwaiterBase() will clear it using the
+  // CoroutineBase& reference we save.
+  coroutine.setPromiseNodeForTrace(node);
+  maybeCoroutine = coroutine;
+  return true;
 }
 
 // ---------------------------------------------------------
