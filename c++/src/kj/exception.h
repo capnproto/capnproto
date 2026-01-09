@@ -511,13 +511,35 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 #define KJ_SILENCE_SHADOWING_END
 #endif
 
+namespace _ {
+
+struct TryCatchStorage {
+  // Uninitialized storage area for an Exception.
+  TryCatchStorage() {}
+  ~TryCatchStorage() {}
+  KJ_DISALLOW_COPY_AND_MOVE(TryCatchStorage);
+  union {
+    Exception e;
+  };
+};
+
+struct TryCatchDtor {
+  // A simple RAII guard which unconditionally runs Exception's destructor.
+  TryCatchDtor(Exception& exception): e(exception) {}
+  ~TryCatchDtor() { kj::dtor(e); }
+  KJ_DISALLOW_COPY_AND_MOVE(TryCatchDtor);
+  Exception& e;
+};
+
+}  // namespace _ (private)
+
 // Since we have two macros -- KJ_TRY and KJ_CATCH -- which must both access the same exception
 // storage variable, we must choose a hard-coded name for it. This will cause variable shadowing in
 // nested KJ_TRY/KJ_CATCHes, but that is benign, so we disable shadowing warnings. The `_kj` prefix
 // on the variable name should make name collision with user code extremely unlikely.
 #define KJ_TRY \
     KJ_SILENCE_SHADOWING_BEGIN \
-    if (::kj::Maybe<::kj::Exception> _kjTryCatchException; true) \
+    if (::kj::_::TryCatchStorage _kjTryCatchStorage; true) \
       try KJ_SILENCE_SHADOWING_END
 
 // TODO(soon): Inline getCaughtExceptionAsKj()'s logic here and use KJ_TRY / KJ_CATCH to implement
@@ -525,12 +547,13 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 //   increase code size. Experiment with this after KJ_TRY / KJ_CATCH has been adopted at large.
 #define KJ_CATCH(exception) \
       catch (...) { \
-        _kjTryCatchException = ::kj::getCaughtExceptionAsKj(); \
+        ::kj::ctor(_kjTryCatchStorage.e, ::kj::getCaughtExceptionAsKj()); \
         goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
       } \
     else \
       KJ_UNIQUE_NAME(_kjTryCatchHandler): \
-      if (auto& exception = *::kj::_::readMaybe(_kjTryCatchException); false) {} \
+      if (::kj::_::TryCatchDtor KJ_UNIQUE_NAME(_kjTryCatchDtor) (_kjTryCatchStorage.e); false) {} \
+      else if (auto& exception = _kjTryCatchStorage.e; false) {} \
       else
 
 namespace _ { class Runnable; }
