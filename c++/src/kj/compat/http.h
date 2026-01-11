@@ -753,6 +753,11 @@ struct HttpConnectSettings {
   //
   // This mechanism is required for certain protocols, more info can be found on
   // https://en.wikipedia.org/wiki/Opportunistic_TLS.
+
+  kj::Maybe<kj::ArrayPtr<const kj::byte>> caCerts;
+  // Optional PEM-encoded CA certificate(s) to use for verifying the server certificate during
+  // TLS handshake. If set, these certificates will be used instead of the default system CA store.
+  // This is useful for connecting through intercepting proxies that use custom CA certificates.
 };
 
 
