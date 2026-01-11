@@ -222,7 +222,7 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
       context.error(str("*** Uncaught exception ***\n", exception));
     }
     context.exit();
-  } catch (const TopLevelProcessContext::CleanShutdownException& e) {
+  } catch (const CleanShutdownException& e) {
     return e.exitCode;
   }
   KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT

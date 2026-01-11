@@ -26,6 +26,7 @@
 #include "string.h"
 #include "vector.h"
 #include "windows-sanity.h"  // work-around macro conflict with `ERROR`
+#include <exception>
 
 KJ_BEGIN_HEADER
 
@@ -201,6 +202,12 @@ struct CanceledException { };
 // stack was doing. It is used in the implementation of fibers in particular. Application code
 // should almost never catch this exception, unless you need to modify stack unwinding for some
 // reason. kj::runCatchingExceptions() does not catch it.
+
+struct CleanShutdownException { int exitCode; };
+// If the environment variable KJ_CLEAN_SHUTDOWN is set, then exit() will actually throw this
+// exception rather than exiting. `kj::runMain()` catches this exception and returns normally.
+// This is useful primarily for testing purposes, to assist tools like memory leak checkers that
+// are easily confused by quick_exit(). Application code should almost never catch this exception.
 
 StringPtr KJ_STRINGIFY(Exception::Type type);
 String KJ_STRINGIFY(const Exception& e);
@@ -542,6 +549,12 @@ struct TryCatchDtor {
     if (::kj::_::TryCatchStorage _kjTryCatchStorage; true) \
       try KJ_SILENCE_SHADOWING_END
 
+// Original Maybe-based implementation for comparison
+#define KJ_TRY_MAYBE \
+    KJ_SILENCE_SHADOWING_BEGIN \
+    if (::kj::Maybe<::kj::Exception> _kjTryCatchException; true) \
+      try KJ_SILENCE_SHADOWING_END
+
 // TODO(soon): Inline getCaughtExceptionAsKj()'s logic here and use KJ_TRY / KJ_CATCH to implement
 //   getCaughtExceptionAsKj(). This should reduce sad path overhead by 50% (no re-throw), but may
 //   increase code size. Experiment with this after KJ_TRY / KJ_CATCH has been adopted at large.
@@ -554,6 +567,75 @@ struct TryCatchDtor {
       KJ_UNIQUE_NAME(_kjTryCatchHandler): \
       if (::kj::_::TryCatchDtor KJ_UNIQUE_NAME(_kjTryCatchDtor) (_kjTryCatchStorage.e); false) {} \
       else if (auto& exception = _kjTryCatchStorage.e; false) {} \
+      else
+
+#define KJ_CATCH_MAYBE(exception) \
+      catch (...) { \
+        _kjTryCatchException = ::kj::getCaughtExceptionAsKj(); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } \
+    else \
+      KJ_UNIQUE_NAME(_kjTryCatchHandler): \
+      if (auto& exception = *::kj::_::readMaybe(_kjTryCatchException); false) {} \
+      else
+
+#define KJ_CATCH_INLINED(exc) \
+      catch (::kj::Exception& KJ_UNIQUE_NAME(_kjCaughtException)) { \
+        KJ_REQUIRE(!KJ_UNIQUE_NAME(_kjCaughtException).isMovedAway(), \
+            "KJ_CATCH_INLINED should be called at most once per catch"); \
+        KJ_UNIQUE_NAME(_kjCaughtException).truncateCommonTrace(); \
+        ::kj::ctor(_kjTryCatchStorage.e, ::kj::mv(KJ_UNIQUE_NAME(_kjCaughtException))); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } catch (::kj::CanceledException) { \
+        throw; \
+      } catch (std::bad_alloc& KJ_UNIQUE_NAME(_kjCaughtStdException)) { \
+        ::kj::ctor(_kjTryCatchStorage.e, ::kj::Exception(::kj::Exception::Type::OVERLOADED, \
+                   "(unknown)", -1, ::kj::str("std::bad_alloc: ", KJ_UNIQUE_NAME(_kjCaughtStdException).what()))); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } catch (std::exception& KJ_UNIQUE_NAME(_kjCaughtStdException)) { \
+        ::kj::ctor(_kjTryCatchStorage.e, ::kj::Exception(::kj::Exception::Type::FAILED, \
+                   "(unknown)", -1, ::kj::str("std::exception: ", KJ_UNIQUE_NAME(_kjCaughtStdException).what()))); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } catch (::kj::CleanShutdownException) { \
+        throw; \
+      } catch (...) { \
+        ::kj::ctor(_kjTryCatchStorage.e, ::kj::Exception(::kj::Exception::Type::FAILED, \
+                   "(unknown)", -1, ::kj::str("unknown non-KJ exception"))); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } \
+    else \
+      KJ_UNIQUE_NAME(_kjTryCatchHandler): \
+      if (::kj::_::TryCatchDtor KJ_UNIQUE_NAME(_kjTryCatchDtor) (_kjTryCatchStorage.e); false) {} \
+      else if (auto& exc = _kjTryCatchStorage.e; false) {} \
+      else
+
+#define KJ_CATCH_MAYBE_INLINED(exc) \
+      catch (::kj::Exception& KJ_UNIQUE_NAME(_kjCaughtException)) { \
+        KJ_REQUIRE(!KJ_UNIQUE_NAME(_kjCaughtException).isMovedAway(), \
+            "KJ_CATCH_MAYBE_INLINED should be called at most once per catch"); \
+        KJ_UNIQUE_NAME(_kjCaughtException).truncateCommonTrace(); \
+        _kjTryCatchException = ::kj::mv(KJ_UNIQUE_NAME(_kjCaughtException)); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } catch (::kj::CanceledException) { \
+        throw; \
+      } catch (std::bad_alloc& KJ_UNIQUE_NAME(_kjCaughtStdException)) { \
+        _kjTryCatchException = ::kj::Exception(::kj::Exception::Type::OVERLOADED, \
+                   "(unknown)", -1, ::kj::str("std::bad_alloc: ", KJ_UNIQUE_NAME(_kjCaughtStdException).what())); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } catch (std::exception& KJ_UNIQUE_NAME(_kjCaughtStdException)) { \
+        _kjTryCatchException = ::kj::Exception(::kj::Exception::Type::FAILED, \
+                   "(unknown)", -1, ::kj::str("std::exception: ", KJ_UNIQUE_NAME(_kjCaughtStdException).what())); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } catch (::kj::CleanShutdownException) { \
+        throw; \
+      } catch (...) { \
+        _kjTryCatchException = ::kj::Exception(::kj::Exception::Type::FAILED, \
+                   "(unknown)", -1, ::kj::str("unknown non-KJ exception")); \
+        goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
+      } \
+    else \
+      KJ_UNIQUE_NAME(_kjTryCatchHandler): \
+      if (auto& exc = *::kj::_::readMaybe(_kjTryCatchException); false) {} \
       else
 
 namespace _ { class Runnable; }

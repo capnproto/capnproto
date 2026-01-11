@@ -289,3 +289,13 @@ cc_test(
         "@google_benchmark//:benchmark",
     ],
 )
+
+cc_test(
+    name = "exception-perf-bench",
+    srcs = ["exception-perf-bench.c++"],
+    tags = ["google_benchmark"],
+    deps = [
+        ":kj",
+        "@google_benchmark//:benchmark",
+    ],
+)

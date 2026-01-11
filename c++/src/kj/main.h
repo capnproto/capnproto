@@ -30,6 +30,10 @@
 KJ_BEGIN_HEADER
 
 namespace kj {
+  struct CleanShutdownException;
+}
+
+namespace kj {
 
 class ProcessContext {
   // Context for command-line programs.
@@ -140,7 +144,7 @@ class TopLevelProcessContext final: public ProcessContext {
 public:
   explicit TopLevelProcessContext(StringPtr programName);
 
-  struct CleanShutdownException { int exitCode; };
+  using CleanShutdownException = ::kj::CleanShutdownException;
   // If the environment variable KJ_CLEAN_SHUTDOWN is set, then exit() will actually throw this
   // exception rather than exiting.  `kj::runMain()` catches this exception and returns normally.
   // This is useful primarily for testing purposes, to assist tools like memory leak checkers that

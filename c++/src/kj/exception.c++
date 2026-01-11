@@ -1553,7 +1553,7 @@ kj::Exception getCaughtExceptionAsKj() {
   } catch (std::exception& e) {
     return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("std::exception: ", e.what()));
-  } catch (TopLevelProcessContext::CleanShutdownException) {
+  } catch (CleanShutdownException) {
     throw;
   } catch (...) {
 #if __GNUC__ && !KJ_NO_RTTI
