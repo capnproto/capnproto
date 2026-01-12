@@ -544,7 +544,7 @@ struct TryCatchDtor {
 // storage variable, we must choose a hard-coded name for it. This will cause variable shadowing in
 // nested KJ_TRY/KJ_CATCHes, but that is benign, so we disable shadowing warnings. The `_kj` prefix
 // on the variable name should make name collision with user code extremely unlikely.
-#define KJ_TRY \
+#define KJ_TRY_OPTIMIZED \
     KJ_SILENCE_SHADOWING_BEGIN \
     if (::kj::_::TryCatchStorage _kjTryCatchStorage; true) \
       try KJ_SILENCE_SHADOWING_END
@@ -555,10 +555,11 @@ struct TryCatchDtor {
     if (::kj::Maybe<::kj::Exception> _kjTryCatchException; true) \
       try KJ_SILENCE_SHADOWING_END
 
+
 // TODO(soon): Inline getCaughtExceptionAsKj()'s logic here and use KJ_TRY / KJ_CATCH to implement
 //   getCaughtExceptionAsKj(). This should reduce sad path overhead by 50% (no re-throw), but may
 //   increase code size. Experiment with this after KJ_TRY / KJ_CATCH has been adopted at large.
-#define KJ_CATCH(exception) \
+#define KJ_CATCH_OPTIMIZED(exception) \
       catch (...) { \
         ::kj::ctor(_kjTryCatchStorage.e, ::kj::getCaughtExceptionAsKj()); \
         goto KJ_UNIQUE_NAME(_kjTryCatchHandler); \
@@ -637,6 +638,9 @@ struct TryCatchDtor {
       KJ_UNIQUE_NAME(_kjTryCatchHandler): \
       if (auto& exc = *::kj::_::readMaybe(_kjTryCatchException); false) {} \
       else
+
+#define KJ_TRY KJ_TRY_MAYBE
+#define KJ_CATCH(name) KJ_CATCH_MAYBE(name)
 
 namespace _ { class Runnable; }
 
