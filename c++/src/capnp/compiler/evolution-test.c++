@@ -712,9 +712,13 @@ static kj::Maybe<kj::Exception> loadFile(
       checkExampleStruct(root, sharedOrdinalCount);
     }
 
-    return kj::runCatchingExceptions([&]() {
+    kj::Maybe<kj::Exception> result;
+    KJ_TRY {
       loadStructAndGroups(compiler.getLoader(), loader, 0x823456789abcdef1llu);
-    });
+    } KJ_CATCH(e) {
+      result = kj::mv(e);
+    }
+    return result;
   }
 }
 

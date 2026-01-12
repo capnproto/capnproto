@@ -2925,9 +2925,9 @@ KJ_TEST("Userland tee pump cancellation implies write cancellation") {
   leftPumpPromise = nullptr;
   // It should cancel its write operations, so it should now be safe to destroy the output stream to
   // which it was pumping.
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     leftPipe.out = nullptr;
-  })) {
+  } KJ_CATCH(exception) {
     KJ_FAIL_EXPECT("write promises were not canceled", exception);
   }
 }
@@ -3703,17 +3703,16 @@ KJ_TEST("accept() with aborted connection - IPv4") {
   bool firstConnectionAborted = false;
   
   // Test if first connection is aborted by attempting to read
-  auto maybeException = kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     firstConnection->tryRead(buffer, 1, sizeof(buffer))
-      .then([&firstConnectionAborted](uint64_t bytesRead) { 
+      .then([&firstConnectionAborted](uint64_t bytesRead) {
         if (bytesRead == 0) {
           firstConnectionAborted = true;
-        }  
+        }
       })
       .exclusiveJoin(io.provider->getTimer().afterDelay(20 * kj::MILLISECONDS))
       .wait(io.waitScope);
-  });
-  KJ_IF_SOME(e, maybeException) {
+  } KJ_CATCH(e) {
     // Read failed with exception (connection was aborted)
     if (e.getType() == kj::Exception::Type::DISCONNECTED) {
       // Read failed with disconnected exception (connection was aborted)
@@ -3809,18 +3808,16 @@ KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
   // On other platforms, we may get the aborted connection first.
   bool connectionAborted = false;
   
-  auto maybeException = kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     serverCon->tryRead(buffer, 1, sizeof(buffer))
-      .then([&connectionAborted](uint64_t bytesRead) { 
+      .then([&connectionAborted](uint64_t bytesRead) {
         if (bytesRead == 0) {
           connectionAborted = true;
-        }  
+        }
       })
       .exclusiveJoin(io.provider->getTimer().afterDelay(20 * kj::MILLISECONDS))
       .wait(io.waitScope);
-    
-  });
-  KJ_IF_SOME(e, maybeException) {
+  } KJ_CATCH(e) {
     if (e.getType() == kj::Exception::Type::DISCONNECTED) {
       // Read failed with disconnected exception (connection was aborted)
       connectionAborted = true;

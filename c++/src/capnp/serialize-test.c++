@@ -449,12 +449,14 @@ TEST(Serialize, RejectTooManySegments) {
   }
   TestInputStream input(data.asPtr(), false);
 
-  kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
+  bool threw = false;
+  KJ_TRY {
     InputStreamMessageReader reader(input);
     ADD_FAILURE() << "Should have thrown an exception.";
-  });
-
-  KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
+  } KJ_CATCH(_) {
+    threw = true;
+  }
+  KJ_EXPECT(threw, "Should have thrown an exception.");
 }
 
 #if !__MINGW32__  // Inexplicably crashes when exception is thrown from constructor.
@@ -468,12 +470,14 @@ TEST(Serialize, RejectHugeMessage) {
   ReaderOptions options;
   options.traversalLimitInWords = 2;
 
-  kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
+  bool threw = false;
+  KJ_TRY {
     InputStreamMessageReader reader(input, options);
     ADD_FAILURE() << "Should have thrown an exception.";
-  });
-
-  KJ_EXPECT(e != kj::none, "Should have thrown an exception.");
+  } KJ_CATCH(_) {
+    threw = true;
+  }
+  KJ_EXPECT(threw, "Should have thrown an exception.");
 }
 #endif  // !__MINGW32__
 

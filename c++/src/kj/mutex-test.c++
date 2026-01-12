@@ -507,13 +507,16 @@ TEST(Mutex, Lazy) {
 TEST(Mutex, LazyException) {
   Lazy<uint> lazy;
 
-  auto exception = kj::runCatchingExceptions([&]() {
+  bool threw = false;
+  KJ_TRY {
     lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
           KJ_FAIL_ASSERT("foo") { break; }
           return space.construct(123);
         });
-  });
-  EXPECT_TRUE(exception != kj::none);
+  } KJ_CATCH(_) {
+    threw = true;
+  }
+  EXPECT_TRUE(threw);
 
   uint i = lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
         return space.construct(456);

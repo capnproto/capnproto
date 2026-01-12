@@ -14,12 +14,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size) {
   kj::ArrayPtr<const uint8_t> array(Data, Size);
   kj::ArrayInputStream ais(array);
 
-  if (kj::none != kj::runCatchingExceptions([&]() {
+  bool threw = false;
+  KJ_TRY {
     capnp::InputStreamMessageReader reader(ais);
     capnp::_::checkTestMessage(reader.getRoot<capnp::_::TestAllTypes>());
     capnp::_::checkDynamicTestMessage(reader.getRoot<capnp::DynamicStruct>(capnp::Schema::from<capnp::_::TestAllTypes>()));
     kj::str(reader.getRoot<capnp::_::TestAllTypes>());
-  })) {
+  } KJ_CATCH(_) {
+    threw = true;
+  }
+  if (threw) {
     KJ_LOG(ERROR, "threw");
   }
   return 0;

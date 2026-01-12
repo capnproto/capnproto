@@ -133,13 +133,15 @@ KJ_TEST("TextCodec parse error") {
   auto root = builder.initRoot<TestAllTypes>();
 
   TextCodec codec;
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions(
-      [&]() { codec.decode(message, root); }));
-
-  KJ_EXPECT(exception.getFile() == "(capnp text input)"_kj);
-  KJ_EXPECT(exception.getLine() == 2);
-  KJ_EXPECT(exception.getDescription() == "3-6: Parse error: Empty list item.",
-            exception.getDescription());
+  KJ_TRY {
+    codec.decode(message, root);
+    KJ_FAIL_EXPECT("Expected exception");
+  } KJ_CATCH(exception) {
+    KJ_EXPECT(exception.getFile() == "(capnp text input)"_kj);
+    KJ_EXPECT(exception.getLine() == 2);
+    KJ_EXPECT(exception.getDescription() == "3-6: Parse error: Empty list item.",
+              exception.getDescription());
+  }
 }
 
 KJ_TEST("text format implicitly coerces struct value from first field type") {

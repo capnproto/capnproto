@@ -261,11 +261,11 @@ public:
         if (!listOnly) {
           bool currentFailed = true;
           auto start = readClock();
-          KJ_IF_SOME(exception, runCatchingExceptions([&]() {
+          KJ_TRY {
             TestExceptionCallback exceptionCallback(context);
             testCase->run();
             currentFailed = exceptionCallback.failed();
-          })) {
+          } KJ_CATCH(exception) {
             context.error(kj::str(exception));
           }
           auto end = readClock();

@@ -41,47 +41,38 @@ TEST(Exception, TrimSourceFilename) {
 
 TEST(Exception, RunCatchingExceptions) {
   bool recovered = false;
-  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     KJ_FAIL_ASSERT("foo") {
       break;
     }
     recovered = true;
-  });
+    ADD_FAILURE() << "Expected exception";
+  } KJ_CATCH(ex) {
+    EXPECT_EQ("foo", ex.getDescription());
+  }
 
   EXPECT_FALSE(recovered);
-
-  KJ_IF_SOME(ex, e) {
-    EXPECT_EQ("foo", ex.getDescription());
-  } else {
-    ADD_FAILURE() << "Expected exception";
-  }
 }
 
 TEST(Exception, RunCatchingExceptionsStdException) {
-  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     throw std::logic_error("foo");
-  });
-
-  KJ_IF_SOME(ex, e) {
-    EXPECT_EQ("std::exception: foo", ex.getDescription());
-  } else {
     ADD_FAILURE() << "Expected exception";
+  } KJ_CATCH(ex) {
+    EXPECT_EQ("std::exception: foo", ex.getDescription());
   }
 }
 
 TEST(Exception, RunCatchingExceptionsOtherException) {
-  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     throw 123;
-  });
-
-  KJ_IF_SOME(ex, e) {
+    ADD_FAILURE() << "Expected exception";
+  } KJ_CATCH(ex) {
 #if __GNUC__ && !KJ_NO_RTTI
     EXPECT_EQ("unknown non-KJ exception of type: int", ex.getDescription());
 #else
     EXPECT_EQ("unknown non-KJ exception", ex.getDescription());
 #endif
-  } else {
-    ADD_FAILURE() << "Expected exception";
   }
 }
 
@@ -96,28 +87,30 @@ public:
 
 TEST(Exception, UnwindDetector) {
   // If no other exception is happening, ThrowingDestructor's destructor throws one.
-  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
-    ThrowingDestructor t;
-  });
-
-  KJ_IF_SOME(ex, e) {
-    EXPECT_EQ("this is a test, not a real bug", ex.getDescription());
-  } else {
-    ADD_FAILURE() << "Expected exception";
+  {
+    bool threw = false;
+    KJ_TRY {
+      ThrowingDestructor t;
+    } KJ_CATCH(ex) {
+      threw = true;
+      EXPECT_EQ("this is a test, not a real bug", ex.getDescription());
+    }
+    KJ_EXPECT(threw, "Expected exception");
   }
 
   // If another exception is happening, ThrowingDestructor's destructor's exception is squelched.
-  e = kj::runCatchingExceptions([&]() {
-    ThrowingDestructor t;
-    KJ_FAIL_ASSERT("baz") {
-      break;
+  {
+    bool threw = false;
+    KJ_TRY {
+      ThrowingDestructor t;
+      KJ_FAIL_ASSERT("baz") {
+        break;
+      }
+    } KJ_CATCH(ex) {
+      threw = true;
+      EXPECT_EQ("baz", ex.getDescription());
     }
-  });
-
-  KJ_IF_SOME(ex, e) {
-    EXPECT_EQ("baz", ex.getDescription());
-  } else {
-    ADD_FAILURE() << "Expected exception";
+    KJ_EXPECT(threw, "Expected exception");
   }
 }
 

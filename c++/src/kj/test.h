@@ -99,41 +99,45 @@ private:
 #if _MSC_VER && !defined(__clang__)
 #define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
   do { \
-    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+    KJ_TRY { \
+      (void)(code); \
+      KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
+    } KJ_CATCH(e) { \
       KJ_INDIRECT_EXPAND(KJ_EXPECT, (e.getType() == ::kj::Exception::Type::type, \
           "code threw wrong exception type: " #code, e, __VA_ARGS__)); \
-    } else { \
-      KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
     } \
   } while (false)
 
 #define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
-    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
+    KJ_TRY { \
+      (void)(code); \
+      KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
+    } KJ_CATCH(e) { \
       KJ_INDIRECT_EXPAND(KJ_EXPECT, (e.getDescription().contains(message), \
           "exception description didn't contain expected substring", e, __VA_ARGS__)); \
-    } else { \
-      KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("code did not throw: " #code, __VA_ARGS__)); \
     } \
   } while (false)
 #else
 #define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
   do { \
-    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { (void)({code;}); })) { \
+    KJ_TRY { \
+      (void)({code;}); \
+      KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
+    } KJ_CATCH(e) { \
       KJ_EXPECT(e.getType() == ::kj::Exception::Type::type, \
           "code threw wrong exception type: " #code, e, ##__VA_ARGS__); \
-    } else { \
-      KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
     } \
   } while (false)
 
 #define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
   do { \
-    KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { (void)({code;}); })) { \
+    KJ_TRY { \
+      (void)({code;}); \
+      KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
+    } KJ_CATCH(e) { \
       KJ_EXPECT(e.getDescription().contains(message), \
           "exception description didn't contain expected substring", e, ##__VA_ARGS__); \
-    } else { \
-      KJ_FAIL_EXPECT("code did not throw: " #code, ##__VA_ARGS__); \
     } \
   } while (false)
 #endif

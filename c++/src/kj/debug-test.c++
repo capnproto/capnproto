@@ -372,37 +372,31 @@ TEST(Debug, Catch) {
 
   {
     // Catch recoverable as kj::Exception.
-    Maybe<Exception> exception = kj::runCatchingExceptions([&](){
+    KJ_TRY {
       line = __LINE__; KJ_FAIL_ASSERT("foo") { break; }
-    });
-
-    KJ_IF_SOME(e, exception) {
+      ADD_FAILURE() << "Expected exception.";
+    } KJ_CATCH(e) {
       String what = str(e);
       KJ_IF_SOME(eol, what.findFirst('\n')) {
         what = kj::str(what.first(eol));
       }
       kj::StringPtr text = what;
       EXPECT_EQ(kj::str(fileLine(__FILE__, line), ": failed: foo"), text);
-    } else {
-      ADD_FAILURE() << "Expected exception.";
     }
   }
 
   {
     // Catch fatal as kj::Exception.
-    Maybe<Exception> exception = kj::runCatchingExceptions([&](){
+    KJ_TRY {
       line = __LINE__; KJ_FAIL_ASSERT("foo");
-    });
-
-    KJ_IF_SOME(e, exception) {
+      ADD_FAILURE() << "Expected exception.";
+    } KJ_CATCH(e) {
       String what = str(e);
       KJ_IF_SOME(eol, what.findFirst('\n')) {
         what = kj::str(what.first(eol));
       }
       kj::StringPtr text = what;
       EXPECT_EQ(kj::str(fileLine(__FILE__, line), ": failed: foo"), text);
-    } else {
-      ADD_FAILURE() << "Expected exception.";
     }
   }
 
@@ -538,54 +532,59 @@ TEST(Debug, Context) {
 
 KJ_TEST("magic assert stringification") {
   {
-    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       int foo = 123;
       int bar = 456;
       KJ_ASSERT(foo == bar) { break; }
-    }));
-
-    KJ_EXPECT(exception.getDescription() == "expected foo == bar [123 == 456]");
+      KJ_FAIL_EXPECT("Expected exception");
+    } KJ_CATCH(exception) {
+      KJ_EXPECT(exception.getDescription() == "expected foo == bar [123 == 456]");
+    }
   }
 
   {
-    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       auto foo = kj::str("hello");
       auto bar = kj::str("world!");
       KJ_ASSERT(foo == bar, foo.size(), bar.size()) { break; }
-    }));
-
-    KJ_EXPECT(exception.getDescription() ==
-        "expected foo == bar [hello == world!]; foo.size() = 5; bar.size() = 6");
+      KJ_FAIL_EXPECT("Expected exception");
+    } KJ_CATCH(exception) {
+      KJ_EXPECT(exception.getDescription() ==
+          "expected foo == bar [hello == world!]; foo.size() = 5; bar.size() = 6");
+    }
   }
 
   {
-    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       KJ_ASSERT(kj::str("hello") == kj::str("world!")) { break; }
-    }));
-
-    KJ_EXPECT(exception.getDescription() ==
-        "expected kj::str(\"hello\") == kj::str(\"world!\") [hello == world!]");
+      KJ_FAIL_EXPECT("Expected exception");
+    } KJ_CATCH(exception) {
+      KJ_EXPECT(exception.getDescription() ==
+          "expected kj::str(\"hello\") == kj::str(\"world!\") [hello == world!]");
+    }
   }
 
   {
-    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       int foo = 123;
       int bar = 456;
       KJ_ASSERT((foo == bar)) { break; }
-    }));
-
-    KJ_EXPECT(exception.getDescription() == "expected (foo == bar)");
+      KJ_FAIL_EXPECT("Expected exception");
+    } KJ_CATCH(exception) {
+      KJ_EXPECT(exception.getDescription() == "expected (foo == bar)");
+    }
   }
 
   // Test use of << on left side, which could create confusion.
   {
-    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       int foo = 123;
       int bar = 456;
       KJ_ASSERT(foo << 2 == bar) { break; }
-    }));
-
-    KJ_EXPECT(exception.getDescription() == "expected foo << 2 == bar [492 == 456]");
+      KJ_FAIL_EXPECT("Expected exception");
+    } KJ_CATCH(exception) {
+      KJ_EXPECT(exception.getDescription() == "expected foo << 2 == bar [492 == 456]");
+    }
   }
 
   // Test use of & on left side.
@@ -593,11 +592,12 @@ KJ_TEST("magic assert stringification") {
     int foo = 4;
     KJ_ASSERT(foo & 4);
 
-    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       KJ_ASSERT(foo & 2) { break; }
-    }));
-
-    KJ_EXPECT(exception.getDescription() == "expected foo & 2");
+      KJ_FAIL_EXPECT("Expected exception");
+    } KJ_CATCH(exception) {
+      KJ_EXPECT(exception.getDescription() == "expected foo & 2");
+    }
   }
 }
 

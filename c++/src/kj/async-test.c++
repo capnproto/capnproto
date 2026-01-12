@@ -419,10 +419,10 @@ TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
   WaitScope waitScope(loop);
 
   auto pair = newPromiseAndFulfiller<int>();
-  kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     auto fulfillerToDrop = kj::mv(pair.fulfiller);
     kj::throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
-  });
+  } KJ_CATCH(_);
 
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
       "test exception", pair.promise.wait(waitScope));

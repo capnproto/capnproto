@@ -112,31 +112,31 @@ uint64_t traverse(AnyPointer::Reader reader) {
 template <typename Checker>
 void traverseCatchingExceptions(kj::ArrayPtr<const word> data) {
   // Try traversing through Checker.
-  kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     FlatArrayMessageReader reader(data);
     KJ_ASSERT(Checker::check(reader) != 0) { break; }
-  });
+  } KJ_CATCH(_);
 
   // Try traversing through AnyPointer.
-  kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     FlatArrayMessageReader reader(data);
     KJ_ASSERT(traverse(reader.getRoot<AnyPointer>()) != 0) { break; }
-  });
+  } KJ_CATCH(_);
 
   // Try counting the size..
-  kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     FlatArrayMessageReader reader(data);
     KJ_ASSERT(reader.getRoot<AnyPointer>().targetSize().wordCount != 0) { break; }
-  });
+  } KJ_CATCH(_);
 
   // Try copying into a builder, and if that works, traversing it with Checker.
   static word buffer[8192];
-  kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     FlatArrayMessageReader reader(data);
     MallocMessageBuilder copyBuilder(buffer);
     copyBuilder.setRoot(reader.getRoot<AnyPointer>());
     KJ_ASSERT(Checker::check(copyBuilder) != 0) { break; }
-  });
+  } KJ_CATCH(_);
 }
 
 template <typename Checker>

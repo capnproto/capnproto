@@ -74,11 +74,14 @@ TEST(StdIoStream, ReadToEndOfFile) {
 
   byte buf[8]{};
 
-  Maybe<Exception> e = kj::runCatchingExceptions([&]() {
+  bool threw = false;
+  KJ_TRY {
     in.read(buf);
-  });
+  } KJ_CATCH(_) {
+    threw = true;
+  }
 
-  ASSERT_FALSE(e == kj::none);
+  ASSERT_TRUE(threw);
 
   // Ensure that the value is still read up to the EOF.
   EXPECT_EQ("foobar"_kjb, arrayPtr(buf).first(6));

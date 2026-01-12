@@ -48,19 +48,31 @@ public:
 
   kj::MainBuilder::Validity run() {
     capnp::StreamFdMessageReader reader(STDIN_FILENO);
-    if (kj::none != kj::runCatchingExceptions([&]() {
+    bool threw = false;
+    KJ_TRY {
       checkTestMessage(reader.getRoot<TestAllTypes>());
-    })) {
+    } KJ_CATCH(_) {
+      threw = true;
+    }
+    if (threw) {
       KJ_LOG(ERROR, "threw");
     }
-    if (kj::none != kj::runCatchingExceptions([&]() {
+    threw = false;
+    KJ_TRY {
       checkDynamicTestMessage(reader.getRoot<DynamicStruct>(Schema::from<TestAllTypes>()));
-    })) {
+    } KJ_CATCH(_) {
+      threw = true;
+    }
+    if (threw) {
       KJ_LOG(ERROR, "dynamic threw");
     }
-    if (kj::none != kj::runCatchingExceptions([&]() {
+    threw = false;
+    KJ_TRY {
       kj::str(reader.getRoot<TestAllTypes>());
-    })) {
+    } KJ_CATCH(_) {
+      threw = true;
+    }
+    if (threw) {
       KJ_LOG(ERROR, "str threw");
     }
     return true;
@@ -68,9 +80,13 @@ public:
 
   kj::MainBuilder::Validity runLists() {
     capnp::StreamFdMessageReader reader(STDIN_FILENO);
-    if (kj::none != kj::runCatchingExceptions([&]() {
+    bool threw = false;
+    KJ_TRY {
       kj::str(reader.getRoot<test::TestLists>());
-    })) {
+    } KJ_CATCH(_) {
+      threw = true;
+    }
+    if (threw) {
       KJ_LOG(ERROR, "threw");
     }
     return true;
@@ -81,7 +97,8 @@ public:
 
     kj::Array<capnp::word> canonical;
     bool equal = false;
-    if (kj::none != kj::runCatchingExceptions([&]() {
+    bool threw = false;
+    KJ_TRY {
       capnp::ReaderOptions options;
 
       // The default traversal limit of 8 * 1024 * 1024 causes
@@ -101,7 +118,10 @@ public:
       KJ_ASSERT(!originalAny.isNull());
 
       equal = originalAny == reader.getRoot<capnp::AnyPointer>();
-    })) {
+    } KJ_CATCH(_) {
+      threw = true;
+    }
+    if (threw) {
       // Probably some kind of decoding exception.
       KJ_LOG(ERROR, "threw");
       context.exit();

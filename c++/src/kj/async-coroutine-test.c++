@@ -290,11 +290,12 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destru
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     (void)deferredThrowCoroutine(kj::NEVER_DONE);
-  }));
-
-  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+    KJ_FAIL_EXPECT("Expected exception");
+  } KJ_CATCH(exception) {
+    KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+  }
 };
 
 KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memory leak") {
@@ -306,7 +307,8 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memor
   // later fulfill, thus arming the Coroutine's Event. If we fail to destroy the coroutine in this
   // state, EventLoop will throw on destruction because it can still see the Event in its list.
 
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+  bool threw = false;
+  KJ_TRY {
     auto paf = kj::newPromiseAndFulfiller<void>();
 
     auto coroPromise = deferredThrowCoroutine(kj::mv(paf.promise));
@@ -315,9 +317,11 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memor
     paf.fulfiller->fulfill();
 
     // If destroying `coroPromise` does not run ~Event(), then ~EventLoop() will crash later.
-  }));
-
-  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+  } KJ_CATCH(exception) {
+    threw = true;
+    KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+  }
+  KJ_EXPECT(threw, "Expected exception");
 };
 
 KJ_TEST("Exceptions during completed coroutine frame-unwind propagate via returned Promise") {
@@ -341,12 +345,13 @@ KJ_TEST("Coroutine destruction exceptions are ignored if there is another except
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     auto promise = deferredThrowCoroutine(kj::NEVER_DONE);
     kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
-  }));
-
-  KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
+    KJ_FAIL_EXPECT("Expected exception");
+  } KJ_CATCH(exception) {
+    KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
+  }
 }
 
 KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not rejected") {

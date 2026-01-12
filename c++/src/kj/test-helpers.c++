@@ -105,11 +105,14 @@ bool expectFatalThrow(kj::Maybe<Exception::Type> type, kj::Maybe<StringPtr> mess
   if (child == 0) {
     KJ_DEFER(_exit(1));
     FatalThrowExpectation expectation(type, message);
-    KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
+    bool threw = false;
+    KJ_TRY {
       code();
-    })) {
+    } KJ_CATCH(e) {
+      threw = true;
       KJ_LOG(ERROR, "a non-fatal exception was thrown, but we expected fatal", e);
-    } else {
+    }
+    if (!threw) {
       KJ_LOG(ERROR, "no fatal exception was thrown");
     }
   }
