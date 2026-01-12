@@ -3269,9 +3269,6 @@ void CoroutineBase::destroy() {
   DisposalResults disposalResults;
   maybeDisposalResults = &disposalResults;
 
-  // Need to save this while `unwindDetector` is still valid.
-  bool shouldRethrow = !unwindDetector.isUnwinding();
-
   do {
     // Clang's implementation of Coroutines does not destroy the Coroutine object or deallocate the
     // coroutine frame if a destructor of an object on the frame threw an exception. This is despite
@@ -3287,7 +3284,11 @@ void CoroutineBase::destroy() {
   // WARNING: `this` is now a dangling pointer.
 
   KJ_IF_SOME(exception, disposalResults.exception) {
-    if (shouldRethrow) {
+    if (UnwindDetector::uncaughtExceptionCount() == 0) {
+      // Technically this does not equal the `UnwindDetector` logic, 
+      // but this behaviour will never lead to trouble, is almost always true on practice
+      // (only coroutines _created_ during unwind could notice a difference in behaviour),
+      // and, more importantly, much faster.
       kj::throwFatalException(kj::mv(exception));
     } else {
       // An exception is already unwinding the stack, so throwing this secondary exception would

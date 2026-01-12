@@ -1325,16 +1325,12 @@ Function<void(Function<void()>)> ExceptionCallback::getThreadInitializer() {
   return next.getThreadInitializer();
 }
 
-namespace _ {  // private
-  uint uncaughtExceptionCount();  // defined later in this file
-}
-
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
 public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
 
   void onRecoverableException(Exception&& exception) override {
-    if (_::uncaughtExceptionCount() > 0) {
+    if (UnwindDetector::uncaughtExceptionCount() > 0) {
       // Bad time to throw an exception.  Just log instead.
       //
       // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
@@ -1444,18 +1440,14 @@ void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
 
 // =======================================================================================
 
-namespace _ {  // private
-
-uint uncaughtExceptionCount() {
+uint UnwindDetector::uncaughtExceptionCount() {
   return std::uncaught_exceptions();
 }
 
-}  // namespace _ (private)
-
-UnwindDetector::UnwindDetector(): uncaughtCount(_::uncaughtExceptionCount()) {}
+UnwindDetector::UnwindDetector(): uncaughtCount(uncaughtExceptionCount()) {}
 
 bool UnwindDetector::isUnwinding() const {
-  return _::uncaughtExceptionCount() > uncaughtCount;
+  return uncaughtExceptionCount() > uncaughtCount;
 }
 
 void UnwindDetector::catchThrownExceptionAsSecondaryFault() const {

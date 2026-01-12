@@ -384,6 +384,9 @@ public:
   // caught and treated as secondary faults, meaning they are considered to be side-effects of the
   // exception that is unwinding the stack.  Otherwise, exceptions are passed through normally.
 
+  static uint uncaughtExceptionCount();
+  // exposes `std::uncaught_exceptions`
+
 private:
   uint uncaughtCount;
 

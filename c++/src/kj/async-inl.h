@@ -2351,8 +2351,6 @@ private:
   // ability to destroy themselves, replacing their own Own, we hold a reference to the owning Own
   // instead of directly to the PromiseNode.
 
-  UnwindDetector unwindDetector;
-
   struct DisposalResults {
     bool destructorRan = false;
     Maybe<Exception> exception;
