@@ -453,10 +453,10 @@ struct Value {
     text @12 :Text;
     data @13 :Data;
 
-    list @14 :AnyPointer;
+    list @14 :AnyList;
 
     enum @15 :UInt16;
-    struct @16 :AnyPointer;
+    struct @16 :AnyStruct;
 
     interface @17 :Void;
     # The only interface value that can be represented statically is "null", whose methods always

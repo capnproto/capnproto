@@ -1791,8 +1791,8 @@ void NodeTranslator::compileDefaultDefaultValue(
     // TODO(cleanup):  Create a cleaner way to do this.
     case schema::Type::TEXT: target.adoptText(Orphan<Text>()); break;
     case schema::Type::DATA: target.adoptData(Orphan<Data>()); break;
-    case schema::Type::STRUCT: target.initStruct(); break;
-    case schema::Type::LIST: target.initList(); break;
+    case schema::Type::STRUCT: target.adoptStruct(Orphan<AnyStruct>()); break;
+    case schema::Type::LIST: target.adoptList(Orphan<AnyList>()); break;
     case schema::Type::ANY_POINTER: target.initAnyPointer(); break;
   }
 }

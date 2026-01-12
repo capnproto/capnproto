@@ -1157,7 +1157,7 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
         List<Declaration::BrandParameter>::Reader params;
         for (auto annotation: fieldProto.getAnnotations()) {
           if (annotation.getId() == 0x94099c3f9eb32d6bull) {
-            params = annotation.getValue().getList().getAs<List<Declaration::BrandParameter>>();
+            params = annotation.getValue().getList().as<List<Declaration::BrandParameter>>();
             break;
           }
         }

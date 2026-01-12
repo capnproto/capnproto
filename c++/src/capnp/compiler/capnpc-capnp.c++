@@ -333,7 +333,7 @@ private:
       case schema::Value::DATA:
         return kj::strTree(DynamicValue::Reader(value.getData()));
       case schema::Value::LIST: {
-        auto listValue = value.getList().getAs<DynamicList>(type.asList());
+        auto listValue = value.getList().as<DynamicList>(type.asList());
         return kj::strTree(listValue);
       }
       case schema::Value::ENUM: {
@@ -345,7 +345,7 @@ private:
       }
       case schema::Value::STRUCT: {
         KJ_REQUIRE(type.which() == schema::Type::STRUCT, "type/value mismatch");
-        auto structValue = value.getStruct().getAs<DynamicStruct>(type.asStruct());
+        auto structValue = value.getStruct().as<DynamicStruct>(type.asStruct());
         return kj::strTree(structValue);
       }
       case schema::Value::INTERFACE: {
