@@ -119,13 +119,13 @@ bool Mutex::checkPredicate(Waiter& waiter) {
   if (waiter.exception != kj::none) return true;  // don't run again after an exception
 
   bool result = false;
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     result = waiter.predicate.check();
-  })) {
+  } KJ_CATCH(exception) {
     // Exception thrown.
     result = true;
     waiter.exception = kj::heap(kj::mv(exception));
-  };
+  }
   return result;
 }
 

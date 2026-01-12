@@ -395,9 +395,9 @@ public:
         // Try to create a consistent display name override for the imported file. This is for
         // backwards-compatibility only -- display names are only overridden when using the
         // deprecated parseDiskFile() interface.
-        kj::runCatchingExceptions([&]() {
+        KJ_TRY {
           displayNameOverride = kj::Path::parse(displayName).parent().eval(target).toString();
-        });
+        } KJ_CATCH(_);
       }
 
       KJ_IF_SOME(newFile, baseDir.tryOpenFile(parsed)) {

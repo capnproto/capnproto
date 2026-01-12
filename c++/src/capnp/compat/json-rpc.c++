@@ -170,9 +170,9 @@ kj::Promise<void> JsonRpc::readLoop() {
     MallocMessageBuilder capnpMessage;
     auto rpcMessageBuilder = capnpMessage.getRoot<json::RpcMessage>();
 
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       codec.decode(message, rpcMessageBuilder);
-    })) {
+    } KJ_CATCH(exception) {
       queueError(kj::none, -32700, kj::str("Parse error: ", exception.getDescription()));
       return readLoop();
     }
@@ -199,9 +199,9 @@ kj::Promise<void> JsonRpc::readLoop() {
         // a call
         KJ_IF_SOME(method, methodMap.find(rpcMessage.getMethod())) {
           auto req = interface.newRequest(method);
-          KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+          KJ_TRY {
             codec.decode(rpcMessage.getParams(), req);
-          })) {
+          } KJ_CATCH(exception) {
             kj::Maybe<JsonValue::Reader> id;
             if (rpcMessage.hasId()) id = rpcMessage.getId();
             queueError(id, -32602,
@@ -272,10 +272,10 @@ kj::Promise<void> JsonRpc::readLoop() {
           // JSON-RPC doesn't define what to do if receiving a response with an invalid id.
           KJ_LOG(ERROR, "JSON-RPC response has invalid ID");
         } else KJ_IF_SOME(awaited, awaitedResponses.find((uint)id.getNumber())) {
-          KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+          KJ_TRY {
             codec.decode(rpcMessage.getResult(), awaited.context.getResults());
             awaited.fulfiller->fulfill();
-          })) {
+          } KJ_CATCH(exception) {
             // Errors always propagate from callee to caller, so we don't want to throw this error
             // back to the server.
             awaited.fulfiller->reject(kj::mv(exception));

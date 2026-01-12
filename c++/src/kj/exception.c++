@@ -307,7 +307,7 @@ String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
     return false;
   }();
 
-  try {
+  KJ_TRY {
     KJ_IF_SOME(subprocess, Subprocess::exec(argv)) {
       // write addresses as "CODE <file_name> <hex_address>" lines.
       auto addrs = strArray(KJ_MAP(addr, trace) {
@@ -370,9 +370,7 @@ String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
     } else {
       return kj::str("\nerror starting llvm-symbolizer");
     }
-  } catch (...) {
-    auto exception = getCaughtExceptionAsKj();
-
+  } KJ_CATCH(exception) {
     // Carefully log only the exception description here, since we don't want to trigger stack
     // trace stringification recursively!
     KJ_LOG(ERROR, "caught exception while trying to stringify stack trace",

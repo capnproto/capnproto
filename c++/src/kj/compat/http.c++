@@ -3860,7 +3860,7 @@ private:
       // to send a disconnect on the destination. If it was the destination that threw, it
       // shouldn't hurt to disconnect() it again, but we'll catch and squelch any exceptions.
       other.disconnected = true;
-      kj::runCatchingExceptions([&other]() { other.stream->shutdownWrite(); });
+      KJ_TRY { other.stream->shutdownWrite(); } KJ_CATCH(_);
       return kj::mv(e);
     }).exclusiveJoin(kj::mv(cancelPromise));
   }
@@ -3911,7 +3911,7 @@ static kj::Promise<void> pumpWebSocketLoop(WebSocket& from, WebSocket& to) {
     // We don't know if it was a read or a write that threw. If it was a read that threw, we need
     // to send a disconnect on the destination. If it was the destination that threw, it
     // shouldn't hurt to disconnect() it again, but we'll catch and squelch any exceptions.
-    kj::runCatchingExceptions([&to]() { to.disconnect(); });
+    KJ_TRY { to.disconnect(); } KJ_CATCH(_);
 
     // In any case, this error broke the pump. We should propagate it out as the pump result.
     throw;
@@ -6166,9 +6166,9 @@ private:
     }
     ~RefcountedClient() noexcept(false) {
       --parent.activeConnectionCount;
-      KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+      KJ_TRY {
         parent.returnClientToAvailable(kj::mv(client));
-      })) {
+      } KJ_CATCH(exception) {
         KJ_LOG(ERROR, exception);
       }
     }

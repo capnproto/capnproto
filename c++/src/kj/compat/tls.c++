@@ -878,7 +878,7 @@ TlsContext::TlsContext(Options options) {
 int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
   // The third parameter is actually type TlsSniCallback*.
 
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     TlsSniCallback& sni = *reinterpret_cast<TlsSniCallback*>(arg);
 
     const char* name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
@@ -909,7 +909,7 @@ int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
         }
       }
     }
-  })) {
+  } KJ_CATCH(exception) {
     KJ_LOG(ERROR, "exception when invoking SNI callback", exception);
     *ad = SSL_AD_INTERNAL_ERROR;
     return SSL_TLSEXT_ERR_ALERT_FATAL;

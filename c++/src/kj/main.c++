@@ -216,9 +216,9 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
       params[i - 1] = argv[i];
     }
 
-    KJ_IF_SOME(exception, runCatchingExceptions([&]() {
+    KJ_TRY {
       func(argv[0], params);
-    })) {
+    } KJ_CATCH(exception) {
       context.error(str("*** Uncaught exception ***\n", exception));
     }
     context.exit();

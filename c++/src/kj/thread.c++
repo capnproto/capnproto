@@ -176,9 +176,9 @@ DWORD Thread::runThread(void* ptr) {
 void* Thread::runThread(void* ptr) {
 #endif
   ThreadState* state = reinterpret_cast<ThreadState*>(ptr);
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     state->initializer(kj::mv(state->func));
-  })) {
+  } KJ_CATCH(exception) {
     state->exception = kj::mv(exception);
   }
   state->unref();

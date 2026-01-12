@@ -460,11 +460,11 @@ kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
   // TODO(perf): It might be nice to have a tryGetsockopt() that doesn't require catching
   //   exceptions?
   int bufSize = 0;
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     uint len = sizeof(int);
     stream.getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
     KJ_ASSERT(len == sizeof(bufSize)) { break; }
-  })) {
+  } KJ_CATCH(exception) {
     if (exception.getType() != kj::Exception::Type::UNIMPLEMENTED) {
       // TODO(someday): Figure out why getting SO_SNDBUF sometimes throws EINVAL. I suspect it
       //   happens when the remote side has closed their read end, meaning we no longer have

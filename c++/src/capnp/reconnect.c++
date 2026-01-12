@@ -93,9 +93,9 @@ private:
       if (exception.getType() == kj::Exception::Type::DISCONNECTED &&
           self->generation == startGeneration) {
         self->generation++;
-        KJ_IF_SOME(e2, kj::runCatchingExceptions([&]() {
+        KJ_TRY {
           self->current = ClientHook::from(self->connect());
-        })) {
+        } KJ_CATCH(e2) {
           self->current = newBrokenCap(kj::mv(e2));
         }
       }

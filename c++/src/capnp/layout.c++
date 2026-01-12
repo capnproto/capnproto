@@ -3872,7 +3872,7 @@ void OrphanBuilder::truncateText(ElementCount size) {
 void OrphanBuilder::euthanize() {
   // Carefully catch any exceptions and rethrow them as recoverable exceptions since we may be in
   // a destructor.
-  auto exception = kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     if (tagAsPtr()->isPositional()) {
       WireHelpers::zeroObject(segment, capTable, tagAsPtr(), location);
     } else {
@@ -3882,9 +3882,7 @@ void OrphanBuilder::euthanize() {
     WireHelpers::zeroMemory(&tag, ONE * WORDS);
     segment = nullptr;
     location = nullptr;
-  });
-
-  KJ_IF_SOME(e, exception) {
+  } KJ_CATCH(e) {
     kj::getExceptionCallback().onRecoverableException(kj::mv(e));
   }
 }

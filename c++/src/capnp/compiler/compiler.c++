@@ -557,13 +557,13 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       content.translator = &workspace.arena.allocate<NodeTranslator>(
           *this, module->getErrorReporter(), declaration, kj::mv(schemaNode),
           module->getCompiler().shouldCompileAnnotations());
-      KJ_IF_SOME(exception, kj::runCatchingExceptions([&](){
+      KJ_TRY {
         auto nodeSet = content.translator->getBootstrapNode();
         for (auto& auxNode: nodeSet.auxNodes) {
           workspace.bootstrapLoader.loadOnce(auxNode);
         }
         content.bootstrapSchema = workspace.bootstrapLoader.loadOnce(nodeSet.node);
-      })) {
+      } KJ_CATCH(exception) {
         content.bootstrapSchema = kj::none;
         // Only bother to report validation failures if we think we haven't seen any errors.
         // Otherwise we assume that the errors caused the validation failure.
@@ -645,14 +645,14 @@ kj::Maybe<schema::Node::Reader> Compiler::Node::getFinalSchema() {
 }
 void Compiler::Node::loadFinalSchema(const SchemaLoader& loader) {
   KJ_IF_SOME(content, getContent(Content::FINISHED)) {
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&](){
+    KJ_TRY {
       KJ_IF_SOME(finalSchema, content.finalSchema) {
         KJ_MAP(auxSchema, content.auxSchemas) {
           return loader.loadOnce(auxSchema);
         };
         loadedFinalSchema = loader.loadOnce(finalSchema).getProto();
       }
-    })) {
+    } KJ_CATCH(exception) {
       // Schema validation threw an exception.
 
       // Don't try loading this again.
@@ -981,9 +981,9 @@ kj::Maybe<Type> Compiler::Node::resolveBootstrapType(schema::Type::Reader type, 
   // TODO(someday): Arguably should return null if the type or its dependencies are placeholders.
 
   kj::Maybe<Type> result;
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     result = module->getCompiler().getWorkspace().bootstrapLoader.getType(type, scope);
-  })) {
+  } KJ_CATCH(exception) {
     result = kj::none;
     if (!module->getErrorReporter().hadErrors()) {
       addError(kj::str("Internal compiler bug: Bootstrap schema failed to load:\n",

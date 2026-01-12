@@ -505,7 +505,7 @@ public:
     auto canceler = kj::mv(connection.get<Connected>().canceler);
     connection.init<Disconnected>(kj::cp(networkException));
 
-    KJ_IF_SOME(newException, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       // Carefully pull all the objects out of the tables prior to releasing them because their
       // destructors could come back and mess with the tables.
       kj::Vector<kj::Own<PipelineHook>> pipelinesToRelease;
@@ -563,7 +563,7 @@ public:
           f->reject(kj::cp(networkException));
         }
       });
-    })) {
+    } KJ_CATCH(newException) {
       // Some destructor must have thrown an exception.  There is no appropriate place to report
       // these errors.
       KJ_LOG(ERROR, "Uncaught exception when destroying capabilities dropped by disconnect.",
@@ -573,12 +573,12 @@ public:
     // Send an abort message, but ignore failure. Don't send if idle, because we promised not to
     // send any more messages in that case... we'll just disconnect.
     if (!idle) {
-      kj::runCatchingExceptions([&]() {
+      KJ_TRY {
         auto message = dyingConnection->newOutgoingMessage(
             messageSizeHint<void>() + exceptionSizeHint(exception));
         fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
         message->send();
-      });
+      } KJ_CATCH(_);
     }
 
     // Indicate disconnect.
@@ -2324,7 +2324,7 @@ private:
 
         // Send the "Finish" message (if the connection is not already broken).
         if (connectionState->connection.is<Connected>() && !question.skipFinish) {
-          KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
+          KJ_TRY {
             auto message = connectionState->connection.get<Connected>().connection
                 ->newOutgoingMessage(messageSizeHint<rpc::Finish>());
             auto builder = message->getBody().getAs<rpc::Message>().initFinish();
@@ -2339,7 +2339,7 @@ private:
             builder.setRequireEarlyCancellationWorkaround(false);
 
             message->send();
-          })) {
+          } KJ_CATCH(e) {
             connectionState->tasks.add(kj::mv(e));
           }
         }
@@ -2615,11 +2615,11 @@ private:
       if (isTailCall) {
         callBuilder.getSendResultsTo().setYourself();
       }
-      KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+      KJ_TRY {
         KJ_CONTEXT("sending RPC call",
            callBuilder.getInterfaceId(), callBuilder.getMethodId());
         message->send();
-      })) {
+      } KJ_CATCH(exception) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
         // TODO(bug): Attempts to use the pipeline will end up sending a request referencing a
@@ -2644,7 +2644,7 @@ private:
         callBuilder.getSendResultsTo().setYourself();
       }
       kj::Promise<void> flowPromise = nullptr;
-      KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+      KJ_TRY {
         KJ_CONTEXT("sending RPC call",
            callBuilder.getInterfaceId(), callBuilder.getMethodId());
         RpcFlowController* flow;
@@ -2655,7 +2655,7 @@ private:
               connectionState->connection.get<Connected>().connection->newStream());
         }
         flowPromise = flow->send(kj::mv(message), setup.promise.ignoreResult());
-      })) {
+      } KJ_CATCH(exception) {
         // We can't safely throw the exception from here since we've already modified the question
         // table state. We'll have to reject the promise instead.
         setup.question.isAwaitingReturn = false;
@@ -3201,11 +3201,11 @@ private:
           selfPromise.detach([](kj::Exception&&) {});
         }
 
-        KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+        KJ_TRY {
           // Debug info in case send() fails due to overside message.
           KJ_CONTEXT("returning from RPC call", interfaceId, methodId);
           exports = responseImpl.send();
-        })) {
+        } KJ_CATCH(exception) {
           responseSent = false;
           sendErrorReturn(kj::mv(exception));
           return;

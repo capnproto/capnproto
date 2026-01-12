@@ -321,9 +321,9 @@ protected:
     node->get(result);
 
     // Delete the node, catching any exceptions.
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
+    KJ_TRY {
       node = nullptr;
-    })) {
+    } KJ_CATCH(exception) {
       result.addException(kj::mv(exception));
     }
 
@@ -1147,11 +1147,11 @@ Maybe<Own<Event>> XThreadEvent::fire() {
     promiseNode = kj::none;  // make sure to destroy in the thread that created it
     return Own<Event>(this, DISPOSER);
   } else {
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       promiseNode = execute();
-    })) {
+    } KJ_CATCH(exception) {
       result.addException(kj::mv(exception));
-    };
+    }
     KJ_IF_SOME(n, promiseNode) {
       n->onReady(this);
     } else {
@@ -1539,7 +1539,9 @@ void FiberStack::runOne() {
       event->run();
     }
     KJ_CASE_ONEOF(func, SynchronousFunc*) {
-      KJ_IF_SOME(exception, kj::runCatchingExceptions(func->func)) {
+      KJ_TRY {
+        func->func();
+      } KJ_CATCH(exception) {
         func->exception.emplace(kj::mv(exception));
       }
     }
@@ -1710,9 +1712,9 @@ void FiberBase::run() {
   WaitScope waitScope(currentEventLoop(), *this);
 
   try {
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       runImpl(waitScope);
-    })) {
+    } KJ_CATCH(exception) {
       result.addException(kj::mv(exception));
     }
   } catch (CanceledException) {
@@ -2069,9 +2071,9 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
 
   waitScope.runOnStackPool([&]() {
     node->get(result);
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       node = nullptr;
-    })) {
+    } KJ_CATCH(exception) {
       result.addException(kj::mv(exception));
     }
   });
@@ -2477,10 +2479,10 @@ void TransformPromiseNodeBase::onReady(Event* event) noexcept {
 }
 
 void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     getImpl(output);
     dropDependency();
-  })) {
+  } KJ_CATCH(exception) {
     output.addException(kj::mv(exception));
   }
 }
@@ -2502,9 +2504,9 @@ void TransformPromiseNodeBase::dropDependency() {
 
 void TransformPromiseNodeBase::getDepResult(ExceptionOrValue& output) {
   dependency->get(output);
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+  KJ_TRY {
     dependency = nullptr;
-  })) {
+  } KJ_CATCH(exception) {
     output.addException(kj::mv(exception));
   }
 
@@ -2540,9 +2542,9 @@ void ForkBranchBase::hubReady() noexcept {
 }
 
 void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
+  KJ_TRY {
     hub = nullptr;
-  })) {
+  } KJ_CATCH(exception) {
     output.addException(kj::mv(exception));
   }
 }
@@ -2574,9 +2576,9 @@ ForkHubBase::ForkHubBase(OwnPromiseNode&& innerParam, ExceptionOrValue& resultRe
 Maybe<Own<Event>> ForkHubBase::fire() {
   // Dependency is ready.  Fetch its result and then delete the node.
   inner->get(resultRef);
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
+  KJ_TRY {
     inner = nullptr;
-  })) {
+  } KJ_CATCH(exception) {
     resultRef.addException(kj::mv(exception));
   }
 
@@ -2662,15 +2664,15 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   ExceptionOr<PromiseBase> intermediate;
   inner->get(intermediate);
 
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
+  KJ_TRY {
     inner = nullptr;
-  })) {
+  } KJ_CATCH(exception) {
     intermediate.addException(kj::mv(exception));
   }
 
   KJ_IF_SOME(exception, intermediate.exception) {
     // There is an exception.  If there is also a value, delete it.
-    kj::runCatchingExceptions([&]() { intermediate.value = kj::none; });
+    KJ_TRY { intermediate.value = kj::none; } KJ_CATCH(_);
     // Now set step2 to a rejected promise.
     inner = allocPromise<ImmediateBrokenPromiseNode>(kj::mv(exception));
   } else KJ_IF_SOME(value, intermediate.value) {
@@ -2778,9 +2780,9 @@ Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
   if (dependency) {
     // Cancel the branch that didn't return first.  Ignore exceptions caused by cancellation.
     if (this == &joinNode.left) {
-      kj::runCatchingExceptions([&]() { joinNode.right.dependency = nullptr; });
+      KJ_TRY { joinNode.right.dependency = nullptr; } KJ_CATCH(_);
     } else {
-      kj::runCatchingExceptions([&]() { joinNode.left.dependency = nullptr; });
+      KJ_TRY { joinNode.left.dependency = nullptr; } KJ_CATCH(_);
     }
 
     joinNode.onReadyEvent.arm();
@@ -2972,7 +2974,7 @@ Maybe<Own<Event>> RaceSuccessfulPromiseNodeBase::Branch::fire() {
     // cancel the others, ignore errors caused by cancellations
     for (auto& otherBranch: parent.branches) {
       if (this != &otherBranch) {
-        kj::runCatchingExceptions([&]() { otherBranch.promise = nullptr; });
+        KJ_TRY { otherBranch.promise = nullptr; } KJ_CATCH(_);
       }
     }
   }
@@ -3106,9 +3108,9 @@ void EagerPromiseNodeBase::traceEvent(TraceBuilder& builder) {
 
 Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
   dependency->get(resultRef);
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
+  KJ_TRY {
     dependency = nullptr;
-  })) {
+  } KJ_CATCH(exception) {
     resultRef.addException(kj::mv(exception));
   }
 
