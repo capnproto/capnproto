@@ -3298,16 +3298,22 @@ void CoroutineBase::destroy() {
 PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
 PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
 PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
-  // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
-  // destroyed.
-  KJ_IF_SOME(coroutine, maybeCoroutine) {
-    coroutine.clearPromiseNodeForTrace();
-  }
+  if (node.get() != nullptr) {
+    // Cancellation of a suspended awaiter.
+    // We must have a coroutine attached otherwise we wouldn't be suspended.
+    auto& coroutine = KJ_REQUIRE_NONNULL(maybeCoroutine);
 
-  unwindDetector.catchExceptionsIfUnwinding([this]() {
-    // No need to check for a moved-from state, node will just ignore the nullification.
-    node = nullptr;
-  });
+    // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
+    // destroyed.
+    coroutine.clearPromiseNodeForTrace();
+
+    try {
+      node = nullptr;
+    } catch (...) {
+      // Ignore exceptions that happen during co_await cancellation: most likely it happens in the
+      // error path already, and there is not much for the user to do if cancellation fails.
+    }
+  }
 }
 
 void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
@@ -3316,6 +3322,12 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
   }
 
   node->get(result);
+
+  try {
+    node = nullptr;
+  } catch (...) {
+    result.addException(getCaughtExceptionAsKj());
+  }
 
   KJ_IF_SOME(exception, result.exception) {
     // Manually extend the stack trace with the instruction address where the co_await occurred.
