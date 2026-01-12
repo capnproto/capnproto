@@ -752,7 +752,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     // So we instead resort to de-duping results.
     std::set<SocketAddress> result;
 
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       addrinfo* list;
       int status = getaddrinfo(
           params.host == "*" ? nullptr : params.host.cStr(),
@@ -802,14 +802,11 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           cur = cur->ai_next;
         }
       } else {
-        KJ_FAIL_WIN32("getaddrinfo()", status, params.host, params.service) {
-          return;
-        }
+        KJ_FAIL_WIN32("getaddrinfo()", status, params.host, params.service);
       }
-    })) {
-      fulfiller->reject(kj::mv(exception));
-    } else {
       fulfiller->fulfill(KJ_MAP(addr, result) { return addr; });
+    } KJ_CATCH(exception) {
+      fulfiller->reject(kj::mv(exception));
     }
   });
 

@@ -1232,7 +1232,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     // So we instead resort to de-duping results.
     std::set<SocketAddress> result;
 
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       struct addrinfo hints;
       memset(&hints, 0, sizeof(hints));
       hints.ai_family = AF_UNSPEC;
@@ -1290,19 +1290,14 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           cur = cur->ai_next;
         }
       } else if (status == EAI_SYSTEM) {
-        KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service) {
-          return;
-        }
+        KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service);
       } else {
         KJ_FAIL_REQUIRE("DNS lookup failed.",
-                        params.host, params.service, gai_strerror(status)) {
-          return;
-        }
+                        params.host, params.service, gai_strerror(status));
       }
-    })) {
-      fulfiller->reject(kj::mv(exception));
-    } else {
       fulfiller->fulfill(KJ_MAP(addr, result) { return addr; });
+    } KJ_CATCH(exception) {
+      fulfiller->reject(kj::mv(exception));
     }
   });
 

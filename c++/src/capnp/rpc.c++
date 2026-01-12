@@ -3744,12 +3744,12 @@ private:
     KJ_DEFER(releaseExports(resultExports));  // in case something goes wrong
 
     // Call the restorer and initialize the answer.
-    KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    KJ_TRY {
       Capability::Client cap = nullptr;
 
       if (bootstrap.hasDeprecatedObjectId()) {
         KJ_FAIL_REQUIRE("This vat only supports a bootstrap interface, not the old "
-                        "Cap'n-Proto-0.4-style named exports.") { return; }
+                        "Cap'n-Proto-0.4-style named exports.");
       } else {
         cap = bootstrapFactory.baseCreateFor(conn.baseGetPeerVatId());
       }
@@ -3775,7 +3775,7 @@ private:
       KJ_IF_SOME(replacement, resolutionsAtReturnTime.find(capHook)) {
         capHook = replacement->addRef();
       }
-    })) {
+    } KJ_CATCH(exception) {
       fromException(exception, ret.initException());
       capHook = newBrokenCap(kj::mv(exception));
     }

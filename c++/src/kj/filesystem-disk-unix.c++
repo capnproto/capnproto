@@ -1706,15 +1706,11 @@ private:
     if (pwd != nullptr) {
       Path result = nullptr;
       struct stat pwdStat, dotStat;
-      KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
-        KJ_ASSERT(pwd[0] == '/') { return; }
+      KJ_TRY {
+        KJ_ASSERT(pwd[0] == '/');
         result = Path::parse(pwd + 1);
-        KJ_SYSCALL(lstat(result.toString(true).cStr(), &pwdStat), result) { return; }
-        KJ_SYSCALL(lstat(".", &dotStat)) { return; }
-      })) {
-        // failed, give up on PWD
-        KJ_LOG(WARNING, "PWD environment variable seems invalid", pwd, e);
-      } else {
+        KJ_SYSCALL(lstat(result.toString(true).cStr(), &pwdStat), result);
+        KJ_SYSCALL(lstat(".", &dotStat));
         if (pwdStat.st_ino == dotStat.st_ino &&
             pwdStat.st_dev == dotStat.st_dev) {
           return kj::mv(result);
@@ -1728,6 +1724,9 @@ private:
           // We used to log a WARNING here but it was deemed too noisy, so we changed it to INFO.
           KJ_LOG(INFO, "PWD environment variable doesn't match current directory", pwd);
         }
+      } KJ_CATCH(e) {
+        // failed, give up on PWD
+        KJ_LOG(WARNING, "PWD environment variable seems invalid", pwd, e);
       }
     }
 
