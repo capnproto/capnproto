@@ -1036,6 +1036,7 @@ KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 void requireOnStack(void* ptr, kj::StringPtr description) {
 #if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
     KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
+    KJ_HAS_COMPILER_FEATURE(hwaddress_sanitizer) || \
     defined(__SANITIZE_ADDRESS__)
   // When using libfuzzer or ASAN, this sanity check may spurriously fail, so skip it.
 #else
