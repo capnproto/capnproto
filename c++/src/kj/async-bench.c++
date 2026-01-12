@@ -208,4 +208,68 @@ static void bm_Coro_Shift_20(benchmark::State &state) {
 
 BENCHMARK(bm_Coro_Shift_20);
 
+///////////////////////////////
+// fib benchmarks mean to benchmark many await points within a single coro
+// these benchmark compute variant of fib function that sums previous 10 numbers.
+
+kj::Promise<size_t> promiseFib10(size_t i) {
+  if (i <= 10)
+    return 1;
+  return promiseFib10(i - 1).then([=](size_t x1) {
+    return promiseFib10(i - 2).then([=](size_t x2) {
+      return promiseFib10(i - 3).then([=](size_t x3) {
+        return promiseFib10(i - 4).then([=](size_t x4) {
+          return promiseFib10(i - 5).then([=](size_t x5) {
+            return promiseFib10(i - 6).then([=](size_t x6) {
+              return promiseFib10(i - 7).then([=](size_t x7) {
+                return promiseFib10(i - 8).then([=](size_t x8) {
+                  return promiseFib10(i - 9).then([=](size_t x9) {
+                    return promiseFib10(i - 10).then([=](size_t x10) {
+                      return x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10;
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+}
+
+static void bm_Promise_Fib10(benchmark::State &state) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  for (auto _ : state) {
+    auto promise = promiseFib10(12);
+    KJ_REQUIRE(promise.wait(waitScope) == 19);
+  }
+}
+
+BENCHMARK(bm_Promise_Fib10);
+
+kj::Promise<size_t> coroFib10(size_t i) {
+  if (i <= 10)
+    co_return 1;
+  co_return (co_await coroFib10(i - 1)) + (co_await coroFib10(i - 2)) +
+      (co_await coroFib10(i - 3)) + (co_await coroFib10(i - 4)) +
+      (co_await coroFib10(i - 5)) + (co_await coroFib10(i - 6)) +
+      (co_await coroFib10(i - 7)) + (co_await coroFib10(i - 8)) +
+      (co_await coroFib10(i - 9)) + (co_await coroFib10(i - 10));
+}
+
+static void bm_Coro_Fib10(benchmark::State &state) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  for (auto _ : state) {
+    auto promise = coroFib10(12);
+    KJ_REQUIRE(promise.wait(waitScope) == 19);
+  }
+}
+
+BENCHMARK(bm_Coro_Fib10);
+
 BENCHMARK_MAIN();
