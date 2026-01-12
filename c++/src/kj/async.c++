@@ -3305,6 +3305,11 @@ PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
   KJ_IF_SOME(coroutine, maybeCoroutine) {
     coroutine.clearPromiseNodeForTrace();
   }
+
+  unwindDetector.catchExceptionsIfUnwinding([this]() {
+    // No need to check for a moved-from state, node will just ignore the nullification.
+    node = nullptr;
+  });
 }
 
 void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
@@ -3313,12 +3318,6 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
   }
 
   node->get(result);
-
-  try {
-    node = nullptr;
-  } catch (...) {
-    result.addException(getCaughtExceptionAsKj());
-  }
 
   KJ_IF_SOME(exception, result.exception) {
     // Manually extend the stack trace with the instruction address where the co_await occurred.

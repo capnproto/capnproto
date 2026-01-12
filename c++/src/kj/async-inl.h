@@ -2481,6 +2481,7 @@ protected:
   bool awaitSuspendImpl(CoroutineBase& coroutine);
 
 private:
+  UnwindDetector unwindDetector;
   OwnPromiseNode node;
 
   Maybe<CoroutineBase&> maybeCoroutine;
