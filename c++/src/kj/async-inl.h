@@ -35,6 +35,8 @@
 #include <intrin.h>  // _ReturnAddress
 #endif
 
+#include <cstdint>
+
 #include <kj/list.h>
 
 KJ_BEGIN_HEADER
