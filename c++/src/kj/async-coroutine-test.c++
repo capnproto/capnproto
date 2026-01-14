@@ -286,6 +286,18 @@ kj::Promise<void> deferredThrowCoroutine(kj::Promise<void> awaitMe) {
   co_return;
 };
 
+kj::Promise<void> deferredThrowCoroutine2(kj::Promise<void> awaitMe) {
+  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind 2")));
+  co_await awaitMe;
+  co_return;
+};
+
+kj::Promise<void> deferredThrowCoroutine3(kj::Promise<void> awaitMe) {
+  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind 3")));
+  co_await awaitMe;
+  co_return;
+};
+
 KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destructor") {
   EventLoop loop;
   WaitScope waitScope(loop);
@@ -294,6 +306,39 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destru
     (void)deferredThrowCoroutine(kj::NEVER_DONE);
   }));
 
+  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destructor II") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE);
+    (void)deferredThrowCoroutine2(kj::mv(coro1));
+  }));
+
+  // Will capture the first exception during the destruction.
+  // The destruction order is the following:
+  // - coro2 is destroyed
+  // - promise awaiter `co_await awaitMe` is destroyed
+  // - coro1 is destroyed
+  // - coro1 destructor throws "thrown during unwind"
+  // - coro2 destructor will later throw "thrown during unwind 2" but it will be ignored
+  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destructor III") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE);
+    auto coro2 = deferredThrowCoroutine2(kj::mv(coro1));
+    (void)deferredThrowCoroutine3(kj::mv(coro2));
+  }));
+
+  // deferredThrowCoroutine3 will be deleted first and will throw first
   KJ_EXPECT(exception.getDescription() == "thrown during unwind");
 };
 
