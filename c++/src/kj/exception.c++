@@ -625,6 +625,7 @@ namespace {
     try {
       std::rethrow_exception(eptr);
     } catch (const kj::Exception& exception) {
+      KJ_DBG(kj::getStackTrace());
       message = kj::str("*** Fatal uncaught kj::Exception: ", exception, '\n');
     } catch (const std::exception& exception) {
       message = kj::str("*** Fatal uncaught std::exception: ", exception.what(),

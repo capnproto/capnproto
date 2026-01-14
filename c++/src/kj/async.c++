@@ -3179,16 +3179,17 @@ void CoroutineBase::unhandled_exception() {
 
   auto exception = getCaughtExceptionAsKj();
 
-  KJ_IF_SOME(disposalResults, maybeDisposalResults) {
-    // Exception during coroutine destruction. Only record the first one.
-    if (disposalResults.exception == kj::none) {
-      disposalResults.exception = kj::mv(exception);
-    }
+  if (maybeDisposalResults != kj::none) {
+    KJ_DBG(this, "unhandled_exception() during destruction");
+    // Exception during coroutine destruction, just rethrow.
+    kj::throwFatalException(kj::mv(exception));
   } else if (isWaiting()) {
+    KJ_DBG(this, "unhandled_exception() during resumption");
     // Exception during coroutine execution.
     resultRef.addException(kj::mv(exception));
     scheduleResumption();
   } else {
+    KJ_DBG(this, "unhandled_exception() during completion");
     // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
     // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
     // successful completion, and something in the frame threw. We can't already be rejected,
@@ -3278,21 +3279,31 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != kj::none` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
-    coroutine.destroy();
+    try {
+      KJ_DBG(this, "calling coroutine.destroy()", UnwindDetector::uncaughtExceptionCount());
+      coroutine.destroy();
+    } catch (...) {
+      if (disposalResults.exception == kj::none) {
+        disposalResults.exception = kj::getCaughtExceptionAsKj();
+      }
+    }
   } while (!disposalResults.destructorRan);
+  KJ_ASSERT(disposalResults.destructorRan);
 
   // WARNING: `this` is now a dangling pointer.
 
   KJ_IF_SOME(exception, disposalResults.exception) {
     if (UnwindDetector::uncaughtExceptionCount() == 0) {
-      // Technically this does not equal the `UnwindDetector` logic, 
+      // Technically this does not equal the `UnwindDetector` logic,
       // but this behaviour will never lead to trouble, is almost always true on practice
       // (only coroutines _created_ during unwind could notice a difference in behaviour),
       // and, more importantly, much faster.
+      KJ_DBG(this, "throwing exception from CoroutineBase::destroy()");
       kj::throwFatalException(kj::mv(exception));
     } else {
       // An exception is already unwinding the stack, so throwing this secondary exception would
       // call std::terminate().
+      KJ_DBG(this, "would throw exception from CoroutineBase::destroy()");
     }
   }
 }

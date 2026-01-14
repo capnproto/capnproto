@@ -281,19 +281,28 @@ KJ_TEST("Coroutines can be canceled while suspended") {
 }
 
 kj::Promise<void> deferredThrowCoroutine(kj::Promise<void> awaitMe) {
-  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind")));
+  UnwindDetector detector;
+  KJ_DEFER(detector.catchExceptionsIfUnwinding([&]() {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
+  }));
   co_await awaitMe;
   co_return;
 };
 
 kj::Promise<void> deferredThrowCoroutine2(kj::Promise<void> awaitMe) {
-  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind 2")));
+  UnwindDetector detector;
+  KJ_DEFER(detector.catchExceptionsIfUnwinding([&]() {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind 2"));
+  }));
   co_await awaitMe;
   co_return;
 };
 
 kj::Promise<void> deferredThrowCoroutine3(kj::Promise<void> awaitMe) {
-  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind 3")));
+  UnwindDetector detector;
+  KJ_DEFER(detector.catchExceptionsIfUnwinding([&]() {
+    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind 3"));
+  }));
   co_await awaitMe;
   co_return;
 };
@@ -315,6 +324,7 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destru
 
   auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
     auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE);
+    KJ_DEFER(KJ_DBG("destroyed coroutine 2"));
     (void)deferredThrowCoroutine2(kj::mv(coro1));
   }));
 
