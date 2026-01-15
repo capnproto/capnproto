@@ -297,22 +297,26 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destru
   KJ_EXPECT(exception.getDescription() == "thrown during unwind");
 };
 
-kj::Promise<void> tryCatchCoAwaitCoroutine(kj::Promise<void> awaitMe) {
+kj::Promise<void> tryCatchCoAwaitCoroutine(kj::Promise<void> awaitMe, bool* caught) {
   try {
     co_await awaitMe;
-  } catch (...) { }
+  } catch (...) { 
+    *caught = true;
+  }
 };
 
 KJ_TEST("Exceptions during suspended coroutine frame-unwind destructor can be caught") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
+  bool caught = false;
   auto exception = kj::runCatchingExceptions([&]() {
     auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE);
-    (void)tryCatchCoAwaitCoroutine(kj::mv(coro1));
+    (void)tryCatchCoAwaitCoroutine(kj::mv(coro1), &caught);
   });
 
   KJ_EXPECT(exception == kj::none);
+  KJ_EXPECT(caught);
 };
 
 KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memory leak") {
