@@ -173,6 +173,7 @@ cc_library(
     "io-test.c++",
     "list-test.c++",
     "map-test.c++",
+    "maybe-test.c++",
     "memory-test.c++",
     "mutex-test.c++",
     "one-of-test.c++",
