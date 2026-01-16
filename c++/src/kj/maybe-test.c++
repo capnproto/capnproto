@@ -21,7 +21,6 @@
 
 #include "common.h"
 #include "test.h"
-#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {
@@ -48,79 +47,79 @@ struct CopyOrMove {
   int i;
 };
 
-TEST(Common, Maybe) {
+KJ_TEST("Maybe") {
   {
     Maybe<int> m = 123;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(123, v);
+      KJ_EXPECT(123 == v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(123, v);
+      KJ_EXPECT(123 == v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(123, m.orDefault(456));
+    KJ_EXPECT(123 == m.orDefault(456));
     bool ranLazy = false;
-    EXPECT_EQ(123, m.orDefault([&] {
+    KJ_EXPECT(123 == m.orDefault([&] {
       ranLazy = true;
       return 456;
     }));
-    EXPECT_FALSE(ranLazy);
+    KJ_EXPECT(!ranLazy);
 
     KJ_IF_SOME(v, m) {
       int notUsedForRef = 5;
       const int& ref = m.orDefault([&]() -> int& { return notUsedForRef; });
 
-      EXPECT_EQ(ref, v);
-      EXPECT_EQ(&ref, &v);
+      KJ_EXPECT(ref == v);
+      KJ_EXPECT(&ref == &v);
 
       const int& ref2 = m.orDefault([notUsed = 5]() -> int { return notUsed; });
-      EXPECT_NE(&ref, &ref2);
-      EXPECT_EQ(ref2, 123);
+      KJ_EXPECT(&ref != &ref2);
+      KJ_EXPECT(ref2 == 123);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
   }
 
   {
     Maybe<Own<CopyOrMove>> m = kj::heap<CopyOrMove>(123);
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(123, v->i);
+      KJ_EXPECT(123 == v->i);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(123, v->i);
+      KJ_EXPECT(123 == v->i);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     // We have moved the kj::Own away, so this should give us the default and leave the Maybe empty.
-    EXPECT_EQ(456, m.orDefault(heap<CopyOrMove>(456))->i);
-    EXPECT_TRUE(m == kj::none);
+    KJ_EXPECT(456 == m.orDefault(heap<CopyOrMove>(456))->i);
+    KJ_EXPECT(m == kj::none);
 
     bool ranLazy = false;
-    EXPECT_EQ(123, mv(m).orDefault([&] {
+    KJ_EXPECT(123 == mv(m).orDefault([&] {
       ranLazy = true;
       return heap<CopyOrMove>(123);
     })->i);
-    EXPECT_TRUE(ranLazy);
-    EXPECT_TRUE(m == kj::none);
+    KJ_EXPECT(ranLazy);
+    KJ_EXPECT(m == kj::none);
 
     m = heap<CopyOrMove>(123);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(m != kj::none);
     ranLazy = false;
-    EXPECT_EQ(123, mv(m).orDefault([&] {
+    KJ_EXPECT(123 == mv(m).orDefault([&] {
       ranLazy = true;
       return heap<CopyOrMove>(456);
     })->i);
-    EXPECT_FALSE(ranLazy);
-    EXPECT_TRUE(m == kj::none);
+    KJ_EXPECT(!ranLazy);
+    KJ_EXPECT(m == kj::none);
   }
 
   {
@@ -129,161 +128,161 @@ TEST(Common, Maybe) {
     auto& ref1 = empty.orDefault([&defaultValue]() -> int& {
       return defaultValue;
     });
-    EXPECT_EQ(&ref1, &defaultValue);
+    KJ_EXPECT(&ref1 == &defaultValue);
 
     auto ref2 = empty.orDefault([&]() -> int { return defaultValue; });
-    EXPECT_NE(&ref2, &defaultValue);
+    KJ_EXPECT(&ref2 != &defaultValue);
   }
 
   {
     Maybe<int> m = 0;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(0, v);
+      KJ_EXPECT(0 == v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(0, v);
+      KJ_EXPECT(0 == v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(0, m.orDefault(456));
+    KJ_EXPECT(0 == m.orDefault(456));
     bool ranLazy = false;
-    EXPECT_EQ(0, m.orDefault([&] {
+    KJ_EXPECT(0 == m.orDefault([&] {
       ranLazy = true;
       return 456;
     }));
-    EXPECT_FALSE(ranLazy);
+    KJ_EXPECT(!ranLazy);
   }
 
   {
     Maybe<int> m = kj::none;
-    EXPECT_TRUE(m == kj::none);
-    EXPECT_FALSE(m != kj::none);
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(!(m != kj::none));
     KJ_IF_SOME(v, m) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, v);  // avoid unused warning
+      KJ_FAIL_EXPECT("unexpected");
+      KJ_EXPECT(0 == v);  // avoid unused warning
     }
     KJ_IF_SOME(v, mv(m)) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, v);  // avoid unused warning
+      KJ_FAIL_EXPECT("unexpected");
+      KJ_EXPECT(0 == v);  // avoid unused warning
     }
-    EXPECT_EQ(456, m.orDefault(456));
+    KJ_EXPECT(456 == m.orDefault(456));
     bool ranLazy = false;
-    EXPECT_EQ(456, m.orDefault([&] {
+    KJ_EXPECT(456 == m.orDefault([&] {
       ranLazy = true;
       return 456;
     }));
-    EXPECT_TRUE(ranLazy);
+    KJ_EXPECT(ranLazy);
   }
 
   int i = 234;
   {
     Maybe<int&> m = i;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(&i, &v);
+      KJ_EXPECT(&i == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(&i, &v);
+      KJ_EXPECT(&i == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(234, m.orDefault(456));
+    KJ_EXPECT(234 == m.orDefault(456));
   }
 
   {
     Maybe<int&> m = kj::none;
-    EXPECT_TRUE(m == kj::none);
-    EXPECT_FALSE(m != kj::none);
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(!(m != kj::none));
     KJ_IF_SOME(v, m) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, v);  // avoid unused warning
+      KJ_FAIL_EXPECT("unexpected");
+      KJ_EXPECT(0 == v);  // avoid unused warning
     }
     KJ_IF_SOME(v, mv(m)) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, v);  // avoid unused warning
+      KJ_FAIL_EXPECT("unexpected");
+      KJ_EXPECT(0 == v);  // avoid unused warning
     }
-    EXPECT_EQ(456, m.orDefault(456));
+    KJ_EXPECT(456 == m.orDefault(456));
   }
 
   {
     Maybe<int&> m = &i;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(&i, &v);
+      KJ_EXPECT(&i == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(&i, &v);
+      KJ_EXPECT(&i == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(234, m.orDefault(456));
+    KJ_EXPECT(234 == m.orDefault(456));
   }
 
   {
     const Maybe<int&> m2 = &i;
     Maybe<const int&> m = m2;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(&i, &v);
+      KJ_EXPECT(&i == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(&i, &v);
+      KJ_EXPECT(&i == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(234, m.orDefault(456));
+    KJ_EXPECT(234 == m.orDefault(456));
   }
 
   {
     Maybe<int&> m = implicitCast<int*>(nullptr);
-    EXPECT_TRUE(m == kj::none);
-    EXPECT_FALSE(m != kj::none);
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(!(m != kj::none));
     KJ_IF_SOME(v, m) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, v);  // avoid unused warning
+      KJ_FAIL_EXPECT("unexpected");
+      KJ_EXPECT(0 == v);  // avoid unused warning
     }
     KJ_IF_SOME(v, mv(m)) {
-      ADD_FAILURE();
-      EXPECT_EQ(0, v);  // avoid unused warning
+      KJ_FAIL_EXPECT("unexpected");
+      KJ_EXPECT(0 == v);  // avoid unused warning
     }
-    EXPECT_EQ(456, m.orDefault(456));
+    KJ_EXPECT(456 == m.orDefault(456));
   }
 
   {
     Maybe<int> mi = i;
     Maybe<int&> m = mi;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &v);
+      KJ_EXPECT(&KJ_ASSERT_NONNULL(mi) == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &v);
+      KJ_EXPECT(&KJ_ASSERT_NONNULL(mi) == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(234, m.orDefault(456));
+    KJ_EXPECT(234 == m.orDefault(456));
   }
 
   {
     Maybe<int> mi = kj::none;
     Maybe<int&> m = mi;
-    EXPECT_TRUE(m == kj::none);
+    KJ_EXPECT(m == kj::none);
     KJ_IF_SOME(v, m) {
       KJ_FAIL_EXPECT(v);
     }
@@ -292,25 +291,25 @@ TEST(Common, Maybe) {
   {
     const Maybe<int> mi = i;
     Maybe<const int&> m = mi;
-    EXPECT_FALSE(m == kj::none);
-    EXPECT_TRUE(m != kj::none);
+    KJ_EXPECT(!(m == kj::none));
+    KJ_EXPECT(m != kj::none);
     KJ_IF_SOME(v, m) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &v);
+      KJ_EXPECT(&KJ_ASSERT_NONNULL(mi) == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, mv(m)) {
-      EXPECT_EQ(&KJ_ASSERT_NONNULL(mi), &v);
+      KJ_EXPECT(&KJ_ASSERT_NONNULL(mi) == &v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
-    EXPECT_EQ(234, m.orDefault(456));
+    KJ_EXPECT(234 == m.orDefault(456));
   }
 
   {
     const Maybe<int> mi = kj::none;
     Maybe<const int&> m = mi;
-    EXPECT_TRUE(m == kj::none);
+    KJ_EXPECT(m == kj::none);
     KJ_IF_SOME(v, m) {
       KJ_FAIL_EXPECT(v);
     }
@@ -320,8 +319,8 @@ TEST(Common, Maybe) {
     // Verify orDefault() works with move-only types.
     Maybe<kj::String> m = kj::none;
     kj::String s = kj::mv(m).orDefault(kj::str("foo"));
-    EXPECT_EQ("foo", s);
-    EXPECT_EQ("foo", kj::mv(m).orDefault([] {
+    KJ_EXPECT("foo" == s);
+    KJ_EXPECT("foo" == kj::mv(m).orDefault([] {
       return kj::str("foo");
     }));
   }
@@ -332,14 +331,14 @@ TEST(Common, Maybe) {
     Maybe<uint> m2(m);
     Maybe<uint> m3(kj::mv(m));
     KJ_IF_SOME(v, m2) {
-      EXPECT_EQ(123, v);
+      KJ_EXPECT(123 == v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
     KJ_IF_SOME(v, m3) {
-      EXPECT_EQ(123, v);
+      KJ_EXPECT(123 == v);
     } else {
-      ADD_FAILURE();
+      KJ_FAIL_EXPECT("unexpected");
     }
   }
 
@@ -439,7 +438,7 @@ TEST(Common, Maybe) {
   }
 }
 
-TEST(Common, MaybeConstness) {
+KJ_TEST("Maybe constness") {
   int i;
 
   Maybe<int&> mi = i;
@@ -447,9 +446,9 @@ TEST(Common, MaybeConstness) {
 //  const Maybe<int&> cmi2 = cmi;    // shouldn't compile!  Transitive const violation.
 
   KJ_IF_SOME(i2, cmi) {
-    EXPECT_EQ(&i, &i2);
+    KJ_EXPECT(&i == &i2);
   } else {
-    ADD_FAILURE();
+    KJ_FAIL_EXPECT("unexpected");
   }
 
   Maybe<const int&> mci = mi;
@@ -457,14 +456,14 @@ TEST(Common, MaybeConstness) {
   const Maybe<const int&> cmci2 = cmci;
 
   KJ_IF_SOME(i2, cmci2) {
-    EXPECT_EQ(&i, &i2);
+    KJ_EXPECT(&i == &i2);
   } else {
-    ADD_FAILURE();
+    KJ_FAIL_EXPECT("unexpected");
   }
 }
 
 #if __GNUC__
-TEST(Common, MaybeUnwrapOrReturn) {
+KJ_TEST("Maybe unwrap or return") {
   {
     auto func = [](Maybe<int> i) -> int {
       int& j = KJ_UNWRAP_OR_RETURN(i, -1);
