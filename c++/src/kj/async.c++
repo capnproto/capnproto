@@ -3163,16 +3163,14 @@ Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW
 
 namespace _ {  // (private)
 
-CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
-                             SourceLocation location)
+CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location)
     : Event(location),
-      coroutine(coroutine),
-      resultRef(resultRef) {}
+      coroutine(coroutine) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
 }
 
-void CoroutineBase::unhandled_exception() {
+void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
   // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
   // we're being destroyed, in which case we propagate it back to our disposer. Note that all
   // unhandled exceptions end up here, not just ones after the first co_await.

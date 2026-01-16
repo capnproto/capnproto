@@ -2267,8 +2267,7 @@ namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 class CoroutineBase: public PromiseNode,
                      public Event {
 public:
-  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
-                SourceLocation location);
+  CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
@@ -2289,8 +2288,6 @@ public:
   //
   // The final suspension point is useful to delay deallocation of the coroutine frame to match the
   // lifetime of the enclosing promise.
-
-  void unhandled_exception();
 
   // Called from Awaiter implementations to integrate with async tracing during suspension.
   void setPromiseNodeForTrace(OwnPromiseNode& node) {
@@ -2315,6 +2312,8 @@ protected:
     waiting = false;
   }
 
+  void unhandledExceptionImpl(ExceptionOrValue& resultRef);
+
 private:
   // -------------------------------------------------------
   // PromiseNode implementation
@@ -2329,7 +2328,6 @@ private:
   void traceEvent(TraceBuilder& builder) override;
 
   stdcoro::coroutine_handle<> coroutine;
-  ExceptionOrValue& resultRef;
 
   OnReadyEvent onReadyEvent;
   bool waiting = true;
@@ -2386,7 +2384,7 @@ public:
   Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
 
   Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
-      : CoroutineBase(handle, result, location) {}
+      : CoroutineBase(handle, location) {}
 
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
@@ -2432,6 +2430,8 @@ public:
       scheduleResumption();
     }
   }
+
+  void unhandled_exception() { unhandledExceptionImpl(result); }
 
 private:
   // -------------------------------------------------------
