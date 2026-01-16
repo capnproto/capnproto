@@ -2345,6 +2345,9 @@ private:
   // already been called. To prove that our assumptions are correct in that function, we want to be
   // able to assert that `final_suspend()` has not yet been called. This boolean hack allows us to
   // preserve that assertion.
+  inline bool isDone() const { return finalSuspendCalled; }
+#else
+  inline bool isDone() const { return coroutine.done(); }
 #endif
 
   Maybe<OwnPromiseNode&> promiseNodeForTrace;
