@@ -151,21 +151,21 @@ KJ_TEST("Coroutine Frame sizes") {
     DebugCoroutineAllocator allocator;
     auto promise = immediateCoroutine(allocator);
     KJ_EXPECT(allocator.totalAllocCount == 1);
-    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 184);
+    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 176);
   }
 
   {
     DebugCoroutineAllocator allocator;
     auto promise = coroFib(allocator, 10);
     KJ_EXPECT(allocator.totalAllocCount == 1);
-    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 328);
+    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 304);
   }
 
   {
     DebugCoroutineAllocator allocator;
     auto promise = coroFib10(allocator, 10);
     KJ_EXPECT(allocator.totalAllocCount == 1);
-    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 912);
+    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 816);
   }
 }
 

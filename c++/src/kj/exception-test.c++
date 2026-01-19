@@ -573,6 +573,48 @@ KJ_TEST("getDestructionReason returns default exception if exception was "
   }
 }
 
+// =======================================================================================
+// Maybe<Exception> niche optimization tests
+
+KJ_TEST("Maybe<Exception> niche optimization") {
+  // Maybe<Exception> should use niche optimization, storing Exception directly without a
+  // separate bool flag. This means sizeof(Maybe<Exception>) == sizeof(Exception).
+  static_assert(sizeof(Maybe<Exception>) == sizeof(Exception),
+      "Maybe<Exception> should be niche-optimized to the same size as Exception");
+
+  // Test basic Maybe<Exception> functionality with niche optimization
+  {
+    Maybe<Exception> empty;
+    KJ_EXPECT(empty == kj::none);
+  }
+
+  {
+    Maybe<Exception> m = KJ_EXCEPTION(FAILED, "test error");
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m).getDescription() == "test error");
+  }
+
+  // Test move semantics
+  {
+    Maybe<Exception> m1 = KJ_EXCEPTION(DISCONNECTED, "disconnect error");
+    Maybe<Exception> m2 = kj::mv(m1);
+    KJ_EXPECT(m1 == kj::none);  // Source should be empty after move
+    KJ_EXPECT(m2 != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m2).getType() == Exception::Type::DISCONNECTED);
+  }
+
+  // Test assignment
+  {
+    Maybe<Exception> m;
+    m = KJ_EXCEPTION(OVERLOADED, "overload error");
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m).getType() == Exception::Type::OVERLOADED);
+
+    m = kj::none;
+    KJ_EXPECT(m == kj::none);
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
