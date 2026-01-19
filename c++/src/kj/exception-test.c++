@@ -362,7 +362,6 @@ KJ_TEST("KJ_TRY/KJ_CATCH with multiple statements") {
   KJ_TRY {
     value = 42;
     KJ_FAIL_ASSERT("delayed exception");
-    value = 100;
   } KJ_CATCH(e) {
     caughtException = true;
     KJ_EXPECT(e.getDescription() == "delayed exception");
