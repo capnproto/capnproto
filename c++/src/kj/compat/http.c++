@@ -1520,7 +1520,7 @@ public:
       // We're still working on reading the previous body.
       auto fork = messageReadQueue.fork();
       messageReadQueue = fork.addBranch();
-      co_await fork;
+      co_await kj::mv(fork);
     }
 
     for (;;) {
@@ -1553,7 +1553,7 @@ public:
     auto nextMessageReady = kj::mv(messageReadQueue);
     messageReadQueue = kj::mv(paf.promise);
 
-    co_await nextMessageReady;
+    co_await kj::mv(nextMessageReady);
     onMessageDone = kj::mv(paf.fulfiller);
 
     co_return co_await readHeader(HeaderType::MESSAGE, 0, 0);
@@ -1839,7 +1839,7 @@ private:
         readPromise = inner.read(headerBuffer.slice(bufferEnd).first(maxBytes).asBytes(), 1);
       }
 
-      auto amount = co_await readPromise;
+      auto amount = co_await kj::mv(readPromise);
 
       if (lineBreakBeforeNextHeader) {
         // Hackily deal with expected leading line break.
@@ -2397,7 +2397,7 @@ public:
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    co_await fork;
+    co_await kj::mv(fork);
     co_await inner.write(buffer);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2413,7 +2413,7 @@ public:
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    co_await fork;
+    co_await kj::mv(fork);
     co_await inner.write(pieces);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2429,7 +2429,7 @@ public:
     auto fork = writeQueue.fork();
     writeQueue = fork.addBranch();
 
-    co_await fork;
+    co_await kj::mv(fork);
     auto actual = co_await input.pumpTo(inner, amount);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -3639,7 +3639,7 @@ private:
         // We recently sent a control message; make sure it's finished before proceeding.
         auto localPromise = kj::mv(p);
         sendingControlMessage = kj::none;
-        co_await localPromise;
+        co_await kj::mv(localPromise);
       } else {
         break;
       }
@@ -7129,7 +7129,7 @@ private:
         KJ_IF_SOME(t, completionTask) {
           auto result = kj::mv(t);
           completionTask = kj::none;
-          co_await result;
+          co_await kj::mv(result);
         }
       }
     }
@@ -7140,7 +7140,7 @@ private:
         KJ_IF_SOME(t, completionTask) {
           auto result = kj::mv(t);
           completionTask = kj::none;
-          co_await result;
+          co_await kj::mv(result);
         }
       }
     }
@@ -7709,7 +7709,7 @@ private:
         receivedHeaders = receivedHeaders.exclusiveJoin(kj::mv(timeoutPromise));
       }
 
-      auto requestOrProtocolError = co_await receivedHeaders;
+      auto requestOrProtocolError = co_await kj::mv(receivedHeaders);
       auto loopResult = co_await onHeaders(kj::mv(requestOrProtocolError));
 
       switch (loopResult) {
@@ -7835,7 +7835,7 @@ private:
       // Finish sending and close the connection.
       auto promise = kj::mv(p);
       tunnelRejected = kj::none;
-      co_return co_await promise;
+      co_return co_await kj::mv(promise);
     }
 
     if (httpOutput.isBroken()) {
@@ -7877,7 +7877,7 @@ private:
       // sendWebSocketError() was called. Finish sending and close the connection.
       auto promise = kj::mv(p);
       webSocketError = kj::none;
-      co_return co_await promise;
+      co_return co_await kj::mv(promise);
     }
 
     if (upgraded) {
@@ -8171,7 +8171,7 @@ private:
   }
 
   kj::Promise<LoopResult> finishSendingError(kj::Promise<void> promise) {
-    co_await promise;
+    co_await kj::mv(promise);
     if (!httpOutput.isBroken()) {
       // Skip flush for broken streams, since it will throw an exception that may be worse than
       // the one we just handled.
