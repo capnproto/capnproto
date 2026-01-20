@@ -2305,6 +2305,28 @@ public:
     return hasSuspendedAtLeastOnce && isNext();
   }
 
+  template <typename... Args>
+  inline void* operator new(size_t frameSize, Args&&...args) {
+    // Allocates new coroutine frame of `frameSize` bytes.
+    // `args` are coroutine function arguments that will be copied/moved to the coroutine state.
+
+    // Curiously operator new[]/delete[] pair is slower.
+    return ::operator new (frameSize);
+  }
+
+#if defined(__clang__) && __clang_major__ > 18
+  // Sized delete for coroutines are supported since clang-19
+  inline void operator delete(void* framePtr, size_t frameSize) {
+    // Deallocates coroutine frame.
+    ::operator delete (framePtr, frameSize);
+  }
+#else
+  inline void operator delete(void* framePtr) {
+    // Deallocates coroutine frame.
+    ::operator delete (framePtr);
+  }
+#endif
+
 protected:
   bool isWaiting() { return waiting; }
   void scheduleResumption() {
