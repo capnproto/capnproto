@@ -169,6 +169,7 @@ includekj_HEADERS =                                            \
   src/kj/filesystem.h                                          \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
+  src/kj/async-coroutine-alloc.h                               \
   src/kj/async-inl.h                                           \
   src/kj/time.h                                                \
   src/kj/timer.h                                               \
@@ -516,6 +517,7 @@ heavy_tests =                                                  \
   src/kj/async-test.c++                                        \
   src/kj/async-xthread-test.c++                                \
   src/kj/async-coroutine-test.c++                              \
+  src/kj/async-coroutine-alloc-test.c++                        \
   src/kj/async-unix-test.c++                                   \
   src/kj/async-unix-xthread-test.c++                           \
   src/kj/async-win32-test.c++                                  \

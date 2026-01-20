@@ -106,6 +106,7 @@ cc_library(
     }),
     hdrs = [
         "async.h",
+        "async-coroutine-alloc.h",
         "async-inl.h",
         "async-io.h",
         "async-io-internal.h",
@@ -193,6 +194,15 @@ cc_library(
 cc_test(
     name = "async-coroutine-test",
     srcs = ["async-coroutine-test.c++"],
+    deps = [
+        ":kj-test",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+cc_test(
+    name = "async-coroutine-alloc-test",
+    srcs = ["async-coroutine-alloc-test.c++"],
     deps = [
         ":kj-test",
         "//src/kj/compat:kj-http",

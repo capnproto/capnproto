@@ -2212,13 +2212,105 @@ PromiseCrossThreadFulfillerPair<T> Executor::newPromiseAndCrossThreadFulfiller()
 
 namespace kj::_ {
 
-template <typename T> class Coroutine;
+template <typename T, typename Allocator> class Coroutine;
 
 template <typename T>
 concept NoWaitScope = !isSameType<Decay<T>, WaitScope>();
 // Define a Concept to use in our `coroutine_traits` specialization to validate allowable coroutine
 // parameter types.
 // TODO(cleanup): This can be removed by adding KJ_DISALLOW_AS_COROUTINE_PARAM to WaitScope.
+
+struct DefaultCoroutineAllocator;
+
+class CoroutineAllocator {
+  // Marker class for all coroutine allocators.
+  // Custom allocators need to publicly extend `CoroutineAllocator` and implement following methods:
+  // - `void* alloc(std::size_t frameSize)`
+  // - `static void free(void* framePtr, std::size_t frameSize)`
+  // - `static void free(void* framePtr)` - this is needed for older compilers only (slower).
+  //
+  // Notice that allocator instance is not available in `free()` - the allocator needs to recover it
+  // itself if necessary.
+  //
+  // To use custom allocator, pass a reference to it to the coroutine function as any parameter.
+  // Keep passing the allocator reference around if you want to keep using the allocator for
+  // inner coroutines.
+  // If allocator parameter is not present, then `DefaultCoroutineAllocator` is used.
+
+private:
+  // Implementations of public meta-programming api.
+
+  template <typename X>
+  requires (!kj::canConvert<X, CoroutineAllocator>())
+  static constexpr std::nullptr_t tryGetAllocator(X&&) { return nullptr; }
+
+  template <typename X>
+  requires (kj::canConvert<X, CoroutineAllocator>())
+  static constexpr X* tryGetAllocator(X& alloc) { return &alloc; }
+
+  template <typename... Args>
+  struct AllocatorTypeHelper {
+    using Type = DefaultCoroutineAllocator;
+  };
+
+  template <typename First, typename... Rest>
+  struct AllocatorTypeHelper<First, Rest...>:
+      AllocatorTypeHelper<Rest...> {};
+
+  template <typename First, typename... Rest>
+  requires (kj::canConvert<First, CoroutineAllocator>())
+  struct AllocatorTypeHelper<First, Rest...> {
+    using Type = Decay<First>;
+  };
+
+public:
+  // Meta-programming api to detect and extract allocator arguments.
+
+  template <typename... Args>
+  static constexpr bool hasAllocator = (kj::canConvert<Args, CoroutineAllocator &>() || ...);
+  // Check if any of the argument is an allocator reference.
+
+  template <typename... Args>
+  using AllocatorType = typename AllocatorTypeHelper<Args...>::Type;
+  // Extract exact allocator type, returns `DefaultCoroutineAllocator` if no allocator argument
+  // is present.
+
+  template <typename First, typename... Rest>
+  static constexpr auto& getAllocator(First&& first, Rest&&... rest) {
+    // Extract allocator argument, assumes `hasAllocator` is true.
+
+    if constexpr (kj::canConvert<First, CoroutineAllocator>()) {
+      return first;
+    } else {
+      static_assert(sizeof...(Rest) > 0, "No allocator found in arguments");
+      return getAllocator(kj::fwd<Rest>(rest)...);
+    }
+  }
+
+};
+
+struct DefaultCoroutineAllocator: public CoroutineAllocator {
+  // Default coroutine allocator.
+  // Used when now allocator parameter is specified in coroutine declaration.
+  // Can be instantiated and passed as a reference as well.
+
+  inline static void* alloc(std::size_t frameSize) {
+    // Note: new[]/delete[] are measurably slower.
+    return ::operator new(frameSize);
+  }
+
+  inline static void free(void* framePtr, std::size_t frameSize) {
+#if defined(__cpp_sized_deallocation)
+    ::operator delete(framePtr, frameSize);
+#else
+    ::operator delete(framePtr);
+#endif
+  }
+
+  inline static void free(void* framePtr) {
+    ::operator delete(framePtr);
+  }
+};
 
 }  // namespace kj::_
 
@@ -2244,7 +2336,7 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
   // A second note: This has the reasonable side effect of making it impossible for us to write
   // WaitScope member coroutines.
 
-  using promise_type = kj::_::Coroutine<T>;
+  using promise_type = kj::_::Coroutine<T, kj::_::CoroutineAllocator::AllocatorType<Args...>>;
   // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
   // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
   // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
@@ -2304,28 +2396,6 @@ public:
   bool canImmediatelyResume() {
     return hasSuspendedAtLeastOnce && isNext();
   }
-
-  template <typename... Args>
-  inline void* operator new(size_t frameSize, Args&&...args) {
-    // Allocates new coroutine frame of `frameSize` bytes.
-    // `args` are coroutine function arguments that will be copied/moved to the coroutine state.
-
-    // Curiously operator new[]/delete[] pair is slower.
-    return ::operator new (frameSize);
-  }
-
-#if defined(__clang__) && __clang_major__ > 18
-  // Sized delete for coroutines are supported since clang-19
-  inline void operator delete(void* framePtr, size_t frameSize) {
-    // Deallocates coroutine frame.
-    ::operator delete (framePtr, frameSize);
-  }
-#else
-  inline void operator delete(void* framePtr) {
-    // Deallocates coroutine frame.
-    ::operator delete (framePtr);
-  }
-#endif
 
 protected:
   bool isWaiting() { return waiting; }
@@ -2391,20 +2461,19 @@ template <typename Self, typename T>
 class CoroutineMixin;
 // CRTP mixin, covered later.
 
-template <typename T>
+template <typename T, typename Allocator>
 class Coroutine final: public CoroutineBase,
-                       public CoroutineMixin<Coroutine<T>, T> {
+                       public CoroutineMixin<Coroutine<T, Allocator>, T> {
   // The standard calls this the `promise_type` object. We can call this the "coroutine
   // implementation object" since the word promise means different things in KJ and std styles. This
   // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
   // is later fulfilled. We also fill in a few lifetime-related details.
   //
-  // The implementation object is also where we can customize memory allocation of coroutine frames,
-  // by implementing a member `operator new(size_t, Args...)` (same `Args...` as in
-  // coroutine_traits).
+  // The type is statically parametrized by an `Allocator` to enable custom coroutine allocators
+  // without any overhead. See `CoroutineAllocator` for more details.
 
 public:
-  using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
+  using Handle = stdcoro::coroutine_handle<Coroutine<T, Allocator>>;
 
   Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
 
@@ -2457,6 +2526,29 @@ public:
   }
 
   void unhandled_exception() { unhandledExceptionImpl(result); }
+
+
+  template <typename... Args>
+  inline void* operator new(std::size_t frameSize, Args&&... args) {
+    if constexpr (CoroutineAllocator::hasAllocator<Args...>) {
+      return CoroutineAllocator::getAllocator(args...).alloc(frameSize);
+    } else {
+      return Allocator::alloc(frameSize);
+    }
+  }
+
+
+#if defined(__cpp_sized_deallocation)
+  inline void operator delete(void* framePtr, size_t frameSize) {
+    // Deallocates coroutine frame.
+    Allocator::free(framePtr, frameSize);
+  }
+#else
+  inline void operator delete(void* framePtr) {
+    // Deallocates coroutine frame.
+    Allocator::free(framePtr);
+  }
+#endif
 
 private:
   // -------------------------------------------------------

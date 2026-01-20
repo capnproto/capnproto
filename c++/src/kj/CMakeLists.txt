@@ -143,6 +143,7 @@ set(kj-async_sources
 set(kj-async_headers
   async-prelude.h
   async.h
+  async-coroutine-alloc.h
   async-inl.h
   async-unix.h
   async-win32.h
@@ -284,6 +285,7 @@ if(BUILD_TESTING)
       async-test.c++
       async-xthread-test.c++
       async-coroutine-test.c++
+      async-coroutine-alloc-test.c++
       async-unix-test.c++
       async-unix-xthread-test.c++
       async-win32-test.c++
