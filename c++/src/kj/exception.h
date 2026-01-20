@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <stdint.h>  // for uintptr_t
 #include "memory.h"
 #include "array.h"
 #include "string.h"

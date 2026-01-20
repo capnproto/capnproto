@@ -1,9 +1,10 @@
 common --enable_platform_specific_config
 
-common --incompatible_autoload_externally=
+# Needed for Brotli, which does not import rules_cc symbols itself (otherwise needed with Bazel 9)
+common --incompatible_autoload_externally=+cc_library,+cc_binary
 
 # Debug build configuration with maximum runtime checks
-build:dbg -c dbg 
+build:dbg -c dbg
 build:dbg --config=max-debug-info
 build:dbg --//src/kj:debug_memory=True
 
