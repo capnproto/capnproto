@@ -21,6 +21,7 @@
 
 #include "common.h"
 #include "test.h"
+#include <stdexcept>
 
 namespace kj {
 namespace {
@@ -46,6 +47,202 @@ struct CopyOrMove {
 
   int i;
 };
+
+// =======================================================================================
+
+// Test types for converting constructor tests
+
+struct Base {
+  int value;
+  explicit Base(int v): value(v) {}
+  virtual ~Base() = default;
+};
+
+struct Derived: Base {
+  explicit Derived(int v): Base(v) {}
+};
+
+// Niche optimization test types
+
+struct MoveOnlyNiche {
+  // A move-only type where value == 0 represents the "none" niche state.
+  int value;
+
+  explicit MoveOnlyNiche(int v): value(v) {}
+  MoveOnlyNiche(MoveOnlyNiche&& other): value(other.value) { other.value = 0; }
+  MoveOnlyNiche& operator=(MoveOnlyNiche&& other) {
+    value = other.value;
+    other.value = 0;
+    return *this;
+  }
+  KJ_DISALLOW_COPY(MoveOnlyNiche);
+
+  friend struct ::kj::MaybeTraits<MoveOnlyNiche>;
+};
+
+struct NonMoveableNiche {
+  // A non-moveable type where value == 0 represents the "none" niche state.
+  int value;
+
+  explicit NonMoveableNiche(int v): value(v) {}
+  KJ_DISALLOW_COPY_AND_MOVE(NonMoveableNiche);
+
+  friend struct ::kj::MaybeTraits<NonMoveableNiche>;
+};
+
+struct NicheInt {
+  // A niche-optimized int wrapper. Uses -1 as none (so 0 is a valid value).
+  // Has implicit copy/move that doesn't change the source (just copies the int).
+  int value;
+
+  NicheInt(int v): value(v) {}
+  operator int() const { return value; }
+
+  friend struct ::kj::MaybeTraits<NicheInt>;
+};
+
+struct NonNicheInt {
+  // A non-niche-optimized int wrapper.
+  // No MaybeTraits, so Maybe<NonNicheInt> uses the regular isSet-based NullableValue.
+  int value;
+
+  NonNicheInt(int v): value(v) {}
+  operator int() const { return value; }
+};
+
+struct NoneThrowingNiche {
+  // A niche-optimized type that throws if move/copy constructed from its none state.
+  // This verifies that NullableValue never tries to construct from a none value.
+  int value;
+
+  explicit NoneThrowingNiche(int v): value(v) {}
+
+  NoneThrowingNiche(NoneThrowingNiche&& other): value(other.value) {
+    if (other.value == 0) {
+      throw std::logic_error("moved from none!");
+    }
+    other.value = -1;  // moved-from state, NOT none
+  }
+
+  NoneThrowingNiche(const NoneThrowingNiche& other): value(other.value) {
+    if (other.value == 0) {
+      throw std::logic_error("copied from none!");
+    }
+  }
+
+  NoneThrowingNiche& operator=(NoneThrowingNiche&& other) {
+    if (other.value == 0) {
+      throw std::logic_error("move-assigned from none!");
+    }
+    value = other.value;
+    other.value = -1;  // moved-from state, NOT none
+    return *this;
+  }
+
+  NoneThrowingNiche& operator=(const NoneThrowingNiche& other) {
+    if (other.value == 0) {
+      throw std::logic_error("copy-assigned from none!");
+    }
+    value = other.value;
+    return *this;
+  }
+
+  friend struct ::kj::MaybeTraits<NoneThrowingNiche>;
+};
+
+}  // namespace
+
+// MaybeTraits specializations for test types
+template <>
+struct MaybeTraits<MoveOnlyNiche> {
+  // Niche optimization: value == 0 is the "none" state
+  static void initNone(MoveOnlyNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const MoveOnlyNiche& m) noexcept { return m.value == 0; }
+};
+
+template <>
+struct MaybeTraits<NonMoveableNiche> {
+  // Niche optimization: value == 0 is the "none" state
+  static void initNone(NonMoveableNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const NonMoveableNiche& m) noexcept { return m.value == 0; }
+};
+
+template <>
+struct MaybeTraits<NicheInt> {
+  // Niche optimization: value == -1 is the "none" state
+  static void initNone(NicheInt* ptr) noexcept { kj::ctor(*ptr, -1); }
+  static bool isNone(const NicheInt& m) noexcept { return m.value == -1; }
+};
+
+template <>
+struct MaybeTraits<NoneThrowingNiche> {
+  // Niche optimization: value == 0 is the "none" state
+  static void initNone(NoneThrowingNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const NoneThrowingNiche& m) noexcept { return m.value == 0; }
+};
+
+namespace {
+
+// =======================================================================================
+// Test wrapper for dereferencingConversion functionality (standalone, doesn't depend on memory.h)
+
+// A simple smart pointer type for testing Maybe<T> -> Maybe<U&> conversion
+template <typename T>
+class TestPtr {
+public:
+  TestPtr(): ptr(nullptr) {}
+  explicit TestPtr(T* p): ptr(p) {}
+  ~TestPtr() { delete ptr; }
+
+  TestPtr(TestPtr&& other): ptr(other.ptr) { other.ptr = nullptr; }
+  TestPtr& operator=(TestPtr&& other) {
+    if (this != &other) {
+      delete ptr;
+      ptr = other.ptr;
+      other.ptr = nullptr;
+    }
+    return *this;
+  }
+
+  // Converting constructor: TestPtr<U> -> TestPtr<T> when U* converts to T*
+  // This mimics Own<T>'s behavior of allowing Own<Derived> -> Own<Base>.
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  TestPtr(TestPtr<U>&& other): ptr(other.ptr) { other.ptr = nullptr; }
+
+  KJ_DISALLOW_COPY(TestPtr);
+
+  T* get() const { return ptr; }
+  T& operator*() const { return *ptr; }
+  T* operator->() const { return ptr; }
+
+private:
+  T* ptr;
+
+  template <typename U>
+  friend class TestPtr;
+  friend struct ::kj::MaybeTraits<TestPtr<T>>;
+};
+
+template <typename T>
+TestPtr<T> makeTestPtr(T* p) { return TestPtr<T>(p); }
+
+}  // namespace (anonymous)
+
+// MaybeTraits for TestPtr - enables niche optimization, converting constructor, and deref conversion
+template <typename T>
+struct MaybeTraits<TestPtr<T>> {
+  // Niche optimization: nullptr is the "none" state
+  static void initNone(TestPtr<T>* ptr) noexcept { kj::ctor(*ptr); }
+  static bool isNone(const TestPtr<T>& p) noexcept { return p.get() == nullptr; }
+
+  // Allow implicit conversions (use T's implicit conversions)
+  static constexpr bool convertingConstructor = true;
+
+  // Reference conversion: Maybe<TestPtr<T>> -> Maybe<T&> via dereference
+  static constexpr bool dereferencingConversion = true;
+};
+
+namespace {
 
 KJ_TEST("Maybe") {
   {
@@ -551,6 +748,684 @@ KJ_TEST("Maybe unwrap or return") {
 
 }
 #endif
+
+// =======================================================================================
+// Maybe<T> converting constructor tests
+//
+// The convertingConstructor MaybeTraits option exists to solve the "two user-defined conversions"
+// problem. In C++, an implicit conversion sequence can only have ONE user-defined conversion.
+// Without convertingConstructor=true:
+//   Maybe<TestPtr<Base>> m = testPtrDerived;  // FAILS: TestPtr<Derived>->TestPtr<Base> is UDC #1,
+//                                              //        then TestPtr<Base>->Maybe is UDC #2
+// With convertingConstructor=true:
+//   Maybe<TestPtr<Base>> m = testPtrDerived;  // WORKS: TestPtr<Derived>->Maybe<TestPtr<Base>> is
+//                                              //        a single conversion via Maybe's converting ctor
+
+KJ_TEST("Maybe convertingConstructor enables implicit two-step conversion") {
+  // This test verifies that MaybeTraits::convertingConstructor=true allows implicit conversion
+  // from TestPtr<Derived> to Maybe<TestPtr<Base>>. Without convertingConstructor, this would
+  // require two user-defined conversions and fail to compile.
+  //
+  // TestPtr has convertingConstructor=true in its MaybeTraits, mimicking Own<T>'s behavior.
+
+  // Direct construction: TestPtr<Derived> -> Maybe<TestPtr<Base>>
+  {
+    TestPtr<Derived> derived(new Derived(42));
+    Maybe<TestPtr<Base>> m = kj::mv(derived);  // Implicit conversion!
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+  }
+
+  // Return from function - the primary use case for convertingConstructor
+  {
+    auto makeWidget = []() -> Maybe<TestPtr<Base>> {
+      return TestPtr<Derived>(new Derived(123));  // No braces needed!
+    };
+    Maybe<TestPtr<Base>> m = makeWidget();
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 123);
+  }
+
+  // Assignment from TestPtr<Derived> to Maybe<TestPtr<Base>>
+  {
+    Maybe<TestPtr<Base>> m;
+    m = TestPtr<Derived>(new Derived(99));
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 99);
+  }
+}
+
+// =======================================================================================
+// Maybe<T> -> Maybe<U&> reference conversion via MaybeTraits::dereferencingConversion
+//
+// This test uses TestPtr (defined above) which is a standalone smart pointer type
+// that doesn't depend on memory.h. This tests the dereferencingConversion mechanism in isolation.
+
+// Types for testing reference conversion with inheritance
+struct RefBase {
+  int value;
+  explicit RefBase(int v): value(v) {}
+  virtual ~RefBase() = default;
+};
+
+struct RefDerived: RefBase {
+  explicit RefDerived(int v): RefBase(v) {}
+};
+
+KJ_TEST("Maybe<TestPtr<T>> implicit conversion to Maybe<U&> via dereferencingConversion") {
+  // Maybe<TestPtr<T>> can implicitly convert to Maybe<U&> when MaybeTraits::dereferencingConversion
+  // is true. The conversion uses operator*() to dereference the smart pointer.
+
+  // Lvalue conversion
+  {
+    Maybe<TestPtr<RefDerived>> m = makeTestPtr(new RefDerived(42));
+    Maybe<RefDerived&> ref = m;
+    KJ_EXPECT(ref != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(ref).value == 42);
+
+    // Modifying through the reference affects the pointed-to value
+    KJ_ASSERT_NONNULL(ref).value = 100;
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 100);
+  }
+
+  // Conversion to base type reference
+  {
+    Maybe<TestPtr<RefDerived>> m = makeTestPtr(new RefDerived(42));
+    Maybe<RefBase&> baseRef = m;  // Derived* converts to Base*
+    KJ_EXPECT(baseRef != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(baseRef).value == 42);
+  }
+
+  // Empty conversion
+  {
+    Maybe<TestPtr<RefDerived>> empty;
+    Maybe<RefDerived&> ref = empty;
+    KJ_EXPECT(ref == kj::none);
+  }
+
+  // Const conversion
+  {
+    const Maybe<TestPtr<RefDerived>> m = makeTestPtr(new RefDerived(42));
+    Maybe<const RefDerived&> ref = m;
+    KJ_EXPECT(KJ_ASSERT_NONNULL(ref).value == 42);
+  }
+
+  // Function parameter passing (common use case)
+  {
+    auto processValue = [](Maybe<RefBase&> ref) -> bool {
+      KJ_IF_SOME(v, ref) {
+        v.value *= 2;
+        return true;
+      }
+      return false;
+    };
+
+    Maybe<TestPtr<RefDerived>> m = makeTestPtr(new RefDerived(21));
+    KJ_EXPECT(processValue(m));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+
+    Maybe<TestPtr<RefDerived>> empty;
+    KJ_EXPECT(!processValue(empty));
+  }
+}
+
+// =======================================================================================
+// Niche optimization tests
+
+KJ_TEST("Maybe<MoveOnlyNiche> niche optimization") {
+  // Verify that Maybe<MoveOnlyNiche> uses niche optimization (no size overhead).
+  static_assert(sizeof(Maybe<MoveOnlyNiche>) == sizeof(MoveOnlyNiche),
+      "Maybe<MoveOnlyNiche> should have no size overhead due to niche optimization");
+
+  // Test empty state
+  Maybe<MoveOnlyNiche> empty;
+  KJ_EXPECT(empty == kj::none);
+
+  // Test construction with value
+  Maybe<MoveOnlyNiche> a = MoveOnlyNiche(42);
+  KJ_EXPECT(a != kj::none);
+
+  KJ_IF_SOME(v, a) {
+    KJ_EXPECT(v.value == 42);
+  } else {
+    KJ_FAIL_EXPECT("should have value");
+  }
+
+  // Test move semantics
+  Maybe<MoveOnlyNiche> b = kj::mv(a);
+  KJ_EXPECT(a == kj::none);  // moved-from should be none
+  KJ_EXPECT(b != kj::none);
+
+  KJ_IF_SOME(v, b) {
+    KJ_EXPECT(v.value == 42);
+  } else {
+    KJ_FAIL_EXPECT("should have value");
+  }
+
+  // Test assignment to none
+  b = kj::none;
+  KJ_EXPECT(b == kj::none);
+
+  // Test emplace
+  b.emplace(123);
+  KJ_EXPECT(b != kj::none);
+  KJ_IF_SOME(v, b) {
+    KJ_EXPECT(v.value == 123);
+  } else {
+    KJ_FAIL_EXPECT("should have value");
+  }
+}
+
+KJ_TEST("Maybe<NonMoveableNiche> niche optimization") {
+  // Verify that Maybe<NonMoveableNiche> uses niche optimization (no size overhead).
+  static_assert(sizeof(Maybe<NonMoveableNiche>) == sizeof(NonMoveableNiche),
+      "Maybe<NonMoveableNiche> should have no size overhead due to niche optimization");
+
+  // NOTE: Ideally, Maybe<NonMoveableNiche> would itself be non-moveable, but the current
+  // niche-optimized Maybe implementation doesn't conditionally delete its move/copy constructors.
+  // This is a known limitation. The type traits report it as moveable/copyable even though
+  // attempting to actually move/copy would fail to compile.
+
+  // Test empty state
+  Maybe<NonMoveableNiche> empty;
+  KJ_EXPECT(empty == kj::none);
+
+  // Test emplace (the only way to set a value for non-moveable types)
+  Maybe<NonMoveableNiche> a;
+  a.emplace(42);
+  KJ_EXPECT(a != kj::none);
+
+  KJ_IF_SOME(v, a) {
+    KJ_EXPECT(v.value == 42);
+  } else {
+    KJ_FAIL_EXPECT("should have value");
+  }
+
+  // Test assignment to none
+  a = kj::none;
+  KJ_EXPECT(a == kj::none);
+
+  // Test emplace again
+  a.emplace(123);
+  KJ_EXPECT(a != kj::none);
+  KJ_IF_SOME(v, a) {
+    KJ_EXPECT(v.value == 123);
+  } else {
+    KJ_FAIL_EXPECT("should have value");
+  }
+}
+
+KJ_TEST("Maybe niche-optimized KJ_IF_SOME(v, kj::mv(m)) does not force source to none") {
+  // Test that KJ_IF_SOME with kj::mv() does NOT force the source Maybe to none.
+  // This is because KJ_IF_SOME extracts NullableValue&& via readMaybe(), which does NOT
+  // go through Maybe's move constructor/assignment. The source remains in whatever state
+  // T's move constructor left it in.
+  //
+  // NicheInt has implicit copy/move that just copies the int value without modifying the source.
+  static_assert(sizeof(Maybe<NicheInt>) == sizeof(NicheInt), "Should be niche-optimized");
+
+  Maybe<NicheInt> m = NicheInt(42);
+  KJ_EXPECT(m != kj::none);
+
+  KJ_IF_SOME(v, kj::mv(m)) {
+    KJ_EXPECT(v.value == 42);
+  } else {
+    KJ_FAIL_EXPECT("should have value");
+  }
+
+  // m should NOT be none - NicheInt's move constructor copies the value,
+  // it doesn't set the source to -1 (the none state).
+  KJ_EXPECT(m != kj::none);
+  KJ_IF_SOME(v, m) {
+    KJ_EXPECT(v.value == 42);  // Still has the original value
+  } else {
+    KJ_FAIL_EXPECT("should still have value after KJ_IF_SOME(v, kj::mv(m))");
+  }
+
+  // Contrast with Maybe-to-Maybe move, which ALWAYS sets source to none.
+  // This is true regardless of whether T is niche-optimized or not.
+  Maybe<NicheInt> m2 = NicheInt(100);
+  Maybe<NicheInt> m3 = kj::mv(m2);
+  KJ_EXPECT(m3 != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m3).value == 100);
+  // m2 IS none after Maybe-to-Maybe move - Maybe always sets source to none.
+  KJ_EXPECT(m2 == kj::none);
+}
+
+KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types") {
+  // Test converting between Maybe<NicheInt> and Maybe<NonNicheInt>.
+  // NicheInt is niche-optimized (uses -1 as none), NonNicheInt is not.
+
+  static_assert(sizeof(Maybe<NicheInt>) == sizeof(NicheInt),
+      "NicheInt should be niche-optimized");
+  static_assert(sizeof(Maybe<NonNicheInt>) > sizeof(NonNicheInt),
+      "NonNicheInt should NOT be niche-optimized");
+
+  // Test niche -> non-niche conversion (move)
+  {
+    Maybe<NicheInt> niche = NicheInt(42);
+    Maybe<NonNicheInt> nonNiche = kj::mv(niche);
+    KJ_EXPECT(nonNiche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
+  }
+
+  // Test niche -> non-niche conversion (copy)
+  {
+    Maybe<NicheInt> niche = NicheInt(42);
+    Maybe<NonNicheInt> nonNiche = niche;
+    KJ_EXPECT(nonNiche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
+    // Original should still have value
+    KJ_EXPECT(niche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
+  }
+
+  // Test niche -> non-niche conversion from none
+  {
+    Maybe<NicheInt> niche;
+    KJ_EXPECT(niche == kj::none);
+    Maybe<NonNicheInt> nonNiche = kj::mv(niche);
+    KJ_EXPECT(nonNiche == kj::none);
+  }
+
+  // Test non-niche -> niche conversion (move)
+  {
+    Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
+    Maybe<NicheInt> niche = kj::mv(nonNiche);
+    KJ_EXPECT(niche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
+  }
+
+  // Test non-niche -> niche conversion (copy)
+  {
+    Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
+    Maybe<NicheInt> niche = nonNiche;
+    KJ_EXPECT(niche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
+    // Original should still have value
+    KJ_EXPECT(nonNiche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
+  }
+
+  // Test non-niche -> niche conversion from none
+  {
+    Maybe<NonNicheInt> nonNiche;
+    KJ_EXPECT(nonNiche == kj::none);
+    Maybe<NicheInt> niche = kj::mv(nonNiche);
+    KJ_EXPECT(niche == kj::none);
+  }
+
+  // Test niche -> non-niche assignment (move)
+  {
+    Maybe<NicheInt> niche = NicheInt(42);
+    Maybe<NonNicheInt> nonNiche;
+    nonNiche = kj::mv(niche);
+    KJ_EXPECT(nonNiche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
+  }
+
+  // Test niche -> non-niche assignment (copy)
+  {
+    Maybe<NicheInt> niche = NicheInt(42);
+    Maybe<NonNicheInt> nonNiche;
+    nonNiche = niche;
+    KJ_EXPECT(nonNiche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
+  }
+
+  // Test niche -> non-niche assignment from none
+  {
+    Maybe<NicheInt> niche;
+    Maybe<NonNicheInt> nonNiche = NonNicheInt(99);
+    nonNiche = kj::mv(niche);
+    KJ_EXPECT(nonNiche == kj::none);
+  }
+
+  // Test non-niche -> niche assignment (move)
+  {
+    Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
+    Maybe<NicheInt> niche;
+    niche = kj::mv(nonNiche);
+    KJ_EXPECT(niche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
+  }
+
+  // Test non-niche -> niche assignment (copy)
+  {
+    Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
+    Maybe<NicheInt> niche;
+    niche = nonNiche;
+    KJ_EXPECT(niche != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
+  }
+
+  // Test non-niche -> niche assignment from none
+  {
+    Maybe<NonNicheInt> nonNiche;
+    Maybe<NicheInt> niche = NicheInt(99);
+    niche = kj::mv(nonNiche);
+    KJ_EXPECT(niche == kj::none);
+  }
+}
+
+KJ_TEST("Maybe<NoneThrowingNiche> never constructs from none state") {
+  // Verify that NullableValue never tries to move/copy construct from a none value.
+  // NoneThrowingNiche throws if you try to construct from its none state (value == 0).
+  // If any of these operations throw, the test fails.
+  static_assert(sizeof(Maybe<NoneThrowingNiche>) == sizeof(NoneThrowingNiche),
+      "Should be niche-optimized");
+
+  // Move-construct from empty Maybe
+  {
+    Maybe<NoneThrowingNiche> empty;
+    KJ_EXPECT(empty == kj::none);
+    Maybe<NoneThrowingNiche> moved = kj::mv(empty);  // Should NOT throw
+    KJ_EXPECT(moved == kj::none);
+  }
+
+  // Copy-construct from empty Maybe
+  {
+    Maybe<NoneThrowingNiche> empty;
+    KJ_EXPECT(empty == kj::none);
+    Maybe<NoneThrowingNiche> copied = empty;  // Should NOT throw
+    KJ_EXPECT(copied == kj::none);
+  }
+
+  // Move-assign from empty Maybe
+  {
+    Maybe<NoneThrowingNiche> empty;
+    Maybe<NoneThrowingNiche> target = NoneThrowingNiche(42);
+    KJ_EXPECT(target != kj::none);
+    target = kj::mv(empty);  // Should NOT throw
+    KJ_EXPECT(target == kj::none);
+  }
+
+  // Copy-assign from empty Maybe
+  {
+    Maybe<NoneThrowingNiche> empty;
+    Maybe<NoneThrowingNiche> target = NoneThrowingNiche(42);
+    KJ_EXPECT(target != kj::none);
+    target = empty;  // Should NOT throw
+    KJ_EXPECT(target == kj::none);
+  }
+
+  // Move-construct from non-empty Maybe (should work, source becomes none)
+  {
+    Maybe<NoneThrowingNiche> src = NoneThrowingNiche(42);
+    Maybe<NoneThrowingNiche> dst = kj::mv(src);
+    KJ_EXPECT(dst != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(dst).value == 42);
+    // src is now none - Maybe-to-Maybe move always sets source to none.
+    // The key point is that NullableValue's move constructor moved from the value WITHOUT
+    // throwing (because we don't construct from the none state), and then Maybe set src to none.
+    KJ_EXPECT(src == kj::none);
+  }
+
+  // Copy-construct from non-empty Maybe
+  {
+    Maybe<NoneThrowingNiche> src = NoneThrowingNiche(42);
+    Maybe<NoneThrowingNiche> dst = src;
+    KJ_EXPECT(dst != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(dst).value == 42);
+    KJ_EXPECT(src != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(src).value == 42);
+  }
+}
+
+// =======================================================================================
+// Exception safety tests for niche-optimized Maybe<T>
+//
+// These tests verify that if a constructor or destructor throws, the Maybe is left in a
+// valid none state. This is important because niche-optimized Maybe doesn't have a separate
+// bool flag, so we can't just "mark as unset" - we must actually construct a none value.
+
+// A type that can be configured to throw during construction or destruction.
+// Uses value == 0 as the "none" niche state.
+// value == -1 is the "moved-from" state (not none, needs destruction).
+struct ThrowingNiche {
+  int value;
+  bool throwOnDestroy = false;
+
+  static bool throwOnConstruct;
+  static bool throwOnMovedFromDestroy;  // Throw when destroying moved-from value (value == -1)
+  static int constructCount;
+  static int destroyCount;
+
+  explicit ThrowingNiche(int v): value(v) {
+    ++constructCount;
+    if (throwOnConstruct && v != 0) {  // Don't throw for none value (v == 0)
+      throw std::runtime_error("constructor throw");
+    }
+  }
+
+  ThrowingNiche(ThrowingNiche&& other): value(other.value), throwOnDestroy(other.throwOnDestroy) {
+    // Set to moved-from state (-1), NOT to none state (0).
+    // This means the moved-from object still needs destruction.
+    other.value = -1;
+    other.throwOnDestroy = false;
+    ++constructCount;
+    if (throwOnConstruct && value != 0) {
+      throw std::runtime_error("move constructor throw");
+    }
+  }
+
+  ~ThrowingNiche() noexcept(false) {
+    ++destroyCount;
+    if (throwOnDestroy) {
+      throwOnDestroy = false;
+      throw std::runtime_error("destructor throw");
+    }
+    if (throwOnMovedFromDestroy && value == -1) {
+      throwOnMovedFromDestroy = false;  // Only throw once
+      throw std::runtime_error("moved-from destructor throw");
+    }
+  }
+
+  KJ_DISALLOW_COPY(ThrowingNiche);
+
+  friend struct MaybeTraits<ThrowingNiche>;
+};
+
+bool ThrowingNiche::throwOnConstruct = false;
+bool ThrowingNiche::throwOnMovedFromDestroy = false;
+int ThrowingNiche::constructCount = 0;
+int ThrowingNiche::destroyCount = 0;
+
+}  // namespace (anonymous)
+
+template <>
+struct MaybeTraits<ThrowingNiche> {
+  // Niche optimization: value == 0 is the "none" state
+  static void initNone(ThrowingNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const ThrowingNiche& m) noexcept { return m.value == 0; }
+};
+
+namespace {
+
+KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in emplace") {
+  // Verify that if ctor throws during emplace, the Maybe is left in none state.
+  static_assert(sizeof(Maybe<ThrowingNiche>) == sizeof(ThrowingNiche),
+      "Should be niche-optimized");
+
+  ThrowingNiche::throwOnConstruct = false;
+  ThrowingNiche::constructCount = 0;
+  ThrowingNiche::destroyCount = 0;
+
+  Maybe<ThrowingNiche> m;
+  m.emplace(42);
+  KJ_EXPECT(m != kj::none);
+
+  // Now make the next constructor throw
+  ThrowingNiche::throwOnConstruct = true;
+
+  bool caught = false;
+  try {
+    m.emplace(99);  // Should throw
+  } catch (const std::runtime_error& e) {
+    caught = true;
+    KJ_EXPECT(kj::StringPtr(e.what()) == "constructor throw");
+  }
+
+  KJ_EXPECT(caught);
+  KJ_EXPECT(m == kj::none);  // Should be in none state after throw
+
+  ThrowingNiche::throwOnConstruct = false;
+}
+
+KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in emplace") {
+  // Verify that if dtor throws during emplace, the Maybe is left in none state.
+  ThrowingNiche::throwOnConstruct = false;
+  ThrowingNiche::constructCount = 0;
+  ThrowingNiche::destroyCount = 0;
+
+  Maybe<ThrowingNiche> m;
+  m.emplace(42);
+  KJ_EXPECT(m != kj::none);
+
+  // Set up the value to throw on destruction
+  KJ_ASSERT_NONNULL(m).throwOnDestroy = true;
+
+  bool caught = false;
+  try {
+    m.emplace(99);  // Destructor of old value should throw
+  } catch (const std::runtime_error& e) {
+    caught = true;
+    KJ_EXPECT(kj::StringPtr(e.what()) == "destructor throw");
+  }
+
+  KJ_EXPECT(caught);
+  KJ_EXPECT(m == kj::none);  // Should be in none state after throw
+}
+
+KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in assignment") {
+  // Verify that if ctor throws during assignment, the Maybe is left in none state.
+  ThrowingNiche::throwOnConstruct = false;
+  ThrowingNiche::constructCount = 0;
+  ThrowingNiche::destroyCount = 0;
+
+  Maybe<ThrowingNiche> m;
+  m.emplace(42);
+  KJ_EXPECT(m != kj::none);
+
+  Maybe<ThrowingNiche> other;
+  other.emplace(99);
+  KJ_EXPECT(other != kj::none);
+
+  // Make move constructor throw
+  ThrowingNiche::throwOnConstruct = true;
+
+  bool caught = false;
+  try {
+    m = kj::mv(other);  // Move ctor should throw
+  } catch (const std::runtime_error& e) {
+    caught = true;
+    KJ_EXPECT(kj::StringPtr(e.what()) == "move constructor throw");
+  }
+
+  KJ_EXPECT(caught);
+  KJ_EXPECT(m == kj::none);  // Should be in none state after throw
+
+  ThrowingNiche::throwOnConstruct = false;
+}
+
+KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in assignment") {
+  // Verify that if dtor throws during assignment, the Maybe is left in none state.
+  ThrowingNiche::throwOnConstruct = false;
+  ThrowingNiche::constructCount = 0;
+  ThrowingNiche::destroyCount = 0;
+
+  Maybe<ThrowingNiche> m;
+  m.emplace(42);
+  KJ_EXPECT(m != kj::none);
+
+  // Set up the value to throw on destruction
+  KJ_ASSERT_NONNULL(m).throwOnDestroy = true;
+
+  Maybe<ThrowingNiche> other;
+  other.emplace(99);
+  KJ_EXPECT(other != kj::none);
+
+  bool caught = false;
+  try {
+    m = kj::mv(other);  // Destructor of old value should throw
+  } catch (const std::runtime_error& e) {
+    caught = true;
+    KJ_EXPECT(kj::StringPtr(e.what()) == "destructor throw");
+  }
+
+  KJ_EXPECT(caught);
+  KJ_EXPECT(m == kj::none);  // Should be in none state after throw
+}
+
+KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in assign-to-none") {
+  // Verify that if dtor throws when assigning to none, the Maybe is left in none state.
+  ThrowingNiche::throwOnConstruct = false;
+  ThrowingNiche::constructCount = 0;
+  ThrowingNiche::destroyCount = 0;
+
+  Maybe<ThrowingNiche> m;
+  m.emplace(42);
+  KJ_EXPECT(m != kj::none);
+
+  // Set up the value to throw on destruction
+  KJ_ASSERT_NONNULL(m).throwOnDestroy = true;
+
+  bool caught = false;
+  try {
+    m = kj::none;  // Destructor should throw
+  } catch (const std::runtime_error& e) {
+    caught = true;
+    KJ_EXPECT(kj::StringPtr(e.what()) == "destructor throw");
+  }
+
+  KJ_EXPECT(caught);
+  KJ_EXPECT(m == kj::none);  // Should be in none state after throw
+}
+
+KJ_TEST("Maybe<ThrowingNiche> exception safety - source destructor throws in move-assignment") {
+  // Verify that if the source's dtor throws during move-assignment, the source is left in
+  // none state (not in an already-destroyed state that would double-free).
+  //
+  // The move constructor leaves the source in a "moved-from" state (value == -1), which is
+  // NOT the none state (value == 0). So the move-assignment operator must destroy the
+  // moved-from value. If that destructor throws, we must still leave the source in the
+  // none state.
+  //
+  // The sequence of operations in move-assignment is:
+  // 1. dtor(dst.value) - destroy dst's old none value
+  // 2. ctor(dst.value, kj::mv(src.value)) - move construct, src becomes -1 (moved-from)
+  // 3. dtor(src.value) - destroy src's moved-from value <- THIS THROWS
+  // 4. initNone(src.value) - should still happen after catch in the exception handler
+  ThrowingNiche::throwOnConstruct = false;
+  ThrowingNiche::throwOnMovedFromDestroy = false;
+  ThrowingNiche::constructCount = 0;
+  ThrowingNiche::destroyCount = 0;
+
+  Maybe<ThrowingNiche> src;
+  src.emplace(42);
+
+  Maybe<ThrowingNiche> dst;
+
+  // Set up to throw when destroying the moved-from value (value == -1).
+  // This will be triggered in step 3 above.
+  ThrowingNiche::throwOnMovedFromDestroy = true;
+
+  bool caught = false;
+  try {
+    dst = kj::mv(src);  // Move should succeed, but then src's dtor should throw
+  } catch (const std::runtime_error& e) {
+    caught = true;
+    KJ_EXPECT(kj::StringPtr(e.what()) == "moved-from destructor throw");
+  }
+
+  KJ_EXPECT(caught);
+  KJ_EXPECT(dst != kj::none);  // dst should have the moved value
+  KJ_EXPECT(KJ_ASSERT_NONNULL(dst).value == 42);
+  KJ_EXPECT(src == kj::none);  // src should be in none state, not double-destroyed
+  // When src goes out of scope, it should NOT double-destroy (the test passing means no crash)
+
+  ThrowingNiche::throwOnMovedFromDestroy = false;  // Clean up
+}
 
 }  // namespace
 }  // namespace kj

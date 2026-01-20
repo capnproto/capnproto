@@ -611,6 +611,7 @@ T refIfLvalue(T&&);
 template <typename T, typename U> struct IsSameType_ { static constexpr bool value = false; };
 template <typename T> struct IsSameType_<T, T> { static constexpr bool value = true; };
 template <typename T, typename U> constexpr bool isSameType() { return IsSameType_<T, U>::value; }
+template <typename T, typename U> concept SameAs = IsSameType_<T, U>::value;
 
 template <typename T> constexpr bool isIntegral() { return false; }
 template <> constexpr bool isIntegral<char>() { return true; }
@@ -1091,6 +1092,157 @@ inline void dtor(T& location) {
 template <typename T>
 class Maybe;
 
+// =======================================================================================
+// MaybeTraits: Customization point for Maybe<T> behavior
+//
+// MaybeTraits controls three aspects of Maybe<T>:
+//
+// 1. NICHE OPTIMIZATION: When initNone/isNone are defined, Maybe<T> stores T directly
+//    without a separate bool flag, using a special "none" state of T (e.g., nullptr for Own<T>).
+//    This reduces sizeof(Maybe<Own<T>>) from 24 to 16 bytes. Both functions must be defined
+//    together, or neither.
+//
+// 2. CONVERTING CONSTRUCTOR/ASSIGNMENT: When convertingConstructor is true, Maybe<T> has a
+//    converting constructor Maybe<T>(U&&) and assignment operator operator=(U&&) that accept
+//    types U convertible to T. When false or not defined (default), these do not exist at all.
+//    See the detailed discussion in struct MaybeTraits below.
+//
+// 3. REFERENCE CONVERSION: When dereferencingConversion is true, Maybe<T> can implicitly
+//    convert to Maybe<U&> when *T returns a reference convertible to U&. This is useful for
+//    smart pointer types like Own<T>.
+//
+// WARNING: kj-rs (the Rust bindings for KJ) has its own knowledge of Maybe<T> memory layout
+// for interoperability with Rust. As of this writing, kj-rs supports Maybe<T&> and Maybe<Own<T>>
+// niche-optimized types, but not others. When adding niche optimization for a new type, you may
+// need to add corresponding support in kj-rs.
+//
+// To customize MaybeTraits for your type, specialize it in the same header where your type is
+// defined (after the type definition). See memory.h for an example (MaybeTraits<Own<T, D>>).
+
+template <typename T>
+struct MaybeTraits {
+  // Default traits: no niche optimization, no converting constructor, no ref conversion.
+  //
+  // NICHE OPTIMIZATION: To enable, define both of these static member functions:
+  //   static void initNone(T* ptr) noexcept;  // Use kj::ctor() to initialize a "none" value
+  //   static bool isNone(const T& value) noexcept;  // Returns true if value represents "none"
+  // If one is defined, both must be defined or you'll get a compile error.
+  //
+  // Note that if your type's "none constructor" is private, you won't be able to use kj::ctor() in
+  // your implementation of initNone(), but will have to use placement new directly.
+  //
+  // IMPORTANT: Both functions MUST be noexcept. This is required for exception safety in
+  // Maybe's assignment operators - if a constructor throws, we need to be able to safely
+  // leave the Maybe in the none state.
+  //
+  // IMPORTANT: T's destructor must be able to handle destroying a none value. The Maybe
+  // implementation may destroy the none value at any time (e.g., when transitioning from
+  // none to a real value, or when the Maybe itself is destroyed).
+  //
+  // Choosing a none value: If your type T has a moved-from state which is practically
+  // unusable (supporting only destruction and assignment), then that state is likely a
+  // good candidate for being the none value. Ideally, the chosen state would not be constructible
+  // by the type's public API, though this is up to your judgment. See Own<T> as an example, which
+  // uses nullptr as its moved-from / none state.
+  //
+  // Beware that not all moved-from states are appropriate none values. Consider kj::Vector,
+  // which becomes empty when moved from but remains fully usable. An empty vector inside
+  // Maybe<kj::Vector> should probably NOT be considered a none Maybe - it should be a Maybe
+  // containing a value that happens to be an empty vector. The same is generally true of most
+  // container types.
+  //
+  // Lastly, niche optimizing a type using its moved-from state as the none state is technically a
+  // breaking change for code which moves from Maybes with KJ_IF_SOME. Moving from the Maybe changes
+  // to imply setting it to none, whereas this is not the case for normal Maybes.
+  //   KJ_IF_SOME(v, kj::mv(normalMaybe)) { ... }
+  //   // normalMaybe != kj::none, contains moved-from value,
+  //   KJ_IF_SOME(v, kj::mv(nicheOptimizedMaybe)) { ... }
+  //   // nicheOptimizedMaybe == kj::none
+  // This caveat only applies to KJ_IF_SOME. Moving from a Maybe to another Maybe always leaves the
+  // source Maybe in a none state.
+  //
+  // CONVERTING CONSTRUCTOR/ASSIGNMENT: To enable Maybe<T>(U&&) and operator=(U&&) for types U
+  // convertible to T, define:
+  //   static constexpr bool convertingConstructor = true;
+  // The constructor will be implicit when U→T is implicit, explicit when U→T is explicit.
+  // By default (when not defined), these do not exist.
+  //
+  // Understanding when this is needed:
+  //
+  // C++ only allows one user-defined conversion in an implicit conversion sequence. Without
+  // the converting constructor, `Maybe<T> m = u;` requires two user-defined conversions
+  // (U→T, then T→Maybe<T>), so it fails. However, brace initialization `Maybe<T> m = {u};`
+  // works because list-initialization has special rules: the U→T conversion happens "inside"
+  // the list-init when initializing the Maybe(T&&) parameter, not as a separate conversion.
+  //
+  // The converting constructor Maybe<T>(U&&) provides a single user-defined conversion path
+  // (U→Maybe<T>), enabling `Maybe<T> m = u;` without braces. This is needed for code patterns
+  // like `return ownDerived;` from a function returning `Maybe<Own<Base>>`.
+  //
+  // Why opt-in? If the converting constructor exists and is implicit, it can cause ambiguity
+  // in overload resolution. For example, given:
+  //   void f(Maybe<StringPtr>);
+  //   void f(Maybe<ArrayPtr<const char>>);
+  // A call `f(myStringPtr)` becomes ambiguous, since StringPtr can implicitly convert to both
+  // Maybe<StringPtr> (identity + wrap) and Maybe<ArrayPtr> (via the converting constructor).
+  //
+  // Therefore, types must explicitly opt in. Own<T> opts in because returning Own<Derived>
+  // from functions returning Maybe<Own<Base>> is common and would otherwise require braces.
+  //
+  // REFERENCE CONVERSION: To enable Maybe<T> -> Maybe<U&> conversion (where *T returns U&),
+  // define:
+  //   static constexpr bool dereferencingConversion = true;
+  // The conversion will work for any U& that *T can convert to. For example, if T is Own<X>,
+  // then *T returns X&, which can convert to Base& if X derives from Base.
+  // This also handles const: if Maybe<T> is const, it converts to Maybe<const U&>.
+};
+
+namespace _ {  // private
+
+// Helpers to detect which MaybeTraits functions are defined.
+// Note: initNone and isNone must be noexcept for exception safety in NullableValue.
+
+template <typename T>
+concept HasNicheInitNone = requires(T* ptr) {
+  { MaybeTraits<T>::initNone(ptr) } noexcept;
+};
+template <typename T>
+concept HasNicheIsNone = requires(const T& v) {
+  { MaybeTraits<T>::isNone(v) } noexcept -> SameAs<bool>;
+};
+
+template <typename T>
+concept HasAnyNicheFunction = HasNicheInitNone<T> || HasNicheIsNone<T>;
+template <typename T>
+concept HasAllNicheFunctions = HasNicheInitNone<T> && HasNicheIsNone<T>;
+
+template <typename T>
+concept HasConvertingConstructorFlag =
+    requires { { MaybeTraits<T>::convertingConstructor } -> SameAs<const bool&>; } &&
+    MaybeTraits<T>::convertingConstructor;
+// Concept: MaybeTraits<T>::convertingConstructor exists and is true
+
+template <typename T>
+concept HasDereferencingConversionFlag =
+    requires { { MaybeTraits<T>::dereferencingConversion } -> SameAs<const bool&>; } &&
+    MaybeTraits<T>::dereferencingConversion;
+// Concept: MaybeTraits<T>::dereferencingConversion exists and is true
+
+template <typename T, typename U>
+concept DerefConvertsTo = HasDereferencingConversionFlag<T> && requires(T& t) {
+  requires canConvert<decltype(*t), U&>();
+};
+// Concept: *T returns something convertible to U&, and dereferencingConversion is enabled
+
+}  // namespace _ (private)
+
+template <typename T>
+concept NicheOptimizable = _::HasAnyNicheFunction<T>;
+// Concept for types that support niche optimization in Maybe<T>.
+// Matches when ANY niche function is defined, so the niche-optimized specialization is selected.
+// The specialization then static_asserts that ALL functions are defined, giving a clear error
+// message if someone defines only some functions.
+
 namespace _ {  // private
 
 template <typename T>
@@ -1161,17 +1313,24 @@ public:
   }
   template <typename U>
   inline NullableValue(NullableValue<U>&& other)
-      : isSet(other.isSet) {
+      : isSet(other != nullptr) {
+    // Written in terms of public API, in case U is niche-optimized.
     if (isSet) {
-      ctor(value, kj::mv(other.value));
+      ctor(value, kj::mv(*other));
     }
   }
   template <typename U>
   inline NullableValue(const NullableValue<U>& other)
-      : isSet(other.isSet) {
+      : isSet(other != nullptr) {
+    // Written in terms of public API, in case U is niche-optimized.
     if (isSet) {
-      ctor(value, other.value);
+      ctor(value, *other);
     }
+  }
+  template <typename U>
+    requires requires(U&& u) { T(kj::fwd<U>(u)); }
+  inline NullableValue(U&& other): isSet(true) {
+    ctor(value, kj::fwd<U>(other));
   }
   inline NullableValue(decltype(nullptr)): isSet(false) {}
 
@@ -1216,8 +1375,9 @@ public:
   inline NullableValue& operator=(const T& other) { emplace(other); return *this; }
   template <typename U>
   inline NullableValue& operator=(NullableValue<U>&& other) {
-    if (other.isSet) {
-      emplace(kj::mv(other.value));
+    // Written in terms of public API, in case U is niche-optimized.
+    if (other != nullptr) {
+      emplace(kj::mv(*other));
     } else {
       *this = nullptr;
     }
@@ -1225,8 +1385,9 @@ public:
   }
   template <typename U>
   inline NullableValue& operator=(const NullableValue<U>& other) {
-    if (other.isSet) {
-      emplace(other.value);
+    // Written in terms of public API, in case U is niche-optimized.
+    if (other != nullptr) {
+      emplace(*other);
     } else {
       *this = nullptr;
     }
@@ -1262,6 +1423,213 @@ private:
 // seems broken.
 #endif
 
+  union {
+    T value;
+  };
+
+#if _MSC_VER && !defined(__clang__)
+#pragma warning(pop)
+#endif
+
+  friend class kj::Maybe<T>;
+  template <typename U>
+  friend NullableValue<U>&& readMaybe(Maybe<U>&& maybe);
+};
+
+template <typename T>
+  requires NicheOptimizable<T>
+class NullableValue<T> {
+  // Partial specialization of NullableValue for niche-optimizable types.
+  // Instead of storing a separate bool flag, this uses the type's "none" state.
+
+  // Verify that if any niche function is defined, all are defined.
+  static_assert(!HasAnyNicheFunction<T> || HasAllNicheFunctions<T>,
+      "MaybeTraits<T> must define both initNone and isNone, or neither");
+
+  // Convenience aliases
+  static inline void initNone(T* ptr) { MaybeTraits<T>::initNone(ptr); }
+  static inline bool isNone(const T& v) { return MaybeTraits<T>::isNone(v); }
+
+public:
+  inline NullableValue() { initNone(&value); }
+  inline NullableValue(T&& t): value(kj::mv(t)) {}
+  inline NullableValue(T& t): value(t) {}
+  inline NullableValue(const T& t): value(t) {}
+
+  inline NullableValue(NullableValue&& other) {
+    // Careful not to construct from none values.
+    if (other != nullptr) {
+      ctor(value, kj::mv(other.value));
+    } else {
+      initNone(&value);
+    }
+  }
+  inline NullableValue(const NullableValue& other) {
+    // Careful not to construct from none values.
+    if (other != nullptr) {
+      ctor(value, other.value);
+    } else {
+      initNone(&value);
+    }
+  }
+  inline NullableValue(NullableValue& other) {
+    // Careful not to construct from none values.
+    if (other != nullptr) {
+      ctor(value, other.value);
+    } else {
+      initNone(&value);
+    }
+  }
+  inline ~NullableValue()
+#if _MSC_VER && !defined(__clang__)
+      noexcept(false)
+#else
+      noexcept(noexcept(instance<T&>().~T()))
+#endif
+  {
+    dtor(value);
+  }
+
+  inline T& operator*() & { return value; }
+  inline const T& operator*() const & { return value; }
+  inline T&& operator*() && { return kj::mv(value); }
+  inline const T&& operator*() const && { return kj::mv(value); }
+  inline T* operator->() { return &value; }
+  inline const T* operator->() const { return &value; }
+  inline operator T*() { return isNone(value) ? nullptr : &value; }
+  inline operator const T*() const { return isNone(value) ? nullptr : &value; }
+
+  template <typename... Params>
+  inline T& emplace(Params&&... params) {
+    // Exception safety: if dtor or ctor throws, leave in none state.
+    try {
+      dtor(value);
+      ctor(value, kj::fwd<Params>(params)...);
+    } catch (...) {
+      initNone(&value);  // noexcept - leave in none state
+      throw;
+    }
+    return value;
+  }
+
+  template <typename U>
+  inline NullableValue(NullableValue<U>&& other) {
+    // Written in terms of public API, in case U is non-niche-optimized.
+    if (other != nullptr) {
+      ctor(value, kj::mv(*other));
+    } else {
+      initNone(&value);
+    }
+  }
+  template <typename U>
+  inline NullableValue(const NullableValue<U>& other) {
+    // Written in terms of public API, in case U is non-niche-optimized.
+    if (other != nullptr) {
+      ctor(value, *other);
+    } else {
+      initNone(&value);
+    }
+  }
+  template <typename U>
+    requires requires(U&& u) { T(kj::fwd<U>(u)); }
+  inline NullableValue(U&& other): value(kj::fwd<U>(other)) {}
+  // Converting constructor for upcasting, e.g. Own<Derived> to NullableValue<Own<Base>>.
+
+  inline NullableValue(decltype(nullptr)) { initNone(&value); }
+
+  inline NullableValue& operator=(NullableValue&& other) {
+    if (&other != this) {
+      // Careful not to construct from none values.
+      if (other != nullptr) {
+        emplace(kj::mv(*other));
+      } else {
+        *this = nullptr;
+      }
+    }
+    return *this;
+  }
+
+  inline NullableValue& operator=(NullableValue& other) {
+    if (&other != this) {
+      // Careful not to construct from none values.
+      if (other != nullptr) {
+        emplace(*other);
+      } else {
+        *this = nullptr;
+      }
+    }
+    return *this;
+  }
+
+  inline NullableValue& operator=(const NullableValue& other) {
+    if (&other != this) {
+      // Careful not to construct from none values.
+      if (other != nullptr) {
+        emplace(*other);
+      } else {
+        *this = nullptr;
+      }
+    }
+    return *this;
+  }
+
+  inline NullableValue& operator=(T&& other) { emplace(kj::mv(other)); return *this; }
+  inline NullableValue& operator=(T& other) { emplace(other); return *this; }
+  inline NullableValue& operator=(const T& other) { emplace(other); return *this; }
+
+  template <typename U>
+  inline NullableValue& operator=(NullableValue<U>&& other) {
+    // Written in terms of public API, in case U is non-niche-optimized.
+    if (other != nullptr) {
+      emplace(kj::mv(*other));
+    } else {
+      *this = nullptr;
+    }
+    return *this;
+  }
+  template <typename U>
+  inline NullableValue& operator=(const NullableValue<U>& other) {
+    // Written in terms of public API, in case U is non-niche-optimized.
+    if (other != nullptr) {
+      emplace(*other);
+    } else {
+      *this = nullptr;
+    }
+    return *this;
+  }
+  inline NullableValue& operator=(decltype(nullptr)) {
+    // Exception safety: if dtor throws, leave in none state.
+    try {
+      dtor(value);
+    } catch (...) {
+      initNone(&value);  // noexcept
+      throw;
+    }
+    initNone(&value);
+    return *this;
+  }
+
+  inline bool operator==(decltype(nullptr)) const { return isNone(value); }
+
+  NullableValue(const T* t) = delete;
+  NullableValue& operator=(const T* other) = delete;
+
+private:
+#if _MSC_VER && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(disable: 4624)
+#endif
+
+  // Unlike the default NullableValue template, our `value` is always guaranteed to be initialized
+  // for the lifetime of NullableValue (at least outside our own function bodies). However, we must
+  // store it in an anonymous union nevertheless. Why is that? The reason is that T might not expose
+  // a public constructor for its special none state, so we cannot call a constructor to initialize
+  // it. It also may not be a complete type when this NullableValue template is instantiated, so our
+  // constructor cannot call a T-returning function to initialize it -- a defined ~T() would be
+  // required, even if NRVO would kick in for such a "named constructor" function. That leaves a
+  // placement new helper function as our only way to construct it, which means it must remain
+  // uninitialized until our "none" constructor body has a chance to start running. So, we need to
+  // use an anonymous union.
   union {
     T value;
   };
@@ -1425,8 +1793,6 @@ template <typename T>
 class Maybe {
   // A T, or nullptr.
 
-  // IF YOU CHANGE THIS CLASS:  Note that there is a specialization of it in memory.h.
-
 public:
   Maybe(): ptr(nullptr) {}
   Maybe(T&& t): ptr(kj::mv(t)) {}
@@ -1456,6 +1822,27 @@ public:
       ptr.emplace(val);
     }
   }
+
+  template <typename U>
+    requires _::HasConvertingConstructorFlag<T> &&  // Only when MaybeTraits<T> opts in
+             requires(U&& u) { T(kj::fwd<U>(u)); }
+  explicit(!canConvert<U&&, T>())  // Implicit when U→T is implicit, explicit otherwise
+  Maybe(U&& value): ptr(kj::fwd<U>(value)) {}
+  // Converting constructor: allows constructing Maybe<T> from a U that is convertible to T.
+  // Only exists when MaybeTraits<T>::convertingConstructor is true.
+  // Implicit when U is implicitly convertible to T, explicit otherwise.
+  //
+  // Note: When enabled, this converting constructor is preferred over the Maybe<T> copy constructor
+  // for Maybe<T>-derived types, because taking U&& directly is a better match than derived-to-base
+  // slicing. Why would would this matter? If a Maybe-like class is implemented using
+  // inheritance-by-implementation, and has a sloppy variadic constructor template which
+  // perfectly forwards to Maybe, then that constructor will end up choosing to forward to this
+  // converting constructor, rather than to the Maybe copy constructor. When compiling the expression
+  // MaybeDerived<T>(MaybeDerived<T>(...)), the compiler ends up trying to construct T with the
+  // Maybe<T>-derived argument, which is either a compiler error or, if T actually has a compatible
+  // constructor, highly surprising. This comment also applies to the converting assignment
+  // operator, defined elsewhere. The correct solution is to avoid implementation-by-inheritance,
+  // or at least use `using Maybe<T>::Maybe` for such Maybe-derived types.
 
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   Maybe(decltype(nullptr)): ptr(nullptr) {}
@@ -1499,6 +1886,20 @@ public:
     return *this;
   }
 
+  template <typename U>
+    requires _::HasConvertingConstructorFlag<T> &&  // Only when MaybeTraits<T> opts in
+             requires(U&& u) { T(kj::fwd<U>(u)); }
+  Maybe& operator=(U&& value) {
+    ptr.emplace(kj::fwd<U>(value));
+    return *this;
+  }
+  // Converting assignment: allows assigning a U that is convertible to T.
+  // Only exists when MaybeTraits<T>::convertingConstructor is true.
+  //
+  // Note: This converting assignment operator may be preferred over the copy assignment operator
+  // for Maybe<T>-derived types. See the longer note on the converting constructor for a deeper
+  // explanation.
+
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
 
@@ -1520,6 +1921,51 @@ public:
   Maybe& operator=(const T* other) = delete;
   // We used to permit assigning a Maybe<T> directly from a T*, and the assignment would check for
   // nullness. This turned out never to be useful, and sometimes to be dangerous.
+
+  template <typename U>
+    requires _::DerefConvertsTo<T, U>
+  operator Maybe<U&>() & {
+    // Implicit conversion to Maybe<U&> when MaybeTraits<T>::dereferencingConversion is true
+    // and *T returns something convertible to U&. This allows Maybe<Own<X>> to convert to Maybe<X&>.
+    if (ptr == nullptr) {
+      return kj::none;
+    } else {
+      return **ptr;
+    }
+  }
+
+  template <typename U>
+    requires _::DerefConvertsTo<T, U>
+  operator Maybe<U&>() && {
+    // Rvalue version. This is safe when the temporary Maybe<Own<X>> lives for the duration of the
+    // function call that receives the Maybe<X&>.
+    if (ptr == nullptr) {
+      return kj::none;
+    } else {
+      return **ptr;
+    }
+  }
+
+  template <typename U>
+    requires _::DerefConvertsTo<T, const U>
+  operator Maybe<const U&>() const & {
+    if (ptr == nullptr) {
+      return kj::none;
+    } else {
+      return **ptr;
+    }
+  }
+
+  template <typename U>
+    requires _::DerefConvertsTo<T, const U>
+  operator Maybe<const U&>() const && {
+    // Rvalue version.
+    if (ptr == nullptr) {
+      return kj::none;
+    } else {
+      return **ptr;
+    }
+  }
 
   T& orDefault(T& defaultValue) & {
     if (ptr == nullptr) {
