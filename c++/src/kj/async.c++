@@ -3175,20 +3175,14 @@ void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
   // we're being destroyed, in which case we propagate it back to our disposer. Note that all
   // unhandled exceptions end up here, not just ones after the first co_await.
 
-  auto exception = getCaughtExceptionAsKj();
-
-  KJ_IF_SOME(disposalResults, maybeDisposalResults) {
+  
+  if (maybeDisposalResults != kj::none) {
     // Exception during coroutine destruction.
-    if (!isDone()) {
-      // do not report destructor exception during cancellation.
-      return;
-    }
-
-    // Record only the first one.
-    if (disposalResults.exception == kj::none) {
-      disposalResults.exception = kj::mv(exception);
-    }
-  } else if (isWaiting()) {
+    return;
+  }
+  
+  auto exception = getCaughtExceptionAsKj();
+  if (isWaiting()) {
     // Exception during coroutine execution.
     resultRef.addException(kj::mv(exception));
     scheduleResumption();
@@ -3280,19 +3274,6 @@ void CoroutineBase::destroy() {
   } while (!disposalResults.destructorRan);
 
   // WARNING: `this` is now a dangling pointer.
-
-  KJ_IF_SOME(exception, disposalResults.exception) {
-    if (UnwindDetector::uncaughtExceptionCount() == 0) {
-      // Technically this does not equal the `UnwindDetector` logic, 
-      // but this behaviour will never lead to trouble, is almost always true on practice
-      // (only coroutines _created_ during unwind could notice a difference in behaviour),
-      // and, more importantly, much faster.
-      kj::throwFatalException(kj::mv(exception));
-    } else {
-      // An exception is already unwinding the stack, so throwing this secondary exception would
-      // call std::terminate().
-    }
-  }
 }
 
 PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
