@@ -342,7 +342,7 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind coro destructor can 
   KJ_EXPECT(!caught);
 };
 
-KJ_TEST("Exceptions during suspended coroutine frame-unwind node destructor can be caught") {
+KJ_TEST("Exceptions during suspended coroutine frame-unwind node destructor can not be caught") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
