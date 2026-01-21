@@ -338,6 +338,8 @@ protected:
       if (event != nullptr && !builder.full()) event->traceEvent(builder);
     }
 
+    bool armed() const;
+    
   private:
     Event* event = nullptr;
   };
@@ -2328,11 +2330,7 @@ public:
 #endif
 
 protected:
-  bool isWaiting() { return waiting; }
-  void scheduleResumption() {
-    onReadyEvent.arm();
-    waiting = false;
-  }
+  inline void scheduleResumption() { onReadyEvent.arm(); }
 
   void unhandledExceptionImpl(ExceptionOrValue& resultRef);
 
@@ -2352,7 +2350,6 @@ private:
   stdcoro::coroutine_handle<> coroutine;
 
   OnReadyEvent onReadyEvent;
-  bool waiting = true;
 
   bool hasSuspendedAtLeastOnce = false;
 
@@ -2450,10 +2447,8 @@ public:
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
-    if (isWaiting()) {
-      result = kj::mv(value);
-      scheduleResumption();
-    }
+    result = kj::mv(value);
+    scheduleResumption();
   }
 
   void unhandled_exception() { unhandledExceptionImpl(result); }
