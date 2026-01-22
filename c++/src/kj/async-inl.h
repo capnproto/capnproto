@@ -2358,8 +2358,18 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
+class PromiseAwaiterShared: public Event {
+protected:
+  PromiseAwaiterShared(SourceLocation location) : Event(location) {}
+  
+protected:
+  OwnPromiseNode awaiterNode;
+
+  friend class PromiseAwaiterBase;
+};
+
 class CoroutineBase: public PromiseNode,
-                     public Event {
+                     public PromiseAwaiterShared {
 public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location);
   ~CoroutineBase() noexcept(false);
@@ -2384,14 +2394,8 @@ public:
   // lifetime of the enclosing promise.
 
   // Called from Awaiter implementations to integrate with async tracing during suspension.
-  void setPromiseNodeForTrace(OwnPromiseNode& node) {
-    promiseNodeForTrace = node;
+  void setSuspendedAtLeastOnce() {
     hasSuspendedAtLeastOnce = true;
-  }
-
-  // Called from Awaiter implementations to end tracing during resumption/cancellation.
-  void clearPromiseNodeForTrace() {
-    promiseNodeForTrace = kj::none;
   }
 
   // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
@@ -2436,12 +2440,6 @@ private:
 #else
   inline bool isDone() const { return coroutine.done(); }
 #endif
-
-  Maybe<OwnPromiseNode&> promiseNodeForTrace;
-  // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
-  // promise so tracePromise()/traceEvent() can trace into it. Since ChainPromiseNodes have the
-  // ability to destroy themselves, replacing their own Own, we hold a reference to the owning Own
-  // instead of directly to the PromiseNode.
 
   struct DisposalResults {
     bool destructorRan = false;
@@ -2589,7 +2587,6 @@ protected:
 
 private:
   CoroutineBase& coroutine;
-  OwnPromiseNode node;
 };
 
 template <typename T>

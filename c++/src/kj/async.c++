@@ -3168,7 +3168,7 @@ Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW
 namespace _ {  // (private)
 
 CoroutineBase::CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location)
-    : Event(location),
+    : PromiseAwaiterShared(location),
       coroutine(coroutine) {}
 CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
@@ -3210,8 +3210,8 @@ void CoroutineBase::onReady(Event* event) noexcept {
 void CoroutineBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
   if (stopAtNextEvent) return;
 
-  KJ_IF_SOME(promise, promiseNodeForTrace) {
-    promise->tracePromise(builder, stopAtNextEvent);
+  if (awaiterNode.get() != nullptr) {
+    awaiterNode->tracePromise(builder, stopAtNextEvent);
   }
 
   // Maybe returning the address of coroutine() will give us a function name with meaningful type
@@ -3235,10 +3235,10 @@ Maybe<Own<Event>> CoroutineBase::fire() {
 }
 
 void CoroutineBase::traceEvent(TraceBuilder& builder) {
-  KJ_IF_SOME(promise, promiseNodeForTrace) {
-    promise->tracePromise(builder, true);
+  if (awaiterNode.get() != nullptr) {
+    awaiterNode->tracePromise(builder, true);
   }
-
+  
   // Maybe returning the address of coroutine() will give us a function name with meaningful type
   // information. (Narrator: It doesn't.)
   builder.add(GetFunctorStartAddress<>::apply(coroutine));
@@ -3260,7 +3260,7 @@ void CoroutineBase::destroy() {
   maybeDisposalResults = &disposalResults;
 
   do {
-    // Clang's implementation of Coroutines does not destroy the Coroutine object or deallocate the
+    // Clang's implementation of Corutines does not destroy the Coroutine object or deallocate the
     // coroutine frame if a destructor of an object on the frame threw an exception. This is despite
     // the fact that it delivered the exception to _us_ via unhandled_exception(). Anyway, it
     // appears we can work around this by running coroutine.destroy() a second time.
@@ -3287,16 +3287,15 @@ void CoroutineBase::destroy() {
   }
 }
 
-PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node): coroutine(coroutine), node(kj::mv(node)) { }
+PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node): coroutine(coroutine) { 
+  coroutine.awaiterNode = kj::mv(node);
+}
+
 PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
 PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
-  if (node.get() != nullptr) {
-    // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
-    // destroyed.
-    coroutine.clearPromiseNodeForTrace();
-
+  if (coroutine.awaiterNode.get() != nullptr) {
     try {
-      node = nullptr;
+      coroutine.awaiterNode = nullptr;
     } catch (...) {
       // Ignore exceptions that happen during co_await cancellation: most likely it happens in the
       // error path already, and there is not much for the user to do if cancellation fails.
@@ -3305,11 +3304,10 @@ PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
 }
 
 void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
-  coroutine.clearPromiseNodeForTrace();
-  node->get(result);
+  coroutine.awaiterNode->get(result);
 
   try {
-    node = nullptr;
+    coroutine.awaiterNode = nullptr;
   } catch (...) {
     result.addException(getCaughtExceptionAsKj());
   }
@@ -3327,8 +3325,8 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
 }
 
 bool PromiseAwaiterBase::awaitSuspendImpl() {
-  node->setSelfPointer(&node);
-  node->onReady(&coroutine);
+  coroutine.awaiterNode->setSelfPointer(&coroutine.awaiterNode);
+  coroutine.awaiterNode->onReady(&coroutine);
 
   if (coroutine.canImmediatelyResume()) {
     // The result is immediately ready and this coroutine is running on the event loop's stack, not
@@ -3341,10 +3339,8 @@ bool PromiseAwaiterBase::awaitSuspendImpl() {
     // returned true from await_ready().
     return false;
   } else {
-    // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it using the
-    // CoroutineBase& reference we save.
-    coroutine.setPromiseNodeForTrace(node);
+    // Otherwise, we must suspend.
+    coroutine.setSuspendedAtLeastOnce();
     return true;
   }
 }
