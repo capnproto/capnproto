@@ -28,6 +28,7 @@ build:profile --config=thin-lto
 build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic --verbose_failures
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'
+build:unix --cxxopt='-Wunreachable-code'
 build:unix --cxxopt='-Wsuggest-override'
 build:unix --cxxopt='-Wno-strict-aliasing' --host_cxxopt='-Wno-strict-aliasing'
 build:unix --cxxopt='-Wno-sign-compare' --host_cxxopt='-Wno-sign-compare'
