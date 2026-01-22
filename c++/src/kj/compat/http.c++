@@ -972,7 +972,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
 
   KJ_IF_SOME(method, consumeHttpMethod(ptr)) {
     if (*ptr != ' ' && *ptr != '\t') {
-      return ProtocolError { 501, "Not Implemented",
+      return ProtocolError { 405, "Method Not Allowed",
           "Unrecognized request method.", content };
     }
     ++ptr;
@@ -994,7 +994,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
       }
     }
   } else {
-    return ProtocolError { 501, "Not Implemented",
+    return ProtocolError { 405, "Method Not Allowed",
         "Unrecognized request method.", content };
   }
 

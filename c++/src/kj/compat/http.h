@@ -408,7 +408,7 @@ public:
     uint statusCode;
     // Suggested HTTP status code that should be used when returning an error to the client.
     //
-    // Most errors are 400. An unrecognized method will be 501.
+    // Most errors are 400.
 
     kj::StringPtr statusMessage;
     // HTTP status message to go with `statusCode`, e.g. "Bad Request".

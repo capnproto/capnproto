@@ -4301,7 +4301,7 @@ KJ_TEST("HttpServer bad requests") {
       // invalid method
       .request = "bad request\r\n\r\n"_kj,
       .expectedResponse =
-          "HTTP/1.1 501 Not Implemented\r\n"
+          "HTTP/1.1 405 Method Not Allowed\r\n"
           "Connection: close\r\n"
           "Content-Length: 35\r\n"
           "Content-Type: text/plain\r\n"
