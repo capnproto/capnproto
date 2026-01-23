@@ -1135,9 +1135,11 @@ struct MaybeTraits {
   // Maybe's assignment operators - if a constructor throws, we need to be able to safely
   // leave the Maybe in the none state.
   //
-  // IMPORTANT: T's destructor must be able to handle destroying a none value. The Maybe
-  // implementation may destroy the none value at any time (e.g., when transitioning from
-  // none to a real value, or when the Maybe itself is destroyed).
+  // IMPORTANT: The none value must not require destruction. Maybe will NEVER call T's destructor
+  // on a none value. This allows T's destructor to assume it is always destroying a valid
+  // (non-none) value, simplifying the implementation of RAII types. For example, a guard type
+  // that stores a pointer and calls ptr->exit() in its destructor can use nullptr as its none
+  // state without checking for null in the destructor.
   //
   // Choosing a none value: If your type T has a moved-from state which is practically
   // unusable (supporting only destruction and assignment), then that state is likely a
@@ -1487,7 +1489,8 @@ public:
       noexcept(noexcept(instance<T&>().~T()))
 #endif
   {
-    dtor(value);
+    // Never destroy none values - they are treated as trivially destructible sentinels.
+    if (!isNone(value)) dtor(value);
   }
 
   inline T& operator*() & { return value; }
@@ -1502,8 +1505,9 @@ public:
   template <typename... Params>
   inline T& emplace(Params&&... params) {
     // Exception safety: if dtor or ctor throws, leave in none state.
+    // Note: we never destroy none values - they are trivially destructible sentinels.
     try {
-      dtor(value);
+      if (!isNone(value)) dtor(value);
       ctor(value, kj::fwd<Params>(params)...);
     } catch (...) {
       initNone(&value);  // noexcept - leave in none state
@@ -1598,14 +1602,17 @@ public:
     return *this;
   }
   inline NullableValue& operator=(decltype(nullptr)) {
-    // Exception safety: if dtor throws, leave in none state.
-    try {
-      dtor(value);
-    } catch (...) {
-      initNone(&value);  // noexcept
-      throw;
+    // Never destroy none values - they are trivially destructible sentinels.
+    if (!isNone(value)) {
+      // Exception safety: if dtor throws, leave in none state.
+      try {
+        dtor(value);
+      } catch (...) {
+        initNone(&value);  // noexcept
+        throw;
+      }
+      initNone(&value);
     }
-    initNone(&value);
     return *this;
   }
 

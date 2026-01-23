@@ -150,6 +150,42 @@ struct NoneThrowingNiche {
   friend struct ::kj::MaybeTraits<NoneThrowingNiche>;
 };
 
+struct NoneDestructorCounter {
+  // A niche-optimized type that counts destructor calls and asserts its destructor is never
+  // called with the none value. This verifies that Maybe never destroys none values.
+  int value;
+
+  static int nonNoneDestroyCount;
+  static int noneDestroyCount;  // Should always remain 0
+
+  explicit NoneDestructorCounter(int v): value(v) {}
+
+  NoneDestructorCounter(NoneDestructorCounter&& other): value(other.value) {
+    other.value = -1;  // moved-from state, NOT none (which is 0)
+  }
+
+  NoneDestructorCounter& operator=(NoneDestructorCounter&& other) {
+    value = other.value;
+    other.value = -1;  // moved-from state, NOT none
+    return *this;
+  }
+
+  ~NoneDestructorCounter() {
+    if (value == 0) {
+      ++noneDestroyCount;  // This should never happen!
+    } else {
+      ++nonNoneDestroyCount;
+    }
+  }
+
+  KJ_DISALLOW_COPY(NoneDestructorCounter);
+
+  friend struct ::kj::MaybeTraits<NoneDestructorCounter>;
+};
+
+int NoneDestructorCounter::nonNoneDestroyCount = 0;
+int NoneDestructorCounter::noneDestroyCount = 0;
+
 }  // namespace
 
 // MaybeTraits specializations for test types
@@ -179,6 +215,13 @@ struct MaybeTraits<NoneThrowingNiche> {
   // Niche optimization: value == 0 is the "none" state
   static void initNone(NoneThrowingNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const NoneThrowingNiche& m) noexcept { return m.value == 0; }
+};
+
+template <>
+struct MaybeTraits<NoneDestructorCounter> {
+  // Niche optimization: value == 0 is the "none" state
+  static void initNone(NoneDestructorCounter* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const NoneDestructorCounter& m) noexcept { return m.value == 0; }
 };
 
 namespace {
@@ -1170,6 +1213,92 @@ KJ_TEST("Maybe<NoneThrowingNiche> never constructs from none state") {
     KJ_EXPECT(src != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(src).value == 42);
   }
+}
+
+KJ_TEST("Maybe never destroys none values") {
+  // Verify that NullableValue never calls T's destructor on a none value.
+  // This is important because it allows T's destructor to assume it is always
+  // destroying a valid (non-none) value, simplifying RAII types.
+  static_assert(sizeof(Maybe<NoneDestructorCounter>) == sizeof(NoneDestructorCounter),
+      "Should be niche-optimized");
+
+  NoneDestructorCounter::nonNoneDestroyCount = 0;
+  NoneDestructorCounter::noneDestroyCount = 0;
+
+  // Test 1: Creating and destroying an empty Maybe
+  {
+    Maybe<NoneDestructorCounter> empty;
+    KJ_EXPECT(empty == kj::none);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 0);
+
+  // Test 2: Creating a value via emplace, then destroying it
+  {
+    Maybe<NoneDestructorCounter> m;
+    m.emplace(42);
+    KJ_EXPECT(m != kj::none);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 1);
+
+  NoneDestructorCounter::nonNoneDestroyCount = 0;
+
+  // Test 3: Assigning none to a value (should destroy the value, not create a none to destroy)
+  {
+    Maybe<NoneDestructorCounter> m;
+    m.emplace(42);
+    m = kj::none;
+    KJ_EXPECT(m == kj::none);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 1);  // Just the value, not the none
+
+  NoneDestructorCounter::nonNoneDestroyCount = 0;
+
+  // Test 4: Assigning none to none (should not call any destructor)
+  {
+    Maybe<NoneDestructorCounter> m;
+    m = kj::none;
+    KJ_EXPECT(m == kj::none);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 0);
+
+  // Test 5: Emplace on none (should not destroy the none first)
+  {
+    Maybe<NoneDestructorCounter> m;
+    m.emplace(42);
+    KJ_EXPECT(m != kj::none);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 1);  // Just the emplaced value
+
+  NoneDestructorCounter::nonNoneDestroyCount = 0;
+
+  // Test 6: Move from Maybe leaves source as none, but doesn't destroy the none
+  {
+    Maybe<NoneDestructorCounter> src;
+    src.emplace(42);
+    Maybe<NoneDestructorCounter> dst = kj::mv(src);
+    KJ_EXPECT(src == kj::none);
+    KJ_EXPECT(dst != kj::none);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  // Destructions: src's moved-from value (-1) when assigned to none, then dst's value (42) at end
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 2);
+
+  NoneDestructorCounter::nonNoneDestroyCount = 0;
+
+  // Test 7: Multiple emplace calls (each should destroy the previous value, not any none)
+  {
+    Maybe<NoneDestructorCounter> m;
+    m.emplace(1);
+    m.emplace(2);
+    m.emplace(3);
+  }
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+  KJ_EXPECT(NoneDestructorCounter::nonNoneDestroyCount == 3);  // Values 1, 2, and 3
 }
 
 // =======================================================================================
