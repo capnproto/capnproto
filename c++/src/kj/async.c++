@@ -19,6 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#include "kj/exception.h"
 #undef _FORTIFY_SOURCE
 // If _FORTIFY_SOURCE is defined, longjmp will complain when it detects the stack
 // pointer moving in the "wrong direction", thinking you're jumping to a non-existent
@@ -3175,32 +3176,18 @@ CoroutineBase::~CoroutineBase() noexcept(false) {
 }
 
 void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
-  // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
-  // we're being destroyed, in which case we propagate it back to our disposer. Note that all
-  // unhandled exceptions end up here, not just ones after the first co_await.
+  // We propagate the exception to the promise which owns us, unless
+  // we're being destroyed.
 
-  auto exception = getCaughtExceptionAsKj();
-
-  KJ_IF_SOME(disposalResults, maybeDisposalResults) {
-    // Exception during coroutine destruction.
-    if (!isDone()) {
-      // do not report destructor exception during cancellation.
-      return;
-    }
-
-    // Record only the first one.
-    if (disposalResults.exception == kj::none) {
-      disposalResults.exception = kj::mv(exception);
-    }
-  } else {
-    resultRef.addException(kj::mv(exception));
-    if (!onReadyEvent.armed()) {
-      // Exception during coroutine execution.
-      onReadyEvent.arm();
-    } 
-    // Otherwise this is an exception during during coroutine frame-unwind
-    // in-between co_return and final_suspend().
-  }
+  if (maybeDisposalResults != kj::none) { return; }
+  
+  resultRef.addException(getCaughtExceptionAsKj());
+  if (!onReadyEvent.armed()) {
+    // Exception during coroutine execution.
+    onReadyEvent.arm();
+  } 
+  // Otherwise this is an exception during during coroutine frame-unwind
+  // in-between co_return and final_suspend().
 }
 
 void CoroutineBase::onReady(Event* event) noexcept {
@@ -3259,6 +3246,9 @@ void CoroutineBase::destroy() {
   DisposalResults disposalResults;
   maybeDisposalResults = &disposalResults;
 
+  bool done = isDone();
+  kj::Maybe<Exception> disposalException;
+
   do {
     // Clang's implementation of Coroutines does not destroy the Coroutine object or deallocate the
     // coroutine frame if a destructor of an object on the frame threw an exception. This is despite
@@ -3268,13 +3258,20 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != kj::none` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
-    coroutine.destroy();
+    try {
+      coroutine.destroy();
+    } catch (...) {
+      if (disposalException == kj::none) {
+        disposalException = kj::getCaughtExceptionAsKj();
+      }
+    }
   } while (!disposalResults.destructorRan);
+
 
   // WARNING: `this` is now a dangling pointer.
 
-  KJ_IF_SOME(exception, disposalResults.exception) {
-    if (UnwindDetector::uncaughtExceptionCount() == 0) {
+  KJ_IF_SOME(exception, disposalException) {
+    if (UnwindDetector::uncaughtExceptionCount() == 0 && done) {
       // Technically this does not equal the `UnwindDetector` logic, 
       // but this behaviour will never lead to trouble, is almost always true on practice
       // (only coroutines _created_ during unwind could notice a difference in behaviour),

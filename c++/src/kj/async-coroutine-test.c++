@@ -484,7 +484,8 @@ struct ThrowInDestructor {
   UnwindDetector unwindDetector;
 };
 
-Promise<size_t> fortyTwo(ThrowInDestructor arg) {
+Promise<size_t> fortyTwo(ThrowInDestructor arg, Promise<void> wait) {
+  co_await wait;
   co_return 42;
 }
 
@@ -492,19 +493,18 @@ KJ_TEST("Exception thrown by parameter destructor rejects the promise") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto promise = fortyTwo(ThrowInDestructor());
+  auto promise = fortyTwo(ThrowInDestructor(), READY_NOW);
   KJ_EXPECT_THROW_MESSAGE("~ThrowInDestructor()", promise.wait(waitScope));
 }
 
-// TODO(mikea): this behavior is wrong, we want to ignore all exceptions during cancellation.
-KJ_TEST("Exception thrown by parameter destructor during cancellation rejects the promise") {
+KJ_TEST("Exception thrown by parameter destructor during cancellation is ignored") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-      (void)fortyTwo(ThrowInDestructor());
-  }));
-  KJ_EXPECT(exception.getDescription() == "~ThrowInDestructor()");
+  auto exception = kj::runCatchingExceptions([&]() {
+      (void)fortyTwo(ThrowInDestructor(), NEVER_DONE);
+  });
+  KJ_EXPECT(exception == kj::none);
 }
 
 #if !_MSC_VER && !__aarch64__

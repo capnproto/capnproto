@@ -2445,7 +2445,6 @@ private:
 
   struct DisposalResults {
     bool destructorRan = false;
-    Maybe<Exception> exception;
   };
   Maybe<DisposalResults&> maybeDisposalResults;
   // Only non-null during destruction. Before calling coroutine.destroy(), our disposer sets this
