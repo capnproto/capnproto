@@ -1169,7 +1169,7 @@ Own<LowLevelAsyncIoProvider> newLowLevelAsyncIoProvider(Win32EventPort& eventPor
   return kj::heap<LowLevelAsyncIoProviderImpl>(eventPort);
 }
 
-AsyncIoContext setupAsyncIo() {
+AsyncIoContext setupAsyncIo(kj::Maybe<EventLoopObserver&> observer) {
   _::initWinsockOnce();
 
   struct BasicContext {
@@ -1177,10 +1177,12 @@ AsyncIoContext setupAsyncIo() {
     EventLoop eventLoop;
     WaitScope waitScope;
 
-    BasicContext(): eventLoop(eventPort), waitScope(eventLoop) {}
+    BasicContext(kj::Maybe<EventLoopObserver&> observer)
+      : eventLoop(eventPort, observer),
+        waitScope(eventLoop) {}
   };
 
-  auto basicContext = heap<BasicContext>();
+  auto basicContext = heap<BasicContext>(observer);
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>(basicContext->eventPort);
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
   auto& waitScope = basicContext->waitScope;

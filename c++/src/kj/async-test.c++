@@ -1763,6 +1763,18 @@ KJ_TEST("fiber pool limit") {
   // likelihood that the new stack would be allocated in the same location.
 }
 
+struct DebugObserver: public kj::EventLoopObserver {
+  void onWaitStart() override {
+    events.add(kj::str("waitStart"));
+  }
+
+  void onWaitEnd() override {
+    events.add(kj::str("waitEnd"));
+  }
+
+  Vector<String> events;
+};
+
 #if __GNUC__ >= 12 && !__clang__
 // The test below intentionally takes a pointer to a stack variable and stores it past the end
 // of the function. This seems to trigger a warning in newer GCCs.
@@ -1802,7 +1814,8 @@ KJ_TEST("run event loop on freelisted stacks") {
   };
 
   MockEventPort port;
-  EventLoop loop(port);
+  DebugObserver observer;
+  EventLoop loop(port, observer);
   WaitScope waitScope(loop);
   waitScope.runEventCallbacksOnStackPool(pool);
 
@@ -1839,6 +1852,11 @@ KJ_TEST("run event loop on freelisted stacks") {
       KJ_EXPECT(notOnOurStack(port.waitStack));
     });
   }
+
+  KJ_EXPECT(2 == observer.events.size());
+  KJ_EXPECT("waitStart"_kj == observer.events[0]);
+  KJ_EXPECT("waitEnd"_kj == observer.events[1]);
+  observer.events.clear();
 
   port.waitStack = nullptr;
   port.pollStack = nullptr;
@@ -1878,8 +1896,10 @@ KJ_TEST("run event loop on freelisted stacks") {
       KJ_EXPECT(onOurStack(port.pollStack));
     });
   }
+
+  KJ_EXPECT(0 == observer.events.size());
 }
-#endif
+#endif // KJ_USE_FIBERS
 
 KJ_TEST("retryOnDisconnect") {
   EventLoop loop;
@@ -2028,6 +2048,21 @@ KJ_TEST("EventLoopLocal") {
   // Destroying the event loop destoys all locals, so these are no longer shared.
   KJ_EXPECT(!rc1->isShared());
   KJ_EXPECT(!rc2->isShared());
+}
+
+KJ_TEST("EventLoopObserver") {
+  DebugObserver observer;
+  EventLoop loop(observer);
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+  KJ_ASSERT(!paf.promise.poll(waitScope));
+  paf.fulfiller->fulfill();
+  KJ_ASSERT(paf.promise.poll(waitScope));
+  paf.promise.wait(waitScope);
+
+  // no actual call to wait() will happen
+  KJ_EXPECT(0 == observer.events.size());
 }
 
 }  // namespace

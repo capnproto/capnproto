@@ -1183,6 +1183,20 @@ public:
   // The default implementation throws an UNIMPLEMENTED exception.
 };
 
+class EventLoopObserver {
+public:
+  // Observer interface to receive callbacks on EventLoop operations.
+  EventLoopObserver() = default;
+
+  virtual void onWaitStart() {}
+  // EventPort's `wait()` method was called.
+
+  virtual void onWaitEnd() {}
+  // EventPort's `wait()` method has finished.
+
+  KJ_DISALLOW_COPY(EventLoopObserver);
+};
+
 class EventLoop {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
@@ -1216,10 +1230,10 @@ class EventLoop {
   // than allocate an `EventLoop` directly.
 
 public:
-  EventLoop();
+  EventLoop(kj::Maybe<EventLoopObserver&> observer = kj::none);
   // Construct an `EventLoop` which does not receive external events at all.
 
-  explicit EventLoop(EventPort& port);
+  explicit EventLoop(EventPort& port, kj::Maybe<EventLoopObserver&> observer = kj::none);
   // Construct an `EventLoop` which receives external events through the given `EventPort`.
 
   ~EventLoop() noexcept(false);
@@ -1249,6 +1263,8 @@ private:
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
   // events from other threads via the Executor.
+
+  kj::Maybe<EventLoopObserver&> observer;
 
   bool running = false;
   // True while looping -- wait() is then not allowed.
@@ -1285,6 +1301,7 @@ private:
 
   void wait();
   void poll();
+  void wake() const;
 
   static void* getLocal(const void* key, kj::Own<void>(*allocate)());
 
