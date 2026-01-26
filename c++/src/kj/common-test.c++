@@ -649,7 +649,7 @@ TEST(Common, MinMaxValue) {
   EXPECT_EQ(0, uint16_t(minValue));
   EXPECT_EQ(-0x80000000, int32_t(minValue));
   EXPECT_EQ(0, uint32_t(minValue));
-  EXPECT_EQ(-0x8000000000000000ll, int64_t(minValue));
+  EXPECT_EQ((int64_t)0x8000000000000000ll, int64_t(minValue));
   EXPECT_EQ(0, uint64_t(minValue));
 
   double f = inf();

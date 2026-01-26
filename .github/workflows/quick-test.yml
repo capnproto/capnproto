@@ -40,14 +40,50 @@ jobs:
       fail-fast: false
       matrix:
         clang: [18, 19, 20]
-        driver: [bazel-dbg, bazel-opt, super-test]
+        driver: [bazel-dbg, super-test]
         include:
           - driver: bazel-dbg
-            run-test: cd c++ && bazel test --config=dbg --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
-          - driver: bazel-opt
-            run-test: cd c++ && bazel test --config=opt --verbose_failures --test_output=errors -k --cxxopt='-Werror' //...
+            run-test: cd c++ && bazel test --config=ci --config=dbg //...
           - driver: super-test
             run-test: ./super-test.sh quick
+    steps:
+      - uses: actions/checkout@v5
+      - name: install dependencies
+        run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
+      - name: test
+        run: |
+            export CC=clang-${{ matrix.clang }}
+            export CXX=clang++-${{ matrix.clang }}
+            ${{ matrix.run-test }}
+  Linux-clang-opt:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: [20]
+        driver: [bazel-opt]
+        include:
+          - driver: bazel-opt
+            run-test: cd c++ && bazel test --config=ci --config=opt //...
+    steps:
+      - uses: actions/checkout@v5
+      - name: install dependencies
+        run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
+      - name: test
+        run: |
+            export CC=clang-${{ matrix.clang }}
+            export CXX=clang++-${{ matrix.clang }}
+            ${{ matrix.run-test }}
+  Linux-clang-arm64:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: [20]
+        driver: [bazel-dbg]
+        include:
+          - driver: bazel-dbg
+            run-test: cd c++ && bazel test --config=ci --config=dbg //...
     steps:
       - uses: actions/checkout@v5
       - name: install dependencies
@@ -72,7 +108,7 @@ jobs:
         run: |
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
-            cd c++ && bazel test --verbose_failures --test_output=errors -k --config=${{ matrix.config }} //...
+            cd c++ && bazel test --config=ci --config=${{ matrix.config }} //...
   MacOS:
     runs-on: macos-latest
     strategy:
@@ -133,4 +169,4 @@ jobs:
       - uses: actions/checkout@v5
       - name: test
         run: |
-            cd c++ && bazel test --verbose_failures --test_output=errors -k //...
+            cd c++ && bazel test --config=ci //...

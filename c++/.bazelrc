@@ -1,4 +1,5 @@
 common --enable_platform_specific_config
+common --verbose_failures
 
 # Needed for Brotli, which does not import rules_cc symbols itself (otherwise needed with Bazel 9)
 common --incompatible_autoload_externally=+cc_library,+cc_binary
@@ -25,7 +26,7 @@ build:thin-lto --dynamic_mode=off
 
 build:profile --config=thin-lto
 
-build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic --verbose_failures
+build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'
 build:unix --cxxopt='-Wunreachable-code'
@@ -64,7 +65,7 @@ startup --windows_enable_symlinks
 build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-clang-cl
 build:windows --extra_execution_platforms=//:x64_windows-clang-cl
 
-build:windows --cxxopt='/std:c++23preview' --host_cxxopt='/std:c++23preview' --verbose_failures
+build:windows --cxxopt='/std:c++23preview' --host_cxxopt='/std:c++23preview'
 # The `/std:c++23preview` argument is unused during boringssl compilation and we don't
 # want a warning when compiling each file.
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'
@@ -86,3 +87,9 @@ build:sanitizers-common --test_env=KJ_CLEAN_SHUTDOWN=1
 build:asan --config=sanitizers-common
 build:asan --copt="-fsanitize=address" --linkopt="-fsanitize=address"
 build:asan --test_env=ASAN_OPTIONS=abort_on_error=1
+
+
+# CI configuration
+common:ci -k
+build:ci --cxxopt='-Werror'
+test:ci --test_output=errors
