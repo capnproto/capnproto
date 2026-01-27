@@ -1,0 +1,18 @@
+---
+Checks: >
+  -clang-analyzer-core.CallAndMessage,
+  -clang-analyzer-core.NonNullParamChecker,
+  -clang-analyzer-core.NullDereference,
+  -clang-analyzer-core.StackAddressEscape,
+  -clang-analyzer-core.UndefinedBinaryOperatorResult,
+  -clang-analyzer-core.uninitialized.UndefReturn,
+  -clang-analyzer-cplusplus.Move,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  -clang-analyzer-deadcode.DeadStores,
+  -clang-analyzer-optin.core.EnumCastOutOfRange,
+  -clang-analyzer-optin.cplusplus.UninitializedObject,
+  -clang-analyzer-security.ArrayBound,
+  -clang-analyzer-security.insecureAPI.strcpy,
+  -clang-analyzer-unix.StdCLibraryFunctions,
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'

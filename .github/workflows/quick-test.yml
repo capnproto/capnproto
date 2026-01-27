@@ -18,7 +18,7 @@ env:
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
-      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang llvm-$clang
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang llvm-$clang clang-tidy-$clang parallel
     }
 
 jobs:
@@ -107,6 +107,23 @@ jobs:
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
             cd c++ && bazel test --config=ci --config=${{ matrix.config }} //...
+  clang-tidy:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: [20]
+    steps:
+      - uses: actions/checkout@v5
+      - name: install dependencies
+        run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
+      - name: clang-tidy
+        run: |
+            export CC=clang-${{ matrix.clang }}
+            export CXX=clang++-${{ matrix.clang }}
+            cd c++ 
+            bazel build --config=ci //...
+            find src/kj src/capnp -name "*.c++" ! -name "*-test.c++" | parallel clang-tidy-${{ matrix.clang }} {}
   MacOS:
     runs-on: macos-latest
     strategy:

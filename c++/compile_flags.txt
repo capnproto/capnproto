@@ -1,10 +1,11 @@
 -std=c++23
--Isrc
--Itmp
 -Ibazel-bin/src
+-Itmp
 -Ibazel-out/../../../external/boringssl+/include
+-Ibazel-out/../../../external/brotli+/c/include/
 -Ibazel-out/../../../external/codspeed_google_benchmark_compat+/include/
 -Ibazel-out/../../../external/zlib+/
+-Isrc
 -DKJ_HEADER_WARNINGS
 -DCAPNP_HEADER_WARNINGS
 -DCAPNP_DEBUG_TYPES
