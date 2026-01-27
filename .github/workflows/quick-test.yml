@@ -18,7 +18,7 @@ env:
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
-      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang llvm-$clang
     }
 
 jobs:
@@ -61,10 +61,6 @@ jobs:
       fail-fast: false
       matrix:
         clang: [20]
-        driver: [bazel-opt]
-        include:
-          - driver: bazel-opt
-            run-test: cd c++ && bazel test --config=ci --config=opt //...
     steps:
       - uses: actions/checkout@v5
       - name: install dependencies
@@ -73,7 +69,9 @@ jobs:
         run: |
             export CC=clang-${{ matrix.clang }}
             export CXX=clang++-${{ matrix.clang }}
-            ${{ matrix.run-test }}
+            export LD=lld-${{ matrix.clang }}
+            export AR=llvm-ar-${{ matrix.clang }}
+            cd c++ && bazel test --config=ci --config=opt //...
   Linux-clang-arm64:
     runs-on: ubuntu-24.04-arm
     strategy:

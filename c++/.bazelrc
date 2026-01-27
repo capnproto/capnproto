@@ -18,13 +18,13 @@ build:max-debug-info --copt='-mno-omit-leaf-frame-pointer'
 build:opt -c opt
 build:opt --copt='-O3'
 build:opt --linkopt="-Wl,-O3"
+build:opt --config=thin-lto
 
-build:thin-lto --config=opt
 build:thin-lto --cxxopt='-flto=thin'
 build:thin-lto --linkopt='-flto=thin'
 build:thin-lto --dynamic_mode=off
 
-build:profile --config=thin-lto
+build:profile --config=opt
 
 build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic
 build:unix --cxxopt='-Wall'
