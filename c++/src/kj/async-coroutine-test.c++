@@ -468,6 +468,45 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
       awaitPromise(kj::mv(rejectedThrowyDtorPromise)).wait(waitScope));
 }
 
+struct ThrowInDestructor {
+  ThrowInDestructor() {}
+  ThrowInDestructor(ThrowInDestructor&& other) { other.armed = false; }
+  // Make sure that after move only new instance throws.
+
+  ~ThrowInDestructor() noexcept(false) {
+    if (!armed) return;
+    unwindDetector.catchExceptionsIfUnwinding([]() {
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "~ThrowInDestructor()"));
+    });
+  }
+
+  bool armed = true;
+  UnwindDetector unwindDetector;
+};
+
+Promise<size_t> fortyTwo(ThrowInDestructor arg) {
+  co_return 42;
+}
+
+KJ_TEST("Exception thrown by parameter destructor rejects the promise") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto promise = fortyTwo(ThrowInDestructor());
+  KJ_EXPECT_THROW_MESSAGE("~ThrowInDestructor()", promise.wait(waitScope));
+}
+
+// TODO(mikea): this behavior is wrong, we want to ignore all exceptions during cancellation.
+KJ_TEST("Exception thrown by parameter destructor during cancellation rejects the promise") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      (void)fortyTwo(ThrowInDestructor());
+  }));
+  KJ_EXPECT(exception.getDescription() == "~ThrowInDestructor()");
+}
+
 #if !_MSC_VER && !__aarch64__
 // TODO(msvc): This test relies on GetFunctorStartAddress, which is not supported on MSVC currently,
 //   so skip the test. Note this is an ABI issue, so clang-cl is also not supported.
