@@ -35,6 +35,7 @@
 #include <intrin.h>  // _ReturnAddress
 #endif
 
+#include <kj/debug.h>
 #include <kj/list.h>
 
 KJ_BEGIN_HEADER
@@ -78,6 +79,8 @@ public:
   ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
   ExceptionOr(ExceptionOr&&) = default;
   ExceptionOr& operator=(ExceptionOr&&) = default;
+
+  inline bool isSet() const { return value != kj::none || exception != kj::none; }
 
   Maybe<T> value;
 };
@@ -2366,8 +2369,12 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
 
-  auto initial_suspend() { return stdcoro::suspend_never(); }
+  auto initial_suspend() {
+    KJ_DBG("initial_suspend", this);
+    return stdcoro::suspend_never();
+  }
   auto final_suspend() noexcept {
+    KJ_DBG("final_suspend", this);
 #if !defined(__clang__)
     // See comment at `finalSuspendCalled`'s definition.
     finalSuspendCalled = true;
@@ -2404,7 +2411,6 @@ protected:
 
   void unhandledExceptionImpl(ExceptionOrValue& resultRef);
 
-private:
   // -------------------------------------------------------
   // PromiseNode implementation
 
@@ -2515,13 +2521,13 @@ public:
 
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
-
+KJ_DBG("fulfill", this, isDone(), coroutine.done(), result.isSet());
     result = kj::mv(value);
+KJ_DBG("isSet", result.isSet());
     scheduleResumption();
   }
 
   void unhandled_exception() { unhandledExceptionImpl(result); }
-
 
   template <typename... Args>
   inline void* operator new(std::size_t frameSize, Args&&... args) {
@@ -2551,6 +2557,7 @@ private:
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<FixVoid<T>>() = kj::mv(result);
+KJ_DBG("get", this);
   }
 
   ExceptionOr<FixVoid<T>> result;

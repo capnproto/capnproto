@@ -3178,9 +3178,10 @@ void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
   // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
   // we're being destroyed, in which case we propagate it back to our disposer. Note that all
   // unhandled exceptions end up here, not just ones after the first co_await.
+KJ_DBG("unhandledExceptionImpl", this, maybeDisposalResults == kj::none, isDone(), coroutine.done());
 
   auto exception = getCaughtExceptionAsKj();
-  
+
   KJ_IF_SOME(disposalResults, maybeDisposalResults) {
     // Exception during coroutine destruction.
     if (!isDone()) {
@@ -3197,7 +3198,7 @@ void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
     if (!onReadyEvent.armed()) {
       // Exception during coroutine execution.
       onReadyEvent.arm();
-    } 
+    }
     // Otherwise this is an exception during during coroutine frame-unwind
     // in-between co_return and final_suspend().
   }
@@ -3268,14 +3269,19 @@ void CoroutineBase::destroy() {
     // On Clang, `disposalResults.exception != kj::none` implies `!disposalResults.destructorRan`.
     // We could optimize out the separate `destructorRan` flag if we verify that other compilers
     // behave the same way.
+KJ_DBG("before coroutine.destroy()");
     coroutine.destroy();
+KJ_DBG("after coroutine.destroy()");
   } while (!disposalResults.destructorRan);
+
+  KJ_DBG("coroutine.destroy done");
 
   // WARNING: `this` is now a dangling pointer.
 
   KJ_IF_SOME(exception, disposalResults.exception) {
+KJ_DBG(exception.getDescription(), UnwindDetector::uncaughtExceptionCount(), isDone());
     if (UnwindDetector::uncaughtExceptionCount() == 0) {
-      // Technically this does not equal the `UnwindDetector` logic, 
+      // Technically this does not equal the `UnwindDetector` logic,
       // but this behaviour will never lead to trouble, is almost always true on practice
       // (only coroutines _created_ during unwind could notice a difference in behaviour),
       // and, more importantly, much faster.

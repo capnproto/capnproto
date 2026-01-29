@@ -475,6 +475,7 @@ struct ThrowInDestructor {
 
   ~ThrowInDestructor() noexcept(false) {
     if (!armed) return;
+    KJ_DBG("~ThrowInDestructor");
     unwindDetector.catchExceptionsIfUnwinding([]() {
       kj::throwFatalException(KJ_EXCEPTION(FAILED, "~ThrowInDestructor()"));
     });
