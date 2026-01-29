@@ -70,6 +70,8 @@ build:windows --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows-cla
 build:windows --extra_execution_platforms=//:x64_windows-clang-cl
 
 build:windows --cxxopt='/std:c++23preview' --host_cxxopt='/std:c++23preview'
+# Enable proper C++ exceptions
+build:windows --cxxopt='/EHs' --host_cxxopt='/EHs'
 # The `/std:c++23preview` argument is unused during boringssl compilation and we don't
 # want a warning when compiling each file.
 build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-unused-command-line-argument'

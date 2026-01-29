@@ -11,7 +11,7 @@ include(CheckIncludeFileCXX)
 include(GNUInstallDirs)
 # <print> header was added in C++23
 if(MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++23preview")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++23preview /EHs")
   check_include_file_cxx(print HAS_CXX23)
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++23")
