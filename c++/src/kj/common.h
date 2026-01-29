@@ -1126,9 +1126,7 @@ public:
       noexcept(noexcept(instance<T&>().~T()))
 #endif
   {
-    if (isSet) {
-      dtor(value);
-    }
+    destroy();
   }
 
   inline T& operator*() & { return value; }
@@ -1142,10 +1140,7 @@ public:
 
   template <typename... Params>
   inline T& emplace(Params&&... params) {
-    if (isSet) {
-      isSet = false;
-      dtor(value);
-    }
+    destroy();
     ctor(value, kj::fwd<Params>(params)...);
     isSet = true;
     return value;
@@ -1190,10 +1185,7 @@ public:
   inline NullableValue& operator=(NullableValue&& other) {
     if (&other != this) {
       // Careful about throwing destructors/constructors here.
-      if (isSet) {
-        isSet = false;
-        dtor(value);
-      }
+      destroy();
       if (other.isSet) {
         ctor(value, kj::mv(other.value));
         isSet = true;
@@ -1205,10 +1197,7 @@ public:
   inline NullableValue& operator=(NullableValue& other) {
     if (&other != this) {
       // Careful about throwing destructors/constructors here.
-      if (isSet) {
-        isSet = false;
-        dtor(value);
-      }
+      destroy();
       if (other.isSet) {
         ctor(value, other.value);
         isSet = true;
@@ -1220,10 +1209,7 @@ public:
   inline NullableValue& operator=(const NullableValue& other) {
     if (&other != this) {
       // Careful about throwing destructors/constructors here.
-      if (isSet) {
-        isSet = false;
-        dtor(value);
-      }
+      destroy();
       if (other.isSet) {
         ctor(value, other.value);
         isSet = true;
@@ -1263,10 +1249,7 @@ public:
     return *this;
   }
   inline NullableValue& operator=(decltype(nullptr)) {
-    if (isSet) {
-      isSet = false;
-      dtor(value);
-    }
+    destroy();
     return *this;
   }
 
@@ -1278,6 +1261,14 @@ public:
   // nullness. This turned out never to be useful, and sometimes to be dangerous.
 
 private:
+  KJ_ALWAYS_INLINE(void destroy()) {
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.Branch) - clang-tidy is confused
+    if (isSet) {
+      isSet = false;
+      dtor(value);
+    }
+  };
+
   bool isSet;
 
 #if _MSC_VER && !defined(__clang__)

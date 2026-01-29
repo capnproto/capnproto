@@ -3180,7 +3180,7 @@ void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
   // unhandled exceptions end up here, not just ones after the first co_await.
 
   auto exception = getCaughtExceptionAsKj();
-
+  
   KJ_IF_SOME(disposalResults, maybeDisposalResults) {
     // Exception during coroutine destruction.
     if (!isDone()) {
