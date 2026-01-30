@@ -108,7 +108,7 @@ KJ_TEST("DebugAllocator") {
   DebugCoroutineAllocator allocator;
   auto promise = immediateCoroutine(allocator);
   KJ_EXPECT(promise.wait(waitScope) == 42);
-  
+
   KJ_EXPECT(allocator.totalAllocCount == 1);
   KJ_EXPECT(allocator.totalAllocSize > 0);
   KJ_EXPECT(allocator.totalFreeCount == 1);
@@ -141,7 +141,7 @@ KJ_TEST("Coroutine Frame sizes") {
   // We intentionally keep the upper bound open to detect when production compiler deviates.
   #define KJ_EXPECT_CORO_SIZE(...) KJ_EXPECT(__VA_ARGS__)
 #else
-  #define KJ_EXPECT_CORO_SIZE(...) 
+  #define KJ_EXPECT_CORO_SIZE(...)
 #endif
 
   kj::EventLoop loop;
@@ -158,14 +158,14 @@ KJ_TEST("Coroutine Frame sizes") {
     DebugCoroutineAllocator allocator;
     auto promise = coroFib(allocator, 10);
     KJ_EXPECT(allocator.totalAllocCount == 1);
-    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 336);
+    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 328);
   }
 
   {
     DebugCoroutineAllocator allocator;
     auto promise = coroFib10(allocator, 10);
     KJ_EXPECT(allocator.totalAllocCount == 1);
-    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 920);
+    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 912);
   }
 }
 

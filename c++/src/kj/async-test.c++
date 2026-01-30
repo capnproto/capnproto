@@ -2352,7 +2352,7 @@ KJ_TEST("Event arm methods - breadth-first chaining arms at back") {
   KJ_EXPECT(log[2] == "C");
 }
 
-KJ_TEST("Event arm methods - depthFirstInsertPoint resets after turn") {
+KJ_TEST("Event arm methods - depth-first queue readded after turn") {
   EventLoop loop;
   WaitScope waitScope(loop);
   Vector<StringPtr> log;
@@ -2597,7 +2597,7 @@ KJ_TEST("Event arm methods - nested depth-first from breadth-first") {
   KJ_EXPECT(log[3] == "D");
 }
 
-KJ_TEST("Event arm methods - insertion point updates with disarm at depthFirstInsertPoint") {
+KJ_TEST("Event arm methods - depth-first queue updates with disarm") {
   EventLoop loop;
   WaitScope waitScope(loop);
   Vector<StringPtr> log;
@@ -2672,7 +2672,7 @@ KJ_TEST("Event arm methods - insertion point updates with disarm at tail") {
   KJ_EXPECT(log[1] == "C");
 }
 
-KJ_TEST("Event arm methods - turn resets depthFirstInsertPoint") {
+KJ_TEST("Event arm methods - turn readds depth-first queue") {
   EventLoop loop;
   WaitScope waitScope(loop);
   Vector<StringPtr> log;

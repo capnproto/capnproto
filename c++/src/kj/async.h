@@ -1193,7 +1193,6 @@ class Event: private AsyncObject {
 
 public:
   Event(SourceLocation location);
-  Event(kj::EventLoop& loop, SourceLocation location);
   ~Event() noexcept;
   KJ_DISALLOW_COPY_AND_MOVE(Event);
 
@@ -1258,9 +1257,28 @@ protected:
 
 private:
   friend class kj::EventLoop;
-  EventLoop& loop;
+  kj::EventLoop& requireEventLoop();
+
+  inline void unlink() {
+    *prev = next;
+    next->prev = prev;
+    next = nullptr;
+    prev = nullptr;
+  }
+
+  inline void insertBefore(Event& other) {
+    // Insert this event before 'other' in the list.
+    prev = other.prev;
+    *prev = this;
+    next = &other;
+    other.prev = &next;
+  }
+
+  inline void insertAfter(Event& other) { insertBefore(*other.next); }
+
   Event* next;
   Event** prev;
+
   bool firing = false;
 
   static constexpr uint MAGIC_LIVE_VALUE = 0x1e366381u;
@@ -1347,6 +1365,31 @@ public:
   // WaitScope still must exist, i.e., this EventLoop must be current.)
 
 private:
+  inline _::Event* head() const {
+    _::Event* event = headSentinel.next;
+    if (event == &depthFirstInsertPoint) {
+      event = event->next;
+    }
+    if (event == &breadthFirstInsertPoint) {
+      event = event->next;
+    }
+    return event;
+  }
+
+  class Sentinel final: public _::Event {
+    // Sentinel node for event queues. These nodes are never removed, allowing branchless
+    // list operations on normal event nodes.
+  public:
+    Sentinel(): _::Event({}) {};
+    ~Sentinel() {
+      // prevent `disarm` in ~Event from doing anything
+      prev = nullptr;
+    }
+
+    Maybe<Own<_::Event>> fire() override { KJ_UNREACHABLE; }
+    void traceEvent(_::TraceBuilder& builder) override { KJ_UNREACHABLE; }
+  };
+
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
   // events from other threads via the Executor.
@@ -1359,14 +1402,21 @@ private:
   bool lastRunnableState = false;
   // What did we last pass to port.setRunnable()?
 
-  _::Event* head = nullptr;
-  _::Event** tail = &head;
-  _::Event** depthFirstInsertPoint = &head;
-  _::Event** breadthFirstInsertPoint = &head;
+  Sentinel headSentinel;
+  Sentinel tailSentinel;
   // Main event queue.
 
-  _::Event* wouldSleepHead = nullptr;
-  _::Event** wouldSleepTail = &wouldSleepHead;
+  Sentinel depthFirstInsertPoint;
+  // Part of the main queue. Moved to the head of the queue on every loop turn.
+  // `armDepthFirst` inserts events right before `depthFirstInsertPoint`.
+
+  Sentinel breadthFirstInsertPoint;
+  // Part of the main queue, doesn't move.
+  // `armBreadthFirst` inserts events right before `breadthFirstInsertPoint`.
+  // `armLast` inserts events right after `breadthFirstInsertPoint`.
+
+  Sentinel wouldSleepTail;
+  Sentinel wouldSleepHead;
   // A totally separate list of events to run if we get to the point where we otherwise would
   // sleep. (See yieldUntilWouldSleep().)
 
@@ -1381,6 +1431,7 @@ private:
 
   _::Event* currentlyFiring = nullptr;
 
+  void resetDepthFirstQueue();
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
