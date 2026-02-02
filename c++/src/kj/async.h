@@ -961,7 +961,6 @@ class TaskSet: private AsyncObject {
 public:
   class ErrorHandler {
   public:
-    virtual ~ErrorHandler() noexcept(false) = default;
     virtual void taskFailed(kj::Exception&& exception) = 0;
   };
 
