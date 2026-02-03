@@ -54,3 +54,58 @@ jobs:
         with:
           run: ./c++/run_benchmarks.sh
           mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          run: ./c++/run_benchmarks.sh
+          mode: simulation
+
