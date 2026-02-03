@@ -4,6 +4,8 @@ common --verbose_failures
 # Needed for Brotli, which does not import rules_cc symbols itself (otherwise needed with Bazel 9)
 common --incompatible_autoload_externally=+cc_library,+cc_binary
 
+test --test_timeout=1,5,30,30
+
 # Debug build configuration with maximum runtime checks
 build:dbg -c dbg
 build:dbg --config=max-debug-info
@@ -19,7 +21,7 @@ build:opt -c opt
 build:opt --copt='-O3'
 build:opt --linkopt="-Wl,-O3"
 build:opt --config=thin-lto
-# Test coroutine frame sizes in opt build. 
+# Test coroutine frame sizes in opt build.
 # This won't propagate to projects downstream and cause unnecessary breakage because of different
 # configuration
 build:opt --per_file_copt=src/kj/async-coroutine-alloc-test.c++@-DKJ_ASYNC_COROUTINE_ALLOC_TEST_ASSERT_FRAME_SIZE=1

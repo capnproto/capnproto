@@ -136,6 +136,7 @@ kj_tls_tests = [
         ":kj-tls",
         "//src/kj:kj-test",
     ],
+    size = "large",
 ) for f in kj_tls_tests]
 
 cc_test(

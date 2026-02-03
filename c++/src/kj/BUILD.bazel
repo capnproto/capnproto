@@ -162,7 +162,6 @@ cc_library(
     "array-test.c++",
     "async-io-test.c++",
     "async-queue-test.c++",
-    "async-test.c++",
     "async-xthread-test.c++",
     "common-test.c++",
     "debug-test.c++",
@@ -182,7 +181,6 @@ cc_library(
     "std/iostream-test.c++",
     "string-test.c++",
     "string-tree-test.c++",
-    "table-test.c++",
     "test-test.c++",
     "glob-filter-test.c++",
     "thread-test.c++",
@@ -298,4 +296,22 @@ cc_test(
         ":kj-async",
         "@google_benchmark//:benchmark",
     ],
+    size = "large",
+)
+
+cc_test(
+    name = "table-test",
+    srcs = ["table-test.c++"],
+    deps = [ ":kj-test" ],
+    size = "large",
+)
+
+cc_test(
+    name = "async-test",
+    srcs = ["async-test.c++"],
+    deps = [
+        ":kj-test",
+        ":kj-async",
+    ],
+    size = "large",
 )
