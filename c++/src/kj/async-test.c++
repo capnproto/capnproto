@@ -2065,5 +2065,667 @@ KJ_TEST("EventLoopObserver") {
   KJ_EXPECT(0 == observer.events.size());
 }
 
+class RecordingEvent: public _::Event {
+  // Record event name in shared log on fire()
+
+public:
+  RecordingEvent(Vector<StringPtr>& log, StringPtr name)
+      : Event({}), log(log), name(name) {}
+
+protected:
+  Maybe<Own<Event>> fire() override {
+    log.add(name);
+    return kj::none;
+  }
+
+  void traceEvent(_::TraceBuilder& builder) override {}
+
+private:
+  Vector<StringPtr>& log;
+  StringPtr name;
+};
+
+KJ_TEST("Event arm methods - single event each type") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  {
+    RecordingEvent e(log, "depth");
+    e.armDepthFirst();
+    waitScope.poll();
+    KJ_EXPECT(log.size() == 1);
+    KJ_EXPECT(log[0] == "depth");
+  }
+
+  log.clear();
+  {
+    RecordingEvent e(log, "breadth");
+    e.armBreadthFirst();
+    waitScope.poll();
+    KJ_EXPECT(log.size() == 1);
+    KJ_EXPECT(log[0] == "breadth");
+  }
+
+  log.clear();
+  {
+    RecordingEvent e(log, "last");
+    e.armLast();
+    waitScope.poll();
+    KJ_EXPECT(log.size() == 1);
+    KJ_EXPECT(log[0] == "last");
+  }
+}
+
+KJ_TEST("Event arm methods - depth-first ordering") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  c.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+}
+
+KJ_TEST("Event arm methods - breadth-first ordering") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armBreadthFirst();
+  b.armBreadthFirst();
+  c.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+}
+
+KJ_TEST("Event arm methods - armLast ordering") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armLast();
+  b.armLast();
+  c.armLast();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "C");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "A");
+}
+
+KJ_TEST("Event arm methods - depth before breadth") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A-breadth");
+  RecordingEvent b(log, "B-depth");
+  RecordingEvent c(log, "C-breadth");
+  RecordingEvent d(log, "D-depth");
+
+  a.armBreadthFirst();
+  b.armDepthFirst();
+  c.armBreadthFirst();
+  d.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[0] == "B-depth");
+  KJ_EXPECT(log[1] == "D-depth");
+  KJ_EXPECT(log[2] == "A-breadth");
+  KJ_EXPECT(log[3] == "C-breadth");
+}
+
+KJ_TEST("Event arm methods - armLast goes after breadth") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A-breadth");
+  RecordingEvent b(log, "B-last");
+  RecordingEvent c(log, "C-breadth");
+
+  a.armBreadthFirst();
+  b.armLast();
+  c.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A-breadth");
+  KJ_EXPECT(log[1] == "C-breadth");
+  KJ_EXPECT(log[2] == "B-last");
+}
+
+KJ_TEST("Event arm methods - multiple armLast preserve order relative to each other") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A-breadth");
+  RecordingEvent b(log, "B-last");
+  RecordingEvent c(log, "C-last");
+  RecordingEvent d(log, "D-breadth");
+
+  a.armBreadthFirst();
+  b.armLast();
+  c.armLast();
+  d.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[0] == "A-breadth");
+  KJ_EXPECT(log[1] == "D-breadth");
+  KJ_EXPECT(log[2] == "C-last");
+  KJ_EXPECT(log[3] == "B-last");
+}
+
+KJ_TEST("Event arm methods - depth, breadth, and last mixed") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A-breadth");
+  RecordingEvent b(log, "B-depth");
+  RecordingEvent c(log, "C-last");
+  RecordingEvent d(log, "D-depth");
+  RecordingEvent e(log, "E-breadth");
+  RecordingEvent f(log, "F-last");
+
+  a.armBreadthFirst();
+  b.armDepthFirst();
+  c.armLast();
+  d.armDepthFirst();
+  e.armBreadthFirst();
+  f.armLast();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 6);
+  KJ_EXPECT(log[0] == "B-depth");
+  KJ_EXPECT(log[1] == "D-depth");
+  KJ_EXPECT(log[2] == "A-breadth");
+  KJ_EXPECT(log[3] == "E-breadth");
+  KJ_EXPECT(log[4] == "F-last");
+  KJ_EXPECT(log[5] == "C-last");
+}
+
+class ChainEvent: public _::Event {
+public:
+  enum class ArmMethod { DEPTH, BREADTH, LAST };
+
+  ChainEvent(Vector<StringPtr>& log, StringPtr name,
+             std::initializer_list<ChainEvent*> toArm = {},
+             ArmMethod armMethod = ArmMethod::DEPTH)
+      : Event({}), log(log), name(name),
+        toArm(kj::heapArray<ChainEvent*>(toArm.begin(), toArm.size())),
+        armMethod(armMethod) {}
+
+protected:
+  Maybe<Own<Event>> fire() override {
+    log.add(name);
+    for (auto* e : toArm) {
+      switch (armMethod) {
+        case ArmMethod::DEPTH: e->armDepthFirst(); break;
+        case ArmMethod::BREADTH: e->armBreadthFirst(); break;
+        case ArmMethod::LAST: e->armLast(); break;
+      }
+    }
+    return kj::none;
+  }
+
+  void traceEvent(_::TraceBuilder& builder) override {}
+
+private:
+  Vector<StringPtr>& log;
+  StringPtr name;
+  kj::Array<ChainEvent*> toArm;
+  ArmMethod armMethod;
+};
+
+KJ_TEST("Event arm methods - depth-first chaining arms at front") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent c(log, "C");
+  ChainEvent a(log, "A", {&c}, ChainEvent::ArmMethod::DEPTH);
+  ChainEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "C");
+  KJ_EXPECT(log[2] == "B");
+}
+
+KJ_TEST("Event arm methods - breadth-first chaining arms at back") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent c(log, "C");
+  ChainEvent a(log, "A", {&c}, ChainEvent::ArmMethod::BREADTH);
+  ChainEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+}
+
+KJ_TEST("Event arm methods - depthFirstInsertPoint resets after turn") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent d(log, "D");
+  ChainEvent c(log, "C", {&d}, ChainEvent::ArmMethod::DEPTH);
+  ChainEvent b(log, "B", {&c}, ChainEvent::ArmMethod::DEPTH);
+  ChainEvent a(log, "A", {&b}, ChainEvent::ArmMethod::DEPTH);
+
+  a.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+  KJ_EXPECT(log[3] == "D");
+}
+
+KJ_TEST("Event arm methods - chaining multiple events depth-first") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent c(log, "C");
+  ChainEvent d(log, "D");
+  ChainEvent a(log, "A", {&c, &d}, ChainEvent::ArmMethod::DEPTH);
+  ChainEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "C");
+  KJ_EXPECT(log[2] == "D");
+  KJ_EXPECT(log[3] == "B");
+}
+
+KJ_TEST("Event arm methods - chaining multiple events breadth-first") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent c(log, "C");
+  ChainEvent d(log, "D");
+  ChainEvent a(log, "A", {&c, &d}, ChainEvent::ArmMethod::BREADTH);
+  ChainEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+  KJ_EXPECT(log[3] == "D");
+}
+
+KJ_TEST("Event arm methods - armLast chaining preserves last position") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent c(log, "C");
+  ChainEvent a(log, "A", {&c}, ChainEvent::ArmMethod::LAST);
+  ChainEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+}
+
+KJ_TEST("Event arm methods - disarm removes event from queue") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  c.armDepthFirst();
+
+  b.disarm();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 2);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "C");
+}
+
+KJ_TEST("Event arm methods - disarm first event") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  c.armDepthFirst();
+
+  a.disarm();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 2);
+  KJ_EXPECT(log[0] == "B");
+  KJ_EXPECT(log[1] == "C");
+}
+
+KJ_TEST("Event arm methods - disarm last event") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  c.armDepthFirst();
+
+  c.disarm();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 2);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+}
+
+KJ_TEST("Event arm methods - disarm and rearm") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+
+  a.disarm();
+  a.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 2);
+  KJ_EXPECT(log[0] == "B");
+  KJ_EXPECT(log[1] == "A");
+}
+
+KJ_TEST("Event arm methods - arming already armed event is no-op") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  a.armBreadthFirst();
+  a.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 2);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "B");
+}
+
+KJ_TEST("Event arm methods - complex interleaving") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+  RecordingEvent d(log, "D");
+  RecordingEvent e(log, "E");
+  RecordingEvent f(log, "F");
+
+  a.armBreadthFirst();
+  b.armDepthFirst();
+  c.armLast();
+  d.armBreadthFirst();
+  e.armDepthFirst();
+  f.armLast();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 6);
+  KJ_EXPECT(log[0] == "B");
+  KJ_EXPECT(log[1] == "E");
+  KJ_EXPECT(log[2] == "A");
+  KJ_EXPECT(log[3] == "D");
+  KJ_EXPECT(log[4] == "F");
+  KJ_EXPECT(log[5] == "C");
+}
+
+KJ_TEST("Event arm methods - nested depth-first from breadth-first") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  ChainEvent c(log, "C");
+  ChainEvent a(log, "A", {&c}, ChainEvent::ArmMethod::DEPTH);
+  ChainEvent b(log, "B");
+  ChainEvent d(log, "D");
+
+  a.armBreadthFirst();
+  b.armBreadthFirst();
+  d.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "C");
+  KJ_EXPECT(log[2] == "B");
+  KJ_EXPECT(log[3] == "D");
+}
+
+KJ_TEST("Event arm methods - insertion point updates with disarm at depthFirstInsertPoint") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  c.armBreadthFirst();
+
+  b.disarm();
+
+  RecordingEvent d(log, "D");
+  d.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "D");
+  KJ_EXPECT(log[2] == "C");
+}
+
+KJ_TEST("Event arm methods - insertion point updates with disarm at breadthFirstInsertPoint") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armBreadthFirst();
+  b.armBreadthFirst();
+  c.armLast();
+
+  b.disarm();
+
+  RecordingEvent d(log, "D");
+  d.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "D");
+  KJ_EXPECT(log[2] == "C");
+}
+
+KJ_TEST("Event arm methods - insertion point updates with disarm at tail") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+
+  a.armBreadthFirst();
+  b.armBreadthFirst();
+
+  b.disarm();
+
+  RecordingEvent c(log, "C");
+  c.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 2);
+  KJ_EXPECT(log[0] == "A");
+  KJ_EXPECT(log[1] == "C");
+}
+
+KJ_TEST("Event arm methods - turn resets depthFirstInsertPoint") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+  RecordingEvent c(log, "C");
+
+  a.armDepthFirst();
+  b.armDepthFirst();
+  c.armBreadthFirst();
+
+  waitScope.poll(1);
+
+  KJ_ASSERT(log.size() == 1);
+  KJ_EXPECT(log[0] == "A");
+
+  RecordingEvent d(log, "D");
+  d.armDepthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 4);
+  KJ_EXPECT(log[1] == "D");
+  KJ_EXPECT(log[2] == "B");
+  KJ_EXPECT(log[3] == "C");
+}
+
+KJ_TEST("Event arm methods - breadthFirstInsertPoint tracks correctly when head removed") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  Vector<StringPtr> log;
+
+  RecordingEvent a(log, "A");
+  RecordingEvent b(log, "B");
+
+  a.armBreadthFirst();
+  b.armBreadthFirst();
+
+  waitScope.poll(1);
+
+  KJ_ASSERT(log.size() == 1);
+  KJ_EXPECT(log[0] == "A");
+
+  RecordingEvent c(log, "C");
+  c.armBreadthFirst();
+
+  waitScope.poll();
+
+  KJ_ASSERT(log.size() == 3);
+  KJ_EXPECT(log[1] == "B");
+  KJ_EXPECT(log[2] == "C");
+}
+
 }  // namespace
 }  // namespace kj
