@@ -474,6 +474,11 @@ template <typename T> struct IsLvalueReference_<T&> { static constexpr bool valu
 template <typename T>
 inline constexpr bool isLvalueReference() { return IsLvalueReference_<T>::value; }
 
+template <typename> struct IsRvalueReference_ { static constexpr bool value = false; };
+template <typename T> struct IsRvalueReference_<T&&> { static constexpr bool value = true; };
+template <typename T>
+inline constexpr bool isRvalueReference() { return IsRvalueReference_<T>::value; }
+
 template <typename T> struct Decay_ { typedef T Type; };
 template <typename T> struct Decay_<T&> { typedef typename Decay_<T>::Type Type; };
 template <typename T> struct Decay_<T&&> { typedef typename Decay_<T>::Type Type; };

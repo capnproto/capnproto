@@ -346,6 +346,22 @@ template <typename T> struct OneOfStorage_ { using Type = T; };
 template <typename T> struct OneOfStorage_<T&> { using Type = T*; };
 template <typename T> using OneOfStorage = typename OneOfStorage_<T>::Type;
 
+// Check if a variant list contains both T and T& for any T (which would be ambiguous)
+template <typename...> struct HasRefAndValueOfSameType_ { static constexpr bool value = false; };
+template <typename First, typename... Rest>
+struct HasRefAndValueOfSameType_<First, Rest...> {
+  // Check if First is T& and there's a T in Rest, or if First is T and there's a T& in Rest
+  static constexpr bool firstIsRefWithValue =
+      IsLvalueReference_<First>::value &&
+      (isSameType<Decay<First>, Rest>() || ...);
+  static constexpr bool firstIsValueWithRef =
+      !IsLvalueReference_<First>::value &&
+      ((isSameType<First&, Rest>()) || ...);
+  static constexpr bool value =
+      firstIsRefWithValue || firstIsValueWithRef ||
+      HasRefAndValueOfSameType_<Rest...>::value;
+};
+
 // Check if all variants are copyable (references count as copyable since we copy the pointer)
 template <typename T>
 constexpr bool isOneOfVariantCopyable() {
@@ -369,6 +385,14 @@ constexpr bool isOneOfVariantMovable() {
 
 template <typename... Variants>
 class OneOf {
+  // Disallow rvalue reference variants - they don't make sense as stored types
+  static_assert((!isRvalueReference<Variants>() && ...),
+      "OneOf does not support rvalue reference variants (T&&). Use T or T& instead.");
+
+  // Disallow having both T and T& as variants - would be ambiguous
+  static_assert(!_::HasRefAndValueOfSameType_<Variants...>::value,
+      "OneOf cannot have both T and T& as variants for the same type T.");
+
   template <typename Key>
   static inline constexpr uint typeIndex() {
     return _::TypeIndex_<1, _::OneOfFailError_, Key, Variants...>::value;

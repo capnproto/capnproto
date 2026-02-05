@@ -337,23 +337,8 @@ KJ_TEST("OneOf implicit construction from reference") {
   KJ_EXPECT(value == 100);
 }
 
-KJ_TEST("OneOf with both T and T& prefers value") {
-  int value = 42;
-
-  // When both T and T& are variants, implicit construction from lvalue prefers T (copy)
-  OneOf<int, int&> var = value;
-  KJ_EXPECT(var.is<int>());  // Should be value, not reference
-  KJ_EXPECT(var.get<int>() == 42);
-
-  // Modifying var doesn't affect original
-  var.get<int>() = 100;
-  KJ_EXPECT(value == 42);
-
-  // Explicit init<T&> can still be used to get reference
-  var.init<int&>(value);
-  KJ_EXPECT(var.is<int&>());
-  KJ_EXPECT(&var.get<int&>() == &value);
-}
+// NOTE: OneOf<T, T&> is now disallowed (would be ambiguous), so no test for it.
+// If you need both reference and value semantics, use Maybe<T&> or a wrapper type.
 
 KJ_TEST("OneOf reference in switch") {
   int value = 42;
@@ -467,5 +452,25 @@ static_assert(std::is_move_constructible_v<OneOf<int&, float>>,
 // Even with immobile types, if there's a reference variant, the reference itself is copyable
 static_assert(std::is_copy_constructible_v<OneOf<Immobile&, int>>,
     "OneOf with reference to immobile should be copyable");
+
+// Verify restrictions: can't have both T and T& (would trigger static_assert, so we test the trait)
+static_assert(_::HasRefAndValueOfSameType_<int, int&>::value,
+    "Should detect T and T& conflict");
+static_assert(_::HasRefAndValueOfSameType_<int&, int>::value,
+    "Should detect T& and T conflict");
+static_assert(!_::HasRefAndValueOfSameType_<int, float&>::value,
+    "Different types should not conflict");
+static_assert(!_::HasRefAndValueOfSameType_<int, float>::value,
+    "Value types only should not conflict");
+static_assert(!_::HasRefAndValueOfSameType_<int&, float&>::value,
+    "Reference types only should not conflict");
+
+// Verify rvalue reference detection (isRvalueReference is in kj namespace, not _)
+static_assert(isRvalueReference<int&&>(),
+    "Should detect rvalue reference");
+static_assert(!isRvalueReference<int&>(),
+    "Should not flag lvalue reference as rvalue");
+static_assert(!isRvalueReference<int>(),
+    "Should not flag value as rvalue reference");
 
 }  // namespace kj
