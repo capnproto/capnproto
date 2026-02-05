@@ -22,6 +22,7 @@
 #include "one-of.h"
 #include "string.h"
 #include <kj/compat/gtest.h>
+#include <type_traits>
 
 namespace kj {
 
@@ -279,5 +280,192 @@ TEST(OneOf, MaxVariants) {
   v = T<50>();
   EXPECT_TRUE(v.is<T<50>>());
 }
+
+KJ_TEST("OneOf with reference variant") {
+  int value = 42;
+  // Use int& with a copyable type (float) to test copy/move semantics
+  OneOf<int&, float> var;
+
+  // Test init<T&>()
+  var.init<int&>(value);
+  KJ_EXPECT(var.is<int&>());
+  KJ_EXPECT(var.get<int&>() == 42);
+
+  // Verify it's really a reference (modifying through the reference changes original)
+  var.get<int&>() = 100;
+  KJ_EXPECT(value == 100);
+
+  // Test tryGet
+  KJ_IF_SOME(ref, var.tryGet<int&>()) {
+    KJ_EXPECT(ref == 100);
+    ref = 200;
+  }
+  KJ_EXPECT(value == 200);
+
+  // Reset for further tests
+  value = 42;
+  var.init<int&>(value);
+
+  // Test copy (copies pointer, both point to same object)
+  auto copy = var;
+  KJ_EXPECT(copy.is<int&>());
+  KJ_EXPECT(&copy.get<int&>() == &value);
+
+  // Modifying through copy affects original value
+  copy.get<int&>() = 300;
+  KJ_EXPECT(value == 300);
+
+  // Test move (copies pointer, nullifies source)
+  value = 42;
+  var.init<int&>(value);
+  auto moved = kj::mv(var);
+  KJ_EXPECT(moved.is<int&>());
+  KJ_EXPECT(moved.get<int&>() == 42);
+  KJ_EXPECT(var == nullptr);  // Source is now empty after move
+}
+
+KJ_TEST("OneOf implicit construction from reference") {
+  int value = 42;
+
+  // When only T& is a variant (not T), implicit construction should work
+  OneOf<int&, float> var = value;
+  KJ_EXPECT(var.is<int&>());
+  KJ_EXPECT(&var.get<int&>() == &value);
+
+  // Modifying through var affects original
+  var.get<int&>() = 100;
+  KJ_EXPECT(value == 100);
+}
+
+KJ_TEST("OneOf with both T and T& prefers value") {
+  int value = 42;
+
+  // When both T and T& are variants, implicit construction from lvalue prefers T (copy)
+  OneOf<int, int&> var = value;
+  KJ_EXPECT(var.is<int>());  // Should be value, not reference
+  KJ_EXPECT(var.get<int>() == 42);
+
+  // Modifying var doesn't affect original
+  var.get<int>() = 100;
+  KJ_EXPECT(value == 42);
+
+  // Explicit init<T&> can still be used to get reference
+  var.init<int&>(value);
+  KJ_EXPECT(var.is<int&>());
+  KJ_EXPECT(&var.get<int&>() == &value);
+}
+
+KJ_TEST("OneOf reference in switch") {
+  int value = 42;
+  OneOf<int&, float, const char*> var;
+  var.init<int&>(value);
+
+  KJ_SWITCH_ONEOF(var) {
+    KJ_CASE_ONEOF(i, int&) {
+      KJ_EXPECT(i == 42);
+      KJ_EXPECT(&i == &value);
+      i = 100;
+    }
+    KJ_CASE_ONEOF(f, float) {
+      KJ_FAIL_EXPECT("expected int&, got float");
+    }
+    KJ_CASE_ONEOF(s, const char*) {
+      KJ_FAIL_EXPECT("expected int&, got const char*");
+    }
+  }
+
+  KJ_EXPECT(value == 100);
+}
+
+KJ_TEST("OneOf reference subset construction") {
+  int value = 42;
+  OneOf<int&> src;
+  src.init<int&>(value);
+
+  // Copy from subset
+  OneOf<int&, float> dst = src;
+  KJ_EXPECT(dst.is<int&>());
+  KJ_EXPECT(&dst.get<int&>() == &value);
+
+  // Move from subset
+  src.init<int&>(value);
+  OneOf<int&, float, const char*> dst2 = kj::mv(src);
+  KJ_EXPECT(dst2.is<int&>());
+  KJ_EXPECT(&dst2.get<int&>() == &value);
+  KJ_EXPECT(src == nullptr);  // Source nullified after move
+}
+
+// Test immobile types
+struct Immobile {
+  int value;
+  KJ_DISALLOW_COPY_AND_MOVE(Immobile);
+  explicit Immobile(int v): value(v) {}
+};
+
+KJ_TEST("OneOf with immobile type") {
+  OneOf<Immobile, int> var;
+
+  // Can use init() to construct in-place
+  var.init<Immobile>(42);
+  KJ_EXPECT(var.is<Immobile>());
+  KJ_EXPECT(var.get<Immobile>().value == 42);
+
+  // Can switch to a different variant
+  var.init<int>(123);
+  KJ_EXPECT(var.is<int>());
+  KJ_EXPECT(var.get<int>() == 123);
+
+  // Can switch back
+  var.init<Immobile>(999);
+  KJ_EXPECT(var.get<Immobile>().value == 999);
+}
+
+// Compile-time checks for copy/move availability
+static_assert(!std::is_copy_constructible_v<OneOf<Immobile, int>>,
+    "OneOf with immobile type should not be copyable");
+static_assert(!std::is_move_constructible_v<OneOf<Immobile, int>>,
+    "OneOf with immobile type should not be movable");
+static_assert(!std::is_copy_assignable_v<OneOf<Immobile, int>>,
+    "OneOf with immobile type should not be copy-assignable");
+static_assert(!std::is_move_assignable_v<OneOf<Immobile, int>>,
+    "OneOf with immobile type should not be move-assignable");
+
+// Move-only type
+struct MoveOnly {
+  int value;
+  KJ_DISALLOW_COPY(MoveOnly);
+  MoveOnly(int v): value(v) {}
+  MoveOnly(MoveOnly&& other): value(other.value) { other.value = -1; }
+  MoveOnly& operator=(MoveOnly&& other) { value = other.value; other.value = -1; return *this; }
+};
+
+static_assert(!std::is_copy_constructible_v<OneOf<MoveOnly, int>>,
+    "OneOf with move-only type should not be copyable");
+static_assert(std::is_move_constructible_v<OneOf<MoveOnly, int>>,
+    "OneOf with move-only type should be movable");
+
+KJ_TEST("OneOf with move-only type") {
+  OneOf<MoveOnly, int> var;
+  var.init<MoveOnly>(42);
+  KJ_EXPECT(var.is<MoveOnly>());
+  KJ_EXPECT(var.get<MoveOnly>().value == 42);
+
+  // Move construction works
+  auto moved = kj::mv(var);
+  KJ_EXPECT(moved.is<MoveOnly>());
+  KJ_EXPECT(moved.get<MoveOnly>().value == 42);
+  KJ_EXPECT(var.is<MoveOnly>());  // Still has the type, but value was moved
+  KJ_EXPECT(var.get<MoveOnly>().value == -1);  // Moved-from state
+}
+
+// Reference variants are always copyable (copy the pointer)
+static_assert(std::is_copy_constructible_v<OneOf<int&, float>>,
+    "OneOf with reference variant should be copyable");
+static_assert(std::is_move_constructible_v<OneOf<int&, float>>,
+    "OneOf with reference variant should be movable");
+
+// Even with immobile types, if there's a reference variant, the reference itself is copyable
+static_assert(std::is_copy_constructible_v<OneOf<Immobile&, int>>,
+    "OneOf with reference to immobile should be copyable");
 
 }  // namespace kj

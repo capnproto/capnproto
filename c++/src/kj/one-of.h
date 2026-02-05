@@ -341,6 +341,30 @@ template <> struct Variants_<50> { typedef Variants50 Type; };
 template <uint i>
 using Variants = typename Variants_<i>::Type;
 
+// Storage type mapping: T& is stored as T*, other types stored as-is
+template <typename T> struct OneOfStorage_ { using Type = T; };
+template <typename T> struct OneOfStorage_<T&> { using Type = T*; };
+template <typename T> using OneOfStorage = typename OneOfStorage_<T>::Type;
+
+// Check if all variants are copyable (references count as copyable since we copy the pointer)
+template <typename T>
+constexpr bool isOneOfVariantCopyable() {
+  if constexpr (isLvalueReference<T>()) {
+    return true;  // References are always "copyable" (copy the pointer)
+  } else {
+    return __is_constructible(T, const T&);
+  }
+}
+
+template <typename T>
+constexpr bool isOneOfVariantMovable() {
+  if constexpr (isLvalueReference<T>()) {
+    return true;  // References are always "movable" (copy pointer, nullify source)
+  } else {
+    return __is_constructible(T, T&&);
+  }
+}
+
 }  // namespace _ (private)
 
 template <typename... Variants>
@@ -361,13 +385,24 @@ class OneOf {
   // Has a member type called "Success" if and only if all of `OtherVariants` are types that
   // appear in `Variants`. Used with SFINAE to enable subset constructors.
 
+  // Check if all variants are copyable/movable (for conditionally enabling copy/move constructors)
+  static constexpr bool allCopyable = (_::isOneOfVariantCopyable<Variants>() && ...);
+  static constexpr bool allMovable = (_::isOneOfVariantMovable<Variants>() && ...);
+
 public:
   inline OneOf(): tag(0) {}
 
-  OneOf(const OneOf& other) { copyFrom(other); }
-  OneOf(OneOf& other) { copyFrom(other); }
-  OneOf(OneOf&& other) { moveFrom(other); }
-  // Copy/move from same OneOf type.
+  // Copy constructors - only enabled when all variants are copyable
+  OneOf(const OneOf& other) requires allCopyable { copyFrom(other); }
+  OneOf(OneOf& other) requires allCopyable { copyFrom(other); }
+
+  // Move constructor - only enabled when all variants are movable
+  OneOf(OneOf&& other) requires allMovable { moveFrom(other); }
+
+  // Explicitly delete copy/move when not available, with descriptive names for error messages
+  OneOf(const OneOf&) requires (!allCopyable) = delete;
+  OneOf(OneOf&) requires (!allCopyable) = delete;
+  OneOf(OneOf&&) requires (!allMovable) = delete;
 
   template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
   OneOf(const OneOf<OtherVariants...>& other) { copyFromSubset(other); }
@@ -383,10 +418,33 @@ public:
   }
   // Copy/move from a value that matches one of the individual types in the OneOf.
 
+  // Constructor for reference variants when value variant doesn't exist.
+  // This allows: int i; OneOf<int&, String> x = i;  // stores reference to i
+  template <typename T>
+  requires (typeIndexOrZero<T&>() != 0 && typeIndexOrZero<Decay<T>>() == 0)
+  OneOf(T& other): tag(typeIndex<T&>()) {
+    *reinterpret_cast<T**>(space) = &other;
+  }
+
   ~OneOf() { destroy(); }
 
-  OneOf& operator=(const OneOf& other) { if (tag != 0) destroy(); copyFrom(other); return *this; }
-  OneOf& operator=(OneOf&& other) { if (tag != 0) destroy(); moveFrom(other); return *this; }
+  // Copy assignment - only enabled when all variants are copyable
+  OneOf& operator=(const OneOf& other) requires allCopyable {
+    if (tag != 0) destroy();
+    copyFrom(other);
+    return *this;
+  }
+
+  // Move assignment - only enabled when all variants are movable
+  OneOf& operator=(OneOf&& other) requires allMovable {
+    if (tag != 0) destroy();
+    moveFrom(other);
+    return *this;
+  }
+
+  // Explicitly delete when not available
+  OneOf& operator=(const OneOf&) requires (!allCopyable) = delete;
+  OneOf& operator=(OneOf&&) requires (!allMovable) = delete;
 
   inline bool operator==(decltype(nullptr)) const { return tag == 0; }
 
@@ -398,44 +456,67 @@ public:
   template <typename T>
   T& get() & {
     KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
-    return *reinterpret_cast<T*>(space);
+    if constexpr (isLvalueReference<T>()) {
+      return **reinterpret_cast<Decay<T>**>(space);
+    } else {
+      return *reinterpret_cast<T*>(space);
+    }
   }
   template <typename T>
-  T&& get() && {
+  auto&& get() && {
     KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
-    return kj::mv(*reinterpret_cast<T*>(space));
+    if constexpr (isLvalueReference<T>()) {
+      return **reinterpret_cast<Decay<T>**>(space);
+    } else {
+      return kj::mv(*reinterpret_cast<T*>(space));
+    }
   }
   template <typename T>
-  const T& get() const& {
+  const Decay<T>& get() const& {
     KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
-    return *reinterpret_cast<const T*>(space);
+    if constexpr (isLvalueReference<T>()) {
+      return **reinterpret_cast<Decay<T>* const*>(space);
+    } else {
+      return *reinterpret_cast<const T*>(space);
+    }
   }
   template <typename T>
-  const T&& get() const&& {
+  const Decay<T>&& get() const&& {
     KJ_IREQUIRE(is<T>(), "Must check OneOf::is<T>() before calling get<T>().");
-    return kj::mv(*reinterpret_cast<const T*>(space));
+    if constexpr (isLvalueReference<T>()) {
+      return kj::mv(**reinterpret_cast<Decay<T>* const*>(space));
+    } else {
+      return kj::mv(*reinterpret_cast<const T*>(space));
+    }
   }
 
   template <typename T, typename... Params>
   T& init(Params&&... params) {
     if (tag != 0) destroy();
-    ctor(*reinterpret_cast<T*>(space), kj::fwd<Params>(params)...);
+    if constexpr (isLvalueReference<T>()) {
+      // For reference variants, store pointer to the referenced object
+      static_assert(sizeof...(Params) == 1, "Reference variants require exactly one argument");
+      Decay<T>* ptr = &(params, ...);  // fold expression to get single param's address
+      *reinterpret_cast<Decay<T>**>(space) = ptr;
+    } else {
+      ctor(*reinterpret_cast<T*>(space), kj::fwd<Params>(params)...);
+    }
     tag = typeIndex<T>();
-    return *reinterpret_cast<T*>(space);
+    return get<T>();
   }
 
   template <typename T>
   Maybe<T&> tryGet() {
     if (is<T>()) {
-      return *reinterpret_cast<T*>(space);
+      return get<T>();
     } else {
       return kj::none;
     }
   }
   template <typename T>
-  Maybe<const T&> tryGet() const {
+  Maybe<const Decay<T>&> tryGet() const {
     if (is<T>()) {
-      return *reinterpret_cast<const T*>(space);
+      return get<T>();
     } else {
       return kj::none;
     }
@@ -464,6 +545,10 @@ public:
   _::NullableValue<OneOf> _switchSubject() && { return kj::mv(*this); }
 
 private:
+  // Allow other OneOf instantiations to access our private members for subset copy/move
+  template <typename...>
+  friend class OneOf;
+
   uint tag;
 
   static inline constexpr size_t maxSize(size_t a) {
@@ -477,8 +562,9 @@ private:
   // TODO(someday):  Generalize the above template and make it common.  I tried, but C++ decided to
   //   be difficult so I cut my losses.
 
+  // Use OneOfStorage to get proper size: T& is stored as T*, others stored directly
   union alignas(void*) {
-    byte space[maxSize(sizeof(Variants)...)];
+    byte space[maxSize(sizeof(_::OneOfStorage<Variants>)...)];
   };
 
   template <typename... T>
@@ -488,7 +574,11 @@ private:
   inline bool destroyVariant() {
     if (tag == typeIndex<T>()) {
       tag = 0;
-      dtor(*reinterpret_cast<T*>(space));
+      if constexpr (!isLvalueReference<T>()) {
+        // Only call destructor for non-reference types
+        // References are stored as pointers and don't need destruction
+        dtor(*reinterpret_cast<T*>(space));
+      }
     }
     return false;
   }
@@ -499,7 +589,13 @@ private:
   template <typename T>
   inline bool copyVariantFrom(const OneOf& other) {
     if (other.is<T>()) {
-      ctor(*reinterpret_cast<T*>(space), other.get<T>());
+      if constexpr (isLvalueReference<T>()) {
+        // Copy the pointer
+        *reinterpret_cast<Decay<T>**>(space) =
+            *reinterpret_cast<Decay<T>* const*>(other.space);
+      } else {
+        ctor(*reinterpret_cast<T*>(space), other.get<T>());
+      }
     }
     return false;
   }
@@ -513,7 +609,13 @@ private:
   template <typename T>
   inline bool copyVariantFrom(OneOf& other) {
     if (other.is<T>()) {
-      ctor(*reinterpret_cast<T*>(space), other.get<T>());
+      if constexpr (isLvalueReference<T>()) {
+        // Copy the pointer
+        *reinterpret_cast<Decay<T>**>(space) =
+            *reinterpret_cast<Decay<T>**>(other.space);
+      } else {
+        ctor(*reinterpret_cast<T*>(space), other.get<T>());
+      }
     }
     return false;
   }
@@ -527,12 +629,19 @@ private:
   template <typename T>
   inline bool moveVariantFrom(OneOf& other) {
     if (other.is<T>()) {
-      ctor(*reinterpret_cast<T*>(space), kj::mv(other.get<T>()));
+      if constexpr (isLvalueReference<T>()) {
+        // Copy the pointer, then nullify source (matching Maybe<T&> behavior)
+        *reinterpret_cast<Decay<T>**>(space) =
+            *reinterpret_cast<Decay<T>**>(other.space);
+        other.tag = 0;
+      } else {
+        ctor(*reinterpret_cast<T*>(space), kj::mv(other.get<T>()));
+      }
     }
     return false;
   }
   void moveFrom(OneOf& other) {
-    // Initialize as a copy of `other`.  Expects that `this` starts out uninitialized, so the tag
+    // Initialize as a move of `other`.  Expects that `this` starts out uninitialized, so the tag
     // is invalid.
     tag = other.tag;
     doAll(moveVariantFrom<Variants>(other)...);
@@ -541,8 +650,13 @@ private:
   template <typename T, typename... OtherVariants>
   inline bool copySubsetVariantFrom(const OneOf<OtherVariants...>& other) {
     if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      tag = typeIndex<T>();  // Use T directly, not Decay<T>, to preserve reference-ness
+      if constexpr (isLvalueReference<T>()) {
+        *reinterpret_cast<Decay<T>**>(space) =
+            *reinterpret_cast<Decay<T>* const*>(other.space);
+      } else {
+        ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      }
     }
     return false;
   }
@@ -554,8 +668,13 @@ private:
   template <typename T, typename... OtherVariants>
   inline bool copySubsetVariantFrom(OneOf<OtherVariants...>& other) {
     if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      tag = typeIndex<T>();  // Use T directly, not Decay<T>, to preserve reference-ness
+      if constexpr (isLvalueReference<T>()) {
+        *reinterpret_cast<Decay<T>**>(space) =
+            *reinterpret_cast<Decay<T>**>(other.space);
+      } else {
+        ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      }
     }
     return false;
   }
@@ -567,8 +686,14 @@ private:
   template <typename T, typename... OtherVariants>
   inline bool moveSubsetVariantFrom(OneOf<OtherVariants...>& other) {
     if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
+      tag = typeIndex<T>();  // Use T directly, not Decay<T>, to preserve reference-ness
+      if constexpr (isLvalueReference<T>()) {
+        *reinterpret_cast<Decay<T>**>(space) =
+            *reinterpret_cast<Decay<T>**>(other.space);
+        other.tag = 0;  // Nullify source (matching Maybe<T&> behavior)
+      } else {
+        ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
+      }
     }
     return false;
   }
