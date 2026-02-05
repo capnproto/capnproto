@@ -32,10 +32,8 @@ namespace kj {
 namespace _ {  // private
 
 // Default buffer size for gzip streams. Larger buffers reduce per-call overhead but use more
-// memory. 4 KiB is the historical default, but note that many uses may want to increase this.
-// Testing on an amd64 Linux machine gets about 2 GiB/s at 16 KiB vs 850 MiB/s at 4 KiB.
-// TODO(perf): Should we just bump this to 16 KiB by default?
-constexpr size_t KJ_GZ_BUF_SIZE = 4096;
+// memory. Testing on an amd64 Linux machine gets about 2 GiB/s at 16 KiB vs 850 MiB/s at 4 KiB.
+constexpr size_t KJ_GZ_BUF_SIZE = 16384;
 
 class GzipOutputContext final {
 public:
@@ -49,7 +47,7 @@ public:
 private:
   bool compressing;
   z_stream ctx = {};
-  byte buffer[_::KJ_GZ_BUF_SIZE];
+  kj::Array<byte> buffer = kj::heapArray<byte>(_::KJ_GZ_BUF_SIZE);
 
   [[noreturn]] void fail(int result);
 };
@@ -69,7 +67,7 @@ private:
   z_stream ctx = {};
   bool atValidEndpoint = false;
 
-  byte buffer[_::KJ_GZ_BUF_SIZE];
+  kj::Array<byte> buffer = kj::heapArray<byte>(_::KJ_GZ_BUF_SIZE);
 
   size_t readImpl(ArrayPtr<byte> buffer, size_t minBytes, size_t alreadyRead);
 };
@@ -100,7 +98,7 @@ private:
 
 class GzipAsyncInputStream final: public AsyncInputStream {
 public:
-  GzipAsyncInputStream(AsyncInputStream& inner, size_t bufferSize = _::KJ_GZ_BUF_SIZE);
+  GzipAsyncInputStream(AsyncInputStream& inner);
   ~GzipAsyncInputStream() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(GzipAsyncInputStream);
 
@@ -111,7 +109,7 @@ private:
   z_stream ctx = {};
   bool atValidEndpoint = false;
 
-  kj::Array<byte> buffer;
+  kj::Array<byte> buffer = kj::heapArray<byte>(_::KJ_GZ_BUF_SIZE);
 
   Promise<size_t> readImpl(byte* buffer, size_t minBytes, size_t maxBytes, size_t alreadyRead);
 };
