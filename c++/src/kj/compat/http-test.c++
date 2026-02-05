@@ -2493,6 +2493,49 @@ KJ_TEST("WebSocket abort propagates through pipe") {
   KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, downstreamPump.wait(waitScope));
 }
 
+KJ_TEST("WebSocket pumpTo completes on close through WebSocketPipe") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto upstreamPipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  FakeEntropySource maskGenerator;
+  auto upstreamClient = newWebSocket(kj::mv(upstreamPipe.ends[0]), maskGenerator);
+  auto upstreamProxy = newWebSocket(kj::mv(upstreamPipe.ends[1]), kj::none);
+
+  auto wsPipe = newWebSocketPipe();
+
+  // Arrange a one-way pump from the upstream proxy into the WebSocketPipe.
+  auto downstreamMessage = wsPipe.ends[1]->receive();
+  auto pumpTask = upstreamProxy->pumpTo(*wsPipe.ends[0]);
+
+  // Initiate a clean close upstream.
+  upstreamClient->close(1234, "bored").wait(waitScope);
+
+  if (!downstreamMessage.poll(waitScope)) {
+    upstreamClient->abort();
+    upstreamProxy->abort();
+    wsPipe.ends[0]->abort();
+    wsPipe.ends[1]->abort();
+    KJ_FAIL_ASSERT("close did not propagate through WebSocketPipe");
+  }
+
+  {
+    auto msg = downstreamMessage.wait(waitScope);
+    KJ_ASSERT(msg.is<WebSocket::Close>());
+    KJ_EXPECT(msg.get<WebSocket::Close>().code == 1234);
+    KJ_EXPECT(msg.get<WebSocket::Close>().reason == "bored");
+  }
+
+  if (!pumpTask.poll(waitScope)) {
+    upstreamClient->abort();
+    upstreamProxy->abort();
+    wsPipe.ends[0]->abort();
+    wsPipe.ends[1]->abort();
+    KJ_FAIL_ASSERT("pumpTo() did not complete after close through WebSocketPipe");
+  }
+
+  pumpTask.wait(waitScope);
+}
+
 KJ_TEST("WebSocket maximum message size") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe =KJ_HTTP_TEST_CREATE_2PIPE;
