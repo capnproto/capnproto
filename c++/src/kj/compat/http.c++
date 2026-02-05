@@ -4596,15 +4596,9 @@ public:
     return out->whenAborted();
   }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
-    KJ_REQUIRE(in->destinationPumpingFrom == kj::none, "can only call tryPumpFrom() once at a time");
-    // By convention, we store the WebSocket reference on `in`.
-    in->destinationPumpingFrom = other;
-    auto deferredUnregister = kj::defer([this]() { in->destinationPumpingFrom = kj::none; });
-    KJ_IF_SOME(p, out->tryPumpFrom(other)) {
-      return p.attach(kj::mv(deferredUnregister));
-    } else {
-      return kj::none;
-    }
+    // WebSocketPipeEnd provides message-level semantics (send/receive/close). Optimized pumping can
+    // bypass close-frame parsing, so always use the default frame-aware pump.
+    return kj::none;
   }
 
   kj::Promise<Message> receive(size_t maxSize) override {
@@ -7104,9 +7098,9 @@ private:
       co_await afterReceiveClosed();
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
-      return other.pumpTo(*inner).then([this]() {
-        return afterSendClosed();
-      });
+      // Default pumping ensures close frames are forwarded through close()/receive(), which keeps
+      // DelayedCloseWebSocket's close tracking consistent.
+      return kj::none;
     }
 
     uint64_t sentByteCount() override { return inner->sentByteCount(); }
