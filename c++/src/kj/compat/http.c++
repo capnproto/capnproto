@@ -4596,8 +4596,8 @@ public:
     return out->whenAborted();
   }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
-    // WebSocketPipeEnd provides message-level semantics (send/receive/close). Optimized pumping can
-    // bypass close-frame parsing, so always use the default frame-aware pump.
+    // This wrapper depends on message-level close semantics, so it must not participate in
+    // optimized pumping via tryPumpFrom().
     return kj::none;
   }
 
@@ -7098,8 +7098,8 @@ private:
       co_await afterReceiveClosed();
     }
     kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
-      // Default pumping ensures close frames are forwarded through close()/receive(), which keeps
-      // DelayedCloseWebSocket's close tracking consistent.
+      // This wrapper tracks close state via close()/receive(), so it must not participate in
+      // tryPumpFrom().
       return kj::none;
     }
 
