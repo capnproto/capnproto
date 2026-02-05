@@ -4317,18 +4317,18 @@ private:
             auto& vineInfo = KJ_REQUIRE_NONNULL(exp.vineInfo, "Disembargo target is not a vine.");
 
             kj::Maybe<VatNetworkBase::Connection&> nextConn;
-            kj::OneOf<QuestionRef*, RpcClient*> nextTarget;
+            kj::OneOf<QuestionRef&, RpcClient&> nextTarget;
 
             KJ_SWITCH_ONEOF(vineInfo->info) {
               KJ_CASE_ONEOF(provision, VineInfo::Provision) {
                 nextConn = provision->tryGetConnection();
-                nextTarget = provision.get();
+                nextTarget = *provision;
               }
               KJ_CASE_ONEOF(contact, VineInfo::Contact) {
                 // This is a forwarded vine.
                 RpcClient& client = KJ_ASSERT_NONNULL(unwrapIfSameNetwork(*exp.clientHook));
                 nextConn = client.connectionState->tryGetConnection();
-                nextTarget = &client;
+                nextTarget = client;
               }
             }
 
@@ -4340,12 +4340,12 @@ private:
               nextDisembargo.getContext().setAccept(embargoId);
 
               KJ_SWITCH_ONEOF(nextTarget) {
-                KJ_CASE_ONEOF(question, QuestionRef*) {
+                KJ_CASE_ONEOF(question, QuestionRef&) {
                   nextDisembargo.initTarget().initPromisedAnswer()
-                      .setQuestionId(question->getId());
+                      .setQuestionId(question.getId());
                 }
-                KJ_CASE_ONEOF(import, RpcClient*) {
-                  KJ_ASSERT(import->writeTarget(nextDisembargo.initTarget()) == kj::none);
+                KJ_CASE_ONEOF(import, RpcClient&) {
+                  KJ_ASSERT(import.writeTarget(nextDisembargo.initTarget()) == kj::none);
                 }
               }
 
