@@ -22,7 +22,6 @@
 #include <kj/array.h>
 #include <kj/async-coroutine-alloc.h>
 #include <kj/async.h>
-#include <kj/compat/http.h>
 #include <kj/debug.h>
 #include <kj/exception.h>
 #include <kj/test.h>
@@ -35,42 +34,37 @@ using _::DefaultCoroutineAllocator;
 // CoroutineAllocator::hasAllocator tests
 static_assert(!_::CoroutineAllocator::hasAllocator<>);
 static_assert(!_::CoroutineAllocator::hasAllocator<int>);
-static_assert(!_::CoroutineAllocator::hasAllocator<int, double, char *>);
-static_assert(_::CoroutineAllocator::hasAllocator<_::CoroutineAllocator &>);
-static_assert(_::CoroutineAllocator::hasAllocator<DebugCoroutineAllocator &>);
-static_assert(_::CoroutineAllocator::hasAllocator<int, DebugCoroutineAllocator &>);
-static_assert(_::CoroutineAllocator::hasAllocator<DebugCoroutineAllocator &, int>);
-static_assert(_::CoroutineAllocator::hasAllocator<
-              int, double, DefaultCoroutineAllocator &, char *>);
+static_assert(!_::CoroutineAllocator::hasAllocator<int, double, char*>);
+static_assert(_::CoroutineAllocator::hasAllocator<_::CoroutineAllocator&>);
+static_assert(_::CoroutineAllocator::hasAllocator<DebugCoroutineAllocator&>);
+static_assert(_::CoroutineAllocator::hasAllocator<int, DebugCoroutineAllocator&>);
+static_assert(_::CoroutineAllocator::hasAllocator<DebugCoroutineAllocator&, int>);
+static_assert(_::CoroutineAllocator::hasAllocator<int, double, DefaultCoroutineAllocator&, char*>);
+static_assert(_::CoroutineAllocator::hasAllocator<CoroutineStack&>);
 
 // CoroutineAllocator::AllocatorType tests
-static_assert(isSameType<_::CoroutineAllocator::AllocatorType<>,
-                         _::DefaultCoroutineAllocator>());
-static_assert(isSameType<_::CoroutineAllocator::AllocatorType<int>,
-                         _::DefaultCoroutineAllocator>());
-static_assert(isSameType<_::CoroutineAllocator::AllocatorType<int, double>,
-                         _::DefaultCoroutineAllocator>());
+static_assert(isSameType<_::CoroutineAllocator::AllocatorType<>, _::DefaultCoroutineAllocator>());
 static_assert(
-    isSameType<_::CoroutineAllocator::AllocatorType<DebugCoroutineAllocator &>,
-               DebugCoroutineAllocator>());
+    isSameType<_::CoroutineAllocator::AllocatorType<int>, _::DefaultCoroutineAllocator>());
+static_assert(
+    isSameType<_::CoroutineAllocator::AllocatorType<int, double>, _::DefaultCoroutineAllocator>());
+static_assert(isSameType<_::CoroutineAllocator::AllocatorType<DebugCoroutineAllocator&>,
+    DebugCoroutineAllocator>());
+static_assert(isSameType<_::CoroutineAllocator::AllocatorType<DefaultCoroutineAllocator&>,
+    DefaultCoroutineAllocator>());
+static_assert(isSameType<_::CoroutineAllocator::AllocatorType<int, DebugCoroutineAllocator&>,
+    DebugCoroutineAllocator>());
+static_assert(isSameType<_::CoroutineAllocator::AllocatorType<DebugCoroutineAllocator&, int>,
+    DebugCoroutineAllocator>());
+static_assert(
+    isSameType<_::CoroutineAllocator::AllocatorType<int, double, DefaultCoroutineAllocator&, char*>,
+        DefaultCoroutineAllocator>());
 static_assert(isSameType<
-              _::CoroutineAllocator::AllocatorType<DefaultCoroutineAllocator &>,
-              DefaultCoroutineAllocator>());
-static_assert(
-    isSameType<_::CoroutineAllocator::AllocatorType<int, DebugCoroutineAllocator &>,
-               DebugCoroutineAllocator>());
-static_assert(
-    isSameType<_::CoroutineAllocator::AllocatorType<DebugCoroutineAllocator &, int>,
-               DebugCoroutineAllocator>());
-static_assert(isSameType<_::CoroutineAllocator::AllocatorType<
-                             int, double, DefaultCoroutineAllocator &, char *>,
-                         DefaultCoroutineAllocator>());
-static_assert(isSameType<_::CoroutineAllocator::AllocatorType<
-                             DebugCoroutineAllocator &, DefaultCoroutineAllocator &>,
-                         DebugCoroutineAllocator>());
-static_assert(isSameType<_::CoroutineAllocator::AllocatorType<
-                             DefaultCoroutineAllocator &, DebugCoroutineAllocator &>,
-                         DefaultCoroutineAllocator>());
+    _::CoroutineAllocator::AllocatorType<DebugCoroutineAllocator&, DefaultCoroutineAllocator&>,
+    DebugCoroutineAllocator>());
+static_assert(isSameType<
+    _::CoroutineAllocator::AllocatorType<DefaultCoroutineAllocator&, DebugCoroutineAllocator&>,
+    DefaultCoroutineAllocator>());
 
 KJ_TEST("CoroutineAllocator::getAllocator") {
   DefaultCoroutineAllocator def;
@@ -88,7 +82,7 @@ KJ_TEST("CoroutineAllocator::getAllocator") {
 }
 
 template <typename Allocator>
-kj::Promise<size_t> immediateCoroutine(Allocator &) {
+kj::Promise<size_t> immediateCoroutine(Allocator&) {
   co_return 42;
 }
 
@@ -109,24 +103,22 @@ KJ_TEST("DebugAllocator") {
   auto promise = immediateCoroutine(allocator);
   KJ_EXPECT(promise.wait(waitScope) == 42);
 
+
   KJ_EXPECT(allocator.totalAllocCount == 1);
   KJ_EXPECT(allocator.totalAllocSize > 0);
   KJ_EXPECT(allocator.totalFreeCount == 1);
   KJ_EXPECT(allocator.totalFreeSize == allocator.totalFreeSize);
-
 }
 
 template <typename Allocator>
 kj::Promise<size_t> coroFib(Allocator& alloc, size_t i) {
-  if (i <= 10)
-    co_return 1;
+  if (i <= 10) co_return 1;
   co_return (co_await coroFib(alloc, i - 1)) + (co_await coroFib(alloc, i - 2));
 }
 
 template <typename Allocator>
 kj::Promise<size_t> coroFib10(Allocator& alloc, size_t i) {
-  if (i <= 10)
-    co_return 1;
+  if (i <= 10) co_return 1;
   co_return (co_await coroFib10(alloc, i - 1)) + (co_await coroFib10(alloc, i - 2)) +
       (co_await coroFib10(alloc, i - 3)) + (co_await coroFib10(alloc, i - 4)) +
       (co_await coroFib10(alloc, i - 5)) + (co_await coroFib10(alloc, i - 6)) +
@@ -136,10 +128,11 @@ kj::Promise<size_t> coroFib10(Allocator& alloc, size_t i) {
 
 KJ_TEST("Coroutine Frame sizes") {
 #if defined(__clang__) && defined(KJ_ASYNC_COROUTINE_ALLOC_TEST_ASSERT_FRAME_SIZE)
-  // Coroutine size varies between compilers and optimization level. We still want to keep track
-  // of coroutine sizes. Thus restrict check to newest clang opt build.
-  // We intentionally keep the upper bound open to detect when production compiler deviates.
-  #define KJ_EXPECT_CORO_SIZE(...) KJ_EXPECT(__VA_ARGS__)
+// Coroutine size varies between compilers and optimization level. We still want
+// to keep track of coroutine sizes. Thus restrict check to newest clang opt
+// build. We intentionally keep the upper bound open to detect when production
+// compiler deviates.
+#define KJ_EXPECT_CORO_SIZE(...) KJ_EXPECT(__VA_ARGS__)
 #else
   #define KJ_EXPECT_CORO_SIZE(...)
 #endif
@@ -169,5 +162,14 @@ KJ_TEST("Coroutine Frame sizes") {
   }
 }
 
-} // namespace
-} // namespace kj
+KJ_TEST("Stack Allocator") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  CoroutineStack stack;
+
+  KJ_EXPECT(immediateCoroutine(stack).wait(waitScope) == 42);
+  KJ_EXPECT(coroFib10(stack, 12).wait(waitScope) == 19);
+}
+
+}  // namespace
+}  // namespace kj
