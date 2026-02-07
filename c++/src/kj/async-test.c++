@@ -208,16 +208,23 @@ TEST(Async, Chain) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  Promise<int> promise = evalLater([&]() -> int { return 123; });
-  Promise<int> promise2 = evalLater([&]() -> int { return 321; });
+  Promise<int> promise = evalLater([]() -> int { return 123; });
+  Promise<int> promise2 = evalLater([]() -> int { return 321; });
+  Promise<int> promise6 = evalLater([]() -> int { return 444; });
+  //Promise<int> promise4 = evalLater([&](int j) -> int { return 123; });
 
   auto promise3 = promise.then([&](int i) {
     return promise2.then([i](int j) {
       return i + j;
     });
   });
+  //promise3 = promise3.chain((Promise<void>)kj::READY_NOW);
+  Promise<void> p = (Promise<void>)kj::READY_NOW;
+  Promise<void> promise4 = promise3.chain(kj::mv(p));
+  Promise<int> promise5 = promise4.chain(kj::mv(promise6));
 
-  EXPECT_EQ(444, promise3.wait(waitScope));
+
+  EXPECT_EQ(444, promise5.wait(waitScope));
 }
 
 TEST(Async, DeepChain) {

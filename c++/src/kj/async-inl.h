@@ -708,6 +708,8 @@ private:
   friend class TransformPromiseNode;
   template <typename, typename>
   friend class SimpleTransformPromiseNode;
+  template <typename, typename>
+  friend class NewTransformPromiseNode;
 };
 
 template <typename _DepT, typename Func, typename ErrorFunc>
@@ -782,6 +784,44 @@ private:
       output.as<T>() = ExceptionOr<T>(false, kj::mv(depException));
     } else KJ_IF_SOME(depValue, depResult.value) {
       output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
+    }
+  }
+};
+
+template <typename _DepT, typename V>
+class NewTransformPromiseNode final: public TransformPromiseNodeBase {
+  // TransformPromiseNodeBase variant using default error handler to reduce templating.
+
+public:
+  NewTransformPromiseNode(OwnPromiseNode&& dependency, Promise<V> _next,
+                       void* continuationTracePtr)
+      : TransformPromiseNodeBase(kj::mv(dependency), continuationTracePtr),
+        next(kj::mv(_next)) {}
+
+  void destroy() override {
+    freePromise(this);
+  }
+
+  ~NewTransformPromiseNode() noexcept(false) {
+    // We need to make sure the dependency is deleted before we delete the continuations because it
+    // is a common pattern for the continuations to hold ownership of objects that might be in-use
+    // by the dependency.
+    dropDependency();
+  }
+
+private:
+  Promise<V> next;
+
+  void getImpl(ExceptionOrValue& output) override {
+    typedef _::FixVoid<Promise<V>> T;
+    typedef _::FixVoid<_DepT> DepT;
+    ExceptionOr<DepT> depResult;
+    getDepResult(depResult);
+    KJ_IF_SOME(depException, depResult.exception) {
+      output.as<T>() = ExceptionOr<T>(false, kj::mv(depException));
+    } else KJ_IF_SOME(depValue, depResult.value) {
+      (void)depValue;
+      output.as<T>() = kj::mv(next);//handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
     }
   }
 };
@@ -1439,6 +1479,47 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
       _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
   return _::maybeReduce(kj::mv(result), false);
 }
+
+#if 0
+template <typename T>
+template <typename V>
+Promise<V> Promise<T>::chain(Promise<V>&& next) {
+  return this->then([next = kj::mv(next)](T) mutable -> Promise<V> { return kj::mv(next);});
+}
+#else
+template <typename T>
+template <typename V>
+Promise<V> Promise<T>::chain(Promise<V>&& next) {
+  //typedef Promise<V>(*Func)(T);
+  //Func func = [next = kj::mv(next)](T) mutable -> Promise<V> { return kj::mv(next);};
+  auto func = [next = kj::mv(next)](T) mutable { return kj::mv(next);};
+  typedef Promise<V> ResultT;
+
+  void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
+
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::NewTransformPromiseNode<T, V>>(
+      kj::mv(node), kj::mv(next), continuationTracePtr);
+
+  auto result = _::PromiseNode::to<_::ChainPromises<Promise<V>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), {}));
+  return _::maybeReduce(kj::mv(result), false);
+
+  //return this->then([next = kj::mv(next)](T) mutable -> Promise<V> { return kj::mv(next);});
+}
+#endif
+
+
+template <>
+template <typename V>
+Promise<V> Promise<void>::chain(Promise<V>&& next) {
+  return this->then([next = kj::mv(next)]() mutable -> Promise<V> { return kj::mv(next);});
+}
+
+/*template <typename T>
+Promise<void> Promise<T>::chain(Promise<void>&& next) {
+  return this->then([next = kj::mv(next)](){ return next;});
+}*/
 
 namespace _ {  // private
 

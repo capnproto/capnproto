@@ -202,6 +202,10 @@ public:
   template <typename Func>
   PromiseForResult<Func, T> then(Func&& func) KJ_WARN_UNUSED_RESULT;
 
+  template <typename V>
+  Promise<V> chain(Promise<V>&& next) KJ_WARN_UNUSED_RESULT;
+  //Promise<void> chain(Promise<void>&& next) KJ_WARN_UNUSED_RESULT;
+
   template <typename Func, typename ErrorFunc>
   PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler,
                                  SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
