@@ -1427,7 +1427,9 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in emplace") 
 }
 
 KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in assignment") {
-  // Verify that if ctor throws during assignment, the Maybe is left in none state.
+  // Verify that if ctor throws during assignment, the target Maybe is unchanged (strong exception
+  // guarantee). The assignment operator extracts from `other` first into a temp, so if that
+  // extraction throws, `this` is unchanged.
   ThrowingNiche::throwOnConstruct = false;
   ThrowingNiche::constructCount = 0;
   ThrowingNiche::destroyCount = 0;
@@ -1435,6 +1437,7 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in assignmen
   Maybe<ThrowingNiche> m;
   m.emplace(42);
   KJ_EXPECT(m != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m).value == 42);
 
   Maybe<ThrowingNiche> other;
   other.emplace(99);
@@ -1445,14 +1448,16 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in assignmen
 
   bool caught = false;
   try {
-    m = kj::mv(other);  // Move ctor should throw
+    m = kj::mv(other);  // Move ctor should throw during extraction
   } catch (const std::runtime_error& e) {
     caught = true;
     KJ_EXPECT(kj::StringPtr(e.what()) == "move constructor throw");
   }
 
   KJ_EXPECT(caught);
-  KJ_EXPECT(m == kj::none);  // Should be in none state after throw
+  // Strong exception guarantee: m is unchanged
+  KJ_EXPECT(m != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m).value == 42);
 
   ThrowingNiche::throwOnConstruct = false;
 }
@@ -1512,19 +1517,19 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in assign-to-
 }
 
 KJ_TEST("Maybe<ThrowingNiche> exception safety - source destructor throws in move-assignment") {
-  // Verify that if the source's dtor throws during move-assignment, the source is left in
-  // none state (not in an already-destroyed state that would double-free).
+  // Verify that if the source's dtor throws during move-assignment, we don't have memory
+  // corruption or double-frees.
   //
-  // The move constructor leaves the source in a "moved-from" state (value == -1), which is
-  // NOT the none state (value == 0). So the move-assignment operator must destroy the
-  // moved-from value. If that destructor throws, we must still leave the source in the
-  // none state.
+  // With the current implementation, move-assignment works by:
+  // 1. Move src into a temp Maybe
+  // 2. Emplace dst from temp
   //
-  // The sequence of operations in move-assignment is:
-  // 1. dtor(dst.value) - destroy dst's old none value
-  // 2. ctor(dst.value, kj::mv(src.value)) - move construct, src becomes -1 (moved-from)
-  // 3. dtor(src.value) - destroy src's moved-from value <- THIS THROWS
-  // 4. initNone(src.value) - should still happen after catch in the exception handler
+  // The Maybe move constructor sets src to none after moving, which destroys the moved-from
+  // value. If that destructor throws, the exception happens during step 1.
+  //
+  // After the exception:
+  // - dst is unchanged (strong exception guarantee)
+  // - src may be in an indeterminate state (but shouldn't be double-destroyed)
   ThrowingNiche::throwOnConstruct = false;
   ThrowingNiche::throwOnMovedFromDestroy = false;
   ThrowingNiche::constructCount = 0;
@@ -1536,24 +1541,154 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - source destructor throws in mov
   Maybe<ThrowingNiche> dst;
 
   // Set up to throw when destroying the moved-from value (value == -1).
-  // This will be triggered in step 3 above.
   ThrowingNiche::throwOnMovedFromDestroy = true;
 
   bool caught = false;
   try {
-    dst = kj::mv(src);  // Move should succeed, but then src's dtor should throw
+    dst = kj::mv(src);  // Move throws when destroying moved-from src in temp construction
   } catch (const std::runtime_error& e) {
     caught = true;
     KJ_EXPECT(kj::StringPtr(e.what()) == "moved-from destructor throw");
   }
 
   KJ_EXPECT(caught);
-  KJ_EXPECT(dst != kj::none);  // dst should have the moved value
-  KJ_EXPECT(KJ_ASSERT_NONNULL(dst).value == 42);
-  KJ_EXPECT(src == kj::none);  // src should be in none state, not double-destroyed
-  // When src goes out of scope, it should NOT double-destroy (the test passing means no crash)
+  // dst is unchanged (strong exception guarantee)
+  KJ_EXPECT(dst == kj::none);
+  // src may be in a moved-from state, but the test passing (no crash) means no double-free
 
   ThrowingNiche::throwOnMovedFromDestroy = false;  // Clean up
+}
+
+// =======================================================================================
+// Tests for self-ownership safety in Maybe assignment operators
+//
+// These tests verify that Maybe's assignment operators are safe when `this` owns `other`.
+// For example: head = kj::mv(head->next) where head owns the node containing next.
+// Without proper handling, destroying `this`'s old value before accessing `other` causes
+// use-after-free.
+
+KJ_TEST("Maybe<Own<T>> move-assignment is safe when this owns other") {
+  // Test: head = kj::mv(head->next) where head owns the node containing next.
+  // This is niche-optimized (Own<T> uses nullptr as none state).
+
+  struct ListNode {
+    int value;
+    Maybe<Own<ListNode>> next;
+    ListNode(int v): value(v) {}
+  };
+
+  Maybe<Own<ListNode>> head = heap<ListNode>(1);
+  KJ_ASSERT_NONNULL(head)->next = heap<ListNode>(2);
+  KJ_ASSERT_NONNULL(KJ_ASSERT_NONNULL(head)->next)->next = heap<ListNode>(3);
+
+  // Advance head to next - this would be use-after-free without a correctly implemented
+  // assignment operator
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head)->value == 2);
+
+  // Do it again
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head)->value == 3);
+
+  // And once more - should become none
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head == kj::none);
+}
+
+KJ_TEST("Maybe<Own<T>> copy-assignment is safe when this owns other") {
+  // Test copy-assignment where `other` is inside `this`'s value.
+
+  struct CopyableNode {
+    int value;
+    Maybe<Own<CopyableNode>> next;
+
+    CopyableNode(int v): value(v) {}
+    CopyableNode(const CopyableNode& other): value(other.value) {
+      KJ_IF_SOME(n, other.next) {
+        next = heap<CopyableNode>(*n);
+      }
+    }
+    CopyableNode& operator=(const CopyableNode&) = default;
+  };
+
+  Maybe<CopyableNode> head = CopyableNode(1);
+  KJ_ASSERT_NONNULL(head).next = heap<CopyableNode>(2);
+
+  // Copy-assign from a value inside this - would be use-after-free without fix
+  KJ_IF_SOME(node, head) {
+    KJ_IF_SOME(nextNode, node.next) {
+      head = *nextNode;  // Copy from *next into head
+    }
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head).value == 2);
+}
+
+KJ_TEST("Maybe<T> T-value move-assignment is safe when this owns other") {
+  // Test operator=(T&&) where the T value is inside this's current value.
+
+  struct Node {
+    int value;
+    Maybe<Own<Node>> next;
+    Node(int v): value(v) {}
+  };
+
+  // Create a Maybe that owns a Node, which owns another Node
+  Maybe<Node> head = Node(1);
+  KJ_ASSERT_NONNULL(head).next = heap<Node>(2);
+
+  // Move-assign from the inner Node to head
+  KJ_IF_SOME(node, head) {
+    KJ_IF_SOME(next, node.next) {
+      head = kj::mv(*next);  // operator=(T&&) where T is inside head's value
+    }
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head).value == 2);
+}
+
+KJ_TEST("Maybe<T> T-value copy-assignment is safe when this owns other") {
+  // Test operator=(const T&) where the T value is inside this's current value.
+
+  struct Node {
+    int value;
+    Maybe<Own<Node>> next;
+    Node(int v): value(v) {}
+    Node(const Node& other): value(other.value) {
+      // Deep copy
+      KJ_IF_SOME(n, other.next) {
+        next = heap<Node>(*n);
+      }
+    }
+    Node& operator=(const Node&) = default;
+  };
+
+  // Create a Maybe that owns a Node, which owns another Node
+  Maybe<Node> head = Node(1);
+  KJ_ASSERT_NONNULL(head).next = heap<Node>(2);
+
+  // Copy-assign from the inner Node to head
+  KJ_IF_SOME(node, head) {
+    KJ_IF_SOME(next, node.next) {
+      head = *next;  // operator=(const T&) where T is inside head's value
+    }
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head).value == 2);
 }
 
 }  // namespace

@@ -746,6 +746,48 @@ KJ_TEST("Maybe<Own<T>> comprehensive") {
   }
 }
 
+KJ_TEST("Maybe<Own<T>> move-assignment is safe when this owns other") {
+  // Test that move-assignment works correctly when `other` is inside `this`'s value.
+  // This is a regression test for a use-after-free bug where:
+  //   head = kj::mv(head->next);
+  // would access head->next after head's value was destroyed.
+
+  struct ListNode {
+    int value;
+    Maybe<Own<ListNode>> next;
+    ListNode(int v): value(v) {}
+  };
+
+  // Build a list: 1 -> 2 -> 3 -> none
+  Maybe<Own<ListNode>> head = heap<ListNode>(1);
+  KJ_ASSERT_NONNULL(head)->next = heap<ListNode>(2);
+  KJ_ASSERT_NONNULL(KJ_ASSERT_NONNULL(head)->next)->next = heap<ListNode>(3);
+
+  // Pop the head by assigning head = kj::mv(head->next)
+  // Without a correctly implemented assignment operator, this would be use-after-free.
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head)->value == 2);
+
+  // Pop again
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head)->value == 3);
+
+  // Pop once more - should become none
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head == kj::none);
+}
+
 KJ_TEST("Maybe<Own<T>> implicit conversion to Maybe<T&>") {
   // Maybe<Own<T>> can implicitly convert to Maybe<T&>, which is useful for
   // passing owned values to functions expecting references.

@@ -299,6 +299,35 @@ KJ_TEST("exception details") {
   KJ_EXPECT(kj::str(KJ_ASSERT_NONNULL(e2.getDetail(456)).asChars()) == "bar");
 }
 
+KJ_TEST("Maybe<Exception> move-assignment is safe when this owns other") {
+  // Test that move-assignment works correctly when `other` is inside `this`'s value.
+  // An Exception can own another Exception via a detail array with attach().
+  //
+  // This scenario is extremely contrived and almost certainly won't happen in practice,
+  // but we're testing for good measure.
+
+  // Create an inner exception that we'll attach to the outer one
+  Own<Exception> innerOwn = heap<Exception>(Exception::Type::FAILED, __FILE__, __LINE__,
+      str("inner exception"));
+  Exception& inner = *innerOwn;
+
+  // Create an outer exception and attach the inner one to a detail
+  Maybe<Exception> outer = KJ_EXCEPTION(FAILED, "outer exception");
+  auto detailArray = heapArray<byte>(0).attach(kj::mv(innerOwn));
+  KJ_ASSERT_NONNULL(outer).setDetail(123, kj::mv(detailArray));
+
+  // Now `inner` is owned by outer's detail. Verify we can still access it.
+  KJ_EXPECT(inner.getDescription() == "inner exception");
+
+  // Move-assign outer from inner. Without a correctly implemented assignment operator, this
+  // would be use-after-free because outer would be destroyed (freeing inner) before inner
+  // is accessed.
+  outer = kj::mv(inner);
+
+  KJ_EXPECT(outer != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(outer).getDescription() == "inner exception");
+}
+
 KJ_TEST("copy constructor") {
   auto e = new kj::Exception(kj::Exception::Type::FAILED, kj::str("src/bar.cc"),
                              35, kj::str("test_exception"));

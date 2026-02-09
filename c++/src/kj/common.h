@@ -1336,65 +1336,10 @@ public:
   }
   inline NullableValue(decltype(nullptr)): isSet(false) {}
 
-  inline NullableValue& operator=(NullableValue&& other) {
-    if (&other != this) {
-      // Careful about throwing destructors/constructors here.
-      destroy();
-      if (other.isSet) {
-        ctor(value, kj::mv(other.value));
-        isSet = true;
-      }
-    }
-    return *this;
-  }
+  // Note: Assignment operators (except nullptr) are intentionally not provided here.
+  // Maybe<T> implements its own assignment operators that are safe against the case where
+  // `this` owns `other` (e.g., head = kj::mv(head->next) in a linked list).
 
-  inline NullableValue& operator=(NullableValue& other) {
-    if (&other != this) {
-      // Careful about throwing destructors/constructors here.
-      destroy();
-      if (other.isSet) {
-        ctor(value, other.value);
-        isSet = true;
-      }
-    }
-    return *this;
-  }
-
-  inline NullableValue& operator=(const NullableValue& other) {
-    if (&other != this) {
-      // Careful about throwing destructors/constructors here.
-      destroy();
-      if (other.isSet) {
-        ctor(value, other.value);
-        isSet = true;
-      }
-    }
-    return *this;
-  }
-
-  inline NullableValue& operator=(T&& other) { emplace(kj::mv(other)); return *this; }
-  inline NullableValue& operator=(T& other) { emplace(other); return *this; }
-  inline NullableValue& operator=(const T& other) { emplace(other); return *this; }
-  template <typename U>
-  inline NullableValue& operator=(NullableValue<U>&& other) {
-    // Written in terms of public API, in case U is niche-optimized.
-    if (other != nullptr) {
-      emplace(kj::mv(*other));
-    } else {
-      *this = nullptr;
-    }
-    return *this;
-  }
-  template <typename U>
-  inline NullableValue& operator=(const NullableValue<U>& other) {
-    // Written in terms of public API, in case U is niche-optimized.
-    if (other != nullptr) {
-      emplace(*other);
-    } else {
-      *this = nullptr;
-    }
-    return *this;
-  }
   inline NullableValue& operator=(decltype(nullptr)) {
     destroy();
     return *this;
@@ -1541,66 +1486,10 @@ public:
 
   inline NullableValue(decltype(nullptr)) { initNone(&value); }
 
-  inline NullableValue& operator=(NullableValue&& other) {
-    if (&other != this) {
-      // Careful not to construct from none values.
-      if (other != nullptr) {
-        emplace(kj::mv(*other));
-      } else {
-        *this = nullptr;
-      }
-    }
-    return *this;
-  }
+  // Note: Assignment operators (except nullptr) are intentionally not provided here.
+  // Maybe<T> implements its own assignment operators that are safe against the case where
+  // `this` owns `other` (e.g., head = kj::mv(head->next) in a linked list).
 
-  inline NullableValue& operator=(NullableValue& other) {
-    if (&other != this) {
-      // Careful not to construct from none values.
-      if (other != nullptr) {
-        emplace(*other);
-      } else {
-        *this = nullptr;
-      }
-    }
-    return *this;
-  }
-
-  inline NullableValue& operator=(const NullableValue& other) {
-    if (&other != this) {
-      // Careful not to construct from none values.
-      if (other != nullptr) {
-        emplace(*other);
-      } else {
-        *this = nullptr;
-      }
-    }
-    return *this;
-  }
-
-  inline NullableValue& operator=(T&& other) { emplace(kj::mv(other)); return *this; }
-  inline NullableValue& operator=(T& other) { emplace(other); return *this; }
-  inline NullableValue& operator=(const T& other) { emplace(other); return *this; }
-
-  template <typename U>
-  inline NullableValue& operator=(NullableValue<U>&& other) {
-    // Written in terms of public API, in case U is non-niche-optimized.
-    if (other != nullptr) {
-      emplace(kj::mv(*other));
-    } else {
-      *this = nullptr;
-    }
-    return *this;
-  }
-  template <typename U>
-  inline NullableValue& operator=(const NullableValue<U>& other) {
-    // Written in terms of public API, in case U is non-niche-optimized.
-    if (other != nullptr) {
-      emplace(*other);
-    } else {
-      *this = nullptr;
-    }
-    return *this;
-  }
   inline NullableValue& operator=(decltype(nullptr)) {
     // Never destroy none values - they are trivially destructible sentinels.
     if (!isNone(value)) {
@@ -1865,30 +1754,75 @@ public:
     return ptr.emplace(kj::fwd<Params>(params)...);
   }
 
-  inline Maybe& operator=(T&& other) { ptr = kj::mv(other); return *this; }
-  inline Maybe& operator=(T& other) { ptr = other; return *this; }
-  inline Maybe& operator=(const T& other) { ptr = other; return *this; }
+  // All assignment operators below are implemented by first extracting `other`'s value to a
+  // temporary, then emplacing into `this` (which destroys this's old value and constructs the new
+  // one). This pattern ensures:
+  // 1. If `other` is inside `this`'s value (e.g., head = kj::mv(head->next)), the value is
+  //    extracted before `this` is destroyed, so we don't access freed memory.
+  // 2. If the extraction throws, `this` is unchanged.
+  // 3. If emplace() throws, `this` is left in the none state (emplace has exception safety).
 
-  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); other = kj::none; return *this; }
-  inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
-  inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
+  inline Maybe& operator=(T&& other) {
+    T temp(kj::mv(other));
+    ptr.emplace(kj::mv(temp));
+    return *this;
+  }
+  inline Maybe& operator=(T& other) {
+    T temp(other);
+    ptr.emplace(kj::mv(temp));
+    return *this;
+  }
+  inline Maybe& operator=(const T& other) {
+    T temp(other);
+    ptr.emplace(kj::mv(temp));
+    return *this;
+  }
+
+  inline Maybe& operator=(Maybe&& other) {
+    Maybe temp(kj::mv(other));
+    KJ_IF_SOME(value, kj::mv(temp)) {
+      ptr.emplace(kj::mv(value));
+    } else {
+      *this = kj::none;
+    }
+    return *this;
+  }
+  inline Maybe& operator=(Maybe& other) {
+    Maybe temp(other);
+    KJ_IF_SOME(value, temp) {
+      ptr.emplace(kj::mv(value));
+    } else {
+      *this = kj::none;
+    }
+    return *this;
+  }
+  inline Maybe& operator=(const Maybe& other) {
+    Maybe temp(other);
+    KJ_IF_SOME(value, temp) {
+      ptr.emplace(kj::mv(value));
+    } else {
+      *this = kj::none;
+    }
+    return *this;
+  }
 
   template <typename U>
   Maybe& operator=(Maybe<U>&& other) {
-    KJ_IF_SOME(val, kj::mv(other)) {
-      ptr.emplace(kj::mv(val));
-      other = kj::none;
+    Maybe<U> temp(kj::mv(other));
+    KJ_IF_SOME(value, kj::mv(temp)) {
+      ptr.emplace(kj::mv(value));
     } else {
-      ptr = nullptr;
+      *this = kj::none;
     }
     return *this;
   }
   template <typename U>
   Maybe& operator=(const Maybe<U>& other) {
-    KJ_IF_SOME(val, other) {
-      ptr.emplace(val);
+    Maybe<U> temp(other);
+    KJ_IF_SOME(value, temp) {
+      ptr.emplace(kj::mv(value));
     } else {
-      ptr = nullptr;
+      *this = kj::none;
     }
     return *this;
   }
@@ -1897,7 +1831,8 @@ public:
     requires _::HasConvertingConstructorFlag<T> &&  // Only when MaybeTraits<T> opts in
              requires(U&& u) { T(kj::fwd<U>(u)); }
   Maybe& operator=(U&& value) {
-    ptr.emplace(kj::fwd<U>(value));
+    T temp(kj::fwd<U>(value));
+    ptr.emplace(kj::mv(temp));
     return *this;
   }
   // Converting assignment: allows assigning a U that is convertible to T.
