@@ -1691,5 +1691,83 @@ KJ_TEST("Maybe<T> T-value copy-assignment is safe when this owns other") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(head).value == 2);
 }
 
+// =======================================================================================
+// Cross-type assignment tests
+
+KJ_TEST("Maybe<StringPtr> assigned from Maybe<String>") {
+  // String is not copyable, so cross-type assignment must not try to copy the Maybe<String>.
+  // Instead it should convert String -> StringPtr directly.
+
+  // Copy-assignment from const Maybe<String>&
+  Maybe<String> s = kj::str("hello");
+  Maybe<StringPtr> sp;
+  sp = s;
+  KJ_EXPECT(KJ_ASSERT_NONNULL(sp) == "hello");
+  KJ_EXPECT(s != kj::none);  // source unchanged
+
+  // Note: Move-assignment (sp = kj::mv(s)) would leave sp with a dangling StringPtr because
+  // StringPtr is non-owning and the String would be destroyed. This is expected behavior.
+}
+
+KJ_TEST("Cross-type Maybe assignment with move-only types") {
+  // Test that cross-type assignment works with move-only types.
+  // Own<Derived> -> Own<Base> is a common case.
+
+  struct Base {
+    int value;
+    explicit Base(int v): value(v) {}
+    virtual ~Base() = default;
+  };
+  struct Derived: Base {
+    explicit Derived(int v): Base(v) {}
+  };
+
+  {
+    // Move-assignment from Maybe<Own<Derived>>&& to Maybe<Own<Base>>
+    Maybe<Own<Derived>> derived = heap<Derived>(42);
+    Maybe<Own<Base>> base;
+    base = kj::mv(derived);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(base)->value == 42);
+    KJ_EXPECT(derived == kj::none);  // source nullified
+  }
+
+  {
+    // Move-assignment when target already has a value
+    Maybe<Own<Derived>> derived = heap<Derived>(99);
+    Maybe<Own<Base>> base = heap<Base>(1);
+    base = kj::mv(derived);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(base)->value == 99);
+    KJ_EXPECT(derived == kj::none);
+  }
+}
+
+KJ_TEST("Maybe self-assignment is safe") {
+  // Test that self-assignment (m = m) works correctly.
+
+  {
+    // Move self-assignment
+    Maybe<int> m = 42;
+    m = kj::mv(m);
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m) == 42);
+  }
+
+  {
+    // Copy self-assignment
+    Maybe<int> m = 42;
+    Maybe<int>& ref = m;
+    m = ref;
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m) == 42);
+  }
+
+  {
+    // Self-assignment of none
+    Maybe<int> m;
+    m = kj::mv(m);
+    KJ_EXPECT(m == kj::none);
+  }
+}
+
 }  // namespace
 }  // namespace kj
