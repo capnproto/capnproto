@@ -690,22 +690,24 @@ private:
 };
 
 // =======================================================================================
-// KJ_MAP
-
-#define KJ_MAP(elementName, array) \
-  ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>(array) * \
-  [&](typename ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>::Element elementName)
-// Applies some function to every element of an array, returning an Array of the results,  with
-// nice syntax.  Example:
+// KJ_MAP for iterable containers and C arrays
 //
-//     StringPtr foo = "abcd";
-//     Array<char> bar = KJ_MAP(c, foo) -> char { return c + 1; };
-//     KJ_ASSERT(str(bar) == "bcde");
+// The KJ_MAP macro and Mapper primary template are declared in kj/common.h.
+// Below is a constrained specialization for iterable containers (begin/end/size) and
+// an explicit specialization for C arrays. Both produce Array<Result>.
 
 namespace _ {  // private
 
 template <typename T>
-struct Mapper {
+concept MappableContainer = requires(T& t) {
+  *t.begin();
+  t.end();
+  t.size();
+};
+
+template <typename T>
+  requires MappableContainer<T>
+struct Mapper<T> {
   T array;
   Mapper(T&& array): array(kj::fwd<T>(array)) {}
   template <typename Func>
