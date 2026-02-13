@@ -223,6 +223,59 @@ inline uint HashCoder::operator*(T e) const {
   return operator*(static_cast<__underlying_type(T)>(e));
 }
 
+#ifndef __CRC32__
+#ifndef __ARM_FEATURE_CRC32
+// CRC32 implementation taken from https://create.stephan-brumme.com/crc32/, provided under Zlib
+// license:
+/*
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.zlib License
+*/
+
+inline uint32_t crc32_bitwise(const void* data, size_t length, uint32_t previousCrc32)
+{
+  // The polynomial for CRC32C. We use this since hardware implementations are available for x64 and
+  // arm64, zlib CRC32 (polynomial 0xEDB88320) is only available on arm64.
+  uint32_t Polynomial = 0x82F63B78;
+
+  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
+  const uint8_t* current = (const uint8_t*) data;
+
+  while (length-- != 0)
+  {
+    crc ^= *current++;
+
+    for (int j = 0; j < 8; j++)
+    {
+      // branch-free
+      crc = (crc >> 1) ^ (-int32_t(crc & 1) & Polynomial);
+
+      // branching, much slower:
+      //if (crc & 1)
+      //  crc = (crc >> 1) ^ Polynomial;
+      //else
+      //  crc =  crc >> 1;
+    }
+  }
+
+  return ~crc; // same as crc ^ 0xFFFFFFFF
+}
+#endif // __CRC32__
+#endif // __ARM_FEATURE_CRC32
+
 inline uint intHash32(uint32_t i) {
   // Basic 32-bit integer hash function.
   //
@@ -235,26 +288,18 @@ inline uint intHash32(uint32_t i) {
   // The point of all this is that kj::HashMap uses power-of-two-sized tables, and we want to make
   // sure maps with integer keys hash well into those tables.
 
-  // On architectures with a hardware CRC32 instruction, use it. Otherwise fall back to a
-  // reasonable shifty hash.
+  // On architectures with a hardware CRC32 instruction, use it. Otherwise fall back to a bitwise
+  // implementation.
 #if __CRC32__
   return __builtin_ia32_crc32si(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
-  return __builtin_arm_crc32w(0, i);
+  return __builtin_arm_crc32cw(0, i);
 #else
   return __crc32w(0, i);
 #endif
 #else
-  // Thomas Wang 32 bit integer hash function from https://gist.github.com/badboy/6267743
-  // This page says it's public domain: http://burtleburtle.net/bob/hash/integer.html
-  i = ~i + (i << 15); // i = (i << 15) - i - 1;
-  i = i ^ (i >> 12);
-  i = i + (i << 2);
-  i = i ^ (i >> 4);
-  i = i * 2057; // i = (i + (i << 3)) + (i << 11);
-  i = i ^ (i >> 16);
-  return i;
+  return crc32_bitwise((void*)&i, sizeof(uint32_t), 0);
 #endif
 }
 
@@ -274,21 +319,12 @@ inline uint intHash64(uint64_t i) {
   return __builtin_ia32_crc32di(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
-  return __builtin_arm_crc32d(0, i);
+  return __builtin_arm_crc32cd(0, i);
 #else
   return __crc32d(0, i);
 #endif
 #else
-  // Thomas Wang hash6432shift() from https://gist.github.com/badboy/6267743
-  // This page says it's public domain (inthash.c):
-  //     https://github.com/markokr/pghashlib/blob/master/COPYRIGHT
-  i = (~i) + (i << 18);
-  i = i ^ (i >> 31);
-  i = i * 21;
-  i = i ^ (i >> 11);
-  i = i + (i << 6);
-  i = i ^ (i >> 22);
-  return i;
+  return crc32_bitwise((void*)&i, sizeof(uint64_t), 0);
 #endif
 }
 
