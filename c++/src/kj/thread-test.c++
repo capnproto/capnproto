@@ -152,7 +152,7 @@ KJ_TEST("Thread::getCpuTime()") {
   Thread thread([&]() {
     waitForState(RUNNING);
     while (threadCpuNow() < 10 * MILLISECONDS) {}
-    *state.lockExclusive() = DONE;
+    { auto lock = state.lockExclusive(); *lock = DONE; }
     waitForState(EXIT);
   });
 
@@ -160,7 +160,7 @@ KJ_TEST("Thread::getCpuTime()") {
   KJ_EXPECT(thread.getCpuTime() <= 5 * MILLISECONDS);
 
   // Signal thread to start running, and wait for it to finish.
-  *state.lockExclusive() = RUNNING;
+  { auto lock = state.lockExclusive(); *lock = RUNNING; }
   waitForState(DONE);
 
   // Now CPU time should reflect that the thread burned 10ms.
@@ -172,7 +172,7 @@ KJ_TEST("Thread::getCpuTime()") {
 
   // Signal the thread to exit. Note that getCpuTime() may fail if called after the thread exit,
   // hence why we had to delay it.
-  *state.lockExclusive() = EXIT;
+  { auto lock = state.lockExclusive(); *lock = EXIT; }
 }
 #endif  // !__APPLE__
 

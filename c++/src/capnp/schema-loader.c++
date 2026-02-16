@@ -2148,18 +2148,23 @@ Schema SchemaLoader::get(uint64_t id, schema::Brand::Reader brand, Schema scope)
 
 kj::Maybe<Schema> SchemaLoader::tryGet(
     uint64_t id, schema::Brand::Reader brand, Schema scope) const {
-  auto getResult = impl.lockShared()->get()->tryGet(id);
+  auto sharedLock = impl.lockShared();
+  auto getResult = sharedLock->get()->tryGet(id);
+  sharedLock.release();
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
     // This schema couldn't be found or has yet to be lazily loaded. If we have a lazy loader
     // callback, invoke it now to try to get it to load this schema.
     KJ_IF_SOME(c, getResult.callback) {
       c.load(*this, id);
     }
-    getResult = impl.lockShared()->get()->tryGet(id);
+    sharedLock = impl.lockShared();
+    getResult = sharedLock->get()->tryGet(id);
+    sharedLock.release();
   }
   if (getResult.schema != nullptr && getResult.schema->lazyInitializer == nullptr) {
     if (brand.getScopes().size() > 0) {
-      auto brandedSchema = impl.lockExclusive()->get()->makeBranded(
+      auto lock = impl.lockExclusive();
+      auto brandedSchema = lock->get()->makeBranded(
           getResult.schema, brand,
           scope.raw->isUnbound()
               ? kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>>(kj::none)
@@ -2176,7 +2181,8 @@ kj::Maybe<Schema> SchemaLoader::tryGet(
 
 Schema SchemaLoader::getUnbound(uint64_t id) const {
   auto schema = get(id);
-  return Schema(impl.lockExclusive()->get()->getUnbound(schema.raw->generic));
+  auto lock = impl.lockExclusive();
+  return Schema(lock->get()->getUnbound(schema.raw->generic));
 }
 
 Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
@@ -2238,7 +2244,8 @@ Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
 }
 
 Schema SchemaLoader::load(const schema::Node::Reader& reader) {
-  return Schema(&impl.lockExclusive()->get()->load(reader, false)->defaultBrand);
+  auto lock = impl.lockExclusive();
+  return Schema(&lock->get()->load(reader, false)->defaultBrand);
 }
 
 Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
@@ -2254,15 +2261,18 @@ Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
 }
 
 kj::Array<Schema> SchemaLoader::getAllLoaded() const {
-  return impl.lockShared()->get()->getAllLoaded();
+  auto lock = impl.lockShared();
+  return lock->get()->getAllLoaded();
 }
 
 void SchemaLoader::computeOptimizationHints() {
-  impl.lockExclusive()->get()->computeOptimizationHints();
+  auto lock = impl.lockExclusive();
+  lock->get()->computeOptimizationHints();
 }
 
 void SchemaLoader::loadNative(const _::RawSchema* nativeSchema) {
-  impl.lockExclusive()->get()->loadNative(nativeSchema);
+  auto lock = impl.lockExclusive();
+  lock->get()->loadNative(nativeSchema);
 }
 
 }  // namespace capnp

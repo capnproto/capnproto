@@ -118,7 +118,7 @@ TEST(Mutex, MutexGuarded) {
   EXPECT_EQ(789u, *KJ_ASSERT_NONNULL(value.lockSharedWithTimeout(MILLISECONDS * 50)));
 #endif
 
-  EXPECT_EQ(789u, *value.lockExclusive());
+  { auto lock = value.lockExclusive(); EXPECT_EQ(789u, *lock); }
 
   {
     auto rlock1 = value.lockShared();
@@ -165,7 +165,7 @@ TEST(Mutex, MutexGuarded) {
     auto earlyRelease = kj::mv(rlock1);
   }
 
-  EXPECT_EQ(321u, *value.lockExclusive());
+  { auto lock = value.lockExclusive(); EXPECT_EQ(321u, *lock); }
 
 #if !_WIN32 && !__CYGWIN__  // Not checked on win32.
   EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedExclusive());
@@ -184,13 +184,13 @@ TEST(Mutex, When) {
     });
     KJ_EXPECT(m == 126);
 
-    KJ_EXPECT(*value.lockShared() == 124);
+    { auto lock = value.lockShared(); KJ_EXPECT(*lock == 124); }
   }
 
   {
     kj::Thread thread([&]() {
       delay();
-      *value.lockExclusive() = 321;
+      { auto lock = value.lockExclusive(); *lock = 321; }
     });
 
     uint m = value.when([](uint n) { return n > 200; }, [](uint& n) {
@@ -199,12 +199,12 @@ TEST(Mutex, When) {
     });
     KJ_EXPECT(m == 324);
 
-    KJ_EXPECT(*value.lockShared() == 322);
+    { auto lock = value.lockShared(); KJ_EXPECT(*lock == 322); }
   }
 
   {
     // Stress test. 100 threads each wait for a value and then set the next value.
-    *value.lockExclusive() = 0;
+    { auto lock = value.lockExclusive(); *lock = 0; }
 
     auto threads = kj::heapArrayBuilder<kj::Own<kj::Thread>>(100);
     for (auto i: kj::zeroTo(100)) {
@@ -221,7 +221,7 @@ TEST(Mutex, When) {
     });
     KJ_EXPECT(m == 100);
 
-    KJ_EXPECT(*value.lockShared() == 101);
+    { auto lock = value.lockShared(); KJ_EXPECT(*lock == 101); }
   }
 
   {
@@ -235,7 +235,7 @@ TEST(Mutex, When) {
     // Throw from predicate later on.
     kj::Thread thread([&]() {
       delay();
-      *value.lockExclusive() = 321;
+      { auto lock = value.lockExclusive(); *lock = 321; }
     });
 
     KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
@@ -255,7 +255,7 @@ TEST(Mutex, When) {
 
     kj::Thread thread([&]() {
       delay();
-      *value.lockExclusive() = 654;
+      { auto lock = value.lockExclusive(); *lock = 654; }
     });
 
     m = value.when([](uint n) { return n > 500; }, [](uint& n) {
@@ -279,13 +279,13 @@ TEST(Mutex, WhenWithTimeout) {
     }, LONG_TIMEOUT);
     KJ_EXPECT(m == 126);
 
-    KJ_EXPECT(*value.lockShared() == 124);
+    { auto lock = value.lockShared(); KJ_EXPECT(*lock == 124); }
   }
 
   {
     kj::Thread thread([&]() {
       delay();
-      *value.lockExclusive() = 321;
+      { auto lock = value.lockExclusive(); *lock = 321; }
     });
 
     uint m = value.when([](uint n) { return n > 200; }, [](uint& n) {
@@ -294,12 +294,12 @@ TEST(Mutex, WhenWithTimeout) {
     }, LONG_TIMEOUT);
     KJ_EXPECT(m == 324);
 
-    KJ_EXPECT(*value.lockShared() == 322);
+    { auto lock = value.lockShared(); KJ_EXPECT(*lock == 322); }
   }
 
   {
     // Stress test. 100 threads each wait for a value and then set the next value.
-    *value.lockExclusive() = 0;
+    { auto lock = value.lockExclusive(); *lock = 0; }
 
     auto threads = kj::heapArrayBuilder<kj::Own<kj::Thread>>(100);
     for (auto i: kj::zeroTo(100)) {
@@ -316,7 +316,7 @@ TEST(Mutex, WhenWithTimeout) {
     }, LONG_TIMEOUT);
     KJ_EXPECT(m == 100);
 
-    KJ_EXPECT(*value.lockShared() == 101);
+    { auto lock = value.lockShared(); KJ_EXPECT(*lock == 101); }
   }
 
   {
@@ -355,7 +355,7 @@ TEST(Mutex, WhenWithTimeout) {
     // Throw from predicate later on.
     kj::Thread thread([&]() {
       delay();
-      *value.lockExclusive() = 321;
+      { auto lock = value.lockExclusive(); *lock = 321; }
     });
 
     KJ_EXPECT_THROW_MESSAGE("oops threw", value.when([](uint n) -> bool {
@@ -382,7 +382,7 @@ TEST(Mutex, WhenWithTimeout) {
 
     kj::Thread thread([&]() {
       delay();
-      *value.lockExclusive() = 654;
+      { auto lock = value.lockExclusive(); *lock = 654; }
     });
 
     m = value.when([](uint n) { return n > 500; }, [](uint& n) {
@@ -622,7 +622,7 @@ KJ_TEST("condvar wait with flapping predicate") {
 
   Thread thread([&]() {
     delay();
-    *guarded.lockExclusive() = 1;
+    { auto lock = guarded.lockExclusive(); *lock = 1; }
   });
 
   {

@@ -1323,37 +1323,45 @@ Compiler::Compiler(AnnotationFlag annotationFlag)
 Compiler::~Compiler() noexcept(false) {}
 
 Compiler::ModuleScope Compiler::add(Module& module) const {
-  Node& root = impl.lockExclusive()->get()->addInternal(module).getRootNode();
+  auto lock = impl.lockExclusive();
+  Node& root = lock->get()->addInternal(module).getRootNode();
   return ModuleScope(*this, root.getId(), root);
 }
 
 kj::Maybe<uint64_t> Compiler::lookup(uint64_t parent, kj::StringPtr childName) const {
-  return impl.lockExclusive()->get()->lookup(parent, childName);
+  auto lock = impl.lockExclusive();
+  return lock->get()->lookup(parent, childName);
 }
 
 kj::Maybe<schema::Node::SourceInfo::Reader> Compiler::getSourceInfo(uint64_t id) const {
-  return impl.lockExclusive()->get()->getSourceInfo(id);
+  auto lock = impl.lockExclusive();
+  return lock->get()->getSourceInfo(id);
 }
 
 Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
     Compiler::getFileImportTable(Module& module, Orphanage orphanage) const {
-  return impl.lockExclusive()->get()->getFileImportTable(module, orphanage);
+  auto lock = impl.lockExclusive();
+  return lock->get()->getFileImportTable(module, orphanage);
 }
 
 Orphan<List<schema::Node::SourceInfo>> Compiler::getAllSourceInfo(Orphanage orphanage) const {
-  return impl.lockExclusive()->get()->getAllSourceInfo(orphanage);
+  auto lock = impl.lockExclusive();
+  return lock->get()->getAllSourceInfo(orphanage);
 }
 
 void Compiler::eagerlyCompile(uint64_t id, uint eagerness) const {
-  impl.lockExclusive()->get()->eagerlyCompile(id, eagerness, loader);
+  auto lock = impl.lockExclusive();
+  lock->get()->eagerlyCompile(id, eagerness, loader);
 }
 
 void Compiler::clearWorkspace() const {
-  impl.lockExclusive()->get()->clearWorkspace();
+  auto lock = impl.lockExclusive();
+  lock->get()->clearWorkspace();
 }
 
 void Compiler::load(const SchemaLoader& loader, uint64_t id) const {
-  impl.lockExclusive()->get()->loadFinal(loader, id);
+  auto lock = impl.lockExclusive();
+  lock->get()->loadFinal(loader, id);
 }
 
 // -----------------------------------------------------------------------------

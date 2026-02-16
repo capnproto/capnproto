@@ -567,7 +567,8 @@ public:
   }
 
   size_t getFreelistSize() const {
-    return freelist.lockShared()->size();
+    auto lock = freelist.lockShared();
+    return lock->size();
   }
 
   void useCoreLocalFreelists() {
@@ -841,7 +842,7 @@ struct Executor::Impl {
   }
 
   void disconnect() {
-    state.lockExclusive()->loop = kj::none;
+    { auto lock = state.lockExclusive(); lock->loop = kj::none; }
 
     // Now that `loop` is set null in `state`, other threads will no longer try to manipulate our
     // lists, so we can access them without a lock. That's convenient because a bunch of the things
@@ -1270,7 +1271,8 @@ Executor::Executor(EventLoop& loop, Badge<EventLoop>): impl(kj::heap<Impl>(loop)
 Executor::~Executor() noexcept(false) {}
 
 bool Executor::isLive() const {
-  return impl->state.lockShared()->loop != kj::none;
+  auto lock = impl->state.lockShared();
+  return lock->loop != kj::none;
 }
 
 void Executor::send(_::XThreadEvent& event, bool sync) const {
@@ -1348,7 +1350,8 @@ bool Executor::poll() {
 }
 
 EventLoop& Executor::getLoop() const {
-  KJ_IF_SOME(l, impl->state.lockShared()->loop) {
+  auto lock = impl->state.lockShared();
+  KJ_IF_SOME(l, lock->loop) {
     return l;
   } else {
     kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "Executor's event loop has exited"));

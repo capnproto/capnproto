@@ -257,14 +257,14 @@ public:
     ptr = nullptr;
   }
 
-  inline T* operator->() { return ptr; }
-  inline const T* operator->() const { return ptr; }
-  inline T& operator*() { return *ptr; }
-  inline const T& operator*() const { return *ptr; }
-  inline T* get() { return ptr; }
-  inline const T* get() const { return ptr; }
-  inline operator T*() { return ptr; }
-  inline operator const T*() const { return ptr; }
+  inline T* operator->() & { return ptr; }
+  inline const T* operator->() const & { return ptr; }
+  inline T& operator*() & { return *ptr; }
+  inline const T& operator*() const & { return *ptr; }
+  inline T* get() & { return ptr; }
+  inline const T* get() const & { return ptr; }
+  inline operator T*() & { return ptr; }
+  inline operator const T*() const & { return ptr; }
 
   template <typename Cond>
   void wait(Cond&& condition, Maybe<Duration> timeout = kj::none,

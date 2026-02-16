@@ -936,7 +936,8 @@ private:
       ++ref->impl.getAlreadyLockedExclusive().mmapCount;
     }
     ~MmapDisposer() noexcept(false) {
-      --ref->impl.lockExclusive()->mmapCount;
+      auto lock = ref->impl.lockExclusive();
+      --lock->mmapCount;
     }
 
     void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
@@ -955,7 +956,8 @@ private:
       ++ref->impl.getAlreadyLockedExclusive().mmapCount;
     }
     ~WritableFileMappingImpl() noexcept(false) {
-      --ref->impl.lockExclusive()->mmapCount;
+      auto lock = ref->impl.lockExclusive();
+      --lock->mmapCount;
     }
 
     ArrayPtr<byte> get() const override {
@@ -965,11 +967,13 @@ private:
     }
 
     void changed(ArrayPtr<byte> slice) const override {
-      ref->impl.lockExclusive()->modified();
+      auto lock = ref->impl.lockExclusive();
+      lock->modified();
     }
 
     void sync(ArrayPtr<byte> slice) const override {
-      ref->impl.lockExclusive()->modified();
+      auto lock = ref->impl.lockExclusive();
+      lock->modified();
     }
 
   private:
@@ -1282,7 +1286,8 @@ public:
         // Replacement is not allowed, so we'll have to check upfront if the target path exists.
         // Unfortunately we have to take a lock and then drop it immediately since we can't keep
         // the lock held while accessing `fromDirectory`.
-        if (impl.lockShared()->tryGetEntry(toPath[0]) != kj::none) {
+        auto lock = impl.lockShared();
+        if (lock->tryGetEntry(toPath[0]) != kj::none) {
           return false;
         }
       }
@@ -1743,7 +1748,7 @@ private:
 
   kj::Maybe<Own<const ReadableDirectory>> tryGetParent(kj::StringPtr name) const {
     auto lock = impl.lockShared();
-    KJ_IF_SOME(entry, impl.lockShared()->tryGetEntry(name)) {
+    KJ_IF_SOME(entry, lock->tryGetEntry(name)) {
       return asDirectory(lock, entry);
     } else {
       return kj::none;
