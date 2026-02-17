@@ -1808,7 +1808,7 @@ public:
 
   template <typename U>
   Maybe& operator=(Maybe<U>&& other) {
-    Maybe temp(kj::mv(other));
+    Maybe<U> temp(kj::mv(other));
     KJ_IF_SOME(value, kj::mv(temp)) {
       ptr.emplace(kj::mv(value));
     } else {
@@ -1818,8 +1818,8 @@ public:
   }
   template <typename U>
   Maybe& operator=(const Maybe<U>& other) {
-    Maybe temp(other);
-    KJ_IF_SOME(value, kj::mv(temp)) {
+    Maybe<U> temp(other);
+    KJ_IF_SOME(value, temp) {
       ptr.emplace(kj::mv(value));
     } else {
       *this = kj::none;
