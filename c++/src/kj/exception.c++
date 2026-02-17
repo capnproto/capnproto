@@ -478,7 +478,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   }
   KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
 
-  String lines[32];
+  String lines[256];
   FILE* p = nullptr;
   auto strTrace = strArray(trace, " ");
 
@@ -605,7 +605,7 @@ StringPtr stringifyStackTraceAddresses(ArrayPtr<void* const> trace, ArrayPtr<cha
 }
 
 String getStackTrace() {
-  void* space[32]{};
+  void* space[256]{};
   auto trace = getStackTrace(space, 2);
   return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
 }
@@ -613,7 +613,7 @@ String getStackTrace() {
 namespace {
 
 [[noreturn]] void terminateHandler() {
-  void* traceSpace[32]{};
+  void* traceSpace[256]{};
 
   // ignoreCount = 3 to ignore std::terminate entry.
   auto trace = kj::getStackTrace(traceSpace, 3);
@@ -663,7 +663,7 @@ BOOL WINAPI breakHandler(DWORD type) {
           memset(&context, 0, sizeof(context));
           context.ContextFlags = CONTEXT_FULL;
           if (GetThreadContext(thread, &context)) {
-            void* traceSpace[32];
+            void* traceSpace[256];
             auto trace = getStackTrace(traceSpace, 0, thread, context);
             ResumeThread(thread);
             auto message = kj::str("*** Received CTRL+C. stack: ",
@@ -712,7 +712,7 @@ kj::StringPtr exceptionDescription(DWORD code) {
 }
 
 LONG WINAPI sehHandler(EXCEPTION_POINTERS* info) {
-  void* traceSpace[32];
+  void* traceSpace[256];
   auto trace = getStackTrace(traceSpace, 0, GetCurrentThread(), *info->ContextRecord);
   auto message = kj::str("*** Received structured exception #0x",
                          hex(info->ExceptionRecord->ExceptionCode), ": ",
@@ -747,7 +747,7 @@ void printStackTraceOnCrash() {
 namespace {
 
 [[noreturn]] void crashHandler(int signo, siginfo_t* info, void* context) {
-  void* traceSpace[32]{};
+  void* traceSpace[256]{};
 
 #if KJ_USE_WIN32_DBGHELP
   // Win32 backtracing can't trace its way out of a Cygwin signal handler. However, Cygwin gives
