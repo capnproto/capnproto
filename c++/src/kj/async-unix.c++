@@ -832,7 +832,7 @@ inline int kqueueCall(int kq, const KqueueEvent* changes, int nchanges,
   // to context switch away from the process and back. The flag KEVENT_FLAG_IMMEDIATE
   // tells it not to do that, and instead just check for pending I/O and return.
   // Why does it not just recognize a zero-value timeout itself? Dunno, but that's the way it is.
-  auto flags = (timeout != nullptr && timeout->tv_sec == 0 && timout->tv_nsec == 0)
+  auto flags = (timeout != nullptr && timeout->tv_sec == 0 && timeout->tv_nsec == 0)
       ? KEVENT_FLAG_IMMEDIATE : KEVENT_FLAG_NONE;
   return kevent64(kq, changes, nchanges, events, nevents, flags, timeout);
 }
