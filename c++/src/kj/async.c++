@@ -2427,6 +2427,10 @@ void PromiseNode::OnReadyEvent::armBreadthFirst() {
   event = _kJ_ALREADY_READY;
 }
 
+bool PromiseNode::OnReadyEvent::armed() const {
+  return event == _kJ_ALREADY_READY;
+}
+
 // -------------------------------------------------------------------
 
 ImmediatePromiseNodeBase::ImmediatePromiseNodeBase() {}
@@ -3201,26 +3205,14 @@ void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
     if (disposalResults.exception == kj::none) {
       disposalResults.exception = kj::mv(exception);
     }
-  } else if (isWaiting()) {
-    // Exception during coroutine execution.
-    resultRef.addException(kj::mv(exception));
-    scheduleResumption();
   } else {
-    // Okay, what could this mean? We've already been fulfilled or rejected, but we aren't being
-    // destroyed yet. The only possibility is that we are unwinding the coroutine frame due to a
-    // successful completion, and something in the frame threw. We can't already be rejected,
-    // because rejecting a coroutine involves throwing, which would have unwound the frame prior
-    // to setting `waiting = false`.
-    //
-    // Since we know we're unwinding due to a successful completion, we also know that whatever
-    // Event we may have armed has not yet fired, because we haven't had a chance to return to
-    // the event loop.
-
-    KJ_IASSERT(!isDone());
-
-    // Since final_suspend() hasn't been called, whatever Event is waiting on us has not fired,
-    // and will see this exception.
     resultRef.addException(kj::mv(exception));
+    if (!onReadyEvent.armed()) {
+      // Exception during coroutine execution.
+      onReadyEvent.arm();
+    }
+    // Otherwise this is an exception during during coroutine frame-unwind
+    // in-between co_return and final_suspend().
   }
 }
 
