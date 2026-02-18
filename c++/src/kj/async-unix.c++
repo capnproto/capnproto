@@ -62,6 +62,9 @@ namespace {
 int reservedSignal = SIGUSR1;
 bool tooLateToSetReserved = false;
 bool capturedChildExit = false;
+#if KJ_USE_EPOLL || KJ_USE_KQUEUE
+constexpr int EVENT_BATCH_SIZE = 64;
+#endif
 
 #if !KJ_USE_KQUEUE
 bool threadClaimedChildExits = false;
@@ -574,9 +577,10 @@ bool UnixEventPort::wait() {
           .map([](uint64_t t) -> int { return t; })
           .orDefault(-1);
 
-  struct epoll_event events[16];
-  int n;
-  if (signalHead != nullptr || childSet != kj::none) {
+  bool useSignals = signalHead != nullptr || childSet != kj::none;
+  sigset_t waitMask;
+
+  if (useSignals) {
     // We are interested in some signals. Use epoll_pwait().
     //
     // Note: Once upon a time, we used signalfd for this. However, this turned out to be more
@@ -597,7 +601,7 @@ bool UnixEventPort::wait() {
     //   the parent process exit while the child thread lives on. In this case, if a UnixEventPort
     //   had been created before daemonizing, signal handling would be forever broken in the child.
 
-    sigset_t waitMask = originalMask;
+    waitMask = originalMask;
 
     // Unblock the signals we care about.
     {
@@ -611,28 +615,44 @@ bool UnixEventPort::wait() {
       }
     }
 
-    threadEventPort = this;
-    n = epoll_pwait(epollFd, events, kj::size(events), timeout, &waitMask);
-    threadEventPort = nullptr;
-  } else {
-    // Not waiting on any signals. Regular epoll_wait() will be fine.
-    n = epoll_wait(epollFd, events, kj::size(events), timeout);
   }
 
-  if (n < 0) {
-    int error = errno;
-    if (error == EINTR) {
-      // We received a signal. The signal handler may have queued an event to the event loop. Even
-      // if it didn't, we can't simply restart the epoll call because we need to recompute the
-      // timeout. Instead, we pretend epoll_wait() returned zero events. This will cause the event
-      // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
-      n = 0;
+  struct epoll_event events[EVENT_BATCH_SIZE];
+  bool woken = false;
+  int currentTimeout = timeout;
+  bool firstWait = true;
+
+  while (true) {
+    int n;
+    if (useSignals && firstWait) {
+      threadEventPort = this;
+      n = epoll_pwait(epollFd, events, kj::size(events), currentTimeout, &waitMask);
+      threadEventPort = nullptr;
     } else {
-      KJ_FAIL_SYSCALL("epoll_pwait()", error);
+      n = epoll_wait(epollFd, events, kj::size(events), currentTimeout);
     }
+
+    if (n < 0) {
+      int error = errno;
+      if (error == EINTR) {
+        // We received a signal. The signal handler may have queued an event to the event loop. Even
+        // if it didn't, we can't simply restart the epoll call because we need to recompute the
+        // timeout. Instead, we pretend epoll_wait() returned zero events. This will cause the event
+        // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
+        n = 0;
+      } else {
+        KJ_FAIL_SYSCALL((useSignals && firstWait) ? "epoll_pwait()" : "epoll_wait()", error);
+      }
+    }
+
+    woken = processEpollEvents(events, n) || woken;
+    if (n < EVENT_BATCH_SIZE) break;
+
+    currentTimeout = 0;
+    firstWait = false;
   }
 
-  return processEpollEvents(events, n);
+  return woken;
 }
 
 bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
@@ -721,11 +741,16 @@ bool UnixEventPort::poll() {
     }
   }
 
-  struct epoll_event events[16];
+  struct epoll_event events[EVENT_BATCH_SIZE];
+  bool woken = false;
   int n;
-  KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), 0));
 
-  return processEpollEvents(events, n);
+  do {
+    KJ_SYSCALL(n = epoll_wait(epollFd, events, kj::size(events), 0));
+    woken = processEpollEvents(events, n) || woken;
+  } while (n == EVENT_BATCH_SIZE);
+
+  return woken;
 }
 
 int UnixEventPort::getPollableFd() {
@@ -1163,60 +1188,68 @@ void UnixEventPort::wake() const {
 }
 
 bool UnixEventPort::doKqueueWait(struct timespec* timeout) {
-  struct kevent events[16];
-  int n = kevent(kqueueFd, nullptr, 0, events, kj::size(events), timeout);
-
-  if (n < 0) {
-    int error = errno;
-    if (error == EINTR) {
-      // We received a signal. The signal handler may have queued an event to the event loop. Even
-      // if it didn't, we can't simply restart the kevent call because we need to recompute the
-      // timeout. Instead, we pretend kevent() returned zero events. This will cause the event
-      // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
-      n = 0;
-    } else {
-      KJ_FAIL_SYSCALL("kevent()", error);
-    }
-  }
-
+  struct kevent events[EVENT_BATCH_SIZE];
   bool woken = false;
+  struct timespec zeroTimeout;
+  zeroTimeout.tv_sec = 0;
+  zeroTimeout.tv_nsec = 0;
+  struct timespec* currentTimeout = timeout;
 
-  for (int i = 0; i < n; i++) {
-    switch (events[i].filter) {
-#ifdef EVFILT_EXCEPT
-      case EVFILT_EXCEPT:
-#endif
-      case EVFILT_READ:
-      case EVFILT_WRITE: {
-        FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].udata);
-        observer->fire(events[i]);
-        break;
+  while (true) {
+    int n = kevent(kqueueFd, nullptr, 0, events, kj::size(events), currentTimeout);
+
+    if (n < 0) {
+      int error = errno;
+      if (error == EINTR) {
+        // We received a signal. The signal handler may have queued an event to the event loop. Even
+        // if it didn't, we can't simply restart the kevent call because we need to recompute the
+        // timeout. Instead, we pretend kevent() returned zero events. This will cause the event
+        // loop to spin once, decide it has nothing to do, recompute timeouts, then return to waiting.
+        n = 0;
+      } else {
+        KJ_FAIL_SYSCALL("kevent()", error);
       }
-
-      case EVFILT_SIGNAL: {
-        SignalPromiseAdapter* observer = reinterpret_cast<SignalPromiseAdapter*>(events[i].udata);
-        observer->tryConsumeSignal();
-        break;
-      }
-
-      case EVFILT_PROC: {
-        ChildExitPromiseAdapter* observer =
-            reinterpret_cast<ChildExitPromiseAdapter*>(events[i].udata);
-        observer->tryConsumeChild();
-        break;
-      }
-
-      case EVFILT_USER:
-        // Someone called wake() from another thread.
-        woken = true;
-        break;
-
-      default:
-        KJ_FAIL_ASSERT("unexpected EVFILT", events[i].filter);
     }
-  }
 
-  timerImpl.advanceTo(clock.now());
+    for (int i = 0; i < n; i++) {
+      switch (events[i].filter) {
+#ifdef EVFILT_EXCEPT
+        case EVFILT_EXCEPT:
+#endif
+        case EVFILT_READ:
+        case EVFILT_WRITE: {
+          FdObserver* observer = reinterpret_cast<FdObserver*>(events[i].udata);
+          observer->fire(events[i]);
+          break;
+        }
+
+        case EVFILT_SIGNAL: {
+          SignalPromiseAdapter* observer = reinterpret_cast<SignalPromiseAdapter*>(events[i].udata);
+          observer->tryConsumeSignal();
+          break;
+        }
+
+        case EVFILT_PROC: {
+          ChildExitPromiseAdapter* observer =
+              reinterpret_cast<ChildExitPromiseAdapter*>(events[i].udata);
+          observer->tryConsumeChild();
+          break;
+        }
+
+        case EVFILT_USER:
+          // Someone called wake() from another thread.
+          woken = true;
+          break;
+
+        default:
+          KJ_FAIL_ASSERT("unexpected EVFILT", events[i].filter);
+      }
+    }
+    timerImpl.advanceTo(clock.now());
+
+    if (n < EVENT_BATCH_SIZE) break;
+    currentTimeout = &zeroTimeout;
+  }
 
   return woken;
 }
