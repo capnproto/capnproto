@@ -3300,13 +3300,11 @@ void CoroutineBase::destroy() {
   }
 }
 
-PromiseAwaiterBase::PromiseAwaiterBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
-PromiseAwaiterBase::PromiseAwaiterBase(PromiseAwaiterBase&&) = default;
+PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node)
+    : coroutine(coroutine), node(kj::mv(node)) {}
 PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
-  if (node.get() != nullptr) {
+  if (KJ_UNLIKELY(node.get() != nullptr)) {
     // Cancellation of a suspended awaiter.
-    // We must have a coroutine attached otherwise we wouldn't be suspended.
-    auto& coroutine = KJ_REQUIRE_NONNULL(maybeCoroutine);
 
     // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
     // destroyed.
@@ -3322,9 +3320,7 @@ PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
 }
 
 void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
-  KJ_IF_SOME(coroutine, maybeCoroutine) {
-    coroutine.clearPromiseNodeForTrace();
-  }
+  coroutine.clearPromiseNodeForTrace();
 
   node->get(result);
 
@@ -3346,7 +3342,7 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
   }
 }
 
-bool PromiseAwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
+bool PromiseAwaiterBase::awaitSuspendImpl() {
   node->setSelfPointer(&node);
   node->onReady(&coroutine);
 
@@ -3362,10 +3358,8 @@ bool PromiseAwaiterBase::awaitSuspendImpl(CoroutineBase& coroutine) {
     return false;
   } else {
     // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it using the
-    // CoroutineBase& reference we save.
+    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it.
     coroutine.setPromiseNodeForTrace(node);
-    maybeCoroutine = coroutine;
 
     return true;
   }
