@@ -1567,6 +1567,29 @@ KJ_TEST("cancel a fiber") {
   KJ_EXPECT(exited);
   KJ_EXPECT(canceled);
 }
+
+KJ_TEST("cancel a fiber before it starts") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Cancel a fiber without ever polling it -- i.e. before it gets a chance to run.
+
+  bool started = false;
+
+  {
+    Promise<void> fiber = startFiber(65536,
+        [&started](WaitScope&) mutable {
+      started = true;
+    });
+
+    KJ_EXPECT(!started);
+  }
+
+  KJ_EXPECT(!started);
+}
+
 #endif
 
 KJ_TEST("fiber pool") {

@@ -1695,9 +1695,17 @@ void FiberStack::switchToMain() {
 }
 
 void FiberBase::run() {
-  bool caughtCanceled = false;
-  state = RUNNING;
   KJ_DEFER(state = FINISHED);
+
+  if (state == CANCELED) {
+    // Synchronously canceled before the fiber had a chance to start. Since the fiber function was
+    // never entered, there is no stack to unwind, so we can just return. We also skip
+    // onReadyEvent.arm() since the caller is destroying the promise and will never read it.
+    return;
+  }
+
+  state = RUNNING;
+  bool caughtCanceled = false;
 
   WaitScope waitScope(currentEventLoop(), *this);
 
