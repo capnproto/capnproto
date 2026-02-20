@@ -2358,8 +2358,18 @@ namespace kj::_ {
 
 namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
 
+class PromiseAwaiterShared: public Event {
+protected:
+  PromiseAwaiterShared(SourceLocation location) : Event(location) {}
+  
+protected:
+  OwnPromiseNode awaiterNode;
+
+  friend class PromiseAwaiterBase;
+};
+
 class CoroutineBase: public PromiseNode,
-                     public Event {
+                     public PromiseAwaiterShared {
 public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location);
   ~CoroutineBase() noexcept(false);
@@ -2384,14 +2394,8 @@ public:
   // lifetime of the enclosing promise.
 
   // Called from Awaiter implementations to integrate with async tracing during suspension.
-  void setPromiseNodeForTrace(OwnPromiseNode& node) {
-    promiseNodeForTrace = node;
+  void setSuspendedAtLeastOnce() {
     hasSuspendedAtLeastOnce = true;
-  }
-
-  // Called from Awaiter implementations to end tracing during resumption/cancellation.
-  void clearPromiseNodeForTrace() {
-    promiseNodeForTrace = kj::none;
   }
 
   // Used in Awaiter implementations to optimize certain immediately-ready promise awaits.
@@ -2437,12 +2441,6 @@ private:
   inline bool isDone() const { return coroutine.done(); }
 #endif
 
-  Maybe<OwnPromiseNode&> promiseNodeForTrace;
-  // Whenever this coroutine is suspended waiting on another promise, we keep a reference to that
-  // promise so tracePromise()/traceEvent() can trace into it. Since ChainPromiseNodes have the
-  // ability to destroy themselves, replacing their own Own, we hold a reference to the owning Own
-  // instead of directly to the PromiseNode.
-
   struct DisposalResults {
     bool destructorRan = false;
     Maybe<Exception> exception;
@@ -2457,6 +2455,12 @@ private:
 template <typename Self, typename T>
 class CoroutineMixin;
 // CRTP mixin, covered later.
+
+template <typename T>
+class PromiseAwaiter;
+
+template <typename T>
+class ForkedPromiseAwaiter;
 
 template <typename T, typename Allocator>
 class Coroutine final: public CoroutineBase,
@@ -2486,31 +2490,18 @@ public:
   }
 
   template <typename U>
-  U&& await_transform(U&& awaitable) {
-    // Our `await_transform()` implementation is where we can instrument awaitables, or provide
-    // custom awaiter implementations, if we need to. Historically, this _is_ where we created
-    // awaiter implementations (that is, the classes with `await_ready()`, `await_suspend()`, and
-    // `await_resume()` member functions), because this was the only place we knew the enclosing
-    // `Coroutine<T>` type. Nowadays, `await_suspend()` can be a template, allowing us to infer
-    // the enclosing coroutine type that way.
-    //
-    // We cannot get rid of `await_transform()`, because downstream projects can (and do) implement
-    // custom coroutine implementations which wrap this implementation, and they use
-    // `await_transform()` to pass unrecognized awaitables through to us -- and if an
-    // `await_transform()` implementation exists for one awaitable types, then the compiler requires
-    // that it exist for all awaitable types `co_await`ed from within this coroutine.
-    //
-    // So, we just pass through all awaitables unchanged for now, deferring to their
-    // `operator co_await` implementations to instantiate the awaiters.
-    //
-    // TODO(someday): We could implement an `await_transform()` overload which wraps awaitables (e.g.
-    //   Promise, ForkedPromise, and whatever else comes along in the future) in a struct containing
-    //   the awaitable plus a reference to our CoroutineBase. The awaitables' `co_await`
-    //   implementation could accept this struct and pass the CoroutineBase reference to the actual
-    //   awaiter implementation's constructor (e.g. PromiseAwaiter), which would give us access to
-    //   the coroutine in `await_ready()`. This would allow us to decide whether to apply the
-    //   immediately-ready-promise optimization earlier, before suspension.
-    return kj::fwd<U>(awaitable);
+  inline PromiseAwaiter<U> await_transform(Promise<U>&& promise) {
+    return PromiseAwaiter<U>(*this, PromiseNode::from(kj::mv(promise)));
+  }
+
+  template <typename U>
+  inline PromiseAwaiter<U> await_transform(Promise<U>& promise) {
+    return PromiseAwaiter<U>(*this, PromiseNode::from(kj::mv(promise)));
+  }
+
+  template <typename U>
+  inline ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>& promise) {
+    return ForkedPromiseAwaiter<U>(*this, promise);
   }
 
   void fulfill(FixVoid<T>&& value) {
@@ -2577,7 +2568,7 @@ public:
 
 class PromiseAwaiterBase {
 public:
-  explicit PromiseAwaiterBase(OwnPromiseNode&& node);
+  explicit PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node);
 
   PromiseAwaiterBase(PromiseAwaiterBase&&);
   ~PromiseAwaiterBase() noexcept(false);
@@ -2592,17 +2583,10 @@ public:
 
 protected:
   void awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt);
-  bool awaitSuspendImpl(CoroutineBase& coroutine);
+  bool awaitSuspendImpl();
 
 private:
-  OwnPromiseNode node;
-
-  Maybe<CoroutineBase&> maybeCoroutine;
-  // If we do suspend waiting for our wrapped promise, we store a reference to `node` in our
-  // enclosing Coroutine for tracing purposes. To guard against any edge cases where an async stack
-  // trace is generated when a PromiseAwaiter was destroyed without Coroutine::fire() having been
-  // called, we need our own reference to the enclosing Coroutine. (I struggle to think up any such
-  // scenarios, but perhaps they could occur when destroying a suspended coroutine.)
+  CoroutineBase& coroutine;
 };
 
 template <typename T>
@@ -2614,7 +2598,7 @@ class PromiseAwaiter: public PromiseAwaiterBase {
   // awaited promise result.
 
 public:
-  explicit PromiseAwaiter(OwnPromiseNode&& node): PromiseAwaiterBase(kj::mv(node)) {}
+  explicit PromiseAwaiter(CoroutineBase& coroutine, OwnPromiseNode&& node): PromiseAwaiterBase(coroutine, kj::mv(node)) {}
 
   KJ_NOINLINE T await_resume() {
     // This is marked noinline in order to ensure KJ_CALLING_ADDRESS() is accurate for stack
@@ -2629,9 +2613,7 @@ public:
   }
 
   template <typename U> requires (canConvert<U&, CoroutineBase&>())
-  bool await_suspend(stdcoro::coroutine_handle<U> handle) {
-    return awaitSuspendImpl(handle.promise());
-  }
+  bool await_suspend(stdcoro::coroutine_handle<U> handle) { return awaitSuspendImpl(); }
 
 private:
   ExceptionOr<FixVoid<T>> result;
@@ -2642,8 +2624,8 @@ private:
 template <typename T>
 class ForkedPromiseAwaiter {
 public:
-  ForkedPromiseAwaiter(ForkedPromise<T>& promise)
-      : node(promise), awaiter(OwnPromiseNode(&node)) { }
+  ForkedPromiseAwaiter(CoroutineBase& coroutine, ForkedPromise<T>& promise)
+      : node(promise), awaiter(coroutine, OwnPromiseNode(&node)) { }
 
   template <typename U>
   inline bool await_suspend(stdcoro::coroutine_handle<U> coroutine) {
@@ -2680,19 +2662,6 @@ namespace kj {
 // could then use this information to instantiate an Awaiter with immediate access to the coroutine,
 // which would facilitate simpler code.
 
-template <typename T>
-_::PromiseAwaiter<T> operator co_await(Promise<T>& promise) {
-  return _::PromiseAwaiter<T>(_::PromiseNode::from(kj::mv(promise)));
-}
-template <typename T>
-_::PromiseAwaiter<T> operator co_await(Promise<T>&& promise) {
-  return _::PromiseAwaiter<T>(_::PromiseNode::from(kj::mv(promise)));
-}
-
-template <typename T>
-_::ForkedPromiseAwaiter<T> operator co_await(ForkedPromise<T>& promise) {
-  return _::ForkedPromiseAwaiter<T>(promise);
-}
 
 }  // namespace kj
 
