@@ -2084,7 +2084,7 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
 
 namespace kj::_ {
 
-namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
+namespace stdcoro = ::KJ_COROUTINE_STD_NAMESPACE;
 
 class CoroutineBase: public PromiseNode,
                      public Event {
