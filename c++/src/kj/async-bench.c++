@@ -24,6 +24,7 @@
 #include <benchmark/benchmark.h>
 
 #include <kj/async.h>
+#include <kj/async-coroutine-alloc.h>
 #include <kj/debug.h>
 
 // kj::READY_NOW is in its own performance class
@@ -161,6 +162,28 @@ static void bm_Coro_Pow2_20(benchmark::State &state) {
 
 BENCHMARK(bm_Coro_Pow2_20);
 
+template<typename Allocator>
+kj::Promise<size_t> coroPow2Alloc(Allocator& allocator, size_t i) {
+  if (i == 0)
+    co_return 1;
+  co_return (co_await coroPow2Alloc(allocator, i - 1)) << 1;
+}
+
+
+static void bm_Stack_Pow2_20(benchmark::State &state) {
+  // Benchmark waiting for an immediate promise.
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  kj::CoroutineStack stack;
+  for (auto _ : state) {
+    auto promise = coroPow2Alloc(stack, 20);
+    KJ_REQUIRE(promise.wait(waitScope) == 1ll << 20);
+  }
+}
+
+BENCHMARK(bm_Stack_Pow2_20);
+
 ///////////////////////////////
 // shift benchmarks mean to benchmark deep promise chains ending on paf.
 
@@ -207,6 +230,30 @@ static void bm_Coro_Shift_20(benchmark::State &state) {
 }
 
 BENCHMARK(bm_Coro_Shift_20);
+
+template<typename Allocator>
+kj::Promise<size_t> coroShiftAlloc(Allocator& alloc, size_t n, kj::Promise<size_t> x) {
+  if (n == 0)
+    co_return co_await x;
+  co_return (co_await coroShiftAlloc(alloc, n - 1, kj::mv(x))) << 1;
+}
+
+// benchmarks coroutine shift with unresolved paf and its fulfillment
+static void bm_Stack_Shift_20(benchmark::State &state) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  kj::CoroutineStack stack;
+  for (auto _ : state) {
+    auto paf = kj::newPromiseAndFulfiller<size_t>();
+    auto promise = coroShiftAlloc(stack, 20, kj::mv(paf.promise));
+    paf.fulfiller->fulfill(3);
+    KJ_REQUIRE(promise.wait(waitScope) == (1ll << 20) * 3);
+  }
+}
+
+BENCHMARK(bm_Stack_Shift_20);
+
 
 ///////////////////////////////
 // fib benchmarks mean to benchmark many await points within a single coro
@@ -271,5 +318,30 @@ static void bm_Coro_Fib10(benchmark::State &state) {
 }
 
 BENCHMARK(bm_Coro_Fib10);
+
+template<typename Allocator>
+kj::Promise<size_t> coroFib10Alloc(Allocator& alloc, size_t i) {
+  if (i <= 10)
+    co_return 1;
+  co_return (co_await coroFib10Alloc(alloc, i - 1)) + (co_await coroFib10Alloc(alloc, i - 2)) +
+      (co_await coroFib10Alloc(alloc, i - 3)) + (co_await coroFib10Alloc(alloc, i - 4)) +
+      (co_await coroFib10Alloc(alloc, i - 5)) + (co_await coroFib10Alloc(alloc, i - 6)) +
+      (co_await coroFib10Alloc(alloc, i - 7)) + (co_await coroFib10Alloc(alloc, i - 8)) +
+      (co_await coroFib10Alloc(alloc, i - 9)) + (co_await coroFib10Alloc(alloc, i - 10));
+}
+
+static void bm_Stack_Fib10(benchmark::State &state) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  kj::CoroutineStack stack;
+  for (auto _ : state) {
+    auto promise = coroFib10Alloc(stack, 12);
+    KJ_REQUIRE(promise.wait(waitScope) == 19);
+  }
+}
+
+BENCHMARK(bm_Stack_Fib10);
+
 
 BENCHMARK_MAIN();

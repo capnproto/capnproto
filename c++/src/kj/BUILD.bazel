@@ -202,8 +202,8 @@ cc_test(
     name = "async-coroutine-alloc-test",
     srcs = ["async-coroutine-alloc-test.c++"],
     deps = [
+        ":kj-async",
         ":kj-test",
-        "//src/kj/compat:kj-http",
     ],
 )
 
