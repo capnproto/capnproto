@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "common.h"
+#include "memory.h"
 #include "test.h"
 #include <stdexcept>
 
@@ -252,6 +253,18 @@ public:
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   TestPtr(TestPtr<U>&& other): ptr(other.ptr) { other.ptr = nullptr; }
 
+  // Converting assignment: TestPtr<U> -> TestPtr<T> when U* converts to T*.
+  // Own<T> doesn't have this, but we add it here to test Maybe's delegation path for
+  // operator=(U&&) when T has a converting assignment operator.
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  TestPtr& operator=(TestPtr<U>&& other) {
+    T* old = ptr;
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    delete old;
+    return *this;
+  }
+
   KJ_DISALLOW_COPY(TestPtr);
 
   T* get() const { return ptr; }
@@ -302,14 +315,18 @@ KJ_TEST("Maybe") {
     } else {
       KJ_FAIL_EXPECT("unexpected");
     }
-    KJ_EXPECT(123 == m.orDefault(456));
+    // NullableValue's move constructor clears the source, so m is now none.
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(456 == m.orDefault(456));
     bool ranLazy = false;
-    KJ_EXPECT(123 == m.orDefault([&] {
+    KJ_EXPECT(456 == m.orDefault([&] {
       ranLazy = true;
       return 456;
     }));
-    KJ_EXPECT(!ranLazy);
+    KJ_EXPECT(ranLazy);
 
+    // Re-set m to test orDefault with a value present.
+    m = 123;
     KJ_IF_SOME(v, m) {
       int notUsedForRef = 5;
       const int& ref = m.orDefault([&]() -> int& { return notUsedForRef; });
@@ -388,13 +405,15 @@ KJ_TEST("Maybe") {
     } else {
       KJ_FAIL_EXPECT("unexpected");
     }
-    KJ_EXPECT(0 == m.orDefault(456));
+    // NullableValue's move constructor clears the source, so m is now none.
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(456 == m.orDefault(456));
     bool ranLazy = false;
-    KJ_EXPECT(0 == m.orDefault([&] {
+    KJ_EXPECT(456 == m.orDefault([&] {
       ranLazy = true;
       return 456;
     }));
-    KJ_EXPECT(!ranLazy);
+    KJ_EXPECT(ranLazy);
   }
 
   {
@@ -829,9 +848,20 @@ KJ_TEST("Maybe convertingConstructor enables implicit two-step conversion") {
     KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 123);
   }
 
-  // Assignment from TestPtr<Derived> to Maybe<TestPtr<Base>>
+  // Assignment from TestPtr<Derived> to Maybe<TestPtr<Base>> (empty Maybe)
   {
     Maybe<TestPtr<Base>> m;
+    m = TestPtr<Derived>(new Derived(99));
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 99);
+  }
+
+  // Assignment from TestPtr<Derived> to Maybe<TestPtr<Base>> (valueful Maybe)
+  // This exercises the delegation path in operator=(U&&): since TestPtr<Base> has
+  // operator=(TestPtr<Derived>&&), Maybe delegates to it via `*ptr = kj::fwd<U>(value)`.
+  {
+    Maybe<TestPtr<Base>> m = TestPtr<Base>(new Base(42));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
     m = TestPtr<Derived>(new Derived(99));
     KJ_EXPECT(m != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 99);
@@ -998,13 +1028,11 @@ KJ_TEST("Maybe<NonMoveableNiche> niche optimization") {
   }
 }
 
-KJ_TEST("Maybe niche-optimized KJ_IF_SOME(v, kj::mv(m)) does not force source to none") {
-  // Test that KJ_IF_SOME with kj::mv() does NOT force the source Maybe to none.
-  // This is because KJ_IF_SOME extracts NullableValue&& via readMaybe(), which does NOT
-  // go through Maybe's move constructor/assignment. The source remains in whatever state
-  // T's move constructor left it in.
-  //
-  // NicheInt has implicit copy/move that just copies the int value without modifying the source.
+KJ_TEST("Maybe niche-optimized KJ_IF_SOME(v, kj::mv(m)) clears source to none") {
+  // NullableValue's move constructor clears the source to the none state.
+  // For niche-optimized types, this calls destroy() which dtors the moved-from value and
+  // initNones the storage. For NicheInt (whose move ctor just copies the int), the source
+  // would normally still look set — but NullableValue's move ctor explicitly clears it.
   static_assert(sizeof(Maybe<NicheInt>) == sizeof(NicheInt), "Should be niche-optimized");
 
   Maybe<NicheInt> m = NicheInt(42);
@@ -1016,22 +1044,14 @@ KJ_TEST("Maybe niche-optimized KJ_IF_SOME(v, kj::mv(m)) does not force source to
     KJ_FAIL_EXPECT("should have value");
   }
 
-  // m should NOT be none - NicheInt's move constructor copies the value,
-  // it doesn't set the source to -1 (the none state).
-  KJ_EXPECT(m != kj::none);
-  KJ_IF_SOME(v, m) {
-    KJ_EXPECT(v.value == 42);  // Still has the original value
-  } else {
-    KJ_FAIL_EXPECT("should still have value after KJ_IF_SOME(v, kj::mv(m))");
-  }
+  // m is none after KJ_IF_SOME(v, kj::mv(m)) — NullableValue's move ctor clears the source.
+  KJ_EXPECT(m == kj::none);
 
-  // Contrast with Maybe-to-Maybe move, which ALWAYS sets source to none.
-  // This is true regardless of whether T is niche-optimized or not.
+  // Same behavior for Maybe-to-Maybe move.
   Maybe<NicheInt> m2 = NicheInt(100);
   Maybe<NicheInt> m3 = kj::mv(m2);
   KJ_EXPECT(m3 != kj::none);
   KJ_EXPECT(KJ_ASSERT_NONNULL(m3).value == 100);
-  // m2 IS none after Maybe-to-Maybe move - Maybe always sets source to none.
   KJ_EXPECT(m2 == kj::none);
 }
 
@@ -1520,12 +1540,11 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - source destructor throws in mov
   // Verify that if the source's dtor throws during move-assignment, we don't have memory
   // corruption or double-frees.
   //
-  // With the current implementation, move-assignment works by:
-  // 1. Move src into a temp Maybe
-  // 2. Emplace dst from temp
-  //
-  // The Maybe move constructor sets src to none after moving, which destroys the moved-from
-  // value. If that destructor throws, the exception happens during step 1.
+  // Maybe::operator=(Maybe&&) uses KJ_IF_SOME, which materializes a NullableValue temp via the
+  // move constructor. The move ctor moves the value out of the source, then calls
+  // other.destroy() to clear the source. For ThrowingNiche, the moved-from value has
+  // value == -1 (not the none state 0), so destroy() calls the dtor which throws.
+  // The exception happens during the KJ_IF_SOME evaluation, before *this is touched.
   //
   // After the exception:
   // - dst is unchanged (strong exception guarantee)
@@ -1545,7 +1564,7 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - source destructor throws in mov
 
   bool caught = false;
   try {
-    dst = kj::mv(src);  // Move throws when destroying moved-from src in temp construction
+    dst = kj::mv(src);  // Move throws when destroying moved-from src during extraction
   } catch (const std::runtime_error& e) {
     caught = true;
     KJ_EXPECT(kj::StringPtr(e.what()) == "moved-from destructor throw");
@@ -1619,7 +1638,9 @@ KJ_TEST("Maybe<Own<T>> copy-assignment is safe when this owns other") {
         next = heap<CopyableNode>(*n);
       }
     }
-    CopyableNode& operator=(const CopyableNode&) = default;
+    CopyableNode& operator=(const CopyableNode&) = delete;
+    // CopyableNode is copy-constructible (deep copy) but not copy-assignable, because the default
+    // copy-assignment for Maybe<Own<CopyableNode>> can't copy Own<CopyableNode>.
   };
 
   Maybe<CopyableNode> head = CopyableNode(1);
@@ -1673,14 +1694,18 @@ KJ_TEST("Maybe<T> T-value copy-assignment is safe when this owns other") {
         next = heap<Node>(*n);
       }
     }
-    Node& operator=(const Node&) = default;
+    Node& operator=(const Node&) = delete;
+    // Node is copy-constructible (deep copy) but not copy-assignable, because the default
+    // copy-assignment for Maybe<Own<Node>> can't copy Own<Node>.
   };
 
   // Create a Maybe that owns a Node, which owns another Node
   Maybe<Node> head = Node(1);
   KJ_ASSERT_NONNULL(head).next = heap<Node>(2);
 
-  // Copy-assign from the inner Node to head
+  // Copy-assign from the inner Node to head. Node isn't move-assignable (its copy-assignment is
+  // deleted and the implicit move-assignment is suppressed), so Maybe falls back to
+  // copy-constructing a temporary then emplacing.
   KJ_IF_SOME(node, head) {
     KJ_IF_SOME(next, node.next) {
       head = *next;  // operator=(const T&) where T is inside head's value
@@ -1767,6 +1792,448 @@ KJ_TEST("Maybe self-assignment is safe") {
     m = kj::mv(m);
     KJ_EXPECT(m == kj::none);
   }
+}
+
+// =======================================================================================
+// Tests for Maybe assignment delegation
+//
+// Maybe<T>'s assignment operators delegate to T's own assignment operators. This enables T to
+// control the transition safely, including reentrancy from T's destructor (e.g., cascading
+// destructions in an intrusive linked list like io-own.c++).
+
+// Named constants for event encoding offsets.
+static constexpr int MOVE = 100;    // move-construction offset
+static constexpr int ASSIGN = 200;  // move-assignment offset
+
+struct EventLoggerNiche {
+  // A niche-optimized type that logs construction, move, and destruction events.
+  // id == 0 is the none state (niche sentinel).
+  //
+  // Event encoding:
+  //   +id            = explicit construction of value with this id
+  //   +(id + MOVE)   = move construction (source had this id); source becomes id=0 (none/silent)
+  //   +(id + ASSIGN) = move-assigned: new value installed with this id
+  //   -(id + ASSIGN) = move-assigned: old value disposed with this id
+  //   -id            = destruction of live (non-moved-from) value
+  // Moved-from objects have id=0 (niche sentinel) so their destruction is silent.
+  //
+  // The move-assignment operator logs install-before-dispose: the new value is installed
+  // (logged as +(id + ASSIGN)) before the old value is disposed (logged as -(oldId + ASSIGN)).
+  int id;
+
+  static int events[40];
+  static int eventCount;
+
+  explicit EventLoggerNiche(int id): id(id) {
+    if (id != 0) events[eventCount++] = id;
+  }
+  EventLoggerNiche(EventLoggerNiche&& other) noexcept: id(other.id) {
+    if (other.id != 0) events[eventCount++] = other.id + MOVE;
+    other.id = 0;  // Must zero for niche sentinel.
+  }
+  EventLoggerNiche& operator=(EventLoggerNiche&& other) noexcept {
+    int oldId = id;
+    id = other.id;
+    other.id = 0;
+    if (id != 0) events[eventCount++] = id + ASSIGN;
+    if (oldId != 0) events[eventCount++] = -(oldId + ASSIGN);
+    return *this;
+  }
+  KJ_DISALLOW_COPY(EventLoggerNiche);
+
+  ~EventLoggerNiche() {
+    if (id != 0) {
+      events[eventCount++] = -id;
+    }
+  }
+
+  friend struct ::kj::MaybeTraits<EventLoggerNiche>;
+};
+
+int EventLoggerNiche::events[40] = {};
+int EventLoggerNiche::eventCount = 0;
+
+}  // namespace
+
+template <>
+struct MaybeTraits<EventLoggerNiche> {
+  static void initNone(EventLoggerNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const EventLoggerNiche& m) noexcept { return m.id == 0; }
+};
+
+namespace {
+
+struct EventLoggerNonNiche {
+  // Non-niche version: uses the default isSet-based NullableValue.
+  //
+  // Event encoding:
+  //   +id            = explicit construction of value with this id
+  //   +(id + MOVE)   = move construction (source had this id); source keeps id, gets movedFrom=true
+  //   +(id + ASSIGN) = move-assigned: new value installed with this id
+  //   -(id + ASSIGN) = move-assigned: old value disposed with this id
+  //   -id            = destruction of live (non-moved-from) value
+  //   -(id + MOVE)   = destruction of moved-from value (source had this id)
+  // Unlike niche types, moved-from non-niche objects are still "set" in NullableValue (isSet=true),
+  // so their destructor DOES run. We use movedFrom to distinguish live vs moved-from destruction.
+  //
+  // The move-assignment operator logs install-before-dispose, matching EventLoggerNiche.
+  // Disposal of a moved-from old value logs -(oldId + ASSIGN + MOVE). This case cannot occur
+  // for niche types, because their moved-from state IS the none state (id=0), so NullableValue
+  // sees no value to assign over.
+  int id;
+  bool movedFrom = false;
+
+  static int events[40];
+  static int eventCount;
+
+  explicit EventLoggerNonNiche(int id): id(id) {
+    events[eventCount++] = id;
+  }
+  EventLoggerNonNiche(EventLoggerNonNiche&& other) noexcept
+      : id(other.id) {
+    if (other.id != 0) events[eventCount++] = other.id + MOVE;
+    other.movedFrom = true;  // Don't zero id — keep it for dtor identification.
+  }
+  EventLoggerNonNiche& operator=(EventLoggerNonNiche&& other) noexcept {
+    int oldId = id;
+    bool oldMovedFrom = movedFrom;
+    id = other.id;
+    movedFrom = other.movedFrom;
+    other.movedFrom = true;
+    if (id != 0) events[eventCount++] = id + ASSIGN;
+    if (oldMovedFrom) {
+      events[eventCount++] = -(oldId + ASSIGN + MOVE);
+    } else if (oldId != 0) {
+      events[eventCount++] = -(oldId + ASSIGN);
+    }
+    return *this;
+  }
+  KJ_DISALLOW_COPY(EventLoggerNonNiche);
+
+  ~EventLoggerNonNiche() {
+    if (movedFrom) {
+      events[eventCount++] = -(id + MOVE);
+    } else if (id != 0) {
+      events[eventCount++] = -id;
+    }
+  }
+};
+
+int EventLoggerNonNiche::events[40] = {};
+int EventLoggerNonNiche::eventCount = 0;
+
+}  // namespace
+
+template <>
+struct MaybeTraits<EventLoggerNonNiche> {
+};
+
+namespace {
+
+// ===========================================================================
+// Delegation tests: types with move-assignment operators
+//
+// When both source and destination are valueful, Maybe delegates to T's own
+// assignment operator. emplace() does NOT delegate — it always destroys the
+// old value BEFORE constructing the new one.
+//
+// Event encoding (see EventLoggerNiche/NonNiche comments for details):
+//   +id            = explicit construction
+//   +(id + MOVE)   = move construction from value with this id
+//   +(id + ASSIGN) = move-assigned: new value installed
+//   -(id + ASSIGN) = move-assigned: old value disposed
+//   -id            = destruction of live value
+//   -(id + MOVE)   = destruction of moved-from value (non-niche only)
+// ===========================================================================
+
+KJ_TEST("Maybe emplace: old value destroyed BEFORE new constructed (niche)") {
+  EventLoggerNiche::eventCount = 0;
+
+  Maybe<EventLoggerNiche> m;
+  m.emplace(1);
+  EventLoggerNiche::eventCount = 0;
+
+  // emplace(2): no delegation.
+  //   ptr.emplace(2) → destroy old T(1) → logs -1, then construct T(2) → logs 2
+  m.emplace(2);
+  KJ_ASSERT(EventLoggerNiche::eventCount == 2);
+  KJ_EXPECT(EventLoggerNiche::events[0] == -1, "expected dtor:1");
+  KJ_EXPECT(EventLoggerNiche::events[1] == 2,  "expected ctor:2");
+}
+
+KJ_TEST("Maybe emplace: old value destroyed BEFORE new constructed (non-niche)") {
+  EventLoggerNonNiche::eventCount = 0;
+
+  Maybe<EventLoggerNonNiche> m;
+  m.emplace(1);
+  EventLoggerNonNiche::eventCount = 0;
+
+  // emplace(2): no delegation.
+  //   ptr.emplace(2) → destroy old T(1) → logs -1, then construct T(2) → logs 2
+  m.emplace(2);
+  KJ_ASSERT(EventLoggerNonNiche::eventCount == 2);
+  KJ_EXPECT(EventLoggerNonNiche::events[0] == -1, "expected dtor:1");
+  KJ_EXPECT(EventLoggerNonNiche::events[1] == 2,  "expected ctor:2");
+}
+
+KJ_TEST("Maybe operator=(T&&): delegates to T's move-assignment (niche)") {
+  EventLoggerNiche::eventCount = 0;
+
+  Maybe<EventLoggerNiche> m;
+  m.emplace(1);
+  EventLoggerNiche::eventCount = 0;
+
+  // m = EventLoggerNiche(2):
+  //   temporary ctor(2)                         → logs 2
+  //   *ptr = kj::mv(temp) → T's move-assign    → logs +(2 + ASSIGN), -(1 + ASSIGN)
+  //   temp dtor: temp.id=0                      → silent (niche sentinel)
+  m = EventLoggerNiche(2);
+  KJ_ASSERT(EventLoggerNiche::eventCount == 3);
+  KJ_EXPECT(EventLoggerNiche::events[0] == 2,              "expected temp ctor:2");
+  KJ_EXPECT(EventLoggerNiche::events[1] == 2 + ASSIGN,     "expected install new:2");
+  KJ_EXPECT(EventLoggerNiche::events[2] == -(1 + ASSIGN),  "expected dispose old:1");
+  KJ_IF_SOME(val, m) {
+    KJ_EXPECT(val.id == 2, val.id);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe to contain a value");
+  }
+}
+
+KJ_TEST("Maybe operator=(T&&): delegates to T's move-assignment (non-niche)") {
+  EventLoggerNonNiche::eventCount = 0;
+
+  Maybe<EventLoggerNonNiche> m;
+  m.emplace(1);
+  EventLoggerNonNiche::eventCount = 0;
+
+  // m = EventLoggerNonNiche(2):
+  //   temporary ctor(2)                         → logs 2
+  //   *ptr = kj::mv(temp) → T's move-assign    → logs +(2 + ASSIGN), -(1 + ASSIGN)
+  //   temp dtor: movedFrom=true                 → logs -(2 + MOVE)
+  m = EventLoggerNonNiche(2);
+  KJ_ASSERT(EventLoggerNonNiche::eventCount == 4);
+  KJ_EXPECT(EventLoggerNonNiche::events[0] == 2,              "expected temp ctor:2");
+  KJ_EXPECT(EventLoggerNonNiche::events[1] == 2 + ASSIGN,     "expected install new:2");
+  KJ_EXPECT(EventLoggerNonNiche::events[2] == -(1 + ASSIGN),  "expected dispose old:1");
+  KJ_EXPECT(EventLoggerNonNiche::events[3] == -(2 + MOVE),    "expected temp moved-from dtor");
+  KJ_IF_SOME(val, m) {
+    KJ_EXPECT(val.id == 2, val.id);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe to contain a value");
+  }
+}
+
+KJ_TEST("Maybe operator=(Maybe&&) with value: delegates to T's move-assignment (niche)") {
+  EventLoggerNiche::eventCount = 0;
+
+  Maybe<EventLoggerNiche> m;
+  m.emplace(1);
+  Maybe<EventLoggerNiche> other;
+  other.emplace(2);
+  EventLoggerNiche::eventCount = 0;
+
+  // m = kj::mv(other):
+  //   KJ_IF_SOME materializes NullableValue temp via move ctor:
+  //     ctor(temp.value, kj::mv(other.value))     → logs +(2 + MOVE); other.id=0
+  //     other.destroy()                            → dtor id=0 silent, initNone silent
+  //   ptr = kj::mv(val) → NullableValue::operator=(T&&):
+  //     value = kj::mv(val) → T's move-assign     → logs +(2 + ASSIGN), -(1 + ASSIGN)
+  //   temp dtor: val.id=0                          → silent (niche sentinel)
+  m = kj::mv(other);
+  KJ_ASSERT(EventLoggerNiche::eventCount == 3);
+  KJ_EXPECT(EventLoggerNiche::events[0] == 2 + MOVE,       "expected move other→temp");
+  KJ_EXPECT(EventLoggerNiche::events[1] == 2 + ASSIGN,     "expected install new:2");
+  KJ_EXPECT(EventLoggerNiche::events[2] == -(1 + ASSIGN),  "expected dispose old:1");
+  KJ_IF_SOME(val, m) {
+    KJ_EXPECT(val.id == 2, val.id);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe to contain a value");
+  }
+}
+
+KJ_TEST("Maybe operator=(Maybe&&) with value: delegates to T's move-assignment (non-niche)") {
+  EventLoggerNonNiche::eventCount = 0;
+
+  Maybe<EventLoggerNonNiche> m;
+  m.emplace(1);
+  Maybe<EventLoggerNonNiche> other;
+  other.emplace(2);
+  EventLoggerNonNiche::eventCount = 0;
+
+  // m = kj::mv(other):
+  //   KJ_IF_SOME materializes NullableValue temp via move ctor:
+  //     ctor(temp.value, kj::mv(other.value))     → logs +(2 + MOVE)
+  //     other.isSet = false; dtor(other.value)     → logs -(2 + MOVE) (moved-from dtor)
+  //   ptr = kj::mv(val) → NullableValue::operator=(T&&):
+  //     value = kj::mv(val) → T's move-assign     → logs +(2 + ASSIGN), -(1 + ASSIGN)
+  //   temp dtor: val movedFrom=true                → logs -(2 + MOVE)
+  m = kj::mv(other);
+  KJ_ASSERT(EventLoggerNonNiche::eventCount == 5);
+  KJ_EXPECT(EventLoggerNonNiche::events[0] == 2 + MOVE,       "expected move other→temp");
+  KJ_EXPECT(EventLoggerNonNiche::events[1] == -(2 + MOVE),    "expected other moved-from dtor");
+  KJ_EXPECT(EventLoggerNonNiche::events[2] == 2 + ASSIGN,     "expected install new:2");
+  KJ_EXPECT(EventLoggerNonNiche::events[3] == -(1 + ASSIGN),  "expected dispose old:1");
+  KJ_EXPECT(EventLoggerNonNiche::events[4] == -(2 + MOVE),    "expected temp moved-from dtor");
+  KJ_IF_SOME(val, m) {
+    KJ_EXPECT(val.id == 2, val.id);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe to contain a value");
+  }
+}
+
+// ===========================================================================
+// Fallback tests: types without move-assignment operators
+//
+// These types have no move-assignment operator, so NullableValue::operator=(U&&) uses the
+// fallback overload (destroy + construct via emplace) instead of delegating to T's operator=.
+// ===========================================================================
+
+struct NonAssignableNiche {
+  // Movable but not move-assignable. Used to test the fallback overload of
+  // NullableValue::operator=(U&&), which uses destroy + construct via emplace.
+  int id;
+
+  explicit NonAssignableNiche(int id): id(id) {}
+  NonAssignableNiche(NonAssignableNiche&& other): id(other.id) {
+    other.id = 0;
+  }
+  KJ_DISALLOW_COPY(NonAssignableNiche);
+  ~NonAssignableNiche() = default;
+
+  friend struct ::kj::MaybeTraits<NonAssignableNiche>;
+};
+
+}  // namespace
+
+template <>
+struct MaybeTraits<NonAssignableNiche> {
+  static void initNone(NonAssignableNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const NonAssignableNiche& m) noexcept { return m.id == 0; }
+};
+
+namespace {
+
+struct NonAssignableNonNiche {
+  // Movable but not move-assignable, non-niche variant.
+  int id;
+
+  explicit NonAssignableNonNiche(int id): id(id) {}
+  NonAssignableNonNiche(NonAssignableNonNiche&& other): id(other.id) {
+    other.id = 0;
+  }
+  KJ_DISALLOW_COPY(NonAssignableNonNiche);
+  ~NonAssignableNonNiche() = default;
+};
+
+KJ_TEST("Maybe operator=(Maybe&&): non-assignable type uses fallback (niche)") {
+  // Smoke test: non-move-assignable types fall back to destroy + construct via emplace.
+  // The KJ_IF_SOME path materializes a NullableValue temp, then operator=(T&&) fallback
+  // creates a sourceTemp and emplaces. Verify the result is correct.
+  Maybe<NonAssignableNiche> m;
+  m.emplace(1);
+  Maybe<NonAssignableNiche> other;
+  other.emplace(2);
+
+  m = kj::mv(other);
+  KJ_IF_SOME(val, m) {
+    KJ_EXPECT(val.id == 2);
+  } else {
+    KJ_FAIL_EXPECT("expected value");
+  }
+  KJ_EXPECT(other == kj::none);
+}
+
+KJ_TEST("Maybe operator=(Maybe&&): non-assignable type uses fallback (non-niche)") {
+  Maybe<NonAssignableNonNiche> m;
+  m.emplace(1);
+  Maybe<NonAssignableNonNiche> other;
+  other.emplace(2);
+
+  m = kj::mv(other);
+  KJ_IF_SOME(val, m) {
+    KJ_EXPECT(val.id == 2);
+  } else {
+    KJ_FAIL_EXPECT("expected value");
+  }
+  KJ_EXPECT(other == kj::none);
+}
+
+// ===========================================================================
+// Reentrancy tests: Maybe<Own<T>> — old value's destructor observes the Maybe.
+// ===========================================================================
+
+struct ReentrantDestructor {
+  // A type used inside Own<T> to test reentrant access to Maybe<Own<T>> from the old value's
+  // destructor. The destructor reads the owning Maybe and records what it sees.
+  int id;
+  Maybe<Own<ReentrantDestructor>>* owner;
+  int* observedId;  // Written by destructor: the id seen in *owner, or -1 if none.
+
+  ReentrantDestructor(int id,
+                      Maybe<Own<ReentrantDestructor>>* owner = nullptr,
+                      int* observedId = nullptr)
+      : id(id), owner(owner), observedId(observedId) {}
+
+  ~ReentrantDestructor() {
+    if (observedId != nullptr && owner != nullptr) {
+      KJ_IF_SOME(node, *owner) {
+        *observedId = node->id;
+      } else {
+        *observedId = -1;
+      }
+    }
+  }
+};
+
+KJ_TEST("Maybe<Own<T>> operator=(T&&): old value's destructor sees new value") {
+  int observedId = 0;
+  Maybe<Own<ReentrantDestructor>> m;
+
+  // Create a node whose destructor will check what m contains.
+  m = kj::heap<ReentrantDestructor>(1, &m, &observedId);
+
+  // Assign a new value. Maybe delegates to Own's move-assignment, which saves the old pointer,
+  // takes the new pointer, then disposes the old. The old node's destructor sees the new value.
+  m = kj::heap<ReentrantDestructor>(2);
+  KJ_EXPECT(observedId == 2, observedId);
+}
+
+KJ_TEST("Maybe<Own<T>> emplace: old value's destructor sees empty Maybe") {
+  int observedId = 0;
+  Maybe<Own<ReentrantDestructor>> m;
+
+  m = kj::heap<ReentrantDestructor>(1, &m, &observedId);
+
+  // emplace() destroys the old value BEFORE constructing the new one (no deferred destruction).
+  // The old node's destructor runs while the Maybe is cleared, so it sees an empty Maybe.
+  m.emplace(kj::heap<ReentrantDestructor>(2));
+  KJ_EXPECT(observedId == -1, observedId);
+}
+
+KJ_TEST("Maybe<Own<T>> operator=(kj::none): old value's destructor sees empty Maybe") {
+  int observedId = 0;
+  Maybe<Own<ReentrantDestructor>> m;
+
+  m = kj::heap<ReentrantDestructor>(1, &m, &observedId);
+
+  // Clear via kj::none. The old node's destructor sees m as empty.
+  m = kj::none;
+  KJ_EXPECT(observedId == -1, observedId);
+}
+
+KJ_TEST("Maybe<Own<T>> move-assignment from other Maybe: old value's destructor sees new value") {
+  int observedId = 0;
+  Maybe<Own<ReentrantDestructor>> m;
+  Maybe<Own<ReentrantDestructor>> other;
+
+  m = kj::heap<ReentrantDestructor>(1, &m, &observedId);
+  other = kj::heap<ReentrantDestructor>(2);
+
+  // KJ_IF_SOME materializes temp via NullableValue move ctor (clears other), then
+  // ptr = kj::mv(val) delegates to Own's move-assignment. Own saves old pointer, takes new,
+  // disposes old. Old dtor sees the new value.
+  m = kj::mv(other);
+  KJ_EXPECT(observedId == 2, observedId);
 }
 
 }  // namespace
