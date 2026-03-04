@@ -2314,10 +2314,10 @@ kj::String getAsyncTrace() {
 
 namespace _ {  // private
 
-kj::String PromiseBase::trace() {
+kj::String traceNode(PromiseNode& node) {
   void* space[32]{};
   TraceBuilder builder(space);
-  node->tracePromise(builder, false);
+  node.tracePromise(builder, false);
   return kj::str(builder);
 }
 
@@ -2604,10 +2604,10 @@ void ChainPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent)
 Maybe<Own<Event>> ChainPromiseNode::fire() {
   KJ_REQUIRE(state != STEP2);
 
-  static_assert(sizeof(Promise<int>) == sizeof(PromiseBase),
-      "This code assumes Promise<T> does not add any new members to PromiseBase.");
+  static_assert(sizeof(Promise<int>) == sizeof(Promise<void>),
+      "This code assumes all Promise<T> have the same size.");
 
-  ExceptionOr<PromiseBase> intermediate;
+  ExceptionOr<Promise<void>> intermediate;
   inner->get(intermediate);
 
   KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
@@ -2624,7 +2624,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   } else KJ_IF_SOME(value, intermediate.value) {
     // There is a value and no exception.  The value is itself a promise.  Adopt it as our
     // step2.
-    inner = _::PromiseNode::from(kj::mv(value));
+    inner = PromiseNode::from(kj::mv(value));
   } else {
     // We can only get here if inner->get() returned neither an exception nor a
     // value, which never actually happens.

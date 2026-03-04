@@ -1321,11 +1321,11 @@ private:
 
 template <typename T>
 Promise<T>::Promise(_::FixVoid<T> value)
-    : PromiseBase(_::allocPromise<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
+    : node(_::allocPromise<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
 
 template <typename T>
 Promise<T>::Promise(kj::Exception&& exception)
-    : PromiseBase(_::allocPromise<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
+    : node(_::allocPromise<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
 
 template <typename T>
 template <typename Func>
@@ -1472,7 +1472,7 @@ Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr), SourceLocation locatio
 
 template <typename T>
 kj::String Promise<T>::trace() {
-  return PromiseBase::trace();
+  return _::traceNode(*node);
 }
 
 template <typename T, T value>

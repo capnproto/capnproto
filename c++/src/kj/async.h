@@ -117,7 +117,7 @@ private:
 // Promises
 
 template <typename T>
-class [[nodiscard]] Promise: protected _::PromiseBase {
+class [[nodiscard]] Promise {
   // The basic primitive of asynchronous computation in KJ.  Similar to "futures", but designed
   // specifically for event loop concurrency.  Similar to E promises and JavaScript Promises/A.
   //
@@ -377,7 +377,9 @@ public:
   // This method does NOT consume the promise as other methods do.
 
 private:
-  Promise(bool, _::OwnPromiseNode&& node): PromiseBase(kj::mv(node)) {}
+  _::OwnPromiseNode node;
+
+  Promise(bool, _::OwnPromiseNode&& node): node(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
 
   friend class _::PromiseNode;

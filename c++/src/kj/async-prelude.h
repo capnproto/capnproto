@@ -215,21 +215,7 @@ using OwnPromiseNode = Own<PromiseNode, PromiseDisposer>;
 template<typename T, bool FreeOnDestroy>
 class ForkBranch;
 
-class PromiseBase {
-public:
-  kj::String trace();
-  // Dump debug info about this promise.
-
-private:
-  OwnPromiseNode node;
-
-  PromiseBase() = default;
-  PromiseBase(OwnPromiseNode&& node): node(kj::mv(node)) {}
-
-  template <typename>
-  friend class kj::Promise;
-  friend class PromiseNode;
-};
+kj::String traceNode(PromiseNode& node);
 
 void detach(kj::Promise<void>&& promise);
 void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
