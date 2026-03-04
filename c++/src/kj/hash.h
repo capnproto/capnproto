@@ -24,9 +24,12 @@
 #include "string.h"
 #include <stdint.h>
 
-// clang has dedicated builtins for crc32 on arm64, for GCC we fall back to ARM ACLE intrinsics.
+// When crc32 is enabled and we have clang, use the dedicated builtins for crc32 on arm64, for GCC
+// we fall back to ARM ACLE intrinsics.
+#if KJ_HAS_CRC32
 #if __ARM_FEATURE_CRC32 && !__clang__
 #include <arm_acle.h>
+#endif
 #endif
 
 KJ_BEGIN_HEADER
@@ -237,13 +240,20 @@ inline uint intHash32(uint32_t i) {
 
   // On architectures with a hardware CRC32 instruction, use it. Otherwise fall back to a
   // reasonable shifty hash.
+  // To avoid mixing code using CRC32 and not using it, we either don't use crc32 (when KJ_HAS_CRC32
+  // is undefined) or require that hardware support for it is available. The define should always
+  // be used consistently, if it is not the link-time kjCrcHashGuard check will catch it.
+#if KJ_HAS_CRC32
 #if __CRC32__
   return __builtin_ia32_crc32si(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
-  return __builtin_arm_crc32w(0, i);
+  return __builtin_arm_crc32cw(0, i);
 #else
   return __crc32w(0, i);
+#endif
+#else
+#error "CRC32 hardware support must be available when KJ_HAS_CRC32 is set."
 #endif
 #else
   // Thomas Wang 32 bit integer hash function from https://gist.github.com/badboy/6267743
@@ -270,13 +280,17 @@ inline uint intHash64(uint64_t i) {
     return intHash32(i);
   }
 
+#if KJ_HAS_CRC32
 #if __CRC32__
   return __builtin_ia32_crc32di(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
-  return __builtin_arm_crc32d(0, i);
+  return __builtin_arm_crc32cd(0, i);
 #else
   return __crc32d(0, i);
+#endif
+#else
+#error "CRC32 hardware support must be available when KJ_HAS_CRC32 is set."
 #endif
 #else
   // Thomas Wang hash6432shift() from https://gist.github.com/badboy/6267743
