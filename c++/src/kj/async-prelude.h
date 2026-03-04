@@ -237,6 +237,12 @@ public:
   KJ_NORETURN(void wait(WaitScope& waitScope, SourceLocation location = {}) const);
 };
 
+
+template <typename T>
+class CoroutinePromise {
+
+};
+
 }  // namespace _ (private)
 }  // namespace kj
 

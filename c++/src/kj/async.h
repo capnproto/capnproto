@@ -23,6 +23,7 @@
 
 #include "async-prelude.h"
 #include <kj/exception.h>
+#include <kj/one-of.h>
 #include <kj/refcount.h>
 
 KJ_BEGIN_HEADER
@@ -377,7 +378,7 @@ public:
   // This method does NOT consume the promise as other methods do.
 
 private:
-  _::OwnPromiseNode node;
+  kj::OneOf<_::OwnPromiseNode, _::CoroutinePromise<T>> node;
 
   Promise(bool, _::OwnPromiseNode&& node): node(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
