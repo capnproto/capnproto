@@ -386,6 +386,8 @@ private:
   // Second parameter prevent ambiguity with immediate-value constructor.
 
   friend class _::PromiseNode;
+  template <typename, typename>
+  friend class _::Coroutine;
 };
 
 template <typename T>

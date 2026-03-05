@@ -3257,19 +3257,41 @@ void CoroutineBase::destroy() {
 
 PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node)
     : coroutine(coroutine), node(kj::mv(node)) {}
+PromiseAwaiterBase::PromiseAwaiterBase(CoroutineBase& coroutine, CoroutineBase* awaitedCoroutine,
+                                      ExceptionOrValue& result)
+    : coroutine(coroutine), node(awaitedCoroutine) {
+  awaitedCoroutine->resultRef = &result;
+}
 PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
-  if (KJ_UNLIKELY(node.get() != nullptr)) {
-    // Cancellation of a suspended awaiter.
+  KJ_SWITCH_ONEOF(node) {
+    KJ_CASE_ONEOF(n, OwnPromiseNode) {
+      if (KJ_UNLIKELY(n.get() != nullptr)) {
+        // Cancellation of a suspended awaiter.
 
-    // Make sure it's safe to generate an async stack trace between now and when the Coroutine is
-    // destroyed.
-    coroutine.clearPromiseNodeForTrace();
+        // Make sure it's safe to generate an async stack trace between now and when the Coroutine
+        // is destroyed.
+        coroutine.clearPromiseNodeForTrace();
 
-    try {
-      node = nullptr;
-    } catch (...) {
-      // Ignore exceptions that happen during co_await cancellation: most likely it happens in the
-      // error path already, and there is not much for the user to do if cancellation fails.
+        try {
+          n = nullptr;
+        } catch (...) {
+          // Ignore exceptions that happen during co_await cancellation: most likely it happens in
+          // the error path already, and there is not much for the user to do if cancellation fails.
+        }
+      }
+    }
+    KJ_CASE_ONEOF(c, CoroutineBase*) {
+      if (KJ_UNLIKELY(c != nullptr)) {
+        // Cancellation of a suspended awaiter.
+        coroutine.clearPromiseNodeForTrace();
+
+        try {
+          c->destroy();
+        } catch (...) {
+          // Ignore exceptions that happen during co_await cancellation.
+        }
+        c = nullptr;
+      }
     }
   }
 }
@@ -3277,12 +3299,25 @@ PromiseAwaiterBase::~PromiseAwaiterBase() noexcept(false) {
 void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt) {
   coroutine.clearPromiseNodeForTrace();
 
-  node->get(result);
+  KJ_SWITCH_ONEOF(node) {
+    KJ_CASE_ONEOF(n, OwnPromiseNode) {
+      n->get(result);
 
-  try {
-    node = nullptr;
-  } catch (...) {
-    result.addException(getCaughtExceptionAsKj());
+      try {
+        n = nullptr;
+      } catch (...) {
+        result.addException(getCaughtExceptionAsKj());
+      }
+    }
+    KJ_CASE_ONEOF(c, CoroutineBase*) {
+      // Result was already written via resultRef. Destroy the awaited coroutine frame.
+      try {
+        c->destroy();
+      } catch (...) {
+        result.addException(getCaughtExceptionAsKj());
+      }
+      c = nullptr;
+    }
   }
 
   KJ_IF_SOME(exception, result.exception) {
@@ -3298,26 +3333,33 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
 }
 
 bool PromiseAwaiterBase::awaitSuspendImpl() {
-  node->setSelfPointer(&node);
-  node->onReady(&coroutine);
+  KJ_SWITCH_ONEOF(node) {
+    KJ_CASE_ONEOF(n, OwnPromiseNode) {
+      n->setSelfPointer(&n);
+      n->onReady(&coroutine);
 
-  if (coroutine.canImmediatelyResume()) {
-    // The result is immediately ready and this coroutine is running on the event loop's stack, not
-    // a user code stack. Let's cancel our event and immediately resume. It's important that we
-    // don't perform this optimization if this is the first suspension, because our caller may
-    // depend on running code before this promise's continuations fire.
-    coroutine.disarm();
+      if (coroutine.canImmediatelyResume()) {
+        coroutine.disarm();
+        return false;
+      } else {
+        // Store a reference to the OwnPromiseNode we're waiting on for tracing purposes.
+        coroutine.setPromiseNodeForTrace(n);
+        return true;
+      }
+    }
+    KJ_CASE_ONEOF(c, CoroutineBase*) {
+      c->onReady(&coroutine);
 
-    // We can resume ourselves by returning false. This accomplishes the same thing as if we had
-    // returned true from await_ready().
-    return false;
-  } else {
-    // Otherwise, we must suspend. Store a reference to the OwnPromiseNode we're waiting on for
-    // tracing purposes; await_resume() and/or ~PromiseAwaiterBase() will clear it.
-    coroutine.setPromiseNodeForTrace(node);
-
-    return true;
+      if (coroutine.canImmediatelyResume()) {
+        coroutine.disarm();
+        return false;
+      } else {
+        coroutine.hasSuspendedAtLeastOnce = true;
+        return true;
+      }
+    }
   }
+  KJ_UNREACHABLE;
 }
 
 // ---------------------------------------------------------

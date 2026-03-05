@@ -218,6 +218,8 @@ class ForkBranch;
 kj::String traceNode(PromiseNode& node);
 
 class CoroutineBase;
+template <typename T, typename Allocator>
+class Coroutine;
 
 
 template <typename T>

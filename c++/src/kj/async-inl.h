@@ -2366,7 +2366,7 @@ protected:
 
   void unhandledExceptionImpl(ExceptionOrValue& resultRef);
 
-  void* promise = nullptr;
+  ExceptionOrValue* resultRef = nullptr;
 
 private:
   // -------------------------------------------------------
@@ -2421,18 +2421,19 @@ private:
   friend class CoroutinePromise;
   template<typename T>
   friend class CoroutinePromiseNode;
+  friend class PromiseAwaiterBase;
 };
 
 template <typename T>
 CoroutinePromise<T>::CoroutinePromise(CoroutineBase& base) : coroutine(&base) {
-  coroutine->promise = this;
+  coroutine->resultRef = &this->result;
 }
 
 template <typename T>
 CoroutinePromise<T>::CoroutinePromise(CoroutinePromise&& other)
     : coroutine(other.coroutine), result(kj::mv(other.result)) {
   other.coroutine = nullptr;
-  if (coroutine != nullptr) coroutine->promise = this;
+  if (coroutine != nullptr) coroutine->resultRef = &this->result;
 }
 
 template <typename T>
@@ -2446,7 +2447,7 @@ CoroutinePromise<T>& CoroutinePromise<T>::operator=(CoroutinePromise<T>&& other)
   coroutine = other.coroutine;
   result = kj::mv(other.result);
   other.coroutine = nullptr;
-  if (coroutine != nullptr) coroutine->promise = this;
+  if (coroutine != nullptr) coroutine->resultRef = &this->result;
   return *this;
 }
 
@@ -2478,10 +2479,6 @@ public:
   Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
       : CoroutineBase(handle, location) {}
 
-  CoroutinePromise<T>* getPromise() {
-    return static_cast<CoroutinePromise<T>*>(promise);
-  }
-
   CoroutinePromise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
     // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
@@ -2492,12 +2489,34 @@ public:
 
   template <typename U>
   PromiseAwaiter<U> await_transform(Promise<U>& promise) {
-    return PromiseAwaiter<U>(*this, PromiseNode::from(kj::mv(promise)));
+    KJ_SWITCH_ONEOF(promise.node) {
+      KJ_CASE_ONEOF(n, OwnPromiseNode) {
+        return PromiseAwaiter<U>(*this, kj::mv(n));
+      }
+      KJ_CASE_ONEOF(c, CoroutinePromise<U>) {
+        auto* awaited = c.coroutine;
+        auto r = kj::mv(c.result);
+        c.coroutine = nullptr;
+        return PromiseAwaiter<U>(*this, awaited, kj::mv(r));
+      }
+    }
+    KJ_UNREACHABLE;
   }
 
   template <typename U>
   PromiseAwaiter<U> await_transform(Promise<U>&& promise) {
-    return PromiseAwaiter<U>(*this, PromiseNode::from(kj::mv(promise)));
+    KJ_SWITCH_ONEOF(promise.node) {
+      KJ_CASE_ONEOF(n, OwnPromiseNode) {
+        return PromiseAwaiter<U>(*this, kj::mv(n));
+      }
+      KJ_CASE_ONEOF(c, CoroutinePromise<U>) {
+        auto* awaited = c.coroutine;
+        auto r = kj::mv(c.result);
+        c.coroutine = nullptr;
+        return PromiseAwaiter<U>(*this, awaited, kj::mv(r));
+      }
+    }
+    KJ_UNREACHABLE;
   }
 
   template <typename U>
@@ -2507,12 +2526,12 @@ public:
 
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
-    getPromise()->result = kj::mv(value);
+    resultRef->as<FixVoid<T>>() = kj::mv(value);
     scheduleResumption();
   }
 
   void unhandled_exception() {
-    unhandledExceptionImpl(getPromise()->result);
+    unhandledExceptionImpl(*resultRef);
   }
 
 
@@ -2561,6 +2580,8 @@ public:
 class PromiseAwaiterBase {
 public:
   explicit PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node);
+  explicit PromiseAwaiterBase(CoroutineBase& coroutine, CoroutineBase* awaitedCoroutine,
+                              ExceptionOrValue& result);
 
   ~PromiseAwaiterBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(PromiseAwaiterBase);
@@ -2580,7 +2601,7 @@ private:
   CoroutineBase& coroutine;
   // Reference to the enclosing coroutine.
 
-  OwnPromiseNode node;
+  OneOf<OwnPromiseNode, CoroutineBase*> node;
 };
 
 template <typename T>
@@ -2590,10 +2611,21 @@ class PromiseAwaiter: public PromiseAwaiterBase {
   // when the awaited promise is settled. Once that happens, the enclosing coroutine's Event
   // implementation resumes the coroutine, which transitively calls await_resume() to unwrap the
   // awaited promise result.
+  //
+  // Supports two paths:
+  // - PromiseNode path: the awaited promise was backed by an OwnPromiseNode.
+  // - Coroutine path: the awaited promise was backed by a CoroutinePromise<T>, allowing
+  //   direct coroutine-to-coroutine awaiting without allocating a PromiseNode.
 
 public:
   explicit PromiseAwaiter(CoroutineBase& coroutine, OwnPromiseNode&& node)
       : PromiseAwaiterBase(coroutine, kj::mv(node)) {}
+
+  explicit PromiseAwaiter(CoroutineBase& coroutine, CoroutineBase* awaited,
+                          ExceptionOr<FixVoid<T>>&& existingResult)
+      : PromiseAwaiterBase(coroutine, awaited, result) {
+    result = kj::mv(existingResult);
+  }
 
   KJ_NOINLINE T await_resume() {
     // This is marked noinline in order to ensure KJ_CALLING_ADDRESS() is accurate for stack
@@ -2662,7 +2694,7 @@ namespace kj::_ {
 
 
 template<typename T>
-class CoroutinePromiseNode: public PromiseNode {
+class CoroutinePromiseNode final: public PromiseNode {
 public:
   inline CoroutinePromiseNode(_::CoroutinePromise<T>&& node) : node(kj::mv(node)) {}
 
