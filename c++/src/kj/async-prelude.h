@@ -217,9 +217,32 @@ class ForkBranch;
 
 kj::String traceNode(PromiseNode& node);
 
+class CoroutineBase;
+
+template <typename T>
+class CoroutinePromise {
+public:
+  CoroutinePromise(CoroutineBase& base);
+  CoroutinePromise(CoroutinePromise&& other);
+  CoroutinePromise& operator=(CoroutinePromise&& other);
+  ~CoroutinePromise();
+
+  CoroutinePromise(const CoroutinePromise&) = delete;
+  CoroutinePromise& operator=(const CoroutinePromise&) = delete;
+
+  CoroutineBase* coroutine = nullptr;
+};
+template<typename T>
+class CoroutinePromiseNode;
+
 void detach(kj::Promise<void>&& promise);
 void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& waitScope,
               SourceLocation location);
+void waitRef(PromiseNode& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+              SourceLocation location);
+template <typename T>
+T waitCoroutine(_::CoroutinePromise<T>&& node, WaitScope& waitScope, SourceLocation location);
+
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 OwnPromiseNode readyNow();
 OwnPromiseNode neverDone();
@@ -237,11 +260,6 @@ public:
   KJ_NORETURN(void wait(WaitScope& waitScope, SourceLocation location = {}) const);
 };
 
-
-template <typename T>
-class CoroutinePromise {
-
-};
 
 }  // namespace _ (private)
 }  // namespace kj

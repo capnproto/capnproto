@@ -227,27 +227,29 @@ public:
   // must not allocate nor take locks.
 
   template <typename T>
-  static OwnPromiseNode from(T&& promise) {
+  static OwnPromiseNode from(kj::Promise<T>&& promise) {
     // Given a Promise, extract the PromiseNode.
     KJ_SWITCH_ONEOF(promise.node) {
       KJ_CASE_ONEOF(n, OwnPromiseNode) {
         return kj::mv(n);
       }
-      KJ_CASE_ONEOF_DEFAULT {
-        KJ_UNIMPLEMENTED("coroutine promise");
+      KJ_CASE_ONEOF(c, CoroutinePromise<T>) {
+        return allocPromise<CoroutinePromiseNode<T>>(kj::mv(c));
       }
     }
     KJ_UNREACHABLE;
   }
   template <typename T>
-  static PromiseNode& from(T& promise) {
+  static PromiseNode& from(kj::Promise<T>& promise) {
     // Given a Promise, extract the PromiseNode.
     KJ_SWITCH_ONEOF(promise.node) {
       KJ_CASE_ONEOF(n, OwnPromiseNode) {
         return *n;
       }
-      KJ_CASE_ONEOF_DEFAULT {
-        KJ_UNIMPLEMENTED("coroutine promise");
+      KJ_CASE_ONEOF(c, CoroutinePromise<T>) {
+        // todo: this is ugly but works for now
+        promise.node = OwnPromiseNode(allocPromise<CoroutinePromiseNode<T>>(kj::mv(c)));
+        return *promise.node.template get<OwnPromiseNode>();
       }
     }
     KJ_UNREACHABLE;
@@ -1302,6 +1304,8 @@ private:
   friend class FiberStack;
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
+  friend void _::waitRef(_::PromiseNode& node, _::ExceptionOrValue& result,
+                         WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };
 
@@ -1351,21 +1355,14 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func) {
 
   void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
 
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      _::OwnPromiseNode intermediate =
-          _::PromiseDisposer::appendPromise<_::SimpleTransformPromiseNode<T, Func>>(
-          kj::mv(n), kj::fwd<Func>(func), continuationTracePtr);
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::SimpleTransformPromiseNode<T, Func>>(
+      kj::mv(ownNode), kj::fwd<Func>(func), continuationTracePtr);
 
-      auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
-          _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), {}));
-      return _::maybeReduce(kj::mv(result), false);
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), {}));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 template <typename T>
@@ -1375,21 +1372,14 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
   void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      _::OwnPromiseNode intermediate =
-          _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
-              kj::mv(n), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
-              continuationTracePtr);
-      auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
-          _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
-      return _::maybeReduce(kj::mv(result), false);
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
+          kj::mv(ownNode), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
+          continuationTracePtr);
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 namespace _ {  // private
@@ -1433,34 +1423,28 @@ Promise<T> Promise<T>::catch_(ErrorFunc&& errorHandler, SourceLocation location)
   // The reason catch_() isn't simply implemented in terms of then() is because we want the trace
   // pointer to be based on ErrorFunc rather than Func.
   void* continuationTracePtr = _::GetFunctorStartAddress<kj::Exception&&>::apply(errorHandler);
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      _::OwnPromiseNode intermediate =
-          _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
-              kj::mv(n), Func(), kj::fwd<ErrorFunc>(errorHandler), continuationTracePtr);
-      auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
-          _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
-      return _::maybeReduce(kj::mv(result), false);
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  _::OwnPromiseNode intermediate =
+      _::PromiseDisposer::appendPromise<_::TransformPromiseNode<T, Func, ErrorFunc>>(
+          kj::mv(ownNode), Func(), kj::fwd<ErrorFunc>(errorHandler), continuationTracePtr);
+  auto result = _::PromiseNode::to<_::ChainPromises<_::ReturnType<Func, T>>>(
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr), location));
+  return _::maybeReduce(kj::mv(result), false);
 }
 
 template <typename T>
 T Promise<T>::wait(WaitScope& waitScope, SourceLocation location) {
-  _::ExceptionOr<_::FixVoid<T>> result;
   KJ_SWITCH_ONEOF(node) {
     KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
+      _::ExceptionOr<_::FixVoid<T>> result;
       _::waitImpl(kj::mv(n), result, waitScope, location);
+      return convertToReturn(kj::mv(result));
     }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
+    KJ_CASE_ONEOF(p, _::CoroutinePromise<T>) {
+      return _::waitCoroutine(kj::mv(p), waitScope, location);
     }
   }
-  return convertToReturn(kj::mv(result));
+  KJ_UNREACHABLE;
 }
 
 template <typename T>
@@ -1470,7 +1454,8 @@ bool Promise<T>::poll(WaitScope& waitScope, SourceLocation location) {
       return _::pollImpl(*n, waitScope, location);
     }
     KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
+      node = _::OwnPromiseNode(_::allocPromise<_::CoroutinePromiseNode<T>>(kj::mv(c)));
+      return _::pollImpl(*node.template get<_::OwnPromiseNode>(), waitScope, location);
     }
   }
   KJ_UNREACHABLE;
@@ -1478,16 +1463,9 @@ bool Promise<T>::poll(WaitScope& waitScope, SourceLocation location) {
 
 template <typename T>
 ForkedPromise<T> Promise<T>::fork(SourceLocation location) {
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      return ForkedPromise<T>(false,
-          _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(kj::mv(n), location));
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  return ForkedPromise<T>(false,
+      _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(kj::mv(ownNode), location));
 }
 
 template <typename T>
@@ -1502,54 +1480,26 @@ bool ForkedPromise<T>::hasBranches() {
 
 template <typename T>
 _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      return _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(
-          kj::mv(n), location)->split(location);
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  return _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(
+      kj::mv(ownNode), location)->split(location);
 }
 
 template <typename T>
 Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other, SourceLocation location) {
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      KJ_SWITCH_ONEOF(other.node) {
-        KJ_CASE_ONEOF(otherN, _::OwnPromiseNode) {
-          return Promise(false, _::PromiseDisposer::appendPromise<_::ExclusiveJoinPromiseNode>(
-              kj::mv(n), kj::mv(otherN), location));
-        }
-        KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-          KJ_UNIMPLEMENTED("coroutine promise");
-        }
-      }
-      KJ_UNREACHABLE;
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode thisNode = _::PromiseNode::from(kj::mv(*this));
+  _::OwnPromiseNode otherNode = _::PromiseNode::from(kj::mv(other));
+  return Promise(false, _::PromiseDisposer::appendPromise<_::ExclusiveJoinPromiseNode>(
+      kj::mv(thisNode), kj::mv(otherNode), location));
 }
 
 template <typename T>
 template <typename... Attachments>
 Promise<T> Promise<T>::attach(Attachments&&... attachments) {
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      return Promise(false,
-          _::PromiseDisposer::appendPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
-              kj::mv(n), kj::tuple(kj::fwd<Attachments>(attachments)...)));
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  return Promise(false,
+      _::PromiseDisposer::appendPromise<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
+          kj::mv(ownNode), kj::tuple(kj::fwd<Attachments>(attachments)...)));
 }
 
 template <typename T>
@@ -1564,28 +1514,13 @@ Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler, SourceLocation 
 
 template <typename T>
 Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr), SourceLocation location) {
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      return Promise(false, _::spark<_::FixVoid<T>>(kj::mv(n), location));
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  _::OwnPromiseNode ownNode = _::PromiseNode::from(kj::mv(*this));
+  return Promise(false, _::spark<_::FixVoid<T>>(kj::mv(ownNode), location));
 }
 
 template <typename T>
 kj::String Promise<T>::trace() {
-  KJ_SWITCH_ONEOF(node) {
-    KJ_CASE_ONEOF(n, _::OwnPromiseNode) {
-      return _::traceNode(*n);
-    }
-    KJ_CASE_ONEOF(c, _::CoroutinePromise<T>) {
-      KJ_UNIMPLEMENTED("coroutine promise");
-    }
-  }
-  KJ_UNREACHABLE;
+  return _::traceNode(_::PromiseNode::from(*this));
 }
 
 template <typename T, T value>
@@ -2436,6 +2371,8 @@ protected:
 
   void unhandledExceptionImpl(ExceptionOrValue& resultRef);
 
+  void* promise = nullptr;
+
 private:
   // -------------------------------------------------------
   // PromiseNode implementation
@@ -2484,7 +2421,37 @@ private:
   // to point to a DisposalResults on the stack so unhandled_exception() will have some place to
   // store unwind exceptions. We can't store them in this Coroutine, because we'll be destroyed once
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
+
+  template<typename T>
+  friend class CoroutinePromise;
+  template<typename T>
+  friend class CoroutinePromiseNode;
 };
+
+template <typename T>
+CoroutinePromise<T>::CoroutinePromise(CoroutineBase& base) : coroutine(&base) {
+  coroutine->promise = this;
+}
+
+template <typename T>
+CoroutinePromise<T>::CoroutinePromise(CoroutinePromise&& other) : coroutine(other.coroutine) {
+  other.coroutine = nullptr;
+  if (coroutine != nullptr) coroutine->promise = this;
+}
+
+template <typename T>
+CoroutinePromise<T>::~CoroutinePromise() {
+  if (coroutine != nullptr) coroutine->destroy();
+}
+
+template <typename T>
+CoroutinePromise<T>& CoroutinePromise<T>::operator=(CoroutinePromise<T>&& other) {
+  if (coroutine != nullptr) coroutine->destroy();
+  coroutine = other.coroutine;
+  other.coroutine = nullptr;
+  if (coroutine != nullptr) coroutine->promise = this;
+  return *this;
+}
 
 template <typename Self, typename T>
 class CoroutineMixin;
@@ -2514,12 +2481,16 @@ public:
   Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
       : CoroutineBase(handle, location) {}
 
-  Promise<T> get_return_object() {
+  CoroutinePromise<T>* getPromise() {
+    return static_cast<CoroutinePromise<T>*>(promise);
+  }
+
+  CoroutinePromise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
     // coroutine's return object. `this` itself lives inside the coroutine frame, and we arrange for
     // the returned Promise<T> to own `this` via a custom Disposer and by always leaving the
     // coroutine in a suspended state.
-    return PromiseNode::to<Promise<T>>(OwnPromiseNode(this));
+    return CoroutinePromise<T>(*this);
   }
 
   template <typename U>
@@ -2700,6 +2671,41 @@ namespace kj::_ {
 // Coroutine magic is implemented in terms of the `co_yield` keyword, so this is just a define to
 // `co_yield`. The purpose of the macro is primarily as a visual signal that the code is not
 // actually yielding a value, but rather something different is going on.
+
+
+template<typename T>
+class CoroutinePromiseNode: public PromiseNode {
+public:
+  inline CoroutinePromiseNode(_::CoroutinePromise<T>&& node) : node(kj::mv(node)) {}
+
+  void destroy() override {
+    auto* c = node.coroutine;
+    node.coroutine = nullptr;
+    c->destroy();
+  }
+
+  void onReady(Event* event) noexcept override {
+    node.coroutine->onReady(event);
+  }
+
+  void get(ExceptionOrValue& output) noexcept override {
+    node.coroutine->get(output);
+  }
+
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override {
+    node.coroutine->tracePromise(builder, stopAtNextEvent);
+  }
+
+  _::CoroutinePromise<T> node;
+};
+
+template<typename T>
+T waitCoroutine(_::CoroutinePromise<T>&& node, WaitScope& waitScope, SourceLocation location) {
+  _::ExceptionOr<_::FixVoid<T>> result;
+  CoroutinePromiseNode promiseNode(kj::mv(node));
+  waitRef(promiseNode, result, waitScope, location);
+  return convertToReturn(kj::mv(result));
+}
 
 }  // namespace kj::_ (private)
 

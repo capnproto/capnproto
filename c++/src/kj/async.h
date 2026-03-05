@@ -198,6 +198,8 @@ public:
   Promise(kj::Exception&& e);
   // Construct an already-broken Promise.
 
+  inline Promise(_::CoroutinePromise<T> coro) : node(kj::mv(coro)) {}
+
   inline Promise(decltype(nullptr)) {}
 
   template <typename Func>
@@ -1449,6 +1451,8 @@ private:
   friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
+  friend void _::waitRef(_::PromiseNode& node, _::ExceptionOrValue& result,
+                         WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
   friend class _::Event;
   friend class WaitScope;
@@ -1541,6 +1545,8 @@ private:
   friend class _::FiberBase;
   friend void _::waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope, SourceLocation location);
+  friend void _::waitRef(_::PromiseNode& node, _::ExceptionOrValue& result,
+                         WaitScope& waitScope, SourceLocation location);
   friend bool _::pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location);
 };
 

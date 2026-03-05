@@ -2105,6 +2105,54 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
   });
 }
 
+
+void waitRef(PromiseNode& node, _::ExceptionOrValue& result, WaitScope& waitScope,
+              SourceLocation location) {
+  EventLoop& loop = waitScope.loop;
+  KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
+
+  // we don't support fibers when running without exceptions, so just remove the whole block
+  KJ_IF_SOME(fiber, waitScope.fiber) {
+    KJ_UNIMPLEMENTED("TODO");
+  } else {
+    KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
+
+    RootEvent doneEvent(&node, reinterpret_cast<void*>(&waitImpl), location);
+    node.onReady(&doneEvent);
+
+    loop.running = true;
+    KJ_DEFER(loop.running = false);
+
+    for (;;) {
+      waitScope.runOnStackPool([&]() {
+        uint counter = 0;
+        while (!doneEvent.fired) {
+          if (!loop.turn()) {
+            // No events in the queue.  Wait for callback.
+            return;
+          } else if (++counter > waitScope.busyPollInterval) {
+            // Note: It's intentional that if busyPollInterval is kj::maxValue, we never poll.
+            counter = 0;
+            loop.poll();
+          }
+        }
+      });
+
+      if (doneEvent.fired) {
+        break;
+      } else {
+        loop.wait();
+      }
+    }
+
+    loop.setRunnable(loop.isRunnable());
+  }
+
+  waitScope.runOnStackPool([&]() {
+    node.get(result);
+  });
+}
+
 bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation location) {
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
