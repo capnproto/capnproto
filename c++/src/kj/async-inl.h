@@ -44,46 +44,6 @@ namespace kj {
 namespace _ {  // private
 
 template <typename T>
-class ExceptionOr;
-
-class ExceptionOrValue {
-public:
-  ExceptionOrValue(bool, Exception&& exception): exception(kj::mv(exception)) {}
-  KJ_DISALLOW_COPY(ExceptionOrValue);
-
-  void addException(Exception&& exception) {
-    if (this->exception == kj::none) {
-      this->exception = kj::mv(exception);
-    }
-  }
-
-  template <typename T>
-  ExceptionOr<T>& as() { return *static_cast<ExceptionOr<T>*>(this); }
-  template <typename T>
-  const ExceptionOr<T>& as() const { return *static_cast<const ExceptionOr<T>*>(this); }
-
-  Maybe<Exception> exception;
-
-protected:
-  // Allow subclasses to have move constructor / assignment.
-  ExceptionOrValue() = default;
-  ExceptionOrValue(ExceptionOrValue&& other) = default;
-  ExceptionOrValue& operator=(ExceptionOrValue&& other) = default;
-};
-
-template <typename T>
-class ExceptionOr: public ExceptionOrValue {
-public:
-  ExceptionOr() = default;
-  ExceptionOr(T&& value): value(kj::mv(value)) {}
-  ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
-  ExceptionOr(ExceptionOr&&) = default;
-  ExceptionOr& operator=(ExceptionOr&&) = default;
-
-  Maybe<T> value;
-};
-
-template <typename T>
 inline T convertToReturn(ExceptionOr<T>&& result) {
   KJ_IF_SOME(value, result.value) {
     KJ_IF_SOME(exception, result.exception) {
@@ -260,7 +220,7 @@ public:
     return T(false, kj::mv(node));
   }
 
-protected:
+public:
   class OnReadyEvent {
     // Helper class for implementing onReady().
 
@@ -900,6 +860,39 @@ inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
 
 // -------------------------------------------------------------------
 
+// Function pointer type for the type-dependent extraction step in ChainPromiseNode::fire().
+// Takes the inner OwnPromiseNode, calls get() with a correctly-sized ExceptionOr<Promise<T>>,
+// destroys the old inner, and returns the new inner node.
+using ChainExtractor = OwnPromiseNode(*)(OwnPromiseNode& inner);
+
+template <typename T>
+OwnPromiseNode chainExtractImpl(OwnPromiseNode& inner) {
+  ExceptionOr<Promise<T>> intermediate;
+  inner->get(intermediate);
+
+  KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+    inner = nullptr;
+  })) {
+    intermediate.addException(kj::mv(exception));
+  }
+
+  KJ_IF_SOME(exception, intermediate.exception) {
+    // There is an exception.  If there is also a value, delete it.
+    kj::runCatchingExceptions([&]() { intermediate.value = kj::none; });
+    // Now set step2 to a rejected promise.
+    return allocPromise<ImmediateBrokenPromiseNode>(kj::mv(exception));
+  } else KJ_IF_SOME(value, intermediate.value) {
+    // There is a value and no exception.  The value is itself a promise.  Adopt it as our
+    // step2.
+    return PromiseNode::from(kj::mv(value));
+  } else {
+    // We can only get here if inner->get() returned neither an exception nor a
+    // value, which never actually happens.
+    KJ_FAIL_ASSERT("Inner node returned empty value.");
+  }
+  KJ_UNREACHABLE;
+}
+
 class ChainPromiseNode final: public PromiseNode, public Event {
   // Promise node which reduces Promise<Promise<T>> to Promise<T>.
   //
@@ -907,7 +900,8 @@ class ChainPromiseNode final: public PromiseNode, public Event {
   // Own<Event>.  Ugh, templates and private...
 
 public:
-  explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location);
+  explicit ChainPromiseNode(OwnPromiseNode inner, SourceLocation location,
+                            ChainExtractor extractor);
   ~ChainPromiseNode() noexcept(false);
   void destroy() override;
 
@@ -930,6 +924,7 @@ private:
 
   Event* onReadyEvent = nullptr;
   OwnPromiseNode* selfPtr = nullptr;
+  ChainExtractor extractor;
 
   Maybe<Own<Event>> fire() override;
   void traceEvent(TraceBuilder& builder) override;
@@ -937,7 +932,8 @@ private:
 
 template <typename T>
 OwnPromiseNode maybeChain(OwnPromiseNode&& node, Promise<T>*, SourceLocation location) {
-  return PromiseDisposer::appendPromise<ChainPromiseNode>(kj::mv(node), location);
+  return PromiseDisposer::appendPromise<ChainPromiseNode>(
+      kj::mv(node), location, &chainExtractImpl<T>);
 }
 
 template <typename T>
@@ -2325,13 +2321,12 @@ namespace kj::_ {
 
 namespace stdcoro = ::KJ_COROUTINE_STD_NAMESPACE;
 
-class CoroutineBase: public PromiseNode,
-                     public Event {
+class CoroutineBase: public Event {
 public:
   CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
-  void destroy() override;
+  void destroy();
 
   auto initial_suspend() { return stdcoro::suspend_never(); }
   auto final_suspend() noexcept {
@@ -2377,8 +2372,8 @@ private:
   // -------------------------------------------------------
   // PromiseNode implementation
 
-  void onReady(Event* event) noexcept override;
-  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+  void onReady(Event* event) noexcept;
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent);
 
   // -------------------------------------------------------
   // Event implementation
@@ -2388,7 +2383,7 @@ private:
 
   stdcoro::coroutine_handle<> coroutine;
 
-  OnReadyEvent onReadyEvent;
+  PromiseNode::OnReadyEvent onReadyEvent;
 
   bool hasSuspendedAtLeastOnce = false;
 
@@ -2434,7 +2429,8 @@ CoroutinePromise<T>::CoroutinePromise(CoroutineBase& base) : coroutine(&base) {
 }
 
 template <typename T>
-CoroutinePromise<T>::CoroutinePromise(CoroutinePromise&& other) : coroutine(other.coroutine) {
+CoroutinePromise<T>::CoroutinePromise(CoroutinePromise&& other)
+    : coroutine(other.coroutine), result(kj::mv(other.result)) {
   other.coroutine = nullptr;
   if (coroutine != nullptr) coroutine->promise = this;
 }
@@ -2448,6 +2444,7 @@ template <typename T>
 CoroutinePromise<T>& CoroutinePromise<T>::operator=(CoroutinePromise<T>&& other) {
   if (coroutine != nullptr) coroutine->destroy();
   coroutine = other.coroutine;
+  result = kj::mv(other.result);
   other.coroutine = nullptr;
   if (coroutine != nullptr) coroutine->promise = this;
   return *this;
@@ -2510,12 +2507,13 @@ public:
 
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
-
-    result = kj::mv(value);
+    getPromise()->result = kj::mv(value);
     scheduleResumption();
   }
 
-  void unhandled_exception() { unhandledExceptionImpl(result); }
+  void unhandled_exception() {
+    unhandledExceptionImpl(getPromise()->result);
+  }
 
 
   template <typename... Args>
@@ -2539,16 +2537,6 @@ public:
     Allocator::free(framePtr);
   }
 #endif
-
-private:
-  // -------------------------------------------------------
-  // PromiseNode implementation
-
-  void get(ExceptionOrValue& output) noexcept override {
-    output.as<FixVoid<T>>() = kj::mv(result);
-  }
-
-  ExceptionOr<FixVoid<T>> result;
 };
 
 template <typename Self, typename T>
@@ -2681,7 +2669,8 @@ public:
   void destroy() override {
     auto* c = node.coroutine;
     node.coroutine = nullptr;
-    c->destroy();
+    KJ_DEFER(freePromise(this));
+    if (c != nullptr) c->destroy();
   }
 
   void onReady(Event* event) noexcept override {
@@ -2689,7 +2678,7 @@ public:
   }
 
   void get(ExceptionOrValue& output) noexcept override {
-    node.coroutine->get(output);
+    output.as<FixVoid<T>>() = kj::mv(node.result);
   }
 
   void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override {
@@ -2704,6 +2693,7 @@ T waitCoroutine(_::CoroutinePromise<T>&& node, WaitScope& waitScope, SourceLocat
   _::ExceptionOr<_::FixVoid<T>> result;
   CoroutinePromiseNode promiseNode(kj::mv(node));
   waitRef(promiseNode, result, waitScope, location);
+  KJ_REQUIRE(result.isResolved(), &promiseNode.node);
   return convertToReturn(kj::mv(result));
 }
 

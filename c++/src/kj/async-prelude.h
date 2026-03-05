@@ -219,6 +219,51 @@ kj::String traceNode(PromiseNode& node);
 
 class CoroutineBase;
 
+
+template <typename T>
+class ExceptionOr;
+
+class ExceptionOrValue {
+public:
+  ExceptionOrValue(bool, Exception&& exception): exception(kj::mv(exception)) {}
+  KJ_DISALLOW_COPY(ExceptionOrValue);
+
+  void addException(Exception&& exception) {
+    if (this->exception == kj::none) {
+      this->exception = kj::mv(exception);
+    }
+  }
+
+  template <typename T>
+  ExceptionOr<T>& as() { return *static_cast<ExceptionOr<T>*>(this); }
+  template <typename T>
+  const ExceptionOr<T>& as() const { return *static_cast<const ExceptionOr<T>*>(this); }
+
+  Maybe<Exception> exception;
+
+protected:
+  // Allow subclasses to have move constructor / assignment.
+  ExceptionOrValue() = default;
+  ExceptionOrValue(ExceptionOrValue&& other) = default;
+  ExceptionOrValue& operator=(ExceptionOrValue&& other) = default;
+};
+
+template <typename T>
+class ExceptionOr: public ExceptionOrValue {
+public:
+  ExceptionOr() = default;
+  ExceptionOr(T&& value): value(kj::mv(value)) {}
+  ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
+  ExceptionOr(ExceptionOr&&) = default;
+  ExceptionOr& operator=(ExceptionOr&&) = default;
+
+  inline bool isResolved() const {
+    return value != kj::none || exception != kj::none;
+  }
+
+  Maybe<T> value;
+};
+
 template <typename T>
 class CoroutinePromise {
 public:
@@ -231,7 +276,9 @@ public:
   CoroutinePromise& operator=(const CoroutinePromise&) = delete;
 
   CoroutineBase* coroutine = nullptr;
+  ExceptionOr<FixVoid<T>> result;
 };
+
 template<typename T>
 class CoroutinePromiseNode;
 

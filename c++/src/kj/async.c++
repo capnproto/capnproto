@@ -2602,8 +2602,9 @@ void ForkHubBase::traceEvent(TraceBuilder& builder) {
 
 // -------------------------------------------------------------------
 
-ChainPromiseNode::ChainPromiseNode(OwnPromiseNode innerParam, SourceLocation location)
-    : Event(location), state(STEP1), inner(kj::mv(innerParam)) {
+ChainPromiseNode::ChainPromiseNode(OwnPromiseNode innerParam, SourceLocation location,
+                                   ChainExtractor extractor)
+    : Event(location), state(STEP1), inner(kj::mv(innerParam)), extractor(extractor) {
   inner->setSelfPointer(&inner);
   inner->onReady(this);
 }
@@ -2652,32 +2653,7 @@ void ChainPromiseNode::tracePromise(TraceBuilder& builder, bool stopAtNextEvent)
 Maybe<Own<Event>> ChainPromiseNode::fire() {
   KJ_REQUIRE(state != STEP2);
 
-  static_assert(sizeof(Promise<int>) == sizeof(Promise<void>),
-      "This code assumes all Promise<T> have the same size.");
-
-  ExceptionOr<Promise<void>> intermediate;
-  inner->get(intermediate);
-
-  KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() {
-    inner = nullptr;
-  })) {
-    intermediate.addException(kj::mv(exception));
-  }
-
-  KJ_IF_SOME(exception, intermediate.exception) {
-    // There is an exception.  If there is also a value, delete it.
-    kj::runCatchingExceptions([&]() { intermediate.value = kj::none; });
-    // Now set step2 to a rejected promise.
-    inner = allocPromise<ImmediateBrokenPromiseNode>(kj::mv(exception));
-  } else KJ_IF_SOME(value, intermediate.value) {
-    // There is a value and no exception.  The value is itself a promise.  Adopt it as our
-    // step2.
-    inner = PromiseNode::from(kj::mv(value));
-  } else {
-    // We can only get here if inner->get() returned neither an exception nor a
-    // value, which never actually happens.
-    KJ_FAIL_ASSERT("Inner node returned empty value.");
-  }
+  inner = extractor(inner);
   state = STEP2;
 
   if (selfPtr != nullptr) {
