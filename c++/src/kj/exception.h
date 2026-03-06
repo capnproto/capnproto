@@ -194,7 +194,23 @@ private:
   // It is very important for sizeof(kj::Exception) to be small, since it is used in result types
   // everywhere. Encapsulate all storage in a heap-allocated object.
 
+  explicit Exception(kj::None): storage() {}
+
   friend class ExceptionImpl;
+  friend struct MaybeTraits<Exception>;
+};
+
+// MaybeTraits specialization for Exception.
+// Exception uses storage == nullptr as the "none" state.
+template <>
+struct MaybeTraits<Exception> {
+  // Niche optimization: storage == nullptr is the "none" state
+  // NOTE: Uses placement new directly instead of kj::ctor() because Exception(kj::none)
+  // is private and MaybeTraits<Exception> is a friend of Exception.
+  static void initNone(Exception* ptr) noexcept {
+    new (ptr, _::PlacementNew()) Exception(kj::none);
+  }
+  static bool isNone(const Exception& e) noexcept { return e.storage == nullptr; }
 };
 
 #if __GNUC__

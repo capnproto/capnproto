@@ -378,7 +378,6 @@ private:
 
   template <typename, typename>
   friend class Own;
-  friend class Maybe<Own<T>>;
 };
 
 template <>
@@ -499,152 +498,28 @@ private:
 
   template <typename, typename>
   friend class Own;
-  friend class Maybe<Own<T, StaticDisposer>>;
 };
 
-namespace _ {  // private
-
+// MaybeTraits specialization for Own<T, D>.
+// This enables:
+// 1. Niche optimization: Maybe<Own<T>> uses ptr == nullptr as "none", reducing size from 24 to 16.
+// 2. Implicit conversion: If U is implicitly convertible to Own<T, D>, then U is implicitly
+//    convertible to Maybe<Own<T, D>>. This allows: Maybe<Own<Base>> m = ownDerived;
+// 3. Reference conversion: Maybe<Own<T>> can convert to Maybe<U&> when T* converts to U*.
 template <typename T, typename D>
-class OwnOwn {
-public:
-  inline OwnOwn(Own<T, D>&& value) noexcept: value(kj::mv(value)) {}
+struct MaybeTraits<Own<T, D>> {
+  // Niche optimization: nullptr is the "none" state
+  static void initNone(Own<T, D>* ptr) noexcept { kj::ctor(*ptr); }
+  static bool isNone(const Own<T, D>& o) noexcept { return o.get() == nullptr; }
 
-  inline Own<T, D>& operator*() & { return value; }
-  inline const Own<T, D>& operator*() const & { return value; }
-  inline Own<T, D>&& operator*() && { return kj::mv(value); }
-  inline const Own<T, D>&& operator*() const && { return kj::mv(value); }
-  inline Own<T, D>* operator->() { return &value; }
-  inline const Own<T, D>* operator->() const { return &value; }
-  inline operator Own<T, D>*() { return value ? &value : nullptr; }
-  inline operator const Own<T, D>*() const { return value ? &value : nullptr; }
+  // Enable converting constructor: Maybe<Own<T>>(U&&) accepts types U convertible to Own<T>.
+  // The constructor is implicit when U→Own<T> is implicit (e.g., Own<Derived>→Own<Base>).
+  // Example: Maybe<Own<Base>> m = kj::heap<Derived>();
+  static constexpr bool convertingConstructor = true;
 
-private:
-  Own<T, D> value;
-};
-
-template <typename T, typename D>
-OwnOwn<T, D> readMaybe(Maybe<Own<T, D>>&& maybe) { return OwnOwn<T, D>(kj::mv(maybe.ptr)); }
-template <typename T, typename D>
-Own<T, D>* readMaybe(Maybe<Own<T, D>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
-template <typename T, typename D>
-const Own<T, D>* readMaybe(const Maybe<Own<T, D>>& maybe) {
-  return maybe.ptr ? &maybe.ptr : nullptr;
-}
-
-}  // namespace _ (private)
-
-template <typename T, typename D>
-class Maybe<Own<T, D>> {
-public:
-  inline Maybe(): ptr(nullptr) {}
-  inline Maybe(Own<T, D>&& t) noexcept: ptr(kj::mv(t)) {}
-  inline Maybe(Maybe&& other) noexcept: ptr(kj::mv(other.ptr)) {}
-
-  template <typename U>
-  inline Maybe(Maybe<Own<U, D>>&& other): ptr(mv(other.ptr)) {}
-  template <typename U>
-  inline Maybe(Own<U, D>&& other): ptr(mv(other)) {}
-
-  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
-  inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
-
-  inline Maybe(kj::None) noexcept: ptr(nullptr) {}
-
-  inline Own<T, D>& emplace(Own<T, D> value) {
-    // Assign the Maybe to the given value and return the content. This avoids the need to do a
-    // KJ_ASSERT_NONNULL() immediately after setting the Maybe just to read it back again.
-    ptr = kj::mv(value);
-    return ptr;
-  }
-
-  template <typename U = T>
-  inline operator NoInfer<Maybe<U&>>() { return ptr.get(); }
-  template <typename U = T>
-  inline operator NoInfer<Maybe<const U&>>() const { return ptr.get(); }
-  // Implicit conversion to `Maybe<U&>`. The weird templating is to make sure that
-  // `Maybe<Own<void>>` can be instantiated with the compiler complaining about forming references
-  // to void -- the use of templates here will cause SFINAE to kick in and hide these, whereas if
-  // they are not templates then SFINAE isn't applied and so they are considered errors.
-
-  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
-
-  KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
-  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
-
-  inline bool operator==(kj::None) const { return ptr == nullptr; }
-
-  Own<T, D>& orDefault(Own<T, D>& defaultValue) {
-    if (ptr == nullptr) {
-      return defaultValue;
-    } else {
-      return ptr;
-    }
-  }
-  const Own<T, D>& orDefault(const Own<T, D>& defaultValue) const {
-    if (ptr == nullptr) {
-      return defaultValue;
-    } else {
-      return ptr;
-    }
-  }
-
-  template <typename F,
-      typename Result = decltype(instance<bool>() ? instance<Own<T, D>>() : instance<F>()())>
-  Result orDefault(F&& lazyDefaultValue) && {
-    if (ptr == nullptr) {
-      return lazyDefaultValue();
-    } else {
-      return kj::mv(ptr);
-    }
-  }
-
-  template <typename Func>
-  auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T, D>&>()))> {
-    if (ptr == nullptr) {
-      return kj::none;
-    } else {
-      return f(ptr);
-    }
-  }
-
-  template <typename Func>
-  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T, D>&>()))> {
-    if (ptr == nullptr) {
-      return kj::none;
-    } else {
-      return f(ptr);
-    }
-  }
-
-  template <typename Func>
-  auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T, D>&&>()))> {
-    if (ptr == nullptr) {
-      return kj::none;
-    } else {
-      return f(kj::mv(ptr));
-    }
-  }
-
-  template <typename Func>
-  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T, D>&&>()))> {
-    if (ptr == nullptr) {
-      return kj::none;
-    } else {
-      return f(kj::mv(ptr));
-    }
-  }
-
-private:
-  Own<T, D> ptr;
-
-  template <typename U>
-  friend class Maybe;
-  template <typename U, typename D2>
-  friend _::OwnOwn<U, D2> _::readMaybe(Maybe<Own<U, D2>>&& maybe);
-  template <typename U, typename D2>
-  friend Own<U, D2>* _::readMaybe(Maybe<Own<U, D2>>& maybe);
-  template <typename U, typename D2>
-  friend const Own<U, D2>* _::readMaybe(const Maybe<Own<U, D2>>& maybe);
+  // Allow Maybe<Own<T>> -> Maybe<T&> via dereference.
+  // This enables: void foo(Maybe<T&> b); foo(maybeOwn);
+  static constexpr bool dereferencingConversion = true;
 };
 
 namespace _ {  // private

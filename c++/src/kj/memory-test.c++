@@ -562,6 +562,337 @@ KJ_TEST("Maybe<Own<T>>") {
   KJ_EXPECT(&KJ_ASSERT_NONNULL(mRef) == KJ_ASSERT_NONNULL(m).get());
 }
 
+KJ_TEST("Maybe<Own<T>> comprehensive") {
+  // Maybe<Own<T>> currently has a partial specialization in memory.h. These tests document its
+  // behavior comprehensively to ensure any future refactoring preserves the expected semantics.
+
+  // Size verification: Maybe<Own<T>> should have no overhead beyond Own<T> itself, since
+  // nullptr can represent the empty state.
+  static_assert(sizeof(Maybe<Own<int>>) == sizeof(Own<int>));
+
+  // Default construction (empty)
+  {
+    Maybe<Own<int>> empty;
+    KJ_EXPECT(empty == kj::none);
+  }
+
+  // Construction from kj::none
+  {
+    Maybe<Own<int>> empty = kj::none;
+    KJ_EXPECT(empty == kj::none);
+  }
+
+  // Construction from Own<T>
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m) == 42);
+  }
+
+  // Move construction
+  {
+    Maybe<Own<int>> m1 = heap<int>(42);
+    Maybe<Own<int>> m2 = kj::mv(m1);
+    KJ_EXPECT(m1 == kj::none);  // moved-from is empty
+    KJ_EXPECT(m2 != kj::none);
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m2) == 42);
+  }
+
+  // Move assignment
+  {
+    Maybe<Own<int>> m1 = heap<int>(1);
+    Maybe<Own<int>> m2 = heap<int>(2);
+    m1 = kj::mv(m2);
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m1) == 2);
+    KJ_EXPECT(m2 == kj::none);
+  }
+
+  // Assignment of Own<T>
+  {
+    Maybe<Own<int>> m;
+    m = heap<int>(42);
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m) == 42);
+  }
+
+  // Assignment of kj::none
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    m = kj::none;
+    KJ_EXPECT(m == kj::none);
+  }
+
+  // KJ_IF_SOME with mutable access
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    KJ_IF_SOME(own, m) {
+      KJ_EXPECT(*own == 42);
+      *own = 100;  // mutate through reference
+    } else {
+      KJ_FAIL_EXPECT("expected non-null");
+    }
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m) == 100);
+  }
+
+  // KJ_IF_SOME on empty
+  {
+    Maybe<Own<int>> empty;
+    KJ_IF_SOME(own, empty) {
+      (void)own;
+      KJ_FAIL_EXPECT("expected null");
+    }
+  }
+
+  // Rvalue KJ_IF_SOME (move out)
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    KJ_IF_SOME(own, kj::mv(m)) {
+      KJ_EXPECT(*own == 42);
+      Own<int> taken = kj::mv(own);  // take ownership
+      KJ_EXPECT(*taken == 42);
+    }
+    KJ_EXPECT(m == kj::none);
+  }
+
+  // map() on lvalue
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    Maybe<int> mapped = m.map([](Own<int>& o) { return *o * 2; });
+    KJ_EXPECT(KJ_ASSERT_NONNULL(mapped) == 84);
+  }
+
+  // map() on empty
+  {
+    Maybe<Own<int>> empty;
+    Maybe<int> mapped = empty.map([](Own<int>& o) { return *o; });
+    KJ_EXPECT(mapped == kj::none);
+  }
+
+  // map() on rvalue (moving out)
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    Maybe<Own<int>> mapped = kj::mv(m).map([](Own<int>&& o) { return kj::mv(o); });
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(mapped) == 42);
+  }
+
+  // orDefault() with lvalue
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    Own<int> def = heap<int>(0);
+    KJ_EXPECT(*m.orDefault(def) == 42);
+  }
+
+  // orDefault() on empty
+  {
+    Maybe<Own<int>> empty;
+    Own<int> def = heap<int>(99);
+    KJ_EXPECT(*empty.orDefault(def) == 99);
+  }
+
+  // Lazy orDefault on rvalue
+  {
+    Maybe<Own<int>> empty;
+    Own<int> result = kj::mv(empty).orDefault([]() { return heap<int>(123); });
+    KJ_EXPECT(*result == 123);
+  }
+
+  // emplace()
+  {
+    Maybe<Own<int>> m;
+    m.emplace(heap<int>(42));
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m) == 42);
+  }
+
+  // Disposal: destroyed when Maybe goes out of scope
+  {
+    bool destroyed = false;
+    struct Guard {
+      bool& flag;
+      Guard(bool& f) : flag(f) {}
+      ~Guard() { flag = true; }
+    };
+    {
+      Maybe<Own<Guard>> m = heap<Guard>(destroyed);
+      KJ_EXPECT(!destroyed);
+    }
+    KJ_EXPECT(destroyed);
+  }
+
+  // Disposal: destroyed when set to none
+  {
+    bool destroyed = false;
+    struct Guard {
+      bool& flag;
+      Guard(bool& f) : flag(f) {}
+      ~Guard() { flag = true; }
+    };
+    Maybe<Own<Guard>> m = heap<Guard>(destroyed);
+    m = kj::none;
+    KJ_EXPECT(destroyed);
+  }
+
+  // Disposal: old value destroyed on reassignment
+  {
+    bool destroyed1 = false, destroyed2 = false;
+    struct Guard {
+      bool& flag;
+      Guard(bool& f) : flag(f) {}
+      ~Guard() { flag = true; }
+    };
+    Maybe<Own<Guard>> m = heap<Guard>(destroyed1);
+    m = heap<Guard>(destroyed2);
+    KJ_EXPECT(destroyed1);  // old value destroyed on reassignment
+    KJ_EXPECT(!destroyed2); // new value still alive
+  }
+}
+
+KJ_TEST("Maybe<Own<T>> move-assignment is safe when this owns other") {
+  // Test that move-assignment works correctly when `other` is inside `this`'s value.
+  // This is a regression test for a use-after-free bug where:
+  //   head = kj::mv(head->next);
+  // would access head->next after head's value was destroyed.
+
+  struct ListNode {
+    int value;
+    Maybe<Own<ListNode>> next;
+    ListNode(int v): value(v) {}
+  };
+
+  // Build a list: 1 -> 2 -> 3 -> none
+  Maybe<Own<ListNode>> head = heap<ListNode>(1);
+  KJ_ASSERT_NONNULL(head)->next = heap<ListNode>(2);
+  KJ_ASSERT_NONNULL(KJ_ASSERT_NONNULL(head)->next)->next = heap<ListNode>(3);
+
+  // Pop the head by assigning head = kj::mv(head->next)
+  // Without a correctly implemented assignment operator, this would be use-after-free.
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head)->value == 2);
+
+  // Pop again
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(head)->value == 3);
+
+  // Pop once more - should become none
+  KJ_IF_SOME(node, head) {
+    head = kj::mv(node->next);
+  }
+
+  KJ_EXPECT(head == kj::none);
+}
+
+KJ_TEST("Maybe<Own<T>> implicit conversion to Maybe<T&>") {
+  // Maybe<Own<T>> can implicitly convert to Maybe<T&>, which is useful for
+  // passing owned values to functions expecting references.
+
+  // Lvalue conversion
+  {
+    Maybe<Own<int>> m = heap<int>(42);
+    Maybe<int&> ref = m;
+    KJ_EXPECT(ref != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(ref) == 42);
+
+    // Modifying through the reference affects the owned value
+    KJ_ASSERT_NONNULL(ref) = 100;
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m) == 100);
+  }
+
+  // Rvalue conversion (safe for function call lifetime)
+  {
+    auto takesRef = [](Maybe<int&> ref) {
+      KJ_EXPECT(KJ_ASSERT_NONNULL(ref) == 42);
+    };
+    takesRef(Maybe<Own<int>>(heap<int>(42)));
+  }
+
+  // Empty conversion
+  {
+    Maybe<Own<int>> empty;
+    Maybe<int&> ref = empty;
+    KJ_EXPECT(ref == kj::none);
+  }
+
+  // Const conversion
+  {
+    const Maybe<Own<int>> m = heap<int>(42);
+    Maybe<const int&> ref = m;
+    KJ_EXPECT(KJ_ASSERT_NONNULL(ref) == 42);
+  }
+
+  // Function parameter passing (common use case)
+  {
+    auto processValue = [](Maybe<int&> ref) -> bool {
+      KJ_IF_SOME(v, ref) {
+        v *= 2;
+        return true;
+      }
+      return false;
+    };
+
+    Maybe<Own<int>> m = heap<int>(21);
+    KJ_EXPECT(processValue(m));
+    KJ_EXPECT(*KJ_ASSERT_NONNULL(m) == 42);
+
+    Maybe<Own<int>> empty;
+    KJ_EXPECT(!processValue(empty));
+  }
+}
+
+// Types for testing Maybe<Own<Derived>> -> Maybe<Own<Base>> converting constructor
+struct MaybeOwnBase {
+  int value;
+  explicit MaybeOwnBase(int v): value(v) {}
+  virtual ~MaybeOwnBase() = default;
+};
+
+struct MaybeOwnDerived: MaybeOwnBase {
+  explicit MaybeOwnDerived(int v): MaybeOwnBase(v) {}
+};
+
+KJ_TEST("Maybe<Own<T>> converting constructor from Own<Derived>") {
+  // Test that Own<Derived> can be used to construct Maybe<Own<Base>>.
+
+  // Direct construction from heap<Derived>()
+  {
+    Maybe<Own<MaybeOwnBase>> m = heap<MaybeOwnDerived>(42);
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+  }
+
+  // Assignment from heap<Derived>()
+  {
+    Maybe<Own<MaybeOwnBase>> m;
+    m = heap<MaybeOwnDerived>(42);
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+  }
+
+  // Return from function without braces
+  {
+    auto makeWidget = []() -> Maybe<Own<MaybeOwnBase>> {
+      return heap<MaybeOwnDerived>(42);  // No braces needed
+    };
+    Maybe<Own<MaybeOwnBase>> m = makeWidget();
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+  }
+
+  // Move from existing Own<Derived>
+  {
+    Own<MaybeOwnDerived> owned = heap<MaybeOwnDerived>(42);
+    Maybe<Own<MaybeOwnBase>> m = kj::mv(owned);
+    KJ_EXPECT(m != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+  }
+}
+
 int* sawIntPtr = nullptr;
 
 void freeInt(int* ptr) {

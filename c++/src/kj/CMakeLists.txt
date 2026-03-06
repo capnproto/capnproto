@@ -264,6 +264,7 @@ if(BUILD_TESTING)
     string-test.c++
     table-test.c++
     map-test.c++
+    maybe-test.c++
     exception-test.c++
     # this test overrides symbolizer and has to be linked separately
     # exception-override-symbolizer-test.c++
