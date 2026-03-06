@@ -984,8 +984,10 @@ String KJ_STRINGIFY(const Exception& e) {
              stringifyStackTrace(e.getStackTrace()));
 }
 
-static_assert(sizeof(kj::Exception) == 2 * sizeof(size_t),
+static_assert(sizeof(kj::Exception) == sizeof(size_t),
     "exception type is too big, please keep it lean");
+static_assert(sizeof(kj::Exception) == sizeof(kj::Maybe<kj::Exception>),
+    "Maybe<Exception> niche optimization is not working");
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept {
   storage->file = trimSourceFilename(file).cStr();
@@ -1031,8 +1033,6 @@ Exception::Exception(const Exception& other) noexcept {
     });
   }
 }
-
-Exception::~Exception() noexcept {}
 
 Exception::Context::Context(const Context& other) noexcept
     : file(other.file), line(other.line), description(str(other.description)) {
@@ -1134,7 +1134,7 @@ void Exception::addTraceHere() {
 }
 
 kj::Maybe<kj::ArrayPtr<const byte>> Exception::getDetail(DetailTypeId typeId) const {
-  for (auto& detail: storage->details) {
+  for (const auto& detail: storage->details) {
     if (detail.id == typeId) {
       return detail.value.asPtr();
     }

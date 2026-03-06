@@ -67,7 +67,7 @@ protected:
   // Allow subclasses to have move constructor / assignment.
   ExceptionOrValue() = default;
   ExceptionOrValue(ExceptionOrValue&& other) = default;
-  ExceptionOrValue& operator=(ExceptionOrValue&& other) = default;
+  inline ExceptionOrValue& operator=(ExceptionOrValue&& other) = default;
 };
 
 template <typename T>
@@ -77,7 +77,7 @@ public:
   ExceptionOr(T&& value): value(kj::mv(value)) {}
   ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
   ExceptionOr(ExceptionOr&&) = default;
-  ExceptionOr& operator=(ExceptionOr&&) = default;
+  inline ExceptionOr& operator=(ExceptionOr&&) = default;
 
   Maybe<T> value;
 };
