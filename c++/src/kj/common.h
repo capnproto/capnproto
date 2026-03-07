@@ -2060,6 +2060,7 @@ public:
 
   template <typename Func>
   auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
+    // See KJ_MAP for a more ergonomic interface.
     if (ptr == nullptr) {
       return kj::none;
     } else {
@@ -2183,6 +2184,7 @@ public:
 
   template <typename Func>
   auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+    // See KJ_MAP for a more ergonomic interface.
     if (ptr == nullptr) {
       return kj::none;
     } else {
@@ -2210,6 +2212,84 @@ private:
   template <typename U>
   friend U* _::readMaybe(const Maybe<U&>& maybe);
 };
+
+// =======================================================================================
+// KJ_MAP
+
+#define KJ_MAP(elementName, array) \
+  ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>(array) * \
+  [&](typename ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>::Element elementName)
+// Applies a function to each element of a container or Maybe, returning the mapped result.
+// For arrays/containers (include kj/array.h), returns Array<Result>.
+// For Maybe<T>, returns Maybe<Result>.
+//
+//     StringPtr foo = "abcd";
+//     Array<char> bar = KJ_MAP(c, foo) -> char { return c + 1; };
+//
+//     Maybe<int> m = 42;
+//     Maybe<int> doubled = KJ_MAP(x, m) -> int { return x * 2; };
+//
+// The trailing return type (e.g. `-> int`) is not required — the lambda's return type can be
+// deduced — but it is good practice for readability and to catch type errors early.
+//
+// For Maybe in particular, KJ_MAP automatically deduces the correct lambda parameter type, which
+// avoids confusing "no matching function" errors that arise when calling Maybe::map() directly
+// with a mismatched parameter type (e.g. taking a move-only type by value, or using a completely
+// wrong type). These errors are confusing because SFINAE in map()'s return type silently removes
+// the overload from consideration rather than pointing at the real problem.
+
+namespace _ {  // private
+
+template <typename T>
+struct Mapper;
+// Primary template, intentionally undefined.
+// Partial specializations below handle Maybe<T>.
+// A constrained specialization in kj/array.h handles iterable containers.
+
+template <typename T>
+struct Mapper<Maybe<T>&> {
+  Maybe<T>& maybe;
+  Mapper(Maybe<T>& m): maybe(m) {}
+  template <typename Func>
+  auto operator*(Func&& func) { return maybe.map(kj::fwd<Func>(func)); }
+  typedef T& Element;
+};
+
+template <typename T>
+struct Mapper<const Maybe<T>&> {
+  const Maybe<T>& maybe;
+  Mapper(const Maybe<T>& m): maybe(m) {}
+  template <typename Func>
+  auto operator*(Func&& func) { return maybe.map(kj::fwd<Func>(func)); }
+  typedef const T& Element;
+};
+
+template <typename T>
+struct Mapper<const Maybe<T&>&> {
+  // Explicit specialization for const Maybe holding a reference. Without this,
+  // Mapper<const Maybe<T>&> would match with T=U&, and then `const T&` (our Element typedef)
+  // would undergo substitution as `const (U&) &`. In C++, const applied to a reference type is
+  // ignored (you can't const-qualify a reference itself), so `const (U&)` collapses to `U&`,
+  // and then reference collapsing gives `U& &` -> `U&`. The result is Element = U& instead of
+  // const U&, silently losing constness. By matching T& explicitly here, T deduces to the
+  // non-reference type U, and `const T&` is straightforwardly `const U&`.
+  const Maybe<T&>& maybe;
+  Mapper(const Maybe<T&>& m): maybe(m) {}
+  template <typename Func>
+  auto operator*(Func&& func) { return maybe.map(kj::fwd<Func>(func)); }
+  typedef const T& Element;
+};
+
+template <typename T>
+struct Mapper<Maybe<T>> {
+  Maybe<T> maybe;
+  Mapper(Maybe<T>&& m): maybe(kj::mv(m)) {}
+  template <typename Func>
+  auto operator*(Func&& func) { return kj::mv(maybe).map(kj::fwd<Func>(func)); }
+  typedef T&& Element;
+};
+
+}  // namespace _ (private)
 
 // =======================================================================================
 // ArrayPtr

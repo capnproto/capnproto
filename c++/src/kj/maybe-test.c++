@@ -2236,5 +2236,159 @@ KJ_TEST("Maybe<Own<T>> move-assignment from other Maybe: old value's destructor 
   KJ_EXPECT(observedId == 2, observedId);
 }
 
+// =======================================================================================
+// KJ_MAP for Maybe
+
+KJ_TEST("KJ_MAP Maybe<T> lvalue with value") {
+  Maybe<int> m = 5;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 6);
+}
+
+KJ_TEST("KJ_MAP Maybe<T> lvalue with none") {
+  Maybe<int> m = kj::none;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result == kj::none);
+}
+
+KJ_TEST("KJ_MAP const Maybe<T> lvalue with value") {
+  const Maybe<int> m = 5;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 6);
+}
+
+KJ_TEST("KJ_MAP const Maybe<T> lvalue with none") {
+  const Maybe<int> m = kj::none;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result == kj::none);
+}
+
+KJ_TEST("KJ_MAP rvalue Maybe<T> with value") {
+  Maybe<int> result = KJ_MAP(x, Maybe<int>(5)) -> int { return x + 1; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 6);
+}
+
+KJ_TEST("KJ_MAP rvalue Maybe<T> with none") {
+  Maybe<int> result = KJ_MAP(x, Maybe<int>(kj::none)) -> int { return x + 1; };
+  KJ_EXPECT(result == kj::none);
+}
+
+KJ_TEST("KJ_MAP lvalue Maybe<T&> with value") {
+  int val = 5;
+  Maybe<int&> m = val;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 6);
+}
+
+KJ_TEST("KJ_MAP lvalue Maybe<T&> with none") {
+  Maybe<int&> m = kj::none;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result == kj::none);
+}
+
+KJ_TEST("KJ_MAP const lvalue Maybe<T&> with value") {
+  int val = 5;
+  const Maybe<int&> m = val;
+  Maybe<int> result = KJ_MAP(x, m) -> int { return x + 1; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 6);
+}
+
+KJ_TEST("KJ_MAP rvalue Maybe<T&> with value") {
+  int val = 5;
+  Maybe<int> result = KJ_MAP(x, Maybe<int&>(val)) -> int { return x + 1; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 6);
+}
+
+KJ_TEST("KJ_MAP Maybe<T> type transformation") {
+  // Map from one type to a different type.
+  Maybe<int> m = 42;
+  Maybe<double> result = KJ_MAP(x, m) -> double { return x * 1.5; };
+  KJ_EXPECT(result != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 63.0);
+}
+
+KJ_TEST("KJ_MAP Maybe<T> callback not called for none") {
+  Maybe<int> m = kj::none;
+  bool called = false;
+  Maybe<int> result = KJ_MAP(x, m) -> int {
+    called = true;
+    return x;
+  };
+  KJ_EXPECT(result == kj::none);
+  KJ_EXPECT(!called);
+}
+
+KJ_TEST("KJ_MAP Maybe<T> callback called exactly once") {
+  Maybe<int> m = 42;
+  int callCount = 0;
+  Maybe<int> result = KJ_MAP(x, m) -> int {
+    ++callCount;
+    return x + 1;
+  };
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 43);
+  KJ_EXPECT(callCount == 1);
+}
+
+KJ_TEST("KJ_MAP Maybe<T> lvalue mutation") {
+  // The callback receives T& for a non-const lvalue Maybe, so it can mutate the value.
+  Maybe<int> m = 10;
+  Maybe<int> result = KJ_MAP(x, m) -> int {
+    x *= 2;  // mutate the original
+    return x + 1;
+  };
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 21);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(m) == 20);  // original was mutated
+}
+
+KJ_TEST("KJ_MAP Maybe<T&> lvalue mutation") {
+  // The callback receives T& for Maybe<T&>, so mutations propagate to the referent.
+  int val = 10;
+  Maybe<int&> m = val;
+  Maybe<int> result = KJ_MAP(x, m) -> int {
+    x *= 3;
+    return x;
+  };
+  KJ_EXPECT(KJ_ASSERT_NONNULL(result) == 30);
+  KJ_EXPECT(val == 30);  // original referent was mutated
+}
+
+KJ_TEST("KJ_MAP const Maybe<T> callback not called for none") {
+  const Maybe<int> m = kj::none;
+  bool called = false;
+  Maybe<int> result = KJ_MAP(x, m) -> int {
+    called = true;
+    return x;
+  };
+  KJ_EXPECT(result == kj::none);
+  KJ_EXPECT(!called);
+}
+
+KJ_TEST("KJ_MAP rvalue Maybe<T> callback not called for none") {
+  bool called = false;
+  Maybe<int> result = KJ_MAP(x, Maybe<int>(kj::none)) -> int {
+    called = true;
+    return x;
+  };
+  KJ_EXPECT(result == kj::none);
+  KJ_EXPECT(!called);
+}
+
+KJ_TEST("KJ_MAP Maybe<T&> callback not called for none") {
+  Maybe<int&> m = kj::none;
+  bool called = false;
+  Maybe<int> result = KJ_MAP(x, m) -> int {
+    called = true;
+    return x;
+  };
+  KJ_EXPECT(result == kj::none);
+  KJ_EXPECT(!called);
+}
+
 }  // namespace
 }  // namespace kj
