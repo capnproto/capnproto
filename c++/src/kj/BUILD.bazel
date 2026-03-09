@@ -301,6 +301,15 @@ cc_test(
 )
 
 cc_test(
+    name = "maybe-exception-codegen-test",
+    srcs = ["maybe-exception-codegen-test.c++"],
+    deps = [
+        ":kj-async",
+        ":kj-test",
+    ],
+)
+
+cc_test(
     name = "table-test",
     srcs = ["table-test.c++"],
     deps = [ ":kj-test" ],

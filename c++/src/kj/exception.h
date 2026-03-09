@@ -73,8 +73,12 @@ public:
   Exception(Type type, const char* file, int line, String description = nullptr) noexcept;
   Exception(Type type, String file, int line, String description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
-  Exception(Exception&& other) = default;
-  ~Exception() noexcept;
+  inline Exception(Exception&& other) : storage(other.storage) { other.storage = nullptr; };
+  inline ~Exception() noexcept {
+    if (storage != nullptr) {
+      delete storage;
+    }
+   }
 
   const char* getFile() const { return storage->file; }
   int getLine() const { return storage->line; }
@@ -190,11 +194,11 @@ private:
     kj::Vector<Detail> details;
   };
 
-  kj::Own<Storage> storage = kj::heap<Storage>();
+  Storage* storage = {new Storage()};
   // It is very important for sizeof(kj::Exception) to be small, since it is used in result types
   // everywhere. Encapsulate all storage in a heap-allocated object.
 
-  explicit Exception(kj::None): storage() {}
+  explicit Exception(kj::None): storage(nullptr) {}
 
   friend class ExceptionImpl;
   friend struct MaybeTraits<Exception>;
