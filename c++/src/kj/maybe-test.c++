@@ -187,6 +187,44 @@ struct NoneDestructorCounter {
 int NoneDestructorCounter::nonNoneDestroyCount = 0;
 int NoneDestructorCounter::noneDestroyCount = 0;
 
+struct MoveCountNiche {
+  // A niche-optimized type that counts move constructor calls, distinguishing whether the
+  // source was in the none state (value == 0). Used to test noneIsMoveSafe behavior.
+  int value;
+
+  static int moveFromNoneCount;
+  static int moveFromValueCount;
+
+  static void resetCounts() {
+    moveFromNoneCount = 0;
+    moveFromValueCount = 0;
+  }
+
+  explicit MoveCountNiche(int v): value(v) {}
+
+  MoveCountNiche(MoveCountNiche&& other): value(other.value) {
+    if (other.value == 0) {
+      ++moveFromNoneCount;
+    } else {
+      ++moveFromValueCount;
+    }
+    other.value = 0;  // moved-from state IS the none state
+  }
+
+  MoveCountNiche& operator=(MoveCountNiche&& other) {
+    value = other.value;
+    other.value = 0;
+    return *this;
+  }
+
+  KJ_DISALLOW_COPY(MoveCountNiche);
+
+  friend struct ::kj::MaybeTraits<MoveCountNiche>;
+};
+
+int MoveCountNiche::moveFromNoneCount = 0;
+int MoveCountNiche::moveFromValueCount = 0;
+
 }  // namespace
 
 // MaybeTraits specializations for test types
@@ -195,6 +233,7 @@ struct MaybeTraits<MoveOnlyNiche> {
   // Niche optimization: value == 0 is the "none" state
   static void initNone(MoveOnlyNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const MoveOnlyNiche& m) noexcept { return m.value == 0; }
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 template <>
@@ -202,6 +241,7 @@ struct MaybeTraits<NonMoveableNiche> {
   // Niche optimization: value == 0 is the "none" state
   static void initNone(NonMoveableNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const NonMoveableNiche& m) noexcept { return m.value == 0; }
+  static constexpr bool noneIsMoveSafe = false;
 };
 
 template <>
@@ -209,6 +249,7 @@ struct MaybeTraits<NicheInt> {
   // Niche optimization: value == -1 is the "none" state
   static void initNone(NicheInt* ptr) noexcept { kj::ctor(*ptr, -1); }
   static bool isNone(const NicheInt& m) noexcept { return m.value == -1; }
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 template <>
@@ -216,6 +257,7 @@ struct MaybeTraits<NoneThrowingNiche> {
   // Niche optimization: value == 0 is the "none" state
   static void initNone(NoneThrowingNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const NoneThrowingNiche& m) noexcept { return m.value == 0; }
+  static constexpr bool noneIsMoveSafe = false;
 };
 
 template <>
@@ -223,6 +265,17 @@ struct MaybeTraits<NoneDestructorCounter> {
   // Niche optimization: value == 0 is the "none" state
   static void initNone(NoneDestructorCounter* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const NoneDestructorCounter& m) noexcept { return m.value == 0; }
+  static constexpr bool noneIsMoveSafe = false;
+};
+
+template <>
+struct MaybeTraits<MoveCountNiche> {
+  // Niche optimization: value == 0 is the "none" state
+  static void initNone(MoveCountNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
+  static bool isNone(const MoveCountNiche& m) noexcept { return m.value == 0; }
+  // noneIsMoveSafe = true: NullableValue will unconditionally call T's move ctor,
+  // even when source is in the none state.
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 namespace {
@@ -296,6 +349,8 @@ struct MaybeTraits<TestPtr<T>> {
 
   // Reference conversion: Maybe<TestPtr<T>> -> Maybe<T&> via dereference
   static constexpr bool dereferencingConversion = true;
+
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 namespace {
@@ -1235,6 +1290,105 @@ KJ_TEST("Maybe<NoneThrowingNiche> never constructs from none state") {
   }
 }
 
+KJ_TEST("noneIsMoveSafe=true: T's move ctor is called unconditionally") {
+  // When noneIsMoveSafe is true, NullableValue's move constructor unconditionally calls T's
+  // move constructor — even when the source is in the none state. This avoids a branch that
+  // would create a phi-store optimization barrier in LLVM.
+  static_assert(sizeof(Maybe<MoveCountNiche>) == sizeof(MoveCountNiche),
+      "Should be niche-optimized");
+
+  // Move from none: T's move ctor is called (unconditional move path).
+  {
+    MoveCountNiche::resetCounts();
+    Maybe<MoveCountNiche> empty;
+    KJ_EXPECT(empty == kj::none);
+    Maybe<MoveCountNiche> moved = kj::mv(empty);
+    KJ_EXPECT(moved == kj::none);
+    // The unconditional move path calls T's move ctor even on the none value.
+    KJ_EXPECT(MoveCountNiche::moveFromNoneCount == 1);
+    KJ_EXPECT(MoveCountNiche::moveFromValueCount == 0);
+  }
+
+  // Move from value: T's move ctor is called, source becomes none.
+  {
+    Maybe<MoveCountNiche> src = MoveCountNiche(42);
+    KJ_EXPECT(src != kj::none);
+    MoveCountNiche::resetCounts();
+    Maybe<MoveCountNiche> dst = kj::mv(src);
+    KJ_EXPECT(dst != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(dst).value == 42);
+    KJ_EXPECT(src == kj::none);
+    KJ_EXPECT(MoveCountNiche::moveFromNoneCount == 0);
+    KJ_EXPECT(MoveCountNiche::moveFromValueCount == 1);
+  }
+
+  // KJ_IF_SOME with move from value.
+  {
+    Maybe<MoveCountNiche> m = MoveCountNiche(7);
+    MoveCountNiche::resetCounts();
+    KJ_IF_SOME(v, kj::mv(m)) {
+      KJ_EXPECT(v.value == 7);
+    } else {
+      KJ_FAIL_EXPECT("should have value");
+    }
+    KJ_EXPECT(m == kj::none);
+    KJ_EXPECT(MoveCountNiche::moveFromNoneCount == 0);
+    KJ_EXPECT(MoveCountNiche::moveFromValueCount == 1);
+  }
+
+  // KJ_IF_SOME with move from none.
+  {
+    MoveCountNiche::resetCounts();
+    Maybe<MoveCountNiche> m;
+    bool gotValue = false;
+    KJ_IF_SOME(v, kj::mv(m)) {
+      (void)v;
+      gotValue = true;
+    }
+    KJ_EXPECT(!gotValue);
+    // The unconditional move still happens internally, but the result is recognized as none.
+    KJ_EXPECT(MoveCountNiche::moveFromNoneCount == 1);
+    KJ_EXPECT(MoveCountNiche::moveFromValueCount == 0);
+  }
+}
+
+KJ_TEST("noneIsMoveSafe=false: T's move ctor is never called on none") {
+  // When noneIsMoveSafe is false, NullableValue's move constructor checks whether the source
+  // is none before calling T's move constructor. This is verified by NoneThrowingNiche, which
+  // throws if its move ctor is called on a none value.
+  static_assert(sizeof(Maybe<NoneThrowingNiche>) == sizeof(NoneThrowingNiche),
+      "Should be niche-optimized");
+
+  // Move from none: T's move ctor is NOT called.
+  {
+    Maybe<NoneThrowingNiche> empty;
+    KJ_EXPECT(empty == kj::none);
+    // NoneThrowingNiche would throw if move ctor were called on none.
+    Maybe<NoneThrowingNiche> moved = kj::mv(empty);
+    KJ_EXPECT(moved == kj::none);
+  }
+
+  // Move from value: T's move ctor IS called (source is not none).
+  {
+    Maybe<NoneThrowingNiche> src = NoneThrowingNiche(42);
+    Maybe<NoneThrowingNiche> dst = kj::mv(src);
+    KJ_EXPECT(dst != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(dst).value == 42);
+    KJ_EXPECT(src == kj::none);
+  }
+
+  // KJ_IF_SOME with move from none: no throw.
+  {
+    Maybe<NoneThrowingNiche> m;
+    bool gotValue = false;
+    KJ_IF_SOME(v, kj::mv(m)) {
+      (void)v;
+      gotValue = true;
+    }
+    KJ_EXPECT(!gotValue);
+  }
+}
+
 KJ_TEST("Maybe never destroys none values") {
   // Verify that NullableValue never calls T's destructor on a none value.
   // This is important because it allows T's destructor to assume it is always
@@ -1387,6 +1541,7 @@ struct MaybeTraits<ThrowingNiche> {
   // Niche optimization: value == 0 is the "none" state
   static void initNone(ThrowingNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const ThrowingNiche& m) noexcept { return m.value == 0; }
+  static constexpr bool noneIsMoveSafe = false;
 };
 
 namespace {
@@ -1859,6 +2014,7 @@ template <>
 struct MaybeTraits<EventLoggerNiche> {
   static void initNone(EventLoggerNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const EventLoggerNiche& m) noexcept { return m.id == 0; }
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 namespace {
@@ -2109,6 +2265,7 @@ template <>
 struct MaybeTraits<NonAssignableNiche> {
   static void initNone(NonAssignableNiche* ptr) noexcept { kj::ctor(*ptr, 0); }
   static bool isNone(const NonAssignableNiche& m) noexcept { return m.id == 0; }
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 namespace {
