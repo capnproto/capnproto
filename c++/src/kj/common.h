@@ -1783,7 +1783,7 @@ public:
   Maybe(T&& t): ptr(kj::mv(t)) {}
   Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
-  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) { other.ptr = nullptr; }
+  Maybe(Maybe&& other): ptr(kj::mv(other.ptr)) {}
   Maybe(const Maybe& other): ptr(other.ptr) {}
   Maybe(Maybe& other): ptr(other.ptr) {}
 
@@ -1791,7 +1791,6 @@ public:
   Maybe(Maybe<U>&& other) {
     KJ_IF_SOME(val, kj::mv(other)) {
       ptr.emplace(kj::mv(val));
-      other = kj::none;
     }
   }
   template <typename U>
