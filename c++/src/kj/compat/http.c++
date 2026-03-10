@@ -1406,16 +1406,20 @@ public:
 
       uint64_t value = 0;
       for (char c: text) {
+        uint64_t digit;
         if ('0' <= c && c <= '9') {
-          value = value * 16 + (c - '0');
+          digit = c - '0';
         } else if ('a' <= c && c <= 'f') {
-          value = value * 16 + (c - 'a' + 10);
+          digit = c - 'a' + 10;
         } else if ('A' <= c && c <= 'F') {
-          value = value * 16 + (c - 'A' + 10);
+          digit = c - 'A' + 10;
         } else {
           KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) { break; }
           return value;
         }
+        KJ_REQUIRE(value <= (uint64_t(kj::maxValue) >> 4),
+            "HTTP chunk size overflow", text, text.asBytes()) { break; }
+        value = value * 16 + digit;
       }
 
       return value;
@@ -1942,7 +1946,15 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       // Body elided.
       kj::Maybe<uint64_t> length;
       KJ_IF_MAYBE(cl, headers.get(HttpHeaderId::CONTENT_LENGTH)) {
-        length = strtoull(cl->cStr(), nullptr, 10);
+        // Validate that the Content-Length is a non-negative integer. Note that strtoull() accepts
+        // leading '-' signs and silently converts negative values to large unsigned values, so we
+        // must explicitly check for a leading digit.
+        char* end;
+        uint64_t parsedValue = strtoull(cl->cStr(), &end, 10);
+        if ((*cl)[0] >= '0' && (*cl)[0] <= '9' && end > cl->begin() && *end == '\0') {
+          length = parsedValue;
+        }
+        // If invalid, we just leave `length` as nullptr, since the body is elided anyway.
       } else if (headers.get(HttpHeaderId::TRANSFER_ENCODING) == nullptr) {
         // HACK: Neither Content-Length nor Transfer-Encoding header in response to HEAD
         //   request. Propagate this fact with a 0 expected body length.
@@ -1991,12 +2003,16 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     //   "Content-Length: 5, 5, 5". Hopefully no one actually does that...
     char* end;
     uint64_t length = strtoull(cl->cStr(), &end, 10);
-    if (end > cl->begin() && *end == '\0') {
+    // Note that strtoull() accepts leading '-' signs and silently converts negative values to
+    // large unsigned values, so we must explicitly check for a leading digit.
+    if ((*cl)[0] >= '0' && (*cl)[0] <= '9' && end > cl->begin() && *end == '\0') {
       // #5
       return kj::heap<HttpFixedLengthEntityReader>(*this, length);
     } else {
       // #4 (bad content-length)
-      KJ_FAIL_REQUIRE("invalid Content-Length header value", *cl);
+      KJ_FAIL_REQUIRE("invalid Content-Length header value", *cl) { break; }
+      // To pass the -fno-exceptions test (but KJ-HTTP is really not safe to use in that mode).
+      return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
     }
   }
 
