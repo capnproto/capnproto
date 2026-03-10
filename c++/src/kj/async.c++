@@ -2912,6 +2912,9 @@ Maybe<Own<Event>> RaceSuccessfulPromiseNodeBase::Branch::fire() {
   }
 
   auto count = --parent.countLeft;
+  // This is either the first fire() or all previous ones have failed.
+  // In such case we need to clear the previous exception.
+  parent.output.exception = kj::none;
   promise->get(parent.output);
 
   if (parent.output.exception == kj::none) {
