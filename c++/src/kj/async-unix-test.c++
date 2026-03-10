@@ -1025,6 +1025,26 @@ KJ_TEST("UnixEventPort poll for signals") {
   promise2.wait(waitScope);
 }
 
+KJ_TEST("UnixEventPort wait for signals with repeating timer") {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto promise1 = port.onSignal(SIGIO).ignoreResult();
+  auto promise2 = [&]() -> kj::Promise<void> {
+    while (true) {
+      co_await port.getTimer().afterDelay(kj::NANOSECONDS);
+    }
+  }();
+
+  KJ_SYSCALL(kill(getpid(), SIGIO));
+
+  port.getTimer().timeoutAfter(
+    kj::SECONDS*5,
+    promise1.exclusiveJoin(kj::mv(promise2))).wait(waitScope);
+}
+
 #if defined(SIGRTMIN) && !__CYGWIN__ && !__aarch64__
 // TODO(someday): Figure out why RT signals don't seem to work correctly on Cygwin. It looks like
 //   only the first signal is delivered, like how non-RT signals work. Is it possible Cygwin
