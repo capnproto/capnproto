@@ -67,7 +67,7 @@ protected:
   // Allow subclasses to have move constructor / assignment.
   ExceptionOrValue() = default;
   ExceptionOrValue(ExceptionOrValue&& other) = default;
-  ExceptionOrValue& operator=(ExceptionOrValue&& other) = default;
+  ExceptionOrValue& operator=(ExceptionOrValue&&) = delete;
 };
 
 template <typename T>
@@ -77,7 +77,14 @@ public:
   ExceptionOr(T&& value): value(kj::mv(value)) {}
   ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
   ExceptionOr(ExceptionOr&&) = default;
-  ExceptionOr& operator=(ExceptionOr&&) = default;
+
+  inline ExceptionOr& operator=(ExceptionOr&& other) {
+    KJ_IREQUIRE(value == kj::none && exception == kj::none,
+        "ExceptionOr must be empty to be assigned to.");
+    value.emplaceInit(kj::mv(other.value));
+    exception.emplaceInit(kj::mv(other.exception));
+    return *this;
+  }
 
   Maybe<T> value;
 };
