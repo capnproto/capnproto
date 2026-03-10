@@ -120,12 +120,10 @@ kj::Promise<kj::Maybe<size_t>> AsyncMessageReader::readWithFds(
 
 kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& inputStream,
                                                          kj::ArrayPtr<word> scratchSpace) {
-  if (segmentCount() == 0) {
-    firstWord[1].set(0);
-  }
-
   // Reject messages with too many segments for security reasons.
-  KJ_REQUIRE(segmentCount() < 512, "Message has too many segments.") {
+  // Use firstWord[0].get() here instead of segmentCount() to catch overflow. The actual limit
+  // we are enforcing is 512, but firstWord[0] contains segmentCount - 1, hence we compare to 511.
+  KJ_REQUIRE(firstWord[0].get() < 511, "Message has too many segments.") {
     return kj::READY_NOW;  // exception will be propagated
   }
 
