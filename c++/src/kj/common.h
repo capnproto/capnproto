@@ -1123,10 +1123,11 @@ template <typename T>
 struct MaybeTraits {
   // Default traits: no niche optimization, no converting constructor, no ref conversion.
   //
-  // NICHE OPTIMIZATION: To enable, define both of these static member functions:
+  // NICHE OPTIMIZATION: To enable, define all of the following:
   //   static void initNone(T* ptr) noexcept;  // Use kj::ctor() to initialize a "none" value
   //   static bool isNone(const T& value) noexcept;  // Returns true if value represents "none"
-  // If one is defined, both must be defined or you'll get a compile error.
+  //   static constexpr bool noneIsMoveSafe = ...;  // true if T's move ctor can be called on none
+  // If any is defined, all must be defined or you'll get a compile error.
   //
   // Note that if your type's "none constructor" is private, you won't be able to use kj::ctor() in
   // your implementation of initNone(), but will have to use placement new directly.
@@ -1204,9 +1205,13 @@ concept HasNicheIsNone = requires(const T& v) {
 };
 
 template <typename T>
-concept HasAnyNicheFunction = HasNicheInitNone<T> || HasNicheIsNone<T>;
+concept HasNicheNoneIsMoveSafe =
+    requires { { MaybeTraits<T>::noneIsMoveSafe } -> SameAs<const bool&>; };
+
 template <typename T>
-concept HasAllNicheFunctions = HasNicheInitNone<T> && HasNicheIsNone<T>;
+concept HasAnyNicheMember = HasNicheInitNone<T> || HasNicheIsNone<T> || HasNicheNoneIsMoveSafe<T>;
+template <typename T>
+concept HasAllNicheMembers = HasNicheInitNone<T> && HasNicheIsNone<T> && HasNicheNoneIsMoveSafe<T>;
 
 template <typename T>
 concept HasConvertingConstructorFlag =
@@ -1219,6 +1224,14 @@ concept HasDereferencingConversionFlag =
     requires { { MaybeTraits<T>::dereferencingConversion } -> SameAs<const bool&>; } &&
     MaybeTraits<T>::dereferencingConversion;
 // Concept: MaybeTraits<T>::dereferencingConversion exists and is true
+
+template <typename T>
+concept NoneIsMoveSafe = HasNicheNoneIsMoveSafe<T> && MaybeTraits<T>::noneIsMoveSafe;
+// Concept: MaybeTraits<T>::noneIsMoveSafe exists and is true.
+// When true, T's move constructor can safely be called on a value in the "none" state
+// (as defined by MaybeTraits<T>::isNone). This allows NullableValue's move constructor
+// to unconditionally move, avoiding branches (which are phi-nodes preventing
+// further optimizations).
 
 template <typename T, typename U>
 concept DerefConvertsTo = HasDereferencingConversionFlag<T> && requires(T& t) {
@@ -1237,11 +1250,11 @@ concept ConstructibleFrom = requires(U&& u) { T(kj::fwd<U>(u)); };
 }  // namespace _ (private)
 
 template <typename T>
-concept NicheOptimizable = _::HasAnyNicheFunction<T>;
+concept NicheOptimizable = _::HasAnyNicheMember<T>;
 // Concept for types that support niche optimization in Maybe<T>.
-// Matches when ANY niche function is defined, so the niche-optimized specialization is selected.
-// The specialization then static_asserts that ALL functions are defined, giving a clear error
-// message if someone defines only some functions.
+// Matches when ANY niche member is defined, so the niche-optimized specialization is selected.
+// The specialization then static_asserts that ALL members are defined, giving a clear error
+// message if someone defines only some members.
 
 namespace _ {  // private
 
@@ -1420,9 +1433,9 @@ class NullableValue<T> {
   // Partial specialization of NullableValue for niche-optimizable types.
   // Instead of storing a separate bool flag, this uses the type's "none" state.
 
-  // Verify that if any niche function is defined, all are defined.
-  static_assert(!HasAnyNicheFunction<T> || HasAllNicheFunctions<T>,
-      "MaybeTraits<T> must define both initNone and isNone, or neither");
+  // Verify that if any niche member is defined, all are defined.
+  static_assert(!HasAnyNicheMember<T> || HasAllNicheMembers<T>,
+      "MaybeTraits<T> must define initNone, isNone, and noneIsMoveSafe");
 
   // Convenience aliases
   static inline void initNone(T* ptr) { MaybeTraits<T>::initNone(ptr); }
@@ -1434,7 +1447,19 @@ public:
   inline NullableValue(T& t): value(t) {}
   inline NullableValue(const T& t): value(t) {}
 
-  inline NullableValue(NullableValue&& other) {
+  inline NullableValue(NullableValue&& other) requires(NoneIsMoveSafe<T>)
+      : value(kj::mv(other.value)) {
+    if (!isNone(other.value)) {
+      try {
+        other.destroy();
+      } catch (...) {
+        // Our dtor won't run if we throw from our ctor, so clean up manually.
+        try { dtor(value); } catch (...) {}
+        throw;
+      }
+    }
+  }
+  inline NullableValue(NullableValue&& other) requires(!NoneIsMoveSafe<T>) {
     // Careful not to construct from none values.
     if (other != nullptr) {
       ctor(value, kj::mv(other.value));

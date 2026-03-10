@@ -520,6 +520,10 @@ struct MaybeTraits<Own<T, D>> {
   // Allow Maybe<Own<T>> -> Maybe<T&> via dereference.
   // This enables: void foo(Maybe<T&> b); foo(maybeOwn);
   static constexpr bool dereferencingConversion = true;
+
+  // Own's move ctor just copies ptr and sets source to nullptr (the none state).
+  // Moving a null Own is safe.
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 namespace _ {  // private

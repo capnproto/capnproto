@@ -73,7 +73,7 @@ public:
   Exception(Type type, const char* file, int line, String description = nullptr) noexcept;
   Exception(Type type, String file, int line, String description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
-  Exception(Exception&& other) = default;
+  Exception(Exception&& other) noexcept = default;
   ~Exception() noexcept;
 
   const char* getFile() const { return storage->file; }
@@ -211,6 +211,8 @@ struct MaybeTraits<Exception> {
     new (ptr, _::PlacementNew()) Exception(kj::none);
   }
   static bool isNone(const Exception& e) noexcept { return e.storage == nullptr; }
+
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 #if __GNUC__
