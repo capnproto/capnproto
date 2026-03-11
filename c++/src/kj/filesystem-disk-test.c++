@@ -43,6 +43,10 @@
 #include <dirent.h>
 #endif
 
+#pragma push_macro("KJ_DEFER")
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -157,7 +161,7 @@ private:
       if (error == ERROR_FILE_NOT_FOUND) return;
       KJ_FAIL_WIN32("FindFirstFile", error, path) { return; }
     }
-    KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+    KJ_DEFER { KJ_WIN32(FindClose(handle)) { break; }; };
 
     do {
       // Ignore "." and "..", ugh.
@@ -218,7 +222,7 @@ static Own<File> newTempFile() {
   const char* tmpDir = getenv("TEST_TMPDIR");
   auto filename = str(tmpDir != nullptr ? tmpDir : VAR_TMP, "/kj-filesystem-test.XXXXXX");
   auto fd = KJ_SYSCALL_FD(mkstemp(filename.begin()));
-  KJ_DEFER(KJ_SYSCALL(unlink(filename.cStr())));
+  KJ_DEFER { KJ_SYSCALL(unlink(filename.cStr())); };
   return newDiskFile(kj::mv(fd));
 }
 
@@ -250,7 +254,7 @@ private:
     {
       DIR* dir = opendir(path.cStr());
       KJ_ASSERT(dir != nullptr);
-      KJ_DEFER(closedir(dir));
+      KJ_DEFER { closedir(dir); };
 
       for (;;) {
         auto entry = readdir(dir);
@@ -997,7 +1001,7 @@ KJ_TEST("DiskFilesystem::computeCurrentPath") {
 
   auto origDir = open(".", O_RDONLY);
   KJ_SYSCALL(fchdir(KJ_ASSERT_NONNULL(subdir->getFd())));
-  KJ_DEFER(KJ_SYSCALL(fchdir(origDir)));
+  KJ_DEFER { KJ_SYSCALL(fchdir(origDir)); };
 
   // Test computeCurrentPath indirectly.
   newDiskFilesystem();
@@ -1006,3 +1010,5 @@ KJ_TEST("DiskFilesystem::computeCurrentPath") {
 
 }  // namespace
 }  // namespace kj
+
+#pragma pop_macro("KJ_DEFER")

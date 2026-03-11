@@ -67,6 +67,9 @@ inline void delay() { usleep(10000); }
 #define EXPECT_SI_CODE(a,b)
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 void captureSignals() {
   static bool captured = false;
   if (!captured) {
@@ -103,7 +106,7 @@ bool checkForQemuEpollPwaitBug() {
   KJ_SYSCALL(sigemptyset(&mask));
   KJ_SYSCALL(sigaddset(&mask, SIGURG));
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &mask, &origMask));
-  KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &origMask, nullptr)));
+  KJ_DEFER { KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &origMask, nullptr)); };
 
   struct sigaction action;
   memset(&action, 0, sizeof(action));
@@ -400,7 +403,7 @@ TEST(AsyncUnixTest, ReadObserverMultiListen) {
 
   int bogusPipefds[2]{};
   KJ_SYSCALL(pipe(bogusPipefds));
-  KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
+  KJ_DEFER { close(bogusPipefds[1]); close(bogusPipefds[0]); };
 
   UnixEventPort::FdObserver bogusObserver(port, bogusPipefds[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
@@ -413,7 +416,7 @@ TEST(AsyncUnixTest, ReadObserverMultiListen) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  KJ_DEFER { close(pipefds[1]); close(pipefds[0]); };
 
   UnixEventPort::FdObserver observer(port, pipefds[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
@@ -430,7 +433,7 @@ TEST(AsyncUnixTest, ReadObserverMultiReceive) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  KJ_DEFER { close(pipefds[1]); close(pipefds[0]); };
 
   UnixEventPort::FdObserver observer(port, pipefds[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
@@ -438,7 +441,7 @@ TEST(AsyncUnixTest, ReadObserverMultiReceive) {
 
   int pipefds2[2]{};
   KJ_SYSCALL(pipe(pipefds2));
-  KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+  KJ_DEFER { close(pipefds2[1]); close(pipefds2[0]); };
 
   UnixEventPort::FdObserver observer2(port, pipefds2[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
@@ -485,7 +488,7 @@ TEST(AsyncUnixTest, ReadObserverAsync) {
   // Make a pipe and wait on its read end while another thread writes to it.
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  KJ_DEFER { close(pipefds[1]); close(pipefds[0]); };
   UnixEventPort::FdObserver observer(port, pipefds[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -508,13 +511,13 @@ TEST(AsyncUnixTest, ReadObserverNoWait) {
 
   int pipefds[2]{};
   KJ_SYSCALL(pipe(pipefds));
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  KJ_DEFER { close(pipefds[1]); close(pipefds[0]); };
   UnixEventPort::FdObserver observer(port, pipefds[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
 
   int pipefds2[2]{};
   KJ_SYSCALL(pipe(pipefds2));
-  KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+  KJ_DEFER { close(pipefds2[1]); close(pipefds2[0]); };
   UnixEventPort::FdObserver observer2(port, pipefds2[0],
       UnixEventPort::FdObserver::OBSERVE_READ);
 
@@ -626,10 +629,10 @@ TEST(AsyncUnixTest, UrgentObserver) {
   // Create a pipe that we'll use to signal if MSG_OOB return EINVAL.
   int failpipe[2]{};
   KJ_SYSCALL(pipe(failpipe));
-  KJ_DEFER({
+  KJ_DEFER {
     close(failpipe[0]);
     close(failpipe[1]);
-  });
+  };
 
   // Accept one connection, send in-band and OOB byte, wait for a quit message
   Thread thread([&]() {
@@ -656,7 +659,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
     KJ_SYSCALL(recv(clientFd, &c, 1, 0));
     EXPECT_EQ('q', c);
   });
-  KJ_DEFER({ shutdown(serverFd, SHUT_RDWR); serverFd = nullptr; });
+  KJ_DEFER { shutdown(serverFd, SHUT_RDWR); serverFd = nullptr; };
 
   auto clientFd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_STREAM, 0));
   KJ_SYSCALL(connect(clientFd, reinterpret_cast<sockaddr*>(&saddr), saddrLen));
@@ -892,7 +895,7 @@ TEST(AsyncUnixTest, ChildProcess) {
   KJ_SYSCALL(sigemptyset(&sigs));
   KJ_SYSCALL(sigaddset(&sigs, SIGTERM));
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &sigs, &oldsigs));
-  KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &oldsigs, nullptr)) { break; });
+  KJ_DEFER { KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &oldsigs, nullptr)) { break; } };
 
   UnixEventPort port;
   EventLoop loop(port);

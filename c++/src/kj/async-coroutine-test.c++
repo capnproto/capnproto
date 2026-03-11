@@ -26,6 +26,9 @@
 #include <kj/exception.h>
 #include <kj/test.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -282,8 +285,8 @@ KJ_TEST("Coroutines can be canceled while suspended") {
 }
 
 Promise<void> deferredThrowCoroutine(Promise<void> awaitMe, StringPtr message) {
-  KJ_DEFER(throwFatalException(
-      Exception(Exception::Type::FAILED, __FILE__, __LINE__, str(message))));
+  KJ_DEFER { throwFatalException(
+      Exception(Exception::Type::FAILED, __FILE__, __LINE__, str(message))); };
   co_await awaitMe;
   co_return;
 };

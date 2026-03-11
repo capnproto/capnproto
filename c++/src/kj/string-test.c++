@@ -27,6 +27,9 @@
 #include <locale.h>
 #include <stdint.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace _ {  // private
 namespace {
@@ -355,7 +358,7 @@ KJ_TEST("float stringification and parsing is not locale-dependent") {
   char* oldLocaleCstr = setlocale(LC_NUMERIC, nullptr);
   KJ_ASSERT(oldLocaleCstr != nullptr);
   auto oldLocale = kj::str(oldLocaleCstr);
-  KJ_DEFER(setlocale(LC_NUMERIC, oldLocale.cStr()));
+  KJ_DEFER { setlocale(LC_NUMERIC, oldLocale.cStr()); };
 
   // Set the locale to "C".
   KJ_ASSERT(setlocale(LC_NUMERIC, "C") != nullptr);

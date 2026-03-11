@@ -51,6 +51,9 @@
 #include <netinet/in.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -179,7 +182,7 @@ TEST(AsyncIo, UnixSocket) {
   auto& network = ioContext.provider->getNetwork();
 
   auto path = kj::str(TMPDIR "/kj-async-io-test.", getpid());
-  KJ_DEFER(unlink(path.cStr()));
+  KJ_DEFER { unlink(path.cStr()); };
 
   Own<ConnectionReceiver> listener;
   Own<AsyncIoStream> server;
@@ -1173,7 +1176,7 @@ TEST(AsyncIo, AbstractUnixSocket) {
   // but passes for abstract unix socket.
   auto originalDirFd = KJ_SYSCALL_FD(open(".", O_RDONLY | O_DIRECTORY | O_CLOEXEC));
   KJ_SYSCALL(chdir("/"));
-  KJ_DEFER(KJ_SYSCALL(fchdir(originalDirFd)));
+  KJ_DEFER { KJ_SYSCALL(fchdir(originalDirFd)); };
 
   addr->connect().attach(kj::mv(listener)).wait(ioContext.waitScope);
 }
@@ -3617,7 +3620,7 @@ KJ_TEST("Calling abortRead() while tryRead() is in progress") {
   public:
     virtual kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
       numConcurrentCalls++;
-      KJ_DEFER(numConcurrentCalls--);
+      KJ_DEFER { numConcurrentCalls--; };
       co_await (kj::Promise<void>) kj::NEVER_DONE;
       co_return 0;
     }

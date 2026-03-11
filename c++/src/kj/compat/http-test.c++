@@ -54,6 +54,10 @@
   kj::newTwoWayPipe()
 #endif
 
+#pragma push_macro("KJ_DEFER")
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -4747,7 +4751,7 @@ public:
   }
 
   kj::Maybe<HttpServer::SuspendedRequest> getSuspended() {
-    KJ_DEFER(suspendedRequest = kj::none);
+    KJ_DEFER { suspendedRequest = kj::none; };
     return kj::mv(suspendedRequest);
   }
 
@@ -8072,3 +8076,5 @@ KJ_TEST("Range header parsing") {
 
 }  // namespace
 }  // namespace kj
+
+#pragma pop_macro("KJ_DEFER")

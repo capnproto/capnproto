@@ -26,6 +26,9 @@
 #include <stdexcept>
 #include <stdint.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace _ {  // private
 namespace {
@@ -238,7 +241,7 @@ KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
 KJ_TEST("InFlightExceptionIterator works") {
   bool caught = false;
   try {
-    KJ_DEFER({
+    KJ_DEFER {
       try {
         KJ_FAIL_ASSERT("bar");
       } catch (const kj::Exception& e) {
@@ -259,7 +262,7 @@ KJ_TEST("InFlightExceptionIterator works") {
 
         caught = true;
       }
-    });
+    };
     KJ_FAIL_ASSERT("foo");
   } catch (const kj::Exception& e) {
     // expected

@@ -22,6 +22,9 @@
 #include "list.h"
 #include <kj/test.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -43,7 +46,7 @@ KJ_TEST("List") {
 
   {
     list.add(foo);
-    KJ_DEFER(list.remove(foo));
+    KJ_DEFER { list.remove(foo); };
     KJ_EXPECT(!list.empty());
     KJ_EXPECT(list.size() == 1);
     KJ_EXPECT(list.front().i == 123);
@@ -51,7 +54,7 @@ KJ_TEST("List") {
     {
       list.add(bar);
       KJ_EXPECT(list.size() == 2);
-      KJ_DEFER(list.remove(bar));
+      KJ_DEFER { list.remove(bar); };
 
       {
         auto iter = list.begin();
@@ -82,7 +85,7 @@ KJ_TEST("List") {
       {
         list.addFront(baz);
         KJ_EXPECT(list.size() == 3);
-        KJ_DEFER(list.remove(baz));
+        KJ_DEFER { list.remove(baz); };
 
         {
           auto iter = list.begin();
@@ -119,7 +122,7 @@ KJ_TEST("List") {
 
   {
     list.addFront(bar);
-    KJ_DEFER(list.remove(bar));
+    KJ_DEFER { list.remove(bar); };
     KJ_EXPECT(!list.empty());
     KJ_EXPECT(list.size() == 1);
     KJ_EXPECT(list.front().i == 321);
@@ -135,7 +138,7 @@ KJ_TEST("List") {
     {
       list.add(baz);
       KJ_EXPECT(list.size() == 2);
-      KJ_DEFER(list.remove(baz));
+      KJ_DEFER { list.remove(baz); };
 
       {
         auto iter = list.begin();
@@ -160,14 +163,14 @@ KJ_TEST("List remove while iterating") {
 
   TestElement foo(123);
   list.add(foo);
-  KJ_DEFER(list.remove(foo));
+  KJ_DEFER { list.remove(foo); };
 
   TestElement bar(456);
   list.add(bar);
 
   TestElement baz(789);
   list.add(baz);
-  KJ_DEFER(list.remove(baz));
+  KJ_DEFER { list.remove(baz); };
 
   KJ_EXPECT(foo.link.isLinked());
   KJ_EXPECT(bar.link.isLinked());

@@ -26,6 +26,9 @@
 #include <span>
 #include "thread.h"
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -143,8 +146,6 @@ TEST(Common, Defer1) {
   bool k = false;
 
   {
-    KJ_DEFER(++i);
-    KJ_DEFER(j += 3; k = true);
     KJ_DEFER1(++i);
     KJ_DEFER1(j += 3; k = true);
     EXPECT_EQ(0u, i);

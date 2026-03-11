@@ -38,6 +38,9 @@
 #include <ucontext.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -1024,7 +1027,7 @@ void runWithStackLimit(size_t stackSize, Func&& func) {
 #if !_WIN32
   pthread_attr_t attr;
   KJ_REQUIRE(0 == pthread_attr_init(&attr));
-  KJ_DEFER(KJ_REQUIRE(0 == pthread_attr_destroy(&attr)));
+  KJ_DEFER { KJ_REQUIRE(0 == pthread_attr_destroy(&attr)); };
 
   auto setStackSizeRetval = pthread_attr_setstacksize(&attr, stackSize);
   if (setStackSizeRetval == EINVAL) {
@@ -1549,7 +1552,7 @@ KJ_TEST("cancel a fiber") {
   {
     Promise<StringPtr> fiber = startFiber(65536,
         [promise = kj::mv(paf.promise), &exited, &canceled](WaitScope& fiberScope) mutable {
-      KJ_DEFER(exited = true);
+      KJ_DEFER { exited = true; };
       try {
         promise.wait(fiberScope);
       } catch (kj::CanceledException) {
