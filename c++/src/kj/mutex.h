@@ -28,6 +28,10 @@
 
 KJ_BEGIN_HEADER
 
+#pragma push_macro("KJ_DEFER")
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 #if __linux__ && !defined(KJ_USE_FUTEX)
 #define KJ_USE_FUTEX 1
 #endif
@@ -446,7 +450,7 @@ public:
   ~ExternalMutexGuarded() noexcept(false) {
     if (mutex != nullptr) {
       mutex->lock(_::Mutex::EXCLUSIVE, kj::none, location);
-      KJ_DEFER(mutex->unlock(_::Mutex::EXCLUSIVE));
+      KJ_DEFER { mutex->unlock(_::Mutex::EXCLUSIVE); };
       value = T();
     }
   }
@@ -624,5 +628,7 @@ inline const T& Lazy<T>::get(Func&& init, LockSourceLocationArg location) const 
 }
 
 }  // namespace kj
+
+#pragma pop_macro("KJ_DEFER")
 
 KJ_END_HEADER

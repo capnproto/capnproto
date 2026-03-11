@@ -42,6 +42,10 @@
 
 KJ_BEGIN_HEADER
 
+#pragma push_macro("KJ_DEFER")
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 class String;
@@ -447,9 +451,11 @@ public:
     }
 
     bool success = false;
-    KJ_DEFER(if (!success) {
-      indexObj.erase(table.rows.asPtr(), pos, indexObj.keyForRow(row));
-    });
+    KJ_DEFER {
+      if (!success) {
+        indexObj.erase(table.rows.asPtr(), pos, indexObj.keyForRow(row));
+      }
+    };
     auto result = Impl<index + 1>::insert(table, pos, row, skip);
     success = result == kj::none;
     return result;
@@ -612,17 +618,17 @@ public:
       return table.rows[existing];
     } else {
       bool success = false;
-      KJ_DEFER({
+      KJ_DEFER {
         if (!success) {
           get<index>(table.indexes).erase(table.rows.asPtr(), pos, params...);
         }
-      });
+      };
       auto& newRow = table.rows.add(createFunc());
-      KJ_DEFER({
+      KJ_DEFER {
         if (!success) {
           table.rows.removeLast();
         }
-      });
+      };
       if (Table<Row, Indexes...>::template Impl<>::insert(table, pos, newRow, index) == kj::none) {
         success = true;
       } else {
@@ -1638,5 +1644,7 @@ private:
 };
 
 } // namespace kj
+
+#pragma pop_macro("KJ_DEFER")
 
 KJ_END_HEADER

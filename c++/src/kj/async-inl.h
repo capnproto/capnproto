@@ -39,6 +39,10 @@
 
 KJ_BEGIN_HEADER
 
+#pragma push_macro("KJ_DEFER")
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace _ {  // private
 
@@ -277,7 +281,7 @@ public:
     PromiseArena* arena = node->arena;
     // Defer the `delete` to protect against exception in `destroy()`.
     // Reminder: `delete` automatically ignores null pointers
-    KJ_DEFER(delete arena);
+    KJ_DEFER { delete arena; };
     node->destroy();
   }
 
@@ -2589,5 +2593,7 @@ namespace kj::_ {
 // actually yielding a value, but rather something different is going on.
 
 }  // namespace kj::_ (private)
+
+#pragma pop_macro("KJ_DEFER")
 
 KJ_END_HEADER
