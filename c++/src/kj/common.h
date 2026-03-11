@@ -1318,6 +1318,13 @@ public:
     return value;
   }
 
+  template <typename... Params>
+  inline T& emplaceInit(Params&&... params) {
+    ctor(value, kj::fwd<Params>(params)...);
+    isSet = true;
+    return value;
+  }
+
   inline NullableValue(): isSet(false) {}
   inline NullableValue(T&& t)
       : isSet(true) {
@@ -1522,6 +1529,12 @@ public:
       initNone(&value);  // noexcept - leave in none state
       throw;
     }
+    return value;
+  }
+
+  template <typename... Params>
+  inline T& emplaceInit(Params&&... params) {
+    ctor(value, kj::fwd<Params>(params)...);
     return value;
   }
 
@@ -1790,20 +1803,20 @@ public:
   template <typename U>
   Maybe(Maybe<U>&& other) {
     KJ_IF_SOME(val, kj::mv(other)) {
-      ptr.emplace(kj::mv(val));
+      ptr.emplaceInit(kj::mv(val));
     }
   }
   template <typename U>
   Maybe(Maybe<U&>&& other) {
     KJ_IF_SOME(val, other) {
-      ptr.emplace(val);
+      ptr.emplaceInit(val);
       other = kj::none;
     }
   }
   template <typename U>
   Maybe(const Maybe<U>& other) {
     KJ_IF_SOME(val, other) {
-      ptr.emplace(val);
+      ptr.emplaceInit(val);
     }
   }
 
@@ -1839,6 +1852,24 @@ public:
     // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
     // Returns a reference to the newly-constructed value.
     return ptr.emplace(kj::fwd<Params>(params)...);
+  }
+
+  template <typename... Params>
+  inline T& emplaceInit(Params&&... params) {
+    // A variant of `emplace` which assume `this` to be empty.
+    // Generates more efficient code by not invoking `~T`.
+    KJ_IREQUIRE(ptr == nullptr, "emplaceInit() requires an empty Maybe");
+    return ptr.emplaceInit(kj::fwd<Params>(params)...);
+  }
+
+  inline Maybe& emplaceInit(Maybe&& other) {
+    // A variant of `Maybe& operator=(T&& other)` which assume `this` to be empty.
+    // Generates more efficient code by not invoking `~T`.
+    KJ_IREQUIRE(ptr == nullptr, "emplaceInit() requires an empty Maybe");
+    KJ_IF_SOME(val, kj::mv(other)) {
+      ptr.emplaceInit(kj::mv(val));
+    }
+    return *this;
   }
 
   // Assignment operators.
