@@ -33,6 +33,9 @@
 #include <kj/io.h>
 #include <map>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace capnp {
 
 namespace {
@@ -286,7 +289,7 @@ void SchemaParser::setDiskFilesystem(kj::Filesystem& fs) {
 }
 
 ParsedSchema SchemaParser::parseFile(kj::Own<SchemaFile>&& file) const {
-  KJ_DEFER(impl->compiler.clearWorkspace());
+  KJ_DEFER { impl->compiler.clearWorkspace(); };
   uint64_t id = impl->compiler.add(getModuleImpl(kj::mv(file))).getId();
   impl->compiler.eagerlyCompile(id,
       compiler::Compiler::NODE | compiler::Compiler::CHILDREN |

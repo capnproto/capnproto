@@ -24,6 +24,9 @@
 #include <capnp/schema.h>
 #include <capnp/message.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace capnp {
 
 using kj::uint;
@@ -174,12 +177,12 @@ private:
 
     // Detect cancellation (of the operation) and mark the object broken in this case.
     bool done = false;
-    KJ_DEFER({
+    KJ_DEFER {
       if (!done && error == kj::none) {
         error = kj::heap(KJ_EXCEPTION(FAILED,
             "a write was canceled before completing, breaking the WebSocket"));
       }
-    });
+    };
 
     KJ_TRY {
       KJ_IF_SOME(ws, webSocket) {
@@ -510,7 +513,7 @@ public:
 
     ClientRequestContextImpl context(factory, kjResponse);
     RevocableServer<capnp::HttpService::ClientRequestContext> revocableContext(context);
-    KJ_DEFER({
+    KJ_DEFER {
       if (!context.hasSentResponse()) {
         // Client is disconnecting before server has sent a response. Make sure to revoke with a
         // DISCONNECTED exception here so that the server side doesn't log a spurious error.
@@ -548,7 +551,7 @@ public:
             "client disconnected before HTTP-over-capnp response completed (but after it "
             "started)"));
       }
-    });
+    };
 
     rpcRequest.setContext(revocableContext.getClient());
 

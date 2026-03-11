@@ -33,6 +33,9 @@
 #include <kj/io.h>
 #include <kj/map.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace capnp {
 namespace _ {  // private
 
@@ -459,7 +462,7 @@ public:
     // After disconnect(), the RpcSystem could be destroyed, making `traceEncoder` a dangling
     // reference, so null it out before we return from here. We don't need it anymore once
     // disconnected anyway.
-    KJ_DEFER(traceEncoder = kj::none);
+    KJ_DEFER { traceEncoder = kj::none; };
 
     if (!connection.is<Connected>()) {
       // Already disconnected.
@@ -512,7 +515,7 @@ public:
       kj::Vector<kj::Own<ClientHook>> clientsToRelease;
       kj::Vector<decltype(Answer::task)> tasksToRelease;
       kj::Vector<kj::Promise<void>> resolveOpsToRelease;
-      KJ_DEFER(tasks.clear());
+      KJ_DEFER { tasks.clear(); };
 
       // All current questions complete with exceptions.
       questions.forEach([&](QuestionId id, Question& question) {
@@ -3112,7 +3115,7 @@ private:
         // We haven't sent a return yet, so we must have been canceled.  Send a cancellation return.
         unwindDetector.catchExceptionsIfUnwinding([&]() {
           bool shouldFreePipeline = true;
-          KJ_DEFER(cleanupAnswerTable(nullptr, shouldFreePipeline));
+          KJ_DEFER { cleanupAnswerTable(nullptr, shouldFreePipeline); };
 
           // Don't send anything if the connection is broken, or if the onlyPromisePipeline hint
           // was used (in which case the caller doesn't care to receive a `Return`).
@@ -3165,7 +3168,7 @@ private:
       // `releaseResultCaps` was set in the already-received `Finish`.
       if (!receivedFinish && isFirstResponder()) {
         kj::Maybe<kj::Array<ExportId>> exports;
-        KJ_DEFER({
+        KJ_DEFER {
           KJ_IF_SOME(e, exports) {
             // Caps were returned, so we can't free the pipeline yet.
             cleanupAnswerTable(kj::mv(e), false);
@@ -3173,7 +3176,7 @@ private:
             // No caps in the results, therefore the pipeline is irrelevant.
             cleanupAnswerTable(nullptr, true);
           }
-        });
+        };
 
         KJ_ASSERT(connectionState->connection.is<Connected>(),
                   "Cancellation should have been requested on disconnect.") {
@@ -3228,7 +3231,7 @@ private:
       if (isFirstResponder()) {
         // Do not allow releasing the pipeline because we want pipelined calls to propagate the
         // exception rather than fail with a "no such field" exception.
-        KJ_DEFER(cleanupAnswerTable(nullptr, false));
+        KJ_DEFER { cleanupAnswerTable(nullptr, false); };
 
         if (connectionState->connection.is<Connected>()) {
           auto message = connectionState->connection.get<Connected>().connection
@@ -3254,7 +3257,7 @@ private:
       KJ_ASSERT(!hints.onlyPromisePipeline);
 
       if (isFirstResponder()) {
-        KJ_DEFER(cleanupAnswerTable(nullptr, false));
+        KJ_DEFER { cleanupAnswerTable(nullptr, false); };
 
         auto message = connectionState->connection.get<Connected>().connection
             ->newOutgoingMessage(messageSizeHint<rpc::Return>());
@@ -3338,7 +3341,7 @@ private:
             if (isFirstResponder()) {
               // There are no caps in our return message, but of course the tail results could have
               // caps, so we must continue to honor pipeline calls (and just bounce them back).
-              KJ_DEFER(cleanupAnswerTable(nullptr, false));
+              KJ_DEFER { cleanupAnswerTable(nullptr, false); };
 
               if (connectionState->connection.is<Connected>()) {
                 auto message = connectionState->connection.get<Connected>().connection
@@ -3741,7 +3744,7 @@ private:
 
     kj::Own<ClientHook> capHook;
     kj::Array<ExportId> resultExports;
-    KJ_DEFER(releaseExports(resultExports));  // in case something goes wrong
+    KJ_DEFER { releaseExports(resultExports); };  // in case something goes wrong
 
     // Call the restorer and initialize the answer.
     KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
@@ -3940,7 +3943,7 @@ private:
     // Transitive destructors can end up manipulating the question table and invalidating our
     // pointer into it, so make sure these destructors run later.
     kj::Array<ExportId> exportsToRelease;
-    KJ_DEFER(releaseExports(exportsToRelease));
+    KJ_DEFER { releaseExports(exportsToRelease); };
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     QuestionId questionId = ret.getAnswerId();
@@ -4083,7 +4086,7 @@ private:
     // Delay release of these things until return so that transitive destructors don't accidentally
     // modify the answer table and invalidate our pointer into it.
     kj::Array<ExportId> exportsToRelease;
-    KJ_DEFER(releaseExports(exportsToRelease));
+    KJ_DEFER { releaseExports(exportsToRelease); };
     Answer answerToRelease;
     kj::Maybe<kj::Own<PipelineHook>> pipelineToRelease;
     kj::Maybe<decltype(Answer::task)> promiseToRelease;

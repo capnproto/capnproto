@@ -29,6 +29,9 @@
 #include <kj/encoding.h>
 #include <kj/map.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace capnp {
 
 struct JsonCodec::Impl {
@@ -647,7 +650,7 @@ public:
 
   void parseValue(JsonValue::Builder& output) {
     input.consumeWhitespace();
-    KJ_DEFER(input.consumeWhitespace());
+    KJ_DEFER { input.consumeWhitespace(); };
 
     KJ_REQUIRE(!input.exhausted(), "JSON message ends prematurely.");
 
@@ -683,7 +686,7 @@ public:
 
     input.consume('[');
     KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
-    KJ_DEFER(--nestingDepth);
+    KJ_DEFER { --nestingDepth; };
 
     while (input.consumeWhitespace(), input.nextChar() != ']') {
       auto orphan = orphanage.newOrphan<JsonValue>();
@@ -718,7 +721,7 @@ public:
 
     input.consume('{');
     KJ_REQUIRE(++nestingDepth <= maxNestingDepth, "JSON message nested too deeply.");
-    KJ_DEFER(--nestingDepth);
+    KJ_DEFER { --nestingDepth; };
 
     while (input.consumeWhitespace(), input.nextChar() != '}') {
       auto orphan = orphanage.newOrphan<JsonValue::Field>();

@@ -31,6 +31,9 @@
 #include <unordered_map>
 #include "node-translator.h"
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace capnp {
 namespace compiler {
 
@@ -473,7 +476,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
   }
 
   inGetContent = true;
-  KJ_DEFER(inGetContent = false);
+  KJ_DEFER { inGetContent = false; };
 
   switch (content.state) {
     case Content::STUB: {
@@ -1176,7 +1179,7 @@ Compiler::Impl::~Impl() noexcept(false) {}
 
 void Compiler::Impl::clearWorkspace() {
   // Make sure we reconstruct the workspace even if destroying it throws an exception.
-  KJ_DEFER(kj::ctor(workspace, *this));
+  KJ_DEFER { kj::ctor(workspace, *this); };
   kj::dtor(workspace);
 }
 
