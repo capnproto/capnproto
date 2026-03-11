@@ -50,6 +50,9 @@
 #include <unistd.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 Promise<size_t> AsyncInputStream::read(ArrayPtr<byte> buffer, size_t minBytes) {
@@ -2145,7 +2148,7 @@ private:
     if (!pulling) {
       pulling = true;
       UnwindDetector unwind;
-      KJ_DEFER(if (unwind.isUnwinding()) pulling = false);
+      KJ_DEFER { if (unwind.isUnwinding()) pulling = false; };
       pullPromise = pull();
     }
   }

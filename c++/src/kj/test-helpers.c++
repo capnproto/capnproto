@@ -35,6 +35,9 @@
 #include <process.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace _ {  // private
 
@@ -103,7 +106,7 @@ bool expectFatalThrow(kj::Maybe<Exception::Type> type, kj::Maybe<StringPtr> mess
   pid_t child;
   KJ_SYSCALL(child = fork());
   if (child == 0) {
-    KJ_DEFER(_exit(1));
+    KJ_DEFER { _exit(1); };
     FatalThrowExpectation expectation(type, message);
     KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
       code();

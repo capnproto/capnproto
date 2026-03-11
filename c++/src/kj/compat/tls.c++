@@ -54,6 +54,9 @@
 #define BIO_set_data(x,v)          (x->ptr=v)
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 // =======================================================================================
@@ -100,13 +103,13 @@ void updateOpenSSLCAStoreWithWindowsCertificates(SSL_CTX* ctx) {
   }
   HCERTSTORE hStore;
   KJ_WIN32(hStore = CertOpenSystemStoreA(NULL, "ROOT"));
-  KJ_DEFER(KJ_WIN32(CertCloseStore(hStore, 0)));
+  KJ_DEFER { KJ_WIN32(CertCloseStore(hStore, 0)); };
   PCCERT_CONTEXT pContext = nullptr;
-  KJ_DEFER(CertFreeCertificateContext(pContext));
+  KJ_DEFER { CertFreeCertificateContext(pContext); };
   while ((pContext = CertEnumCertificatesInStore(hStore, pContext))) {
     X509* x509 = d2i_X509(nullptr, (const unsigned char**)&pContext->pbCertEncoded, pContext->cbCertEncoded);
     if (x509) {
-      KJ_DEFER(X509_free(x509));
+      KJ_DEFER { X509_free(x509); };
       if (!X509_STORE_add_cert(store, x509)) {
         throwOpensslError();
       }
@@ -1008,7 +1011,7 @@ TlsPrivateKey::TlsPrivateKey(kj::StringPtr pem, kj::Maybe<kj::StringPtr> passwor
 
   // const_cast apparently needed for older versions of OpenSSL.
   BIO* bio = BIO_new_mem_buf(const_cast<char*>(pem.begin()), pem.size());
-  KJ_DEFER(BIO_free(bio));
+  KJ_DEFER { BIO_free(bio); };
 
   pkey = PEM_read_bio_PrivateKey(bio, nullptr, &passwordCallback, &password);
   if (pkey == nullptr) {
@@ -1086,7 +1089,7 @@ TlsCertificate::TlsCertificate(kj::StringPtr pem) {
 
   // const_cast apparently needed for older versions of OpenSSL.
   BIO* bio = BIO_new_mem_buf(const_cast<char*>(pem.begin()), pem.size());
-  KJ_DEFER(BIO_free(bio));
+  KJ_DEFER { BIO_free(bio); };
 
   for (auto i: kj::indices(chain)) {
     // "_AUX" apparently refers to some auxiliary information that can be appended to the
@@ -1185,7 +1188,7 @@ kj::String TlsPeerIdentity::getCommonName() {
   unsigned char* out = nullptr;
   int len = ASN1_STRING_to_UTF8(&out, data);
   KJ_ASSERT(len >= 0);
-  KJ_DEFER(OPENSSL_free(out));
+  KJ_DEFER { OPENSSL_free(out); };
 
   return kj::heapString(reinterpret_cast<char*>(out), len);
 }

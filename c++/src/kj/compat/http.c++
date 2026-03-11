@@ -99,6 +99,8 @@ typedef struct
 #define R3(v,w,x,y,z,i) z+=(((w|x)&y)|(w&x))+blk(i)+0x8F1BBCDC+rol(v,5);w=rol(w,30);
 #define R4(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0xCA62C1D6+rol(v,5);w=rol(w,30);
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
 
 /* Hash a single 512-bit block. This is the core of the algorithm. */
 
@@ -1595,7 +1597,7 @@ public:
 
   inline kj::Promise<HttpHeaders::RequestConnectOrProtocolError> readRequestHeaders() {
     KJ_IF_SOME(resuming, resumingRequest) {
-      KJ_DEFER(resumingRequest = kj::none);
+      KJ_DEFER { resumingRequest = kj::none; };
       co_return HttpHeaders::RequestConnectOrProtocolError(resuming);
     }
 
@@ -4051,7 +4053,7 @@ public:
   kj::Promise<void> pumpToNoAbort(WebSocket& other) {
     KJ_IF_SOME(s, state) {
       auto before = other.receivedByteCount();
-      KJ_DEFER(transferredBytes += other.receivedByteCount() - before);
+      KJ_DEFER { transferredBytes += other.receivedByteCount() - before; };
       co_await s.pumpTo(other);
     } else {
       co_await newAdaptedPromise<void, BlockedPumpTo>(*this, other);
@@ -7612,7 +7614,7 @@ public:
   SuspendedRequest suspend(SuspendableRequest& suspendable) {
     KJ_REQUIRE(httpInput.canSuspend(),
         "suspend() may only be called before the request body is consumed");
-    KJ_DEFER(suspended = true);
+    KJ_DEFER { suspended = true; };
     auto released = httpInput.releaseBuffer();
     auto headers = httpInput.releaseHeaders();
     return {

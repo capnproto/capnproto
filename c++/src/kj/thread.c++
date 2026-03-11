@@ -31,6 +31,9 @@
 #include <time.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 #if _WIN32
@@ -45,7 +48,7 @@ Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
 
 Thread::~Thread() noexcept(false) {
   if (!detached) {
-    KJ_DEFER(state->unref());
+    KJ_DEFER { state->unref(); };
 
     KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
 
@@ -92,7 +95,7 @@ Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
 
 Thread::~Thread() noexcept(false) {
   if (!detached) {
-    KJ_DEFER(state->unref());
+    KJ_DEFER { state->unref(); };
 
     int pthreadResult = pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr);
     if (pthreadResult != 0) {

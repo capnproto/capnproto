@@ -58,6 +58,9 @@
 #include <windows.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 #ifdef KJ_USE_FUTEX
 struct BlockedOnMutexAcquisition {
@@ -166,7 +169,7 @@ Mutex::~Mutex() {
 
 bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location) {
   BlockedOnReason blockReason = BlockedOnMutexAcquisition{*this, location};
-  KJ_DEFER(setCurrentThreadIsNoLongerWaiting());
+  KJ_DEFER { setCurrentThreadIsNoLongerWaiting(); };
 
   auto spec = timeout.map([](Duration d) { return toRelativeTimespec(d); });
   struct timespec* specp = nullptr;
@@ -402,18 +405,18 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocati
   addWaiter(waiter);
 
   BlockedOnReason blockReason = BlockedOnCondVarWait{*this, &waiter, location};
-  KJ_DEFER(setCurrentThreadIsNoLongerWaiting());
+  KJ_DEFER { setCurrentThreadIsNoLongerWaiting(); };
 
   // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
   // currently.
   bool currentlyLocked = true;
-  KJ_DEFER({
+  KJ_DEFER {
     // Infinite timeout for re-obtaining the lock is on purpose because the post-condition for this
     // function has to be that the lock state hasn't changed (& we have to be locked when we enter
     // since that's how condvars work).
     if (!currentlyLocked) lock(EXCLUSIVE, kj::none, location);
     removeWaiter(waiter);
-  });
+  };
 
   if (!predicate.check()) {
     unlock(EXCLUSIVE, &waiter);
@@ -534,7 +537,7 @@ startOver:
     }
   } else {
     BlockedOnReason blockReason = BlockedOnOnceInit{*this, location};
-    KJ_DEFER(setCurrentThreadIsNoLongerWaiting());
+    KJ_DEFER { setCurrentThreadIsNoLongerWaiting(); };
 
     for (;;) {
       if (state == INITIALIZED) {
@@ -635,7 +638,7 @@ void Mutex::wakeReadyWaiter(Waiter* waiterToSkip) {
 void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   switch (exclusivity) {
     case EXCLUSIVE: {
-      KJ_DEFER(ReleaseSRWLockExclusive(&coercedSrwLock));
+      KJ_DEFER { ReleaseSRWLockExclusive(&coercedSrwLock); };
 
       // Check if there are any conditional waiters. Note we only do this when unlocking an
       // exclusive lock since under a shared lock the state couldn't have changed.
@@ -664,7 +667,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   InitializeConditionVariable(&coercedCondvar(waiter.condvar));
 
   addWaiter(waiter);
-  KJ_DEFER(removeWaiter(waiter));
+  KJ_DEFER { removeWaiter(waiter); };
 
   DWORD sleepMs;
 
@@ -835,7 +838,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, NoopSourceLoc
 }
 
 void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
-  KJ_DEFER(KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex)));
+  KJ_DEFER { KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex)); };
 
   if (exclusivity == EXCLUSIVE) {
     // Check if there are any conditional waiters. Note we only do this when unlocking an
@@ -907,14 +910,14 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
   // To guarantee that we've re-locked the mutex before scope exit, keep track of whether it is
   // currently.
   bool currentlyLocked = true;
-  KJ_DEFER({
+  KJ_DEFER {
     if (!currentlyLocked) lock(EXCLUSIVE, kj::none, NoopSourceLocation{});
     removeWaiter(waiter);
 
     // Destroy pthread objects.
     KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&waiter.stupidMutex));
     KJ_PTHREAD_CLEANUP(pthread_cond_destroy(&waiter.condvar));
-  });
+  };
 
 #if !__APPLE__
   if (timeout != kj::none) {
@@ -1024,7 +1027,7 @@ Once::~Once() {
 
 void Once::runOnce(Initializer& init, NoopSourceLocation) {
   KJ_PTHREAD_CALL(pthread_mutex_lock(&mutex));
-  KJ_DEFER(KJ_PTHREAD_CALL(pthread_mutex_unlock(&mutex)));
+  KJ_DEFER { KJ_PTHREAD_CALL(pthread_mutex_unlock(&mutex)); };
 
   if (state != UNINITIALIZED) {
     return;

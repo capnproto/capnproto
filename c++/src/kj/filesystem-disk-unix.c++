@@ -53,6 +53,12 @@
 #include <sys/sendfile.h>
 #endif
 
+// This file is #included by filesystem-disk-generic-test.c++, so use push/pop to avoid leaking
+// the KJ_DEFER redefinition into subsequently included files.
+#pragma push_macro("KJ_DEFER")
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace {
 
@@ -164,7 +170,7 @@ static void rmrfChildrenAndClose(int fd) {
     close(fd);
     KJ_FAIL_SYSCALL("fdopendir", errno);
   };
-  KJ_DEFER(closedir(dir));
+  KJ_DEFER { closedir(dir); };
 
   for (;;) {
     errno = 0;
@@ -684,7 +690,7 @@ public:
       KJ_FAIL_SYSCALL("fdopendir", errno);
     }
 
-    KJ_DEFER(closedir(dir));
+    KJ_DEFER { closedir(dir); };
     typedef Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))> Entry;
     kj::Vector<Entry> entries;
 
@@ -1779,5 +1785,7 @@ Own<Filesystem> newDiskFilesystem() {
 }
 
 } // namespace kj
+
+#pragma pop_macro("KJ_DEFER")
 
 #endif  // !_WIN32

@@ -52,6 +52,9 @@
 #include <fcntl.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 // =======================================================================================
@@ -1056,7 +1059,7 @@ public:
       // race against itself.
       static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
       pthread_mutex_lock(&mut);
-      KJ_DEFER(pthread_mutex_unlock(&mut));
+      KJ_DEFER { pthread_mutex_unlock(&mut); };
 
       sigset_t mask;
       KJ_SYSCALL(sigpending(&mask));
@@ -1068,7 +1071,7 @@ public:
         siginfo_t info;
         memset(&info, 0, sizeof(info));
         threadCapture = &info;
-        KJ_DEFER(threadCapture = nullptr);
+        KJ_DEFER { threadCapture = nullptr; };
         int result = sigsuspend(&mask);
         KJ_ASSERT(result < 0 && errno == EINTR, "sigsuspend() didn't EINTR?", result, errno);
         KJ_ASSERT(info.si_signo == signum);
@@ -1603,7 +1606,7 @@ bool UnixEventPort::poll() {
     pthread_sigmask(SIG_SETMASK, nullptr, &capture.originalMask);
 #endif
     threadCapture = &capture;
-    KJ_DEFER(threadCapture = nullptr);
+    KJ_DEFER { threadCapture = nullptr; };
     while (signalCount-- > 0) {
 #if KJ_BROKEN_SIGLONGJMP
       if (sigsetjmp(capture.jumpTo, false)) {

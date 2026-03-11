@@ -71,6 +71,9 @@
 #define SOL_LOCAL 0
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 namespace {
@@ -1248,7 +1251,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           params.service == nullptr ? nullptr : params.service.cStr(),
           &hints, &list);
       if (status == 0) {
-        KJ_DEFER(freeaddrinfo(list));
+        KJ_DEFER { freeaddrinfo(list); };
 
         struct addrinfo* cur = list;
         while (cur != nullptr) {

@@ -45,6 +45,9 @@
 #define IPV6_V6ONLY 27
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 namespace _ {  // private
@@ -759,7 +762,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           params.service == nullptr ? nullptr : params.service.cStr(),
           nullptr, &list);
       if (status == 0) {
-        KJ_DEFER(freeaddrinfo(list));
+        KJ_DEFER { freeaddrinfo(list); };
 
         addrinfo* cur = list;
         while (cur != nullptr) {

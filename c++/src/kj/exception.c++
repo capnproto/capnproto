@@ -95,6 +95,9 @@ static void __lsan_ignore_object(const void* p) {}
 // TODO(cleanup): Remove the LSAN stuff per https://github.com/capnproto/capnproto/pull/1255
 // feedback.
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace {
 template <typename T>
 inline T* lsanIgnoreObjectAndReturn(T* ptr) {
@@ -336,7 +339,7 @@ String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
         KJ_LOG(ERROR, "fdopen error", strerror(errno));
         return nullptr;
       }
-      KJ_DEFER(fclose(out));
+      KJ_DEFER { fclose(out); };
 
       kj::String lines[256];
       size_t i = 0;
@@ -467,7 +470,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   // is in use.
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&mutex);
-  KJ_DEFER(pthread_mutex_unlock(&mutex));
+  KJ_DEFER { pthread_mutex_unlock(&mutex); };
 
   // Don't heapcheck / intercept syscalls.
   const char* preload = getenv("LD_PRELOAD");
@@ -476,7 +479,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
     oldPreload = heapString(preload);
     unsetenv("LD_PRELOAD");
   }
-  KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
+  KJ_DEFER { if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); } };
 
   String lines[32];
   FILE* p = nullptr;

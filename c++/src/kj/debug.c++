@@ -39,6 +39,9 @@
 #include <wchar.h>
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 namespace _ {  // private
 
@@ -400,7 +403,7 @@ void Debug::Fault::init(
 
   String message;
   if (result > 0) {
-    KJ_DEFER(LocalFree(ptr));
+    KJ_DEFER { LocalFree(ptr); };
     const wchar_t* desc = reinterpret_cast<wchar_t*>(ptr);
     size_t len = wcslen(desc);
     if (len > 0 && desc[len-1] == '\n') --len;

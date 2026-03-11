@@ -116,6 +116,9 @@ static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::
 #define __ATOMIC_RELEASE std::memory_order_release
 #endif
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 namespace {
@@ -426,14 +429,14 @@ void TaskSet::destroyTasks() {
   // tasks added! We'll have to repeatedly cancel. Additionally, we need to make sure that we destroy
   // the items in a loop to prevent any issues with stack overflow.
 
-  KJ_DEFER({
+  KJ_DEFER {
     // If an exception occurs, ensure the remaining tasks still get unlinked.  Here, we assume it
     // is not necessary to catch further exceptions, since we require destructors to guard against
     // exceptions when unwinding.
     while (tasks != kj::none) {
       auto removed = KJ_REQUIRE_NONNULL(tasks)->pop();
     }
-  });
+  };
 
   while (tasks != kj::none) {
     auto removed = KJ_REQUIRE_NONNULL(tasks)->pop();
@@ -542,7 +545,7 @@ public:
   ~Impl() noexcept(false) {
 #if USE_CORE_LOCAL_FREELISTS
     if (coreLocalFreelists != nullptr) {
-      KJ_DEFER(free(coreLocalFreelists));
+      KJ_DEFER { free(coreLocalFreelists); };
 
       for (uint i: kj::zeroTo(nproc)) {
         for (auto stack: coreLocalFreelists[i].stacks) {
@@ -667,7 +670,7 @@ private:
 
   void disposeImpl(void* pointer) const override {
     _::FiberStack* stack = reinterpret_cast<_::FiberStack*>(pointer);
-    KJ_DEFER(delete stack);
+    KJ_DEFER { delete stack; };
 
     // Verify that the stack was reset before returning, otherwise it might be in a weird state
     // where we don't want to reuse it.
@@ -852,7 +855,7 @@ struct Executor::Impl {
 
     // We do, however, take and release the lock on the way out, to make sure anyone performing
     // a conditional wait for state changes gets a chance to have their wait condition re-checked.
-    KJ_DEFER(state.lockExclusive());
+    KJ_DEFER { state.lockExclusive(); };
 
     for (auto& event: s.start) {
       KJ_ASSERT(event.state == _::XThreadEvent::QUEUED, event.state) { break; }
@@ -961,11 +964,11 @@ void XThreadEvent::ensureDoneOrCanceled() {
           // release the other lock in the meantime.
 
           // Make sure we unset waitingForCancel on the way out.
-          KJ_DEFER({
+          KJ_DEFER {
             lock = {};
 
             Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
-            KJ_DEFER(selfExecutor.impl->processAsyncCancellations(eventsToCancelOutsideLock));
+            KJ_DEFER { selfExecutor.impl->processAsyncCancellations(eventsToCancelOutsideLock); };
 
             auto selfLock = selfExecutor.impl->state.lockExclusive();
             selfLock->waitingForCancel = false;
@@ -973,7 +976,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
 
             // We don't need to re-take the lock on the other executor here; it's not used again
             // after this scope.
-          });
+          };
 
           while (state != DONE) {
             bool otherThreadIsWaiting = lock->waitingForCancel;
@@ -983,7 +986,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
             lock = {};
             {
               Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
-              KJ_DEFER(selfExecutor.impl->processAsyncCancellations(eventsToCancelOutsideLock));
+              KJ_DEFER { selfExecutor.impl->processAsyncCancellations(eventsToCancelOutsideLock); };
 
               auto selfLock = selfExecutor.impl->state.lockExclusive();
               selfLock->waitingForCancel = true;
@@ -1323,7 +1326,7 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
 
 void Executor::wait() {
   Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
-  KJ_DEFER(impl->processAsyncCancellations(eventsToCancelOutsideLock));
+  KJ_DEFER { impl->processAsyncCancellations(eventsToCancelOutsideLock); };
 
   auto lock = impl->state.lockExclusive();
 
@@ -1336,7 +1339,7 @@ void Executor::wait() {
 
 bool Executor::poll() {
   Vector<_::XThreadEvent*> eventsToCancelOutsideLock;
-  KJ_DEFER(impl->processAsyncCancellations(eventsToCancelOutsideLock));
+  KJ_DEFER { impl->processAsyncCancellations(eventsToCancelOutsideLock); };
 
   auto lock = impl->state.lockExclusive();
   if (lock->isDispatchNeeded()) {
@@ -1697,7 +1700,7 @@ void FiberStack::switchToMain() {
 void FiberBase::run() {
   bool caughtCanceled = false;
   state = RUNNING;
-  KJ_DEFER(state = FINISHED);
+  KJ_DEFER { state = FINISHED; };
 
   WaitScope waitScope(currentEventLoop(), *this);
 
@@ -1775,7 +1778,7 @@ EventLoop::~EventLoop() noexcept(false) {
   {
     // Mark event loop as current to allow tasks to arm/disarm events in the queue.
     enterScope();
-    KJ_DEFER(leaveScope());
+    KJ_DEFER { leaveScope(); };
 
     // Destroy all "daemon" tasks, noting that their destructors might register more daemon tasks.
     while (!daemons->isEmpty()) {
@@ -1814,7 +1817,7 @@ EventLoop::~EventLoop() noexcept(false) {
 
 void EventLoop::run(uint maxTurnCount) {
   running = true;
-  KJ_DEFER(running = false);
+  KJ_DEFER { running = false; };
 
   for (uint i = 0; i < maxTurnCount; i++) {
     if (!turn()) {
@@ -1848,9 +1851,9 @@ bool EventLoop::turn() {
   Maybe<Own<_::Event>> eventToDestroy;
   {
     event->firing = true;
-    KJ_DEFER(event->firing = false);
+    KJ_DEFER { event->firing = false; };
     currentlyFiring = event;
-    KJ_DEFER(currentlyFiring = nullptr);
+    KJ_DEFER { currentlyFiring = nullptr; };
     eventToDestroy = event->fire();
   }
 
@@ -1907,11 +1910,11 @@ void EventLoop::wait() {
   KJ_SILENCE_DANGLING_ELSE_BEGIN
   // For some reason silence inside KJ_IF_SOME doesn't work.
   // Putting this silence inside KJ_DEFER doesn't help either.
-  KJ_DEFER({
+  KJ_DEFER {
     KJ_IF_SOME(observer, this->observer) {
       observer.onWaitEnd();
     }
-  });
+  };
   KJ_SILENCE_DANGLING_ELSE_END
 
   KJ_IF_SOME(p, port) {
@@ -1959,7 +1962,7 @@ uint WaitScope::poll(uint maxTurnCount) {
   KJ_REQUIRE(!loop.running, "poll() is not allowed from within event callbacks.");
 
   loop.running = true;
-  KJ_DEFER(loop.running = false);
+  KJ_DEFER { loop.running = false; };
 
   uint turnCount = 0;
   runOnStackPool([&]() {
@@ -2046,7 +2049,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
     node->onReady(&fiber);
 
     fiber.currentInner = &node;
-    KJ_DEFER(fiber.currentInner = nullptr);
+    KJ_DEFER { fiber.currentInner = nullptr; };
 
     // Switch to the main stack to run the event loop.
     fiber.state = FiberBase::WAITING;
@@ -2068,7 +2071,7 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
     node->onReady(&doneEvent);
 
     loop.running = true;
-    KJ_DEFER(loop.running = false);
+    KJ_DEFER { loop.running = false; };
 
     for (;;) {
       waitScope.runOnStackPool([&]() {
@@ -2115,7 +2118,7 @@ bool pollImpl(_::PromiseNode& node, WaitScope& waitScope, SourceLocation locatio
   node.onReady(&doneEvent);
 
   loop.running = true;
-  KJ_DEFER(loop.running = false);
+  KJ_DEFER { loop.running = false; };
 
   waitScope.runOnStackPool([&]() {
     while (!doneEvent.fired) {

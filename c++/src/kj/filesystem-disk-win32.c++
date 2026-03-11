@@ -36,6 +36,9 @@
 #include <winioctl.h>
 #include "windows-sanity.h"
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+
 namespace kj {
 
 static Own<ReadableDirectory> newDiskReadableDirectory(AutoCloseHandle fd, Path&& path);
@@ -175,7 +178,7 @@ static void rmrfChildren(ArrayPtr<const wchar_t> path) {
     if (error == ERROR_FILE_NOT_FOUND) return;
     KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob)) { return; }
   }
-  KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+  KJ_DEFER { KJ_WIN32(FindClose(handle)) { break; } };
 
   do {
     // Ignore "." and "..", ugh.
@@ -311,7 +314,7 @@ constexpr MmapDisposer mmapDisposer = MmapDisposer();
 void* win32Mmap(HANDLE handle, MmapRange range, DWORD pageProtect, DWORD access) {
   HANDLE mappingHandle;
   KJ_WIN32(mappingHandle = CreateFileMappingW(handle, NULL, pageProtect, 0, 0, NULL));
-  KJ_DEFER(KJ_WIN32(CloseHandle(mappingHandle)) { break; });
+  KJ_DEFER { KJ_WIN32(CloseHandle(mappingHandle)) { break; } };
 
   void* mapping = MapViewOfFile(mappingHandle, access,
       static_cast<DWORD>(range.offset >> 32), static_cast<DWORD>(range.offset), range.size);
@@ -593,7 +596,7 @@ public:
       if (error == ERROR_FILE_NOT_FOUND) return nullptr;
       KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob));
     }
-    KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+    KJ_DEFER { KJ_WIN32(FindClose(handle)) { break; } };
 
     typedef Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))> Entry;
     kj::Vector<Entry> entries;
@@ -1086,7 +1089,7 @@ public:
       if (kj::isSameType<T, Directory>()) {
         *objectHandle = nullptr;
       }
-      KJ_DEFER({
+      KJ_DEFER {
         if (kj::isSameType<T, Directory>()) {
           HANDLE newHandle = nullptr;
           KJ_WIN32(newHandle = CreateFileW(
@@ -1100,7 +1103,7 @@ public:
           *objectHandle = AutoCloseHandle(newHandle);
           *getPathPointerHack(*object) = KJ_ASSERT_NONNULL(parentDirectory.dirPath).append(path);
         }
-      });
+      };
 
       return committed = parentDirectory.tryCommitReplacement(
           path, tempPath, Directory::Replacer<T>::mode);
