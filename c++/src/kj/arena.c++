@@ -23,6 +23,13 @@
 #include "debug.h"
 #include <stdint.h>
 
+#undef KJ_DEFER
+#define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
+
 namespace kj {
 
 Arena::Arena(size_t chunkSizeHint): nextChunkSize(kj::max(sizeof(ChunkHeader), chunkSizeHint)) {}
@@ -45,7 +52,7 @@ Arena::~Arena() noexcept(false) {
   // Run cleanup() explicitly, but if it throws an exception, make sure to run it again as part of
   // unwind.  The second call will not throw because destructors are required to guard against
   // exceptions when already unwinding.
-  KJ_ON_SCOPE_FAILURE(cleanup());
+  KJ_ON_SCOPE_FAILURE { cleanup(); };
   cleanup();
 }
 

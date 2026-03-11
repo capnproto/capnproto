@@ -56,6 +56,10 @@
 
 #undef KJ_DEFER
 #define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
 
 namespace kj {
 
@@ -775,7 +779,7 @@ TlsContext::TlsContext(Options options) {
   if (ctx == nullptr) {
     throwOpensslError();
   }
-  KJ_ON_SCOPE_FAILURE(SSL_CTX_free(ctx));
+  KJ_ON_SCOPE_FAILURE { SSL_CTX_free(ctx); };
 
   // honor options.useSystemTrustStore
   if (options.useSystemTrustStore) {

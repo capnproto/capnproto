@@ -47,6 +47,10 @@
 
 #undef KJ_DEFER
 #define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
 
 namespace kj {
 
@@ -968,7 +972,7 @@ public:
       int fd = addr.socket(SOCK_STREAM);
 
       {
-        KJ_ON_SCOPE_FAILURE(closesocket(fd));
+        KJ_ON_SCOPE_FAILURE { closesocket(fd); };
 
         // We always enable SO_REUSEADDR because having to take your server down for five minutes
         // before it can restart really sucks.
@@ -1002,7 +1006,7 @@ public:
     int fd = addrs[0].socket(SOCK_DGRAM);
 
     {
-      KJ_ON_SCOPE_FAILURE(closesocket(fd));
+      KJ_ON_SCOPE_FAILURE { closesocket(fd); };
 
       // We always enable SO_REUSEADDR because having to take your server down for five minutes
       // before it can restart really sucks.

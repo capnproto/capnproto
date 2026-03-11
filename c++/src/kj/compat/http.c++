@@ -101,6 +101,10 @@ typedef struct
 
 #undef KJ_DEFER
 #define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
 
 /* Hash a single 512-bit block. This is the core of the algorithm. */
 
@@ -6286,9 +6290,9 @@ public:
     // Pause any potential pending reads.
     inner->pause();
 
-    KJ_ON_SCOPE_FAILURE({
+    KJ_ON_SCOPE_FAILURE {
       inner->reject(KJ_EXCEPTION(FAILED, "StartTls failed."));
-    });
+    };
 
     KJ_ASSERT(!inner->getCurrentlyReading() && !inner->getCurrentlyWriting(),
         "Cannot call startTls while reads/writes are outstanding");

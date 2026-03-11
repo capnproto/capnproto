@@ -35,6 +35,10 @@
 
 #undef KJ_DEFER
 #define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
 
 namespace capnp {
 namespace _ {  // private
@@ -2695,10 +2699,10 @@ private:
       question.selfRef = *questionRef;
 
       // If sending throws, we'll need to fix up the state a little...
-      KJ_ON_SCOPE_FAILURE({
+      KJ_ON_SCOPE_FAILURE {
         question.skipFinish = true;
         connectionState->releaseExports(question.paramExports);
-      });
+      };
 
       // Finish and send.
       callBuilder.setQuestionId(questionId);

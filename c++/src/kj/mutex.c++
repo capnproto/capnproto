@@ -60,6 +60,10 @@
 
 #undef KJ_DEFER
 #define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
 
 namespace kj {
 #ifdef KJ_USE_FUTEX
@@ -519,14 +523,14 @@ startOver:
                                   __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
     // It's our job to initialize!
     {
-      KJ_ON_SCOPE_FAILURE({
+      KJ_ON_SCOPE_FAILURE {
         // An exception was thrown by the initializer.  We have to revert.
         if (__atomic_exchange_n(&futex, UNINITIALIZED, __ATOMIC_RELEASE) ==
             INITIALIZING_WITH_WAITERS) {
           // Someone was waiting for us to finish.
           syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
         }
-      });
+      };
 
       init.run();
     }
@@ -774,7 +778,7 @@ void Once::runOnce(Initializer& init, NoopSourceLocation) {
 
   if (needInit) {
     {
-      KJ_ON_SCOPE_FAILURE(InitOnceComplete(&coercedInitOnce, INIT_ONCE_INIT_FAILED, nullptr));
+      KJ_ON_SCOPE_FAILURE { InitOnceComplete(&coercedInitOnce, INIT_ONCE_INIT_FAILED, nullptr); };
       init.run();
     }
 

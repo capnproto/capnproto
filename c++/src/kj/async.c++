@@ -118,6 +118,10 @@ static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::
 
 #undef KJ_DEFER
 #define KJ_DEFER KJ_DEFER2
+#undef KJ_ON_SCOPE_SUCCESS
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS2
+#undef KJ_ON_SCOPE_FAILURE
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE2
 
 namespace kj {
 
@@ -1412,9 +1416,9 @@ struct FiberStack::Impl {
     if (stackMapping == MAP_FAILED) {
       KJ_FAIL_SYSCALL("mmap(new stack)", errno);
     }
-    KJ_ON_SCOPE_FAILURE({
+    KJ_ON_SCOPE_FAILURE {
       KJ_SYSCALL(munmap(stackMapping, allocSize)) { break; }
-    });
+    };
 
 #if __linux__
 #if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
