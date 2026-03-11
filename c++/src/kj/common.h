@@ -2775,6 +2775,14 @@ private:
   // out.
 };
 
+struct DeferHelper {
+  // Helper for KJ_DEFER2 block syntax. The operator* takes a lambda and returns a Deferred.
+  template <typename Func>
+  Deferred<Func> operator*(Func&& func) {
+    return Deferred<Func>(kj::fwd<Func>(func));
+  }
+};
+
 }  // namespace _ (private)
 
 template <typename Func>
@@ -2793,8 +2801,25 @@ _::Deferred<Func> defer(Func&& func) {
   return _::Deferred<Func>(kj::fwd<Func>(func));
 }
 
-#define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::defer([&](){code;})
+#define KJ_DEFER1(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::defer([&](){code;})
+// KJ_DEFER1: Legacy syntax. Code is passed as a macro argument.
+//     KJ_DEFER1(doSomething());
+
+#define KJ_DEFER2 auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::_::DeferHelper{} * [&]()
+// KJ_DEFER2: Block syntax. Code follows the macro as a brace-enclosed lambda body.
+//     KJ_DEFER2 { doSomething(); };
+//
+// The block syntax is preferred when the deferred code uses statement macros like KJ_IF_SOME,
+// because those macros use _Pragma directives that don't work correctly when nested inside another
+// macro's arguments.
+
+#define KJ_DEFER KJ_DEFER1
 // Run the given code when the function exits, whether by return or exception.
+//
+// Defaults to the legacy KJ_DEFER1 syntax for backwards compatibility. To use the block syntax
+// in a translation unit, add:
+//     #undef KJ_DEFER
+//     #define KJ_DEFER KJ_DEFER2
 
 // =======================================================================================
 // IsDisallowedInCoroutine

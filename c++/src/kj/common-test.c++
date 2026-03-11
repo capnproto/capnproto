@@ -136,7 +136,8 @@ TEST(Common, MinMaxValue) {
   EXPECT_GE(char(maxValue), '\x7f');
 }
 
-TEST(Common, Defer) {
+// TODO(cleanup): Delete the KJ_DEFER1 copy once the KJ_DEFER1 -> KJ_DEFER2 transition is complete.
+TEST(Common, Defer1) {
   uint i = 0;
   uint j = 1;
   bool k = false;
@@ -144,6 +145,26 @@ TEST(Common, Defer) {
   {
     KJ_DEFER(++i);
     KJ_DEFER(j += 3; k = true);
+    KJ_DEFER1(++i);
+    KJ_DEFER1(j += 3; k = true);
+    EXPECT_EQ(0u, i);
+    EXPECT_EQ(1u, j);
+    EXPECT_FALSE(k);
+  }
+
+  EXPECT_EQ(1u, i);
+  EXPECT_EQ(4u, j);
+  EXPECT_TRUE(k);
+}
+
+TEST(Common, Defer2) {
+  uint i = 0;
+  uint j = 1;
+  bool k = false;
+
+  {
+    KJ_DEFER2 { ++i; };
+    KJ_DEFER2 { j += 3; k = true; };
     EXPECT_EQ(0u, i);
     EXPECT_EQ(1u, j);
     EXPECT_FALSE(k);
@@ -578,6 +599,22 @@ KJ_TEST("kj::defer()") {
     KJ_EXPECT(runCount == 1);
   }
 
+}
+
+KJ_TEST("KJ_DEFER block syntax with KJ_IF_SOME") {
+  // Test that KJ_IF_SOME works inside KJ_DEFER without -Wdangling-else warnings.
+  // This is the motivating use case for the block syntax (KJ_DEFER2).
+  Maybe<int> maybeVal = 42;
+  int captured = 0;
+  {
+    KJ_DEFER {
+      KJ_IF_SOME(val, maybeVal) {
+        captured = val;
+      }
+    };
+    KJ_EXPECT(captured == 0);
+  }
+  KJ_EXPECT(captured == 42);
 }
 
 KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {

@@ -133,13 +133,15 @@ TEST(Exception, ExceptionCallbackMustBeOnStack) {
 #endif
 #endif  // !__MINGW32__
 
-TEST(Exception, ScopeSuccessFail) {
+// TODO(cleanup): Delete the *1 copy once the KJ_ON_SCOPE_{SUCCESS,FAILURE}1 -> *2 transition is
+// complete.
+TEST(Exception, ScopeSuccessFail1) {
   bool success = false;
   bool failure = false;
 
   {
-    KJ_ON_SCOPE_SUCCESS(success = true);
-    KJ_ON_SCOPE_FAILURE(failure = true);
+    KJ_ON_SCOPE_SUCCESS1(success = true);
+    KJ_ON_SCOPE_FAILURE1(failure = true);
 
     EXPECT_FALSE(success);
     EXPECT_FALSE(failure);
@@ -152,8 +154,40 @@ TEST(Exception, ScopeSuccessFail) {
   failure = false;
 
   try {
-    KJ_ON_SCOPE_SUCCESS(success = true);
-    KJ_ON_SCOPE_FAILURE(failure = true);
+    KJ_ON_SCOPE_SUCCESS1(success = true);
+    KJ_ON_SCOPE_FAILURE1(failure = true);
+
+    EXPECT_FALSE(success);
+    EXPECT_FALSE(failure);
+
+    throw 1;
+  } catch (int) {}
+
+  EXPECT_FALSE(success);
+  EXPECT_TRUE(failure);
+}
+
+TEST(Exception, ScopeSuccessFail2) {
+  bool success = false;
+  bool failure = false;
+
+  {
+    KJ_ON_SCOPE_SUCCESS2 { success = true; };
+    KJ_ON_SCOPE_FAILURE2 { failure = true; };
+
+    EXPECT_FALSE(success);
+    EXPECT_FALSE(failure);
+  }
+
+  EXPECT_TRUE(success);
+  EXPECT_FALSE(failure);
+
+  success = false;
+  failure = false;
+
+  try {
+    KJ_ON_SCOPE_SUCCESS2 { success = true; };
+    KJ_ON_SCOPE_FAILURE2 { failure = true; };
 
     EXPECT_FALSE(success);
     EXPECT_FALSE(failure);

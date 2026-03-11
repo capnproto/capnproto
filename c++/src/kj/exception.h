@@ -651,14 +651,62 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
   }
 }
 
-#define KJ_ON_SCOPE_SUCCESS(code) \
+namespace _ {  // private
+
+struct ScopeSuccessHelper {
+  // Helper for KJ_ON_SCOPE_SUCCESS2. Wraps the user's lambda to only run when not unwinding.
+  UnwindDetector& detector;
+  template <typename Func>
+  auto operator*(Func&& func) {
+    auto wrapper = [&det = detector, f = kj::fwd<Func>(func)]() mutable {
+      if (!det.isUnwinding()) f();
+    };
+    return Deferred<decltype(wrapper)>(kj::mv(wrapper));
+  }
+};
+
+struct ScopeFailureHelper {
+  // Helper for KJ_ON_SCOPE_FAILURE2. Wraps the user's lambda to only run when unwinding.
+  UnwindDetector& detector;
+  template <typename Func>
+  auto operator*(Func&& func) {
+    auto wrapper = [&det = detector, f = kj::fwd<Func>(func)]() mutable {
+      if (det.isUnwinding()) f();
+    };
+    return Deferred<decltype(wrapper)>(kj::mv(wrapper));
+  }
+};
+
+}  // namespace _ (private)
+
+#define KJ_ON_SCOPE_SUCCESS1(code) \
   ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
-  KJ_DEFER(if (!KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
+  KJ_DEFER1(if (!KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
+// KJ_ON_SCOPE_SUCCESS1: Legacy syntax. Code is passed as a macro argument.
+
+#define KJ_ON_SCOPE_SUCCESS2 \
+  ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
+  auto KJ_UNIQUE_NAME(_kjDefer) = \
+      ::kj::_::ScopeSuccessHelper{KJ_UNIQUE_NAME(_kjUnwindDetector)} * [&]()
+// KJ_ON_SCOPE_SUCCESS2: Block syntax.
+//     KJ_ON_SCOPE_SUCCESS2 { doSomething(); };
+
+#define KJ_ON_SCOPE_SUCCESS KJ_ON_SCOPE_SUCCESS1
 // Runs `code` if the current scope is exited normally (not due to an exception).
 
-#define KJ_ON_SCOPE_FAILURE(code) \
+#define KJ_ON_SCOPE_FAILURE1(code) \
   ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
-  KJ_DEFER(if (KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
+  KJ_DEFER1(if (KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
+// KJ_ON_SCOPE_FAILURE1: Legacy syntax. Code is passed as a macro argument.
+
+#define KJ_ON_SCOPE_FAILURE2 \
+  ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
+  auto KJ_UNIQUE_NAME(_kjDefer) = \
+      ::kj::_::ScopeFailureHelper{KJ_UNIQUE_NAME(_kjUnwindDetector)} * [&]()
+// KJ_ON_SCOPE_FAILURE2: Block syntax.
+//     KJ_ON_SCOPE_FAILURE2 { doSomething(); };
+
+#define KJ_ON_SCOPE_FAILURE KJ_ON_SCOPE_FAILURE1
 // Runs `code` if the current scope is exited due to an exception.
 
 // =======================================================================================
