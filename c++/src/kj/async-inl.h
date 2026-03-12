@@ -832,7 +832,7 @@ private:
   ForkBranchBase** tailBranch = &headBranch;
   // Tail becomes null once the inner promise is ready and all branches have been notified.
 
-  Maybe<Own<Event>> fire() override;
+  void fire() override;
   void traceEvent(TraceBuilder& builder) override;
 
   friend class ForkBranchBase;
@@ -912,7 +912,7 @@ private:
   Event* onReadyEvent = nullptr;
   OwnPromiseNode* selfPtr = nullptr;
 
-  Maybe<Own<Event>> fire() override;
+  void fire() override;
   void traceEvent(TraceBuilder& builder) override;
 };
 
@@ -958,7 +958,7 @@ private:
     bool get(ExceptionOrValue& output);
     // Returns true if this is the side that finished.
 
-    Maybe<Own<Event>> fire() override;
+    void fire() override;
     void traceEvent(TraceBuilder& builder) override;
 
   private:
@@ -1009,7 +1009,7 @@ private:
            ExceptionOrValue& output, SourceLocation location);
     ~Branch() noexcept(false);
 
-    Maybe<Own<Event>> fire() override;
+    void fire() override;
     void traceEvent(TraceBuilder& builder) override;
 
   private:
@@ -1094,7 +1094,7 @@ private:
            SourceLocation location);
     ~Branch() noexcept(false);
 
-    Maybe<Own<Event>> fire() override;
+    void fire() override;
     void traceEvent(TraceBuilder &builder) override;
 
   private:
@@ -1161,7 +1161,7 @@ private:
 
   ExceptionOrValue& resultRef;
 
-  Maybe<Own<Event>> fire() override;
+  void fire() override;
   void traceEvent(TraceBuilder& builder) override;
 };
 
@@ -1278,7 +1278,7 @@ private:
   void run();
   virtual void runImpl(WaitScope& waitScope) = 0;
 
-  Maybe<Own<Event>> fire() override;
+  void fire() override;
   void traceEvent(TraceBuilder& builder) override;
   // Implements Event. Each time the event is fired, switchToFiber() is called.
 
@@ -1846,7 +1846,7 @@ private:
   class DelayedDoneHack;
 
   // implements Event ----------------------------------------------------------
-  Maybe<Own<Event>> fire() override;
+  void fire() override;
   // If called with promiseNode == nullptr, it's time to call execute(). If promiseNode != nullptr,
   // then it just indicated readiness and we need to get its result.
 
@@ -2333,7 +2333,7 @@ private:
   // -------------------------------------------------------
   // Event implementation
 
-  Maybe<Own<Event>> fire() override;
+  void fire() override;
   void traceEvent(TraceBuilder& builder) override;
 
   stdcoro::coroutine_handle<> coroutine;
