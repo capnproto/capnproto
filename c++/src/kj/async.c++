@@ -326,8 +326,10 @@ protected:
     }
 
     // Remove from the task list. Do this before calling taskFailed(), so that taskFailed() can
-    // safely call clear(). Will be destroyed on scope exit.
+    // safely call clear().
     auto self = pop();
+    // self will be destroyed on scope exit.
+    self->permitSelfDestruction();
 
     // We'll also process onEmpty() now, just in case `taskFailed()` actually destroys the whole
     // `TaskSet`.
@@ -1114,8 +1116,9 @@ void XThreadEvent::fire() {
   KJ_IF_SOME(n, promiseNode) {
     n->get(result);
     promiseNode = kj::none;  // make sure to destroy in the thread that created it
-    done(); // possible deletes this
-    return;
+    // Done might delete this.
+    permitSelfDestruction();
+    done();
   } else {
     KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
       promiseNode = execute();
@@ -1125,8 +1128,9 @@ void XThreadEvent::fire() {
     KJ_IF_SOME(n, promiseNode) {
       n->onReady(this);
     } else {
-      done(); // possible deletes this
-    return;
+      // Done might delete this.
+      permitSelfDestruction();
+      done();
     }
   }
 }
@@ -2166,11 +2170,15 @@ kj::EventLoop& Event::requireEventLoop() {
 }
 
 Event::~Event() noexcept {  // intentionally noexcept
-  if (threadLocalCurrentlyFiring == this) {
-    threadLocalCurrentlyFiring = nullptr;
+  if (KJ_UNLIKELY(threadLocalCurrentlyFiring == this)) {
+    KJ_FAIL_REQUIRE("Promise callback destroyed itself.");
   }
-
   disarm();
+}
+
+void Event::permitSelfDestruction() {
+  KJ_REQUIRE(threadLocalCurrentlyFiring == this, "Event needs to be firing.");
+  threadLocalCurrentlyFiring = nullptr;
 }
 
 void Event::armDepthFirst() {
@@ -2230,8 +2238,6 @@ String TraceBuilder::toString() {
 }  // namespace _ (private)
 
 ArrayPtr<void* const> getAsyncTrace(ArrayPtr<void*> space) {
-  EventLoop* loop = threadLocalEventLoop;
-  if (loop == nullptr) return nullptr;
   if (threadLocalCurrentlyFiring == nullptr) return nullptr;
 
   _::TraceBuilder builder(space);
@@ -2566,8 +2572,11 @@ void ChainPromiseNode::fire() {
   state = STEP2;
 
   if (selfPtr != nullptr) {
-    // Hey, we can shorten the chain here. Will be destroyed on scope exit.
+    // Hey, we can shorten the chain here.
     auto chain = selfPtr->downcast<ChainPromiseNode>();
+    // self will be destroyed on scope exit.
+    chain->permitSelfDestruction();
+
     *selfPtr = kj::mv(inner);
     selfPtr->get()->setSelfPointer(selfPtr);
     if (onReadyEvent != nullptr) {

@@ -1251,7 +1251,13 @@ public:
 
 protected:
   virtual void fire() = 0;
-  // Fire the event. Possibly deletes itself, so event shoudn't be used after calling this.
+  // Fire the event. Possibly deletes itself, so event shouldn't be used after calling this.
+  // To aid debugging promises that cancel itself the event that is going to delete itself in `fire`
+  // needs to call `permitSelfDestruction` before doing so.
+  // Otherwise deleting currently firing event will result in exception.
+
+  void permitSelfDestruction();
+  // Must be called from within `fire()` method if Event intends to self-destroy after fire.
 
 private:
   friend class kj::EventLoop;
