@@ -44,6 +44,10 @@ FlatArrayMessageReader::FlatArrayMessageReader(
   uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
 
+  KJ_REQUIRE(segmentCount != 0, "Message segment count too large, caused overflow.") {
+    return;
+  }
+
   KJ_REQUIRE(array.size() >= offset, "Message ends prematurely in segment table.") {
     return;
   }
@@ -90,6 +94,15 @@ size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> array) {
 
   uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
+
+  if (segmentCount == 0) {
+    // Integer overflow in segmentCount. Any attempt to actually parse this will throw an
+    // exception. Only the first word is needed for the exception to be thrown, so we'll just say
+    // the expected size is 1. Think of this as: "The data is corrupt, and the corruption exists
+    // in the first word. We have no idea how long the message might be, but the first word is
+    // all we need to see that it is corrupt."
+    return 1;
+  }
 
   // If the array is too small to contain the full segment table, truncate segmentCount to just
   // what is available.
@@ -173,14 +186,16 @@ InputStreamMessageReader::InputStreamMessageReader(
   inputStream.read(firstWord, sizeof(firstWord));
 
   uint segmentCount = firstWord[0].get() + 1;
-  uint segment0Size = segmentCount == 0 ? 0 : firstWord[1].get();
+  uint segment0Size = firstWord[1].get();
 
   size_t totalWords = segment0Size;
 
   // Reject messages with too many segments for security reasons.
-  KJ_REQUIRE(segmentCount < 512, "Message has too many segments.") {
+  // Use firstWord[0].get() here instead of segmentCount to catch overflow. The actual limit
+  // we are enforcing is 512, but firstWord[0] contains segmentCount - 1, hence we compare to 511.
+  KJ_REQUIRE(firstWord[0].get() < 511, "Message has too many segments.") {
     segmentCount = 1;
-    segment0Size = 1;
+    segment0Size = 0;
     break;
   }
 

@@ -479,6 +479,20 @@ TEST(Serialize, RejectHugeMessage) {
 }
 #endif  // !__MINGW32__
 
+// Test for security bug: security-advisories/2026-03-10-0-segment-count-overflow.md
+// (However, there was never an actual security bug in the sync read path, only async.)
+KJ_TEST("large segment counts are rejected -- even UINT_MAX") {
+  // Construct a message with segment count of UINT_MAX, which previously led to an integer
+  // overflow leading to a zero-byte allocation, into which a pointer was written (buffer overrun,
+  // though fortunately benign on all known memory allocators; see advisory).
+  const byte BYTES[] = {0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0};
+
+  kj::ArrayInputStream input(BYTES);
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Message has too many segments.",
+      InputStreamMessageReader reader(input));
+}
+
 // TODO(test):  Test error cases.
 
 }  // namespace

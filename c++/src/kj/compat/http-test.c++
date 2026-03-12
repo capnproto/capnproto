@@ -4038,6 +4038,70 @@ KJ_TEST("HttpServer invalid method") {
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
 
+KJ_TEST("HttpServer rejects negative Content-Length") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service, {
+    .canceledUploadGraceBytes = 1024 * 1024,
+  });
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto msg =
+      "POST / HTTP/1.1\r\n"
+      "Content-Length: -1\r\n"
+      "\r\n"
+      "foo"_kj.asBytes();
+
+  auto writePromise = pipe.ends[1]->write(msg.begin(), msg.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+
+  // The server should reject the negative Content-Length. The KJ_FAIL_REQUIRE in getEntityBody()
+  // gets caught by the server loop and turned into a 500 error.
+  KJ_EXPECT(response.startsWith("HTTP/1.1 500 Internal Server Error"), response);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.catch_([](kj::Exception&&) {}).wait(waitScope);
+}
+
+KJ_TEST("HttpServer rejects chunked body with overflowing chunk size") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service, {
+    .canceledUploadGraceBytes = 1024 * 1024,
+  });
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // 17 hex digits: 0x10000000000000000 = 2^64, which overflows uint64_t.
+  auto msg =
+      "POST / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "10000000000000000\r\n"
+      "x\r\n"
+      "0\r\n"
+      "\r\n"_kj.asBytes();
+
+  auto writePromise = pipe.ends[1]->write(msg.begin(), msg.size());
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+
+  // The chunk size overflow causes a KJ_REQUIRE failure during body reading, which the server
+  // catches and turns into a 500 error.
+  KJ_EXPECT(response.startsWith("HTTP/1.1 500 Internal Server Error"), response);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  writePromise.catch_([](kj::Exception&&) {}).wait(waitScope);
+}
+
 // Ensure that HttpServerSettings can continue to be constexpr.
 KJ_UNUSED static constexpr HttpServerSettings STATIC_CONSTEXPR_SETTINGS {};
 
