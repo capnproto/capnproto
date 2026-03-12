@@ -4045,9 +4045,7 @@ KJ_TEST("HttpServer rejects negative Content-Length") {
 
   HttpHeaderTable table;
   BrokenHttpService service;
-  HttpServer server(timer, table, service, {
-    .canceledUploadGraceBytes = 1024 * 1024,
-  });
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
@@ -4075,9 +4073,7 @@ KJ_TEST("HttpServer rejects chunked body with overflowing chunk size") {
 
   HttpHeaderTable table;
   BrokenHttpService service;
-  HttpServer server(timer, table, service, {
-    .canceledUploadGraceBytes = 1024 * 1024,
-  });
+  HttpServer server(timer, table, service);
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
