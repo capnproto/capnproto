@@ -2629,6 +2629,16 @@ Promise<void> AsyncCapabilityStream::sendFd(int fd) {
   return promise.attach(kj::mv(fds));
 }
 
+#if _WIN32
+Maybe<AutoCloseHandle> AsyncIoStream::releaseWin32Handle() {
+  return nullptr;
+}
+#else
+Maybe<AutoCloseFd> AsyncIoStream::releaseFd() {
+  return nullptr;
+}
+#endif
+
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
   KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
 }

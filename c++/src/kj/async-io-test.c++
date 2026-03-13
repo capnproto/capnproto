@@ -91,6 +91,70 @@ TEST(AsyncIo, SimpleNetwork) {
   EXPECT_EQ("foo", result);
 }
 
+TEST(AsyncIo, ReleaseFd) {
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
+
+  Own<ConnectionReceiver> listener;
+  Own<AsyncIoStream> server;
+  Own<AsyncIoStream> client;
+
+  char receiveBuffer[4];
+
+  auto port = newPromiseAndFulfiller<uint>();
+
+  auto waitClient = port.promise.then([&](uint portnum) {
+    return network.parseAddress("localhost", portnum);
+  }).then([&](Own<NetworkAddress>&& result) {
+    return result->connect();
+  }).then([&](Own<AsyncIoStream>&& result) {
+    client = kj::mv(result);
+  });
+
+  network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
+    listener = result->listen();
+    port.fulfiller->fulfill(listener->getPort());
+    return listener->accept();
+  }).then([&](Own<AsyncIoStream>&& result) {
+    server = kj::mv(result);
+  }).wait(ioContext.waitScope);
+  waitClient.wait(ioContext.waitScope);
+
+#if _WIN32
+  AutoCloseHandle fd;
+  KJ_IF_MAYBE(fdPtr, client->releaseWin32Handle()) {
+    fd = kj::mv(*fdPtr);
+  } else {
+    KJ_FAIL_ASSERT("Handle should be valid");
+  }
+#else
+  AutoCloseFd fd;
+  KJ_IF_MAYBE(fdPtr, client->releaseFd()) {
+    fd = kj::mv(*fdPtr);
+  } else {
+    KJ_FAIL_ASSERT("File descriptor should be valid");
+  }
+#endif
+  client = nullptr;
+  // Create new client without ownership of the fd.
+  auto newCLient = ioContext.lowLevelProvider->wrapSocketFd(reinterpret_cast<kj::LowLevelAsyncIoProvider::Fd>(fd.get()));
+  server->write("foo", 3).detach([](kj::Exception&& exception) {
+    KJ_FAIL_EXPECT(exception);
+  });
+  const size_t bytesRead = newCLient->tryRead(receiveBuffer, 3, 4).wait(ioContext.waitScope);
+  const kj::String result = kj::heapString(receiveBuffer, bytesRead);
+  EXPECT_EQ("foo", result);
+#if _WIN32
+  KJ_IF_MAYBE(fdPtr, newCLient->releaseWin32Handle()) {
+      KJ_FAIL_ASSERT("Release of fd should not return anything because the stream does not own the fd");
+  }
+#else
+  KJ_IF_MAYBE(fdPtr, newCLient->releaseFd()) {
+    KJ_FAIL_ASSERT("Release of fd should not return anything because the stream does not own the fd");
+  }
+#endif
+}
+
 #if !_WIN32  // TODO(someday): Implement NetworkPeerIdentity for Win32.
 TEST(AsyncIo, SimpleNetworkAuthentication) {
   auto ioContext = setupAsyncIo();
