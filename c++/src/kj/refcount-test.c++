@@ -118,9 +118,12 @@ KJ_TEST("Rc inheritance") {
   bool b = false;
 
   auto child = kj::rc<Child>(&b);
+  KJ_ASSERT(!child->isShared());
 
   // up casting works automatically
   kj::Rc<SetTrueInDestructor> parent = child.addRef();
+  KJ_ASSERT(child->isShared());
+  KJ_ASSERT(parent->isShared());
   
   auto down = parent.downcast<Child>();
   EXPECT_TRUE(parent == nullptr);
