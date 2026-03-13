@@ -80,7 +80,7 @@ public:
   int getLine() const { return storage->line; }
   Type getType() const { return storage->type; }
   StringPtr getDescription() const { return storage->description; }
-  ArrayPtr<void* const> getStackTrace() const { return arrayPtr(storage->trace, storage->traceCount); }
+  ArrayPtr<void* const> getStackTrace() const { return storage->trace.asPtr(); }
 
   void setDescription(kj::String&& desc) { storage->description = kj::mv(desc); }
 
@@ -117,11 +117,9 @@ public:
   // is expected that contexts will be added in reverse order as the exception passes up the
   // callback stack.
 
-  KJ_NOINLINE void extendTrace(uint ignoreCount, uint limit = kj::maxValue);
+  KJ_NOINLINE void extendTrace(uint ignoreCount);
   // Append the current stack trace to the exception's trace, ignoring the first `ignoreCount`
   // frames (see `getStackTrace()` for discussion of `ignoreCount`).
-  //
-  // If `limit` is set, limit the number of frames added to the given number.
 
   KJ_NOINLINE void truncateCommonTrace();
   // Remove the part of the stack trace which the exception shares with the caller of this method.
@@ -171,12 +169,11 @@ private:
     String description;
     Maybe<Own<Context>> context;
     String remoteTrace;
-    void* trace[32];
-    uint traceCount = 0;
+    Vector<void*> trace;
 
     bool isFullTrace = false;
-    // Is `trace` a full trace to the top of the stack (or as close as we could get before we ran
-    // out of space)? If this is false, then `trace` is instead a partial trace covering just the
+    // Is `trace` a full trace to the top of the stack? If this is false, then `trace` is instead
+    // a partial trace covering just the
     // frames between where the exception was thrown and where it was caught.
     //
     // extendTrace() transitions this to true, and truncateCommonTrace() changes it back to false.
@@ -663,18 +660,14 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
 
 // =======================================================================================
 
-KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount);
-// Attempt to get the current stack trace, returning a list of pointers to instructions. The
-// returned array is a slice of `space`. Provide a larger `space` to get a deeper stack trace.
-// If the platform doesn't support stack traces, returns an empty array.
+KJ_NOINLINE Vector<void*> getStackTrace(size_t ignoreCount);
+// Attempt to get the current stack trace, returning a list of pointers to instructions.
+// If the platform doesn't support stack traces, returns an empty vector.
 //
 // `ignoreCount` items will be truncated from the front of the trace. This is useful for chopping
 // off a prefix of the trace that is uninteresting to the developer because it's just locations
 // inside the debug infrastructure that is requesting the trace. Be careful to mark functions as
-// KJ_NOINLINE if you intend to count them in `ignoreCount`. Note that, unfortunately, the
-// ignored entries will still waste space in the `space` array (and the returned array's `begin()`
-// is never exactly equal to `space.begin()` due to this effect, even if `ignoreCount` is zero
-// since `getStackTrace()` needs to ignore its own internal frames).
+// KJ_NOINLINE if you intend to count them in `ignoreCount`.
 
 String stringifyStackTrace(ArrayPtr<void* const>);
 // Convert the stack trace to a string with file names and line numbers. This may involve executing

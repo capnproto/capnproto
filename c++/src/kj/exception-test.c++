@@ -565,6 +565,66 @@ KJ_TEST("KJ_TRY/KJ_CATCH does not catch CleanShutdownException") {
   KJ_EXPECT(outerCatchCalled);
 }
 
+KJ_TEST("addTrace grows dynamically") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+
+  for (int i = 0; i < 100; i++) {
+    e.addTrace(reinterpret_cast<void*>(static_cast<uintptr_t>(i + 1)));
+  }
+
+  auto trace = e.getStackTrace();
+  KJ_EXPECT(trace.size() == 100);
+  for (int i = 0; i < 100; i++) {
+    KJ_EXPECT(trace[i] == reinterpret_cast<void*>(static_cast<uintptr_t>(i + 1)));
+  }
+}
+
+KJ_TEST("extendTrace appends stack frames") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+
+  // Add some initial trace entries.
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+
+  // extendTrace should append current stack frames.
+  e.extendTrace(0);
+  KJ_EXPECT(e.getStackTrace().size() > 2);
+
+  // The first two entries should still be our original ones.
+  KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
+  KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
+}
+
+
+KJ_TEST("truncateCommonTrace removes common suffix") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+
+  e.extendTrace(1);
+  KJ_EXPECT(e.getStackTrace().size() > 2);
+
+  // truncateCommonTrace should remove the frames shared with our current stack.
+  e.truncateCommonTrace();
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+
+  KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
+  KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
+}
+
+KJ_TEST("truncateCommonTrace is no-op without extendTrace") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+
+  e.truncateCommonTrace();
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+  KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
+  KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
+}
+
 KJ_TEST("getDestructionReason returns default exception if exception wasn't thrown") {
   auto e =
       kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
@@ -600,6 +660,29 @@ KJ_TEST("getDestructionReason returns default exception if exception was "
     KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
     KJ_EXPECT(e.getDescription() == "default description"_kj);
   }
+}
+
+KJ_NOINLINE kj::Exception deepRecursion(size_t depth) {
+  if (depth == 0) {
+    kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("deep"));
+    e.extendTrace(0);
+    return e;
+  }
+  auto e = deepRecursion(depth - 1);
+  // If we simply return e here, compiler will apply tail call optimization and trace will be
+  // short.
+  e.setDescription(kj::str(e.getDescription(), "."));
+  return kj::mv(e);
+}
+
+KJ_TEST("getStackTrace() grows beyond 128 frames") {
+  auto e = deepRecursion(256);
+  KJ_EXPECT(e.getStackTrace().size() > 256, e.getStackTrace().size());
+}
+
+KJ_TEST("getStackTrace() doesn't grow beyond 1024 frames") {
+  auto e = deepRecursion(2048);
+  KJ_EXPECT(e.getStackTrace().size() < 1024, e.getStackTrace().size());
 }
 
 // =======================================================================================
