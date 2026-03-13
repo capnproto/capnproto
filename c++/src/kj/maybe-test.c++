@@ -752,6 +752,75 @@ KJ_TEST("Maybe") {
   }
 }
 
+KJ_TEST("Maybe emplaceInit") {
+  {
+    Maybe<int> m;
+    m.emplaceInit(123);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m) == 123);
+  }
+
+  {
+    // from another maybe
+    Maybe<int> src = 456;
+    Maybe<int> dst;
+    dst.emplaceInit(kj::mv(src));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(dst) == 456);
+    KJ_EXPECT(src == kj::none);
+  }
+
+  {
+    // from another maybe
+    Maybe<int> src = kj::none;
+    Maybe<int> dst;
+    dst.emplaceInit(kj::mv(src));
+    KJ_EXPECT(dst == kj::none);
+    KJ_EXPECT(src == kj::none);
+  }
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  {
+    Maybe<int> m = 1;
+    KJ_EXPECT_THROW(FAILED, m.emplaceInit(2));
+  }
+
+  {
+    Maybe<int> src = 2;
+    Maybe<int> dst = 1;
+    KJ_EXPECT_THROW(FAILED, dst.emplaceInit(kj::mv(src)));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(src) == 2);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(dst) == 1);
+  }
+#endif
+}
+
+KJ_TEST("Maybe emplaceInit with niche-optimized type") {
+  NoneDestructorCounter::noneDestroyCount = 0;
+  NoneDestructorCounter::nonNoneDestroyCount = 0;
+
+  {
+    Maybe<NoneDestructorCounter> src;
+    src.emplaceInit(42);
+    KJ_EXPECT(src != kj::none);
+
+    // from another maybe
+    Maybe<NoneDestructorCounter> dst;
+    dst.emplaceInit(kj::mv(src));
+    KJ_EXPECT(src == kj::none);
+    KJ_EXPECT(dst != kj::none);
+  }
+
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+
+  {
+    Maybe<NoneDestructorCounter> src;
+    Maybe<NoneDestructorCounter> dst;
+    dst.emplaceInit(kj::mv(src));
+    KJ_EXPECT(src == kj::none);
+    KJ_EXPECT(dst == kj::none);
+  }
+
+  KJ_EXPECT(NoneDestructorCounter::noneDestroyCount == 0);
+}
+
 KJ_TEST("Maybe constness") {
   int i;
 
