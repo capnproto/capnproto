@@ -149,6 +149,13 @@ struct PointerHelpers<UncheckedMessage> {
   static inline const word* get(PointerReader reader) {
     return reader.getUnchecked();
   }
+
+  template <typename T>
+  static inline const word* getValuePointer(const T& value) {
+    // Helper to get unchecked pointer from a Value reader's pointer field.
+    // Only valid for unchecked messages (e.g., schema default values).
+    return value._reader.getPointerField(bounded<0>() * POINTERS).getUnchecked();
+  }
 };
 
 }  // namespace _ (private)

@@ -234,15 +234,14 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
           auto elementType = type.asList().getElementType();
           return DynamicList::Reader(type.asList(),
               reader.getPointerField(assumePointerOffset(slot.getOffset()))
-                    .getList(elementSizeFor(elementType.which()), dval.isAnyPointer() ? nullptr :
-                        dval.getList().getAs<_::UncheckedMessage>()));
+                    .getList(elementSizeFor(elementType.which()),
+                        _::PointerHelpers<_::UncheckedMessage>::getValuePointer(dval)));
         }
 
         case schema::Type::STRUCT:
           return DynamicStruct::Reader(type.asStruct(),
               reader.getPointerField(assumePointerOffset(slot.getOffset()))
-                    .getStruct(dval.isAnyPointer() ? nullptr :
-                        dval.getStruct().getAs<_::UncheckedMessage>()));
+                    .getStruct(_::PointerHelpers<_::UncheckedMessage>::getValuePointer(dval)));
 
         case schema::Type::ANY_POINTER:
           return AnyPointer::Reader(reader.getPointerField(assumePointerOffset(slot.getOffset())));
@@ -328,14 +327,12 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
             return DynamicList::Builder(listType,
                 builder.getPointerField(assumePointerOffset(slot.getOffset()))
                        .getStructList(structSizeFromSchema(listType.getStructElementType()),
-                                      dval.isAnyPointer() ? nullptr :
-                                          dval.getList().getAs<_::UncheckedMessage>()));
+                                      _::PointerHelpers<_::UncheckedMessage>::getValuePointer(dval)));
           } else {
             return DynamicList::Builder(listType,
                 builder.getPointerField(assumePointerOffset(slot.getOffset()))
                        .getList(elementSizeFor(listType.whichElementType()),
-                                dval.isAnyPointer() ? nullptr :
-                                    dval.getList().getAs<_::UncheckedMessage>()));
+                                _::PointerHelpers<_::UncheckedMessage>::getValuePointer(dval)));
           }
         }
 
@@ -344,8 +341,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
           return DynamicStruct::Builder(structSchema,
               builder.getPointerField(assumePointerOffset(slot.getOffset()))
                      .getStruct(structSizeFromSchema(structSchema),
-                                dval.isAnyPointer() ? nullptr :
-                                    dval.getStruct().getAs<_::UncheckedMessage>()));
+                                _::PointerHelpers<_::UncheckedMessage>::getValuePointer(dval)));
         }
 
         case schema::Type::ANY_POINTER:
@@ -1453,11 +1449,11 @@ DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
       break;
 
     case schema::Type::STRUCT:
-      *this = value.getStruct().getAs<DynamicStruct>(type.asStruct());
+      *this = value.getStruct().as<DynamicStruct>(type.asStruct());
       break;
 
     case schema::Type::LIST:
-      *this = value.getList().getAs<DynamicList>(type.asList());
+      *this = value.getList().as<DynamicList>(type.asList());
       break;
 
     case schema::Type::ANY_POINTER:

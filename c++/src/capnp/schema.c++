@@ -337,13 +337,9 @@ uint32_t Schema::getSchemaOffset(const schema::Value::Reader& value) const {
       ptr = reinterpret_cast<const word*>(value.getData().begin());
       break;
     case schema::Value::STRUCT:
-      ptr = value.getStruct().getAs<_::UncheckedMessage>();
-      break;
     case schema::Value::LIST:
-      ptr = value.getList().getAs<_::UncheckedMessage>();
-      break;
     case schema::Value::ANY_POINTER:
-      ptr = value.getAnyPointer().getAs<_::UncheckedMessage>();
+      ptr = _::PointerHelpers<_::UncheckedMessage>::getValuePointer(value);
       break;
     default:
       KJ_FAIL_ASSERT("getDefaultValueSchemaOffset() can only be called on struct, list, "

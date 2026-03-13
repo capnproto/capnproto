@@ -651,6 +651,11 @@ public:
     // T must be List<U>.
     return ReaderFor<T>(_reader);
   }
+
+  template <typename T>
+  ReaderFor<T> as(ListSchema schema) const;
+  // T must be DynamicList. Defined in dynamic.h.
+
 private:
   _::ListReader _reader;
 
