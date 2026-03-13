@@ -4,6 +4,9 @@ common --verbose_failures
 # Needed for Brotli, which does not import rules_cc symbols itself (otherwise needed with Bazel 9)
 common --incompatible_autoload_externally=+cc_library,+cc_binary
 
+# we enable irequre checks in production
+build --@capnp-cpp//src/kj:kj_enable_irequire=True
+
 test --test_timeout=1,5,30,30
 
 # Debug build configuration with maximum runtime checks
