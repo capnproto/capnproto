@@ -25,6 +25,7 @@
 #include <kj/vector.h>
 #include <kj/debug.h>
 #include <kj/compat/gtest.h>
+#include <stdlib.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -211,6 +212,332 @@ KJ_TEST("MessageBuilder::sizeInWords()") {
   capnp::SegmentArrayMessageReader reader(segments);
   checkTestMessage(reader.getRoot<TestAllTypes>());
   KJ_EXPECT(reader.sizeInWords() == expected);
+}
+
+KJ_TEST("MallocMessageBuilder with LAZY_ZERO_MEMORY strategy") {
+  // Verify that the new InitializationStrategy API works for basic usage.
+  MallocMessageBuilder builder(1024, AllocationStrategy::FIXED_SIZE,
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
+  auto root = builder.initRoot<TestAllTypes>();
+  root.setInt64Field(12345);
+  KJ_EXPECT(root.getInt64Field() == 12345);
+}
+
+KJ_TEST("SECURITY: Uninitialized DATA zeroes padding bytes (Info Leak Prevention)") {
+  // Setup a "Dirty" Scratch Buffer filled with 0xAA.
+  // This simulates a scenario where malloc returns memory containing sensitive residual data.
+  byte dirtyBuffer[1024];
+  memset(dirtyBuffer, 0xAA, sizeof(dirtyBuffer));
+  kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
+
+  // Create a builder that opts out of zeroing.
+  MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
+
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Allocate 3 bytes of DATA.
+  // Physical layout: 1 word (8 bytes) allocated.
+  // Bytes [0, 1, 2] are the data body.
+  // Bytes [3, 4, 5, 6, 7] are alignment padding.
+  auto data = root.uninitializedDataField(3);
+  const byte* rawPtr = data.begin();
+
+  // CHECK 1: Performance verification.
+  // The body bytes [0..2] should remain 0xAA.
+  // This proves that we successfully skipped the memset for the data payload.
+  KJ_EXPECT(rawPtr[0] == 0xAA);
+  KJ_EXPECT(rawPtr[1] == 0xAA);
+  KJ_EXPECT(rawPtr[2] == 0xAA);
+
+  // CHECK 2: Security verification.
+  // The padding bytes [3..7] MUST be zeroed.
+  // Leaving these as 0xAA would constitute an Information Leak vulnerability.
+  KJ_EXPECT(rawPtr[3] == 0x00);
+  KJ_EXPECT(rawPtr[4] == 0x00);
+  KJ_EXPECT(rawPtr[5] == 0x00);
+  KJ_EXPECT(rawPtr[6] == 0x00);
+  KJ_EXPECT(rawPtr[7] == 0x00);
+}
+
+KJ_TEST("SAFETY: Structs are always zeroed even with LAZY_ZERO_MEMORY") {
+  // Setup a dirty buffer (filled with 0xBB).
+  byte dirtyBuffer[1024];
+  memset(dirtyBuffer, 0xBB, sizeof(dirtyBuffer));
+  kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
+
+  MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
+
+  // Initialize a Struct.
+  // Even though the builder is in LAZY_ZERO_MEMORY mode, Struct allocations must always
+  // enforce zero-initialization to ensure pointer validity and default values.
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Verify fields are 0/false, not 0xBB.
+  KJ_EXPECT(root.getInt64Field() == 0);
+  KJ_EXPECT(root.getUInt32Field() == 0);
+  KJ_EXPECT(root.getBoolField() == false);
+}
+
+KJ_TEST("Corner Case: Uninitialized DATA with exact word alignment") {
+  // Test boundary condition: Size is exactly 8 bytes (No padding).
+  byte dirtyBuffer[1024];
+  memset(dirtyBuffer, 0xCC, sizeof(dirtyBuffer));
+  kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
+
+  MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // 8 bytes -> Exactly 1 word. Padding size is 0.
+  // The padding zeroing logic must not crash or overwrite the next word.
+  auto data = root.uninitializedDataField(8);
+  const byte* rawPtr = data.begin();
+
+  // Body is dirty (0xCC).
+  for(int i = 0; i < 8; ++i) {
+    KJ_EXPECT(rawPtr[i] == 0xCC);
+  }
+
+  // Verify we didn't touch the *next* word (which should still be 0xCC).
+  // Note: Accessing rawPtr[8] is technically out of bounds for the 'data' blob,
+  // but valid within our controlled scratch buffer context.
+  KJ_EXPECT(rawPtr[8] == 0xCC);
+}
+
+KJ_TEST("Corner Case: Uninitialized DATA with 1 byte padding") {
+  // Test boundary condition: Size is 7 bytes (1 byte padding).
+  byte dirtyBuffer[1024];
+  memset(dirtyBuffer, 0xDD, sizeof(dirtyBuffer));
+  kj::ArrayPtr<word> scratch(reinterpret_cast<word*>(dirtyBuffer), sizeof(dirtyBuffer) / sizeof(word));
+
+  MallocMessageBuilder builder(scratch, AllocationStrategy::FIXED_SIZE,
+                               MallocMessageBuilder::InitializationStrategy::LAZY_ZERO_MEMORY);
+  auto root = builder.initRoot<TestAllTypes>();
+
+  auto data = root.uninitializedDataField(7);
+  const byte* rawPtr = data.begin();
+
+  // Body [0..6] is dirty.
+  for(int i = 0; i < 7; ++i) {
+    KJ_EXPECT(rawPtr[i] == 0xDD);
+  }
+
+  // The single padding byte [7] must be zeroed.
+  KJ_EXPECT(rawPtr[7] == 0x00);
+}
+
+// Helper class for the Custom Builder test.
+// Simulates a user-defined MessageBuilder that uses a custom allocator (e.g., malloc)
+// without zero-initializing memory. It overrides isAllocationZeroed() to return false,
+// ensuring that Cap'n Proto correctly sanitizes memory where necessary (e.g., Structs, padding)
+// while preserving performance optimizations (e.g., uninitialized Data).
+class DirtyMallocMessageBuilder : public MessageBuilder {
+public:
+  DirtyMallocMessageBuilder()
+      // Initialize with an empty segment list. This forces the Builder to call
+      // allocateSegment() immediately when the first object is allocated, ensuring
+      // we get our "dirty" memory from the start rather than assuming Segment 0 exists.
+      : MessageBuilder() {}
+
+  ~DirtyMallocMessageBuilder() {
+    for (void* ptr : allocations) {
+      free(ptr);
+    }
+  }
+
+  // Explicitly declare that this allocator provides dirty memory.
+  // This forces the MessageBuilder to proactively zero-out Structs upon initialization.
+  bool needLazyZero() const override { return true; }
+
+  kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
+    size_t sizeBytes = minimumSize * sizeof(word);
+    void* ptr = malloc(sizeBytes);
+    KJ_ASSERT(ptr != nullptr);
+
+    // Deliberately fill with garbage pattern (0xEE) to verify that Cap'n Proto
+    // correctly zeros out fields and padding, but leaves "uninitialized" data
+    // bodies untouched as an optimization.
+    memset(ptr, 0xEE, sizeBytes);
+
+    allocations.add(ptr);
+    return kj::arrayPtr(reinterpret_cast<word*>(ptr), minimumSize);
+  }
+
+private:
+  kj::Vector<void*> allocations;
+};
+
+KJ_TEST("CustomMessageBuilder: Lazy zeroing works with custom dirty allocator") {
+  DirtyMallocMessageBuilder builder;
+
+  // 1. Verify Safety: Structs must be zero-initialized.
+  // Even though the underlying memory is filled with 0xEE, the Builder must clear it.
+  auto root = builder.initRoot<TestAllTypes>();
+  KJ_EXPECT(root.getInt64Field() == 0);
+  KJ_EXPECT(root.getBoolField() == false);
+
+  // 2. Verify Performance & Security for Data Blob.
+  // Allocate 3 bytes of Data.
+  // Memory Layout (1 word): [Body: 0, 1, 2] [Padding: 3, 4, 5, 6, 7]
+  auto data = root.uninitializedDataField(3);
+  const byte* ptr = data.begin();
+
+  // Check Body: Should remain dirty (0xEE) because requested "Uninitialized".
+  // This confirms the performance optimization (skipping memset on the body).
+  KJ_EXPECT(ptr[0] == 0xEE);
+  KJ_EXPECT(ptr[1] == 0xEE);
+  KJ_EXPECT(ptr[2] == 0xEE);
+
+  // Check Padding: Must be zeroed (0x00).
+  // This confirms security (prevention of information leaks in padding bytes).
+  KJ_EXPECT(ptr[3] == 0x00);
+  KJ_EXPECT(ptr[4] == 0x00);
+  KJ_EXPECT(ptr[5] == 0x00);
+  KJ_EXPECT(ptr[6] == 0x00);
+  KJ_EXPECT(ptr[7] == 0x00);
+}
+
+KJ_TEST("STRESS: List of Structs containing Uninitialized Data") {
+  // Create a List of Structs.
+  // Each Struct contains a Data blob.
+  // Memory Layout: [Struct Ptr][Struct Ptr] ... [Struct Body][Data Body][Struct Body][Data Body]...
+
+  DirtyMallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const int listSize = 100;
+  auto list = root.initStructList(listSize);
+
+  for (int i = 0; i < listSize; ++i) {
+    auto element = list[i];
+
+    // 1. Set a primitive field (ensure clean write)
+    element.setInt64Field(i);
+
+    // 2. Allocate Uninitialized Data inside the struct
+    // This forces the allocator to jump between Struct logic (Clean) and Data logic (Dirty/Skip)
+    auto data = element.uninitializedDataField(3); // 3 bytes data, 5 bytes padding
+    const byte* ptr = data.begin();
+
+    // Verify Data Body is DIRTY (0xEE)
+    KJ_EXPECT(ptr[0] == 0xEE);
+
+    // Verify Data Padding is CLEAN (0x00)
+    KJ_EXPECT(ptr[3] == 0x00);
+  }
+
+  // 3. Verify the Structs themselves remained valid (pointers didn't get corrupted)
+  for (int i = 0; i < listSize; ++i) {
+    KJ_EXPECT(list[i].getInt64Field() == i);
+    KJ_EXPECT(list[i].getDataField().size() == 3);
+  }
+}
+
+KJ_TEST("COMPLEX: Uninitialized Data triggering Segment Expansion") {
+  DirtyMallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Fill up the first segment (assuming default size)
+  auto filler = root.initDataField(8192); // 8KB
+  memset(filler.begin(), 0x11, filler.size());
+
+  // Now allocate a massive uninitialized blob that definitely forces a new Segment
+  // Size: 1MB + 1 byte (odd alignment)
+  size_t hugeSize = 1024 * 1024 + 1;
+  auto hugeData = root.uninitializedDataField(hugeSize);
+
+  const byte* ptr = hugeData.begin();
+
+  // Verify Body (Dirty)
+  KJ_EXPECT(ptr[0] == 0xEE);
+  KJ_EXPECT(ptr[hugeSize - 1] == 0xEE);
+
+  // Verify Padding (Clean)
+  KJ_EXPECT(ptr[hugeSize] == 0x00);
+  KJ_EXPECT(ptr[hugeSize + 6] == 0x00);
+}
+
+KJ_TEST("CORNER CASE: Many 1-byte uninitialized allocations") {
+  // Allocate data where Padding (7 bytes) > Payload (1 byte).
+  // This stresses the zeroing logic more than the skipping logic.
+
+  DirtyMallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  auto list = root.initStructList(50);
+
+  for (auto element : list) {
+    auto data = element.uninitializedDataField(1);
+    const byte* ptr = data.begin();
+
+    // Payload (1 byte) -> Dirty
+    KJ_EXPECT(ptr[0] == 0xEE);
+
+    // Padding (7 bytes) -> Clean
+    for(int k=1; k<=7; ++k) KJ_EXPECT(ptr[k] == 0x00);
+  }
+}
+
+KJ_TEST("CORNER CASE: Data ends exactly at word boundary minus 1 byte") {
+  // Case A: Size = 7 bytes. Padding = 1 byte.
+  // Case B: Size = 8 bytes. Padding = 0 bytes.
+  // Case C: Size = 9 bytes. Padding = 7 bytes.
+
+  DirtyMallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // Case A: 7 bytes
+  {
+    auto data = root.uninitializedDataField(7);
+    const byte* ptr = data.begin();
+    for(int i=0; i<7; ++i) KJ_EXPECT(ptr[i] == 0xEE); // Dirty
+    KJ_EXPECT(ptr[7] == 0x00); // 1 byte padding
+  }
+
+  // Case B: 8 bytes (Exact fit)
+  {
+    auto data = root.uninitializedDataField(8);
+    const byte* ptr = data.begin();
+    for(int i=0; i<8; ++i) KJ_EXPECT(ptr[i] == 0xEE);
+  }
+
+  // Case C: 9 bytes (1 word + 1 byte)
+  {
+    auto data = root.uninitializedDataField(9);
+    const byte* ptr = data.begin();
+    for(int i=0; i<9; ++i) KJ_EXPECT(ptr[i] == 0xEE);
+    // Padding bytes 9..15 must be zero
+    for(int i=9; i<16; ++i) KJ_EXPECT(ptr[i] == 0x00);
+  }
+}
+
+KJ_TEST("COMPLEX: Deeply nested structs with uninitialized leaf") {
+  // Ensure the needLazyZero flag implies safety even deep in the graph.
+  // Root -> Struct A -> Struct B -> Uninitialized Data
+
+  DirtyMallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  // TestAllTypes has a 'structField' which is itself a TestAllTypes, allowing recursion.
+  auto level1 = root.initStructField();
+  auto level2 = level1.initStructField();
+  auto level3 = level2.initStructField();
+
+  auto data = level3.uninitializedDataField(10);
+  const byte* ptr = data.begin();
+
+  // Verify Dirty
+  KJ_EXPECT(ptr[0] == 0xEE);
+  KJ_EXPECT(ptr[9] == 0xEE);
+
+  // Verify Padding Clean
+  KJ_EXPECT(ptr[10] == 0x00);
+
+  // Verify Level 1 and 2 are still valid (Clean pointers)
+  KJ_EXPECT(level1.getBoolField() == false);
+  KJ_EXPECT(level2.getBoolField() == false);
 }
 
 // TODO(test):  More tests.
