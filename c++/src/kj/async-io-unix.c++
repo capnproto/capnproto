@@ -241,7 +241,7 @@ public:
 
   Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
-#if __linux__ && !__ANDROID__
+#if __linux__ && !__ANDROID__ && !__OHOS__
     KJ_IF_SOME(sock, kj::dynamicDowncastIfAvailable<AsyncStreamFd>(input)) {
       return pumpFromOther(sock, amount);
     }
@@ -302,7 +302,7 @@ private:
 public:
 #endif  // __linux__
 
-#if __linux__ && !__ANDROID__
+#if __linux__ && !__ANDROID__ && !__OHOS__
 // Linux's splice() syscall lets us optimize pumping of bytes between file descriptors.
 //
 // TODO(someday): splice()-based pumping hangs in unit tests on Android for some reason. We should
@@ -880,7 +880,7 @@ private:
   }
 };
 
-#if __linux__ && !__ANDROID__
+#if __linux__ && !__ANDROID__ && !__OHOS__
 constexpr size_t AsyncStreamFd::MAX_SPLICE_LEN;
 #endif  // __linux__ && !__ANDROID__
 
