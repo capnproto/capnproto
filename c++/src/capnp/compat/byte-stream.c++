@@ -513,8 +513,8 @@ public:
     PathProber(CapnpToKjStreamAdapter& parent, kj::Own<kj::AsyncOutputStream> inner,
                kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>())
         : parent(parent), inner(kj::mv(inner)),
-          readyPromise(paf.promise.fork()),
           readyFulfiller(kj::mv(paf.fulfiller)),
+          readyPromise(paf.promise.fork()),
           task(nullptr) {}
 
     void startProbing() {
@@ -594,8 +594,9 @@ public:
   private:
     kj::Maybe<CapnpToKjStreamAdapter&> parent;
     kj::Own<kj::AsyncOutputStream> inner;
-    kj::ForkedPromise<void> readyPromise;
+    // declare fulfiller first, so that destructor doesn't try to resolve the promise
     kj::Own<kj::PromiseFulfiller<void>> readyFulfiller;
+    kj::ForkedPromise<void> readyPromise;
     kj::Promise<void> task;
 
     friend class SubstreamCallbackImpl;
