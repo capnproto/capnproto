@@ -121,7 +121,18 @@ public:
 
   kj::Maybe<kj::Promise<Capability::Client>> shortenPath() override {
     auto onAbort = canceler.wrap(KJ_ASSERT_NONNULL(webSocket).whenAborted())
-        .then([]() -> kj::Promise<Capability::Client> {
+        .then([this]() -> kj::Promise<Capability::Client> {
+      // whenAborted() resolved, indicating webSocket.abort() was called, which could just be
+      // because the WebSocket was destroyed.
+
+      if (closed) {
+        // Oh, we got here because close() completed successfully and then the WebSocket was
+        // dropped. Don't bother shortening the path in this case as the caller will presumably
+        // drop this capability shortly (and also the shortening can actually outrun the return
+        // from close() which causes trouble).
+        return kj::NEVER_DONE;
+      }
+
       return KJ_EXCEPTION(DISCONNECTED, "WebSocket was aborted");
     });
     return shorteningPromise
@@ -146,7 +157,9 @@ public:
       webSocket = kj::none;
 
       return ws.close(params.getCode(), params.getReason())
-          .attach(kj::mv(ownWebSocket));
+          .attach(kj::defer([this, ws = kj::mv(ownWebSocket)]() {
+        closed = true;
+      }));
     });
   }
 
@@ -161,6 +174,7 @@ private:
   kj::Maybe<kj::Own<kj::Exception>> error;
 
   bool shortened = false;
+  bool closed = false;
 
   kj::WebSocket& getWebSocket() {
     return KJ_REQUIRE_NONNULL(webSocket, "request canceled");
