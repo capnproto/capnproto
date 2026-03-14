@@ -245,6 +245,8 @@ public:
   inline constexpr size_t size() const;
   // Result does not include NUL terminator.
 
+  inline constexpr void shrink(size_t size);
+
   inline constexpr char operator[](size_t index) const;
   inline constexpr char& operator[](size_t index) KJ_LIFETIMEBOUND;
 
@@ -358,6 +360,8 @@ public:
 
   inline constexpr size_t size() const;
   // Result does not include NUL terminator.
+
+  inline constexpr void shrink(size_t size);
 
   inline constexpr char operator[](size_t index) const;
   inline constexpr char& operator[](size_t index) KJ_LIFETIMEBOUND;
@@ -755,6 +759,19 @@ inline constexpr const char* ConstString::cStr() const { return content == nullp
 
 inline constexpr size_t String::size() const { return content == nullptr ? 0 : content.size() - 1; }
 inline constexpr size_t ConstString::size() const { return content == nullptr ? 0 : content.size() - 1; }
+
+inline constexpr void String::shrink(size_t size) {
+  if (content != nullptr) {
+    KJ_IREQUIRE(content.size() >= size, "New size must be less than or equal to the current size");
+    content = kj::heapArray(content.first(size));
+  }
+}
+inline constexpr void ConstString::shrink(size_t size) {
+  if (content != nullptr) {
+    KJ_IREQUIRE(content.size() >= size, "New size must be less than or equal to the current size");
+    content = kj::heapArray(content.first(size));
+  }
+}
 
 inline constexpr char String::operator[](size_t index) const { return content[index]; }
 inline constexpr char& String::operator[](size_t index) { return content[index]; }
