@@ -1397,7 +1397,10 @@ public:
     return *this;
   }
 
-  inline bool operator==(decltype(nullptr)) const { return !isSet; }
+  inline bool operator==(decltype(nullptr)) const {
+    // NOLINTNEXTLINE(clang-analyzer-core.uninitialized.UndefReturn) really confused by coros
+    return !isSet;
+  }
 
   NullableValue(const T* t) = delete;
   NullableValue& operator=(const T* other) = delete;

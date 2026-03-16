@@ -803,6 +803,36 @@ TEST(Async, RaceSuccessful) {
   }
 
   {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = newPromiseAndFulfiller<int>();
+    auto right = newPromiseAndFulfiller<int>();
+
+    auto race = raceSuccessful(kj::arr(kj::mv(left.promise), kj::mv(right.promise)));
+
+    left.fulfiller->reject(KJ_EXCEPTION(FAILED, "left failed"));
+    right.fulfiller->reject(KJ_EXCEPTION(FAILED, "right failed"));
+
+    KJ_EXPECT_THROW(FAILED, race.wait(waitScope));
+  }
+
+  {
+    EventLoop loop;
+    WaitScope waitScope(loop);
+
+    auto left = newPromiseAndFulfiller<int>();
+    auto right = newPromiseAndFulfiller<int>();
+
+    auto race = raceSuccessful(kj::arr(kj::mv(left.promise), kj::mv(right.promise)));
+
+    left.fulfiller->reject(KJ_EXCEPTION(FAILED, "left failed"));
+    right.fulfiller->fulfill(123);
+
+    EXPECT_EQ(123, race.wait(waitScope));
+  }
+
+  {
     struct NoCopy {
       int i;
 
