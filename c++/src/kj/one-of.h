@@ -425,7 +425,7 @@ public:
   }
 
   template <typename T>
-  Maybe<T&> tryGet() {
+  Maybe<T&> tryGet() & {
     if (is<T>()) {
       return *reinterpret_cast<T*>(space);
     } else {
@@ -433,9 +433,17 @@ public:
     }
   }
   template <typename T>
-  Maybe<const T&> tryGet() const {
+  Maybe<const T&> tryGet() const & {
     if (is<T>()) {
       return *reinterpret_cast<const T*>(space);
+    } else {
+      return kj::none;
+    }
+  }
+  template <typename T>
+  Maybe<T> tryGet() && {
+    if (is<T>()) {
+      return kj::mv(*reinterpret_cast<T*>(space));
     } else {
       return kj::none;
     }
