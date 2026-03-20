@@ -122,6 +122,42 @@ TEST(Serialize, FlatArray) {
   }
 }
 
+KJ_TEST("FlatArrayMessageReader from aligned byte array") {
+  TestMessageBuilder builder(1);
+  initTestMessage(builder.initRoot<TestAllTypes>());
+
+  kj::Array<word> serialized = messageToFlatArray(builder);
+  kj::ArrayPtr<const byte> bytes = serialized.asBytes();
+
+  // Verify precondition: the byte pointer is word-aligned.
+  KJ_ASSERT(reinterpret_cast<uintptr_t>(bytes.begin()) % sizeof(word) == 0);
+
+  FlatArrayMessageReader reader(bytes);
+  checkTestMessage(reader.getRoot<TestAllTypes>());
+
+  // getEnd() should point into the original array, confirming no copy was made.
+  KJ_EXPECT(serialized.end() == reader.getEnd());
+}
+
+KJ_TEST("FlatArrayMessageReader from unaligned byte array") {
+  TestMessageBuilder builder(1);
+  initTestMessage(builder.initRoot<TestAllTypes>());
+
+  kj::Array<word> serialized = messageToFlatArray(builder);
+  size_t byteSize = serialized.asBytes().size();
+
+  // Allocate a buffer with extra space and offset by 1 byte to guarantee misalignment.
+  auto buffer = kj::heapArray<byte>(byteSize + sizeof(word));
+  auto unaligned = buffer.slice(1, 1 + byteSize);
+  memcpy(unaligned.begin(), serialized.asBytes().begin(), byteSize);
+
+  // Verify precondition: the byte pointer is NOT word-aligned.
+  KJ_ASSERT(reinterpret_cast<uintptr_t>(unaligned.begin()) % sizeof(word) != 0);
+
+  FlatArrayMessageReader reader(unaligned);
+  checkTestMessage(reader.getRoot<TestAllTypes>());
+}
+
 TEST(Serialize, FlatArrayOddSegmentCount) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
