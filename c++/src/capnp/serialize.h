@@ -54,6 +54,12 @@ class FlatArrayMessageReader: public MessageReader {
 public:
   FlatArrayMessageReader(kj::ArrayPtr<const word> array, ReaderOptions options = ReaderOptions());
   // The array must remain valid until the MessageReader is destroyed.
+  //
+  // `array` MUST be aligned, or this is likely to throw.
+
+  FlatArrayMessageReader(kj::ArrayPtr<const byte> bytes, ReaderOptions options = ReaderOptions());
+  // Reads from a byte array instead of a word array. If the bytes are not aligned, a copy will
+  // be made.
 
   kj::ArrayPtr<const word> getSegment(uint id) override;
 
@@ -68,6 +74,10 @@ private:
   kj::ArrayPtr<const word> segment0;
   kj::Array<kj::ArrayPtr<const word>> moreSegments;
   const word* end;
+
+  kj::Array<word> alignedCopy;
+
+  void init(kj::ArrayPtr<const word> array);
 };
 
 kj::ArrayPtr<const word> initMessageBuilderFromFlatArrayCopy(
@@ -121,7 +131,7 @@ size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> messagePrefix);
 
 kj::Array<word> serializeSegmentTable(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Returns the segments table for given message segments.
-// Fully serialized message consists of the table and segments written consecutively. 
+// Fully serialized message consists of the table and segments written consecutively.
 
 // =======================================================================================
 

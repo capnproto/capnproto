@@ -240,6 +240,12 @@ Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
     Reader&& from, Orphanage to, kj::Own<MembranePolicy> policy);
 // Like copyIntoMembrane() except that `from` is "inside" the membrane and `to` is "outside".
 
+template <typename PipelineType>
+PipelineType membranePipeline(PipelineType inner, kj::Own<MembranePolicy> policy);
+template <typename PipelineType>
+PipelineType reverseMembranePipeline(PipelineType inner, kj::Own<MembranePolicy> policy);
+// Applies a membrane to a `Pipeline` object.
+
 // =======================================================================================
 // inline implementation details
 
@@ -298,6 +304,21 @@ Orphan<typename kj::Decay<Reader>::Reads> copyOutOfMembrane(
   return _::copyOutOfMembrane(
       _::PointerHelpers<typename kj::Decay<Reader>::Reads>::getInternalReader(from),
       to, kj::mv(policy), false);
+}
+
+AnyPointer::Pipeline membranePipeline(AnyPointer::Pipeline inner, kj::Own<MembranePolicy> policy);
+AnyPointer::Pipeline reverseMembranePipeline(
+    AnyPointer::Pipeline inner, kj::Own<MembranePolicy> policy);
+
+template <typename PipelineType>
+PipelineType membranePipeline(PipelineType inner, kj::Own<MembranePolicy> policy) {
+  return PipelineType(membranePipeline(
+      AnyPointer::Pipeline(PipelineHook::from(kj::mv(inner))), kj::mv(policy)));
+}
+template <typename PipelineType>
+PipelineType reverseMembranePipeline(PipelineType inner, kj::Own<MembranePolicy> policy) {
+  return PipelineType(reverseMembranePipeline(
+      AnyPointer::Pipeline(PipelineHook::from(kj::mv(inner))), kj::mv(policy)));
 }
 
 } // namespace capnp

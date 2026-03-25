@@ -32,7 +32,28 @@ namespace capnp {
 
 FlatArrayMessageReader::FlatArrayMessageReader(
     kj::ArrayPtr<const word> array, ReaderOptions options)
-    : MessageReader(options), end(array.end()) {
+    : MessageReader(options) {
+  init(array);
+}
+
+FlatArrayMessageReader::FlatArrayMessageReader(
+    kj::ArrayPtr<const byte> bytes, ReaderOptions options)
+    : MessageReader(options) {
+  KJ_REQUIRE(bytes.size() % sizeof(word) == 0, "message must be a whole number of words");
+  auto wordCount = bytes.size() / sizeof(word);
+
+  if (reinterpret_cast<uintptr_t>(bytes.begin()) % sizeof(word) == 0) {
+    init(kj::arrayPtr(reinterpret_cast<const word*>(bytes.begin()), wordCount));
+  } else {
+    alignedCopy = kj::heapArray<word>(wordCount);
+    alignedCopy.asBytes().copyFrom(bytes);
+    init(alignedCopy);
+  }
+}
+
+void FlatArrayMessageReader::init(kj::ArrayPtr<const word> array) {
+  end = array.end();
+
   if (array.size() < 1) {
     // Assume empty message.
     return;
