@@ -426,9 +426,16 @@ int Debug::getOsErrorNumber(bool nonblocking) {
 
   // On many systems, EAGAIN and EWOULDBLOCK have the same value, but this is not strictly required
   // by POSIX, so we need to check both.
-  return result == EINTR ? -1
-       : nonblocking && (result == EAGAIN || result == EWOULDBLOCK) ? 0
-       : result;
+  if (result == EINTR) {
+    return -1;
+  } else if (nonblocking && (result == EAGAIN || result == EWOULDBLOCK)) {
+    // Clear errno so it doesn't leak into application code that may check it
+    // after a successful non-blocking operation.
+    errno = 0;
+    return 0;
+  } else {
+    return result;
+  }
 }
 
 #if _WIN32 || __CYGWIN__
