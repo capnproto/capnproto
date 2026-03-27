@@ -1347,7 +1347,7 @@ public:
       if (addrlen == 0) {
 #if __APPLE__
         // A bug in XNU (the macOS kernel) can cause accept() to return a socket but addrlen=0
-        // The socket is already dead and should be discarded 
+        // The socket is already dead and should be discarded
         // https://github.com/apple-oss-distributions/xnu/blob/e3723e1f17661b24996789d8afc084c0c3303b26/bsd/kern/uipc_syscalls.c#L663-L691
 #else
         KJ_LOG(ERROR, "accept() returned zero-size address?");
@@ -2053,16 +2053,18 @@ Own<LowLevelAsyncIoProvider> newLowLevelAsyncIoProvider(UnixEventPort& eventPort
   return kj::heap<LowLevelAsyncIoProviderImpl>(eventPort);
 }
 
-AsyncIoContext setupAsyncIo() {
+AsyncIoContext setupAsyncIo(kj::Maybe<EventLoopObserver&> observer) {
   struct BasicContext {
     UnixEventPort eventPort;
     EventLoop eventLoop;
     WaitScope waitScope;
 
-    BasicContext(): eventLoop(eventPort), waitScope(eventLoop) {}
+    BasicContext(kj::Maybe<EventLoopObserver&> observer)
+      : eventLoop(eventPort, observer),
+        waitScope(eventLoop) {}
   };
 
-  auto basicContext = heap<BasicContext>();
+  auto basicContext = heap<BasicContext>(observer);
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>(basicContext->eventPort);
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
   auto& waitScope = basicContext->waitScope;

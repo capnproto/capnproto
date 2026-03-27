@@ -151,6 +151,16 @@ Passing a `kj::Array<T>` implies an ownership transfer. If you merely want to pa
 
 Both `kj::Array` and `kj::ArrayPtr` contain a number of useful methods, like `slice()`. Be sure to check out the class definitions for more details.
 
+`KJ_MAP` applies a function to every element of an array or container, returning an `Array` of the results, with nice syntax:
+
+```c++
+StringPtr foo = "abcd";
+Array<char> bar = KJ_MAP(c, foo) -> char { return c + 1; };
+KJ_ASSERT(str(bar) == "bcde");
+```
+
+The trailing return type (e.g. `-> char`) is optional but good practice for readability. `KJ_MAP` also works with `kj::Maybe` -- see [Maybes](#maybes).
+
 ## Strings
 
 A `kj::String` is a segment of text. By convention, this text is expected to be Unicode encoded in UTF-8. But, `kj::String` itself is not Unicode-aware; it is merely an array of `char`s.
@@ -234,6 +244,18 @@ KJ_IF_SOME(j, maybeJ) {
 Note that `KJ_IF_SOME` forces you to think about the null case. This differs from `std::optional`, which can be dereferenced using `*`, resulting in undefined behavior if the value is null.
 
 Similarly, `map()` and `orDefault()` allow transforming and retrieving the stored value in a safe manner without complex control flows.
+
+`KJ_MAP` (primarily used for mapping over arrays -- see [Arrays](#arrays)) also works with `kj::Maybe<T>`. When applied to a `Maybe`, it returns a `Maybe<Result>` instead of an `Array<Result>`:
+
+```c++
+Maybe<int> m = 42;
+Maybe<int> doubled = KJ_MAP(x, m) -> int { return x * 2; };
+KJ_ASSERT(KJ_ASSERT_NONNULL(doubled) == 84);
+
+Maybe<int> empty = kj::none;
+Maybe<int> result = KJ_MAP(x, empty) -> int { return x + 1; };
+KJ_ASSERT(result == kj::none);  // callback was not called
+```
 
 Performance nuts will be interested to know that `kj::Maybe<T&>` and `kj::Maybe<Own<T>>` are both optimized such that they take no more space than their underlying pointer type, using a literal null pointer to indicate nullness. For other types of `T`, `kj::Maybe<T>` must maintain an extra boolean and so is somewhat larger than `T`.
 

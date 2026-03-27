@@ -59,7 +59,7 @@ TEST(CommonParsers, AnyParser) {
   EXPECT_TRUE(input.atEnd());
 
   result = parser(input);
-  EXPECT_TRUE(result == nullptr);
+  EXPECT_TRUE(result == kj::none);
   EXPECT_TRUE(input.atEnd());
 }
 
@@ -68,21 +68,21 @@ TEST(CommonParsers, ExactElementParser) {
   Input input(text.begin(), text.end());
 
   Maybe<Tuple<>> result = exactly('f')(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_FALSE(input.atEnd());
 
   result = exactly('o')(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_FALSE(input.atEnd());
 
   result = exactly('x')(input);
-  EXPECT_TRUE(result == nullptr);
+  EXPECT_TRUE(result == kj::none);
   EXPECT_FALSE(input.atEnd());
 
   auto parser = exactly('o');
   ParserRef<Input, Tuple<>> wrapped = ref<Input>(parser);
   result = wrapped(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_TRUE(input.atEnd());
 }
 
@@ -91,21 +91,21 @@ TEST(CommonParsers, ExactlyConstParser) {
   Input input(text.begin(), text.end());
 
   Maybe<Tuple<>> result = exactlyConst<char, 'f'>()(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_FALSE(input.atEnd());
 
   result = exactlyConst<char, 'o'>()(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_FALSE(input.atEnd());
 
   result = exactlyConst<char, 'x'>()(input);
-  EXPECT_TRUE(result == nullptr);
+  EXPECT_TRUE(result == kj::none);
   EXPECT_FALSE(input.atEnd());
 
   auto parser = exactlyConst<char, 'o'>();
   ParserRef<Input, Tuple<>> wrapped = ref<Input>(parser);
   result = wrapped(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_TRUE(input.atEnd());
 }
 
@@ -129,7 +129,7 @@ TEST(CommonParsers, DiscardParser) {
   StringPtr text = "o";
   Input input(text.begin(), text.end());
   Maybe<Tuple<>> result = parser(input);
-  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(result != kj::none);
   EXPECT_TRUE(input.atEnd());
 }
 
@@ -139,21 +139,21 @@ TEST(CommonParsers, SequenceParser) {
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result = sequence(exactly('f'), exactly('o'), exactly('o'))(input);
-    EXPECT_TRUE(result != nullptr);
+    EXPECT_TRUE(result != kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result = sequence(exactly('f'), exactly('o'))(input);
-    EXPECT_TRUE(result != nullptr);
+    EXPECT_TRUE(result != kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result = sequence(exactly('x'), exactly('o'), exactly('o'))(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
@@ -161,7 +161,7 @@ TEST(CommonParsers, SequenceParser) {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result =
         sequence(sequence(exactly('f'), exactly('o')), exactly('o'))(input);
-    EXPECT_TRUE(result != nullptr);
+    EXPECT_TRUE(result != kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
@@ -169,7 +169,7 @@ TEST(CommonParsers, SequenceParser) {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result =
         sequence(sequence(exactly('f')), exactly('o'), exactly('o'))(input);
-    EXPECT_TRUE(result != nullptr);
+    EXPECT_TRUE(result != kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
@@ -233,7 +233,7 @@ TEST(CommonParsers, TimesParser) {
   {
     Input input(text.begin(), text.begin() + 4);
     Maybe<Array<char>> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
@@ -268,21 +268,21 @@ TEST(CommonParsers, TimesParserCountOnly) {
   {
     Input input(text.begin(), text.begin() + 4);
     Maybe<Tuple<>> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.begin() + 5);
     Maybe<Tuple<>> result = parser(input);
-    EXPECT_TRUE(result != nullptr);
+    EXPECT_TRUE(result != kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result = parser(input);
-    EXPECT_TRUE(result != nullptr);
+    EXPECT_TRUE(result != kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
@@ -291,7 +291,7 @@ TEST(CommonParsers, TimesParserCountOnly) {
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 }
@@ -355,7 +355,7 @@ TEST(CommonParsers, OptionalParser) {
     StringPtr text = "bzr";
     Input input(text.begin(), text.end());
     Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
   }
 }
 
@@ -419,7 +419,7 @@ TEST(CommonParsers, TransformOrRejectParser) {
         if (heapString(chars) == "foo") {
           return 123;
         } else {
-          return nullptr;
+          return kj::none;
         }
       });
 
@@ -439,7 +439,7 @@ TEST(CommonParsers, TransformOrRejectParser) {
     StringPtr text = "bar";
     Input input(text.begin(), text.end());
     Maybe<int> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(result == kj::none);
     EXPECT_TRUE(input.atEnd());
   }
 }
@@ -490,14 +490,14 @@ TEST(CommonParsers, NotLookingAt) {
   {
     StringPtr text = "a";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_TRUE(parser(input) == kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 
   {
     StringPtr text = "b";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) != nullptr);
+    EXPECT_TRUE(parser(input) != kj::none);
     EXPECT_FALSE(input.atEnd());
   }
 }
@@ -508,10 +508,10 @@ TEST(CommonParsers, EndOfInput) {
   {
     StringPtr text = "a";
     Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) == nullptr);
-    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_TRUE(parser(input) == kj::none);
+    EXPECT_TRUE(parser(input) == kj::none);
     input.next();
-    EXPECT_FALSE(parser(input) == nullptr);
+    EXPECT_FALSE(parser(input) == kj::none);
   }
 }
 

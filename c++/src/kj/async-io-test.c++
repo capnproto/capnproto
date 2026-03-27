@@ -1233,6 +1233,41 @@ KJ_TEST("CIDR parsing") {
   }
 }
 
+KJ_TEST("CidrRange::matches") {
+  KJ_EXPECT(CidrRange("1.2.255.255/18").matches("1.2.223.255"));
+  KJ_EXPECT(!CidrRange("1.2.255.255/19").matches("1.2.223.255"));
+  KJ_EXPECT(CidrRange("1.2.0.0/16").matches("1.2.223.255"));
+  KJ_EXPECT(!CidrRange("1.3.0.0/16").matches("1.2.223.255"));
+  KJ_EXPECT(CidrRange("1.2.223.255/32").matches("1.2.223.255"));
+  KJ_EXPECT(!CidrRange("192.168.1.1/32").matches("192.168.1.2"));
+  KJ_EXPECT(CidrRange("0.0.0.0/0").matches("1.2.223.255"));
+  KJ_EXPECT(CidrRange("0.0.0.0/0").matches("255.255.255.255"));
+  KJ_EXPECT(!CidrRange("::/0").matches("1.2.223.255"));
+
+  KJ_EXPECT(CidrRange("0102:03ff::/24").matches("0102:0304:0506:0708:090a:0b0c:0d0e:0f10"));
+  KJ_EXPECT(!CidrRange("0102:02ff::/24").matches("0102:0304:0506:0708:090a:0b0c:0d0e:0f10"));
+  KJ_EXPECT(CidrRange("0102:02ff::/23").matches("0102:0304:0506:0708:090a:0b0c:0d0e:0f10"));
+  KJ_EXPECT(CidrRange("0102:0304:0506:0708:090a:0b0c:0d0e:0f10/128")
+      .matches("0102:0304:0506:0708:090a:0b0c:0d0e:0f10"));
+  KJ_EXPECT(CidrRange("::1/128").matches("::1"));
+  KJ_EXPECT(!CidrRange("::1/128").matches("::2"));
+  KJ_EXPECT(CidrRange("::/0").matches("0102:0304:0506:0708:090a:0b0c:0d0e:0f10"));
+  KJ_EXPECT(CidrRange("::/0").matches("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"));
+  KJ_EXPECT(!CidrRange("0.0.0.0/0").matches("0102:0304:0506:0708:090a:0b0c:0d0e:0f10"));
+
+  KJ_EXPECT(CidrRange("1.2.255.255/18").matches("::ffff:1.2.223.255"));
+  KJ_EXPECT(!CidrRange("1.2.255.255/19").matches("::ffff:1.2.223.255"));
+  KJ_EXPECT(CidrRange("1.2.0.0/16").matches("::ffff:1.2.223.255"));
+  KJ_EXPECT(!CidrRange("1.3.0.0/16").matches("::ffff:1.2.223.255"));
+  KJ_EXPECT(CidrRange("1.2.223.255/32").matches("::ffff:1.2.223.255"));
+  KJ_EXPECT(CidrRange("0.0.0.0/0").matches("::ffff:1.2.223.255"));
+  KJ_EXPECT(CidrRange("::/0").matches("::ffff:1.2.223.255"));
+
+  KJ_EXPECT_THROW_MESSAGE("Invalid IP address", CidrRange("0.0.0.0/0").matches("not-an-ip"));
+  KJ_EXPECT_THROW_MESSAGE("Invalid IP address", CidrRange("0.0.0.0/0").matches(""));
+  KJ_EXPECT_THROW_MESSAGE("Invalid IP address", CidrRange("0.0.0.0/0").matches("1.2.3.4/24"));
+}
+
 bool allowed4(_::NetworkFilter& filter, StringPtr addrStr) {
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -3622,7 +3657,11 @@ KJ_TEST("Calling abortRead() after tryRead() raised exception") {
     virtual kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
       numCalls++;
       KJ_FAIL_REQUIRE("This stream never works");
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunreachable-code"
+      // clang-18 thinks this line is unnecessary
       co_return 0;
+#pragma clang diagnostic pop
     }
 
     uint numCalls = 0;

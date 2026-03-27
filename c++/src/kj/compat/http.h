@@ -1135,13 +1135,29 @@ kj::Own<HttpClient> newHttpClient(const HttpHeaderTable& responseHeaderTable,
 // subsequent requests will fail. If a response takes a long time, it blocks subsequent responses.
 // If a WebSocket is opened successfully, all subsequent requests fail.
 
+struct ConcurrencyLimitingHttpClientSettings {
+  uint maxConcurrentRequests;
+  // Maximum number of concurrent requests allowed. Additional requests are queued.
+
+  kj::Function<void(uint runningCount, uint pendingCount)> countChangedCallback;
+  // Called when a new connection is opened or enqueued and when an open connection is closed,
+  // passing the number of open and pending connections.
+
+  bool releaseSlotOnHeadersReceived = false;
+  // If true, the concurrency slot is released as soon as response headers are received, rather
+  // than when the response body is fully consumed. This allows more concurrent connections while
+  // still limiting the rate at which new requests can be made (since the slot is held until the
+  // origin responds with headers).
+};
+
+kj::Own<HttpClient> newConcurrencyLimitingHttpClient(
+    HttpClient& inner, ConcurrencyLimitingHttpClientSettings settings);
+// Creates an HttpClient that is limited to a maximum number of concurrent requests.
+
 kj::Own<HttpClient> newConcurrencyLimitingHttpClient(
     HttpClient& inner, uint maxConcurrentRequests,
     kj::Function<void(uint runningCount, uint pendingCount)> countChangedCallback);
-// Creates an HttpClient that is limited to a maximum number of concurrent requests.  Additional
-// requests are queued, to be opened only after an open request completes.  `countChangedCallback`
-// is called when a new connection is opened or enqueued and when an open connection is closed,
-// passing the number of open and pending connections.
+// Deprecated: Use the overload that takes ConcurrencyLimitingHttpClientSettings instead.
 
 kj::Own<HttpClient> newHttpClient(HttpService& service);
 kj::Own<HttpService> newHttpService(HttpClient& client);

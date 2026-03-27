@@ -81,6 +81,12 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint m
 
 TwoPartyVatNetwork::~TwoPartyVatNetwork() noexcept(false) {};
 
+static bool adaptiveFlowControlEnabled = false;
+
+void TwoPartyVatNetwork::useAdaptiveFlowControl() {
+  adaptiveFlowControlEnabled = true;
+}
+
 MessageStream& TwoPartyVatNetwork::getStream() {
   KJ_SWITCH_ONEOF(stream) {
     KJ_CASE_ONEOF(s, MessageStream*) {
@@ -255,7 +261,11 @@ private:
 };
 
 kj::Own<RpcFlowController> TwoPartyVatNetwork::newStream() {
-  return RpcFlowController::newVariableWindowController(*this);
+  if (adaptiveFlowControlEnabled) {
+    return RpcFlowController::newAdaptiveController(getWindow(), clock);
+  } else {
+    return RpcFlowController::newVariableWindowController(*this);
+  }
 }
 
 size_t TwoPartyVatNetwork::getWindow() {

@@ -1,3 +1,0 @@
-# dummy WORKSPACE file – capnproto itself already uses bzlmod, but downstream projects still rely on
-# importing it using workspace logic.
-workspace(name = "capnp-cpp")

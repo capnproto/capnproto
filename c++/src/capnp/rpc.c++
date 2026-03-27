@@ -4854,6 +4854,305 @@ private:
   WindowFlowController inner;
 };
 
+// =======================================================================================
+// AdaptiveFlowController
+//
+// Estimates the bandwidth-delay product (BDP) of a stream by observing send/ack timestamps,
+// and dynamically adjusts the window size to match. The window is set to the estimated BDP
+// multiplied by a growth factor, so that the sender always pushes slightly more than the
+// estimated capacity -- naturally probing for increased bandwidth.
+//
+// The algorithm works in two phases:
+// - Startup: The window is allowed to double each RTT, enabling
+//   rapid discovery of available bandwidth. Startup ends when the window stops growing
+//   meaningfully for STARTUP_EXIT_ROUNDS consecutive RTT rounds.
+// - Steady state: The window grows by at most 5/4 per RTT and shrinks by at most 7/8 per
+//   RTT, providing stability.
+
+class AdaptiveFlowController final: public RpcFlowController, private kj::TaskSet::ErrorHandler {
+public:
+  AdaptiveFlowController(size_t initialWindowSize, const kj::MonotonicClock& clock)
+      : window(initialWindowSize), clock(clock), tasks(*this) {
+    state.init<Running>();
+  }
+
+  kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
+    auto size = message->sizeInWords() * sizeof(capnp::word);
+    maxMessageSize = kj::max(size, maxMessageSize);
+
+    auto now = clock.now();
+
+    // We are REQUIRED to send the message NOW to maintain correct ordering.
+    message->send();
+
+    bytesInFlight += size;
+    bool windowFull = !isReady();
+
+    // Capture the BDP-estimation snapshot for this send.
+    SendSnapshot snapshot {
+      .sentTime = now,
+      .size = size,
+      .deliveredAtSend = delivered,
+      .deliveredTimeAtSend = deliveredTime,
+      .windowAtSend = window,
+      .windowFullAtSend = windowFull,
+    };
+
+    tasks.add(ack.then([this, snapshot]() {
+      onAck(snapshot);
+    }));
+
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedSends, Running) {
+        if (!windowFull) {
+          return kj::READY_NOW;
+        } else {
+          auto paf = kj::newPromiseAndFulfiller<void>();
+          blockedSends.add(kj::mv(paf.fulfiller));
+          return kj::mv(paf.promise);
+        }
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        return kj::cp(exception);
+      }
+    }
+    KJ_UNREACHABLE;
+  }
+
+  kj::Promise<void> waitAllAcked() override {
+    KJ_IF_SOME(q, state.tryGet<Running>()) {
+      if (!q.empty()) {
+        auto paf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
+        emptyFulfiller = kj::mv(paf.fulfiller);
+        return kj::mv(paf.promise);
+      }
+    }
+    return tasks.onEmpty();
+  }
+
+private:
+  struct SendSnapshot {
+    // Records the state of the world at the time that a particular message was sent. We hold onto
+    // this information until the message is acked, then use it to update the window size.
+
+    kj::TimePoint sentTime = kj::origin<kj::TimePoint>();
+    // Time when tnhis message was sent.
+
+    size_t size = 0;
+    // Size of the message in bytes.
+
+    uint64_t deliveredAtSend = 0;
+    kj::Maybe<kj::TimePoint> deliveredTimeAtSend;
+    // At the time of send, what was the time of the last ack (if any), and the total bytes acked?
+    // We use this to estimate the bandwidth observed between that time and when this message is
+    // acked (one RTT).
+
+    size_t windowAtSend = 0;
+    // What was the window size when the message was sent.
+
+    bool windowFullAtSend = false;
+    // Was the window full when this message was sent? If not, then the application isn't pushing
+    // enough bytes to fully utilize the window, so we should assume any bandwidth measurement is
+    // application-constrained and we should not reduce the window based on it.
+  };
+
+  // --- Window and tracking state ---
+  size_t window;
+  const kj::MonotonicClock& clock;
+  uint64_t bytesInFlight = 0;
+  size_t maxMessageSize = 0;
+
+  // --- BDP estimation state ---
+  uint64_t delivered = 0;                       // Total bytes acked so far.
+  kj::Maybe<kj::TimePoint> deliveredTime;       // Time of most recent ack.
+
+  struct FirstAckInfo {
+    kj::TimePoint time;
+    uint64_t delivered;
+  };
+  kj::Maybe<FirstAckInfo> firstAck;      // Recorded on the very first ack.
+
+  kj::Duration minRtt = 365 * kj::DAYS;  // Minimum observed RTT (init to effectively infinity).
+
+  // --- Startup exit tracking ---
+  bool inStartupPhase = true;
+  uint roundsWithoutIncrease = 0;
+  size_t lastRoundWindow = 0;
+  kj::Maybe<kj::TimePoint> roundStartTime;      // None until first round is established.
+
+  // --- Blocking/error state ---
+  typedef kj::Vector<kj::Own<kj::PromiseFulfiller<void>>> Running;
+  kj::OneOf<Running, kj::Exception> state;
+
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Promise<void>>>> emptyFulfiller;
+
+  kj::TaskSet tasks;
+
+  static constexpr size_t MAX_WINDOW = 1024 * 1024 * 1024;
+  static constexpr size_t MIN_WINDOW = 64 * 1024;
+  static constexpr uint STARTUP_EXIT_ROUNDS = 3;
+
+  // Apply the per-RTT growth factor: 2x during startup, 5/4 in steady state.
+  inline uint64_t applyGrowth(uint64_t value) {
+    if (inStartupPhase) {
+      return applyStartupGrowth(value);
+    } else {
+      return applySteadyGrowth(value);
+    }
+  }
+
+  static inline uint64_t applyStartupGrowth(uint64_t value) {
+    return value * 2;
+  }
+  static inline uint64_t applySteadyGrowth(uint64_t value) {
+    return value * 5 / 4;
+  }
+
+  // Apply the per-RTT decay factor: 7/8.
+  static inline uint64_t applyDecay(uint64_t value) {
+    return value * 7 / 8;
+  }
+
+  void onAck(const SendSnapshot& snapshot) {
+    auto ackTime = clock.now();
+
+    // Update delivery tracking.
+    delivered += snapshot.size;
+    deliveredTime = ackTime;
+    bytesInFlight -= snapshot.size;
+
+    // Update RTT estimate.
+    auto rtt = ackTime - snapshot.sentTime;
+    minRtt = kj::min(minRtt, rtt);
+
+    // Update bandwidth estimate and window.
+    KJ_IF_SOME(fa, firstAck) {
+      // We've seen at least one ack before, so we can estimate bandwidth.
+      kj::TimePoint baseTime = fa.time;
+      uint64_t baseDelivered = fa.delivered;
+
+      KJ_IF_SOME(dt, snapshot.deliveredTimeAtSend) {
+        // Normal case: use the delivery state at send time as the baseline.
+        baseTime = dt;
+        baseDelivered = snapshot.deliveredAtSend;
+      }
+      // Otherwise, this write was sent before any acks had been received, but wasn't the
+      // very first write. Use the first ack as baseline (already set above).
+
+      // Use microseconds to avoid overflow while keeping sufficient precision. The division
+      // by intervalUs is kept last so that the intermediate product (bytes * microseconds)
+      // stays in integer range without losing significant precision.
+      uint64_t intervalUs = (ackTime - baseTime) / kj::MICROSECONDS;
+      uint64_t minRttUs = minRtt / kj::MICROSECONDS;
+      uint64_t bytesDelivered = delivered - baseDelivered;
+
+      if (intervalUs > 0) {
+        uint64_t newWindow;
+        if (bytesDelivered > MAX_WINDOW * 2) {
+          // If bytesDelivered is insanely high we might overflow. In this case we presumably would
+          // end up clamping to MAX_WINDOW anyway so just use that.
+          newWindow = MAX_WINDOW;
+        } else {
+          // New window = estimated BDP * growth factor.
+          //   BDP = bandwidth * RTT = bytesDelivered / interval * minRtt
+          newWindow = applyGrowth(bytesDelivered * minRttUs) / intervalUs;
+        }
+
+        // Growth collar: window can grow by at most the growth factor per RTT.
+        newWindow = kj::min(newWindow, applyGrowth(snapshot.windowAtSend));
+
+        if (snapshot.windowFullAtSend) {
+          // Decay collar: window can shrink by at most the decay factor per RTT.
+          newWindow = kj::max(newWindow, applyDecay(snapshot.windowAtSend));
+        } else {
+          // App-limited: don't shrink the window -- we can't infer the pipe capacity is lower
+          // when we weren't saturating it. We clamp to this->window rather than windowAtSend
+          // so as not to undo previous shrinkage when alternating between saturated and
+          // unsaturated sends.
+          newWindow = kj::max(newWindow, window);
+        }
+
+        // Clamp to min/max.
+        window = kj::max(kj::min(newWindow, MAX_WINDOW), MIN_WINDOW);
+
+        // Check startup exit: has the window stopped growing meaningfully?
+        if (inStartupPhase) {
+          bool newRound = true;
+          KJ_IF_SOME(rst, roundStartTime) {
+            newRound = (snapshot.sentTime >= rst);
+          }
+
+          if (newRound) {
+            if (window > applySteadyGrowth(lastRoundWindow)) {
+              // Significant growth this round; reset the plateau counter.
+              roundsWithoutIncrease = 0;
+            } else {
+              // Growth has stalled.
+              if (++roundsWithoutIncrease >= STARTUP_EXIT_ROUNDS) {
+                inStartupPhase = false;
+              }
+            }
+
+            // Advance to next round.
+            roundStartTime = ackTime;
+            lastRoundWindow = window;
+          }
+        }
+      }
+    } else {
+      // First ack ever. Record it as a baseline for future bandwidth calculations.
+      // We can't estimate bandwidth from a single ack, so we skip the window update.
+      firstAck = FirstAckInfo { ackTime, delivered };
+    }
+
+    // Release blocked senders if the window now has room.
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedSends, Running) {
+        if (isReady()) {
+          for (auto& fulfiller: blockedSends) {
+            fulfiller->fulfill();
+          }
+          blockedSends.clear();
+        }
+
+        KJ_IF_SOME(f, emptyFulfiller) {
+          if (bytesInFlight == 0) {
+            f->fulfill(tasks.onEmpty());
+          }
+        }
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        // A previous call failed, but this one -- which was already in-flight at the time --
+        // ended up succeeding. Nothing much we can do about it here.
+      }
+    }
+  }
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(blockedSends, Running) {
+        // Fail out all pending sends.
+        for (auto& fulfiller: blockedSends) {
+          fulfiller->reject(kj::cp(exception));
+        }
+        // Fail out all future sends.
+        state = kj::mv(exception);
+      }
+      KJ_CASE_ONEOF(exception, kj::Exception) {
+        // ignore redundant exception
+      }
+    }
+  }
+
+  bool isReady() {
+    // We extend the window by maxMessageSize to avoid a pathological situation when a message
+    // is larger than the window size. Otherwise, after sending that message, we would end up
+    // not sending any others until the ack was received, wasting a round trip's worth of
+    // bandwidth.
+    return bytesInFlight < window + maxMessageSize;
+  }
+};
+
 }  // namespace
 
 kj::Own<RpcFlowController> RpcFlowController::newFixedWindowController(size_t windowSize) {
@@ -4861,6 +5160,10 @@ kj::Own<RpcFlowController> RpcFlowController::newFixedWindowController(size_t wi
 }
 kj::Own<RpcFlowController> RpcFlowController::newVariableWindowController(WindowGetter& getter) {
   return kj::heap<WindowFlowController>(getter);
+}
+kj::Own<RpcFlowController> RpcFlowController::newAdaptiveController(
+    size_t initialWindowSize, const kj::MonotonicClock& clock) {
+  return kj::heap<AdaptiveFlowController>(initialWindowSize, clock);
 }
 
 bool IncomingRpcMessage::isShortLivedRpcMessage(AnyPointer::Reader body) {

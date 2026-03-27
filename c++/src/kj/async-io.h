@@ -978,7 +978,7 @@ struct AsyncIoContext {
 #endif
 };
 
-AsyncIoContext setupAsyncIo();
+AsyncIoContext setupAsyncIo(kj::Maybe<EventLoopObserver&> observer = kj::none);
 // Convenience method which sets up the current thread with everything it needs to do async I/O.
 // The returned objects contain an `EventLoop` which is wrapping an appropriate `EventPort` for
 // doing I/O on the host system, so everything is ready for the thread to start making async calls

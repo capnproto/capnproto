@@ -67,7 +67,7 @@ protected:
   // Allow subclasses to have move constructor / assignment.
   ExceptionOrValue() = default;
   ExceptionOrValue(ExceptionOrValue&& other) = default;
-  ExceptionOrValue& operator=(ExceptionOrValue&& other) = default;
+  ExceptionOrValue& operator=(ExceptionOrValue&&) = delete;
 };
 
 template <typename T>
@@ -77,7 +77,14 @@ public:
   ExceptionOr(T&& value): value(kj::mv(value)) {}
   ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
   ExceptionOr(ExceptionOr&&) = default;
-  ExceptionOr& operator=(ExceptionOr&&) = default;
+
+  inline ExceptionOr& operator=(ExceptionOr&& other) {
+    KJ_IREQUIRE(value == kj::none && exception == kj::none,
+        "ExceptionOr must be empty to be assigned to.");
+    value.emplaceInit(kj::mv(other.value));
+    exception.emplaceInit(kj::mv(other.exception));
+    return *this;
+  }
 
   Maybe<T> value;
 };
@@ -141,87 +148,6 @@ private:
 struct alignas(void*) PromiseArena {
   // Space in which a chain of promises may be allocated. See PromiseDisposer.
   byte bytes[1024];
-};
-
-class Event: private AsyncObject {
-  // An event waiting to be executed.  Not for direct use by applications -- promises use this
-  // internally.
-
-public:
-  Event(SourceLocation location);
-  Event(kj::EventLoop& loop, SourceLocation location);
-  ~Event() noexcept;
-  KJ_DISALLOW_COPY_AND_MOVE(Event);
-
-  void armDepthFirst();
-  // Enqueue this event so that `fire()` will be called from the event loop soon.
-  //
-  // Events scheduled in this way are executed in depth-first order:  if an event callback arms
-  // more events, those events are placed at the front of the queue (in the order in which they
-  // were armed), so that they run immediately after the first event's callback returns.
-  //
-  // Depth-first event scheduling is appropriate for events that represent simple continuations
-  // of a previous event that should be globbed together for performance.  Depth-first scheduling
-  // can lead to starvation, so any long-running task must occasionally yield with
-  // `armBreadthFirst()`.  (Promise::then() uses depth-first whereas evalLater() uses
-  // breadth-first.)
-  //
-  // To use breadth-first scheduling instead, use `armBreadthFirst()`.
-
-  void armBreadthFirst();
-  // Like `armDepthFirst()` except that the event is placed at the end of the queue.
-
-  void armLast();
-  // Enqueues this event to happen after all other events have run to completion and there is
-  // really nothing left to do except wait for I/O.
-
-  void armWhenWouldSleep();
-  // Enqueues this event to a separate queue of events which should be promoted
-
-  bool isNext();
-  // True if the Event has been armed and is next in line to be fired. This can be used after
-  // calling PromiseNode::onReady(event) to determine if a promise being waited is immediately
-  // ready, in which case continuations may be optimistically run without returning to the event
-  // loop. Note that this optimization is only valid if we know that we would otherwise immediately
-  // return to the event loop without running more application code. So this turns out to be useful
-  // in fairly narrow circumstances, chiefly when a coroutine is about to suspend, but discovers it
-  // doesn't need to.
-  //
-  // Returns false if the event loop is not currently running. This ensures that promise
-  // continuations don't execute except under a call to .wait().
-
-  void disarm() noexcept;
-  // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
-  // implicitly.)
-
-  virtual void traceEvent(TraceBuilder& builder) = 0;
-  // Build a trace of the callers leading up to this event. `builder` will be populated with
-  // "return addresses" of the promise chain waiting on this event. The return addresses may
-  // actually be the addresses of lambdas passed to .then(), but in any case, feeding them into
-  // addr2line should produce useful source code locations.
-  //
-  // `traceEvent()` may be called from an async signal handler while `fire()` is executing. It
-  // must not allocate nor take locks.
-
-  String traceEvent();
-  // Helper that builds a trace and stringifies it.
-
-protected:
-  virtual Maybe<Own<Event>> fire() = 0;
-  // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
-  // caller.  This is the only way that an event can delete itself as a result of firing, as
-  // doing so from within fire() will throw an exception.
-
-private:
-  friend class kj::EventLoop;
-  EventLoop& loop;
-  Event* next;
-  Event** prev;
-  bool firing = false;
-
-  static constexpr uint MAGIC_LIVE_VALUE = 0x1e366381u;
-  uint live = MAGIC_LIVE_VALUE;
-  SourceLocation location;
 };
 
 class PromiseArenaMember {
@@ -337,6 +263,8 @@ protected:
     inline void traceEvent(TraceBuilder& builder) {
       if (event != nullptr && !builder.full()) event->traceEvent(builder);
     }
+
+    bool armed() const;
 
   private:
     Event* event = nullptr;
@@ -2212,13 +2140,105 @@ PromiseCrossThreadFulfillerPair<T> Executor::newPromiseAndCrossThreadFulfiller()
 
 namespace kj::_ {
 
-template <typename T> class Coroutine;
+template <typename T, typename Allocator> class Coroutine;
 
 template <typename T>
 concept NoWaitScope = !isSameType<Decay<T>, WaitScope>();
 // Define a Concept to use in our `coroutine_traits` specialization to validate allowable coroutine
 // parameter types.
 // TODO(cleanup): This can be removed by adding KJ_DISALLOW_AS_COROUTINE_PARAM to WaitScope.
+
+struct DefaultCoroutineAllocator;
+
+class CoroutineAllocator {
+  // Marker class for all coroutine allocators.
+  // Custom allocators need to publicly extend `CoroutineAllocator` and implement following methods:
+  // - `void* alloc(std::size_t frameSize)`
+  // - `static void free(void* framePtr, std::size_t frameSize)`
+  // - `static void free(void* framePtr)` - this is needed for older compilers only (slower).
+  //
+  // Notice that allocator instance is not available in `free()` - the allocator needs to recover it
+  // itself if necessary.
+  //
+  // To use custom allocator, pass a reference to it to the coroutine function as any parameter.
+  // Keep passing the allocator reference around if you want to keep using the allocator for
+  // inner coroutines.
+  // If allocator parameter is not present, then `DefaultCoroutineAllocator` is used.
+
+private:
+  // Implementations of public meta-programming api.
+
+  template <typename X>
+  requires (!kj::canConvert<X, CoroutineAllocator>())
+  static constexpr std::nullptr_t tryGetAllocator(X&&) { return nullptr; }
+
+  template <typename X>
+  requires (kj::canConvert<X, CoroutineAllocator>())
+  static constexpr X* tryGetAllocator(X& alloc) { return &alloc; }
+
+  template <typename... Args>
+  struct AllocatorTypeHelper {
+    using Type = DefaultCoroutineAllocator;
+  };
+
+  template <typename First, typename... Rest>
+  struct AllocatorTypeHelper<First, Rest...>:
+      AllocatorTypeHelper<Rest...> {};
+
+  template <typename First, typename... Rest>
+  requires (kj::canConvert<First, CoroutineAllocator>())
+  struct AllocatorTypeHelper<First, Rest...> {
+    using Type = Decay<First>;
+  };
+
+public:
+  // Meta-programming api to detect and extract allocator arguments.
+
+  template <typename... Args>
+  static constexpr bool hasAllocator = (kj::canConvert<Args, CoroutineAllocator &>() || ...);
+  // Check if any of the argument is an allocator reference.
+
+  template <typename... Args>
+  using AllocatorType = typename AllocatorTypeHelper<Args...>::Type;
+  // Extract exact allocator type, returns `DefaultCoroutineAllocator` if no allocator argument
+  // is present.
+
+  template <typename First, typename... Rest>
+  static constexpr auto& getAllocator(First&& first, Rest&&... rest) {
+    // Extract allocator argument, assumes `hasAllocator` is true.
+
+    if constexpr (kj::canConvert<First, CoroutineAllocator>()) {
+      return first;
+    } else {
+      static_assert(sizeof...(Rest) > 0, "No allocator found in arguments");
+      return getAllocator(kj::fwd<Rest>(rest)...);
+    }
+  }
+
+};
+
+struct DefaultCoroutineAllocator: public CoroutineAllocator {
+  // Default coroutine allocator.
+  // Used when now allocator parameter is specified in coroutine declaration.
+  // Can be instantiated and passed as a reference as well.
+
+  inline static void* alloc(std::size_t frameSize) {
+    // Note: new[]/delete[] are measurably slower.
+    return ::operator new(frameSize);
+  }
+
+  inline static void free(void* framePtr, std::size_t frameSize) {
+#if defined(__cpp_sized_deallocation)
+    ::operator delete(framePtr, frameSize);
+#else
+    ::operator delete(framePtr);
+#endif
+  }
+
+  inline static void free(void* framePtr) {
+    ::operator delete(framePtr);
+  }
+};
 
 }  // namespace kj::_
 
@@ -2244,7 +2264,7 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
   // A second note: This has the reasonable side effect of making it impossible for us to write
   // WaitScope member coroutines.
 
-  using promise_type = kj::_::Coroutine<T>;
+  using promise_type = kj::_::Coroutine<T, kj::_::CoroutineAllocator::AllocatorType<Args...>>;
   // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
   // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
   // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
@@ -2262,20 +2282,19 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
 
 namespace kj::_ {
 
-namespace stdcoro = KJ_COROUTINE_STD_NAMESPACE;
+namespace stdcoro = ::KJ_COROUTINE_STD_NAMESPACE;
 
 class CoroutineBase: public PromiseNode,
                      public Event {
 public:
-  CoroutineBase(stdcoro::coroutine_handle<> coroutine, ExceptionOrValue& resultRef,
-                SourceLocation location);
+  CoroutineBase(stdcoro::coroutine_handle<> coroutine, SourceLocation location);
   ~CoroutineBase() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(CoroutineBase);
   void destroy() override;
 
   auto initial_suspend() { return stdcoro::suspend_never(); }
   auto final_suspend() noexcept {
-#if _MSC_VER && !defined(__clang__)
+#if !defined(__clang__)
     // See comment at `finalSuspendCalled`'s definition.
     finalSuspendCalled = true;
 #endif
@@ -2289,8 +2308,6 @@ public:
   //
   // The final suspension point is useful to delay deallocation of the coroutine frame to match the
   // lifetime of the enclosing promise.
-
-  void unhandled_exception();
 
   // Called from Awaiter implementations to integrate with async tracing during suspension.
   void setPromiseNodeForTrace(OwnPromiseNode& node) {
@@ -2309,11 +2326,9 @@ public:
   }
 
 protected:
-  bool isWaiting() { return waiting; }
-  void scheduleResumption() {
-    onReadyEvent.arm();
-    waiting = false;
-  }
+  inline void scheduleResumption() { onReadyEvent.arm(); }
+
+  void unhandledExceptionImpl(ExceptionOrValue& resultRef);
 
 private:
   // -------------------------------------------------------
@@ -2329,22 +2344,23 @@ private:
   void traceEvent(TraceBuilder& builder) override;
 
   stdcoro::coroutine_handle<> coroutine;
-  ExceptionOrValue& resultRef;
 
   OnReadyEvent onReadyEvent;
-  bool waiting = true;
 
   bool hasSuspendedAtLeastOnce = false;
 
-#if _MSC_VER && !defined(__clang__)
+#if !defined(__clang__)
   bool finalSuspendCalled = false;
-  // MSVC erroneously reports the coroutine as done (that is, `coroutine.done()` returns true)
+  // MSVC and GCC erroneously report the coroutine as done (that is, `coroutine.done()` returns true)
   // seemingly as soon as `return_value()`/`return_void()` are called. This matters in our
   // implementation of `unhandled_exception()`, which must arrange to propagate exceptions during
   // coroutine frame unwind via the returned promise, even if `return_value()`/`return_void()` have
   // already been called. To prove that our assumptions are correct in that function, we want to be
   // able to assert that `final_suspend()` has not yet been called. This boolean hack allows us to
   // preserve that assertion.
+  inline bool isDone() const { return finalSuspendCalled; }
+#else
+  inline bool isDone() const { return coroutine.done(); }
 #endif
 
   Maybe<OwnPromiseNode&> promiseNodeForTrace;
@@ -2369,24 +2385,28 @@ class CoroutineMixin;
 // CRTP mixin, covered later.
 
 template <typename T>
+class PromiseAwaiter;
+template <typename T>
+class ForkedPromiseAwaiter;
+
+template <typename T, typename Allocator>
 class Coroutine final: public CoroutineBase,
-                       public CoroutineMixin<Coroutine<T>, T> {
+                       public CoroutineMixin<Coroutine<T, Allocator>, T> {
   // The standard calls this the `promise_type` object. We can call this the "coroutine
   // implementation object" since the word promise means different things in KJ and std styles. This
   // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
   // is later fulfilled. We also fill in a few lifetime-related details.
   //
-  // The implementation object is also where we can customize memory allocation of coroutine frames,
-  // by implementing a member `operator new(size_t, Args...)` (same `Args...` as in
-  // coroutine_traits).
+  // The type is statically parametrized by an `Allocator` to enable custom coroutine allocators
+  // without any overhead. See `CoroutineAllocator` for more details.
 
 public:
-  using Handle = stdcoro::coroutine_handle<Coroutine<T>>;
+  using Handle = stdcoro::coroutine_handle<Coroutine<T, Allocator>>;
 
   Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
 
   Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
-      : CoroutineBase(handle, result, location) {}
+      : CoroutineBase(handle, location) {}
 
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
@@ -2397,41 +2417,51 @@ public:
   }
 
   template <typename U>
-  U&& await_transform(U&& awaitable) {
-    // Our `await_transform()` implementation is where we can instrument awaitables, or provide
-    // custom awaiter implementations, if we need to. Historically, this _is_ where we created
-    // awaiter implementations (that is, the classes with `await_ready()`, `await_suspend()`, and
-    // `await_resume()` member functions), because this was the only place we knew the enclosing
-    // `Coroutine<T>` type. Nowadays, `await_suspend()` can be a template, allowing us to infer
-    // the enclosing coroutine type that way.
-    //
-    // We cannot get rid of `await_transform()`, because downstream projects can (and do) implement
-    // custom coroutine implementations which wrap this implementation, and they use
-    // `await_transform()` to pass unrecognized awaitables through to us -- and if an
-    // `await_transform()` implementation exists for one awaitable types, then the compiler requires
-    // that it exist for all awaitable types `co_await`ed from within this coroutine.
-    //
-    // So, we just pass through all awaitables unchanged for now, deferring to their
-    // `operator co_await` implementations to instantiate the awaiters.
-    //
-    // TODO(someday): We could implement an `await_transform()` overload which wraps awaitables (e.g.
-    //   Promise, ForkedPromise, and whatever else comes along in the future) in a struct containing
-    //   the awaitable plus a reference to our CoroutineBase. The awaitables' `co_await`
-    //   implementation could accept this struct and pass the CoroutineBase reference to the actual
-    //   awaiter implementation's constructor (e.g. PromiseAwaiter), which would give us access to
-    //   the coroutine in `await_ready()`. This would allow us to decide whether to apply the
-    //   immediately-ready-promise optimization earlier, before suspension.
-    return kj::fwd<U>(awaitable);
+  PromiseAwaiter<U> await_transform(Promise<U>& promise) {
+    return PromiseAwaiter<U>(*this, PromiseNode::from(kj::mv(promise)));
+  }
+
+  template <typename U>
+  PromiseAwaiter<U> await_transform(Promise<U>&& promise) {
+    return PromiseAwaiter<U>(*this, PromiseNode::from(kj::mv(promise)));
+  }
+
+  template <typename U>
+  ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>& promise) {
+    return ForkedPromiseAwaiter<U>(*this, promise);
   }
 
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
-    if (isWaiting()) {
-      result = kj::mv(value);
-      scheduleResumption();
+    result = kj::mv(value);
+    scheduleResumption();
+  }
+
+  void unhandled_exception() { unhandledExceptionImpl(result); }
+
+
+  template <typename... Args>
+  inline void* operator new(std::size_t frameSize, Args&&... args) {
+    if constexpr (CoroutineAllocator::hasAllocator<Args...>) {
+      return CoroutineAllocator::getAllocator(args...).alloc(frameSize);
+    } else {
+      return Allocator::alloc(frameSize);
     }
   }
+
+
+#if defined(__cpp_sized_deallocation)
+  inline void operator delete(void* framePtr, size_t frameSize) {
+    // Deallocates coroutine frame.
+    Allocator::free(framePtr, frameSize);
+  }
+#else
+  inline void operator delete(void* framePtr) {
+    // Deallocates coroutine frame.
+    Allocator::free(framePtr);
+  }
+#endif
 
 private:
   // -------------------------------------------------------
@@ -2465,11 +2495,10 @@ public:
 
 class PromiseAwaiterBase {
 public:
-  explicit PromiseAwaiterBase(OwnPromiseNode&& node);
+  explicit PromiseAwaiterBase(CoroutineBase& coroutine, OwnPromiseNode&& node);
 
-  PromiseAwaiterBase(PromiseAwaiterBase&&);
   ~PromiseAwaiterBase() noexcept(false);
-  KJ_DISALLOW_COPY(PromiseAwaiterBase);
+  KJ_DISALLOW_COPY_AND_MOVE(PromiseAwaiterBase);
 
   bool await_ready() const { return false; }
   // This could return "`node->get()` is safe to call" instead, which would make suspension-less
@@ -2480,18 +2509,13 @@ public:
 
 protected:
   void awaitResumeImpl(ExceptionOrValue& result, void* awaitedAt);
-  bool awaitSuspendImpl(CoroutineBase& coroutine);
+  bool awaitSuspendImpl();
 
 private:
-  UnwindDetector unwindDetector;
-  OwnPromiseNode node;
+  CoroutineBase& coroutine;
+  // Reference to the enclosing coroutine.
 
-  Maybe<CoroutineBase&> maybeCoroutine;
-  // If we do suspend waiting for our wrapped promise, we store a reference to `node` in our
-  // enclosing Coroutine for tracing purposes. To guard against any edge cases where an async stack
-  // trace is generated when a PromiseAwaiter was destroyed without Coroutine::fire() having been
-  // called, we need our own reference to the enclosing Coroutine. (I struggle to think up any such
-  // scenarios, but perhaps they could occur when destroying a suspended coroutine.)
+  OwnPromiseNode node;
 };
 
 template <typename T>
@@ -2503,7 +2527,8 @@ class PromiseAwaiter: public PromiseAwaiterBase {
   // awaited promise result.
 
 public:
-  explicit PromiseAwaiter(OwnPromiseNode&& node): PromiseAwaiterBase(kj::mv(node)) {}
+  explicit PromiseAwaiter(CoroutineBase& coroutine, OwnPromiseNode&& node)
+      : PromiseAwaiterBase(coroutine, kj::mv(node)) {}
 
   KJ_NOINLINE T await_resume() {
     // This is marked noinline in order to ensure KJ_CALLING_ADDRESS() is accurate for stack
@@ -2517,9 +2542,8 @@ public:
     return T(kj::mv(*value));
   }
 
-  template <typename U> requires (canConvert<U&, CoroutineBase&>())
-  bool await_suspend(stdcoro::coroutine_handle<U> handle) {
-    return awaitSuspendImpl(handle.promise());
+  bool await_suspend(stdcoro::coroutine_handle<> handle) {
+    return awaitSuspendImpl();
   }
 
 private:
@@ -2531,8 +2555,8 @@ private:
 template <typename T>
 class ForkedPromiseAwaiter {
 public:
-  ForkedPromiseAwaiter(ForkedPromise<T>& promise)
-      : node(promise), awaiter(OwnPromiseNode(&node)) { }
+  ForkedPromiseAwaiter(CoroutineBase& coroutine, ForkedPromise<T>& promise)
+      : node(promise), awaiter(coroutine, OwnPromiseNode(&node)) { }
 
   template <typename U>
   inline bool await_suspend(stdcoro::coroutine_handle<U> coroutine) {
@@ -2549,41 +2573,6 @@ private:
 };
 
 }  // namespace kj::_
-
-namespace kj {
-
-// `operator co_await` definitions for Promise and ForkedPromise
-// ---------------------------------------------------------
-//
-// These operators are called when someone writes `co_await promise`, where `promise` is a
-// kj::Promise<T>. We return an Awaiter<T>, which implements coroutine suspension and resumption in
-// terms of the KJ async event system.
-//
-// `operator co_await` is only one of two hooks we could implement to make Promises awaitable: the
-// other one is the `await_transform()` member function on `kj::_::Coroutine<U>`. We do implement
-// that function, but all it does is pass through awaitables unchanged, which are then picked up by
-// these `co_await` operators.
-//
-// We could someday change our `await_transform()` implementation to return some sort of struct of
-// both the Promise plus a reference to the enclosing Coroutine. Our `co_await` implementations
-// could then use this information to instantiate an Awaiter with immediate access to the coroutine,
-// which would facilitate simpler code.
-
-template <typename T>
-_::PromiseAwaiter<T> operator co_await(Promise<T>& promise) {
-  return _::PromiseAwaiter<T>(_::PromiseNode::from(kj::mv(promise)));
-}
-template <typename T>
-_::PromiseAwaiter<T> operator co_await(Promise<T>&& promise) {
-  return _::PromiseAwaiter<T>(_::PromiseNode::from(kj::mv(promise)));
-}
-
-template <typename T>
-_::ForkedPromiseAwaiter<T> operator co_await(ForkedPromise<T>& promise) {
-  return _::ForkedPromiseAwaiter<T>(promise);
-}
-
-}  // namespace kj
 
 namespace kj::_ {
 

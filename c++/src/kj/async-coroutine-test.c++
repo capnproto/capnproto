@@ -23,6 +23,7 @@
 #include <kj/array.h>
 #include <kj/compat/http.h>
 #include <kj/debug.h>
+#include <kj/exception.h>
 #include <kj/test.h>
 
 namespace kj {
@@ -280,36 +281,104 @@ KJ_TEST("Coroutines can be canceled while suspended") {
   KJ_EXPECT(unwind == 3);
 }
 
-kj::Promise<void> deferredThrowCoroutine(kj::Promise<void> awaitMe) {
-  KJ_DEFER(kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind")));
+Promise<void> deferredThrowCoroutine(Promise<void> awaitMe, StringPtr message) {
+  KJ_DEFER(throwFatalException(
+      Exception(Exception::Type::FAILED, __FILE__, __LINE__, str(message))));
   co_await awaitMe;
   co_return;
 };
 
-KJ_TEST("Exceptions during suspended coroutine frame-unwind propagate via destructor") {
-  EventLoop loop;
-  WaitScope waitScope(loop);
-
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-    (void)deferredThrowCoroutine(kj::NEVER_DONE);
-  }));
-
-  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
-};
-
-kj::Promise<void> tryCatchCoAwaitCoroutine(kj::Promise<void> awaitMe) {
-  try {
-    co_await awaitMe;
-  } catch (...) { }
-};
-
-KJ_TEST("Exceptions during suspended coroutine frame-unwind destructor can be caught") {
+KJ_TEST("Exceptions during suspended coroutine frame-unwind do not propagate via destructor") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
   auto exception = kj::runCatchingExceptions([&]() {
-    auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE);
-    (void)tryCatchCoAwaitCoroutine(kj::mv(coro1));
+    (void)deferredThrowCoroutine(kj::NEVER_DONE, "thrown during unwind");
+  });
+
+  KJ_EXPECT(exception == kj::none);
+};
+
+kj::Promise<void> tryCatchCoAwaitCoroutine(kj::Promise<void> awaitMe, bool* resolved, bool* caught) {
+  try {
+    co_await awaitMe;
+    *resolved = true;
+  } catch (...) { 
+    *caught = true;
+  }
+};
+
+struct DeferredThrowPromiseNode: public _::PromiseNode {
+  // A promise that never resolves but throws exception in its destructor.
+
+  virtual ~DeferredThrowPromiseNode() noexcept(false) {
+    unwindDetector.catchExceptionsIfUnwinding([]() {
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "~DeferredThrowPromiseNode()"));
+    });
+  }
+
+  void onReady(_::Event* event) noexcept override {}
+  void get(_::ExceptionOrValue& output) noexcept override { KJ_UNREACHABLE; };
+  void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {};
+  void destroy() override { _::freePromise(this); }
+
+  UnwindDetector unwindDetector;
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind coro destructor can not be caught") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool caught = false;
+  bool resolved = false;
+  auto exception = kj::runCatchingExceptions([&]() {
+    auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE, "thrown during unwind");
+    (void)tryCatchCoAwaitCoroutine(kj::mv(coro1), &resolved, &caught);
+  });
+
+  KJ_EXPECT(exception == kj::none);
+  KJ_EXPECT(!resolved);
+  // you can't catch what you do not propagate
+  KJ_EXPECT(!caught);
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind node destructor can not be caught") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool caught = false;
+  bool resolved = false;
+  auto exception = kj::runCatchingExceptions([&]() {
+    auto promise = _::PromiseNode::to<Promise<void>>(_::allocPromise<DeferredThrowPromiseNode>());
+    (void)tryCatchCoAwaitCoroutine(kj::mv(promise), &resolved, &caught);
+  });
+
+  KJ_EXPECT(exception == kj::none);
+  // exceptions are ignored during cancellation
+  KJ_EXPECT(!resolved);
+  KJ_EXPECT(!caught);
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind do not propagate via destructor II") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = kj::runCatchingExceptions([&]() {
+    auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE, "thrown during unwind");
+    (void)deferredThrowCoroutine(kj::mv(coro1), "thrown during unwind 2");
+  });
+
+  KJ_EXPECT(exception == kj::none);
+};
+
+KJ_TEST("Exceptions during suspended coroutine frame-unwind do not propagate via destructor III") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto exception = kj::runCatchingExceptions([&]() {
+    auto coro1 = deferredThrowCoroutine(kj::NEVER_DONE, "thrown during unwind");
+    auto coro2 = deferredThrowCoroutine(kj::mv(coro1), "thrown during unwind 2");
+    (void)deferredThrowCoroutine(kj::mv(coro2), "thrown during unwind 3");
   });
 
   KJ_EXPECT(exception == kj::none);
@@ -324,18 +393,18 @@ KJ_TEST("Exceptions during suspended coroutine frame-unwind do not cause a memor
   // later fulfill, thus arming the Coroutine's Event. If we fail to destroy the coroutine in this
   // state, EventLoop will throw on destruction because it can still see the Event in its list.
 
-  auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+  auto exception = kj::runCatchingExceptions([&]() {
     auto paf = kj::newPromiseAndFulfiller<void>();
 
-    auto coroPromise = deferredThrowCoroutine(kj::mv(paf.promise));
+    auto coroPromise = deferredThrowCoroutine(kj::mv(paf.promise), "thrown during unwind");
 
     // Arm the Coroutine's Event.
     paf.fulfiller->fulfill();
 
     // If destroying `coroPromise` does not run ~Event(), then ~EventLoop() will crash later.
-  }));
+  });
 
-  KJ_EXPECT(exception.getDescription() == "thrown during unwind");
+  KJ_EXPECT(exception == kj::none);
 };
 
 KJ_TEST("Exceptions during completed coroutine frame-unwind propagate via returned Promise") {
@@ -344,13 +413,13 @@ KJ_TEST("Exceptions during completed coroutine frame-unwind propagate via return
 
   {
     // First, prove that exceptions don't escape the destructor of a completed coroutine.
-    auto promise = deferredThrowCoroutine(kj::READY_NOW);
+    auto promise = deferredThrowCoroutine(kj::READY_NOW, "thrown during unwind");
     KJ_EXPECT(promise.poll(waitScope));
   }
 
   {
     // Next, prove that they show up via the returned Promise.
-    auto promise = deferredThrowCoroutine(kj::READY_NOW);
+    auto promise = deferredThrowCoroutine(kj::READY_NOW, "thrown during unwind");
     KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("thrown during unwind", promise.wait(waitScope));
   }
 }
@@ -360,7 +429,7 @@ KJ_TEST("Coroutine destruction exceptions are ignored if there is another except
   WaitScope waitScope(loop);
 
   auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-    auto promise = deferredThrowCoroutine(kj::NEVER_DONE);
+    auto promise = deferredThrowCoroutine(kj::NEVER_DONE, "thrown during unwind");
     kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
   }));
 

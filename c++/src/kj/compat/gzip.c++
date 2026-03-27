@@ -59,8 +59,8 @@ void GzipOutputContext::setInput(const void* in, size_t size) {
 }
 
 kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(int flush) {
-  ctx.next_out = buffer;
-  ctx.avail_out = sizeof(buffer);
+  ctx.next_out = buffer.begin();
+  ctx.avail_out = buffer.size();
 
   auto result = compressing ? deflate(&ctx, flush) : inflate(&ctx, flush);
   if (result != Z_OK && result != Z_BUF_ERROR && result != Z_STREAM_END) {
@@ -70,7 +70,7 @@ kj::Tuple<bool, kj::ArrayPtr<const byte>> GzipOutputContext::pumpOnce(int flush)
   // - Z_STREAM_END means we have finished the stream successfully.
   // - Z_BUF_ERROR means we didn't have any more input to process
   //   (but still have to make a call to write to potentially flush data).
-  return kj::tuple(result == Z_OK, kj::arrayPtr(buffer, sizeof(buffer) - ctx.avail_out));
+  return kj::tuple(result == Z_OK, buffer.first(buffer.size() - ctx.avail_out));
 }
 
 void GzipOutputContext::fail(int result) {
@@ -103,7 +103,7 @@ size_t GzipInputStream::tryRead(ArrayPtr<byte> out, size_t minBytes) {
 size_t GzipInputStream::readImpl(
     ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
-    size_t amount = inner.tryRead(buffer, 1);
+    size_t amount = inner.tryRead(buffer.asPtr(), 1);
     // Note: This check would reject valid streams with a high compression ratio if zlib were to
     // read in the entire input data, getting more decompressed data than fits in the out buffer
     // and subsequently fill the output buffer and internally store some pending data. It turns
@@ -116,7 +116,7 @@ size_t GzipInputStream::readImpl(
       }
       return alreadyRead;
     } else {
-      ctx.next_in = buffer;
+      ctx.next_in = buffer.begin();
       ctx.avail_in = amount;
     }
   }
@@ -180,7 +180,7 @@ void GzipOutputStream::pump(int flush) {
 // =======================================================================================
 
 GzipAsyncInputStream::GzipAsyncInputStream(AsyncInputStream& inner)
-    : inner(inner) {
+    : inner(inner), buffer(kj::heapArray<byte>(_::KJ_GZ_BUF_SIZE)) {
   // windowBits = 15 (maximum) + magic value 16 to ask for gzip.
   KJ_ASSERT(inflateInit2(&ctx, 15 + 16) == Z_OK);
 }
@@ -198,7 +198,7 @@ Promise<size_t> GzipAsyncInputStream::tryRead(void* out, size_t minBytes, size_t
 Promise<size_t> GzipAsyncInputStream::readImpl(
     byte* out, size_t minBytes, size_t maxBytes, size_t alreadyRead) {
   if (ctx.avail_in == 0) {
-    return inner.tryRead(buffer, 1, sizeof(buffer))
+    return inner.tryRead(buffer.begin(), 1, buffer.size())
         .then([this,out,minBytes,maxBytes,alreadyRead](size_t amount) -> Promise<size_t> {
       if (amount == 0) {
         if (!atValidEndpoint) {
@@ -206,7 +206,7 @@ Promise<size_t> GzipAsyncInputStream::readImpl(
         }
         return alreadyRead;
       } else {
-        ctx.next_in = buffer;
+        ctx.next_in = buffer.begin();
         ctx.avail_in = amount;
         return readImpl(out, minBytes, maxBytes, alreadyRead);
       }

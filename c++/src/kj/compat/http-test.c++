@@ -4371,6 +4371,70 @@ KJ_TEST("HttpServer bad requests") {
   }
 }
 
+KJ_TEST("HttpServer rejects negative Content-Length") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service, {
+    .canceledUploadGraceBytes = 1024 * 1024,
+  });
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto msg =
+      "POST / HTTP/1.1\r\n"
+      "Content-Length: -1\r\n"
+      "\r\n"
+      "foo"_kjb;
+
+  auto writePromise = pipe.ends[1]->write(msg);
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+
+  // The server should reject the negative Content-Length. The KJ_FAIL_REQUIRE in getEntityBody()
+  // gets caught by the server loop and turned into a 500 error.
+  KJ_EXPECT(response.startsWith("HTTP/1.1 500 Internal Server Error"), response);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  try { writePromise.wait(waitScope); } catch (...) {}
+}
+
+KJ_TEST("HttpServer rejects chunked body with overflowing chunk size") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  BrokenHttpService service;
+  HttpServer server(timer, table, service, {
+    .canceledUploadGraceBytes = 1024 * 1024,
+  });
+
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // 17 hex digits: 0x10000000000000000 = 2^64, which overflows uint64_t.
+  auto msg =
+      "POST / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "10000000000000000\r\n"
+      "x\r\n"
+      "0\r\n"
+      "\r\n"_kjb;
+
+  auto writePromise = pipe.ends[1]->write(msg);
+  auto response = pipe.ends[1]->readAllText().wait(waitScope);
+
+  // The chunk size overflow causes a KJ_REQUIRE failure during body reading, which the server
+  // catches and turns into a 500 error.
+  KJ_EXPECT(response.startsWith("HTTP/1.1 500 Internal Server Error"), response);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  try { writePromise.wait(waitScope); } catch (...) {}
+}
+
 // Ensure that HttpServerSettings can continue to be constexpr.
 KJ_UNUSED static constexpr HttpServerSettings STATIC_CONSTEXPR_SETTINGS {};
 
@@ -6091,6 +6155,341 @@ KJ_TEST("HttpClient concurrency limiting") {
   KJ_EXPECT(count == 0);
   KJ_EXPECT(cumulative == 5);
   KJ_EXPECT(callbackEvents == kj::ArrayPtr<const CallbackEvent>({ {0, 0} }));
+}
+
+KJ_TEST("HttpClient releaseSlotOnHeadersReceived") {
+#if KJ_HTTP_TEST_USE_OS_PIPE && !__linux__
+  return;
+#endif
+
+  // Comprehensive test for releaseSlotOnHeadersReceived. With maxConcurrentRequests=1, we
+  // interleave regular HTTP, WebSocket, and CONNECT requests, tightly controlling when the server
+  // sends response headers and when the client reads response bodies. We verify concurrent and
+  // cumulative connection counts at every step.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
+
+  kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+
+  // A service where the test controls exactly when each request's response headers are sent.
+  // Each incoming request (HTTP, WS, or CONNECT) co_awaits a gate promise before responding.
+  struct GatedService final: public HttpService {
+    HttpHeaderTable& headerTable;
+    uint nextGate = 0;
+    kj::Vector<kj::Promise<void>> gates;
+
+    GatedService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      KJ_ASSERT(nextGate < gates.size(), "no gate available for incoming request");
+      co_await gates[nextGate++];
+      if (headers.isWebSocket()) {
+        auto ws = response.acceptWebSocket(HttpHeaders(headerTable));
+        // Send a message, then wait for the client to close.
+        co_await ws->send("hello from server"_kj);
+        co_await ws->receive();
+      } else {
+        auto body = kj::str("body:", url);
+        auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+        co_await stream->write(body.asBytes());
+        co_await requestBody.readAllBytes();
+      }
+    }
+
+    kj::Promise<void> connect(kj::StringPtr host,
+                              const HttpHeaders& headers,
+                              kj::AsyncIoStream& connection,
+                              ConnectResponse& response,
+                              kj::HttpConnectSettings settings) override {
+      KJ_ASSERT(nextGate < gates.size(), "no gate available for incoming CONNECT");
+      co_await gates[nextGate++];
+      response.accept(200, "OK", HttpHeaders(headerTable));
+      co_await connection.pumpTo(connection);
+    }
+  };
+
+  GatedService service(headerTable);
+
+  // Create gate fulfillers. We'll need gates for: http1, http2, ws, connect1, connect2.
+  kj::Vector<kj::Own<kj::PromiseFulfiller<void>>> gateFulfillers;
+  for (auto i KJ_UNUSED: kj::zeroTo(5)) {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    service.gates.add(kj::mv(paf.promise));
+    gateFulfillers.add(kj::mv(paf.fulfiller));
+  }
+  auto& httpGate1 = *gateFulfillers[0];
+  auto& httpGate2 = *gateFulfillers[1];
+  auto& wsGate = *gateFulfillers[2];
+  auto& connectGate1 = *gateFulfillers[3];
+  auto& connectGate2 = *gateFulfillers[4];
+
+  HttpServerSettings serverSettings;
+  HttpServer server(serverTimer, headerTable, service, serverSettings);
+  auto listenTask = server.listenHttp(*listener);
+
+  uint count = 0;
+  uint cumulative = 0;
+  CountingNetworkAddress countingAddr(*addr, count, cumulative);
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.idleTimeout = 0 * kj::SECONDS;
+  auto innerClient = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
+
+  uint concurrent = 0;
+  ConcurrencyLimitingHttpClientSettings settings;
+  settings.maxConcurrentRequests = 1;
+  settings.countChangedCallback = [&](uint runningCount, uint pendingCount) {
+    concurrent = runningCount;
+  };
+  settings.releaseSlotOnHeadersReceived = true;
+  auto client = newConcurrencyLimitingHttpClient(*innerClient, kj::mv(settings));
+
+  KJ_EXPECT(concurrent == 0);
+  KJ_EXPECT(cumulative == 0);
+
+  // ---------------------------------------------------------------------------
+  // Regular HTTP requests
+  // ---------------------------------------------------------------------------
+
+  // Issue HTTP request 1. It takes the only slot.
+  auto http1 = client->request(HttpMethod::GET, kj::str("/1"), HttpHeaders(headerTable));
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 1);
+
+  // Issue HTTP request 2. It's queued behind http1 in the concurrency limiter.
+  auto http2 = client->request(HttpMethod::GET, kj::str("/2"), HttpHeaders(headerTable));
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 1);  // Still 1: http2 hasn't opened a connection yet.
+
+  // Neither response is ready (server hasn't sent headers).
+  KJ_EXPECT(!http1.response.poll(waitScope));
+  KJ_EXPECT(!http2.response.poll(waitScope));
+
+  // Signal server to respond to http1. Its headers arrive, releasing the slot.
+  httpGate1.fulfill();
+  KJ_ASSERT(http1.response.poll(waitScope));
+  auto httpResp1 = http1.response.wait(waitScope);
+  KJ_EXPECT(httpResp1.statusCode == 200);
+
+  // http2 should now be unblocked and have opened a connection. The slot transferred from http1
+  // to http2 (released on headers, immediately acquired by queued http2).
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 2);
+
+  // But http2's response is not ready yet (server hasn't responded to it).
+  KJ_EXPECT(!http2.response.poll(waitScope));
+
+  // ---------------------------------------------------------------------------
+  // WebSocket request (while http2 is still waiting for headers)
+  // ---------------------------------------------------------------------------
+
+  // Issue a WebSocket request. It's queued because http2 holds the slot.
+  auto wsReq = client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable));
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 2);  // WS hasn't opened a connection yet.
+
+  // Signal server to respond to http2. Its headers arrive, releasing the slot.
+  httpGate2.fulfill();
+  KJ_ASSERT(http2.response.poll(waitScope));
+  auto httpResp2 = http2.response.wait(waitScope);
+  KJ_EXPECT(httpResp2.statusCode == 200);
+
+  // WS should now be unblocked. The slot transferred from http2 to ws.
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 3);
+
+  // Read http2's body before http1's body, proving the slot was already released.
+  auto body2 = httpResp2.body->readAllText().wait(waitScope);
+  KJ_EXPECT(body2 == "body:/2");
+  auto body1 = httpResp1.body->readAllText().wait(waitScope);
+  KJ_EXPECT(body1 == "body:/1");
+
+  // ---------------------------------------------------------------------------
+  // CONNECT requests (while WS is still waiting for headers)
+  // ---------------------------------------------------------------------------
+
+  // Issue CONNECT request 1. It's queued because WS holds the slot.
+  auto connect1 = client->connect("host1:443"_kj, HttpHeaders(headerTable), {});
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 3);  // connect1 hasn't opened a connection yet.
+
+  // Signal server to accept WS. The WS upgrade response releases the slot.
+  wsGate.fulfill();
+  KJ_ASSERT(wsReq.poll(waitScope));
+  auto wsResp = wsReq.wait(waitScope);
+  KJ_EXPECT(wsResp.statusCode == 101);
+  auto& ws = KJ_ASSERT_NONNULL(wsResp.webSocketOrBody.tryGet<kj::Own<WebSocket>>());
+
+  // CONNECT 1 should now be unblocked. The slot transferred from ws to connect1.
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 4);
+
+  // Issue CONNECT request 2. It's queued because connect1 holds the slot.
+  auto connect2 = client->connect("host2:443"_kj, HttpHeaders(headerTable), {});
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 4);  // connect2 hasn't opened a connection yet.
+
+  // Read the WS message and close the WebSocket.
+  auto wsMsg = ws->receive().wait(waitScope);
+  KJ_ASSERT(wsMsg.is<kj::String>());
+  KJ_EXPECT(wsMsg.get<kj::String>() == "hello from server");
+  ws->close(1000, "done"_kj).wait(waitScope);
+
+  // Signal server to accept CONNECT 1. The 200 status releases the slot.
+  connectGate1.fulfill();
+  KJ_ASSERT(connect1.status.poll(waitScope));
+  auto status1 = connect1.status.wait(waitScope);
+  KJ_EXPECT(status1.statusCode == 200);
+
+  // CONNECT 2 should now be unblocked. The slot transferred from connect1 to connect2.
+  waitScope.poll();
+  KJ_EXPECT(concurrent == 1);
+  KJ_EXPECT(cumulative == 5);
+
+  // Signal server to accept CONNECT 2. No more queued requests, so the slot is freed.
+  connectGate2.fulfill();
+  KJ_ASSERT(connect2.status.poll(waitScope));
+  auto status2 = connect2.status.wait(waitScope);
+  KJ_EXPECT(status2.statusCode == 200);
+  KJ_EXPECT(concurrent == 0);
+  KJ_EXPECT(cumulative == 5);
+
+  // ---------------------------------------------------------------------------
+  // Verify CONNECT tunnels are usable
+  // ---------------------------------------------------------------------------
+
+  // Write and read through both CONNECT tunnels. We must start the read before waiting on the
+  // write, because the in-memory pipe has no buffering: the server's pumpTo forwards data
+  // synchronously, and the write won't complete until the echoed data is read.
+  {
+    auto writePromise = connect1.connection->write("tunnel1"_kjb);
+    expectRead(*connect1.connection, "tunnel1"_kj).wait(waitScope);
+    writePromise.wait(waitScope);
+  }
+  {
+    auto writePromise = connect2.connection->write("tunnel2"_kjb);
+    expectRead(*connect2.connection, "tunnel2"_kj).wait(waitScope);
+    writePromise.wait(waitScope);
+  }
+
+  connect1.connection->shutdownWrite();
+  connect2.connection->shutdownWrite();
+
+  KJ_EXPECT(cumulative == 5);
+}
+
+KJ_TEST("HttpClient releaseSlotOnHeadersReceived immediate path") {
+#if KJ_HTTP_TEST_USE_OS_PIPE && !__linux__
+  return;
+#endif
+
+  // The previous test exercises the queued path for openWebSocket() and connect(). This test
+  // ensures the immediate path (concurrentRequests < maxConcurrentRequests) is also covered for
+  // all three request types by issuing each when the slot is free.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
+
+  kj::TimerImpl serverTimer(kj::origin<kj::TimePoint>());
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+
+  struct Service final: public HttpService {
+    HttpHeaderTable& headerTable;
+    Service(HttpHeaderTable& headerTable): headerTable(headerTable) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      if (headers.isWebSocket()) {
+        auto ws = response.acceptWebSocket(HttpHeaders(headerTable));
+        co_await ws->receive();
+      } else {
+        auto body = "ok"_kjb;
+        auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+        co_await stream->write(body);
+        co_await requestBody.readAllBytes();
+      }
+    }
+
+    kj::Promise<void> connect(kj::StringPtr host,
+                              const HttpHeaders& headers,
+                              kj::AsyncIoStream& connection,
+                              ConnectResponse& response,
+                              kj::HttpConnectSettings settings) override {
+      response.accept(200, "OK", HttpHeaders(headerTable));
+      co_await connection.pumpTo(connection);
+    }
+  };
+
+  Service service(headerTable);
+  HttpServerSettings serverSettings;
+  HttpServer server(serverTimer, headerTable, service, serverSettings);
+  auto listenTask = server.listenHttp(*listener);
+
+  uint count = 0;
+  uint cumulative = 0;
+  CountingNetworkAddress countingAddr(*addr, count, cumulative);
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  clientSettings.idleTimeout = 0 * kj::SECONDS;
+  auto innerClient = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
+
+  uint concurrent = 0;
+  ConcurrencyLimitingHttpClientSettings settings;
+  settings.maxConcurrentRequests = 1;
+  settings.countChangedCallback = [&](uint runningCount, uint pendingCount) {
+    concurrent = runningCount;
+  };
+  settings.releaseSlotOnHeadersReceived = true;
+  auto client = newConcurrencyLimitingHttpClient(*innerClient, kj::mv(settings));
+
+  // HTTP request — immediate path.
+  KJ_EXPECT(concurrent == 0);
+  auto http = client->request(HttpMethod::GET, kj::str("/"), HttpHeaders(headerTable));
+  KJ_EXPECT(concurrent == 1);
+  auto httpResp = http.response.wait(waitScope);
+  KJ_EXPECT(httpResp.statusCode == 200);
+  KJ_EXPECT(concurrent == 0);
+  httpResp.body->readAllText().wait(waitScope);
+  KJ_EXPECT(cumulative == 1);
+
+  // WebSocket — immediate path.
+  KJ_EXPECT(concurrent == 0);
+  auto wsResp = client->openWebSocket(kj::str("/websocket"), HttpHeaders(headerTable))
+      .wait(waitScope);
+  KJ_EXPECT(wsResp.statusCode == 101);
+  KJ_EXPECT(concurrent == 0);
+  auto& ws = KJ_ASSERT_NONNULL(wsResp.webSocketOrBody.tryGet<kj::Own<WebSocket>>());
+  ws->close(1000, "done"_kj).wait(waitScope);
+  KJ_EXPECT(cumulative == 2);
+
+  // CONNECT — immediate path.
+  KJ_EXPECT(concurrent == 0);
+  auto conn = client->connect("host:443"_kj, HttpHeaders(headerTable), {});
+  KJ_EXPECT(concurrent == 1);
+  auto status = conn.status.wait(waitScope);
+  KJ_EXPECT(status.statusCode == 200);
+  KJ_EXPECT(concurrent == 0);
+  conn.connection->shutdownWrite();
+  KJ_EXPECT(cumulative == 3);
 }
 
 KJ_TEST("HttpClientImpl connect()") {

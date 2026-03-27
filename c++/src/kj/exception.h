@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <stdint.h>  // for uintptr_t
 #include "memory.h"
 #include "array.h"
 #include "string.h"
@@ -72,7 +73,7 @@ public:
   Exception(Type type, const char* file, int line, String description = nullptr) noexcept;
   Exception(Type type, String file, int line, String description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
-  Exception(Exception&& other) = default;
+  Exception(Exception&& other) noexcept = default;
   ~Exception() noexcept;
 
   const char* getFile() const { return storage->file; }
@@ -193,7 +194,25 @@ private:
   // It is very important for sizeof(kj::Exception) to be small, since it is used in result types
   // everywhere. Encapsulate all storage in a heap-allocated object.
 
+  explicit Exception(kj::None): storage() {}
+
   friend class ExceptionImpl;
+  friend struct MaybeTraits<Exception>;
+};
+
+// MaybeTraits specialization for Exception.
+// Exception uses storage == nullptr as the "none" state.
+template <>
+struct MaybeTraits<Exception> {
+  // Niche optimization: storage == nullptr is the "none" state
+  // NOTE: Uses placement new directly instead of kj::ctor() because Exception(kj::none)
+  // is private and MaybeTraits<Exception> is a friend of Exception.
+  static void initNone(Exception* ptr) noexcept {
+    new (ptr, _::PlacementNew()) Exception(kj::none);
+  }
+  static bool isNone(const Exception& e) noexcept { return e.storage == nullptr; }
+
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 #if __GNUC__
@@ -512,14 +531,15 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 // `KJ_IF_CATCH(e)` macro that supports a trailing `else` clause. That said, such patterns are
 // probably ill-advised to begin with.
 
-#if __GNUC__ || __clang__
-// Both clang and GCC understand the GCC set of pragma directives.
+#if __clang__
+// clang understands the GCC set of pragma directives.
+// Not applied to GCC due to Bug 78657 (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78657).
 #define KJ_SILENCE_SHADOWING_BEGIN \
     _Pragma("GCC diagnostic push") \
     _Pragma("GCC diagnostic ignored \"-Wshadow\"")
 #define KJ_SILENCE_SHADOWING_END \
     _Pragma("GCC diagnostic pop")
-#elif defined(_MSC_VER)  // __GNUC__ || __clang__
+#elif defined(_MSC_VER)  // __clang__
 // https://learn.microsoft.com/en-us/previous-versions/visualstudio/visual-studio-2015/code-quality/c6244
 #define KJ_SILENCE_SHADOWING_BEGIN \
     _Pragma("warning(push)") \
@@ -527,7 +547,8 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 #define KJ_SILENCE_SHADOWING_END \
     _Pragma("warning(pop)")
 #else  // defined(_MSC_VER)
-// We only support clang, gcc, and MSVC, but for consistency's sake, let's define empty macros here.
+// We only support clang, gcc, and MSVC.
+// For GCC and consistency's sake, let's define empty macros here.
 #define KJ_SILENCE_SHADOWING_BEGIN
 #define KJ_SILENCE_SHADOWING_END
 #endif

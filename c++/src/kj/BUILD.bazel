@@ -106,6 +106,7 @@ cc_library(
     }),
     hdrs = [
         "async.h",
+        "async-coroutine-alloc.h",
         "async-inl.h",
         "async-io.h",
         "async-io-internal.h",
@@ -161,7 +162,6 @@ cc_library(
     "array-test.c++",
     "async-io-test.c++",
     "async-queue-test.c++",
-    "async-test.c++",
     "async-xthread-test.c++",
     "common-test.c++",
     "debug-test.c++",
@@ -173,6 +173,7 @@ cc_library(
     "io-test.c++",
     "list-test.c++",
     "map-test.c++",
+    "maybe-test.c++",
     "memory-test.c++",
     "mutex-test.c++",
     "one-of-test.c++",
@@ -181,7 +182,6 @@ cc_library(
     "std/iostream-test.c++",
     "string-test.c++",
     "string-tree-test.c++",
-    "table-test.c++",
     "test-test.c++",
     "glob-filter-test.c++",
     "thread-test.c++",
@@ -193,6 +193,15 @@ cc_library(
 cc_test(
     name = "async-coroutine-test",
     srcs = ["async-coroutine-test.c++"],
+    deps = [
+        ":kj-test",
+        "//src/kj/compat:kj-http",
+    ],
+)
+
+cc_test(
+    name = "async-coroutine-alloc-test",
+    srcs = ["async-coroutine-alloc-test.c++"],
     deps = [
         ":kj-test",
         "//src/kj/compat:kj-http",
@@ -288,4 +297,22 @@ cc_test(
         ":kj-async",
         "@google_benchmark//:benchmark",
     ],
+    size = "large",
+)
+
+cc_test(
+    name = "table-test",
+    srcs = ["table-test.c++"],
+    deps = [ ":kj-test" ],
+    size = "large",
+)
+
+cc_test(
+    name = "async-test",
+    srcs = ["async-test.c++"],
+    deps = [
+        ":kj-test",
+        ":kj-async",
+    ],
+    size = "large",
 )

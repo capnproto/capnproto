@@ -555,6 +555,23 @@ KJ_TEST("BufferedMessageStream many small messages") {
 // TODO(test): We should probably test BufferedMessageStream's FD handling here... but really it
 //   gets tested well enough by rpc-twoparty-test.
 
+// Test for security bug: security-advisories/2026-03-10-0-segment-count-overflow.md
+KJ_TEST("large segment counts are rejected -- even UINT_MAX") {
+  kj::EventLoop loop;
+  kj::WaitScope ws(loop);
+
+  // Construct a message with segment count of UINT_MAX, which previously led to an integer
+  // overflow leading to a zero-byte allocation, into which a pointer was written (buffer overrun,
+  // though fortunately benign on all known memory allocators; see advisory).
+  const byte BYTES[] = {0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0};
+
+  auto pipe = kj::newOneWayPipe();
+  auto writePromise = pipe.out->write(BYTES);
+
+  KJ_EXPECT_THROW_MESSAGE("Message has too many segments.",
+      readMessage(*pipe.in).wait(ws));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

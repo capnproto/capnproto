@@ -271,7 +271,7 @@ void myFailRequire(kj::SourceLocation location = {}) {
   KJ_FAIL_REQUIRE_AT(location, "a_message");
 }
 void myRequireNonnull(kj::Maybe<int> value, kj::SourceLocation location = {}) {
-  KJ_REQUIRE_NONNULL_AT(value, location, "a_message");
+  (void)KJ_REQUIRE_NONNULL_AT(value, location, "a_message");
 }
 void myAssert(bool cond, kj::SourceLocation location = {}) {
   KJ_ASSERT_AT(cond, location, "a_message");
@@ -280,7 +280,7 @@ void myFailAssert(kj::SourceLocation location = {}) {
   KJ_FAIL_ASSERT_AT(location, "a_message");
 }
 void myAssertNonnull(kj::Maybe<int> value, kj::SourceLocation location = {}) {
-  KJ_ASSERT_NONNULL_AT(value, location, "a_message");
+  (void)KJ_ASSERT_NONNULL_AT(value, location, "a_message");
 }
 void myLog(kj::SourceLocation location = {}) {
   KJ_LOG_AT(WARNING, location, "a_message");

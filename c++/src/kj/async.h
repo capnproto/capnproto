@@ -1183,6 +1183,125 @@ public:
   // The default implementation throws an UNIMPLEMENTED exception.
 };
 
+namespace _ {  // private
+
+class TraceBuilder;
+
+class Event: private AsyncObject {
+  // An event waiting to be executed.  Not for direct use by applications -- promises use this
+  // internally.
+
+public:
+  Event(SourceLocation location);
+  ~Event() noexcept;
+  KJ_DISALLOW_COPY_AND_MOVE(Event);
+
+  void armDepthFirst();
+  // Enqueue this event so that `fire()` will be called from the event loop soon.
+  //
+  // Events scheduled in this way are executed in depth-first order:  if an event callback arms
+  // more events, those events are placed at the front of the queue (in the order in which they
+  // were armed), so that they run immediately after the first event's callback returns.
+  //
+  // Depth-first event scheduling is appropriate for events that represent simple continuations
+  // of a previous event that should be globbed together for performance.  Depth-first scheduling
+  // can lead to starvation, so any long-running task must occasionally yield with
+  // `armBreadthFirst()`.  (Promise::then() uses depth-first whereas evalLater() uses
+  // breadth-first.)
+  //
+  // To use breadth-first scheduling instead, use `armBreadthFirst()`.
+
+  void armBreadthFirst();
+  // Like `armDepthFirst()` except that the event is placed at the end of the queue.
+
+  void armLast();
+  // Enqueues this event to happen after all other events have run to completion and there is
+  // really nothing left to do except wait for I/O.
+
+  void armWhenWouldSleep();
+  // Enqueues this event to a separate queue of events which should be promoted
+
+  bool isNext();
+  // True if the Event has been armed and is next in line to be fired. This can be used after
+  // calling PromiseNode::onReady(event) to determine if a promise being waited is immediately
+  // ready, in which case continuations may be optimistically run without returning to the event
+  // loop. Note that this optimization is only valid if we know that we would otherwise immediately
+  // return to the event loop without running more application code. So this turns out to be useful
+  // in fairly narrow circumstances, chiefly when a coroutine is about to suspend, but discovers it
+  // doesn't need to.
+  //
+  // Returns false if the event loop is not currently running. This ensures that promise
+  // continuations don't execute except under a call to .wait().
+
+  void disarm() noexcept;
+  // If the event is armed but hasn't fired, cancel it. (Destroying the event does this
+  // implicitly.)
+
+  virtual void traceEvent(TraceBuilder& builder) = 0;
+  // Build a trace of the callers leading up to this event. `builder` will be populated with
+  // "return addresses" of the promise chain waiting on this event. The return addresses may
+  // actually be the addresses of lambdas passed to .then(), but in any case, feeding them into
+  // addr2line should produce useful source code locations.
+  //
+  // `traceEvent()` may be called from an async signal handler while `fire()` is executing. It
+  // must not allocate nor take locks.
+
+  String traceEvent();
+  // Helper that builds a trace and stringifies it.
+
+protected:
+  virtual Maybe<Own<Event>> fire() = 0;
+  // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
+  // caller.  This is the only way that an event can delete itself as a result of firing, as
+  // doing so from within fire() will throw an exception.
+
+private:
+  friend class kj::EventLoop;
+  kj::EventLoop& requireEventLoop();
+
+  inline void unlink() {
+    *prev = next;
+    next->prev = prev;
+    next = nullptr;
+    prev = nullptr;
+  }
+
+  inline void insertBefore(Event& other) {
+    // Insert this event before 'other' in the list.
+    prev = other.prev;
+    *prev = this;
+    next = &other;
+    other.prev = &next;
+  }
+
+  inline void insertAfter(Event& other) { insertBefore(*other.next); }
+
+  Event* next;
+  Event** prev;
+
+  bool firing = false;
+
+  static constexpr uint MAGIC_LIVE_VALUE = 0x1e366381u;
+  uint live = MAGIC_LIVE_VALUE;
+  SourceLocation location;
+};
+
+}  // namespace kj::_ (private)
+
+class EventLoopObserver {
+public:
+  // Observer interface to receive callbacks on EventLoop operations.
+  EventLoopObserver() = default;
+
+  virtual void onWaitStart() {}
+  // EventPort's `wait()` method was called.
+
+  virtual void onWaitEnd() {}
+  // EventPort's `wait()` method has finished.
+
+  KJ_DISALLOW_COPY(EventLoopObserver);
+};
+
 class EventLoop {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
@@ -1216,10 +1335,10 @@ class EventLoop {
   // than allocate an `EventLoop` directly.
 
 public:
-  EventLoop();
+  EventLoop(kj::Maybe<EventLoopObserver&> observer = kj::none);
   // Construct an `EventLoop` which does not receive external events at all.
 
-  explicit EventLoop(EventPort& port);
+  explicit EventLoop(EventPort& port, kj::Maybe<EventLoopObserver&> observer = kj::none);
   // Construct an `EventLoop` which receives external events through the given `EventPort`.
 
   ~EventLoop() noexcept(false);
@@ -1246,9 +1365,36 @@ public:
   // WaitScope still must exist, i.e., this EventLoop must be current.)
 
 private:
+  inline _::Event* head() const {
+    _::Event* event = headSentinel.next;
+    if (event == &depthFirstInsertPoint) {
+      event = event->next;
+    }
+    if (event == &breadthFirstInsertPoint) {
+      event = event->next;
+    }
+    return event;
+  }
+
+  class Sentinel final: public _::Event {
+    // Sentinel node for event queues. These nodes are never removed, allowing branchless
+    // list operations on normal event nodes.
+  public:
+    Sentinel(): _::Event({}) {};
+    ~Sentinel() {
+      // prevent `disarm` in ~Event from doing anything
+      prev = nullptr;
+    }
+
+    Maybe<Own<_::Event>> fire() override { KJ_UNREACHABLE; }
+    void traceEvent(_::TraceBuilder& builder) override { KJ_UNREACHABLE; }
+  };
+
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
   // events from other threads via the Executor.
+
+  kj::Maybe<EventLoopObserver&> observer;
 
   bool running = false;
   // True while looping -- wait() is then not allowed.
@@ -1256,14 +1402,21 @@ private:
   bool lastRunnableState = false;
   // What did we last pass to port.setRunnable()?
 
-  _::Event* head = nullptr;
-  _::Event** tail = &head;
-  _::Event** depthFirstInsertPoint = &head;
-  _::Event** breadthFirstInsertPoint = &head;
+  Sentinel headSentinel;
+  Sentinel tailSentinel;
   // Main event queue.
 
-  _::Event* wouldSleepHead = nullptr;
-  _::Event** wouldSleepTail = &wouldSleepHead;
+  Sentinel depthFirstInsertPoint;
+  // Part of the main queue. Moved to the head of the queue on every loop turn.
+  // `armDepthFirst` inserts events right before `depthFirstInsertPoint`.
+
+  Sentinel breadthFirstInsertPoint;
+  // Part of the main queue, doesn't move.
+  // `armBreadthFirst` inserts events right before `breadthFirstInsertPoint`.
+  // `armLast` inserts events right after `breadthFirstInsertPoint`.
+
+  Sentinel wouldSleepTail;
+  Sentinel wouldSleepHead;
   // A totally separate list of events to run if we get to the point where we otherwise would
   // sleep. (See yieldUntilWouldSleep().)
 
@@ -1278,6 +1431,7 @@ private:
 
   _::Event* currentlyFiring = nullptr;
 
+  void resetDepthFirstQueue();
   bool turn();
   void setRunnable(bool runnable);
   void enterScope();
@@ -1285,6 +1439,7 @@ private:
 
   void wait();
   void poll();
+  void wake() const;
 
   static void* getLocal(const void* key, kj::Own<void>(*allocate)());
 

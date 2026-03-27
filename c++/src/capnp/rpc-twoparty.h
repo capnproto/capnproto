@@ -51,16 +51,16 @@ class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
 public:
   TwoPartyVatNetwork(MessageStream& msgStream,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
-                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
+                     const kj::MonotonicClock& clock = kj::systemPreciseMonotonicClock());
   TwoPartyVatNetwork(MessageStream& msgStream, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
-                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
+                     const kj::MonotonicClock& clock = kj::systemPreciseMonotonicClock());
   TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                      ReaderOptions receiveOptions = ReaderOptions(),
-                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
+                     const kj::MonotonicClock& clock = kj::systemPreciseMonotonicClock());
   TwoPartyVatNetwork(kj::AsyncCapabilityStream& stream, uint maxFdsPerMessage,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions(),
-                     const kj::MonotonicClock& clock = kj::systemCoarseMonotonicClock());
+                     const kj::MonotonicClock& clock = kj::systemPreciseMonotonicClock());
   // To support FD passing, pass an AsyncCapabilityStream or a MessageStream which supports
   // fd passing, and `maxFdsPerMessage`, which specifies the maximum number of file descriptors
   // to accept from the peer in any one RPC message. It is important to keep maxFdsPerMessage
@@ -78,6 +78,11 @@ public:
 
   ~TwoPartyVatNetwork() noexcept(false);
   KJ_DISALLOW_COPY_AND_MOVE(TwoPartyVatNetwork);
+
+  static void useAdaptiveFlowControl();
+  // Tell the entire process to use adaptive flow control instead of fixed-window flow control,
+  // for two-party vat networks. This will become the default in the future. For now we expose it
+  // this way to make it easy to turn on via an autogate in the Cloudflare Workers runtime.
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.

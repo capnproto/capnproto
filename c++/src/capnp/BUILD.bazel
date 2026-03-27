@@ -243,7 +243,6 @@ cc_library(
     "canonicalize-test.c++",
     "common-test.c++",
     "capability-test.c++",
-    "compiler/evolution-test.c++",
     "compiler/lexer-test.c++",
     "compiler/type-id-test.c++",
     "dynamic-test.c++",
@@ -294,4 +293,11 @@ cc_test(
     srcs = ["fuzz-test.c++"],
     tags = ["manual"],
     deps = [":capnp-test"],
+)
+
+cc_test(
+    name = "compiler/evolution-test",
+    srcs = ["compiler/evolution-test.c++"],
+    deps = [":capnp-test"],
+    size = "large",
 )

@@ -46,6 +46,7 @@ public:
   uint getSpecificity() const { return bitCount; }
 
   bool matches(const struct sockaddr* addr) const;
+  bool matches(StringPtr addr) const;
   bool matchesFamily(int family) const;
 
   String toString() const;
