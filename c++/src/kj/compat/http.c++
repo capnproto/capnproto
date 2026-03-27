@@ -4901,10 +4901,6 @@ public:
     }
   }
 
-  kj::Maybe<int> getFd() const override {
-    return inner->getFd();
-  }
-
 private:
   kj::Own<kj::AsyncIoStream> inner;
   kj::ForkedPromise<void> readGuard;
