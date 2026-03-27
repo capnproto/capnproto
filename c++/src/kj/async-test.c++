@@ -2103,11 +2103,7 @@ public:
       : Event({}), log(log), name(name) {}
 
 protected:
-  Maybe<Own<Event>> fire() override {
-    log.add(name);
-    return kj::none;
-  }
-
+  void fire() override { log.add(name); }
   void traceEvent(_::TraceBuilder& builder) override {}
 
 private:
@@ -2321,7 +2317,7 @@ public:
         armMethod(armMethod) {}
 
 protected:
-  Maybe<Own<Event>> fire() override {
+  void fire() override {
     log.add(name);
     for (auto* e : toArm) {
       switch (armMethod) {
@@ -2330,7 +2326,6 @@ protected:
         case ArmMethod::LAST: e->armLast(); break;
       }
     }
-    return kj::none;
   }
 
   void traceEvent(_::TraceBuilder& builder) override {}
