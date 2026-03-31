@@ -190,7 +190,11 @@ private:
     kj::Vector<Detail> details;
   };
 
-  kj::Own<Storage> storage = kj::heap<Storage>();
+  struct StorageDisposer {
+    static void dispose(Storage* storage) { delete storage; }
+  };
+
+  kj::Own<Storage, StorageDisposer> storage { new Storage() };
   // It is very important for sizeof(kj::Exception) to be small, since it is used in result types
   // everywhere. Encapsulate all storage in a heap-allocated object.
 
