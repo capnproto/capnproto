@@ -788,5 +788,51 @@ KJ_TEST("ThreadId") {
   });
 }
 
+class ExplicitCopy {
+public:
+  ExplicitCopy() {}
+  explicit ExplicitCopy(const ExplicitCopy& other) = default;
+  ExplicitCopy(ExplicitCopy&& other) = delete;
+};
+
+KJ_TEST("kj::cp() invokes explicit constructor") {
+  {
+    // non-const copy
+    ExplicitCopy a;
+    auto aCopy = kj::cp(a);
+    (void)aCopy;
+  }
+
+  {
+    // const copy
+    const ExplicitCopy a;
+    auto aCopy = kj::cp(a);
+    (void)aCopy;
+  }
+}
+
+class ImplicitCopy {
+public:
+  ImplicitCopy() {}
+  ImplicitCopy(const ImplicitCopy& other) = default;
+  ImplicitCopy(ImplicitCopy&& other) = delete;
+};
+
+KJ_TEST("kj::cp() invokes implicit constructor") {
+  {
+    // non-const copy
+    ImplicitCopy a;
+    auto aCopy = kj::cp(a);
+    (void)aCopy;
+  }
+
+  {
+    // const copy
+    const ImplicitCopy a;
+    auto aCopy = kj::cp(a);
+    (void)aCopy;
+  }
+}
+
 }  // namespace
 }  // namespace kj
