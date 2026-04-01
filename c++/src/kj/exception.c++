@@ -984,7 +984,7 @@ String KJ_STRINGIFY(const Exception& e) {
              stringifyStackTrace(e.getStackTrace()));
 }
 
-static_assert(sizeof(kj::Exception) == 2 * sizeof(size_t),
+static_assert(sizeof(kj::Exception) == sizeof(size_t),
     "exception type is too big, please keep it lean");
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept {
