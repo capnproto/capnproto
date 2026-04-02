@@ -72,7 +72,7 @@ public:
 
   Exception(Type type, const char* file, int line, String description = nullptr) noexcept;
   Exception(Type type, String file, int line, String description = nullptr) noexcept;
-  Exception(const Exception& other) noexcept;
+  explicit Exception(const Exception& other) noexcept;
   Exception(Exception&& other) noexcept = default;
   KJ_NOINLINE ~Exception() noexcept;
 
