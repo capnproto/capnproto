@@ -191,7 +191,7 @@ private:
   };
 
   struct StorageDisposer {
-    static void dispose(Storage* storage) { delete storage; }
+    static void dispose(Storage* storage) noexcept { delete storage; }
   };
 
   kj::Own<Storage, StorageDisposer> storage { new Storage() };
