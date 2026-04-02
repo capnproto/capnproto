@@ -2325,10 +2325,8 @@ void PromiseNode::setSelfPointer(OwnPromiseNode* selfPtr) noexcept {}
 
 void PromiseNode::OnReadyEvent::init(Event* newEvent) {
   if (event == _kJ_ALREADY_READY) {
-    // A new continuation was added to a promise that was already ready.  In this case, we schedule
-    // breadth-first, to make it difficult for applications to accidentally starve the event loop
-    // by repeatedly waiting on immediate promises.
-    if (newEvent) newEvent->armBreadthFirst();
+    // A new continuation was added to a promise that was already ready.
+    if (newEvent) newEvent->armDepthFirst();
   } else {
     event = newEvent;
   }
@@ -2338,9 +2336,7 @@ void PromiseNode::OnReadyEvent::arm() {
   KJ_ASSERT(event != _kJ_ALREADY_READY, "arm() should only be called once");
 
   if (event != nullptr) {
-    // A promise resolved and an event is already waiting on it.  In this case, arm in depth-first
-    // order so that the event runs immediately after the current one.  This way, chained promises
-    // execute together for better cache locality and lower latency.
+    // A promise resolved and an event is already waiting on it.
     event->armDepthFirst();
   }
 
@@ -2351,7 +2347,8 @@ void PromiseNode::OnReadyEvent::armBreadthFirst() {
   KJ_ASSERT(event != _kJ_ALREADY_READY, "armBreadthFirst() should only be called once");
 
   if (event != nullptr) {
-    // A promise resolved and an event is already waiting on it.
+    // A promise resolved and an event is already waiting on it, and the caller explicitly
+    // requested breadth-first scheduling.
     event->armBreadthFirst();
   }
 
@@ -2368,7 +2365,7 @@ ImmediatePromiseNodeBase::ImmediatePromiseNodeBase() {}
 ImmediatePromiseNodeBase::~ImmediatePromiseNodeBase() noexcept(false) {}
 
 void ImmediatePromiseNodeBase::onReady(Event* event) noexcept {
-  if (event) event->armBreadthFirst();
+  if (event) event->armDepthFirst();
 }
 
 void ImmediatePromiseNodeBase::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
@@ -2968,6 +2965,7 @@ Promise<void> yield() {
     void destroy() override {}
 
     void onReady(_::Event* event) noexcept override {
+      // The point of yield() is to allow other tasks in the queue to run, so arm breadth-first.
       if (event) event->armBreadthFirst();
     }
     void get(_::ExceptionOrValue& output) noexcept override {
