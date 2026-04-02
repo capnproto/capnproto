@@ -1298,7 +1298,11 @@ public:
       noexcept(noexcept(instance<T&>().~T()))
 #endif
   {
-    destroy();
+    if constexpr (noexcept(instance<T&>().~T())) {
+      if (isSet) { dtor(value); }
+    } else {
+      destroy();
+    }
   }
 
   inline T& operator*() & { return value; }
@@ -1507,7 +1511,11 @@ public:
       noexcept(noexcept(instance<T&>().~T()))
 #endif
   {
-    destroy();
+    if constexpr (noexcept(instance<T&>().~T())) {
+      if (!isNone(value)) { dtor(value); }
+    } else {
+      destroy();
+    }
   }
 
   inline T& operator*() & { return value; }

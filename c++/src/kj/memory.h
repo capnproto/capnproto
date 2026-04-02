@@ -417,7 +417,14 @@ public:
   }
   inline explicit Own(T* ptr) noexcept: ptr(ptr) {}
 
-  ~Own() noexcept(false) { dispose(); }
+  ~Own() noexcept(false) {
+    if constexpr (noexcept(StaticDisposer::dispose(kj::instance<T*>()))) {
+      // dispose doesn't throw, we can be more optimal.
+      StaticDisposer::dispose(ptr);
+    } else {
+      dispose();
+    }
+  }
 
   inline Own& operator=(Own&& other) {
     // Move-assignnment operator.
