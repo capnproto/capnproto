@@ -4728,6 +4728,20 @@ public:
     state.init<Running>();
   }
 
+  ~WindowFlowController() noexcept(false) {
+    KJ_IF_SOME(blockedSends, state.tryGet<Running>()) {
+      // Without this, the default destructor would destroy the fulfillers, causing KJ to
+      // reject them with a hardcoded FAILED exception ("PromiseFulfiller was destroyed without
+      // fulfilling the promise"). Fulfilling is safe because the send() promise resolving only
+      // means "now is a good time to send the next message", not that the message was delivered.
+      // The caller's next send will fail with the actual root cause error from the connection
+      // layer.
+      for (auto& fulfiller: blockedSends) {
+        fulfiller->fulfill();
+      }
+    }
+  }
+
   kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
     auto size = message->sizeInWords() * sizeof(capnp::word);
     maxMessageSize = kj::max(size, maxMessageSize);
@@ -4869,6 +4883,20 @@ public:
   AdaptiveFlowController(size_t initialWindowSize, const kj::MonotonicClock& clock)
       : window(initialWindowSize), clock(clock), tasks(*this) {
     state.init<Running>();
+  }
+
+  ~AdaptiveFlowController() noexcept(false) {
+    KJ_IF_SOME(blockedSends, state.tryGet<Running>()) {
+      // Without this, the default destructor would destroy the fulfillers, causing KJ to
+      // reject them with a hardcoded FAILED exception ("PromiseFulfiller was destroyed without
+      // fulfilling the promise"). Fulfilling is safe because the send() promise resolving only
+      // means "now is a good time to send the next message", not that the message was delivered.
+      // The caller's next send will fail with the actual root cause error from the connection
+      // layer.
+      for (auto& fulfiller: blockedSends) {
+        fulfiller->fulfill();
+      }
+    }
   }
 
   kj::Promise<void> send(kj::Own<OutgoingRpcMessage> message, kj::Promise<void> ack) override {
