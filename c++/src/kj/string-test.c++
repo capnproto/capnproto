@@ -31,6 +31,10 @@ namespace kj {
 namespace _ {  // private
 namespace {
 
+static_assert(Cloneable<String>);
+static_assert(Cloneable<ConstString>);
+static_assert(Cloneable<StringPtr>);
+
 TEST(String, Str) {
   EXPECT_EQ("foobar", str("foo", "bar"));
   EXPECT_EQ("1 2 3 4", str(1, " ", 2u, " ", 3l, " ", 4ll));
@@ -397,6 +401,25 @@ KJ_TEST("ConstString clone") {
   // still valid after original string gets deallocated
   heapConst = nullptr;
   KJ_EXPECT(heapClone == "bar");
+}
+
+KJ_TEST("StringPtr clone") {
+  kj::StringPtr original = "foo";
+  kj::String cloned = original.clone();
+
+  KJ_EXPECT(cloned == "foo");
+  KJ_EXPECT(cloned.begin() != original.begin());
+}
+
+KJ_TEST("String clone") {
+  kj::String original = kj::str("bar");
+  kj::String cloned = original.clone();
+
+  KJ_EXPECT(cloned == "bar");
+  KJ_EXPECT(cloned.begin() != original.begin());
+
+  original = nullptr;
+  KJ_EXPECT(cloned == "bar");
 }
 
 KJ_TEST("StringPtr find") {

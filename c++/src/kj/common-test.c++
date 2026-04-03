@@ -29,6 +29,16 @@
 namespace kj {
 namespace {
 
+struct ClonesToInt { int clone() const { return 123; } };
+struct ClonesToStringPtr { StringPtr clone() const { return "foo"; } };
+struct NoClone {};
+struct NonConstClone { int clone() { return 123; } };
+
+static_assert(Cloneable<ClonesToInt>);
+static_assert(Cloneable<ClonesToStringPtr>);
+static_assert(!Cloneable<NoClone>);
+static_assert(!Cloneable<NonConstClone>);
+
 KJ_ASSERT_CAN_MEMCPY(char);
 KJ_ASSERT_CAN_MEMCPY(byte);
 

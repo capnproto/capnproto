@@ -20,7 +20,9 @@
 // THE SOFTWARE.
 
 #include "common.h"
+#include "array.h"
 #include "memory.h"
+#include "string.h"
 #include "test.h"
 #include <stdexcept>
 
@@ -48,6 +50,17 @@ struct CopyOrMove {
 
   int i;
 };
+
+struct CloneableMaybeValue {
+  int clone() const { return 123; }
+};
+
+struct NonCloneableMaybeValue {};
+
+static_assert(Cloneable<Maybe<CloneableMaybeValue>>);
+static_assert(Cloneable<Maybe<CloneableMaybeValue&>>);
+static_assert(!Cloneable<Maybe<NonCloneableMaybeValue>>);
+static_assert(!Cloneable<Maybe<NonCloneableMaybeValue&>>);
 
 // =======================================================================================
 
@@ -730,6 +743,68 @@ KJ_TEST("Maybe") {
     KJ_EXPECT(m1 != m4);
     KJ_EXPECT(m4 == m5);
     KJ_EXPECT(m4 != m1);
+  }
+
+  {
+    Maybe<ConstString> m = ConstString(kj::str("foo"));
+    auto cloned = m.clone();
+    KJ_EXPECT(cloned != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned).cStr() != KJ_ASSERT_NONNULL(m).cStr());
+
+    Maybe<ConstString> empty = kj::none;
+    KJ_EXPECT(empty.clone() == kj::none);
+  }
+
+  {
+    // cloned value can be of different type
+    Maybe<StringPtr> m = StringPtr("foo");
+    Maybe<String> cloned = m.clone();
+    KJ_EXPECT(cloned != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned) == "foo");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned).cStr() != KJ_ASSERT_NONNULL(m).begin());
+  }
+
+  {
+    // references are cloned into values
+    StringPtr str = "bar";
+    Maybe<StringPtr&> m = str;
+    Maybe<String> cloned = m.clone();
+    KJ_EXPECT(cloned != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned) == "bar");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned).cStr() != KJ_ASSERT_NONNULL(m).begin());
+  }
+
+  {
+    Maybe<String> m = kj::str("baz");
+    Maybe<String> cloned = m.clone();
+    KJ_EXPECT(cloned != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned) == "baz");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned).cStr() != KJ_ASSERT_NONNULL(m).cStr());
+  }
+
+  {
+    // clone is deep
+    StringPtr values[] = {"one", "two"};
+    Maybe<ArrayPtr<const StringPtr>> m = ArrayPtr<const StringPtr>(values);
+    Maybe<Array<String>> cloned = m.clone();
+    KJ_EXPECT(cloned != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned).size() == 2);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[0] == "one");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[1] == "two");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[0].begin() != KJ_ASSERT_NONNULL(m)[0].begin());
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[1].begin() != KJ_ASSERT_NONNULL(m)[1].begin());
+  }
+
+  {
+    // clone can change multiple types
+    Maybe<Array<const StringPtr>> m = heapArray<const StringPtr>({"three", "four"});
+    Maybe<Array<String>> cloned = m.clone();
+    KJ_EXPECT(cloned != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned).size() == 2);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[0] == "three");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[1] == "four");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[0].begin() != KJ_ASSERT_NONNULL(m)[0].begin());
+    KJ_EXPECT(KJ_ASSERT_NONNULL(cloned)[1].begin() != KJ_ASSERT_NONNULL(m)[1].begin());
   }
 
   {
