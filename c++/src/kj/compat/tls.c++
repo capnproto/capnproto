@@ -545,7 +545,7 @@ public:
   Promise<AuthenticatedStream> acceptAuthenticated() override {
     KJ_IF_SOME(e, maybeInnerException) {
       // We've experienced an exception from the inner receiver, we consider this unrecoverable.
-      return Exception(e);
+      return e.clone();
     }
 
     return queue.pop();
@@ -585,7 +585,7 @@ private:
     // Store this exception to reject all future calls to accept() and reject any unfulfilled
     // promises from the queue.
     maybeInnerException = kj::mv(e);
-    queue.rejectAll(Exception(KJ_REQUIRE_NONNULL(maybeInnerException)));
+    queue.rejectAll(KJ_REQUIRE_NONNULL(maybeInnerException).clone());
   }
 
   Promise<void> acceptLoop() {

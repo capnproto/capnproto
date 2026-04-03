@@ -224,7 +224,7 @@ void Canceler::cancel(const Exception& exception) {
   for (;;) {
     KJ_IF_SOME(a, list) {
       a.unlink();
-      a.cancel(kj::cp(exception));
+      a.cancel(exception.clone());
     } else {
       break;
     }

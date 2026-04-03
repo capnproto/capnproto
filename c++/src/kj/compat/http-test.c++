@@ -4151,7 +4151,7 @@ public:
       kj::AsyncInputStream& requestBody, Response& responseSender) override {
     return requestBody.readAllBytes().then([this](kj::Array<byte>&&) -> kj::Promise<void> {
       KJ_IF_SOME(e, exception) {
-        return kj::cp(e);
+        return e.clone();
       } else {
         return kj::READY_NOW;
       }

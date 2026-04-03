@@ -429,7 +429,7 @@ private:
     // fulfilling the fulfiller.
     return [&fulfiller, &canceler](kj::Exception&& e) {
       canceler.release();
-      fulfiller.reject(kj::cp(e));
+      fulfiller.reject(e.clone());
       kj::throwRecoverableException(kj::mv(e));
     };
   }
@@ -446,7 +446,7 @@ private:
     // fulfilling the fulfiller.
     return [&fulfiller, &canceler](kj::Exception&& e) -> size_t {
       canceler.release();
-      fulfiller.reject(kj::cp(e));
+      fulfiller.reject(e.clone());
       kj::throwRecoverableException(kj::mv(e));
       return 0;
     };
@@ -464,7 +464,7 @@ private:
     // fulfilling the fulfiller.
     return [&fulfiller, &canceler](kj::Exception&& e) -> kj::Promise<T> {
       canceler.release();
-      fulfiller.reject(kj::cp(e));
+      fulfiller.reject(e.clone());
       return kj::mv(e);
     };
   }
@@ -1878,7 +1878,7 @@ public:
         if (reason.is<Eof>() || readSoFar > 0) {
           return readSoFar;
         }
-        return cp(reason.get<Exception>());
+        return reason.get<Exception>().clone();
       }
     }
 
@@ -1910,7 +1910,7 @@ public:
         if (reason.is<Eof>()) {
           return constPromise<uint64_t, 0>();
         }
-        return cp(reason.get<Exception>());
+        return reason.get<Exception>().clone();
       }
     }
 
@@ -2021,7 +2021,7 @@ private:
             // Prefer short read to exception.
             fulfill(readSoFar);
           } else {
-            reject(cp(reason.get<Exception>()));
+            reject(reason.get<Exception>().clone());
           }
           return READY_NOW;
         }
@@ -2082,7 +2082,7 @@ private:
           // pump promise rather than show it a "short pump".
           fulfill(pumpedSoFar);
         } else {
-          reject(cp(reason.get<Exception>()));
+          reject(reason.get<Exception>().clone());
         }
       }
 

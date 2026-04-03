@@ -204,9 +204,9 @@ public:
         // Since no one checks write failures, we need to propagate them into read failures,
         // otherwise we might get stuck sending all messages into a black hole and wondering why
         // the peer never replies.
-        network.readCancelReason = kj::cp(e);
+        network.readCancelReason = e.clone();
         if (!network.readCanceler.isEmpty()) {
-          network.readCanceler.cancel(kj::cp(e));
+          network.readCanceler.cancel(e.clone());
         }
         kj::throwRecoverableException(kj::mv(e));
       });
@@ -315,7 +315,7 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
   return kj::evalLater([this]() -> kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> {
     KJ_IF_SOME(e, readCancelReason) {
       // A previous write failed; propagate the failure to reads, too.
-      return kj::cp(e);
+      return e.clone();
     }
 
     kj::Array<kj::OwnFd> fdSpace = nullptr;

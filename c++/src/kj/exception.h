@@ -72,9 +72,13 @@ public:
 
   Exception(Type type, const char* file, int line, String description = nullptr) noexcept;
   Exception(Type type, String file, int line, String description = nullptr) noexcept;
-  Exception(const Exception& other) noexcept;
   Exception(Exception&& other) noexcept = default;
   KJ_NOINLINE ~Exception() noexcept;
+
+  Exception(const Exception& other) noexcept = delete;
+  // Use clone() instead.
+
+  Exception clone() const noexcept;
 
   const char* getFile() const { return storage->file; }
   int getLine() const { return storage->line; }

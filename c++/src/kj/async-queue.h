@@ -132,7 +132,7 @@ public:
     // Reject all waiters with a given exception.
 
     while (!waiters.empty()) {
-      auto newE = Exception(e);
+      auto newE = e.clone();
       waiters.reject(kj::mv(newE));
     }
   }
