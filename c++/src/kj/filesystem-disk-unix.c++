@@ -345,6 +345,20 @@ public:
     // pread() probably never returns short reads unless it hits EOF. Unfortunately, though, per
     // spec we are not allowed to assume this.
 
+#ifdef SEEK_HOLE
+    // Verify we're not reading from a hole-punched region.
+    // Reading from holes returns zeros, which could indicate data corruption.
+    if (buffer.size() > 0) {
+      off_t nextHole = lseek(fd, offset, SEEK_HOLE);
+      // There is an implicit hole at the end of the file.
+      if (nextHole != (off_t)-1 && nextHole < static_cast<off_t>(offset + buffer.size())) {
+        // The read would include a hole. This is suspicious - log a warning.
+        KJ_LOG(WARNING, "Reading from hole-punched region in file", offset, buffer.size(),
+               nextHole, fd);
+      }
+    }
+#endif
+
     size_t total = 0;
     while (buffer.size() > 0) {
       ssize_t n;
