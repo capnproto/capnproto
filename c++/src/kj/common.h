@@ -1066,6 +1066,13 @@ inline void dtor(T& location) {
   location.~T();
 }
 
+template <typename T>
+constexpr bool isNoThrowMoveConstructible() {
+  // like std::is_nothrow_move_constructible but that ignores noexcept(false) destructors
+  if constexpr (isReference<T>()) return true;
+  else return noexcept(new ((void*)nullptr, _::PlacementNew()) T(instance<T&&>()));
+}
+
 // =======================================================================================
 // Maybe
 //

@@ -22,6 +22,7 @@
 #include "common.h"
 #include "test.h"
 #include <inttypes.h>
+#include <type_traits>
 #include <kj/compat/gtest.h>
 #include <span>
 #include "thread.h"
@@ -168,6 +169,50 @@ TEST(Common, CanConvert) {
 
   static_assert(canConvert<void*, const void*>(), "failure");
   static_assert(!canConvert<const void*, void*>(), "failure");
+}
+
+KJ_TEST("isNoThrowMoveConstructible") {
+  static_assert(isNoThrowMoveConstructible<int>());
+  static_assert(isNoThrowMoveConstructible<int&>());
+  static_assert(isNoThrowMoveConstructible<int*>());
+
+  struct ImplicitMove {};
+  static_assert(isNoThrowMoveConstructible<ImplicitMove>());
+
+  struct ExplicitNoThrowMove {
+    ExplicitNoThrowMove() = default;
+    ExplicitNoThrowMove(ExplicitNoThrowMove&&) noexcept = default;
+  };
+  static_assert(isNoThrowMoveConstructible<ExplicitNoThrowMove>());
+
+  struct ExplicitThrowingMove {
+    ExplicitThrowingMove() = default;
+    ExplicitThrowingMove(ExplicitThrowingMove&&) noexcept(false) {}
+  };
+  static_assert(!isNoThrowMoveConstructible<ExplicitThrowingMove>());
+  static_assert(isNoThrowMoveConstructible<ExplicitThrowingMove&>());
+  static_assert(isNoThrowMoveConstructible<ExplicitThrowingMove*>());
+
+  struct CopyOnlyNoThrow {
+    CopyOnlyNoThrow() = default;
+    CopyOnlyNoThrow(const CopyOnlyNoThrow&) noexcept {}
+  };
+  static_assert(isNoThrowMoveConstructible<CopyOnlyNoThrow>());
+
+  struct CopyOnlyThrowing {
+    CopyOnlyThrowing() = default;
+    CopyOnlyThrowing(const CopyOnlyThrowing&) noexcept(false) {}
+  };
+  static_assert(!isNoThrowMoveConstructible<CopyOnlyThrowing>());
+
+  struct ThrowingDestructor {
+    ThrowingDestructor() = default;
+    ThrowingDestructor(ThrowingDestructor&&) noexcept = default;
+    ~ThrowingDestructor() noexcept(false) {}
+  };
+  // this is where we intentionally differ from std
+  static_assert(isNoThrowMoveConstructible<ThrowingDestructor>());
+  static_assert(!std::is_nothrow_move_constructible_v<ThrowingDestructor>);
 }
 
 TEST(Common, ArrayAsBytes) {
