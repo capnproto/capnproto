@@ -366,7 +366,9 @@ public:
 
   OneOf(const OneOf& other) { copyFrom(other); }
   OneOf(OneOf& other) { copyFrom(other); }
-  OneOf(OneOf&& other) { moveFrom(other); }
+  OneOf(OneOf&& other) noexcept((kj::isNoThrowMoveConstructible<Variants>() && ...)) {
+    moveFrom(other);
+  }
   // Copy/move from same OneOf type.
 
   template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
@@ -374,11 +376,15 @@ public:
   template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
   OneOf(OneOf<OtherVariants...>& other) { copyFromSubset(other); }
   template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(OneOf<OtherVariants...>&& other) { moveFromSubset(other); }
+  OneOf(OneOf<OtherVariants...>&& other)
+      noexcept((kj::isNoThrowMoveConstructible<OtherVariants>() && ...)) {
+    moveFromSubset(other);
+  }
   // Copy/move from OneOf that contains a subset of the types we do.
 
   template <typename T, typename = typename HasAll<0, Decay<T>>::Success>
-  OneOf(T&& other): tag(typeIndex<Decay<T>>()) {
+  OneOf(T&& other) noexcept(kj::isNoThrowMoveConstructible<Decay<T>>()):
+      tag(typeIndex<Decay<T>>()) {
     ctor(*reinterpret_cast<Decay<T>*>(space), kj::fwd<T>(other));
   }
   // Copy/move from a value that matches one of the individual types in the OneOf.
@@ -539,7 +545,7 @@ private:
     }
     return false;
   }
-  void moveFrom(OneOf& other) {
+  void moveFrom(OneOf& other) noexcept((kj::isNoThrowMoveConstructible<Variants>() && ...)) {
     // Initialize as a copy of `other`.  Expects that `this` starts out uninitialized, so the tag
     // is invalid.
     tag = other.tag;
@@ -573,7 +579,8 @@ private:
   }
 
   template <typename T, typename... OtherVariants>
-  inline bool moveSubsetVariantFrom(OneOf<OtherVariants...>& other) {
+  inline bool moveSubsetVariantFrom(OneOf<OtherVariants...>& other)
+      noexcept(kj::isNoThrowMoveConstructible<T>()) {
     if (other.template is<T>()) {
       tag = typeIndex<Decay<T>>();
       ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
@@ -581,7 +588,8 @@ private:
     return false;
   }
   template <typename... OtherVariants>
-  void moveFromSubset(OneOf<OtherVariants...>& other) {
+  void moveFromSubset(OneOf<OtherVariants...>& other)
+      noexcept((kj::isNoThrowMoveConstructible<OtherVariants>() && ...)) {
     doAll(moveSubsetVariantFrom<OtherVariants>(other)...);
   }
 };

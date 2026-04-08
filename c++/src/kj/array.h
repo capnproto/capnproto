@@ -371,13 +371,13 @@ public:
                         const ArrayDisposer& disposer)
       : ptr(firstElement), pos(firstElement), endPtr(firstElement + capacity),
         disposer(&disposer) {}
-  ArrayBuilder(ArrayBuilder&& other)
+  ArrayBuilder(ArrayBuilder&& other) noexcept
       : ptr(other.ptr), pos(other.pos), endPtr(other.endPtr), disposer(other.disposer) {
     other.ptr = nullptr;
     other.pos = nullptr;
     other.endPtr = nullptr;
   }
-  ArrayBuilder(Array<T>&& other)
+  ArrayBuilder(Array<T>&& other) noexcept
       : ptr(other.ptr), pos(other.ptr + other.size_), endPtr(pos), disposer(other.disposer) {
     // Create an already-full ArrayBuilder from an Array of the same type. This constructor
     // primarily exists to enable Vector<T> to be constructed from Array<T>.

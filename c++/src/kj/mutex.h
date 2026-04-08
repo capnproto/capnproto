@@ -234,7 +234,7 @@ class Locked {
 public:
   KJ_DISALLOW_COPY(Locked);
   inline Locked(): mutex(nullptr), ptr(nullptr) {}
-  inline Locked(Locked&& other): mutex(other.mutex), ptr(other.ptr) {
+  inline Locked(Locked&& other) noexcept: mutex(other.mutex), ptr(other.ptr) {
     other.mutex = nullptr;
     other.ptr = nullptr;
   }
@@ -451,7 +451,7 @@ public:
     }
   }
 
-  ExternalMutexGuarded(ExternalMutexGuarded&& other)
+  ExternalMutexGuarded(ExternalMutexGuarded&& other) noexcept
       : mutex(other.mutex), value(kj::mv(other.value)), location(other.location) {
     other.mutex = nullptr;
   }

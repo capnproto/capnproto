@@ -101,7 +101,7 @@ struct Url {
   // ---------------------------------------------------------------------------
 
   Url() = default;
-  Url(Url&&) = default;
+  Url(Url&&) noexcept = default;
   ~Url() noexcept(false);
   Url& operator=(Url&&) = default;
 

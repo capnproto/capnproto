@@ -172,6 +172,14 @@ TEST(Common, CanConvert) {
 }
 
 KJ_TEST("isNoThrowMoveConstructible") {
+  static_assert(_::NoThrowConstructibleFrom<int, int>);
+
+  struct ExplicitThrowingInt {
+    ExplicitThrowingInt(int) noexcept(false) {}
+  };
+  static_assert(!_::NoThrowConstructibleFrom<ExplicitThrowingInt, int>);
+
+  // T == U cases
   static_assert(isNoThrowMoveConstructible<int>());
   static_assert(isNoThrowMoveConstructible<int&>());
   static_assert(isNoThrowMoveConstructible<int*>());
@@ -213,6 +221,37 @@ KJ_TEST("isNoThrowMoveConstructible") {
   // this is where we intentionally differ from std
   static_assert(isNoThrowMoveConstructible<ThrowingDestructor>());
   static_assert(!std::is_nothrow_move_constructible_v<ThrowingDestructor>);
+
+  // T != U
+
+  struct Source {};
+
+  struct NoThrowFromSource {
+    NoThrowFromSource(Source&&) noexcept {}
+  };
+  static_assert(isNoThrowMoveConstructible<NoThrowFromSource, Source>());
+
+  struct ThrowingFromSource {
+    ThrowingFromSource(Source&&) noexcept(false) {}
+  };
+  static_assert(!isNoThrowMoveConstructible<ThrowingFromSource, Source>());
+
+  struct NoThrowCopyFromSource {
+    NoThrowCopyFromSource(const Source&) noexcept {}
+  };
+  static_assert(isNoThrowMoveConstructible<NoThrowCopyFromSource, const Source&>());
+
+  struct ThrowingCopyFromSource {
+    ThrowingCopyFromSource(const Source&) noexcept(false) {}
+  };
+  static_assert(!isNoThrowMoveConstructible<ThrowingCopyFromSource, const Source&>());
+
+  struct CrossTypeThrowingDestructor {
+    CrossTypeThrowingDestructor(Source&&) noexcept {}
+    ~CrossTypeThrowingDestructor() noexcept(false) {}
+  };
+  static_assert(isNoThrowMoveConstructible<CrossTypeThrowingDestructor, Source>());
+  static_assert(!std::is_nothrow_constructible_v<CrossTypeThrowingDestructor, Source&&>);
 }
 
 TEST(Common, ArrayAsBytes) {
