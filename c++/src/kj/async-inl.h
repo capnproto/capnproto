@@ -74,9 +74,10 @@ template <typename T>
 class ExceptionOr: public ExceptionOrValue {
 public:
   ExceptionOr() = default;
-  ExceptionOr(T&& value): value(kj::mv(value)) {}
-  ExceptionOr(bool, Exception&& exception): ExceptionOrValue(false, kj::mv(exception)) {}
-  ExceptionOr(ExceptionOr&&) = default;
+  // TODO(soon) - we want to assert isNoThrowMoveConstructible for all Ts here
+  ExceptionOr(T&& value) noexcept(isNoThrowMoveConstructible<T>()): value(kj::mv(value)) {}
+  ExceptionOr(bool, Exception&& exception) noexcept: ExceptionOrValue(false, kj::mv(exception)) {}
+  ExceptionOr(ExceptionOr&&) noexcept = default;
 
   inline ExceptionOr& operator=(ExceptionOr&& other) {
     KJ_IREQUIRE(value == kj::none && exception == kj::none,

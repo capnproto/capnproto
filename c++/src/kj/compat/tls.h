@@ -189,8 +189,8 @@ public:
   TlsPrivateKey& operator=(const TlsPrivateKey& other);
   // Copy-by-refcount.
 
-  inline TlsPrivateKey(TlsPrivateKey&& other): pkey(other.pkey) { other.pkey = nullptr; }
-  inline TlsPrivateKey& operator=(TlsPrivateKey&& other) {
+  inline TlsPrivateKey(TlsPrivateKey&& other) noexcept: pkey(other.pkey) { other.pkey = nullptr; }
+  inline TlsPrivateKey& operator=(TlsPrivateKey&& other) noexcept {
     pkey = other.pkey; other.pkey = nullptr;
     return *this;
   }
@@ -223,11 +223,11 @@ public:
   TlsCertificate& operator=(const TlsCertificate& other);
   // Copy-by-refcount.
 
-  inline TlsCertificate(TlsCertificate&& other) {
+  inline TlsCertificate(TlsCertificate&& other) noexcept {
     memcpy(chain, other.chain, sizeof(chain));
     memset(other.chain, 0, sizeof(chain));
   }
-  inline TlsCertificate& operator=(TlsCertificate&& other) {
+  inline TlsCertificate& operator=(TlsCertificate&& other) noexcept {
     memcpy(chain, other.chain, sizeof(chain));
     memset(other.chain, 0, sizeof(chain));
     return *this;
