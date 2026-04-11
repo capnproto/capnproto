@@ -61,5 +61,17 @@ uint HashCoder::operator*(ArrayPtr<const byte> s) const {
   return h;
 }
 
+// Enforce that if the CRC32 integer hash is enabled on any translation unit, it will be enabled on
+// all of them to avoid ODR violations.
+#if KJ_HAS_CRC32
+#if defined (__CRC32__) || defined (__ARM_FEATURE_CRC32)
+const char kjCrc32HashEnabled = 0;
+#else
+#error "CRC32 hardware support must be available when KJ_HAS_CRC32 is set."
+#endif
+#else
+const char kjCrc32HashDisabled = 0;
+#endif
+
 }  // namespace _ (private)
 } // namespace kj
