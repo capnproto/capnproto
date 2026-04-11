@@ -226,6 +226,19 @@ inline uint HashCoder::operator*(T e) const {
   return operator*(static_cast<__underlying_type(T)>(e));
 }
 
+// Ensure we don't mix different hash implementations. The template will only be instantiated in
+// translation units where intHash32 or intHash64 are called, so there is no overhead otherwise.
+extern const char kjCrc32HashEnabled;
+extern const char kjCrc32HashDisabled;
+
+template <bool enabled>
+struct kjCrcHashGuard {
+    kjCrcHashGuard() {
+    KJ_USED static constexpr const char* value =
+        enabled ? &kjCrc32HashEnabled : &kjCrc32HashDisabled;
+    }
+};
+
 inline uint intHash32(uint32_t i) {
   // Basic 32-bit integer hash function.
   //
@@ -244,18 +257,22 @@ inline uint intHash32(uint32_t i) {
   // is undefined) or require that hardware support for it is available. The define should always
   // be used consistently, if it is not the link-time kjCrcHashGuard check will catch it.
 #if KJ_HAS_CRC32
+  kjCrcHashGuard<true> guard;
+  (void)guard;
 #if __CRC32__
   return __builtin_ia32_crc32si(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
   return __builtin_arm_crc32cw(0, i);
 #else
-  return __crc32w(0, i);
+  return __crc32cw(0, i);
 #endif
 #else
 #error "CRC32 hardware support must be available when KJ_HAS_CRC32 is set."
 #endif
 #else
+  kjCrcHashGuard<false> guard;
+  (void)guard;
   // Thomas Wang 32 bit integer hash function from https://gist.github.com/badboy/6267743
   // This page says it's public domain: http://burtleburtle.net/bob/hash/integer.html
   i = ~i + (i << 15); // i = (i << 15) - i - 1;
@@ -281,18 +298,22 @@ inline uint intHash64(uint64_t i) {
   }
 
 #if KJ_HAS_CRC32
+  kjCrcHashGuard<true> guard;
+  (void)guard;
 #if __CRC32__
   return __builtin_ia32_crc32di(0, i);
 #elif __ARM_FEATURE_CRC32
 #ifdef __clang__
   return __builtin_arm_crc32cd(0, i);
 #else
-  return __crc32d(0, i);
+  return __crc32cd(0, i);
 #endif
 #else
 #error "CRC32 hardware support must be available when KJ_HAS_CRC32 is set."
 #endif
 #else
+  kjCrcHashGuard<false> guard;
+  (void)guard;
   // Thomas Wang hash6432shift() from https://gist.github.com/badboy/6267743
   // This page says it's public domain (inthash.c):
   //     https://github.com/markokr/pghashlib/blob/master/COPYRIGHT
