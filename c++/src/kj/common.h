@@ -1264,6 +1264,10 @@ constexpr bool isNoThrowMoveConstructible() {
 }
 
 template <typename T>
+concept Cloneable = requires(const T& value) { value.clone(); };
+// Concept: T has a `const clone()` member.
+
+template <typename T>
 concept NicheOptimizable = _::HasAnyNicheMember<T>;
 // Concept for types that support niche optimization in Maybe<T>.
 // Matches when ANY niche member is defined, so the niche-optimized specialization is selected.
@@ -2138,6 +2142,17 @@ public:
     }
   }
 
+  auto clone() const requires Cloneable<T> {
+    // Clones the value if it is not none.
+    // Returns Maybe<decltype(t.clone())>
+    using U = decltype(ptr->clone());
+    if (ptr == nullptr) {
+      return Maybe<U>(kj::none);
+    } else {
+      return Maybe<U>(ptr->clone());
+    }
+  }
+
   template <typename Func>
   auto map(Func&& f) & -> Maybe<decltype(f(instance<T&>()))> {
     // See KJ_MAP for a more ergonomic interface.
@@ -2259,6 +2274,16 @@ public:
       return defaultValue;
     } else {
       return *ptr;
+    }
+  }
+
+  auto clone() const requires Cloneable<T> {
+    // Clones the value (not a reference) if reference is not none.
+    using U = decltype(ptr->clone());
+    if (ptr == nullptr) {
+      return Maybe<U>(kj::none);
+    } else {
+      return Maybe<U>(ptr->clone());
     }
   }
 
@@ -2610,6 +2635,10 @@ public:
   inline auto as() const { return asImpl((U*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(U*, const ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
+
+  auto clone() const requires Cloneable<T>;
+  // Deep-clone into heap-owned array.
+  // Returns Array<decltype(t.clone())>
 
   inline void fill(T t) {
     // Fill the area by copying t over every element.

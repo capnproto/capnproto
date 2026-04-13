@@ -158,6 +158,9 @@ public:
   // Syntax sugar for invoking asImpl(T*, const StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
+  inline String clone() const;
+  // Clones the string into heap-owning storage.
+
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
   friend constexpr StringPtr (::operator ""_kj)(const char* str, size_t n);
@@ -314,6 +317,9 @@ public:
   inline auto as() const { return asImpl((T*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(T*, const String&).
   // Used to chain conversion calls rather than wrap with function.
+
+  inline String clone() const;
+  // Clones the string into heap-owning storage.
 
 private:
   Array<char> content;
@@ -783,6 +789,14 @@ inline ConstString ConstString::clone() const {
   } else {
     return ConstString(heapArray<char>(content));
   }
+}
+
+inline String StringPtr::clone() const {
+  return heapString(begin(), size());
+}
+
+inline String String::clone() const {
+  return heapString(begin(), size());
 }
 
 inline String::String(Array<char> buffer): content(kj::mv(buffer)) {
