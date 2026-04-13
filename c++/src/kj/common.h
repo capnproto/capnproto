@@ -1264,8 +1264,8 @@ constexpr bool isNoThrowMoveConstructible() {
 }
 
 template <typename T>
-concept Cloneable = requires(const T& value) { value.clone(); };
-// Concept: T has a `const clone()` member.
+concept Cloneable = requires(T& value) { value.clone(); };
+// Concept: T has a `clone()` member callable on a `T&`.
 
 template <typename T>
 concept NicheOptimizable = _::HasAnyNicheMember<T>;
@@ -2142,10 +2142,21 @@ public:
     }
   }
 
-  auto clone() const requires Cloneable<T> {
+  auto clone() requires Cloneable<T> {
     // Clones the value if it is not none.
     // Returns Maybe<decltype(t.clone())>
-    using U = decltype(ptr->clone());
+    using U = decltype(instance<T&>().clone());
+    if (ptr == nullptr) {
+      return Maybe<U>(kj::none);
+    } else {
+      return Maybe<U>(ptr->clone());
+    }
+  }
+
+  auto clone() const requires Cloneable<const T> {
+    // Clones the value if it is not none.
+    // Returns Maybe<decltype(t.clone())>
+    using U = decltype(instance<const T&>().clone());
     if (ptr == nullptr) {
       return Maybe<U>(kj::none);
     } else {
@@ -2277,13 +2288,24 @@ public:
     }
   }
 
-  auto clone() const requires Cloneable<T> {
+  auto clone() requires Cloneable<T> {
     // Clones the value (not a reference) if reference is not none.
-    using U = decltype(ptr->clone());
+    using U = decltype(instance<T&>().clone());
     if (ptr == nullptr) {
       return Maybe<U>(kj::none);
     } else {
       return Maybe<U>(ptr->clone());
+    }
+  }
+
+  auto clone() const requires Cloneable<const T> {
+    // Clones the value (not a reference) if reference is not none.
+    using U = decltype(instance<const T&>().clone());
+    if (ptr == nullptr) {
+      return Maybe<U>(kj::none);
+    } else {
+      const T& ref = *ptr;
+      return Maybe<U>(ref.clone());
     }
   }
 
@@ -2636,7 +2658,8 @@ public:
   // Syntax sugar for invoking asImpl(U*, const ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
-  auto clone() const requires Cloneable<T>;
+  auto clone() requires Cloneable<T>;
+  auto clone() const requires Cloneable<const T>;
   // Deep-clone into heap-owned array.
   // Returns Array<decltype(t.clone())>
 
