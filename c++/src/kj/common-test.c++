@@ -34,12 +34,25 @@ struct ClonesToInt { int clone() const { return 123; } };
 struct ClonesToStringPtr { StringPtr clone() const { return "foo"; } };
 struct NoClone {};
 struct NonConstClone { int clone() { return 123; } };
+struct HasCopy { HasCopy() = default; HasCopy(const HasCopy&) = default; };
+struct NoCopy { NoCopy() = default; NoCopy(const NoCopy&) = delete; };
+struct NonConstCopy {
+  NonConstCopy() = default;
+  NonConstCopy(NonConstCopy&) {}
+};
 
 static_assert(Cloneable<ClonesToInt>);
 static_assert(Cloneable<ClonesToStringPtr>);
 static_assert(!Cloneable<NoClone>);
 static_assert(Cloneable<NonConstClone>);
 static_assert(!Cloneable<const NonConstClone>);
+
+static_assert(Copyable<int>);
+static_assert(Copyable<const int>);
+static_assert(Copyable<HasCopy>);
+static_assert(!Copyable<NoCopy>);
+static_assert(Copyable<NonConstCopy>);
+static_assert(!Copyable<const NonConstCopy>);
 
 KJ_ASSERT_CAN_MEMCPY(char);
 KJ_ASSERT_CAN_MEMCPY(byte);

@@ -272,10 +272,9 @@ public:
   // Syntax sugar for invoking asImpl(U*, const Array&).
   // Used to chain conversion calls rather than wrap with function.
 
-  auto clone() requires Cloneable<T>;
-  auto clone() const requires Cloneable<const T>;
-  // Deep-clone to a new heap array by cloning every element.
-  // Returns Array<decltype(t.clone())>
+  auto clone() requires (Cloneable<T> || Copyable<T>);
+  auto clone() const requires (Cloneable<const T> || Copyable<const T>);
+  // Deep-clone or copy to a new heap array element-by-element.
 
   inline bool hasNullDisposer() const {return disposer == &NullArrayDisposer::instance; }
   // Returns true if array uses NullArrayDisposer, intended for use with string literal
@@ -955,22 +954,22 @@ inline Array<T> heapArray(std::initializer_list<T> init) {
 }
 
 template <typename T>
-inline auto ArrayPtr<T>::clone() requires Cloneable<T> {
-  return KJ_MAP(value, *this) { return value.clone(); };
+inline auto ArrayPtr<T>::clone() requires (Cloneable<T> || Copyable<T>) {
+  return KJ_MAP(value, *this) { return _::copyOrClone(value); };
 }
 
 template <typename T>
-inline auto ArrayPtr<T>::clone() const requires Cloneable<const T> {
-  return KJ_MAP(value, *this) { return value.clone(); };
+inline auto ArrayPtr<T>::clone() const requires (Cloneable<const T> || Copyable<const T>) {
+  return KJ_MAP(value, *this) { return _::copyOrClone(value); };
 }
 
 template <typename T>
-inline auto Array<T>::clone() requires Cloneable<T> {
+inline auto Array<T>::clone() requires (Cloneable<T> || Copyable<T>) {
   return asPtr().clone();
 }
 
 template <typename T>
-inline auto Array<T>::clone() const requires Cloneable<const T> {
+inline auto Array<T>::clone() const requires (Cloneable<const T> || Copyable<const T>) {
   return asPtr().clone();
 }
 

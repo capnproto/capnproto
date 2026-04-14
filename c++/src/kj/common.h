@@ -1265,7 +1265,33 @@ constexpr bool isNoThrowMoveConstructible() {
 
 template <typename T>
 concept Cloneable = requires(T& value) { value.clone(); };
-// Concept: T has a `clone()` member callable on a `T&`.
+// Concept: `T` has a `clone()` member callable on a `T&`.
+// Note that this supports mutable cloning because we do not hide interior mutability like
+// Rust does.
+// `Cloneable<const T>` represent a const-cloneable object which is similar to Rust `Clone`.
+
+template <typename T>
+concept Copyable = _::ConstructibleFrom<T, T&>;
+// Concept: T has a copy constructor callable on a `T&`.
+// Supports mutable copying similar to `Cloneable<T>`.
+// Unlike Rust this does not represent trivial to copy object, but simply an object with available
+// copy constructor.
+// By KJ conventions we avoid heap allocations in copy constructors. Despite of this copying a
+// complicated object might still be expensive.
+
+namespace _ {  // private
+
+template <typename T>
+auto copyOrClone(T& value) requires Cloneable<T> {
+  return value.clone();
+}
+
+template <typename T>
+Decay<T> copyOrClone(T& value) requires (!Cloneable<T> && Copyable<T>) {
+  return Decay<T>(value);
+}
+
+}  // namespace _ (private)
 
 template <typename T>
 concept NicheOptimizable = _::HasAnyNicheMember<T>;
@@ -2658,10 +2684,9 @@ public:
   // Syntax sugar for invoking asImpl(U*, const ArrayPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
-  auto clone() requires Cloneable<T>;
-  auto clone() const requires Cloneable<const T>;
-  // Deep-clone into heap-owned array.
-  // Returns Array<decltype(t.clone())>
+  auto clone() requires (Cloneable<T> || Copyable<T>);
+  auto clone() const requires (Cloneable<const T> || Copyable<const T>);
+  // Deep-clone or copy into a heap-owned array.
 
   inline void fill(T t) {
     // Fill the area by copying t over every element.
