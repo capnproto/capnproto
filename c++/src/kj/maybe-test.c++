@@ -55,10 +55,20 @@ struct CloneableMaybeValue {
   int clone() const { return 123; }
 };
 
+struct NonConstCloneableMaybeValue {
+  int clone() { return 123; }
+};
+
 struct NonCloneableMaybeValue {};
 
 static_assert(Cloneable<Maybe<CloneableMaybeValue>>);
+static_assert(Cloneable<const Maybe<CloneableMaybeValue>>);
 static_assert(Cloneable<Maybe<CloneableMaybeValue&>>);
+static_assert(Cloneable<const Maybe<CloneableMaybeValue&>>);
+static_assert(Cloneable<Maybe<NonConstCloneableMaybeValue>>);
+static_assert(!Cloneable<const Maybe<NonConstCloneableMaybeValue>>);
+static_assert(Cloneable<Maybe<NonConstCloneableMaybeValue&>>);
+static_assert(!Cloneable<const Maybe<NonConstCloneableMaybeValue&>>);
 static_assert(!Cloneable<Maybe<NonCloneableMaybeValue>>);
 static_assert(!Cloneable<Maybe<NonCloneableMaybeValue&>>);
 

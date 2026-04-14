@@ -33,10 +33,20 @@ struct CloneableElement {
   int clone() const { return 123; }
 };
 
+struct NonConstCloneableElement {
+  int clone() { return 123; }
+};
+
 struct NonCloneableElement {};
 
 static_assert(Cloneable<Array<CloneableElement>>);
+static_assert(Cloneable<const Array<CloneableElement>>);
 static_assert(Cloneable<ArrayPtr<CloneableElement>>);
+static_assert(Cloneable<const ArrayPtr<CloneableElement>>);
+static_assert(Cloneable<Array<NonConstCloneableElement>>);
+static_assert(!Cloneable<const Array<NonConstCloneableElement>>);
+static_assert(Cloneable<ArrayPtr<NonConstCloneableElement>>);
+static_assert(!Cloneable<const ArrayPtr<NonConstCloneableElement>>);
 static_assert(!Cloneable<Array<NonCloneableElement>>);
 static_assert(!Cloneable<ArrayPtr<NonCloneableElement>>);
 

@@ -20,10 +20,12 @@
 // THE SOFTWARE.
 
 #include "refcount.h"
+#include "array.h"
 #include <kj/compat/gtest.h>
 
 namespace kj {
 
+namespace _ {
 struct SetTrueInDestructor: public Refcounted {
   SetTrueInDestructor(bool* ptr): ptr(ptr) {}
   ~SetTrueInDestructor() { *ptr = true; }
@@ -32,6 +34,15 @@ struct SetTrueInDestructor: public Refcounted {
 
   bool* ptr;
 };
+
+static_assert(Cloneable<Rc<SetTrueInDestructor>>);
+static_assert(!Cloneable<const Rc<SetTrueInDestructor>>);
+static_assert(Cloneable<Maybe<Rc<SetTrueInDestructor>>>);
+static_assert(!Cloneable<const Maybe<Rc<SetTrueInDestructor>>>);
+static_assert(Cloneable<Array<Rc<SetTrueInDestructor>>>);
+static_assert(!Cloneable<const Array<Rc<SetTrueInDestructor>>>);
+static_assert(Cloneable<ArrayPtr<Rc<SetTrueInDestructor>>>);
+static_assert(!Cloneable<const ArrayPtr<Rc<SetTrueInDestructor>>>);
 
 TEST(Refcount, Basic) {
   bool b = false;
@@ -95,6 +106,52 @@ KJ_TEST("Rc") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc clone") {
+  bool b = false;
+
+  auto ref1 = kj::rc<SetTrueInDestructor>(&b);
+  auto ref2 = ref1.clone();
+
+  EXPECT_TRUE(ref1 == ref2);
+
+  ref1 = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc container clone") {
+  bool b = false;
+
+  {
+    auto ref = kj::rc<SetTrueInDestructor>(&b);
+
+    Maybe<Rc<SetTrueInDestructor>> maybe = ref.addRef();
+    auto maybeClone = maybe.clone();
+    ASSERT_TRUE(maybeClone != kj::none);
+    EXPECT_TRUE(KJ_ASSERT_NONNULL(maybe) == KJ_ASSERT_NONNULL(maybeClone));
+
+    ArrayBuilder<Rc<SetTrueInDestructor>> builder = heapArrayBuilder<Rc<SetTrueInDestructor>>(2);
+    builder.add(ref.addRef());
+    builder.add(ref.addRef());
+    auto array = builder.finish();
+
+    auto arrayPtr = array.asPtr();
+    auto arrayPtrClone = arrayPtr.clone();
+    ASSERT_EQ(2u, arrayPtrClone.size());
+    EXPECT_TRUE(arrayPtrClone[0] == array[0]);
+    EXPECT_TRUE(arrayPtrClone[1] == array[1]);
+
+    auto arrayClone = array.clone();
+    ASSERT_EQ(2u, arrayClone.size());
+    EXPECT_TRUE(arrayClone[0] == array[0]);
+    EXPECT_TRUE(arrayClone[1] == array[1]);
+  }
+
+  EXPECT_TRUE(b);
+}
+
 KJ_TEST("Rc Own interop") {
     bool b = false;
 
@@ -121,7 +178,7 @@ KJ_TEST("Rc inheritance") {
 
   // up casting works automatically
   kj::Rc<SetTrueInDestructor> parent = child.addRef();
-  
+
   auto down = parent.downcast<Child>();
   EXPECT_TRUE(parent == nullptr);
   EXPECT_TRUE(down != nullptr);
@@ -240,6 +297,9 @@ struct AtomicSetTrueInDestructor: public AtomicRefcounted {
   bool* ptr;
 };
 
+static_assert(Cloneable<Arc<AtomicSetTrueInDestructor>>);
+static_assert(Cloneable<const Arc<AtomicSetTrueInDestructor>>);
+
 KJ_TEST("Arc") {
   bool b = false;
 
@@ -265,6 +325,22 @@ KJ_TEST("Arc") {
 
   EXPECT_FALSE(b);
   ref4 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc clone") {
+  bool b = false;
+
+  auto ref1 = kj::arc<AtomicSetTrueInDestructor>(&b);
+  const auto& cref = ref1;
+  auto ref2 = cref.clone();
+
+  EXPECT_TRUE(ref1 == ref2);
+
+  ref1 = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
   EXPECT_TRUE(b);
 }
 
@@ -320,4 +396,5 @@ KJ_TEST("Arc disown / reown") {
   KJ_EXPECT(b == true);
 }
 
+}  // namespace _
 }  // namespace kj

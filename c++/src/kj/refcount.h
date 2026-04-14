@@ -189,6 +189,10 @@ public:
     }
   }
 
+  kj::Rc<T> clone() {
+    return addRef();
+  }
+
   Rc& operator=(decltype(nullptr)) {
     own = nullptr;
     return *this;
@@ -442,6 +446,10 @@ public:
     } else {
       return kj::Arc<T>();
     }
+  }
+
+  kj::Arc<T> clone() const {
+    return addRef();
   }
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there

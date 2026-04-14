@@ -272,7 +272,8 @@ public:
   // Syntax sugar for invoking asImpl(U*, const Array&).
   // Used to chain conversion calls rather than wrap with function.
 
-  auto clone() const requires Cloneable<T>;
+  auto clone() requires Cloneable<T>;
+  auto clone() const requires Cloneable<const T>;
   // Deep-clone to a new heap array by cloning every element.
   // Returns Array<decltype(t.clone())>
 
@@ -954,17 +955,22 @@ inline Array<T> heapArray(std::initializer_list<T> init) {
 }
 
 template <typename T>
-inline auto ArrayPtr<T>::clone() const requires Cloneable<T> {
-  using U = decltype(instance<const T&>().clone());
-  auto builder = heapArrayBuilder<U>(size());
-  for (auto& value: *this) {
-    builder.add(value.clone());
-  }
-  return builder.finish();
+inline auto ArrayPtr<T>::clone() requires Cloneable<T> {
+  return KJ_MAP(value, *this) { return value.clone(); };
 }
 
 template <typename T>
-inline auto Array<T>::clone() const requires Cloneable<T> {
+inline auto ArrayPtr<T>::clone() const requires Cloneable<const T> {
+  return KJ_MAP(value, *this) { return value.clone(); };
+}
+
+template <typename T>
+inline auto Array<T>::clone() requires Cloneable<T> {
+  return asPtr().clone();
+}
+
+template <typename T>
+inline auto Array<T>::clone() const requires Cloneable<const T> {
   return asPtr().clone();
 }
 
