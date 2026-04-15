@@ -2691,6 +2691,52 @@ KJ_TEST("AdaptiveFlowController: minimum window is enforced") {
   KJ_EXPECT(estimatedWindow >= 64 * 1024, estimatedWindow);
 }
 
+KJ_TEST("AdaptiveFlowController: destroying with blocked senders fulfills them") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  TestClock clock;
+  auto fc = RpcFlowController::newAdaptiveController(256 * 1024, clock);
+
+  // Send a 256KB message to fill most of the window. The ack never arrives (NEVER_DONE),
+  // simulating a dead follower.
+  auto msg1 = kj::heap<MockMessage>(256 * 1024);
+  fc->send(kj::mv(msg1), kj::NEVER_DONE).poll(waitScope);
+
+  // Second send blocks — window is full since the first ack never arrived.
+  auto msg2 = kj::heap<MockMessage>(256 * 1024);
+  auto blockedPromise = fc->send(kj::mv(msg2), kj::NEVER_DONE);
+  KJ_EXPECT(!blockedPromise.poll(waitScope));
+
+  // Destroy the flow controller while a sender is blocked.
+  fc = nullptr;
+
+  // The blocked promise should be fulfilled (not rejected).
+  blockedPromise.wait(waitScope);
+}
+
+KJ_TEST("WindowFlowController: destroying with blocked senders fulfills them") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  auto fc = RpcFlowController::newFixedWindowController(256 * 1024);
+
+  // Send a 256KB message to fill most of the window. The ack never arrives,
+  // simulating a dead follower.
+  auto msg1 = kj::heap<MockMessage>(256 * 1024);
+  fc->send(kj::mv(msg1), kj::NEVER_DONE).poll(waitScope);
+
+  // Second send blocks — window is full since the first ack never arrived.
+  auto msg2 = kj::heap<MockMessage>(256 * 1024);
+  auto blockedPromise = fc->send(kj::mv(msg2), kj::NEVER_DONE);
+  KJ_EXPECT(!blockedPromise.poll(waitScope));
+
+  // Destroy the flow controller while a sender is blocked.
+  fc = nullptr;
+
+  // The blocked promise should be fulfilled (not rejected).
+  blockedPromise.wait(waitScope);
+}
+
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
