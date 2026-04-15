@@ -180,8 +180,7 @@ const Dbghelp& getDbghelp() {
   return dbghelp;
 }
 
-ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
-                                    HANDLE thread, CONTEXT& context) {
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, HANDLE thread, CONTEXT& context) {
   // NOTE: Apparently there is a function CaptureStackBackTrace() that is equivalent to glibc's
   //   backtrace(). Somehow I missed that when I originally wrote this. However,
   //   CaptureStackBackTrace() does not accept a CONTEXT parameter; it can only trace the caller.
@@ -221,7 +220,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
     space[count] = reinterpret_cast<void*>(frame.AddrPC.Offset - 1);
   }
 
-  return space.slice(kj::min(ignoreCount, count), count);
+  return space.first(count);
 }
 
 }  // namespace
@@ -385,7 +384,9 @@ String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
 
 #endif
 
-ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
+KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
+  // Low-level non-allocating getStackTrace functionality
+
   if (getExceptionCallback().stackTraceMode() == ExceptionCallback::StackTraceMode::NONE) {
     return nullptr;
   }
@@ -393,7 +394,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
 #if KJ_USE_WIN32_DBGHELP
   CONTEXT context;
   RtlCaptureContext(&context);
-  return getStackTrace(space, ignoreCount, GetCurrentThread(), context);
+  return getStackTrace(space, GetCurrentThread(), context);
 #elif KJ_HAS_BACKTRACE
   size_t size = backtrace(space.begin(), space.size());
   for (auto& addr: space.first(size)) {
@@ -406,10 +407,47 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount) {
     // instructions were multi-byte, but it appears addr2line is able to cope with this.
     addr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) - 1);
   }
-  return space.slice(kj::min(ignoreCount + 1, size), size);
+  return space.first(size);
 #else
   return nullptr;
 #endif
+}
+
+KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, size_t ignoreCount) {
+  ignoreCount++ /* this frame */;
+  auto trace = getStackTrace(space);
+  return trace.slice(kj::min(ignoreCount, trace.size()), trace.size());
+}
+
+Vector<void*> getStackTrace(size_t ignoreCount) {
+  ignoreCount += 2; /* this frame + getStackTrace(space) frame */
+
+  // try buffer on the stack first
+  void* space[32];
+  auto trace = getStackTrace(space);
+  if (trace.size() < kj::size(space)) {
+      auto start = kj::min(ignoreCount, trace.size());
+      kj::Vector<void*> result(trace.size() - start);
+      result.addAll(trace.slice(start));
+      return result;
+  }
+
+  // stack buffer wasn't enough, switch to heap-allocated Vector
+  kj::Vector<void*> vec(64 /* we already know 32 is not enough */);
+  for (;;) {
+    vec.resize(vec.capacity());
+
+    auto trace = getStackTrace(vec);
+    if (trace.size() < vec.size() || vec.capacity() >= 1024 /* protect against stack overflow */) {
+        auto start = kj::min(ignoreCount, trace.size());
+        if (start < trace.size()) {
+          memmove(vec.begin(), vec.begin() + start, (trace.size() - start) * sizeof(void*));
+        }
+        vec.truncate(trace.size() - start);
+        return kj::mv(vec);
+    }
+    vec.reserve(vec.capacity() * 2);
+  }
 }
 
 #if (__GNUC__ && !_WIN32) || __clang__
@@ -605,18 +643,15 @@ StringPtr stringifyStackTraceAddresses(ArrayPtr<void* const> trace, ArrayPtr<cha
 }
 
 String getStackTrace() {
-  void* space[32]{};
-  auto trace = getStackTrace(space, 2);
+  auto trace = getStackTrace(2);
   return kj::str(stringifyStackTraceAddresses(trace), stringifyStackTrace(trace));
 }
 
 namespace {
 
 [[noreturn]] void terminateHandler() {
-  void* traceSpace[32]{};
-
   // ignoreCount = 3 to ignore std::terminate entry.
-  auto trace = kj::getStackTrace(traceSpace, 3);
+  auto trace = kj::getStackTrace(3);
 
   kj::String message;
 
@@ -664,7 +699,7 @@ BOOL WINAPI breakHandler(DWORD type) {
           context.ContextFlags = CONTEXT_FULL;
           if (GetThreadContext(thread, &context)) {
             void* traceSpace[32];
-            auto trace = getStackTrace(traceSpace, 0, thread, context);
+            auto trace = getStackTrace(traceSpace, thread, context);
             ResumeThread(thread);
             auto message = kj::str("*** Received CTRL+C. stack: ",
                                    stringifyStackTraceAddresses(trace),
@@ -713,7 +748,7 @@ kj::StringPtr exceptionDescription(DWORD code) {
 
 LONG WINAPI sehHandler(EXCEPTION_POINTERS* info) {
   void* traceSpace[32];
-  auto trace = getStackTrace(traceSpace, 0, GetCurrentThread(), *info->ContextRecord);
+  auto trace = getStackTrace(traceSpace, GetCurrentThread(), *info->ContextRecord);
   auto message = kj::str("*** Received structured exception #0x",
                          hex(info->ExceptionRecord->ExceptionCode), ": ",
                          exceptionDescription(info->ExceptionRecord->ExceptionCode),
@@ -760,7 +795,7 @@ namespace {
   static_assert(sizeof(ucontext->uc_mcontext) >= sizeof(win32Context),
       "mcontext_t should be an extension of CONTEXT");
   memcpy(&win32Context, &ucontext->uc_mcontext, sizeof(win32Context));
-  auto trace = getStackTrace(traceSpace, 0, GetCurrentThread(), win32Context);
+  auto trace = getStackTrace(traceSpace, GetCurrentThread(), win32Context);
 #elif __linux__ && __x86_64__
   kj::ArrayPtr<void* const> trace;
 
@@ -1017,8 +1052,7 @@ Exception::Exception(const Exception& other) noexcept {
     storage->remoteTrace = kj::str(other.storage->remoteTrace);
   }
 
-  storage->traceCount = other.storage->traceCount;
-  memcpy(storage->trace, other.storage->trace, sizeof(storage->trace[0]) * storage->traceCount);
+  storage->trace.addAll(other.storage->trace);
 
   KJ_IF_SOME(c, other.storage->context) {
     storage->context = heap(*c);
@@ -1045,7 +1079,7 @@ void Exception::wrapContext(const char* file, int line, String&& description) {
   storage->context = heap<Context>(file, line, mv(description), mv(storage->context));
 }
 
-void Exception::extendTrace(uint ignoreCount, uint limit) {
+void Exception::extendTrace(uint ignoreCount) {
   if (storage->isFullTrace) {
     // Awkward: extendTrace() was called twice without truncating in between. This should probably
     // be an error, but historically we didn't check for this so I'm hesitant to make it an error
@@ -1055,17 +1089,9 @@ void Exception::extendTrace(uint ignoreCount, uint limit) {
     return;
   }
 
-  KJ_STACK_ARRAY(void*, newTraceSpace, kj::min(kj::size(storage->trace), limit) + ignoreCount + 1,
-      sizeof(storage->trace)/sizeof(storage->trace[0]) + 8, 128);
-
-  auto newTrace = kj::getStackTrace(newTraceSpace, ignoreCount + 1);
-  if (newTrace.size() > ignoreCount + 2) {
-    // Remove suffix that won't fit into our static-sized trace.
-    newTrace = newTrace.first(kj::min(kj::size(storage->trace) - storage->traceCount, newTrace.size()));
-
-    // Copy the rest into our trace.
-    memcpy(storage->trace + storage->traceCount, newTrace.begin(), newTrace.asBytes().size());
-    storage->traceCount += newTrace.size();
+  auto newTrace = kj::getStackTrace(ignoreCount + 1 /* this frame */);
+  if (newTrace.size() > 0) {
+    storage->trace.addAll(newTrace);
     storage->isFullTrace = true;
   }
 }
@@ -1086,29 +1112,28 @@ void Exception::truncateCommonTrace() {
     return;
   }
 
-  if (storage->traceCount > 0) {
+  if (storage->trace.size() > 0) {
     // Create a "reference" stack trace that is a little bit deeper than the one in the exception.
-    void* refTraceSpace[sizeof(storage->trace) / sizeof(storage->trace[0]) + 4]{};
-    auto refTrace = kj::getStackTrace(refTraceSpace, 0);
+    auto refTrace = kj::getStackTrace(0);
 
     // We expect that the deepest frame in the exception's stack trace should be somewhere in our
     // own trace, since our own trace has a deeper limit. Search for it.
     for (uint i = refTrace.size(); i > 0; i--) {
-      if (refTrace[i-1] == storage->trace[storage->traceCount-1]) {
+      if (refTrace[i-1] == storage->trace[storage->trace.size()-1]) {
         // See how many frames match.
         for (uint j = 0; j < i; j++) {
-          if (j >= storage->traceCount) {
+          if (j >= storage->trace.size()) {
             // We matched the whole trace, apparently?
-            storage->traceCount = 0;
+            storage->trace.clear();
             return;
-          } else if (refTrace[i-j-1] != storage->trace[storage->traceCount-j-1]) {
+          } else if (refTrace[i-j-1] != storage->trace[storage->trace.size()-j-1]) {
             // Found mismatching entry.
 
             // If we matched more than half of the reference trace, guess that this is in fact
             // the prefix we're looking for.
             if (j > refTrace.size() / 2) {
               // Delete the matching suffix.
-              storage->traceCount -= j;
+              storage->trace.truncate(storage->trace.size() - j);
               return;
             }
           }
@@ -1124,9 +1149,7 @@ void Exception::addTrace(void* ptr) {
   // TODO(cleanup): Abort here if isFullTrace is true, and see what breaks. This method only makes
   // sense to call on partial traces.
 
-  if (storage->traceCount < kj::size(storage->trace)) {
-    storage->trace[storage->traceCount++] = ptr;
-  }
+  storage->trace.add(ptr);
 }
 
 void Exception::addTraceHere() {
@@ -1261,7 +1284,7 @@ kj::Exception getDestructionReason(void* traceSeparator, kj::Exception::Type def
         kj::heapString(defaultDescription));
 
     // Let's give some context on where the PromiseFulfiller was destroyed.
-    exception.extendTrace(2, 16);
+    exception.extendTrace(2);
 
     // Add a separator that hopefully makes this understandable...
     exception.addTrace(traceSeparator);

@@ -89,8 +89,7 @@ public:
 
   void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                   String&& text) override {
-    void* traceSpace[32]{};
-    auto trace = getStackTrace(traceSpace, 2);
+    auto trace = getStackTrace(2);
 
     if (text.size() == 0) {
       text = kj::heapString("expectation failed");
