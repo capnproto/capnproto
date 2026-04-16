@@ -518,7 +518,7 @@ public:
     KJ_IF_SOME(newException, kj::runCatchingExceptions([&]() {
       // Carefully pull all the objects out of the tables prior to releasing them because their
       // destructors could come back and mess with the tables.
-      kj::Vector<kj::Own<PipelineHook>> pipelinesToRelease;
+      kj::Vector<kj::Rc<PipelineHook>> pipelinesToRelease;
       kj::Vector<kj::Own<ClientHook>> clientsToRelease;
       kj::Vector<decltype(Answer::task)> tasksToRelease;
       kj::Vector<kj::Promise<void>> resolveOpsToRelease;
@@ -689,7 +689,7 @@ private:
     Answer& operator=(Answer&&) = default;
     // If we don't explicitly write all this, we get some stupid error deep in STL.
 
-    kj::Maybe<kj::Own<PipelineHook>> pipeline;
+    kj::Maybe<kj::Rc<PipelineHook>> pipeline;
     // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
 
     using Running = kj::Promise<void>;
@@ -2492,14 +2492,14 @@ private:
 
         auto sendResult = sendInternal(false);
 
-        kj::Own<PipelineHook> pipeline;
+        kj::Rc<PipelineHook> pipeline;
         if (noPromisePipelining) {
           pipeline = getDisabledPipeline();
         } else {
           auto forkedPromise = sendResult.promise.fork();
 
           // The pipeline must get notified of resolution before the app does to maintain ordering.
-          pipeline = kj::refcounted<RpcPipeline>(
+          pipeline = kj::rc<RpcPipeline>(
               *connectionState, kj::mv(sendResult.questionRef), forkedPromise.addBranch());
 
           sendResult.promise = forkedPromise.addBranch();
@@ -2560,7 +2560,7 @@ private:
         return send();
       } else {
         auto questionRef = sendForPipelineInternal();
-        kj::Own<PipelineHook> pipeline = kj::refcounted<RpcPipeline>(
+        kj::Rc<PipelineHook> pipeline = kj::rc<RpcPipeline>(
             *connectionState, kj::mv(questionRef));
         return AnyPointer::Pipeline(kj::mv(pipeline));
       }
@@ -2569,7 +2569,7 @@ private:
     struct TailInfo {
       QuestionId questionId;
       kj::Promise<void> promise;
-      kj::Own<PipelineHook> pipeline;
+      kj::Rc<PipelineHook> pipeline;
     };
 
     kj::Maybe<TailInfo> tailSend() {
@@ -2600,12 +2600,12 @@ private:
 
       QuestionId questionId = sendResult.questionRef->getId();
 
-      kj::Own<PipelineHook> pipeline;
+      kj::Rc<PipelineHook> pipeline;
       bool noPromisePipelining = callBuilder.getNoPromisePipelining();
       if (noPromisePipelining) {
         pipeline = getDisabledPipeline();
       } else {
-        pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef));
+        pipeline = kj::rc<RpcPipeline>(*connectionState, kj::mv(sendResult.questionRef));
       }
 
       return TailInfo { questionId, kj::mv(promise), kj::mv(pipeline) };
@@ -2757,7 +2757,7 @@ private:
     }
   };
 
-  class RpcPipeline final: public PipelineHook, public kj::Refcounted {
+  class RpcPipeline final: public PipelineHook {
   public:
     RpcPipeline(RpcConnectionState& connectionState, kj::Own<QuestionRef>&& questionRef,
                 kj::Promise<kj::Own<RpcResponse>>&& redirectLaterParam)
@@ -2787,10 +2787,6 @@ private:
     }
 
     // implements PipelineHook ---------------------------------------
-
-    kj::Own<PipelineHook> addRef() override {
-      return kj::addRef(*this);
-    }
 
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
       auto copy = kj::heapArrayBuilder<PipelineOp>(ops.size());
@@ -3051,7 +3047,7 @@ private:
     MallocMessageBuilder message;
   };
 
-  class PostReturnRpcPipeline final: public PipelineHook, public kj::Refcounted {
+  class PostReturnRpcPipeline final: public PipelineHook {
     // Once an incoming call has returned, we may need to replace the `PipelineHook` with one that
     // correctly handles the Tribble 4-way race condition. Namely, we must ensure that if the
     // response contained any capabilities pointing back out to the network, then any further
@@ -3059,14 +3055,10 @@ private:
     // will resolve to the same network capability forever, *even if* that network capability is
     // itself a promise which later resolves to somewhere else.
   public:
-    PostReturnRpcPipeline(kj::Own<PipelineHook> inner,
+    PostReturnRpcPipeline(kj::Rc<PipelineHook> inner,
                           RpcServerResponseImpl& response,
                           kj::Own<RpcCallContext> context)
         : inner(kj::mv(inner)), response(response), context(kj::mv(context)) {}
-
-    kj::Own<PipelineHook> addRef() override {
-      return kj::addRef(*this);
-    }
 
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
       auto resolved = response.getResolutionAtReturnTime(ops);
@@ -3081,7 +3073,7 @@ private:
     }
 
   private:
-    kj::Own<PipelineHook> inner;
+    kj::Rc<PipelineHook> inner;
     RpcServerResponseImpl& response;
     kj::Own<RpcCallContext> context;  // owns `response`
 
@@ -3263,8 +3255,8 @@ private:
           auto& answer = KJ_ASSERT_NONNULL(connectionState->answers.find(answerId));
           // Swap out the `pipeline` in the answer table for one that will return capabilities
           // consistent with whatever the result caps resolved to as of the time the return was sent.
-          answer.pipeline = answer.pipeline.map([&](kj::Own<PipelineHook>& inner) {
-            return kj::refcounted<PostReturnRpcPipeline>(
+          answer.pipeline = answer.pipeline.map([&](kj::Rc<PipelineHook>& inner) {
+            return kj::rc<PostReturnRpcPipeline>(
                 kj::mv(inner), responseImpl, kj::addRef(*this));
           });
         }
@@ -3358,7 +3350,7 @@ private:
         return results;
       }
     }
-    void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+    void setPipeline(kj::Rc<PipelineHook> pipeline) override {
       KJ_IF_SOME(f, tailCallPipelineFulfiller) {
         f->fulfill(AnyPointer::Pipeline(kj::mv(pipeline)));
       }
@@ -3750,14 +3742,10 @@ private:
   // ---------------------------------------------------------------------------
   // Level 0
 
-  class SingleCapPipeline: public PipelineHook, public kj::Refcounted {
+  class SingleCapPipeline: public PipelineHook {
   public:
     SingleCapPipeline(kj::Own<ClientHook>&& cap)
         : cap(kj::mv(cap)) {}
-
-    kj::Own<PipelineHook> addRef() override {
-      return kj::addRef(*this);
-    }
 
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
       if (ops.size() == 0) {
@@ -3835,7 +3823,7 @@ private:
                                      "questionId is already in use", answerId);
 
     answer.resultExports = kj::mv(resultExports);
-    answer.pipeline = kj::Own<PipelineHook>(kj::refcounted<SingleCapPipeline>(kj::mv(capHook)));
+    answer.pipeline = kj::rc<SingleCapPipeline>(kj::mv(capHook));
 
     response->send();
   }
@@ -3961,11 +3949,11 @@ private:
 
       case rpc::MessageTarget::PROMISED_ANSWER: {
         auto promisedAnswer = target.getPromisedAnswer();
-        kj::Own<PipelineHook> pipeline;
+        kj::Rc<PipelineHook> pipeline;
 
         KJ_IF_SOME(answer, answers.find(promisedAnswer.getQuestionId())) {
           KJ_IF_SOME(p, answer.pipeline) {
-            pipeline = p->addRef();
+            pipeline = p.addRef();
           }
         }
         if (pipeline.get() == nullptr) {
@@ -4134,7 +4122,7 @@ private:
     kj::Array<ExportId> exportsToRelease;
     KJ_DEFER(releaseExports(exportsToRelease));
     Answer answerToRelease;
-    kj::Maybe<kj::Own<PipelineHook>> pipelineToRelease;
+    kj::Maybe<kj::Rc<PipelineHook>> pipelineToRelease;
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
 
     KJ_IF_SOME(answer, answers.find(finish.getQuestionId())) {
@@ -4513,13 +4501,9 @@ private:
     // Use a `pipeline` that'll throw exceptions if anyone actually tries to use it.
     //
     // It also holds onto `awaiter`, so that `awaiter` is dropped when `Finish` is received.
-    class ProvidePipelineHook final: public PipelineHook, public kj::Refcounted {
+    class ProvidePipelineHook final: public PipelineHook {
     public:
       ProvidePipelineHook(kj::Own<void> awaiter): awaiter(kj::mv(awaiter)) {}
-
-      kj::Own<PipelineHook> addRef() override {
-        return kj::addRef(*this);
-      }
 
       kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
         return newBrokenCap(KJ_EXCEPTION(FAILED, "can't pipeline on a Provide operation"));
@@ -4533,7 +4517,7 @@ private:
       kj::Own<void> awaiter;
     };
 
-    answer.pipeline = kj::refcounted<ProvidePipelineHook>(kj::mv(awaiter));
+    answer.pipeline = kj::rc<ProvidePipelineHook>(kj::mv(awaiter));
   }
 
   void handleAccept(const rpc::Accept::Reader& accept) {
@@ -4574,7 +4558,7 @@ private:
     });
 
     // Set `answer.pipeline` to a single-cap pipeline.
-    answer.pipeline = kj::refcounted<SingleCapPipeline>(
+    answer.pipeline = kj::rc<SingleCapPipeline>(
         newLocalPromiseClient(promise.addBranch()));
   }
 
