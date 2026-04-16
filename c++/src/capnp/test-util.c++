@@ -955,7 +955,8 @@ kj::Promise<void> TestExtendsImpl::grault(GraultContext context) {
   return kj::READY_NOW;
 }
 
-TestPipelineImpl::TestPipelineImpl(int& callCount): callCount(callCount) {}
+TestPipelineImpl::TestPipelineImpl(int& callCount, SetPipelineMode setPipelineMode)
+    : callCount(callCount), setPipelineMode(setPipelineMode) {}
 
 kj::Promise<void> TestPipelineImpl::getCap(GetCapContext context) {
   ++callCount;
@@ -1007,7 +1008,16 @@ kj::Promise<void> TestPipelineImpl::getCapPipelineOnly(GetCapPipelineOnlyContext
   ++callCount;
   PipelineBuilder<GetCapPipelineOnlyResults> pb;
   pb.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
-  context.setPipeline(pb.build());
+  switch (setPipelineMode) {
+    case SetPipelineMode::RVALUE:
+      context.setPipeline(pb.build());
+      break;
+    case SetPipelineMode::LVALUE: {
+      auto pipeline = pb.build();
+      context.setPipeline(pipeline);
+      break;
+    }
+  }
   return kj::NEVER_DONE;
 }
 
