@@ -104,7 +104,7 @@ public:
     return Bottom(kj::mv(e));
   }
   Bottom operator()(const  Exception& e) {
-    return Bottom(kj::cp(e));
+    return Bottom(e.clone());
   }
 };
 

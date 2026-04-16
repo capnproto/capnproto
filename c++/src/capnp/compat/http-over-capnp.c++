@@ -169,7 +169,7 @@ private:
   template <typename Func>
   kj::Promise<void> wrap(Func&& func) {
     KJ_IF_SOME(e, error) {
-      kj::throwFatalException(kj::cp(*e));
+      kj::throwFatalException(e->clone());
     }
 
     // Detect cancellation (of the operation) and mark the object broken in this case.
@@ -188,7 +188,7 @@ private:
         kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
       }
     } KJ_CATCH(e) {
-      error = kj::heap(kj::cp(e));
+      error = kj::heap(e.clone());
       kj::throwFatalException(kj::mv(e));
     }
 

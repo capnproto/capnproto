@@ -2818,7 +2818,7 @@ public:
 
   kj::Promise<Message> receive(size_t maxSize) override {
     KJ_IF_SOME(ex, receiveException) {
-      return kj::cp(ex);
+      return ex.clone();
     }
 
     size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
@@ -4197,7 +4197,7 @@ private:
         return pipe.pumpTo(other);
       }, [this](kj::Exception&& e) -> kj::Promise<void> {
         canceler.release();
-        fulfiller.reject(kj::cp(e));
+        fulfiller.reject(e.clone());
         pipe.endState(*this);
         return kj::mv(e);
       }));
@@ -4271,7 +4271,7 @@ private:
         return kj::mv(message);
       }, [this](kj::Exception&& e) -> Message {
         canceler.release();
-        fulfiller.reject(kj::cp(e));
+        fulfiller.reject(e.clone());
         pipe.endState(*this);
         kj::throwRecoverableException(kj::mv(e));
         return Message(kj::String());
@@ -4286,7 +4286,7 @@ private:
         pipe.endState(*this);
       }, [this](kj::Exception&& e) {
         canceler.release();
-        fulfiller.reject(kj::cp(e));
+        fulfiller.reject(e.clone());
         pipe.endState(*this);
         kj::throwRecoverableException(kj::mv(e));
       }));
@@ -4367,7 +4367,7 @@ private:
         return other.pumpTo(pipe);
       }, [this](kj::Exception&& e) -> kj::Promise<void> {
         canceler.release();
-        fulfiller.reject(kj::cp(e));
+        fulfiller.reject(e.clone());
         pipe.endState(*this);
         return kj::mv(e);
       }));
@@ -4441,7 +4441,7 @@ private:
       }, [this](kj::Exception&& e) {
         canceler.release();
         pipe.endState(*this);
-        fulfiller.reject(kj::cp(e));
+        fulfiller.reject(e.clone());
         kj::throwRecoverableException(kj::mv(e));
       }));
     }
@@ -4462,7 +4462,7 @@ private:
       }, [this](kj::Exception&& e) {
         canceler.release();
         pipe.endState(*this);
-        fulfiller.reject(kj::cp(e));
+        fulfiller.reject(e.clone());
         kj::throwRecoverableException(kj::mv(e));
       }));
     }
@@ -7307,7 +7307,7 @@ private:
         auto ex = KJ_EXCEPTION(FAILED,
             "service's connect() implementation never called accept() nor reject()");
         if (fulfiller->isWaiting()) {
-          fulfiller->reject(kj::cp(ex));
+          fulfiller->reject(ex.clone());
         }
         if (streamAndFulfiller.fulfiller->isWaiting()) {
           streamAndFulfiller.fulfiller->reject(kj::mv(ex));
@@ -7363,7 +7363,7 @@ private:
     void handleException(kj::Exception&& ex, kj::Own<kj::AsyncIoStream> connectStream) {
       // Reject the status promise if it is still pending...
       if (fulfiller->isWaiting()) {
-        fulfiller->reject(kj::cp(ex));
+        fulfiller->reject(ex.clone());
       }
       if (streamAndFulfiller.fulfiller->isWaiting()) {
         // If the guard hasn't yet ben released, we can fail the pending reads by

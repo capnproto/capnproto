@@ -259,7 +259,7 @@ public:
   ~TestVat() {
     kj::Exception exception = KJ_EXCEPTION(FAILED, "Network was destroyed.");
     for (auto& entry: connections) {
-      entry.value->disconnect(kj::cp(exception));
+      entry.value->disconnect(exception.clone());
     }
   }
 
@@ -335,7 +335,7 @@ public:
     }
 
     void disconnect(kj::Exception&& exception) {
-      messageQueue.rejectAll(kj::cp(exception));
+      messageQueue.rejectAll(exception.clone());
       networkException = kj::mv(exception);
       tasks = nullptr;
     }
@@ -428,7 +428,7 @@ public:
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
       KJ_IF_SOME(e, networkException) {
-        kj::throwFatalException(kj::cp(e));
+        kj::throwFatalException(e.clone());
       }
 
       if (initiatedIdleShutdown) {
@@ -449,7 +449,7 @@ public:
     }
     kj::Promise<void> shutdown() override {
       KJ_IF_SOME(e, vat.shutdownExceptionToThrow) {
-        return kj::cp(e);
+        return e.clone();
       }
       KJ_IF_SOME(p, partner) {
         if (p.initiatedIdleShutdown) {
@@ -1587,7 +1587,7 @@ KJ_TEST("method throws exception") {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
 
-  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  auto& exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == nullptr);
 }
@@ -1603,7 +1603,7 @@ KJ_TEST("method throws exception won't redundantly add remote exception prefix")
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
 
-  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  auto& exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == nullptr);
 }
@@ -1623,7 +1623,7 @@ KJ_TEST("method throws exception with trace encoder") {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
 
-  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  auto& exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == "trace for test exception");
 }
@@ -1639,7 +1639,7 @@ KJ_TEST("method throws exception with detail") {
     maybeException = kj::mv(e);
   }).wait(context.waitScope);
 
-  auto exception = KJ_ASSERT_NONNULL(maybeException);
+  auto& exception = KJ_ASSERT_NONNULL(maybeException);
   KJ_EXPECT(exception.getDescription() == "remote exception: test exception");
   KJ_EXPECT(exception.getRemoteTrace() == nullptr);
   auto detail = KJ_ASSERT_NONNULL(exception.getDetail(1));

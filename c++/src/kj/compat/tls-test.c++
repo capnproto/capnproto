@@ -389,7 +389,7 @@ public:
   template <typename T>
   kj::Promise<T> wrap(kj::Promise<T>&& promise) {
     return promise.catch_([this](kj::Exception&& e) -> kj::Promise<T> {
-      fulfiller->reject(kj::cp(e));
+      fulfiller->reject(e.clone());
       return kj::mv(e);
     }).exclusiveJoin(failurePromise.addBranch().then([]() -> T { KJ_UNREACHABLE; }));
   }

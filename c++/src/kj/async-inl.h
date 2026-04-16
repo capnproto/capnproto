@@ -779,7 +779,7 @@ public:
     } else {
       output.as<T>().value = kj::none;
     }
-    output.exception = hubResult.exception;
+    output.exception = hubResult.exception.clone();
     releaseHub(output);
   }
 };
@@ -802,7 +802,7 @@ public:
     } else {
       output.as<Element>().value = kj::none;
     }
-    output.exception = hubResult.exception;
+    output.exception = hubResult.exception.clone();
     releaseHub(output);
   }
 };

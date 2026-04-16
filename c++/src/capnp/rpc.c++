@@ -414,7 +414,7 @@ public:
 
   kj::Own<ClientHook> bootstrap() {
     if (connection.is<Disconnected>()) {
-      return newBrokenCap(kj::cp(connection.get<Disconnected>()));
+      return newBrokenCap(connection.get<Disconnected>().clone());
     }
 
     setNotIdle();
@@ -503,7 +503,7 @@ public:
     auto& rpcSystem = connection.get<Connected>().rpcSystem;
     auto dyingConnection = kj::mv(connection.get<Connected>().connection);
     auto canceler = kj::mv(connection.get<Connected>().canceler);
-    connection.init<Disconnected>(kj::cp(networkException));
+    connection.init<Disconnected>(networkException.clone());
 
     KJ_IF_SOME(newException, kj::runCatchingExceptions([&]() {
       // Carefully pull all the objects out of the tables prior to releasing them because their
@@ -518,7 +518,7 @@ public:
       questions.forEach([&](QuestionId id, Question& question) {
         KJ_IF_SOME(questionRef, question.selfRef) {
           // QuestionRef still present.
-          questionRef.reject(kj::cp(networkException));
+          questionRef.reject(networkException.clone());
 
           // We need to fully disconnect each QuestionRef otherwise it holds a reference back to
           // the connection state. Meanwhile `tasks` may hold streaming calls that end up holding
@@ -554,13 +554,13 @@ public:
 
       imports.forEach([&](ImportId id, Import& import) {
         KJ_IF_SOME(f, import.promiseFulfiller) {
-          f->reject(kj::cp(networkException));
+          f->reject(networkException.clone());
         }
       });
 
       embargoes.forEach([&](EmbargoId id, Embargo& embargo) {
         KJ_IF_SOME(f, embargo.fulfiller) {
-          f->reject(kj::cp(networkException));
+          f->reject(networkException.clone());
         }
       });
     })) {
@@ -1080,7 +1080,7 @@ private:
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
         CallHints hints) {
       if (!connectionState->connection.is<Connected>()) {
-        return newBrokenRequest(kj::cp(connectionState->connection.get<Disconnected>()), sizeHint);
+        return newBrokenRequest(connectionState->connection.get<Disconnected>().clone(), sizeHint);
       }
 
       auto request = kj::heap<RpcRequest>(
@@ -1278,7 +1278,7 @@ private:
               }).catch_([&](kj::Exception&& e) {
                 // Make any exceptions thrown from resolve() go to the connection's TaskSet which
                 // will cause the connection to be terminated.
-                connectionState.tasks.add(kj::cp(e));
+                connectionState.tasks.add(e.clone());
                 return newBrokenCap(kj::mv(e));
               }).fork()) {}
     // Create a client that starts out forwarding all calls to `initial` but, once `eventual`
@@ -1616,7 +1616,7 @@ private:
             KJ_CASE_ONEOF(error, Disconnected) {
               // We accepted the capability but the connection we accepted it on is now dead.
               // Don't fill in `contact` and just return a broken cap.
-              return newBrokenCap(kj::cp(error));
+              return newBrokenCap(error.clone());
             }
           }
           KJ_UNREACHABLE;
@@ -2283,7 +2283,7 @@ private:
         }
       }
       KJ_CASE_ONEOF(error, Disconnected) {
-        return newBrokenCap(kj::cp(error));
+        return newBrokenCap(error.clone());
       }
     }
     KJ_UNREACHABLE;
@@ -2426,8 +2426,8 @@ private:
         // TODO(bug): Seems like we should check for redirect before this?
         const kj::Exception& e = connectionState->connection.get<Disconnected>();
         return RemotePromise<AnyPointer>(
-            kj::Promise<Response<AnyPointer>>(kj::cp(e)),
-            AnyPointer::Pipeline(newBrokenPipeline(kj::cp(e))));
+            kj::Promise<Response<AnyPointer>>(e.clone()),
+            AnyPointer::Pipeline(newBrokenPipeline(e.clone())));
       }
 
       KJ_IF_SOME(redirect, target->writeTarget(callBuilder.getTarget())) {
@@ -2473,7 +2473,7 @@ private:
       if (!connectionState->connection.is<Connected>()) {
         // Connection is broken.
         // TODO(bug): Seems like we should check for redirect before this?
-        return kj::cp(connectionState->connection.get<Disconnected>());
+        return connectionState->connection.get<Disconnected>().clone();
       }
 
       KJ_IF_SOME(redirect, target->writeTarget(callBuilder.getTarget())) {
@@ -2495,7 +2495,7 @@ private:
         // Connection is broken.
         // TODO(bug): Seems like we should check for redirect before this?
         const kj::Exception& e = connectionState->connection.get<Disconnected>();
-        return AnyPointer::Pipeline(newBrokenPipeline(kj::cp(e)));
+        return AnyPointer::Pipeline(newBrokenPipeline(e.clone()));
       }
 
       KJ_IF_SOME(redirect, target->writeTarget(callBuilder.getTarget())) {
@@ -2660,7 +2660,7 @@ private:
         // table state. We'll have to reject the promise instead.
         setup.question.isAwaitingReturn = false;
         setup.question.skipFinish = true;
-        setup.questionRef->reject(kj::cp(exception));
+        setup.questionRef->reject(exception.clone());
         return kj::mv(exception);
       }
 
@@ -2783,7 +2783,7 @@ private:
           };
         } else {
           return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
-            kj::mv(ops), newBrokenCap(kj::cp(state.get<Broken>()))
+            kj::mv(ops), newBrokenCap(state.get<Broken>().clone())
           };
         }
       })->addRef();
@@ -2813,7 +2813,7 @@ private:
       state.init<Resolved>(kj::mv(response));
     }
 
-    void resolve(const kj::Exception&& exception) {
+    void resolve(kj::Exception&& exception) {
       KJ_ASSERT(state.is<Waiting>(), "Already resolved?");
       state.init<Broken>(kj::mv(exception));
     }
@@ -3882,7 +3882,7 @@ private:
     KJ_TRY {
       return capability->call(interfaceId, methodId, kj::mv(context), hints);
     } KJ_CATCH(exception) {
-      auto pipeline = newBrokenPipeline(kj::cp(exception));
+      auto pipeline = newBrokenPipeline(exception.clone());
 
       // In the past, an exception here would have killed the entire connection (and also caused
       // us to send back a bogus Finish message claiming the call was canceled). We have evidence
@@ -4592,7 +4592,7 @@ public:
           deleteMe.add(kj::mv(entry.value));
         }
         for (auto& entry: deleteMe) {
-          entry->disconnect(kj::cp(shutdownException));
+          entry->disconnect(shutdownException.clone());
         }
         KJ_ASSERT(connections.size() == 0);
       }
@@ -4788,7 +4788,7 @@ public:
         }
       }
       KJ_CASE_ONEOF(exception, kj::Exception) {
-        return kj::cp(exception);
+        return exception.clone();
       }
     }
     KJ_UNREACHABLE;
@@ -4822,7 +4822,7 @@ private:
       KJ_CASE_ONEOF(blockedSends, Running) {
         // Fail out all pending sends.
         for (auto& fulfiller: blockedSends) {
-          fulfiller->reject(kj::cp(exception));
+          fulfiller->reject(exception.clone());
         }
         // Fail out all future sends.
         state = kj::mv(exception);
@@ -4936,7 +4936,7 @@ public:
         }
       }
       KJ_CASE_ONEOF(exception, kj::Exception) {
-        return kj::cp(exception);
+        return exception.clone();
       }
     }
     KJ_UNREACHABLE;
@@ -5156,7 +5156,7 @@ private:
       KJ_CASE_ONEOF(blockedSends, Running) {
         // Fail out all pending sends.
         for (auto& fulfiller: blockedSends) {
-          fulfiller->reject(kj::cp(exception));
+          fulfiller->reject(exception.clone());
         }
         // Fail out all future sends.
         state = kj::mv(exception);

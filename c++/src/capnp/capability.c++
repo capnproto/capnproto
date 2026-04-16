@@ -865,7 +865,7 @@ private:
 
     KJ_IF_SOME(e, brokenException) {
       // Previous streaming call threw, so everything fails from now on.
-      return kj::cp(e);
+      return e.clone();
     }
 
     // `server` can't be null here since `brokenException` is null.
@@ -889,7 +889,7 @@ private:
     if (result.isStreaming) {
       return result.promise
           .catch_([this](kj::Exception&& e) {
-        brokenException = kj::cp(e);
+        brokenException = e.clone();
         kj::throwRecoverableException(kj::mv(e));
       }).attach(BlockingScope(*this));
     } else {
@@ -989,7 +989,7 @@ namespace {
 
 class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
 public:
-  BrokenPipeline(const kj::Exception& exception): exception(exception) {}
+  BrokenPipeline(const kj::Exception& exception): exception(exception.clone()) {}
 
   kj::Own<PipelineHook> addRef() override {
     return kj::addRef(*this);
@@ -1004,15 +1004,15 @@ private:
 class BrokenRequest final: public RequestHook {
 public:
   BrokenRequest(const kj::Exception& exception, kj::Maybe<MessageSize> sizeHint)
-      : exception(exception), message(firstSegmentSize(sizeHint)) {}
+      : exception(exception.clone()), message(firstSegmentSize(sizeHint)) {}
 
   RemotePromise<AnyPointer> send() override {
-    return RemotePromise<AnyPointer>(kj::cp(exception),
+    return RemotePromise<AnyPointer>(exception.clone(),
         AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
   }
 
   kj::Promise<void> sendStreaming() override {
-    return kj::cp(exception);
+    return exception.clone();
   }
 
   AnyPointer::Pipeline sendForPipeline() override {
@@ -1026,7 +1026,7 @@ public:
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
   BrokenClient(const kj::Exception& exception, bool resolved, const void* brand)
-      : ClientHook(brand), exception(exception), resolved(resolved) {}
+      : ClientHook(brand), exception(exception.clone()), resolved(resolved) {}
   BrokenClient(const kj::StringPtr description, bool resolved, const void* brand)
       : ClientHook(brand), exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)),
         resolved(resolved) {}
@@ -1034,12 +1034,12 @@ public:
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
       CallHints hints) override {
-    return newBrokenRequest(kj::cp(exception), sizeHint);
+    return newBrokenRequest(exception.clone(), sizeHint);
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
-    return VoidPromiseAndPipeline { kj::cp(exception), kj::refcounted<BrokenPipeline>(exception) };
+    return VoidPromiseAndPipeline { exception.clone(), kj::refcounted<BrokenPipeline>(exception) };
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
@@ -1050,7 +1050,7 @@ public:
     if (resolved) {
       return kj::none;
     } else {
-      return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+      return kj::Promise<kj::Own<ClientHook>>(exception.clone());
     }
   }
 
