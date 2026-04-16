@@ -26,6 +26,7 @@
 #include "list.h"
 #include <kj/windows-sanity.h>  // work-around macro conflict with `VOID`
 #include <kj/hash.h>
+#include <kj/refcount.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -264,7 +265,7 @@ struct AnyPointer {
     typedef AnyPointer Pipelines;
 
     inline Pipeline(decltype(nullptr)) {}
-    inline explicit Pipeline(kj::Own<PipelineHook>&& hook): hook(kj::mv(hook)) {}
+    inline explicit Pipeline(kj::Rc<PipelineHook> hook): hook(kj::mv(hook)) {}
 
     Pipeline noop();
     // Just make a copy.
@@ -277,17 +278,17 @@ struct AnyPointer {
     kj::Own<ClientHook> asCap();
     // Expect that the result is a capability and construct a pipelined version of it now.
 
-    inline kj::Own<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
+    inline kj::Rc<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
     // For use by RPC implementations.
 
     template <typename T, typename = kj::EnableIf<CAPNP_KIND(FromClient<T>) == Kind::INTERFACE>>
     inline operator T() { return T(asCap()); }
 
   private:
-    kj::Own<PipelineHook> hook;
+    kj::Rc<PipelineHook> hook;
     kj::Array<PipelineOp> ops;
 
-    inline Pipeline(kj::Own<PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
+    inline Pipeline(kj::Rc<PipelineHook> hook, kj::Array<PipelineOp>&& ops)
         : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
 
     friend class LocalClient;
@@ -736,13 +737,10 @@ inline bool operator==(const PipelineOp& a, const PipelineOp& b) {
   KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
-class PipelineHook {
+class PipelineHook: public kj::Refcounted {
   // Represents a currently-running call, and implements pipelined requests on its result.
 
 public:
-  virtual kj::Own<PipelineHook> addRef() = 0;
-  // Increment this object's reference count.
-
   virtual kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;
   // Extract a promised Capability from the results.
 
@@ -751,7 +749,7 @@ public:
   // Default implementation just calls the other version.
 
   template <typename Pipeline, typename = FromPipeline<Pipeline>>
-  static inline kj::Own<PipelineHook> from(Pipeline&& pipeline);
+  static inline kj::Rc<PipelineHook> from(Pipeline&& pipeline);
 
   template <typename Pipeline, typename = FromPipeline<Pipeline>>
   static inline PipelineHook& from(Pipeline& pipeline);
@@ -1075,7 +1073,7 @@ struct OrphanGetImpl<AnyList, Kind::OTHER> {
 
 template <typename T>
 struct PipelineHook::FromImpl {
-  static inline kj::Own<PipelineHook> apply(typename T::Pipeline&& pipeline) {
+  static inline kj::Rc<PipelineHook> apply(typename T::Pipeline&& pipeline) {
     return from(kj::mv(pipeline._typeless));
   }
   static inline PipelineHook& apply(typename T::Pipeline& pipeline) {
@@ -1085,16 +1083,16 @@ struct PipelineHook::FromImpl {
 
 template <>
 struct PipelineHook::FromImpl<AnyPointer> {
-  static inline kj::Own<PipelineHook> apply(AnyPointer::Pipeline&& pipeline) {
+  static inline kj::Rc<PipelineHook> apply(AnyPointer::Pipeline&& pipeline) {
     return kj::mv(pipeline.hook);
   }
   static inline PipelineHook& apply(AnyPointer::Pipeline& pipeline) {
-    return *pipeline.hook;
+    return *pipeline.hook.get();
   }
 };
 
 template <typename Pipeline, typename T>
-inline kj::Own<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
+inline kj::Rc<PipelineHook> PipelineHook::from(Pipeline&& pipeline) {
   return FromImpl<T>::apply(kj::fwd<Pipeline>(pipeline));
 }
 
