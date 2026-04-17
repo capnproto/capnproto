@@ -2817,260 +2817,300 @@ public:
   }
 
   kj::Promise<Message> receive(size_t maxSize) override {
-    KJ_IF_SOME(ex, receiveException) {
-      return ex.clone();
-    }
-
-    size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
-
-    if (headerSize > recvData.size()) {
-      if (recvData.begin() != recvBuffer.begin()) {
-        // Move existing data to front of buffer.
-        if (recvData.size() > 0) {
-          memmove(recvBuffer.begin(), recvData.begin(), recvData.size());
-        }
-        recvData = recvBuffer.first(recvData.size());
+    for (;;) {  // To handle ping/pong packets without recursion.
+      KJ_IF_SOME(ex, receiveException) {
+        return ex.clone();
       }
 
-      return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
-          .then([this,maxSize](size_t actual) -> kj::Promise<Message> {
-        receivedBytes += actual;
-        if (actual == 0) {
+      size_t headerSize = Header::headerSize(recvData.begin(), recvData.size());
+
+      if (headerSize > recvData.size()) {
+        if (recvData.begin() != recvBuffer.begin()) {
+          // Move existing data to front of buffer.
           if (recvData.size() > 0) {
-            return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
-          } else {
-            // It's incorrect for the WebSocket to disconnect without sending `Close`.
-            return KJ_EXCEPTION(DISCONNECTED,
-                "WebSocket disconnected between frames without sending `Close`.");
+            memmove(recvBuffer.begin(), recvData.begin(), recvData.size());
           }
+          recvData = recvBuffer.first(recvData.size());
         }
 
-        recvData = recvBuffer.first(recvData.size() + actual);
-        return receive(maxSize);
-      });
-    }
+        return stream->tryRead(recvData.end(), 1, recvBuffer.end() - recvData.end())
+            .then([this,maxSize](size_t actual) -> kj::Promise<Message> {
+          receivedBytes += actual;
+          if (actual == 0) {
+            if (recvData.size() > 0) {
+              return KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in frame header");
+            } else {
+              // It's incorrect for the WebSocket to disconnect without sending `Close`.
+              return KJ_EXCEPTION(DISCONNECTED,
+                  "WebSocket disconnected between frames without sending `Close`.");
+            }
+          }
 
-    auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
-    if (recvHeader.hasRsv2or3()) {
-      return sendCloseDueToError(1002, "Received frame had RSV bits 2 or 3 set");
-    }
-
-    recvData = recvData.slice(headerSize, recvData.size());
-
-    size_t payloadLen = recvHeader.getPayloadLen();
-    if (payloadLen > maxSize) {
-      auto description = kj::str("Message is too large: ", payloadLen, " > ", maxSize);
-      return sendCloseDueToError(1009, description.asPtr()).attach(kj::mv(description));
-    }
-
-    auto opcode = recvHeader.getOpcode();
-    bool isData = opcode < OPCODE_FIRST_CONTROL;
-    if (opcode == OPCODE_CONTINUATION) {
-      if (fragments.empty()) {
-        return sendCloseDueToError(1002, "Unexpected continuation frame");
+          recvData = recvBuffer.first(recvData.size() + actual);
+          return receive(maxSize);
+        });
       }
 
-      opcode = fragmentOpcode;
-    } else if (isData) {
-      if (!fragments.empty()) {
-        return sendCloseDueToError(1002, "Missing continuation frame");
-      }
-    }
-
-    bool isFin = recvHeader.isFin();
-    bool isCompressed = false;
-
-    kj::Array<byte> message;           // space to allocate
-    byte* payloadTarget;               // location into which to read payload (size is payloadLen)
-    kj::Maybe<size_t> originalMaxSize; // maxSize from first `receive()` call
-    if (isFin) {
-      size_t amountToAllocate;
-      if (recvHeader.isCompressed() || fragmentCompressed) {
-        // Add 4 since we append 0x00 0x00 0xFF 0xFF to the tail of the payload.
-        // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
-        amountToAllocate = payloadLen + 4;
-        isCompressed = true;
-      } else {
-        // Add space for NUL terminator when allocating text message.
-        amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+      auto& recvHeader = *reinterpret_cast<Header*>(recvData.begin());
+      if (recvHeader.hasRsv2or3()) {
+        return sendCloseDueToError(1002, "Received frame had RSV bits 2 or 3 set");
       }
 
-      if (isData && !fragments.empty()) {
-        // Final frame of a fragmented message. Gather the fragments.
-        size_t offset = 0;
-        for (auto& fragment: fragments) offset += fragment.size();
-        message = kj::heapArray<byte>(offset + amountToAllocate);
-        originalMaxSize = offset + maxSize; // gives us back the original maximum message size.
+      recvData = recvData.slice(headerSize, recvData.size());
 
-        offset = 0;
-        for (auto& fragment: fragments) {
-          memcpy(message.begin() + offset, fragment.begin(), fragment.size());
-          offset += fragment.size();
+      size_t payloadLen = recvHeader.getPayloadLen();
+      if (payloadLen > maxSize) {
+        auto description = kj::str("Message is too large: ", payloadLen, " > ", maxSize);
+        return sendCloseDueToError(1009, description.asPtr()).attach(kj::mv(description));
+      }
+
+      auto opcode = recvHeader.getOpcode();
+      bool isData = opcode < OPCODE_FIRST_CONTROL;
+      if (opcode == OPCODE_CONTINUATION) {
+        if (fragments.empty()) {
+          return sendCloseDueToError(1002, "Unexpected continuation frame");
         }
-        payloadTarget = message.begin() + offset;
 
-        fragments.clear();
-        fragmentOpcode = 0;
-        fragmentCompressed = false;
+        opcode = fragmentOpcode;
+      } else if (isData) {
+        if (!fragments.empty()) {
+          return sendCloseDueToError(1002, "Missing continuation frame");
+        }
+      }
+
+      bool isFin = recvHeader.isFin();
+      bool isCompressed = false;
+
+      kj::Array<byte> message;           // space to allocate
+      byte* payloadTarget;               // location into which to read payload (size is payloadLen)
+      kj::Maybe<size_t> originalMaxSize; // maxSize from first `receive()` call
+      if (isFin) {
+        size_t amountToAllocate;
+        if (recvHeader.isCompressed() || fragmentCompressed) {
+          // Add 4 since we append 0x00 0x00 0xFF 0xFF to the tail of the payload.
+          // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+          amountToAllocate = payloadLen + 4;
+          isCompressed = true;
+        } else {
+          // Add space for NUL terminator when allocating text message.
+          amountToAllocate = payloadLen + (opcode == OPCODE_TEXT && isFin);
+        }
+
+        if (isData && !fragments.empty()) {
+          // Final frame of a fragmented message. Gather the fragments.
+          size_t offset = 0;
+          for (auto& fragment: fragments) offset += fragment.size();
+          message = kj::heapArray<byte>(offset + amountToAllocate);
+          originalMaxSize = offset + maxSize; // gives us back the original maximum message size.
+
+          offset = 0;
+          for (auto& fragment: fragments) {
+            memcpy(message.begin() + offset, fragment.begin(), fragment.size());
+            offset += fragment.size();
+          }
+          payloadTarget = message.begin() + offset;
+
+          fragments.clear();
+          fragmentOpcode = 0;
+          fragmentCompressed = false;
+        } else {
+          // Single-frame message.
+          message = kj::heapArray<byte>(amountToAllocate);
+          originalMaxSize = maxSize; // gives us back the original maximum message size.
+          payloadTarget = message.begin();
+        }
       } else {
-        // Single-frame message.
-        message = kj::heapArray<byte>(amountToAllocate);
-        originalMaxSize = maxSize; // gives us back the original maximum message size.
+        // Fragmented message, and this isn't the final fragment.
+        if (!isData) {
+          return sendCloseDueToError(1002, "Received fragmented control frame");
+        }
+
+        message = kj::heapArray<byte>(payloadLen);
         payloadTarget = message.begin();
-      }
-    } else {
-      // Fragmented message, and this isn't the final fragment.
-      if (!isData) {
-        return sendCloseDueToError(1002, "Received fragmented control frame");
-      }
-
-      message = kj::heapArray<byte>(payloadLen);
-      payloadTarget = message.begin();
-      if (fragments.empty()) {
-        // This is the first fragment, so set the opcode.
-        fragmentOpcode = opcode;
-        fragmentCompressed = recvHeader.isCompressed();
-      }
-    }
-
-    Mask mask = recvHeader.getMask();
-
-    auto handleMessage =
-        [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize,originalMaxSize,
-         isCompressed,message=kj::mv(message)]() mutable
-        -> kj::Promise<Message> {
-      if (!mask.isZero()) {
-        mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
-      }
-
-      if (!isFin) {
-        // Add fragment to the list and loop.
-        auto newMax = maxSize - message.size();
-        fragments.add(kj::mv(message));
-        return receive(newMax);
-      }
-
-      // Provide a reasonable error if a compressed frame is received without compression enabled.
-      if (isCompressed && compressionConfig == kj::none) {
-        return sendCloseDueToError(
-            1002,
-            "Received a WebSocket frame whose compression bit was set, but the compression "
-            "extension was not negotiated for this connection.");
-      }
-
-      switch (opcode) {
-        case OPCODE_CONTINUATION:
-          // Shouldn't get here; handled above.
-          KJ_UNREACHABLE;
-        case OPCODE_TEXT:
-#if KJ_HAS_ZLIB
-          if (isCompressed) {
-            auto& config = KJ_ASSERT_NONNULL(compressionConfig);
-            auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
-            KJ_ASSERT(message.size() >= 4);
-            auto tail = message.slice(message.size() - 4, message.size());
-            // Note that we added an additional 4 bytes to `message`s capacity to account for these
-            // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
-            const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
-            memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
-            // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
-            // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
-            if (config.inboundNoContextTakeover) {
-              // We must reset context on each message.
-              decompressor.reset();
-            }
-            bool addNullTerminator = true;
-            // We want to add the null terminator when receiving a TEXT message.
-            auto decompressedOrError = decompressor.processMessage(message, originalMaxSize,
-                addNullTerminator);
-            KJ_SWITCH_ONEOF(decompressedOrError) {
-              KJ_CASE_ONEOF(protocolError, ProtocolError) {
-                return sendCloseDueToError(protocolError.statusCode, protocolError.description)
-                    .attach(kj::mv(decompressedOrError));
-              }
-              KJ_CASE_ONEOF(decompressed, kj::Array<byte>) {
-                return Message(kj::String(decompressed.releaseAsChars()));
-              }
-            }
-          }
-#endif // KJ_HAS_ZLIB
-          message.back() = '\0';
-          return Message(kj::String(message.releaseAsChars()));
-        case OPCODE_BINARY:
-#if KJ_HAS_ZLIB
-          if (isCompressed) {
-            auto& config = KJ_ASSERT_NONNULL(compressionConfig);
-            auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
-            KJ_ASSERT(message.size() >= 4);
-            auto tail = message.slice(message.size() - 4, message.size());
-            // Note that we added an additional 4 bytes to `message`s capacity to account for these
-            // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
-            const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
-            memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
-            // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
-            // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
-            if (config.inboundNoContextTakeover) {
-              // We must reset context on each message.
-              decompressor.reset();
-            }
-
-            auto decompressedOrError = decompressor.processMessage(message, originalMaxSize);
-            KJ_SWITCH_ONEOF(decompressedOrError) {
-              KJ_CASE_ONEOF(protocolError, ProtocolError) {
-                return sendCloseDueToError(protocolError.statusCode, protocolError.description)
-                    .attach(kj::mv(decompressedOrError));
-              }
-              KJ_CASE_ONEOF(decompressed, kj::Array<byte>) {
-                return Message(decompressed.releaseAsBytes());
-              }
-            }
-          }
-#endif // KJ_HAS_ZLIB
-          return Message(message.releaseAsBytes());
-        case OPCODE_CLOSE:
-          if (message.size() < 2) {
-            return Message(Close { 1005, nullptr });
-          } else {
-            uint16_t status = (static_cast<uint16_t>(message[0]) << 8)
-                            | (static_cast<uint16_t>(message[1])     );
-            return Message(Close {
-              status, kj::heapString(message.slice(2, message.size()).asChars())
-            });
-          }
-        case OPCODE_PING:
-          // Send back a pong.
-          queuePong(kj::mv(message));
-          return receive(maxSize);
-        case OPCODE_PONG:
-          // Unsolicited pong. Ignore.
-          return receive(maxSize);
-        default:
-          {
-            auto description = kj::str("Unknown opcode ", opcode);
-            return sendCloseDueToError(1002, description.asPtr()).attach(kj::mv(description));
-          }
-      }
-    };
-
-    if (payloadLen <= recvData.size()) {
-      // All data already received.
-      memcpy(payloadTarget, recvData.begin(), payloadLen);
-      recvData = recvData.slice(payloadLen, recvData.size());
-      return handleMessage();
-    } else {
-      // Need to read more data.
-      memcpy(payloadTarget, recvData.begin(), recvData.size());
-      size_t remaining = payloadLen - recvData.size();
-      auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
-          .then([this, remaining](size_t amount) {
-        receivedBytes += amount;
-        if (amount < remaining) {
-          kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
+        if (fragments.empty()) {
+          // This is the first fragment, so set the opcode.
+          fragmentOpcode = opcode;
+          fragmentCompressed = recvHeader.isCompressed();
         }
-      });
-      recvData = nullptr;
-      return promise.then(kj::mv(handleMessage));
-    }
+      }
+
+      Mask mask = recvHeader.getMask();
+
+      // When the entire payload is already buffered, handle control frames and
+      // fragment accumulation iteratively to avoid stack overflow from many
+      // buffered frames (e.g. thousands of PING/PONG frames injected in the
+      // HTTP upgrade leftover data).
+      bool payloadAlreadyCopied = false;
+      if (payloadLen <= recvData.size()) {
+        memcpy(payloadTarget, recvData.begin(), payloadLen);
+        recvData = recvData.slice(payloadLen, recvData.size());
+
+        if (!mask.isZero()) {
+          mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
+        }
+
+        if (!isFin) {
+          // Non-final fragment: accumulate and continue to next frame.
+          maxSize -= message.size();
+          fragments.add(kj::mv(message));
+          continue;
+        }
+
+        if (opcode == OPCODE_PING) {
+          queuePong(kj::mv(message));
+          continue;
+        }
+        if (opcode == OPCODE_PONG) {
+          continue;
+        }
+
+        // Data frame or close with payload already buffered and mask already
+        // applied. Zero the mask so handleMessage() won't apply it again.
+        mask = Mask();
+        payloadAlreadyCopied = true;
+      }
+
+      auto handleMessage =
+          [this,opcode,payloadTarget,payloadLen,mask,isFin,maxSize,originalMaxSize,
+           isCompressed,message=kj::mv(message)]() mutable
+          -> kj::Promise<Message> {
+        if (!mask.isZero()) {
+          mask.apply(kj::arrayPtr(payloadTarget, payloadLen));
+        }
+
+        if (!isFin) {
+          // Add fragment to the list and loop.
+          auto newMax = maxSize - message.size();
+          fragments.add(kj::mv(message));
+          return receive(newMax);
+        }
+
+        // Provide a reasonable error if a compressed frame is received without compression enabled.
+        if (isCompressed && compressionConfig == kj::none) {
+          return sendCloseDueToError(
+              1002,
+              "Received a WebSocket frame whose compression bit was set, but the compression "
+              "extension was not negotiated for this connection.");
+        }
+
+        switch (opcode) {
+          case OPCODE_CONTINUATION:
+            // Shouldn't get here; handled above.
+            KJ_UNREACHABLE;
+          case OPCODE_TEXT:
+#if KJ_HAS_ZLIB
+            if (isCompressed) {
+              auto& config = KJ_ASSERT_NONNULL(compressionConfig);
+              auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
+              KJ_ASSERT(message.size() >= 4);
+              auto tail = message.slice(message.size() - 4, message.size());
+              // Note that we added an additional 4 bytes to `message`s capacity to account for these
+              // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
+              const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
+              memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
+              // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
+              // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+              if (config.inboundNoContextTakeover) {
+                // We must reset context on each message.
+                decompressor.reset();
+              }
+              bool addNullTerminator = true;
+              // We want to add the null terminator when receiving a TEXT message.
+              auto decompressedOrError = decompressor.processMessage(message, originalMaxSize,
+                  addNullTerminator);
+              KJ_SWITCH_ONEOF(decompressedOrError) {
+                KJ_CASE_ONEOF(protocolError, ProtocolError) {
+                  return sendCloseDueToError(protocolError.statusCode, protocolError.description)
+                      .attach(kj::mv(decompressedOrError));
+                }
+                KJ_CASE_ONEOF(decompressed, kj::Array<byte>) {
+                  return Message(kj::String(decompressed.releaseAsChars()));
+                }
+              }
+            }
+#endif // KJ_HAS_ZLIB
+            message.back() = '\0';
+            return Message(kj::String(message.releaseAsChars()));
+          case OPCODE_BINARY:
+#if KJ_HAS_ZLIB
+            if (isCompressed) {
+              auto& config = KJ_ASSERT_NONNULL(compressionConfig);
+              auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
+              KJ_ASSERT(message.size() >= 4);
+              auto tail = message.slice(message.size() - 4, message.size());
+              // Note that we added an additional 4 bytes to `message`s capacity to account for these
+              // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
+              const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
+              memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
+              // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
+              // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
+              if (config.inboundNoContextTakeover) {
+                // We must reset context on each message.
+                decompressor.reset();
+              }
+
+              auto decompressedOrError = decompressor.processMessage(message, originalMaxSize);
+              KJ_SWITCH_ONEOF(decompressedOrError) {
+                KJ_CASE_ONEOF(protocolError, ProtocolError) {
+                  return sendCloseDueToError(protocolError.statusCode, protocolError.description)
+                      .attach(kj::mv(decompressedOrError));
+                }
+                KJ_CASE_ONEOF(decompressed, kj::Array<byte>) {
+                  return Message(decompressed.releaseAsBytes());
+                }
+              }
+            }
+#endif // KJ_HAS_ZLIB
+            return Message(message.releaseAsBytes());
+          case OPCODE_CLOSE:
+            if (message.size() < 2) {
+              return Message(Close { 1005, nullptr });
+            } else {
+              uint16_t status = (static_cast<uint16_t>(message[0]) << 8)
+                              | (static_cast<uint16_t>(message[1])     );
+              return Message(Close {
+                status, kj::heapString(message.slice(2, message.size()).asChars())
+              });
+            }
+          case OPCODE_PING:
+            // Send back a pong.
+            queuePong(kj::mv(message));
+            return receive(maxSize);
+          case OPCODE_PONG:
+            // Unsolicited pong. Ignore.
+            return receive(maxSize);
+          default:
+            {
+              auto description = kj::str("Unknown opcode ", opcode);
+              return sendCloseDueToError(1002, description.asPtr()).attach(kj::mv(description));
+            }
+        }
+      };
+
+      if (payloadAlreadyCopied) {
+        // Synchronous data/close frame — payload already copied and unmasked
+        // above. handleMessage won't recurse for these opcodes.
+        return handleMessage();
+      } else if (payloadLen <= recvData.size()) {
+        // All data already received.
+        memcpy(payloadTarget, recvData.begin(), payloadLen);
+        recvData = recvData.slice(payloadLen, recvData.size());
+        return handleMessage();
+      } else {
+        // Need to read more data.
+        memcpy(payloadTarget, recvData.begin(), recvData.size());
+        size_t remaining = payloadLen - recvData.size();
+        auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
+            .then([this, remaining](size_t amount) {
+          receivedBytes += amount;
+          if (amount < remaining) {
+            kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "WebSocket EOF in message"));
+          }
+        });
+        recvData = nullptr;
+        return promise.then(kj::mv(handleMessage));
+      }
+    } // for(;;) to handle ping/pong packets without recursion.
   }
 
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
