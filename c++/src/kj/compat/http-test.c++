@@ -2132,6 +2132,42 @@ KJ_TEST("WebSocket unsolicited pong") {
   clientTask.wait(waitScope);
 }
 
+KJ_TEST("WebSocket many buffered pongs do not stack overflow") {
+  // Regression test: many zero-length PONG (or PING) control frames already buffered
+  // in the receive buffer must be handled iteratively. Previously, each control frame
+  // caused a recursive call to receive(), and thousands of pre-buffered frames (e.g.
+  // injected in HTTP upgrade leftover data) would exhaust the native stack.
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto client = kj::mv(pipe.ends[0]);
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none);
+
+  // Build a buffer with many zero-length PONG frames followed by a text message.
+  // Each PONG frame is 2 bytes: 0x8A (FIN + opcode 0x0A) 0x00 (zero-length payload).
+  // 10000 frames would overflow a typical 8 MB stack with the old recursive code.
+  constexpr size_t NUM_PONGS = 10000;
+  kj::Vector<byte> data(NUM_PONGS * 2 + 20);
+  for (size_t i = 0; i < NUM_PONGS; i++) {
+    data.add(0x8A);  // FIN + PONG opcode
+    data.add(0x00);  // zero-length payload
+  }
+
+  // Append a text message "hello" so receive() has something to return.
+  byte textFrame[] = { 0x81, 0x05, 'h', 'e', 'l', 'l', 'o' };
+  for (auto b : textFrame) data.add(b);
+
+  auto clientTask = client->write(data.asPtr().asBytes());
+
+  {
+    auto message = server->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "hello");
+  }
+
+  clientTask.wait(waitScope);
+}
+
 void doWebSocketPingTest(kj::Maybe<EntropySource&> maskGenerator) {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
