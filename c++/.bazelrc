@@ -1,9 +1,6 @@
 common --enable_platform_specific_config
 common --verbose_failures
 
-# Needed for Brotli, which does not import rules_cc symbols itself (otherwise needed with Bazel 9)
-common --incompatible_autoload_externally=+cc_library,+cc_binary
-
 # we enable irequre checks in production
 build --@capnp-cpp//src/kj:kj_enable_irequire=True
 
@@ -88,7 +85,7 @@ build:windows --cxxopt='-Wno-unused-command-line-argument' --host_cxxopt='-Wno-u
 # set the correct value.
 build:windows --cxxopt='/Zc:__cplusplus' --host_cxxopt='/Zc:__cplusplus'
 
-# build with ssl, zlib and bazel by default
+# build with ssl, zlib and brotli by default
 build --//src/kj:openssl=True
 build --//src/kj:zlib=True
 build --//src/kj:brotli=True
