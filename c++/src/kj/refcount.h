@@ -174,6 +174,8 @@ public:
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Rc(Rc<U>&& other) noexcept : own(kj::mv(other.own)) { }
 
+  inline ~Rc() { own = nullptr; }
+
   kj::Own<T> toOwn() {
     // Convert Rc<T> to Own<T>.
     // Nullifies the original Rc<T>.
@@ -432,6 +434,8 @@ public:
 
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Arc(Arc<U>&& other) noexcept : own(kj::mv(other.own)) { }
+
+  inline ~Arc() { own = nullptr; }
 
   kj::Own<const T> toOwn() {
     // Convert Arc<T> to Own<const T>.
