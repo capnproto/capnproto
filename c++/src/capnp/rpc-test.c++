@@ -1356,6 +1356,81 @@ KJ_TEST("embargos block CapabilityServerSet") {
   KJ_EXPECT(unwrappedAt >= 3, unwrappedAt);
 }
 
+KJ_TEST("TribbleRaceBlocker blocks CapabilityServerSet unwrap") {
+  TestContext context;
+
+  capnp::CapabilityServerSet<test::TestCallOrder> capSet;
+
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
+
+  TestCallOrderImpl* ptr;
+  auto ownCap = kj::heap<TestCallOrderImpl>();
+  ptr = ownCap;
+  auto cap = capSet.add(kj::mv(ownCap));
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  auto echoAgainRequest = client.echoRequest();
+  echoAgainRequest.setCap(pipeline);
+  auto echoAgain = echoAgainRequest.send();
+
+  auto roundTripCap = echoAgain.getCap();
+
+  echo.wait(context.waitScope);
+  echoAgain.wait(context.waitScope);
+
+  auto& roundTripObj = KJ_ASSERT_NONNULL(capSet.getLocalServer(roundTripCap).wait(
+      context.waitScope));
+  KJ_EXPECT(&roundTripObj == ptr);
+}
+
+KJ_TEST("TribbleRaceBlocker preserves order for reflected promise") {
+  TestContext context;
+
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
+
+  auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>());
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  auto echoAgainRequest = client.echoRequest();
+  echoAgainRequest.setCap(pipeline);
+  auto echoAgain = echoAgainRequest.send();
+
+  auto& aliceToBob = KJ_ASSERT_NONNULL(
+      context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork));
+  aliceToBob.block();
+
+  auto roundTripCap = echoAgain.getCap();
+  auto call0 = getCallSequence(pipeline, 0);
+
+  echo.wait(context.waitScope);
+  echoAgain.wait(context.waitScope);
+
+  auto& bobToAlice = KJ_ASSERT_NONNULL(
+      context.bob.vatNetwork.getConnectionTo(context.alice.vatNetwork));
+  bobToAlice.block();
+  aliceToBob.unblock();
+
+  auto call1 = getCallSequence(roundTripCap, 1);
+
+  KJ_EXPECT(!call0.poll(context.waitScope));
+  KJ_EXPECT(!call1.poll(context.waitScope));
+
+  bobToAlice.unblock();
+
+  KJ_EXPECT(call0.wait(context.waitScope).getN() == 0);
+  KJ_EXPECT(call1.wait(context.waitScope).getN() == 1);
+}
+
 template <typename T>
 void expectPromiseThrows(kj::Promise<T>&& promise, kj::WaitScope& waitScope) {
   KJ_EXPECT(promise.then([](T&&) { return false; }, [](kj::Exception&&) { return true; })

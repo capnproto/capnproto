@@ -2093,13 +2093,17 @@ private:
     //    `PromiseClient` from recognizing the capability as being remote, so it instead treats it
     //    as local. That causes it to set up an embargo as desired.
     //
-    // TODO(perf): This actually blocks further promise resolution in the case where the
-    //   ImportClient or PipelineClient itself ends up being yet another promise that resolves
-    //   back over the connection again. What we probably really need to do here is, instead of
-    //   placing `ImportClient` or `PipelineClient` on the export table, place a special type there
-    //   that both knows what to do with future incoming messages to that export ID, but also knows
-    //   what to do when that export is the subject of a `Resolve`.
-
+    //    The wrapper still presents itself as a promise resolving to `inner`, so code like
+    //    `CapabilityServerSet` can keep following the resolution chain. The important bit is only
+    //    that `getResolved()` does not reveal `inner` until the `whenMoreResolved()` promise
+    //    actually resolves.
+    //
+    // TODO(perf): This still doesn't fully shorten the path for ordinary calls when `inner` is
+    //   itself another promise that later resolves back over the connection. Messages sent through
+    //   this export continue to route through `inner` to preserve Tribble ordering. A more complete
+    //   optimization would be to put a special export-table entry here that separately handles
+    //   incoming messages to the export and use of the export as the subject of a `Resolve`.
+    //
   public:
     TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
 
@@ -2113,14 +2117,17 @@ private:
       return inner->call(interfaceId, methodId, kj::mv(context), hints);
     }
     kj::Maybe<ClientHook&> getResolved() override {
-      // We always wrap either PipelineClient or ImportClient, both of which return null for this
-      // anyway.
-      return kj::none;
+      return resolved.map([](kj::Own<ClientHook>& r) -> ClientHook& { return *r; });
     }
     kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-      // We always wrap either PipelineClient or ImportClient, both of which return null for this
-      // anyway.
-      return kj::none;
+      KJ_IF_SOME(r, resolved) {
+        return kj::Promise<kj::Own<ClientHook>>(r->addRef());
+      } else {
+        return kj::evalLater([this,result = inner->addRef()]() mutable {
+          resolved = result->addRef();
+          return kj::mv(result);
+        }).attach(kj::addRef(*this));
+      }
     }
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
@@ -2131,6 +2138,7 @@ private:
 
   private:
     kj::Own<ClientHook> inner;
+    kj::Maybe<kj::Own<ClientHook>> resolved;
   };
 
   kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
