@@ -546,6 +546,9 @@ public:
 
       exports.forEach([&](ExportId id, Export& exp) {
         clientsToRelease.add(kj::mv(exp.clientHook));
+        KJ_IF_SOME(resolveHook, exp.resolveHook) {
+          clientsToRelease.add(kj::mv(resolveHook));
+        }
         KJ_IF_SOME(op, exp.resolveOp) {
           resolveOpsToRelease.add(kj::mv(op));
         }
@@ -730,6 +733,12 @@ private:
     // `exportsByCap[clientHook]` points to this entry.
 
     kj::Own<ClientHook> clientHook;
+
+    kj::Maybe<kj::Own<ClientHook>> resolveHook;
+    // If non-null, use this hook rather than `clientHook` when a `receiverHosted` descriptor
+    // refers to this export. `clientHook` remains the pinned message target for calls addressed
+    // directly to the export, but `resolveHook` retains the original resolution path so promise
+    // shortening can continue when this export is itself used to resolve another promise.
 
     kj::Maybe<kj::Promise<void>> resolveOp = kj::none;
     // If this export is a promise (not a settled capability), the `resolveOp` represents the
@@ -1924,6 +1933,7 @@ private:
         KJ_ASSERT(exportsByCap.erase(exp.clientHook));
       }
       exp.clientHook = kj::mv(resolution);
+      exp.resolveHook = kj::none;
 
       // The export now points to `resolution`, but it is not necessarily the canonical export
       // for `resolution`. The export itself still represents the promise that ended up resolving
@@ -1975,7 +1985,10 @@ private:
         // was for the temporary destination for pipelined calls. To resolve the Tribble 4-way
         // race condition, we must make sure our existing export table entry permanently points
         // strictly to the pipeline, not the promise.
+        exp2.resolveHook = exp2.clientHook->addRef();
         exp2.clientHook = writeDescResult.described.addRef();
+      } else {
+        exp2.resolveHook = kj::none;
       }
 
       return kj::READY_NOW;
@@ -2093,28 +2106,35 @@ private:
     //    `PromiseClient` from recognizing the capability as being remote, so it instead treats it
     //    as local. That causes it to set up an embargo as desired.
     //
-    //    The wrapper still presents itself as a promise resolving to `inner`, so code like
-    //    `CapabilityServerSet` can keep following the resolution chain. The important bit is only
-    //    that `getResolved()` does not reveal `inner` until the `whenMoreResolved()` promise
-    //    actually resolves.
-    //
-    // TODO(perf): This still doesn't fully shorten the path for ordinary calls when `inner` is
-    //   itself another promise that later resolves back over the connection. Messages sent through
-    //   this export continue to route through `inner` to preserve Tribble ordering. A more complete
-    //   optimization would be to put a special export-table entry here that separately handles
-    //   incoming messages to the export and use of the export as the subject of a `Resolve`.
+    //    The wrapper has separate views: calls are sent to `callTarget`, preserving the pinned
+    //    path required by the Tribble rule, while `whenMoreResolved()` resolves to
+    //    `resolutionTarget`, allowing a promise that resolves to this capability to keep
+    //    shortening once its embargo clears. The important bit is only that `getResolved()` does
+    //    not reveal `resolutionTarget` until the `whenMoreResolved()` promise actually resolves.
     //
   public:
-    TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
+    TribbleRaceBlocker(kj::Own<ClientHook> inner)
+        : ClientHook(getBrand()), callTarget(inner->addRef()), resolutionTarget(kj::mv(inner)) {}
+
+    TribbleRaceBlocker(kj::Own<ClientHook> callTarget, kj::Own<ClientHook> resolutionTarget)
+        : ClientHook(getBrand()),
+          callTarget(kj::mv(callTarget)), resolutionTarget(kj::mv(resolutionTarget)) {}
+
+    static const void* getBrand() {
+      static const int brand = 0;
+      return &brand;
+    }
+
+    ClientHook& getCallTarget() { return *callTarget; }
 
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
         CallHints hints) override {
-      return inner->newCall(interfaceId, methodId, sizeHint, hints);
+      return callTarget->newCall(interfaceId, methodId, sizeHint, hints);
     }
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context, CallHints hints) override {
-      return inner->call(interfaceId, methodId, kj::mv(context), hints);
+      return callTarget->call(interfaceId, methodId, kj::mv(context), hints);
     }
     kj::Maybe<ClientHook&> getResolved() override {
       return resolved.map([](kj::Own<ClientHook>& r) -> ClientHook& { return *r; });
@@ -2123,7 +2143,7 @@ private:
       KJ_IF_SOME(r, resolved) {
         return kj::Promise<kj::Own<ClientHook>>(r->addRef());
       } else {
-        return kj::evalLater([this,result = inner->addRef()]() mutable {
+        return kj::evalLater([this,result = resolutionTarget->addRef()]() mutable {
           resolved = result->addRef();
           return kj::mv(result);
         }).attach(kj::addRef(*this));
@@ -2133,11 +2153,12 @@ private:
       return kj::addRef(*this);
     }
     kj::Maybe<int> getFd() override {
-      return inner->getFd();
+      return callTarget->getFd();
     }
 
   private:
-    kj::Own<ClientHook> inner;
+    kj::Own<ClientHook> callTarget;
+    kj::Own<ClientHook> resolutionTarget;
     kj::Maybe<kj::Own<ClientHook>> resolved;
   };
 
@@ -2175,7 +2196,10 @@ private:
                   vineConnection, capnp::clone(*contact), kj::mv(vine));
             }
           }
-          if (unwrapIfSameConnection(*result) != kj::none) {
+          KJ_IF_SOME(resolveHook, exp.resolveHook) {
+            result = kj::refcounted<TribbleRaceBlocker>(
+                kj::mv(result), resolveHook->addRef());
+          } else if (unwrapIfSameConnection(*result) != kj::none) {
             result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
           }
           return kj::mv(result);
@@ -3058,7 +3082,12 @@ private:
       ClientHook* ptr = original.get();
       for (;;) {
         if (ptr == resolution.returnedCap.get()) {
-          return kj::mv(resolution.unwrapped);
+          if (resolution.unwrapped.get() == resolution.returnedCap.get()) {
+            return kj::mv(resolution.unwrapped);
+          } else {
+            return kj::refcounted<TribbleRaceBlocker>(
+                kj::mv(resolution.unwrapped), kj::mv(resolution.returnedCap));
+          }
         } else KJ_IF_SOME(r, ptr->getResolved()) {
           ptr = &r;
         } else {
@@ -4234,6 +4263,29 @@ private:
     }
   }
 
+  kj::Promise<kj::Own<ClientHook>> whenMessageTargetResolved(kj::Own<ClientHook> target) {
+    // Resolve a target for the purpose of forwarding a message or disembargo. A
+    // `TribbleRaceBlocker` has a separate call target and resolution target; for this path we must
+    // follow the call target to preserve the Tribble ordering rule.
+    for (;;) {
+      if (target->isBrand(TribbleRaceBlocker::getBrand())) {
+        target = kj::downcast<TribbleRaceBlocker>(*target).getCallTarget().addRef();
+      } else KJ_IF_SOME(r, target->getResolved()) {
+        target = r.addRef();
+      } else {
+        break;
+      }
+    }
+
+    KJ_IF_SOME(p, target->whenMoreResolved()) {
+      return p.attach(kj::mv(target)).then([this](kj::Own<ClientHook>&& resolved) {
+        return whenMessageTargetResolved(kj::mv(resolved));
+      });
+    } else {
+      return kj::mv(target);
+    }
+  }
+
   void handleDisembargo(const rpc::Disembargo::Reader& disembargo) {
     auto context = disembargo.getContext();
     switch (context.which()) {
@@ -4252,22 +4304,17 @@ private:
         // Alice. Alice then *also* sends a Disembargo to Bob. The Alice -> Bob Disembargo might
         // arrive at Bob before the Bob -> Carol Disembargo has resolved, in which case the
         // Disembargo is delivered to a promise capability.
-        auto promise = target->whenResolved()
-            .then([]() {
+        auto promise = whenMessageTargetResolved(kj::mv(target))
+            .then([this](kj::Own<ClientHook>&& target) mutable {
           // We also need to insert yieldUntilQueueEmpty() here to make sure that any pending calls
           // towards this cap have had time to find their way through the event loop.
-          return kj::yieldUntilQueueEmpty();
+          return kj::yieldUntilQueueEmpty()
+              .then([this,target = kj::mv(target)]() mutable {
+            return whenMessageTargetResolved(kj::mv(target));
+          });
         });
 
-        tasks.add(promise.then([this, embargoId, target = kj::mv(target)]() mutable {
-          for (;;) {
-            KJ_IF_SOME(r, target->getResolved()) {
-              target = r.addRef();
-            } else {
-              break;
-            }
-          }
-
+        tasks.add(promise.then([this, embargoId](kj::Own<ClientHook>&& target) mutable {
           KJ_REQUIRE(unwrapIfSameConnection(*target) != kj::none,
                     "'Disembargo' of type 'senderLoopback' sent to an object that does not point "
                     "back to the sender.") {
