@@ -288,6 +288,10 @@ public:
   // The file descriptor will remain open at least as long as the Capability::Client remains alive.
   // If you need it to last longer, you will need to `dup()` it.
 
+  kj::String debugInfo();
+  // For debugging purposes, return what kind of capability this is, including layers of wrapping
+  // (promises, membranes, etc.). This is suitable for debug logging only; do NOT parse this.
+
   // TODO(someday):  method(s) for Join
 
 protected:
@@ -870,6 +874,10 @@ public:
   virtual kj::Maybe<int> getFd() = 0;
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
+
+  virtual void debugInfo(kj::Vector<kj::ConstString>& chain);
+  // For debugging purposes, follows the chain of ClientHooks appending information about each
+  // to `chain`.
 
   static kj::Own<ClientHook> from(Capability::Client client) { return kj::mv(client.hook); }
 
