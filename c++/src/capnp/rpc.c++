@@ -1394,6 +1394,11 @@ private:
       }
     }
 
+    void debugInfo(kj::Vector<kj::ConstString>& chain) override {
+      chain.add("rpcPromise"_kjc);
+      cap->debugInfo(chain);
+    }
+
   private:
     kj::Own<ClientHook> cap;
 

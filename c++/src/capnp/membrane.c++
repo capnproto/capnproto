@@ -22,6 +22,10 @@
 #include "membrane.h"
 #include <kj/debug.h>
 
+#if !KJ_NO_RTTI
+#include <typeinfo>
+#endif
+
 namespace capnp {
 
 namespace {
@@ -534,6 +538,14 @@ public:
     }
     return kj::none;
   }
+
+#if !KJ_NO_RTTI
+  void debugInfo(kj::Vector<kj::ConstString>& chain) override {
+    auto& policyRef = *policy;  // avoid stupid compiler warning about side effects
+    chain.add(kj::str(typeid(policyRef).name()));
+    inner->debugInfo(chain);
+  }
+#endif
 
 private:
   kj::Own<ClientHook> inner;

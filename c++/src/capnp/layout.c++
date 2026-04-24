@@ -28,6 +28,9 @@
 
 #if !CAPNP_LITE
 #include "capability.h"
+#if !KJ_NO_RTTI
+#include <typeinfo>
+#endif  // !KJ_NO_RTTI
 #endif  // !CAPNP_LITE
 
 namespace capnp {
@@ -65,6 +68,19 @@ static BrokenCapFactory* readGlobalBrokenCapFactoryForLayoutCpp() {
 const uint ClientHook::NULL_CAPABILITY_BRAND = 0;
 const uint ClientHook::BROKEN_CAPABILITY_BRAND = 0;
 // Defined here rather than capability.c++ so that we can safely call isNull() in this file.
+
+void ClientHook::debugInfo(kj::Vector<kj::ConstString>& chain) {
+  // Defined here rather than capability.c++ because when compiling in UBSAN mode specifically,
+  // the compiler emits references to the type info block for ClientHook in some translation units
+  // that #include capability.h even if they don't explicitly use ClientHook, so we need it to be
+  // emitted as part of libcapnp rather than libcapnp-rpc.
+
+#if KJ_NO_RTTI
+  chain.add("unknown"_kjc);
+#else
+  chain.add(kj::str(typeid(*this).name()));
+#endif
+}
 
 namespace _ {  // private
 
