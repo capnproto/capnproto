@@ -162,7 +162,6 @@ cc_library(
     "array-test.c++",
     "async-io-test.c++",
     "async-queue-test.c++",
-    "async-xthread-test.c++",
     "common-test.c++",
     "debug-test.c++",
     "encoding-test.c++",
@@ -206,6 +205,16 @@ cc_test(
         ":kj-test",
         "//src/kj/compat:kj-http",
     ],
+)
+
+cc_test(
+    name = "async-xthread-test",
+    srcs = ["async-xthread-test.c++"],
+    deps = [
+        ":kj-async",
+        ":kj-test",
+    ],
+    size = "large",
 )
 
 cc_library(
@@ -291,28 +300,28 @@ cc_test(
 
 cc_test(
     name = "async-bench",
+    size = "large",
     srcs = ["async-bench.c++"],
     tags = ["google_benchmark"],
     deps = [
         ":kj-async",
         "@google_benchmark//:benchmark",
     ],
-    size = "large",
 )
 
 cc_test(
     name = "table-test",
-    srcs = ["table-test.c++"],
-    deps = [ ":kj-test" ],
     size = "large",
+    srcs = ["table-test.c++"],
+    deps = [":kj-test"],
 )
 
 cc_test(
     name = "async-test",
+    size = "large",
     srcs = ["async-test.c++"],
     deps = [
-        ":kj-test",
         ":kj-async",
+        ":kj-test",
     ],
-    size = "large",
 )
