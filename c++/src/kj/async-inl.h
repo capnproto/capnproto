@@ -664,14 +664,27 @@ private:
     // Derive return type from DepT to reduce templating.
     typedef _::FixVoid<_::ReturnType<Func, _DepT>> T;
     typedef _::FixVoid<_DepT> DepT;
-    ExceptionOr<DepT> depResult;
-    getDepResult(depResult);
-    KJ_IF_SOME(depException, depResult.exception) {
-      output.as<T>() = handle<T>(
-          MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
-              errorHandler, kj::mv(depException)));
-    } else KJ_IF_SOME(depValue, depResult.value) {
-      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
+
+    kj::Maybe<DepT> depValue;
+
+    {
+      ExceptionOr<DepT> depResult;
+      getDepResult(depResult);
+
+      KJ_IF_SOME(depException, depResult.exception) {
+        output.as<T>() = handle<T>(
+            MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
+                errorHandler, kj::mv(depException)));
+        return;
+      }
+
+      KJ_IF_SOME(value, depResult.value) {
+        depValue.emplaceInit(kj::mv(value));
+      }
+    }
+
+    KJ_IF_SOME(value, depValue) {
+      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(value)));
     }
   }
 };
@@ -703,12 +716,25 @@ private:
   void getImpl(ExceptionOrValue& output) override {
     typedef _::FixVoid<_::ReturnType<Func, _DepT>> T;
     typedef _::FixVoid<_DepT> DepT;
-    ExceptionOr<DepT> depResult;
-    getDepResult(depResult);
-    KJ_IF_SOME(depException, depResult.exception) {
-      output.as<T>() = ExceptionOr<T>(false, kj::mv(depException));
-    } else KJ_IF_SOME(depValue, depResult.value) {
-      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(depValue)));
+
+    kj::Maybe<DepT> depValue;
+
+    {
+      ExceptionOr<DepT> depResult;
+      getDepResult(depResult);
+
+      KJ_IF_SOME(depException, depResult.exception) {
+        output.as<T>() = ExceptionOr<T>(false, kj::mv(depException));
+        return;
+      }
+
+      KJ_IF_SOME(value, depResult.value) {
+        depValue.emplaceInit(kj::mv(value));
+      }
+    }
+
+    KJ_IF_SOME(value, depValue) {
+      output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(value)));
     }
   }
 };
