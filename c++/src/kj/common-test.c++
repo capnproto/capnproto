@@ -688,6 +688,31 @@ KJ_TEST("kj::defer()") {
 
 }
 
+KJ_TEST("KJ_DEFER() block syntax") {
+  // Test the KJ_DEFER() { ... }; block syntax, which allows statement macros like KJ_IF_SOME
+  // inside the deferred code without triggering -Wdangling-else warnings.
+  uint i = 0;
+
+  {
+    KJ_DEFER() { ++i; };
+    KJ_EXPECT(i == 0);
+  }
+  KJ_EXPECT(i == 1);
+
+  // Test that KJ_IF_SOME works inside KJ_DEFER() without warnings.
+  Maybe<int> maybeVal = 42;
+  int captured = 0;
+  {
+    KJ_DEFER() {
+      KJ_IF_SOME(val, maybeVal) {
+        captured = val;
+      }
+    };
+    KJ_EXPECT(captured == 0);
+  }
+  KJ_EXPECT(captured == 42);
+}
+
 KJ_TEST("kj::ArrayPtr startsWith / endsWith / findFirst / findLast") {
   // Note: char-/byte- optimized versions are covered by string-test.c++.
 
