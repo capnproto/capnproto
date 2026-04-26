@@ -597,6 +597,13 @@ bool UnixEventPort::wait() {
     //   the parent process exit while the child thread lives on. In this case, if a UnixEventPort
     //   had been created before daemonizing, signal handling would be forever broken in the child.
 
+    // If the timeout is zero, use the alternative approach implemented by poll()
+    // to deliver pending signals. Otherwise a repeating timer with a timeout less than
+    // 1ms resolution will prevent signals from ever being delivered.
+    if (timeout == 0) {
+      return poll();
+    }
+
     sigset_t waitMask = originalMask;
 
     // Unblock the signals we care about.
