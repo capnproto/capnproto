@@ -99,6 +99,9 @@ set_property(CACHE WITH_FIBERS PROPERTY STRINGS AUTO ON OFF)
 # CapnProtoConfig.cmake.in needs this variable.
 set(_WITH_LIBUCONTEXT OFF)
 
+# Used by pkg-config files
+set(ASYNC_REQUIRES_PRIVATE "")
+
 if (WITH_FIBERS OR WITH_FIBERS STREQUAL "AUTO")
   set(_capnp_fibers_found OFF)
   if (WIN32 OR CYGWIN)
@@ -119,6 +122,7 @@ if (WITH_FIBERS OR WITH_FIBERS STREQUAL "AUTO")
         if (libucontext_FOUND)
           set(_WITH_LIBUCONTEXT ON)
           set(_capnp_fibers_found ON)
+          set(ASYNC_REQUIRES_PRIVATE "${ASYNC_REQUIRES_PRIVATE} libucontext")
         endif()
       else()
         set(_capnp_fibers_found OFF)
