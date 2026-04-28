@@ -2452,6 +2452,16 @@ struct Mapper<Maybe<T>> {
 template <typename T>
 class Array;
 
+namespace _ {  // private
+class SplitIteratorEnd;
+
+template <typename T>
+class SplitIterator;
+
+template <typename T>
+class SplitIterable;
+}  // namespace _ (private)
+
 template <typename T>
 class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
@@ -2597,6 +2607,10 @@ public:
     return kj::none;
   }
 
+  inline auto split(T delim) { return _::SplitIterable<T>(*this, kj::mv(delim)); }
+  inline auto split(T delim) const { return _::SplitIterable<const T>(asConst(), kj::mv(delim)); }
+  // Returns iterator of segments (ArrayPtr<T>)
+
   constexpr ArrayPtr<PropagateConst<T, byte>> asBytes() const {
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.
@@ -2733,6 +2747,65 @@ private:
     return begin() < other.end() && other.begin() < end();
   }
 };
+
+namespace _ {  // private
+
+class SplitIteratorEnd {};
+
+template <typename T>
+class SplitIterator {
+public:
+  inline SplitIterator(ArrayPtr<T> array, T delim) : array(array), end(0), delim(kj::mv(delim)) {
+    nextSegment();
+  }
+
+  inline ArrayPtr<T> operator*() { return array.first(end); }
+
+  inline SplitIterator& operator++() {
+    if (end == array.size()) {
+      end = array.size() + 1;
+    } else {
+      array = array.slice(end + 1);
+      nextSegment();
+    }
+    return *this;
+  }
+
+  inline bool operator==(const SplitIterator& other) const {
+    return array == other.array && end == other.end;
+  }
+  inline bool operator==(SplitIteratorEnd) const { return end == array.size() + 1; }
+
+private:
+  ArrayPtr<T> array;
+  // The remaining suffix starting at the current segment.
+  size_t end;
+  // Delimiter index, array.size() for the final segment, or array.size() + 1 when exhausted.
+  
+  const T delim;
+
+  inline void nextSegment() {
+    KJ_IF_SOME(index, array.findFirst(delim)) {
+      end = index;
+    } else {
+      end = array.size();
+    }
+  }
+};
+
+template <typename T>
+class SplitIterable {
+public:
+  inline SplitIterable(ArrayPtr<T> array, T&& delim) : array(array), delim(kj::mv(delim)) {}
+  inline SplitIterator<T> begin() const { return SplitIterator<T>(array, delim); }
+  inline SplitIteratorEnd end() const { return SplitIteratorEnd(); }
+
+private:
+  ArrayPtr<T> array;
+  const T delim;
+};
+
+}  // namespace _ (private)
 
 template <>
 inline Maybe<size_t> ArrayPtr<const char>::findFirst(const char& c) const {

@@ -778,6 +778,78 @@ KJ_TEST("Array::slice(start) const") {
 #endif
 }
 
+KJ_TEST("ArrayPtr::split") {
+  {
+    const char text[] = "foo,,bar,";
+    StringPtr expected[] = {"foo", "", "bar", ""};
+
+    size_t i = 0;
+    for (auto part: kj::arrayPtr(text, sizeof(text) - 1).split(',')) {
+      ASSERT_LT(i, kj::size(expected));
+      KJ_EXPECT(part == expected[i], i, part, expected[i]);
+      ++i;
+    }
+
+    KJ_EXPECT(i == kj::size(expected));
+  }
+
+  {
+    const char text[] = "foobar";
+    size_t i = 0;
+    for (auto part: kj::arrayPtr(text, sizeof(text) - 1).split(',')) {
+      KJ_EXPECT(i == 0);
+      KJ_EXPECT(part == "foobar"_kj);
+      ++i;
+    }
+
+    KJ_EXPECT(i == 1);
+  }
+
+  {
+    size_t i = 0;
+    for (auto part: kj::ArrayPtr<const char>().split(',')) {
+      KJ_EXPECT(i == 0);
+      KJ_EXPECT(part == ""_kj);
+      ++i;
+    }
+
+    KJ_EXPECT(i == 1);
+  }
+}
+
+KJ_TEST("ArrayPtr::split mutable") {
+  int values[] = {1, 0, 2, 3, 0, 4};
+  int expectedFirst[] = {11, 12, 14};
+
+  size_t i = 0;
+  for (auto part: kj::arrayPtr(values).split(0)) {
+    if (part.size() > 0) {
+      ASSERT_LT(i, kj::size(expectedFirst));
+      part[0] += 10;
+      KJ_EXPECT(part[0] == expectedFirst[i]);
+    }
+    ++i;
+  }
+
+  KJ_EXPECT(i == 3);
+  KJ_EXPECT(kj::ArrayPtr<const int>(values) == kj::arr(11, 0, 12, 3, 0, 14));
+}
+
+KJ_TEST("ArrayPtr::split const") {
+  const int values[] = {1, 0, 2};
+  const auto split = kj::arrayPtr(values).split(0);
+  static_assert(kj::isSameType<decltype(*split.begin()), kj::ArrayPtr<const int>>());
+
+  size_t i = 0;
+  for (auto part: split) {
+    KJ_ASSERT(i < 2);
+    KJ_EXPECT(part == kj::arr(i == 0 ? 1 : 2));
+    ++i;
+  }
+
+  KJ_EXPECT(i == 2);
+}
+
 KJ_TEST("FixedArray::fill") {
   FixedArray<int64_t, 10> arr;
   arr.fill(42);
