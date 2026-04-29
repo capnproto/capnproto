@@ -1356,6 +1356,210 @@ KJ_TEST("embargos block CapabilityServerSet") {
   KJ_EXPECT(unwrappedAt >= 3, unwrappedAt);
 }
 
+class TestPromiseEchoer final: public test::TestMoreStuff::Server {
+  // Helper for constructing the receiverHosted version of the CapabilityServerSet unwrap test.
+  // The first echo() returns a promise and saves the input capability. fulfill() resolves that
+  // promise to the saved input, while the second echo() behaves like a normal echo server.
+
+public:
+  kj::Promise<void> echo(EchoContext context) override {
+    auto params = context.getParams();
+
+    if (fulfiller == kj::none) {
+      capToResolve = params.getCap();
+      auto paf = kj::newPromiseAndFulfiller<test::TestCallOrder::Client>();
+      fulfiller = kj::mv(paf.fulfiller);
+      context.getResults().setCap(kj::mv(paf.promise));
+    } else {
+      context.getResults().setCap(params.getCap());
+    }
+
+    return kj::READY_NOW;
+  }
+
+  void fulfill() {
+    KJ_ASSERT_NONNULL(fulfiller)->fulfill(kj::mv(capToResolve));
+  }
+
+private:
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<test::TestCallOrder::Client>>> fulfiller;
+  test::TestCallOrder::Client capToResolve = nullptr;
+};
+
+KJ_TEST("RequireEmbargoWrapper shouldn't block CapabilityServerSet unwrap (RECEIVER_HOSTED)") {
+  // This test verifies that RequireEmbargoWrapper's use in the RECEIVER_HOSTED case of receiveCap()
+  // does not interfece with CapabilityServerSet unwrapping.
+
+  TestContext context;
+
+  capnp::CapabilityServerSet<test::TestCallOrder> capSet;
+
+  // Use a custom server so that Alice first receives a promise hosted by Carol, then later sends
+  // that same promise back to Carol after Carol has locally resolved it.
+  auto ownServer = kj::heap<TestPromiseEchoer>();
+  auto server = ownServer.get();
+  auto& carol = context.initVat("carol", kj::mv(ownServer));
+  auto client = context.alice.connect<test::TestMoreStuff>("carol");
+
+  // Create the local capability that should survive the round trip and remain unwrappable by
+  // CapabilityServerSet after all promise resolution has completed.
+  TestCallOrderImpl* ptr;
+  auto ownCap = kj::heap<TestCallOrderImpl>();
+  ptr = ownCap;
+  auto cap = capSet.add(kj::mv(ownCap));
+
+  // The first echo() returns a Carol-hosted promise to Alice and saves Alice's local capability as
+  // the eventual resolution of that promise.
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto reflectedPromise = echo.wait(context.waitScope).getCap();
+
+  // Block Carol's Resolve message to Alice. Carol will update its own export table entry to point
+  // back at Alice's local capability, but Alice will still believe reflectedPromise is unresolved.
+  auto& carolToAlice = KJ_ASSERT_NONNULL(
+      carol.vatNetwork.getConnectionTo(context.alice.vatNetwork));
+  carolToAlice.block();
+
+  server->fulfill();
+  context.waitScope.poll();
+
+  // Send the unresolved promise back to Carol. Since Carol's export table entry for that promise
+  // has already resolved to an ImportClient pointing back to Alice, Carol receives this as a
+  // receiverHosted descriptor that gets a RequireEmbargoWrapper in the RECEIVER_HOSTED case of
+  // receiveCap().
+  auto echoAgainRequest = client.echoRequest();
+  echoAgainRequest.setCap(reflectedPromise);
+  auto echoAgain = echoAgainRequest.send();
+  context.waitScope.poll();
+
+  // Now let Alice learn about the promise resolution and verify that the reflected capability can
+  // still resolve through to the local server. A RequireEmbargoWrapper here prevents that final
+  // resolution and makes CapabilityServerSet fail to unwrap.
+  carolToAlice.unblock();
+  auto roundTripCap = echoAgain.wait(context.waitScope).getCap();
+
+  auto& roundTripObj = KJ_ASSERT_NONNULL(capSet.getLocalServer(roundTripCap).wait(
+      context.waitScope));
+  KJ_EXPECT(&roundTripObj == ptr);
+}
+
+KJ_TEST("RequireEmbargoWrapper shouldn't block CapabilityServerSet unwrap (RECEIVER_ANSWER)") {
+  // This test verifies that RequireEmbargoWrapper's use in the RECEIVER_ANSWER case of receiveCap()
+  // does not interfece with CapabilityServerSet unwrapping.
+
+  TestContext context;
+
+  capnp::CapabilityServerSet<test::TestCallOrder> capSet;
+
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
+
+  // Create a local capability registered with CapabilityServerSet. If the RPC machinery fully
+  // resolves a reflected promise back to this local capability, getLocalServer() should be able to
+  // unwrap it at the end of the test.
+  TestCallOrderImpl* ptr;
+  auto ownCap = kj::heap<TestCallOrderImpl>();
+  ptr = ownCap;
+  auto cap = capSet.add(kj::mv(ownCap));
+
+  // Send the local capability to Bob, who will just echo it back. But, immediately use the
+  // pipelined result before Bob's response arrives. The pipelined capability is represented by a
+  // receiverAnswer descriptor when reflected back to Alice below.
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  // Reflect the pipelined capability through a second echo(). Alice receives a capability that
+  // should eventually resolve all the way back to the local TestCallOrderImpl.
+  auto echoAgainRequest = client.echoRequest();
+  echoAgainRequest.setCap(pipeline);
+  auto echoAgain = echoAgainRequest.send();
+
+  auto roundTripCap = echoAgain.getCap();
+
+  // Wait for both RPCs to complete so there are no outstanding protocol messages left to make the
+  // capability appear more local later. If RequireEmbargoWrapper hides further resolution here,
+  // CapabilityServerSet incorrectly concludes the capability is not one of its local servers.
+  echo.wait(context.waitScope);
+  echoAgain.wait(context.waitScope);
+
+  auto& roundTripObj = KJ_ASSERT_NONNULL(capSet.getLocalServer(roundTripCap).wait(
+      context.waitScope));
+  KJ_EXPECT(&roundTripObj == ptr);
+}
+
+KJ_TEST("RequireEmbargoWrapper has its intended effect (RECEIVER_HOSTED)") {
+  // This test verifies that RequireEmbargoWrapper is used properly in the RECEIVER_HOSTED case of
+  // receiveCap(). Commenting out the creation of the RequireEmbargoWrapper wrapper there should
+  // break this test.
+
+  TestContext context;
+
+  auto client = context.connect().getTestMoreStuffRequest().send().getCap();
+
+  // Export a promise to Bob. Alice will later resolve it to Bob's own TestMoreStuff capability,
+  // creating a reflected-hosted version of the Tribble race.
+  auto paf = kj::newPromiseAndFulfiller<test::TestCallOrder::Client>();
+  auto cap = test::TestCallOrder::Client(kj::mv(paf.promise));
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  // Block Bob's response so Alice continues using the promise pipeline while Bob still holds a
+  // reference to Alice's exported promise.
+  auto& bobToAlice = KJ_ASSERT_NONNULL(
+      context.bob.vatNetwork.getConnectionTo(context.alice.vatNetwork));
+  bobToAlice.block();
+
+  context.waitScope.poll();
+
+  // Block Alice's Resolve message to Bob, then resolve the exported promise to Bob's own
+  // capability. Alice updates her export table entry before Bob learns about the resolution.
+  auto& aliceToBob = KJ_ASSERT_NONNULL(
+      context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork));
+  aliceToBob.block();
+
+  paf.fulfiller->fulfill(client.castAs<test::TestCallOrder>());
+  context.waitScope.poll();
+
+  // This call goes to Bob through the original promise pipeline and is held behind Alice's blocked
+  // connection.
+  auto pipeline = echo.getCap();
+  auto call0 = getCallSequence(pipeline, 1);
+
+  // Let Alice receive Bob's echo result while Bob still has not received Alice's Resolve. The
+  // echoed capability refers to Alice's export table via receiverHosted, and receiveCap()'s
+  // `receiverHosetd` switch case needs to force an embargo because that export now points back at
+  // Bob.
+  bobToAlice.unblock();
+  echo.wait(context.waitScope);
+
+  // Allow the first call to proceed but prevent the disembargo response from returning yet.
+  bobToAlice.block();
+  aliceToBob.unblock();
+
+  // This second call goes through the reflected receiverHosted capability. It must not overtake
+  // call0 even though the reflected capability appears to point directly back to Bob.
+  auto call1 = getCallSequence(pipeline, 2);
+
+  // Both calls should wait until Bob's disembargo response reaches Alice.
+  KJ_EXPECT(!call0.poll(context.waitScope));
+  KJ_EXPECT(!call1.poll(context.waitScope));
+
+  bobToAlice.unblock();
+
+  KJ_EXPECT(call0.wait(context.waitScope).getN() == 1);
+  KJ_EXPECT(call1.wait(context.waitScope).getN() == 2);
+}
+
+// Neither GPT 5.5 nor Opus 4.7 were able to come up with any test to verify RequireEmbargoWrapper's
+// behavior in the RECEIVER_ANSWER case in receiveCap(). It may be that there is no reasonable
+// way to test this case. I certainly can't think of one.
+
 template <typename T>
 void expectPromiseThrows(kj::Promise<T>&& promise, kj::WaitScope& waitScope) {
   KJ_EXPECT(promise.then([](T&&) { return false; }, [](kj::Exception&&) { return true; })

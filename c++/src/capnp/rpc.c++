@@ -941,13 +941,23 @@ private:
       return connectionState.get() == &expected;
     }
 
-    virtual void promiseResolvedToThis(bool receivedCall) {}
+    virtual bool promiseResolvedToThis(bool receivedCall) { return false; }
     // Called to indicate that an RPC promise was resolved (via a `Resolve` message we received)
     // to point to this client (i.e. the `CapDescriptor` for the resolution pointed to another
     // import table entry). `receivedCall` is true if the resolving promise had received calls
     // in the past, which had been pipelined. Some RpcClient derivatives need to know when this
     // happens in order to arrange to use embargoes where appropriate. Others don't care, so can
     // use the default implementation.
+    //
+    // The method returns true if the caller needs to apply an embargo to the resolution.
+    // Normally, when a promised import or answer resolves to another import on the same
+    // connection, no embargo is necessary since it points along the same path. However, if a
+    // promised import/answer resolves to what the sending side thinks is a capability hosted on
+    // the receiving end, but it just so happens that said capability itself loops back to point
+    // to the sender, then we have a Tribble 4-way race an an embargo is still needed. In this case
+    // the hook is intentionally wrapped in RequireEmbargoWrapper, which forwards all calls to the
+    // underlying hook but returns true for promiseResolvedToThis(). All other implementations
+    // return false.
 
     struct WriteDescriptorResult {
       kj::Maybe<ExportId> exportId;
@@ -1300,13 +1310,14 @@ private:
       }
     }
 
-    void promiseResolvedToThis(bool receivedCall) override {
+    bool promiseResolvedToThis(bool receivedCall) override {
       // Some other promise resolved to *this* promise.
       KJ_REQUIRE(!isResolved,
           "peer committed RPC protocol error: a promise cannot resolve to another promise "
           "where the latter promise is itself already resolved; see "
           "`CapDescriptor.senderPromise`.");
       this->receivedCall = this->receivedCall || receivedCall;
+      return false;
     }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
@@ -1431,7 +1442,14 @@ private:
           // (And if `rpcReplacement` is *not* a promise then no embargo is needed because the
           // capability cannot resolve back to point to us later. It's remote over the same
           // connection and therefore calls will stay ordered naturally.)
-          rpcReplacement.promiseResolvedToThis(receivedCall);
+          //
+          // Exception: The remote end may have resolved us to a capability that it *thought*
+          // pointed back to us, but that capability itself was a promise which we subsequently
+          // resolved *back* to the remote. In this case, even though we are resolving one promise
+          // to another on the same connection, an embargo is still needed, because the remote end
+          // didn't know that it was resolving back to itself and will be forwarding pipelined
+          // calls our way in the meantime.
+          needsEmbargo = rpcReplacement.promiseResolvedToThis(receivedCall);
         } else {
           // Resolved to a thard-party capability. The three-party handoff mechanism takes care
           // of embargoing this.
@@ -1528,7 +1546,7 @@ private:
         kj::Own<AnyPointer::Reader> contact, kj::Own<RpcClient> vine)
         : RpcClient(connectionState), state(Deferred {kj::mv(contact), kj::mv(vine)}) {}
 
-    void promiseResolvedToThis(bool receivedCall) override {
+    bool promiseResolvedToThis(bool receivedCall) override {
       if (receivedCall) {
         // A promise resolved to us, and it had received calls that were pipelined. If we end up
         // accepting this capability locally, we will need to use an embargo.
@@ -1555,6 +1573,7 @@ private:
         // capability.
         KJ_ASSERT(state.is<Deferred>());
       }
+      return false;
     }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
@@ -2051,7 +2070,7 @@ private:
     }
   }
 
-  class TribbleRaceBlocker: public ClientHook, public kj::Refcounted {
+  class RequireEmbargoWrapper: public RpcClient {
     // Hack to work around a problem that arises during the Tribble 4-way Race Condition as
     // described in rpc.capnp in the documentation for the `Disembargo` message.
     //
@@ -2087,21 +2106,14 @@ private:
     //    problems. In the case of a `Return`, some non-RPC-specific code is involved in the
     //    resolution, making it harder to pass along a flag.
     //
-    //    Instead, we use this hack: When we read an entry in the export table and discover that
-    //    it actually contains an `ImportClient` or a `PipelineClient` reflecting back over our
-    //    own connection, then we wrap it in a `TribbleRaceBlocker`. This wrapper prevents
-    //    `PromiseClient` from recognizing the capability as being remote, so it instead treats it
-    //    as local. That causes it to set up an embargo as desired.
-    //
-    // TODO(perf): This actually blocks further promise resolution in the case where the
-    //   ImportClient or PipelineClient itself ends up being yet another promise that resolves
-    //   back over the connection again. What we probably really need to do here is, instead of
-    //   placing `ImportClient` or `PipelineClient` on the export table, place a special type there
-    //   that both knows what to do with future incoming messages to that export ID, but also knows
-    //   what to do when that export is the subject of a `Resolve`.
+    //    Instead, we wrap the resolution in `RequireEmbargoWrapper`, which is a class that forwards
+    //    all calls to the inner RpcClient EXCEPT that its return value for promiseResolvedToThis()
+    //    notifies any promise resolving to this object that an embargo is still needed, despite
+    //    being on the same connection.
 
   public:
-    TribbleRaceBlocker(kj::Own<ClientHook> inner): inner(kj::mv(inner)) {}
+    RequireEmbargoWrapper(RpcConnectionState& connectionState, kj::Own<RpcClient> inner)
+        : RpcClient(connectionState), inner(kj::mv(inner)) {}
 
     Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
@@ -2113,14 +2125,10 @@ private:
       return inner->call(interfaceId, methodId, kj::mv(context), hints);
     }
     kj::Maybe<ClientHook&> getResolved() override {
-      // We always wrap either PipelineClient or ImportClient, both of which return null for this
-      // anyway.
-      return kj::none;
+      return inner->getResolved();
     }
     kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-      // We always wrap either PipelineClient or ImportClient, both of which return null for this
-      // anyway.
-      return kj::none;
+      return inner->whenMoreResolved();
     }
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
@@ -2129,8 +2137,34 @@ private:
       return inner->getFd();
     }
 
+    bool promiseResolvedToThis(bool receivedCall) override {
+      inner->promiseResolvedToThis(receivedCall);
+
+      // This is the one thing we don't pass through. The reason for RequireEmbargoWrapper's
+      // existence: to force the embargo that otherwise would be skipped, by returning true here.
+      return true;
+    }
+    WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
+                                                  kj::Vector<int>& fds) override {
+      return inner->writeDescriptor(descriptor, fds);
+    }
+    kj::Maybe<kj::Own<ClientHook>> writeTarget(
+        rpc::MessageTarget::Builder target) override {
+      return inner->writeTarget(target);
+    }
+    void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
+      return inner->adoptFlowController(kj::mv(flowController));
+    }
+
+    WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
+          VatNetworkBase::Connection& provider,
+          VatNetworkBase::Connection& recipient,
+          AnyPointer::Builder contact) override {
+      return inner->writeThirdPartyDescriptor(provider, recipient, contact);
+    }
+
   private:
-    kj::Own<ClientHook> inner;
+    kj::Own<RpcClient> inner;
   };
 
   kj::Maybe<kj::Own<ClientHook>> receiveCap(rpc::CapDescriptor::Reader descriptor,
@@ -2167,8 +2201,8 @@ private:
                   vineConnection, capnp::clone(*contact), kj::mv(vine));
             }
           }
-          if (unwrapIfSameConnection(*result) != kj::none) {
-            result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
+          KJ_IF_SOME(rpcClient, unwrapIfSameConnection(*result)) {
+            result = kj::refcounted<RequireEmbargoWrapper>(*this, kj::addRef(rpcClient));
           }
           return kj::mv(result);
         } else {
@@ -2182,8 +2216,8 @@ private:
           KJ_IF_SOME(pipeline, answer.pipeline) {
             auto ops = toPipelineOps(promisedAnswer.getTransform());
             auto result = pipeline->getPipelinedCap(ops);
-            if (unwrapIfSameConnection(*result) != kj::none) {
-              result = kj::refcounted<TribbleRaceBlocker>(kj::mv(result));
+            KJ_IF_SOME(rpcClient, unwrapIfSameConnection(*result)) {
+              result = kj::refcounted<RequireEmbargoWrapper>(*this, kj::addRef(rpcClient));
             }
             return kj::mv(result);
           }
