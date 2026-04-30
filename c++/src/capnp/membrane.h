@@ -321,6 +321,29 @@ PipelineType reverseMembranePipeline(PipelineType inner, kj::Own<MembranePolicy>
       AnyPointer::Pipeline(PipelineHook::from(kj::mv(inner))), kj::mv(policy)));
 }
 
+class RevokerMembrane final: public MembranePolicy, public kj::Refcounted {
+  // A membrane which revokes when a Promise is rejected.
+ public:
+  explicit RevokerMembrane(kj::Promise<void> promise): promise(promise.fork()) {}
+
+  kj::Maybe<Capability::Client> inboundCall(
+      uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {
+    return kj::none;
+  }
+
+  kj::Maybe<Capability::Client> outboundCall(
+      uint64_t interfaceId, uint16_t methodId, Capability::Client target) override {
+    return kj::none;
+  }
+
+  kj::Own<MembranePolicy> addRef() override { return kj::addRef(*this); }
+
+  kj::Maybe<kj::Promise<void>> onRevoked() override { return promise.addBranch(); }
+
+ private:
+  kj::ForkedPromise<void> promise;
+};
+
 } // namespace capnp
 
 CAPNP_END_HEADER

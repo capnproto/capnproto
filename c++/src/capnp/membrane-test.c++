@@ -401,6 +401,40 @@ KJ_TEST("revoke membrane") {
       thing.passThroughRequest().send().wait(env.waitScope));
 }
 
+KJ_TEST("can use RevokerMembrane to revoke") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  auto revoker = kj::refcounted<RevokerMembrane>(kj::mv(paf.promise));
+
+  kj::TwoWayPipe pipe(kj::newTwoWayPipe());
+  TwoPartyClient client(*pipe.ends[0]);
+  TwoPartyClient server(*pipe.ends[1], membrane(kj::heap<TestMembraneImpl>(), kj::mv(revoker)),
+      rpc::twoparty::Side::SERVER);
+  test::TestMembrane::Client membraned(client.bootstrap().castAs<test::TestMembrane>());
+
+  auto thing = membraned.makeThingRequest().send().wait(waitScope).getThing();
+
+  auto result = thing.passThroughRequest().send().wait(waitScope);
+  KJ_EXPECT("inside" == result.getText());
+
+  auto callPromise = membraned.waitForeverRequest().send();
+
+  KJ_EXPECT(!callPromise.poll(waitScope));
+
+  paf.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "foobar"));
+
+  KJ_ASSERT(callPromise.poll(waitScope));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", callPromise.wait(waitScope));
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
+      membraned.makeThingRequest().send().wait(waitScope));
+
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
+      thing.passThroughRequest().send().wait(waitScope));
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp
