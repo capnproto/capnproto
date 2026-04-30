@@ -18,12 +18,12 @@ env:
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
-      if [ "$clang" -ge 22 ]; then
+      if [ "$clang" -ge 23 ]; then
         . /etc/os-release
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
         echo "deb http://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-$clang main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
       fi
-      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang llvm-$clang clang-tidy-$clang parallel
+      export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libunwind-$clang-dev libclang-rt-$clang-dev lld-$clang llvm-$clang clang-tidy-$clang parallel
     }
 
 jobs:
@@ -39,8 +39,18 @@ jobs:
         run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang20 libc++-dev llvm-libunwind-dev
       - name: super-test
         run: ./super-test.sh quick clang-20
+  Linux-gcc:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: install dependencies
+        run: eval "$INSTALL_DEPS" && install_deps 20 && sudo apt-get install --no-upgrade --no-install-recommends -y gcc-15
+      - name: test
+        run: |
+          export CC=gcc-15
+          cd c++ && bazel test --config=ci --config=gcc //...
   Linux-clang:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +71,7 @@ jobs:
             export CXX=clang++-${{ matrix.clang }}
             ${{ matrix.run-test }}
   Linux-clang-opt:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -73,12 +83,11 @@ jobs:
       - name: test
         run: |
             export CC=clang-${{ matrix.clang }}
-            export CXX=clang++-${{ matrix.clang }}
             export LD=lld-${{ matrix.clang }}
             export AR=llvm-ar-${{ matrix.clang }}
             cd c++ && bazel test --config=ci --config=opt //...
   Linux-clang-arm64:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -97,7 +106,7 @@ jobs:
             export CXX=clang++-${{ matrix.clang }}
             ${{ matrix.run-test }}
   Linux-clang-sanitizers:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -110,10 +119,9 @@ jobs:
       - name: test
         run: |
             export CC=clang-${{ matrix.clang }}
-            export CXX=clang++-${{ matrix.clang }}
             cd c++ && bazel test --config=ci --config=${{ matrix.config }} //...
   Linux-clang-tidy:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +133,6 @@ jobs:
       - name: test
         run: |
             export CC=clang-${{ matrix.clang }}
-            export CXX=clang++-${{ matrix.clang }}
             export CLANG_TIDY=clang-tidy-${{ matrix.clang }}
             cd c++ 
             bazel build --config=ci //...

@@ -1077,7 +1077,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with startTls") {
   auto request = frontCapnpHttpClient->connect(
       "https://example.org"_kj, kj::HttpHeaders(*table), settings);
 
-  KJ_ASSERT_NONNULL(*tlsStarter);
+  KJ_ASSERT(*tlsStarter != kj::none);
 
   request.status.then(
       [io=kj::mv(request.connection), &tlsStarter](auto status) mutable {

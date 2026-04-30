@@ -55,7 +55,15 @@ struct TypeByIndex_<index, First, Rest...>
     : public TypeByIndex_<index - 1, Rest...> {};
 template <size_t index>
 struct TypeByIndex_<index> {
+// GCC 15 (possibly earlier versions too) issues a warning for this
+#if __GNUC__ && !__clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtautological-compare"
+#endif
   static_assert(index != index, "Index out-of-range.");
+#if __GNUC__ && !__clang__
+#pragma GCC diagnostic pop
+#endif
 };
 template <size_t index, typename... T>
 using TypeByIndex = typename TypeByIndex_<index, T...>::Type;
