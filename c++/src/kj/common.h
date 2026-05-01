@@ -2799,6 +2799,7 @@ private:
 
 template <>
 inline Maybe<size_t> ArrayPtr<const char>::findFirst(const char& c) const {
+  if (size_ == 0) return kj::none;
   const char* pos = reinterpret_cast<const char*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
     return kj::none;
@@ -2809,6 +2810,7 @@ inline Maybe<size_t> ArrayPtr<const char>::findFirst(const char& c) const {
 
 template <>
 inline Maybe<size_t> ArrayPtr<char>::findFirst(const char& c) const {
+  if (size_ == 0) return kj::none;
   char* pos = reinterpret_cast<char*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
     return kj::none;
@@ -2819,6 +2821,7 @@ inline Maybe<size_t> ArrayPtr<char>::findFirst(const char& c) const {
 
 template <>
 inline Maybe<size_t> ArrayPtr<const byte>::findFirst(const byte& c) const {
+  if (size_ == 0) return kj::none;
   const byte* pos = reinterpret_cast<const byte*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
     return kj::none;
@@ -2829,6 +2832,7 @@ inline Maybe<size_t> ArrayPtr<const byte>::findFirst(const byte& c) const {
 
 template <>
 inline Maybe<size_t> ArrayPtr<byte>::findFirst(const byte& c) const {
+  if (size_ == 0) return kj::none;
   byte* pos = reinterpret_cast<byte*>(memchr(ptr, c, size_));
   if (pos == nullptr) {
     return kj::none;
