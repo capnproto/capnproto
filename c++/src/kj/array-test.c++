@@ -817,6 +817,13 @@ KJ_TEST("ArrayPtr::split") {
   }
 }
 
+KJ_TEST("ArrayPtr::findFirst empty optimized types") {
+  KJ_EXPECT(kj::ArrayPtr<const char>().findFirst(',') == kj::none);
+  KJ_EXPECT(kj::ArrayPtr<char>().findFirst(',') == kj::none);
+  KJ_EXPECT(kj::ArrayPtr<const byte>().findFirst(byte{123}) == kj::none);
+  KJ_EXPECT(kj::ArrayPtr<byte>().findFirst(byte{123}) == kj::none);
+}
+
 KJ_TEST("ArrayPtr::split mutable") {
   int values[] = {1, 0, 2, 3, 0, 4};
   int expectedFirst[] = {11, 12, 14};
