@@ -2797,7 +2797,8 @@ template <typename T>
 class SplitIterable {
 public:
   inline SplitIterable(ArrayPtr<T> array, T&& delim) : array(array), delim(kj::mv(delim)) {}
-  inline SplitIterator<T> begin() const { return SplitIterator<T>(array, delim); }
+  inline SplitIterator<T> begin() { return SplitIterator<T>(array, delim); }
+  inline SplitIterator<const T> begin() const { return SplitIterator<const T>(array.asConst(), delim); }
   inline SplitIteratorEnd end() const { return SplitIteratorEnd(); }
 
 private:

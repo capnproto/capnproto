@@ -10,6 +10,7 @@ test --test_timeout=1,5,30,30
 build:dbg -c dbg
 build:dbg --config=max-debug-info
 build:dbg --//src/kj:debug_memory=True
+build:dbg --copt='-DCAPNP_DEBUG_TYPES'
 
 # use this config for maximum possible debug information
 build:max-debug-info --copt='-g3'
