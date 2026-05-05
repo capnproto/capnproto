@@ -173,6 +173,20 @@ public:
   virtual Maybe<void*> getWin32Handle() const { return nullptr; }
   // Get the underlying Win32 HANDLE, if any. Returns nullptr if this object actually isn't
   // wrapping a handle.
+
+#if _WIN32
+  virtual Maybe<AutoCloseHandle> releaseWin32Handle();
+#else
+  virtual Maybe<AutoCloseFd> releaseFd();
+#endif
+  // If the AsyncIoStream owns a file descriptor or HANDLE, release it. If the AsyncIoStream
+  // is not wrapping a fd/HANDLE, or if the fd/HANDLE is not owned by the AsyncIoStream, return
+  // nullptr.
+  // If releaseFd()/releaseWin32Handle() return a non-null value, destroying the AsyncIoStream will
+  // not close the fd/HANDLE.
+  // It is strongly recommended to delete the stream immediately after calling 
+  // releaseFd()/releaseWin32Handle(). As long as the stream exists, the fd/HANDLE is still observed
+  // by the event loop for events, even if it has been released.
 };
 
 Promise<uint64_t> unoptimizedPumpTo(

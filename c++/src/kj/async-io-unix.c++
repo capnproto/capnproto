@@ -138,6 +138,14 @@ public:
   }
 
 protected:
+  bool hasOwnership() const {
+    return flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+  }
+
+  void disown() {
+    flags &= ~LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+  }
+
   const int fd;
 
 private:
@@ -877,6 +885,14 @@ private:
         morePieces = morePieces.slice(1, morePieces.size());
       }
     }
+  }
+
+  Maybe<AutoCloseFd> releaseFd() override {
+    if(!hasOwnership()) {
+      return nullptr;
+    }
+    disown();
+    return AutoCloseFd{fd}; 
   }
 };
 
