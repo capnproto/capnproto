@@ -960,7 +960,7 @@ public:
       for (auto anno: schemaProto.getAnnotations()) {
         switch (anno.getId()) {
           case JSON_DISCRIMINATOR_ANNOTATION_ID:
-            discriminator = anno.getValue().getStruct().getAs<json::DiscriminatorOptions>();
+            discriminator = anno.getValue().getStruct().as<json::DiscriminatorOptions>();
             break;
         }
       }
@@ -1010,11 +1010,11 @@ public:
           case JSON_FLATTEN_ANNOTATION_ID:
             KJ_REQUIRE(type.isStruct(), "only struct types can be flattened", fieldName, typeName);
             flattened = true;
-            info.prefix = anno.getValue().getStruct().getAs<json::FlattenOptions>().getPrefix();
+            info.prefix = anno.getValue().getStruct().as<json::FlattenOptions>().getPrefix();
             break;
           case JSON_DISCRIMINATOR_ANNOTATION_ID:
             KJ_REQUIRE(fieldProto.isGroup(), "only unions can have discriminator");
-            subDiscriminator = anno.getValue().getStruct().getAs<json::DiscriminatorOptions>();
+            subDiscriminator = anno.getValue().getStruct().as<json::DiscriminatorOptions>();
             break;
           case JSON_BASE64_ANNOTATION_ID: {
             KJ_REQUIRE(field.getType().isData(), "only Data can be marked for base64 encoding");

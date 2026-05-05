@@ -3771,14 +3771,14 @@ public:
 
   inline bool isList() const;
   inline bool hasList() const;
-  inline ::capnp::AnyPointer::Reader getList() const;
+  inline  ::capnp::AnyList::Reader getList() const;
 
   inline bool isEnum() const;
   inline  ::uint16_t getEnum() const;
 
   inline bool isStruct() const;
   inline bool hasStruct() const;
-  inline ::capnp::AnyPointer::Reader getStruct() const;
+  inline  ::capnp::AnyStruct::Reader getStruct() const;
 
   inline bool isInterface() const;
   inline  ::capnp::Void getInterface() const;
@@ -3882,8 +3882,12 @@ public:
 
   inline bool isList();
   inline bool hasList();
-  inline ::capnp::AnyPointer::Builder getList();
-  inline ::capnp::AnyPointer::Builder initList();
+  inline  ::capnp::AnyList::Builder getList();
+  inline void setList( ::capnp::AnyList::Reader value);
+  template <typename T_>
+  inline ::capnp::BuilderFor<T_> initListAs(unsigned int size);
+  inline void adoptList(::capnp::Orphan< ::capnp::AnyList>&& value);
+  inline ::capnp::Orphan< ::capnp::AnyList> disownList();
 
   inline bool isEnum();
   inline  ::uint16_t getEnum();
@@ -3891,8 +3895,12 @@ public:
 
   inline bool isStruct();
   inline bool hasStruct();
-  inline ::capnp::AnyPointer::Builder getStruct();
-  inline ::capnp::AnyPointer::Builder initStruct();
+  inline  ::capnp::AnyStruct::Builder getStruct();
+  inline void setStruct( ::capnp::AnyStruct::Reader value);
+  template <typename T_>
+  inline ::capnp::BuilderFor<T_> initStructAs();
+  inline void adoptStruct(::capnp::Orphan< ::capnp::AnyStruct>&& value);
+  inline ::capnp::Orphan< ::capnp::AnyStruct> disownStruct();
 
   inline bool isInterface();
   inline  ::capnp::Void getInterface();
@@ -8117,27 +8125,47 @@ inline bool Value::Builder::hasList() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::AnyPointer::Reader Value::Reader::getList() const {
+inline  ::capnp::AnyList::Reader Value::Reader::getList() const {
   KJ_IREQUIRE((which() == Value::LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::AnyList>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Value::Builder::getList() {
+inline  ::capnp::AnyList::Builder Value::Builder::getList() {
   KJ_IREQUIRE((which() == Value::LIST),
               "Must check which() before get()ing a union member.");
-  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::AnyList>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Value::Builder::initList() {
+inline void Value::Builder::setList( ::capnp::AnyList::Reader value) {
   _builder.setDataField<Value::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::LIST);
-  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::AnyList>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline void Value::Builder::adoptList(
+    ::capnp::Orphan< ::capnp::AnyList>&& value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::LIST);
+  ::capnp::_::PointerHelpers< ::capnp::AnyList>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::AnyList> Value::Builder::disownList() {
+  KJ_IREQUIRE((which() == Value::LIST),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::AnyList>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
-  result.clear();
-  return result;
 }
 
+template <typename T_>
+inline ::capnp::BuilderFor<T_> Value::Builder::initListAs(unsigned int size) {
+  static_assert(::capnp::kind<T_>() == ::capnp::Kind::LIST,
+                "list must be a list");
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::LIST);
+  return ::capnp::_::PointerHelpers<T_>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), size);
+}
 inline bool Value::Reader::isEnum() const {
   return which() == Value::ENUM;
 }
@@ -8180,27 +8208,47 @@ inline bool Value::Builder::hasStruct() {
   return !_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::AnyPointer::Reader Value::Reader::getStruct() const {
+inline  ::capnp::AnyStruct::Reader Value::Reader::getStruct() const {
   KJ_IREQUIRE((which() == Value::STRUCT),
               "Must check which() before get()ing a union member.");
-  return ::capnp::AnyPointer::Reader(_reader.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::AnyStruct>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Value::Builder::getStruct() {
+inline  ::capnp::AnyStruct::Builder Value::Builder::getStruct() {
   KJ_IREQUIRE((which() == Value::STRUCT),
               "Must check which() before get()ing a union member.");
-  return ::capnp::AnyPointer::Builder(_builder.getPointerField(
+  return ::capnp::_::PointerHelpers< ::capnp::AnyStruct>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
-inline ::capnp::AnyPointer::Builder Value::Builder::initStruct() {
+inline void Value::Builder::setStruct( ::capnp::AnyStruct::Reader value) {
   _builder.setDataField<Value::Which>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::STRUCT);
-  auto result = ::capnp::AnyPointer::Builder(_builder.getPointerField(
+  ::capnp::_::PointerHelpers< ::capnp::AnyStruct>::set(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), value);
+}
+inline void Value::Builder::adoptStruct(
+    ::capnp::Orphan< ::capnp::AnyStruct>&& value) {
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::STRUCT);
+  ::capnp::_::PointerHelpers< ::capnp::AnyStruct>::adopt(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::AnyStruct> Value::Builder::disownStruct() {
+  KJ_IREQUIRE((which() == Value::STRUCT),
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::AnyStruct>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
-  result.clear();
-  return result;
 }
 
+template <typename T_>
+inline ::capnp::BuilderFor<T_> Value::Builder::initStructAs() {
+  static_assert(::capnp::kind<T_>() == ::capnp::Kind::STRUCT,
+                "struct must be a struct");
+  _builder.setDataField<Value::Which>(
+      ::capnp::bounded<0>() * ::capnp::ELEMENTS, Value::STRUCT);
+  return ::capnp::_::PointerHelpers<T_>::init(_builder.getPointerField(
+      ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
 inline bool Value::Reader::isInterface() const {
   return which() == Value::INTERFACE;
 }

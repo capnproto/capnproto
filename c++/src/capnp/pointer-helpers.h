@@ -142,12 +142,19 @@ template <> struct Kind_<UncheckedMessage> { static constexpr Kind kind = Kind::
 
 template <>
 struct PointerHelpers<UncheckedMessage> {
-  // Reads an AnyPointer field as an unchecked message pointer.  Requires that the containing
-  // message is itself unchecked.  This hack is currently private.  It is used to locate default
-  // values within encoded schemas.
-
-  static inline const word* get(PointerReader reader) {
-    return reader.getUnchecked();
+  // Assuming `T` is `schema::Value::Reader` for a pointer-typed value, return a (native) pointer
+  // pointing at the value's (capnp) pointer, which can then be used as an unchecked message. This
+  // is used in default value handling in `dynamic.c++`.
+  //
+  // This is wrapped in a one-of specialization of `PointerHelpers` primarily to make it a "friend"
+  // of all pointer types, which is needed specifically so that it can become a friend of
+  // `schema::Value::Reader`, in order to extract its underlying `StructReader`.
+  //
+  // TODO(cleanup): This is quite a hack and there's probably a better way to structure this but
+  // we're too lazy to come up with something at the moment.
+  template <typename T>
+  static inline const word* getValuePointer(const T& value) {
+    return value._reader.getPointerField(bounded<0>() * POINTERS).getUnchecked();
   }
 };
 
