@@ -98,9 +98,22 @@ void updateOpenSSLCAStoreWithWindowsCertificates(SSL_CTX* ctx) {
   if (store == nullptr) {
     throwOpensslError();
   }
-  HCERTSTORE hStore;
-  KJ_WIN32(hStore = CertOpenSystemStoreA(NULL, "ROOT"));
-  KJ_DEFER(KJ_WIN32(CertCloseStore(hStore, 0)));
+  HCERTSTORE hStore = CertOpenSystemStoreA(NULL, "ROOT");
+  DWORD currentUserError = hStore == nullptr ? GetLastError() : ERROR_SUCCESS;
+  if (hStore == nullptr) {
+    hStore = CertOpenStore(CERT_STORE_PROV_SYSTEM_A, 0, 0,
+        CERT_SYSTEM_STORE_LOCAL_MACHINE | CERT_STORE_READONLY_FLAG, "ROOT");
+  }
+  DWORD localMachineError = hStore == nullptr ? GetLastError() : ERROR_SUCCESS;
+  if (hStore == nullptr) {
+    // Service accounts may not have a loadable current-user certificate store. Treat the
+    // Windows CA import as best-effort; SSL_CTX_set_default_verify_paths() has already run,
+    // and callers may still provide explicit trusted certificates.
+    KJ_LOG(WARNING, "unable to open Windows ROOT certificate store; skipping Windows CA import",
+        currentUserError, localMachineError);
+    return;
+  }
+  KJ_DEFER(CertCloseStore(hStore, 0));
   PCCERT_CONTEXT pContext = nullptr;
   KJ_DEFER(CertFreeCertificateContext(pContext));
   while ((pContext = CertEnumCertificatesInStore(hStore, pContext))) {
