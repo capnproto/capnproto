@@ -686,7 +686,7 @@ public:
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
-    response.accept(200, "OK", kj::HttpHeaders(headerTable));
+    response.accept(200, "OK"_kj, kj::HttpHeaders(headerTable));
     return io.write("test"_kjb).then([&io]() mutable {
       io.shutdownWrite();
     });
@@ -711,7 +711,7 @@ public:
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
-    response.accept(200, "OK", kj::HttpHeaders(headerTable));
+    response.accept(200, "OK"_kj, kj::HttpHeaders(headerTable));
     // TODO(later): `io.pumpTo(io).ignoreResult;` doesn't work here,
     // it causes startTls to come back in a loop. The below avoids this.
     auto buffer = kj::heapArray<byte>(4096);
@@ -748,7 +748,7 @@ public:
       kj::StringPtr host, const kj::HttpHeaders& headers, kj::AsyncIoStream& io,
       kj::HttpService::ConnectResponse& response,
       kj::HttpConnectSettings settings) override {
-    auto body = response.reject(500, "Internal Server Error", kj::HttpHeaders(headerTable), 5);
+    auto body = response.reject(500, "Internal Server Error"_kj, kj::HttpHeaders(headerTable), 5);
     return body->write("Error"_kjb).attach(kj::mv(body));
   }
 
@@ -782,7 +782,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
     kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller;
     ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::HttpClient::ConnectRequest::Status>> fulfiller)
       : fulfiller(kj::mv(fulfiller)) {}
-    void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+    void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+                const kj::HttpHeaders& headers) override {
       KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
       fulfiller->fulfill(
         kj::HttpClient::ConnectRequest::Status(
@@ -796,7 +797,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect with close") {
 
     kj::Own<kj::AsyncOutputStream> reject(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const kj::HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize) override {
       KJ_UNREACHABLE;
@@ -857,17 +858,18 @@ KJ_TEST("HTTP-over-Cap'n-Proto Connect Reject") {
     kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller;
     ResponseImpl(kj::Own<kj::PromiseFulfiller<kj::Own<kj::AsyncInputStream>>> fulfiller)
       : fulfiller(kj::mv(fulfiller)) {}
-    void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+    void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+                const kj::HttpHeaders& headers) override {
       KJ_UNREACHABLE;
     }
 
     kj::Own<kj::AsyncOutputStream> reject(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const kj::HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize) override {
       KJ_ASSERT(statusCode == 500);
-      KJ_ASSERT(statusText == "Internal Server Error");
+      KJ_ASSERT(statusText == "Internal Server Error"_kj);
       KJ_ASSERT(expectedBodySize.orDefault(5));
       auto pipe = kj::newOneWayPipe();
       fulfiller->fulfill(kj::mv(pipe.in));
