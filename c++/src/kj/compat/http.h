@@ -450,7 +450,7 @@ public:
                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   kj::String serializeConnectRequest(kj::StringPtr authority,
                               kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
-  kj::String serializeResponse(uint statusCode, kj::StringPtr statusText,
+  kj::String serializeResponse(uint statusCode, kj::ArrayPtr<const char> statusText,
                                kj::ArrayPtr<const kj::StringPtr> connectionHeaders = nullptr) const;
   // **Most applications will not use these methods; they are called by the HTTP client and server
   // implementations.**
@@ -932,7 +932,7 @@ public:
   class Response {
   public:
     virtual kj::Own<kj::AsyncOutputStream> send(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
+        uint statusCode, kj::ArrayPtr<const char> statusText, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) = 0;
     // Begin the response.
     //
@@ -955,9 +955,9 @@ public:
     // `acceptWebSocket()` may only be called a single time. Calling it a second time will cause an
     // exception to be thrown.
 
-    kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
+    kj::Promise<void> sendError(uint statusCode, kj::ArrayPtr<const char> statusText,
                                 const HttpHeaders& headers);
-    kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
+    kj::Promise<void> sendError(uint statusCode, kj::ArrayPtr<const char> statusText,
                                 const HttpHeaderTable& headerTable);
     // Convenience wrapper around send() which sends a basic error. A generic error page specifying
     // the error code is sent as the body.
@@ -993,13 +993,13 @@ public:
   public:
     virtual void accept(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const HttpHeaders& headers) = 0;
     // Signals acceptance of the CONNECT tunnel.
 
     virtual kj::Own<kj::AsyncOutputStream> reject(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) = 0;
     // Signals rejection of the CONNECT tunnel.
