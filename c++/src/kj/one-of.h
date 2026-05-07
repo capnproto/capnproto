@@ -389,6 +389,35 @@ public:
   }
   // Copy/move from a value that matches one of the individual types in the OneOf.
 
+  // Deep-clone or copy each variant. For variants that are Cloneable, use `clone()`; for
+  // variants that are only Copyable, use copy. Mirrors `kj::Array<T>::clone()`.
+  //
+  // The result type is `OneOf<decltype(_::copyOrClone(v))...>` — for variants where `clone()`
+  // returns a different type than the variant itself (e.g. `ArrayPtr<T>::clone()` returns
+  // `Array<T>`), the cloned OneOf has the corresponding cloned-element types.
+  //
+  // Unlike `Maybe<T>::clone()` which only requires `Cloneable<T>` (because `Maybe<T>` is
+  // already copyable when `T` is copyable, making `clone()` redundant for that case),
+  // `OneOf<...>` is non-copyable as soon as any one variant is non-copyable. So `clone()`
+  // here accepts the dual `Cloneable<T> || Copyable<T>` per variant — clone the cloneable
+  // variants and copy the copyable ones — to support the mixed-trait case (e.g.
+  // `OneOf<int, kj::String>::clone()`).
+  //
+  // Both `&` and `const&` overloads are provided so types whose `clone()` is non-const (e.g.
+  // `kj::Rc<T>::clone()` mutates a refcount) work in non-const contexts.
+  auto clone() requires ((Cloneable<Variants> || Copyable<Variants>) && ...) {
+    using Result = OneOf<decltype(_::copyOrClone(instance<Variants&>()))...>;
+    Result result;
+    (cloneVariantInto<Variants>(result), ...);
+    return result;
+  }
+  auto clone() const requires ((Cloneable<const Variants> || Copyable<const Variants>) && ...) {
+    using Result = OneOf<decltype(_::copyOrClone(instance<const Variants&>()))...>;
+    Result result;
+    (cloneVariantInto<Variants>(result), ...);
+    return result;
+  }
+
   ~OneOf() { destroy(); }
 
   OneOf& operator=(const OneOf& other) { if (tag != 0) destroy(); copyFrom(other); return *this; }
@@ -536,6 +565,23 @@ private:
     // is invalid.
     tag = other.tag;
     doAll(copyVariantFrom<Variants>(other)...);
+  }
+
+  template <typename T, typename Result>
+  inline bool cloneVariantInto(Result& result) {
+    if (this->template is<T>()) {
+      using U = decltype(_::copyOrClone(instance<T&>()));
+      result.template init<U>(_::copyOrClone(this->template get<T>()));
+    }
+    return false;
+  }
+  template <typename T, typename Result>
+  inline bool cloneVariantInto(Result& result) const {
+    if (this->template is<T>()) {
+      using U = decltype(_::copyOrClone(instance<const T&>()));
+      result.template init<U>(_::copyOrClone(this->template get<T>()));
+    }
+    return false;
   }
 
   template <typename T>

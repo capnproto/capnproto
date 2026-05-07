@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "one-of.h"
+#include "refcount.h"
 #include "string.h"
 #include <kj/compat/gtest.h>
 
@@ -263,6 +264,105 @@ template<unsigned int N>
 struct T {
   unsigned int n = N;
 };
+
+struct RcCloneable: public Refcounted {
+  int value;
+  RcCloneable(int v): value(v) {}
+};
+
+KJ_TEST("OneOf clone: mixed Cloneable + Copyable variants") {
+  // OneOf<int, String> is the canonical mixed-trait case. The OneOf itself is non-copyable
+  // (String is move-only), but per-variant `Cloneable<T> || Copyable<T>` lets clone() work:
+  // String is cloned, int is copied. Exercise both arms by cloning each active variant.
+
+  OneOf<int, String> textVar = kj::str("foo");
+  auto textCloned = textVar.clone();
+  static_assert(isSameType<decltype(textCloned), OneOf<int, String>>());
+  KJ_EXPECT(textCloned.get<String>() == "foo");
+  // Independent storage — mutating original doesn't disturb the clone.
+  textVar.get<String>() = kj::str("bar");
+  KJ_EXPECT(textCloned.get<String>() == "foo");
+
+  OneOf<int, String> intVar = 42;
+  auto intCloned = intVar.clone();
+  KJ_EXPECT(intCloned.get<int>() == 42);
+  intVar.get<int>() = 99;
+  KJ_EXPECT(intCloned.get<int>() == 42);
+}
+
+KJ_TEST("OneOf clone: nested Cloneable composites (Array, Maybe)") {
+  // Variants whose own types are clone()-aware composites: Array<String> deep-clones each
+  // element, Maybe<String> clones the held value if present. Verifies the per-variant
+  // clone() dispatch propagates through composite types correctly.
+
+  OneOf<Array<String>, Maybe<String>> arrayVar = arr<String>(kj::str("a"), kj::str("b"));
+  auto arrayCloned = arrayVar.clone();
+  KJ_EXPECT(arrayCloned.get<Array<String>>().size() == 2);
+  KJ_EXPECT(arrayCloned.get<Array<String>>()[0] == "a");
+  // Distinct backing storage.
+  KJ_EXPECT(arrayCloned.get<Array<String>>()[0].begin() !=
+      arrayVar.get<Array<String>>()[0].begin());
+
+  OneOf<Array<String>, Maybe<String>> maybeVar = Maybe<String>(kj::str("baz"));
+  auto maybeCloned = maybeVar.clone();
+  KJ_EXPECT(KJ_ASSERT_NONNULL(maybeCloned.get<Maybe<String>>()) == "baz");
+}
+
+KJ_TEST("OneOf clone: type-changing variants (ArrayPtr -> Array)") {
+  // ArrayPtr<T>::clone() returns Array<T>, so OneOf<ArrayPtr<int>, String>::clone() returns
+  // OneOf<Array<int>, String>. Mirrors Maybe<ArrayPtr<T>>::clone() returning Maybe<Array<T>>.
+
+  int storage[] = {1, 2, 3};
+  OneOf<ArrayPtr<int>, String> var = ArrayPtr<int>(storage);
+
+  auto cloned = var.clone();
+  static_assert(isSameType<decltype(cloned), OneOf<Array<int>, String>>());
+  KJ_EXPECT(cloned.get<Array<int>>().size() == 3);
+  KJ_EXPECT(cloned.get<Array<int>>()[0] == 1);
+}
+
+KJ_TEST("OneOf clone: non-const overload supports Rc<T>") {
+  // kj::Rc<T>::clone() is non-const (it mutates the refcount), so Cloneable<const Rc<T>>
+  // is false and the const clone() overload is SFINAE'd out for OneOf<Rc<T>, ...>. The
+  // non-const overload exists precisely to support this case; verify it works and that the
+  // refcount semantics carry through (both originals share the same underlying object).
+
+  OneOf<int, Rc<RcCloneable>> var = kj::rc<RcCloneable>(42);
+  auto cloned = var.clone();
+  KJ_EXPECT(cloned.get<Rc<RcCloneable>>()->value == 42);
+  KJ_EXPECT(var.get<Rc<RcCloneable>>().get() == cloned.get<Rc<RcCloneable>>().get());
+}
+
+KJ_TEST("OneOf clone: default-constructed source produces default-constructed clone") {
+  // A default-constructed OneOf has no active variant (tag == 0). Cloning skips every
+  // variant arm of the fold expression and returns a fresh default-constructed result.
+  // Mirrors the behavior already documented for the copy ctor at the top of TEST(OneOf,
+  // Copy).
+  OneOf<int, String> var;
+  KJ_EXPECT(!var.is<int>());
+  KJ_EXPECT(!var.is<String>());
+
+  auto cloned = var.clone();
+  KJ_EXPECT(!cloned.is<int>());
+  KJ_EXPECT(!cloned.is<String>());
+}
+
+KJ_TEST("OneOf clone: moved-from source still clonable, produces moved-from-equivalent clone") {
+  // OneOf doesn't reset its tag during move construction (see TEST(OneOf, Basic) above:
+  // `kj::mv(var); var.get<String>() == ""` is the existing documented behavior). So a
+  // moved-from OneOf still has tag == String with a moved-from String inside. clone() is
+  // therefore well-defined on a moved-from source: it clones whatever the moved-from
+  // variant currently holds — which for kj::String is empty content.
+  OneOf<int, String> var = kj::str("payload");
+  OneOf<int, String> moved KJ_UNUSED = kj::mv(var);
+
+  KJ_EXPECT(var.is<String>());
+  KJ_EXPECT(var.get<String>() == "");
+
+  auto cloned = var.clone();
+  KJ_EXPECT(cloned.is<String>());
+  KJ_EXPECT(cloned.get<String>() == "");
+}
 
 TEST(OneOf, MaxVariants) {
   kj::OneOf<
