@@ -474,7 +474,7 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, CapTableBuilder* capTable,
-      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena)) {
+      SegmentWordCount amount, WirePointer::Kind kind, BuilderArena* orphanArena, bool requireCleanMemory = true)) {
     // Allocate space in the message for a new object, creating far pointers if necessary. The
     // space is guaranteed to be zero'd (because MessageBuilder implementations are required to
     // return zero'd memory).
@@ -531,10 +531,22 @@ struct WireHelpers {
         ref = reinterpret_cast<WirePointer*>(ptr);
         ref->setKindAndTarget(kind, ptr + POINTER_SIZE_IN_WORDS, segment);
 
+        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion
+        // after the landing pad.
+        if (requireCleanMemory && segment->needLazyZero()) {
+          WireHelpers::zeroMemory(ptr + POINTER_SIZE_IN_WORDS, amount);
+        }
+
         // Allocated space follows new pointer.
         return ptr + POINTER_SIZE_IN_WORDS;
       } else {
         ref->setKindAndTarget(kind, ptr, segment);
+
+        // If clean memory is wanted and the segment is not pre-zeroed, zero the data portion
+        // after the landing pad.
+        if (requireCleanMemory && segment->needLazyZero()) {
+          WireHelpers::zeroMemory(ptr, amount);
+        }
         return ptr;
       }
     } else {
@@ -543,6 +555,10 @@ struct WireHelpers {
       auto allocation = orphanArena->allocate(amount);
       segment = allocation.segment;
       ref->setKindForOrphan(kind);
+      // Check for the need to lazy zero the segment allocated by OrphanArena.
+      if (requireCleanMemory && segment->needLazyZero()) {
+        WireHelpers::zeroMemory(allocation.words, amount);
+      }
       return allocation.words;
     }
   }
@@ -1733,6 +1749,32 @@ struct WireHelpers {
     return { segment, Data::Builder(reinterpret_cast<byte*>(ptr), unbound(size / BYTES)) };
   }
 
+  static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> uninitializedDataPointer(
+      WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, BlobSize size,
+      BuilderArena* orphanArena = nullptr)) {
+    // Allocate the space with requireCleanMemory = false
+    word* ptr = allocate(ref, segment, capTable, roundBytesUpToWords(size),
+                         WirePointer::LIST, orphanArena, false);
+
+    // Initialize the pointer.
+    ref->listRef.set(ElementSize::BYTE, size * (ONE * ELEMENTS / BYTES));
+
+    // Zero-out padding bytes if memory is dirty for security reason.
+    if (segment->needLazyZero()) {
+      size_t byteSize = unbound(size / BYTES);
+      // Calculate the actual allocated size in bytes (aligned to Word boundary).
+      size_t allocatedSize = unbound(roundBytesUpToWords(size)) * sizeof(word);
+
+      if (byteSize < allocatedSize) {
+        // Zero-out the trailing padding bytes to prevent information leakage.
+        memset(reinterpret_cast<byte*>(ptr) + byteSize, 0, allocatedSize - byteSize);
+      }
+    }
+
+    // Build the Data::Builder.
+    return { segment, Data::Builder(reinterpret_cast<byte*>(ptr), unbound(size / BYTES)) };
+  }
+
   static KJ_ALWAYS_INLINE(SegmentAnd<Data::Builder> setDataPointer(
       WirePointer* ref, SegmentBuilder* segment, CapTableBuilder* capTable, Data::Reader value,
       BuilderArena* orphanArena = nullptr)) {
@@ -2608,6 +2650,11 @@ Text::Builder PointerBuilder::getBlob<Text>(const void* defaultValue, ByteCount 
 template <>
 Data::Builder PointerBuilder::initBlob<Data>(ByteCount size) {
   return WireHelpers::initDataPointer(pointer, segment, capTable,
+      assertMaxBits<BLOB_SIZE_BITS>(size, ThrowOverflow())).value;
+}
+template <>
+Data::Builder PointerBuilder::uninitializedBlob<Data>(ByteCount size) {
+  return WireHelpers::uninitializedDataPointer(pointer, segment, capTable,
       assertMaxBits<BLOB_SIZE_BITS>(size, ThrowOverflow())).value;
 }
 template <>

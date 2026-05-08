@@ -210,19 +210,21 @@ kj::ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
 // -------------------------------------------------------------------
 
 MallocMessageBuilder::MallocMessageBuilder(
-    uint firstSegmentWords, AllocationStrategy allocationStrategy)
-    : nextSize(firstSegmentWords), allocationStrategy(allocationStrategy),
+    uint firstSegmentWords, AllocationStrategy allocationStrategy, InitializationStrategy initStrategy)
+    : nextSize(firstSegmentWords), allocationStrategy(allocationStrategy), initializationStrategy(initStrategy),
       ownFirstSegment(true), returnedFirstSegment(false), firstSegment(nullptr) {}
 
 MallocMessageBuilder::MallocMessageBuilder(
-    kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
-    : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
+    kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy, InitializationStrategy initStrategy)
+    : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy), initializationStrategy(initStrategy),
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
   KJ_REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
 
-  // Checking just the first word should catch most cases of failing to zero the segment.
-  KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
-          "First segment must be zeroed.");
+  if (initStrategy == InitializationStrategy::PRE_ZERO_MEMORY) {
+    // Checking just the first word should catch most cases of failing to zero the segment.
+    KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+            "First segment must be zeroed.");
+  }
 }
 
 MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
@@ -265,9 +267,24 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   uint size = kj::max(minimumSize, nextSize);
 
-  void* result = calloc(size, sizeof(word));
+  // Allocate memory based on strategy
+  void* result;
+  const char* syscallName = "unknown";
+  switch (initializationStrategy) {
+    case InitializationStrategy::PRE_ZERO_MEMORY:
+      syscallName = "calloc(size, sizeof(word))";
+      result = calloc(size, sizeof(word));
+      break;
+    case InitializationStrategy::LAZY_ZERO_MEMORY:
+      syscallName = "malloc(size * sizeof(word))";
+      result = malloc(size * sizeof(word));
+      break;
+    default:
+      KJ_FAIL_ASSERT("Unknown initialization strategy");
+  }
+
   if (result == nullptr) {
-    KJ_FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
+    KJ_FAIL_SYSCALL(syscallName, ENOMEM, size);
   }
 
   if (!returnedFirstSegment) {

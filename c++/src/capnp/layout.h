@@ -358,6 +358,7 @@ public:
   ListBuilder initList(ElementSize elementSize, ElementCount elementCount);
   ListBuilder initStructList(ElementCount elementCount, StructSize size);
   template <typename T> typename T::Builder initBlob(ByteCount size);
+  template <typename T> typename T::Builder uninitializedBlob(ByteCount size);
   // Init methods:  Initialize the pointer to a newly-allocated object, discarding the existing
   // object.
 
@@ -967,6 +968,7 @@ template <> typename Text::Reader PointerReader::getBlob<Text>(
     const void* defaultValue, ByteCount defaultSize) const;
 
 template <> typename Data::Builder PointerBuilder::initBlob<Data>(ByteCount size);
+template <> typename Data::Builder PointerBuilder::uninitializedBlob<Data>(ByteCount size);
 template <> void PointerBuilder::setBlob<Data>(typename Data::Reader value);
 template <> typename Data::Builder PointerBuilder::getBlob<Data>(
     const void* defaultValue, ByteCount defaultSize);

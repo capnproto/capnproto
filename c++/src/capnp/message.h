@@ -168,6 +168,17 @@ public:
     size_t wordsUsed;
     // Number of words in `space` which are used; the rest are free space in which additional
     // objects may be allocated.
+
+    bool needLazyZero = false;
+    // Specifies whether the provided `space` contains uninitialized ("dirty") memory.
+    //
+    // If set to true, the builder assumes the segment is NOT zero-initialized. It will
+    // apply the same lazy zeroing logic as described in `MessageBuilder::needLazyZero()`:
+    // zeroing lazily as objects are allocated, while allowing specific fields (allocated
+    // via `uninitializedFoo()`) to skip zeroing entirely.
+    //
+    // If false (default), Cap'n Proto assumes the segment is already zeroed, enabling
+    // the standard, faster allocation path.
   };
 
   explicit MessageBuilder(kj::ArrayPtr<SegmentInit> segments);
@@ -201,6 +212,55 @@ public:
   // allocateSegment() is responsible for zeroing the memory before returning. This is required
   // because otherwise the Cap'n Proto implementation would have to zero the memory anyway, and
   // many allocators are able to provide already-zero'd memory more efficiently.
+
+  virtual bool needLazyZero() const { return false; }
+  // Override this method in a subclass to opt in to lazy zero segment allocation.
+  //
+  // By default, Cap'n Proto requires segment allocators (including custom `allocateSegment`
+  // methods) to return zero-initialized memory. When the caller enables lazy zero segment
+  // allocation by overriding `needLazyZero` to return true, the allocator is permitted to
+  // return un-zeroed segments.
+  //
+  // In this case, the builder takes responsibility for zeroing during message construction:
+  // it will lazily zero the parts of the segment that are initialized using `initRoot()` or
+  // standard `initFoo()` methods, but will SKIP the regions that are explicitly initialized
+  // using `uninitializedFoo()` to leave them un-zeroed. This approach reduces unnecessary
+  // memset work for large allocations (e.g., big `DATA` type blobs) and avoids double-writing
+  // (memset followed by memcpy).
+  //
+  // IMPORTANT:
+  // 1. When opted in, the allocator does NOT need to zero the segment; Cap'n Proto handles
+  //    zeroing as needed.
+  // 2. Only fields that are initialized using `uninitializedFoo()` will skip zeroing.
+  //    All other memory will be zeroed by the builder automatically.
+  // 3. Currently, `uninitializedFoo()` is only supported for DATA type fields.
+  // 4. Users must ensure correctness: if a lazily-skipped region is read before being fully
+  //    overwritten, the read will return uninitialized memory. Do not read skipped regions
+  //    until you have completely written them.
+  // 5. Security: Before sending a message over the network, it is strongly recommended to
+  //    explicitly zero out any dirty fields (or ensure they are fully overwritten) to
+  //    prevent accidental leakage of previous heap data.
+  //
+  // Example usage:
+  //
+  //   class LazyZeroMallocMessageBuilder : public MessageBuilder {
+  //   public:
+  //     // Opt-in to lazy zero segment allocation.
+  //     bool needLazyZero() const override { return true; }
+  //
+  //     kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
+  //       // Use malloc (dirty) instead of calloc (clean) for performance.
+  //       void* ptr = malloc(minimumSize * sizeof(word));
+  //       KJ_ASSERT(ptr != nullptr);
+  //       return kj::arrayPtr(reinterpret_cast<word*>(ptr), minimumSize);
+  //     }
+  //   };
+  //
+  //   LazyZeroMallocMessageBuilder builder;
+  //   auto root = builder.initRoot<MyMessage>();
+  //   // This allocation skips memset, improving performance for large blobs.
+  //   auto data = root.uninitializedFoo(1024 * 1024);
+  //   memcpy(data.begin(), source, data.size());
 
   template <typename RootType>
   typename RootType::Builder initRoot();
@@ -373,13 +433,31 @@ constexpr uint SUGGESTED_FIRST_SEGMENT_WORDS = 1024;
 constexpr AllocationStrategy SUGGESTED_ALLOCATION_STRATEGY = AllocationStrategy::GROW_HEURISTICALLY;
 
 class MallocMessageBuilder: public MessageBuilder {
-  // A simple MessageBuilder that uses malloc() (actually, calloc()) to allocate segments.  This
+  // A simple MessageBuilder that uses malloc()/calloc() (by default, calloc()) to allocate segments.  This
   // implementation should be reasonable for any case that doesn't require writing the message to
   // a specific location in memory.
 
 public:
+  enum class InitializationStrategy: uint8_t {
+    PRE_ZERO_MEMORY,
+    // The standard behavior: Memory for new segments is zero-initialized by the allocator
+    // using `calloc` before it is returned to the builder.
+    //
+    // This is the default and the safest strategy that ensures all fields default to zero.
+
+    LAZY_ZERO_MEMORY
+    // Memory for new segments is allocated as "dirty" / uninitialized using `malloc`.
+    //
+    // This will opt in lazy zero segment allocation, please find detailed information above
+    // in the MessageBuilder abstract class.
+    //
+    // BENEFIT: This enables the use of `uninitializedData()` to skip zeroing for specific
+    // fields, avoiding the "double-write" (zeroing then writing/copying) for large payloads.
+  };
+
   explicit MallocMessageBuilder(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
-      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY,
+      InitializationStrategy initStrategy = InitializationStrategy::PRE_ZERO_MEMORY);
   // Creates a BuilderContext which allocates at least the given number of words for the first
   // segment, and then uses the given strategy to decide how much to allocate for subsequent
   // segments.  When choosing a value for firstSegmentWords, consider that:
@@ -391,15 +469,24 @@ public:
   //    zeroing it out becomes a bottleneck.
   // The defaults have been chosen to be reasonable for most people, so don't change them unless you
   // have reason to believe you need to.
+  //
+  // `initStrategy` configures how memory is initialized, please find detailed information above.
 
   explicit MallocMessageBuilder(kj::ArrayPtr<word> firstSegment,
-      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+                                AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY,
+                                InitializationStrategy initStrategy = InitializationStrategy::PRE_ZERO_MEMORY);
+
   // This version always returns the given array for the first segment, and then proceeds with the
   // allocation strategy.  This is useful for optimization when building lots of small messages in
   // a tight loop:  you can reuse the space for the first segment.
   //
-  // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
-  // over any space that was used so that it can be reused.
+  // By default, if lazy zero is not opted in, firstSegment MUST be zero-initialized.
+  // MallocMessageBuilder's destructor will write new zeros over any space that was used so that
+  // it can be reused.
+
+  bool needLazyZero() const override {
+    return initializationStrategy == InitializationStrategy::LAZY_ZERO_MEMORY;
+  }
 
   KJ_DISALLOW_COPY_AND_MOVE(MallocMessageBuilder);
   virtual ~MallocMessageBuilder() noexcept(false);
@@ -409,6 +496,7 @@ public:
 private:
   uint nextSize;
   AllocationStrategy allocationStrategy;
+  InitializationStrategy initializationStrategy;
 
   bool ownFirstSegment;
   bool returnedFirstSegment;
