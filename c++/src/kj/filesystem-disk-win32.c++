@@ -380,6 +380,11 @@ public:
       case ERROR_CALL_NOT_IMPLEMENTED:
         // Probably WINE.
       	break;
+      case ERROR_INVALID_FUNCTION:
+        // Also WINE: NtQueryInformationFile returns STATUS_NOT_IMPLEMENTED for
+        // unsupported FileInfoClass values, which RtlNtStatusToDosError maps to
+        // ERROR_INVALID_FUNCTION (not ERROR_CALL_NOT_IMPLEMENTED).
+        break;
       case ERROR_INVALID_PARAMETER:
         // Probably VeraCrypt. See https://github.com/capnproto/capnproto/issues/2176
         break;
