@@ -233,10 +233,10 @@ extern const char kjCrc32HashDisabled;
 
 template <bool enabled>
 struct kjCrcHashGuard {
-    kjCrcHashGuard() {
+  kjCrcHashGuard() {
     KJ_USED static constexpr const char* value =
         enabled ? &kjCrc32HashEnabled : &kjCrc32HashDisabled;
-    }
+  }
 };
 
 inline uint intHash32(uint32_t i) {
