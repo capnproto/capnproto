@@ -1,4 +1,5 @@
 """Bazel rule to compile .capnp files into c++."""
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 capnp_provider = provider("Capnproto Provider", fields = {
     "includes": "includes for this target (transitive)",
@@ -117,7 +118,7 @@ def cc_capnp_library(
         visibility = visibility,
         target_compatible_with = target_compatible_with,
     )
-    native.cc_library(
+    cc_library(
         name = name,
         srcs = srcs_cpp,
         hdrs = hdrs,

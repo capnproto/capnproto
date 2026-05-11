@@ -1,3 +1,4 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load("//:build/configure.bzl", "kj_configure")
 
 kj_configure()
