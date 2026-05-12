@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 
 #include "http-over-capnp.h"
+#include <capnp/message.h>
 #include <kj/test.h>
 
 #ifndef TEST_PEER_OPTIMIZATION_LEVEL
@@ -28,6 +29,38 @@
 
 namespace capnp {
 namespace {
+
+KJ_TEST("HttpOverCapnpFactory::capnpToKj rejects out of range common values") {
+  MallocMessageBuilder message;
+  auto orphanage = message.getOrphanage();
+
+  kj::HttpHeaderTable::Builder headerBuilder;
+
+  ByteStreamFactory streamFactory;
+  HttpOverCapnpFactory factory(streamFactory, headerBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+
+  auto headerTable = headerBuilder.build();
+
+  {
+    auto invalidName = orphanage.newOrphan<List<HttpHeader>>(1);
+    auto invalidNameHeader = invalidName.get()[0];
+    auto common = invalidNameHeader.initCommon();
+    common.setName(static_cast<CommonHeaderName>(999));
+    common.setValue("value");
+
+    KJ_EXPECT_THROW_MESSAGE("unknown common header name", factory.capnpToKj(invalidName.get()));
+  }
+
+  {
+    auto invalidValue = orphanage.newOrphan<List<HttpHeader>>(1);
+    auto invalidValueHeader = invalidValue.get()[0];
+    auto common = invalidValueHeader.initCommon();
+    common.setName(CommonHeaderName::ACCEPT_CHARSET);
+    common.setCommonValue(static_cast<CommonHeaderValue>(999));
+
+    KJ_EXPECT_THROW_MESSAGE("unknown common header value", factory.capnpToKj(invalidValue.get()));
+  }
+}
 
 KJ_TEST("KJ and RPC HTTP method enums match") {
 #define EXPECT_MATCH(METHOD) \

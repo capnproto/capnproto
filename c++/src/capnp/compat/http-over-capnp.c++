@@ -1070,7 +1070,7 @@ kj::HttpHeaders HttpOverCapnpFactory::capnpToKj(
         switch (nv.which()) {
           case capnp::HttpHeader::Common::COMMON_VALUE: {
             auto cvInt = static_cast<uint>(nv.getCommonValue());
-            KJ_REQUIRE(nameInt < valueCapnpToKj.size(),
+            KJ_REQUIRE(cvInt < valueCapnpToKj.size(),
                 "unknown common header value", nv.getCommonValue());
             result.setPtr(nameCapnpToKj[nameInt], valueCapnpToKj[cvInt]);
             break;
