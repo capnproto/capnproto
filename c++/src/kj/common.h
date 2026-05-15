@@ -226,6 +226,7 @@ typedef unsigned char byte;
 
 #if defined(_MSC_VER) && !__clang__
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
+#define KJ_USED
 #define KJ_UNUSED
 #define KJ_WARN_UNUSED_RESULT
 // TODO(msvc): KJ_WARN_UNUSED_RESULT can use _Check_return_ on MSVC, but it's a prefix, so
@@ -233,6 +234,7 @@ typedef unsigned char byte;
 //   Similarly, KJ_UNUSED could use __pragma(warning(suppress:...)), but again that's a prefix.
 #else
 #define KJ_NORETURN(prototype) prototype __attribute__((noreturn))
+#define KJ_USED __attribute__((used))
 #define KJ_UNUSED __attribute__((unused))
 #define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #endif
