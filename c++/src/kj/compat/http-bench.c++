@@ -42,7 +42,7 @@ public:
                             Response &response) override {
     responseHeaders.clear();
     responseHeaders.setPtr(HttpHeaderId::CONTENT_TYPE, "text/plain");
-    auto stream = response.send(200, "OK", responseHeaders);
+    auto stream = response.send(200, "OK"_kj, responseHeaders);
     co_await stream->write("OK"_kjb);
   }
 

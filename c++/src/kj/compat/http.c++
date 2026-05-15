@@ -1083,7 +1083,7 @@ kj::String HttpHeaders::serializeConnectRequest(
 }
 
 kj::String HttpHeaders::serializeResponse(
-    uint statusCode, kj::StringPtr statusText,
+    uint statusCode, kj::ArrayPtr<const char> statusText,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
   auto statusCodeStr = kj::toCharSequence(statusCode);
 
@@ -7124,7 +7124,7 @@ private:
     }
 
     kj::Own<kj::AsyncOutputStream> send(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
+        uint statusCode, kj::ArrayPtr<const char> statusText, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
       // The caller of HttpClient is allowed to assume that the statusText and headers remain
       // valid until the body stream is dropped, but the HttpService implementation is allowed to
@@ -7272,7 +7272,7 @@ private:
     }
 
     kj::Own<kj::AsyncOutputStream> send(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
+        uint statusCode, kj::ArrayPtr<const char> statusText, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
       // The caller of HttpClient is allowed to assume that the statusText and headers remain
       // valid until the body stream is dropped, but the HttpService implementation is allowed to
@@ -7355,14 +7355,15 @@ private:
       }
     }
 
-    void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+    void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+                const HttpHeaders& headers) override {
       KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
       respond(statusCode, statusText, headers);
     }
 
     kj::Own<kj::AsyncOutputStream> reject(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
       KJ_REQUIRE(statusCode < 200 || statusCode >= 300,
@@ -7425,7 +7426,7 @@ private:
     }
 
     void respond(uint statusCode,
-                 kj::StringPtr statusText,
+                 kj::ArrayPtr<const char> statusText,
                  const HttpHeaders& headers,
                  kj::Maybe<kj::Own<kj::AsyncInputStream>> errorBody = kj::none) {
       if (errorBody == kj::none) {
@@ -7582,14 +7583,14 @@ kj::Own<HttpService> newHttpService(HttpClient& client) {
 // =======================================================================================
 
 kj::Promise<void> HttpService::Response::sendError(
-    uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {
+    uint statusCode, kj::ArrayPtr<const char> statusText, const HttpHeaders& headers) {
   auto stream = send(statusCode, statusText, headers, statusText.size());
   auto promise = stream->write(statusText.asBytes());
   return promise.attach(kj::mv(stream));
 }
 
 kj::Promise<void> HttpService::Response::sendError(
-    uint statusCode, kj::StringPtr statusText, const HttpHeaderTable& headerTable) {
+    uint statusCode, kj::ArrayPtr<const char> statusText, const HttpHeaderTable& headerTable) {
   return sendError(statusCode, statusText, HttpHeaders(headerTable));
 }
 
@@ -8084,7 +8085,7 @@ private:
   }
 
   kj::Own<kj::AsyncOutputStream> send(
-      uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
+      uint statusCode, kj::ArrayPtr<const char> statusText, const HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = kj::none;
@@ -8237,7 +8238,7 @@ private:
     currentMethod = kj::none;
 
     httpOutput.writeHeaders(headers.serializeResponse(
-        101, "Switching Protocols", connectionHeaders));
+        101, "Switching Protocols"_kj, connectionHeaders));
 
     upgraded = true;
     // We need to give the WebSocket an Own<AsyncIoStream>, but we only have a reference. This is
@@ -8321,7 +8322,8 @@ private:
         kj::mv(paf.promise));
   }
 
-  void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+  void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+              const HttpHeaders& headers) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = kj::none;
     KJ_ASSERT(method.is<HttpConnectMethod>(), "only use accept() with CONNECT requests");
@@ -8338,7 +8340,7 @@ private:
 
   kj::Own<kj::AsyncOutputStream> reject(
       uint statusCode,
-      kj::StringPtr statusText,
+      kj::ArrayPtr<const char> statusText,
       const HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
@@ -8544,15 +8546,15 @@ kj::Promise<void> HttpServerErrorHandler::handleApplicationError(
     if (exception.getType() == kj::Exception::Type::OVERLOADED) {
       errorMessage = kj::str(
           "ERROR: The server is temporarily unable to handle your request. Details:\n\n", exception);
-      body = r.send(503, "Service Unavailable", headers, errorMessage.size());
+      body = r.send(503, "Service Unavailable"_kj, headers, errorMessage.size());
     } else if (exception.getType() == kj::Exception::Type::UNIMPLEMENTED) {
       errorMessage = kj::str(
           "ERROR: The server does not implement this operation. Details:\n\n", exception);
-      body = r.send(501, "Not Implemented", headers, errorMessage.size());
+      body = r.send(501, "Not Implemented"_kj, headers, errorMessage.size());
     } else {
       errorMessage = kj::str(
           "ERROR: The server threw an exception. Details:\n\n", exception);
-      body = r.send(500, "Internal Server Error", headers, errorMessage.size());
+      body = r.send(500, "Internal Server Error"_kj, headers, errorMessage.size());
     }
 
     return body->write(errorMessage.asBytes()).attach(kj::mv(errorMessage), kj::mv(body));
@@ -8573,7 +8575,7 @@ kj::Promise<void> HttpServerErrorHandler::handleNoResponse(kj::HttpService::Resp
   headers.setPtr(HttpHeaderId::CONTENT_TYPE, "text/plain");
 
   constexpr auto errorMessage = "ERROR: The HttpService did not generate a response."_kj;
-  auto body = response.send(500, "Internal Server Error", headers, errorMessage.size());
+  auto body = response.send(500, "Internal Server Error"_kj, headers, errorMessage.size());
 
   return body->write(errorMessage.asBytes()).attach(kj::mv(body));
 }

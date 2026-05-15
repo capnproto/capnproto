@@ -261,7 +261,7 @@ public:
     kj::HttpHeaders responseHeaders(headerTable);
     responseHeaders.setPtr(kj::HttpHeaderId::CONTENT_TYPE, "text/plain");
     responseHeaders.setPtr(customHeaderId, "foobar"_kj);
-    auto stream = response.send(200, "OK", responseHeaders);
+    auto stream = response.send(200, "OK"_kj, responseHeaders);
     auto promise = stream->write(HELLO_WORLD.asBytes());
     return promise.attach(kj::mv(stream));
   }
@@ -306,7 +306,7 @@ private:
   VectorOutputStream responseBody;
 
   kj::Own<kj::AsyncOutputStream> send(
-      kj::uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
+      kj::uint statusCode, kj::ArrayPtr<const char> statusText, const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_ASSERT(statusCode == 200);
     KJ_ASSERT(statusText == "OK"_kj);
