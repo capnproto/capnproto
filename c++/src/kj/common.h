@@ -696,6 +696,14 @@ template<typename T> constexpr T cp(T& t) noexcept { return T(t); }
 template<typename T> constexpr T cp(const T& t) noexcept { return T(t); }
 // Useful to force a copy, particularly to pass into a function that expects T&&.
 
+template <typename T>
+void swp(T& a, T& b) {
+  // Swap two values. Similar to std::swap. Using kj::swap collides with libc++ sources.
+  T tmp = kj::mv(a);
+  a = kj::mv(b);
+  b = kj::mv(tmp);
+}
+
 template <typename T, typename U, bool takeT, bool uOK = true> struct ChooseType_;
 template <typename T, typename U> struct ChooseType_<T, U, true, true> { typedef T Type; };
 template <typename T, typename U> struct ChooseType_<T, U, true, false> { typedef T Type; };
