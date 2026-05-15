@@ -3391,6 +3391,12 @@ KJ_TEST("WebSocket Compression String Parsing (findValidExtensionOffers)") {
   KJ_ASSERT(validOffers[2].inboundNoContextTakeover == false);
   KJ_ASSERT(validOffers[2].outboundMaxWindowBits == kj::none);
   KJ_ASSERT(validOffers[2].inboundMaxWindowBits == kj::none);
+
+  validOffers = _::findValidExtensionOffers(
+      ", permessage-deflate, , permessage-deflate; client_no_context_takeover,"_kj);
+  KJ_ASSERT(validOffers.size() == 2);
+  KJ_ASSERT(validOffers[0].outboundNoContextTakeover == false);
+  KJ_ASSERT(validOffers[1].outboundNoContextTakeover == true);
 }
 
 KJ_TEST("WebSocket Compression String Parsing (generateExtensionRequest)") {
@@ -3473,6 +3479,19 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionOffers)") {
   auto invalid = "invalid"_kj; // Any of the invalid offers we saw above would return NULL.
   maybeAccepted = _::tryParseExtensionOffers(invalid);
   KJ_ASSERT(maybeAccepted == kj::none);
+
+  maybeAccepted = _::tryParseExtensionOffers(", permessage-deflate"_kj);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+
+  maybeAccepted = _::tryParseExtensionOffers("permessage-deflate, ,"_kj);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+
+  maybeAccepted = _::tryParseExtensionOffers(", ,"_kj);
+  KJ_ASSERT(maybeAccepted == kj::none);
 }
 
 KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
@@ -3553,6 +3572,19 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseAllExtensionOffers)") {
   KJ_ASSERT(accepted.inboundMaxWindowBits == kj::none);
   // Asserts that we accepted an offer that allowed for `server_no_context_takeover` AND we chose
   // the lower number of bits (in this case, the manual config's choice of 13).
+
+  maybeAccepted = _::tryParseAllExtensionOffers(", permessage-deflate"_kj, defaultConfig);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+
+  maybeAccepted = _::tryParseAllExtensionOffers("permessage-deflate, ,"_kj, defaultConfig);
+  accepted = KJ_ASSERT_NONNULL(maybeAccepted);
+  KJ_ASSERT(accepted.outboundNoContextTakeover == false);
+  KJ_ASSERT(accepted.inboundNoContextTakeover == false);
+
+  maybeAccepted = _::tryParseAllExtensionOffers(", ,"_kj, defaultConfig);
+  KJ_ASSERT(maybeAccepted == kj::none);
 }
 
 KJ_TEST("WebSocket Compression String Parsing (generateExtensionResponse)") {
@@ -3602,6 +3634,15 @@ KJ_TEST("WebSocket Compression String Parsing (tryParseExtensionAgreement)") {
                                 "server_max_window_bits=10;";
   maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, invalidExt);
   KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == badExt);
+
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, ","_kj);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == badExt);
+
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, " \t "_kj);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == badExt);
+
+  maybeAccepted = _::tryParseExtensionAgreement(defaultConfig, ", permessage-deflate"_kj);
+  KJ_ASSERT(KJ_ASSERT_NONNULL(maybeAccepted.tryGet<kj::Exception>()).getDescription() == tooMany);
 
   constexpr auto invalidVal = "permessage-deflate; "
                                 "client_no_context_takeover; "
