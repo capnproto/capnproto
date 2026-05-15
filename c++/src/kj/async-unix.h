@@ -58,11 +58,23 @@ KJ_BEGIN_HEADER
 #if KJ_USE_EPOLL
 struct epoll_event;
 #elif KJ_USE_KQUEUE
+#if __APPLE__
+struct kevent64_s;
+#else
 struct kevent;
+#endif
 struct timespec;
 #endif
 
 namespace kj {
+
+#if KJ_USE_KQUEUE
+#if __APPLE__
+using KqueueEvent = ::kevent64_s;
+#else
+using KqueueEvent = ::kevent;
+#endif
+#endif
 
 class UnixEventPort final: public EventPort, private TimerImpl::SleepHooks {
   // An EventPort implementation which can wait for events on file descriptors as well as signals.
@@ -424,7 +436,7 @@ private:
   Maybe<bool> atEnd;
 
 #if KJ_USE_KQUEUE
-  void fire(struct kevent event);
+  void fire(KqueueEvent event);
 #else
   void fire(short events);
 #endif
