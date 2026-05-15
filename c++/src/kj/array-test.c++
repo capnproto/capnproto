@@ -62,6 +62,45 @@ static_assert(Cloneable<ArrayPtr<int>>);
 static_assert(Cloneable<const ArrayPtr<int>>);
 static_assert(!Cloneable<Array<NonCloneableNonCopyableElement>>);
 static_assert(!Cloneable<ArrayPtr<NonCloneableNonCopyableElement>>);
+static_assert(!canConvert<RcArrayPtr<int>, ArrayPtr<int>>());
+static_assert(!canConvert<RcArrayPtr<int>*, ArrayPtr<int>*>());
+
+TEST(Array, RcArrayPtr) {
+  RcArrayPtr<int> retained;
+
+  {
+    RcArrayPtr<int> ptr(arr(1, 2, 3));
+
+    EXPECT_EQ(3u, ptr.asPtr().size());
+    EXPECT_EQ(1, ptr.asPtr()[0]);
+    EXPECT_EQ(2, ptr.asPtr()[1]);
+    EXPECT_EQ(3, ptr.asPtr()[2]);
+    ++ptr.asPtr()[0];
+    EXPECT_EQ(2, ptr.asPtr()[0]);
+
+    auto copy = ptr;
+    auto clone = ptr.clone();
+    retained = ptr;
+
+    EXPECT_EQ(ptr.asPtr().begin(), copy.asPtr().begin());
+    EXPECT_EQ(ptr.asPtr().begin(), clone.asPtr().begin());
+    EXPECT_EQ(2, copy.asPtr()[0]);
+    EXPECT_EQ(2, clone.asPtr()[0]);
+  }
+
+  EXPECT_EQ(2, retained.asPtr()[0]);
+  retained = nullptr;
+
+  RcArrayPtr<int> owned(arr(4, 5, 6));
+  EXPECT_EQ(3u, owned.asPtr().size());
+  EXPECT_EQ(4, owned.asPtr()[0]);
+  EXPECT_EQ(5, owned.asPtr()[1]);
+  EXPECT_EQ(6, owned.asPtr()[2]);
+
+  auto ownedCopy = owned;
+  EXPECT_EQ(owned.asPtr().begin(), ownedCopy.asPtr().begin());
+  EXPECT_EQ(4, ownedCopy.asPtr()[0]);
+}
 
 struct TestObject {
   TestObject() {
