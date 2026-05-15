@@ -85,6 +85,8 @@ class AtomicRefcounted;
 class Refcounted;
 
 namespace _ {  // private
+template <typename T>
+concept IsPolymorphic = _kj_internal_isPolymorphic((T*)nullptr);
 
 template <typename T, typename U>
 concept DerivedFrom = requires(const T* t) { static_cast<const U*>(t); };

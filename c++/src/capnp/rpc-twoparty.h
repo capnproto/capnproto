@@ -109,6 +109,7 @@ public:
 
 private:
   class OutgoingMessageImpl;
+  friend KJ_DECLARE_DERIVED_FROM_REFCOUNTED(OutgoingMessageImpl);
   class IncomingMessageImpl;
 
   kj::OneOf<MessageStream*, kj::Own<MessageStream>> stream;

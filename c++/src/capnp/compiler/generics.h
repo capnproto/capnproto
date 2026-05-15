@@ -35,6 +35,7 @@ namespace compiler {
 
 class BrandedDecl;
 class BrandScope;
+KJ_DECLARE_DERIVED_FROM_REFCOUNTED(BrandScope);
 
 struct ImplicitParams {
   // Represents a set of implicit brand parameters visible in the current context.
@@ -268,6 +269,7 @@ private:
   BrandedDecl decompileType(Resolver& resolver, schema::Type::Reader type);
 
   template <typename T, typename... Params>
+  requires kj::_::DerivedFromRefcounted<T>
   friend kj::Rc<T> kj::rc(Params&&... params);
   friend class BrandedDecl;
 };

@@ -21,6 +21,7 @@
 
 #include "refcount.h"
 #include "array.h"
+#include "string.h"
 #include <kj/compat/gtest.h>
 
 namespace kj {
@@ -43,6 +44,110 @@ static_assert(Cloneable<Array<Rc<SetTrueInDestructor>>>);
 static_assert(!Cloneable<const Array<Rc<SetTrueInDestructor>>>);
 static_assert(Cloneable<ArrayPtr<Rc<SetTrueInDestructor>>>);
 static_assert(!Cloneable<const ArrayPtr<Rc<SetTrueInDestructor>>>);
+
+struct IncompleteDeclaredRefcounted;
+KJ_DECLARE_DERIVED_FROM_REFCOUNTED(IncompleteDeclaredRefcounted);
+static_assert(_::DerivedFromRefcounted<IncompleteDeclaredRefcounted>);
+static_assert(sizeof(Rc<IncompleteDeclaredRefcounted>) == sizeof(Own<IncompleteDeclaredRefcounted>));
+
+struct IncompleteDeclaredRefcounted: public Refcounted {
+  IncompleteDeclaredRefcounted(bool* ptr): ptr(ptr) {}
+  ~IncompleteDeclaredRefcounted() { *ptr = true; }
+
+  bool* ptr;
+};
+
+struct IncompleteDeclaredNotRefcounted;
+KJ_DECLARE_NOT_DERIVED_FROM_REFCOUNTED(IncompleteDeclaredNotRefcounted);
+static_assert(!_::DerivedFromRefcounted<IncompleteDeclaredNotRefcounted>);
+
+struct IncompleteDeclaredNotRefcounted {
+  IncompleteDeclaredNotRefcounted(bool* ptr): ptr(ptr) {}
+  ~IncompleteDeclaredNotRefcounted() { *ptr = true; }
+
+  bool* ptr;
+};
+
+struct IncompleteInnerDeclaredRefcounted {
+private:
+  struct Inner;
+  friend KJ_DECLARE_DERIVED_FROM_REFCOUNTED(Inner);
+  static_assert(_::DerivedFromRefcounted<Inner>);
+  static_assert(sizeof(Rc<Inner>) == sizeof(Own<Inner>));
+
+public:
+  static void test();
+};
+
+struct IncompleteInnerDeclaredRefcounted::Inner: public Refcounted {
+  Inner(bool* ptr): ptr(ptr) {}
+  ~Inner() { *ptr = true; }
+
+  bool* ptr;
+};
+
+void IncompleteInnerDeclaredRefcounted::test() {
+  bool b = false;
+  Rc<Inner> ref = kj::rc<Inner>(&b);
+  KJ_EXPECT(!b);
+  ref = nullptr;
+  KJ_EXPECT(b);
+}
+
+struct IncompleteInnerDeclaredNotRefcounted {
+private:
+  struct Inner;
+  friend KJ_DECLARE_NOT_DERIVED_FROM_REFCOUNTED(Inner);
+  static_assert(!_::DerivedFromRefcounted<Inner>);
+
+public:
+  static void test();
+};
+
+struct IncompleteInnerDeclaredNotRefcounted::Inner {
+  Inner(bool* ptr): ptr(ptr) {}
+  ~Inner() { *ptr = true; }
+
+  bool* ptr;
+};
+
+void IncompleteInnerDeclaredNotRefcounted::test() {
+  bool b = false;
+  Rc<Inner> ref = kj::rc<Inner>(&b);
+  KJ_EXPECT(!b);
+  auto ref2 = ref.addRef();
+  ref = nullptr;
+  KJ_EXPECT(!b);
+  ref2 = nullptr;
+  KJ_EXPECT(b);
+}
+
+KJ_TEST("Rc incomplete declared refcounted types") {
+  {
+    bool b = false;
+    Rc<IncompleteDeclaredRefcounted> ref = kj::rc<IncompleteDeclaredRefcounted>(&b);
+    KJ_EXPECT(!b);
+    ref = nullptr;
+    KJ_EXPECT(b);
+  }
+
+  IncompleteInnerDeclaredRefcounted::test();
+}
+
+KJ_TEST("Rc incomplete declared non-refcounted types") {
+  {
+    bool b = false;
+    Rc<IncompleteDeclaredNotRefcounted> ref = kj::rc<IncompleteDeclaredNotRefcounted>(&b);
+    KJ_EXPECT(!b);
+    auto ref2 = ref.addRef();
+    ref = nullptr;
+    KJ_EXPECT(!b);
+    ref2 = nullptr;
+    KJ_EXPECT(b);
+  }
+
+  IncompleteInnerDeclaredNotRefcounted::test();
+}
 
 TEST(Refcount, Basic) {
   bool b = false;
@@ -167,6 +272,76 @@ KJ_TEST("Rc Own interop") {
     EXPECT_TRUE(b);
 }
 
+struct Abstract {
+  virtual ~Abstract() noexcept(false) = default;
+  virtual void use() = 0;
+};
+
+struct Concrete final: public Abstract {
+  Concrete(bool* ptr): ptr(ptr) {}
+  ~Concrete() { *ptr = true; }
+  void use() override {}
+  bool* ptr;
+};
+
+KJ_TEST("Rc<Abstract>") {
+  bool b = false;
+
+  Rc<Abstract> ref(kj::heap<Concrete>(&b));
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_FALSE(b);
+
+  ref->use();
+
+  auto ref2 = ref.addRef();
+  EXPECT_TRUE(ref == ref2);
+  EXPECT_TRUE(ref.get() == ref2.get());
+
+  Own<Abstract> own2 = ref.toOwn();
+  EXPECT_TRUE(ref == nullptr);
+  own2->use();
+  EXPECT_FALSE(b);
+  own2 = nullptr;
+  EXPECT_FALSE(b);
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc<Concrete>") {
+  bool b = false;
+
+  Rc<Concrete> ref = kj::rc<Concrete>(&b);
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_FALSE(b);
+
+  auto own = ref.toOwn();
+  EXPECT_TRUE(ref == nullptr);
+  EXPECT_TRUE(own.get() != nullptr);
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc polymorphic upcast") {
+  bool b = false;
+
+  Rc<Concrete> ref = kj::rc<Concrete>(&b);
+  Rc<Concrete> ref2 = ref.addRef();
+
+  Rc<Abstract> abstract = kj::mv(ref);
+  EXPECT_TRUE(ref == nullptr);
+  EXPECT_TRUE(abstract.get() == ref2.get());
+
+  abstract->use();
+  EXPECT_FALSE(b);
+
+  abstract = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
 struct Child: public SetTrueInDestructor {
   Child(bool* ptr): SetTrueInDestructor(ptr) {}
 };
@@ -217,6 +392,73 @@ struct SetTrueInDestructor2 {
 
   bool* ptr;
 };
+
+KJ_TEST("Rc wraps non-refcounted types") {
+  bool b = false;
+
+  Rc<SetTrueInDestructor2> ref1 = kj::rc<SetTrueInDestructor2>(&b);
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_FALSE(ref1 == nullptr);
+
+  Rc<SetTrueInDestructor2> ref2 = ref1.addRef();
+  EXPECT_TRUE(ref1 == ref2);
+  EXPECT_TRUE(ref1.get() == ref2.get());
+
+  EXPECT_FALSE(b);
+  Own<SetTrueInDestructor2> own = ref1.toOwn();
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_TRUE(own.get() == ref2.get());
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc<Own<T>>") {
+  bool b = false;
+
+  Rc<Own<SetTrueInDestructor2>> ref(kj::heap<SetTrueInDestructor2>(&b));
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_FALSE(ref == nullptr);
+
+  Rc<Own<SetTrueInDestructor2>> ref2 = ref.addRef();
+  EXPECT_TRUE(ref == ref2);
+  EXPECT_TRUE(ref.get() == ref2.get());
+
+  EXPECT_FALSE(b);
+  Own<SetTrueInDestructor2> own = ref.toOwn();
+  EXPECT_TRUE(ref == nullptr);
+  EXPECT_TRUE(own.get() == ref2.get());
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc<String>") {
+  Rc<String> ref1 = kj::rc<String>(kj::str("hello"));
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_TRUE(ref1->asPtr() == "hello");
+
+  Rc<String> ref2 = ref1.addRef();
+  EXPECT_TRUE(ref1 == ref2);
+  EXPECT_TRUE(ref1.get() == ref2.get());
+
+  (*ref2.get())[0] = 'H';
+  EXPECT_TRUE(ref1->asPtr() == "Hello");
+
+  Own<String> own = ref1.toOwn();
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_TRUE(own.get() == ref2.get());
+  EXPECT_TRUE(own->asPtr() == "Hello");
+
+  own = nullptr;
+  EXPECT_TRUE(ref2->asPtr() == "Hello");
+}
 
 KJ_TEST("RefcountedWrapper") {
   {
