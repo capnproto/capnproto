@@ -5261,7 +5261,7 @@ kj::Vector<CompressionParameters> findValidExtensionOffers(StringPtr offers) {
 
   for (const auto& offer : extensions) {
     auto splitOffer = splitParts(offer, ';');
-    if (splitOffer.front() != "permessage-deflate"_kj) {
+    if (splitOffer.empty() || splitOffer.front() != "permessage-deflate"_kj) {
       continue;
     }
     KJ_IF_SOME(validated, tryExtractParameters(splitOffer, false)) {
@@ -5314,7 +5314,7 @@ kj::Maybe<CompressionParameters> tryParseExtensionOffers(StringPtr offers) {
   for (const auto& offer : splitOffers) {
     auto splitOffer = splitParts(offer, ';');
 
-    if (splitOffer.front() != "permessage-deflate"_kj) {
+    if (splitOffer.empty() || splitOffer.front() != "permessage-deflate"_kj) {
       // Extension token was invalid.
       continue;
     }
@@ -5339,7 +5339,7 @@ kj::Maybe<CompressionParameters> tryParseAllExtensionOffers(StringPtr offers,
   for (const auto& offer : splitOffers) {
     auto splitOffer = splitParts(offer, ';');
 
-    if (splitOffer.front() != "permessage-deflate"_kj) {
+    if (splitOffer.empty() || splitOffer.front() != "permessage-deflate"_kj) {
       // Extension token was invalid.
       continue;
     }
@@ -5458,7 +5458,7 @@ kj::OneOf<CompressionParameters, kj::Exception> tryParseExtensionAgreement(
   }
   auto splitOffer = splitParts(offers.front(), ';');
 
-  if (splitOffer.front() != "permessage-deflate"_kj) {
+  if (splitOffer.empty() || splitOffer.front() != "permessage-deflate"_kj) {
     e.setDescription(kj::str(FAILURE, "response included a Sec-WebSocket-Extensions value that was "
                                       "not permessage-deflate."));
     return kj::mv(e);
