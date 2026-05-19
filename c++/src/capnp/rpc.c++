@@ -3620,6 +3620,11 @@ private:
   }
 
   void handleMessage(kj::Own<IncomingRpcMessage> message) {
+    // We need to hold a self-reference for the duration of message handling. This is necessary
+    // because processing a message can trigger destructor chains (e.g., releasing pipelines in
+    // handleFinish) that may drop the last external reference to this RpcConnectionState.
+    auto selfRef = kj::addRef(*this);
+
     // If we were idle before, receiving a message changes that. This is true even if we received
     // a message that makes no sense while idle, because we need to send an error in response, and
     // sending any message requires we are not idle.
