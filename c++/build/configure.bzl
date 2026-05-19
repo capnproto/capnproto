@@ -1,3 +1,4 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "int_flag")
 
 def kj_configure():
@@ -79,7 +80,7 @@ def kj_configure():
         flag_values = {"track_lock_blocking": "True"},
     )
 
-    native.cc_library(
+    cc_library(
         name = "kj-defines",
         defines = select({
             "//src/kj:use_openssl": ["KJ_HAS_OPENSSL"],
