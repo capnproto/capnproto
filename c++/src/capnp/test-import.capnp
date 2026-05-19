@@ -23,6 +23,10 @@
 
 using Test = import "test.capnp";
 
+using TestAllTypesAlias = Test.TestAllTypes;
+using UnusedTestAllTypesAlias = Test.TestAllTypes;
+
 struct TestImport {
   field @0 :Test.TestAllTypes;
+  fieldViaAlias @1 :TestAllTypesAlias;
 }

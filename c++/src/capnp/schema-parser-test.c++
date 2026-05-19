@@ -271,6 +271,62 @@ TEST(SchemaParser, SourceInfo) {
   expectSourceInfo(thud.getSourceInfo(), 0xcca9972702b730b4, "post-comment\n", {});
 }
 
+TEST(SchemaParser, Using) {
+  FakeFileReader reader;
+  SchemaParser parser;
+  parser.setDiskFilesystem(reader);
+
+  reader.add("alias.capnp",
+      "@0x91234567890abcde;\n"
+      "using Other = import \"other.capnp\";\n"
+      "using UserId = UInt64;\n"
+      "using UserIdAlias = UserId;\n"
+      "using OtherFoo = Other.Foo;\n"
+      "struct Container {\n"
+      "  using LocalAlias = UserId;\n"
+      "  id @0 :UserId;\n"
+      "  idAlias @1 :UserIdAlias;\n"
+      "  local @2 :LocalAlias;\n"
+      "  ext @3 :OtherFoo;\n"
+      "}\n");
+  reader.add("other.capnp",
+      "@0x9234567890abcdef;\n"
+      "struct Foo {}\n");
+
+  auto fileSchema = parser.parseDiskFile("alias.capnp", "alias.capnp", nullptr);
+
+  auto container = fileSchema.getNested("Container").asStruct();
+  auto fields = container.getFields();
+  ASSERT_EQ(4u, fields.size());
+
+  auto idType = fields[0].getProto().getSlot().getType();
+  auto idAliasType = fields[1].getProto().getSlot().getType();
+  auto localType = fields[2].getProto().getSlot().getType();
+  auto extType = fields[3].getProto().getSlot().getType();
+
+  EXPECT_TRUE(idType.isUint64());
+  EXPECT_TRUE(idAliasType.isUint64());
+  EXPECT_TRUE(localType.isUint64());
+  EXPECT_TRUE(extType.isStruct());
+
+  EXPECT_NE(0u, idType.getUsingId());
+  EXPECT_NE(0u, idAliasType.getUsingId());
+  EXPECT_NE(0u, localType.getUsingId());
+  EXPECT_NE(0u, extType.getUsingId());
+  EXPECT_NE(idType.getUsingId(), idAliasType.getUsingId());
+  EXPECT_NE(idType.getUsingId(), localType.getUsingId());
+
+  reader.add("bad.capnp",
+      "@0x934567890abcdef1;\n"
+      "const myConst :UInt32 = 42;\n"
+      "using Bad = myConst;\n");
+  {
+    KJ_EXPECT_LOG(ERROR, "Non-type names must begin with a lower-case letter");
+    KJ_EXPECT_THROW_MESSAGE("Parse error",
+        parser.parseDiskFile("bad.capnp", "bad.capnp", nullptr));
+  }
+}
+
 TEST(SchemaParser, SetFileIdsRequired) {
   FakeFileReader reader;
   reader.add("no-file-id.capnp",

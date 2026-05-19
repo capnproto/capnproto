@@ -249,6 +249,9 @@ public:
       case schema::Node::ANNOTATION:
         validate(node.getAnnotation());
         break;
+      case schema::Node::USING:
+        validate(node.getUsing());
+        break;
     }
 
     // We accept and pass through node types we don't recognize.
@@ -460,6 +463,10 @@ private:
     validate(annotationNode.getType());
   }
 
+  void validate(const schema::Node::Using::Reader& usingNode) {
+    validate(usingNode.getTarget());
+  }
+
   void validate(const schema::Type::Reader& type, const schema::Value::Reader& value,
                 uint* dataSizeInBits, bool* isPointer) {
     validate(type);
@@ -502,6 +509,11 @@ private:
   }
 
   void validate(const schema::Type::Reader& type) {
+    // Register the `using` alias as a dependency so interpretType can attach it later.
+    if (auto usingId = type.getUsingId()) {
+      validateTypeId(usingId, schema::Node::USING);
+    }
+
     switch (type.which()) {
       case schema::Type::VOID:
       case schema::Type::BOOL:
@@ -1422,6 +1434,7 @@ _::RawSchema* SchemaLoader::Impl::loadEmpty(
     case schema::Node::STRUCT: node.initStruct(); break;
     case schema::Node::ENUM: node.initEnum(); break;
     case schema::Node::INTERFACE: node.initInterface(); break;
+    case schema::Node::USING: node.initUsing(); break;
 
     case schema::Node::FILE:
     case schema::Node::CONST:
@@ -2180,61 +2193,69 @@ Schema SchemaLoader::getUnbound(uint64_t id) const {
 }
 
 Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
-  switch (proto.which()) {
-    case schema::Type::VOID:
-    case schema::Type::BOOL:
-    case schema::Type::INT8:
-    case schema::Type::INT16:
-    case schema::Type::INT32:
-    case schema::Type::INT64:
-    case schema::Type::UINT8:
-    case schema::Type::UINT16:
-    case schema::Type::UINT32:
-    case schema::Type::UINT64:
-    case schema::Type::FLOAT32:
-    case schema::Type::FLOAT64:
-    case schema::Type::TEXT:
-    case schema::Type::DATA:
-      return proto.which();
+  Type result = [&]() -> Type {
+    switch (proto.which()) {
+      case schema::Type::VOID:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+        return proto.which();
 
-    case schema::Type::STRUCT: {
-      auto structType = proto.getStruct();
-      return get(structType.getTypeId(), structType.getBrand(), scope).asStruct();
-    }
-
-    case schema::Type::ENUM: {
-      auto enumType = proto.getEnum();
-      return get(enumType.getTypeId(), enumType.getBrand(), scope).asEnum();
-    }
-
-    case schema::Type::INTERFACE: {
-      auto interfaceType = proto.getInterface();
-      return get(interfaceType.getTypeId(), interfaceType.getBrand(), scope)
-          .asInterface();
-    }
-
-    case schema::Type::LIST:
-      return ListSchema::of(getType(proto.getList().getElementType(), scope));
-
-    case schema::Type::ANY_POINTER: {
-      auto anyPointer = proto.getAnyPointer();
-      switch (anyPointer.which()) {
-        case schema::Type::AnyPointer::UNCONSTRAINED:
-          return schema::Type::ANY_POINTER;
-        case schema::Type::AnyPointer::PARAMETER: {
-          auto param = anyPointer.getParameter();
-          return scope.getBrandBinding(param.getScopeId(), param.getParameterIndex());
-        }
-        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
-          // We don't support binding implicit method params here.
-          return schema::Type::ANY_POINTER;
+      case schema::Type::STRUCT: {
+        auto structType = proto.getStruct();
+        return get(structType.getTypeId(), structType.getBrand(), scope).asStruct();
       }
 
-      KJ_UNREACHABLE;
+      case schema::Type::ENUM: {
+        auto enumType = proto.getEnum();
+        return get(enumType.getTypeId(), enumType.getBrand(), scope).asEnum();
+      }
+
+      case schema::Type::INTERFACE: {
+        auto interfaceType = proto.getInterface();
+        return get(interfaceType.getTypeId(), interfaceType.getBrand(), scope).asInterface();
+      }
+
+      case schema::Type::LIST:
+        return ListSchema::of(getType(proto.getList().getElementType(), scope));
+
+      case schema::Type::ANY_POINTER: {
+        auto anyPointer = proto.getAnyPointer();
+        switch (anyPointer.which()) {
+          case schema::Type::AnyPointer::UNCONSTRAINED:
+            return schema::Type::ANY_POINTER;
+          case schema::Type::AnyPointer::PARAMETER: {
+            auto param = anyPointer.getParameter();
+            return scope.getBrandBinding(param.getScopeId(), param.getParameterIndex());
+          }
+          case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+            // We don't support binding implicit method params here.
+            return schema::Type::ANY_POINTER;
+        }
+
+        KJ_UNREACHABLE;
+      }
+    }
+
+    KJ_UNREACHABLE;
+  }();
+
+  if (auto id = proto.getUsingId()) {
+    if (auto raw = impl.lockShared()->get()->tryGet(id).schema) {
+      result.setUsingNode(readMessageUnchecked<schema::Node>(raw->encodedNode));
     }
   }
-
-  KJ_UNREACHABLE;
+  return result;
 }
 
 Schema SchemaLoader::load(const schema::Node::Reader& reader) {

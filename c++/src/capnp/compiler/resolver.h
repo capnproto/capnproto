@@ -72,6 +72,10 @@ public:
     // using the target type. This happens when the decl resolved to an alias; all other fields
     // of `ResolvedDecl` refer to the target of the alias, except for `scopeId` which is the
     // scope that contained the alias.
+
+    uint64_t usingId = 0;
+    // If non-zero, the ID of the `using` alias Node this result was reached through. Other
+    // fields still describe the resolved target.
   };
 
   struct ResolvedParameter {

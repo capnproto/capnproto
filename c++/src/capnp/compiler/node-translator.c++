@@ -1749,9 +1749,17 @@ NodeTranslator::compileDeclExpression(
 
 /* static */ kj::Maybe<Resolver::ResolveResult> NodeTranslator::compileDecl(
     uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
-    Expression::Reader expression, schema::Brand::Builder brandBuilder) {
+    Expression::Reader expression, schema::Brand::Builder brandBuilder,
+    kj::Maybe<schema::Type::Builder> typeBuilder) {
   auto scope = kj::refcounted<BrandScope>(errorReporter, scopeId, scopeParameterCount, resolver);
   KJ_IF_SOME(decl, scope->compileDeclExpression(expression, resolver, ImplicitParams::none())) {
+    KJ_IF_SOME(target, typeBuilder) {
+      // Skip FILE: a file-scope import is a valid alias target but not a type, and
+      // compileAsType would emit a spurious "not a type" diagnostic.
+      if (decl.getKind() != kj::Maybe<Declaration::Which>(Declaration::FILE)) {
+        decl.compileAsType(errorReporter, target);
+      }
+    }
     return decl.asResolveResult(scope->getScopeId(), brandBuilder);
   } else {
     return kj::none;
