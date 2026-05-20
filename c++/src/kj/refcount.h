@@ -210,6 +210,8 @@ public:
 
   inline T* operator->() { return own.get(); }
   inline const T* operator->() const { return own.get(); }
+  inline T& operator*() { return *own; }
+  inline const T& operator*() const { return *own; }
 
   inline T* get() { return own.get(); }
   inline const T* get() const { return own.get(); }
@@ -480,6 +482,7 @@ public:
   inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
 
   inline const T* operator->() const { return own.get(); }
+  inline const T& operator*() const { return *own; }
   inline const T* get() const { return own.get(); }
 
 private:

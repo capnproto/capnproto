@@ -75,6 +75,9 @@ KJ_TEST("Rc") {
 
   Rc<SetTrueInDestructor> ref1 = kj::rc<SetTrueInDestructor>(&b);
   EXPECT_FALSE(ref1->isShared());
+  EXPECT_TRUE(&*ref1 == ref1.get());
+  const auto& cref1 = ref1;
+  EXPECT_TRUE(&*cref1 == ref1.get());
   EXPECT_TRUE(ref1 != nullptr);
   EXPECT_FALSE(ref1 == nullptr);
 
@@ -305,6 +308,9 @@ KJ_TEST("Arc") {
 
   kj::Arc<AtomicSetTrueInDestructor> ref1 = kj::arc<AtomicSetTrueInDestructor>(&b);
   EXPECT_FALSE(ref1->isShared());
+  EXPECT_TRUE(&*ref1 == ref1.get());
+  const auto& cref1 = ref1;
+  EXPECT_TRUE(&*cref1 == ref1.get());
   EXPECT_TRUE(ref1 != nullptr);
   EXPECT_FALSE(ref1 == nullptr);
 
