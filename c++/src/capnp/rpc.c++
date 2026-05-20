@@ -32,6 +32,7 @@
 #include <capnp/rpc.capnp.h>
 #include <kj/io.h>
 #include <kj/map.h>
+#include <kj/refcount.h>
 
 namespace capnp {
 namespace _ {  // private
@@ -671,6 +672,7 @@ private:
   };
 
   struct ThirdPartyExchangeValue;
+  friend KJ_DECLARE_DERIVED_FROM_REFCOUNTED(ThirdPartyExchangeValue);
 
   struct Answer {
     Answer() = default;

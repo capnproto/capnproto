@@ -37,6 +37,45 @@ namespace kj {
 template<typename T>
 class Rc;
 
+namespace _ {  // private
+
+struct DeclaredDerivedFromRefcounted{};
+struct DeclaredNotDerivedFromRefcounted{};
+struct UndeclaredRefcounted{};
+
+}  // namespace _ (private)
+
+template <typename T> _::UndeclaredRefcounted _kj_internal_refcountedDeclaration(T*);
+
+#define KJ_DECLARE_DERIVED_FROM_REFCOUNTED(...) \
+  kj::_::DeclaredDerivedFromRefcounted _kj_internal_refcountedDeclaration(__VA_ARGS__*)
+  // Declare forward type to be derived from Refcounted.
+  // Add `friend ` prefix in front to use with inner classes.
+
+#define KJ_DECLARE_NOT_DERIVED_FROM_REFCOUNTED(...) \
+  kj::_::DeclaredNotDerivedFromRefcounted _kj_internal_refcountedDeclaration(__VA_ARGS__*)
+  // Declare forward type to be _not_ derived from Refcounted.
+  // Add `friend ` prefix in front to use with inner classes.
+
+namespace _ {  // private
+
+template <typename T>
+concept DeclaredDerivedFromRefcounted_ =
+    SameAs<decltype(_kj_internal_refcountedDeclaration((T*)nullptr)), DeclaredDerivedFromRefcounted>;
+
+template <typename T>
+concept UndeclaredRefcounted_ =
+    SameAs<decltype(_kj_internal_refcountedDeclaration((T*)nullptr)), UndeclaredRefcounted>;
+
+template <typename T>
+concept DerivedFromRefcounted = DeclaredDerivedFromRefcounted_<T> ||
+    (UndeclaredRefcounted_<T> && DerivedFrom<T, Refcounted>);
+
+template <typename T>
+class RcWrapper;
+
+}  // namespace _ (private)
+
 class Refcounted: private Disposer {
   // Subclass this to create a class that contains a reference count. Then, use
   // `kj::refcounted<T>()` to allocate a new refcounted pointer.
@@ -98,6 +137,10 @@ private:
   friend class RefcountedWrapper;
 
   template <typename T, typename... Params>
+  requires _::DerivedFromRefcounted<T>
+  friend Rc<T> rc(Params&&... params);
+  template <typename T, typename... Params>
+  requires (!_::DerivedFromRefcounted<T>)
   friend Rc<T> rc(Params&&... params);
 
   template <typename T>
@@ -113,11 +156,21 @@ inline Own<T> refcounted(Params&&... params) {
 }
 
 template <typename T, typename... Params>
+requires _::DerivedFromRefcounted<T>
 inline Rc<T> rc(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.
   // Returns smart pointer that can be used to manage references.
 
   return Refcounted::addRcRefInternal(new T(kj::fwd<Params>(params)...));
+}
+
+template <typename T, typename... Params>
+requires (!_::DerivedFromRefcounted<T>)
+inline Rc<T> rc(Params&&... params) {
+  // Allocate a new T wrapped in a refcounted instance.
+  // Returns smart pointer that can be used to manage references.
+
+  return Rc<T>(new _::RcWrapper<T>(kj::fwd<Params>(params)...));
 }
 
 template <typename T>
@@ -145,25 +198,37 @@ Rc<T> Refcounted::addRcRefInternal(T* object) {
   return Rc<T>(object);
 }
 
+// =======================================================================================
+// Rc<T>
+//
+// Rc<T> is a smart pointer providing reference counting capabilities for variety of T:
+// - T extends Refcounted - T's refcount field is used for reference counting. 
+//   Rc<T> is a direct smart pointer to a heap-allocated object.
+// - T is non-polymorphic - T is wrapped with RcWrapper.
+//   Rc<T> is a direct smart pointer to a heap-allocated RcWrapper<T>.
+// - T is polymorphic - T is wrapped with RcWrapper<Own>.
+//   Rc<T> is a double pointer to 2 heap-allocated objects: RcWrapper<Own> and T.
+//
+// There are only three ways to obtain new Rc instances:
+// - use kj::rc<T>(...) function to create new T.
+// - use kj::Rc::addRef() and the existing Rc instance.
+//
+// Suggested usage patterns are:
+// - return kj::Rc as value from factory functions:
+//     kj::Rc<MyService> createMyService();
+// - pass kj::Rc as rvalue to functions that need to extend T's lifetime:
+//     void setMyService(kj::Rc<MyService>&& service)
+// - store kj::Rc as data member:
+//     struct MyComputation { kj::Rc<MyService> service; };
+// - use toOwn to convert kj::Rc<T> instance to kj::Own<T> and use it
+//     without being concerned of reference counting behavior.
+//     To improve the transparency of the code, kj::Own<T> shouldn't be used
+//     to call addRef() without kj::Rc.
+
 template<typename T>
-class Rc {
-  // Smart pointer for reference counted objects.
-  //
-  // There are only three ways to obtain new Rc instances:
-  // - use kj::rc<T>(...) function to create new T.
-  // - use kj::Rc::addRef() and the existing Rc instance.
-  //
-  // Suggested usage patterns are:
-  // - return kj::Rc as value from factory functions:
-  //     kj::Rc<MyService> createMyService();
-  // - pass kj::Rc as rvalue to functions that need to extend T's lifetime:
-  //     void setMyService(kj::Rc<MyService>&& service)
-  // - store kj::Rc as data member:
-  //     struct MyComputation { kj::Rc<MyService> service; };
-  // - use toOwn to convert kj::Rc<T> instance to kj::Own<T> and use it
-  //     without being concerned of reference counting behavior.
-  //     To improve the transparency of the code, kj::Own<T> shouldn't be used
-  //     to call addRef() without kj::Rc.
+requires _::DerivedFromRefcounted<T>
+class Rc<T> {
+  // Smart pointer for objects extending Refcounted.
 
 public:
   KJ_DISALLOW_COPY(Rc);
@@ -221,6 +286,202 @@ private:
   Own<T> own;
 
   friend class Refcounted;
+
+  template <typename>
+  friend class Rc;
+};
+
+namespace _ {  // private
+
+template <typename T>
+requires (!IsPolymorphic<T>)
+class RcWrapper<T>: public Refcounted {
+public:
+  template <typename... Params>
+  explicit RcWrapper(Params&&... params): wrapped(kj::fwd<Params>(params)...) {}
+
+  T* getWrappedPtr() { return &wrapped; }
+  const T* getWrappedPtr() const { return &wrapped; }
+
+protected:
+  T wrapped;
+  // If you experience "field has incomplete type" error, this means you're trying to use
+  // Rc<T> with forward-declared T. 
+  // Add KJ_DECLARE_DERIVED_FROM_REFCOUNTED/KJ_DECLARE_NOT_DERIVED_FROM_REFCOUNTED
+  // after forward declaration.
+};
+
+template <typename T>
+requires IsPolymorphic<T>
+class RcWrapper<T>: public Refcounted {
+public:
+  explicit RcWrapper(Own<T>&& wrapped): wrapped(kj::mv(wrapped)) {}
+
+  template <typename... Params>
+  explicit RcWrapper(Params&&... params): wrapped(kj::heap<T>(kj::fwd<Params>(params)...)) {}
+
+  T* getWrappedPtr() { return wrapped.get(); }
+  const T* getWrappedPtr() const { return wrapped.get(); }
+
+protected:
+  Own<T> wrapped;
+};
+
+template <typename T>
+class RcWrapper<Own<T>>: public Refcounted {
+public:
+  explicit RcWrapper(Own<T>&& wrapped): wrapped(kj::mv(wrapped)) {}
+
+  T* getWrappedPtr() { return wrapped.get(); }
+  const T* getWrappedPtr() const { return wrapped.get(); }
+
+protected:
+  Own<T> wrapped;
+};
+
+}  // namespace _ (private)
+
+template<typename T>
+requires (!_::DerivedFromRefcounted<T>)
+class Rc<T> {
+  // Smart pointer for objects wrapped in a reference counted allocation.
+
+public:
+  KJ_DISALLOW_COPY(Rc);
+  Rc() { }
+  Rc(decltype(nullptr)) { }
+  inline Rc(Rc&& other) noexcept : own(kj::mv(other.own)) { }
+
+  inline Rc(T t) noexcept requires (!_::IsPolymorphic<T>) : Rc(new _::RcWrapper<T>(kj::mv(t))) {}
+  inline Rc(Own<T> t) noexcept requires _::IsPolymorphic<T> : Rc(new _::RcWrapper<T>(kj::mv(t))) {}
+
+  template <typename U>
+  requires _::IsPolymorphic<T> && _::IsPolymorphic<U> &&
+      (!_::DerivedFromRefcounted<U>) && (canConvert<T*, U*>())
+  inline operator Rc<U>() && {
+    return Rc<U>(toOwn());
+  }
+
+  kj::Rc<T> addRef() {
+    if (own.get() != nullptr) {
+      return Rc(own.get());
+    } else {
+      return kj::Rc<T>();
+    }
+  }
+
+  kj::Rc<T> clone() {
+    return addRef();
+  }
+
+  Rc& operator=(decltype(nullptr)) {
+    own = nullptr;
+    return *this;
+  }
+
+  Rc& operator=(Rc&& other) = default;
+
+  Own<T> toOwn() {
+    auto wrapper = own.get();
+    if (wrapper == nullptr) return Own<T>();
+    auto ptr = wrapper->getWrappedPtr();
+    if (ptr == nullptr) {
+      own = nullptr;
+      return Own<T>();
+    }
+    Own<T> result(ptr, *wrapper);
+    own.disown(wrapper);
+    return result;
+  }
+
+  inline bool operator==(const Rc<T>& other) const { return own.get() == other.own.get(); }
+  inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
+
+  inline T* operator->() { return own->getWrappedPtr(); }
+  inline const T* operator->() const { return own->getWrappedPtr(); }
+
+  inline T* get() { return own.get() == nullptr ? nullptr : own->getWrappedPtr(); }
+  inline const T* get() const { return own.get() == nullptr ? nullptr : own->getWrappedPtr(); }
+
+private:
+  Rc(_::RcWrapper<T>* t): own(t, *t) {
+    ++own->Refcounted::refcount;
+  }
+
+  Own<_::RcWrapper<T>> own;
+
+  template <typename U, typename... Params>
+  requires (!_::DerivedFromRefcounted<U>)
+  friend Rc<U> rc(Params&&... params);
+
+  template <typename>
+  friend class Rc;
+};
+
+template<typename T>
+class Rc<Own<T>> {
+  // Smart pointer for objects that start out as Own<T>. This exposes T directly rather than
+  // wrapping Own<T> as the pointee type and producing Own<Own<T>> from toOwn().
+
+public:
+  KJ_DISALLOW_COPY(Rc);
+  Rc() { }
+  Rc(decltype(nullptr)) { }
+  inline Rc(Rc&& other) noexcept : own(kj::mv(other.own)) { }
+
+  inline Rc(Own<T> t) noexcept : Rc(new _::RcWrapper<Own<T>>(kj::mv(t))) {}
+
+  kj::Rc<Own<T>> addRef() {
+    if (own.get() != nullptr) {
+      return Rc(own.get());
+    } else {
+      return kj::Rc<Own<T>>();
+    }
+  }
+
+  kj::Rc<Own<T>> clone() {
+    return addRef();
+  }
+
+  Rc& operator=(decltype(nullptr)) {
+    own = nullptr;
+    return *this;
+  }
+
+  Rc& operator=(Rc&& other) = default;
+
+  Own<T> toOwn() {
+    auto wrapper = own.get();
+    if (wrapper == nullptr) return Own<T>();
+    auto ptr = wrapper->getWrappedPtr();
+    if (ptr == nullptr) {
+      own = nullptr;
+      return Own<T>();
+    }
+    Own<T> result(ptr, *wrapper);
+    own.disown(wrapper);
+    return result;
+  }
+
+  inline bool operator==(const Rc<Own<T>>& other) const { return own.get() == other.own.get(); }
+  inline bool operator==(decltype(nullptr)) const { return own.get() == nullptr; }
+
+  inline T* operator->() { return own->getWrappedPtr(); }
+  inline const T* operator->() const { return own->getWrappedPtr(); }
+
+  inline T* get() { return own.get() == nullptr ? nullptr : own->getWrappedPtr(); }
+  inline const T* get() const { return own.get() == nullptr ? nullptr : own->getWrappedPtr(); }
+
+private:
+  Rc(_::RcWrapper<Own<T>>* t): own(t, *t) {
+    ++own->Refcounted::refcount;
+  }
+
+  Own<_::RcWrapper<Own<T>>> own;
+
+  template <typename U, typename... Params>
+  requires (!_::DerivedFromRefcounted<U>)
+  friend Rc<U> rc(Params&&... params);
 
   template <typename>
   friend class Rc;
