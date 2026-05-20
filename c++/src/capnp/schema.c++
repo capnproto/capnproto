@@ -310,7 +310,7 @@ ConstSchema Schema::asConst() const {
   return ConstSchema(*this);
 }
 
-kj::StringPtr Schema::getShortDisplayName() const {
+kj::StringPtr Schema::getUnqualifiedName() const {
   auto proto = getProto();
   return proto.getDisplayName().slice(proto.getDisplayNamePrefixLength());
 }

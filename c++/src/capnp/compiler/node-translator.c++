@@ -2257,7 +2257,7 @@ void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
 }
 
 kj::String ValueTranslator::makeNodeName(Schema schema) {
-  return kj::str(schema.getShortDisplayName());
+  return kj::str(schema.getUnqualifiedName());
 }
 
 kj::String ValueTranslator::makeTypeName(Type type) {
@@ -2363,7 +2363,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     // qualified name to make it more obvious.  Report an error.
     KJ_IF_SOME(scope, resolver.resolveBootstrapSchema(proto.getScopeId(),
                                                        schema::Brand::Reader())) {
-      kj::StringPtr parent = scope.getProto().isFile() ? "" : scope.getShortDisplayName();
+      kj::StringPtr parent = scope.getProto().isFile() ? "" : scope.getUnqualifiedName();
       kj::StringPtr id = source.getRelativeName().getValue();
 
       errorReporter.addErrorOn(source, kj::str(
