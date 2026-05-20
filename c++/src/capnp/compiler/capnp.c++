@@ -1741,7 +1741,7 @@ public:
 
       case schema::Node::STRUCT:
         if (pos == nameParts.end()) {
-          return kj::str("'", schema.getShortDisplayName(), "' cannot be evaluated.");
+          return kj::str("'", schema.getUnqualifiedName(), "' cannot be evaluated.");
         }
 
         // Use the struct's default value.
@@ -1750,11 +1750,11 @@ public:
 
       default:
         if (stoppedAtSubscript) {
-          return kj::str("'", schema.getShortDisplayName(), "' is not a list.");
+          return kj::str("'", schema.getUnqualifiedName(), "' is not a list.");
         } else if (pos != nameParts.end()) {
           return kj::str("'", kj::get<0>(*pos), "' is not defined.");
         } else {
-          return kj::str("'", schema.getShortDisplayName(), "' cannot be evaluated.");
+          return kj::str("'", schema.getUnqualifiedName(), "' cannot be evaluated.");
         }
     }
 

@@ -398,7 +398,7 @@ TEST(SchemaLoader, LoadStreaming) {
 
   auto results = schema.getMethodByName("doStreamI").getResultType();
   KJ_EXPECT(results.isStreamResult());
-  KJ_EXPECT(results.getShortDisplayName() == "StreamResult", results.getShortDisplayName());
+  KJ_EXPECT(results.getUnqualifiedName() == "StreamResult", results.getUnqualifiedName());
 }
 
 KJ_TEST("SchemaLoader placeholders are assumed to have caps") {
