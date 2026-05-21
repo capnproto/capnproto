@@ -1452,7 +1452,7 @@ struct FiberStack::Impl {
     // reuse. When we're done with the fiber, we just destroy it, without switching to it's
     // stack. This is safe since the start routine doesn't allocate any memory or RAII objects
     // before looping.
-    context->uc_link = 0;
+    context->uc_link = nullptr;
 
     return impl;
   }

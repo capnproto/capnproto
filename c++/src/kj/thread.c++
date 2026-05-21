@@ -182,7 +182,11 @@ void* Thread::runThread(void* ptr) {
     state->exception = kj::mv(exception);
   }
   state->unref();
+#if _WIN32
   return 0;
+#else
+  return nullptr;
+#endif
 }
 
 }  // namespace kj
