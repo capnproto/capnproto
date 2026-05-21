@@ -63,7 +63,7 @@ bool MessageReader::isCanonical() {
 
   _::SegmentReader *segment = arena()->tryGetSegment(_::SegmentId(0));
 
-  if (segment == NULL) {
+  if (segment == nullptr) {
     // The message has no segments
     return false;
   }
@@ -168,7 +168,7 @@ Orphanage MessageBuilder::getOrphanage() {
 bool MessageBuilder::isCanonical() {
   _::SegmentReader *segment = getRootSegment();
 
-  if (segment == NULL) {
+  if (segment == nullptr) {
     // The message has no segments
     return false;
   }
