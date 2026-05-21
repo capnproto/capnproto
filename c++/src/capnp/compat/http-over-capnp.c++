@@ -1065,12 +1065,12 @@ kj::HttpHeaders HttpOverCapnpFactory::capnpToKj(
       case capnp::HttpHeader::COMMON: {
         auto nv = header.getCommon();
         auto nameInt = static_cast<uint>(nv.getName());
-        KJ_REQUIRE(nameInt < nameCapnpToKj.size(), "unknown common header name", nv.getName());
+        KJ_REQUIRE(nameInt > 0 && nameInt < nameCapnpToKj.size(), "unknown common header name", nv.getName());
 
         switch (nv.which()) {
           case capnp::HttpHeader::Common::COMMON_VALUE: {
             auto cvInt = static_cast<uint>(nv.getCommonValue());
-            KJ_REQUIRE(cvInt < valueCapnpToKj.size(),
+            KJ_REQUIRE(cvInt > 0 && cvInt < valueCapnpToKj.size(),
                 "unknown common header value", nv.getCommonValue());
             result.setPtr(nameCapnpToKj[nameInt], valueCapnpToKj[cvInt]);
             break;
