@@ -1,0 +1,8 @@
+---
+# We prefer to enable useful checks one by one.
+Checks: >
+  -*,
+  modernize-use-nullptr
+
+HeaderFilterRegex: '.*'
+WarningsAsErrors: '*'
