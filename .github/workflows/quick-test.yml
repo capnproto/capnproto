@@ -18,6 +18,11 @@ env:
   INSTALL_DEPS: |
     install_deps() {
       local clang=$1
+      if [ "$clang" -ge 22 ]; then
+        . /etc/os-release
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+        echo "deb http://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-$clang main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+      fi
       export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install --no-upgrade --no-install-recommends -y clang-$clang libc++-$clang-dev libc++abi-$clang-dev libclang-rt-$clang-dev lld-$clang llvm-$clang clang-tidy-$clang parallel
     }
 
@@ -39,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [18, 19, 20]
+        clang: [18, 20, 22]
         driver: [bazel-dbg, super-test]
         include:
           - driver: bazel-dbg
@@ -112,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [20]
+        clang: [22]
     steps:
       - uses: actions/checkout@v6
       - name: install dependencies
