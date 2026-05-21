@@ -326,6 +326,53 @@ private:
 };
 
 // =======================================================================================
+// RcStringPtr -- A StringPtr-like value with reference-counted backing storage.
+
+class RcStringPtr {
+public:
+  inline RcStringPtr() = default;
+  inline RcStringPtr(decltype(nullptr)): ptr(nullptr) {}
+  inline RcStringPtr(String string);
+
+  inline RcStringPtr(const RcStringPtr& other)
+      : ptr(other.ptr), storage(other.storage.addRef()) {}
+  inline RcStringPtr(RcStringPtr&& other) noexcept
+      : ptr(other.ptr), storage(kj::mv(other.storage)) {
+    other.ptr = nullptr;
+  }
+
+  inline RcStringPtr& operator=(const RcStringPtr& other) {
+    ptr = other.ptr;
+    storage = other.storage.addRef();
+    return *this;
+  }
+  inline RcStringPtr& operator=(RcStringPtr&& other) noexcept {
+    ptr = other.ptr;
+    storage = kj::mv(other.storage);
+    other.ptr = nullptr;
+    return *this;
+  }
+  inline RcStringPtr& operator=(decltype(nullptr)) {
+    ptr = nullptr;
+    storage = nullptr;
+    return *this;
+  }
+
+  inline StringPtr asPtr() const { return ptr; }
+
+  inline RcStringPtr clone() const { return *this; }
+
+private:
+  StringPtr ptr;
+  mutable Rc<RefcountedWrapper<String>> storage;
+};
+
+inline RcStringPtr::RcStringPtr(String string) {
+  storage = rc<RefcountedWrapper<String>>(kj::mv(string));
+  ptr = storage->getWrapped().asPtr();
+}
+
+// =======================================================================================
 // ConstString -- Same as String, but the backing buffer is const.
 //
 // This has the useful property that it can reference a string literal without allocating

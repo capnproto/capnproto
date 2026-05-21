@@ -22,12 +22,68 @@
 #pragma once
 
 #include "memory.h"
+#include "refcount.h"
 #include <string.h>
 #include <initializer_list>
 
 KJ_BEGIN_HEADER
 
 namespace kj {
+
+// =======================================================================================
+// RcArrayPtr
+
+template <typename T>
+class RcArrayPtr: public DisallowConstCopyIfNotConst<T> {
+  // An ArrayPtr that keeps its backing storage alive through a reference-counted Array.
+  // Copies and clone() share the storage rather than copying the array contents.
+
+public:
+  inline RcArrayPtr() = default;
+  inline RcArrayPtr(decltype(nullptr)): ptr(nullptr) {}
+  inline RcArrayPtr(Array<T> array);
+
+  inline RcArrayPtr(RcArrayPtr& other)
+      : ptr(other.ptr), storage(other.storage.addRef()) {}
+  inline RcArrayPtr(const RcArrayPtr& other) requires (isConst<T>())
+      : ptr(other.ptr), storage(other.storage.addRef()) {}
+  inline RcArrayPtr(RcArrayPtr&& other) noexcept
+      : ptr(other.ptr), storage(kj::mv(other.storage)) {
+    other.ptr = nullptr;
+  }
+
+  inline RcArrayPtr& operator=(RcArrayPtr& other) {
+    ptr = other.ptr;
+    storage = other.storage.addRef();
+    return *this;
+  }
+  inline RcArrayPtr& operator=(const RcArrayPtr& other) requires (isConst<T>()) {
+    ptr = other.ptr;
+    storage = other.storage.addRef();
+    return *this;
+  }
+  inline RcArrayPtr& operator=(RcArrayPtr&& other) noexcept {
+    ptr = other.ptr;
+    storage = kj::mv(other.storage);
+    other.ptr = nullptr;
+    return *this;
+  }
+  inline RcArrayPtr& operator=(decltype(nullptr)) {
+    ptr = nullptr;
+    storage = nullptr;
+    return *this;
+  }
+
+  inline ArrayPtr<T> asPtr() { return ptr; }
+  inline ArrayPtr<const T> asPtr() const { return ptr; }
+
+  inline RcArrayPtr clone() { return *this; }
+  inline RcArrayPtr clone() const requires (isConst<T>()) { return *this; }
+
+private:
+  ArrayPtr<T> ptr;
+  mutable Rc<RefcountedWrapper<Array<T>>> storage;
+};
 
 // =======================================================================================
 // ArrayDisposer -- Implementation details.
@@ -304,6 +360,12 @@ private:
 };
 
 static_assert(!canMemcpy<Array<char>>(), "canMemcpy<>() is broken");
+
+template <typename T>
+inline RcArrayPtr<T>::RcArrayPtr(Array<T> array) {
+  storage = rc<RefcountedWrapper<Array<T>>>(kj::mv(array));
+  ptr = storage->getWrapped().asPtr();
+}
 
 namespace _ {  // private
 

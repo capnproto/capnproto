@@ -263,6 +263,43 @@ TEST(String, ToString) {
   EXPECT_EQ("foo", kj::str(Stringable()));
 }
 
+static_assert(!canConvert<RcStringPtr, StringPtr>());
+static_assert(!canConvert<RcStringPtr*, StringPtr*>());
+
+TEST(String, RcStringPtr) {
+  RcStringPtr retained;
+
+  {
+    RcStringPtr ptr(heapString("hello world"));
+
+    EXPECT_EQ("hello world", ptr.asPtr());
+    EXPECT_EQ("world", ptr.asPtr().slice(6));
+    EXPECT_EQ(11u, ptr.asPtr().asArray().size());
+    EXPECT_TRUE(ptr.asPtr().startsWith("hello"));
+    EXPECT_TRUE(ptr.asPtr().endsWith("world"));
+
+    auto copy = ptr;
+    auto clone = ptr.clone();
+    retained = ptr;
+
+    EXPECT_EQ(ptr.asPtr().begin(), copy.asPtr().begin());
+    EXPECT_EQ(ptr.asPtr().begin(), clone.asPtr().begin());
+    EXPECT_EQ("hello world", copy.asPtr());
+    EXPECT_EQ("hello world", clone.asPtr());
+  }
+
+  EXPECT_EQ("world", retained.asPtr().slice(6));
+  retained = nullptr;
+
+  RcStringPtr owned(heapString("owned string"));
+  EXPECT_EQ("owned string", owned.asPtr());
+  EXPECT_EQ("string", owned.asPtr().slice(6));
+
+  auto ownedCopy = owned;
+  EXPECT_EQ(owned.asPtr().begin(), ownedCopy.asPtr().begin());
+  EXPECT_EQ("owned string", ownedCopy.asPtr());
+}
+
 KJ_TEST("StringPtr constructors") {
   KJ_EXPECT(StringPtr("") == "");
   KJ_EXPECT(StringPtr(nullptr) == "");
