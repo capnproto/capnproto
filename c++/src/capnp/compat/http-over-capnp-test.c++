@@ -52,11 +52,31 @@ KJ_TEST("HttpOverCapnpFactory::capnpToKj rejects out of range common values") {
   }
 
   {
+    auto invalidName = orphanage.newOrphan<List<HttpHeader>>(1);
+    auto invalidNameHeader = invalidName.get()[0];
+    auto common = invalidNameHeader.initCommon();
+    common.setName(CommonHeaderName::INVALID);
+    common.setValue("value");
+
+    KJ_EXPECT_THROW_MESSAGE("unknown common header name", factory.capnpToKj(invalidName.get()));
+  }
+
+  {
     auto invalidValue = orphanage.newOrphan<List<HttpHeader>>(1);
     auto invalidValueHeader = invalidValue.get()[0];
     auto common = invalidValueHeader.initCommon();
     common.setName(CommonHeaderName::ACCEPT_CHARSET);
     common.setCommonValue(static_cast<CommonHeaderValue>(999));
+
+    KJ_EXPECT_THROW_MESSAGE("unknown common header value", factory.capnpToKj(invalidValue.get()));
+  }
+  
+  {
+    auto invalidValue = orphanage.newOrphan<List<HttpHeader>>(1);
+    auto invalidValueHeader = invalidValue.get()[0];
+    auto common = invalidValueHeader.initCommon();
+    common.setName(CommonHeaderName::ACCEPT_CHARSET);
+    common.setCommonValue(CommonHeaderValue::INVALID);
 
     KJ_EXPECT_THROW_MESSAGE("unknown common header value", factory.capnpToKj(invalidValue.get()));
   }
