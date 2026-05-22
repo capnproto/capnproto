@@ -587,8 +587,8 @@ public:
     if (error != 0) {
       KJ_FAIL_SYSCALL("posix_memalign", error);
     }
-    memset(allocPtr, 0, totalSize);
     coreLocalFreelists = reinterpret_cast<CoreLocalFreelist*>(allocPtr);
+    kj::arrayPtr(coreLocalFreelists, nproc).asBytes().fill(0);
 #endif
   }
 

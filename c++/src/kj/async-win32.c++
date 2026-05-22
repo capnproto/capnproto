@@ -49,7 +49,7 @@ public:
       : fulfiller(fulfiller), port(port) {
     *selfPtr = this;
 
-    memset(implicitCast<OVERLAPPED*>(this), 0, sizeof(OVERLAPPED));
+    *implicitCast<OVERLAPPED*>(this) = {};
     this->Offset = offset & 0x00000000FFFFFFFFull;
     this->OffsetHigh = offset >> 32;
   }
@@ -188,8 +188,7 @@ void Win32IocpEventPort::wake() const {
 void Win32IocpEventPort::waitIocp(DWORD timeoutMs) {
   if (isAllowApc) {
     ULONG countReceived = 0;
-    OVERLAPPED_ENTRY entry;
-    memset(&entry, 0, sizeof(entry));
+    OVERLAPPED_ENTRY entry = {};
 
     if (GetQueuedCompletionStatusEx(iocp, &entry, 1, &countReceived, timeoutMs, TRUE)) {
       KJ_ASSERT(countReceived == 1);
