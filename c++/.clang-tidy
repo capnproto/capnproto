@@ -5,11 +5,13 @@ Checks: >
   modernize-use-nullptr,
   custom-arrayptr-as-bytes,
   custom-arrayptr-singleton,
-  custom-arrayptr-slice-zero
+  custom-arrayptr-slice-zero,
+  custom-use-rc-arc-deref
 
 
 HeaderFilterRegex: '.*'
 WarningsAsErrors: '*'
+
 
 ####
 # Custom checks.
@@ -70,3 +72,20 @@ CustomChecks:
       - BindName: arrayPtr
         Message: kj::arrayPtr(&, 1) can be simplified to kj::arrayPtr(item)
         Level: Warning
+        
+  - Name: use-rc-arc-deref
+    Query: |
+      match unaryOperator(
+        hasOperatorName("*"),
+        hasUnaryOperand(ignoringParenImpCasts(cxxMemberCallExpr(
+          callee(cxxMethodDecl(hasName("get"))),
+          on(expr(hasType(qualType(hasDeclaration(
+            classTemplateSpecializationDecl(hasAnyName("::kj::Rc", "::kj::Arc"))
+          )))))
+        )))
+      ).bind("deref")
+    Diagnostic:
+      - BindName: deref
+        Message: use operator* instead of dereferencing Rc::get() or Arc::get()
+        Level: Warning
+
