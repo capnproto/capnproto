@@ -1311,6 +1311,42 @@ TEST(Rpc, Abort) {
   EXPECT_TRUE(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
 }
 
+KJ_TEST("abort with invalid exception type") {
+  // Regression test: a peer sends an abort message with an out-of-range Exception::type.
+  // Cap'n Proto enums are raw UInt16 on the wire, so any value 0-65535 is possible.
+  // The server must handle this gracefully (clamp to FAILED) rather than crashing
+  // due to an out-of-bounds array access in KJ_STRINGIFY(Exception::Type).
+
+  TestContext context;
+
+  MallocMessageBuilder refMessage(128);
+  auto hostId = refMessage.initRoot<test::TestSturdyRefHostId>();
+  hostId.setHost("server");
+
+  auto conn = KJ_ASSERT_NONNULL(context.clientNetwork.connect(hostId));
+
+  {
+    // Send an abort with an out-of-range exception type (0xFFFF).
+    auto msg = conn->newOutgoingMessage(128);
+    auto abort = msg->getBody().initAs<rpc::Message>().initAbort();
+    abort.setReason("malformed type test");
+    abort.setType(static_cast<rpc::Exception::Type>(0xFFFF));
+    msg->send();
+  }
+
+  // The server should handle the malformed abort without crashing. It disconnects and
+  // sends its own abort back (with the clamped exception type).
+  auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(context.waitScope));
+  KJ_EXPECT(reply->getBody().getAs<rpc::Message>().which() == rpc::Message::ABORT);
+
+  // Verify the abort response has a valid (clamped) exception type.
+  auto responseException = reply->getBody().getAs<rpc::Message>().getAbort();
+  KJ_EXPECT(responseException.getType() == rpc::Exception::Type::FAILED);
+
+  // Connection should then close.
+  KJ_EXPECT(conn->receiveIncomingMessage().wait(context.waitScope) == nullptr);
+}
+
 KJ_TEST("handles exceptions thrown during disconnect") {
   // This is similar to the earlier "abort" test, but throws an exception on
   // connection shutdown, to exercise the RpcConnectionState error handler.

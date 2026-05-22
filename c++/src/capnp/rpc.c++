@@ -120,8 +120,18 @@ kj::Exception toException(const rpc::Exception::Reader& exception) {
     }
   }();
 
-  kj::Exception result(static_cast<kj::Exception::Type>(exception.getType()),
-      "(remote)", 0, kj::mv(reason));
+  // Cap'n Proto enums are encoded as raw UInt16 on the wire, so a peer can send any value 0-65535.
+  // We must clamp to valid kj::Exception::Type values to avoid undefined behavior (e.g. out-of-
+  // bounds array access when stringifying the exception type).
+  kj::Exception::Type type = kj::Exception::Type::FAILED;
+  switch (exception.getType()) {
+    case rpc::Exception::Type::FAILED:        type = kj::Exception::Type::FAILED; break;
+    case rpc::Exception::Type::OVERLOADED:    type = kj::Exception::Type::OVERLOADED; break;
+    case rpc::Exception::Type::DISCONNECTED:  type = kj::Exception::Type::DISCONNECTED; break;
+    case rpc::Exception::Type::UNIMPLEMENTED: type = kj::Exception::Type::UNIMPLEMENTED; break;
+  }
+
+  kj::Exception result(type, "(remote)", 0, kj::mv(reason));
   if (exception.hasTrace()) {
     result.setRemoteTrace(kj::str(exception.getTrace()));
   }
