@@ -158,14 +158,16 @@ void ReaderArena::reportReadLimitReached() {
 // =======================================================================================
 
 BuilderArena::BuilderArena(MessageBuilder* message)
-    : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
+    : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr),
+      needLazyZero(message->needLazyZero()) {}
 
 BuilderArena::BuilderArena(MessageBuilder* message,
                            kj::ArrayPtr<MessageBuilder::SegmentInit> segments)
     : message(message),
       segment0(this, SegmentId(0), segments[0].space.begin(),
                verifySegment(segments[0].space),
-               &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed)) {
+               &this->dummyLimiter, verifySegmentSize(segments[0].wordsUsed), segments[0].needLazyZero),
+      needLazyZero(message->needLazyZero()){
   if (segments.size() > 1) {
     kj::Vector<kj::Own<SegmentBuilder>> builders(segments.size() - 1);
 
@@ -173,7 +175,7 @@ BuilderArena::BuilderArena(MessageBuilder* message,
     for (auto& segment: segments.slice(1, segments.size())) {
       builders.add(kj::heap<SegmentBuilder>(
           this, SegmentId(i++), segment.space.begin(), verifySegment(segment.space),
-          &this->dummyLimiter, verifySegmentSize(segment.wordsUsed)));
+          &this->dummyLimiter, verifySegmentSize(segment.wordsUsed), segment.needLazyZero));
     }
 
     kj::Vector<kj::ArrayPtr<const word>> forOutput;
@@ -224,6 +226,9 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
 }
 
 BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
+  // Check if memory needs lazy zero
+  bool needLazyZero = this->needLazyZero;
+
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
     kj::ArrayPtr<word> ptr = message->allocateSegment(unbound(amount / WORDS));
@@ -232,10 +237,13 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
     // pointers to this segment yet, so it should be fine.
     kj::dtor(segment0);
-    kj::ctor(segment0, this, SegmentId(0), ptr.begin(), actualSize, &this->dummyLimiter);
+    kj::ctor(segment0, this, SegmentId(0), ptr.begin(), actualSize, &this->dummyLimiter, ZERO * WORDS, needLazyZero);
 
     segmentWithSpace = &segment0;
-    return AllocateResult { &segment0, segment0.allocate(amount) };
+    word* resultPtr = segment0.allocate(amount);
+    // Zero the root pointer field if the memory is not pre-zeroed.
+    if (needLazyZero) memset(resultPtr, 0, static_cast<size_t>(POINTER_SIZE_IN_WORDS) * sizeof(word));
+    return AllocateResult { &segment0, resultPtr };
   } else {
     if (segmentWithSpace != nullptr) {
       // Check if there is space in an existing segment.
@@ -252,13 +260,17 @@ BuilderArena::AllocateResult BuilderArena::allocate(SegmentWordCount amount) {
     }
 
     // Need to allocate a new segment.
-    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(unbound(amount / WORDS)));
+    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(unbound(amount / WORDS)),
+      needLazyZero);
 
     // Check this new segment first the next time we need to allocate.
     segmentWithSpace = result;
 
     // Allocating from the new segment is guaranteed to succeed since we made it big enough.
-    return AllocateResult { result, result->allocate(amount) };
+    word* resultPtr = result->allocate(amount);
+    // Zero the root pointer field if the memory is not pre-zeroed.
+    if (needLazyZero) memset(resultPtr, 0, static_cast<size_t>(POINTER_SIZE_IN_WORDS) * sizeof(word));
+    return AllocateResult { result, resultPtr };
   }
 }
 
@@ -267,7 +279,7 @@ SegmentBuilder* BuilderArena::addExternalSegment(kj::ArrayPtr<const word> conten
 }
 
 template <typename T>
-SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
+SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content, bool notZeroed) {
   // This check should never fail in practice, since you can't get an Orphanage without allocating
   // the root segment.
   KJ_REQUIRE(segment0.getArena() != nullptr,
@@ -286,7 +298,7 @@ SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
 
   kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
       this, SegmentId(segmentState->builders.size() + 1),
-      content.begin(), contentSize, &this->dummyLimiter);
+      content.begin(), contentSize, &this->dummyLimiter, ZERO * WORDS, notZeroed);
   SegmentBuilder* result = newBuilder.get();
   segmentState->builders.add(kj::mv(newBuilder));
 
