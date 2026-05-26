@@ -129,7 +129,7 @@ size_t PackedInputStream::tryRead(kj::ArrayPtr<byte> dstArray, size_t minBytes) 
                  "Packed input did not end cleanly on a segment boundary.") {
         return out - dst;
       }
-      memset(out, 0, runLength);
+      kj::arrayPtr(out, runLength).fill(0);
       out += runLength;
 
     } else if (tag == 0xffu) {

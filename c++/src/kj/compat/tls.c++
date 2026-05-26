@@ -1069,7 +1069,7 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const kj::ArrayPtr<const byte>> asn1
   KJ_REQUIRE(asn1.size() <= kj::size(chain),
       "exceeded maximum certificate chain length of 10");
 
-  memset(chain, 0, sizeof(chain));
+  kj::arrayPtr(chain).fill(nullptr);
 
   for (auto i: kj::indices(asn1)) {
     auto p = asn1[i].begin();
@@ -1095,7 +1095,7 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const byte> asn1)
 TlsCertificate::TlsCertificate(kj::StringPtr pem) {
   ensureOpenSslInitialized();
 
-  memset(chain, 0, sizeof(chain));
+  kj::arrayPtr(chain).fill(nullptr);
 
   // const_cast apparently needed for older versions of OpenSSL.
   BIO* bio = BIO_new_mem_buf(const_cast<char*>(pem.begin()), pem.size());

@@ -401,8 +401,7 @@ public:
     while (buffer.size() > 0) {
       // Apparently, the way to fake pread() on Windows is to provide an OVERLAPPED structure even
       // though we're not doing overlapped I/O.
-      OVERLAPPED overlapped;
-      memset(&overlapped, 0, sizeof(overlapped));
+      OVERLAPPED overlapped = {};
       overlapped.Offset = static_cast<DWORD>(offset);
       overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
 
@@ -449,8 +448,7 @@ public:
     while (data.size() > 0) {
       // Apparently, the way to fake pwrite() on Windows is to provide an OVERLAPPED structure even
       // though we're not doing overlapped I/O.
-      OVERLAPPED overlapped;
-      memset(&overlapped, 0, sizeof(overlapped));
+      OVERLAPPED overlapped = {};
       overlapped.Offset = static_cast<DWORD>(offset);
       overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
 
@@ -463,8 +461,7 @@ public:
   }
 
   void zero(uint64_t offset, uint64_t size) const {
-    FILE_ZERO_DATA_INFORMATION info;
-    memset(&info, 0, sizeof(info));
+    FILE_ZERO_DATA_INFORMATION info = {};
     info.FileOffset.QuadPart = offset;
     info.BeyondFinalZero.QuadPart = offset + size;
 
@@ -493,8 +490,7 @@ public:
   void truncate(uint64_t size) const {
     // SetEndOfFile() would require seeking the file. It looks like SetFileInformationByHandle()
     // lets us avoid this!
-    FILE_END_OF_FILE_INFO info;
-    memset(&info, 0, sizeof(info));
+    FILE_END_OF_FILE_INFO info = {};
     info.EndOfFile.QuadPart = size;
     KJ_WIN32_HANDLE_ERRORS(
         SetFileInformationByHandle(handle, FileEndOfFileInfo, &info, sizeof(info))) {

@@ -2262,8 +2262,7 @@ private:
         // message here because we can't allocate the actual outgoing message until we have a
         // connection object.
         // TODO(perf): Maybe we can change the signature of connectToIntroduced() to fix this?
-        capnp::word scratch[32];
-        memset(scratch, 0, sizeof(scratch));
+        capnp::word scratch[32]{};
         MallocMessageBuilder message(scratch);
         auto completion = message.getRoot<AnyPointer>();
 

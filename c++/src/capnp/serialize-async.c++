@@ -42,9 +42,7 @@ namespace {
 
 class AsyncMessageReader: public MessageReader {
 public:
-  inline AsyncMessageReader(ReaderOptions options): MessageReader(options) {
-    memset(firstWord, 0, sizeof(firstWord));
-  }
+  inline AsyncMessageReader(ReaderOptions options): MessageReader(options), firstWord{} {}
   ~AsyncMessageReader() noexcept(false) {}
 
   kj::Promise<bool> read(kj::AsyncInputStream& inputStream, kj::ArrayPtr<word> scratchSpace);

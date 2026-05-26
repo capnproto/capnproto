@@ -2,7 +2,21 @@
 # We prefer to enable useful checks one by one.
 Checks: >
   -*,
-  modernize-use-nullptr
+  modernize-use-nullptr,
+  custom-prohibit-memset
+
+CustomChecks:
+  - Name: prohibit-memset
+    Query: |
+      match callExpr(
+        callee(
+          functionDecl(hasAnyName("::memset", "::std::memset"))
+        )
+      ).bind("memsetCall")
+    Diagnostic:
+      - BindName: memsetCall
+        Message: memset function should not be used directly, use kj::ArrayPtr<T>::fill(), kj::memzero<T>() or {} initializer
+        Level: Warning
 
 HeaderFilterRegex: '.*'
 WarningsAsErrors: '*'

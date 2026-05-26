@@ -61,7 +61,7 @@ public:
       auto delim = delimArrayPtr.begin();
       delim[0] = ',';
       delim[1] = '\n';
-      memset(delim + 2, ' ', amount * 2);
+      kj::arrayPtr(delim + 2, amount * 2).fill(' ');
       delim[amount * 2 + 2] = '\0';
 
       // If the outer value isn't being printed on its own line, we need to add a newline/indent

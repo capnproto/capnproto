@@ -828,7 +828,7 @@ public:
 
     // Ignore the rest.
     if (actual < size) {
-      memset(result.begin() + actual, 0, size - actual);
+      result.slice(actual).fill(0);
     }
 
     return result;
@@ -853,14 +853,14 @@ public:
     KJ_REQUIRE(end >= offset, "zero() request overflows uint64");
     lock->ensureCapacity(end);
     lock->size = kj::max(lock->size, end);
-    memset(lock->bytes.begin() + offset, 0, zeroSize);
+    lock->bytes.slice(offset, end).fill(0);
   }
 
   void truncate(uint64_t newSize) const override {
     auto lock = impl.lockExclusive();
     if (newSize < lock->size) {
       lock->modified();
-      memset(lock->bytes.begin() + newSize, 0, lock->size - newSize);
+      lock->bytes.slice(newSize, lock->size).fill(0);
       lock->size = newSize;
     } else if (newSize > lock->size) {
       lock->modified();
@@ -919,7 +919,7 @@ private:
         if (size > 0) {  // placate ubsan; bytes.begin() might be null
           memcpy(newBytes.begin(), bytes.begin(), size);
         }
-        memset(newBytes.begin() + size, 0, newBytes.size() - size);
+        newBytes.slice(size).fill(0);
         bytes = kj::mv(newBytes);
       }
     }
