@@ -7,8 +7,20 @@ Checks: >
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
+  custom-memcpy-use-arrayptr-copyfrom,
   custom-use-rc-arc-deref
 
+
+CustomChecks:
+  - Name: memcpy-use-arrayptr-copyfrom
+    Query: |
+      match callExpr(
+        callee(functionDecl(hasAnyName("::memcpy", "::std::memcpy")))
+      ).bind("call")
+    Diagnostic:
+      - BindName: call
+        Message: use ArrayPtr::copyFrom() instead of memcpy()
+        Level: Warning
 
 HeaderFilterRegex: '.*'
 WarningsAsErrors: '*'
@@ -109,3 +121,4 @@ CustomChecks:
       - BindName: deref
         Message: use operator* instead of dereferencing Rc::get() or Arc::get()
         Level: Warning
+
