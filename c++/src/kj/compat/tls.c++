@@ -1052,7 +1052,7 @@ int TlsPrivateKey::passwordCallback(char* buf, int size, int rwflag, void* u) {
 
   KJ_IF_SOME(p, password) {
     int result = kj::min(p.size(), size);
-    memcpy(buf, p.begin(), result);
+    kj::arrayPtr(buf, result).copyFrom(p.first(result));
     return result;
   } else {
     return 0;
@@ -1136,7 +1136,7 @@ TlsCertificate::TlsCertificate(kj::StringPtr pem) {
 }
 
 TlsCertificate::TlsCertificate(const TlsCertificate& other) {
-  memcpy(chain, other.chain, sizeof(chain));
+  kj::arrayPtr(chain).copyFrom(kj::arrayPtr(other.chain));
   for (void* p: chain) {
     if (p == nullptr) break;  // end of chain; quit early
     X509_up_ref(reinterpret_cast<X509*>(p));

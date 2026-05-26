@@ -1051,7 +1051,7 @@ private:
         // bytes. This is fine because if those bytes are actually part of the message we will
         // hit an error later and if they are not then who cares?
         auto words = kj::heapArray<word>(allBytes.size() / sizeof(word));
-        memcpy(words.begin(), allBytes.begin(), words.size() * sizeof(word));
+        words.asBytes().copyFrom(allBytes.first(words.asBytes().size()));
 
         kj::ArrayPtr<const word> segments[1] = { words };
         SegmentArrayMessageReader message(segments, options);

@@ -804,7 +804,7 @@ template <typename T, bool move>
 struct CopyConstructArray_<T, T*, move, true> {
   static inline T* apply(T* __restrict__ pos, T* start, T* end) {
     if (end != start) {
-      memcpy(pos, start, reinterpret_cast<byte*>(end) - reinterpret_cast<byte*>(start));
+      kj::arrayPtr(pos, end - start).copyFrom(kj::arrayPtr(start, end));
     }
     return pos + (end - start);
   }
@@ -814,7 +814,7 @@ template <typename T>
 struct CopyConstructArray_<T, const T*, false, true> {
   static inline T* apply(T* __restrict__ pos, const T* start, const T* end) {
     if (end != start) {
-      memcpy(pos, start, reinterpret_cast<const byte*>(end) - reinterpret_cast<const byte*>(start));
+      kj::arrayPtr(pos, end - start).copyFrom(kj::arrayPtr(start, end));
     }
     return pos + (end - start);
   }

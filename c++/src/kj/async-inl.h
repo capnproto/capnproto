@@ -536,7 +536,7 @@ class PtmfHelper {
 #define BODY \
     PtmfHelper result; \
     static_assert(sizeof(p) == sizeof(result), "unknown ptmf layout"); \
-    memcpy(&result, &p, sizeof(result)); \
+    kj::asBytes(result).copyFrom(kj::asBytes(p)); \
     return result
 
 #else  // __GNUG__

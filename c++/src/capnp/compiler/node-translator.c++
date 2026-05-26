@@ -2080,7 +2080,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
           case schema::Type::TEXT: {
             // Sadly, we need to make a copy to add the NUL terminator.
             auto text = orphanage.newOrphan<Text>(data.size());
-            memcpy(text.get().begin(), data.begin(), data.size());
+            text.get().asBytes().copyFrom(data);
             return kj::mv(text);
           }
           case schema::Type::DATA:
@@ -2112,7 +2112,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(Expression::Reader src, 
             } else {
               // Ugh, data not aligned. Make a copy.
               copy = kj::heapArray<word>(data.size() / sizeof(word));
-              memcpy(copy.begin(), data.begin(), data.size());
+              copy.asBytes().copyFrom(data);
               words = copy;
             }
             ReaderOptions options;

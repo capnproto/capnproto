@@ -221,7 +221,7 @@ public:
   kj::Promise<void> send(kj::ArrayPtr<const char> message) override {
     auto req = KJ_REQUIRE_NONNULL(out, "already called disconnect()").sendTextRequest(
         MessageSize { 8 + message.size() / sizeof(word), 0 });
-    memcpy(req.initText(message.size()).begin(), message.begin(), message.size());
+    req.initText(message.size()).asArray().copyFrom(message);
     sentBytes += message.size();
     return req.send();
   }

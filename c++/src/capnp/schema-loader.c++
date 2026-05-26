@@ -1773,7 +1773,7 @@ kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<const T> valu
 
   // Need to make a new copy.
   auto copy = arena.allocateArray<T>(values.size());
-  memcpy(copy.begin(), values.begin(), values.size() * sizeof(T));
+  copy.asBytes().copyFrom(values.asBytes());
 
   dedupTable.insert(copy.asBytes());
 

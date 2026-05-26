@@ -25,7 +25,7 @@ namespace kj {
 
 static size_t copyInto(kj::ArrayPtr<byte> dst, kj::ArrayPtr<const byte>& src) {
   size_t n = kj::min(dst.size(), src.size());
-  memcpy(dst.begin(), src.begin(), n);
+  dst.first(n).copyFrom(src.first(n));
   src = src.slice(n, src.size());
   return n;
 }
@@ -156,4 +156,3 @@ kj::Promise<void> ReadyOutputStreamWrapper::pump() {
 }
 
 }  // namespace kj
-

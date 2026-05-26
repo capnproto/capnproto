@@ -59,7 +59,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> WebSocketMessageStream::tryReadMessa
 
             // Note: can't just use bytes.size(), since the the target buffer may
             // be shorter due to integer division.
-            memcpy(words.begin(), bytes.begin(), sizeInWords * sizeof(word));
+            words.asBytes().copyFrom(bytes.first(words.asBytes().size()));
             reader = kj::heap<FlatArrayMessageReader>(
                 kj::arrayPtr(words.begin(), sizeInWords),
                 options).attach(kj::mv(words));

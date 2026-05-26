@@ -96,7 +96,7 @@ using WireValue = DirectWireValue<T>;
 //   them.
 
 // TODO(perf):  Verify that this code optimizes reasonably.  In particular, ensure that the
-//   compiler optimizes away the memcpy()s and keeps everything in registers.
+//   compiler optimizes away the byte copies and keeps everything in registers.
 
 template <typename T, size_t size = sizeof(T)>
 class SwappingWireValue;
@@ -119,12 +119,12 @@ public:
     // on gcc-4.7.3-cygwin32 (but present on gcc-4.8.1-cygwin64).
     uint16_t swapped = (value << 8) | (value >> 8);
     T result;
-    memcpy(&result, &swapped, sizeof(T));
+    kj::asBytes(result).copyFrom(kj::asBytes(swapped));
     return result;
   }
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint16_t raw;
-    memcpy(&raw, &newValue, sizeof(T));
+    kj::asBytes(raw).copyFrom(kj::asBytes(newValue));
     // Not all platforms have __builtin_bswap16() for some reason.  In particular, it is missing
     // on gcc-4.7.3-cygwin32 (but present on gcc-4.8.1-cygwin64).
     value = (raw << 8) | (raw >> 8);
@@ -140,12 +140,12 @@ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint32_t swapped = __builtin_bswap32(value);
     T result;
-    memcpy(&result, &swapped, sizeof(T));
+    kj::asBytes(result).copyFrom(kj::asBytes(swapped));
     return result;
   }
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint32_t raw;
-    memcpy(&raw, &newValue, sizeof(T));
+    kj::asBytes(raw).copyFrom(kj::asBytes(newValue));
     value = __builtin_bswap32(raw);
   }
 
@@ -159,12 +159,12 @@ public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint64_t swapped = __builtin_bswap64(value);
     T result;
-    memcpy(&result, &swapped, sizeof(T));
+    kj::asBytes(result).copyFrom(kj::asBytes(swapped));
     return result;
   }
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint64_t raw;
-    memcpy(&raw, &newValue, sizeof(T));
+    kj::asBytes(raw).copyFrom(kj::asBytes(newValue));
     value = __builtin_bswap64(raw);
   }
 
@@ -211,12 +211,12 @@ public:
     uint16_t raw = (static_cast<uint16_t>(bytes[0])     ) |
                    (static_cast<uint16_t>(bytes[1]) << 8);
     T result;
-    memcpy(&result, &raw, sizeof(T));
+    kj::asBytes(result).copyFrom(kj::asBytes(raw));
     return result;
   }
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint16_t raw;
-    memcpy(&raw, &newValue, sizeof(T));
+    kj::asBytes(raw).copyFrom(kj::asBytes(newValue));
     bytes[0] = raw;
     bytes[1] = raw >> 8;
   }
@@ -237,12 +237,12 @@ public:
                    (static_cast<uint32_t>(bytes[2]) << 16) |
                    (static_cast<uint32_t>(bytes[3]) << 24);
     T result;
-    memcpy(&result, &raw, sizeof(T));
+    kj::asBytes(result).copyFrom(kj::asBytes(raw));
     return result;
   }
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint32_t raw;
-    memcpy(&raw, &newValue, sizeof(T));
+    kj::asBytes(raw).copyFrom(kj::asBytes(newValue));
     bytes[0] = raw;
     bytes[1] = raw >> 8;
     bytes[2] = raw >> 16;
@@ -269,12 +269,12 @@ public:
                    (static_cast<uint64_t>(bytes[6]) << 48) |
                    (static_cast<uint64_t>(bytes[7]) << 56);
     T result;
-    memcpy(&result, &raw, sizeof(T));
+    kj::asBytes(result).copyFrom(kj::asBytes(raw));
     return result;
   }
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint64_t raw;
-    memcpy(&raw, &newValue, sizeof(T));
+    kj::asBytes(raw).copyFrom(kj::asBytes(newValue));
     bytes[0] = raw;
     bytes[1] = raw >> 8;
     bytes[2] = raw >> 16;

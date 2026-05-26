@@ -346,7 +346,7 @@ class word {
   // arithmetic clearer.  Since the contents are private, the only way to access them is to first
   // reinterpret_cast to some other pointer type.
   //
-  // Copying is disallowed because you should always use memcpy().  Otherwise, you may run afoul of
+  // Copying is disallowed because you should always use byte-wise copying.  Otherwise, you may run afoul of
   // aliasing rules.
   //
   // A pointer of type word* should always be word-aligned even if won't actually be dereferenced
@@ -356,7 +356,7 @@ public:
 private:
   uint64_t content KJ_UNUSED_MEMBER;
 #if __GNUC__ < 8 || __clang__
-  // GCC 8's -Wclass-memaccess complains whenever we try to memcpy() a `word` if we've disallowed
+  // GCC 8's -Wclass-memaccess complains whenever we try to byte-copy a `word` if we've disallowed
   // the copy constructor. We don't want to disable the warning because it's a useful warning and
   // we'd have to disable it for all applications that include this header. Instead we allow `word`
   // to be copyable on GCC.

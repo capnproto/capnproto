@@ -224,11 +224,11 @@ public:
   // Copy-by-refcount.
 
   inline TlsCertificate(TlsCertificate&& other) noexcept {
-    memcpy(chain, other.chain, sizeof(chain));
+    kj::arrayPtr(chain).copyFrom(kj::arrayPtr(other.chain));
     memset(other.chain, 0, sizeof(chain));
   }
   inline TlsCertificate& operator=(TlsCertificate&& other) noexcept {
-    memcpy(chain, other.chain, sizeof(chain));
+    kj::arrayPtr(chain).copyFrom(kj::arrayPtr(other.chain));
     memset(other.chain, 0, sizeof(chain));
     return *this;
   }
