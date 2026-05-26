@@ -367,7 +367,41 @@ private:
   kj::ProcessContext& context;
   SchemaLoader schemaLoader;
   std::unordered_set<uint64_t> usedImports;
+  std::map<uint64_t, schema::Node::SourceInfo::Reader> sourceInfo;
   bool hasInterfaces = false;
+
+  schema::Node::SourceInfo::Reader getSourceInfo(Schema schema) {
+    auto iter = sourceInfo.find(schema.getProto().getId());
+    return iter == sourceInfo.end() ? schema::Node::SourceInfo::Reader() : iter->second;
+  }
+
+  kj::StringTree makeDocComment(Text::Reader docComment, kj::StringPtr indent) {
+    if (docComment.size() == 0) {
+      return kj::strTree();
+    }
+
+    auto text = docComment.endsWith("\n") ? docComment.first(docComment.size() - 1) : docComment;
+    kj::Vector<kj::StringTree> lines;
+    for (auto line: text.split('\n')) {
+      lines.add(kj::strTree(indent, "/// ", line, "\n"));
+    }
+    return kj::strTree(lines.releaseAsArray());
+  }
+
+  kj::StringTree makeDocComment(Schema schema, kj::StringPtr indent) {
+    return makeDocComment(getSourceInfo(schema).getDocComment(), indent);
+  }
+
+  kj::StringTree makeMemberDocComment(Schema schema, uint index, kj::StringPtr indent) {
+    auto members = getSourceInfo(schema).getMembers();
+    if (index >= members.size()) {
+      // This can happen if the schema node is missing source info, or if the source info is
+      // out of date and doesn't have info for this member. In either case, just return an empty
+      // doc comment.
+      return kj::strTree();
+    }
+    return makeDocComment(members[index].getDocComment(), indent);
+  }
 
   CppTypeName cppFullName(Schema schema, kj::Maybe<InterfaceSchema::Method> method) {
     return cppFullName(schema, schema, method);
@@ -1194,6 +1228,8 @@ private:
     auto typeSchema = field.getType();
     auto baseName = protoName(proto);
     kj::String titleCase = toTitleCase(baseName);
+    auto containingStruct = field.getContainingStruct();
+    auto fieldIndex = field.getIndex();
 
     DiscriminantChecks unionDiscrim;
     if (hasDiscriminantValue(proto)) {
@@ -1211,17 +1247,21 @@ private:
         return FieldText {
             kj::strTree(
                 kj::mv(unionDiscrim.readerIsDecl),
+                makeMemberDocComment(containingStruct, fieldIndex, "  "),
                 "  inline typename ", titleCase, "::Reader get", titleCase, "() const;\n"
                 "\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.builderIsDecl),
-                "  inline typename ", titleCase, "::Builder get", titleCase, "();\n"
+                "  inline typename ", titleCase, "::Builder get", titleCase, "();\n",
+                makeMemberDocComment(containingStruct, fieldIndex, "  "),
                 "  inline typename ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
 
             hasDiscriminantValue(proto) ? kj::strTree() :
-                kj::strTree("  inline typename ", titleCase, "::Pipeline get", titleCase, "();\n"),
+                kj::strTree(
+                    makeMemberDocComment(containingStruct, fieldIndex, "  "),
+                    "  inline typename ", titleCase, "::Pipeline get", titleCase, "();\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
@@ -1408,12 +1448,14 @@ private:
       auto field = FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  ", maybeInline, type, " get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
-            "  ", maybeInline, type, " get", titleCase, "();\n"
+            "  ", maybeInline, type, " get", titleCase, "();\n",
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  ", maybeInline, "void set", titleCase, "(", type, " value", setterDefault, ");\n"
             "\n"),
 
@@ -1462,7 +1504,8 @@ private:
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
-            "#if !CAPNP_LITE\n"
+            "#if !CAPNP_LITE\n",
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  inline ", clientType, " get", titleCase, "() const;\n"
             "#endif  // !CAPNP_LITE\n"
             "\n"),
@@ -1471,7 +1514,8 @@ private:
             kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
             "#if !CAPNP_LITE\n"
-            "  inline ", clientType, " get", titleCase, "();\n"
+            "  inline ", clientType, " get", titleCase, "();\n",
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  inline void set", titleCase, "(", clientType, "&& value);\n",
             "  inline void set", titleCase, "(", clientType, "& value);\n",
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
@@ -1479,9 +1523,9 @@ private:
             "#endif  // !CAPNP_LITE\n"
             "\n"),
 
-        kj::strTree(
-            hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
-              "  inline ", clientType, " get", titleCase, "();\n")),
+        hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
+              makeMemberDocComment(containingStruct, fieldIndex, "  "),
+              "  inline ", clientType, " get", titleCase, "();\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
@@ -1549,14 +1593,16 @@ private:
       return FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
-            "  inline bool has", titleCase, "() const;\n"
+            "  inline bool has", titleCase, "() const;\n",
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  inline ::capnp::AnyPointer::Reader get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
-            "  inline ::capnp::AnyPointer::Builder get", titleCase, "();\n"
+            "  inline ::capnp::AnyPointer::Builder get", titleCase, "();\n",
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  inline ::capnp::AnyPointer::Builder init", titleCase, "();\n"
             "\n"),
 
@@ -1732,6 +1778,7 @@ private:
             kj::mv(unionDiscrim.readerIsDecl),
             "  ", maybeInline, "bool has", titleCase, "() const;\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  ", maybeInline, readerType, " get", titleCase, "() const;\n",
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
@@ -1740,7 +1787,8 @@ private:
             kj::mv(unionDiscrim.builderIsDecl),
             "  ", maybeInline, "bool has", titleCase, "();\n",
             COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
-            "  ", maybeInline, builderType, " get", titleCase, "();\n"
+            "  ", maybeInline, builderType, " get", titleCase, "();\n",
+            makeMemberDocComment(containingStruct, fieldIndex, "  "),
             "  ", maybeInline, "void set", titleCase, "(", readerType, " value);\n",
             COND(shouldIncludeArrayInitializer,
               "  ", maybeInline, "void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
@@ -1761,9 +1809,9 @@ private:
             COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
-        kj::strTree(
-            COND(shouldIncludePipelineGetter,
-              "  ", maybeInline, pipelineType, " get", titleCase, "();\n")),
+        COND(shouldIncludePipelineGetter,
+              makeMemberDocComment(containingStruct, fieldIndex, "  "),
+              "  ", maybeInline, pipelineType, " get", titleCase, "();\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
@@ -2131,6 +2179,7 @@ private:
           "  struct ", name, ";\n"),
 
       kj::strTree(
+          makeDocComment(schema, ""),
           templateContext.parentDecls(),
           templateContext.decl(scope == nullptr),
           "struct ", scope, name, " {\n",
@@ -2141,9 +2190,12 @@ private:
           "  class Pipeline;\n",
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
               "  enum Which: uint16_t {\n",
-              KJ_MAP(f, structNode.getFields()) {
+              KJ_MAP(i, kj::indices(structNode.getFields())) {
+                auto f = structNode.getFields()[i];
                 if (hasDiscriminantValue(f)) {
-                  return kj::strTree("    ", toUpperCase(protoName(f)), ",\n");
+                  return kj::strTree(
+                      makeMemberDocComment(schema, i, "    "),
+                      "    ", toUpperCase(protoName(f)), ",\n");
                 } else {
                   return kj::strTree();
                 }
@@ -2315,6 +2367,7 @@ private:
 
     return MethodText {
       kj::strTree(
+          makeMemberDocComment(method.getContainingInterface(), method.getIndex(), "  "),
           implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
           templateContext.isGeneric() ? "  CAPNP_AUTO_IF_MSVC(" : "  ",
           isStreaming ? kj::strTree("::capnp::StreamingRequest<", paramType, ">")
@@ -2332,7 +2385,8 @@ private:
               ? kj::strTree("  typedef ::capnp::StreamingCallContext<", shortParamType, "> ")
               : kj::strTree(
                   "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> "),
-              titleCase, "Context;\n"
+              titleCase, "Context;\n",
+          makeMemberDocComment(method.getContainingInterface(), method.getIndex(), "  "),
           "  virtual ::kj::Promise<void> ", identifierName, "(", titleCase, "Context context);\n"),
 
       implicitParams.size() == 0 ? kj::strTree() : kj::mv(requestMethodImpl),
@@ -2462,6 +2516,7 @@ private:
           "  struct ", name, ";\n"),
 
       kj::strTree(
+          makeDocComment(schema, ""),
           templateContext.parentDecls(),
           templateContext.decl(scope == nullptr),
           "struct ", scope, name, " {\n",
@@ -2961,10 +3016,12 @@ private:
 
         return NodeText {
           scope.size() == 0 ? kj::strTree() : kj::strTree(
+              makeDocComment(schema, "  "),
               "  typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
               "\n"),
 
           scope.size() > 0 ? kj::strTree() : kj::strTree(
+              makeDocComment(schema, ""),
               "typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
               "\n"),
 
@@ -2977,7 +3034,9 @@ private:
               // place because we don't want them to be parameterized for generics.
               "enum class ", name, "_", hexId, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
-                return kj::strTree("  ", toUpperCase(protoName(e.getProto())), ",\n");
+                return kj::strTree(
+                    makeMemberDocComment(schema, e.getIndex(), "  "),
+                    "  ", toUpperCase(protoName(e.getProto())), ",\n");
               },
               "};\n"
               "CAPNP_DECLARE_ENUM(", name, ", ", hexId, ");\n"),
@@ -3012,8 +3071,10 @@ private:
         auto constText = makeConstText(scope, name, schema.asConst(), templateContext);
 
         return NodeText {
-          scope.size() == 0 ? kj::strTree() : kj::strTree("  ", kj::mv(constText.decl)),
-          scope.size() > 0 ? kj::strTree() : kj::mv(constText.decl),
+          scope.size() == 0 ? kj::strTree() : kj::strTree(
+              makeDocComment(schema, "  "), "  ", kj::mv(constText.decl)),
+          scope.size() > 0 ? kj::strTree() : kj::strTree(
+              makeDocComment(schema, ""), kj::mv(constText.decl)),
           kj::strTree(),
           kj::strTree(),
 
@@ -3234,6 +3295,9 @@ private:
 
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);
+    }
+    for (auto info: request.getSourceInfo()) {
+      sourceInfo[info.getId()] = info;
     }
 
     schemaLoader.computeOptimizationHints();

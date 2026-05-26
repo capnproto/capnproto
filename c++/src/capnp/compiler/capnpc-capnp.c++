@@ -103,6 +103,40 @@ public:
 private:
   kj::ProcessContext& context;
   SchemaLoader schemaLoader;
+  std::map<uint64_t, schema::Node::SourceInfo::Reader> sourceInfo;
+
+  schema::Node::SourceInfo::Reader getSourceInfo(Schema schema) {
+    auto iter = sourceInfo.find(schema.getProto().getId());
+    return iter == sourceInfo.end() ? schema::Node::SourceInfo::Reader() : iter->second;
+  }
+
+  kj::StringTree genDocComment(Text::Reader docComment, Indent indent) {
+    if (docComment.size() == 0) {
+      return kj::strTree();
+    }
+
+    auto text = docComment.endsWith("\n") ? docComment.first(docComment.size() - 1) : docComment;
+    kj::Vector<kj::StringTree> lines;
+    for (auto line: text.split('\n')) {
+      lines.add(kj::strTree(indent, "# ", line, "\n"));
+    }
+    return kj::strTree(lines.releaseAsArray());
+  }
+
+  kj::StringTree genDocComment(Schema schema, Indent indent) {
+    return genDocComment(getSourceInfo(schema).getDocComment(), indent);
+  }
+
+  kj::StringTree genMemberDocComment(Schema schema, uint index, Indent indent) {
+    auto members = getSourceInfo(schema).getMembers();
+    if (index >= members.size()) {
+      // This can happen if the schema node is missing source info, or if the source info is
+      // out of date and doesn't have info for this member. In either case, just return an empty
+      // doc comment.
+      return kj::strTree();
+    }
+    return genDocComment(members[index].getDocComment(), indent);
+  }
 
   Text::Reader getUnqualifiedName(Schema schema) {
     auto proto = schema.getProto();
@@ -458,11 +492,13 @@ private:
 
   kj::StringTree genStructField(StructSchema::Field field, Schema scope, Indent indent) {
     auto proto = field.getProto();
+    auto docComment = genMemberDocComment(field.getContainingStruct(), field.getIndex(), indent);
     switch (proto.which()) {
       case schema::Field::SLOT: {
         auto slot = proto.getSlot();
         int size = typeSizeBits(slot.getType());
         return kj::strTree(
+            kj::mv(docComment),
             indent, proto.getName(), " @", proto.getOrdinal().getExplicit(),
             " :", genType(slot.getType(), scope, kj::none),
             isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
@@ -478,6 +514,7 @@ private:
       case schema::Field::GROUP: {
         auto group = field.getType().asStruct();
         return kj::strTree(
+            kj::mv(docComment),
             indent, proto.getName(),
             " :group", genAnnotations(proto.getAnnotations(), scope), " {",
             hasDiscriminantValue(proto)
@@ -539,6 +576,7 @@ private:
       case schema::Node::STRUCT: {
         auto structProto = proto.getStruct();
         return kj::strTree(
+            genDocComment(schema, indent),
             indent, "struct ", name,
             " @0x", kj::hex(proto.getId()), genGenericParams(schema),
             genAnnotations(schema), " {  # ",
@@ -555,11 +593,14 @@ private:
       }
       case schema::Node::ENUM: {
         return kj::strTree(
+            genDocComment(schema, indent),
             indent, "enum ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {\n",
             KJ_MAP(enumerant, sortByCodeOrder(schema.asEnum().getEnumerants())) {
-              return kj::strTree(indent.next(), enumerant.getProto().getName(), " @",
-                                 enumerant.getIndex(),
-                                 genAnnotations(enumerant.getProto().getAnnotations(), schema),
+              return kj::strTree(
+                                  genMemberDocComment(schema, enumerant.getIndex(), indent.next()),
+                                  indent.next(), enumerant.getProto().getName(), " @",
+                                  enumerant.getIndex(),
+                                  genAnnotations(enumerant.getProto().getAnnotations(), schema),
                                  ";\n");
             },
             genNestedDecls(schema, indent.next()),
@@ -568,6 +609,7 @@ private:
       case schema::Node::INTERFACE: {
         auto interface = schema.asInterface();
         return kj::strTree(
+            genDocComment(schema, indent),
             indent, "interface ", name, " @0x", kj::hex(proto.getId()), genGenericParams(schema),
             genSuperclasses(interface),
             genAnnotations(schema), " {\n",
@@ -586,6 +628,7 @@ private:
               auto params = schemaLoader.get(methodProto.getParamStructType()).asStruct();
               auto results = schemaLoader.get(methodProto.getResultStructType()).asStruct();
               return kj::strTree(
+                  genMemberDocComment(schema, method.getIndex(), indent.next()),
                   indent.next(), methodProto.getName(),
                   " @", method.getIndex(), " ", kj::mv(implicitsStr),
                   genParamList(interface, params, methodProto.getParamBrand(), method), " -> ",
@@ -598,6 +641,7 @@ private:
       case schema::Node::CONST: {
         auto constProto = proto.getConst();
         return kj::strTree(
+            genDocComment(schema, indent),
             indent, "const ", name, " @0x", kj::hex(proto.getId()), " :",
             genType(constProto.getType(), schema, kj::none), " = ",
             genValue(schema.asConst().getType(), constProto.getValue()),
@@ -629,6 +673,7 @@ private:
         }
 
         return kj::strTree(
+            genDocComment(schema, indent),
             indent, "annotation ", name, " @0x", kj::hex(proto.getId()),
             " (", strArray(targets, ", "), ") :",
             genType(annotationProto.getType(), schema, kj::none), genAnnotations(schema), ";\n");
@@ -651,6 +696,7 @@ private:
 
     return kj::strTree(
       "# ", proto.getDisplayName(), "\n",
+      genDocComment(file, Indent(0)),
       "@0x", kj::hex(proto.getId()), ";\n",
       KJ_MAP(ann, proto.getAnnotations()) { return genAnnotation(ann, file, "", ";\n"); },
       genNestedDecls(file, Indent(0)));
@@ -664,6 +710,9 @@ private:
 
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);
+    }
+    for (auto info: request.getSourceInfo()) {
+      sourceInfo[info.getId()] = info;
     }
 
     kj::FdOutputStream rawOut(STDOUT_FILENO);
