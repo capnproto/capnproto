@@ -8,3 +8,5 @@ platform(
         "@bazel_tools//tools/cpp:clang-cl",
     ],
 )
+
+exports_files([".clang-tidy"])
