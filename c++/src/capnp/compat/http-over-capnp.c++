@@ -895,7 +895,7 @@ public:
 
     class EofDetector final: public kj::AsyncOutputStream {
     public:
-      EofDetector(kj::Own<kj::AsyncIoStream> inner)
+      EofDetector(kj::Rc<kj::AsyncIoStream> inner)
           : inner(kj::mv(inner)) {}
       ~EofDetector() {
         inner->shutdownWrite();
@@ -918,29 +918,27 @@ public:
         return inner->whenWriteDisconnected();
       }
     private:
-      kj::Own<kj::AsyncIoStream> inner;
+      kj::Rc<kj::AsyncIoStream> inner;
     };
 
     auto stream = factory.streamFactory.capnpToKjExplicitEnd(context.getParams().getDown());
 
     // We want to keep the stream alive even after EofDetector is destroyed, so we need to create
     // a refcounted AsyncIoStream.
-    auto refcounted = kj::refcountedWrapper(kj::mv(pipe.ends[1]));
-    kj::Own<kj::AsyncIoStream> ref1 = refcounted->addWrappedRef();
-    kj::Own<kj::AsyncIoStream> ref2 = refcounted->addWrappedRef();
+    kj::Rc<kj::AsyncIoStream> refcounted(kj::mv(pipe.ends[1]));
 
     // We write to the `down` pipe.
-    auto pumpTask = ref1->pumpTo(*stream)
+    auto pumpTask = refcounted->pumpTo(*stream)
           .then([&stream = *stream](uint64_t) mutable {
       return stream.end();
-    }).then([httpProxyStream = kj::mv(ref1), stream = kj::mv(stream)]() mutable
+    }).then([httpProxyStream = refcounted.addRef(), stream = kj::mv(stream)]() mutable
         -> kj::Promise<void> {
       return kj::NEVER_DONE;
     });
 
     {
       PipelineBuilder<ConnectResults> pb;
-      auto eofWrapper = kj::heap<EofDetector>(kj::mv(ref2));
+      auto eofWrapper = kj::heap<EofDetector>(refcounted.addRef());
       auto up = factory.streamFactory.kjToCapnp(kj::mv(eofWrapper), kj::mv(tlsStarter));
       pb.setUp(kj::cp(up));
 

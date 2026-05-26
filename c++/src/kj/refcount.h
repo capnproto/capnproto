@@ -181,16 +181,13 @@ template<typename T>
 class Rc {
   // Rc<T> is a smart pointer providing reference counting capabilities for all kinds of Ts.
   //
-  // The primary way to obtain new `Rc<T>` instance is ot use `kj::rc<T>(...)` function that will
-  // allocates new T on the heap. Depending on T nature:
-  // - T extends Refcounted. In such case T's `refcount` field is used for counting. 1 allocation.
-  // - T does not extend Refcounted and is not polymorphic. `kj::rc` will over-allocate 
-  //   `RcWrapper<T>` to provide a `refcount`. 1 allocation.
-  // - T extends Refcounted and is polymorphic. `RcOwnWrapper<T>` is used. 2 allocations.
+  // The primary way to obtain new `Rc<T>` instance is to use `kj::rc<T>(...)`, which allocates
+  // a new T on the heap. If T extends Refcounted, T's `refcount` field is used for counting.
+  // Otherwise, `kj::rc` allocates `RcWrapper<T>` to provide a `refcount`.
   //
   // Rc<T> can also be constructed from:
-  // - kj::Own<T> for all types of T. Always allocates.
-  // - T for non-polymorphic non-`Refcounted` Ts with move constructor. Always allocates.
+  // - kj::Own<T> for all types of T. Allocates a wrapper.
+  // - T for non-`Refcounted` Ts with move constructor. Allocates a wrapper.
   //
   // Once you have `Rc<T>` you can `addRef` or `clone` it to increment the refcount and obtain new
   // smart pointer.
@@ -236,10 +233,9 @@ public:
   }
 
   inline Rc(Own<T> t) noexcept {
-    static_assert(!canConvert<T*, Refcounted*>());
     if (t.get() == nullptr) return;
     auto wrapper = new _::RcOwnWrapper<T>(mv(t));
-    this->refcounted = wrapper;
+    refcounted = wrapper;
     ptr = wrapper->getWrappedPtr();
   }
 
@@ -302,11 +298,11 @@ private:
   Rc(Refcounted *wrapper, T *ptr) : refcounted(wrapper), ptr(ptr) {}
   void dispose() {
     if (ptr == nullptr) return;
-    auto ptrCopy = ptr;
-    auto wrapperCopy = refcounted;
+    auto refcountedCopy = refcounted;
     refcounted = nullptr;
     ptr = nullptr;
-    wrapperCopy->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
+    // refcounted dispose ignores the pointer
+    refcountedCopy->dispose(static_cast<Refcounted*>(nullptr));
   }
 
   Refcounted* refcounted = nullptr;
@@ -328,8 +324,6 @@ inline Rc<T> rc(Params&&... params) {
 
   if constexpr (canConvert<T*, Refcounted*>()) {
     return Refcounted::addRcRefInternal(new T(fwd<Params>(params)...));
-  } else if constexpr (_::IsPolymorphic<T>) {
-    return Rc<T>(heap<T>(fwd<Params>(params)...));
   } else {
     auto wrapper = new _::RcWrapper<T>(fwd<Params>(params)...);
     return Rc<T>(wrapper, wrapper->getWrappedPtr());

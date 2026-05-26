@@ -6525,15 +6525,15 @@ public:
     if (!connectSettings.useTls) {
       KJ_IF_SOME(wrapper, settings.tlsContext) {
         KJ_IF_SOME(tlsStarter, connectSettings.tlsStarter) {
-          auto transitConnectionRef = kj::refcountedWrapper(
+          kj::Rc<TransitionaryAsyncIoStream> transitConnectionRef(
               kj::heap<TransitionaryAsyncIoStream>(kj::mv(connection)));
           Function<kj::Promise<void>(kj::StringPtr)> cb =
-              [&wrapper, ref1 = transitConnectionRef->addWrappedRef()](
+              [&wrapper, ref1 = transitConnectionRef.addRef()](
               kj::StringPtr expectedServerHostname) mutable {
             ref1->startTls(&wrapper, expectedServerHostname);
             return kj::READY_NOW;
           };
-          connection = transitConnectionRef->addWrappedRef();
+          connection = transitConnectionRef.addRef().toOwn();
           tlsStarter = kj::mv(cb);
         }
       }

@@ -269,6 +269,24 @@ KJ_TEST("Rc Own interop") {
     EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc wraps Own of refcounted types") {
+  bool b = false;
+
+  Own<SetTrueInDestructor> own = kj::refcounted<SetTrueInDestructor>(&b);
+
+  Rc<SetTrueInDestructor> ref(kj::mv(own));
+  EXPECT_TRUE(own.get() == nullptr);
+  EXPECT_TRUE(ref != nullptr);
+
+  Rc<SetTrueInDestructor> ref2 = ref.addRef();
+  EXPECT_TRUE(ref.get() == ref2.get());
+
+  ref = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
 
 struct SetTrueInDestructor2 {
   // Like SetTrueInDestructor but doesn't inherit Refcounted.
@@ -327,6 +345,29 @@ KJ_TEST("Rc wraps Own of non-refcounted types") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc wraps attached Own") {
+  bool b = false;
+  bool attached = false;
+
+  Own<SetTrueInDestructor> own = kj::refcounted<SetTrueInDestructor>(&b)
+      .attachToThisReference(kj::heap<SetTrueInDestructor2>(&attached));
+  Rc<SetTrueInDestructor> ref(kj::mv(own));
+  EXPECT_TRUE(own.get() == nullptr);
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_FALSE(b);
+  EXPECT_FALSE(attached);
+
+  Rc<SetTrueInDestructor> ref2 = ref.addRef();
+
+  ref = nullptr;
+  EXPECT_FALSE(b);
+  EXPECT_FALSE(attached);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(attached);
+}
+
 KJ_TEST("Rc<String>") {
   Rc<String> ref1 = kj::rc<String>(kj::str("hello"));
   EXPECT_TRUE(ref1 != nullptr);
@@ -359,6 +400,39 @@ struct Concrete final: public Abstract {
   void use() override {}
   bool* ptr;
 };
+
+struct AbstractRefcounted: public Refcounted {
+  virtual void use() = 0;
+};
+
+struct ConcreteRefcounted final: public Abstract, public AbstractRefcounted {
+  ConcreteRefcounted(bool* ptr): ptr(ptr) {}
+  ~ConcreteRefcounted() { *ptr = true; }
+  void use() override {}
+
+  bool* ptr;
+};
+
+KJ_TEST("Rc wraps Own of abstract refcounted types") {
+  bool b = false;
+
+  Own<AbstractRefcounted> own = kj::refcounted<ConcreteRefcounted>(&b);
+
+  Rc<AbstractRefcounted> ref(kj::mv(own));
+  EXPECT_TRUE(own.get() == nullptr);
+  EXPECT_TRUE(ref != nullptr);
+
+  ref->use();
+
+  Rc<AbstractRefcounted> ref2 = ref.addRef();
+  EXPECT_TRUE(ref.get() == ref2.get());
+
+  ref = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
 
 KJ_TEST("Rc<Abstract>") {
   bool b = false;
