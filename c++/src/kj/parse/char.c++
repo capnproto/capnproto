@@ -41,25 +41,26 @@ double ParseFloat::operator()(const Array<char>& digits,
 
   KJ_STACK_ARRAY(char, buf, bufSize + 1, 128, 128);
 
-  char* pos = buf.begin();
-  memcpy(pos, digits.begin(), digits.size());
-  pos += digits.size();
+  auto remaining = buf;
+  remaining.write(digits);
   KJ_IF_SOME(f, fraction) {
-    *pos++ = '.';
-    memcpy(pos, f.begin(), f.size());
-    pos += f.size();
+    remaining[0] = '.';
+    remaining = remaining.slice(1);
+    remaining.write(f);
   }
   KJ_IF_SOME(e, exponent) {
-    *pos++ = 'e';
+    remaining[0] = 'e';
+    remaining = remaining.slice(1);
     KJ_IF_SOME(sign, get<0>(e)) {
-      *pos++ = sign;
+      remaining[0] = sign;
+      remaining = remaining.slice(1);
     }
-    memcpy(pos, get<1>(e).begin(), get<1>(e).size());
-    pos += get<1>(e).size();
+    remaining.write(get<1>(e));
   }
 
-  *pos++ = '\0';
-  KJ_DASSERT(pos == buf.end());
+  remaining[0] = '\0';
+  remaining = remaining.slice(1);
+  KJ_DASSERT(remaining.size() == 0);
 
   // The above construction should always produce a valid double, so this should never throw...
   return StringPtr(buf.begin(), bufSize).parseAs<double>();

@@ -38,7 +38,9 @@ StringTree::StringTree(Array<StringTree>&& pieces, StringPtr delim)
 
     for (uint i = 1; i < pieces.size(); i++) {
       if (delim.size() > 0) {
-        memcpy(text.begin() + (i - 1) * delim.size(), delim.begin(), delim.size());
+        text.asArray()
+            .slice((i - 1) * delim.size(), i * delim.size())
+            .copyFrom(delim);
       }
       branches[i].index = i * delim.size();
       branches[i].content = kj::mv(pieces[i]);
@@ -55,7 +57,7 @@ String StringTree::flatten() const {
 
 char* StringTree::flattenTo(char* __restrict__ target) const {
   visit([&target](ArrayPtr<const char> text) {
-    memcpy(target, text.begin(), text.size());
+    kj::arrayPtr(target, text.size()).copyFrom(text);
     target += text.size();
   });
   return target;
@@ -64,7 +66,7 @@ char* StringTree::flattenTo(char* __restrict__ target) const {
 char* StringTree::flattenTo(char* __restrict__ target, char* limit) const {
   visit([&target,limit](ArrayPtr<const char> text) {
     size_t size = kj::min(text.size(), limit - target);
-    memcpy(target, text.begin(), size);
+    kj::arrayPtr(target, size).copyFrom(text.first(size));
     target += size;
   });
   return target;

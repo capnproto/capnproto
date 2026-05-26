@@ -213,7 +213,7 @@ TEST(Orphans, OrphanageText) {
 
   Orphan<Text> orphan = builder.getOrphanage().newOrphan<Text>(8);
   ASSERT_EQ(8u, orphan.get().size());
-  memcpy(orphan.get().begin(), "12345678", 8);
+  orphan.get().asArray().copyFrom(kj::arrayPtr("12345678", 8));
 
   auto root = builder.initRoot<TestAllTypes>();
   root.adoptTextField(kj::mv(orphan));

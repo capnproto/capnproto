@@ -173,14 +173,14 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
     table[segments.size() + 1].set(0);
   }
 
-  word* dst = result.begin() + segments.size() / 2 + 1;
+  auto dst = result.asPtr().slice(segments.size() / 2 + 1);
 
   for (auto& segment: segments) {
-    memcpy(dst, segment.begin(), segment.size() * sizeof(word));
-    dst += segment.size();
+    dst.first(segment.size()).asBytes().write(segment.asBytes());
+    dst = dst.slice(segment.size());
   }
 
-  KJ_DASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
+  KJ_DASSERT(dst.size() == 0, "Buffer overrun/underrun bug in code above.");
 
   return kj::mv(result);
 }

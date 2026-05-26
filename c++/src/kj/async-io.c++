@@ -196,11 +196,9 @@ private:
   }
 
   void copyInto(ArrayPtr<byte> out) {
-    size_t pos = 0;
     for (auto& part: parts) {
-      size_t n = kj::min(part.size(), out.size() - pos);
-      memcpy(out.begin() + pos, part.begin(), n);
-      pos += n;
+      size_t n = kj::min(part.size(), out.size());
+      out.write(part.first(n));
     }
   }
 };
@@ -720,9 +718,8 @@ private:
 
         {
           auto n = writeBuffer.size();
-          memcpy(readBuffer.begin(), writeBuffer.begin(), n);
+          readBuffer.write(writeBuffer.first(n));
           totalRead += n;
-          readBuffer = readBuffer.slice(n, readBuffer.size());
         }
 
         if (morePieces.size() == 0) {
@@ -746,7 +743,7 @@ private:
       // it completely.
       {
         auto n = readBuffer.size();
-        memcpy(readBuffer.begin(), writeBuffer.begin(), n);
+        readBuffer.write(writeBuffer.first(n));
         writeBuffer = writeBuffer.slice(n, writeBuffer.size());
         totalRead += n;
       }
@@ -1174,9 +1171,8 @@ private:
         if (data.size() < readBuffer.size()) {
           // First write segment consumes a portion of the read buffer but not all of it.
           auto n = data.size();
-          memcpy(readBuffer.begin(), data.begin(), n);
+          readBuffer.write(data.first(n));
           readSoFar.byteCount += n;
-          readBuffer = readBuffer.slice(n, readBuffer.size());
           if (moreData.size() == 0) {
             // Consumed all written pieces.
             if (readSoFar.byteCount >= minBytes) {
@@ -1195,7 +1191,7 @@ private:
           readSoFar.byteCount += n;
           fulfiller.fulfill(kj::cp(readSoFar));
           pipe.endState(*this);
-          memcpy(readBuffer.begin(), data.begin(), n);
+          readBuffer.write(data.first(n));
 
           data = data.slice(n, data.size());
           if (data.size() == 0 && moreData.size() == 0) {
@@ -2286,10 +2282,9 @@ uint64_t AsyncTee::Buffer::consume(ArrayPtr<byte>& readBuffer, size_t& minBytes)
   while (readBuffer.size() > 0 && !bufferList.empty()) {
     auto& bytes = bufferList.front();
     auto amount = kj::min(bytes.size(), readBuffer.size());
-    memcpy(readBuffer.begin(), bytes.begin(), amount);
+    readBuffer.write(bytes.first(amount));
     totalAmount += amount;
 
-    readBuffer = readBuffer.slice(amount, readBuffer.size());
     minBytes -= kj::min(amount, minBytes);
 
     if (amount == bytes.size()) {

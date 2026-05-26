@@ -634,6 +634,7 @@ _::Delimited<T> delimited(T&& arr, kj::StringPtr delim);
 template <typename T>
 String strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
+  auto delimPtr = kj::arrayPtr(delim, delimLen);
   KJ_STACK_ARRAY(decltype(_::STR * arr[0]), pieces, kj::size(arr), 8, 32);
   size_t size = 0;
   for (size_t i = 0; i < kj::size(arr); i++) {
@@ -643,13 +644,13 @@ String strArray(T&& arr, const char* delim) {
   }
 
   String result = heapString(size);
-  char* pos = result.begin();
+  auto output = result.asArray();
   for (size_t i = 0; i < kj::size(arr); i++) {
     if (i > 0) {
-      memcpy(pos, delim, delimLen);
-      pos += delimLen;
+      output.write(delimPtr);
     }
-    pos = _::fill(pos, pieces[i]);
+    auto filled = _::fill(output.begin(), pieces[i]) - output.begin();
+    output = output.slice(filled);
   }
   return result;
 }

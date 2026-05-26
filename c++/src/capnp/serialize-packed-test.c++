@@ -66,7 +66,7 @@ public:
     size_t maxBytes = buffer.size();
     KJ_ASSERT(maxBytes <= data.size() - readPos, "Overran end of stream.");
     size_t amount = kj::min(maxBytes, kj::max(minBytes, preferredReadSize));
-    memcpy(buffer.begin(), data.data() + readPos, amount);
+    buffer.write(kj::arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount));
     readPos += amount;
     return amount;
   }
@@ -96,7 +96,7 @@ void expectPacksTo(kj::ArrayPtr<const byte> unpackedUnaligned, kj::ArrayPtr<cons
   // Make a guaranteed-to-be-aligned copy of the unpacked buffer.
   kj::Array<word> unpackedWords = kj::heapArray<word>(unpackedSizeInWords);
   if (unpackedUnaligned.size() != 0u) {
-    memcpy(unpackedWords.begin(), unpackedUnaligned.begin(), unpackedUnaligned.size());
+    unpackedWords.asPtr().asBytes().copyFrom(unpackedUnaligned);
   }
   kj::ArrayPtr<const byte> unpacked = unpackedWords.asBytes();
 

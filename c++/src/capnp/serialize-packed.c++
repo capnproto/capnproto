@@ -145,12 +145,18 @@ size_t PackedInputStream::tryRead(kj::ArrayPtr<byte> dstArray, size_t minBytes) 
       size_t inRemaining = BUFFER_REMAINING;
       if (inRemaining >= runLength) {
         // Fast path.
-        memcpy(out, in, runLength);
+        auto outOffset = out - dst;
+        auto inOffset = in - reinterpret_cast<const uint8_t*>(buffer.begin());
+        dstArray.slice(outOffset, outOffset + runLength)
+            .copyFrom(buffer.slice(inOffset, inOffset + runLength));
         out += runLength;
         in += runLength;
       } else {
         // Copy over the first buffer, then do one big read for the rest.
-        memcpy(out, in, inRemaining);
+        auto outOffset = out - dst;
+        auto inOffset = in - reinterpret_cast<const uint8_t*>(buffer.begin());
+        dstArray.slice(outOffset, outOffset + inRemaining)
+            .copyFrom(buffer.slice(inOffset, inOffset + inRemaining));
         out += inRemaining;
         runLength -= inRemaining;
 
@@ -412,8 +418,10 @@ void PackedOutputStream::write(kj::ArrayPtr<const byte> src) {
       *out++ = count / sizeof(word);
 
       if (count <= reinterpret_cast<uint8_t*>(buffer.end()) - out) {
-        // There's enough space to memcpy.
-        memcpy(out, runStart, count);
+        // There's enough space to copy.
+        auto outOffset = out - reinterpret_cast<uint8_t*>(buffer.begin());
+        auto inOffset = runStart - src.begin();
+        buffer.slice(outOffset, outOffset + count).copyFrom(src.slice(inOffset, inOffset + count));
         out += count;
       } else {
         // Input overruns the output buffer.  We'll give it to the output stream in one chunk

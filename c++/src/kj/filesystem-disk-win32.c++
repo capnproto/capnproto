@@ -141,9 +141,10 @@ static Array<wchar_t> join16(ArrayPtr<const wchar_t> path, const wchar_t* file) 
 
   size_t len = wcslen(file) + 1;
   auto result = kj::heapArray<wchar_t>(path.size() + len);
-  memcpy(result.begin(), path.begin(), path.asBytes().size() - sizeof(wchar_t));
+  result.asBytes().first(path.asBytes().size() - sizeof(wchar_t))
+      .copyFrom(path.asBytes().first(path.asBytes().size() - sizeof(wchar_t)));
   result[path.size() - 1] = '\\';
-  memcpy(result.begin() + path.size(), file, len * sizeof(wchar_t));
+  result.slice(path.size()).copyFrom(kj::arrayPtr(file, len));
   return result;
 }
 

@@ -1434,7 +1434,8 @@ private:
     //   not designed to allow that -- it passes in an already-allocated builder. Oops.
     auto dataIn = input.getDataSection();
     auto dataOut = output.getDataSection();
-    memcpy(dataOut.begin(), dataIn.begin(), kj::min(dataOut.size(), dataIn.size()));
+    auto dataCopySize = kj::min(dataOut.size(), dataIn.size());
+    dataOut.write(dataIn.first(dataCopySize));
 
     auto ptrIn = input.getPointerSection();
     auto ptrOut = output.getPointerSection();

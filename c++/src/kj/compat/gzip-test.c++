@@ -51,7 +51,7 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer.begin(), bytes.begin(), n);
+    buffer.write(bytes.first(n));
     bytes = bytes.slice(n, bytes.size());
     return n;
   }
@@ -76,7 +76,7 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
+    kj::arrayPtr(reinterpret_cast<byte*>(buffer), n).copyFrom(bytes.first(n));
     bytes = bytes.slice(n, bytes.size());
     return n;
   }

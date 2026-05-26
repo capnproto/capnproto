@@ -806,7 +806,7 @@ private:
       cmsg->cmsg_level = SOL_SOCKET;
       cmsg->cmsg_type = SCM_RIGHTS;
       cmsg->cmsg_len = CMSG_LEN(sizeof(int) * fds.size());
-      memcpy(CMSG_DATA(cmsg), fds.begin(), fds.asBytes().size());
+      kj::arrayPtr(CMSG_DATA(cmsg), fds.asBytes().size()).copyFrom(fds.asBytes());
 
       KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(fd, &msg, 0)) {
         // Error.
@@ -886,7 +886,8 @@ class SocketAddress {
 public:
   SocketAddress(const void* sockaddr, uint len): addrlen(len) {
     KJ_REQUIRE(len <= sizeof(addr), "Sorry, your sockaddr is too big for me.");
-    memcpy(&addr.generic, sockaddr, len);
+    kj::arrayPtr(reinterpret_cast<byte*>(&addr.generic), len)
+        .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(sockaddr), len));
   }
 
   bool operator<(const SocketAddress& other) const {
@@ -1026,7 +1027,9 @@ public:
       result.addr.unixDomain.sun_path[0] = '\0';
       // although not strictly required by Linux, also copy the trailing
       // NULL terminator so that we can safely read it back in toString
-      memcpy(result.addr.unixDomain.sun_path + 1, path.cStr(), path.size() + 1);
+      auto pathTarget = kj::arrayPtr(result.addr.unixDomain.sun_path + 1, path.size() + 1);
+      pathTarget.write(path);
+      pathTarget[0] = '\0';
       result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
 
       if (!result.parseAllowedBy(filter)) {
@@ -1131,7 +1134,7 @@ public:
     if (addrPart.size() < INET6_ADDRSTRLEN - 1) {
       // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
       char buffer[INET6_ADDRSTRLEN]{};
-      memcpy(buffer, addrPart.begin(), addrPart.size());
+      kj::arrayPtr(buffer).write(addrPart);
       buffer[addrPart.size()] = '\0';
 
       // OK, parse it!
@@ -1279,7 +1282,8 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
             }
           } else {
             addr.addrlen = cur->ai_addrlen;
-            memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
+            kj::arrayPtr(reinterpret_cast<byte*>(&addr.addr.generic), cur->ai_addrlen)
+                .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(cur->ai_addr), cur->ai_addrlen));
           }
           result.insert(addr);
           cur = cur->ai_next;
@@ -1819,7 +1823,7 @@ Promise<size_t> DatagramPortImpl::send(
     extra = kj::heapArray<byte>(extraSize);
     extraSize = 0;
     for (size_t i = iovmax - 1; i < pieces.size(); i++) {
-      memcpy(extra.begin() + extraSize, pieces[i].begin(), pieces[i].size());
+      extra.slice(extraSize, extraSize + pieces[i].size()).copyFrom(pieces[i]);
       extraSize += pieces[i].size();
     }
     iov.back().iov_base = extra.begin();

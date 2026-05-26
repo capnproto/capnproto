@@ -152,7 +152,9 @@ void* Arena::allocateBytesInternal(size_t amount, uint alignment) {
 
 StringPtr Arena::copyString(StringPtr content) {
   char* data = reinterpret_cast<char*>(allocateBytes(content.size() + 1, 1, false));
-  memcpy(data, content.cStr(), content.size() + 1);
+  auto result = kj::arrayPtr(data, content.size() + 1);
+  result.write(content);
+  result[0] = '\0';
   return StringPtr(data, content.size());
 }
 

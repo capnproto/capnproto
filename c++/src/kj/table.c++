@@ -286,7 +286,8 @@ void BTreeImpl::growTree(uint minCapacity) {
 //      aligned_alloc(sizeof(BTreeImpl::NodeUnion), newCapacity * sizeof(BTreeImpl::NodeUnion)));
 //  KJ_ASSERT(newTree != nullptr, "memory allocation failed", newCapacity);
 
-  acopy(newTree, tree, treeCapacity);
+  kj::arrayPtr(newTree, treeCapacity)
+      .copyFrom(kj::arrayPtr(tree, treeCapacity));
   azero(newTree + treeCapacity, newCapacity - treeCapacity);
   if (tree != &EMPTY_NODE) aligned_free(tree);
   tree = newTree;
@@ -598,9 +599,9 @@ void BTreeImpl::renumber(uint oldRow, uint newRow, const SearchKey& searchKey) {
 uint BTreeImpl::split(Parent& dst, uint dstPos, Parent& src, uint srcPos) {
   constexpr size_t mid = Parent::NKEYS / 2;
   uint pivot = *src.keys[mid];
-  acopy(dst.keys, src.keys + mid + 1, Parent::NKEYS - mid - 1);
+  kj::arrayPtr(dst.keys).write(kj::arrayPtr(src.keys).slice(mid + 1));
   azero(src.keys + mid, Parent::NKEYS - mid);
-  acopy(dst.children, src.children + mid + 1, Parent::NCHILDREN - mid - 1);
+  kj::arrayPtr(dst.children).write(kj::arrayPtr(src.children).slice(mid + 1));
   azero(src.children + mid + 1, Parent::NCHILDREN - mid - 1);
   return pivot;
 }
@@ -608,7 +609,7 @@ uint BTreeImpl::split(Parent& dst, uint dstPos, Parent& src, uint srcPos) {
 uint BTreeImpl::split(Leaf& dst, uint dstPos, Leaf& src, uint srcPos) {
   constexpr size_t mid = Leaf::NROWS / 2;
   uint pivot = *src.rows[mid - 1];
-  acopy(dst.rows, src.rows + mid, Leaf::NROWS - mid);
+  kj::arrayPtr(dst.rows).write(kj::arrayPtr(src.rows).slice(mid));
   azero(src.rows + mid, Leaf::NROWS - mid);
 
   if (src.next == 0) {
@@ -632,8 +633,12 @@ void BTreeImpl::merge(Parent& dst, uint dstPos, uint pivot, Parent& src) {
 
   constexpr size_t mid = Parent::NKEYS/2;
   dst.keys[mid] = pivot;
-  acopy(dst.keys + mid + 1, src.keys, mid);
-  acopy(dst.children + mid + 1, src.children, mid + 1);
+  kj::arrayPtr(dst.keys)
+      .slice(mid + 1, mid + 1 + mid)
+      .copyFrom(kj::arrayPtr(src.keys).first(mid));
+  kj::arrayPtr(dst.children)
+      .slice(mid + 1, mid + 1 + mid + 1)
+      .copyFrom(kj::arrayPtr(src.children).first(mid + 1));
 }
 
 void BTreeImpl::merge(Leaf& dst, uint dstPos, uint pivot, Leaf& src) {
@@ -645,7 +650,9 @@ void BTreeImpl::merge(Leaf& dst, uint dstPos, uint pivot, Leaf& src) {
 
   constexpr size_t mid = Leaf::NROWS/2;
   KJ_DASSERT(dst.rows[mid-1] == pivot);
-  acopy(dst.rows + mid, src.rows, mid);
+  kj::arrayPtr(dst.rows)
+      .slice(mid, mid + mid)
+      .copyFrom(kj::arrayPtr(src.rows).first(mid));
 
   dst.next = src.next;
   if (dst.next == 0) {
@@ -820,7 +827,8 @@ void InsertionOrderIndex::reserve(size_t size) {
     // To catch bugs, fill unused links with 0xff.
     kj::asBytes(newLinks, allocation).fill(0xff);
 #endif
-    _::acopy(newLinks, links, capacity + 1);
+    kj::arrayPtr(newLinks, capacity + 1)
+        .copyFrom(kj::arrayPtr(links, capacity + 1));
     if (links != &EMPTY_LINK) delete[] links;
     links = newLinks;
     capacity = allocation - 1;

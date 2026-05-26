@@ -55,7 +55,7 @@ TEST(String, Str) {
   Vector<char> v;
   v.addAll(a);
   FixedArray<char, 3> f;
-  memcpy(f.begin(), buf, 3);
+  kj::arrayPtr(f.begin(), 3).copyFrom(kj::arrayPtr(buf, 3));
 
   EXPECT_EQ("foo", str(a));
   EXPECT_EQ("foo", str(ca));

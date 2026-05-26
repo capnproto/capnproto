@@ -1140,7 +1140,7 @@ KJ_TEST("HttpClient chunked body pump from fixed length stream") {
       auto n = kj::min(body.size(), maxBytes);
       n = kj::max(n, minBytes);
       n = kj::min(n, body.size());
-      memcpy(buffer, body.begin(), n);
+      kj::arrayPtr(reinterpret_cast<byte*>(buffer), n).copyFrom(body.asBytes().first(n));
       body = body.slice(n);
       return n;
     }
@@ -4737,7 +4737,7 @@ public:
 
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     size_t amount = kj::min(maxBytes, unread.size());
-    memcpy(buffer, unread.begin(), amount);
+    kj::arrayPtr(reinterpret_cast<byte*>(buffer), amount).copyFrom(unread.first(amount));
     unread = unread.slice(amount, unread.size());
     return amount;
   }

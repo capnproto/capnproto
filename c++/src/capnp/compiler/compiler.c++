@@ -451,9 +451,9 @@ kj::StringPtr Compiler::Node::joinDisplayName(
       parent.displayName.size() + declName.size() + 2);
 
   size_t separatorPos = parent.displayName.size();
-  memcpy(result.begin(), parent.displayName.begin(), separatorPos);
+  result.first(separatorPos).write(parent.displayName.first(separatorPos));
   result[separatorPos] = parent.parent == kj::none ? ':' : '.';
-  memcpy(result.begin() + separatorPos + 1, declName.begin(), declName.size());
+  result.slice(separatorPos + 1, separatorPos + 1 + declName.size()).copyFrom(declName);
   result[result.size() - 1] = '\0';
   return kj::StringPtr(result.begin(), result.size() - 1);
 }

@@ -95,11 +95,11 @@ namespace _ {  // private
 // =======================================================================================
 
 #if __GNUC__ >= 8 && !__clang__
-// GCC 8 introduced a warning which complains whenever we try to memset() or memcpy() a
+// GCC 8 introduced a warning which complains whenever we try to zero or byte-copy a
 // WirePointer, because we deleted the regular copy constructor / assignment operator. Weirdly, if
 // I remove those deletions, GCC *still* complains that WirePointer is non-trivial. I don't
 // understand why -- maybe because WireValue has private members? We don't want to make WireValue's
-// member public, but memset() and memcpy() on it are certainly valid and desirable, so we'll just
+// member public, but byte-wise access is certainly valid and desirable, so we'll just
 // have to disable the warning I guess.
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
@@ -431,34 +431,39 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(byte* to, const byte* from, ByteCount32 count)) {
-    if (count != ZERO * BYTES) memcpy(to, from, unbound(count / BYTES));
+    auto size = unbound(count / BYTES);
+    if (size != 0) kj::arrayPtr(to, size).copyFrom(kj::arrayPtr(from, size));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(word* to, const word* from, WordCountN<29> count)) {
-    if (count != ZERO * WORDS) memcpy(to, from, unbound(count * BYTES_PER_WORD / BYTES));
+    auto size = unbound(count / WORDS);
+    if (size != 0) kj::asBytes(to, size).copyFrom(kj::asBytes(from, size));
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(WirePointer* to, const WirePointer* from,
                                           WirePointerCountN<29> count)) {
-    if (count != ZERO * POINTERS) memcpy(to, from, unbound(count * BYTES_PER_POINTER  / BYTES));
+    auto size = unbound(count * BYTES_PER_POINTER / BYTES);
+    if (size != 0) kj::arrayPtr(reinterpret_cast<byte*>(to), size)
+        .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(from), size));
   }
 
   template <typename T>
   static inline void copyMemory(T* to, const T* from) {
-    memcpy(to, from, sizeof(*from));
+    kj::arrayPtr(reinterpret_cast<byte*>(to), sizeof(*to))
+        .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(from), sizeof(*from)));
   }
 
   // TODO(cleanup): Turn these into a .copyTo() method of ArrayPtr?
   template <typename T>
   static inline void copyMemory(T* to, kj::ArrayPtr<T> from) {
-    if (from.size() != 0u) memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+    if (from.size() != 0u) kj::arrayPtr(to, from.size()).asBytes().copyFrom(from.asBytes());
   }
   template <typename T>
   static inline void copyMemory(T* to, kj::ArrayPtr<const T> from) {
-    if (from.size() != 0u) memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+    if (from.size() != 0u) kj::asBytes(to, from.size()).copyFrom(from.asBytes());
   }
   static KJ_ALWAYS_INLINE(void copyMemory(char* to, kj::StringPtr from)) {
-    if (from.size() != 0u) memcpy(to, from.begin(), from.size() * sizeof(from[0]));
+    if (from.size() != 0u) kj::arrayPtr(to, from.size()).copyFrom(from);
   }
 
   static KJ_ALWAYS_INLINE(bool boundsCheck(
@@ -1086,7 +1091,7 @@ struct WireHelpers {
         dst->setKindAndTarget(srcTag->kind(), srcPtr, dstSegment);
       }
 
-      // We can just copy the upper 32 bits.  (Use memcpy() to comply with aliasing rules.)
+      // We can just copy the upper 32 bits.  (Use byte copy to comply with aliasing rules.)
       copyMemory(&dst->upper32Bits, &srcTag->upper32Bits);
     } else {
       // Need to create a far pointer.  Try to allocate it in the same segment as the source, so
@@ -3533,7 +3538,7 @@ OrphanBuilder OrphanBuilder::concat(
       break;
     }
     case ElementSize::BIT: {
-      // It's difficult to memcpy() bits since a list could start or end mid-byte. For now we
+      // It's difficult to byte-copy bits since a list could start or end mid-byte. For now we
       // do a slow, naive loop. Probably no one will ever care.
       ListElementCount pos = ZERO * ELEMENTS;
       for (auto& list: lists) {
@@ -3547,7 +3552,7 @@ OrphanBuilder OrphanBuilder::concat(
     }
     default: {
       // We know all the inputs are primitives with identical size because otherwise we would have
-      // chosen INLINE_COMPOSITE. Therefore, we can safely use memcpy() here instead of copying
+      // chosen INLINE_COMPOSITE. Therefore, we can safely byte-copy here instead of copying
       // each element manually.
       byte* target = builder.ptr;
       auto step = builder.step / BITS_PER_BYTE;

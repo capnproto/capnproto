@@ -100,13 +100,13 @@ void attachDocComment(Statement::Builder statement, kj::Array<kj::String>&& comm
     size += line.size() + 1;  // include newline
   }
   Text::Builder builder = statement.initDocComment(size);
-  char* pos = builder.begin();
+  auto out = builder.asArray();
   for (auto& line: comment) {
-    memcpy(pos, line.begin(), line.size());
-    pos += line.size();
-    *pos++ = '\n';
+    out.write(line);
+    out[0] = '\n';
+    out = out.slice(1);
   }
-  KJ_ASSERT(pos == builder.end());
+  KJ_ASSERT(out.size() == 0);
 }
 
 constexpr auto discardComment =
@@ -196,7 +196,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
             auto t = orphanage.newOrphan<Token>();
             // Append '\n' to the text.
             auto out = initTok(t, loc).initStringLiteral(text.size() + 1);
-            memcpy(out.begin(), text.begin(), text.size());
+            out.asArray().write(text);
             out[out.size() - 1] = '\n';
             return t;
           }),

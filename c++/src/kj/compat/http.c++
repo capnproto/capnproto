@@ -118,7 +118,7 @@ void SHA1Transform(
 #ifdef SHA1HANDSOFF
     CHAR64LONG16 block[1];      /* use array to appear as a pointer */
 
-    memcpy(block, buffer, 64);
+    kj::asBytes(block).copyFrom(kj::arrayPtr(buffer, sizeof(CHAR64LONG16)));
 #else
     /* The following had better never be used because it causes the
      * pointer-to-const buffer to be cast into a pointer to non-const.
@@ -252,6 +252,7 @@ void SHA1Update(
     uint32_t len
 )
 {
+    auto input = kj::arrayPtr(data, len);
     uint32_t i;
 
     uint32_t j;
@@ -263,7 +264,8 @@ void SHA1Update(
     j = (j >> 3) & 63;
     if ((j + len) > 63)
     {
-        memcpy(&context->buffer[j], data, (i = 64 - j));
+        i = 64 - j;
+        kj::arrayPtr(context->buffer).slice(j, j + i).copyFrom(input.first(i));
         SHA1Transform(context->state, context->buffer);
         for (; i + 63 < len; i += 64)
         {
@@ -273,7 +275,7 @@ void SHA1Update(
     }
     else
         i = 0;
-    memcpy(&context->buffer[j], &data[i], len - i);
+    kj::arrayPtr(context->buffer).slice(j, j + len - i).copyFrom(input.slice(i));
 }
 
 
@@ -1647,12 +1649,13 @@ public:
       co_return co_await inner.tryRead(buffer, minBytes, maxBytes);
     } else if (leftover.size() >= maxBytes) {
       // Didn't even read the entire leftover buffer.
-      memcpy(buffer, leftover.begin(), maxBytes);
+      kj::arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes).asChars()
+          .copyFrom(leftover.first(maxBytes));
       leftover = leftover.slice(maxBytes, leftover.size());
       co_return maxBytes;
     } else {
       // Read the entire leftover buffer, plus some.
-      memcpy(buffer, leftover.begin(), leftover.size());
+      kj::arrayPtr(reinterpret_cast<byte*>(buffer), leftover.size()).asChars().copyFrom(leftover);
       size_t copied = leftover.size();
       leftover = nullptr;
       if (copied >= minBytes) {
@@ -1823,7 +1826,7 @@ private:
                   .rawContent = nullptr };
             }
             auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
-            memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
+            newBuffer.asPtr().write(headerBuffer);
             headerBuffer = kj::mv(newBuffer);
           }
         }
@@ -1897,7 +1900,7 @@ private:
             if (headerBuffer.size() - newEnd < MAX_CHUNK_HEADER_SIZE) {
               // Ugh, there's not enough space for the secondary await buffer. Grow once more.
               auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
-              memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
+              newBuffer.asPtr().write(headerBuffer);
               headerBuffer = kj::mv(newBuffer);
             }
             messageHeaderEnd = endIndex;
@@ -2905,7 +2908,7 @@ public:
 
           offset = 0;
           for (auto& fragment: fragments) {
-            memcpy(message.begin() + offset, fragment.begin(), fragment.size());
+            message.slice(offset, offset + fragment.size()).copyFrom(fragment);
             offset += fragment.size();
           }
           payloadTarget = message.begin() + offset;
@@ -2942,7 +2945,8 @@ public:
       // HTTP upgrade leftover data).
       bool payloadAlreadyCopied = false;
       if (payloadLen <= recvData.size()) {
-        memcpy(payloadTarget, recvData.begin(), payloadLen);
+        auto payload = kj::arrayPtr(payloadTarget, payloadLen);
+        payload.copyFrom(recvData.first(payloadLen));
         recvData = recvData.slice(payloadLen, recvData.size());
 
         if (!mask.isZero()) {
@@ -3007,7 +3011,7 @@ public:
               // Note that we added an additional 4 bytes to `message`s capacity to account for these
               // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
               const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
-              memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
+              tail.asBytes().copyFrom(tailBytes);
               // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
               // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
               if (config.inboundNoContextTakeover) {
@@ -3041,7 +3045,7 @@ public:
               // Note that we added an additional 4 bytes to `message`s capacity to account for these
               // extra bytes. See `amountToAllocate` in the if(recvHeader.isCompressed()) block above.
               const byte tailBytes[] = {0x00, 0x00, 0xFF, 0xFF};
-              memcpy(tail.begin(), tailBytes, sizeof(tailBytes));
+              tail.asBytes().copyFrom(tailBytes);
               // We have to append 0x00 0x00 0xFF 0xFF to the message before inflating.
               // See: https://datatracker.ietf.org/doc/html/rfc7692#section-7.2.2
               if (config.inboundNoContextTakeover) {
@@ -3093,12 +3097,14 @@ public:
         return handleMessage();
       } else if (payloadLen <= recvData.size()) {
         // All data already received.
-        memcpy(payloadTarget, recvData.begin(), payloadLen);
+        auto payload = kj::arrayPtr(payloadTarget, payloadLen);
+        payload.copyFrom(recvData.first(payloadLen));
         recvData = recvData.slice(payloadLen, recvData.size());
         return handleMessage();
       } else {
         // Need to read more data.
-        memcpy(payloadTarget, recvData.begin(), recvData.size());
+        auto payload = kj::arrayPtr(payloadTarget, payloadLen);
+        payload.write(recvData);
         size_t remaining = payloadLen - recvData.size();
         auto promise = stream->tryRead(payloadTarget + recvData.size(), remaining, remaining)
             .then([this, remaining](size_t amount) {
@@ -3221,7 +3227,7 @@ private:
   class Mask {
   public:
     Mask(): maskBytes { 0, 0, 0, 0 } {}
-    Mask(const byte* ptr) { memcpy(maskBytes, ptr, 4); }
+    Mask(const byte* ptr) { kj::arrayPtr(maskBytes).copyFrom(kj::arrayPtr(ptr, 4)); }
 
     Mask(kj::Maybe<EntropySource&> generator) {
       KJ_IF_SOME(g, generator) {
@@ -3236,7 +3242,7 @@ private:
     }
 
     void copyTo(byte* output) const {
-      memcpy(output, maskBytes, 4);
+      kj::arrayPtr(output, 4).copyFrom(kj::arrayPtr(maskBytes));
     }
 
     bool isZero() const {
@@ -3483,7 +3489,8 @@ private:
       kj::Array<kj::byte> processedMessage = kj::heapArray<kj::byte>(amountToAllocate);
       size_t currentIndex = 0; // Current index into processedMessage.
       for (const auto& part : parts) {
-        memcpy(&processedMessage[currentIndex], part.buffer.begin(), part.size);
+        processedMessage.slice(currentIndex, currentIndex + part.size)
+            .copyFrom(part.buffer.first(part.size));
         // We need to use `part.size` to determine the number of useful bytes, since data after
         // `part.size` is unused (and probably junk).
         currentIndex += part.size;
@@ -3788,7 +3795,7 @@ private:
       payload = heapArray<byte>(reason.size() + 2);
       payload[0] = code >> 8;
       payload[1] = code;
-      memcpy(payload.begin() + 2, reason.begin(), reason.size());
+      payload.slice(2, 2 + reason.size()).copyFrom(reason.asBytes());
     }
     return kj::mv(payload);
   }
@@ -4207,7 +4214,7 @@ private:
         }
         KJ_CASE_ONEOF(arr, kj::ArrayPtr<const byte>) {
           auto copy = kj::heapArray<byte>(arr.size());
-          memcpy(copy.begin(), arr.begin(), arr.size());
+          copy.asPtr().copyFrom(arr);
           return Message(kj::mv(copy));
         }
         KJ_CASE_ONEOF(close, ClosePtr) {
@@ -4375,7 +4382,7 @@ private:
     kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
       auto copy = kj::heapArray<byte>(message.size());
-      memcpy(copy.begin(), message.begin(), message.size());
+      copy.asPtr().copyFrom(message);
       fulfiller.fulfill(Message(kj::mv(copy)));
       pipe.endState(*this);
       return kj::READY_NOW;
@@ -4743,7 +4750,7 @@ public:
     if (leftover.size() >= minBytes) {
       // We are going to immediately read up to maxBytes from the leftover buffer...
       auto bytesToCopy = kj::min(maxBytes, leftover.size());
-      memcpy(destination, leftover.begin(), bytesToCopy);
+      kj::arrayPtr(destination, bytesToCopy).copyFrom(leftover.first(bytesToCopy));
       leftover = leftover.slice(bytesToCopy, leftover.size());
 
       // If we've consumed all of the data in the leftover buffer, go ahead and free it.
@@ -4760,7 +4767,7 @@ public:
       KJ_DASSERT(bytesToCopy < minBytes);
 
       if (bytesToCopy > 0) {
-        memcpy(destination, leftover.begin(), bytesToCopy);
+        kj::arrayPtr(destination, bytesToCopy).copyFrom(leftover.first(bytesToCopy));
         leftover = nullptr;
         leftoverBackingBuffer = nullptr;
         minBytes -= bytesToCopy;

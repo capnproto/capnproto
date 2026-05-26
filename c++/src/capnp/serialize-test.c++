@@ -70,7 +70,7 @@ private:
 
 kj::Array<word> copyWords(kj::ArrayPtr<const word> input) {
   auto result = kj::heapArray<word>(input.size());
-  memcpy(result.asBytes().begin(), input.asBytes().begin(), input.asBytes().size());
+  result.asPtr().asBytes().copyFrom(input.asBytes());
   return result;
 }
 
@@ -95,7 +95,7 @@ TEST(Serialize, FlatArray) {
   }
 
   kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
-  memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
+  serializedWithSuffix.asPtr().first(serialized.size()).asBytes().write(serialized.asBytes());
 
   {
     FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
@@ -149,7 +149,7 @@ KJ_TEST("FlatArrayMessageReader from unaligned byte array") {
   // Allocate a buffer with extra space and offset by 1 byte to guarantee misalignment.
   auto buffer = kj::heapArray<byte>(byteSize + sizeof(word));
   auto unaligned = buffer.slice(1, 1 + byteSize);
-  memcpy(unaligned.begin(), serialized.asBytes().begin(), byteSize);
+  unaligned.copyFrom(serialized.asBytes());
 
   // Verify precondition: the byte pointer is NOT word-aligned.
   KJ_ASSERT(reinterpret_cast<uintptr_t>(unaligned.begin()) % sizeof(word) != 0);
@@ -171,7 +171,7 @@ TEST(Serialize, FlatArrayOddSegmentCount) {
   }
 
   kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
-  memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
+  serializedWithSuffix.asPtr().first(serialized.size()).asBytes().write(serialized.asBytes());
 
   {
     FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
@@ -210,7 +210,7 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
   }
 
   kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
-  memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
+  serializedWithSuffix.asPtr().first(serialized.size()).asBytes().write(serialized.asBytes());
 
   {
     FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
@@ -248,7 +248,7 @@ public:
     size_t maxBytes = buffer.size();
     KJ_ASSERT(maxBytes <= size_t(end - pos), "Overran end of stream.");
     size_t amount = lazy ? minBytes : maxBytes;
-    memcpy(buffer.begin(), pos, amount);
+    buffer.write(kj::arrayPtr(reinterpret_cast<const byte*>(pos), amount));
     pos += amount;
     return amount;
   }
