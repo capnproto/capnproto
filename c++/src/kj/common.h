@@ -260,6 +260,10 @@ typedef unsigned char byte;
 // by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
 
+#define KJ_ASYNC_CALLBACK_PARAM(type, name) type name
+// Marker for callback parameters that may be called asynchronously after the callee returns.
+// This gives clang-tidy's query-based custom checks a KJ-specific source pattern to match.
+
 #if KJ_HAS_CPP_ATTRIBUTE(clang::musttail)
 #define KJ_MUSTTAIL [[clang::musttail]]
 #else

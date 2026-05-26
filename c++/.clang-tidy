@@ -2,7 +2,37 @@
 # We prefer to enable useful checks one by one.
 Checks: >
   -*,
-  modernize-use-nullptr
+  modernize-use-nullptr,
+  custom-async-callback-reference-capture
+
+####
+# Custom checks.
+#
+# These checks enforce custom KJ code style and idiomatic code. We recommend to enable these
+# in all projects that use KJ.
+#
+# Requires clang-tidy's --experimental-custom-checks flag.
+#
+# References:
+# - https://clang.llvm.org/extra/clang-tidy/QueryBasedCustomChecks.html
+# - https://clang.llvm.org/docs/LibASTMatchersReference.html
+CustomChecks:
+  - Name: async-callback-reference-capture
+    # Query-based checks cannot inspect the string payload of `clang::annotate`, so this matches
+    # parameters declared through KJ_ASYNC_CALLBACK_PARAM().
+    Query: |
+      match callExpr(
+        forEachArgumentWithParam(
+          ignoringImplicit(lambdaExpr(
+            has(cxxRecordDecl(forEach(fieldDecl(hasType(referenceType())).bind("capture"))))
+          )),
+          parmVarDecl(isExpandedFromMacro("KJ_ASYNC_CALLBACK_PARAM"))
+        )
+      )
+    Diagnostic:
+      - BindName: capture
+        Message: "lambda passed to async callback must not capture by reference; use kj::mv, kj::Own, kj::Rc, or clone() to give the callback its own state"
+        Level: Warning
 
 HeaderFilterRegex: '.*'
 WarningsAsErrors: '*'
