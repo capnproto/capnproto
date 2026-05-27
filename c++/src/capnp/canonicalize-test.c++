@@ -204,7 +204,7 @@ KJ_TEST("isCanonical rejects multi-segment messages") {
 }
 
 KJ_TEST("isCanonical rejects zero segment messages") {
-  SegmentArrayMessageReader zero(kj::arrayPtr((kj::ArrayPtr<const word>*)NULL,
+  SegmentArrayMessageReader zero(kj::arrayPtr((kj::ArrayPtr<const word>*)nullptr,
                                                0));
   KJ_ASSERT(!zero.isCanonical());
 }
