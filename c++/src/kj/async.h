@@ -1302,6 +1302,11 @@ public:
   KJ_DISALLOW_COPY(EventLoopObserver);
 };
 
+void setBeforeFireHook(void (*hook)(const SourceLocation& eventLocation));
+// Installs a process-global hook called by EventLoop::turn() immediately before each event
+// fires, receiving the SourceLocation captured at the Event's construction site. Pass
+// `nullptr` to clear.
+
 class EventLoop {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the

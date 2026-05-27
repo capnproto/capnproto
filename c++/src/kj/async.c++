@@ -124,6 +124,14 @@ thread_local DisallowAsyncDestructorsScope* disallowAsyncDestructorsScope = null
 
 }  // namespace
 
+void (*beforeFireHook)(const SourceLocation&) = nullptr;
+// Set via setBeforeFireHook(); read by EventLoop::turn(). Expected to be installed once during
+// startup, so a plain pointer write/read is sufficient.
+
+void setBeforeFireHook(void (*hook)(const SourceLocation&)) {
+  beforeFireHook = hook;
+}
+
 AsyncObject::~AsyncObject() {
   if (disallowAsyncDestructorsScope != nullptr) {
     // If we try to do the KJ_FAIL_REQUIRE here (declaring `~AsyncObject()` itself to be noexcept),
@@ -1851,6 +1859,9 @@ bool EventLoop::turn() {
     KJ_DEFER(event->firing = false);
     currentlyFiring = event;
     KJ_DEFER(currentlyFiring = nullptr);
+
+    if (beforeFireHook != nullptr) beforeFireHook(event->location);
+
     eventToDestroy = event->fire();
   }
 
