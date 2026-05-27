@@ -200,10 +200,11 @@ public:
   inline Promise(decltype(nullptr)) {}
 
   template <typename Func>
-  PromiseForResult<Func, T> then(Func&& func) KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, T> then(KJ_ASYNC_CALLBACK_PARAM(Func&&, func)) KJ_WARN_UNUSED_RESULT;
 
   template <typename Func, typename ErrorFunc>
-  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler,
+  PromiseForResult<Func, T> then(KJ_ASYNC_CALLBACK_PARAM(Func&&, func),
+                                 KJ_ASYNC_CALLBACK_PARAM(ErrorFunc&&, errorHandler),
                                  SourceLocation location = {}) KJ_WARN_UNUSED_RESULT;
   // Register a continuation function to be executed when the promise completes.  The continuation
   // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation

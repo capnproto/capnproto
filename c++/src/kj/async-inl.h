@@ -1337,7 +1337,7 @@ Promise<T>::Promise(kj::Exception&& exception)
 
 template <typename T>
 template <typename Func>
-PromiseForResult<Func, T> Promise<T>::then(Func&& func) {
+PromiseForResult<Func, T> Promise<T>::then(KJ_ASYNC_CALLBACK_PARAM(Func&&, func)) {
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
   void* continuationTracePtr = _::GetFunctorStartAddress<_::FixVoid<T>&&>::apply(func);
@@ -1353,7 +1353,8 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func) {
 
 template <typename T>
 template <typename Func, typename ErrorFunc>
-PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler,
+PromiseForResult<Func, T> Promise<T>::then(KJ_ASYNC_CALLBACK_PARAM(Func&&, func),
+                                           KJ_ASYNC_CALLBACK_PARAM(ErrorFunc&&, errorHandler),
                                            SourceLocation location) {
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
