@@ -397,6 +397,72 @@ TEST(Common, ArrayAsBytes) {
   }
 }
 
+KJ_TEST("ArrayPtr write") {
+  int raw[] = {0, 0, 0, 0, 0};
+  ArrayPtr<int> head = raw;
+
+  int first[] = {1, 2};
+  head.write(arrayPtr(first));
+
+  int expectedAfterFirst[] = {1, 2, 0, 0, 0};
+  KJ_EXPECT(arrayPtr(raw) == arrayPtr(expectedAfterFirst));
+  KJ_EXPECT(head.begin() == raw + 2);
+  KJ_EXPECT(head.size() == 3);
+
+  int second[] = {3, 4, 5};
+  head.write(arrayPtr(second));
+
+  int expectedAfterSecond[] = {1, 2, 3, 4, 5};
+  KJ_EXPECT(arrayPtr(raw) == arrayPtr(expectedAfterSecond));
+  KJ_EXPECT(head.begin() == raw + 5);
+  KJ_EXPECT(head.size() == 0);
+}
+
+KJ_TEST("ArrayPtr write bounds check") {
+  int raw[] = {9, 9, 9};
+  ArrayPtr<int> head = raw;
+  int source[] = {1, 2, 3, 4};
+
+  KJ_EXPECT_THROW_MESSAGE("Out-of-bounds", head.write(arrayPtr(source)));
+
+  int expected[] = {9, 9, 9};
+  KJ_EXPECT(arrayPtr(raw) == arrayPtr(expected));
+  KJ_EXPECT(head.begin() == raw);
+  KJ_EXPECT(head.size() == 3);
+}
+
+KJ_TEST("ArrayPtr write pieces") {
+  int raw[] = {0, 0, 0, 0, 0, 0};
+  ArrayPtr<int> head = raw;
+  int first[] = {1, 2};
+  int second[] = {3};
+  int third[] = {4, 5};
+  ArrayPtr<const int> pieces[] = {arrayPtr(first), arrayPtr(second), arrayPtr(third)};
+
+  head.write(arrayPtr(pieces));
+
+  int expected[] = {1, 2, 3, 4, 5, 0};
+  KJ_EXPECT(arrayPtr(raw) == arrayPtr(expected));
+  KJ_EXPECT(head.begin() == raw + 5);
+  KJ_EXPECT(head.size() == 1);
+}
+
+KJ_TEST("ArrayPtr write pieces bounds check") {
+  int raw[] = {9, 9, 9, 9};
+  ArrayPtr<int> head = raw;
+  int first[] = {1, 2};
+  int second[] = {3, 4, 5};
+  int third[] = {6};
+  ArrayPtr<const int> pieces[] = {arrayPtr(first), arrayPtr(second), arrayPtr(third)};
+
+  KJ_EXPECT_THROW_MESSAGE("Out-of-bounds", head.write(arrayPtr(pieces)));
+
+  int expected[] = {1, 2, 9, 9};
+  KJ_EXPECT(arrayPtr(raw) == arrayPtr(expected));
+  KJ_EXPECT(head.begin() == raw + 2);
+  KJ_EXPECT(head.size() == 2);
+}
+
 enum TestOrdering {
   UNORDERED,
   EQUAL,

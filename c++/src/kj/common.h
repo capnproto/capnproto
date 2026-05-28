@@ -2725,6 +2725,21 @@ public:
     for (size_t s = size_, i = 0; i < s; i++) { dst[i] = src[i]; }
   }
 
+  inline void write(kj::ArrayPtr<const T> other) {
+    // Copy data to the head of this pointer, then advance past the copied data.
+    // Out-of-bounds exception is raised is data does not fit.
+    first(other.size()).copyFrom(other); // first will do a bounds check
+    ptr += other.size();
+    size_ -= other.size();
+  }
+
+  inline void write(kj::ArrayPtr<const kj::ArrayPtr<const T>> pieces) {
+    // Copy pieces of data to the head of this pointer, then advancing past the copied data.
+    // Pieces are bound-checked individually, i.e. the data can be partially written when raising
+    // an out-of-bounds exception.
+    for (auto piece: pieces) { write(piece); }
+  }
+
 private:
   T* ptr;
   size_t size_;
