@@ -199,7 +199,7 @@ BufferedOutputStreamWrapper::~BufferedOutputStreamWrapper() noexcept(false) {
 
 void BufferedOutputStreamWrapper::flush() {
   if (bufferPos > buffer.begin()) {
-    inner.write(buffer.slice(0, bufferPos - buffer.begin()));
+    inner.write(buffer.first(bufferPos - buffer.begin()));
     bufferPos = buffer.begin();
   }
 }
@@ -231,7 +231,7 @@ void BufferedOutputStreamWrapper::write(ArrayPtr<const byte> src) {
       bufferPos = buffer.begin() + size;
     } else {
       // Writing so much data that we might as well write directly to avoid a copy.
-      inner.write(buffer.slice(0, bufferPos - buffer.begin()));
+      inner.write(buffer.first(bufferPos - buffer.begin()));
       bufferPos = buffer.begin();
       inner.write(src.first(size));
     }

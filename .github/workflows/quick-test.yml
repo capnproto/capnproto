@@ -129,7 +129,7 @@ jobs:
             export CLANG_TIDY=clang-tidy-${{ matrix.clang }}
             cd c++ 
             bazel build --config=ci //...
-            find src/kj src/capnp -name "*.c++" | parallel $CLANG_TIDY {}
+            find src/kj src/capnp -name "*.c++" | parallel $CLANG_TIDY --experimental-custom-checks {}
   MacOS:
     runs-on: macos-latest
     strategy:

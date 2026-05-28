@@ -2,7 +2,35 @@
 # We prefer to enable useful checks one by one.
 Checks: >
   -*,
-  modernize-use-nullptr
+  modernize-use-nullptr,
+  custom-arrayptr-slice-zero
+
+####
+# Custom checks.
+#
+# These checks enforce custom KJ code style and idiomatic code. We recommend to enable these
+# in all projects that use KJ.
+#
+# Requires clang-tidy's --experimental-custom-checks flag.
+#
+# References:
+# - https://clang.llvm.org/extra/clang-tidy/QueryBasedCustomChecks.html
+# - https://clang.llvm.org/docs/LibASTMatchersReference.html
+CustomChecks:
+  - Name: arrayptr-slice-zero
+    Query: |
+      match cxxMemberCallExpr(
+        callee(cxxMethodDecl(
+          hasName("slice"),
+          ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
+        )),
+        argumentCountIs(2),
+        hasArgument(0, ignoringParenImpCasts(integerLiteral(equals(0))))
+      ).bind("call")
+    Diagnostic:
+      - BindName: call
+        Message: "use first() instead of slice(0, ...)"
+        Level: Warning
 
 HeaderFilterRegex: '.*'
 WarningsAsErrors: '*'

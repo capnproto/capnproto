@@ -2570,14 +2570,16 @@ public:
     return ArrayPtr(ptr + start, size_ - start);
   }
   inline constexpr bool startsWith(const ArrayPtr<const T>& other) const {
-    return other.size() <= size_ && slice(0, other.size()) == other;
+    return other.size() <= size_ && first(other.size()) == other;
   }
   inline constexpr bool endsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && slice(size_ - other.size(), size_) == other;
   }
 
+  // NOLINTBEGIN(*-arrayptr-slice-zero)
   inline constexpr ArrayPtr first(size_t count) { return slice(0, count); }
   inline constexpr ArrayPtr<const T> first(size_t count) const { return slice(0, count); }
+  // NOLINTEND(*-arrayptr-slice-zero)
 
   inline Maybe<size_t> findFirst(const T& match) const {
     for (size_t i = 0; i < size_; i++) {
