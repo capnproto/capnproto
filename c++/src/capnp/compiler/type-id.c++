@@ -390,13 +390,13 @@ kj::ArrayPtr<const kj::byte> TypeIdGenerator::finish()
     free = 64 - used;
 
     if (free < 8) {
-      memset(&ctx.buffer[used], 0, free);
+      kj::arrayPtr(&ctx.buffer[used], free).fill(0);
       body(ctx.buffer, 64);
       used = 0;
       free = 64;
     }
 
-    memset(&ctx.buffer[used], 0, free - 8);
+    kj::arrayPtr(&ctx.buffer[used], free - 8).fill(0);
 
     ctx.lo <<= 3;
     ctx.buffer[56] = ctx.lo;

@@ -533,8 +533,7 @@ public:
     // Can't just go directly to writeObserver.whenBecomesWritable() because of edge triggering. We
     // need to explicitly check if the socket is already connected.
 
-    struct pollfd pollfd;
-    memset(&pollfd, 0, sizeof(pollfd));
+    struct pollfd pollfd = {};
     pollfd.fd = fd;
     pollfd.events = POLLOUT;
 
@@ -575,11 +574,9 @@ private:
         goto error;
       }
     } else {
-      struct msghdr msg;
-      memset(&msg, 0, sizeof(msg));
+      struct msghdr msg = {};
 
-      struct iovec iov;
-      memset(&iov, 0, sizeof(iov));
+      struct iovec iov = {};
       iov.iov_base = buffer;
       iov.iov_len = maxBytes;
       msg.msg_iov = &iov;
@@ -625,7 +622,7 @@ private:
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
       KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
-      memset(cmsgBytes.begin(), 0, cmsgBytes.size());
+      cmsgBytes.fill(0);
       msg.msg_control = cmsgBytes.begin();
       msg.msg_controllen = msgBytes;
 
@@ -785,8 +782,7 @@ private:
         goto error;
       }
     } else {
-      struct msghdr msg;
-      memset(&msg, 0, sizeof(msg));
+      struct msghdr msg = {};
       msg.msg_iov = iov.begin();
       msg.msg_iovlen = iov.size();
 
@@ -802,7 +798,7 @@ private:
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
       KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
-      memset(cmsgBytes.begin(), 0, cmsgBytes.size());
+      cmsgBytes.fill(0);
       msg.msg_control = cmsgBytes.begin();
       msg.msg_controllen = msgBytes;
 
@@ -1233,8 +1229,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     std::set<SocketAddress> result;
 
     KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
-      struct addrinfo hints;
-      memset(&hints, 0, sizeof(hints));
+      struct addrinfo hints = {};
       hints.ai_family = AF_UNSPEC;
 #if __BIONIC__ || !defined(AI_V4MAPPED)
       // AI_V4MAPPED causes getaddrinfo() to fail on Bionic libc (Android).
@@ -1797,8 +1792,7 @@ Promise<size_t> DatagramPortImpl::send(
 
 Promise<size_t> DatagramPortImpl::send(
     ArrayPtr<const ArrayPtr<const byte>> pieces, NetworkAddress& destination) {
-  struct msghdr msg;
-  memset(&msg, 0, sizeof(msg));
+  struct msghdr msg = {};
 
   auto& addr = downcast<NetworkAddressImpl>(destination).chooseOneAddress();
   msg.msg_name = const_cast<void*>(implicitCast<const void*>(addr.getRaw()));
@@ -1858,11 +1852,9 @@ public:
                                                : Array<byte>(nullptr)) {}
 
   Promise<void> receive() override {
-    struct msghdr msg;
-    memset(&msg, 0, sizeof(msg));
+    struct msghdr msg = {};
 
-    struct sockaddr_storage addr;
-    memset(&addr, 0, sizeof(addr));
+    struct sockaddr_storage addr = {};
     msg.msg_name = &addr;
     msg.msg_namelen = sizeof(addr);
 

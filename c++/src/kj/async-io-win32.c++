@@ -117,7 +117,7 @@ int win32Socketpair(SOCKET socks[2]) {
   if (listener == -1)
     return SOCKET_ERROR;
 
-  memset(&a, 0, sizeof(a));
+  a = {};
   a.inaddr.sin_family = AF_INET;
   a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   a.inaddr.sin_port = 0;
@@ -129,7 +129,7 @@ int win32Socketpair(SOCKET socks[2]) {
     if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
       break;
 
-    memset(&a, 0, sizeof(a));
+    a = {};
     if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
       break;
     // win32 getsockname may only set the port number, p=0.0005.

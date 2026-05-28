@@ -146,8 +146,7 @@ bool CidrRange::matches(const struct sockaddr* addr) const {
 }
 
 bool CidrRange::matches(StringPtr addr) const {
-  struct sockaddr_storage ss;
-  memset(&ss, 0, sizeof(ss));
+  struct sockaddr_storage ss = {};
 
   auto* sin = reinterpret_cast<struct sockaddr_in*>(&ss);
   auto* sin6 = reinterpret_cast<struct sockaddr_in6*>(&ss);
@@ -188,7 +187,7 @@ void CidrRange::zeroIrrelevantBits() {
 
     // Zero the remaining bytes.
     size_t n = bitCount / 8 + 1;
-    memset(bits + n, 0, sizeof(bits) - n);
+    kj::arrayPtr(bits + n, sizeof(bits) - n).fill(0);
   }
 }
 

@@ -196,8 +196,7 @@ ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, uint ignoreCount,
     return nullptr;
   }
 
-  STACKFRAME64 frame;
-  memset(&frame, 0, sizeof(frame));
+  STACKFRAME64 frame = {};
 
   frame.AddrPC.Offset = context.Rip;
   frame.AddrPC.Mode = AddrModeFlat;
@@ -443,8 +442,7 @@ String stringifyStackTrace(ArrayPtr<void* const> trace) {
   KJ_STACK_ARRAY(String, lines, trace.size(), 32, 32);
 
   for (auto i: kj::indices(trace)) {
-    IMAGEHLP_LINE64 lineInfo;
-    memset(&lineInfo, 0, sizeof(lineInfo));
+    IMAGEHLP_LINE64 lineInfo = {};
     lineInfo.SizeOfStruct = sizeof(lineInfo);
     DWORD displacement;
     if (dbghelp.symGetLineFromAddr64(process, reinterpret_cast<DWORD64>(trace[i]), &displacement, &lineInfo)) {
@@ -659,8 +657,7 @@ BOOL WINAPI breakHandler(DWORD type) {
       HANDLE thread = OpenThread(THREAD_ALL_ACCESS, FALSE, mainThreadId);
       if (thread != NULL) {
         if (SuspendThread(thread) != (DWORD)-1) {
-          CONTEXT context;
-          memset(&context, 0, sizeof(context));
+          CONTEXT context = {};
           context.ContextFlags = CONTEXT_FULL;
           if (GetThreadContext(thread, &context)) {
             void* traceSpace[32];
@@ -818,8 +815,7 @@ namespace {
 
 void printStackTraceOnCrash() {
   // Set up alternate signal stack so that stack overflows can be handled.
-  stack_t stack;
-  memset(&stack, 0, sizeof(stack));
+  stack_t stack = {};
 
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
@@ -836,8 +832,7 @@ void printStackTraceOnCrash() {
   KJ_SYSCALL(sigaltstack(&stack, nullptr));
 
   // Catch all relevant signals.
-  struct sigaction action;
-  memset(&action, 0, sizeof(action));
+  struct sigaction action = {};
 
   action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER | SA_RESETHAND;
   action.sa_sigaction = &crashHandler;
@@ -915,8 +910,7 @@ retry:
 
 void resetCrashHandlers() {
 #ifndef _WIN32
-  struct sigaction action;
-  memset(&action, 0, sizeof(action));
+  struct sigaction action = {};
 
   action.sa_handler = SIG_DFL;
   KJ_SYSCALL(sigaction(SIGSEGV, &action, nullptr));

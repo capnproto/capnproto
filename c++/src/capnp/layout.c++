@@ -410,7 +410,7 @@ struct WireHelpers {
 #endif
 
   static KJ_ALWAYS_INLINE(void zeroMemory(byte* ptr, ByteCount32 count)) {
-    if (count != ZERO * BYTES) memset(ptr, 0, unbound(count / BYTES));
+    if (count != ZERO * BYTES) kj::arrayPtr(ptr, unbound(count / BYTES)).fill(0);
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(word* ptr, WordCountN<29> count)) {
@@ -427,7 +427,7 @@ struct WireHelpers {
 
   template <typename T>
   static inline void zeroMemory(kj::ArrayPtr<T> array) {
-    if (array.size() != 0u) memset(array.begin(), 0, array.size() * sizeof(array[0]));
+    if (array.size() != 0u) array.asBytes().fill(0);
   }
 
   static KJ_ALWAYS_INLINE(void copyMemory(byte* to, const byte* from, ByteCount32 count)) {

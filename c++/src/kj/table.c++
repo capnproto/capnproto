@@ -77,7 +77,7 @@ kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t t
   }
 
   auto newBuckets = kj::heapArray<HashBucket>(size);
-  memset(newBuckets.begin(), 0, sizeof(HashBucket) * size);
+  newBuckets.asBytes().fill(0);
 
   uint entryCount = 0;
   uint collisionCount = 0;
@@ -818,7 +818,7 @@ void InsertionOrderIndex::reserve(size_t size) {
     Link* newLinks = new Link[allocation];
 #ifdef KJ_DEBUG
     // To catch bugs, fill unused links with 0xff.
-    memset(newLinks, 0xff, allocation * sizeof(Link));
+    kj::asBytes(newLinks, allocation).fill(0xff);
 #endif
     _::acopy(newLinks, links, capacity + 1);
     if (links != &EMPTY_LINK) delete[] links;
@@ -832,7 +832,7 @@ void InsertionOrderIndex::clear() {
 
 #ifdef KJ_DEBUG
   // To catch bugs, fill unused links with 0xff.
-  memset(links + 1, 0xff, capacity * sizeof(Link));
+  kj::asBytes(links + 1, capacity).fill(0xff);
 #endif
 }
 
@@ -855,7 +855,7 @@ void InsertionOrderIndex::eraseImpl(size_t pos) {
   links[link.prev].next = link.next;
 
 #ifdef KJ_DEBUG
-  memset(&link, 0xff, sizeof(Link));
+  kj::asBytes(link).fill(0xff);
 #endif
 }
 
@@ -871,7 +871,7 @@ void InsertionOrderIndex::moveImpl(size_t oldPos, size_t newPos) {
   links[link.prev].next = newPos + 1;
 
 #ifdef KJ_DEBUG
-  memset(&link, 0xff, sizeof(Link));
+  kj::asBytes(link).fill(0xff);
 #endif
 }
 

@@ -539,7 +539,7 @@ kj::Own<kj::Decay<Reader>> clone(Reader&& reader) {
     size = reader.totalSize();
   }
   auto buffer = kj::heapArray<capnp::word>(size.wordCount + 1);
-  memset(buffer.asBytes().begin(), 0, buffer.asBytes().size());
+  buffer.asBytes().fill(0);
   if (size.capCount == 0) {
     copyToUnchecked(reader, buffer);
     auto result = readMessageUnchecked<FromReader<Reader>>(buffer.begin());

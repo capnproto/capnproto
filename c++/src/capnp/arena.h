@@ -499,7 +499,7 @@ inline kj::ArrayPtr<const word> SegmentBuilder::currentlyAllocated() {
 
 inline void SegmentBuilder::reset() {
   word* start = getPtrUnchecked(ZERO * WORDS);
-  memset(start, 0, (pos - start) * sizeof(word));
+  kj::asBytes(start, pos).fill(0);
   pos = start;
 }
 

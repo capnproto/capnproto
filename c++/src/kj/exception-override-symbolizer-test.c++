@@ -23,7 +23,6 @@
 
 #include "debug.h"
 #include <kj/exception.h>
-#include "kj/common.h"
 #include "kj/array.h"
 #include <kj/compat/gtest.h>
 #include <stdexcept>

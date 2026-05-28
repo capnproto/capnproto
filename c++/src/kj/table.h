@@ -916,7 +916,7 @@ public:
 
   void clear() {
     erasedCount = 0;
-    if (buckets.size() > 0) memset(buckets.begin(), 0, buckets.asBytes().size());
+    buckets.asBytes().fill(0);
   }
 
   template <typename Row>
@@ -1052,7 +1052,7 @@ inline void acopy(T* to, T* from, size_t size) { memcpy(to, from, size * sizeof(
 template <typename T>
 inline void amove(T* to, T* from, size_t size) { memmove(to, from, size * sizeof(T)); }
 template <typename T>
-inline void azero(T* ptr, size_t size) { memset(ptr, 0, size * sizeof(T)); }
+inline void azero(T* ptr, size_t size) { kj::asBytes(ptr, size).fill(0); }
 // memcpy/memmove/memset variants that count size in elements, not bytes.
 //
 // TODO(cleanup): These are generally useful, put them somewhere.

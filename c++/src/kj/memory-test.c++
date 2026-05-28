@@ -19,7 +19,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "kj/common.h"
 #include "kj/string.h"
 #include "kj/refcount.h"
 #include "kj/test.h"

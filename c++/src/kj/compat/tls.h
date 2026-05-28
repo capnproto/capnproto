@@ -225,11 +225,11 @@ public:
 
   inline TlsCertificate(TlsCertificate&& other) noexcept {
     kj::arrayPtr(chain).copyFrom(kj::arrayPtr(other.chain));
-    memset(other.chain, 0, sizeof(chain));
+    kj::arrayPtr(other.chain).fill(nullptr);
   }
   inline TlsCertificate& operator=(TlsCertificate&& other) noexcept {
     kj::arrayPtr(chain).copyFrom(kj::arrayPtr(other.chain));
-    memset(other.chain, 0, sizeof(chain));
+    kj::arrayPtr(other.chain).fill(nullptr);
     return *this;
   }
 

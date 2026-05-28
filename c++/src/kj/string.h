@@ -23,7 +23,6 @@
 
 #include <initializer_list>
 #include "array.h"
-#include "kj/common.h"
 #include <string.h>
 
 KJ_BEGIN_HEADER

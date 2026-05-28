@@ -844,7 +844,7 @@ private:
 class OrphanBuilder {
 public:
   inline OrphanBuilder(): segment(nullptr), capTable(nullptr), location(nullptr) {
-    memset(&tag, 0, sizeof(tag));
+    kj::memzero(tag);
   }
   OrphanBuilder(const OrphanBuilder& other) = delete;
   inline OrphanBuilder(OrphanBuilder&& other) noexcept;

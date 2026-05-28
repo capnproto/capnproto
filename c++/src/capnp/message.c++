@@ -235,7 +235,7 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
       if (segments.size() > 0) {
         KJ_ASSERT(segments[0].begin() == firstSegment,
             "First segment in getSegmentsForOutput() is not the first segment allocated?");
-        memset(firstSegment, 0, segments[0].size() * sizeof(word));
+        kj::asBytes(static_cast<word*>(firstSegment), segments[0].size()).fill(0);
       }
     }
 
