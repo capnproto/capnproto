@@ -2683,13 +2683,13 @@ const char WEBSOCKET_REQUEST_HANDSHAKE[] =
     "Sec-WebSocket-Version: 13\r\n"
     "My-Header: foo\r\n"
     "\r\n";
-const char WEBSOCKET_RESPONSE_HANDSHAKE[] =
+const auto WEBSOCKET_RESPONSE_HANDSHAKE =
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "My-Header: respond-foo\r\n"
-    "\r\n";
+    "\r\n"_kjb;
 #if KJ_HAS_ZLIB
 const char WEBSOCKET_COMPRESSION_HANDSHAKE[] =
     " HTTP/1.1\r\n"
@@ -2699,13 +2699,13 @@ const char WEBSOCKET_COMPRESSION_HANDSHAKE[] =
     "Sec-WebSocket-Version: 13\r\n"
     "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover\r\n"
     "\r\n";
-const char WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE[] =
+const auto WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE =
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover\r\n"
-    "\r\n";
+    "\r\n"_kjb;
 const char WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE[] =
     " HTTP/1.1\r\n"
     "Connection: Upgrade\r\n"
@@ -2715,20 +2715,20 @@ const char WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE[] =
     "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; "
         "server_no_context_takeover\r\n"
     "\r\n";
-const char WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE[] =
+const auto WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE =
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
     "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; "
         "server_no_context_takeover\r\n"
-    "\r\n";
+    "\r\n"_kjb;
 #endif // KJ_HAS_ZLIB
-const char WEBSOCKET_RESPONSE_HANDSHAKE_ERROR[] =
+const auto WEBSOCKET_RESPONSE_HANDSHAKE_ERROR =
     "HTTP/1.1 404 Not Found\r\n"
     "Content-Length: 0\r\n"
     "My-Header: respond-foo\r\n"
-    "\r\n";
+    "\r\n"_kjb;
 const byte WEBSOCKET_FIRST_MESSAGE_INLINE[] =
     { 0x81, 0x0c, 's','t','a','r','t','-','i','n','l','i','n','e' };
 const byte WEBSOCKET_SEND_MESSAGE[] =
@@ -2774,11 +2774,6 @@ const byte WEBSOCKET_EMPTY_SEND_COMPRESSED_MESSAGE[] =
 const byte WEBSOCKET_SEND_COMPRESSED_HELLO_REUSE_CTX[] =
     { 0xc1, 0x85, 12, 34, 56, 78, 0xf2^12, 0x00^34, 0x51^56, 0x00^78, 0x00^12};
 #endif // KJ_HAS_ZLIB
-
-template <size_t s>
-kj::ArrayPtr<const byte> asBytes(const char (&chars)[s]) {
-  return kj::ArrayPtr<const char>(chars, s - 1).asBytes();
-}
 
 void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
                          kj::HttpHeaderId hMyHeader, HttpClient& client) {
@@ -3046,7 +3041,7 @@ KJ_TEST("HttpClient WebSocket handshake") {
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_MESSAGE); })
@@ -3688,7 +3683,7 @@ KJ_TEST("HttpClient WebSocket Empty Message Compression") {
   auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_EMPTY_COMPRESSED_MESSAGE); })
@@ -3727,7 +3722,7 @@ KJ_TEST("HttpClient WebSocket Default Compression") {
   auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
@@ -3763,7 +3758,7 @@ KJ_TEST("HttpClient WebSocket negotiate compression and interleave it") {
   auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
       // Server sends uncompressed "Hi" -- client responds with compressed "Hi".
@@ -3803,7 +3798,7 @@ KJ_TEST("HttpClient WebSocket Extract Extensions") {
   auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_COMPRESSION_RESPONSE_HANDSHAKE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_CLOSE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_REPLY_CLOSE); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
@@ -3836,8 +3831,7 @@ KJ_TEST("HttpClient WebSocket Compression (Client Discards Compression Context)"
   auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1],
-          asBytes(WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
       .then([&]() { return expectRead(*pipe.ends[1], WEBSOCKET_SEND_COMPRESSED_MESSAGE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_FIRST_COMPRESSED_MESSAGE); })
@@ -3879,8 +3873,7 @@ KJ_TEST("HttpClient WebSocket Compression (Different DEFLATE blocks)") {
   auto request = kj::str("GET /websocket", WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1],
-          asBytes(WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_COMPRESSION_CLIENT_DISCARDS_CTX_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_TWO_DEFLATE_BLOCKS_MESSAGE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_DEFLATE_NO_COMPRESSION_MESSAGE); })
       .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_BFINAL_SET_MESSAGE); })
@@ -3915,9 +3908,9 @@ KJ_TEST("HttpClient WebSocket error") {
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
 
   auto serverTask = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR); })
       .then([&]() { return expectRead(*pipe.ends[1], request); })
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE_ERROR)); })
+      .then([&]() { return writeA(*pipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE_ERROR); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
   HttpHeaderTable::Builder tableBuilder;
@@ -5345,7 +5338,7 @@ KJ_TEST("newHttpService from HttpClient WebSockets") {
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
-      .then([&]() { return writeA(*backPipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
       .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_REPLY_MESSAGE); })
@@ -5396,12 +5389,12 @@ KJ_TEST("HttpClient WebSocket: client can have a custom WebSocket error handler"
     "Sec-WebSocket-Key: DCI4TgwiOE4MIjhODCI4Tg==\r\n"
     "Sec-WebSocket-Version: 13\r\n"
     "\r\n";
-  const char wsResponseHandshake[] =
+  const auto wsResponseHandshake =
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Connection: Upgrade\r\n"
     "Upgrade: websocket\r\n"
     "Sec-WebSocket-Accept: pShtIFKT0s8RYZvnWY/CrjQD8CM=\r\n"
-    "\r\n";
+    "\r\n"_kjb;
 
   const byte badFrame[] = {
     0xF0, 0x02, 'y', 'o'  // all RSV bits set, plus FIN
@@ -5421,7 +5414,7 @@ KJ_TEST("HttpClient WebSocket: client can have a custom WebSocket error handler"
 
   auto request = kj::str("GET /websocket", wsRequestHandshake);
   auto serverPromise = expectRead(*pipe.ends[1], request)
-      .then([&]() { return writeA(*pipe.ends[1], asBytes(wsResponseHandshake)); })
+      .then([&]() { return writeA(*pipe.ends[1], wsResponseHandshake); })
       .then([&]() { return writeA(*pipe.ends[1], badFrame); })
       .then([&]() { return expectRead(*pipe.ends[1], closeFrame); })
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
@@ -5456,7 +5449,7 @@ KJ_TEST("newHttpService from HttpClient WebSockets disconnect") {
 
   auto request = kj::str("GET /websocket", WEBSOCKET_REQUEST_HANDSHAKE);
   auto writeResponsesPromise = expectRead(*backPipe.ends[1], request)
-      .then([&]() { return writeA(*backPipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE)); })
+      .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_RESPONSE_HANDSHAKE); })
       .then([&]() { return writeA(*backPipe.ends[1], WEBSOCKET_FIRST_MESSAGE_INLINE); })
       .then([&]() { return expectRead(*backPipe.ends[1], WEBSOCKET_SEND_MESSAGE); })
       .then([&]() { backPipe.ends[1]->shutdownWrite(); })

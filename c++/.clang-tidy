@@ -3,7 +3,13 @@
 Checks: >
   -*,
   modernize-use-nullptr,
+  custom-arrayptr-as-bytes,
+  custom-arrayptr-singleton,
   custom-arrayptr-slice-zero
+
+
+HeaderFilterRegex: '.*'
+WarningsAsErrors: '*'
 
 ####
 # Custom checks.
@@ -32,5 +38,35 @@ CustomChecks:
         Message: "use first() instead of slice(0, ...)"
         Level: Warning
 
-HeaderFilterRegex: '.*'
-WarningsAsErrors: '*'
+  - Name: arrayptr-as-bytes
+    Query: |
+      match cxxMemberCallExpr(
+        on(expr(anyOf(
+          callExpr(
+            callee(functionDecl(hasName("kj::arrayPtr")))
+          ).bind("arrayPtr"),
+          cxxConstructExpr(
+            hasDeclaration(cxxConstructorDecl(
+              ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
+            ))
+          ).bind("arrayPtr")
+        ))),
+        callee(cxxMethodDecl(hasName("asBytes")))
+      ).bind("asBytes")
+    Diagnostic:
+      - BindName: asBytes
+        Message: ArrayPtr construction followed by asBytes() can be simplified to kj::asBytes()
+        Level: Warning
+
+  - Name: arrayptr-singleton
+    Query: |
+      match callExpr(
+        callee(functionDecl(hasName("kj::arrayPtr"))),
+        argumentCountIs(2),
+        hasArgument(0, unaryOperator(hasOperatorName("&"))),
+        hasArgument(1, integerLiteral(equals(1)))
+      ).bind("arrayPtr")
+    Diagnostic:
+      - BindName: arrayPtr
+        Message: kj::arrayPtr(&, 1) can be simplified to kj::arrayPtr(item)
+        Level: Warning

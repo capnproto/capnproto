@@ -2861,7 +2861,7 @@ inline constexpr ArrayPtr<T> arrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFET
 template <typename T>
 inline constexpr ArrayPtr<T> arrayPtr(T& t KJ_LIFETIMEBOUND) {
   // Construct ArrayPtr pointing to a single object instance.
-  return arrayPtr(&t, 1);
+  return arrayPtr(&t, 1); //NOLINT(*-arrayptr-singleton)
 }
 
 template <typename T, size_t s>
@@ -2872,7 +2872,7 @@ inline constexpr ArrayPtr<T> arrayPtr(T (&arr)[s]) {
 
 template <typename... Params>
 auto asBytes(Params&&... params) {
-  return kj::arrayPtr(kj::fwd<Params>(params)...).asBytes();
+  return kj::arrayPtr(kj::fwd<Params>(params)...).asBytes(); // NOLINT(*-arrayptr-as-bytes)
 }
 
 // =======================================================================================
