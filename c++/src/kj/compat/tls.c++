@@ -1127,7 +1127,8 @@ kj::String TlsPeerIdentity::getCommonName() {
 
   const X509_NAME* subj = X509_get_subject_name(reinterpret_cast<X509*>(cert));
 
-  int index = X509_NAME_get_index_by_NID(subj, NID_commonName, -1);
+  // Cast away const for compatibility with older OpenSSL versions
+  int index = X509_NAME_get_index_by_NID(const_cast<X509_NAME*>(subj), NID_commonName, -1);
   KJ_ASSERT(index != -1, "certificate has no common name?");
   const X509_NAME_ENTRY* entry = X509_NAME_get_entry(subj, index);
   KJ_ASSERT(entry != nullptr);
