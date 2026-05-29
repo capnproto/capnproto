@@ -746,6 +746,9 @@ private:
       case schema::Node::ANNOTATION:
         checkCompatibility(node.getAnnotation(), replacement.getAnnotation());
         break;
+      case schema::Node::USING:
+        // using declarations are not part of the schema proper, so we ignore them for compatibility purposes.
+        break;
     }
   }
 
@@ -1568,6 +1571,7 @@ SchemaLoader::Impl::makeBrandedDependencies(
     case schema::Node::FILE:
     case schema::Node::ENUM:
     case schema::Node::ANNOTATION:
+    case schema::Node::USING:
       break;
 
     case schema::Node::CONST:
