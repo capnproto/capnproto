@@ -40,6 +40,13 @@ Refcounted::~Refcounted() noexcept(false) {
 
 void Refcounted::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
+    if (weakControl != nullptr) {
+      auto weakControlCopy = weakControl;
+      weakControl = nullptr;
+      weakControlCopy->refcounted = nullptr;
+      weakControlCopy->ptr = nullptr;
+      weakControlCopy->dispose();
+    }
     delete this;
   }
 }

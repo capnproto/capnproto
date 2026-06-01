@@ -38,8 +38,12 @@ struct SetTrueInDestructor: public Refcounted {
 
 static_assert(Cloneable<Rc<SetTrueInDestructor>>);
 static_assert(!Cloneable<const Rc<SetTrueInDestructor>>);
+static_assert(Cloneable<WeakRc<SetTrueInDestructor>>);
+static_assert(!Cloneable<const WeakRc<SetTrueInDestructor>>);
 static_assert(Cloneable<Maybe<Rc<SetTrueInDestructor>>>);
 static_assert(!Cloneable<const Maybe<Rc<SetTrueInDestructor>>>);
+static_assert(Cloneable<Maybe<WeakRc<SetTrueInDestructor>>>);
+static_assert(!Cloneable<const Maybe<WeakRc<SetTrueInDestructor>>>);
 static_assert(Cloneable<Array<Rc<SetTrueInDestructor>>>);
 static_assert(!Cloneable<const Array<Rc<SetTrueInDestructor>>>);
 static_assert(Cloneable<ArrayPtr<Rc<SetTrueInDestructor>>>);
@@ -223,6 +227,80 @@ KJ_TEST("Rc clone") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("WeakRc") {
+  bool b = false;
+  WeakRc<SetTrueInDestructor> weak;
+  WeakRc<SetTrueInDestructor> weak2;
+  WeakRc<SetTrueInDestructor> weak3;
+
+  {
+    auto ref = kj::rc<SetTrueInDestructor>(&b);
+    weak = ref.weakRef();
+    weak2 = weak.addRef();
+    weak3 = weak.clone();
+    WeakRc<SetTrueInDestructor> weakFromRc(ref);
+
+    EXPECT_TRUE(weak != kj::none);
+    EXPECT_TRUE(weak2 != kj::none);
+    EXPECT_TRUE(weak3 != kj::none);
+    EXPECT_TRUE(weakFromRc != kj::none);
+    EXPECT_TRUE(weak == weak2);
+    EXPECT_TRUE(weak == weak3);
+    EXPECT_TRUE(weak == weakFromRc);
+
+    KJ_IF_SOME(value, weak.tryGet()) {
+      EXPECT_TRUE(&value == ref.get());
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryGet() failed for a live object");
+    }
+
+    KJ_IF_SOME(upgraded, weak.tryUpgrade()) {
+      EXPECT_TRUE(upgraded.get() == ref.get());
+      EXPECT_TRUE(ref->isShared());
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryUpgrade() failed for a live object");
+    }
+
+    EXPECT_FALSE(b);
+  }
+
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == kj::none);
+  EXPECT_TRUE(weak2 == kj::none);
+  EXPECT_TRUE(weak3 == kj::none);
+  EXPECT_TRUE(weak.tryGet() == kj::none);
+  EXPECT_TRUE(weak.tryUpgrade() == kj::none);
+}
+
+KJ_TEST("WeakRc null") {
+  WeakRc<SetTrueInDestructor> weak;
+  EXPECT_TRUE(weak == nullptr);
+  EXPECT_TRUE(weak == kj::none);
+  EXPECT_TRUE(weak.tryGet() == kj::none);
+  EXPECT_TRUE(weak.tryUpgrade() == kj::none);
+}
+
+KJ_TEST("WeakRc Own interop") {
+  bool b = false;
+
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+  auto weak = ref.weakRef();
+  auto own = ref.toOwn();
+  EXPECT_TRUE(ref == nullptr);
+  EXPECT_TRUE(weak != kj::none);
+
+  KJ_IF_SOME(upgraded, weak.tryUpgrade()) {
+    EXPECT_TRUE(upgraded.get() == own.get());
+  } else {
+    KJ_FAIL_REQUIRE("WeakRc::tryUpgrade() failed while Own was live");
+  }
+
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == kj::none);
+}
+
 KJ_TEST("Rc container clone") {
   bool b = false;
 
@@ -321,6 +399,34 @@ KJ_TEST("Rc wraps non-refcounted types") {
 
   ref2 = nullptr;
   EXPECT_TRUE(b);
+}
+
+KJ_TEST("WeakRc wraps non-refcounted types") {
+  bool b = false;
+  WeakRc<SetTrueInDestructor2> weak;
+
+  {
+    Rc<SetTrueInDestructor2> ref = kj::rc<SetTrueInDestructor2>(&b);
+    weak = ref.weakRef();
+    EXPECT_TRUE(weak != kj::none);
+
+    KJ_IF_SOME(value, weak.tryGet()) {
+      EXPECT_TRUE(&value == ref.get());
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryGet() failed for a wrapped live object");
+    }
+
+    KJ_IF_SOME(upgraded, weak.tryUpgrade()) {
+      EXPECT_TRUE(upgraded.get() == ref.get());
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryUpgrade() failed for a wrapped live object");
+    }
+  }
+
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == kj::none);
+  EXPECT_TRUE(weak.tryGet() == kj::none);
+  EXPECT_TRUE(weak.tryUpgrade() == kj::none);
 }
 
 KJ_TEST("Rc wraps Own of non-refcounted types") {
@@ -460,6 +566,34 @@ KJ_TEST("Rc<Abstract>") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("WeakRc<Abstract>") {
+  bool b = false;
+  WeakRc<Abstract> weak;
+
+  {
+    Rc<Abstract> ref(kj::heap<Concrete>(&b));
+    weak = ref.weakRef();
+    EXPECT_TRUE(weak != kj::none);
+
+    KJ_IF_SOME(value, weak.tryGet()) {
+      EXPECT_TRUE(&value == ref.get());
+      value.use();
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryGet() failed for a polymorphic live object");
+    }
+
+    KJ_IF_SOME(upgraded, weak.tryUpgrade()) {
+      EXPECT_TRUE(upgraded.get() == ref.get());
+      upgraded->use();
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryUpgrade() failed for a polymorphic live object");
+    }
+  }
+
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == kj::none);
+}
+
 KJ_TEST("Rc<Concrete>") {
   bool b = false;
 
@@ -502,6 +636,18 @@ struct Child: public SetTrueInDestructor {
   Child(bool* ptr): SetTrueInDestructor(ptr) {}
 };
 
+struct WeakSelfRef: public Refcounted {
+  WeakSelfRef(bool* ptr): ptr(ptr) {}
+  ~WeakSelfRef() {
+    EXPECT_TRUE(weak == kj::none);
+    EXPECT_TRUE(weak.tryGet() == kj::none);
+    *ptr = true;
+  }
+
+  bool* ptr;
+  WeakRc<WeakSelfRef> weak;
+};
+
 KJ_TEST("Rc inheritance") {
   bool b = false;
 
@@ -518,6 +664,38 @@ KJ_TEST("Rc inheritance") {
   child = nullptr;
   EXPECT_FALSE(b);
   down = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("WeakRc inheritance") {
+  bool b = false;
+  WeakRc<SetTrueInDestructor> parentWeak;
+
+  {
+    auto child = kj::rc<Child>(&b);
+    parentWeak = child.weakRef();
+
+    EXPECT_TRUE(parentWeak != kj::none);
+    KJ_IF_SOME(parent, parentWeak.tryUpgrade()) {
+      EXPECT_TRUE(parent.get() == child.get());
+    } else {
+      KJ_FAIL_REQUIRE("WeakRc::tryUpgrade() failed after upcast");
+    }
+  }
+
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(parentWeak == kj::none);
+}
+
+KJ_TEST("WeakRc is expired during destruction") {
+  bool b = false;
+
+  {
+    auto ref = kj::rc<WeakSelfRef>(&b);
+    ref->weak = ref.weakRef();
+    EXPECT_TRUE(ref->weak != kj::none);
+  }
+
   EXPECT_TRUE(b);
 }
 

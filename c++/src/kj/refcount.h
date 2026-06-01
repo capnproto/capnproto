@@ -37,13 +37,36 @@ namespace kj {
 template<typename T>
 class Rc;
 
+template<typename T>
+class WeakRc;
+
+class Refcounted;
+
 template <typename T, typename... Params>
 Rc<T> rc(Params&&... params);
 
 namespace _ {  // private
 
+struct RcWeakControl;
 template <typename T> class RcWrapper;
 template <typename T> class RcOwnWrapper;
+
+}  // namespace _ (private)
+
+namespace _ {  // private
+
+struct RcWeakControl {
+  RcWeakControl(Refcounted* refcounted, void* ptr): refcounted(refcounted), ptr(ptr) {}
+
+  void addRef() { ++refcount; }
+  void dispose() {
+    if (--refcount == 0) delete this;
+  }
+
+  uint refcount = 1;
+  Refcounted* refcounted;
+  void* ptr;
+};
 
 }  // namespace _ (private)
 
@@ -91,7 +114,17 @@ private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
 
+  mutable _::RcWeakControl* weakControl = nullptr;
+
   void disposeImpl(void* pointer) const override;
+
+  _::RcWeakControl* addWeakRefInternal(void* ptr) const {
+    if (weakControl == nullptr) {
+      weakControl = new _::RcWeakControl(const_cast<Refcounted*>(this), ptr);
+    }
+    weakControl->addRef();
+    return weakControl;
+  }
 
   template <typename T>
   static Own<T> addRefInternal(T* object);
@@ -112,6 +145,8 @@ private:
 
   template <typename T>
   friend class Rc;
+  template <typename T>
+  friend class WeakRc;
 
   template <typename T> friend class _::RcWrapper;
   template <typename T> friend class _::RcOwnWrapper;
@@ -262,6 +297,8 @@ public:
     return addRef();
   }
 
+  kj::WeakRc<T> weakRef();
+
   Rc& operator=(decltype(nullptr)) {
     dispose();
     return *this;
@@ -315,7 +352,108 @@ private:
 
   template <typename>
   friend class Rc;
+
+  template <typename>
+  friend class WeakRc;
 };
+
+template<typename T>
+class WeakRc {
+  // Weak reference to an Rc<T>-managed object. A WeakRc<T> does not keep T alive, but can be
+  // upgraded back to Rc<T> while some strong Rc/Own reference still exists.
+public:
+  KJ_DISALLOW_COPY(WeakRc);
+  WeakRc() = default;
+  WeakRc(decltype(nullptr)) {}
+
+  template <typename U = T, typename = EnableIf<canConvert<U*, T*>()>>
+  WeakRc(Rc<U>& rc) {
+    if (rc.ptr != nullptr) {
+      weakControl = rc.refcounted->addWeakRefInternal(rc.ptr);
+    }
+  }
+
+  inline WeakRc(WeakRc&& other) noexcept : weakControl(other.weakControl) {
+    other.weakControl = nullptr;
+  }
+
+  template <typename U = T, typename = EnableIf<canConvert<U*, T*>()>>
+  inline WeakRc(WeakRc<U>&& other) noexcept : weakControl(other.weakControl) {
+    other.weakControl = nullptr;
+  }
+
+  ~WeakRc() noexcept(false) { dispose(); }
+
+  WeakRc& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
+  }
+
+  WeakRc& operator=(WeakRc&& other) {
+    if (this == &other) return *this;
+    kj::swp(weakControl, other.weakControl);
+    other.dispose();
+    return *this;
+  }
+
+  kj::WeakRc<T> addRef() {
+    if (weakControl != nullptr) {
+      weakControl->addRef();
+      return WeakRc(weakControl);
+    } else {
+      return kj::WeakRc<T>();
+    }
+  }
+
+  kj::WeakRc<T> clone() {
+    return addRef();
+  }
+
+  kj::Maybe<kj::Rc<T>> tryUpgrade() {
+    if (weakControl == nullptr || weakControl->refcounted == nullptr) return kj::none;
+    auto refcounted = weakControl->refcounted;
+    ++refcounted->refcount;
+    return Rc<T>(refcounted, static_cast<T*>(weakControl->ptr));
+  }
+
+  kj::Maybe<T&> tryGet() {
+    if (weakControl == nullptr || weakControl->refcounted == nullptr) return kj::none;
+    return *static_cast<T*>(weakControl->ptr);
+  }
+
+  kj::Maybe<const T&> tryGet() const {
+    if (weakControl == nullptr || weakControl->refcounted == nullptr) return kj::none;
+    return *static_cast<T*>(weakControl->ptr);
+  }
+
+  inline bool operator==(const WeakRc<T>& other) const {
+    return weakControl == other.weakControl;
+  }
+  inline bool operator==(decltype(nullptr)) const { return weakControl == nullptr; }
+  inline bool operator==(None) const {
+    return weakControl == nullptr || weakControl->refcounted == nullptr;
+  }
+  inline bool operator!=(None) const { return !(*this == kj::none); }
+
+private:
+  explicit WeakRc(_::RcWeakControl* weakControl): weakControl(weakControl) {}
+
+  void dispose() {
+    auto weakControlCopy = weakControl;
+    weakControl = nullptr;
+    if (weakControlCopy != nullptr) weakControlCopy->dispose();
+  }
+
+  _::RcWeakControl* weakControl = nullptr;
+
+  template <typename>
+  friend class WeakRc;
+};
+
+template <typename T>
+kj::WeakRc<T> Rc<T>::weakRef() {
+  return WeakRc<T>(*this);
+}
 
 template <typename T, typename... Params>
 inline Rc<T> rc(Params&&... params) {
