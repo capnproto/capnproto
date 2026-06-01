@@ -2727,7 +2727,8 @@ public:
 
   inline void write(kj::ArrayPtr<const T> other) {
     // Copy data to the head of this pointer, then advance past the copied data.
-    // Out-of-bounds exception is raised is data does not fit.
+    // Out-of-bounds exception is raised if data does not fit.
+    // NOLINTNEXTLINE(*-arrayptr-first-copyfrom)
     first(other.size()).copyFrom(other); // first will do a bounds check
     ptr += other.size();
     size_ -= other.size();

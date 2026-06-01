@@ -4,6 +4,7 @@ Checks: >
   -*,
   modernize-use-nullptr,
   custom-arrayptr-as-bytes,
+  custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
   custom-use-rc-arc-deref
@@ -60,6 +61,26 @@ CustomChecks:
         Message: ArrayPtr construction followed by asBytes() can be simplified to kj::asBytes()
         Level: Warning
 
+  - Name: arrayptr-first-copyfrom
+    Query: |
+      match cxxMemberCallExpr(
+        callee(cxxMethodDecl(
+          hasName("copyFrom"),
+          ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
+        )),
+        argumentCountIs(1),
+        on(ignoringParenImpCasts(cxxMemberCallExpr(
+          callee(cxxMethodDecl(
+            hasName("first"),
+            ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
+          ))
+        )))
+      ).bind("copyFrom")
+    Diagnostic:
+      - BindName: copyFrom
+        Message: replace first(...).copyFrom(value) with write(value)
+        Level: Warning
+
   - Name: arrayptr-singleton
     Query: |
       match callExpr(
@@ -88,4 +109,3 @@ CustomChecks:
       - BindName: deref
         Message: use operator* instead of dereferencing Rc::get() or Arc::get()
         Level: Warning
-
