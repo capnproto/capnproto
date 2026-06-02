@@ -622,6 +622,106 @@ struct AtomicSetTrueInDestructor: public AtomicRefcounted {
 static_assert(Cloneable<Arc<AtomicSetTrueInDestructor>>);
 static_assert(Cloneable<const Arc<AtomicSetTrueInDestructor>>);
 
+struct IncompleteDeclaredAtomicRefcounted;
+static_assert(sizeof(Arc<IncompleteDeclaredAtomicRefcounted>) == 2 * sizeof(void*));
+
+struct IncompleteDeclaredAtomicRefcounted: public AtomicRefcounted {
+  IncompleteDeclaredAtomicRefcounted(bool* ptr): ptr(ptr) {}
+  ~IncompleteDeclaredAtomicRefcounted() { *ptr = true; }
+
+  bool* ptr;
+};
+
+struct IncompleteDeclaredNotAtomicRefcounted;
+static_assert(sizeof(Arc<IncompleteDeclaredNotAtomicRefcounted>) == 2 * sizeof(void*));
+
+struct IncompleteDeclaredNotAtomicRefcounted {
+  IncompleteDeclaredNotAtomicRefcounted(bool* ptr): ptr(ptr) {}
+  ~IncompleteDeclaredNotAtomicRefcounted() { *ptr = true; }
+
+  bool* ptr;
+};
+
+struct IncompleteInnerDeclaredAtomicRefcounted {
+private:
+  struct Inner;
+  static_assert(sizeof(Arc<Inner>) == 2 * sizeof(void*));
+
+public:
+  static void test();
+};
+
+struct IncompleteInnerDeclaredAtomicRefcounted::Inner: public AtomicRefcounted {
+  Inner(bool* ptr): ptr(ptr) {}
+  ~Inner() { *ptr = true; }
+
+  bool* ptr;
+};
+
+void IncompleteInnerDeclaredAtomicRefcounted::test() {
+  bool b = false;
+  Arc<Inner> ref = kj::arc<Inner>(&b);
+  KJ_EXPECT(!b);
+  ref = nullptr;
+  KJ_EXPECT(b);
+}
+
+struct IncompleteInnerDeclaredNotAtomicRefcounted {
+private:
+  struct Inner;
+  static_assert(sizeof(Arc<Inner>) == 2 * sizeof(void*));
+
+public:
+  static void test();
+};
+
+struct IncompleteInnerDeclaredNotAtomicRefcounted::Inner {
+  Inner(bool* ptr): ptr(ptr) {}
+  ~Inner() { *ptr = true; }
+
+  bool* ptr;
+};
+
+void IncompleteInnerDeclaredNotAtomicRefcounted::test() {
+  bool b = false;
+  Arc<Inner> ref = kj::arc<Inner>(&b);
+  KJ_EXPECT(!b);
+  auto ref2 = ref.addRef();
+  ref = nullptr;
+  KJ_EXPECT(!b);
+  ref2 = nullptr;
+  KJ_EXPECT(b);
+}
+
+KJ_TEST("Arc incomplete declared atomic refcounted types") {
+  {
+    bool b = false;
+    Arc<IncompleteDeclaredAtomicRefcounted> ref =
+        kj::arc<IncompleteDeclaredAtomicRefcounted>(&b);
+    KJ_EXPECT(!b);
+    ref = nullptr;
+    KJ_EXPECT(b);
+  }
+
+  IncompleteInnerDeclaredAtomicRefcounted::test();
+}
+
+KJ_TEST("Arc incomplete declared non-atomic-refcounted types") {
+  {
+    bool b = false;
+    Arc<IncompleteDeclaredNotAtomicRefcounted> ref =
+        kj::arc<IncompleteDeclaredNotAtomicRefcounted>(&b);
+    KJ_EXPECT(!b);
+    auto ref2 = ref.addRef();
+    ref = nullptr;
+    KJ_EXPECT(!b);
+    ref2 = nullptr;
+    KJ_EXPECT(b);
+  }
+
+  IncompleteInnerDeclaredNotAtomicRefcounted::test();
+}
+
 KJ_TEST("Arc") {
   bool b = false;
 
@@ -666,6 +766,29 @@ KJ_TEST("Arc clone") {
   EXPECT_FALSE(b);
 
   ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+struct AtomicChild: public AtomicSetTrueInDestructor {
+  AtomicChild(bool* ptr): AtomicSetTrueInDestructor(ptr) {}
+};
+
+KJ_TEST("Arc inheritance") {
+  bool b = false;
+
+  auto child = kj::arc<AtomicChild>(&b);
+
+  // up casting works automatically
+  kj::Arc<AtomicSetTrueInDestructor> parent = child.addRef();
+
+  auto down = parent.downcast<AtomicChild>();
+  EXPECT_TRUE(parent == nullptr);
+  EXPECT_TRUE(down != nullptr);
+
+  EXPECT_FALSE(b);
+  child = nullptr;
+  EXPECT_FALSE(b);
+  down = nullptr;
   EXPECT_TRUE(b);
 }
 
@@ -719,6 +842,164 @@ KJ_TEST("Arc disown / reown") {
   }
 
   KJ_EXPECT(b == true);
+}
+
+KJ_TEST("Arc wraps non-atomic-refcounted types") {
+  bool b = false;
+
+  Arc<SetTrueInDestructor2> ref1 = kj::arc<SetTrueInDestructor2>(&b);
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_FALSE(ref1 == nullptr);
+  EXPECT_TRUE(&*ref1 == ref1.get());
+  const auto& cref1 = ref1;
+  EXPECT_TRUE(&*cref1 == ref1.get());
+
+  Arc<SetTrueInDestructor2> ref2 = ref1.addRef();
+  EXPECT_TRUE(ref1 == ref2);
+  EXPECT_TRUE(ref1.get() == ref2.get());
+
+  EXPECT_FALSE(b);
+  Own<const SetTrueInDestructor2> own = ref1.toOwn();
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_TRUE(own.get() == ref2.get());
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc wraps Own of non-atomic-refcounted types") {
+  bool b = false;
+
+  Arc<SetTrueInDestructor2> ref1(kj::heap<SetTrueInDestructor2>(&b));
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_FALSE(b);
+
+  Arc<SetTrueInDestructor2> ref2 = ref1.addRef();
+  EXPECT_TRUE(ref1 == ref2);
+  EXPECT_TRUE(ref1.get() == ref2.get());
+
+  Own<const SetTrueInDestructor2> own = ref1.toOwn();
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_TRUE(own.get() == ref2.get());
+
+  own = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc<String>") {
+  Arc<String> ref1 = kj::arc<String>(kj::str("hello"));
+  EXPECT_TRUE(ref1 != nullptr);
+  EXPECT_TRUE(ref1->asPtr() == "hello");
+
+  Arc<String> ref2 = ref1.addRef();
+  EXPECT_TRUE(ref1 == ref2);
+  EXPECT_TRUE(ref1.get() == ref2.get());
+
+  Own<const String> own = ref1.toOwn();
+  EXPECT_TRUE(ref1 == nullptr);
+  EXPECT_TRUE(own.get() == ref2.get());
+  EXPECT_TRUE(own->asPtr() == "hello");
+
+  own = nullptr;
+  EXPECT_TRUE(ref2->asPtr() == "hello");
+}
+
+struct AbstractForArc {
+  virtual ~AbstractForArc() noexcept(false) = default;
+  virtual void use() const = 0;
+};
+
+struct ConcreteForArc final: public AbstractForArc {
+  ConcreteForArc(bool* ptr): ptr(ptr) {}
+  ~ConcreteForArc() { *ptr = true; }
+  void use() const override {}
+  bool* ptr;
+};
+
+struct AbstractAtomicRefcounted: public AtomicRefcounted {
+  virtual void use() const = 0;
+};
+
+struct ConcreteAtomicRefcounted final: public AbstractForArc, public AbstractAtomicRefcounted {
+  ConcreteAtomicRefcounted(bool* ptr): ptr(ptr) {}
+  ~ConcreteAtomicRefcounted() { *ptr = true; }
+  void use() const override {}
+
+  bool* ptr;
+};
+
+KJ_TEST("Arc<Abstract>") {
+  bool b = false;
+
+  Arc<AbstractForArc> ref(kj::heap<ConcreteForArc>(&b));
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_FALSE(b);
+  EXPECT_TRUE(&*ref == ref.get());
+  const auto& cref = ref;
+  EXPECT_TRUE(&*cref == ref.get());
+
+  ref->use();
+
+  auto ref2 = ref.addRef();
+  EXPECT_TRUE(ref == ref2);
+  EXPECT_TRUE(ref.get() == ref2.get());
+
+  Own<const AbstractForArc> own2 = ref.toOwn();
+  EXPECT_TRUE(ref == nullptr);
+  own2->use();
+  EXPECT_FALSE(b);
+  own2 = nullptr;
+  EXPECT_FALSE(b);
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc<Concrete>") {
+  bool b = false;
+
+  Arc<ConcreteForArc> ref = kj::arc<ConcreteForArc>(&b);
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_FALSE(b);
+  EXPECT_TRUE(&*ref == ref.get());
+  const auto& cref = ref;
+  EXPECT_TRUE(&*cref == ref.get());
+
+  auto own = ref.toOwn();
+  EXPECT_TRUE(ref == nullptr);
+  EXPECT_TRUE(own.get() != nullptr);
+  EXPECT_FALSE(b);
+  own = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc polymorphic upcast") {
+  bool b = false;
+
+  Arc<ConcreteForArc> ref = kj::arc<ConcreteForArc>(&b);
+  Arc<ConcreteForArc> ref2 = ref.addRef();
+
+  Arc<AbstractForArc> abstract = kj::mv(ref);
+  EXPECT_TRUE(ref == nullptr);
+  EXPECT_TRUE(abstract.get() == ref2.get());
+
+  abstract->use();
+  EXPECT_FALSE(b);
+
+  Arc<ConcreteForArc> concrete = abstract.downcast<ConcreteForArc>();
+  EXPECT_TRUE(abstract == nullptr);
+  EXPECT_TRUE(concrete.get() == ref2.get());
+
+  concrete = nullptr;
+  EXPECT_FALSE(b);
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
 }
 
 }  // namespace _
