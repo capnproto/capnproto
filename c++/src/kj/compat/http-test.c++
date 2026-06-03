@@ -8145,6 +8145,12 @@ KJ_TEST("Range header parsing") {
     {"bytes=5-"_kjc,                  2},
     // Check multiple valid ranges accepted
     {"bytes=  1-  ,6-, 10-11 "_kjc,  12, {{1,11},{6,11},{10,11}}},
+    // Check positions past 2^32 are not truncated against a 64-bit content length
+    {"bytes=5000000000-5000000001"_kjc, 8000000000, {{5000000000, 5000000001}}},
+    {"bytes=5000000000-"_kjc,           8000000000, {{5000000000, 7999999999}}},
+    {"bytes=-5000000000"_kjc,           8000000000, {{3000000000, 7999999999}}},
+    // Check a start position past the content is rejected rather than wrapping into range
+    {"bytes=4294967298-"_kjc,                    8},
 
     // ===== Suffix =====
     // Check valid ranges accepted

@@ -852,6 +852,30 @@ static kj::Maybe<uint> consumeNumber(char*& ptr) {
   return result;
 }
 
+static kj::Maybe<uint64_t> consumeNumber64(const char*& ptr) {
+  // Like consumeNumber(), but accumulates into a 64-bit value and rejects (rather than silently
+  // wrapping) numbers that don't fit. Used for byte-range positions, which are compared against a
+  // 64-bit content length.
+  const char* start = skipSpace(ptr);
+  const char* p = start;
+
+  uint64_t result = 0;
+
+  for (;;) {
+    const char c = *p;
+    if ('0' <= c && c <= '9') {
+      uint digit = c - '0';
+      if (result > (uint64_t(kj::maxValue) - digit) / 10) return kj::none;
+      result = result * 10 + digit;
+      ++p;
+    } else {
+      if (p == start) return kj::none;
+      ptr = p;
+      return result;
+    }
+  }
+}
+
 static kj::StringPtr consumeLine(char*& ptr) {
   char* start = skipSpace(ptr);
   char* p = start;
@@ -1186,8 +1210,8 @@ static bool consumeByteRangeUnit(const char*& ptr) {
 static kj::Maybe<HttpByteRange> consumeIntRange(const char*& ptr, uint64_t contentLength) {
   const char* p = ptr;
   p = skipSpace(p);
-  uint firstPos;
-  KJ_IF_SOME(n, consumeNumber(p)) {
+  uint64_t firstPos;
+  KJ_IF_SOME(n, consumeNumber64(p)) {
     firstPos = n;
   } else {
     return kj::none;
@@ -1195,7 +1219,7 @@ static kj::Maybe<HttpByteRange> consumeIntRange(const char*& ptr, uint64_t conte
   p = skipSpace(p);
   if (*(p++) != '-') return kj::none;
   p = skipSpace(p);
-  auto maybeLastPos = consumeNumber(p);
+  auto maybeLastPos = consumeNumber64(p);
   p = skipSpace(p);
 
   KJ_IF_SOME(lastPos, maybeLastPos) {
@@ -1218,8 +1242,8 @@ static kj::Maybe<HttpByteRange> consumeSuffixRange(const char*& ptr, uint64_t co
   p = skipSpace(p);
   if (*(p++) != '-') return kj::none;
   p = skipSpace(p);
-  uint suffixLength;
-  KJ_IF_SOME(n, consumeNumber(p)) {
+  uint64_t suffixLength;
+  KJ_IF_SOME(n, consumeNumber64(p)) {
     suffixLength = n;
   } else {
     return kj::none;
