@@ -148,9 +148,9 @@ String heapString(const char* value, size_t size) {
   char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
   auto result = kj::arrayPtr(buffer, size + 1);
   if (size != 0u) {
-    result.first(size).copyFrom(kj::arrayPtr(value, size));
+    result.write(kj::arrayPtr(value, size));
   }
-  result[size] = '\0';
+  result[0] = '\0';
   return String(buffer, size, _::HeapArrayDisposer::instance);
 }
 

@@ -50,8 +50,9 @@ CidrRange::CidrRange(StringPtr pattern) {
   bitCount = pattern.slice(slashPos + 1).parseAs<uint>();
 
   KJ_STACK_ARRAY(char, addr, slashPos + 1, 128, 128);
-  addr.first(slashPos).copyFrom(pattern.first(slashPos));
-  addr[slashPos] = '\0';
+  auto buf =  addr;
+  buf.write(pattern.first(slashPos));
+  buf[0] = '\0';
 
   if (pattern.findFirst(':') == kj::none) {
     family = AF_INET;
@@ -74,9 +75,9 @@ CidrRange::CidrRange(int family, ArrayPtr<const byte> bits, uint bitCount)
   }
   KJ_REQUIRE(bits.size() * 8 >= bitCount);
   size_t byteCount = (bitCount + 7) / 8;
-  kj::arrayPtr(this->bits).first(byteCount).copyFrom(bits.first(byteCount));
-  memset(this->bits + byteCount, 0, sizeof(this->bits) - byteCount);
-
+  auto buf = kj::arrayPtr(this->bits);
+  buf.write(bits.first(byteCount));
+  buf.fill(0);
   zeroIrrelevantBits();
 }
 

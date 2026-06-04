@@ -25,7 +25,7 @@ namespace kj {
 
 static size_t copyInto(kj::ArrayPtr<byte> dst, kj::ArrayPtr<const byte>& src) {
   size_t n = kj::min(dst.size(), src.size());
-  dst.first(n).copyFrom(src.first(n));
+  dst.write(src.first(n));
   src = src.slice(n, src.size());
   return n;
 }
