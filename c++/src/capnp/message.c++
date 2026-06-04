@@ -239,7 +239,7 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
       }
     }
 
-    for (void* ptr: moreSegments) {
+    for (word* ptr: moreSegments) {
       free(ptr);
     }
   }
@@ -252,7 +252,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
       "MallocMessageBuilder nextSize out of bounds.");
 
   if (!returnedFirstSegment && !ownFirstSegment) {
-    kj::ArrayPtr<word> result = kj::arrayPtr(reinterpret_cast<word*>(firstSegment), nextSize);
+    kj::ArrayPtr<word> result = kj::arrayPtr(firstSegment, nextSize);
     if (result.size() >= minimumSize) {
       returnedFirstSegment = true;
       return result;
@@ -265,7 +265,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   uint size = kj::max(minimumSize, nextSize);
 
-  void* result = calloc(size, sizeof(word));
+  word* result = reinterpret_cast<word*>(calloc(size, sizeof(word)));
   if (result == nullptr) {
     KJ_FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
   }
@@ -286,7 +286,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     }
   }
 
-  return kj::arrayPtr(reinterpret_cast<word*>(result), size);
+  return kj::arrayPtr(result, size);
 }
 
 // -------------------------------------------------------------------

@@ -804,7 +804,7 @@ TlsContext::TlsContext(Options options) {
       throwOpensslError();
     }
     for (auto& cert: options.trustedCertificates) {
-      if (!X509_STORE_add_cert(store, reinterpret_cast<X509*>(cert.chain[0]))) {
+      if (!X509_STORE_add_cert(store, cert.chain[0])) {
         throwOpensslError();
       }
     }
@@ -850,16 +850,16 @@ TlsContext::TlsContext(Options options) {
 
   // honor options.defaultKeypair
   KJ_IF_SOME(kp, options.defaultKeypair) {
-    if (!SSL_CTX_use_PrivateKey(ctx, reinterpret_cast<EVP_PKEY*>(kp.privateKey.pkey))) {
+    if (!SSL_CTX_use_PrivateKey(ctx, kp.privateKey.pkey)) {
       throwOpensslError();
     }
 
-    if (!SSL_CTX_use_certificate(ctx, reinterpret_cast<X509*>(kp.certificate.chain[0]))) {
+    if (!SSL_CTX_use_certificate(ctx, kp.certificate.chain[0])) {
       throwOpensslError();
     }
 
     for (size_t i = 1; i < kj::size(kp.certificate.chain); i++) {
-      X509* x509 = reinterpret_cast<X509*>(kp.certificate.chain[i]);
+      X509* x509 = kp.certificate.chain[i];
       if (x509 == nullptr) break;  // end of chain
 
       if (!SSL_CTX_add_extra_chain_cert(ctx, x509)) {
@@ -897,11 +897,11 @@ int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
     const char* name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
     if (name != nullptr) {
       KJ_IF_SOME(kp, sni.getKey(name)) {
-        if (!SSL_use_PrivateKey(ssl, reinterpret_cast<EVP_PKEY*>(kp.privateKey.pkey))) {
+        if (!SSL_use_PrivateKey(ssl, kp.privateKey.pkey)) {
           throwOpensslError();
         }
 
-        if (!SSL_use_certificate(ssl, reinterpret_cast<X509*>(kp.certificate.chain[0]))) {
+        if (!SSL_use_certificate(ssl, kp.certificate.chain[0])) {
           throwOpensslError();
         }
 
@@ -910,7 +910,7 @@ int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
         }
 
         for (size_t i = 1; i < kj::size(kp.certificate.chain); i++) {
-          X509* x509 = reinterpret_cast<X509*>(kp.certificate.chain[i]);
+          X509* x509 = kp.certificate.chain[i];
           if (x509 == nullptr) break;  // end of chain
 
           if (!SSL_add0_chain_cert(ssl, x509)) {
@@ -932,12 +932,12 @@ int TlsContext::SniCallback::callback(SSL* ssl, int* ad, void* arg) {
 }
 
 TlsContext::~TlsContext() noexcept(false) {
-  SSL_CTX_free(reinterpret_cast<SSL_CTX*>(ctx));
+  SSL_CTX_free(ctx);
 }
 
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
     kj::Own<kj::AsyncIoStream> stream, kj::StringPtr expectedServerHostname) {
-  auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
+  auto conn = kj::heap<TlsConnection>(kj::mv(stream), ctx);
   auto promise = conn->connect(expectedServerHostname);
   return promise.then([conn=kj::mv(conn)]() mutable
       -> kj::Own<kj::AsyncIoStream> {
@@ -946,7 +946,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapClient(
 }
 
 kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::AsyncIoStream> stream) {
-  auto conn = kj::heap<TlsConnection>(kj::mv(stream), reinterpret_cast<SSL_CTX*>(ctx));
+  auto conn = kj::heap<TlsConnection>(kj::mv(stream), ctx);
   auto promise = conn->accept();
   KJ_IF_SOME(timeout, acceptTimeout) {
     promise = KJ_REQUIRE_NONNULL(timer).afterDelay(timeout).then([]() -> kj::Promise<void> {
@@ -961,7 +961,7 @@ kj::Promise<kj::Own<kj::AsyncIoStream>> TlsContext::wrapServer(kj::Own<kj::Async
 
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(
     kj::AuthenticatedStream stream, kj::StringPtr expectedServerHostname) {
-  auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
+  auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), ctx);
   auto promise = conn->connect(expectedServerHostname);
   return promise.then([conn=kj::mv(conn),innerId=kj::mv(stream.peerIdentity)]() mutable {
     auto id = conn->getIdentity(kj::mv(innerId));
@@ -970,7 +970,7 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapClient(
 }
 
 kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStream stream) {
-  auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), reinterpret_cast<SSL_CTX*>(ctx));
+  auto conn = kj::heap<TlsConnection>(kj::mv(stream.stream), ctx);
   auto promise = conn->accept();
   KJ_IF_SOME(timeout, acceptTimeout) {
     promise = KJ_REQUIRE_NONNULL(timer).afterDelay(timeout).then([]() -> kj::Promise<void> {
@@ -1031,20 +1031,20 @@ TlsPrivateKey::TlsPrivateKey(kj::StringPtr pem, kj::Maybe<kj::StringPtr> passwor
 
 TlsPrivateKey::TlsPrivateKey(const TlsPrivateKey& other)
     : pkey(other.pkey) {
-  if (pkey != nullptr) EVP_PKEY_up_ref(reinterpret_cast<EVP_PKEY*>(pkey));
+  if (pkey != nullptr) EVP_PKEY_up_ref(pkey);
 }
 
 TlsPrivateKey& TlsPrivateKey::operator=(const TlsPrivateKey& other) {
   if (pkey != other.pkey) {
-    EVP_PKEY_free(reinterpret_cast<EVP_PKEY*>(pkey));
+    EVP_PKEY_free(pkey);
     pkey = other.pkey;
-    if (pkey != nullptr) EVP_PKEY_up_ref(reinterpret_cast<EVP_PKEY*>(pkey));
+    if (pkey != nullptr) EVP_PKEY_up_ref(pkey);
   }
   return *this;
 }
 
 TlsPrivateKey::~TlsPrivateKey() noexcept(false) {
-  EVP_PKEY_free(reinterpret_cast<EVP_PKEY*>(pkey));
+  EVP_PKEY_free(pkey);
 }
 
 int TlsPrivateKey::passwordCallback(char* buf, int size, int rwflag, void* u) {
@@ -1082,7 +1082,7 @@ TlsCertificate::TlsCertificate(kj::ArrayPtr<const kj::ArrayPtr<const byte>> asn1
 
     if (chain[i] == nullptr) {
       for (size_t j = 0; j < i; j++) {
-        X509_free(reinterpret_cast<X509*>(chain[j]));
+        X509_free(chain[j]);
       }
       throwOpensslError();
     }
@@ -1117,7 +1117,7 @@ TlsCertificate::TlsCertificate(kj::StringPtr pem) {
         return;
       } else {
         for (size_t j = 0; j < i; j++) {
-          X509_free(reinterpret_cast<X509*>(chain[j]));
+          X509_free(chain[j]);
         }
         throwOpensslError();
       }
@@ -1129,7 +1129,7 @@ TlsCertificate::TlsCertificate(kj::StringPtr pem) {
   if (dummy != nullptr) {
     X509_free(dummy);
     for (auto i: kj::indices(chain)) {
-      X509_free(reinterpret_cast<X509*>(chain[i]));
+      X509_free(chain[i]);
     }
     KJ_FAIL_REQUIRE("exceeded maximum certificate chain length of 10");
   }
@@ -1137,18 +1137,18 @@ TlsCertificate::TlsCertificate(kj::StringPtr pem) {
 
 TlsCertificate::TlsCertificate(const TlsCertificate& other) {
   kj::arrayPtr(chain).copyFrom(kj::arrayPtr(other.chain));
-  for (void* p: chain) {
+  for (X509* p: chain) {
     if (p == nullptr) break;  // end of chain; quit early
-    X509_up_ref(reinterpret_cast<X509*>(p));
+    X509_up_ref(p);
   }
 }
 
 TlsCertificate& TlsCertificate::operator=(const TlsCertificate& other) {
   for (auto i: kj::indices(chain)) {
     if (chain[i] != other.chain[i]) {
-      EVP_PKEY_free(reinterpret_cast<EVP_PKEY*>(chain[i]));
+      X509_free(chain[i]);
       chain[i] = other.chain[i];
-      if (chain[i] != nullptr) X509_up_ref(reinterpret_cast<X509*>(chain[i]));
+      if (chain[i] != nullptr) X509_up_ref(chain[i]);
     } else if (chain[i] == nullptr) {
       // end of both chains; quit early
       break;
@@ -1158,9 +1158,9 @@ TlsCertificate& TlsCertificate::operator=(const TlsCertificate& other) {
 }
 
 TlsCertificate::~TlsCertificate() noexcept(false) {
-  for (void* p: chain) {
+  for (X509* p: chain) {
     if (p == nullptr) break;  // end of chain; quit early
-    X509_free(reinterpret_cast<X509*>(p));
+    X509_free(p);
   }
 }
 
@@ -1169,7 +1169,7 @@ TlsCertificate::~TlsCertificate() noexcept(false) {
 
 TlsPeerIdentity::~TlsPeerIdentity() noexcept(false) {
   if (cert != nullptr) {
-    X509_free(reinterpret_cast<X509*>(cert));
+    X509_free(cert);
   }
 }
 
@@ -1186,7 +1186,7 @@ kj::String TlsPeerIdentity::getCommonName() {
     KJ_FAIL_REQUIRE("client did not provide a certificate") { return nullptr; }
   }
 
-  X509_NAME* subj = X509_get_subject_name(reinterpret_cast<X509*>(cert));
+  X509_NAME* subj = X509_get_subject_name(cert);
 
   int index = X509_NAME_get_index_by_NID(subj, NID_commonName, -1);
   KJ_ASSERT(index != -1, "certificate has no common name?");

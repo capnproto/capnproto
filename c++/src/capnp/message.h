@@ -413,8 +413,8 @@ private:
   bool ownFirstSegment;
   bool returnedFirstSegment;
 
-  void* firstSegment;
-  kj::Vector<void*> moreSegments;
+  word* firstSegment;
+  kj::Vector<word*> moreSegments;
 };
 
 class FlatMessageBuilder: public MessageBuilder {
