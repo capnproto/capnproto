@@ -556,6 +556,18 @@ public:
     return addRef();
   }
 
+  // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
+  // is no need for the caller to prove they know how to dispose of the object, because the object
+  // is its own Disposer.
+  const T* disown() {
+    return own.disown(own.get());
+  }
+
+  // Assume ownership of an object without incrementing its refcount. Opposite of disown().
+  static Arc reown(const T* ptr) {
+    return Arc(ptr);
+  }
+
   Arc& operator=(decltype(nullptr)) {
     own = nullptr;
     return *this;
