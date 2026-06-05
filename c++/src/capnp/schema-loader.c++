@@ -362,7 +362,7 @@ private:
 
         membersByDiscriminant[discriminantPos++] = index;
       } else {
-        VALIDATE_SCHEMA(nonDiscriminantPos <= fields.size(),
+        VALIDATE_SCHEMA(nonDiscriminantPos < fields.size(),
                         "discriminantCount did not match fields");
         membersByDiscriminant[nonDiscriminantPos++] = index;
       }
