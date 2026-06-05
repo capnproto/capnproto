@@ -859,13 +859,18 @@ static kj::Maybe<uint64_t> consumeNumber64(const char*& ptr) {
   const char* start = skipSpace(ptr);
   const char* p = start;
 
+  constexpr uint64_t MAX = kj::maxValue;
+
   uint64_t result = 0;
 
   for (;;) {
     const char c = *p;
     if ('0' <= c && c <= '9') {
       uint digit = c - '0';
-      if (result > (uint64_t(kj::maxValue) - digit) / 10) return kj::none;
+      // Reject before `result * 10 + digit` would exceed a uint64. MAX / 10 and MAX % 10 are
+      // compile-time constants, so this is a couple of comparisons per digit rather than a
+      // division.
+      if (result > MAX / 10 || (result == MAX / 10 && digit > MAX % 10)) return kj::none;
       result = result * 10 + digit;
       ++p;
     } else {
