@@ -6,7 +6,11 @@ set(VERSION 1.5-dev)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-include(CTest)
+# PROJECT_IS_TOP_LEVEL was added in CMake 3.21
+if (NOT DEFINED PROJECT_IS_TOP_LEVEL OR PROJECT_IS_TOP_LEVEL)
+  include(CTest)
+endif()
+
 include(CheckIncludeFileCXX)
 include(GNUInstallDirs)
 if(MSVC)
