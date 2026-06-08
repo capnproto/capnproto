@@ -234,6 +234,31 @@ TEST(SchemaLoader, Incompatible) {
       loadUnderAlternateTypeId<test::TestAllTypes>(loader, typeId<test::TestListDefaults>()));
 }
 
+TEST(SchemaLoader, OutOfBoundsFieldOffset) {
+  // A field's offset is a UInt32 taken straight from the schema node. The validator must reject
+  // offsets that don't fit within the struct's declared data section, because the layout code
+  // (StructBuilder::setDataField) trusts the offset and does no bounds check of its own. An offset
+  // near 2^32 used to slip through, because the bounds check evaluated (offset + 1) * bits in
+  // 32-bit arithmetic, which wraps around to a small value.
+  SchemaLoader loader;
+
+  MallocMessageBuilder builder;
+  builder.setRoot(Schema::from<test::TestAllTypes>().getProto());
+  auto node = builder.getRoot<schema::Node>();
+
+  bool found = false;
+  for (auto field: node.getStruct().getFields()) {
+    if (field.isSlot() && field.getSlot().getType().isUint64()) {
+      field.getSlot().setOffset(0xffffffffu);
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
+
+  EXPECT_NONFATAL_FAILURE(loader.load(node));
+}
+
 TEST(SchemaLoader, Enumerate) {
   SchemaLoader loader;
   loader.loadCompiledTypeAndDependencies<TestAllTypes>();
