@@ -76,7 +76,7 @@ void FlatArrayMessageReader::init(kj::ArrayPtr<const word> array) {
   {
     uint segmentSize = table[1].get();
 
-    KJ_REQUIRE(array.size() >= offset + segmentSize,
+    KJ_REQUIRE(array.size() - offset >= segmentSize,
                "Message ends prematurely in first segment.") {
       return;
     }
@@ -91,7 +91,7 @@ void FlatArrayMessageReader::init(kj::ArrayPtr<const word> array) {
     for (uint i = 1; i < segmentCount; i++) {
       uint segmentSize = table[i + 1].get();
 
-      KJ_REQUIRE(array.size() >= offset + segmentSize, "Message ends prematurely.") {
+      KJ_REQUIRE(array.size() - offset >= segmentSize, "Message ends prematurely.") {
         moreSegments = nullptr;
         return;
       }
@@ -209,7 +209,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   uint segmentCount = firstWord[0].get() + 1;
   uint segment0Size = firstWord[1].get();
 
-  size_t totalWords = segment0Size;
+  uint64_t totalWords = segment0Size;
 
   // Reject messages with too many segments for security reasons.
   // Use firstWord[0].get() here instead of segmentCount to catch overflow. The actual limit
