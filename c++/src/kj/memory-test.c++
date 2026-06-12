@@ -1030,6 +1030,81 @@ KJ_TEST("kj::Ptr<T> subtyping") {
   KJ_EXPECT(ptr3 == pin);
 }
 
+KJ_TEST("Maybe<kj::Ptr<T>> niche optimization") {
+  static_assert(sizeof(kj::Maybe<kj::Ptr<Obj>>) == sizeof(kj::Ptr<Obj>),
+      "Maybe<Ptr<T>> should have no size overhead due to niche optimization");
+  static_assert(alignof(kj::Maybe<kj::Ptr<Obj>>) == alignof(kj::Ptr<Obj>),
+      "Maybe<Ptr<T>> should preserve Ptr<T>'s alignment");
+
+  kj::Maybe<kj::Ptr<Obj>> empty;
+  KJ_EXPECT(empty == kj::none);
+
+  kj::Pin<Obj> pin("a");
+  empty = pin.asPtr();
+
+  KJ_IF_SOME(ptr, empty) {
+    KJ_EXPECT(ptr == pin);
+    KJ_EXPECT(ptr->name == "a"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Ptr<T>> to contain a pointer");
+  }
+
+  kj::Maybe<kj::Ptr<Obj>> copy = empty;
+  KJ_IF_SOME(ptr, copy) {
+    KJ_EXPECT(ptr == pin);
+  } else {
+    KJ_FAIL_EXPECT("expected copied Maybe<Ptr<T>> to contain a pointer");
+  }
+
+  KJ_IF_SOME(ptr, kj::mv(empty)) {
+    KJ_EXPECT(ptr == pin);
+  } else {
+    KJ_FAIL_EXPECT("expected moved Maybe<Ptr<T>> to contain a pointer");
+  }
+  KJ_EXPECT(empty == kj::none);
+
+  copy = kj::none;
+  KJ_EXPECT(copy == kj::none);
+}
+
+KJ_TEST("Maybe<kj::Ptr<T>> converting constructor") {
+  static_assert(kj::MaybeTraits<kj::Ptr<Obj>>::convertingConstructor,
+      "Maybe<Ptr<T>> should opt into converting construction");
+  static_assert(kj::canConvert<kj::Ptr<Obj2>, kj::Maybe<kj::Ptr<Obj>>>(),
+      "Maybe<Ptr<Base>> should be implicitly constructible from Ptr<Derived>");
+  static_assert(!kj::canConvert<kj::Ptr<Obj>, kj::Maybe<kj::Ptr<Obj2>>>(),
+      "Maybe<Ptr<Derived>> should not be implicitly constructible from Ptr<Base>");
+
+  kj::Pin<Obj2> pin("obj2", 42);
+
+  kj::Maybe<kj::Ptr<Obj>> maybe = pin.asPtr();
+  KJ_IF_SOME(ptr, maybe) {
+    KJ_EXPECT(ptr == pin);
+    KJ_EXPECT(ptr->name == "obj2"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Ptr<Base>> to be constructed from Ptr<Derived>");
+  }
+
+  auto makeMaybe = [](kj::Pin<Obj2>& pin) -> kj::Maybe<kj::Ptr<Obj>> {
+    return pin.asPtr();
+  };
+  KJ_IF_SOME(ptr, makeMaybe(pin)) {
+    KJ_EXPECT(ptr == pin);
+    KJ_EXPECT(ptr->name == "obj2"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected Ptr<Derived> return to convert to Maybe<Ptr<Base>>");
+  }
+
+  kj::Maybe<kj::Ptr<Obj>> assigned;
+  assigned = pin.asPtr();
+  KJ_IF_SOME(ptr, assigned) {
+    KJ_EXPECT(ptr == pin);
+    KJ_EXPECT(ptr->name == "obj2"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Ptr<Base>> to be assigned from Ptr<Derived>");
+  }
+}
+
 #if KJ_ASSERT_PTR_COUNTERS
 KJ_TEST("kj::Pin<T> destroyed with active ptrs crashed") {
   PtrHolder* holder = nullptr;

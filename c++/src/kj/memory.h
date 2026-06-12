@@ -679,6 +679,12 @@ public:
   inline T* operator->() { return get(); }
   inline const T* operator->() const { return get(); }
 
+  inline T& operator*() { return *get(); }
+  inline const T& operator*() const { return *get(); }
+
+  inline T* get() { return &t; }
+  inline const T* get() const { return &t; }
+
   inline operator Ptr<T>() { return Ptr<T>(this); }
   // Pin<T> can be implicitly converted to Ptr<T> to obtain new pointers.
 
@@ -706,9 +712,6 @@ private:
 #if KJ_ASSERT_PTR_COUNTERS
   _::PtrCounter ptrCounter;
 #endif
-
-  inline T* get() { return &t; }
-  inline const T* get() const { return &t; }
 
   template <typename>
   friend class Ptr;
@@ -789,8 +792,12 @@ public:
 private:
 
 #if KJ_ASSERT_PTR_COUNTERS
+  inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr), counter(nullptr) {}
+
   inline Ptr(Pin<T>* pin) : ptr(pin->get()), counter(&pin->ptrCounter) { counter->inc(); }
 #else
+  inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
   inline Ptr(Pin<T>* pin) : ptr(pin->get()) {}
 #endif
 
@@ -815,6 +822,22 @@ private:
   friend class Ptr;
   template <typename>
   friend class Pin;
+  friend struct MaybeTraits<Ptr<T>>;
+};
+
+// MaybeTraits specialization for Ptr<T>.
+// This enables niche optimization: Maybe<Ptr<T>> uses ptr == nullptr as "none".
+template <typename T>
+struct MaybeTraits<Ptr<T>> {
+  static void initNone(Ptr<T>* ptr) noexcept { new (ptr, _::PlacementNew()) Ptr<T>(nullptr); }
+  static bool isNone(const Ptr<T>& p) noexcept { return p.ptr == nullptr; }
+
+  // Ptr's move ctor just copies ptr/counter and sets source.ptr to nullptr. Moving a null Ptr is
+  // safe when the null state is constructed via initNone().
+  static constexpr bool noneIsMoveSafe = true;
+
+  // Allow `Maybe<Ptr<T>>` to be constructed from types convertible to `Ptr<T>`, like `Ptr<U>`.
+  static constexpr bool convertingConstructor = true;
 };
 
 // =======================================================================================
