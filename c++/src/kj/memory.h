@@ -789,6 +789,151 @@ private:
 };
 
 // =======================================================================================
+// Weak<T>
+
+template <typename T>
+class Weak {
+  // Weak<T> is a smart alternative to T& with expiration detection.
+  //
+  // Weak<T> is obtained from Pin<T>::addWeak(). It does not keep the Pin alive and does not prevent
+  // the Pin from moving; it expires when the Pin is moved or destroyed.
+  // Common usage:
+  // - KJ_IF_SOME on Weak<T> upgrades to Ptr<T>
+  // - assertLive() obtains T& and throws on expired Weak<T>
+  // - tryGet() obtains Maybe<T&> directly.
+  // - upgrade() method upgrades to Maybe<Ptr<T>>
+
+public:
+  inline Weak(decltype(nullptr)) noexcept: cell(nullptr), ptr(nullptr) {}
+
+  inline ~Weak() { dispose(); }
+
+  Weak(Weak&& other) noexcept {
+    kj::swp(cell, other.cell);
+    kj::swp(ptr, other.ptr);
+  }
+
+  Weak(const Weak& other): cell(other.cell), ptr(other.ptr) {
+    if (cell != nullptr) {
+      cell->addRef();
+    }
+  }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  Weak(Weak<U>&& other) noexcept: ptr(other.ptr) {
+    kj::swp(cell, other.cell);
+    other.ptr = nullptr;
+  }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  Weak(const Weak<U>& other): cell(other.cell), ptr(other.ptr) {
+    if (cell != nullptr) {
+      cell->addRef();
+    }
+  }
+
+  inline Weak(Ptr<T>& ptr);
+  inline Weak(Ptr<T>&& ptr);
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Weak(Ptr<U>& ptr);
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Weak(Ptr<U>&& ptr);
+
+  inline Weak& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
+  }
+
+  inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const Weak<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const T* const other) const { return get() == other; }
+
+  template <typename U>
+  inline bool operator==(const Pin<U>& other) const { return get() == other.get(); }
+
+  template <typename U>
+  inline bool operator==(const Weak<U>& other) const { return get() == other.get(); }
+
+  inline T& assertLive() {
+    // Obtain a `T&` reference, checking that the referent is still alive.
+    T* ptr = get();
+    KJ_IREQUIRE(ptr != nullptr, "null Weak<> dereference");
+    return *ptr;
+  }
+
+  inline const T& assertLive() const {
+    // Obtain a `const T&` reference, checking that the referent is still alive.
+    const T* ptr = get();
+    KJ_IREQUIRE(ptr != nullptr, "null Weak<> dereference");
+    return *ptr;
+  }
+
+  inline Maybe<T&> tryGet() { return get(); }
+  // Obtain a reference if the referent is still alive, otherwise return none.
+
+  inline Maybe<const T&> tryGet() const { return get(); }
+  // Obtain a const reference if the referent is still alive, otherwise return none.
+
+  inline Maybe<Ptr<T>> upgrade();
+  // Obtain a strong pointer if the referent is still alive, otherwise return none.
+
+  inline Maybe<Ptr<const T>> upgrade() const;
+  // Obtain a const strong pointer if the referent is still alive, otherwise return none.
+
+private:
+  _::WeakCell* cell = nullptr;
+  T* ptr = nullptr;
+
+  inline Weak(Pin<T>* pin): cell(pin->getWeakCell()), ptr(pin->get()) {
+    cell->addRef();
+  }
+
+  inline Weak(T* ptr, _::WeakCell* cell): cell(cell), ptr(ptr) {
+    if (cell != nullptr) {
+      cell->addRef();
+    }
+  }
+
+  inline void dispose() {
+    if (cell != nullptr) {
+      cell->decRef();
+      cell = nullptr;
+      ptr = nullptr;
+    }
+  }
+
+  inline T* get() const {
+    if (cell == nullptr || cell->ptr == nullptr) {
+      return nullptr;
+    }
+    return ptr;
+  }
+
+  template <typename>
+  friend class Pin;
+  template <typename>
+  friend class Ptr;
+  template <typename>
+  friend class Weak;
+  friend struct MaybeTraits<Weak<T>>;
+};
+
+// MaybeTraits specialization for Weak<T>.
+// This enables niche optimization: Maybe<Weak<T>> uses cell == nullptr as "none".
+template <typename T>
+struct MaybeTraits<Weak<T>> {
+  static void initNone(Weak<T>* ptr) noexcept { new (ptr, _::PlacementNew()) Weak<T>(nullptr); }
+  static bool isNone(const Weak<T>& p) noexcept { return p.cell == nullptr; }
+
+  // Weak's move ctor copies cell and sets source.cell to nullptr. Moving a null Weak is safe.
+  static constexpr bool noneIsMoveSafe = true;
+
+  // Allow `Maybe<Weak<T>>` to be constructed from types convertible to `Weak<T>`, like `Weak<U>`.
+  static constexpr bool convertingConstructor = true;
+};
+
+// =======================================================================================
 // Ptr<T>
 
 template <typename T>
@@ -913,163 +1058,36 @@ struct MaybeTraits<Ptr<T>> {
   static constexpr bool convertingConstructor = true;
 };
 
-// =======================================================================================
-// Weak<T>
+template <typename T>
+inline Weak<T>::Weak(Ptr<T>& ptr): Weak(ptr.asWeak()) {}
+template <typename T>
+inline Weak<T>::Weak(Ptr<T>&& ptr): Weak(ptr.asWeak()) {}
 
 template <typename T>
-class Weak {
-  // Weak<T> is a smart alternative to T& with expiration detection.
-  //
-  // Weak<T> is obtained from Pin<T>::addWeak(). It does not keep the Pin alive and does not prevent
-  // the Pin from moving; it expires when the Pin is moved or destroyed.
-  // Common usage:
-  // - KJ_IF_SOME on Weak<T> upgrades to Ptr<T>
-  // - assertLive() obtains T& and throws on expired Weak<T>
-  // - tryGet() obtains Maybe<T&> directly.
-  // - upgrade() method upgrades to Maybe<Ptr<T>>
+template <typename U, typename>
+inline Weak<T>::Weak(Ptr<U>& ptr): Weak(ptr.asWeak()) {}
+template <typename T>
+template <typename U, typename>
+inline Weak<T>::Weak(Ptr<U>&& ptr): Weak(ptr.asWeak()) {}
 
-public:
-  inline Weak(decltype(nullptr)) noexcept: cell(nullptr), ptr(nullptr) {}
-
-  inline ~Weak() { dispose(); }
-
-  Weak(Weak&& other) noexcept {
-    kj::swp(cell, other.cell);
-    kj::swp(ptr, other.ptr);
+template <typename T>
+inline Maybe<Ptr<T>> Weak<T>::upgrade() {
+  if (get() == nullptr) {
+    return kj::none;
   }
+  return Ptr<T>(ptr, cell);
+}
 
-  Weak(const Weak& other): cell(other.cell), ptr(other.ptr) {
-    if (cell != nullptr) {
-      cell->addRef();
-    }
+template <typename T>
+inline Maybe<Ptr<const T>> Weak<T>::upgrade() const {
+  if (get() == nullptr) {
+    return kj::none;
   }
-
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  Weak(Weak<U>&& other) noexcept: ptr(other.ptr) {
-    kj::swp(cell, other.cell);
-    other.ptr = nullptr;
-  }
-
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  Weak(const Weak<U>& other): cell(other.cell), ptr(other.ptr) {
-    if (cell != nullptr) {
-      cell->addRef();
-    }
-  }
-
-  inline Weak(Ptr<T>& ptr): Weak(ptr.asWeak()) {}
-  inline Weak(Ptr<T>&& ptr): Weak(ptr.asWeak()) {}
-
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  inline Weak(Ptr<U>& ptr): Weak(ptr.asWeak()) {}
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  inline Weak(Ptr<U>&& ptr): Weak(ptr.asWeak()) {}
-
-  inline Weak& operator=(decltype(nullptr)) {
-    dispose();
-    return *this;
-  }
-
-  inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
-  inline bool operator==(const Weak<T>& other) const { return get() == other.get(); }
-  inline bool operator==(const T* const other) const { return get() == other; }
-
-  template <typename U>
-  inline bool operator==(const Pin<U>& other) const { return get() == other.get(); }
-
-  template <typename U>
-  inline bool operator==(const Weak<U>& other) const { return get() == other.get(); }
-
-  inline T& assertLive() {
-    // Obtain a `T&` reference, checking that the referent is still alive.
-    T* ptr = get();
-    KJ_IREQUIRE(ptr != nullptr, "null Weak<> dereference");
-    return *ptr;
-  }
-
-  inline const T& assertLive() const {
-    // Obtain a `const T&` reference, checking that the referent is still alive.
-    const T* ptr = get();
-    KJ_IREQUIRE(ptr != nullptr, "null Weak<> dereference");
-    return *ptr;
-  }
-
-  inline Maybe<T&> tryGet() { return get(); }
-  // Obtain a reference if the referent is still alive, otherwise return none.
-
-  inline Maybe<const T&> tryGet() const { return get(); }
-  // Obtain a const reference if the referent is still alive, otherwise return none.
-
-  inline Maybe<Ptr<T>> upgrade() {
-    // Obtain a strong pointer if the referent is still alive, otherwise return none.
-    if (get() == nullptr) {
-      return kj::none;
-    }
-    return Ptr<T>(ptr, cell);
-  }
-
-  inline Maybe<Ptr<const T>> upgrade() const {
-    // Obtain a const strong pointer if the referent is still alive, otherwise return none.
-    if (get() == nullptr) {
-      return kj::none;
-    }
-    return Ptr<const T>(ptr, cell);
-  }
-
-private:
-  _::WeakCell* cell = nullptr;
-  T* ptr = nullptr;
-
-  inline Weak(Pin<T>* pin): cell(pin->getWeakCell()), ptr(pin->get()) {
-    cell->addRef();
-  }
-
-  inline Weak(T* ptr, _::WeakCell* cell): cell(cell), ptr(ptr) {
-    if (cell != nullptr) {
-      cell->addRef();
-    }
-  }
-
-  inline void dispose() {
-    if (cell != nullptr) {
-      cell->decRef();
-      cell = nullptr;
-      ptr = nullptr;
-    }
-  }
-
-  inline T* get() const {
-    if (cell == nullptr || cell->ptr == nullptr) {
-      return nullptr;
-    }
-    return ptr;
-  }
-
-  template <typename>
-  friend class Pin;
-  template <typename>
-  friend class Ptr;
-  template <typename>
-  friend class Weak;
-  friend struct MaybeTraits<Weak<T>>;
-};
+  return Ptr<const T>(ptr, cell);
+}
 
 template <typename T, typename U>
 inline bool operator==(const Pin<T>& pin, const Weak<U>& weak) { return weak == pin; }
-
-// MaybeTraits specialization for Weak<T>.
-// This enables niche optimization: Maybe<Weak<T>> uses cell == nullptr as "none".
-template <typename T>
-struct MaybeTraits<Weak<T>> {
-  static void initNone(Weak<T>* ptr) noexcept { new (ptr, _::PlacementNew()) Weak<T>(nullptr); }
-  static bool isNone(const Weak<T>& p) noexcept { return p.cell == nullptr; }
-
-  // Weak's move ctor copies cell and sets source.cell to nullptr. Moving a null Weak is safe.
-  static constexpr bool noneIsMoveSafe = true;
-
-  // Allow `Maybe<Weak<T>>` to be constructed from types convertible to `Weak<T>`, like `Weak<U>`.
-  static constexpr bool convertingConstructor = true;
-};
 
 namespace _ {  // private
 
