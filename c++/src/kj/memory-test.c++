@@ -1364,7 +1364,61 @@ KJ_TEST("kj::Pin<T> moved with active ptrs crashes") {
     kj::Pin<Obj> obj2(kj::mv(obj));
   });
 }
-#endif  
+#else
+KJ_TEST("kj::Ptr<T> expires when Pin<T> is destroyed in opt mode") {
+  kj::Maybe<kj::Ptr<Obj>> maybePtr;
+
+  {
+    kj::Pin<Obj> obj("b");
+    maybePtr = obj.asPtr();
+
+    KJ_IF_SOME(ptr, maybePtr) {
+      KJ_EXPECT(ptr == obj);
+      KJ_EXPECT(ptr->name == "b"_kj);
+    } else {
+      KJ_FAIL_EXPECT("expected Maybe<Ptr<T>> to contain a pointer");
+    }
+  }
+
+  KJ_IF_SOME(ptr, maybePtr) {
+    KJ_EXPECT(ptr == nullptr);
+    KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)ptr->name);
+    KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)ptr.asRef());
+
+    kj::Weak<Obj> weak = ptr.asWeak();
+    KJ_EXPECT(weak == nullptr);
+    KJ_EXPECT(weak.upgrade() == kj::none);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Ptr<T>> to contain an expired pointer");
+  }
+}
+
+KJ_TEST("kj::Ptr<T> expires when Pin<T> is moved in opt mode") {
+  kj::Maybe<kj::Ptr<Obj>> maybePtr;
+
+  {
+    kj::Pin<Obj> obj("b");
+    maybePtr = obj.asPtr();
+    kj::Pin<Obj> obj2(kj::mv(obj));
+
+    KJ_IF_SOME(ptr, maybePtr) {
+      KJ_EXPECT(ptr == nullptr);
+      KJ_EXPECT(!(ptr == obj2));
+      KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)ptr->name);
+
+      kj::Weak<Obj> weak = ptr.asWeak();
+      KJ_EXPECT(weak == nullptr);
+      KJ_EXPECT(weak.upgrade() == kj::none);
+    } else {
+      KJ_FAIL_EXPECT("expected Maybe<Ptr<T>> to contain an expired pointer");
+    }
+
+    auto newPtr = obj2.asPtr();
+    KJ_EXPECT(newPtr == obj2);
+    KJ_EXPECT(newPtr->name == "b"_kj);
+  }
+}
+#endif
 
 } // namespace 
 
