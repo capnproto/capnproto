@@ -1017,6 +1017,91 @@ struct MultiBaseObj2 : public OtherBase, public Obj2 {
   MultiBaseObj2(kj::StringPtr name, int size) : Obj2(name, size) {}
 };
 
+struct TargetObj: public kj::PtrTarget {
+  TargetObj(kj::StringPtr name) : name(kj::str(name)) {}
+
+  kj::Ptr<TargetObj> asPtr() { return asPtrToThis(); }
+  kj::Ptr<const TargetObj> asPtr() const { return asPtrToThis(); }
+  kj::Weak<TargetObj> addWeak() { return addWeakToThis(); }
+  kj::Weak<const TargetObj> addWeak() const { return addWeakToThis(); }
+
+  kj::String name;
+};
+
+struct TargetObj2: public TargetObj {
+  TargetObj2(kj::StringPtr name, int size): TargetObj(name), size(size) {}
+
+  kj::Ptr<TargetObj2> asDerivedPtr() { return asPtrToThis(); }
+  kj::Weak<TargetObj2> addDerivedWeak() { return addWeakToThis(); }
+
+  int size;
+};
+
+struct DestructorObserverTarget;
+
+struct DestructorObserver {
+  DestructorObserver(kj::Maybe<kj::Weak<DestructorObserverTarget>>& weak, bool& upgraded)
+      : weak(weak), upgraded(upgraded) {}
+  ~DestructorObserver();
+
+  kj::Maybe<kj::Weak<DestructorObserverTarget>>& weak;
+  bool& upgraded;
+};
+
+struct DestructorObserverTarget: public kj::PtrTarget {
+  DestructorObserverTarget(kj::Maybe<kj::Weak<DestructorObserverTarget>>& weak, bool& upgraded)
+      : observer(weak, upgraded) {}
+
+  kj::Weak<DestructorObserverTarget> addWeak() { return addWeakToThis(); }
+
+  DestructorObserver observer;
+};
+
+DestructorObserver::~DestructorObserver() {
+  KJ_IF_SOME(weakRef, weak) {
+    KJ_IF_SOME(strong, weakRef) {
+      upgraded = !(strong == nullptr);
+    }
+  }
+}
+
+struct SurvivingPtrObserverTarget;
+
+struct SurvivingPtrObserver {
+  SurvivingPtrObserver(kj::Maybe<kj::Weak<SurvivingPtrObserverTarget>>& weak,
+      kj::Maybe<kj::Ptr<SurvivingPtrObserverTarget>>& ptr)
+      : weak(weak), ptr(ptr) {}
+  ~SurvivingPtrObserver();
+
+  kj::Maybe<kj::Weak<SurvivingPtrObserverTarget>>& weak;
+  kj::Maybe<kj::Ptr<SurvivingPtrObserverTarget>>& ptr;
+};
+
+struct SurvivingPtrObserverTarget: public kj::PtrTarget {
+  SurvivingPtrObserverTarget(kj::Maybe<kj::Weak<SurvivingPtrObserverTarget>>& weak,
+      kj::Maybe<kj::Ptr<SurvivingPtrObserverTarget>>& ptr)
+      : observer(weak, ptr) {}
+
+  kj::Weak<SurvivingPtrObserverTarget> addWeak() { return addWeakToThis(); }
+
+  SurvivingPtrObserver observer;
+};
+
+SurvivingPtrObserver::~SurvivingPtrObserver() {
+  KJ_IF_SOME(weakRef, weak) {
+    KJ_IF_SOME(strong, weakRef) {
+      ptr = kj::mv(strong);
+    }
+  }
+}
+
+static_assert(sizeof(kj::Pin<kj::PtrTarget>) == sizeof(kj::PtrTarget),
+    "Pin<T> should reuse PtrTarget's control instead of adding another one");
+static_assert(sizeof(kj::Pin<TargetObj>) == sizeof(TargetObj),
+    "Pin<T> should reuse PtrTarget's control instead of adding another one");
+static_assert(sizeof(kj::Pin<TargetObj2>) == sizeof(TargetObj2),
+    "Pin<T> should reuse PtrTarget's control instead of adding another one");
+
 KJ_TEST("kj::Ptr<T> subtyping") {
   // pin the child
   kj::Pin<Obj2> pin("obj2", 42);
@@ -1043,6 +1128,123 @@ KJ_TEST("kj::Ptr<T> subtyping") {
 
   kj::Ptr<const Obj2> ptr5 = pin;
   KJ_EXPECT(ptr5->name == "obj2"_kj);
+}
+
+KJ_TEST("kj::PtrTarget creates Ptr<T> and Weak<T> from this") {
+  TargetObj obj("a");
+
+  kj::Ptr<TargetObj> ptr1 = obj.asPtr();
+  KJ_EXPECT(ptr1->name == "a"_kj);
+
+  kj::Ptr<TargetObj> ptr2 = obj.asPtr();
+  KJ_EXPECT(ptr1 == ptr2);
+
+  kj::Weak<TargetObj> weak = obj.addWeak();
+  KJ_EXPECT(weak.assertLive().name == "a"_kj);
+
+  KJ_IF_SOME(strong, weak) {
+    KJ_EXPECT(strong == ptr1);
+    strong->name = kj::str("b");
+  } else {
+    KJ_FAIL_EXPECT("expected Weak<TargetObj> to upgrade");
+  }
+
+  KJ_EXPECT(obj.name == "b"_kj);
+
+  const TargetObj& constObj = obj;
+  kj::Ptr<const TargetObj> constPtr = constObj.asPtr();
+  KJ_EXPECT(constPtr->name == "b"_kj);
+
+  kj::Weak<const TargetObj> constWeak = constObj.addWeak();
+  KJ_EXPECT(constWeak.assertLive().name == "b"_kj);
+}
+
+KJ_TEST("kj::Pin<T> reuses PtrTarget control") {
+  kj::Maybe<kj::Weak<TargetObj>> maybeWeak;
+  {
+    kj::Pin<TargetObj> pin("a");
+
+    kj::Ptr<TargetObj> ptrFromPin = pin.asPtr();
+    kj::Ptr<TargetObj> ptrFromThis = pin->asPtr();
+    KJ_EXPECT(ptrFromPin == ptrFromThis);
+
+    kj::Weak<TargetObj> weakFromPin = pin.addWeak();
+    kj::Weak<TargetObj> weakFromThis = pin->addWeak();
+
+    KJ_IF_SOME(strong, weakFromPin) {
+      KJ_EXPECT(strong == ptrFromThis);
+    } else {
+      KJ_FAIL_EXPECT("expected Weak<TargetObj> from Pin<TargetObj> to upgrade");
+    }
+
+    KJ_IF_SOME(strong, weakFromThis) {
+      KJ_EXPECT(strong == ptrFromPin);
+    } else {
+      KJ_FAIL_EXPECT("expected Weak<TargetObj> from PtrTarget to upgrade");
+    }
+
+    maybeWeak = ptrFromPin.asWeak();
+  }
+
+  KJ_IF_SOME(weak, maybeWeak) {
+    KJ_EXPECT(weak.upgrade() == kj::none);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Weak<TargetObj>> to contain an expired pointer");
+  }
+}
+
+KJ_TEST("kj::PtrTarget subtyping") {
+  TargetObj2 obj("obj2", 42);
+
+  kj::Ptr<TargetObj2> ptr1 = obj.asDerivedPtr();
+  KJ_EXPECT(ptr1->name == "obj2"_kj);
+  KJ_EXPECT(ptr1->size == 42);
+
+  kj::Ptr<TargetObj> ptr2 = ptr1;
+  KJ_EXPECT(ptr2->name == "obj2"_kj);
+  KJ_EXPECT(ptr1 == ptr2);
+
+  kj::Weak<TargetObj2> weak1 = obj.addDerivedWeak();
+  kj::Weak<TargetObj> weak2 = weak1;
+  KJ_EXPECT(weak2.assertLive().name == "obj2"_kj);
+}
+
+KJ_TEST("kj::Weak<T> expires when PtrTarget is destroyed") {
+  kj::Maybe<kj::Weak<TargetObj>> maybeWeak;
+  {
+    TargetObj obj("a");
+    maybeWeak = obj.addWeak();
+
+    KJ_IF_SOME(weak, maybeWeak) {
+      KJ_EXPECT(weak.assertLive().name == "a"_kj);
+    } else {
+      KJ_FAIL_EXPECT("expected Maybe<Weak<TargetObj>> to contain a pointer");
+    }
+  }
+
+  KJ_IF_SOME(weak, maybeWeak) {
+    KJ_EXPECT(weak.tryGet() == kj::none);
+    KJ_EXPECT(weak.upgrade() == kj::none);
+    KJ_EXPECT_THROW_MESSAGE("null Weak<> dereference", (void)weak.assertLive());
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Weak<TargetObj>> to contain an expired pointer");
+  }
+}
+
+KJ_TEST("kj::PtrTarget allows weak refs during member destruction") {
+  kj::Maybe<kj::Weak<DestructorObserverTarget>> maybeWeak;
+  bool upgradedInMemberDestructor = false;
+  {
+    DestructorObserverTarget obj(maybeWeak, upgradedInMemberDestructor);
+    maybeWeak = obj.addWeak();
+  }
+
+  KJ_EXPECT(upgradedInMemberDestructor);
+  KJ_IF_SOME(weak, maybeWeak) {
+    KJ_EXPECT(weak.upgrade() == kj::none);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Weak<DestructorObserverTarget>> to contain an expired pointer");
+  }
 }
 
 KJ_TEST("kj::Weak<T> subtyping") {
@@ -1362,6 +1564,17 @@ KJ_TEST("kj::Pin<T> moved with active ptrs crashes") {
     auto ptr = obj.asPtr();
     // moving a pin with active reference crashes
     kj::Pin<Obj> obj2(kj::mv(obj));
+  });
+}
+
+KJ_TEST("kj::PtrTarget destroyed with active ptr from destructor crashes") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Maybe<kj::Weak<SurvivingPtrObserverTarget>> weak;
+    kj::Maybe<kj::Ptr<SurvivingPtrObserverTarget>> ptr;
+    {
+      SurvivingPtrObserverTarget obj(weak, ptr);
+      weak = obj.addWeak();
+    }
   });
 }
 #else
