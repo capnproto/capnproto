@@ -706,13 +706,95 @@ private:
 };
 
 // =======================================================================================
-// Pin<T>
+// PtrTarget and Pin<T>
 
 template <typename T>
 class Ptr;
 
 template <typename T>
 class Weak;
+
+namespace _ {  // private
+
+template <typename T, bool isPtrTarget>
+class PinControl;
+
+}  // namespace _ (private)
+
+class PtrTarget {
+  // Intrusive base for objects that need to hand out kj::Ptr<T> or kj::Weak<T> to themselves.
+  //
+  // PtrTarget is to Ptr<T>/Weak<T> what Refcounted is to Own<T>: inheriting from it embeds the
+  // control block in the object. Subclasses can expose typed public wrappers around asPtrToThis()
+  // and addWeakToThis(). The object must not move or be destroyed while any Ptr<T> points at it;
+  // debug builds assert this. Weak<T>s do not keep the object alive and expire when PtrTarget is
+  // destroyed.
+  //
+  // During destruction of a raw PtrTarget subclass, Weak<T> remains upgradable until PtrTarget's
+  // base destructor runs. Any Ptr<T> so obtained must be destroyed before then, or debug builds will
+  // assert. Pin<T> expires Weak<T>s before destroying T.
+
+public:
+  PtrTarget() = default;
+  inline ~PtrTarget() { control.dispose(); }
+  KJ_DISALLOW_COPY_AND_MOVE(PtrTarget);
+
+protected:
+  inline auto asPtrToThis(this auto& self) {
+    return asPtrToThisInternal(self);
+  }
+
+  inline auto addWeakToThis(this auto& self) {
+    return addWeakToThisInternal(self);
+  }
+
+private:
+  mutable _::PtrControl control;
+
+  inline _::WeakCell* getWeakCell(const void* ptr) const {
+    return control.getWeakCell(const_cast<void*>(ptr));
+  }
+
+  template <typename T>
+  static inline Ptr<T> asPtrToThisInternal(T& self) {
+    return Ptr<T>(&self, self.PtrTarget::getWeakCell(&self));
+  }
+
+  template <typename T>
+  static inline Weak<T> addWeakToThisInternal(T& self) {
+    return Weak<T>(&self, self.PtrTarget::getWeakCell(&self));
+  }
+
+  template <typename>
+  friend class Ptr;
+  template <typename>
+  friend class Weak;
+  template <typename, bool>
+  friend class _::PinControl;
+};
+
+namespace _ {  // private
+
+template <typename T>
+class PinControl<T, false> {
+public:
+  inline void dispose(T&) { control.dispose(); }
+  inline WeakCell* getWeakCell(T& t) { return control.getWeakCell(&t); }
+  inline PtrControl* getPtrControl(T&) { return &control; }
+
+private:
+  PtrControl control;
+};
+
+template <typename T>
+class PinControl<T, true> {
+public:
+  inline void dispose(T& t) { t.PtrTarget::control.dispose(); }
+  inline WeakCell* getWeakCell(T& t) { return t.PtrTarget::getWeakCell(&t); }
+  inline PtrControl* getPtrControl(T& t) { return &t.PtrTarget::control; }
+};
+
+}  // namespace _ (private)
 
 template <typename T>
 class Pin {
@@ -725,7 +807,8 @@ class Pin {
   // Debug builds track pointers and abort if these operations violate Ptr<T>'s lifetime
   // constraint.
   // Weak<T> support adds one pointer of overhead to Pin<T>, and allocates a shared cell lazily when
-  // the first weak reference is created.
+  // the first weak reference is created. If T inherits PtrTarget, Pin<T> reuses T's embedded control
+  // instead.
 
 public:
   template <typename... Params>
@@ -735,13 +818,13 @@ public:
   inline Pin(Pin<T>&& other): t(kj::mv(other.t)) {
     // Move T's ownership.
     // Undefined behavior when live pointers exist, asserted in debug builds.
-    other.control.dispose();
+    other.control.dispose(other.t);
   }
 
   inline ~Pin() {
     // Destroy a Pin with underlying object.
     // Undefined behavior when live pointers exist, asserted in debug builds.
-    control.dispose();
+    control.dispose(t);
   }
 
   inline T* operator->() { return get(); }
@@ -781,11 +864,11 @@ private:
   inline Pin(T&& t): t(kj::mv(t)) {}
 
   inline _::WeakCell* getWeakCell() {
-    return control.getWeakCell(&t);
+    return control.getWeakCell(t);
   }
 
   T t;
-  _::PtrControl control;
+  KJ_NO_UNIQUE_ADDRESS _::PinControl<T, _::DerivedFrom<T, PtrTarget>> control;
 
   template <typename>
   friend class Ptr;
@@ -800,8 +883,9 @@ template <typename T>
 class Weak {
   // Weak<T> is a smart alternative to T& with expiration detection.
   //
-  // Weak<T> is obtained from Pin<T>::addWeak(). It does not keep the Pin alive and does not prevent
-  // the Pin from moving; it expires when the Pin is moved or destroyed.
+  // Weak<T> is obtained from Pin<T>::addWeak() or PtrTarget::addWeakToThis(). It does not keep the
+  // referent alive and does not prevent Pin from moving; it expires when the Pin is moved or
+  // destroyed, or when the PtrTarget is destroyed.
   // Common usage:
   // - KJ_IF_SOME on Weak<T> upgrades to Ptr<T>
   // - assertLive() obtains T& and throws on expired Weak<T>
@@ -921,6 +1005,7 @@ private:
   friend class Ptr;
   template <typename>
   friend class Weak;
+  friend class PtrTarget;
   friend struct MaybeTraits<Weak<T>>;
 };
 
@@ -945,8 +1030,8 @@ struct MaybeTraits<Weak<T>> {
 
 // Ptr<T> is a smart alternative to T&. 
 //
-// New instances of Ptr<T> are obtained from Pin<T> which provides inline T storage and provides all
-// the necessary machinery for Ptr<T> contract enforcement.
+// New instances of Ptr<T> are obtained from Pin<T>, which provides inline T storage, or from
+// PtrTarget, which embeds the pointer-control machinery directly in T.
 //
 // The contract demands that T exists while Ptr<T> does, i.e. destroying T while there are active
 // Ptr<T> instances pointing to it is undefined behavior.
@@ -1029,12 +1114,12 @@ public:
 private:
   inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr), control(nullptr) {}
 
-  inline Ptr(Pin<T>* pin) : ptr(pin->get()), control(&pin->control) {
+  inline Ptr(Pin<T>* pin) : ptr(pin->get()), control(pin->control.getPtrControl(pin->t)) {
     control->inc();
   }
 
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  inline Ptr(Pin<U>* pin) : ptr(pin->get()), control(&pin->control) {
+  inline Ptr(Pin<U>* pin) : ptr(pin->get()), control(pin->control.getPtrControl(pin->t)) {
     control->inc();
   }
 
@@ -1061,6 +1146,7 @@ private:
   friend class Pin;
   template <typename>
   friend class Weak;
+  friend class PtrTarget;
   friend struct MaybeTraits<Ptr<T>>;
 };
 
@@ -1153,6 +1239,7 @@ private:
   friend class Pin;
   template <typename>
   friend class Weak;
+  friend class PtrTarget;
   friend struct MaybeTraits<Ptr<T>>;
 };
 
