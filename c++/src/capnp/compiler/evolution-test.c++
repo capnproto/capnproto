@@ -317,6 +317,19 @@ kj::ConstFunction<ChangeInfo(Declaration::Builder, uint&, bool)> STRUCT_MODS_[] 
 kj::ArrayPtr<kj::ConstFunction<ChangeInfo(Declaration::Builder, uint&, bool)>>
     STRUCT_MODS = STRUCT_MODS_;
 
+static uint maxGroupDepth(Declaration::Reader decl) {
+  uint childDepth = 0;
+  for (auto nested: decl.getNestedDecls()) {
+    uint depth = maxGroupDepth(nested);
+    if (depth > childDepth) childDepth = depth;
+  }
+  return childDepth + (decl.isGroup() ? 1 : 0);
+}
+
+// Deep group nesting makes SchemaLoader compatibility checks very expensive, while adding little
+// value to this randomized coverage once we have enough nesting to exercise group evolution.
+static constexpr uint MAX_GROUP_DEPTH = 12;
+
 // ================================================================================
 
 static ChangeInfo fieldUpgradeList(Declaration::Builder decl, uint& nextOrdinal,
@@ -825,19 +838,33 @@ void doTest() {
     uint oldOrdinalCount = nextOrdinal;
 
     auto newBuilder = kj::heap<MallocMessageBuilder>();
-    newBuilder->setRoot(builder->getRoot<ParsedFile>().asReader());
-
-    auto parsedFile = newBuilder->getRoot<ParsedFile>();
-    Declaration::Builder decl = parsedFile.getRoot().getNestedDecls()[0];
 
     // Apply a random modification.
     ChangeInfo changeInfo;
     while (changeInfo.kind == NO_CHANGE) {
+      uint trialNextOrdinal = nextOrdinal;
+      auto trialBuilder = kj::heap<MallocMessageBuilder>();
+      trialBuilder->setRoot(builder->getRoot<ParsedFile>().asReader());
+
+      auto parsedFile = trialBuilder->getRoot<ParsedFile>();
+      Declaration::Builder decl = parsedFile.getRoot().getNestedDecls()[0];
+
       auto& mod = chooseFrom(STRUCT_MODS);
-      changeInfo = mod(decl, nextOrdinal, false);
+      changeInfo = mod(decl, trialNextOrdinal, false);
+
+      if (changeInfo.kind != NO_CHANGE) {
+        if (maxGroupDepth(decl.asReader()) > MAX_GROUP_DEPTH) {
+          changeInfo = { NO_CHANGE, "Skip mutation that creates too much group nesting." };
+        } else {
+          nextOrdinal = trialNextOrdinal;
+          newBuilder = kj::mv(trialBuilder);
+        }
+      }
     }
 
     KJ_CONTEXT(changeInfo.description);
+
+    auto parsedFile = newBuilder->getRoot<ParsedFile>();
 
     if (checkChange(builder->getRoot<ParsedFile>(), parsedFile, changeInfo.kind, oldOrdinalCount) &&
         checkChange(parsedFile, builder->getRoot<ParsedFile>(), changeInfo.kind, oldOrdinalCount)) {
