@@ -22,6 +22,7 @@
 #pragma once
 
 #include "common.h"
+#include <atomic>
 
 // KJ_DEBUG_MEMORY == 1 enables variety of checks designed to catch memory usage errors.
 // KJ_DEBUG_MEMORY undefined or KJ_DEBUG_MEMORY == 0 disables all such checks.
@@ -45,11 +46,6 @@
 #define KJ_ASSERT_PTR_COUNTERS 0
 #endif
 #endif
-
-#if KJ_ASSERT_PTR_COUNTERS
-#include <atomic>
-#endif // KJ_ASSERT_PTR_COUNTERS
-
 
 KJ_BEGIN_HEADER
 
@@ -203,14 +199,18 @@ class WeakCell {
 public:
   explicit WeakCell(void* ptr, PtrControl* control): ptr(ptr), control(control) {}
 
-  inline void addRef() { ++refcount; }
-  inline void decRef() { if (--refcount == 0) { delete this; } }
+  inline void addRef() { refcount.fetch_add(1, std::memory_order_relaxed); }
+  inline void decRef() {
+    if (refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      delete this;
+    }
+  }
 
   void* ptr;
   PtrControl* control;
 
 private:
-  size_t refcount = 1;
+  std::atomic<size_t> refcount = 1;
 };
 
 void atomicPtrCounterAssertionFailed(const char* const);
