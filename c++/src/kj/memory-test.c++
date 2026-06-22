@@ -1018,6 +1018,13 @@ struct MultiBaseObj2 : public OtherBase, public Obj2 {
 };
 
 KJ_TEST("kj::Ptr<T> subtyping") {
+  static_assert(kj::canConvert<kj::Ptr<Obj2>, kj::Ptr<Obj>>(), "failure");
+  static_assert(!kj::canConvert<kj::Ptr<Obj>, kj::Ptr<Obj2>>(), "failure");
+  static_assert(!kj::canConvert<kj::Ptr<Obj2>, kj::Ptr<const Obj>>(), "failure");
+  static_assert(kj::canConvert<kj::Ptr<const Obj2>, kj::Ptr<const Obj>>(), "failure");
+  static_assert(!kj::canConvert<kj::Pin<Obj2>&, kj::Ptr<const Obj2>>(), "failure");
+  static_assert(kj::canConvert<kj::Pin<const Obj2>&, kj::Ptr<const Obj>>(), "failure");
+
   // pin the child
   kj::Pin<Obj2> pin("obj2", 42);
 
@@ -1041,18 +1048,22 @@ KJ_TEST("kj::Ptr<T> subtyping") {
   KJ_EXPECT(ptr4->name == "obj2"_kj);
   KJ_EXPECT(ptr4 == pin);
 
-  kj::Ptr<const Obj2> ptr5 = pin;
-  KJ_EXPECT(ptr5->name == "obj2"_kj);
+  kj::Pin<const Obj2> constPin("constObj2", 123);
+  kj::Ptr<const Obj> ptr5 = constPin;
+  KJ_EXPECT(ptr5->name == "constObj2"_kj);
 }
 
 KJ_TEST("kj::Weak<T> subtyping") {
   static_assert(kj::canConvert<kj::Weak<Obj2>, kj::Weak<Obj>>(), "failure");
   static_assert(!kj::canConvert<kj::Weak<Obj>, kj::Weak<Obj2>>(), "failure");
-  static_assert(kj::canConvert<kj::Weak<Obj2>, kj::Weak<const Obj>>(), "failure");
+  static_assert(!kj::canConvert<kj::Weak<Obj2>, kj::Weak<const Obj>>(), "failure");
+  static_assert(kj::canConvert<kj::Weak<const Obj2>, kj::Weak<const Obj>>(), "failure");
   static_assert(kj::MaybeTraits<kj::Weak<Obj>>::convertingConstructor,
       "Maybe<Weak<T>> should opt into converting construction");
   static_assert(kj::canConvert<kj::Weak<Obj2>, kj::Maybe<kj::Weak<Obj>>>(),
       "Maybe<Weak<Base>> should be implicitly constructible from Weak<Derived>");
+  static_assert(!kj::canConvert<kj::Weak<Obj2>, kj::Maybe<kj::Weak<const Obj>>>(),
+      "Maybe<Weak<const Base>> should not be implicitly constructible from Weak<Derived>");
   static_assert(!kj::canConvert<kj::Weak<Obj>, kj::Maybe<kj::Weak<Obj2>>>(),
       "Maybe<Weak<Derived>> should not be implicitly constructible from Weak<Base>");
 
@@ -1062,8 +1073,11 @@ KJ_TEST("kj::Weak<T> subtyping") {
   KJ_EXPECT(weak2 == pin);
   KJ_EXPECT(weak2.assertLive().name == "obj2"_kj);
 
-  kj::Weak<const Obj> weak3 = weak1;
-  KJ_EXPECT(weak3.assertLive().name == "obj2"_kj);
+  kj::Pin<const Obj2> constPin("constObj2", 321);
+  kj::Weak<const Obj2> weak3 = constPin.addWeak();
+  kj::Weak<const Obj> weak4 = weak3;
+  KJ_EXPECT(weak4 == constPin);
+  KJ_EXPECT(weak4.assertLive().name == "constObj2"_kj);
 
   kj::Maybe<kj::Weak<Obj>> maybeWeak = weak1;
   KJ_IF_SOME(weak, maybeWeak) {
@@ -1130,9 +1144,9 @@ KJ_TEST("kj::Weak<T> basic properties") {
   KJ_EXPECT(pin->name == "b"_kj);
 
   const auto& constWeak = weak1;
-  KJ_IF_SOME(obj, constWeak) {
-    static_assert(kj::isSameType<decltype(obj), kj::Ptr<const Obj>&>());
-    KJ_EXPECT(obj->name == "b"_kj);
+  KJ_IF_SOME(obj, constWeak.tryGet()) {
+    static_assert(kj::isSameType<decltype(obj), Obj&>());
+    KJ_EXPECT(obj.name == "b"_kj);
   } else {
     KJ_FAIL_EXPECT("expected KJ_IF_SOME on const Weak<T> to contain a pointer");
   }
@@ -1195,22 +1209,36 @@ KJ_TEST("kj::Ptr<T> and kj::Weak<T> conversion") {
   }
 
   const auto& constWeak = weak;
-  KJ_IF_SOME(strong, constWeak) {
-    static_assert(kj::isSameType<decltype(strong), kj::Ptr<const Obj>&>());
-    KJ_EXPECT(strong->name == "a"_kj);
+  KJ_IF_SOME(obj, constWeak.tryGet()) {
+    static_assert(kj::isSameType<decltype(obj), Obj&>());
+    KJ_EXPECT(obj.name == "a"_kj);
   } else {
-    KJ_FAIL_EXPECT("expected KJ_IF_SOME on const Weak<T> to upgrade");
+    KJ_FAIL_EXPECT("expected const Weak<T> to contain a pointer");
   }
 
-  auto strongFromConstRequire = KJ_REQUIRE_NONNULL(constWeak);
-  static_assert(kj::isSameType<decltype(strongFromConstRequire), kj::Ptr<const Obj>>());
-  KJ_EXPECT(strongFromConstRequire->name == "a"_kj);
+  auto& objFromConstRequire = KJ_REQUIRE_NONNULL(constWeak.tryGet());
+  static_assert(kj::isSameType<decltype(objFromConstRequire), Obj&>());
+  KJ_EXPECT(objFromConstRequire.name == "a"_kj);
 
-  KJ_IF_SOME(strong, constWeak.upgrade()) {
+  kj::Pin<const Obj> constPin("constA");
+  kj::Weak<const Obj> weakConstObj = constPin.addWeak();
+  const auto& constWeakConstObj = weakConstObj;
+  KJ_IF_SOME(strong, constWeakConstObj) {
     static_assert(kj::isSameType<decltype(strong), kj::Ptr<const Obj>&>());
-    KJ_EXPECT(strong->name == "a"_kj);
+    KJ_EXPECT(strong->name == "constA"_kj);
   } else {
-    KJ_FAIL_EXPECT("expected const Weak<T> to upgrade");
+    KJ_FAIL_EXPECT("expected const Weak<const T> to upgrade");
+  }
+
+  auto strongFromConstRequire = KJ_REQUIRE_NONNULL(constWeakConstObj);
+  static_assert(kj::isSameType<decltype(strongFromConstRequire), kj::Ptr<const Obj>>());
+  KJ_EXPECT(strongFromConstRequire->name == "constA"_kj);
+
+  KJ_IF_SOME(strong, constWeakConstObj.upgrade()) {
+    static_assert(kj::isSameType<decltype(strong), kj::Ptr<const Obj>&>());
+    KJ_EXPECT(strong->name == "constA"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected const Weak<const T> to upgrade");
   }
 }
 

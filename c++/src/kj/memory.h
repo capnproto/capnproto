@@ -123,6 +123,10 @@ const void* castToConstVoid(T* ptr) {
 
 KJ_NORETURN(void throwWrongDisposerError());
 
+template <typename From, typename To>
+using EnableIfCanConvertPtr = EnableIf<canConvert<From*, To*>() && isConst<From>() == isConst<To>()>;
+// Checks if Ptr<From> can be converted into Ptr<To> following const-correctness.
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -197,12 +201,12 @@ class WeakCell {
   // Pin releases its reference, allowing outstanding Weak pointers to observe expiration safely.
 
 public:
-  explicit WeakCell(void* ptr, PtrControl* control): ptr(ptr), control(control) {}
+  explicit WeakCell(const void* ptr, PtrControl* control): ptr(ptr), control(control) {}
 
   inline void addRef() { ++refcount; }
   inline void decRef() { if (--refcount == 0) { delete this; } }
 
-  void* ptr;
+  const void* ptr;
   PtrControl* control;
 
 private:
@@ -244,7 +248,7 @@ class PtrControl {
 public:
   PtrControl() = default;
 
-  inline WeakCell* getWeakCell(void* ptr) {
+  inline WeakCell* getWeakCell(const void* ptr) {
     if (weakCell == nullptr) {
       weakCell = new WeakCell(ptr, this);
     }
@@ -715,6 +719,14 @@ class Pin {
   //
   // Pin<T> should be created on the stack or used as a data member. It should not be
   // allocated on the heap.
+  //
+  // Pin is designed to be used both in single and multi-threaded context and relies on
+  // const-correctness in its implementation:
+  // - Pin<const T> and corresponding references types designate an object that is used by multiple
+  //   threads.
+  // - Pin<non-const T> designates a single-threaded object.
+  // Conversion between const and non-const variants are not allowed.
+  //
   // Pin<T> is integrated with Ptr<T> and Weak<T>. It is legal to move/destroy only when there are
   // no active Ptr<T>s; outstanding Weak<T>s are nulled instead.
   // When KJ_ASSERT_PTR_COUNTERS is defined, pointers are tracked and validity of these
@@ -739,14 +751,9 @@ public:
     control.dispose();
   }
 
-  inline T* operator->() { return get(); }
-  inline const T* operator->() const { return get(); }
-
-  inline T& operator*() { return *get(); }
-  inline const T& operator*() const { return *get(); }
-
-  inline T* get() { return &t; }
-  inline const T* get() const { return &t; }
+  inline T* operator->() const { return get(); }
+  inline T& operator*() const { return *get(); }
+  inline T* get() const { return const_cast<T*>(&t); }
 
   inline operator Ptr<T>() { return Ptr<T>(this); }
   // Pin<T> can be implicitly converted to Ptr<T> to obtain new pointers.
@@ -754,11 +761,11 @@ public:
   inline Ptr<T> asPtr() { return Ptr<T>(this); }
   // Explicit convenience method to create new pointers.
 
-  template <typename U, typename = EnableIf<canConvert<T*, U*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
   inline operator Ptr<U>() { return Ptr<U>(this); }
   // Pin<T> can be implicitly converted to pointers of compatible types.
 
-  template <typename U, typename = EnableIf<canConvert<T*, U*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
   inline Ptr<U> asPtr() { return Ptr<U>(this); }
   // Explicit convenience method to create new pointers of compatible types.
 
@@ -813,20 +820,20 @@ public:
     other.control = nullptr;
   }
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   Ptr(Ptr<U>&& other) : ptr(other.ptr), control(other.control) {
     other.ptr = nullptr;
     other.control = nullptr;
   }
 
-// Ptr<T> can be freely copied.
+  // Ptr<T> can be freely copied.
   Ptr(const Ptr& other) : ptr(other.ptr), control(other.control) {
     if (ptr != nullptr) {
       control->inc();
     }
   }
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   Ptr(const Ptr<U>& other) : ptr(other.ptr), control(other.control) {
     if (ptr != nullptr) {
       control->inc();
@@ -841,8 +848,8 @@ public:
     }
   }
 
-  inline T* operator->() { return get(); }
-  inline const T* operator->() const { return get(); }
+  inline T* operator->() const { return get(); }
+  inline T* get() const { return ptr; }
 
   inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
   inline bool operator==(const Ptr<T>& other) const { return get() == other.get(); }
@@ -854,7 +861,7 @@ public:
   template <typename U>
   inline bool operator==(const Ptr<U>& other) const { return get() == other.get(); }
 
-  inline T& asRef() { return *get(); }
+  inline T& asRef() const { return *get(); }
   // Obtain a `T&` reference.
   // This is an unsafe operation and should be avoided unless absolutely necessary.
   // It is undefined behavior to use the reference after the object managed by this Ptr<T>
@@ -876,7 +883,7 @@ private:
     control->inc();
   }
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   inline Ptr(Pin<U>* pin) : ptr(pin->get()), control(&pin->control) {
     control->inc();
   }
@@ -885,9 +892,6 @@ private:
 
   T *ptr;
   _::PtrControl* control;
-
-  inline T* get() { return ptr; }
-  inline const T* get() const { return ptr; }
 
   template <typename>
   friend class Ptr;
@@ -944,13 +948,13 @@ public:
     }
   }
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   Weak(Weak<U>&& other) noexcept: ptr(other.ptr) {
     kj::swp(cell, other.cell);
     other.ptr = nullptr;
   }
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   Weak(const Weak<U>& other): cell(other.cell), ptr(other.ptr) {
     if (cell != nullptr) {
       cell->addRef();
@@ -960,9 +964,9 @@ public:
   inline Weak(Ptr<T>& ptr): Weak(ptr.asWeak()) {}
   inline Weak(Ptr<T>&& ptr): Weak(ptr.asWeak()) {}
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   inline Weak(Ptr<U>& ptr): Weak(ptr.asWeak()) {}
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
   inline Weak(Ptr<U>&& ptr): Weak(ptr.asWeak()) {}
 
   inline Weak& operator=(decltype(nullptr)) {
@@ -970,50 +974,32 @@ public:
     return *this;
   }
 
-  inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
+  inline bool operator==(Pin<T>& other) const { return get() == other.get(); }
   inline bool operator==(const Weak<T>& other) const { return get() == other.get(); }
-  inline bool operator==(const T* const other) const { return get() == other; }
+  inline bool operator==(const T* other) const { return get() == other; }
 
   template <typename U>
-  inline bool operator==(const Pin<U>& other) const { return get() == other.get(); }
+  inline bool operator==(Pin<U>& other) const { return get() == other.get(); }
 
   template <typename U>
   inline bool operator==(const Weak<U>& other) const { return get() == other.get(); }
 
-  inline T& assertLive() {
+  inline T& assertLive() const {
     // Obtain a `T&` reference, checking that the referent is still alive.
     T* ptr = get();
     KJ_IREQUIRE(ptr != nullptr, "null Weak<> dereference");
     return *ptr;
   }
 
-  inline const T& assertLive() const {
-    // Obtain a `const T&` reference, checking that the referent is still alive.
-    const T* ptr = get();
-    KJ_IREQUIRE(ptr != nullptr, "null Weak<> dereference");
-    return *ptr;
-  }
-
-  inline Maybe<T&> tryGet() { return get(); }
+  inline Maybe<T&> tryGet() const { return get(); }
   // Obtain a reference if the referent is still alive, otherwise return none.
 
-  inline Maybe<const T&> tryGet() const { return get(); }
-  // Obtain a const reference if the referent is still alive, otherwise return none.
-
-  inline Maybe<Ptr<T>> upgrade() {
+  inline Maybe<Ptr<T>> upgrade() const {
     // Obtain a strong pointer if the referent is still alive, otherwise return none.
     if (get() == nullptr) {
       return kj::none;
     }
     return Ptr<T>(ptr, cell);
-  }
-
-  inline Maybe<Ptr<const T>> upgrade() const {
-    // Obtain a const strong pointer if the referent is still alive, otherwise return none.
-    if (get() == nullptr) {
-      return kj::none;
-    }
-    return Ptr<const T>(ptr, cell);
   }
 
 private:
@@ -1055,7 +1041,7 @@ private:
 };
 
 template <typename T, typename U>
-inline bool operator==(const Pin<T>& pin, const Weak<U>& weak) { return weak == pin; }
+inline bool operator==(Pin<T>& pin, const Weak<U>& weak) { return weak == pin; }
 
 // MaybeTraits specialization for Weak<T>.
 // This enables niche optimization: Maybe<Weak<T>> uses cell == nullptr as "none".
@@ -1075,8 +1061,8 @@ namespace _ {  // private
 
 template <typename T>
 inline NullableValue<Ptr<T>> readMaybe(Weak<T>& weak) { return readMaybe(weak.upgrade()); }
-template <typename T>
-inline NullableValue<Ptr<const T>> readMaybe(const Weak<T>& weak) {
+template <typename T, typename = EnableIf<isConst<T>()>>
+inline NullableValue<Ptr<T>> readMaybe(const Weak<T>& weak) {
   return readMaybe(weak.upgrade());
 }
 template <typename T>
