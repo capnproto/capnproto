@@ -22,6 +22,7 @@
 #pragma once
 
 #include "memory.h"
+#include <atomic>
 
 #if _MSC_VER && !defined(__clang__)
 #include <intrin0.h> // _InterlockedXX
@@ -558,6 +559,96 @@ private:
   Own<const T> wrapped;
 };
 
+template <typename T>
+constexpr bool IsAtomicRefcounted = canConvert<const T*, const AtomicRefcounted*>();
+
+template <typename T, bool isAtomicRefcounted = IsAtomicRefcounted<T>>
+class ArcStorage;
+
+template <typename T>
+struct ArcState {
+  const AtomicRefcounted* refcounted;
+  const T* ptr;
+};
+
+template <typename T>
+class ArcStorage<T, true> {
+  // Single-pointer Arc storage specialization for isAtomicRefcounted case.
+
+public:
+  ArcStorage() = default;
+  ArcStorage(ArcState<T> state): ptr(state.ptr) {}
+  ArcStorage(ArcStorage&& other) noexcept: ptr(other.take().ptr) { }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>() && IsAtomicRefcounted<U>>>
+  ArcStorage(ArcStorage<U, true>&& other) noexcept: ptr(other.take().ptr) { }
+
+  inline const T* getPtr() const { return ptr.load(std::memory_order_acquire); }
+  inline const T* takePtr() const { return ptr.exchange(nullptr, std::memory_order_acq_rel); }
+  inline void setPtr(const T* t) const { ptr.store(t, std::memory_order_release); }
+
+  inline const AtomicRefcounted* getRefcounted() const {
+    return static_cast<const AtomicRefcounted*>(getPtr());
+  }
+
+  inline ArcState<T> take() const {
+    const T* ptrCopy = takePtr();
+    return {static_cast<const AtomicRefcounted*>(ptrCopy), ptrCopy};
+  }
+
+  inline void swap(const ArcStorage& other) const {
+    if (this == &other) return;
+
+    // Do not use takePtr() here: swap must not expose a transient null to racing readers.
+    auto otherPtr = other.getPtr();
+    other.setPtr(ptr.exchange(otherPtr, std::memory_order_acq_rel));
+  }
+
+  inline void set(ArcState<T> state) const { setPtr(state.ptr); }
+
+private:
+  mutable std::atomic<const T*> ptr { nullptr };
+};
+
+template <typename T>
+class ArcStorage<T, false> {
+public:
+  ArcStorage() = default;
+  ArcStorage(ArcState<T> state): refcounted(state.refcounted), ptr(state.ptr) {}
+  ArcStorage(ArcStorage&& other) noexcept: ArcStorage(other.take()) { }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>() && !IsAtomicRefcounted<U>>>
+  ArcStorage(ArcStorage<U, false>&& other) noexcept {
+    auto otherState = other.take();
+    ptr = otherState.ptr;
+    refcounted = otherState.refcounted;
+  }
+
+  inline const T* getPtr() const { return ptr; }
+  inline const AtomicRefcounted* getRefcounted() const { return refcounted; }
+
+  inline ArcState<T> take() {
+    auto result = ArcState<T>{refcounted, ptr};
+    refcounted = nullptr;
+    ptr = nullptr;
+    return result;
+  }
+
+  inline void swap(ArcStorage& other) {
+    swp(refcounted, other.refcounted);
+    swp(ptr, other.ptr);
+  }
+
+  inline void set(const AtomicRefcounted* newRefcounted, const T* newPtr) {
+    refcounted = newRefcounted;
+    ptr = newPtr;
+  }
+
+private:
+  const AtomicRefcounted* refcounted = nullptr;
+  const T* ptr = nullptr;
+};
+
 }  // namespace _ (private)
 
 template<typename T>
@@ -571,36 +662,38 @@ class Arc {
   // The usage is similar to `kj::Rc<T>` but with a "const"-ness twist:
   // since in kj multithreaded code "const" means "thread-safe", `Arc<T>`
   // exposes only `const` members of T and thus is closer to `kj::Rc<const T>`.
+  //
+  // If T extends AtomicRefcounted, kj::swp(const Arc<T>&, const Arc<T>&) is also thread-safe with
+  // respect to addRef() and other swaps on those same live Arc handles.
+  // WARNING: do not destroy, clear, or assign shared handle directly. Instead, swap the shared 
+  // handle with a local Arc, then let the local Arc drop the old reference 
+  // outside the shared storage. In other words, kj::swp() is the thread-safe
+  // operation on the shared Arc handle; destruction is only safe on a non-shared handle.
+
+  static constexpr bool isAtomicRefcounted = _::IsAtomicRefcounted<T>;
 
 public:
   KJ_DISALLOW_COPY(Arc);
   Arc() { }
   Arc(decltype(nullptr)) { }
-  inline Arc(Arc&& other) noexcept: refcounted(other.refcounted), ptr(other.ptr) {
-    other.refcounted = nullptr;
-    other.ptr = nullptr;
-  }
+  inline Arc(Arc&& other) noexcept: storage(kj::mv(other.storage)) {}
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
-  inline Arc(Arc<U>&& other) noexcept: refcounted(other.refcounted), ptr(other.ptr) {
-    other.refcounted = nullptr;
-    other.ptr = nullptr;
-  }
+  template <typename U, typename = EnableIf<canConvert<U*, T*>() && 
+      _::IsAtomicRefcounted<T> == _::IsAtomicRefcounted<U>>>
+  inline Arc(Arc<U>&& other) noexcept: storage(kj::mv(other.storage)) {}
 
   template <typename U = T, typename = EnableIf<isSameType<U, T>()>>
   inline Arc(U t) {
     static_assert(!canConvert<const T*, const AtomicRefcounted*>());
     auto wrapper = new _::ArcWrapper<U>(kj::mv(t));
-    refcounted = wrapper;
-    ptr = wrapper->getWrappedPtr();
+    storage.set(wrapper, wrapper->getWrappedPtr());
   }
 
   inline Arc(Own<const T> t) {
     static_assert(!canConvert<const T*, const AtomicRefcounted*>());
     if (t.get() == nullptr) return;
     auto wrapper = new _::ArcOwnWrapper<T>(kj::mv(t));
-    refcounted = wrapper;
-    ptr = wrapper->getWrappedPtr();
+    storage.set(wrapper, wrapper->getWrappedPtr());
   }
 
   ~Arc() noexcept(false) { dispose(); }
@@ -608,15 +701,15 @@ public:
   kj::Own<const T> toOwn() {
     // Convert Arc<T> to Own<const T>.
     // Nullifies the original Arc<T>.
-    if (ptr == nullptr) return Own<const T>();
-    auto result = Own<const T>(ptr, *refcounted);
-    refcounted = nullptr;
-    ptr = nullptr;
-    return result;
+    auto state = storage.take();
+    if (state.ptr == nullptr) return Own<const T>();
+    return Own<const T>(state.ptr, *state.refcounted);
   }
 
   kj::Arc<T> addRef() const {
+    const T* ptr = get();
     if (ptr != nullptr) {
+      const AtomicRefcounted* refcounted = getRefcounted(ptr);
       refcounted->incRefcount();
       return Arc(refcounted, ptr);
     } else {
@@ -631,17 +724,12 @@ public:
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
   // is its own Disposer.
-  const T* disown() {
-    static_assert(canConvert<const T*, const AtomicRefcounted*>());
-    const T* result = ptr;
-    refcounted = nullptr;
-    ptr = nullptr;
-    return result;
+  const T* disown() requires(isAtomicRefcounted) {
+    return storage.take().ptr;
   }
 
   // Assume ownership of an object without incrementing its refcount. Opposite of disown().
-  static Arc reown(const T* ptr) {
-    static_assert(canConvert<const T*, const AtomicRefcounted*>());
+  static Arc reown(const T* ptr) requires(isAtomicRefcounted) {
     return Arc(static_cast<const AtomicRefcounted*>(ptr), ptr);
   }
 
@@ -652,46 +740,51 @@ public:
 
   Arc& operator=(Arc&& other) {
     if (this == &other) return *this;
-    swp(refcounted, other.refcounted);
-    swp(ptr, other.ptr);
+    storage.swap(other.storage);
     other.dispose();
     return *this;
   }
 
   template <typename U>
   Arc<U> downcast() {
-    Arc<U> result;
+    const T* ptr = get();
     if (ptr != nullptr) {
-      result = Arc<U>(refcounted, &kj::downcast<const U>(*ptr));
-      refcounted = nullptr;
-      ptr = nullptr;
+      Arc<U> result(getRefcounted(ptr), &kj::downcast<const U>(*ptr));
+      storage.take();
+      return result;
     }
-    return result;
+    return Arc<U>();
   }
 
-  inline bool operator==(const Arc<T>& other) const { return ptr == other.ptr; }
-  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+  inline bool operator==(const Arc<T>& other) const { return get() == other.get(); }
+  inline bool operator==(decltype(nullptr)) const { return get() == nullptr; }
 
 #define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null Arc<> dereference")
-  inline const T* operator->() const { NULLCHECK; return ptr; }
-  inline const T& operator*() const { NULLCHECK; return *ptr; }
+  inline const T* operator->() const { auto ptr = get(); NULLCHECK; return ptr; }
+  inline const T& operator*() const { auto ptr = get(); NULLCHECK; return *ptr; }
 #undef NULLCHECK
-  inline const T* get() const { return ptr; }
+  inline const T* get() const { return storage.getPtr(); }
 
 private:
-  Arc(const AtomicRefcounted* refcounted, const T* ptr): refcounted(refcounted), ptr(ptr) {}
+  Arc(const AtomicRefcounted* refcounted, const T* ptr): storage({refcounted, ptr}) {}
 
-  void dispose() {
-    if (ptr == nullptr) return;
-    const AtomicRefcounted* refcountedCopy = refcounted;
-    refcounted = nullptr;
-    ptr = nullptr;
-    // AtomicRefcounted dispose ignores the pointer.
-    refcountedCopy->dispose(static_cast<AtomicRefcounted*>(nullptr));
+  inline const AtomicRefcounted* getRefcounted() const { return getRefcounted(get()); }
+  inline const AtomicRefcounted* getRefcounted(const T* ptr) const {
+    if constexpr (isAtomicRefcounted) {
+      return static_cast<const AtomicRefcounted*>(ptr);
+    } else {
+      return storage.getRefcounted();
+    }
   }
 
-  const AtomicRefcounted* refcounted = nullptr;
-  const T* ptr = nullptr;
+  void dispose() {
+    auto state = storage.take();
+    if (state.ptr == nullptr) return;
+    // AtomicRefcounted dispose ignores the pointer.
+    state.refcounted->dispose(static_cast<AtomicRefcounted*>(nullptr));
+  }
+
+  _::ArcStorage<T> storage;
 
   friend class AtomicRefcounted;
 
@@ -700,7 +793,26 @@ private:
 
   template <typename>
   friend class Arc;
+
+  template <typename U>
+  friend void swp(Arc<U>& a, Arc<U>& b);
+
+  template <typename U>
+  friend void swp(const Arc<U>& a, const Arc<U>& b) requires _::IsAtomicRefcounted<U>;
 };
+
+template <typename T>
+void swp(Arc<T>& a, Arc<T>& b) {
+  a.storage.swap(b.storage);
+}
+
+template <typename T>
+void swp(const Arc<T>& a, const Arc<T>& b) requires _::IsAtomicRefcounted<T> {
+  // Thread-safe for live shared Arc handles. See Arc<T> class comment for the required lifetime
+  // rule: use this to move references out to local Arcs; do not concurrently destroy the shared Arc
+  // handles themselves.
+  a.storage.swap(b.storage);
+}
 
 template <typename T, typename... Params>
 inline Arc<T> arc(Params&&... params) {

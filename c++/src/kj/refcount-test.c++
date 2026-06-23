@@ -619,11 +619,24 @@ struct AtomicSetTrueInDestructor: public AtomicRefcounted {
   bool* ptr;
 };
 
+template <typename T>
+concept HasConstToOwn = requires(const T& ref) { ref.toOwn(); };
+
+template <typename T, typename U>
+concept HasConstDowncast = requires(const T& ref) { ref.template downcast<U>(); };
+
 static_assert(Cloneable<Arc<AtomicSetTrueInDestructor>>);
 static_assert(Cloneable<const Arc<AtomicSetTrueInDestructor>>);
+static_assert(sizeof(Arc<AtomicSetTrueInDestructor>) == sizeof(void*));
+static_assert(!AssignableFrom<const Arc<AtomicSetTrueInDestructor>&, decltype(nullptr)>);
+static_assert(!AssignableFrom<const Arc<AtomicSetTrueInDestructor>&,
+    Arc<AtomicSetTrueInDestructor>>);
+static_assert(!AssignableFrom<const Arc<SetTrueInDestructor2>&, decltype(nullptr)>);
+static_assert(!AssignableFrom<const Arc<SetTrueInDestructor2>&, Arc<SetTrueInDestructor2>>);
+static_assert(!HasConstToOwn<Arc<AtomicSetTrueInDestructor>>);
+static_assert(!HasConstToOwn<Arc<SetTrueInDestructor2>>);
 
 struct IncompleteDeclaredAtomicRefcounted;
-static_assert(sizeof(Arc<IncompleteDeclaredAtomicRefcounted>) == 2 * sizeof(void*));
 
 struct IncompleteDeclaredAtomicRefcounted: public AtomicRefcounted {
   IncompleteDeclaredAtomicRefcounted(bool* ptr): ptr(ptr) {}
@@ -631,9 +644,9 @@ struct IncompleteDeclaredAtomicRefcounted: public AtomicRefcounted {
 
   bool* ptr;
 };
+static_assert(sizeof(Arc<IncompleteDeclaredAtomicRefcounted>) == sizeof(void*));
 
 struct IncompleteDeclaredNotAtomicRefcounted;
-static_assert(sizeof(Arc<IncompleteDeclaredNotAtomicRefcounted>) == 2 * sizeof(void*));
 
 struct IncompleteDeclaredNotAtomicRefcounted {
   IncompleteDeclaredNotAtomicRefcounted(bool* ptr): ptr(ptr) {}
@@ -641,11 +654,11 @@ struct IncompleteDeclaredNotAtomicRefcounted {
 
   bool* ptr;
 };
+static_assert(sizeof(Arc<IncompleteDeclaredNotAtomicRefcounted>) == 2 * sizeof(void*));
 
 struct IncompleteInnerDeclaredAtomicRefcounted {
 private:
   struct Inner;
-  static_assert(sizeof(Arc<Inner>) == 2 * sizeof(void*));
 
 public:
   static void test();
@@ -659,6 +672,7 @@ struct IncompleteInnerDeclaredAtomicRefcounted::Inner: public AtomicRefcounted {
 };
 
 void IncompleteInnerDeclaredAtomicRefcounted::test() {
+  static_assert(sizeof(Arc<Inner>) == sizeof(void*));
   bool b = false;
   Arc<Inner> ref = kj::arc<Inner>(&b);
   KJ_EXPECT(!b);
@@ -669,7 +683,6 @@ void IncompleteInnerDeclaredAtomicRefcounted::test() {
 struct IncompleteInnerDeclaredNotAtomicRefcounted {
 private:
   struct Inner;
-  static_assert(sizeof(Arc<Inner>) == 2 * sizeof(void*));
 
 public:
   static void test();
@@ -683,6 +696,7 @@ struct IncompleteInnerDeclaredNotAtomicRefcounted::Inner {
 };
 
 void IncompleteInnerDeclaredNotAtomicRefcounted::test() {
+  static_assert(sizeof(Arc<Inner>) == 2 * sizeof(void*));
   bool b = false;
   Arc<Inner> ref = kj::arc<Inner>(&b);
   KJ_EXPECT(!b);
@@ -811,6 +825,29 @@ KJ_TEST("AtomicRefcounted::addRefToThis") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Arc atomic const swap") {
+  bool b1 = false;
+  bool b2 = false;
+
+  {
+    const kj::Arc<AtomicSetTrueInDestructor> ref1 = kj::arc<AtomicSetTrueInDestructor>(&b1);
+    const kj::Arc<AtomicSetTrueInDestructor> ref2 = kj::arc<AtomicSetTrueInDestructor>(&b2);
+    const AtomicSetTrueInDestructor* ptr1 = ref1.get();
+    const AtomicSetTrueInDestructor* ptr2 = ref2.get();
+
+    kj::swp(ref1, ref2);
+    EXPECT_TRUE(ref1.get() == ptr2);
+    EXPECT_TRUE(ref2.get() == ptr1);
+
+    auto ref3 = ref1.addRef();
+    EXPECT_TRUE(ref3.get() == ptr2);
+    EXPECT_TRUE(ref1->isShared());
+  }
+
+  EXPECT_TRUE(b1);
+  EXPECT_TRUE(b2);
+}
+
 KJ_TEST("Arc Own interop") {
   bool b = false;
 
@@ -925,6 +962,7 @@ struct ConcreteForArc final: public AbstractForArc {
 struct AbstractAtomicRefcounted: public AtomicRefcounted {
   virtual void use() const = 0;
 };
+static_assert(sizeof(Arc<AbstractAtomicRefcounted>) == sizeof(void*));
 
 struct ConcreteAtomicRefcounted final: public AbstractForArc, public AbstractAtomicRefcounted {
   ConcreteAtomicRefcounted(bool* ptr): ptr(ptr) {}
@@ -933,6 +971,11 @@ struct ConcreteAtomicRefcounted final: public AbstractForArc, public AbstractAto
 
   bool* ptr;
 };
+static_assert(sizeof(Arc<ConcreteAtomicRefcounted>) == sizeof(void*));
+static_assert(ConstructibleFrom<Arc<AbstractAtomicRefcounted>, Arc<ConcreteAtomicRefcounted>>);
+static_assert(!ConstructibleFrom<Arc<AbstractForArc>, Arc<ConcreteAtomicRefcounted>>);
+static_assert(!HasConstDowncast<Arc<AbstractAtomicRefcounted>, ConcreteAtomicRefcounted>);
+static_assert(!HasConstDowncast<Arc<AbstractForArc>, ConcreteForArc>);
 
 KJ_TEST("Arc<Abstract>") {
   bool b = false;
@@ -976,6 +1019,46 @@ KJ_TEST("Arc<Concrete>") {
   EXPECT_FALSE(b);
   own = nullptr;
   EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc atomic multiple inheritance") {
+  bool b = false;
+
+  Arc<ConcreteAtomicRefcounted> ref = kj::arc<ConcreteAtomicRefcounted>(&b);
+  EXPECT_TRUE(ref != nullptr);
+
+  Arc<AbstractAtomicRefcounted> atomicBase = ref.addRef();
+  atomicBase->use();
+  auto concrete = atomicBase.downcast<ConcreteAtomicRefcounted>();
+  EXPECT_TRUE(atomicBase == nullptr);
+  EXPECT_TRUE(concrete.get() == ref.get());
+
+  concrete = nullptr;
+  EXPECT_FALSE(b);
+
+  ref = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("const Arc atomic-refcounted base swap") {
+  bool b1 = false;
+  bool b2 = false;
+
+  {
+    const Arc<AbstractAtomicRefcounted> ref1 = kj::arc<ConcreteAtomicRefcounted>(&b1);
+    const Arc<AbstractAtomicRefcounted> ref2 = kj::arc<ConcreteAtomicRefcounted>(&b2);
+    const AbstractAtomicRefcounted* ptr1 = ref1.get();
+    const AbstractAtomicRefcounted* ptr2 = ref2.get();
+
+    kj::swp(ref1, ref2);
+    EXPECT_TRUE(ref1.get() == ptr2);
+    EXPECT_TRUE(ref2.get() == ptr1);
+    ref1->use();
+    ref2->use();
+  }
+
+  EXPECT_TRUE(b1);
+  EXPECT_TRUE(b2);
 }
 
 KJ_TEST("Arc polymorphic upcast") {
