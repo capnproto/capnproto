@@ -932,6 +932,9 @@ class Weak {
   // - tryGet() obtains Maybe<T&> directly.
   // - upgrade() method upgrades to Maybe<Ptr<T>>
 
+  static_assert(!isConst<T>(),
+      "Weak<const T> signifies multi-threaded uses and is not implemented yet.");
+
 public:
   inline Weak(decltype(nullptr)) noexcept: cell(nullptr), ptr(nullptr) {}
 
