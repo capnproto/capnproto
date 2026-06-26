@@ -223,6 +223,23 @@ KJ_TEST("Rc clone") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc self-assignment") {
+  bool b = false;
+
+  Rc<SetTrueInDestructor> ref = kj::rc<SetTrueInDestructor>(&b);
+  auto ptr = ref.get();
+  auto refPtr = &ref;
+
+  ref = kj::mv(*refPtr);
+
+  EXPECT_TRUE(ref != nullptr);
+  EXPECT_TRUE(ref.get() == ptr);
+  EXPECT_FALSE(b);
+
+  ref = nullptr;
+  EXPECT_TRUE(b);
+}
+
 KJ_TEST("Rc container clone") {
   bool b = false;
 
@@ -519,6 +536,271 @@ KJ_TEST("Rc inheritance") {
   EXPECT_FALSE(b);
   down = nullptr;
   EXPECT_TRUE(b);
+}
+
+static_assert(sizeof(WeakRc<SetTrueInDestructor>) == 2 * sizeof(void*));
+static_assert(sizeof(WeakRc<IncompleteDeclaredRefcounted>) == 2 * sizeof(void*));
+static_assert(sizeof(WeakRc<IncompleteDeclaredNotRefcounted>) == 2 * sizeof(void*));
+
+static_assert(kj::canConvert<WeakRc<Child>, WeakRc<SetTrueInDestructor>>());
+static_assert(!kj::canConvert<WeakRc<SetTrueInDestructor>, WeakRc<Child>>());
+
+// WeakRc<T> is move-only; explicit copies are made via clone().
+static_assert(Cloneable<WeakRc<SetTrueInDestructor>>);
+static_assert(!Cloneable<const WeakRc<SetTrueInDestructor>>);
+
+KJ_TEST("WeakRc basic") {
+  bool b = false;
+  Rc<SetTrueInDestructor> ref = kj::rc<SetTrueInDestructor>(&b);
+
+  WeakRc<SetTrueInDestructor> weak = ref.downgrade();
+  EXPECT_TRUE(weak != nullptr);
+  EXPECT_FALSE(weak == nullptr);
+  EXPECT_TRUE(weak == ref);
+  EXPECT_TRUE(&weak.assertLive() == ref.get());
+
+  // A WeakRc does not keep the referent alive on its own.
+  EXPECT_FALSE(ref->isShared());
+
+  KJ_IF_SOME(strong, weak.upgrade()) {
+    static_assert(kj::isSameType<decltype(strong), kj::Rc<SetTrueInDestructor>&>());
+    EXPECT_TRUE(strong == ref);
+    // The upgraded strong reference holds the refcount while it lives.
+    EXPECT_TRUE(ref->isShared());
+  } else {
+    KJ_FAIL_EXPECT("expected WeakRc to upgrade while referent is alive");
+  }
+  EXPECT_FALSE(ref->isShared());
+  EXPECT_FALSE(b);
+
+  ref = nullptr;
+  EXPECT_TRUE(b);
+
+  // The WeakRc has now expired.
+  EXPECT_TRUE(weak == nullptr);
+  EXPECT_TRUE(weak.tryGet() == kj::none);
+  EXPECT_TRUE(weak.upgrade() == kj::none);
+  EXPECT_TRUE(weak == ref); // both are null
+#ifdef KJ_DEBUG
+  KJ_EXPECT_THROW_MESSAGE("null WeakRc<> dereference", (void)weak.assertLive());
+#endif
+}
+
+KJ_TEST("WeakRc KJ_IF_SOME and tryGet") {
+  bool b = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+  auto weak = ref.downgrade();
+
+  KJ_IF_SOME(strong, weak) {
+    static_assert(kj::isSameType<decltype(strong), kj::Rc<SetTrueInDestructor>&>());
+    EXPECT_TRUE(strong == ref);
+  } else {
+    KJ_FAIL_EXPECT("expected KJ_IF_SOME on WeakRc to upgrade");
+  }
+
+  KJ_IF_SOME(obj, weak.tryGet()) {
+    static_assert(kj::isSameType<decltype(obj), SetTrueInDestructor&>());
+    EXPECT_TRUE(&obj == ref.get());
+  } else {
+    KJ_FAIL_EXPECT("expected tryGet to succeed");
+  }
+}
+
+KJ_TEST("WeakRc expires when Rc dropped, observed through Maybe") {
+  bool b = false;
+  kj::Maybe<WeakRc<SetTrueInDestructor>> maybeWeak;
+  {
+    auto ref = kj::rc<SetTrueInDestructor>(&b);
+    maybeWeak = ref.downgrade();
+
+    KJ_IF_SOME(weak, maybeWeak) {
+      EXPECT_TRUE(&weak.assertLive() == ref.get());
+    } else {
+      KJ_FAIL_EXPECT("expected Maybe<WeakRc<T>> to contain a value");
+    }
+    EXPECT_FALSE(b);
+  }
+  EXPECT_TRUE(b);
+
+  KJ_IF_SOME(weak, maybeWeak) {
+    EXPECT_TRUE(weak.tryGet() == kj::none);
+    EXPECT_TRUE(weak.upgrade() == kj::none);
+    KJ_IF_SOME(obj, weak) {
+      KJ_FAIL_EXPECT("expected KJ_IF_SOME on expired WeakRc<T> to be empty", obj.get());
+    } else {
+      EXPECT_TRUE(true);
+    }
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<WeakRc<T>> to still contain the (expired) value");
+  }
+}
+
+KJ_TEST("WeakRc upgrade extends lifetime") {
+  bool b = false;
+  WeakRc<SetTrueInDestructor> weak = nullptr;
+  kj::Maybe<kj::Rc<SetTrueInDestructor>> strong;
+  {
+    auto ref = kj::rc<SetTrueInDestructor>(&b);
+    weak = ref.downgrade();
+    KJ_IF_SOME(s, weak.upgrade()) {
+      strong = kj::mv(s);
+    } else {
+      KJ_FAIL_EXPECT("expected WeakRc to upgrade");
+    }
+  }
+
+  // The original Rc is gone, but the upgraded Rc keeps the object alive.
+  EXPECT_FALSE(b);
+  EXPECT_TRUE(weak != nullptr);
+
+  strong = kj::none;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == nullptr);
+}
+
+KJ_TEST("WeakRc clone and move") {
+  bool b = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+
+  WeakRc<SetTrueInDestructor> weak1 = ref.downgrade();
+  WeakRc<SetTrueInDestructor> weak2 = weak1.clone();  // explicit copy
+  EXPECT_TRUE(weak1 == weak2);
+  EXPECT_TRUE(weak1 == ref);
+
+  WeakRc<SetTrueInDestructor> weak3 = kj::mv(weak1);  // move ctor
+  EXPECT_TRUE(weak1 == nullptr);
+  EXPECT_TRUE(weak3 == ref);
+
+  WeakRc<SetTrueInDestructor> weak4 = nullptr;
+  weak4 = weak3.clone();  // explicit copy + move assign
+  EXPECT_TRUE(weak4 == ref);
+
+  WeakRc<SetTrueInDestructor> weak5 = nullptr;
+  weak5 = kj::mv(weak4);  // move assign
+  EXPECT_TRUE(weak4 == nullptr);
+  EXPECT_TRUE(weak5 == ref);
+
+  weak2 = nullptr;
+  EXPECT_TRUE(weak2 == nullptr);
+
+  EXPECT_FALSE(b);
+  ref = nullptr;
+  EXPECT_TRUE(b);
+}
+
+KJ_TEST("WeakRc self-assignment") {
+  bool b = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+
+  WeakRc<SetTrueInDestructor> weak = ref.downgrade();
+  auto ptr = &weak.assertLive();
+  auto weakPtr = &weak;
+
+  weak = kj::mv(*weakPtr);
+
+  EXPECT_TRUE(weak != nullptr);
+  EXPECT_TRUE(weak == ref);
+  EXPECT_TRUE(&weak.assertLive() == ptr);
+  EXPECT_FALSE(b);
+
+  ref = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == nullptr);
+}
+
+KJ_TEST("WeakRc subtyping and construction from Rc") {
+  bool b = false;
+  auto child = kj::rc<Child>(&b);
+
+  WeakRc<Child> weakChild = child.downgrade();
+  WeakRc<SetTrueInDestructor> weakParent = weakChild.clone();  // upcast (clone + move)
+  EXPECT_TRUE(weakParent == child);
+  EXPECT_TRUE(&weakParent.assertLive() == child.get());
+
+  // Construct WeakRc<Base> directly from Rc<Derived>.
+  WeakRc<SetTrueInDestructor> weakParent2 = child;
+  EXPECT_TRUE(weakParent2 == child);
+
+  // Maybe<WeakRc<T>> holding a moved weak reference.
+  kj::Maybe<WeakRc<Child>> maybeWeak = weakChild.clone();
+  KJ_IF_SOME(strong, maybeWeak) {
+    EXPECT_TRUE(strong == child);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<WeakRc<T>> to upgrade");
+  }
+
+  child = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weakParent == nullptr);
+  EXPECT_TRUE(weakParent2 == nullptr);
+}
+
+KJ_TEST("WeakRc polymorphic upcast") {
+  bool b = false;
+  Rc<Concrete> ref = kj::rc<Concrete>(&b);
+
+  WeakRc<Abstract> weak = ref.downgrade();  // Rc<Concrete> -> WeakRc<Abstract>
+  EXPECT_TRUE(weak != nullptr);
+
+  KJ_IF_SOME(strong, weak.upgrade()) {
+    strong->use();
+  } else {
+    KJ_FAIL_EXPECT("expected WeakRc<Abstract> to upgrade");
+  }
+
+  EXPECT_FALSE(b);
+  ref = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == nullptr);
+}
+
+KJ_TEST("WeakRc with non-refcounted type") {
+  bool b = false;
+  Rc<SetTrueInDestructor2> ref = kj::rc<SetTrueInDestructor2>(&b);
+
+  WeakRc<SetTrueInDestructor2> weak = ref.downgrade();
+  EXPECT_TRUE(weak == ref);
+
+  auto ref2 = ref.addRef();
+  ref = nullptr;
+  EXPECT_FALSE(b);
+  EXPECT_TRUE(weak != nullptr);
+
+  KJ_IF_SOME(strong, weak.upgrade()) {
+    EXPECT_TRUE(strong.get() == ref2.get());
+  } else {
+    KJ_FAIL_EXPECT("expected WeakRc to upgrade while a strong ref exists");
+  }
+
+  ref2 = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak == nullptr);
+}
+
+KJ_TEST("WeakRc from null Rc") {
+  Rc<SetTrueInDestructor> ref = nullptr;
+  WeakRc<SetTrueInDestructor> weak = ref.downgrade();
+  EXPECT_TRUE(weak == nullptr);
+  EXPECT_TRUE(weak.tryGet() == kj::none);
+  EXPECT_TRUE(weak.upgrade() == kj::none);
+}
+
+KJ_TEST("WeakRc addWeakRef/addStrongRef synonyms") {
+  bool b = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+
+  WeakRc<SetTrueInDestructor> weak = ref.addWeakRef();
+  EXPECT_TRUE(weak == ref);
+
+  KJ_IF_SOME(strong, weak.addStrongRef()) {
+    EXPECT_TRUE(strong == ref);
+  } else {
+    KJ_FAIL_EXPECT("expected addStrongRef() to upgrade while referent is alive");
+  }
+
+  ref = nullptr;
+  EXPECT_TRUE(b);
+  EXPECT_TRUE(weak.addStrongRef() == kj::none);
 }
 
 KJ_TEST("Refcounted::addRefToThis") {
