@@ -1394,6 +1394,113 @@ KJ_TEST("kj::Pin<T> moved with active ptrs crashes") {
 }
 #endif  
 
+struct TargetObj: public kj::PtrTarget {
+  TargetObj(kj::StringPtr name): name(kj::str(name)) {}
+
+  kj::Ptr<TargetObj> getPtr() { return addPtrToThis(); }
+  kj::Weak<TargetObj> getWeak() { return addWeakToThis(); }
+
+  kj::String name;
+
+  KJ_DISALLOW_COPY_AND_MOVE(TargetObj);
+};
+
+struct TargetObj2: public TargetObj {
+  TargetObj2(kj::StringPtr name, int size): TargetObj(name), size(size) {}
+
+  kj::Ptr<TargetObj2> getPtr2() { return addPtrToThis(); }
+  kj::Weak<TargetObj2> getWeak2() { return addWeakToThis(); }
+
+  int size;
+};
+
+KJ_TEST("kj::PtrTarget addPtrToThis") {
+  TargetObj obj("a");
+
+  kj::Ptr<TargetObj> ptr1 = obj.getPtr();
+  KJ_EXPECT(ptr1 == &obj);
+  KJ_EXPECT(ptr1->name == "a"_kj);
+
+  // Multiple pointers can refer to the same target.
+  kj::Ptr<TargetObj> ptr2 = obj.getPtr();
+  KJ_EXPECT(ptr1 == ptr2);
+
+  // Copies work too.
+  kj::Ptr<TargetObj> ptr3 = ptr1;
+  KJ_EXPECT(ptr3->name == "a"_kj);
+
+  ptr1->name = kj::str("b");
+  KJ_EXPECT(obj.name == "b"_kj);
+}
+
+KJ_TEST("kj::PtrTarget addWeakToThis") {
+  kj::Maybe<kj::Weak<TargetObj>> maybeWeak;
+  {
+    TargetObj obj("a");
+
+    kj::Weak<TargetObj> weak = obj.getWeak();
+    KJ_EXPECT(weak == &obj);
+    KJ_EXPECT(weak.assertLive().name == "a"_kj);
+
+    KJ_IF_SOME(ptr, weak) {
+      static_assert(kj::isSameType<decltype(ptr), kj::Ptr<TargetObj>&>());
+      KJ_EXPECT(ptr->name == "a"_kj);
+    } else {
+      KJ_FAIL_EXPECT("expected Weak<T> to upgrade");
+    }
+
+    maybeWeak = obj.getWeak();
+  }
+
+  // Weak pointers expire once the target is destroyed.
+  KJ_IF_SOME(weak, maybeWeak) {
+    KJ_EXPECT(weak.tryGet() == kj::none);
+    KJ_EXPECT(weak.upgrade() == kj::none);
+  } else {
+    KJ_FAIL_EXPECT("expected Maybe<Weak<T>> to contain an expired pointer");
+  }
+}
+
+KJ_TEST("kj::PtrTarget subtyping") {
+  static_assert(kj::canConvert<kj::Ptr<TargetObj2>, kj::Ptr<TargetObj>>(), "failure");
+  static_assert(kj::canConvert<kj::Weak<TargetObj2>, kj::Weak<TargetObj>>(), "failure");
+
+  TargetObj2 obj("obj2", 42);
+
+  // addPtrToThis/addWeakToThis return the most-derived type.
+  kj::Ptr<TargetObj2> ptr2 = obj.getPtr2();
+  static_assert(kj::isSameType<decltype(ptr2), kj::Ptr<TargetObj2>>());
+  KJ_EXPECT(ptr2->size == 42);
+  KJ_EXPECT(ptr2->name == "obj2"_kj);
+
+  // Calling the base-class method yields a Ptr to the base type.
+  kj::Ptr<TargetObj> ptr1 = obj.getPtr();
+  static_assert(kj::isSameType<decltype(ptr1), kj::Ptr<TargetObj>>());
+  KJ_EXPECT(ptr1 == ptr2);
+  KJ_EXPECT(ptr1->name == "obj2"_kj);
+
+  // Derived pointer converts to base pointer.
+  kj::Ptr<TargetObj> ptrUpcast = obj.getPtr2();
+  KJ_EXPECT(ptrUpcast == ptr2);
+
+  kj::Weak<TargetObj2> weak2 = obj.getWeak2();
+  kj::Weak<TargetObj> weak1 = weak2;
+  KJ_EXPECT(weak1 == &obj);
+  KJ_EXPECT(weak1.assertLive().name == "obj2"_kj);
+}
+
+#if KJ_ASSERT_PTR_COUNTERS
+KJ_TEST("kj::PtrTarget destroyed with active ptrs crashes") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto obj = kj::heap<TargetObj>("a");
+    // create a pointer and leak it
+    auto* leaked = new kj::Ptr<TargetObj>(obj->getPtr());
+    (void)leaked;
+    // destroying the target with an active reference crashes
+  });
+}
+#endif
+
 } // namespace 
 
 }  // namespace kj
