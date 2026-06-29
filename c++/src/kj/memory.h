@@ -1032,6 +1032,22 @@ public:
     return *this;
   }
 
+  Weak& operator=(Weak&& other) {
+    if (this == &other) return *this;
+    kj::swp(cell, other.cell);
+    kj::swp(ptr, other.ptr);
+    other.dispose();
+    return *this;
+  }
+
+  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
+  Weak& operator=(Weak<U>&& other) {
+    Weak tmp(kj::mv(other));
+    kj::swp(cell, tmp.cell);
+    kj::swp(ptr, tmp.ptr);
+    return *this;
+  }
+
   inline bool operator==(Pin<T>& other) const { return get() == other.get(); }
   inline bool operator==(const Weak<T>& other) const { return get() == other.get(); }
   inline bool operator==(const T* other) const { return get() == other; }
