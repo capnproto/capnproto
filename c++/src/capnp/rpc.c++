@@ -4106,6 +4106,7 @@ private:
 
             // Throw away the result promise.
             promiseToRelease = kj::mv(answer.task);
+            answer.task = Answer::Finished();
 
             KJ_IF_SOME(context, answer.callContext) {
               // Send the `Return` message  for the call of which we're taking ownership, so

@@ -991,6 +991,22 @@ private:
   kj::Promise<void> unblock;
 };
 
+class TestQueuedTailCaller final: public test::TestTailCaller::Server {
+public:
+  TestQueuedTailCaller(kj::Promise<void> unblock)
+      : unblock(kj::mv(unblock).fork()) {}
+
+  kj::Promise<void> foo(FooContext context) override {
+    return unblock.addBranch().then([context]() mutable {
+      auto tailRequest = context.getParams().getCallee().fooRequest();
+      return context.tailCall(kj::mv(tailRequest));
+    });
+  }
+
+private:
+  kj::ForkedPromise<void> unblock;
+};
+
 KJ_TEST("cancel tail call") {
   TestContext context;
 
@@ -1054,6 +1070,67 @@ KJ_TEST("tail call cancellation race") {
 
   KJ_ASSERT(callCount == 1);
   KJ_ASSERT(cancelCount == 1);
+}
+
+KJ_TEST("takeFromOtherQuestion reuse after canceled redirect") {
+  TestContext context;
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  auto& carol = context.initVat("carol", kj::heap<TestQueuedTailCaller>(kj::mv(paf.promise)));
+
+  uint takeFromOtherQuestionReturnCount = 0;
+  kj::Maybe<uint32_t> firstTakeFromOtherQuestion = kj::none;
+  carol.vatNetwork.onSend([&](MessageBuilder& builder) {
+    auto message = builder.getRoot<rpc::Message>();
+    if (message.isReturn()) {
+      auto ret = message.getReturn();
+      if (ret.isTakeFromOtherQuestion()) {
+        if (takeFromOtherQuestionReturnCount == 0) {
+          firstTakeFromOtherQuestion = ret.getTakeFromOtherQuestion();
+        } else if (takeFromOtherQuestionReturnCount == 1) {
+          ret.setTakeFromOtherQuestion(KJ_ASSERT_NONNULL(firstTakeFromOtherQuestion));
+        }
+        ++takeFromOtherQuestionReturnCount;
+      }
+    }
+    return true;
+  });
+
+  auto caller = context.alice.connect<test::TestTailCaller>("carol");
+
+  int calleeCallCount = 0;
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount));
+
+  {
+    auto request = caller.fooRequest();
+    request.setCallee(callee);
+    auto promise = request.send();
+    KJ_ASSERT(!promise.poll(context.waitScope));
+
+    // Unblock Carol and cancel in the same turn to force the canceled-question race path while
+    // still ensuring the call executes.
+    paf.fulfiller->fulfill();
+    promise = nullptr;
+  }
+
+  for (uint i = 0; i < 16 && takeFromOtherQuestionReturnCount < 1; i++) {
+    kj::yield().wait(context.waitScope);
+  }
+  KJ_ASSERT(takeFromOtherQuestionReturnCount == 1);
+
+  auto request = caller.fooRequest();
+  request.setCallee(callee);
+  auto livePromise = request.send();
+
+  bool rejected = livePromise.then(
+      [](auto&&) {
+        return false;
+      },
+      [](kj::Exception&&) {
+        return true;
+      }).wait(context.waitScope);
+
+  KJ_EXPECT(rejected);
+  KJ_EXPECT(takeFromOtherQuestionReturnCount >= 2);
 }
 
 KJ_TEST("cancellation") {
