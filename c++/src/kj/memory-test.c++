@@ -1087,9 +1087,21 @@ KJ_TEST("kj::Weak<T> subtyping") {
     KJ_FAIL_EXPECT("expected Weak<Base> to upgrade");
   }
 
+  kj::Weak<Obj> assignedBaseWeak = nullptr;
+  assignedBaseWeak = kj::mv(multiWeak);
+  KJ_EXPECT(multiWeak == nullptr);
+  KJ_EXPECT(assignedBaseWeak.assertLive().name == "multi"_kj);
+  KJ_IF_SOME(basePtr, assignedBaseWeak) {
+    KJ_EXPECT(basePtr->name == "multi"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected move-assigned Weak<Base> to upgrade");
+  }
+
   kj::Pin<MultiBaseObj2> movedMultiPin(kj::mv(multiPin));
   KJ_EXPECT(baseWeak.tryGet() == kj::none);
   KJ_EXPECT(baseWeak.upgrade() == kj::none);
+  KJ_EXPECT(assignedBaseWeak.tryGet() == kj::none);
+  KJ_EXPECT(assignedBaseWeak.upgrade() == kj::none);
 
   kj::Weak<Obj> movedBaseWeak = movedMultiPin.addWeak();
   KJ_EXPECT(movedBaseWeak == movedMultiPin);
@@ -1151,6 +1163,17 @@ KJ_TEST("kj::Weak<T> basic properties") {
   kj::Weak<Obj> weak2 = weak1;
   KJ_EXPECT(weak1 == weak2);
   KJ_EXPECT(weak2.assertLive().name == "b"_kj);
+
+  kj::Weak<Obj> weak3 = nullptr;
+  weak3 = kj::mv(weak2);
+  KJ_EXPECT(weak2 == nullptr);
+  KJ_EXPECT(weak3 == pin);
+  KJ_EXPECT(weak3.assertLive().name == "b"_kj);
+
+  auto weak3Ptr = &weak3;
+  weak3 = kj::mv(*weak3Ptr);
+  KJ_EXPECT(weak3 == pin);
+  KJ_EXPECT(weak3.assertLive().name == "b"_kj);
 
   weak2 = nullptr;
   KJ_EXPECT(weak2 == nullptr);
