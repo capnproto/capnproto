@@ -1155,7 +1155,7 @@ inline NullableValue<Ptr<T>> readMaybe(Weak<T>&& weak) { return readMaybe(weak.u
 // Inline implementation details
 
 template <typename T>
-void Disposer::dispose(T* object) const {
+KJ_DISPOSE_ATTR void Disposer::dispose(T* object) const {
   if constexpr (_kj_internal_isPolymorphic((T*)nullptr)) {
     // Note that dynamic_cast<void*> does not require RTTI to be enabled, because the offset to
     // the top of the object is in the vtable -- as it obviously needs to be to correctly implement

@@ -224,6 +224,20 @@ typedef unsigned char byte;
 #define KJ_NOINLINE __attribute__((noinline))
 #endif
 
+#ifndef KJ_DISPOSE_ATTR
+#define KJ_DISPOSE_ATTR
+// Attribute applied to KJ's type-erased object-teardown dispatch helpers: Disposer::dispose(),
+// ArrayDisposer::dispose(), and PromiseDisposer::dispose(). By default this expands to nothing, so
+// these remain ordinary inlinable functions and existing embedders see no change.
+//
+// An embedder whose build instantiates these helpers at a very large number of call sites may
+// define KJ_DISPOSE_ATTR (typically to KJ_NOINLINE) to force the dispatch out-of-line. Because the
+// instantiations are largely identical, the linker can then fold them (e.g. via ICF) into a small
+// number of shared copies, substantially reducing code size on teardown paths -- at the cost of a
+// non-inlined call per disposal. Defining it does not change the meaning of the program, only
+// inlining/codegen.
+#endif
+
 #if defined(_MSC_VER) && !__clang__
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
 #define KJ_UNUSED
