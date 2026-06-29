@@ -40,6 +40,15 @@ Refcounted::~Refcounted() noexcept(false) {
 
 void Refcounted::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
+    if (weakCell != nullptr) {
+      // The refcount has reached zero and will never be incremented again: we null the cell's
+      // back-pointer here, before destroying the object, so that any outstanding WeakRc<T> can
+      // observe expiration and will never attempt to revive a dead object (see
+      // WeakRc<T>::upgrade()). Then release the strong-side reference to the cell;
+      // the cell itself is freed once the last WeakRc<T> is gone.
+      weakCell->refcounted = nullptr;
+      weakCell->decRef();
+    }
     delete this;
   }
 }

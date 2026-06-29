@@ -37,13 +37,41 @@ namespace kj {
 template<typename T>
 class Rc;
 
+template<typename T>
+class WeakRc;
+
 template <typename T, typename... Params>
 Rc<T> rc(Params&&... params);
+
+class Refcounted;
 
 namespace _ {  // private
 
 template <typename T> class RcWrapper;
 template <typename T> class RcOwnWrapper;
+
+class RcWeakCell {
+  // Shared validity cell backing kj::WeakRc<T>, the weak companion of kj::Rc<T>.
+  //
+  // The strong side (the Refcounted object) owns one reference while the referent is alive; each
+  // WeakRc owns one reference. When the last strong reference is dropped, `refcounted` is nulled
+  // before the strong-side reference is released, allowing outstanding WeakRc pointers to observe
+  // expiration safely. The cell outlives the referent so that expiration can be detected, and is
+  // freed once both the strong side and all WeakRc references are gone.
+
+public:
+  explicit RcWeakCell(Refcounted* refcounted): refcounted(refcounted) {}
+
+  inline void addRef() { ++refcount; }
+  inline void decRef() { if (--refcount == 0) { delete this; } }
+
+  Refcounted* refcounted;
+  // The live Refcounted object, or nullptr once the last strong reference has been dropped.
+
+private:
+  size_t refcount = 1;
+  // Starts at 1 to account for the strong-side reference held while `refcounted` is non-null.
+};
 
 }  // namespace _ (private)
 
@@ -91,7 +119,20 @@ private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
 
+  mutable _::RcWeakCell* weakCell = nullptr;
+  // Lazily-allocated shared cell backing any kj::WeakRc<T> referencing this object. Nulled and
+  // released when the last strong reference is dropped (see disposeImpl()).
+  // "mutable" because disposeImpl() is const.
+
   void disposeImpl(void* pointer) const override;
+
+  inline _::RcWeakCell* getWeakCell() {
+    // Lazily allocate (or return the existing) weak cell for this object.
+    if (weakCell == nullptr) {
+      weakCell = new _::RcWeakCell(this);
+    }
+    return weakCell;
+  }
 
   template <typename T>
   static Own<T> addRefInternal(T* object);
@@ -112,6 +153,9 @@ private:
 
   template <typename T>
   friend class Rc;
+
+  template <typename T>
+  friend class WeakRc;
 
   template <typename T> friend class _::RcWrapper;
   template <typename T> friend class _::RcOwnWrapper;
@@ -262,6 +306,14 @@ public:
     return addRef();
   }
 
+  WeakRc<T> downgrade();
+  // Create a weak reference to the referent. The weak reference does not keep the object alive;
+  // it expires once the last strong Rc<T> is dropped, but can be upgraded back to an Rc<T> while
+  // the object is still alive. See kj::WeakRc<T>.
+
+  WeakRc<T> addWeakRef() { return downgrade(); }
+  // Synonym for downgrade().
+
   Rc& operator=(decltype(nullptr)) {
     dispose();
     return *this;
@@ -315,6 +367,9 @@ private:
 
   template <typename>
   friend class Rc;
+
+  template <typename>
+  friend class WeakRc;
 };
 
 template <typename T, typename... Params>
@@ -329,6 +384,163 @@ inline Rc<T> rc(Params&&... params) {
     return Rc<T>(wrapper, wrapper->getWrappedPtr());
   }
 }
+
+template <typename T>
+class WeakRc {
+  // WeakRc<T> is a weak reference companion to kj::Rc<T>.
+  //
+  // A WeakRc<T> does not keep its referent alive: it expires once the last strong Rc<T> is
+  // dropped. While the referent is still alive, a WeakRc<T> can be upgraded back to a strong
+  // Rc<T>. This is useful for breaking reference cycles or for holding a non-owning reference that
+  // can detect when the referent has gone away.
+  //
+  // Obtain a WeakRc<T> via Rc<T>::downgrade() (or its synonym Rc<T>::addWeakRef()). Common usage:
+  // - KJ_IF_SOME on WeakRc<T> upgrades to Rc<T>
+  // - assertLive() obtains T& and throws on expired WeakRc<T>
+  // - tryGet() obtains Maybe<T&> directly
+  // - upgrade() (or its synonym addStrongRef()) upgrades to Maybe<Rc<T>>
+  //
+  // WeakRc<T> is movable but, like kj::Rc<T>, not implicitly copyable; use clone() to make an
+  // additional weak reference explicitly. Like kj::Rc<T> it is NOT threadsafe.
+  //
+  // Upgrading never resurrects a dead object: once the last strong Rc<T> is dropped the referent's
+  // refcount reaches zero and is never incremented again. upgrade() only ever produces a strong
+  // reference while the refcount is still non-zero. See WeakRc<T>::upgrade().
+  //
+  // The relationship between Rc<T> and WeakRc<T> is similar to that between kj::Pin<T>/kj::Ptr<T>
+  // and kj::Weak<T>.
+
+public:
+  KJ_DISALLOW_COPY(WeakRc);
+  inline WeakRc(decltype(nullptr)) noexcept {}
+
+  inline ~WeakRc() noexcept(false) { dispose(); }
+
+  WeakRc(WeakRc&& other) noexcept {
+    kj::swp(cell, other.cell);
+    kj::swp(ptr, other.ptr);
+  }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  WeakRc(WeakRc<U>&& other) noexcept: ptr(other.ptr) {
+    kj::swp(cell, other.cell);
+    other.ptr = nullptr;
+  }
+
+  inline WeakRc(Rc<T>& rc): WeakRc(rc.downgrade()) {}
+  inline WeakRc(Rc<T>&& rc): WeakRc(rc.downgrade()) {}
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline WeakRc(Rc<U>& rc): WeakRc(rc.downgrade()) {}
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline WeakRc(Rc<U>&& rc): WeakRc(rc.downgrade()) {}
+
+  WeakRc<T> clone() {
+    // Make an additional weak reference to the same referent.
+    return WeakRc<T>(cell, ptr);
+  }
+
+  WeakRc<T> addRef() { return clone(); }
+  // Make an additional weak reference to the same referent.
+  
+  WeakRc& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
+  }
+
+  WeakRc& operator=(WeakRc&& other) {
+    if (this == &other) return *this;
+    kj::swp(cell, other.cell);
+    kj::swp(ptr, other.ptr);
+    other.dispose();
+    return *this;
+  }
+
+  inline bool operator==(decltype(nullptr)) const { return get() == nullptr; }
+  inline bool operator==(const WeakRc<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const Rc<T>& other) const { return get() == other.get(); }
+
+  template <typename U>
+  inline bool operator==(const WeakRc<U>& other) const { return get() == other.get(); }
+
+  inline T& assertLive() const {
+    // Obtain a `T&` reference, checking that the referent is still alive.
+    T* p = get();
+    KJ_IREQUIRE(p != nullptr, "null WeakRc<> dereference");
+    return *p;
+  }
+
+  inline Maybe<T&> tryGet() const { return get(); }
+  // Obtain a reference if the referent is still alive, otherwise return none.
+
+  inline Maybe<Rc<T>> upgrade() const {
+    // Obtain a strong Rc<T> if the referent is still alive, otherwise return none.
+    if (get() == nullptr) {
+      return kj::none;
+    }
+    // No resurrection: when the last strong Rc<T> is dropped, the refcount reaches zero and
+    // Refcounted::disposeImpl() nulls `cell->refcounted` before the object is destroyed. Because
+    // (non-atomic) Rc<T> is single-threaded, a non-null `cell->refcounted` therefore guarantees the
+    // refcount is still non-zero here (confirmed by get() above), so we never increment a refcount
+    // that has already reached zero.
+    KJ_IREQUIRE(cell->refcounted->refcount > 0,
+        "WeakRc<> must not revive an object whose refcount already reached zero.");
+    ++cell->refcounted->refcount;
+    return Rc<T>(cell->refcounted, ptr);
+  }
+
+  inline Maybe<Rc<T>> addStrongRef() const { return upgrade(); }
+  // Synonym for upgrade().
+
+private:
+  _::RcWeakCell* cell = nullptr;
+  T* ptr = nullptr;
+
+  inline WeakRc(_::RcWeakCell* cell, T* ptr): cell(cell), ptr(ptr) {
+    if (cell != nullptr) {
+      cell->addRef();
+    }
+  }
+
+  inline void dispose() {
+    if (cell != nullptr) {
+      cell->decRef();
+      cell = nullptr;
+      ptr = nullptr;
+    }
+  }
+
+  inline T* get() const {
+    if (cell == nullptr || cell->refcounted == nullptr) {
+      return nullptr;
+    }
+    return ptr;
+  }
+
+  template <typename>
+  friend class Rc;
+  template <typename>
+  friend class WeakRc;
+};
+
+template <typename T>
+WeakRc<T> Rc<T>::downgrade() {
+  if (ptr == nullptr) {
+    return nullptr;
+  }
+  return WeakRc<T>(refcounted->getWeakCell(), ptr);
+}
+
+namespace _ {  // private
+
+template <typename T>
+inline NullableValue<Rc<T>> readMaybe(WeakRc<T>& weak) { return readMaybe(weak.upgrade()); }
+template <typename T, typename = EnableIf<isConst<T>()>>
+inline NullableValue<Rc<T>> readMaybe(const WeakRc<T>& weak) { return readMaybe(weak.upgrade()); }
+template <typename T>
+inline NullableValue<Rc<T>> readMaybe(WeakRc<T>&& weak) { return readMaybe(weak.upgrade()); }
+
+}  // namespace _ (private)
 
 template <typename T>
 class RefcountedWrapper: public Refcounted {
