@@ -1073,6 +1073,13 @@ KJ_TEST("tail call cancellation race") {
 }
 
 KJ_TEST("takeFromOtherQuestion reuse after canceled redirect") {
+  // Regresses a stale-state bug in `handleReturn()`:
+  // - Return #1 targets a canceled question and uses takeFromOtherQuestion=A.
+  // - Return #2 targets a live question and is rewritten to also use A.
+  // Historically, Return #1 moved out `answer.task` but didn't reset it to Finished,
+  // leaving a stale Redirected tag with moved-from payload. Return #2 would then crash
+  // when trying to consume that moved-from promise.
+
   TestContext context;
   auto paf = kj::newPromiseAndFulfiller<void>();
   auto& carol = context.initVat("carol", kj::heap<TestQueuedTailCaller>(kj::mv(paf.promise)));
@@ -1121,15 +1128,7 @@ KJ_TEST("takeFromOtherQuestion reuse after canceled redirect") {
   request.setCallee(callee);
   auto livePromise = request.send();
 
-  bool rejected = livePromise.then(
-      [](auto&&) {
-        return false;
-      },
-      [](kj::Exception&&) {
-        return true;
-      }).wait(context.waitScope);
-
-  KJ_EXPECT(rejected);
+  KJ_EXPECT_THROW(DISCONNECTED, livePromise.wait(context.waitScope));
   KJ_EXPECT(takeFromOtherQuestionReturnCount >= 2);
 }
 
