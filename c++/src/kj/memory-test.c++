@@ -1153,6 +1153,13 @@ KJ_TEST("kj::Weak<T> basic properties") {
     KJ_FAIL_EXPECT("expected KJ_IF_SOME on const Weak<T> to contain a pointer");
   }
 
+  KJ_IF_SOME(obj, constWeak) {
+    static_assert(kj::isSameType<decltype(obj), kj::Ptr<Obj>&>());
+    KJ_EXPECT(obj->name == "b"_kj);
+  } else {
+    KJ_FAIL_EXPECT("expected KJ_IF_SOME on const Weak<T> to contain a pointer");
+  }
+
   KJ_IF_SOME(obj, pin.addWeak()) {
     static_assert(kj::isSameType<decltype(obj), kj::Ptr<Obj>&>());
     KJ_EXPECT(obj->name == "b"_kj);
