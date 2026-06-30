@@ -281,7 +281,7 @@ public:
     return sizeof(T) <= sizeof(PromiseArena) && alignof(T) <= alignof(void*);
   }
 
-  static void dispose(PromiseArenaMember* node) {
+  static KJ_DISPOSE_ATTR void dispose(PromiseArenaMember* node) {
     PromiseArena* arena = node->arena;
     // Defer the `delete` to protect against exception in `destroy()`.
     // Reminder: `delete` automatically ignores null pointers

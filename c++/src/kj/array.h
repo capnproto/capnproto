@@ -753,7 +753,8 @@ struct ArrayDisposer::Dispose_ {
 };
 
 template <typename T>
-void ArrayDisposer::dispose(T* firstElement, size_t elementCount, size_t capacity) const {
+KJ_DISPOSE_ATTR void ArrayDisposer::dispose(
+    T* firstElement, size_t elementCount, size_t capacity) const {
   if constexpr (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
     disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
                          sizeof(T), elementCount, capacity, nullptr);
