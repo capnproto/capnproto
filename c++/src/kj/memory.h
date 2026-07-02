@@ -991,6 +991,7 @@ class Weak {
       "Weak<const T> signifies multi-threaded uses and is not implemented yet.");
 
 public:
+  inline Weak() noexcept = default;
   inline Weak(decltype(nullptr)) noexcept: cell(nullptr), ptr(nullptr) {}
 
   inline ~Weak() { dispose(); }
