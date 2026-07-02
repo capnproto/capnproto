@@ -1114,6 +1114,14 @@ KJ_TEST("kj::Weak<T> subtyping") {
 }
 
 KJ_TEST("kj::Weak<T> basic properties") {
+  kj::Weak<Obj> defaultWeak;
+  KJ_EXPECT(defaultWeak == nullptr);
+  KJ_IF_SOME(obj, defaultWeak) {
+    KJ_FAIL_EXPECT("expected KJ_IF_SOME on default Weak<T> to be empty", obj->name);
+  } else {
+    KJ_EXPECT(true);
+  }
+
   kj::Weak<Obj> nullWeak = nullptr;
   KJ_EXPECT(nullWeak == nullptr);
   KJ_IF_SOME(obj, nullWeak) {
