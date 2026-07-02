@@ -1409,6 +1409,186 @@ struct TargetObj2: public TargetObj {
   int size;
 };
 
+KJ_TEST("kj::Pin<T> reuses PtrTarget control") {
+  static_assert(sizeof(kj::Pin<TargetObj>) == sizeof(TargetObj));
+  static_assert(sizeof(kj::Pin<const TargetObj>) == sizeof(TargetObj));
+
+  kj::Maybe<kj::Weak<TargetObj>> weakFromPin;
+  kj::Maybe<kj::Weak<TargetObj>> weakFromTarget;
+  {
+    kj::Pin<TargetObj> pin("a");
+    kj::Ptr<TargetObj> ptr = pin;
+    KJ_EXPECT(ptr == pin->getPtr());
+
+    weakFromPin = pin.addWeak();
+    weakFromTarget = pin->getWeak();
+    KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromPin).assertLive().name == "a"_kj);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromTarget).assertLive().name == "a"_kj);
+  }
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromPin).tryGet() == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromTarget).tryGet() == kj::none);
+}
+
+KJ_TEST("kj::Pin<const T> reuses PtrTarget control") {
+  kj::Pin<const TargetObj2> pin("const target", 42);
+  kj::Ptr<const TargetObj2> ptr = pin;
+  KJ_EXPECT(ptr == pin);
+  KJ_EXPECT(ptr->name == "const target"_kj);
+  KJ_EXPECT(ptr->size == 42);
+
+  auto explicitPtr = pin.asPtr();
+  KJ_EXPECT(explicitPtr == ptr);
+  kj::Ptr<const TargetObj> basePtr = pin;
+  KJ_EXPECT(basePtr == ptr);
+  KJ_EXPECT(basePtr->name == "const target"_kj);
+}
+
+KJ_TEST("kj::Pin<T> releases member-owned self pointers before checking PtrTarget") {
+  struct TargetWithSelfPtr: public kj::PtrTarget {
+    TargetWithSelfPtr(kj::Weak<TargetWithSelfPtr>& weak, bool& destroyed)
+        : self(addPtrToThis()), weak(weak), destroyed(destroyed) {}
+
+    ~TargetWithSelfPtr() noexcept(false) {
+      // Pin expires existing weak pointers before T starts tearing down, but self remains valid
+      // until member destruction releases it.
+      KJ_EXPECT(weak.tryGet() == kj::none);
+      KJ_EXPECT(self.get() == this);
+      destroyed = true;
+    }
+
+    kj::Ptr<TargetWithSelfPtr> self;
+    kj::Weak<TargetWithSelfPtr>& weak;
+    bool& destroyed;
+  };
+
+  kj::Weak<TargetWithSelfPtr> weak;
+  bool destroyed = false;
+  {
+    kj::Pin<TargetWithSelfPtr> pin(weak, destroyed);
+    weak = pin.addWeak();
+    KJ_EXPECT(weak.tryGet() != kj::none);
+    KJ_EXPECT(pin->self == pin);
+  }
+  KJ_EXPECT(destroyed);
+  KJ_EXPECT(weak.upgrade() == kj::none);
+}
+
+KJ_TEST("kj::Pin<T> keeps PtrTarget weak invalidation permanent during destruction") {
+  struct InvalidatedTarget: public kj::PtrTarget {
+    InvalidatedTarget(kj::Weak<InvalidatedTarget>& weakFromDestructor)
+        : weakFromDestructor(weakFromDestructor) {}
+
+    ~InvalidatedTarget() noexcept(false) {
+      weakFromDestructor = addWeakToThis();
+      KJ_EXPECT(weakFromDestructor.tryGet() == kj::none);
+    }
+
+    void invalidate() { invalidateWeak(); }
+
+    kj::Weak<InvalidatedTarget>& weakFromDestructor;
+  };
+
+  for (bool explicitlyInvalidate: {false, true}) {
+    kj::Weak<InvalidatedTarget> weakFromDestructor;
+    kj::Weak<InvalidatedTarget> weakBeforeDestruction;
+    {
+      kj::Pin<InvalidatedTarget> pin(weakFromDestructor);
+      if (explicitlyInvalidate) {
+        pin->invalidate();
+      }
+      weakBeforeDestruction = pin.addWeak();
+      KJ_EXPECT((weakBeforeDestruction.tryGet() == kj::none) == explicitlyInvalidate);
+    }
+    KJ_EXPECT(weakBeforeDestruction.upgrade() == kj::none);
+    KJ_EXPECT(weakFromDestructor.upgrade() == kj::none);
+  }
+}
+
+KJ_TEST("kj::Pin<T> allows fresh PtrTarget weak pointers after move") {
+  struct MovableTarget: public kj::PtrTarget {
+    MovableTarget() = default;
+    MovableTarget(MovableTarget&&) {}
+
+    kj::Weak<MovableTarget> getWeak() { return addWeakToThis(); }
+  };
+
+  // Exercise absent cells, cells whose weak pointers were released, and outstanding weak pointers.
+  for (auto weakState: kj::range(0, 3)) {
+    kj::Pin<MovableTarget> pin;
+    kj::Weak<MovableTarget> weakFromPin;
+    kj::Weak<MovableTarget> weakFromTarget;
+    if (weakState > 0) {
+      weakFromPin = pin.addWeak();
+      weakFromTarget = pin->getWeak();
+      KJ_EXPECT(weakFromPin.upgrade() != kj::none);
+      KJ_EXPECT(weakFromTarget.upgrade() != kj::none);
+      if (weakState == 1) {
+        weakFromPin = nullptr;
+        weakFromTarget = nullptr;
+      }
+    }
+
+    kj::Pin<MovableTarget> pin2(kj::mv(pin));
+    KJ_EXPECT(weakFromPin.upgrade() == kj::none);
+    KJ_EXPECT(weakFromTarget.upgrade() == kj::none);
+    KJ_EXPECT(pin2.addWeak().upgrade() != kj::none);
+    KJ_EXPECT(pin2->getWeak().upgrade() != kj::none);
+
+    auto freshFromPin = pin.addWeak();
+    auto freshFromTarget = pin->getWeak();
+    KJ_EXPECT(freshFromPin == pin);
+    KJ_EXPECT(freshFromTarget == pin);
+    KJ_EXPECT(freshFromPin.upgrade() != kj::none);
+    KJ_EXPECT(freshFromTarget.upgrade() != kj::none);
+
+    // Moving the source again expires this new generation without reviving the old one.
+    kj::Pin<MovableTarget> pin3(kj::mv(pin));
+    KJ_EXPECT(freshFromPin.upgrade() == kj::none);
+    KJ_EXPECT(freshFromTarget.upgrade() == kj::none);
+    KJ_EXPECT(weakFromPin.upgrade() == kj::none);
+    KJ_EXPECT(weakFromTarget.upgrade() == kj::none);
+    KJ_EXPECT(pin.addWeak().upgrade() != kj::none);
+    KJ_EXPECT(pin2.addWeak().upgrade() != kj::none);
+    KJ_EXPECT(pin3.addWeak().upgrade() != kj::none);
+  }
+}
+
+KJ_TEST("kj::Pin<T> keeps PtrTarget weak invalidation permanent after move") {
+  struct MovableTarget: public kj::PtrTarget {
+    MovableTarget() = default;
+    MovableTarget(MovableTarget&&) {}
+
+    kj::Weak<MovableTarget> getWeak() { return addWeakToThis(); }
+    void invalidate() { invalidateWeak(); }
+  };
+
+  for (bool createWeakFirst: {false, true}) {
+    kj::Pin<MovableTarget> pin;
+    kj::Weak<MovableTarget> weakFromPin;
+    kj::Weak<MovableTarget> weakFromTarget;
+    if (createWeakFirst) {
+      weakFromPin = pin.addWeak();
+      weakFromTarget = pin->getWeak();
+    }
+    pin->invalidate();
+    kj::Pin<MovableTarget> pin2(kj::mv(pin));
+
+    // The moved-from target stays invalidated; the new one is unaffected.
+    KJ_EXPECT(weakFromPin.upgrade() == kj::none);
+    KJ_EXPECT(weakFromTarget.upgrade() == kj::none);
+    KJ_EXPECT(pin->getWeak().tryGet() == kj::none);
+    KJ_EXPECT(pin.addWeak().tryGet() == kj::none);
+    KJ_EXPECT(pin2->getWeak().tryGet() != kj::none);
+    KJ_EXPECT(pin2.addWeak().tryGet() != kj::none);
+
+    kj::Pin<MovableTarget> pin3(kj::mv(pin));
+    KJ_EXPECT(pin->getWeak().tryGet() == kj::none);
+    KJ_EXPECT(pin.addWeak().tryGet() == kj::none);
+    KJ_EXPECT(pin3.addWeak().upgrade() != kj::none);
+  }
+}
+
 KJ_TEST("kj::PtrTarget addPtrToThis") {
   TargetObj obj("a");
 
@@ -1589,6 +1769,30 @@ KJ_TEST("kj::PtrTarget subtyping") {
 }
 
 #if KJ_ASSERT_PTR_COUNTERS
+KJ_TEST("kj::Pin<T> with embedded PtrTarget destroyed with active ptrs crashes") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Pin<TargetObj> pin("a");
+    // Deferring the counter check until member cleanup must still detect external pointers.
+    auto* leaked = new kj::Ptr<TargetObj>(pin.asPtr());
+    (void)leaked;
+  });
+}
+
+KJ_TEST("kj::Pin<T> with embedded PtrTarget moved with self pointer crashes") {
+  struct MovableTargetWithSelfPtr: public kj::PtrTarget {
+    MovableTargetWithSelfPtr(): self(addPtrToThis()) {}
+    MovableTargetWithSelfPtr(MovableTargetWithSelfPtr&&): self(addPtrToThis()) {}
+
+    kj::Ptr<MovableTargetWithSelfPtr> self;
+  };
+
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Pin<MovableTargetWithSelfPtr> pin;
+    // A self pointer is a pointer to the Pin: moving the Pin while it exists is illegal.
+    kj::Pin<MovableTargetWithSelfPtr> pin2(kj::mv(pin));
+  });
+}
+
 KJ_TEST("kj::PtrTarget destroyed with active ptrs crashes") {
   KJ_EXPECT_SIGNAL(SIGABRT, {
     auto obj = kj::heap<TargetObj>("a");
