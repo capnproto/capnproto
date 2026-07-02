@@ -115,6 +115,10 @@ protected:
     return addRcRefInternal(&self);
   }
 
+  inline auto addWeakToThis(this auto&& self) {
+    return addWeakRefInternal(&self);
+  }
+
 private:
   mutable uint refcount = 0;
   // "mutable" because disposeImpl() is const.  Bleh.
@@ -139,6 +143,9 @@ private:
 
   template <typename T>
   static Rc<T> addRcRefInternal(T* object);
+
+  template <typename T>
+  static WeakRc<T> addWeakRefInternal(T* object);
 
   template <typename T>
   friend Own<T> addRef(T& object);
@@ -521,7 +528,17 @@ private:
   friend class Rc;
   template <typename>
   friend class WeakRc;
+  friend class Refcounted;
 };
+
+template <typename T>
+WeakRc<T> Refcounted::addWeakRefInternal(T* object) {
+  static_assert(kj::canConvert<T&, Refcounted&>());
+  Refcounted* refcounted = object;
+  KJ_IREQUIRE(refcounted->refcount > 0,
+      "Object not allocated with kj::refcounted() or kj::rc().");
+  return WeakRc<T>(refcounted->getWeakCell(), object);
+}
 
 template <typename T>
 WeakRc<T> Rc<T>::downgrade() {
