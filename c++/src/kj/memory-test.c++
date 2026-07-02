@@ -1421,6 +1421,27 @@ struct TargetObj2: public TargetObj {
   int size;
 };
 
+KJ_TEST("kj::Pin<T> reuses PtrTarget control") {
+  static_assert(sizeof(kj::Pin<TargetObj>) == sizeof(TargetObj));
+  static_assert(sizeof(kj::Pin<const TargetObj>) == sizeof(TargetObj));
+
+  kj::Maybe<kj::Weak<TargetObj>> weakFromPin;
+  kj::Maybe<kj::Weak<TargetObj>> weakFromTarget;
+  {
+    kj::Pin<TargetObj> pin("a");
+    kj::Ptr<TargetObj> ptr = pin;
+    KJ_EXPECT(ptr == pin->getPtr());
+
+    weakFromPin = pin.addWeak();
+    weakFromTarget = pin->getWeak();
+    KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromPin).assertLive().name == "a"_kj);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromTarget).assertLive().name == "a"_kj);
+  }
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromPin).tryGet() == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromTarget).tryGet() == kj::none);
+}
+
 KJ_TEST("kj::PtrTarget addPtrToThis") {
   TargetObj obj("a");
 

@@ -290,7 +290,11 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
+#if defined(_MSC_VER) && KJ_HAS_CPP_ATTRIBUTE(msvc::no_unique_address)
+#define KJ_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
 #define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
 
 #if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
 #define KJ_DISABLE_TSAN __attribute__((no_sanitize("thread"), noinline))
