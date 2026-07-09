@@ -74,6 +74,49 @@ bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result,
 
 namespace {
 
+constexpr uint MAX_NESTING_DEPTH = 64;
+// Maximum allowed nesting depth of parentheses/brackets/braces in a schema file. The lexer is a
+// recursive-descent parser, so each level of nesting consumes stack space; without a limit, a
+// maliciously-crafted input consisting of deeply-nested brackets could overflow the stack and
+// crash the process. This limit is far larger than any legitimate schema requires.
+//
+// Note that this single limit protects both the lexer and the later parsing stages: the lexer
+// builds nested token/statement trees whose depth is bounded here, and the parser (parser.c++)
+// merely recurses over those already-bounded trees.
+
+template <typename SubParser>
+class NestingGuard {
+  // Parser combinator which wraps another parser, incrementing a shared depth counter for the
+  // duration of the sub-parser and failing (without recursing) if the depth would exceed
+  // MAX_NESTING_DEPTH. Placed at each point where the grammar can recurse, this bounds the total
+  // recursion depth and thus the stack usage.
+public:
+  explicit constexpr NestingGuard(uint& depth, SubParser&& subParser)
+      : depth(depth), subParser(kj::mv(subParser)) {}
+
+  template <typename Input>
+  auto operator()(Input& input) const
+      -> decltype(kj::instance<const SubParser&>()(input)) {
+    if (depth >= MAX_NESTING_DEPTH) {
+      // Too deeply nested; refuse to recurse further. This causes a parse failure which will be
+      // reported as a generic parse error at this location.
+      return kj::none;
+    }
+    ++depth;
+    KJ_DEFER(--depth);
+    return subParser(input);
+  }
+
+private:
+  uint& depth;
+  SubParser subParser;
+};
+
+template <typename SubParser>
+constexpr NestingGuard<SubParser> nestingGuard(uint& depth, SubParser&& subParser) {
+  return NestingGuard<SubParser>(depth, kj::fwd<SubParser>(subParser));
+}
+
 typedef p::Span<uint32_t> Location;
 
 Token::Builder initTok(Orphan<Token>& t, const Location& loc) {
@@ -173,7 +216,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
         }
       }));
 
-  auto& token = arena.copy(p::oneOf(
+  auto& rawToken = arena.copy(p::oneOf(
       p::transformWithLocation(p::identifier,
           [this](Location loc, kj::String name) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
@@ -250,6 +293,11 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
                 "Non-UTF-8 input detected. Cap'n Proto schema files must be UTF-8 text.");
             return kj::none;
           }), [](kj::Maybe<Orphan<Token>> param) { return param; })));
+
+  // Wrap `token` in a nesting guard so that recursion through parenthesized/bracketed lists (which
+  // go token -> commaDelimitedList -> tokenSequence -> token) is depth-limited.
+  auto& token = arena.copy(nestingGuard(nestingDepth, p::ref<ParserInput>(rawToken)));
+
   parsers.tokenSequence = arena.copy(p::sequence(
       commentsAndWhitespace, p::many(p::sequence(token, commentsAndWhitespace))));
 
@@ -288,7 +336,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
           })
       ));
 
-  auto& statement = arena.copy(p::transformWithLocation(p::sequence(tokenSequence, statementEnd),
+  auto& rawStatement = arena.copy(p::transformWithLocation(p::sequence(tokenSequence, statementEnd),
       [](Location loc, kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
         auto builder = statement.get();
         auto tokensBuilder = builder.initTokens(tokens.size());
@@ -299,6 +347,11 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
         builder.setEndByte(loc.end());
         return kj::mv(statement);
       }));
+
+  // Wrap `statement` in a nesting guard so that recursion through curly-brace blocks (which go
+  // statement -> statementEnd -> statementSequence -> statement) is depth-limited. This shares the
+  // same depth counter as the token guard above, so the limit applies to the total nesting depth.
+  auto& statement = arena.copy(nestingGuard(nestingDepth, p::ref<ParserInput>(rawStatement)));
 
   parsers.statementSequence = arena.copy(sequence(
       commentsAndWhitespace, many(sequence(statement, commentsAndWhitespace))));

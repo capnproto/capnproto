@@ -440,32 +440,57 @@ uint Debug::getWin32ErrorCode() {
 Debug::Context::Context(): logged(false) {}
 Debug::Context::~Context() noexcept(false) {}
 
-Debug::Context::Value Debug::Context::ensureInitialized() {
+Maybe<Debug::Context::Value> Debug::Context::ensureInitialized() {
+  if (evaluationFailed || evaluating) {
+    // Either a previous evaluation attempt threw, or we are being called re-entrantly from within
+    // evaluate() itself (because evaluating the context parameters threw an exception, which
+    // re-entered the exception callback chain -- see the comments in debug.h). In either case we
+    // must drop the context to avoid infinite recursion / stack overflow.
+    evaluationFailed = true;
+    return kj::none;
+  }
+
+  if (value == kj::none) {
+    // Evaluating the context parameters could itself throw (e.g. if a parameter's stringification
+    // throws). We must catch such exceptions here; otherwise the thrown exception would re-enter
+    // this same Context callback, calling ensureInitialized() again, leading to infinite recursion
+    // and eventually a stack overflow. If evaluation throws, `value` won't be set and we'll drop
+    // the context below.
+    evaluating = true;
+    KJ_DEFER(evaluating = false);
+    kj::runCatchingExceptions([&]() {
+      value = evaluate();
+    });
+  }
+
   KJ_IF_SOME(v, value) {
     return Value(v.file, v.line, heapString(v.description));
   } else {
-    Value result = evaluate();
-    value = Value(result.file, result.line, heapString(result.description));
-    return result;
+    // Our attempt to call `evaluate()` must have thrown an exception. Drop the context.
+    evaluationFailed = true;
+    return kj::none;
   }
 }
 
 void Debug::Context::onRecoverableException(Exception&& exception) {
-  Value v = ensureInitialized();
-  exception.wrapContext(v.file, v.line, mv(v.description));
+  KJ_IF_SOME(v, ensureInitialized()) {
+    exception.wrapContext(v.file, v.line, mv(v.description));
+  }
   next.onRecoverableException(kj::mv(exception));
 }
 void Debug::Context::onFatalException(Exception&& exception) {
-  Value v = ensureInitialized();
-  exception.wrapContext(v.file, v.line, mv(v.description));
+  KJ_IF_SOME(v, ensureInitialized()) {
+    exception.wrapContext(v.file, v.line, mv(v.description));
+  }
   next.onFatalException(kj::mv(exception));
 }
 void Debug::Context::logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                                 String&& text) {
   if (!logged) {
-    Value v = ensureInitialized();
-    next.logMessage(LogSeverity::INFO, trimSourceFilename(v.file).cStr(), v.line, 0,
-                    str("context: ", mv(v.description), '\n'));
+    KJ_IF_SOME(v, ensureInitialized()) {
+      next.logMessage(LogSeverity::INFO, trimSourceFilename(v.file).cStr(), v.line, 0,
+                      str("context: ", mv(v.description), '\n'));
+    }
     logged = true;
   }
 
