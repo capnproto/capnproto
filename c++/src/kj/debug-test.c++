@@ -46,6 +46,13 @@ namespace {
 
 class MockException {};
 
+struct ThrowOnStringify {};
+kj::String KJ_STRINGIFY(ThrowOnStringify) {
+  // Simulates a parameter whose stringification throws an exception (e.g. reading a corrupt
+  // Cap'n Proto field). Used to test that KJ_CONTEXT handles this gracefully.
+  KJ_FAIL_ASSERT("stringification intentionally failed") { return nullptr; }
+}
+
 class MockExceptionCallback: public ExceptionCallback {
 public:
   ~MockExceptionCallback() {}
@@ -461,6 +468,25 @@ TEST(Debug, Context) {
         + fileLine(__FILE__, cline2) + ": context: grault\n"
         + fileLine(__FILE__, line) + ": failed: bar\n"
   ));
+}
+
+KJ_TEST("KJ_CONTEXT parameter that throws during evaluation is dropped") {
+  // Regression test: previously, if evaluating a KJ_CONTEXT parameter threw an exception (e.g.
+  // stringifying a corrupt value), that exception would re-enter the same Context callback, which
+  // would re-evaluate the parameter, throwing again, ... leading to infinite recursion and a
+  // stack overflow. Now, if evaluating the context throws, the context is simply dropped and the
+  // original exception propagates normally.
+  auto exception = kj::runCatchingExceptions([&]() {
+    KJ_CONTEXT("bad context", ThrowOnStringify());
+    KJ_FAIL_ASSERT("the real error") { break; }
+  });
+
+  auto& e = KJ_ASSERT_NONNULL(exception);
+  auto text = kj::str(e);
+  // The real error still propagates...
+  KJ_EXPECT(strstr(text.cStr(), "the real error") != nullptr, text);
+  // ...but the context that failed to evaluate was dropped.
+  KJ_EXPECT(strstr(text.cStr(), "bad context") == nullptr, text);
 }
 
 KJ_TEST("magic assert stringification") {

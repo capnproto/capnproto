@@ -758,7 +758,11 @@ StringPtr KJ_STRINGIFY(Exception::Type type) {
     "unimplemented"
   };
 
-  return TYPE_STRINGS[static_cast<uint>(type)];
+  uint i = static_cast<uint>(type);
+  if (i >= kj::size(TYPE_STRINGS)) {
+    i = 0;
+  }
+  return TYPE_STRINGS[i];
 }
 
 String KJ_STRINGIFY(const Exception& e) {

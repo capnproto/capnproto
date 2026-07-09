@@ -294,6 +294,16 @@ KJ_TEST("computeRelativeTrace") {
       {8, 7, 6, 5, 6, 7, 8, 7, 8});
 }
 
+KJ_TEST("KJ_STRINGIFY(Exception::Type) handles out-of-range values") {
+  KJ_EXPECT(kj::str(kj::Exception::Type::FAILED) == "failed");
+  KJ_EXPECT(kj::str(kj::Exception::Type::OVERLOADED) == "overloaded");
+  KJ_EXPECT(kj::str(kj::Exception::Type::DISCONNECTED) == "disconnected");
+  KJ_EXPECT(kj::str(kj::Exception::Type::UNIMPLEMENTED) == "unimplemented");
+
+  KJ_EXPECT(kj::str(static_cast<kj::Exception::Type>(99)) == "failed");
+  KJ_EXPECT(kj::str(static_cast<kj::Exception::Type>(0xffff)) == "failed");
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj
