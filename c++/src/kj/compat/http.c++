@@ -977,7 +977,11 @@ static kj::Maybe<kj::StringPtr> consumeHeaderName(char*& ptr) {
   while (HTTP_HEADER_NAME_CHARS.contains(*p)) ++p;
   char* end = p;
 
-  p = skipSpace(p);
+  // Note: We intentionally do NOT skip whitespace between the header name and the colon. RFC 9112
+  // section 5.1 requires that no whitespace appear there, and that a message with such whitespace
+  // be rejected with 400 (Bad Request). Historically some HTTP implementations treated the
+  // trailing whitespace as part of the header name, which -- if a message passed through both such
+  // an implementation and a lenient one -- could lead to HTTP desync / request smuggling.
 
   if (end == start || *p != ':') return kj::none;
   ++p;
