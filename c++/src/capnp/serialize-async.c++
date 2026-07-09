@@ -139,7 +139,7 @@ kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& i
 
 kj::Promise<void> AsyncMessageReader::readSegments(kj::AsyncInputStream& inputStream,
                                                    kj::ArrayPtr<word> scratchSpace) {
-  size_t totalWords = segment0Size();
+  uint64_t totalWords = segment0Size();
 
   if (segmentCount() > 1) {
     for (uint i = 0; i < segmentCount() - 1; i++) {
