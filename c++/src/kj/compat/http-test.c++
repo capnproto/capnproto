@@ -373,6 +373,52 @@ KJ_TEST("HttpHeaders validation") {
   KJ_EXPECT_THROW_MESSAGE("invalid header value", headers.add("Valid-Name", "in\nvalid"));
 }
 
+KJ_TEST("HttpHeaders serialization validation") {
+  // The serialization functions must reject request URLs and status texts containing characters
+  // that would allow HTTP desync / request smuggling (e.g. when http-over-capnp forwards untrusted
+  // metadata to a plain-HTTP connection). See GHSL-2026-146.
+  auto table = HttpHeaderTable::Builder().build();
+  HttpHeaders headers(*table);
+
+  // Valid values serialize fine.
+  KJ_EXPECT(headers.serializeRequest(HttpMethod::GET, "/some/path?query=1") ==
+      "GET /some/path?query=1 HTTP/1.1\r\n\r\n");
+  KJ_EXPECT(headers.serializeResponse(200, "OK") ==
+      "HTTP/1.1 200 OK\r\n\r\n");
+
+  // A CRLF in the URL could inject headers or an entire second request.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, "/foo\r\nX-Injected: 1"));
+
+  // A bare LF is equally dangerous.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, "/foo\nbar"));
+
+  // A space in the request-target would introduce an extra token into the request line.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, "/foo bar"));
+
+  // A NUL byte terminates the C string and could truncate the request line.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeRequest(HttpMethod::GET, kj::StringPtr("/foo\0bar", 8)));
+
+  // CONNECT authority is validated too.
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      headers.serializeConnectRequest("example.com:443\r\nX-Injected: 1"));
+
+  // A CRLF in the status text could inject headers into the response.
+  KJ_EXPECT_THROW_MESSAGE("invalid status text",
+      headers.serializeResponse(200, "OK\r\nX-Injected: 1"));
+
+  // A bare LF is equally dangerous.
+  KJ_EXPECT_THROW_MESSAGE("invalid status text",
+      headers.serializeResponse(200, "OK\nfoo"));
+
+  // Status text may legitimately contain spaces.
+  KJ_EXPECT(headers.serializeResponse(418, "I'm a teapot") ==
+      "HTTP/1.1 418 I'm a teapot\r\n\r\n");
+}
+
 KJ_TEST("HttpHeaders Set-Cookie handling") {
   HttpHeaderTable::Builder builder;
   auto hCookie = builder.add("Cookie");

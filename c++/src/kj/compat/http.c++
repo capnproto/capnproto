@@ -499,6 +499,40 @@ static void requireValidHeaderValue(kj::StringPtr value) {
       kj::encodeCEscape(value));
 }
 
+static bool isValidRequestUrl(kj::StringPtr url) {
+  // The request-target (URL) appears in the request line as `METHOD SP request-target SP version`.
+  // It must not contain whitespace (which would introduce extra tokens into the request line) nor
+  // any control characters (in particular CR or LF, which would allow injecting additional headers
+  // or entire requests). We reject any byte <= 0x20 (this covers space, tab, CR, LF, and NUL) as
+  // well as 0x7f (DEL). Bytes >= 0x80 are permitted since some callers pass pre-encoded or
+  // non-ASCII targets; these cannot cause desync.
+  for (char c: url) {
+    if (static_cast<byte>(c) <= 0x20 || static_cast<byte>(c) == 0x7f) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void requireValidRequestUrl(kj::StringPtr url) {
+  KJ_REQUIRE(isValidRequestUrl(url), "invalid request URL", kj::encodeCEscape(url));
+}
+
+static bool isValidStatusText(kj::StringPtr text) {
+  // The status text (reason-phrase) appears at the end of the response status line. It must not
+  // contain CR, LF, or NUL, which would allow injecting additional headers or corrupt the framing.
+  for (char c: text) {
+    if (c == '\0' || c == '\r' || c == '\n') {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void requireValidStatusText(kj::StringPtr text) {
+  KJ_REQUIRE(isValidStatusText(text), "invalid status text", kj::encodeCEscape(text));
+}
+
 static const char* BUILTIN_HEADER_NAMES[] = {
   // Indexed by header ID, which includes connection headers, so we include those names too.
 #define HEADER_NAME(id, name) name,
@@ -1045,18 +1079,22 @@ bool HttpHeaders::parseHeaders(char* ptr, char* end) {
 kj::String HttpHeaders::serializeRequest(
     HttpMethod method, kj::StringPtr url,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  requireValidRequestUrl(url);
   return serialize(kj::toCharSequence(method), url, kj::StringPtr("HTTP/1.1"), connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeConnectRequest(
     kj::StringPtr authority,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  requireValidRequestUrl(authority);
   return serialize("CONNECT"_kj, authority, kj::StringPtr("HTTP/1.1"), connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeResponse(
     uint statusCode, kj::StringPtr statusText,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
+  requireValidStatusText(statusText);
+
   auto statusCodeStr = kj::toCharSequence(statusCode);
 
   return serialize(kj::StringPtr("HTTP/1.1"), statusCodeStr, statusText, connectionHeaders);
