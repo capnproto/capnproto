@@ -91,6 +91,11 @@ private:
   Orphanage orphanage;
   kj::Arena arena;
   Parsers parsers;
+
+  uint nestingDepth = 0;
+  // Tracks the current recursion depth of the recursive-descent parser, so that maliciously-nested
+  // input (e.g. deeply-nested parentheses, brackets, or curly-brace blocks) can be rejected before
+  // it overflows the stack. See NestingGuard in lexer.c++.
 };
 
 }  // namespace compiler
