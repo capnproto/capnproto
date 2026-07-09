@@ -357,6 +357,55 @@ KJ_TEST("HttpHeaders reject whitespace before colon") {
   }
 }
 
+KJ_TEST("HttpHeaders reject obsolete line folding") {
+  // RFC 9112 section 7.1.4 deprecates line folding and allows rejecting it with 400 (Bad Request).
+  // Folding has historically been a source of HTTP desync when peers disagree about whether a
+  // folded line is a continuation or a new header, so KJ rejects it.
+  auto table = HttpHeaderTable::Builder().build();
+
+  // Folded value with a leading space on the continuation line.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Some-Header: a really long\r\n"
+        "   header value\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+  }
+
+  // Folded value with a leading tab on the continuation line.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Some-Header: a really long\r\n"
+        "\theader value\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+  }
+
+  // Folding used to smuggle what looks like a separate header.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(
+        "HTTP/1.1 200 OK\r\n"
+        "Host: example.com\r\n"
+        "Some-Header: value\r\n"
+        " Smuggled-Header: value\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseResponse(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 502, protocolError.statusCode);
+  }
+}
+
 KJ_TEST("HttpHeaders require valid HttpHeaderTable") {
   const auto ERROR_MESSAGE =
       "HttpHeaders object was constructed from HttpHeaderTable "
