@@ -598,9 +598,20 @@ public:
 
   private:
     bool logged;
+    bool evaluationFailed = false;
+    // Set true if an attempt to evaluate() the context threw an exception. Once this happens we
+    // permanently drop the context. This prevents re-evaluation, which could throw again, leading
+    // to infinite recursion: evaluate() throwing an exception re-enters the exception callback
+    // chain, which includes this very Context, so onFatalException()/onRecoverableException() would
+    // be invoked recursively.
+    bool evaluating = false;
+    // Set true while evaluate() is running, so that we can detect the re-entrant case described
+    // above and bail out.
     Maybe<Value> value;
 
-    Value ensureInitialized();
+    Maybe<Value> ensureInitialized();
+    // Evaluates the context (if not already evaluated) and returns its value. Returns kj::none if
+    // evaluating the context threw an exception, in which case the context should be dropped.
   };
 
   template <typename Func>
