@@ -410,7 +410,8 @@ fi
 
 if [ $IS_CLANG = yes ]; then
   # Don't fail out on this ridiculous "argument unused during compilation" warning.
-  export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
+  # Also disable the new nontrivial-memaccess warning that is blocking tests on MacOS.
+  export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument -Wno-error=nontrivial-memaccess"
 
   # Enable coroutines if supported.
   if [ "${CXX#*-}" -ge 14 ] 2>/dev/null; then
