@@ -308,6 +308,55 @@ KJ_TEST("HttpHeaders parse invalid") {
   }
 }
 
+KJ_TEST("HttpHeaders reject whitespace before colon") {
+  // RFC 9112 section 5.1 requires rejecting a header with whitespace between the field name and the
+  // colon. Historically KJ silently stripped it, which -- paired with a peer that treats the space
+  // as part of the name -- could enable HTTP desync / request smuggling.
+  auto table = HttpHeaderTable::Builder().build();
+  HttpHeaders headers(*table);
+
+  // Space before the colon.
+  {
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Content-Length : 0\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+    KJ_EXPECT(protocolError.description == "The headers sent by your client are not valid.",
+        protocolError.description);
+  }
+
+  // Tab before the colon.
+  {
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Content-Length\t: 0\r\n"
+        "\r\n");
+
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+
+    KJ_EXPECT(protocolError.statusCode == 400, protocolError.statusCode);
+  }
+
+  // Whitespace *after* the colon (i.e. before the value) is still allowed and stripped.
+  {
+    auto input = kj::heapString(
+        "POST   /some/path   HTTP/1.1\r\n"
+        "Host: example.com\r\n"
+        "Content-Length:    123\r\n"
+        "\r\n");
+
+    auto result = headers.tryParseRequest(input).get<HttpHeaders::Request>();
+    KJ_EXPECT(result.method == HttpMethod::POST);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::CONTENT_LENGTH)) == "123");
+  }
+}
+
 KJ_TEST("HttpHeaders require valid HttpHeaderTable") {
   const auto ERROR_MESSAGE =
       "HttpHeaders object was constructed from HttpHeaderTable "
