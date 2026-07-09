@@ -326,8 +326,9 @@ private:
       VALIDATE_SCHEMA(structNode.getDiscriminantCount() <= fields.size(),
                       "struct can't have more union fields than total fields");
 
-      VALIDATE_SCHEMA((structNode.getDiscriminantOffset() + 1) * 16 <= dataSizeInBits,
-                      "union discriminant is out-of-bounds");
+      VALIDATE_SCHEMA(
+          (static_cast<uint64_t>(structNode.getDiscriminantOffset()) + 1) * 16 <= dataSizeInBits,
+          "union discriminant is out-of-bounds");
     }
 
     membersByDiscriminant = loader.arena.allocateArray<uint16_t>(fields.size());
@@ -372,10 +373,11 @@ private:
           uint fieldBits = 0;
           bool fieldIsPointer = false;
           validate(slot.getType(), slot.getDefaultValue(), &fieldBits, &fieldIsPointer);
-          VALIDATE_SCHEMA(fieldBits * (slot.getOffset() + 1) <= dataSizeInBits &&
-                          fieldIsPointer * (slot.getOffset() + 1) <= pointerCount,
+          uint64_t offset = slot.getOffset();
+          VALIDATE_SCHEMA(fieldBits * (offset + 1) <= dataSizeInBits &&
+                          fieldIsPointer * (offset + 1) <= pointerCount,
                           "field offset out-of-bounds",
-                          slot.getOffset(), dataSizeInBits, pointerCount);
+                          offset, dataSizeInBits, pointerCount);
 
           break;
         }
