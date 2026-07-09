@@ -368,6 +368,57 @@ TEST(Lexer, Utf8Bom) {
       doLex<LexedTokens>("\xef\xbb\xbf""foo bar\xef\xbb\xbf""baz").cStr());
 }
 
+class TestCountingErrorReporter: public ErrorReporter {
+public:
+  uint errorCount = 0;
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
+    ++errorCount;
+  }
+  bool hadErrors() override {
+    return errorCount > 0;
+  }
+};
+
+kj::String nested(char open, char close, uint count) {
+  // Produces a string of `count` `open` chars followed by `count` `close` chars.
+  auto result = kj::heapString(count * 2);
+  for (uint i = 0; i < count; i++) {
+    result[i] = open;
+    result[count + i] = close;
+  }
+  return result;
+}
+
+TEST(Lexer, DeeplyNestedInputDoesNotOverflowStack) {
+  // Regression test for a stack-overflow vulnerability: the lexer is a recursive-descent parser,
+  // so deeply-nested brackets/braces could overflow the stack and crash the process. The lexer now
+  // enforces a maximum nesting depth, rejecting over-nested input rather than crashing.
+
+  auto tryLexTokens = [](kj::StringPtr text) {
+    MallocMessageBuilder message;
+    auto file = message.initRoot<LexedTokens>();
+    TestCountingErrorReporter errorReporter;
+    return lex(text, file, errorReporter);
+  };
+  auto tryLexStatements = [](kj::StringPtr text) {
+    MallocMessageBuilder message;
+    auto file = message.initRoot<LexedStatements>();
+    TestCountingErrorReporter errorReporter;
+    return lex(text, file, errorReporter);
+  };
+
+  // A reasonable amount of nesting is accepted.
+  EXPECT_TRUE(tryLexTokens(nested('(', ')', 30)));
+  EXPECT_TRUE(tryLexTokens(nested('[', ']', 30)));
+  EXPECT_TRUE(tryLexStatements(nested('{', '}', 30)));
+
+  // Extremely deep nesting is rejected (rather than crashing with a stack overflow). We use a
+  // large count that would definitely overflow the stack absent the depth limit.
+  EXPECT_FALSE(tryLexTokens(nested('(', ')', 100000)));       // parenthesized lists
+  EXPECT_FALSE(tryLexTokens(nested('[', ']', 100000)));       // bracketed lists
+  EXPECT_FALSE(tryLexStatements(nested('{', '}', 100000)));   // curly-brace blocks
+}
+
 }  // namespace
 }  // namespace compiler
 }  // namespace capnp
