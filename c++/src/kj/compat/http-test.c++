@@ -8144,6 +8144,12 @@ KJ_TEST("Range header parsing") {
     {"bytes=5-"_kjc,                  2},
     // Check multiple valid ranges accepted
     {"bytes=  1-  ,6-, 10-11 "_kjc,  12, {{1,11},{6,11},{10,11}}},
+    // Check positions past 2^32 are not truncated against a 64-bit content length
+    {"bytes=5000000000-5000000001"_kjc, 8000000000, {{5000000000, 5000000001}}},
+    {"bytes=5000000000-"_kjc,           8000000000, {{5000000000, 7999999999}}},
+    {"bytes=-5000000000"_kjc,           8000000000, {{3000000000, 7999999999}}},
+    // Check a start position past the content is rejected rather than wrapping into range
+    {"bytes=4294967298-"_kjc,                    8},
 
     // ===== Suffix =====
     // Check valid ranges accepted
@@ -8152,6 +8158,24 @@ KJ_TEST("Range header parsing") {
     // Check start after content truncated and entire response response
     {"bytes=-7"_kjc,                  7, HttpEverythingRange {}},
     {"bytes=-10"_kjc,                 5, HttpEverythingRange {}},
+    // Check the top of the uint64 range parses without overflow, and values past uint64 max are
+    // rejected rather than wrapping. A suffix length >= content resolves to the whole resource, so
+    // each value that parses yields everything while a rejected one falls through to unsatisfiable.
+    {"bytes=-18446744073709551615"_kjc, 4, HttpEverythingRange {}},  // 2^64 - 1
+    {"bytes=-18446744073709551614"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551613"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551612"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551611"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551610"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551609"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551608"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551607"_kjc, 4, HttpEverythingRange {}},
+    {"bytes=-18446744073709551606"_kjc, 4, HttpEverythingRange {}},
+    // 2^64 and beyond must be rejected, not wrapped down into a satisfiable length
+    {"bytes=-18446744073709551616"_kjc, 4},
+    {"bytes=-18446744073709551617"_kjc, 4},
+    {"bytes=-18446744073709551620"_kjc, 4},
+    {"bytes=-99999999999999999999"_kjc, 4},
     // Check if any range returns entire response, other ranges ignored
     {"bytes=0-1,-5,2-3"_kjc,          5, HttpEverythingRange {}},
     // Check unsatisfiable empty range ignored
