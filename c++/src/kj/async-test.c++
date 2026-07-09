@@ -461,16 +461,16 @@ TEST(Async, Ordering) {
       paf.fulfiller->fulfill();
     }
 
-    // .then() is scheduled breadth-first if the promise has already resolved, but depth-first
-    // if the promise resolves later.
+    // .then() is scheduled depth-first.
     tasks.add(Promise<void>(READY_NOW).then([&]() {
-      EXPECT_EQ(4, counter++);
+      EXPECT_EQ(2, counter++);
     }).then([&]() {
-      EXPECT_EQ(5, counter++);
+      EXPECT_EQ(3, counter++);
       tasks.add(kj::evalLast([&]() {
-        EXPECT_EQ(7, counter++);
+        // evalLast()s are LIFO, so although this evalLast() is registered first it'll go last.
+        EXPECT_EQ(9, counter++);
         tasks.add(kj::evalLater([&]() {
-          EXPECT_EQ(8, counter++);
+          EXPECT_EQ(10, counter++);
         }));
       }));
     }));
@@ -478,25 +478,26 @@ TEST(Async, Ordering) {
     {
       auto paf = kj::newPromiseAndFulfiller<void>();
       tasks.add(paf.promise.then([&]() {
-        EXPECT_EQ(2, counter++);
+        EXPECT_EQ(4, counter++);
         tasks.add(kj::evalLast([&]() {
-          EXPECT_EQ(9, counter++);
+          EXPECT_EQ(7, counter++);
           tasks.add(kj::evalLater([&]() {
-            EXPECT_EQ(10, counter++);
+            EXPECT_EQ(8, counter++);
           }));
         }));
       }));
       paf.fulfiller->fulfill();
     }
 
-    // evalLater() is like READY_NOW.then().
+    // evalLater() is scheduled breadth-first, so it'll come after depth-first stuff and
+    // evalLater()s scheduled before it, but before evalLast() stuff.
     tasks.add(evalLater([&]() {
       EXPECT_EQ(6, counter++);
     }));
   }));
 
   tasks.add(evalLater([&]() {
-    EXPECT_EQ(3, counter++);
+    EXPECT_EQ(5, counter++);
 
     // Making this a chain should NOT cause it to preempt the first promise.  (This was a problem
     // at one point.)
