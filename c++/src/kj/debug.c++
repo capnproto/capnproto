@@ -459,9 +459,15 @@ Maybe<Debug::Context::Value> Debug::Context::ensureInitialized() {
     // the context below.
     evaluating = true;
     KJ_DEFER(evaluating = false);
-    kj::runCatchingExceptions([&]() {
+    auto e = kj::runCatchingExceptions([&]() {
       value = evaluate();
     });
+    if (e != nullptr) {
+      // In -fno-exceptions mode, a recoverable exception may have been thrown but we still
+      // proceeded to assing `value`. Discard it here to match the behavior if exceptions were
+      // enabled.
+      value = nullptr;
+    }
   }
 
   KJ_IF_MAYBE(v, value) {

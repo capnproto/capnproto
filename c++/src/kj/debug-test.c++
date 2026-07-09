@@ -50,7 +50,7 @@ struct ThrowOnStringify {};
 kj::String KJ_STRINGIFY(ThrowOnStringify) {
   // Simulates a parameter whose stringification throws an exception (e.g. reading a corrupt
   // Cap'n Proto field). Used to test that KJ_CONTEXT handles this gracefully.
-  KJ_FAIL_ASSERT("stringification intentionally failed");
+  KJ_FAIL_ASSERT("stringification intentionally failed") { return nullptr; }
 }
 
 class MockExceptionCallback: public ExceptionCallback {
@@ -478,7 +478,7 @@ KJ_TEST("KJ_CONTEXT parameter that throws during evaluation is dropped") {
   // original exception propagates normally.
   auto exception = kj::runCatchingExceptions([&]() {
     KJ_CONTEXT("bad context", ThrowOnStringify());
-    KJ_FAIL_ASSERT("the real error");
+    KJ_FAIL_ASSERT("the real error") { break; }
   });
 
   auto& e = KJ_ASSERT_NONNULL(exception);
