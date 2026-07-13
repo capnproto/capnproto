@@ -552,7 +552,7 @@ namespace _ {  // private
 
 template <typename T>
 inline NullableValue<Rc<T>> readMaybe(WeakRc<T>& weak) { return readMaybe(weak.upgrade()); }
-template <typename T, typename = EnableIf<isConst<T>()>>
+template <typename T>
 inline NullableValue<Rc<T>> readMaybe(const WeakRc<T>& weak) { return readMaybe(weak.upgrade()); }
 template <typename T>
 inline NullableValue<Rc<T>> readMaybe(WeakRc<T>&& weak) { return readMaybe(weak.upgrade()); }
