@@ -316,10 +316,10 @@ KJ_TEST("HttpHeaders reject whitespace before colon") {
   // colon. Historically KJ silently stripped it, which -- paired with a peer that treats the space
   // as part of the name -- could enable HTTP desync / request smuggling.
   auto table = HttpHeaderTable::Builder().build();
-  HttpHeaders headers(*table);
 
   // Space before the colon.
   {
+    HttpHeaders headers(*table);
     auto input = kj::heapString(
         "POST   /some/path   HTTP/1.1\r\n"
         "Host: example.com\r\n"
@@ -335,6 +335,7 @@ KJ_TEST("HttpHeaders reject whitespace before colon") {
 
   // Tab before the colon.
   {
+    HttpHeaders headers(*table);
     auto input = kj::heapString(
         "POST   /some/path   HTTP/1.1\r\n"
         "Host: example.com\r\n"
@@ -348,6 +349,7 @@ KJ_TEST("HttpHeaders reject whitespace before colon") {
 
   // Whitespace *after* the colon (i.e. before the value) is still allowed and stripped.
   {
+    HttpHeaders headers(*table);
     auto input = kj::heapString(
         "POST   /some/path   HTTP/1.1\r\n"
         "Host: example.com\r\n"
