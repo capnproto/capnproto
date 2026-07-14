@@ -34,7 +34,7 @@ struct DynamicList;
 namespace _ { struct OrphanageInternal; }
 
 template <typename T>
-class Orphan {
+class KJ_GSL_OWNER Orphan {
   // Represents an object which is allocated within some message builder but has no pointers
   // pointing at it.  An Orphan can later be "adopted" by some other object as one of that object's
   // fields, without having to copy the orphan.  For a field `foo` of pointer type, the generated
@@ -97,7 +97,7 @@ private:
   friend class MessageBuilder;
 };
 
-class Orphanage: private kj::DisallowConstCopy {
+class KJ_GSL_POINTER Orphanage: private kj::DisallowConstCopy {
   // Use to directly allocate Orphan objects, without having a parent object allocate and then
   // disown the object.
 

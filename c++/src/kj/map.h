@@ -29,7 +29,7 @@ KJ_BEGIN_HEADER
 namespace kj {
 
 template <typename Key, typename Value>
-class HashMap {
+class KJ_GSL_OWNER HashMap {
   // A key/value mapping backed by hashing.
   //
   // `Key` must be hashable (via a `.hashCode()` method or `KJ_HASHCODE()`; see `hash.h`) and must
@@ -137,7 +137,7 @@ private:
 };
 
 template <typename Key, typename Value>
-class TreeMap {
+class KJ_GSL_OWNER TreeMap {
   // A key/value mapping backed by a B-tree.
   //
   // `Key` must support `operator<` and `operator==` against other Keys, and against any type
@@ -281,7 +281,7 @@ public:
 }  // namespace _ (private)
 
 template <typename Element>
-class HashSet: public Table<Element, HashIndex<_::HashSetCallbacks>> {
+class KJ_GSL_OWNER HashSet: public Table<Element, HashIndex<_::HashSetCallbacks>> {
   // A simple hashtable-based set, using kj::hashCode() and operator==().
 
 public:
@@ -294,7 +294,7 @@ public:
 };
 
 template <typename Element>
-class TreeSet: public Table<Element, TreeIndex<_::TreeSetCallbacks>> {
+class KJ_GSL_OWNER TreeSet: public Table<Element, TreeIndex<_::TreeSetCallbacks>> {
   // A simple b-tree-based set, using operator<() and operator==().
 
 public:

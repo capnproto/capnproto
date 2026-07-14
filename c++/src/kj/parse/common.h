@@ -118,7 +118,7 @@ using OutputType = typename OutputType_<
 // =======================================================================================
 
 template <typename Input, typename Output>
-class ParserRef {
+class KJ_GSL_POINTER ParserRef {
   // Acts as a reference to some other parser, with simplified type.  The referenced parser
   // is polymorphic by virtual call rather than templates.  For grammars of non-trivial size,
   // it is important to inject refs into the grammar here and there to prevent the parser types

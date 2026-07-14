@@ -83,7 +83,7 @@ struct ReaderOptions {
   // stack overflow, yet high enough that it is never a problem in practice.
 };
 
-class MessageReader {
+class KJ_GSL_OWNER MessageReader {
   // Abstract interface for an object used to read a Cap'n Proto message.  Subclasses of
   // MessageReader are responsible for reading the raw, flat message content.  Callers should
   // usually call `messageReader.getRoot<MyStructType>()` to get a `MyStructType::Reader`
@@ -145,7 +145,7 @@ private:
   AnyPointer::Reader getRootInternal();
 };
 
-class MessageBuilder {
+class KJ_GSL_OWNER MessageBuilder {
   // Abstract interface for an object used to allocate and build a message.  Subclasses of
   // MessageBuilder are responsible for allocating the space in which the message will be written.
   // The most common subclass is `MallocMessageBuilder`, but other subclasses may be used to do
@@ -333,7 +333,7 @@ kj::Own<kj::Decay<Reader>> clone(Reader&& reader);
 
 // =======================================================================================
 
-class SegmentArrayMessageReader: public MessageReader {
+class KJ_GSL_OWNER SegmentArrayMessageReader: public MessageReader {
   // A simple MessageReader that reads from an array of word arrays representing all segments.
   // In particular you can read directly from the output of MessageBuilder::getSegmentsForOutput()
   // (although it would probably make more sense to call builder.getRoot().asReader() in that case).
@@ -372,7 +372,7 @@ enum class AllocationStrategy: uint8_t {
 constexpr uint SUGGESTED_FIRST_SEGMENT_WORDS = 1024;
 constexpr AllocationStrategy SUGGESTED_ALLOCATION_STRATEGY = AllocationStrategy::GROW_HEURISTICALLY;
 
-class MallocMessageBuilder: public MessageBuilder {
+class KJ_GSL_OWNER MallocMessageBuilder: public MessageBuilder {
   // A simple MessageBuilder that uses malloc() (actually, calloc()) to allocate segments.  This
   // implementation should be reasonable for any case that doesn't require writing the message to
   // a specific location in memory.
@@ -417,7 +417,7 @@ private:
   kj::Vector<word*> moreSegments;
 };
 
-class FlatMessageBuilder: public MessageBuilder {
+class KJ_GSL_OWNER FlatMessageBuilder: public MessageBuilder {
   // THIS IS NOT THE CLASS YOU'RE LOOKING FOR.
   //
   // If you want to write a message into already-existing scratch space, use `MallocMessageBuilder`

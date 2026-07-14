@@ -89,7 +89,7 @@ struct AnyPointer {
 
   AnyPointer() = delete;
 
-  class Reader {
+  class KJ_GSL_POINTER Reader {
   public:
     typedef AnyPointer Reads;
 
@@ -139,7 +139,7 @@ struct AnyPointer {
     friend struct _::PointerHelpers<AnyPointer>;
   };
 
-  class Builder {
+  class KJ_GSL_POINTER Builder {
   public:
     typedef AnyPointer Builds;
 
@@ -298,7 +298,7 @@ struct AnyPointer {
 };
 
 template <>
-class Orphan<AnyPointer> {
+class KJ_GSL_OWNER Orphan<AnyPointer> {
   // An orphaned object of unknown type.
 
 public:
@@ -385,7 +385,7 @@ struct List<AnyPointer, Kind::OTHER> {
 
   List() = delete;
 
-  class Reader {
+  class KJ_GSL_POINTER Reader {
   public:
     typedef List<AnyPointer> Reads;
 
@@ -417,7 +417,7 @@ struct List<AnyPointer, Kind::OTHER> {
     friend struct ToDynamic_;
   };
 
-  class Builder {
+  class KJ_GSL_POINTER Builder {
   public:
     typedef List<AnyPointer> Builds;
 
@@ -448,7 +448,7 @@ struct List<AnyPointer, Kind::OTHER> {
   };
 };
 
-class AnyStruct::Reader {
+class KJ_GSL_POINTER AnyStruct::Reader {
 public:
   typedef AnyStruct Reads;
 
@@ -493,7 +493,7 @@ private:
   friend class Orphanage;
 };
 
-class AnyStruct::Builder {
+class KJ_GSL_POINTER AnyStruct::Builder {
 public:
   typedef AnyStruct Builds;
 
@@ -560,7 +560,7 @@ private:
 };
 #endif  // !CAPNP_LITE
 
-class List<AnyStruct, Kind::OTHER>::Reader {
+class KJ_GSL_POINTER List<AnyStruct, Kind::OTHER>::Reader {
 public:
   typedef List<AnyStruct> Reads;
 
@@ -592,7 +592,7 @@ private:
   friend struct ToDynamic_;
 };
 
-class List<AnyStruct, Kind::OTHER>::Builder {
+class KJ_GSL_POINTER List<AnyStruct, Kind::OTHER>::Builder {
 public:
   typedef List<AnyStruct> Builds;
 
@@ -622,7 +622,7 @@ private:
   friend struct ToDynamic_;
 };
 
-class AnyList::Reader {
+class KJ_GSL_POINTER AnyList::Reader {
 public:
   typedef AnyList Reads;
 
@@ -664,7 +664,7 @@ private:
   friend class Orphanage;
 };
 
-class AnyList::Builder {
+class KJ_GSL_POINTER AnyList::Builder {
 public:
   typedef AnyList Builds;
 

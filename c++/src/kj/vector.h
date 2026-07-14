@@ -28,7 +28,7 @@ KJ_BEGIN_HEADER
 namespace kj {
 
 template <typename T>
-class Vector {
+class KJ_GSL_OWNER Vector {
   // Similar to std::vector, but based on KJ framework.
   //
   // This implementation always uses move constructors when growing the backing array.  If the

@@ -47,7 +47,7 @@ struct UrlOptions {
   // produce empty components.
 };
 
-struct Url {
+struct KJ_GSL_OWNER Url {
   // Represents a URL (or, more accurately, a URI, but whatever).
   //
   // Can be parsed from a string and composed back into a string.
@@ -55,7 +55,7 @@ struct Url {
   String scheme;
   // E.g. "http", "https".
 
-  struct UserInfo {
+  struct KJ_GSL_OWNER UserInfo {
     String username;
     Maybe<String> password;
   };
@@ -77,7 +77,7 @@ struct Url {
   // toString() will throw. Note that parse() and parseRelative() automatically resolve such
   // components.
 
-  struct QueryParam {
+  struct KJ_GSL_OWNER QueryParam {
     String name;
     String value;
   };

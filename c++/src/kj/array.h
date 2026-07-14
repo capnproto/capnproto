@@ -122,7 +122,7 @@ public:
 // Array
 
 template <typename T>
-class Array {
+class KJ_GSL_OWNER Array {
   // An owned array which will automatically be disposed of (using an ArrayDisposer) in the
   // destructor.  Can be moved, but not copied.  Much like Own<T>, but for arrays rather than
   // single objects.
@@ -364,7 +364,7 @@ Array<T> heapArrayFromIterable(Array<T>&& a) { return mv(a); }
 // ArrayBuilder
 
 template <typename T>
-class ArrayBuilder {
+class KJ_GSL_OWNER ArrayBuilder {
   // Class which lets you build an Array<T> specifying the exact constructor arguments for each
   // element, rather than starting by default-constructing them.
 
@@ -572,7 +572,7 @@ inline ArrayBuilder<T> heapArrayBuilder(size_t size) {
 // Inline Arrays
 
 template <typename T, size_t fixedSize>
-class FixedArray {
+class KJ_GSL_OWNER FixedArray {
   // A fixed-width array whose storage is allocated inline rather than on the heap.
 
 public:
@@ -604,7 +604,7 @@ private:
 };
 
 template <typename T, size_t fixedSize>
-class CappedArray {
+class KJ_GSL_OWNER CappedArray {
   // Like `FixedArray` but can be dynamically resized as long as the size does not exceed the limit
   // specified by the template parameter.
   //
@@ -664,7 +664,7 @@ private:
 // TODO(someday): Implement SmallArrayBuilder to support types which have no default constructor.
 
 template <typename T, size_t smallSize>
-class SmallArray final: private Array<T> {
+class KJ_GSL_OWNER SmallArray final: private Array<T> {
 public:
   explicit SmallArray(size_t size);
 

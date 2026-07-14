@@ -58,7 +58,7 @@ using TableIterator = MappedIterator<Inner, TableMapping<Row>>;
 }  // namespace _ (private)
 
 template <typename Row, typename... Indexes>
-class Table {
+class KJ_GSL_OWNER Table {
   // A table with one or more indexes. This is the KJ alternative to map, set, unordered_map, and
   // unordered_set.
   //

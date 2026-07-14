@@ -227,7 +227,7 @@ private:
 // Public interface
 
 template <typename T>
-class Locked {
+class KJ_GSL_POINTER Locked {
   // Return type for `MutexGuarded<T>::lock()`.  `Locked<T>` provides access to the bounded object
   // and unlocks the mutex when it goes out of scope.
 
@@ -313,7 +313,7 @@ public:
 };
 
 template <typename T>
-class MutexGuarded {
+class KJ_GSL_OWNER MutexGuarded {
   // An object of type T, bounded by a mutex.  In order to access the object, you must lock it.
   //
   // Write locks are not "recursive" -- trying to lock again in a thread that already holds a lock
@@ -397,14 +397,14 @@ private:
 };
 
 template <typename T>
-class MutexGuarded<const T> {
+class KJ_GSL_OWNER MutexGuarded<const T> {
   // MutexGuarded cannot guard a const type.  This would be pointless anyway, and would complicate
   // the implementation of Locked<T>, which uses constness to decide what kind of lock it holds.
   static_assert(sizeof(T) < 0, "MutexGuarded's type cannot be const.");
 };
 
 template <typename T>
-class ExternalMutexGuarded {
+class KJ_GSL_OWNER ExternalMutexGuarded {
   // Holds a value that can only be manipulated while some other mutex is locked.
   //
   // The ExternalMutexGuarded<T> lives *outside* the scope of any lock on the mutex, but ensures

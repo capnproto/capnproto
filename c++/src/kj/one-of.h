@@ -344,7 +344,7 @@ using Variants = typename Variants_<i>::Type;
 }  // namespace _ (private)
 
 template <typename... Variants>
-class OneOf {
+class KJ_GSL_OWNER OneOf {
   template <typename Key>
   static inline constexpr uint typeIndex() {
     return _::TypeIndex_<1, _::OneOfFailError_, Key, Variants...>::value;

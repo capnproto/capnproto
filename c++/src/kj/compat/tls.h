@@ -173,7 +173,7 @@ private:
   struct SniCallback;
 };
 
-class TlsPrivateKey {
+class KJ_GSL_OWNER TlsPrivateKey {
   // A private key suitable for use in a TLS server.
 
 public:
@@ -207,7 +207,7 @@ private:
   static int passwordCallback(char* buf, int size, int rwflag, void* u);
 };
 
-class TlsCertificate {
+class KJ_GSL_OWNER TlsCertificate {
   // A TLS certificate, possibly with chained intermediate certificates.
 
 public:
@@ -251,7 +251,7 @@ private:
   friend class TlsContext;
 };
 
-struct TlsKeypair {
+struct KJ_GSL_OWNER TlsKeypair {
   // A pair of a private key and a certificate, for use by a server.
 
   TlsPrivateKey privateKey;

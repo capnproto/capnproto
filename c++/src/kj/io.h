@@ -257,7 +257,7 @@ private:
 // =======================================================================================
 // File descriptor I/O
 
-class OwnFd {
+class KJ_GSL_OWNER OwnFd {
   // A wrapper around a file descriptor which automatically closes the descriptor when destroyed.
   // The wrapper supports move construction for transferring ownership of the descriptor.  If
   // close() returns an error, the destructor throws an exception, UNLESS the destructor is being
@@ -357,7 +357,7 @@ private:
 
 #ifdef _WIN32
 
-class AutoCloseHandle {
+class KJ_GSL_OWNER AutoCloseHandle {
   // A wrapper around a Win32 HANDLE which automatically closes the handle when destroyed.
   // The wrapper supports move construction for transferring ownership of the handle.  If
   // CloseHandle() returns an error, the destructor throws an exception, UNLESS the destructor is

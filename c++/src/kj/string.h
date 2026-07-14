@@ -63,7 +63,7 @@ namespace kj {
 // a NUL byte appear immediately after the last byte of the content.  This terminator byte is not
 // counted in the string's size.
 
-class StringPtr {
+class KJ_GSL_POINTER StringPtr {
 public:
   inline constexpr StringPtr(): content("", 1) {}
   inline constexpr StringPtr(decltype(nullptr)): content("", 1) {}
@@ -197,7 +197,7 @@ template <> Maybe<unsigned long long> StringPtr::tryParseAs<unsigned long long>(
 template <> Maybe<float> StringPtr::tryParseAs<float>() const;
 template <> Maybe<double> StringPtr::tryParseAs<double>() const;
 
-class LiteralStringConst: public StringPtr {
+class KJ_GSL_POINTER LiteralStringConst: public StringPtr {
 public:
   inline operator ConstString() const;
 
@@ -216,7 +216,7 @@ private:
 // To allocate a String, you must call kj::heapString().  We do not implement implicit copying to
 // the heap because this hides potential inefficiency from the developer.
 
-class String {
+class KJ_GSL_OWNER String {
 public:
   String() = default;
   inline String(decltype(nullptr)): content(nullptr) {}
@@ -331,7 +331,7 @@ private:
 // a copy. Any String can also convert (by move) to ConstString, transferring ownership of
 // the buffer.
 
-class ConstString {
+class KJ_GSL_OWNER ConstString {
 public:
   ConstString() = default;
   inline ConstString(decltype(nullptr)): content(nullptr) {}

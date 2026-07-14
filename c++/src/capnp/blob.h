@@ -44,7 +44,7 @@ struct Text {
   class Pipeline {};
 };
 
-class Data::Reader: public kj::ArrayPtr<const byte> {
+class KJ_GSL_POINTER Data::Reader: public kj::ArrayPtr<const byte> {
   // Points to a blob of bytes.  The usual Reader rules apply -- Data::Reader behaves like a simple
   // pointer which does not own its target, can be passed by value, etc.
 
@@ -60,7 +60,7 @@ public:
   inline Reader(const ArrayPtr<byte>& value): ArrayPtr<const byte>(value) {}
 };
 
-class Text::Reader: public kj::StringPtr {
+class KJ_GSL_POINTER Text::Reader: public kj::StringPtr {
   // Like Data::Reader, but points at NUL-terminated UTF-8 text.  The NUL terminator is not counted
   // in the size but must be present immediately after the last byte.
   //
@@ -79,7 +79,7 @@ public:
   inline Reader(const StringPtr& value): StringPtr(value) {}
 };
 
-class Data::Builder: public kj::ArrayPtr<byte> {
+class KJ_GSL_POINTER Data::Builder: public kj::ArrayPtr<byte> {
   // Like Data::Reader except the pointers aren't const.
 
 public:
@@ -97,7 +97,7 @@ public:
   inline operator Reader() const { return asReader(); }
 };
 
-class Text::Builder: public kj::DisallowConstCopy {
+class KJ_GSL_POINTER Text::Builder: public kj::DisallowConstCopy {
   // Basically identical to kj::StringPtr, except that the contents are non-const.
 
 public:

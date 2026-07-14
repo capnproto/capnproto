@@ -33,7 +33,7 @@ KJ_BEGIN_HEADER
 namespace kj {
 
 template <typename ResultType>
-struct EncodingResult: public ResultType {
+struct KJ_GSL_OWNER EncodingResult: public ResultType {
   // Equivalent to ResultType (a String or wide-char array) for all intents and purposes, except
   // that the bool `hadErrors` can be inspected to see if any errors were encountered in the input.
   // Each encoding/decoding function that returns this type will "work around" errors in some way,

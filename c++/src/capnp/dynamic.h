@@ -182,7 +182,7 @@ enum class HasMode: uint8_t {
   // on the wire (since primitive values are XORed by their defined default value when encoded).
 };
 
-class DynamicStruct::Reader {
+class KJ_GSL_POINTER DynamicStruct::Reader {
 public:
   typedef DynamicStruct Reads;
 
@@ -249,7 +249,7 @@ private:
   friend class AnyStruct::Reader;
 };
 
-class DynamicStruct::Builder {
+class KJ_GSL_POINTER DynamicStruct::Builder {
 public:
   typedef DynamicStruct Builds;
 
@@ -370,7 +370,7 @@ private:
 
 // -------------------------------------------------------------------
 
-class DynamicList::Reader {
+class KJ_GSL_POINTER DynamicList::Reader {
 public:
   typedef DynamicList Reads;
 
@@ -415,7 +415,7 @@ private:
   friend class AnyList::Reader;
 };
 
-class DynamicList::Builder {
+class KJ_GSL_POINTER DynamicList::Builder {
 public:
   typedef DynamicList Builds;
 
@@ -621,7 +621,7 @@ template <> struct ReaderFor_ <DynamicCapability, Kind::OTHER> { typedef Dynamic
 template <> struct BuilderFor_<DynamicCapability, Kind::OTHER> { typedef DynamicCapability::Client Type; };
 template <> struct PipelineFor_<DynamicCapability, Kind::OTHER> { typedef DynamicCapability::Client Type; };
 
-class DynamicValue::Reader {
+class KJ_GSL_POINTER DynamicValue::Reader {
 public:
   typedef DynamicValue Reads;
 
@@ -725,7 +725,7 @@ private:
   friend class Orphanage;  // to speed up newOrphanCopy(DynamicValue::Reader)
 };
 
-class DynamicValue::Builder {
+class KJ_GSL_POINTER DynamicValue::Builder {
 public:
   typedef DynamicValue Builds;
 

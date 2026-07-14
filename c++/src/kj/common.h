@@ -274,6 +274,30 @@ typedef unsigned char byte;
 // by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
 
+#if KJ_HAS_CPP_ATTRIBUTE(gsl::Owner)
+#define KJ_GSL_OWNER [[gsl::Owner]]
+#else
+#define KJ_GSL_OWNER
+#endif
+// Annotation for a class/struct that owns an object and is responsible for its lifetime (e.g. a
+// smart pointer or container like `Own<T>`, `Array<T>` or `String`). When a `[[gsl::Pointer]]` is
+// constructed from an owner, lifetime-safety analysis considers the pointer to point into the
+// owner, so that using the pointer after the owner is destroyed is flagged as a dangling access.
+// The (optional) type argument is ignored by the compiler; we omit it. This has no effect on code
+// generation and is only consumed by static analysis tools.
+// https://clang.llvm.org/docs/AttributeReference.html#owner
+
+#if KJ_HAS_CPP_ATTRIBUTE(gsl::Pointer)
+#define KJ_GSL_POINTER [[gsl::Pointer]]
+#else
+#define KJ_GSL_POINTER
+#endif
+// Annotation for a class/struct that behaves like a non-owning pointer/view into an object owned
+// elsewhere (e.g. `ArrayPtr<T>` or `StringPtr`). Lifetime-safety analysis will treat such a type as
+// dangling once the owner it points into is destroyed. As with KJ_GSL_OWNER, the optional type
+// argument is ignored and this has no effect on code generation.
+// https://clang.llvm.org/docs/AttributeReference.html#pointer
+
 #if KJ_HAS_CPP_ATTRIBUTE(clang::musttail)
 #define KJ_MUSTTAIL [[clang::musttail]]
 #else
@@ -1854,7 +1878,7 @@ inline Maybe<T> some(T&& t) { return Maybe<T>(kj::mv(t)); }
 #endif
 
 template <typename T>
-class Maybe {
+class KJ_GSL_OWNER Maybe {
   // A T, or nullptr.
 
 public:
@@ -2474,7 +2498,7 @@ class SplitIterable;
 }  // namespace _ (private)
 
 template <typename T>
-class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
+class KJ_GSL_POINTER ArrayPtr: public DisallowConstCopyIfNotConst<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
   // and passing by value only copies the pointer, not the target.
 

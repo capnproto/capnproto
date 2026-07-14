@@ -37,7 +37,7 @@ class Vector;
 
 class PathPtr;
 
-class Path {
+class KJ_GSL_OWNER Path {
   // A Path identifies a file in a directory tree.
   //
   // In KJ, we avoid representing paths as plain strings because this can lead to path injection
@@ -246,7 +246,7 @@ private:
   static bool isWin32Special(StringPtr part);
 };
 
-class PathPtr {
+class KJ_GSL_POINTER PathPtr {
   // Points to a Path or a slice of a Path, but doesn't own it.
   //
   // PathPtr is to Path as ArrayPtr is to Array and StringPtr is to String.

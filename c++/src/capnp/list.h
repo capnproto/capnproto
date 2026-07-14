@@ -102,7 +102,7 @@ struct List<T, Kind::PRIMITIVE> {
 
   List() = delete;
 
-  class Reader {
+  class KJ_GSL_POINTER Reader {
   public:
     typedef List<T> Reads;
 
@@ -134,7 +134,7 @@ struct List<T, Kind::PRIMITIVE> {
     friend struct ToDynamic_;
   };
 
-  class Builder {
+  class KJ_GSL_POINTER Builder {
   public:
     typedef List<T> Builds;
 
@@ -202,7 +202,7 @@ struct List<T, Kind::STRUCT> {
 
   List() = delete;
 
-  class Reader {
+  class KJ_GSL_POINTER Reader {
   public:
     typedef List<T> Reads;
 
@@ -234,7 +234,7 @@ struct List<T, Kind::STRUCT> {
     friend struct ToDynamic_;
   };
 
-  class Builder {
+  class KJ_GSL_POINTER Builder {
   public:
     typedef List<T> Builds;
 
@@ -328,7 +328,7 @@ struct List<List<T>, Kind::LIST> {
 
   List() = delete;
 
-  class Reader {
+  class KJ_GSL_POINTER Reader {
   public:
     typedef List<List<T>> Reads;
 
@@ -361,7 +361,7 @@ struct List<List<T>, Kind::LIST> {
     friend struct ToDynamic_;
   };
 
-  class Builder {
+  class KJ_GSL_POINTER Builder {
   public:
     typedef List<List<T>> Builds;
 
@@ -441,7 +441,7 @@ template <typename T>
 struct List<T, Kind::BLOB> {
   List() = delete;
 
-  class Reader {
+  class KJ_GSL_POINTER Reader {
   public:
     typedef List<T> Reads;
 
@@ -474,7 +474,7 @@ struct List<T, Kind::BLOB> {
     friend struct ToDynamic_;
   };
 
-  class Builder {
+  class KJ_GSL_POINTER Builder {
   public:
     typedef List<T> Builds;
 

@@ -383,19 +383,19 @@ public:
   // Takes ownership of a string so that it lives until the HttpHeaders object is destroyed. Useful
   // when you've passed a dynamic value to set() or add() or parse*().
 
-  struct Request {
+  struct KJ_GSL_POINTER Request {
     HttpMethod method;
     kj::StringPtr url;
   };
-  struct ConnectRequest {
+  struct KJ_GSL_POINTER ConnectRequest {
     kj::StringPtr authority;
   };
-  struct Response {
+  struct KJ_GSL_POINTER Response {
     uint statusCode;
     kj::StringPtr statusText;
   };
 
-  struct ProtocolError {
+  struct KJ_GSL_POINTER ProtocolError {
     // Represents a protocol error, such as a bad request method or invalid headers. Debugging such
     // errors is difficult without a copy of the data which we tried to parse, but this data is
     // sensitive, so we can't just lump it into the error description directly. ProtocolError
@@ -666,7 +666,7 @@ public:
   // resolves, but send() or receive() will throw DISCONNECTED when appropriate. See also
   // kj::AsyncOutputStream::whenWriteDisconnected().)
 
-  struct ProtocolError {
+  struct KJ_GSL_POINTER ProtocolError {
     // Represents a protocol error, such as a bad opcode or oversize message.
 
     uint statusCode;
@@ -679,7 +679,7 @@ public:
     // it can be used as the body of a Close frame (RFC 6455 sections 5.5 and 5.5.1).
   };
 
-  struct Close {
+  struct KJ_GSL_OWNER Close {
     uint16_t code;
     kj::String reason;
   };
@@ -873,7 +873,7 @@ public:
   // stack-allocated).
 
   struct ConnectRequest {
-    struct Status {
+    struct KJ_GSL_OWNER Status {
       uint statusCode;
       kj::String statusText;
       kj::Own<HttpHeaders> headers;
@@ -1196,7 +1196,7 @@ kj::Own<WebSocket> newWebSocket(kj::Own<kj::AsyncIoStream> stream,
 // `errorHandler` is an optional argument that lets callers throw custom exceptions for WebSocket
 // protocol errors.
 
-struct WebSocketPipe {
+struct KJ_GSL_OWNER WebSocketPipe {
   kj::Own<WebSocket> ends[2];
 };
 
@@ -1343,7 +1343,7 @@ public:
   // caller should close it without any further reads/writes. Note this only ever returns `true`
   // if you called `drain()` -- otherwise this server would keep handling the connection.
 
-  class SuspendedRequest {
+  class KJ_GSL_OWNER SuspendedRequest {
     // SuspendedRequest is a representation of a request immediately after parsing the method line and
     // headers. You can obtain one of these by suspending a request by calling
     // SuspendableRequest::suspend(), then later resume the request with another call to
@@ -1425,7 +1425,7 @@ private:
       bool wantCleanDrain);
 };
 
-class HttpServer::SuspendableRequest {
+class KJ_GSL_POINTER HttpServer::SuspendableRequest {
   // Interface passed to the SuspendableHttpServiceFactory parameter of listenHttpCleanDrain().
 
 public:

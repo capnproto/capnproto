@@ -203,7 +203,7 @@ private:
 };
 
 template <typename Return, typename... Params>
-class FunctionParam<Return(Params...)> {
+class KJ_GSL_POINTER FunctionParam<Return(Params...)> {
 public:
   template <typename Func>
   FunctionParam(Func&& func) {

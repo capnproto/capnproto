@@ -222,7 +222,7 @@ private:
 }  // namespace _ (private)
 
 template<typename T>
-class Rc {
+class KJ_GSL_OWNER Rc {
   // Rc<T> is a smart pointer providing reference counting capabilities for all kinds of Ts.
   //
   // The primary way to obtain new `Rc<T>` instance is to use `kj::rc<T>(...)`, which allocates
@@ -773,7 +773,7 @@ private:
 }  // namespace _ (private)
 
 template<typename T>
-class Arc {
+class KJ_GSL_OWNER Arc {
   // Smart pointer providing atomic reference-counted ownership.
   //
   // The primary way to obtain a new `Arc<T>` is `kj::arc<T>(...)`, which allocates a new T on the

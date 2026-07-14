@@ -355,7 +355,7 @@ template <typename T, typename StaticDisposer = decltype(nullptr)>
 class Own;
 
 template <typename T>
-class Own<T, decltype(nullptr)> {
+class KJ_GSL_OWNER Own<T, decltype(nullptr)> {
   // A transferrable title to a T.  When an Own<T> goes out of scope, the object's Disposer is
   // called to dispose of it.  An Own<T> can be efficiently passed by move, without relocating the
   // underlying object; this transfers ownership.
@@ -516,7 +516,7 @@ inline const void* Own<const void>::cast(U* ptr) {
 }
 
 template <typename T, typename StaticDisposer>
-class Own {
+class KJ_GSL_OWNER Own {
   // If a `StaticDisposer` is specified (which is not the norm), then the object will be deleted
   // by calling StaticDisposer::dispose(pointer). The pointer passed to `dispose()` could be a
   // superclass of `T`, if the pointer has been upcast.
@@ -764,7 +764,7 @@ private:
 // Pin<T>
 
 template <typename T>
-class Pin {
+class KJ_GSL_OWNER Pin {
   // Pin<T> is a smart, in-place storage for T.
   //
   // Pin<T> should be created on the stack or used as a data member. It should not be
@@ -849,7 +849,7 @@ private:
 // Ptr<T>
 
 template <typename T>
-class Ptr {
+class KJ_GSL_POINTER Ptr {
   // Ptr<T> is a smart alternative to T&.
   //
   // When used together with Pin<T> it keeps track of active pointers.
