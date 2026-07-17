@@ -698,6 +698,10 @@ Own<T> heap(Params&&... params) {
   // assume this.  (Since we know the object size at delete time, we could actually implement an
   // allocator that is more efficient than operator new.)
 
+  static_assert(!_::IsRefcounted<T>,
+      "Don't use kj::heap() to allocate a refcounted type; use kj::refcounted() or kj::rc() "
+      "instead so that the reference count is initialized correctly.");
+
   return Own<T>(new T(kj::fwd<Params>(params)...), _::HeapDisposer<T>::instance);
 }
 
@@ -709,6 +713,9 @@ Own<Decay<T>> heap(T&& orig) {
   // one argument and the purpose is to copy it.
 
   typedef Decay<T> T2;
+  static_assert(!_::IsRefcounted<T2>,
+      "Don't use kj::heap() to allocate a refcounted type; use kj::refcounted() or kj::rc() "
+      "instead so that the reference count is initialized correctly.");
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
 
