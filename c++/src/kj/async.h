@@ -1364,6 +1364,31 @@ public:
   // Same as WaitScope::cancelAllDetached(). Sometimes it's easier to call on the EventLoop. (A
   // WaitScope still must exist, i.e., this EventLoop must be current.)
 
+  class Id {
+    // Unique event loop identifier.
+    // Implemented as a monotonically increasing counter value assigned to each EventLoop on
+    // construction, so it stays unique even after an EventLoop is destroyed and its memory reused.
+
+  public:
+    static Id current();
+    // Obtain the id of the EventLoop currently running on this thread. Requires that an EventLoop
+    // is running on the current thread.
+
+    inline bool operator==(const Id& other) const = default;
+
+    void assertCurrentEventLoop() const;
+    // KJ_ASSERTs that the current thread's EventLoop matches this identifier.
+
+  private:
+    inline explicit Id(size_t id): id(id) {}
+    size_t id;
+
+    friend class EventLoop;
+  };
+
+  Id id() const;
+  // Returns the unique identifier of this EventLoop.
+
 private:
   inline _::Event* head() const {
     _::Event* event = headSentinel.next;
@@ -1389,6 +1414,10 @@ private:
     Maybe<Own<_::Event>> fire() override { KJ_UNREACHABLE; }
     void traceEvent(_::TraceBuilder& builder) override { KJ_UNREACHABLE; }
   };
+
+  size_t loopId;
+  // Unique identifier for this EventLoop, assigned from a global atomic counter on construction.
+  // See id().
 
   kj::Maybe<EventPort&> port;
   // If null, this thread doesn't receive I/O events from the OS. It can potentially receive
