@@ -238,7 +238,7 @@ class Rc {
   // Otherwise, `kj::rc` allocates `RcWrapper<T>` to provide a `refcount`.
   //
   // Rc<T> can also be constructed from:
-  // - kj::Own<T> for all types of T. Allocates a wrapper.
+  // - kj::Own<T> for non-`Refcounted` Ts. Allocates a wrapper.
   // - T for non-`Refcounted` Ts with move constructor. Allocates a wrapper.
   //
   // Once you have `Rc<T>` you can `addRef` or `clone` it to increment the refcount and obtain new
@@ -255,7 +255,7 @@ class Rc {
   //     without being concerned of reference counting behavior.
   //     To improve the transparency of the code, kj::Own<T> shouldn't be used
   //     to call addRef() without kj::Rc.
-  // - convert kj::Own<T> to kj::Rc<T> to wrap an object into refcounted hold.
+  // - convert kj::Own<T> to kj::Rc<T> to wrap a non-refcounted object into a refcounted hold.
 public:
   KJ_DISALLOW_COPY(Rc);
   Rc() { }
@@ -285,6 +285,10 @@ public:
   }
 
   inline Rc(Own<T> t) noexcept {
+    // Taking over an Own<T> is only supported for non-refcounted types. A type that is already
+    // Refcounted must be managed through its own reference count from the start to end.
+    static_assert(!canConvert<T*, Refcounted*>(),
+        "Cannot convert Own<T> to Rc<T> when T is already Refcounted; use kj::rc<T>() instead.");
     if (t.get() == nullptr) return;
     auto wrapper = new _::RcOwnWrapper<T>(mv(t));
     refcounted = wrapper;
