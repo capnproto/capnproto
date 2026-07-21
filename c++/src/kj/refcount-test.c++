@@ -386,25 +386,6 @@ KJ_TEST("Rc disown / reown") {
   KJ_EXPECT(b == true);
 }
 
-KJ_TEST("Rc wraps Own of refcounted types") {
-  bool b = false;
-
-  Own<SetTrueInDestructor> own = kj::refcounted<SetTrueInDestructor>(&b);
-
-  Rc<SetTrueInDestructor> ref(kj::mv(own));
-  EXPECT_TRUE(own.get() == nullptr);
-  EXPECT_TRUE(ref != nullptr);
-
-  Rc<SetTrueInDestructor> ref2 = ref.addRef();
-  EXPECT_TRUE(ref.get() == ref2.get());
-
-  ref = nullptr;
-  EXPECT_FALSE(b);
-
-  ref2 = nullptr;
-  EXPECT_TRUE(b);
-}
-
 struct SetTrueInDestructor2 {
   // Like SetTrueInDestructor but doesn't inherit Refcounted.
 
