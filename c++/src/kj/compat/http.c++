@@ -6236,7 +6236,7 @@ public:
                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     auto refcounted = getClient();
     auto result = refcounted->client->request(method, url, headers, expectedBodySize);
-    result.body = result.body.attach(kj::addRef(*refcounted));
+    result.body = result.body.attach(refcounted.addRef());
     result.response = result.response.then(
         [refcounted=kj::mv(refcounted)](Response&& response) mutable {
       response.body = response.body.attach(kj::mv(refcounted));
@@ -6273,7 +6273,7 @@ public:
     auto refcounted = getClient();
     auto request = refcounted->client->connect(host, headers, settings);
     return ConnectRequest {
-      request.status.attach(kj::addRef(*refcounted)),
+      request.status.attach(refcounted.addRef()),
       request.connection.attach(kj::mv(refcounted))
     };
   }
@@ -6315,17 +6315,17 @@ private:
     kj::Own<HttpClientImpl> client;
   };
 
-  kj::Own<RefcountedClient> getClient() {
+  kj::Rc<RefcountedClient> getClient() {
     for (;;) {
       if (availableClients.empty()) {
         auto stream = newPromisedStream(address->connect());
-        return kj::refcounted<RefcountedClient>(*this,
+        return kj::rc<RefcountedClient>(*this,
           kj::heap<HttpClientImpl>(responseHeaderTable, kj::mv(stream), settings));
       } else {
         auto client = kj::mv(availableClients.back().client);
         availableClients.pop_back();
         if (client->canReuse()) {
-          return kj::refcounted<RefcountedClient>(*this, kj::mv(client));
+          return kj::rc<RefcountedClient>(*this, kj::mv(client));
         }
         // Whoops, this client's connection was closed by the server at some point. Discard.
       }
