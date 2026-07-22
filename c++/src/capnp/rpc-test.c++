@@ -382,7 +382,7 @@ public:
         // Uncomment to get a debug dump.
 //        connection.dumper.dump(message.getRoot<rpc::Message>());
 
-        auto incomingMessage = kj::heap<IncomingRpcMessageImpl>(messageToFlatArray(message));
+        auto incomingMessage = kj::rc<IncomingRpcMessageImpl>(messageToFlatArray(message));
 
         kj::Promise<void> blocker = nullptr;
         KJ_IF_SOME(b, connection.currentBlock) {
@@ -403,7 +403,7 @@ public:
         connection.tasks->add(blocker.then(
             [connectionPtr,message=kj::mv(incomingMessage)]() mutable {
           KJ_IF_SOME(p, connectionPtr->partner) {
-            p.messageQueue.push(kj::Own<IncomingRpcMessage>(kj::mv(message)));
+            p.messageQueue.push(kj::Own<IncomingRpcMessage>(message.toOwn()));
           }
         }));
       }
