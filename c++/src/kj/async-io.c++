@@ -1553,7 +1553,7 @@ private:
 
 class PipeReadEnd final: public AsyncInputStream {
 public:
-  PipeReadEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
+  PipeReadEnd(kj::Rc<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeReadEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       pipe->abortRead();
@@ -1569,13 +1569,13 @@ public:
   }
 
 private:
-  Own<AsyncPipe> pipe;
+  Rc<AsyncPipe> pipe;
   UnwindDetector unwind;
 };
 
 class PipeWriteEnd final: public AsyncOutputStream {
 public:
-  PipeWriteEnd(kj::Own<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
+  PipeWriteEnd(kj::Rc<AsyncPipe> pipe): pipe(kj::mv(pipe)) {}
   ~PipeWriteEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
       pipe->shutdownWrite();
@@ -1600,13 +1600,13 @@ public:
   }
 
 private:
-  Own<AsyncPipe> pipe;
+  Rc<AsyncPipe> pipe;
   UnwindDetector unwind;
 };
 
 class TwoWayPipeEnd final: public AsyncCapabilityStream {
 public:
-  TwoWayPipeEnd(kj::Own<AsyncPipe> in, kj::Own<AsyncPipe> out)
+  TwoWayPipeEnd(kj::Rc<AsyncPipe> in, kj::Rc<AsyncPipe> out)
       : in(kj::mv(in)), out(kj::mv(out)) {}
   ~TwoWayPipeEnd() noexcept(false) {
     unwind.catchExceptionsIfUnwinding([&]() {
@@ -1662,8 +1662,8 @@ public:
   }
 
 private:
-  kj::Own<AsyncPipe> in;
-  kj::Own<AsyncPipe> out;
+  kj::Rc<AsyncPipe> in;
+  kj::Rc<AsyncPipe> out;
   UnwindDetector unwind;
 };
 
@@ -1718,8 +1718,8 @@ private:
 }  // namespace
 
 OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength) {
-  auto impl = kj::refcounted<AsyncPipe>();
-  Own<AsyncInputStream> readEnd = kj::heap<PipeReadEnd>(kj::addRef(*impl));
+  auto impl = kj::rc<AsyncPipe>();
+  Own<AsyncInputStream> readEnd = kj::heap<PipeReadEnd>(impl.addRef());
   KJ_IF_SOME(l, expectedLength) {
     readEnd = kj::heap<LimitedInputStream>(kj::mv(readEnd), l);
   }
@@ -1728,17 +1728,17 @@ OneWayPipe newOneWayPipe(kj::Maybe<uint64_t> expectedLength) {
 }
 
 TwoWayPipe newTwoWayPipe() {
-  auto pipe1 = kj::refcounted<AsyncPipe>();
-  auto pipe2 = kj::refcounted<AsyncPipe>();
-  auto end1 = kj::heap<TwoWayPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto pipe1 = kj::rc<AsyncPipe>();
+  auto pipe2 = kj::rc<AsyncPipe>();
+  auto end1 = kj::heap<TwoWayPipeEnd>(pipe1.addRef(), pipe2.addRef());
   auto end2 = kj::heap<TwoWayPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
   return { { kj::mv(end1), kj::mv(end2) } };
 }
 
 CapabilityPipe newCapabilityPipe() {
-  auto pipe1 = kj::refcounted<AsyncPipe>();
-  auto pipe2 = kj::refcounted<AsyncPipe>();
-  auto end1 = kj::heap<TwoWayPipeEnd>(kj::addRef(*pipe1), kj::addRef(*pipe2));
+  auto pipe1 = kj::rc<AsyncPipe>();
+  auto pipe2 = kj::rc<AsyncPipe>();
+  auto end1 = kj::heap<TwoWayPipeEnd>(pipe1.addRef(), pipe2.addRef());
   auto end2 = kj::heap<TwoWayPipeEnd>(kj::mv(pipe2), kj::mv(pipe1));
   return { { kj::mv(end1), kj::mv(end2) } };
 }
