@@ -1750,8 +1750,14 @@ void EventPort::wake() const {
       "cross-thread wake() not implemented by this EventPort implementation"));
 }
 
+namespace {
+std::atomic<size_t> nextEventLoopId(0);
+// Global counter used to assign a unique id to each EventLoop.
+}  // namespace
+
 EventLoop::EventLoop(kj::Maybe<EventLoopObserver&> observer)
-    : observer(observer), daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {
+    : loopId(nextEventLoopId.fetch_add(1, std::memory_order_relaxed)),
+      observer(observer), daemons(kj::heap<TaskSet>(_::LoggingErrorHandler::instance)) {
   auto link = [](_::Event& prev, _::Event& next) {
     prev.next = &next;
     next.prev = &prev.next;
@@ -1882,6 +1888,15 @@ void EventLoop::setRunnable(bool runnable) {
 void EventLoop::enterScope() {
   KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
   threadLocalEventLoop = this;
+}
+
+EventLoop::Id EventLoop::id() const { return Id(loopId); }
+
+EventLoop::Id EventLoop::Id::current() { return currentEventLoop().id(); }
+
+void EventLoop::Id::assertCurrentEventLoop() const {
+  EventLoop* loop = threadLocalEventLoop;
+  KJ_ASSERT(loop != nullptr && loop->loopId == id);
 }
 
 void EventLoop::leaveScope() {
