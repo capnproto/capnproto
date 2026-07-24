@@ -163,7 +163,6 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
   pkgconfig/kj-gzip.pc \
-  pkgconfig/kj-tls.pc \
   pkgconfig/kj-test.pc \
 ])
 AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
@@ -230,6 +229,7 @@ AS_IF([test "$with_openssl" = check], [
 ])
 AS_IF([test "$with_openssl" != no], [
   CXXFLAGS="$CXXFLAGS -DKJ_HAS_OPENSSL"
+  CAPNP_PKG_CONFIG_FILES="$CAPNP_PKG_CONFIG_FILES pkgconfig/kj-tls.pc"
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
@@ -301,5 +301,5 @@ AC_SUBST(_WITH_LIBUCONTEXT, NO)
 
 AM_CONDITIONAL([HAS_FUZZING_ENGINE], [test "x$LIB_FUZZING_ENGINE" != "x"])
 
-AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES CAPNP_CMAKE_CONFIG_FILES)
+AC_CONFIG_FILES([Makefile] CAPNP_PKG_CONFIG_FILES pkgconfig/kj-tls.pc CAPNP_CMAKE_CONFIG_FILES)
 AC_OUTPUT
