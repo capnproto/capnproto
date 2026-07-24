@@ -776,6 +776,9 @@ KJ_TEST("detached cross-thread event doesn't cause crash") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   Own<PromiseFulfiller<void>> fulfiller;  // accessed only from the subthread
 
+  // Set once the detached event has begun executing on the subthread.
+  MutexGuarded<bool> eventStarted(false);
+
   Thread thread([&]() noexcept {
     KJ_XTHREAD_TEST_SETUP_LOOP;
 
@@ -805,6 +808,9 @@ KJ_TEST("detached cross-thread event doesn't cause crash") {
       }
 
       exec->executeAsync([&]() -> kj::Promise<void> {
+        // Signal that the event has started running.
+        *eventStarted.lockExclusive() = true;
+
         // Make sure other thread gets time to exit its EventLoop.
         delay();
         delay();
@@ -815,8 +821,9 @@ KJ_TEST("detached cross-thread event doesn't cause crash") {
         KJ_LOG(ERROR, e);
       });
 
-      // Give the other thread a chance to wake up and start working on the event.
-      delay();
+      // Wait until the event has started; destroying the loop while it was still queued would
+      // cancel it, so fulfill() would never run and the subthread would block forever.
+      eventStarted.lockExclusive().wait([](bool started) { return started; });
 
       // Now we'll destroy our EventLoop. That *should* cause detached promises to be destroyed,
       // thereby cancelling it, before disabling our own executor. However, at one point in the
