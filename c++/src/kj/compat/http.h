@@ -775,6 +775,8 @@ public:
 
   kj::Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes);
 
+  kj::Maybe<size_t> tryReadSync(kj::ArrayPtr<byte> buffer, size_t minBytes) override;
+
   kj::Maybe<uint64_t> tryGetLength() override;
 
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
@@ -782,6 +784,10 @@ public:
   kj::Promise<void> write(ArrayPtr<const byte> buffer) override;
 
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override;
+
+  bool tryWriteSync(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override;
