@@ -1771,11 +1771,7 @@ class AsyncTee final: public Refcounted {
     uint64_t size() const;
 
     Buffer clone() const {
-      size_t size = 0;
-      for (const auto& buf: bufferList) {
-        size += buf.size();
-      }
-      auto builder = heapArrayBuilder<byte>(size);
+      auto builder = heapArrayBuilder<byte>(totalSize);
       for (const auto& buf: bufferList) {
         builder.addAll(buf);
       }
@@ -1785,9 +1781,17 @@ class AsyncTee final: public Refcounted {
     }
 
   private:
-    Buffer(std::deque<Array<byte>>&& buffer) : bufferList(mv(buffer)) {}
+    Buffer(std::deque<Array<byte>>&& buffer): bufferList(mv(buffer)) {
+      for (const auto& buf: bufferList) {
+        totalSize += buf.size();
+      }
+    }
 
     std::deque<Array<byte>> bufferList;
+
+    // Sum of the sizes of everything in `bufferList`. Kept in sync by produce(), consume() and
+    // asArray().
+    uint64_t totalSize = 0;
   };
 
   class Sink;
@@ -2218,7 +2222,6 @@ private:
       n.maxBytes = kj::min(n.maxBytes, bufferSizeLimit);
       n.maxBytes = kj::max(n.minBytes, n.maxBytes);
       for (auto& branch: branches) {
-        // TODO(perf): buffer.size() is O(n) where n = # of individual heap-allocated byte arrays.
         if (branch.buffer.size() + n.maxBytes > bufferSizeLimit) {
           stoppage = Stoppage(KJ_EXCEPTION(FAILED, "tee buffer size limit exceeded"));
           return pullLoop();
@@ -2296,14 +2299,18 @@ uint64_t AsyncTee::Buffer::consume(ArrayPtr<byte>& readBuffer, size_t& minBytes)
       bufferList.pop_front();
     } else {
       bytes = heapArray(bytes.slice(amount, bytes.size()));
-      return totalAmount;
+      break;
     }
   }
+
+  KJ_ASSERT(totalSize >= totalAmount);
+  totalSize -= totalAmount;
 
   return totalAmount;
 }
 
 void AsyncTee::Buffer::produce(Array<byte> bytes) {
+  totalSize += bytes.size();
   bufferList.push_back(mv(bytes));
 }
 
@@ -2337,6 +2344,8 @@ Array<const ArrayPtr<const byte>> AsyncTee::Buffer::asArray(
     }
   }
 
+  KJ_DASSERT(totalSize >= amount);
+  totalSize -= amount;
 
   if (buffers.size() > 0) {
     return buffers.releaseAsArray().attach(mv(ownBuffers));
@@ -2350,13 +2359,7 @@ bool AsyncTee::Buffer::empty() const {
 }
 
 uint64_t AsyncTee::Buffer::size() const {
-  uint64_t result = 0;
-
-  for (auto& bytes: bufferList) {
-    result += bytes.size();
-  }
-
-  return result;
+  return totalSize;
 }
 
 }  // namespace
