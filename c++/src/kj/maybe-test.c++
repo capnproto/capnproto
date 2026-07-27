@@ -837,6 +837,32 @@ KJ_TEST("Maybe") {
   }
 }
 
+KJ_TEST("Maybe assertSome") {
+  int value = 123;
+
+  Maybe<int> maybeValue = value;
+  KJ_EXPECT(&maybeValue.assertSome() != &value);
+  KJ_EXPECT(maybeValue.assertSome() == value);
+  maybeValue.assertSome() = 456;
+  KJ_EXPECT(KJ_ASSERT_NONNULL(maybeValue) == 456);
+
+  Maybe<int&> maybeReference = value;
+  KJ_EXPECT(&maybeReference.assertSome() == &value);
+  maybeReference.assertSome() = 789;
+  KJ_EXPECT(value == 789);
+
+  const Maybe<int&> constMaybeReference = value;
+  KJ_EXPECT(constMaybeReference.assertSome() == value);
+
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  Maybe<int> emptyValue = kj::none;
+  KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyValue.assertSome());
+
+  Maybe<int&> emptyReference = kj::none;
+  KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyReference.assertSome());
+#endif
+}
+
 KJ_TEST("Maybe emplaceInit") {
   {
     Maybe<int> m;

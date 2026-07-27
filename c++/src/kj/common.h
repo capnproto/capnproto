@@ -2110,6 +2110,17 @@ public:
     }
   }
 
+  T& assertSome() & {
+    // Returns the contained value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return *ptr;
+  }
+  const T& assertSome() const & {
+    // Returns the contained value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return *ptr;
+  }
+
   T& orDefault(T& defaultValue) & {
     if (ptr == nullptr) {
       return defaultValue;
@@ -2309,6 +2320,17 @@ public:
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
 
   inline bool operator==(kj::None) const { return ptr == nullptr; }
+
+  T& assertSome() & {
+    // Returns the referenced value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return *ptr;
+  }
+  const T& assertSome() const & {
+    // Returns the referenced value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return *ptr;
+  }
 
   T& orDefault(T& defaultValue) {
     if (ptr == nullptr) {
