@@ -163,7 +163,6 @@ AC_DEFUN([CAPNP_PKG_CONFIG_FILES], [ \
   pkgconfig/kj-async.pc \
   pkgconfig/kj-http.pc \
   pkgconfig/kj-gzip.pc \
-  pkgconfig/kj-tls.pc \
   pkgconfig/kj-test.pc \
 ])
 AC_DEFUN([CAPNP_CMAKE_CONFIG_FILES], [ \
@@ -230,6 +229,13 @@ AS_IF([test "$with_openssl" = check], [
 ])
 AS_IF([test "$with_openssl" != no], [
   CXXFLAGS="$CXXFLAGS -DKJ_HAS_OPENSSL"
+  # Note: CAPNP_PKG_CONFIG_FILES is both an m4 macro (defined above) and a
+  # substituted shell variable. We must bracket-quote the whole assignment so
+  # m4 doesn't expand the bare CAPNP_PKG_CONFIG_FILES tokens into the file list.
+  [CAPNP_PKG_CONFIG_FILES="$CAPNP_PKG_CONFIG_FILES pkgconfig/kj-tls.pc"]
+  # Only generate kj-tls.pc when TLS is enabled, so the set of generated files
+  # matches the set we install (see pkgconfig_DATA in Makefile.am).
+  AC_CONFIG_FILES([pkgconfig/kj-tls.pc])
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 

@@ -221,6 +221,9 @@ if(NOT MSVC)
   set(PTHREAD_CFLAGS "-pthread")
 endif()
 set(STDLIB_FLAG)  # TODO: Unsupported
+if(WIN32)
+  set(ASYNC_LIBS "-lws2_32")
+endif()
 set(CAPNP_PKG_CONFIG_FILES
   pkgconfig/kj.pc
   pkgconfig/capnp.pc
@@ -233,10 +236,15 @@ if(NOT CAPNP_LITE)
     pkgconfig/kj-gzip.pc
     pkgconfig/kj-http.pc
     pkgconfig/kj-test.pc
-    pkgconfig/kj-tls.pc
     pkgconfig/capnp-rpc.pc
     pkgconfig/capnp-websocket.pc
     pkgconfig/capnp-json.pc
+  )
+endif()
+
+if(WITH_OPENSSL)
+  list(APPEND CAPNP_PKG_CONFIG_FILES
+    pkgconfig/kj-tls.pc
   )
 endif()
 

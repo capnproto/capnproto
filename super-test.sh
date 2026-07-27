@@ -24,6 +24,39 @@ function test_samples() {
   rm -f /tmp/capnp-calculator-example-$$
 }
 
+# libkj-tls and its pkg-config file must be installed as a unit: both present
+# when OpenSSL is available, both absent otherwise. #2726 fixed the case where
+# kj-tls.pc was installed even when OpenSSL was absent and libkj-tls was never
+# built (a .pc advertising a missing library); while iterating on that fix, the
+# opposite briefly slipped in -- libkj-tls installed with no kj-tls.pc. The
+# install samples don't use TLS, so they exercise neither case. Check both,
+# under whatever prefix the (autotools or CMake) build installed into.
+function check_kj_tls_packaging() {
+  local prefix=$1
+  local tls_lib tls_pc pc_dir
+  # Capture find's full output; piping to `head` can SIGPIPE under `pipefail`.
+  tls_lib=$(find "$prefix" -name 'libkj-tls.*' 2>/dev/null)
+  tls_pc=$(find "$prefix" -name 'kj-tls.pc' 2>/dev/null)
+
+  if [ -n "$tls_lib" ]; then
+    # libkj-tls was built, so kj-tls.pc must be installed and fully resolvable,
+    # including its private OpenSSL dependency.
+    if [ -z "$tls_pc" ]; then
+      echo "error: libkj-tls was built but kj-tls.pc was not installed" >&2
+      exit 1
+    fi
+    pc_dir=$(dirname "${tls_pc%%$'\n'*}")  # first match, in case there are several
+    PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+        doit pkg-config --exists --print-errors kj-tls
+    PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+        doit pkg-config --cflags --libs --static kj-tls
+  elif [ -n "$tls_pc" ]; then
+    # libkj-tls was not built, so kj-tls.pc must not be installed.
+    echo "error: kj-tls.pc was installed but libkj-tls was not built" >&2
+    exit 1
+  fi
+}
+
 QUICK=
 CPP_FEATURES=
 WERROR="-Werror"
@@ -279,6 +312,8 @@ while [ $# -gt 0 ]; do
       # Build and install
       doit make -j$PARALLEL install
 
+      check_kj_tls_packaging "$WORKSPACE/inst"
+
       # Configure, build, and execute the samples.
       cd $WORKSPACE/build-samples
       doit cmake $SOURCE_DIR/samples -G "Unix Makefiles" -DCMAKE_PREFIX_PATH="$WORKSPACE/inst" \
@@ -464,6 +499,8 @@ doit make install
 
 test "x$(which capnp)" = "x$STAGING/bin/capnp"
 test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
+
+check_kj_tls_packaging "$STAGING"
 
 cd samples
 
