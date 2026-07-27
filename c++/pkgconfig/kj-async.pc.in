@@ -8,4 +8,4 @@ Description: Basic utility library called KJ (async part)
 Version: @VERSION@
 Libs: -L${libdir} -lkj-async @ASYNC_LIBS@ @PTHREAD_CFLAGS@ @PTHREAD_LIBS@ @STDLIB_FLAG@
 Requires: kj = @VERSION@
-Cflags: -I${includedir} @ASYNC_LIBS@ @PTHREAD_CFLAGS@ @STDLIB_FLAG@ @CAPNP_LITE_FLAG@
+Cflags: -I${includedir} @PTHREAD_CFLAGS@ @STDLIB_FLAG@ @CAPNP_LITE_FLAG@
