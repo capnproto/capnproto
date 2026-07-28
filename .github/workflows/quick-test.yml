@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [20]
+        clang: [22]
     steps:
       - uses: actions/checkout@v6
       - name: install dependencies
