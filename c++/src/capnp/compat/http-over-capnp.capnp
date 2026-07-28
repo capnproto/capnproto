@@ -84,6 +84,9 @@ interface HttpService {
     #
     # Client -> Server WebSocket frames will be sent via method calls on `upSocket`, while
     # Server -> Client will be sent as calls to `downSocket`.
+
+    sendInformational @2 (info :HttpInformationalResponse);
+    # Sends an informational response before the final response or WebSocket handshake.
   }
 
   interface ConnectClientRequestContext {
@@ -147,6 +150,12 @@ struct HttpResponse {
     unknown @3 :Void;   # e.g. due to transfer-encoding: chunked
     fixed @4 :UInt64;   # e.g. due to content-length
   }
+}
+
+struct HttpInformationalResponse {
+  statusCode @0 :UInt16;
+  statusText @1 :Text;
+  headers @2 :List(HttpHeader);
 }
 
 enum HttpMethod {

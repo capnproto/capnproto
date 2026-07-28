@@ -70,7 +70,7 @@ KJ_TEST("HttpOverCapnpFactory::capnpToKj rejects out of range common values") {
 
     KJ_EXPECT_THROW_MESSAGE("unknown common header value", factory.capnpToKj(invalidValue.get()));
   }
-  
+
   {
     auto invalidValue = orphanage.newOrphan<List<HttpHeader>>(1);
     auto invalidValueHeader = invalidValue.get()[0];
@@ -477,6 +477,208 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, with path shortening") {
   auto headerTable = tableBuilder.build();
 
   runEndToEndTests(timer, *headerTable, factory, factory, waitScope);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto forwards informational responses") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  auto infoHeader = tableBuilder.add("X-Info");
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  class Service final: public kj::HttpService {
+  public:
+    Service(kj::HttpHeaderTable& table, kj::HttpHeaderId infoHeader)
+        : table(table), infoHeader(infoHeader) {}
+
+    kj::Promise<void> request(
+        kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      kj::HttpHeaders first(table);
+      first.setPtr(infoHeader, "first");
+      response.sendInformational(103, "Early Hints", first);
+
+      kj::HttpHeaders second(table);
+      second.setPtr(infoHeader, "second");
+      response.sendInformational(102, "Processing", second);
+
+      if (url == "/body") {
+        auto body = response.send(200, "OK", kj::HttpHeaders(table), uint64_t(3));
+        return body->write("foo"_kjb).attach(kj::mv(body));
+      } else {
+        response.send(204, "No Content", kj::HttpHeaders(table), uint64_t(0));
+        return kj::READY_NOW;
+      }
+    }
+
+  private:
+    kj::HttpHeaderTable& table;
+    kj::HttpHeaderId infoHeader;
+  };
+
+  auto rpcService = factory.kjToCapnp(kj::heap<Service>(*headerTable, infoHeader));
+  auto service = factory.capnpToKj(rpcService);
+  auto client = kj::newHttpClient(*service);
+
+  kj::Vector<uint> events;
+  kj::Vector<kj::String> values;
+  kj::HttpClient::RequestOptions options;
+  options.informationResponseHandler =
+      [&](kj::HttpClient::InformationalResponse&& response) {
+    events.add(response.statusCode);
+    values.add(kj::str(KJ_ASSERT_NONNULL(response.headers.get(infoHeader))));
+  };
+
+  auto request = client->request(
+      kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable), kj::mv(options));
+  request.body = nullptr;
+  auto response = request.response.wait(waitScope);
+  events.add(response.statusCode);
+  response.body = nullptr;
+
+  KJ_ASSERT(events.size() == 3);
+  KJ_EXPECT(events[0] == 103);
+  KJ_EXPECT(events[1] == 102);
+  KJ_EXPECT(events[2] == 204);
+  KJ_ASSERT(values.size() == 2);
+  KJ_EXPECT(values[0] == "first");
+  KJ_EXPECT(values[1] == "second");
+
+  auto withoutHandler = client->request(
+      kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable));
+  withoutHandler.body = nullptr;
+  auto finalResponse = withoutHandler.response.wait(waitScope);
+  KJ_EXPECT(finalResponse.statusCode == 204);
+  finalResponse.body = nullptr;
+
+  kj::HttpClient::RequestOptions failingOptions;
+  failingOptions.informationResponseHandler = [](kj::HttpClient::InformationalResponse&&) {
+    KJ_FAIL_REQUIRE("RPC information handler failed");
+  };
+  auto failing = client->request(
+      kj::HttpMethod::GET, "/body", kj::HttpHeaders(*headerTable), kj::mv(failingOptions));
+  failing.body = nullptr;
+  KJ_EXPECT_THROW_MESSAGE("RPC information handler failed", failing.response.wait(waitScope));
+
+  kj::HttpClient::RequestOptions disconnectedOptions;
+  disconnectedOptions.informationResponseHandler = [](kj::HttpClient::InformationalResponse&&) {
+    kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "callback disconnected"));
+  };
+  auto disconnected = client->request(
+      kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable), kj::mv(disconnectedOptions));
+  disconnected.body = nullptr;
+  KJ_EXPECT_THROW(DISCONNECTED, disconnected.response.wait(waitScope));
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto drops informational responses for an old peer") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  class Service final: public kj::HttpService {
+  public:
+    Service(kj::HttpHeaderTable& table): table(table) {}
+
+    kj::Promise<void> request(
+        kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      response.sendInformational(103, "Early Hints", kj::HttpHeaders(table));
+      response.send(204, "No Content", kj::HttpHeaders(table), uint64_t(0));
+      return kj::READY_NOW;
+    }
+
+  private:
+    kj::HttpHeaderTable& table;
+  };
+
+  class OldContext final: public capnp::HttpService::ClientRequestContext::Server {
+  public:
+    OldContext(kj::Own<kj::PromiseFulfiller<uint>> fulfiller)
+        : fulfiller(kj::mv(fulfiller)) {}
+
+    kj::Promise<void> startResponse(StartResponseContext context) override {
+      fulfiller->fulfill(context.getParams().getResponse().getStatusCode());
+      return kj::READY_NOW;
+    }
+
+  private:
+    kj::Own<kj::PromiseFulfiller<uint>> fulfiller;
+  };
+
+  auto rpcService = factory.kjToCapnp(kj::heap<Service>(*headerTable));
+  auto responsePaf = kj::newPromiseAndFulfiller<uint>();
+  auto request = rpcService.requestRequest();
+  auto metadata = request.initRequest();
+  metadata.setMethod(capnp::HttpMethod::GET);
+  metadata.setUrl("/");
+  metadata.getBodySize().setFixed(0);
+  request.setContext(kj::heap<OldContext>(kj::mv(responsePaf.fulfiller)));
+  auto requestPromise = request.send();
+
+  KJ_EXPECT(responsePaf.promise.wait(waitScope) == 204);
+  requestPromise.wait(waitScope);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto rejects informational responses after the final response") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  class OutOfOrderService final: public capnp::HttpService::Server {
+  public:
+    OutOfOrderService(bool& rejected): rejected(rejected) {}
+
+    kj::Promise<void> request(RequestContext context) override {
+      auto clientContext = context.getParams().getContext();
+
+      auto finalRequest = clientContext.startResponseRequest();
+      auto finalResponse = finalRequest.initResponse();
+      finalResponse.setStatusCode(204);
+      finalResponse.setStatusText("No Content");
+      finalResponse.getBodySize().setFixed(0);
+      auto finalPromise = finalRequest.send().ignoreResult();
+
+      auto lateRequest = clientContext.sendInformationalRequest();
+      auto info = lateRequest.initInfo();
+      info.setStatusCode(103);
+      info.setStatusText("Early Hints");
+      auto latePromise = lateRequest.send().ignoreResult();
+
+      return finalPromise.then([this, latePromise = kj::mv(latePromise)]() mutable {
+        return latePromise.then([]() {
+          KJ_FAIL_ASSERT("late informational response unexpectedly succeeded");
+        }, [this](kj::Exception&& exception) {
+          rejected = true;
+          KJ_EXPECT(exception.getDescription().contains("after startResponse()"));
+        });
+      });
+    }
+
+  private:
+    bool& rejected;
+  };
+
+  bool rejected = false;
+  auto service = factory.capnpToKj(kj::heap<OutOfOrderService>(rejected));
+  auto client = kj::newHttpClient(*service);
+  auto request = client->request(
+      kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable));
+  request.body = nullptr;
+  auto response = request.response.wait(waitScope);
+  KJ_EXPECT(response.statusCode == 204);
+  KJ_EXPECT(rejected);
+  response.body = nullptr;
 }
 
 KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {

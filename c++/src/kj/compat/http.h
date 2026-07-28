@@ -167,7 +167,8 @@ public:
   MACRO(LOCATION, "Location") \
   MACRO(CONTENT_TYPE, "Content-Type") \
   MACRO(RANGE, "Range") \
-  MACRO(CONTENT_RANGE, "Content-Range")
+  MACRO(CONTENT_RANGE, "Content-Range") \
+  MACRO(EXPECT, "Expect")
   // For convenience, these headers are valid for all HttpHeaderTables. You can refer to them like:
   //
   //     HttpHeaderId::HOST
@@ -386,9 +387,11 @@ public:
   struct Request {
     HttpMethod method;
     kj::StringPtr url;
+    bool isHttp10 = false;
   };
   struct ConnectRequest {
     kj::StringPtr authority;
+    bool isHttp10 = false;
   };
   struct Response {
     uint statusCode;
@@ -825,6 +828,17 @@ class HttpClient {
   //   The `url` specified in a request is a full URL including protocol and hostname.
 
 public:
+  struct InformationalResponse {
+    uint statusCode;
+    kj::StringPtr statusText;
+    const HttpHeaders& headers;
+  };
+
+  struct RequestOptions {
+    kj::Maybe<uint64_t> expectedBodySize = kj::none;
+    kj::Maybe<kj::Function<void(InformationalResponse&&)>> informationResponseHandler = kj::none;
+  };
+
   struct Response {
     uint statusCode;
     kj::StringPtr statusText;
@@ -857,6 +871,11 @@ public:
   // `expectedBodySize`, if provided, must be exactly the number of bytes that will be written to
   // the body. This will trigger use of the `Content-Length` connection header. Otherwise,
   // `Transfer-Encoding: chunked` will be used.
+
+  virtual Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                          RequestOptions options);
+  // Performs a request and synchronously reports informational responses before the final response.
+  // The handler must not retain `statusText` or `headers` without copying them.
 
   struct WebSocketResponse {
     uint statusCode;
@@ -941,6 +960,7 @@ public:
     //
     // `send()` may only be called a single time. Calling it a second time will cause an exception
     // to be thrown.
+    // `statusCode` must be 200 or greater; use sendInformational() for non-101 1xx responses.
 
     virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
     // If headers.isWebSocket() is true then you can call acceptWebSocket() instead of send().
@@ -954,6 +974,10 @@ public:
     //
     // `acceptWebSocket()` may only be called a single time. Calling it a second time will cause an
     // exception to be thrown.
+
+    virtual void sendInformational(
+        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
+    // Sends a non-101 informational response before send() or acceptWebSocket().
 
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
                                 const HttpHeaders& headers);
@@ -1241,6 +1265,9 @@ struct HttpServerSettings {
     AUTOMATIC_COMPRESSION, // Will perform compression parameter negotiation if client requests it.
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
+
+  bool autoHandle100Continue = false;
+  // Sends 100 Continue when a request body carrying Expect: 100-continue is first read.
 };
 
 class HttpServerErrorHandler {
@@ -1353,7 +1380,8 @@ public:
     // Nothing, this is an opaque type.
 
   private:
-    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, HttpHeaders);
+    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>,
+        kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, bool, HttpHeaders);
 
     kj::Array<byte> buffer;
     // A buffer containing at least the request's method, URL, and headers, and possibly content
@@ -1365,6 +1393,7 @@ public:
 
     kj::OneOf<HttpMethod, HttpConnectMethod> method;
     kj::StringPtr url;
+    bool isHttp10;
     HttpHeaders headers;
     // Parsed request front matter. `url` and `headers` both store pointers into `buffer`.
 

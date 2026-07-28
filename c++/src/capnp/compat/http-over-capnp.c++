@@ -334,12 +334,31 @@ public:
     }
   }
 
+  kj::Promise<void> sendInformational(SendInformationalContext context) override {
+    KJ_REQUIRE(!sentResponse,
+        "sendInformational() after startResponse() or startWebSocket()");
+    auto info = context.getParams().getInfo();
+    auto statusCode = info.getStatusCode();
+    KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
+        "informational status must be between 100 and 199, excluding 101");
+    KJ_TRY {
+      kjResponse.sendInformational(
+          statusCode, info.getStatusText(), factory.capnpToKj(info.getHeaders()));
+    } KJ_CATCH(exception) {
+      informationalErrorOccurred = true;
+      if (informationalError == kj::none) informationalError = kj::mv(exception);
+    }
+    return kj::READY_NOW;
+  }
+
   kj::Promise<void> startResponse(StartResponseContext context) override {
     KJ_REQUIRE(!sentResponse, "already called startResponse() or startWebSocket()");
     sentResponse = true;
 
     auto params = context.getParams();
     auto rpcResponse = params.getResponse();
+    KJ_REQUIRE(rpcResponse.getStatusCode() >= 200,
+        "final response status must be at least 200; use sendInformational() for 1xx");
 
     auto bodySize = rpcResponse.getBodySize();
     kj::Maybe<uint64_t> expectedSize;
@@ -350,10 +369,20 @@ public:
       hasBody = size > 0;
     }
 
+    auto results = context.getResults(MessageSize { 16, 1 });
+    if (informationalError != kj::none) {
+      if (hasBody) {
+        auto pipe = kj::newOneWayPipe();
+        auto sink = kj::heap<kj::NullStream>();
+        results.setBody(factory.streamFactory.kjToCapnp(kj::mv(pipe.out)));
+        responsePumpTask = pipe.in->pumpTo(*sink).ignoreResult()
+            .attach(kj::mv(pipe.in), kj::mv(sink));
+      }
+      return kj::READY_NOW;
+    }
+
     auto bodyStream = kjResponse.send(rpcResponse.getStatusCode(), rpcResponse.getStatusText(),
         factory.capnpToKj(rpcResponse.getHeaders()), expectedSize);
-
-    auto results = context.getResults(MessageSize { 16, 1 });
     if (hasBody) {
       auto pipe = kj::newOneWayPipe();
       results.setBody(factory.streamFactory.kjToCapnp(kj::mv(pipe.out)));
@@ -443,6 +472,10 @@ public:
     return ownWebSocket != kj::none;
   }
 
+  bool hasInformationalError() {
+    return informationalErrorOccurred;
+  }
+
   kj::Promise<void> closeWebSocketForOverload() {
     if (closingForOverload) {
       return finishPump().catch_([](kj::Exception&&) {});
@@ -477,12 +510,19 @@ private:
   kj::Maybe<kj::Own<kj::WebSocket>> ownWebSocket;
   kj::Maybe<kj::Promise<void>> responsePumpTask;
   kj::Maybe<CapnpToKjWebSocketAdapter&> maybeWebSocket;
+  kj::Maybe<kj::Exception> informationalError;
 
   kj::HttpService::Response& kjResponse;
   bool sentResponse = false;
   bool closingForOverload = false;
+  bool informationalErrorOccurred = false;
 
   kj::Promise<void> finishPumpInner() {
+    KJ_IF_SOME(exception, informationalError) {
+      auto result = kj::mv(exception);
+      informationalError = kj::none;
+      return kj::mv(result);
+    }
     KJ_IF_SOME(r, responsePumpTask) {
       auto promise = kj::mv(r);
       // Null out the task so a second call can't await the moved-from (null) promise.
@@ -684,7 +724,8 @@ public:
       // do the same. Actually, technically, even non-DISCONNECTED exceptions arguably shouldn't
       // propagate here for the same reason. But, non-DISCONNECTED exceptions are more likely to
       // flag some real bug, so I'm leaving them alone for now. This could be revisited later.
-      if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
+      if (context.hasInformationalError() ||
+          exception.getType() != kj::Exception::Type::DISCONNECTED) {
         kj::throwFatalException(kj::mv(exception));
       }
     }
@@ -771,10 +812,27 @@ public:
         headers(factory.capnpToKj(request.getHeaders())),
         clientContext(kj::mv(clientContext)) {}
 
+  void sendInformational(
+      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+    KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
+        "informational status must be between 100 and 199, excluding 101");
+
+    auto req = clientContext.sendInformationalRequest();
+    auto info = req.initInfo();
+    info.setStatusCode(statusCode);
+    info.setStatusText(statusText);
+    info.adoptHeaders(factory.headersToCapnp(
+        headers, Orphanage::getForMessageContaining(info)));
+    dontWaitForRpc(req.send());
+  }
+
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(statusCode >= 200,
+        "final response status must be at least 200; use sendInformational() for 1xx");
     responseSent = true;
 
     auto req = clientContext.startResponseRequest();

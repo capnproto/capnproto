@@ -1070,8 +1070,19 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
         "Unrecognized request method.", content };
   }
 
-  // Ignore rest of line. Don't care about "HTTP/1.1" or whatever.
-  consumeLine(ptr);
+  auto versionLine = consumeLine(ptr);
+  auto versionEnd = versionLine.end();
+  while (versionEnd > versionLine.begin() &&
+         (versionEnd[-1] == ' ' || versionEnd[-1] == '\t')) {
+    --versionEnd;
+  }
+  bool isHttp10 = versionLine.slice(0, versionEnd - versionLine.begin()) ==
+      kj::StringPtr("HTTP/1.0").asArray();
+  if (result.is<HttpHeaders::Request>()) {
+    result.get<HttpHeaders::Request>().isHttp10 = isHttp10;
+  } else {
+    result.get<HttpHeaders::ConnectRequest>().isHttp10 = isHttp10;
+  }
 
   if (!parseHeaders(ptr, end)) {
     return ProtocolError { 400, "Bad Request",
@@ -1437,19 +1448,27 @@ private:
 static constexpr size_t MIN_BUFFER = 4096;
 static constexpr size_t MAX_BUFFER = 128 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
+static constexpr uint MAX_INFORMATION_RESPONSES = 16;
+// The maximum number of interim responses (1xx) that we will accept before giving up.
+// RFC 9110 section 15.2.6 says that a client MUST be prepared to receive one or more
+// 1xx responses before a final response, but it doesn't specify a limit. We set a
+// limit to avoid DoS attacks. The limit is high enough that it should never be a
+// problem in practice. Eventually we might want to make this configurable, but that
+// feels like overkill for now.
 
 class HttpInputStreamImpl final: public HttpInputStream,
                                  public WrappableStreamMixin<HttpInputStreamImpl> {
 private:
   static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
       kj::OneOf<HttpMethod, HttpConnectMethod> method,
-      kj::StringPtr url) {
+      kj::StringPtr url,
+      bool isHttp10) {
     KJ_SWITCH_ONEOF(method) {
       KJ_CASE_ONEOF(m, HttpMethod) {
-        return HttpHeaders::Request { m, url };
+        return HttpHeaders::Request { m, url, isHttp10 };
       }
       KJ_CASE_ONEOF(m, HttpConnectMethod) {
-        return HttpHeaders::ConnectRequest { url };
+        return HttpHeaders::ConnectRequest { url, isHttp10 };
       }
     }
     KJ_UNREACHABLE;
@@ -1461,17 +1480,18 @@ public:
 
   explicit HttpInputStreamImpl(AsyncInputStream& inner,
       kj::Array<char> headerBufferParam,
-      kj::ArrayPtr<char> leftoverParam,
-      kj::OneOf<HttpMethod, HttpConnectMethod> method,
-      kj::StringPtr url,
-      HttpHeaders headers)
+       kj::ArrayPtr<char> leftoverParam,
+       kj::OneOf<HttpMethod, HttpConnectMethod> method,
+       kj::StringPtr url,
+       bool isHttp10,
+       HttpHeaders headers)
       : inner(inner),
         headerBuffer(kj::mv(headerBufferParam)),
         // Initialize `messageHeaderEnd` to a safe value, we'll adjust it below.
         messageHeaderEnd(leftoverParam.begin() - headerBuffer.begin()),
         leftover(leftoverParam),
         headers(kj::mv(headers)),
-        resumingRequest(getResumingRequest(method, url)) {
+        resumingRequest(getResumingRequest(method, url, isHttp10)) {
     // Constructor used for resuming a SuspendedRequest.
 
     // We expect headerBuffer to look like this:
@@ -1701,21 +1721,50 @@ public:
     KJ_UNREACHABLE;
   }
 
-  inline kj::Promise<HttpHeaders::ResponseOrProtocolError> readResponseHeaders() {
+  inline kj::Promise<HttpHeaders::ResponseOrProtocolError> readResponseHeaders(
+      kj::Maybe<kj::Function<void(HttpClient::InformationalResponse&&)>> handler = kj::none) {
     // Note: readResponseHeaders() could be called multiple times concurrently when pipelining
     //   requests. readMessageHeaders() will serialize these, but it's important not to mess with
     //   state (like calling headers.clear()) before said serialization has taken place.
-    auto headersOrError = co_await readMessageHeaders();
-    KJ_SWITCH_ONEOF(headersOrError) {
-      KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
-        co_return protocolError;
+    KJ_TRY {
+      auto headersOrError = co_await readMessageHeaders();
+      uint interimCount = 0;
+      for (;;) {
+        KJ_SWITCH_ONEOF(headersOrError) {
+          KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+            abortRead();
+            co_return protocolError;
+          }
+          KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
+            headers.clear();
+            auto responseOrError = headers.tryParseResponse(text);
+            KJ_IF_SOME(response, responseOrError.tryGet<HttpHeaders::Response>()) {
+              if (response.statusCode >= 100 && response.statusCode < 200 &&
+                  response.statusCode != 101) {
+                if (++interimCount > MAX_INFORMATION_RESPONSES) {
+                  abortRead();
+                  co_return HttpHeaders::ProtocolError {
+                    502, "Bad Gateway", "Too many informational responses.", text
+                  };
+                }
+                KJ_IF_SOME(h, handler) {
+                  h(HttpClient::InformationalResponse {
+                    response.statusCode, response.statusText, headers
+                  });
+                }
+                headersOrError = co_await readHeader(HeaderType::MESSAGE, 0, 0);
+                continue;
+              }
+            }
+            if (responseOrError.is<HttpHeaders::ProtocolError>()) abortRead();
+            co_return responseOrError;
+          }
+        }
       }
-      KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
-        headers.clear();
-        co_return headers.tryParseResponse(text);
-      }
+    } KJ_CATCH(exception) {
+      if (onMessageDone != kj::none) abortRead();
+      kj::throwRecoverableException(kj::mv(exception));
     }
-
     KJ_UNREACHABLE;
   }
 
@@ -2477,6 +2526,12 @@ public:
     KJ_REQUIRE(!inBody, "previous HTTP message body incomplete; can't write more messages");
     inBody = true;
 
+    queueWrite(kj::mv(content));
+  }
+
+  void writeInformationalHeaders(String content) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
+    KJ_REQUIRE(!inBody, "previous HTTP message body incomplete; can't write more messages");
     queueWrite(kj::mv(content));
   }
 
@@ -5621,7 +5676,14 @@ public:
   }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    RequestOptions options;
+    options.expectedBodySize = expectedBodySize;
+    return request(method, url, headers, kj::mv(options));
+  }
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  RequestOptions options) override {
     KJ_REQUIRE(!upgraded,
         "can't make further requests on this HttpClient because it has been or is in the process "
         "of being upgraded");
@@ -5637,7 +5699,7 @@ public:
     bool isGet = method == HttpMethod::GET || method == HttpMethod::HEAD;
     bool hasBody;
 
-    KJ_IF_SOME(s, expectedBodySize) {
+    KJ_IF_SOME(s, options.expectedBodySize) {
       if (isGet && s == 0) {
         // GET with empty body; don't send any Content-Length.
         hasBody = false;
@@ -5668,7 +5730,7 @@ public:
       // No entity-body.
       httpOutput.finishBody();
       bodyStream = heap<HttpNullEntityWriter>();
-    } else KJ_IF_SOME(s, expectedBodySize) {
+    } else KJ_IF_SOME(s, options.expectedBodySize) {
       bodyStream = heap<HttpFixedLengthEntityWriter>(httpOutput, s);
     } else {
       bodyStream = heap<HttpChunkedEntityWriter>(httpOutput);
@@ -5676,7 +5738,8 @@ public:
 
     auto id = ++counter;
 
-    auto responsePromise = httpInput.readResponseHeaders().then(
+    auto responsePromise = httpInput.readResponseHeaders(
+        kj::mv(options.informationResponseHandler)).then(
         [this,method,id](HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
             -> HttpClient::Response {
       KJ_SWITCH_ONEOF(responseOrProtocolError) {
@@ -5708,6 +5771,10 @@ public:
         }
       }
 
+      KJ_UNREACHABLE;
+    }, [this](kj::Exception&& exception) -> HttpClient::Response {
+      closed = true;
+      kj::throwRecoverableException(kj::mv(exception));
       KJ_UNREACHABLE;
     });
 
@@ -6002,6 +6069,11 @@ private:
 
 }  // namespace
 
+HttpClient::Request HttpClient::request(
+    HttpMethod method, kj::StringPtr url, const HttpHeaders& headers, RequestOptions options) {
+  return request(method, url, headers, options.expectedBodySize);
+}
+
 kj::Promise<HttpClient::WebSocketResponse> HttpClient::openWebSocket(
     kj::StringPtr url, const HttpHeaders& headers) {
   return request(HttpMethod::GET, url, headers, kj::none)
@@ -6233,9 +6305,16 @@ public:
   }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    RequestOptions options;
+    options.expectedBodySize = expectedBodySize;
+    return request(method, url, headers, kj::mv(options));
+  }
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  RequestOptions options) override {
     auto refcounted = getClient();
-    auto result = refcounted->client->request(method, url, headers, expectedBodySize);
+    auto result = refcounted->client->request(method, url, headers, kj::mv(options));
     result.body = result.body.attach(refcounted.addRef());
     result.response = result.response.then(
         [refcounted=kj::mv(refcounted)](Response&& response) mutable {
@@ -6472,17 +6551,25 @@ public:
   }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    RequestOptions options;
+    options.expectedBodySize = expectedBodySize;
+    return request(method, url, headers, kj::mv(options));
+  }
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  RequestOptions options) override {
     KJ_IF_SOME(c, client) {
-      return c->request(method, url, headers, expectedBodySize);
+      return c->request(method, url, headers, kj::mv(options));
     } else {
       // This gets complicated since request() returns a pair of a stream and a promise.
       auto urlCopy = kj::str(url);
       auto headersCopy = headers.clone();
       auto combined = promise.addBranch().then(
-          [this,method,expectedBodySize,url=kj::mv(urlCopy), headers=kj::mv(headersCopy)]()
+          [this,method,options=kj::mv(options),url=kj::mv(urlCopy),
+           headers=kj::mv(headersCopy)]() mutable
           -> kj::Tuple<kj::Own<kj::AsyncOutputStream>, kj::Promise<Response>> {
-        auto req = KJ_ASSERT_NONNULL(client)->request(method, url, headers, expectedBodySize);
+        auto req = KJ_ASSERT_NONNULL(client)->request(method, url, headers, kj::mv(options));
         return kj::tuple(kj::mv(req.body), kj::mv(req.response));
       });
 
@@ -6547,7 +6634,14 @@ public:
         tasks(*this) {}
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    RequestOptions options;
+    options.expectedBodySize = expectedBodySize;
+    return request(method, url, headers, kj::mv(options));
+  }
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  RequestOptions options) override {
     // We need to parse the proxy-style URL to convert it to host-style.
     // Use URL parsing options that avoid unnecessary rewrites.
     Url::Options urlOptions;
@@ -6558,7 +6652,7 @@ public:
     auto path = parsed.toString(Url::HTTP_REQUEST);
     auto headersCopy = headers.clone();
     headersCopy.setPtr(HttpHeaderId::HOST, parsed.host);
-    return getClient(parsed).request(method, path, headersCopy, expectedBodySize);
+    return getClient(parsed).request(method, path, headersCopy, kj::mv(options));
   }
 
   kj::Promise<WebSocketResponse> openWebSocket(
@@ -6756,10 +6850,17 @@ public:
   }
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    RequestOptions options;
+    options.expectedBodySize = expectedBodySize;
+    return request(method, url, headers, kj::mv(options));
+  }
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  RequestOptions options) override {
     if (concurrentRequests < maxConcurrentRequests) {
       auto counter = ConnectionCounter(*this);
-      auto request = inner.request(method, url, headers, expectedBodySize);
+      auto request = inner.request(method, url, headers, kj::mv(options));
       fireCountChanged();
       auto promise = releaseSlotOnHeadersReceived
           ? releaseCounterOnHeaders(kj::mv(request.response), kj::mv(counter))
@@ -6776,8 +6877,8 @@ public:
                method,
                urlCopy = kj::mv(urlCopy),
                headersCopy = kj::mv(headersCopy),
-               expectedBodySize](ConnectionCounter&& counter) mutable {
-      auto req = inner.request(method, urlCopy, headersCopy, expectedBodySize);
+               options = kj::mv(options)](ConnectionCounter&& counter) mutable {
+      auto req = inner.request(method, urlCopy, headersCopy, kj::mv(options));
       auto promise = releaseSlotOnHeadersReceived
           ? releaseCounterOnHeaders(kj::mv(req.response), kj::mv(counter))
           : attachCounter(kj::mv(req.response), kj::mv(counter));
@@ -7017,19 +7118,27 @@ public:
   HttpClientAdapter(HttpService& service): service(service) {}
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
-                  kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    RequestOptions options;
+    options.expectedBodySize = expectedBodySize;
+    return request(method, url, headers, kj::mv(options));
+  }
+
+  Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                  RequestOptions options) override {
     // We have to clone the URL and headers because HttpService implementation are allowed to
     // assume that they remain valid until the service handler completes whereas HttpClient callers
     // are allowed to destroy them immediately after the call.
     auto urlCopy = kj::str(url);
     auto headersCopy = kj::heap(headers.clone());
 
-    auto pipe = newOneWayPipe(expectedBodySize);
+    auto pipe = newOneWayPipe(options.expectedBodySize);
 
     // TODO(cleanup): The ownership relationships here are a mess. Can we do something better
     //   involving a PromiseAdapter, maybe?
     auto paf = kj::newPromiseAndFulfiller<Response>();
-    auto responder = kj::refcounted<ResponseImpl>(method, kj::mv(paf.fulfiller));
+    auto responder = kj::refcounted<ResponseImpl>(
+        method, kj::mv(paf.fulfiller), kj::mv(options.informationResponseHandler));
 
     auto requestPaf = kj::newPromiseAndFulfiller<kj::Promise<void>>();
     responder->setPromise(kj::mv(requestPaf.promise));
@@ -7193,8 +7302,11 @@ private:
   class ResponseImpl final: public HttpService::Response, public kj::Refcounted {
   public:
     ResponseImpl(kj::HttpMethod method,
-                 kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller)
-        : method(method), fulfiller(kj::mv(fulfiller)) {}
+                 kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller,
+                 kj::Maybe<kj::Function<void(HttpClient::InformationalResponse&&)>>
+                     informationResponseHandler)
+        : method(method), fulfiller(kj::mv(fulfiller)),
+          informationResponseHandler(kj::mv(informationResponseHandler)) {}
 
     void setPromise(kj::Promise<void> promise) {
       task = promise.eagerlyEvaluate([this](kj::Exception&& exception) {
@@ -7210,6 +7322,10 @@ private:
     kj::Own<kj::AsyncOutputStream> send(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+      KJ_REQUIRE(!responseStarted, "already called send() or acceptWebSocket()");
+      KJ_REQUIRE(statusCode >= 200,
+          "final response status must be at least 200; use sendInformational() for 1xx");
+      responseStarted = true;
       // The caller of HttpClient is allowed to assume that the statusText and headers remain
       // valid until the body stream is dropped, but the HttpService implementation is allowed to
       // send values that are only valid until send() returns, so we have to copy.
@@ -7250,10 +7366,23 @@ private:
       KJ_FAIL_REQUIRE("a WebSocket was not requested");
     }
 
+    void sendInformational(
+        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+      KJ_REQUIRE(!responseStarted, "already called send() or acceptWebSocket()");
+      KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
+          "informational status must be between 100 and 199, excluding 101");
+      KJ_IF_SOME(handler, informationResponseHandler) {
+        handler(HttpClient::InformationalResponse { statusCode, statusText, headers });
+      }
+    }
+
   private:
     kj::HttpMethod method;
     kj::Own<kj::PromiseFulfiller<HttpClient::Response>> fulfiller;
+    kj::Maybe<kj::Function<void(HttpClient::InformationalResponse&&)>>
+        informationResponseHandler;
     kj::Promise<void> task = nullptr;
+    bool responseStarted = false;
   };
 
   class DelayedCloseWebSocket final: public WebSocket {
@@ -7358,6 +7487,8 @@ private:
     kj::Own<kj::AsyncOutputStream> send(
         uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+      KJ_REQUIRE(statusCode >= 200,
+          "final response status must be at least 200; use sendInformational() for 1xx");
       // The caller of HttpClient is allowed to assume that the statusText and headers remain
       // valid until the body stream is dropped, but the HttpService implementation is allowed to
       // send values that are only valid until send() returns, so we have to copy.
@@ -7548,7 +7679,13 @@ public:
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
     if (!headers.isWebSocket()) {
-      auto innerReq = client.request(method, url, headers, requestBody.tryGetLength());
+      HttpClient::RequestOptions options;
+      options.expectedBodySize = requestBody.tryGetLength();
+      options.informationResponseHandler =
+          [&response](HttpClient::InformationalResponse&& info) {
+        response.sendInformational(info.statusCode, info.statusText, info.headers);
+      };
+      auto innerReq = client.request(method, url, headers, kj::mv(options));
 
       auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
       promises.add(requestBody.pumpTo(*innerReq.body).ignoreResult()
@@ -7677,6 +7814,9 @@ kj::Promise<void> HttpService::Response::sendError(
   return sendError(statusCode, statusText, HttpHeaders(headerTable));
 }
 
+void HttpService::Response::sendInformational(
+    uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {}
+
 kj::Promise<void> HttpService::connect(
     kj::StringPtr host,
     const HttpHeaders& headers,
@@ -7685,6 +7825,87 @@ kj::Promise<void> HttpService::connect(
     kj::HttpConnectSettings settings) {
   KJ_UNIMPLEMENTED("CONNECT is not implemented by this HttpService");
 }
+
+namespace {
+
+class OnFirstReadInputStream final: public kj::AsyncInputStream {
+public:
+  OnFirstReadInputStream(
+      kj::Own<kj::AsyncInputStream> inner, kj::Function<void()> callback)
+      : inner(kj::mv(inner)), callback(kj::mv(callback)) {}
+
+  kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    start();
+    return inner->tryRead(buffer, minBytes, maxBytes);
+  }
+
+  kj::Maybe<uint64_t> tryGetLength() override {
+    return inner->tryGetLength();
+  }
+
+  kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override {
+    start();
+    return inner->pumpTo(output, amount);
+  }
+
+private:
+  kj::Own<kj::AsyncInputStream> inner;
+  kj::Function<void()> callback;
+  bool started = false;
+
+  void start() {
+    if (!started) {
+      started = true;
+      callback();
+    }
+  }
+};
+
+bool is100Continue(kj::StringPtr value) {
+  constexpr char expected[] = "100-continue";
+  auto begin = value.begin();
+  while (begin < value.end()) {
+    while (begin < value.end() && (*begin == ' ' || *begin == '\t')) ++begin;
+    auto end = begin;
+    bool quoted = false;
+    bool escaped = false;
+    while (end < value.end()) {
+      if (escaped) {
+        escaped = false;
+      } else if (quoted && *end == '\\') {
+        escaped = true;
+      } else if (*end == '"') {
+        quoted = !quoted;
+      } else if (!quoted && *end == ',') {
+        break;
+      }
+      ++end;
+    }
+    auto trimmedEnd = end;
+    while (trimmedEnd > begin &&
+           (trimmedEnd[-1] == ' ' || trimmedEnd[-1] == '\t')) {
+      --trimmedEnd;
+    }
+
+    if (trimmedEnd - begin == sizeof(expected) - 1) {
+      bool matches = true;
+      for (size_t i = 0; i < sizeof(expected) - 1; ++i) {
+        char c = begin[i];
+        if ('A' <= c && c <= 'Z') c += 'a' - 'A';
+        if (c != expected[i]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return true;
+    }
+
+    begin = end + (end < value.end());
+  }
+  return false;
+}
+
+}  // namespace
 
 class HttpServer::Connection final: private HttpService::Response,
                                     private HttpService::ConnectResponse,
@@ -7758,6 +7979,7 @@ public:
       released.leftover,
       suspendable.method,
       suspendable.url,
+      currentRequestIsHttp10,
       kj::mv(headers),
     };
   }
@@ -7772,6 +7994,8 @@ private:
   HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
   kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> currentMethod;
+  bool currentRequestIsHttp10 = false;
+  bool auto100ContinuePending = false;
   bool timedOut = false;
   bool closed = false;
   bool upgraded = false;
@@ -7795,6 +8019,7 @@ private:
           sr.leftover.asChars(),
           sr.method,
           sr.url,
+          sr.isHttp10,
           kj::mv(sr.headers));
     }
     return HttpInputStreamImpl(stream, table);
@@ -7968,6 +8193,8 @@ private:
         // sendError() uses Response::send(), which requires that we have a currentMethod, but we
         // never read one. GET seems like the correct choice here.
         currentMethod = HttpMethod::GET;
+        currentRequestIsHttp10 = true;
+        auto100ContinuePending = false;
         co_return co_await sendError(kj::mv(protocolError));
       }
     }
@@ -7979,6 +8206,8 @@ private:
     auto& headers = httpInput.getHeaders();
 
     currentMethod = HttpConnectMethod();
+    currentRequestIsHttp10 = request.isHttp10;
+    auto100ContinuePending = false;
 
     // The HTTP specification says that CONNECT requests have no meaningful payload
     // but stops short of saying that CONNECT *cannot* have a payload. Implementations
@@ -8042,6 +8271,8 @@ private:
     auto& headers = httpInput.getHeaders();
 
     currentMethod = request.method;
+    currentRequestIsHttp10 = request.isHttp10;
+    auto100ContinuePending = false;
 
     SuspendableRequest suspendable(*this, request.method, request.url, headers);
     auto maybeService = factory(suspendable);
@@ -8060,6 +8291,23 @@ private:
 
     auto body = httpInput.getEntityBody(
         HttpInputStreamImpl::REQUEST, request.method, 0, headers);
+
+    if (server.settings.autoHandle100Continue && !request.isHttp10 &&
+        body->tryGetLength().orDefault(1) > 0) {
+      KJ_IF_SOME(expect, headers.get(HttpHeaderId::EXPECT)) {
+        if (is100Continue(expect)) {
+          auto100ContinuePending = true;
+          body = kj::heap<OnFirstReadInputStream>(kj::mv(body), [this]() {
+            if (!auto100ContinuePending) return;
+            auto100ContinuePending = false;
+            if (currentMethod != kj::none) {
+              httpOutput.writeInformationalHeaders(
+                  kj::str("HTTP/1.1 100 Continue\r\n\r\n"));
+            }
+          });
+        }
+      }
+    }
 
     co_await service->request(
         request.method, request.url, headers, *body, *this).attach(kj::mv(service));
@@ -8167,11 +8415,27 @@ private:
     }
   }
 
+  void sendInformational(
+      uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+    KJ_REQUIRE(currentMethod != kj::none, "already called send() or acceptWebSocket()");
+    KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
+        "informational status must be between 100 and 199, excluding 101");
+    if (currentRequestIsHttp10) return;
+
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT] = {};
+    httpOutput.writeInformationalHeaders(
+        headers.serializeResponse(statusCode, statusText, connectionHeaders));
+    if (statusCode == 100) auto100ContinuePending = false;
+  }
+
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
+    KJ_REQUIRE(statusCode >= 200,
+        "final response status must be at least 200; use sendInformational() for 1xx");
     currentMethod = kj::none;
+    auto100ContinuePending = false;
 
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
@@ -8319,6 +8583,7 @@ private:
     // callback. This prevents the error handler from inadvertently trying to send another error on
     // the connection.
     currentMethod = kj::none;
+    auto100ContinuePending = false;
 
     httpOutput.writeHeaders(headers.serializeResponse(
         101, "Switching Protocols", connectionHeaders));
@@ -8408,6 +8673,7 @@ private:
   void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = kj::none;
+    auto100ContinuePending = false;
     KJ_ASSERT(method.is<HttpConnectMethod>(), "only use accept() with CONNECT requests");
     KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
     tunnelRejected = kj::none;
@@ -8563,11 +8829,12 @@ void HttpServer::taskFailed(kj::Exception&& exception) {
 HttpServer::SuspendedRequest::SuspendedRequest(
     kj::Array<byte> bufferParam, kj::ArrayPtr<byte> leftoverParam,
     kj::OneOf<HttpMethod, HttpConnectMethod> method,
-    kj::StringPtr url, HttpHeaders headers)
+    kj::StringPtr url, bool isHttp10, HttpHeaders headers)
     : buffer(kj::mv(bufferParam)),
       leftover(leftoverParam),
       method(method),
       url(url),
+      isHttp10(isHttp10),
       headers(kj::mv(headers)) {
   if (leftover.size() > 0) {
     // We have a `leftover`; make sure it is a slice of `buffer`.
