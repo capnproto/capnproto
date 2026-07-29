@@ -58,18 +58,36 @@ class RcWeakCell {
   // before the strong-side reference is released, allowing outstanding WeakRc pointers to observe
   // expiration safely. The cell outlives the referent so that expiration can be detected, and is
   // freed once both the strong side and all WeakRc references are gone.
+  //
+  // The cell's own refcount is manipulated atomically. This is what makes it safe to move, clone,
+  // and (importantly) destroy a WeakRc<T> from a thread other than the one that owns the referent:
+  // dropping the last strong Rc<T> decrements this same refcount from the owner thread, and that
+  // decrement must not race with a WeakRc<T> being destroyed elsewhere. (Actually *upgrading* a
+  // WeakRc<T> back to a strong Rc<T> still has to happen on the owner thread, because that touches
+  // the referent's non-atomic refcount -- see WeakRc<T>::upgrade().)
 
 public:
   explicit RcWeakCell(Refcounted* refcounted): refcounted(refcounted) {}
 
-  inline void addRef() { ++refcount; }
-  inline void decRef() { if (--refcount == 0) { delete this; } }
+  void addRef();
+  void decRef();
+  // Adjust the (atomic) weak-side refcount. Defined out-of-line in refcount.c++ so the atomic
+  // machinery (and, on MSVC, the acquire fence used before deletion) lives in one place.
 
   Refcounted* refcounted;
   // The live Refcounted object, or nullptr once the last strong reference has been dropped.
+  //
+  // This back-pointer is *not* synchronized: it is written once (nulled) by the owner thread when
+  // the last strong reference drops, and is only meant to be read on the owner thread (during
+  // upgrade()/get()). Cross-thread WeakRc<T> use is limited to lifecycle operations (move/clone/
+  // destroy), which only ever touch the atomic refcount above.
 
 private:
-  size_t refcount = 1;
+#if _MSC_VER && !defined(__clang__)
+  volatile long refcount = 1;
+#else
+  volatile uint refcount = 1;
+#endif
   // Starts at 1 to account for the strong-side reference held while `refcounted` is non-null.
 };
 
@@ -408,7 +426,15 @@ class WeakRc {
   // - upgrade() (or its synonym addStrongRef()) upgrades to Maybe<Rc<T>>
   //
   // WeakRc<T> is movable but, like kj::Rc<T>, not implicitly copyable; use clone() to make an
-  // additional weak reference explicitly. Like kj::Rc<T> it is NOT threadsafe.
+  // additional weak reference explicitly.
+  //
+  // Threading: the referent and its strong Rc<T>s still belong to a single "owner" thread, and
+  // upgrading a WeakRc<T> back to Rc<T> (upgrade(), tryGet(), assertLive(), operator==, KJ_IF_SOME,
+  // etc.) must be done on that owner thread. However, a WeakRc<T>'s own lifecycle -- moving,
+  // cloning, and (most usefully) destroying it -- is safe to perform from any thread, because the
+  // weak-side refcount in the shared cell is manipulated atomically. This means you can hand a
+  // WeakRc<T> to another thread and let it be dropped there without having to bounce the
+  // destruction back to the owner thread.
   //
   // Upgrading never resurrects a dead object: once the last strong Rc<T> is dropped the referent's
   // refcount reaches zero and is never incremented again. upgrade() only ever produces a strong

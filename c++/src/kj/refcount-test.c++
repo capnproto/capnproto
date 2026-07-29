@@ -22,6 +22,8 @@
 #include "refcount.h"
 #include "array.h"
 #include "string.h"
+#include "thread.h"
+#include "mutex.h"
 #include <kj/compat/gtest.h>
 
 namespace kj {
@@ -816,6 +818,41 @@ KJ_TEST("WeakRc with non-refcounted type") {
   ref2 = nullptr;
   EXPECT_TRUE(b);
   EXPECT_TRUE(weak == nullptr);
+}
+
+KJ_TEST("WeakRc destroyed on another thread") {
+  // A WeakRc<T> must be safe to move to and destroy on a thread other than the one owning the
+  // referent, even while the owner thread is concurrently dropping the last strong Rc<T>. Both
+  // sides decrement the shared cell's (atomic) refcount. Run this under TSAN to catch races.
+  bool b = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+
+  constexpr size_t kCount = 1000;
+  auto builder = kj::heapArrayBuilder<WeakRc<SetTrueInDestructor>>(kCount);
+  for (size_t i = 0; i < kCount; i++) {
+    builder.add(ref.downgrade());
+  }
+  auto weaks = builder.finish();
+
+  // Used to release both threads roughly simultaneously to maximize contention on the cell.
+  kj::MutexGuarded<bool> go(false);
+
+  {
+    kj::Thread thread([&]() {
+      go.when([](bool ready) { return ready; }, [](bool&) {});
+      // Destroy all the weak references from this thread.
+      for (auto& w: weaks) {
+        w = nullptr;
+      }
+    });
+
+    *go.lockExclusive() = true;
+    // Meanwhile, drop the last strong reference on the owner thread.
+    ref = nullptr;
+  }
+
+  // The referent was destroyed and nothing crashed / no cell was double-freed.
+  EXPECT_TRUE(b);
 }
 
 KJ_TEST("WeakRc from null Rc") {

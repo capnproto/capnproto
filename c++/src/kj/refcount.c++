@@ -32,6 +32,44 @@
 namespace kj {
 
 // =======================================================================================
+// WeakRc<T> validity cell
+//
+// The cell's refcount is atomic so that a WeakRc<T> can be moved, cloned, or destroyed from any
+// thread, even though the referent itself (and its strong Rc<T>s) remain single-threaded. In
+// particular the owner thread's disposeImpl() below decrements this same refcount, and that must
+// not race with a WeakRc<T> being destroyed on another thread.
+
+namespace _ {  // private
+
+void RcWeakCell::addRef() {
+#if _MSC_VER && !defined(__clang__)
+  KJ_MSVC_INTERLOCKED(Increment, nf)(&refcount);
+#else
+  __atomic_add_fetch(&refcount, 1, __ATOMIC_RELAXED);
+#endif
+}
+
+void RcWeakCell::decRef() {
+#if _MSC_VER && !defined(__clang__)
+  if (KJ_MSVC_INTERLOCKED(Decrement, rel)(&refcount) == 0) {
+    std::atomic_thread_fence(std::memory_order_acquire);
+    delete this;
+  }
+#else
+  // Use acquire-release on the decrement itself rather than a release decrement plus a separate
+  // acquire fence. Both are correct, but the RMW form guarantees the thread that observes the
+  // count reach zero has also acquired every prior release (including the owner thread nulling
+  // `refcounted` in disposeImpl()) before it frees the cell. It is also understood by
+  // ThreadSanitizer, which does not model standalone atomic_thread_fence.
+  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_ACQ_REL) == 0) {
+    delete this;
+  }
+#endif
+}
+
+}  // namespace _ (private)
+
+// =======================================================================================
 // Non-atomic (thread-unsafe) refcounting
 
 Refcounted::~Refcounted() noexcept(false) {
