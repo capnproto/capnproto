@@ -854,12 +854,32 @@ KJ_TEST("Maybe assertSome") {
   const Maybe<int&> constMaybeReference = value;
   KJ_EXPECT(constMaybeReference.assertSome() == value);
 
-#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
-  Maybe<int> emptyValue = kj::none;
-  KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyValue.assertSome());
+  const Maybe<int> constMaybeValue = value;
+  static_assert(isSameType<decltype(kj::mv(maybeValue).assertSome()), int>());
+  static_assert(isSameType<decltype(kj::mv(constMaybeValue).assertSome()), const int&&>());
+  static_assert(isSameType<decltype(kj::mv(maybeReference).assertSome()), int&>());
+  static_assert(isSameType<decltype(kj::mv(constMaybeReference).assertSome()), const int&>());
 
+  Maybe<int> movedByAssertNonNull = 123;
+  KJ_EXPECT(KJ_ASSERT_NONNULL(kj::mv(movedByAssertNonNull)) == 123);
+  movedByAssertNonNull.assertNone();
+
+  Maybe<int> movedByAssertSome = 456;
+  KJ_EXPECT(kj::mv(movedByAssertSome).assertSome() == 456);
+  movedByAssertSome.assertNone();
+
+  KJ_EXPECT(kj::mv(maybeReference).assertSome() == value);
+
+  Maybe<int> emptyValue = kj::none;
+  emptyValue.assertNone();
   Maybe<int&> emptyReference = kj::none;
+  emptyReference.assertNone();
+
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyValue.assertSome());
   KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyReference.assertSome());
+  KJ_EXPECT_THROW_MESSAGE("expected Maybe<> to be none", maybeValue.assertNone());
+  KJ_EXPECT_THROW_MESSAGE("expected Maybe<> to be none", maybeReference.assertNone());
 #endif
 }
 

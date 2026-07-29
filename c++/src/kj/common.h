@@ -2120,6 +2120,23 @@ public:
     KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
     return *ptr;
   }
+  T assertSome() && {
+    // Returns and removes the contained value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    T result(kj::mv(*ptr));
+    ptr = nullptr;
+    return result;
+  }
+  const T&& assertSome() const && {
+    // Returns the contained value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return kj::mv(*ptr);
+  }
+
+  void assertNone() const {
+    // Verifies that the Maybe does not contain a value.
+    KJ_IREQUIRE(ptr == nullptr, "expected Maybe<> to be none");
+  }
 
   T& orDefault(T& defaultValue) & {
     if (ptr == nullptr) {
@@ -2330,6 +2347,21 @@ public:
     // Returns the referenced value. The Maybe must not be none.
     KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
     return *ptr;
+  }
+  T& assertSome() && {
+    // Returns the referenced value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return *ptr;
+  }
+  const T& assertSome() const && {
+    // Returns the referenced value. The Maybe must not be none.
+    KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
+    return *ptr;
+  }
+
+  void assertNone() const {
+    // Verifies that the Maybe does not contain a reference.
+    KJ_IREQUIRE(ptr == nullptr, "expected Maybe<> to be none");
   }
 
   T& orDefault(T& defaultValue) {
