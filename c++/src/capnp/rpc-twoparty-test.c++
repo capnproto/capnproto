@@ -44,6 +44,7 @@
 #include <kj/windows-sanity.h>
 #else
 #include <sys/socket.h>
+#include <sys/stat.h>
 #endif
 
 // TODO(cleanup): Auto-generate stringification functions for union discriminants.
@@ -591,6 +592,154 @@ KJ_TEST("FD per message limit") {
             == "");
   KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in2))->readAllText().wait(io.waitScope)
             == "foo");
+}
+
+class FdWriteGate final: public MessageStream {
+  // A MessageStream which holds back the first message that has FDs attached until the test
+  // releases it, then reports what that FD referred to at the moment it was finally written. This
+  // lets a test control what happens in between the RPC system choosing which FD to attach to a
+  // message and the message actually being written.
+
+public:
+  FdWriteGate(MessageStream& inner, kj::Own<kj::PromiseFulfiller<void>> sawFdWrite,
+              kj::Promise<void> release, kj::Own<kj::PromiseFulfiller<void>> wroteFd)
+      : inner(inner), sawFdWrite(kj::mv(sawFdWrite)), release(kj::mv(release)),
+        wroteFd(kj::mv(wroteFd)) {}
+
+  bool statSucceeded = false;
+  mode_t mode = 0;
+  // Result of fstat()ing the attached FD at the moment the gated message was written. Valid once
+  // the `wroteFd` promise has resolved.
+
+  kj::Promise<kj::Maybe<MessageReaderAndFds>> tryReadMessage(
+      kj::ArrayPtr<kj::OwnFd> fdSpace, ReaderOptions options, kj::ArrayPtr<word> scratch) override {
+    return inner.tryReadMessage(fdSpace, options, scratch);
+  }
+
+  kj::Promise<void> writeMessage(kj::ArrayPtr<const int> fds,
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) override {
+    if (fds.size() == 0) return inner.writeMessage(fds, segments);
+
+    auto releasePromise = kj::mv(KJ_ASSERT_NONNULL(release, "expected only one message with FDs"));
+    release = kj::none;
+    sawFdWrite->fulfill();
+
+    // Capturing `fds` and `segments` is safe because MessageStream requires the caller to keep them
+    // valid until the promise returned here resolves.
+    return releasePromise.then([this, fds, segments]() {
+      struct stat stats;
+      if (fstat(fds[0], &stats) >= 0) {
+        statSucceeded = true;
+        mode = stats.st_mode;
+      }
+      wroteFd->fulfill();
+      return inner.writeMessage(fds, segments);
+    });
+  }
+
+  kj::Promise<void> writeMessages(
+      kj::ArrayPtr<kj::ArrayPtr<const kj::ArrayPtr<const word>>> messages) override {
+    return inner.writeMessages(messages);
+  }
+
+  kj::Maybe<int> getSendBufferSize() override { return inner.getSendBufferSize(); }
+  kj::Promise<void> end() override { return inner.end(); }
+
+  // Make sure the overridden virtual methods don't hide the non-virtual overloads.
+  using MessageStream::tryReadMessage;
+  using MessageStream::writeMessage;
+  using MessageStream::writeMessages;
+
+private:
+  MessageStream& inner;
+  kj::Own<kj::PromiseFulfiller<void>> sawFdWrite;
+  kj::Maybe<kj::Promise<void>> release;
+  kj::Own<kj::PromiseFulfiller<void>> wroteFd;
+};
+
+class FdCapHolder final: public test::TestMoreStuff::Server {
+  // Bootstrap which hands out a single capability owning a file descriptor. The descriptor is
+  // closed, and `destroyed` fulfilled, when that capability is dropped. getHeld() may only be
+  // called once.
+
+public:
+  FdCapHolder(kj::OwnFd fd, kj::Own<kj::PromiseFulfiller<void>> destroyed)
+      : fd(kj::mv(fd)), destroyed(kj::mv(destroyed)) {}
+
+  kj::Promise<void> getHeld(GetHeldContext context) override {
+    context.getResults().setCap(kj::heap<Held>(kj::mv(fd), kj::mv(destroyed)));
+    return kj::READY_NOW;
+  }
+
+private:
+  class Held final: public test::TestInterface::Server {
+    // Like `TestFdCap`, but also signals when it is destroyed, which is the moment its
+    // descriptor is closed.
+
+  public:
+    Held(kj::OwnFd fd, kj::Own<kj::PromiseFulfiller<void>> destroyed)
+        : fd(kj::mv(fd)), destroyed(kj::mv(destroyed)) {}
+    ~Held() noexcept(false) { destroyed->fulfill(); }
+
+    kj::Maybe<int> getFd() override { return fd.get(); }
+
+  private:
+    kj::OwnFd fd;
+    kj::Own<kj::PromiseFulfiller<void>> destroyed;
+  };
+
+  kj::OwnFd fd;
+  kj::Own<kj::PromiseFulfiller<void>> destroyed;
+};
+
+KJ_TEST("attached FD outlives a capability dropped before the message is written") {
+  // send() is only required to *queue* a message, so the FD chosen for a CapDescriptor may not be
+  // written for some time. A capability's FD is only guaranteed to stay open as long as the
+  // capability itself, so if the capability is dropped in the meantime, the queued message is left
+  // holding a number that has been closed -- or that the OS has since recycled for an unrelated
+  // file. The RPC system must keep the capability alive until the message has been written.
+
+  auto io = kj::setupAsyncIo();
+  auto pipe = io.provider->newCapabilityPipe();
+
+  // The capability holds one end of a socketpair, so that we can distinguish the FD still being
+  // open from its number having been reused by something else.
+  int socketFds[2]{};
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, socketFds));
+  kj::OwnFd peerEnd(socketFds[0]);
+  kj::OwnFd heldEnd(socketFds[1]);
+
+  auto sawFdWrite = kj::newPromiseAndFulfiller<void>();
+  auto release = kj::newPromiseAndFulfiller<void>();
+  auto wroteFd = kj::newPromiseAndFulfiller<void>();
+  auto destroyed = kj::newPromiseAndFulfiller<void>();
+
+  AsyncCapabilityMessageStream serverStream(*pipe.ends[0]);
+  FdWriteGate gate(serverStream, kj::mv(sawFdWrite.fulfiller), kj::mv(release.promise),
+      kj::mv(wroteFd.fulfiller));
+  TwoPartyVatNetwork network(gate, 1, rpc::twoparty::Side::SERVER);
+  auto rpcServer = makeRpcServer(network, test::TestMoreStuff::Client(
+      kj::heap<FdCapHolder>(kj::mv(heldEnd), kj::mv(destroyed.fulfiller))));
+
+  TwoPartyClient client(*pipe.ends[1], 1);
+  auto promise = client.bootstrap().castAs<test::TestMoreStuff>().getHeldRequest().send();
+
+  // Wait until the server has built its Return message and chosen the FD to attach to it.
+  sawFdWrite.promise.wait(io.waitScope);
+
+  // Abandon the question. Because the Return hasn't arrived yet, the Finish sets
+  // releaseResultCaps, so the server drops the export -- the only other reference to the
+  // capability -- while its Return is still sitting in the write queue.
+  { auto abandoned = kj::mv(promise); }
+
+  // The capability must survive regardless, since the queued message still refers to its FD.
+  KJ_EXPECT(!destroyed.promise.poll(io.waitScope));
+
+  // Let the write proceed, and confirm the peer is being handed the socket we meant to send.
+  release.fulfiller->fulfill();
+  wroteFd.promise.wait(io.waitScope);
+  KJ_EXPECT(gate.statSucceeded);
+  KJ_EXPECT((gate.mode & S_IFMT) == S_IFSOCK, gate.mode);
 }
 #endif  // !_WIN32 && !__CYGWIN__
 

@@ -522,6 +522,11 @@ public:
   // If this capability is backed by a file descriptor that is safe to directly expose to clients,
   // returns that FD. When FD passing has been enabled in the RPC layer, this FD may be sent to
   // other processes along with the capability.
+  //
+  // The descriptor must stay open for at least as long as the capability itself. The RPC layer may
+  // hold a reference to the capability in order to keep the descriptor valid until it has finished
+  // sending it, so a server which closes its descriptor early can cause the peer to receive a
+  // descriptor that has been closed, or that now refers to some unrelated file.
 
   virtual kj::Maybe<kj::Promise<Capability::Client>> shortenPath();
   // If this returns non-null, then it is a promise which, when resolved, points to a new

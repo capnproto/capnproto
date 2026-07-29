@@ -402,6 +402,41 @@ private:
   kj::HashMap<Id, T> high;
 };
 
+class OutgoingFds {
+  // Accumulates the file descriptors to attach to one outgoing message, along with a reference to
+  // the capability each one came from.
+  //
+  // A capability's descriptor is only guaranteed to stay open as long as the capability itself
+  // lives, but `OutgoingRpcMessage::send()` is permitted to merely queue the message. A capability
+  // dropped in between would take its descriptor with it, leaving a number that is closed, or that
+  // has since been reused for some unrelated file, to be written. `release()` therefore hands these
+  // references to the message so that the capabilities outlive the write.
+
+public:
+  size_t size() {
+    return fds.size();
+  }
+
+  void add(int fd, ClientHook& owner) {
+    fds.add(fd);
+    owners.add(owner.addRef());
+  }
+
+  kj::Array<int> release() {
+    // The descriptors, with the capabilities they came from attached. Pass this to
+    // `OutgoingRpcMessage::setFds()`, which holds it until the message has been written.
+    if (fds.size() == 0) {
+      // Nothing to keep alive, and there'd be no array to attach it to in any case.
+      return nullptr;
+    }
+    return fds.releaseAsArray().attach(owners.releaseAsArray());
+  }
+
+private:
+  kj::Vector<int> fds;
+  kj::Vector<kj::Own<ClientHook>> owners;
+};
+
 }  // namespace
 
 // =======================================================================================
@@ -989,7 +1024,7 @@ private:
     };
 
     virtual WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                                  kj::Vector<int>& fds) = 0;
+                                                  OutgoingFds& fds) = 0;
     // Writes a CapDescriptor referencing this client.  The CapDescriptor must be sent as part of
     // the very next message sent on the connection, as it may become invalid if other things
     // happen.
@@ -1192,7 +1227,7 @@ private:
     }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                          kj::Vector<int>& fds) override {
+                                          OutgoingFds& fds) override {
       descriptor.setReceiverHosted(importId);
       return {
         .exportId = kj::none,
@@ -1240,7 +1275,7 @@ private:
         : RpcClient(connectionState), questionRef(kj::mv(questionRef)), ops(kj::mv(ops)) {}
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                          kj::Vector<int>& fds) override {
+                                          OutgoingFds& fds) override {
       auto promisedAnswer = descriptor.initReceiverAnswer();
       promisedAnswer.setQuestionId(questionRef->getId());
       promisedAnswer.adoptTransform(fromPipelineOps(
@@ -1331,7 +1366,7 @@ private:
     }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                          kj::Vector<int>& fds) override {
+                                          OutgoingFds& fds) override {
       // TODO(now): Setting receivedCall = true seems wrong here, writing a descriptor does not
       //   imply that the capability is being called, and so does not imply that an embargo is
       //   needed when the capability is resolved.
@@ -1587,7 +1622,7 @@ private:
     }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                          kj::Vector<int>& fds) override {
+                                          OutgoingFds& fds) override {
       KJ_SWITCH_ONEOF(state) {
         KJ_CASE_ONEOF(deferred, Deferred) {
           // A ThirdPartyCapDescriptor was sent to us, and we are sending it *back* over the same
@@ -1741,7 +1776,7 @@ private:
   };
 
   RpcClient::WriteDescriptorResult writeDescriptor(
-      ClientHook& cap, rpc::CapDescriptor::Builder descriptor, kj::Vector<int>& fds) {
+      ClientHook& cap, rpc::CapDescriptor::Builder descriptor, OutgoingFds& fds) {
     // Write a descriptor for the given capability.
 
     // Follow all promise resolutions before writing the descriptor. This is important to comply
@@ -1758,7 +1793,7 @@ private:
 
     KJ_IF_SOME(fd, inner->getFd()) {
       descriptor.setAttachedFd(fds.size());
-      fds.add(kj::mv(fd));
+      fds.add(fd, *inner);
     }
 
     KJ_IF_SOME(rpcInner, unwrapIfSameNetwork(*inner)) {
@@ -1861,7 +1896,7 @@ private:
 
   kj::Array<ExportId> writeDescriptors(
       kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable,
-      rpc::Payload::Builder payload, kj::Vector<int>& fds,
+      rpc::Payload::Builder payload, OutgoingFds& fds,
       kj::Maybe<kj::HashMap<ClientHook*, kj::Own<ClientHook>>&> describedMap = kj::none) {
     // Write all descriptors for a cap table.
     //
@@ -1991,9 +2026,9 @@ private:
           messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
-      kj::Vector<int> fds;
+      OutgoingFds fds;
       auto writeDescResult = writeDescriptor(*exp.clientHook, resolve.initCap(), fds);
-      message->setFds(fds.releaseAsArray());
+      message->setFds(fds.release());
       message->send();
 
       // `writeDescriptor()` can create new exports, invalidating the `exp` reference. Look it up
@@ -2155,7 +2190,7 @@ private:
       return true;
     }
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
-                                                  kj::Vector<int>& fds) override {
+                                                  OutgoingFds& fds) override {
       return inner->writeDescriptor(descriptor, fds);
     }
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
@@ -2632,10 +2667,10 @@ private:
 
     SetupSendResult setupSend(bool isTailCall) {
       // Build the cap table.
-      kj::Vector<int> fds;
+      OutgoingFds fds;
       auto exports = connectionState->writeDescriptors(
           capTable.getTable(), callBuilder.getParams(), fds);
-      message->setFds(fds.releaseAsArray());
+      message->setFds(fds.release());
 
       // Init the question table.  Do this after writing descriptors to avoid interference.
       QuestionId questionId;
@@ -2719,10 +2754,10 @@ private:
       // Since must of setupSend() is subtly different for this case, we don't reuse it.
 
       // Build the cap table.
-      kj::Vector<int> fds;
+      OutgoingFds fds;
       auto exports = connectionState->writeDescriptors(
           capTable.getTable(), callBuilder.getParams(), fds);
-      message->setFds(fds.releaseAsArray());
+      message->setFds(fds.release());
 
       if (exports.size() > 0) {
         connectionState->sentCapabilitiesInPipelineOnlyCall = true;
@@ -2979,10 +3014,10 @@ private:
 
       // Build the cap table.
       auto capTable = this->capTable.getTable();
-      kj::Vector<int> fds;
+      OutgoingFds fds;
       auto exports = connectionState.writeDescriptors(
           capTable, payload, fds, resolutionsAtReturnTime);
-      message->setFds(fds.releaseAsArray());
+      message->setFds(fds.release());
 
       message->send();
       if (capTable.size() == 0) {
@@ -3808,10 +3843,10 @@ private:
 
       auto capTableArray = capTable.getTable();
       KJ_DASSERT(capTableArray.size() == 1);
-      kj::Vector<int> fds;
+      OutgoingFds fds;
       kj::HashMap<ClientHook*, kj::Own<ClientHook>> resolutionsAtReturnTime;
       resultExports = writeDescriptors(capTableArray, payload, fds, resolutionsAtReturnTime);
-      response->setFds(fds.releaseAsArray());
+      response->setFds(fds.release());
       capHook = kj::mv(KJ_ASSERT_NONNULL(capTableArray[0]));
 
       // If we're returning a capability that turns out to be an PromiseClient pointing back on
