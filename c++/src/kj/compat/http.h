@@ -98,6 +98,17 @@ KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 #undef DECLARE_METHOD
 };
 
+enum class HttpInformationalStatus {
+  // We intentionally only support a subset of the 1xx informational status code.
+  // Because we don't know what future semantics will be added to future 1xx
+  // codes, we don't support them. They will be ignored when received and we
+  // won't allow sending them. The ones we do support here are known to be
+  // safe to handle at either the kj or application level.
+  CONTINUE = 100,
+  PROCESSING = 102,
+  EARLY_HINTS = 103,
+};
+
 struct HttpConnectMethod {};
 // CONNECT is handled specially and separately from the other HttpMethods.
 
@@ -829,7 +840,7 @@ class HttpClient {
 
 public:
   struct InformationalResponse {
-    uint statusCode;
+    HttpInformationalStatus statusCode;
     kj::StringPtr statusText;
     const HttpHeaders& headers;
   };
@@ -960,7 +971,7 @@ public:
     //
     // `send()` may only be called a single time. Calling it a second time will cause an exception
     // to be thrown.
-    // `statusCode` must be 200 or greater; use sendInformational() for non-101 1xx responses.
+    // `statusCode` must be 200 or greater; use sendInformational() for informational responses.
 
     virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
     // If headers.isWebSocket() is true then you can call acceptWebSocket() instead of send().
@@ -976,8 +987,8 @@ public:
     // exception to be thrown.
 
     virtual void sendInformational(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
-    // Sends a non-101 informational response before send() or acceptWebSocket().
+        HttpInformationalStatus statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
+    // Sends a supported informational response before send() or acceptWebSocket().
 
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
                                 const HttpHeaders& headers);

@@ -152,8 +152,17 @@ struct HttpResponse {
   }
 }
 
+enum HttpInformationalStatus {
+  invalid @0;
+  # Dummy to serve as default value. Should never actually appear on wire.
+
+  continue @1;
+  processing @2;
+  earlyHints @3;
+}
+
 struct HttpInformationalResponse {
-  statusCode @0 :UInt16;
+  statusCode @0 :HttpInformationalStatus;
   statusText @1 :Text;
   headers @2 :List(HttpHeader);
 }

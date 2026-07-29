@@ -321,6 +321,42 @@ private:
 
 // =======================================================================================
 
+namespace {
+
+kj::HttpInformationalStatus capnpToKjInformationalStatus(
+    capnp::HttpInformationalStatus status) {
+  switch (status) {
+    case capnp::HttpInformationalStatus::CONTINUE:
+      return kj::HttpInformationalStatus::CONTINUE;
+    case capnp::HttpInformationalStatus::PROCESSING:
+      return kj::HttpInformationalStatus::PROCESSING;
+    case capnp::HttpInformationalStatus::EARLY_HINTS:
+      return kj::HttpInformationalStatus::EARLY_HINTS;
+    default:
+      KJ_FAIL_REQUIRE(
+          "unknown informational response status", static_cast<uint>(status));
+  }
+}
+
+capnp::HttpInformationalStatus kjToCapnpInformationalStatus(
+    kj::HttpInformationalStatus status) {
+  switch (status) {
+    case kj::HttpInformationalStatus::CONTINUE:
+      return capnp::HttpInformationalStatus::CONTINUE;
+    case kj::HttpInformationalStatus::PROCESSING:
+      return capnp::HttpInformationalStatus::PROCESSING;
+    case kj::HttpInformationalStatus::EARLY_HINTS:
+      return capnp::HttpInformationalStatus::EARLY_HINTS;
+    default:
+      KJ_FAIL_REQUIRE(
+          "unsupported informational response status", static_cast<uint>(status));
+  }
+}
+
+}  // namespace
+
+// =======================================================================================
+
 class HttpOverCapnpFactory::ClientRequestContextImpl final
     : public capnp::HttpService::ClientRequestContext::Server {
 public:
@@ -338,9 +374,7 @@ public:
     KJ_REQUIRE(!sentResponse,
         "sendInformational() after startResponse() or startWebSocket()");
     auto info = context.getParams().getInfo();
-    auto statusCode = info.getStatusCode();
-    KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
-        "informational status must be between 100 and 199, excluding 101");
+    auto statusCode = capnpToKjInformationalStatus(info.getStatusCode());
     KJ_TRY {
       kjResponse.sendInformational(
           statusCode, info.getStatusText(), factory.capnpToKj(info.getHeaders()));
@@ -813,14 +847,13 @@ public:
         clientContext(kj::mv(clientContext)) {}
 
   void sendInformational(
-      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+      kj::HttpInformationalStatus statusCode, kj::StringPtr statusText,
+      const kj::HttpHeaders& headers) override {
     KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
-    KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
-        "informational status must be between 100 and 199, excluding 101");
 
     auto req = clientContext.sendInformationalRequest();
     auto info = req.initInfo();
-    info.setStatusCode(statusCode);
+    info.setStatusCode(kjToCapnpInformationalStatus(statusCode));
     info.setStatusText(statusText);
     info.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(info)));

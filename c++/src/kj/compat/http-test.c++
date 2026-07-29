@@ -1244,6 +1244,9 @@ KJ_TEST("HttpClient handles informational responses") {
         "HTTP/1.1 100 Continue\r\n"
         "X-Interim: first\r\n"
         "\r\n"
+        "HTTP/1.1 199 Extension Response\r\n"
+        "X-Interim: ignored\r\n"
+        "\r\n"
         "HTTP/1.1 103 Early Hints\r\n"
         "Connection: close\r\n"
         "X-Interim: second\r\n"
@@ -1261,7 +1264,7 @@ KJ_TEST("HttpClient handles informational responses") {
   auto table = builder.build();
   auto client = newHttpClient(*table, *pipe.ends[0]);
 
-  kj::Vector<uint> statuses;
+  kj::Vector<HttpInformationalStatus> statuses;
   kj::Vector<kj::String> values;
   kj::Maybe<HttpHeaders> retainedHeaders;
   HttpClient::RequestOptions options;
@@ -1283,8 +1286,8 @@ KJ_TEST("HttpClient handles informational responses") {
   firstResponse.body = nullptr;
 
   KJ_ASSERT(statuses.size() == 2);
-  KJ_EXPECT(statuses[0] == 100);
-  KJ_EXPECT(statuses[1] == 103);
+  KJ_EXPECT(statuses[0] == HttpInformationalStatus::CONTINUE);
+  KJ_EXPECT(statuses[1] == HttpInformationalStatus::EARLY_HINTS);
   KJ_EXPECT(values[0] == "first");
   KJ_EXPECT(values[1] == "second");
   KJ_EXPECT(KJ_ASSERT_NONNULL(KJ_ASSERT_NONNULL(retainedHeaders).get(interimHeader)) == "first");
@@ -1338,7 +1341,7 @@ KJ_TEST("HttpClient limits informational responses") {
   request.body = nullptr;
   expectRead(*pipe.ends[1], "GET /sixteen HTTP/1.1\r\n\r\n").wait(waitScope);
   auto sixteen = kj::str(
-      kj::strArray(kj::repeat("HTTP/1.1 103 Early Hints\r\n\r\n", 16), ""),
+      kj::strArray(kj::repeat("HTTP/1.1 199 Extension Response\r\n\r\n", 16), ""),
       "HTTP/1.1 204 No Content\r\n\r\n");
   pipe.ends[1]->write(sixteen.asBytes()).wait(waitScope);
   auto response = request.response.wait(waitScope);
@@ -1353,7 +1356,7 @@ KJ_TEST("HttpClient limits informational responses") {
       "GET /seventeen HTTP/1.1\r\n\r\n"
       "GET /queued HTTP/1.1\r\n\r\n").wait(waitScope);
   auto seventeen = kj::str(
-      kj::strArray(kj::repeat("HTTP/1.1 103 Early Hints\r\n\r\n", 17), ""),
+      kj::strArray(kj::repeat("HTTP/1.1 199 Extension Response\r\n\r\n", 17), ""),
       "HTTP/1.1 204 No Content\r\n\r\n");
   pipe.ends[1]->write(seventeen.asBytes()).wait(waitScope);
   KJ_EXPECT_THROW_MESSAGE("Too many informational responses", excessive.response.wait(waitScope));
@@ -1627,17 +1630,21 @@ KJ_TEST("HttpServer sends informational responses") {
       informational.setPtr(HttpHeaderId::TRANSFER_ENCODING, "chunked");
       informational.setPtr(infoHeader, "value");
 
-      response.sendInformational(103, "Early Hints", informational);
-      KJ_EXPECT_THROW_MESSAGE("between 100 and 199",
-          response.sendInformational(99, "Invalid", informational));
-      KJ_EXPECT_THROW_MESSAGE("excluding 101",
-          response.sendInformational(101, "Switching Protocols", informational));
+      response.sendInformational(
+          HttpInformationalStatus::EARLY_HINTS, "Early Hints", informational);
+      KJ_EXPECT_THROW_MESSAGE("unsupported informational response status",
+          response.sendInformational(
+              static_cast<HttpInformationalStatus>(99), "Invalid", informational));
+      KJ_EXPECT_THROW_MESSAGE("unsupported informational response status",
+          response.sendInformational(
+              static_cast<HttpInformationalStatus>(101), "Switching Protocols", informational));
       KJ_EXPECT_THROW_MESSAGE("final response status must be at least 200",
           response.send(103, "Early Hints", informational, uint64_t(0)));
 
       auto body = response.send(204, "No Content", HttpHeaders(table), uint64_t(0));
       KJ_EXPECT_THROW_MESSAGE("already called send",
-          response.sendInformational(103, "Late", informational));
+          response.sendInformational(
+              HttpInformationalStatus::EARLY_HINTS, "Late", informational));
       return kj::READY_NOW;
     }
 
@@ -1682,7 +1689,8 @@ KJ_TEST("HttpServer handles Expect: 100-continue") {
         HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
         kj::AsyncInputStream& requestBody, Response& response) override {
       if (mode == MANUAL_CONTINUE) {
-        response.sendInformational(100, "Continue", HttpHeaders(table));
+        response.sendInformational(
+            HttpInformationalStatus::CONTINUE, "Continue", HttpHeaders(table));
       } else if (mode == REJECT) {
         response.send(417, "Expectation Failed", HttpHeaders(table), uint64_t(0));
         co_return;
@@ -1810,7 +1818,7 @@ KJ_TEST("HttpClient and HttpServer coordinate 100-continue") {
   options.expectedBodySize = uint64_t(3);
   options.informationResponseHandler = [&](HttpClient::InformationalResponse&& response) {
     ++interimCount;
-    KJ_EXPECT(response.statusCode == 100);
+    KJ_EXPECT(response.statusCode == HttpInformationalStatus::CONTINUE);
     upload = requestBody->write("foo"_kjb);
   };
 
@@ -5554,7 +5562,8 @@ KJ_TEST("HttpServer preserves HTTP/1.0 across request suspension") {
     kj::Promise<void> request(
         HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
         kj::AsyncInputStream& requestBody, Response& response) override {
-      response.sendInformational(103, "Early Hints", HttpHeaders(table));
+      response.sendInformational(
+          HttpInformationalStatus::EARLY_HINTS, "Early Hints", HttpHeaders(table));
       response.send(204, "No Content", HttpHeaders(table), uint64_t(0));
       return kj::READY_NOW;
     }
@@ -6127,7 +6136,8 @@ KJ_TEST("newHttpClient from HttpService forwards informational responses") {
         kj::AsyncInputStream& requestBody, Response& response) override {
       HttpHeaders informational(table);
       informational.setPtr(infoHeader, "value");
-      response.sendInformational(103, "Early Hints", informational);
+      response.sendInformational(
+          HttpInformationalStatus::EARLY_HINTS, "Early Hints", informational);
       KJ_EXPECT_THROW_MESSAGE("final response status must be at least 200",
           response.send(103, "Early Hints", informational, uint64_t(0)));
       response.send(204, "No Content", HttpHeaders(table), uint64_t(0));
@@ -6144,7 +6154,7 @@ KJ_TEST("newHttpClient from HttpService forwards informational responses") {
   HttpClient::RequestOptions options;
   options.informationResponseHandler = [&](HttpClient::InformationalResponse&& response) {
     ++callbackCount;
-    KJ_EXPECT(response.statusCode == 103);
+    KJ_EXPECT(response.statusCode == HttpInformationalStatus::EARLY_HINTS);
     KJ_EXPECT(response.statusText == "Early Hints");
     KJ_EXPECT(KJ_ASSERT_NONNULL(response.headers.get(infoHeader)) == "value");
   };
@@ -6512,7 +6522,8 @@ public:
       }
 
       if (url == "/interim") {
-        response.sendInformational(103, "Early Hints", HttpHeaders(headerTable));
+        response.sendInformational(
+            HttpInformationalStatus::EARLY_HINTS, "Early Hints", HttpHeaders(headerTable));
       }
 
       auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
@@ -6567,7 +6578,7 @@ KJ_TEST("HttpClient connection management") {
     HttpClient::RequestOptions options;
     options.informationResponseHandler = [&](HttpClient::InformationalResponse&& response) {
       sawInterim = true;
-      KJ_EXPECT(response.statusCode == 103);
+      KJ_EXPECT(response.statusCode == HttpInformationalStatus::EARLY_HINTS);
     };
     auto request = client->request(
         HttpMethod::GET, "/interim", HttpHeaders(headerTable), kj::mv(options));

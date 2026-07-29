@@ -497,13 +497,23 @@ KJ_TEST("HTTP-over-Cap'n-Proto forwards informational responses") {
     kj::Promise<void> request(
         kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
         kj::AsyncInputStream& requestBody, Response& response) override {
+      KJ_EXPECT_THROW_MESSAGE("unsupported informational response status",
+          response.sendInformational(
+              static_cast<kj::HttpInformationalStatus>(199),
+              "Extension Response", kj::HttpHeaders(table)));
+
       kj::HttpHeaders first(table);
       first.setPtr(infoHeader, "first");
-      response.sendInformational(103, "Early Hints", first);
+      response.sendInformational(kj::HttpInformationalStatus::CONTINUE, "Continue", first);
 
       kj::HttpHeaders second(table);
       second.setPtr(infoHeader, "second");
-      response.sendInformational(102, "Processing", second);
+      response.sendInformational(kj::HttpInformationalStatus::PROCESSING, "Processing", second);
+
+      kj::HttpHeaders third(table);
+      third.setPtr(infoHeader, "third");
+      response.sendInformational(
+          kj::HttpInformationalStatus::EARLY_HINTS, "Early Hints", third);
 
       if (url == "/body") {
         auto body = response.send(200, "OK", kj::HttpHeaders(table), uint64_t(3));
@@ -528,7 +538,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto forwards informational responses") {
   kj::HttpClient::RequestOptions options;
   options.informationResponseHandler =
       [&](kj::HttpClient::InformationalResponse&& response) {
-    events.add(response.statusCode);
+    events.add(static_cast<uint>(response.statusCode));
     values.add(kj::str(KJ_ASSERT_NONNULL(response.headers.get(infoHeader))));
   };
 
@@ -539,13 +549,15 @@ KJ_TEST("HTTP-over-Cap'n-Proto forwards informational responses") {
   events.add(response.statusCode);
   response.body = nullptr;
 
-  KJ_ASSERT(events.size() == 3);
-  KJ_EXPECT(events[0] == 103);
+  KJ_ASSERT(events.size() == 4);
+  KJ_EXPECT(events[0] == 100);
   KJ_EXPECT(events[1] == 102);
-  KJ_EXPECT(events[2] == 204);
-  KJ_ASSERT(values.size() == 2);
+  KJ_EXPECT(events[2] == 103);
+  KJ_EXPECT(events[3] == 204);
+  KJ_ASSERT(values.size() == 3);
   KJ_EXPECT(values[0] == "first");
   KJ_EXPECT(values[1] == "second");
+  KJ_EXPECT(values[2] == "third");
 
   auto withoutHandler = client->request(
       kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable));
@@ -573,6 +585,55 @@ KJ_TEST("HTTP-over-Cap'n-Proto forwards informational responses") {
   KJ_EXPECT_THROW(DISCONNECTED, disconnected.response.wait(waitScope));
 }
 
+KJ_TEST("HTTP-over-Cap'n-Proto rejects invalid informational response status") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  class Service final: public capnp::HttpService::Server {
+  public:
+    Service(bool& rejected): rejected(rejected) {}
+
+    kj::Promise<void> request(RequestContext context) override {
+      auto clientContext = context.getParams().getContext();
+      auto invalidRequest = clientContext.sendInformationalRequest();
+      invalidRequest.initInfo().setStatusCode(capnp::HttpInformationalStatus::INVALID);
+
+      return invalidRequest.send().ignoreResult().then([]() {
+        KJ_FAIL_ASSERT("invalid informational response unexpectedly succeeded");
+      }, [this](kj::Exception&& exception) {
+        rejected = true;
+        KJ_EXPECT(exception.getDescription().contains("unknown informational response status"));
+      }).then([clientContext = kj::mv(clientContext)]() mutable {
+        auto finalRequest = clientContext.startResponseRequest();
+        auto finalResponse = finalRequest.initResponse();
+        finalResponse.setStatusCode(204);
+        finalResponse.setStatusText("No Content");
+        finalResponse.getBodySize().setFixed(0);
+        return finalRequest.send().ignoreResult();
+      });
+    }
+
+  private:
+    bool& rejected;
+  };
+
+  bool rejected = false;
+  auto service = factory.capnpToKj(kj::heap<Service>(rejected));
+  auto client = kj::newHttpClient(*service);
+  auto request = client->request(
+      kj::HttpMethod::GET, "/", kj::HttpHeaders(*headerTable));
+  request.body = nullptr;
+  auto response = request.response.wait(waitScope);
+  KJ_EXPECT(response.statusCode == 204);
+  KJ_EXPECT(rejected);
+  response.body = nullptr;
+}
+
 KJ_TEST("HTTP-over-Cap'n-Proto drops informational responses for an old peer") {
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);
@@ -589,7 +650,8 @@ KJ_TEST("HTTP-over-Cap'n-Proto drops informational responses for an old peer") {
     kj::Promise<void> request(
         kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
         kj::AsyncInputStream& requestBody, Response& response) override {
-      response.sendInformational(103, "Early Hints", kj::HttpHeaders(table));
+      response.sendInformational(
+          kj::HttpInformationalStatus::EARLY_HINTS, "Early Hints", kj::HttpHeaders(table));
       response.send(204, "No Content", kj::HttpHeaders(table), uint64_t(0));
       return kj::READY_NOW;
     }
@@ -651,7 +713,7 @@ KJ_TEST("HTTP-over-Cap'n-Proto rejects informational responses after the final r
 
       auto lateRequest = clientContext.sendInformationalRequest();
       auto info = lateRequest.initInfo();
-      info.setStatusCode(103);
+      info.setStatusCode(capnp::HttpInformationalStatus::EARLY_HINTS);
       info.setStatusText("Early Hints");
       auto latePromise = lateRequest.send().ignoreResult();
 

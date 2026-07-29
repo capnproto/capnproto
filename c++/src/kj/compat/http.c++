@@ -1449,12 +1449,28 @@ static constexpr size_t MIN_BUFFER = 4096;
 static constexpr size_t MAX_BUFFER = 128 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 static constexpr uint MAX_INFORMATION_RESPONSES = 16;
-// The maximum number of interim responses (1xx) that we will accept before giving up.
+// The maximum number of informational responses (1xx) that we will accept before giving up.
 // RFC 9110 section 15.2.6 says that a client MUST be prepared to receive one or more
 // 1xx responses before a final response, but it doesn't specify a limit. We set a
 // limit to avoid DoS attacks. The limit is high enough that it should never be a
 // problem in practice. Eventually we might want to make this configurable, but that
 // feels like overkill for now.
+
+kj::Maybe<HttpInformationalStatus> tryGetInformationalStatus(uint statusCode) {
+  switch (statusCode) {
+    case 100: return HttpInformationalStatus::CONTINUE;
+    case 102: return HttpInformationalStatus::PROCESSING;
+    case 103: return HttpInformationalStatus::EARLY_HINTS;
+    default: return kj::none;
+  }
+}
+
+uint getInformationalStatusCode(HttpInformationalStatus status) {
+  auto statusCode = static_cast<uint>(status);
+  KJ_REQUIRE(tryGetInformationalStatus(statusCode) != kj::none,
+      "unsupported informational response status", statusCode);
+  return statusCode;
+}
 
 class HttpInputStreamImpl final: public HttpInputStream,
                                  public WrappableStreamMixin<HttpInputStreamImpl> {
@@ -1747,10 +1763,12 @@ public:
                     502, "Bad Gateway", "Too many informational responses.", text
                   };
                 }
-                KJ_IF_SOME(h, handler) {
-                  h(HttpClient::InformationalResponse {
-                    response.statusCode, response.statusText, headers
-                  });
+                KJ_IF_SOME(status, tryGetInformationalStatus(response.statusCode)) {
+                  KJ_IF_SOME(h, handler) {
+                    h(HttpClient::InformationalResponse {
+                      status, response.statusText, headers
+                    });
+                  }
                 }
                 headersOrError = co_await readHeader(HeaderType::MESSAGE, 0, 0);
                 continue;
@@ -7367,12 +7385,12 @@ private:
     }
 
     void sendInformational(
-        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+        HttpInformationalStatus status, kj::StringPtr statusText,
+        const HttpHeaders& headers) override {
       KJ_REQUIRE(!responseStarted, "already called send() or acceptWebSocket()");
-      KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
-          "informational status must be between 100 and 199, excluding 101");
+      getInformationalStatusCode(status);
       KJ_IF_SOME(handler, informationResponseHandler) {
-        handler(HttpClient::InformationalResponse { statusCode, statusText, headers });
+        handler(HttpClient::InformationalResponse { status, statusText, headers });
       }
     }
 
@@ -7815,7 +7833,9 @@ kj::Promise<void> HttpService::Response::sendError(
 }
 
 void HttpService::Response::sendInformational(
-    uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {}
+    HttpInformationalStatus status, kj::StringPtr statusText, const HttpHeaders& headers) {
+  getInformationalStatusCode(status);
+}
 
 kj::Promise<void> HttpService::connect(
     kj::StringPtr host,
@@ -8416,16 +8436,16 @@ private:
   }
 
   void sendInformational(
-      uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+      HttpInformationalStatus status, kj::StringPtr statusText,
+      const HttpHeaders& headers) override {
     KJ_REQUIRE(currentMethod != kj::none, "already called send() or acceptWebSocket()");
-    KJ_REQUIRE(statusCode >= 100 && statusCode < 200 && statusCode != 101,
-        "informational status must be between 100 and 199, excluding 101");
+    auto statusCode = getInformationalStatusCode(status);
     if (currentRequestIsHttp10) return;
 
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT] = {};
     httpOutput.writeInformationalHeaders(
         headers.serializeResponse(statusCode, statusText, connectionHeaders));
-    if (statusCode == 100) auto100ContinuePending = false;
+    if (status == HttpInformationalStatus::CONTINUE) auto100ContinuePending = false;
   }
 
   kj::Own<kj::AsyncOutputStream> send(
