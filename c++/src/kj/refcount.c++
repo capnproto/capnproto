@@ -40,16 +40,31 @@ Refcounted::~Refcounted() noexcept(false) {
 
 void Refcounted::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
-    if (weakCell != nullptr) {
+    // Grab a local copy of the cell pointer; `this` (and therefore the `weakCell` member) is about
+    // to be destroyed.
+    _::RcWeakCell* cell = weakCell;
+    if (cell != nullptr) {
       // The refcount has reached zero and will never be incremented again: we null the cell's
       // back-pointer here, before destroying the object, so that any outstanding WeakRc<T> can
       // observe expiration and will never attempt to revive a dead object (see
-      // WeakRc<T>::upgrade()). Then release the strong-side reference to the cell;
-      // the cell itself is freed once the last WeakRc<T> is gone.
-      weakCell->refcounted = nullptr;
-      weakCell->decRef();
+      // WeakRc<T>::upgrade()).
+      cell->refcounted = nullptr;
     }
+
+    // Note that we hold onto the strong-side reference to the cell across `delete this`. The
+    // referent is still "alive" (from the cell's perspective) until its destructor finishes
+    // running, and the destructor may legitimately manipulate weak references (e.g. clone a
+    // WeakRc<T> that it holds). If we released the strong-side reference first, the cell could be
+    // freed out from under such an operation whenever the last remaining WeakRc<T> was dropped,
+    // leading to a use-after-free. Keeping the strong-side reference alive until the destructor
+    // completes guarantees the cell stays valid throughout destruction.
     delete this;
+
+    if (cell != nullptr) {
+      // Now that the object is fully destroyed, release the strong-side reference to the cell. The
+      // cell itself is freed once the last WeakRc<T> is gone.
+      cell->decRef();
+    }
   }
 }
 

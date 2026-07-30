@@ -1348,5 +1348,39 @@ KJ_TEST("Arc polymorphic upcast") {
   EXPECT_TRUE(b);
 }
 
+// A refcounted object that holds a self weak-reference and touches it from its destructor. This
+// exercises the requirement that weak references remain valid while the destructor runs, even when
+// the destructor's own weak reference is the last one keeping the backing cell alive.
+struct WeakInDestructor: public Refcounted {
+  WeakInDestructor(bool* ptr): ptr(ptr) {}
+  ~WeakInDestructor() {
+    // At this point the strong refcount has already reached zero. Cloning the weak reference (and
+    // observing that it has expired) must not touch freed memory.
+    auto clone = self.clone();
+    KJ_EXPECT(clone == nullptr);
+    KJ_IF_SOME(obj, clone.tryGet()) {
+      KJ_FAIL_EXPECT("weak ref should have expired during destruction", &obj);
+    }
+    *ptr = true;
+  }
+
+  kj::WeakRc<WeakInDestructor> self = nullptr;
+
+  bool* ptr;
+};
+
+KJ_TEST("WeakRc manipulated during destructor stays valid") {
+  bool destroyed = false;
+  {
+    Rc<WeakInDestructor> ref = kj::rc<WeakInDestructor>(&destroyed);
+    // The object's only weak reference is the one it holds to itself. When the last strong Rc is
+    // dropped below, the destructor clones this weak reference; the backing cell must survive until
+    // the destructor finishes.
+    ref->self = ref.downgrade();
+    KJ_EXPECT(!destroyed);
+  }
+  KJ_EXPECT(destroyed);
+}
+
 }  // namespace _
 }  // namespace kj
