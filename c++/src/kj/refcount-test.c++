@@ -1348,5 +1348,37 @@ KJ_TEST("Arc polymorphic upcast") {
   EXPECT_TRUE(b);
 }
 
+// Code running inside a destructor (directly, or in a lambda run by some member's destructor) can
+// legitimately try to take a weak reference to the object being destroyed. Such a reference must be
+// born expired: if it could be upgraded, the resulting Rc<T> would resurrect the refcount and its
+// destruction would re-enter `delete this`.
+struct WeakDuringDestruction: public Refcounted {
+  WeakRc<WeakDuringDestruction> weak() { return addWeakToThis(); }
+
+  ~WeakDuringDestruction() noexcept(false) {
+    auto w = weak();
+    KJ_EXPECT(w == nullptr);
+    KJ_EXPECT(w.tryGet() == kj::none);
+    KJ_EXPECT(w.upgrade() == kj::none);
+  }
+};
+
+KJ_TEST("WeakRc taken during destruction is expired (no prior weak refs)") {
+  { auto ref = kj::rc<WeakDuringDestruction>(); }
+}
+
+KJ_TEST("WeakRc taken during destruction is expired (weak ref dropped earlier)") {
+  auto ref = kj::rc<WeakDuringDestruction>();
+  { auto w = ref.downgrade(); }
+  ref = nullptr;
+}
+
+KJ_TEST("WeakRc taken during destruction is expired (weak ref outstanding)") {
+  auto ref = kj::rc<WeakDuringDestruction>();
+  auto w = ref.downgrade();
+  ref = nullptr;
+  KJ_EXPECT(w == nullptr);
+}
+
 }  // namespace _
 }  // namespace kj

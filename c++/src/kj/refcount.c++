@@ -36,20 +36,39 @@ namespace kj {
 
 Refcounted::~Refcounted() noexcept(false) {
   KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
+  KJ_ASSERT(weakCell == nullptr || weakCell->refcounted == nullptr,
+      "Refcounted object with outstanding kj::WeakRc<T> was destroyed without going through "
+      "Refcounted::disposeImpl(); those weak references would never observe expiration. The object "
+      "was probably owned by something other than a refcount (a kj::heap(), a member, the stack).");
 }
+
+namespace _ {
+RcWeakCell EXPIRED_WEAK_CELL(nullptr);
+}  // namespace _ (private)
 
 void Refcounted::disposeImpl(void* pointer) const {
   if (--refcount == 0) {
-    if (weakCell != nullptr) {
+    _::RcWeakCell* cell = weakCell;
+    if (cell != nullptr) {
       // The refcount has reached zero and will never be incremented again: we null the cell's
       // back-pointer here, before destroying the object, so that any outstanding WeakRc<T> can
       // observe expiration and will never attempt to revive a dead object (see
-      // WeakRc<T>::upgrade()). Then release the strong-side reference to the cell;
-      // the cell itself is freed once the last WeakRc<T> is gone.
-      weakCell->refcounted = nullptr;
-      weakCell->decRef();
+      // WeakRc<T>::upgrade()).
+      cell->refcounted = nullptr;
+    } else {
+      // No cell was ever allocated, so there is nothing to expire -- but the destructor may still
+      // ask for a weak reference, and getWeakCell() must not hand it a live cell pointing at an
+      // object whose refcount has already reached zero.
+      weakCell = &_::EXPIRED_WEAK_CELL;
     }
     delete this;
+    if (cell != nullptr) {
+      // Release the strong-side reference to the cell; the cell itself is freed once the last
+      // WeakRc<T> is gone. Note we do this only after the destructor has run: code running in the
+      // destructor may ask for a weak reference, and must find the expired cell rather than a
+      // dangling `weakCell` pointer.
+      cell->decRef();
+    }
   }
 }
 

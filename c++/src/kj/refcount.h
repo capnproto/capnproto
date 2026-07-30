@@ -73,6 +73,11 @@ private:
   // Starts at 1 to account for the strong-side reference held while `refcounted` is non-null.
 };
 
+extern RcWeakCell EXPIRED_WEAK_CELL;
+// A permanently-expired cell. Refcounted::disposeImpl() parks this in `weakCell` when the last
+// strong reference is dropped and no cell was ever allocated, purely so that getWeakCell() can tell
+// that the object is expired. It is never handed to a WeakRc<T>, so its refcount is never touched.
+
 }  // namespace _ (private)
 
 class Refcounted: private Disposer {
@@ -124,16 +129,21 @@ private:
   // "mutable" because disposeImpl() is const.  Bleh.
 
   mutable _::RcWeakCell* weakCell = nullptr;
-  // Lazily-allocated shared cell backing any kj::WeakRc<T> referencing this object. Nulled and
-  // released when the last strong reference is dropped (see disposeImpl()).
+  // Lazily-allocated shared cell backing any kj::WeakRc<T> referencing this object. Expired when
+  // the last strong reference is dropped (see disposeImpl()).
   // "mutable" because disposeImpl() is const.
 
   void disposeImpl(void* pointer) const override;
 
   inline _::RcWeakCell* getWeakCell() {
-    // Lazily allocate (or return the existing) weak cell for this object.
+    // Lazily allocate (or return the existing) weak cell for this object. Returns null once the
+    // cell has expired, which yields a WeakRc<T> that is born expired: code running in a destructor
+    // may legitimately ask for a weak reference, and handing it a live cell would let it resurrect
+    // an object whose refcount has already reached zero.
     if (weakCell == nullptr) {
       weakCell = new _::RcWeakCell(this);
+    } else if (weakCell->refcounted == nullptr) {
+      return nullptr;
     }
     return weakCell;
   }
@@ -412,7 +422,8 @@ class WeakRc {
   //
   // Upgrading never resurrects a dead object: once the last strong Rc<T> is dropped the referent's
   // refcount reaches zero and is never incremented again. upgrade() only ever produces a strong
-  // reference while the refcount is still non-zero. See WeakRc<T>::upgrade().
+  // reference while the refcount is still non-zero. See WeakRc<T>::upgrade(). This holds even for a
+  // WeakRc<T> obtained from within the referent's destructor: such a reference is born expired.
   //
   // The relationship between Rc<T> and WeakRc<T> is similar to that between kj::Pin<T>/kj::Ptr<T>
   // and kj::Weak<T>.
@@ -535,8 +546,9 @@ template <typename T>
 WeakRc<T> Refcounted::addWeakRefInternal(T* object) {
   static_assert(kj::canConvert<T&, Refcounted&>());
   Refcounted* refcounted = object;
-  KJ_IREQUIRE(refcounted->refcount > 0,
-      "Object not allocated with kj::refcounted() or kj::rc().");
+  // Note we cannot require `refcount > 0` here: it is legal (and, in destructor-driven code, hard
+  // to avoid) to ask for a weak reference while the object is being destroyed. getWeakCell()
+  // returns null in that case, producing an already-expired WeakRc<T>.
   return WeakRc<T>(refcounted->getWeakCell(), object);
 }
 
