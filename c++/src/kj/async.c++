@@ -1367,6 +1367,19 @@ struct FiberStack::Impl {
   // Size and location of the original stack before switching fibers. These are filled in by
   // __sanitizer_finish_switch_fiber() after the switch, and must be passed to
   // __sanitizer_start_switch_fiber() when switching back later.
+
+  void* stackBase(size_t stackSize) {
+    // Lowest address of the fiber's stack area, which is what __sanitizer_start_switch_fiber()
+    // wants. Note that `this` sits at the *top* of that area, so we have to walk back down.
+    //
+    // Getting this wrong is not benign: __asan_handle_no_return(), which the compiler emits ahead
+    // of every call to a noreturn function (so, ahead of every `throw`) and which ASAN's
+    // longjmp/_longjmp interceptors call (so, on every fiber switch), unpoisons everything between
+    // the current stack pointer and what ASAN believes is the top of the current stack. If we
+    // claimed the stack started at `this`, that would clear the poison from up to `stackSize`
+    // bytes of whatever unrelated mapping happens to follow the fiber stack.
+    return reinterpret_cast<byte*>(this + 1) - stackSize;
+  }
 #endif
 
   static Impl* alloc(size_t stackSize, ucontext_t* context) {
@@ -1539,7 +1552,8 @@ FiberStack::FiberStack(size_t stackSizeParam)
 
   makecontext(&context, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
 
-  __sanitizer_start_switch_fiber(&impl->originalFakeStack, impl, stackSize - sizeof(Impl));
+  __sanitizer_start_switch_fiber(
+      &impl->originalFakeStack, impl->stackBase(stackSize), stackSize - sizeof(Impl));
   if (_setjmp(impl->originalJmpBuf) == 0) {
     setcontext(&context);
   }
@@ -1636,7 +1650,8 @@ void FiberStack::switchToFiber() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #else
-  __sanitizer_start_switch_fiber(&impl->originalFakeStack, impl, stackSize - sizeof(Impl));
+  __sanitizer_start_switch_fiber(
+      &impl->originalFakeStack, impl->stackBase(stackSize), stackSize - sizeof(Impl));
   if (_setjmp(impl->originalJmpBuf) == 0) {
     _longjmp(impl->fiberJmpBuf, 1);
   }
