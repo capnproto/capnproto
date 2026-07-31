@@ -512,6 +512,18 @@ private:
 #else
   struct Impl;
   Impl* impl;
+
+  void asanStartSwitchToFiber();
+  // Tell ASAN that we are about to switch from the current stack onto this fiber's stack. Every
+  // such switch must go through here rather than calling __sanitizer_start_switch_fiber()
+  // directly, so that the stack's bounds are computed in exactly one place. Compiles to nothing
+  // when not building with ASAN.
+
+  void asanCheckOnFiberStack() noexcept;
+  // Verify, while actually running on the fiber stack, that the bounds we hand to ASAN really do
+  // contain it. ASAN accepts bogus bounds without complaint, so this check is the only thing
+  // standing between a layout mistake here and silent corruption of the shadow memory belonging
+  // to some unrelated mapping. Compiles to nothing when not building with ASAN.
 #endif
 #endif
 
@@ -1368,17 +1380,23 @@ struct FiberStack::Impl {
   // __sanitizer_finish_switch_fiber() after the switch, and must be passed to
   // __sanitizer_start_switch_fiber() when switching back later.
 
-  void* stackBase(size_t stackSize) {
-    // Lowest address of the fiber's stack area, which is what __sanitizer_start_switch_fiber()
-    // wants. Note that `this` sits at the *top* of that area, so we have to walk back down.
+  ArrayPtr<const byte> asanStackBounds(size_t stackSize) const {
+    // The region that __sanitizer_start_switch_fiber() should be told is the fiber's stack: the
+    // mapping from alloc(), minus the guard page below it and minus this Impl, which alloc()
+    // placed at the *top* of the area. Both endpoints come from here so that a caller cannot pair
+    // a correct base with a stale size.
     //
-    // Getting this wrong is not benign: __asan_handle_no_return(), which the compiler emits ahead
-    // of every call to a noreturn function (so, ahead of every `throw`) and which ASAN's
-    // longjmp/_longjmp interceptors call (so, on every fiber switch), unpoisons everything between
-    // the current stack pointer and what ASAN believes is the top of the current stack. If we
-    // claimed the stack started at `this`, that would clear the poison from up to `stackSize`
-    // bytes of whatever unrelated mapping happens to follow the fiber stack.
-    return reinterpret_cast<byte*>(this + 1) - stackSize;
+    // Getting either endpoint wrong is not benign, and ASAN will not complain: it takes whatever
+    // bounds we hand it. __asan_handle_no_return(), which the compiler emits ahead of every call
+    // to a noreturn function (so, ahead of every `throw`) and which ASAN's longjmp/_longjmp
+    // interceptors call (so, on every fiber switch), unpoisons everything between the current
+    // stack pointer and what ASAN believes is the top of the current stack. Overstating the range
+    // silently clears the poison from whatever unrelated mapping happens to follow the fiber
+    // stack.
+    //
+    // Note this intentionally does not match uc_stack.ss_sp on Apple/arm64; see alloc().
+    auto top = reinterpret_cast<const byte*>(this);
+    return kj::arrayPtr(top + sizeof(Impl) - stackSize, top);
   }
 #endif
 
@@ -1431,6 +1449,11 @@ struct FiberStack::Impl {
     // we allocate the full size, but tell the ucontext the stack is the last
     // page only. This appears to work as no particular bounds checks or
     // anything are set up based on what we say here.
+    //
+    // Note that asanStackBounds() deliberately still reports the *full* mapping to ASAN. Only
+    // ucontext is being lied to; the stack really is stackSize bytes and the fiber really will
+    // grow down through all of it, so ASAN needs to know about all of it. Do not "fix" the two to
+    // agree.
     context->uc_stack.ss_size = min(pageSize, stackSize) - sizeof(Impl);
     context->uc_stack.ss_sp = reinterpret_cast<char*>(stack) + stackSize - min(pageSize, stackSize);
 #else
@@ -1461,6 +1484,31 @@ struct FiberStack::Impl {
     return result;
   }
 };
+
+void FiberStack::asanStartSwitchToFiber() {
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  auto bounds = impl->asanStackBounds(stackSize);
+  __sanitizer_start_switch_fiber(&impl->originalFakeStack, bounds.begin(), bounds.size());
+#endif
+}
+
+void FiberStack::asanCheckOnFiberStack() noexcept {
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer)
+  // Use the frame address rather than the address of a local: with
+  // detect_stack_use_after_return=1, an address-taken local may live on ASAN's "fake stack"
+  // instead of on the real one, but the frame itself is always on the real stack.
+  auto frame = reinterpret_cast<const byte*>(__builtin_frame_address(0));
+  auto bounds = impl->asanStackBounds(stackSize);
+
+  // Note this function is noexcept, so a failure here aborts rather than throws. That is what we
+  // want: reaching this point means we have been feeding ASAN bounds that do not describe the
+  // stack we are standing on, and every `throw` since has been scribbling over someone else's
+  // shadow memory.
+  KJ_ASSERT(frame >= bounds.begin() && frame < bounds.end(),
+      "fiber stack bounds reported to ASAN do not contain the fiber stack",
+      frame - bounds.begin(), bounds.size(), stackSize);
+#endif
+}
 #endif
 #endif
 
@@ -1470,7 +1518,9 @@ struct FiberStack::StartRoutine {
     // This is the static C-style function we pass to CreateFiber().
     reinterpret_cast<FiberStack*>(ptr)->run();
   }
-#else
+#elif KJ_USE_FIBERS
+  // Note this must be guarded on KJ_USE_FIBERS, not just on the platform: without fibers,
+  // FiberStack has no `impl` member for us to touch (and nothing ever calls us anyway).
   [[noreturn]] static void run(int arg1, int arg2) {
     // This is the static C-style function we pass to makeContext().
 
@@ -1483,6 +1533,11 @@ struct FiberStack::StartRoutine {
 
     __sanitizer_finish_switch_fiber(nullptr,
         &stack.impl->originalBottom, &stack.impl->originalSize);
+
+    // Now that we're actually running on the fiber stack, confirm it is where we told ASAN it
+    // would be. The bounds are a pure function of `impl` and `stackSize`, both immutable for the
+    // lifetime of the FiberStack, so checking once here covers every later switchToFiber() too.
+    stack.asanCheckOnFiberStack();
 
     // We first switch to the fiber inside of the FiberStack constructor. This is just for
     // initialization purposes, and we're expected to switch back immediately.
@@ -1552,8 +1607,7 @@ FiberStack::FiberStack(size_t stackSizeParam)
 
   makecontext(&context, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
 
-  __sanitizer_start_switch_fiber(
-      &impl->originalFakeStack, impl->stackBase(stackSize), stackSize - sizeof(Impl));
+  asanStartSwitchToFiber();
   if (_setjmp(impl->originalJmpBuf) == 0) {
     setcontext(&context);
   }
@@ -1650,8 +1704,7 @@ void FiberStack::switchToFiber() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #else
-  __sanitizer_start_switch_fiber(
-      &impl->originalFakeStack, impl->stackBase(stackSize), stackSize - sizeof(Impl));
+  asanStartSwitchToFiber();
   if (_setjmp(impl->originalJmpBuf) == 0) {
     _longjmp(impl->fiberJmpBuf, 1);
   }
@@ -1674,6 +1727,12 @@ void FiberStack::switchToMain() {
   //   fiber on final destruction just to get the hints right, so instead we leak the fake stack.
   //   This doesn't seem to cause any problems -- it's not even detected by ASAN as a memory leak.
   //   But if we wanted to run ASAN builds in production or something, it might be an issue.
+  //
+  // NOTE: We are switching *away* from the fiber, so the bounds passed here are those of the
+  //   *original* (main) stack, as recorded by __sanitizer_finish_switch_fiber() below and in
+  //   StartRoutine::run(). Do NOT "make this consistent" with switchToFiber() by using
+  //   asanStartSwitchToFiber() -- that describes the fiber's stack, which is the one we're
+  //   leaving.
   __sanitizer_start_switch_fiber(&impl->fiberFakeStack,
                                  impl->originalBottom, impl->originalSize);
   if (_setjmp(impl->fiberJmpBuf) == 0) {
