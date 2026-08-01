@@ -206,7 +206,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release: ['13.4', '14.2', '15.0']
+        release: ['14.4', '15.1']
     steps:
       - uses: actions/checkout@v7
       - name: Start FreeBSD VM
