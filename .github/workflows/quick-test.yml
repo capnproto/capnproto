@@ -190,22 +190,13 @@ jobs:
   #       run: |
   #         C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh quick'
   Linux-bazel-clang:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        clang_version: [16]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git
-      # todo: replace with apt-get when clang-16 is part of ubuntu lts
-      - name: install clang
-        uses: egor-tensin/setup-clang@v1
-        with:
-          version: ${{ matrix.clang_version }}
+            sudo apt-get install -y build-essential clang-16 git
       - name: super-test
         run: |
             cd c++
