@@ -250,7 +250,7 @@ kj::Promise<void> JsonRpc::readLoop() {
             tasks.add(promise.attach(kj::mv(idCopy)));
           } else {
             // No 'id', so this is a notification.
-            tasks.add(req.send().ignoreResult().catch_([](kj::Exception&& exception) {
+            tasks.add(req.sendIgnoringResult().catch_([](kj::Exception&& exception) {
               if (exception.getType() != kj::Exception::Type::UNIMPLEMENTED) {
                 KJ_LOG(ERROR, "JSON-RPC notification threw exception into the abyss", exception);
               }

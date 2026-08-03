@@ -2491,7 +2491,7 @@ private:
 
     auto req = next.holdRequest();
     req.setCap(kj::mv(cap));
-    co_await req.send();
+    co_await req.sendIgnoringResult();
 
     // (hold() has no results)
   }
