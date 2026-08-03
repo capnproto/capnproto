@@ -651,7 +651,7 @@ public:
     // Wait for the server to indicate completion. Meanwhile, if the
     // promise is canceled from the client side, we propagate cancellation naturally.
     KJ_TRY {
-      co_await pipeline.ignoreResult();
+      co_await pipeline;
     } KJ_CATCH(exception) {
       if (exception.getType() == kj::Exception::Type::OVERLOADED &&
           context.hasStartedWebSocket()) {
@@ -744,7 +744,7 @@ public:
       return kj::NEVER_DONE;
     });
 
-    co_await pipeline.ignoreResult();
+    co_await pipeline;
   }
 
 

@@ -560,6 +560,9 @@ public:
   RemotePromise<DynamicStruct> send();
   // Send the call and return a promise for the results.
 
+  kj::Promise<void> sendIgnoringResult();
+  // Equivalent to send().ignoreResult(), but is a bit more efficient.
+
   kj::Promise<void> sendStreaming();
   // Use when the caller is aware that the response type is StreamResult and wants to invoke
   // streaming behavior. It is an error to call this if the response type is not StreamResult.

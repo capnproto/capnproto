@@ -99,6 +99,12 @@ RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
   return RemotePromise<DynamicStruct>(kj::mv(typedPromise), kj::mv(typedPipeline));
 }
 
+kj::Promise<void> Request<DynamicStruct, DynamicStruct>::sendIgnoringResult() {
+  auto typelessPromise = hook->send();
+  hook = nullptr;  // prevent reuse
+  return kj::mv(typelessPromise).ignoreResult();
+}
+
 kj::Promise<void> Request<DynamicStruct, DynamicStruct>::sendStreaming() {
   KJ_REQUIRE(resultSchema.isStreamResult());
 
