@@ -21,15 +21,15 @@ This package is licensed under the [MIT License](http://opensource.org/licenses/
 Cap'n Proto makes extensive use of C++20 language features. As a result, it requires a relatively
 new version of a well-supported compiler. The minimum versions are:
 
-* GCC 10.0*
-* Clang 14.0
+* GCC 14.3*
+* Clang 16.0
 * Visual C++ 2022
 
-*: Cap'n Proto 2.0 and above cannot currently compile with GCC due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051
+*: Cap'n Proto 2.0 and above require a fairly recent GCC that includes a fix for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102051
 
 If your system's default compiler is older that the above, you will need to install a newer
 compiler and set the `CXX` environment variable before trying to build Cap'n Proto. For example,
-after installing GCC 10, you could set `CXX=g++-10` to use this compiler.
+after installing GCC 14, you could set `CXX=g++-14` to use this compiler.
 
 ### Supported Operating Systems
 

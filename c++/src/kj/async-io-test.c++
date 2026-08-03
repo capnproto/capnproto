@@ -3657,11 +3657,15 @@ KJ_TEST("Calling abortRead() after tryRead() raised exception") {
     virtual kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
       numCalls++;
       KJ_FAIL_REQUIRE("This stream never works");
+#if __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunreachable-code"
+#endif
       // clang-18 thinks this line is unnecessary
       co_return 0;
+#if __clang__
 #pragma clang diagnostic pop
+#endif
     }
 
     uint numCalls = 0;

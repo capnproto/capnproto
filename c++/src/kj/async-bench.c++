@@ -91,6 +91,8 @@ static void bm_Promise_ImmediatePromise_Then(benchmark::State &state) {
 
 BENCHMARK(bm_Promise_ImmediatePromise_Then);
 
+// GCC gets compilation errors with promise continuations in lambdas
+#if !(__GNUC__ && !__clang__)
 static void bm_Coro_CoAwait_ImmediatePromise(benchmark::State &state) {
   // Benchmark coro that co_awaits an immediate coroutine
   kj::EventLoop loop;
@@ -118,6 +120,7 @@ static void bm_Coro_CoAwait_ImmediateCoroutine(benchmark::State &state) {
 }
 
 BENCHMARK(bm_Coro_CoAwait_ImmediateCoroutine);
+#endif  // !(__GNUC__ && !__clang__)
 
 ///////////////////////////////
 // Pow benchmarks mean to benchmark promise evaluation when the start of the

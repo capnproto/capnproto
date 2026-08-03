@@ -1474,7 +1474,7 @@ private:
     }
   };
 
-  bool isSet;
+  bool isSet = false;
 
 #if _MSC_VER && !defined(__clang__)
 #pragma warning(push)

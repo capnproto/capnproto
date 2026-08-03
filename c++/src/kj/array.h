@@ -241,7 +241,7 @@ public:
     return result;
   }
 
-  inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return size_ == 0; }
 
   inline Array& operator=(decltype(nullptr)) {
     dispose();

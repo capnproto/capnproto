@@ -33,6 +33,10 @@ build:thin-lto --dynamic_mode=off
 
 build:profile --config=opt
 
+# Build options for compatibility with GCC
+build:gcc --cxxopt=-Wno-maybe-musttail-local-addr
+build:gcc --cxxopt=-Wno-maybe-uninitialized
+
 build:unix --cxxopt='-std=c++23' --host_cxxopt='-std=c++23' --force_pic
 build:unix --cxxopt='-Wall'
 build:unix --cxxopt='-Wextra'
@@ -50,21 +54,22 @@ build:unix --per_file_copt='external@-w'
 # enable libdl integration for stacktrace symbolization
 build:unix --//src/kj:libdl=True
 
-# I needed these magic spells to build locally with clang-11 and clang-12 on Ubuntu. clang-13 and up
-# work out-of-the-box.
-# TODO(2.0): Remove this when we support g++ again.
-build:linux --cxxopt=-stdlib=libc++ --host_cxxopt=-stdlib=libc++
-build:linux --linkopt='-stdlib=libc++' --host_linkopt='-stdlib=libc++'
+# Build using libc++. This should no longer be required with recent clang versions, but may still be
+# desirable to closer match the downstream build.
+# TODO(someday): We can't default-enable this since GCC does not accept the stdlib flag, even if we
+# try to revert it later. Is there a workaround so we can enable this in clang builds?
+# build:libcpp --cxxopt=-stdlib=libc++ --host_cxxopt=-stdlib=libc++
+# build:libcpp --linkopt='-stdlib=libc++' --host_linkopt='-stdlib=libc++'
 # Drop default link flags, which include libstdc++ for Linux
-build:linux --features=-default_link_libs --host_features=-default_link_libs
-build:linux --linkopt='-lc++' --linkopt='-lm'
-build:linux --host_linkopt='-lc++' --host_linkopt='-lm'
+# build:libcpp --features=-default_link_libs --host_features=-default_link_libs
+# build:libcpp --linkopt='-lc++' --linkopt='-lm'
+# build:libcpp --host_linkopt='-lc++' --host_linkopt='-lm'
 
 # Limit recursive header includes within libc++. This improves compliance with IWYU, helps avoid
 # errors with downstream projects that implicitly define this already and reduces total include size.
 https://libcxx.llvm.org/DesignDocs/HeaderRemovalPolicy.html
-build:unix --cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
-build:unix --host_cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+build:libcpp --cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+build:libcpp --host_cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 
 build:linux --config=unix
 build:macos --config=unix
