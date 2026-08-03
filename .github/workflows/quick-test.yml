@@ -32,7 +32,7 @@ jobs:
     # We depend on both clang and libc++. We use Alpine Linux 3.23 which supports LLVM 21.
     container: alpine:3.23
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         # TODO(cleanup): Could use clang21 here, but that would introduce warnings and make the
         # build fail due to -Werror – fix and update.
@@ -52,7 +52,7 @@ jobs:
           - driver: super-test
             run-test: ./super-test.sh quick
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -67,7 +67,7 @@ jobs:
       matrix:
         clang: [22]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -88,7 +88,7 @@ jobs:
           - driver: bazel-dbg
             run-test: cd c++ && bazel test --config=ci --config=dbg //...
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -104,7 +104,7 @@ jobs:
         clang: [20]
         config: [asan, ubsan]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -119,7 +119,7 @@ jobs:
       matrix:
         clang: [22]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps ${{ matrix.clang }}
       - name: test
@@ -135,7 +135,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             brew install autoconf automake libtool pkg-config
@@ -150,10 +150,10 @@ jobs:
         os: ['windows-latest']
         include:
           - os: windows-latest
-            target: 'Visual Studio 17 2022'
+            target: 'Visual Studio 18 2026'
             arch: -A x64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Include $CONDA in $PATH
         run: |
           echo "$Env:CONDA\condabin" >> $env:GITHUB_PATH
@@ -184,10 +184,10 @@ jobs:
         os: ['windows-latest']
         include:
           - os: windows-latest
-            target: 'Visual Studio 17 2022'
+            target: 'Visual Studio 18 2026'
             arch: -A x64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: test
         run: |
             cd c++ && bazel test --config=ci //...
