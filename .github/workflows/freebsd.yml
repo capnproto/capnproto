@@ -1,0 +1,41 @@
+name: FreeBSD
+
+on:
+  pull_request:
+    paths-ignore:
+    - 'doc/**'
+  push:
+    branches:
+    - master
+    - v2
+    - 'release-*'
+
+jobs:
+  FreeBSD:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ['14.3', '15.1']
+    steps:
+      - uses: actions/checkout@v7
+      - name: test
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: ${{ matrix.release }}
+          usesh: true
+          cache-after-prepare: true
+          prepare: |
+            pkg install -y automake autoconf libtool
+          run: |
+            set -e
+            cd c++
+            autoreconf -i
+            # CXXFLAGS has to be set explicitly, as super-test.sh does. A bare
+            # ./configure supplies -O2, and common.h turns KJ_DEBUG off
+            # whenever __OPTIMIZE__ is set, which compiles out the KJ_IREQUIRE
+            # checks that several tests assert on.
+            ./configure --disable-shared CXXFLAGS="-g"
+            make -j$(sysctl -n hw.ncpu)
+            make check
