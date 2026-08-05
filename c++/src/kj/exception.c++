@@ -908,6 +908,14 @@ retry:
   return filename;
 }
 
+static void abortHandler() {
+  // std::set_terminate(nullptr) is not enough: libstdc++ falls back to abort()
+  // when the handler is null, but libcxxrt calls the pointer, so on FreeBSD
+  // std::terminate() jumps to address zero and the process dies with SIGSEGV
+  // rather than SIGABRT.
+  abort();
+}
+
 void resetCrashHandlers() {
 #ifndef _WIN32
   struct sigaction action = {};
@@ -925,7 +933,7 @@ void resetCrashHandlers() {
 #endif
 #endif
 
-  std::set_terminate(nullptr);
+  std::set_terminate(&abortHandler);
 }
 
 StringPtr KJ_STRINGIFY(Exception::Type type) {
