@@ -63,6 +63,17 @@ int reservedSignal = SIGUSR1;
 bool tooLateToSetReserved = false;
 bool capturedChildExit = false;
 
+class ErrnoPreserver {
+public:
+  ErrnoPreserver(): saved(errno) {}
+  ~ErrnoPreserver() noexcept { restore(); }
+
+  void restore() const { errno = saved; }
+
+private:
+  int saved;
+};
+
 #if !KJ_USE_KQUEUE
 bool threadClaimedChildExits = false;
 #endif
@@ -80,6 +91,10 @@ thread_local UnixEventPort* threadEventPort = nullptr;
 }  // namespace
 
 void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
+  // Signal handlers must preserve errno. In particular, ThreadSanitizer checks this even though
+  // this handler only runs while `epoll_pwait()` is active.
+  ErrnoPreserver errnoPreserver;
+
   // Since this signal handler is *only* called during `epoll_pwait()`, we aren't subject to the
   // usual signal-safety concerns. We can treat this more like a callback. So, we can just call
   // gotSignal() directly, no biggy.
@@ -107,6 +122,8 @@ static thread_local siginfo_t* threadCapture = nullptr;
 #endif
 
 void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
+  ErrnoPreserver errnoPreserver;
+
 #if KJ_HAS_SIGTIMEDWAIT
   // This is never called because we use sigtimedwait() to dequeue the signal while it is still
   // blocked, without running the signal handler. However, if we don't register a handler at all,
@@ -160,6 +177,7 @@ thread_local SignalCapture* threadCapture = nullptr;
 }  // namespace
 
 void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
+  ErrnoPreserver errnoPreserver;
   SignalCapture* capture = threadCapture;
   if (capture != nullptr) {
     capture->siginfo = *siginfo;
@@ -171,8 +189,10 @@ void UnixEventPort::signalHandler(int, siginfo_t* siginfo, void*) noexcept {
     // equivalent to `longjmp()` on Linux or `_longjmp()` on BSD/macOS. See comments on
     // SignalCapture::originalMask for explanation.
     pthread_sigmask(SIG_SETMASK, &capture->originalMask, nullptr);
+    errnoPreserver.restore();
     siglongjmp(capture->jumpTo, false);
 #else
+    errnoPreserver.restore();
     siglongjmp(capture->jumpTo, true);
 #endif
   }
