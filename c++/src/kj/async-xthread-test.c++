@@ -29,6 +29,8 @@
 #include "mutex.h"
 #include <kj/test.h>
 
+#include <atomic>
+
 #if _WIN32
 #include <windows.h>
 #include "windows-sanity.h"
@@ -342,7 +344,7 @@ KJ_TEST("cancel cross-thread event while it runs") {
     }
 
     {
-      volatile bool called = false;
+      std::atomic<bool> called = false;
       Promise<uint> promise = exec->executeAsync([&]() -> kj::Promise<uint> {
         called = true;
         return kj::NEVER_DONE;

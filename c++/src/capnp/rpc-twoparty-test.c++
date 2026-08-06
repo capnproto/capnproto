@@ -38,6 +38,8 @@
 #include <kj/compat/gtest.h>
 #include <kj/miniposix.h>
 
+#include <atomic>
+
 #if _WIN32
 #include <winsock2.h>
 #include <mswsock.h>
@@ -79,6 +81,57 @@ kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider,
        kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream, kj::WaitScope& waitScope) {
     TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
     auto server = makeRpcServer(network, kj::heap<TestInterfaceImpl>(callCount, handleCount));
+    network.onDisconnect().wait(waitScope);
+  });
+}
+
+class AtomicHandleImpl final: public test::TestHandle::Server {
+public:
+  AtomicHandleImpl(std::atomic<int>& count): count(count) { ++count; }
+  ~AtomicHandleImpl() noexcept(false) { --count; }
+
+private:
+  std::atomic<int>& count;
+};
+
+class ReleaseMoreStuffImpl final: public test::TestMoreStuff::Server {
+public:
+  ReleaseMoreStuffImpl(std::atomic<int>& handleCount): handleCount(handleCount) {}
+
+  kj::Promise<void> getHandle(GetHandleContext context) override {
+    context.getResults().setHandle(kj::heap<AtomicHandleImpl>(handleCount));
+    return kj::READY_NOW;
+  }
+
+private:
+  std::atomic<int>& handleCount;
+};
+
+class ReleaseTestInterfaceImpl final: public test::TestInterface::Server {
+public:
+  ReleaseTestInterfaceImpl(std::atomic<int>& handleCount): handleCount(handleCount) {}
+
+  kj::Promise<void> getTestMoreStuff(GetTestMoreStuffContext context) override {
+    context.getResults().setCap(kj::heap<ReleaseMoreStuffImpl>(handleCount));
+    return kj::READY_NOW;
+  }
+
+private:
+  std::atomic<int>& handleCount;
+};
+
+// Starts a dedicated server thread for the capability-release test. Unlike runServer(), this
+// server exposes only the methods needed by that test and its only cross-thread side effect is to
+// atomically update handleCount as TestHandle capabilities are created and destroyed. The returned
+// PipeThread owns the thread and the client end of the pipe; the server runs until that pipe is
+// disconnected.
+kj::AsyncIoProvider::PipeThread runHandleReleaseServer(
+    kj::AsyncIoProvider& ioProvider, std::atomic<int>& handleCount) {
+  return ioProvider.newPipeThread(
+      [&handleCount](
+       kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream, kj::WaitScope& waitScope) {
+    TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
+    auto server = makeRpcServer(network, kj::heap<ReleaseTestInterfaceImpl>(handleCount));
     network.onDisconnect().wait(waitScope);
   });
 }
@@ -296,10 +349,9 @@ TEST(TwoPartyNetwork, Pipelining) {
 
 TEST(TwoPartyNetwork, Release) {
   auto ioContext = kj::setupAsyncIo();
-  int callCount = 0;
-  int handleCount = 0;
+  std::atomic<int> handleCount = 0;
 
-  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
+  auto serverThread = runHandleReleaseServer(*ioContext.provider, handleCount);
   TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
