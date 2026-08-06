@@ -32,6 +32,7 @@
 #include "debug.h"
 #include "thread.h"
 #include <kj/compat/gtest.h>
+#include <atomic>
 #include <stdlib.h>
 
 #if _WIN32
@@ -481,7 +482,7 @@ KJ_TEST("wait()s wake each other") {
 
 TEST(Mutex, Lazy) {
   Lazy<uint> lazy;
-  volatile bool initStarted = false;
+  std::atomic<bool> initStarted(false);
 
   Thread thread([&]() {
     EXPECT_EQ(123u, lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
