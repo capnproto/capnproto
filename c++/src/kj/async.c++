@@ -795,7 +795,7 @@ struct Executor::Impl {
 
       for (auto& event: fulfilled) {
         fulfilled.remove(event);
-        event.state = _::XThreadPaf::DISPATCHED;
+        event.control->state = _::XThreadPafControl::DISPATCHED;
         event.onReadyEvent.armBreadthFirst();
       }
     }
@@ -890,7 +890,7 @@ struct Executor::Impl {
       KJ_LOG(ERROR, "EventLoop destroyed with cross-thread fulfiller replies outstanding");
       for (auto& event: s.fulfilled) {
         s.fulfilled.remove(event);
-        event.state = _::XThreadPaf::DISPATCHED;
+        event.control->state = _::XThreadPafControl::DISPATCHED;
       }
     }
   }};
@@ -1148,27 +1148,29 @@ void XThreadEvent::onReady(Event* event) noexcept {
   onReadyEvent.init(event);
 }
 
-XThreadPaf::XThreadPaf(Own<const Executor> executor)
-    : state(WAITING), executor(kj::mv(executor)) {}
+XThreadPaf::XThreadPaf(Own<const Executor> executor, Arc<XThreadPafControl> control)
+    : executor(kj::mv(executor)), control(kj::mv(control)) {}
 XThreadPaf::~XThreadPaf() noexcept(false) {}
 
 void XThreadPaf::destroy() {
-  auto oldState = WAITING;
+  auto oldState = XThreadPafControl::WAITING;
 
-  if (__atomic_load_n(&state, __ATOMIC_ACQUIRE) == DISPATCHED) {
+  if (__atomic_load_n(&control->state, __ATOMIC_ACQUIRE) == XThreadPafControl::DISPATCHED) {
     // Common case: Promise was fully fulfilled and dispatched, no need for locking.
     delete this;
-  } else if (__atomic_compare_exchange_n(&state, &oldState, CANCELED, false,
-                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+  } else if (__atomic_compare_exchange_n(
+                 &control->state, &oldState, XThreadPafControl::CANCELED, false,
+                 __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
     // State transitioned from WAITING to CANCELED, so now it's the fulfiller's job to destroy the
     // object.
   } else {
     // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
     // wait for it to finish and transition the state to FULFILLED.
     executor->impl->state.when([&](auto&) {
-      return state == FULFILLED || state == DISPATCHED;
+      return control->state == XThreadPafControl::FULFILLED ||
+          control->state == XThreadPafControl::DISPATCHED;
     }, [&](Executor::Impl::State& exState) {
-      if (state == FULFILLED) {
+      if (control->state == XThreadPafControl::FULFILLED) {
         // The object is on the queue but was not yet dispatched. Remove it.
         exState.fulfilled.remove(*this);
       }
@@ -1192,15 +1194,16 @@ void XThreadPaf::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 
 XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
   obj = __atomic_exchange_n(pointer, static_cast<XThreadPaf*>(nullptr), __ATOMIC_ACQUIRE);
-  auto oldState = WAITING;
+  auto oldState = XThreadPafControl::WAITING;
   if (obj == nullptr) {
     // Already fulfilled (possibly by another thread).
-  } else if (__atomic_compare_exchange_n(&obj->state, &oldState, FULFILLING, false,
-                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+  } else if (__atomic_compare_exchange_n(
+                 &obj->control->state, &oldState, XThreadPafControl::FULFILLING, false,
+                 __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
     // Transitioned to FULFILLING, good.
   } else {
     // The waiting thread must have canceled.
-    KJ_ASSERT(oldState == CANCELED);
+    KJ_ASSERT(oldState == XThreadPafControl::CANCELED);
 
     // It's our responsibility to clean up, then.
     delete obj;
@@ -1213,7 +1216,7 @@ XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
   if (obj != nullptr) {
     auto lock = obj->executor->impl->state.lockExclusive();
     lock->fulfilled.add(*obj);
-    __atomic_store_n(&obj->state, FULFILLED, __ATOMIC_RELEASE);
+    __atomic_store_n(&obj->control->state, XThreadPafControl::FULFILLED, __ATOMIC_RELEASE);
     KJ_IF_SOME(l, lock->loop) {
       // TODO(perf): It's annoying we have to call wake() with the lock held, but we have to
       //   prevent the destination EventLoop from being destroyed first.
