@@ -25,10 +25,28 @@
 #include <kj/compat/gtest.h>
 #include <stdexcept>
 #include <stdint.h>
+#include <signal.h>
 
 namespace kj {
 namespace _ {  // private
 namespace {
+
+#if !_WIN32
+void traceFromSignal(int) {
+  void* traceSpace[32]{};
+  getStackTrace(traceSpace, 0);
+}
+
+KJ_TEST("crash handler stack trace is signal-safe") {
+  // The test runner installs the crash handler, which must initialize getStackTrace() up front.
+  struct sigaction action = {};
+  action.sa_handler = &traceFromSignal;
+  KJ_SYSCALL(sigaction(SIGUSR1, &action, nullptr));
+
+  // TSan reports any allocation made by getStackTrace() while handling this signal.
+  KJ_SYSCALL(raise(SIGUSR1));
+}
+#endif
 
 TEST(Exception, TrimSourceFilename) {
 #if _WIN32
