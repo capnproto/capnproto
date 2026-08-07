@@ -198,6 +198,12 @@ public:
   virtual void setFds(kj::Array<int> fds) {}
   // Set the list of file descriptors to send along with this message, if FD passing is supported.
   // An implementation may ignore this.
+  //
+  // An implementation which defers the actual write, as `send()` permits, must keep the array
+  // itself alive until the write completes, rather than copying the numbers out of it. The array
+  // may carry attachments which are the only thing holding the descriptors open; dropping it early
+  // can leave the numbers referring to nothing, or to whatever file has since been given the same
+  // number.
 
   virtual void send() = 0;
   // Send the message, or at least put it in a queue to be sent later.  Note that the builder
