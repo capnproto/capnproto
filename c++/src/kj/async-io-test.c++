@@ -3705,8 +3705,43 @@ KJ_TEST("Calling abortRead() after tryRead() raised exception") {
 // On Unix platforms, accept() typically returns the aborted connection, which fails on first
 // read (throws "Connection reset by peer" or returns 0 bytes). The test then calls accept()
 // again to get the valid connection. Some platforms may filter out aborted connections.
+//
+// On Windows the abort surfaces differently: it completes the pending AcceptEx() operation with
+// an error rather than yielding a socket, so the listener discards it and the first accept()
+// returns the valid connection.
 
-#if !_WIN32
+// Open an IPv4 connection to a loopback port and immediately reset it, leaving a dead entry in
+// that listener's accept queue. SO_LINGER with a zero timeout makes close() send RST rather than
+// FIN. This works below kj::Network on purpose: the connection has to die before anything accepts
+// it, which means owning the socket's close behaviour directly.
+void connectAndReset(uint16_t port) {
+#if _WIN32
+  SOCKET s = ::socket(AF_INET, SOCK_STREAM, 0);
+  KJ_ASSERT(s != INVALID_SOCKET);
+  KJ_DEFER(::closesocket(s));
+#else
+  int s = ::socket(AF_INET, SOCK_STREAM, 0);
+  KJ_ASSERT(s >= 0);
+  KJ_DEFER(::close(s));
+#endif
+
+  struct linger lg = {1, 0};
+  sockaddr_in a {};
+  a.sin_family = AF_INET;
+  a.sin_port = htons(port);
+  a.sin_addr.s_addr = htonl(0x7f000001);
+
+#if _WIN32
+  KJ_WINSOCK(::setsockopt(s, SOL_SOCKET, SO_LINGER,
+                          reinterpret_cast<const char*>(&lg), static_cast<int>(sizeof(lg))));
+  KJ_WINSOCK(::connect(s, reinterpret_cast<sockaddr*>(&a), static_cast<int>(sizeof(a))));
+#else
+  KJ_SYSCALL(::setsockopt(s, SOL_SOCKET, SO_LINGER,
+                          reinterpret_cast<const char*>(&lg), sizeof(lg)));
+  KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
+#endif
+}
+
 KJ_TEST("accept() with aborted connection - IPv4") {
   // -- async-io boilerplate ---------------------------------------------------
   auto io = kj::setupAsyncIo();
@@ -3716,22 +3751,7 @@ KJ_TEST("accept() with aborted connection - IPv4") {
   auto listener = listenerAddr->listen();
   uint16_t port = listener->getPort();
 
-  // Create a connection that will be aborted (sends RST packet)
-  int s = ::socket(AF_INET, SOCK_STREAM, 0);
-  KJ_ASSERT(s >= 0);
-
-  // Configure socket to send RST on close instead of FIN
-  struct linger lg = {1, 0};
-  KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
-
-  sockaddr_in a {};
-  a.sin_family = AF_INET;
-  a.sin_port = htons(port);
-  a.sin_addr.s_addr = htonl(0x7f000001);
-  KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
-
-  // Close immediately to send RST packet
-  KJ_SYSCALL(::close(s));
+  connectAndReset(port);
 
   // Allow aborted connection to reach accept queue first
   io.provider->getTimer().afterDelay(20 * kj::MILLISECONDS).wait(io.waitScope);
@@ -3785,7 +3805,6 @@ KJ_TEST("accept() with aborted connection - IPv4") {
   KJ_ASSERT(amount == 5);
   KJ_ASSERT(memcmp(buffer, "hello", 5) == 0);
 }
-#endif  // !_WIN32
 
 // ---------------------------------------------------------------------------------------------
 // accept() with aborted connection - dual-stack IPv4/IPv6 listener
@@ -3819,27 +3838,12 @@ KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
   auto listener = listenerAddr->listen();
   uint16_t port = listener->getPort();
 
-  // Create IPv4 connection that will be aborted (sends RST packet)
-  int s = ::socket(AF_INET, SOCK_STREAM, 0);
-  KJ_ASSERT(s >= 0);
-
-  // Configure socket to send RST on close instead of FIN
-  struct linger lg = {1, 0};
-  KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
-
-  sockaddr_in a {};
-  a.sin_family = AF_INET;
-  a.sin_port = htons(port);
-  a.sin_addr.s_addr = htonl(0x7f000001);
-  KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
-
-  // Close immediately to send RST packet
-  KJ_SYSCALL(::close(s));
+  // The connection that gets aborted is IPv4, reaching the listener through its IPv4 mapping.
+  connectAndReset(port);
 
   // Allow aborted connection to reach accept queue first
   io.provider->getTimer().afterDelay(20 * kj::MILLISECONDS).wait(io.waitScope);
-  
-  
+
   // Create valid IPv6 connection
   auto clientP = net.parseAddress("::1", port)
       .then([](Own<NetworkAddress> addr) { return addr->connect(); });
