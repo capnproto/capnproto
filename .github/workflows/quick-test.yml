@@ -18,7 +18,7 @@ jobs:
     # Clang 16 appears to be the earliest Clang version we can run easily on Alpine Linux.
     container: alpine:3.18.2
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: apk add autoconf automake bash build-base cmake libtool libucontext-dev linux-headers openssl-dev clang16 libc++-dev
       - name: super-test
@@ -33,7 +33,7 @@ jobs:
           - compiler: clang-11
             dependencies: libc++-11-dev libc++abi-11-dev
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
@@ -51,7 +51,7 @@ jobs:
           - compiler: clang-15
             dependencies: libc++-15-dev libc++abi-15-dev
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
@@ -67,7 +67,7 @@ jobs:
         compiler: [clang]
         features: ["-DKJ_TRACK_LOCK_BLOCKING=1 -DKJ_SAVE_ACQUIRED_LOCK_INFO=1 -DKJ_CONTENTION_WARNING_THRESHOLD=200"]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
@@ -86,7 +86,7 @@ jobs:
           - cross-compiler: manylinux2014-x86
             docker-run-args: --platform linux/386
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: install dockcross
         run: |
             docker run ${{ matrix.docker-run-args }} --rm dockcross/${{ matrix.cross-compiler }} > ./dockcross
@@ -99,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             brew install autoconf automake libtool pkg-config
@@ -111,16 +111,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['windows-2019', 'windows-latest']
+        os: ['windows-2022', 'windows-latest']
         include:
-          - os: windows-2019
-            target: 'Visual Studio 16 2019'
-            arch: -A x64
-          - os: windows-latest
+          - os: windows-2022
             target: 'Visual Studio 17 2022'
             arch: -A x64
+          - os: windows-latest
+            target: 'Visual Studio 18 2026'
+            arch: -A x64
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Include $CONDA in $PATH
         run: |
           echo "$Env:CONDA\condabin" >> $env:GITHUB_PATH
@@ -148,7 +148,7 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Build and test
         shell: cmd
         run: |
@@ -171,7 +171,7 @@ jobs:
   #     fail-fast: false
   #   steps:
   #     - run: git config --global core.autocrlf false
-  #     - uses: actions/checkout@v2
+  #     - uses: actions/checkout@v7
   #     # TODO(someday): If we could cache the Cygwin installation we wouldn't have to spend three
   #     #     minutes installing it for every build. Unfortuntaley, actions/cache@v1 does not preserve
   #     #     DOS file attributes, which corrupts the Cygwin install. In particular, Cygwin marks
@@ -190,22 +190,13 @@ jobs:
   #       run: |
   #         C:\tools\cygwin\bin\bash -lc 'export PATH=/usr/local/bin:/usr/bin:/bin; cd /cygdrive/d/a/capnproto/capnproto; ./super-test.sh quick'
   Linux-bazel-clang:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        clang_version: [16]
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: |
             export DEBIAN_FRONTEND=noninteractive
-            sudo apt-get install -y build-essential git
-      # todo: replace with apt-get when clang-16 is part of ubuntu lts
-      - name: install clang
-        uses: egor-tensin/setup-clang@v1
-        with:
-          version: ${{ matrix.clang_version }}
+            sudo apt-get install -y build-essential clang-16 git
       - name: super-test
         run: |
             cd c++
@@ -215,9 +206,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release: ['13.4', '14.2', '15.0']
+        release: ['14.4', '15.1']
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Start FreeBSD VM
         uses: vmactions/freebsd-vm@v1
         with:
