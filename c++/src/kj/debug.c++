@@ -138,10 +138,14 @@ Exception::Type typeOfErrno(int error) {
 #if _WIN32 || __CYGWIN__
 
 Exception::Type typeOfWin32Error(DWORD error) {
+  // Winsock and Win32 have separate spellings for most of these conditions, and which one a given
+  // failure reports depends on how it was discovered: a direct Winsock call yields WSAE*, while an
+  // overlapped operation's completion status yields ERROR_*. Both spellings must be classified.
   switch (error) {
     // TODO(someday): This needs more work.
 
     case WSAETIMEDOUT:
+    case ERROR_SEM_TIMEOUT:
       return Exception::Type::OVERLOADED;
 
     case WSAENOTCONN:
@@ -154,6 +158,16 @@ Exception::Type typeOfWin32Error(DWORD error) {
     case WSAENETRESET:
     case WSAENETUNREACH:
     case WSAESHUTDOWN:
+    case ERROR_NETNAME_DELETED:  // What a reset connection looks like to overlapped I/O.
+    case ERROR_CONNECTION_ABORTED:
+    case ERROR_CONNECTION_REFUSED:
+    case ERROR_CONNECTION_INVALID:
+    case ERROR_HOST_UNREACHABLE:
+    case ERROR_NETWORK_UNREACHABLE:
+    case ERROR_PORT_UNREACHABLE:
+    case ERROR_BROKEN_PIPE:
+    case ERROR_NO_DATA:
+    case ERROR_PIPE_NOT_CONNECTED:
       return Exception::Type::DISCONNECTED;
 
     case WSAEOPNOTSUPP:
