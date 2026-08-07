@@ -634,9 +634,22 @@ namespace {
                                      stringifyStackTrace(trace), '\n');
     }
   } else {
-    message = kj::str("*** std::terminate() called with no exception"
-                      "\nstack: ", stringifyStackTraceAddresses(trace),
-                                   stringifyStackTrace(trace), '\n');
+    // std::current_exception() only reports an exception that is "currently being handled". When
+    // terminate() is reached because an exception escaped a noexcept function, some ABIs -- the
+    // MSVC one in particular -- have not begun handling it yet, so nothing is reported here even
+    // though an exception is very much in flight. KJ tracks its own exceptions independently of
+    // the C++ runtime, so fall back to that rather than reporting nothing at all. Unlike a stack
+    // trace taken here, a kj::Exception names the throw site and carries its own trace, so this
+    // stays useful even when the binary has no symbols.
+    InFlightExceptionIterator iter;
+    KJ_IF_SOME(exception, iter.next()) {
+      message = kj::str("*** std::terminate() called with in-flight kj::Exception: ",
+                        exception, '\n');
+    } else {
+      message = kj::str("*** std::terminate() called with no exception"
+                        "\nstack: ", stringifyStackTraceAddresses(trace),
+                                     stringifyStackTrace(trace), '\n');
+    }
   }
 
   kj::FdOutputStream(STDERR_FILENO).write(message.asBytes());
