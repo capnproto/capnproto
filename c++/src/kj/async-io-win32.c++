@@ -819,19 +819,18 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
 // =======================================================================================
 
 bool isTransientAcceptError(DWORD error) {
-  // AcceptEx() reports the state of the connection it accepted, not the state of the listener. A
-  // client that completes the handshake and then resets before the server gets around to accepting
-  // leaves a dead connection in the queue, and that is what surfaces here. Such an error says
+  // AcceptEx() may fail because the listener is broken, or because the connection it was accepting
+  // is: a client that completes the handshake and then resets before the server gets around to
+  // accepting leaves a dead entry in the queue, and that is what surfaces here. The latter says
   // nothing about the listener's health, so accept() must take the next connection rather than
-  // fail: ConnectionReceiver::accept() reports only permanent errors.
+  // fail -- ConnectionReceiver::accept() reports only permanent errors. Telling the two apart is
+  // the job of this function, and as in the Unix implementation it's hard to say exactly which
+  // codes mean which, so we've made a guess.
   //
-  // The two platforms surface a reset connection at different points, so this list is not the same
-  // as the one Unix retries on. On Unix accept() succeeds and the reset is only discovered on the
-  // first read, whereas AcceptEx() fails at accept time instead -- so the codes meaning "reset"
-  // have to be treated as transient here, and Unix has no need for them. Both Win32 and Winsock
-  // spellings appear because an overlapped completion may report either. ERROR_OPERATION_ABORTED is
-  // deliberately absent -- that means the operation was cancelled, which must propagate -- as are
-  // WSAENOTSOCK and WSAEINVAL, which indicate a genuinely broken listener.
+  // Both Win32 and Winsock spellings appear because an overlapped completion may report either.
+  // ERROR_OPERATION_ABORTED is deliberately absent -- that means the operation was cancelled,
+  // which must propagate -- as are WSAENOTSOCK and WSAEINVAL, which indicate a genuinely broken
+  // listener.
   switch (error) {
     case ERROR_NETNAME_DELETED:
     case ERROR_CONNECTION_ABORTED:

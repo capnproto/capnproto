@@ -3702,13 +3702,11 @@ KJ_TEST("Calling abortRead() after tryRead() raised exception") {
 // Test accept() behavior when connections are aborted (send RST) before being accepted.
 // Creates an aborted IPv4 connection followed by a valid one, then verifies proper handling.
 //
-// On Unix platforms, accept() typically returns the aborted connection, which fails on first
-// read (throws "Connection reset by peer" or returns 0 bytes). The test then calls accept()
-// again to get the valid connection. Some platforms may filter out aborted connections.
-//
-// On Windows the abort surfaces differently: it completes the pending AcceptEx() operation with
-// an error rather than yielding a socket, so the listener discards it and the first accept()
-// returns the valid connection.
+// Platforms differ in what becomes of a connection that dies while queued: it may never reach
+// accept() at all, it may be reported as an error from accept() -- which the accept loop is
+// expected to retry past -- or it may be handed over as a socket that fails on first read. What
+// matters either way is that the listener survives and goes on to produce the valid connection,
+// so the test tolerates receiving the dead connection or not.
 
 // Open an IPv4 connection to a loopback port and immediately reset it, leaving a dead entry in
 // that listener's accept queue. SO_LINGER with a zero timeout makes close() send RST rather than
@@ -3812,15 +3810,10 @@ KJ_TEST("accept() with aborted connection - IPv4") {
 // Test accept() behavior with aborted cross-protocol connections on dual-stack listeners.
 // Creates an aborted IPv4 connection to an IPv6 listener, followed by a valid IPv6 connection.
 //
-// Expected behavior:
-// - Darwin/macOS: When IPv4 connects to IPv6 listener and gets aborted, accept() returns
-//   a socket with addrlen=0. KJ's accept loop detects this Darwin quirk and discards the
-//   socket automatically, so first accept() returns the valid connection.
-// - Linux/other Unix: accept() returns the aborted connection, which fails on first
-//   read (throws exception or returns 0 bytes). Test then calls accept() again for the
-//   valid connection.
-//
-// This test specifically exercises the Darwin addrlen==0 bug workaround in KJ's accept loop.
+// As above, the dead connection may or may not reach accept(), and the test tolerates either.
+// The case worth having here is Darwin: an aborted IPv4 connection to an IPv6 listener makes
+// accept() return a socket with addrlen == 0, so this exercises the workaround for that quirk in
+// KJ's accept loop.
 
 #if !_WIN32
 KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {

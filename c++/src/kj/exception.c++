@@ -643,8 +643,7 @@ namespace {
     // stays useful even when the binary has no symbols.
     InFlightExceptionIterator iter;
     KJ_IF_SOME(exception, iter.next()) {
-      message = kj::str("*** std::terminate() called with in-flight kj::Exception: ",
-                        exception, '\n');
+      message = kj::str("*** Fatal uncaught kj::Exception: ", exception, '\n');
     } else {
       message = kj::str("*** std::terminate() called with no exception"
                         "\nstack: ", stringifyStackTraceAddresses(trace),
