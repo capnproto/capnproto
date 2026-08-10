@@ -150,7 +150,7 @@ Thread::ThreadState::ThreadState(Function<void()> func)
 
 void Thread::ThreadState::unref() {
   if (kj::atomicSubFetch(&refcount, 1, kj::AtomicMemoryOrder::RELEASE) == 0) {
-    kj::atomicThreadFence(kj::AtomicMemoryOrder::ACQUIRE);
+    kj::atomicThreadFence(&refcount, kj::AtomicMemoryOrder::ACQUIRE);
 
     KJ_IF_SOME(e, exception) {
       // If the exception is still present in ThreadState, this must be a detached thread, so

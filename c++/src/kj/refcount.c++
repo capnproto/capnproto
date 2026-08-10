@@ -71,7 +71,7 @@ AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
 
 void AtomicRefcounted::disposeImpl(void* pointer) const {
   if (kj::atomicSubFetch(&refcount, 1, kj::AtomicMemoryOrder::RELEASE) == 0) {
-    kj::atomicThreadFence(kj::AtomicMemoryOrder::ACQUIRE);
+    kj::atomicThreadFence(&refcount, kj::AtomicMemoryOrder::ACQUIRE);
     delete this;
   }
 }
