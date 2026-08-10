@@ -1047,7 +1047,12 @@ KJ_TEST("cross-thread fulfiller isWaiting concurrent with cancellation") {
   auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
   auto* fulfiller = paf.fulfiller.get();
 
+#if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
+  // TSAN serializes atomic operations, so a large number of polling threads is extremely slow.
+  constexpr uint OBSERVER_COUNT = 4;
+#else
   constexpr uint OBSERVER_COUNT = 64;
+#endif
   std::atomic<uint> entered(0);
   std::atomic<bool> start(false);
   std::atomic<bool> cancel(false);
