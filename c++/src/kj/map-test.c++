@@ -164,6 +164,97 @@ KJ_TEST("TreeMap range") {
   }
 }
 
+KJ_TEST("HashMap callback API") {
+  HashMap<String, int> map;
+  map.insert(kj::str("foo"), 123);
+
+  auto found = map.find("foo"_kj, [&](int& value) {
+    KJ_EXPECT(value == 123);
+    value = 456;
+    return value * 2;
+  });
+  KJ_EXPECT(found.assertSome() == 912);
+
+  auto copied = map.find("foo"_kj, [](int& value) -> int& { return value; });
+  static_assert(kj::isSameType<decltype(copied), kj::Maybe<int>>());
+  map.find("foo"_kj, [](int& value) { return value = 457; });
+  KJ_EXPECT(copied.assertSome() == 456);
+
+  bool called = false;
+  auto missing = map.find("missing"_kj, [&](int&) {
+    called = true;
+  });
+  static_assert(kj::isSameType<decltype(missing), kj::Maybe<void>>());
+  missing.assertNone();
+  KJ_EXPECT(!called);
+
+  auto modified = map.find("foo"_kj, [](int& value) { value = 458; });
+  static_assert(kj::isSameType<decltype(modified), kj::Maybe<void>>());
+  modified.assertSome();
+
+  const auto& constMap = map;
+  KJ_EXPECT(constMap.find("foo"_kj, [&](const int& value) {
+    return value;
+  }).assertSome() == 458);
+
+  KJ_EXPECT(map.findEntry("foo"_kj, [&](HashMap<String, int>::Entry& entry) {
+    entry.value = 789;
+    return entry.key.asPtr();
+  }).assertSome() == "foo");
+  KJ_EXPECT(constMap.findEntry("foo"_kj,
+      [&](const HashMap<String, int>::Entry& entry) {
+    return entry.value;
+  }).assertSome() == 789);
+
+  bool created = false;
+  auto existing = map.findOrCreate("foo"_kj, [&]() -> HashMap<String, int>::Entry {
+    KJ_FAIL_ASSERT("shouldn't have been called");
+  }, [&](int& value) {
+    KJ_EXPECT(value == 789);
+    return value * 2;
+  });
+  KJ_EXPECT(existing == 1578);
+  map.findOrCreate("bar"_kj, [&]() -> HashMap<String, int>::Entry {
+    created = true;
+    return { kj::str("bar"), 321 };
+  }, [&](int& value) {
+    KJ_EXPECT(value == 321);
+    value = 654;
+  });
+  KJ_EXPECT(created);
+  KJ_EXPECT(map.find("bar"_kj).assertSome() == 654);
+
+  auto insertedEntry = map.findOrCreateEntry(
+      "baz"_kj, [&]() -> HashMap<String, int>::Entry {
+    return { kj::str("baz"), 987 };
+  }, [&](HashMap<String, int>::Entry& entry) {
+    KJ_EXPECT(entry.value == 987);
+    return entry.key.asPtr();
+  });
+  KJ_EXPECT(insertedEntry == "baz");
+
+  HashMap<String, int> upsertMap;
+  auto& oldApiResult = upsertMap.upsert(kj::str("foo"), 123,
+      [](int&, int&&) { KJ_FAIL_ASSERT("shouldn't have been called"); });
+  KJ_EXPECT(oldApiResult.value == 123);
+
+  auto upsertInserted = upsertMap.upsert(kj::str("bar"), 456,
+      [](int&, int&&) { KJ_FAIL_ASSERT("shouldn't have been called"); },
+      [](int& value) -> int& { return value; });
+  static_assert(kj::isSameType<decltype(upsertInserted), int>());
+  KJ_EXPECT(upsertInserted == 456);
+
+  auto upsertUpdated = upsertMap.upsert(kj::str("foo"), 456,
+      [](int& oldValue, int&& newValue) { oldValue += newValue; },
+      [](int& value) { return value; });
+  KJ_EXPECT(upsertUpdated == 579);
+
+  upsertMap.upsert(kj::str("foo"), 1,
+      [](int& oldValue, int&& newValue) { oldValue += newValue; },
+      [](int&) {});
+  KJ_EXPECT(upsertMap.find("foo"_kj).assertSome() == 580);
+}
+
 KJ_TEST("HashMap findOrCreate throws") {
   HashMap<int, String> m;
   try {

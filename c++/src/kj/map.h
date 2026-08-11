@@ -71,7 +71,14 @@ public:
   Entry& upsert(Key key, Value value);
   // Tries to insert a new entry. However, if a duplicate already exists (according to some index),
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
-  // If no function is provided, the default is to simply replace the value (but not the key).
+  // If no update function is provided, the default is to simply replace the value (but not the
+  // key).
+
+  template <typename UpdateFunc, typename Func>
+  auto upsert(Key key, Value value, UpdateFunc&& update, Func&& callback);
+  // Like upsert(key, value, update), then calls callback(value) on the inserted or updated value.
+  // Returns the callback's decayed result. The callback must not modify this map while it is using
+  // the value.
 
   template <typename KeyLike>
   kj::Maybe<Value&> find(KeyLike&& key);
@@ -83,9 +90,24 @@ public:
   // Note that the default hasher for String accepts StringPtr.
 
   template <typename KeyLike, typename Func>
+  auto find(KeyLike&& key, Func&& callback);
+  template <typename KeyLike, typename Func>
+  auto find(KeyLike&& key, Func&& callback) const;
+  // Search for a matching key and, if found, call callback(value). Returns `none` if the key wasn't
+  // found, otherwise returns a `Maybe` containing the callback's decayed result. A void callback
+  // produces a populated `Maybe<void>`. The callback must not modify this map while it is using the
+  // value.
+
+  template <typename KeyLike, typename Func>
   Value& findOrCreate(KeyLike&& key, Func&& createEntry);
   // Like find() but if the key isn't present then call createEntry() to create the corresponding
   // entry and insert it. createEntry() must return type `Entry`.
+
+  template <typename KeyLike, typename CreateFunc, typename Func>
+  auto findOrCreate(KeyLike&& key, CreateFunc&& createEntry, Func&& callback);
+  // Like findOrCreate(key, createEntry), then calls callback(value) on the found or created value.
+  // Returns the callback's decayed result. The callback must not modify this map while it is using
+  // the value.
 
   template <typename KeyLike>
   kj::Maybe<Entry&> findEntry(KeyLike&& key);
@@ -94,6 +116,21 @@ public:
   template <typename KeyLike, typename Func>
   Entry& findOrCreateEntry(KeyLike&& key, Func&& createEntry);
   // Sometimes you need to see the whole matching Entry, not just the Value.
+
+  template <typename KeyLike, typename Func>
+  auto findEntry(KeyLike&& key, Func&& callback);
+  template <typename KeyLike, typename Func>
+  auto findEntry(KeyLike&& key, Func&& callback) const;
+  // Search for a matching key and, if found, call callback(entry). Returns `none` if the key wasn't
+  // found, otherwise returns a `Maybe` containing the callback's decayed result. A void callback
+  // produces a populated `Maybe<void>`. The callback must not modify this map while it is using the
+  // entry.
+
+  template <typename KeyLike, typename CreateFunc, typename Func>
+  auto findOrCreateEntry(KeyLike&& key, CreateFunc&& createEntry, Func&& callback);
+  // Like findOrCreateEntry(key, createEntry), then calls callback(entry) on the found or created
+  // entry. Returns the callback's decayed result. The callback must not modify this map while it is
+  // using the entry.
 
   template <typename KeyLike>
   bool erase(KeyLike&& key);
@@ -114,6 +151,27 @@ public:
   // Erase all values for which predicate(key, value) returns true. This scans over the entire map.
 
 private:
+  template <typename Func, typename Arg>
+  static auto callCallback(Func&& callback, Arg&& arg) {
+    using Result = kj::Decay<decltype(callback(kj::fwd<Arg>(arg)))>;
+    if constexpr (kj::isSameType<Result, void>()) {
+      callback(kj::fwd<Arg>(arg));
+    } else {
+      return Result(callback(kj::fwd<Arg>(arg)));
+    }
+  }
+
+  template <typename Func, typename Arg>
+  static auto callMaybeCallback(Func&& callback, Arg&& arg) {
+    using Result = kj::Decay<decltype(callback(kj::fwd<Arg>(arg)))>;
+    if constexpr (kj::isSameType<Result, void>()) {
+      callback(kj::fwd<Arg>(arg));
+      return kj::Maybe<void>::present();
+    } else {
+      return kj::Maybe<Result>(callback(kj::fwd<Arg>(arg)));
+    }
+  }
+
   class Callbacks {
   public:
     inline const Key& keyForRow(const Entry& entry) const { return entry.key; }
@@ -368,6 +426,16 @@ typename HashMap<Key, Value>::Entry& HashMap<Key, Value>::upsert(
     existingEntry.value = kj::mv(newEntry.value);
   });
 }
+template <typename Key, typename Value>
+template <typename UpdateFunc, typename Func>
+auto HashMap<Key, Value>::upsert(
+    Key key, Value value, UpdateFunc&& update, Func&& callback) {
+  auto& entry = table.upsert(Entry { kj::mv(key), kj::mv(value) },
+      [&](Entry& existingEntry, Entry&& newEntry) {
+    update(existingEntry.value, kj::mv(newEntry.value));
+  });
+  return callCallback(callback, entry.value);
+}
 
 template <typename Key, typename Value>
 template <typename KeyLike>
@@ -379,11 +447,36 @@ template <typename KeyLike>
 kj::Maybe<const Value&> HashMap<Key, Value>::find(KeyLike&& key) const {
   return table.find(key).map([](const Entry& e) -> const Value& { return e.value; });
 }
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+auto HashMap<Key, Value>::find(KeyLike&& key, Func&& callback) {
+  using Result = decltype(callMaybeCallback(callback, instance<Value&>()));
+  KJ_IF_SOME(entry, table.find(kj::fwd<KeyLike>(key))) {
+    return callMaybeCallback(callback, entry.value);
+  }
+  return Result(kj::none);
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+auto HashMap<Key, Value>::find(KeyLike&& key, Func&& callback) const {
+  using Result = decltype(callMaybeCallback(callback, instance<const Value&>()));
+  KJ_IF_SOME(entry, table.find(kj::fwd<KeyLike>(key))) {
+    return callMaybeCallback(callback, entry.value);
+  }
+  return Result(kj::none);
+}
 
 template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
 Value& HashMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
   return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename CreateFunc, typename Func>
+auto HashMap<Key, Value>::findOrCreate(
+    KeyLike&& key, CreateFunc&& createEntry, Func&& callback) {
+  return callCallback(callback, table.findOrCreate(
+      kj::fwd<KeyLike>(key), kj::fwd<CreateFunc>(createEntry)).value);
 }
 
 template <typename Key, typename Value>
@@ -400,9 +493,34 @@ HashMap<Key, Value>::findEntry(KeyLike&& key) const {
 }
 template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
+auto HashMap<Key, Value>::findEntry(KeyLike&& key, Func&& callback) {
+  using Result = decltype(callMaybeCallback(callback, instance<Entry&>()));
+  KJ_IF_SOME(entry, table.find(kj::fwd<KeyLike>(key))) {
+    return callMaybeCallback(callback, entry);
+  }
+  return Result(kj::none);
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
+auto HashMap<Key, Value>::findEntry(KeyLike&& key, Func&& callback) const {
+  using Result = decltype(callMaybeCallback(callback, instance<const Entry&>()));
+  KJ_IF_SOME(entry, table.find(kj::fwd<KeyLike>(key))) {
+    return callMaybeCallback(callback, entry);
+  }
+  return Result(kj::none);
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename Func>
 typename HashMap<Key, Value>::Entry&
 HashMap<Key, Value>::findOrCreateEntry(KeyLike&& key, Func&& createEntry) {
   return table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+}
+template <typename Key, typename Value>
+template <typename KeyLike, typename CreateFunc, typename Func>
+auto HashMap<Key, Value>::findOrCreateEntry(
+    KeyLike&& key, CreateFunc&& createEntry, Func&& callback) {
+  return callCallback(callback,
+      table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<CreateFunc>(createEntry)));
 }
 
 template <typename Key, typename Value>
