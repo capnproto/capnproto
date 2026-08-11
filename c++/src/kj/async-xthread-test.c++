@@ -30,6 +30,7 @@
 #include <kj/test.h>
 
 #include <atomic>
+#include <thread>
 
 #if _WIN32
 #include <windows.h>
@@ -1015,6 +1016,60 @@ KJ_TEST("cross-thread fulfiller canceled") {
 
     *done.lockExclusive() = true;
   })();
+}
+
+KJ_TEST("cross-thread fulfiller isWaiting concurrent with cancellation") {
+  // `isWaiting()` is documented as a cross-thread operation. Race it against the ownership
+  // transfer which follows cancellation: the fulfiller observes CANCELED and deletes its target.
+  // The observer threads make it likely that one has loaded `target` immediately before that
+  // deletion. ASan then detects its subsequent access to `target->state`.
+  KJ_XTHREAD_TEST_SETUP_LOOP;
+
+  auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+  auto* fulfiller = paf.fulfiller.get();
+
+  constexpr uint OBSERVER_COUNT = 64;
+  std::atomic<uint> entered(0);
+  std::atomic<bool> start(false);
+  std::atomic<bool> cancel(false);
+  std::atomic<bool> stop(false);
+
+  Vector<Own<Thread>> observers;
+  for (uint i = 0; i < OBSERVER_COUNT; ++i) {
+    observers.add(kj::heap<Thread>([&]() noexcept {
+      while (!start.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+      }
+
+      // Ensure that every observer is actively polling before cancellation starts.
+      fulfiller->isWaiting();
+      entered.fetch_add(1, std::memory_order_release);
+      while (!stop.load(std::memory_order_acquire)) {
+        fulfiller->isWaiting();
+      }
+    }));
+  }
+
+  {
+    Thread fulfillThread([&]() noexcept {
+      while (!cancel.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+      }
+      fulfiller->fulfill();
+    });
+
+    start.store(true, std::memory_order_release);
+    while (entered.load(std::memory_order_acquire) != OBSERVER_COUNT) {
+      std::this_thread::yield();
+    }
+
+    paf.promise = nullptr;
+    cancel.store(true, std::memory_order_release);
+
+    // `fulfill()` must atomically claim the target, see the canceled state, and delete it before
+    // it returns. Leaving this scope joins the thread, establishing that deletion is complete.
+  }
+  stop.store(true, std::memory_order_release);
 }
 
 KJ_TEST("cross-thread fulfiller multiple fulfills") {

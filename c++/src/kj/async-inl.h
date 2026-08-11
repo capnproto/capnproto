@@ -1945,18 +1945,9 @@ namespace _ {  // (private)
 template <typename T>
 class XThreadFulfiller;
 
-class XThreadPaf: public PromiseNode {
+class XThreadPafControl final: public AtomicRefcounted {
 public:
-  XThreadPaf(Own<const Executor> executor);
-  virtual ~XThreadPaf() noexcept(false);
-  void destroy() override;
-
-  // implements PromiseNode ----------------------------------------------------
-  void onReady(Event* event) noexcept override;
-  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
-
-private:
-  enum {
+  enum State {
     WAITING,
     // Not yet fulfilled, and the waiter is still waiting.
     //
@@ -1988,8 +1979,22 @@ private:
     // The waiting thread atomically transitions the state from WAITING to CANCELED if it is no
     // longer listening. In this state, it is the fulfiller thread's responsibility to destroy the
     // object.
-  } state;
+  };
 
+  mutable State state = WAITING;
+};
+
+class XThreadPaf: public PromiseNode {
+public:
+  XThreadPaf(Own<const Executor> executor, Arc<XThreadPafControl> control);
+  virtual ~XThreadPaf() noexcept(false);
+  void destroy() override;
+
+  // implements PromiseNode ----------------------------------------------------
+  void onReady(Event* event) noexcept override;
+  void tracePromise(TraceBuilder& builder, bool stopAtNextEvent) override;
+
+private:
   Own<const Executor> executor;
   // Executor of the waiting thread. We hold a strong reference to it so that we have no risk of UB
   // if the waiting thread exits before the promise is fulfilled.
@@ -1999,6 +2004,10 @@ private:
   // thread's executor. In those states, these pointers are guarded by said executor's mutex.
 
   OnReadyEvent onReadyEvent;
+
+  Arc<XThreadPafControl> control;
+  // The control block is shared with the fulfiller so that isWaiting() can inspect the state
+  // without dereferencing this object after cancellation has allowed it to be destroyed.
 
   class FulfillScope;
 
@@ -2052,7 +2061,8 @@ private:
 template <typename T>
 class XThreadFulfiller final: public CrossThreadPromiseFulfiller<T> {
 public:
-  XThreadFulfiller(XThreadPafImpl<T>* target): target(target) {}
+  XThreadFulfiller(XThreadPafImpl<T>* target, Arc<XThreadPafControl> control)
+      : target(target), control(kj::mv(control)) {}
 
   ~XThreadFulfiller() noexcept(false) {
     if (target != nullptr) {
@@ -2076,20 +2086,17 @@ public:
     }
   }
   bool isWaiting() const override {
-    KJ_IF_SOME(t, target) {
 #if _MSC_VER && !__clang__
-      // Just assume 1-byte loads are atomic... on what kind of absurd platform would they not be?
-      return t.state == XThreadPaf::WAITING;
+    // Just assume enum-sized loads are atomic... on what kind of absurd platform would they not be?
+    return control->state == XThreadPafControl::WAITING;
 #else
-      return __atomic_load_n(&t.state, __ATOMIC_RELAXED) == XThreadPaf::WAITING;
+    return __atomic_load_n(&control->state, __ATOMIC_RELAXED) == XThreadPafControl::WAITING;
 #endif
-    } else {
-      return false;
-    }
   }
 
 private:
   mutable XThreadPaf* target;  // accessed using atomic ops
+  Arc<XThreadPafControl> control;
 };
 
 template <typename T>
@@ -2111,8 +2118,10 @@ PromiseCrossThreadFulfillerPair<T> newPromiseAndCrossThreadFulfiller() {
 
 template <typename T>
 PromiseCrossThreadFulfillerPair<T> Executor::newPromiseAndCrossThreadFulfiller() const {
-  kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(new _::XThreadPafImpl<T>(addRef()));
-  auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node);
+  auto control = kj::arc<_::XThreadPafControl>();
+  kj::Own<_::XThreadPafImpl<T>, _::PromiseDisposer> node(
+      new _::XThreadPafImpl<T>(addRef(), control.addRef()));
+  auto fulfiller = kj::heap<_::XThreadFulfiller<T>>(node, kj::mv(control));
   return { _::PromiseNode::to<_::ReducePromises<T>>(kj::mv(node)), kj::mv(fulfiller) };
 }
 
