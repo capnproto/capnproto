@@ -3702,11 +3702,44 @@ KJ_TEST("Calling abortRead() after tryRead() raised exception") {
 // Test accept() behavior when connections are aborted (send RST) before being accepted.
 // Creates an aborted IPv4 connection followed by a valid one, then verifies proper handling.
 //
-// On Unix platforms, accept() typically returns the aborted connection, which fails on first
-// read (throws "Connection reset by peer" or returns 0 bytes). The test then calls accept()
-// again to get the valid connection. Some platforms may filter out aborted connections.
+// Platforms differ in what becomes of a connection that dies while queued: it may never reach
+// accept() at all, it may be reported as an error from accept() -- which the accept loop is
+// expected to retry past -- or it may be handed over as a socket that fails on first read. What
+// matters either way is that the listener survives and goes on to produce the valid connection,
+// so the test tolerates receiving the dead connection or not.
 
-#if !_WIN32
+// Open an IPv4 connection to a loopback port and immediately reset it, leaving a dead entry in
+// that listener's accept queue. SO_LINGER with a zero timeout makes close() send RST rather than
+// FIN. This works below kj::Network on purpose: the connection has to die before anything accepts
+// it, which means owning the socket's close behaviour directly.
+void connectAndReset(uint16_t port) {
+#if _WIN32
+  SOCKET s = ::socket(AF_INET, SOCK_STREAM, 0);
+  KJ_ASSERT(s != INVALID_SOCKET);
+  KJ_DEFER(::closesocket(s));
+#else
+  int s = ::socket(AF_INET, SOCK_STREAM, 0);
+  KJ_ASSERT(s >= 0);
+  KJ_DEFER(::close(s));
+#endif
+
+  struct linger lg = {1, 0};
+  sockaddr_in a {};
+  a.sin_family = AF_INET;
+  a.sin_port = htons(port);
+  a.sin_addr.s_addr = htonl(0x7f000001);
+
+#if _WIN32
+  KJ_WINSOCK(::setsockopt(s, SOL_SOCKET, SO_LINGER,
+                          reinterpret_cast<const char*>(&lg), static_cast<int>(sizeof(lg))));
+  KJ_WINSOCK(::connect(s, reinterpret_cast<sockaddr*>(&a), static_cast<int>(sizeof(a))));
+#else
+  KJ_SYSCALL(::setsockopt(s, SOL_SOCKET, SO_LINGER,
+                          reinterpret_cast<const char*>(&lg), sizeof(lg)));
+  KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
+#endif
+}
+
 KJ_TEST("accept() with aborted connection - IPv4") {
   // -- async-io boilerplate ---------------------------------------------------
   auto io = kj::setupAsyncIo();
@@ -3716,22 +3749,7 @@ KJ_TEST("accept() with aborted connection - IPv4") {
   auto listener = listenerAddr->listen();
   uint16_t port = listener->getPort();
 
-  // Create a connection that will be aborted (sends RST packet)
-  int s = ::socket(AF_INET, SOCK_STREAM, 0);
-  KJ_ASSERT(s >= 0);
-
-  // Configure socket to send RST on close instead of FIN
-  struct linger lg = {1, 0};
-  KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
-
-  sockaddr_in a {};
-  a.sin_family = AF_INET;
-  a.sin_port = htons(port);
-  a.sin_addr.s_addr = htonl(0x7f000001);
-  KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
-
-  // Close immediately to send RST packet
-  KJ_SYSCALL(::close(s));
+  connectAndReset(port);
 
   // Allow aborted connection to reach accept queue first
   io.provider->getTimer().afterDelay(20 * kj::MILLISECONDS).wait(io.waitScope);
@@ -3785,7 +3803,6 @@ KJ_TEST("accept() with aborted connection - IPv4") {
   KJ_ASSERT(amount == 5);
   KJ_ASSERT(memcmp(buffer, "hello", 5) == 0);
 }
-#endif  // !_WIN32
 
 // ---------------------------------------------------------------------------------------------
 // accept() with aborted connection - dual-stack IPv4/IPv6 listener
@@ -3793,15 +3810,10 @@ KJ_TEST("accept() with aborted connection - IPv4") {
 // Test accept() behavior with aborted cross-protocol connections on dual-stack listeners.
 // Creates an aborted IPv4 connection to an IPv6 listener, followed by a valid IPv6 connection.
 //
-// Expected behavior:
-// - Darwin/macOS: When IPv4 connects to IPv6 listener and gets aborted, accept() returns
-//   a socket with addrlen=0. KJ's accept loop detects this Darwin quirk and discards the
-//   socket automatically, so first accept() returns the valid connection.
-// - Linux/other Unix: accept() returns the aborted connection, which fails on first
-//   read (throws exception or returns 0 bytes). Test then calls accept() again for the
-//   valid connection.
-//
-// This test specifically exercises the Darwin addrlen==0 bug workaround in KJ's accept loop.
+// As above, the dead connection may or may not reach accept(), and the test tolerates either.
+// The case worth having here is Darwin: an aborted IPv4 connection to an IPv6 listener makes
+// accept() return a socket with addrlen == 0, so this exercises the workaround for that quirk in
+// KJ's accept loop.
 
 #if !_WIN32
 KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
@@ -3819,27 +3831,12 @@ KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
   auto listener = listenerAddr->listen();
   uint16_t port = listener->getPort();
 
-  // Create IPv4 connection that will be aborted (sends RST packet)
-  int s = ::socket(AF_INET, SOCK_STREAM, 0);
-  KJ_ASSERT(s >= 0);
-
-  // Configure socket to send RST on close instead of FIN
-  struct linger lg = {1, 0};
-  KJ_SYSCALL(setsockopt(s, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg)));
-
-  sockaddr_in a {};
-  a.sin_family = AF_INET;
-  a.sin_port = htons(port);
-  a.sin_addr.s_addr = htonl(0x7f000001);
-  KJ_SYSCALL(::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)));
-
-  // Close immediately to send RST packet
-  KJ_SYSCALL(::close(s));
+  // The connection that gets aborted is IPv4, reaching the listener through its IPv4 mapping.
+  connectAndReset(port);
 
   // Allow aborted connection to reach accept queue first
   io.provider->getTimer().afterDelay(20 * kj::MILLISECONDS).wait(io.waitScope);
-  
-  
+
   // Create valid IPv6 connection
   auto clientP = net.parseAddress("::1", port)
       .then([](Own<NetworkAddress> addr) { return addr->connect(); });
