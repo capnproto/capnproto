@@ -2279,6 +2279,53 @@ private:
   friend const U* _::readMaybe(const Maybe<U>& maybe);
 };
 
+template <>
+class Maybe<void> {
+  // Records whether an operation which has no result value took place.
+
+public:
+  constexpr Maybe(): hasValue(false) {}
+  constexpr Maybe(kj::None): hasValue(false) {}
+  constexpr Maybe(const Maybe&) = default;
+  constexpr Maybe& operator=(const Maybe&) = default;
+  constexpr Maybe(Maybe&& other) noexcept: hasValue(other.hasValue) {
+    other.hasValue = false;
+  }
+  constexpr Maybe& operator=(Maybe&& other) noexcept {
+    hasValue = other.hasValue;
+    other.hasValue = false;
+    return *this;
+  }
+
+  static constexpr Maybe present() {
+    Maybe result;
+    result.hasValue = true;
+    return result;
+  }
+
+  inline Maybe& operator=(kj::None) {
+    hasValue = false;
+    return *this;
+  }
+  inline bool operator==(kj::None) const { return !hasValue; }
+  inline bool operator==(const Maybe& other) const { return hasValue == other.hasValue; }
+
+  void assertSome() const & {
+    KJ_IREQUIRE(hasValue, "null Maybe<> dereference");
+  }
+  void assertSome() && {
+    KJ_IREQUIRE(hasValue, "null Maybe<> dereference");
+    hasValue = false;
+  }
+  void assertNone() const {
+    KJ_IREQUIRE(!hasValue, "expected Maybe<> to be none");
+  }
+
+private:
+  bool hasValue;
+};
+
+
 template <typename T>
 class Maybe<T&> {
 public:

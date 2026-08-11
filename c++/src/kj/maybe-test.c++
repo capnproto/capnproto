@@ -883,6 +883,46 @@ KJ_TEST("Maybe assertSome") {
 #endif
 }
 
+KJ_TEST("Maybe<void>") {
+  static_assert(sizeof(Maybe<void>) == sizeof(bool));
+
+  Maybe<void> empty;
+  empty.assertNone();
+  KJ_EXPECT(empty == kj::none);
+
+  auto present = Maybe<void>::present();
+  present.assertSome();
+  KJ_EXPECT(present != kj::none);
+  KJ_EXPECT(present == Maybe<void>::present());
+  KJ_EXPECT(present != empty);
+
+  const auto copied = present;
+  copied.assertSome();
+  present.assertSome();
+
+  auto moved = kj::mv(present);
+  moved.assertSome();
+  present.assertNone();
+
+  auto moveAssigned = Maybe<void>::present();
+  moveAssigned = kj::mv(moved);
+  moveAssigned.assertSome();
+  moved.assertNone();
+
+  kj::mv(moveAssigned).assertSome();
+  moveAssigned.assertNone();
+
+  auto reset = Maybe<void>::present();
+  reset = kj::none;
+  reset.assertNone();
+
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", empty.assertSome());
+  KJ_EXPECT_THROW_MESSAGE(
+      "expected Maybe<> to be none", Maybe<void>::present().assertNone());
+#endif
+}
+
 KJ_TEST("Maybe emplaceInit") {
   {
     Maybe<int> m;
