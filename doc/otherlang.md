@@ -16,6 +16,7 @@ project's documentation for details.
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
 * [C#](https://github.com/c80k/capnproto-dotnetcore) by [@c80k](https://github.com/c80k)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
+* [Fortran](https://github.com/HaoZeke/capnp-fortran) by [@HaoZeke](https://github.com/HaoZeke) ([docs](https://capnp-fortran.rgoswami.me/))
 * [Go](https://github.com/capnproto/go-capnp) currently maintained by [@zenhack](https://github.com/zenhack) and [@lthibault](https://github.com/lthibault)
 * [Haskell](https://github.com/zenhack/haskell-capnp) by [@zenhack](https://github.com/zenhack)
 * [JavaScript (Node.js only)](https://github.com/capnproto/node-capnp) by [@kentonv](https://github.com/kentonv)
@@ -27,8 +28,10 @@ project's documentation for details.
 
 * [C](https://github.com/opensourcerouting/c-capnproto) by [OpenSourceRouting](https://www.opensourcerouting.org/) / [@eqvinox](https://github.com/eqvinox) (originally by [@jmckaskill](https://github.com/jmckaskill)) (no longer maintained)
     * [Forked and maintained](https://gitlab.com/dkml/ext/c-capnproto) by [@jonahbeckford](https://github.com/jonahbeckford)
+    * [Forked and maintained](https://github.com/HaoZeke/c-capnproto) by [@HaoZeke](https://github.com/HaoZeke) ([docs](https://c-capnproto.rgoswami.me/))
 * [D](https://github.com/capnproto/capnproto-dlang) by [@ThomasBrixLarsen](https://github.com/ThomasBrixLarsen)
 * [Java](https://github.com/capnproto/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
+* [Janet](https://github.com/HaoZeke/capnp-janet) by [@HaoZeke](https://github.com/HaoZeke) ([docs](https://capnp-janet.rgoswami.me/))
 * [JavaScript](https://github.com/capnp-js/plugin/) by [@popham](https://github.com/popham)
 * [JavaScript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [Cloudflare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
