@@ -366,18 +366,20 @@ public:
     }
 
     auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
-    ClientHook*& slot = map.findOrCreate(&cap, [&]() -> kj::Decay<decltype(map)>::Entry {
-      return { &cap, nullptr };
-    });
-    if (slot == nullptr) {
-      auto result = ClientHook::from(
-          reverse ? policy.importExternal(Capability::Client(cap.addRef()))
-                  : policy.exportInternal(Capability::Client(cap.addRef())));
-      slot = result;
-      return result;
-    } else {
-      return slot->addRef();
+    KJ_IF_SOME(existing, map.find(&cap, [](ClientHook* existing) {
+      return existing->addRef();
+    })) {
+      return kj::mv(existing);
     }
+
+    auto result = ClientHook::from(
+        reverse ? policy.importExternal(Capability::Client(cap.addRef()))
+                : policy.exportInternal(Capability::Client(cap.addRef())));
+    map.upsert(&cap, result, [&](ClientHook*& existing, ClientHook*) {
+      // Creating the wrapper could have recursively added it to the map. Prefer that one.
+      result = existing->addRef();
+    });
+    return result;
   }
 
   static kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap, MembranePolicy& policy, bool reverse) {
@@ -396,18 +398,21 @@ public:
     }
 
     auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
-    ClientHook*& slot = map.findOrCreate(cap.get(), [&]() -> kj::Decay<decltype(map)>::Entry {
-      return { cap.get(), nullptr };
-    });
-    if (slot == nullptr) {
-      auto result = ClientHook::from(
-          reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
-                  : policy.exportInternal(Capability::Client(kj::mv(cap))));
-      slot = result;
-      return result;
-    } else {
-      return slot->addRef();
+    auto key = cap.get();
+    KJ_IF_SOME(existing, map.find(key, [](ClientHook* existing) {
+      return existing->addRef();
+    })) {
+      return kj::mv(existing);
     }
+
+    auto result = ClientHook::from(
+        reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
+                : policy.exportInternal(Capability::Client(kj::mv(cap))));
+    map.upsert(key, result, [&](ClientHook*& existing, ClientHook*) {
+      // Creating the wrapper could have recursively added it to the map. Prefer that one.
+      result = existing->addRef();
+    });
+    return result;
   }
 
   Request<AnyPointer, AnyPointer> newCall(

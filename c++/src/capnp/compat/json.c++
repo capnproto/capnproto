@@ -1447,27 +1447,29 @@ private:
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
       StructSchema schema, kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
       kj::Maybe<kj::StringPtr> unionDeclName, kj::Vector<Schema>& dependencies) {
-  auto& entry = impl->annotatedHandlers.upsert(schema, kj::none,
-      [&](kj::Maybe<kj::Own<AnnotatedHandler>>& existing, auto dummy) {
-    KJ_ASSERT(existing != kj::none,
+  auto existing = impl->annotatedHandlers.upsert(schema, kj::none,
+      [&](kj::Maybe<kj::Own<AnnotatedHandler>>& value, auto dummy) {
+    KJ_ASSERT(value != kj::none,
         "cyclic JSON flattening detected", schema.getProto().getDisplayName());
+  }, [](auto& value) {
+    return value.map([](auto& handler) -> AnnotatedHandler& { return *handler; });
   });
 
-  KJ_IF_SOME(v, entry.value) {
-    // Already exists.
-    return *v;
-  } else {
-    // Not seen before.
-    auto newHandler = kj::heap<AnnotatedHandler>(
-          *this, schema, discriminator, unionDeclName, dependencies);
-    auto& result = *newHandler;
+  KJ_IF_SOME(handler, existing) {
+    return handler;
+  }
 
-    // Map may have changed, so we have to look up again.
-    KJ_ASSERT_NONNULL(impl->annotatedHandlers.find(schema)) = kj::mv(newHandler);
+  auto newHandler = kj::heap<AnnotatedHandler>(
+        *this, schema, discriminator, unionDeclName, dependencies);
+  auto& result = *newHandler;
 
-    addTypeHandler(schema, result);
-    return result;
-  };
+  // Constructing the handler may have rehashed the map, so look up its placeholder again.
+  impl->annotatedHandlers.find(schema, [&](auto& entry) {
+    entry = kj::mv(newHandler);
+  }).assertSome();
+
+  addTypeHandler(schema, result);
+  return result;
 }
 
 void JsonCodec::handleByAnnotation(Schema schema) {
