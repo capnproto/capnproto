@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "vector.h"
+#include <kj/vector.h>
 #include "async-io.h"
 #include <stdint.h>
 #include "cidr.h"

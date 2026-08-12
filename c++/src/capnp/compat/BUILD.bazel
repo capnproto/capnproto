@@ -6,6 +6,8 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 exports_files([
     "json.capnp",
     "std-iterator.h",
+    "byte-stream.capnp",
+    "http-over-capnp.capnp",
 ])
 
 # because git contains generated artifacts (which are used to bootstrap the compiler)

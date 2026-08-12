@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "async.h"
+#include <kj/async.h>
 #include <kj/function.h>
 #include <kj/thread.h>
 #include <kj/timer.h>

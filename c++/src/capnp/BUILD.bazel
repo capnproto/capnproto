@@ -8,6 +8,7 @@ capnp_configure()
 
 exports_files([
     "c++.capnp",
+    "rpc.capnp",
 ])
 
 cc_library(
@@ -66,7 +67,8 @@ cc_library(
     include_prefix = "capnp",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/kj:kj-async",
+        "//src/kj:kj-async-core",
+        "//src/kj:kj-async-io",
     ],
 )
 
@@ -129,6 +131,10 @@ cc_library(
         "compiler/type-id.h",
     ],
     include_prefix = "capnp",
+    linkopts = select({
+        "@platforms//os:windows": ["Advapi32.lib"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":capnp",
@@ -229,6 +235,7 @@ cc_library(
         ":capnp-rpc",
         ":capnp_test",
         ":capnpc",
+        "//src/kj:kj-async-os",
         "//src/kj:kj-test",
     ],
 )
