@@ -1,0 +1,25 @@
+c++/src/kj/async-win32.h
+  s_0117a4430d1788::t_2096ca00017295 32-34
+c++/src/kj/async-io.h
+  s_0117a4430d1788::t_386edc95e865d6 24
+c++/src/kj/async-unix.h
+  s_0117a4430d1788::t_39c987314e3ce0 28-29
+c++/src/kj/async-io-internal.h
+  s_0117a4430d1788::t_94208c0647f168 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bc8f35f13cf71e09ffb56847d0b22f84dd380c67",
+  "prompts": {},
+  "sessions": {
+    "s_0117a4430d1788": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a8d17eca47bfae113",
+        "model": "unknown"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}
