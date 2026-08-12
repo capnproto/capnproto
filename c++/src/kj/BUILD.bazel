@@ -88,13 +88,71 @@ cc_library(
 )
 
 cc_library(
-    name = "kj-async",
+    name = "kj-async-core",
     srcs = [
         "async.c++",
+        "timer.c++",
+    ],
+    hdrs = [
+        "async.h",
+        "async-coroutine-alloc.h",
+        "async-inl.h",
+        "async-prelude.h",
+        "async-queue.h",
+        "timer.h",
+    ],
+    # Disable header parsing based on async-inl.h
+    features = ["-parse_headers"],
+    include_prefix = "kj",
+    visibility = ["//visibility:public"],
+    deps = [":kj"],
+)
+
+cc_library(
+    name = "kj-async-io",
+    srcs = [
         "async-io.c++",
         "cidr.c++",
-        "timer.c++",
-    ] + select({
+    ],
+    hdrs = [
+        "async-io.h",
+        "async-io-internal.h",
+        "cidr.h",
+    ],
+    # Disable header parsing based on async-inl.h
+    features = ["-parse_headers"],
+    include_prefix = "kj",
+    # async-io.c++ / cidr.c++ use winsock (socket(), inet_pton) for address parsing on Windows.
+    linkopts = select({
+        "@platforms//os:windows": ["Ws2_32.lib"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":kj",
+        ":kj-async-core",
+    ],
+)
+
+cc_library(
+    name = "kj-async-os-hdrs",
+    hdrs = select({
+        "@platforms//os:windows": ["async-win32.h"],
+        "//conditions:default": ["async-unix.h"],
+    }),
+    features = ["-parse_headers"],
+    include_prefix = "kj",
+    visibility = ["//visibility:public"],
+    deps = [
+        # async-unix.h includes async.h and timer.h; async-win32.h additionally includes io.h.
+        ":kj",
+        ":kj-async-core",
+    ],
+)
+
+cc_library(
+    name = "kj-async-os",
+    srcs = select({
         "@platforms//os:windows": [
             "async-io-win32.c++",
             "async-win32.c++",
@@ -104,23 +162,6 @@ cc_library(
             "async-unix.c++",
         ],
     }),
-    hdrs = [
-        "async.h",
-        "async-coroutine-alloc.h",
-        "async-inl.h",
-        "async-io.h",
-        "async-io-internal.h",
-        "async-prelude.h",
-        "async-queue.h",
-        "cidr.h",
-        "timer.h",
-    ] + select({
-        "@platforms//os:windows": ["async-win32.h"],
-        "//conditions:default": ["async-unix.h"],
-    }),
-    # Disable header parsing based on async-inl.h
-    features = ["-parse_headers"],
-    include_prefix = "kj",
     linkopts = select({
         "@platforms//os:windows": [
             "Ws2_32.lib",
@@ -129,7 +170,22 @@ cc_library(
         "//conditions:default": [],
     }),
     visibility = ["//visibility:public"],
-    deps = [":kj"],
+    deps = [
+        ":kj",
+        ":kj-async-core",
+        ":kj-async-io",
+        ":kj-async-os-hdrs",
+    ],
+)
+
+cc_library(
+    name = "kj-async",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":kj-async-core",
+        ":kj-async-io",
+        ":kj-async-os",
+    ],
 )
 
 cc_library(
@@ -194,6 +250,7 @@ cc_test(
     srcs = ["async-coroutine-test.c++"],
     deps = [
         ":kj-test",
+        "//src/kj:kj-async-os",
         "//src/kj/compat:kj-http",
     ],
 )

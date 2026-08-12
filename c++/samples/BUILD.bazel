@@ -29,6 +29,7 @@ cc_binary(
     deps = [
         ":calculator_capnp",
         "@capnp-cpp//src/capnp:capnp-rpc",
+        "@capnp-cpp//src/kj:kj-async-os",
     ],
 )
 
@@ -38,5 +39,6 @@ cc_binary(
     deps = [
         ":calculator_capnp",
         "@capnp-cpp//src/capnp:capnp-rpc",
+        "@capnp-cpp//src/kj:kj-async-os",
     ],
 )

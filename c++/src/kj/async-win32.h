@@ -29,9 +29,9 @@
 // #include windows.h yourself before including this header.)
 #include <kj/win32-api-version.h>
 
-#include "async.h"
-#include "timer.h"
-#include "io.h"
+#include <kj/async.h>
+#include <kj/timer.h>
+#include <kj/io.h>
 #include <atomic>
 #include <inttypes.h>
 
