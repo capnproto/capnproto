@@ -22,6 +22,7 @@
 #pragma once
 
 #include "memory.h"
+#include "atomic.h"
 #include <inttypes.h>
 #include "time.h"
 #include "source-location.h"
@@ -185,9 +186,9 @@ public:
   inline bool isInitialized() noexcept {
     // Fast path check to see if runOnce() would simply return immediately.
 #if KJ_USE_FUTEX
-    return __atomic_load_n(&futex, __ATOMIC_ACQUIRE) == INITIALIZED;
+    return kj::atomicLoad(&futex, kj::AtomicMemoryOrder::ACQUIRE) == INITIALIZED;
 #else
-    return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == INITIALIZED;
+    return kj::atomicLoad(&state, kj::AtomicMemoryOrder::ACQUIRE) == INITIALIZED;
 #endif
   }
 #endif

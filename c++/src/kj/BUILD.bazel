@@ -37,6 +37,7 @@ cc_library(
     hdrs = [
         "arena.h",
         "array.h",
+        "atomic.h",
         "common.h",
         "debug.h",
         "encoding.h",

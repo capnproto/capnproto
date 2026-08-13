@@ -36,6 +36,7 @@
 #endif
 
 #include <kj/list.h>
+#include <kj/atomic.h>
 
 KJ_BEGIN_HEADER
 
@@ -2086,12 +2087,8 @@ public:
     }
   }
   bool isWaiting() const override {
-#if _MSC_VER && !__clang__
-    // Just assume enum-sized loads are atomic... on what kind of absurd platform would they not be?
-    return control->state == XThreadPafControl::WAITING;
-#else
-    return __atomic_load_n(&control->state, __ATOMIC_RELAXED) == XThreadPafControl::WAITING;
-#endif
+    return kj::atomicLoad(&control->state, kj::AtomicMemoryOrder::RELAXED) ==
+        XThreadPafControl::WAITING;
   }
 
 private:

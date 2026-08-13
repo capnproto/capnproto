@@ -40,6 +40,7 @@ endif()
 set(kj_headers
   common.h
   units.h
+  atomic.h
   memory.h
   refcount.h
   array.h

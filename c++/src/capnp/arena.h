@@ -26,6 +26,7 @@
 #endif
 
 #include <kj/common.h>
+#include <kj/atomic.h>
 #include <kj/mutex.h>
 #include <kj/exception.h>
 #include <kj/vector.h>
@@ -102,19 +103,11 @@ private:
   KJ_DISALLOW_COPY_AND_MOVE(ReadLimiter);
 
   KJ_ALWAYS_INLINE(void setLimit(uint64_t newLimit)) {
-#if defined(__GNUC__) || defined(__clang__)
-    __atomic_store_n(&limit, newLimit, __ATOMIC_RELAXED);
-#else
-    limit = newLimit;
-#endif
+    kj::atomicStore(&limit, newLimit, kj::AtomicMemoryOrder::RELAXED);
   }
 
   KJ_ALWAYS_INLINE(uint64_t readLimit() const) {
-#if defined(__GNUC__) || defined(__clang__)
-    return __atomic_load_n(&limit, __ATOMIC_RELAXED);
-#else
-    return limit;
-#endif
+    return kj::atomicLoad(&limit, kj::AtomicMemoryOrder::RELAXED);
   }
 };
 

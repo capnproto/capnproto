@@ -22,10 +22,7 @@
 #pragma once
 
 #include "memory.h"
-
-#if _MSC_VER && !defined(__clang__)
-#include <intrin0.h> // _InterlockedXX
-#endif
+#include "atomic.h"
 
 KJ_BEGIN_HEADER
 
@@ -634,14 +631,6 @@ Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
 //
 // Warning: Atomic ops are SLOW.
 
-#if _MSC_VER && !defined(__clang__)
-#if _M_ARM
-#define KJ_MSVC_INTERLOCKED(OP, MEM) _Interlocked##OP##_##MEM
-#else
-#define KJ_MSVC_INTERLOCKED(OP, MEM) _Interlocked##OP
-#endif
-#endif
-
 template<typename T>
 class Arc;
 
@@ -662,11 +651,7 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(AtomicRefcounted);
 
   inline bool isShared() const {
-#if _MSC_VER && !defined(__clang__)
-    return KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 1;
-#else
-    return __atomic_load_n(&refcount, __ATOMIC_ACQUIRE) > 1;
-#endif
+    return kj::atomicLoad(&refcount, kj::AtomicMemoryOrder::ACQUIRE) > 1;
   }
 
 protected:
@@ -675,20 +660,12 @@ protected:
   }
 
 private:
-#if _MSC_VER && !defined(__clang__)
-  mutable volatile long refcount = 0;
-#else
   mutable volatile uint refcount = 0;
-#endif
 
   bool addRefWeakInternal() const;
 
   inline void incRefcount() const {
-#if _MSC_VER && !defined(__clang__)
-    KJ_MSVC_INTERLOCKED(Increment, nf)(&refcount);
-#else
-    __atomic_add_fetch(&refcount, 1, __ATOMIC_RELAXED);
-#endif
+    kj::atomicAddFetch(&refcount, 1, kj::AtomicMemoryOrder::RELAXED);
   }
 
   void disposeImpl(void* pointer) const override;
