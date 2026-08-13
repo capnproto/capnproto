@@ -1018,6 +1018,25 @@ KJ_TEST("cross-thread fulfiller canceled") {
   })();
 }
 
+KJ_TEST("cross-thread fulfiller takes ownership after cancellation") {
+  KJ_XTHREAD_TEST_SETUP_LOOP;
+
+  auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+  auto* fulfiller = paf.fulfiller.get();
+
+  // The relaxed isWaiting() load deliberately does not establish a happens-before edge. The
+  // CANCELED transition itself must publish the waiting thread's prior access to the promise node
+  // before the fulfilling thread takes ownership and deletes it.
+  kj::Thread thread([&]() noexcept {
+    while (fulfiller->isWaiting()) {
+      std::this_thread::yield();
+    }
+    fulfiller->fulfill();
+  });
+
+  paf.promise = nullptr;
+}
+
 KJ_TEST("cross-thread fulfiller isWaiting concurrent with cancellation") {
   // `isWaiting()` is documented as a cross-thread operation. Race it against the ownership
   // transfer which follows cancellation: the fulfiller observes CANCELED and deletes its target.

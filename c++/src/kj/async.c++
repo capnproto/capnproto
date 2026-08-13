@@ -114,6 +114,7 @@ static std::atomic<T>* reinterpretAtomic(T* ptr) { return reinterpret_cast<std::
 #define __ATOMIC_RELAXED std::memory_order_relaxed
 #define __ATOMIC_ACQUIRE std::memory_order_acquire
 #define __ATOMIC_RELEASE std::memory_order_release
+#define __ATOMIC_ACQ_REL std::memory_order_acq_rel
 #endif
 
 namespace kj {
@@ -1160,9 +1161,11 @@ void XThreadPaf::destroy() {
     delete this;
   } else if (__atomic_compare_exchange_n(
                  &control->state, &oldState, XThreadPafControl::CANCELED, false,
-                 __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+                 __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
     // State transitioned from WAITING to CANCELED, so now it's the fulfiller's job to destroy the
-    // object.
+    // object. The successful CAS must have release semantics, not merely acquire semantics: this
+    // publishes this thread's preceding accesses to the object (including the virtual destroy()
+    // dispatch) before the fulfiller observes CANCELED and deletes the object.
   } else {
     // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
     // wait for it to finish and transition the state to FULFILLED.
