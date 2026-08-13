@@ -22,7 +22,11 @@
 #include "refcount.h"
 #include "array.h"
 #include "string.h"
+#include "thread.h"
 #include <kj/compat/gtest.h>
+
+#include <atomic>
+#include <thread>
 
 namespace kj {
 
@@ -1154,6 +1158,48 @@ KJ_TEST("Arc inheritance") {
   EXPECT_FALSE(b);
   down = nullptr;
   EXPECT_TRUE(b);
+}
+
+KJ_TEST("atomicAddRef is safe under concurrent reference-count changes") {
+  bool destroyed = false;
+  auto owner = kj::atomicRefcounted<AtomicSetTrueInDestructor>(&destroyed);
+  auto* object = owner.get();
+  std::atomic<bool> start(false);
+
+  auto addRefs = [&]() noexcept {
+    while (!start.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    for (uint i = 0; i < 1000; ++i) {
+      auto ref = kj::atomicAddRef(*object);
+    }
+  };
+
+  kj::Thread thread1(addRefs);
+  kj::Thread thread2(addRefs);
+  start.store(true, std::memory_order_release);
+}
+
+KJ_TEST("Arc concurrent final release is synchronized") {
+  bool destroyed = false;
+  auto ref1 = kj::arc<AtomicSetTrueInDestructor>(&destroyed);
+  auto ref2 = ref1.addRef();
+  std::atomic<bool> start(false);
+
+  kj::Thread thread1([ref = kj::mv(ref1), &start]() mutable noexcept {
+    while (!start.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    ref = nullptr;
+  });
+  kj::Thread thread2([ref = kj::mv(ref2), &start]() mutable noexcept {
+    while (!start.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    ref = nullptr;
+  });
+
+  start.store(true, std::memory_order_release);
 }
 
 KJ_TEST("AtomicRefcounted::addRefToThis") {
