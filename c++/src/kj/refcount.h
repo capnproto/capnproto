@@ -313,6 +313,23 @@ public:
     return addRef();
   }
 
+  // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
+  // is no need for the caller to prove they know how to dispose of the object, because the object
+  // is its own Disposer.
+  T* disown() {
+    static_assert(canConvert<T*, Refcounted*>());
+    T* result = ptr;
+    refcounted = nullptr;
+    ptr = nullptr;
+    return result;
+  }
+
+  // Assume ownership of an object without incrementing its refcount. Opposite of disown().
+  static Rc reown(T* ptr) {
+    static_assert(canConvert<T*, Refcounted*>());
+    return Rc(static_cast<Refcounted*>(ptr), ptr);
+  }
+
   WeakRc<T> downgrade();
   // Create a weak reference to the referent. The weak reference does not keep the object alive;
   // it expires once the last strong Rc<T> is dropped, but can be upgraded back to an Rc<T> while
