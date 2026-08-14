@@ -287,6 +287,24 @@ KJ_TEST("Rc Own interop") {
     EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc disown / reown") {
+  bool b = false;
+  SetTrueInDestructor* ptr = nullptr;
+
+  {
+    Rc<SetTrueInDestructor> ref = kj::rc<SetTrueInDestructor>(&b);
+    ptr = ref.disown();
+  }
+
+  KJ_EXPECT(b == false);
+
+  {
+    auto ref = kj::Rc<SetTrueInDestructor>::reown(ptr);
+  }
+
+  KJ_EXPECT(b == true);
+}
+
 KJ_TEST("Rc wraps Own of refcounted types") {
   bool b = false;
 
