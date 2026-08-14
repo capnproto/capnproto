@@ -919,7 +919,9 @@ void XThreadEvent::ensureDoneOrCanceled() {
     } else {
       // Target event loop is already dead, so we know it's already working on transitioning all
       // events to the DONE state. We can just wait.
-      lock.wait([&](auto&) { return state == DONE; });
+      lock.wait([&](auto&) {
+        return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == DONE;
+      });
       return;
     }
 
@@ -974,7 +976,7 @@ void XThreadEvent::ensureDoneOrCanceled() {
             // after this scope.
           });
 
-          while (state != DONE) {
+          while (__atomic_load_n(&state, __ATOMIC_ACQUIRE) != DONE) {
             bool otherThreadIsWaiting = lock->waitingForCancel;
 
             // Make sure our waitingForCancel is on and dispatch any pending cancellations on this
@@ -1013,7 +1015,8 @@ void XThreadEvent::ensureDoneOrCanceled() {
             // OK, now we can wait for the other thread to either process our cancellation or
             // indicate that it is waiting for remote cancellation.
             lock.wait([&](const Executor::Impl::State& executorState) {
-              return state == DONE || executorState.waitingForCancel;
+              return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == DONE ||
+                  executorState.waitingForCancel;
             });
           }
         } else {
@@ -1022,7 +1025,9 @@ void XThreadEvent::ensureDoneOrCanceled() {
           //
           // NOTE: I don't think we can actually get here, because it implies that this is a
           //   synchronous execution, which means there's no way to cancel it.
-          lock.wait([&](auto&) { return state == DONE; });
+          lock.wait([&](auto&) {
+            return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == DONE;
+          });
         }
         KJ_DASSERT(!targetLink.isLinked());
         break;
