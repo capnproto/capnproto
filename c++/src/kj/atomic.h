@@ -27,6 +27,10 @@
 #include <atomic>
 #endif
 
+#if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
+#include <sanitizer/tsan_interface.h>
+#endif
+
 KJ_BEGIN_HEADER
 
 namespace kj {
@@ -150,11 +154,33 @@ inline T atomicFetchAnd(volatile T* ptr, U value, AtomicMemoryOrder order) {
 #endif
 }
 
-inline void atomicThreadFence(AtomicMemoryOrder order) {
+template <typename T>
+inline void atomicThreadFence(
+    const volatile T* syncAddress KJ_UNUSED, AtomicMemoryOrder order) {
 #if _MSC_VER && !defined(__clang__)
   std::atomic_thread_fence(_::toStdMemoryOrder(order));
 #else
   __atomic_thread_fence(_::toGnuMemoryOrder(order));
+#endif
+
+#if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
+  // TSan does not model standalone fences, so describe the fence's synchronization explicitly:
+  // https://github.com/llvm/llvm-project/blob/6fd0aae1d6f59bf0b0b1fdbdbf217ccb6662d32c/compiler-rt/lib/tsan/rtl/tsan_interface_atomic.cpp#L489-L495
+  switch (order) {
+    case AtomicMemoryOrder::RELAXED:
+      break;
+    case AtomicMemoryOrder::ACQUIRE:
+      __tsan_acquire(const_cast<T*>(syncAddress));
+      break;
+    case AtomicMemoryOrder::RELEASE:
+      __tsan_release(const_cast<T*>(syncAddress));
+      break;
+    case AtomicMemoryOrder::ACQUIRE_RELEASE:
+    case AtomicMemoryOrder::SEQUENTIAL:
+      __tsan_release(const_cast<T*>(syncAddress));
+      __tsan_acquire(const_cast<T*>(syncAddress));
+      break;
+  }
 #endif
 }
 
