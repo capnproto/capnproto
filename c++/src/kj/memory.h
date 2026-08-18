@@ -249,6 +249,18 @@ protected:
     return Weak<Self>(&self, asPtrTarget(self));
   }
 
+  inline void invalidateWeak() {
+    // Permanently invalidate weak pointers to this object. Derived class destructors can call this
+    // before tearing down state that may otherwise be accessed while the rest of the object is
+    // destroyed.
+    if (weakCell == nullptr) {
+      weakCell = new _::WeakCell(nullptr, nullptr);
+    } else {
+      weakCell->ptr = nullptr;
+      weakCell->target = nullptr;
+    }
+  }
+
 private:
   template <typename Self>
   static inline PtrTarget* asPtrTarget(Self& self) {
