@@ -775,7 +775,8 @@ struct Executor::Impl {
 
       for (auto& event: fulfilled) {
         fulfilled.remove(event);
-        event.control->state = _::XThreadPafControl::DISPATCHED;
+        kj::atomicStore(&event.control->state, _::XThreadPafControl::DISPATCHED,
+            kj::AtomicMemoryOrder::RELEASE);
         event.onReadyEvent.armBreadthFirst();
       }
     }
@@ -870,7 +871,8 @@ struct Executor::Impl {
       KJ_LOG(ERROR, "EventLoop destroyed with cross-thread fulfiller replies outstanding");
       for (auto& event: s.fulfilled) {
         s.fulfilled.remove(event);
-        event.control->state = _::XThreadPafControl::DISPATCHED;
+        kj::atomicStore(&event.control->state, _::XThreadPafControl::DISPATCHED,
+            kj::AtomicMemoryOrder::RELEASE);
       }
     }
   }};
@@ -1155,10 +1157,11 @@ void XThreadPaf::destroy() {
     // Whoops, another thread is already in the process of fulfilling this promise. We'll have to
     // wait for it to finish and transition the state to FULFILLED.
     executor->impl->state.when([&](auto&) {
-      return control->state == XThreadPafControl::FULFILLED ||
-          control->state == XThreadPafControl::DISPATCHED;
+      auto state = kj::atomicLoad(&control->state, kj::AtomicMemoryOrder::ACQUIRE);
+      return state == XThreadPafControl::FULFILLED || state == XThreadPafControl::DISPATCHED;
     }, [&](Executor::Impl::State& exState) {
-      if (control->state == XThreadPafControl::FULFILLED) {
+      if (kj::atomicLoad(&control->state, kj::AtomicMemoryOrder::ACQUIRE) ==
+          XThreadPafControl::FULFILLED) {
         // The object is on the queue but was not yet dispatched. Remove it.
         exState.fulfilled.remove(*this);
       }

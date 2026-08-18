@@ -1091,6 +1091,36 @@ KJ_TEST("cross-thread fulfiller isWaiting concurrent with cancellation") {
   stop.store(true, std::memory_order_release);
 }
 
+KJ_TEST("cross-thread fulfiller isWaiting after cross-thread dispatch") {
+  KJ_XTHREAD_TEST_SETUP_LOOP;
+
+  auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
+  auto* fulfiller = paf.fulfiller.get();
+
+  // Coordinate using relaxed atomics so that observing `dispatched` does not itself establish a
+  // happens-before edge. isWaiting() is a cross-thread operation, so it must be safe even after
+  // the event loop has changed the promise's state to DISPATCHED.
+  std::atomic<bool> dispatched(false);
+  std::atomic<bool> checked(false);
+  Thread observer([&]() noexcept {
+    while (!dispatched.load(std::memory_order_relaxed)) {
+      std::this_thread::yield();
+    }
+    KJ_EXPECT(!fulfiller->isWaiting());
+    checked.store(true, std::memory_order_relaxed);
+  });
+
+  Thread fulfillThread([&]() noexcept {
+    fulfiller->fulfill();
+  });
+  paf.promise.wait(waitScope);
+
+  dispatched.store(true, std::memory_order_relaxed);
+  while (!checked.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+  }
+}
+
 KJ_TEST("cross-thread fulfiller multiple fulfills") {
   MutexGuarded<Maybe<Own<PromiseFulfiller<int>>>> fulfillerMutex;
 
