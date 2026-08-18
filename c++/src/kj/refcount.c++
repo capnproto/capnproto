@@ -28,7 +28,21 @@ namespace kj {
 // Non-atomic (thread-unsafe) refcounting
 
 Refcounted::~Refcounted() noexcept(false) {
-  KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
+  // A Refcounted object is born with a refcount of 1, so if a subclass constructor throws, the
+  // object is destroyed while refcount is still non-zero. Any weak references created and
+  // published by the constructor must observe that the referent has expired, just as they do when
+  // the last strong reference is dropped normally.
+  if (refcount != 0 && weakCell != nullptr) {
+    weakCell->refcounted = nullptr;
+    weakCell->decRef();
+    weakCell = nullptr;
+  }
+
+  // Suppress the assertion when we're unwinding due to a constructor exception. This is a
+  // debug-only assertion so that release builds do not do expensive unwinding checks.
+  KJ_DASSERT(refcount == 0 || UnwindDetector::uncaughtExceptionCount() > 0,
+      "Refcounted object deleted with non-zero refcount; it appears to have "
+      "been allocated without using kj::rc.");
 }
 
 void Refcounted::disposeImpl(void* pointer) const {

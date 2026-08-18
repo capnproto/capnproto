@@ -117,7 +117,11 @@ protected:
   }
 
 private:
-  mutable uint refcount = 0;
+  mutable uint refcount = 1;
+  // A Refcounted object is born with a reference count of 1: it always comes into existence owned
+  // by exactly one strong reference (the Own<T>/Rc<T> returned by kj::refcounted()/kj::rc()). This
+  // means the object is in a valid, fully-counted state throughout its constructor, so addRefToThis()
+  // and addWeakToThis() may be called from within the constructor.
   // "mutable" because disposeImpl() is const.  Bleh.
 
   mutable _::RcWeakCell* weakCell = nullptr;
@@ -169,8 +173,8 @@ template <typename T, typename... Params>
 inline Own<T> refcounted(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.  Returns an
   // initial reference to the object.  More references can be created with `kj::addRef()`.
-
-  return Refcounted::addRefInternal(new T(kj::fwd<Params>(params)...));
+  T* object = new T(kj::fwd<Params>(params)...);
+  return Own<T>(object, *static_cast<Refcounted*>(object));
 }
 
 template <typename T>
@@ -204,7 +208,7 @@ template <typename T>
 class RcWrapper final: public Refcounted {
 public:
   template <typename... Params>
-  explicit RcWrapper(Params &&...params) : wrapped(kj::fwd<Params>(params)...) { ++refcount; }
+  explicit RcWrapper(Params &&...params) : wrapped(kj::fwd<Params>(params)...) {}
   T* getWrappedPtr() { return &wrapped; }
   const T *getWrappedPtr() const { return &wrapped; }
 
@@ -215,7 +219,7 @@ private:
 template <typename T>
 class RcOwnWrapper final: public Refcounted {
 public:
-  explicit RcOwnWrapper(Own<T> &&wrapped) : wrapped(kj::mv(wrapped)) { ++refcount; }
+  explicit RcOwnWrapper(Own<T> &&wrapped) : wrapped(kj::mv(wrapped)) {}
   T* getWrappedPtr() { return wrapped.get(); }
   const T *getWrappedPtr() const { return wrapped.get(); }
 
@@ -399,7 +403,8 @@ inline Rc<T> rc(Params&&... params) {
   // Returns smart pointer that can be used to manage references.
 
   if constexpr (canConvert<T*, Refcounted*>()) {
-    return Refcounted::addRcRefInternal(new T(fwd<Params>(params)...));
+    T* object = new T(fwd<Params>(params)...);
+    return Rc<T>(static_cast<Refcounted*>(object), object);
   } else {
     auto wrapper = new _::RcWrapper<T>(fwd<Params>(params)...);
     return Rc<T>(wrapper, wrapper->getWrappedPtr());
