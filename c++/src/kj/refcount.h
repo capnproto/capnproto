@@ -664,6 +664,10 @@ private:
 
   bool addRefWeakInternal() const;
 
+  inline bool hasRefs() const {
+    return kj::atomicLoad(&refcount, kj::AtomicMemoryOrder::RELAXED) > 0;
+  }
+
   inline void incRefcount() const {
     kj::atomicAddFetch(&refcount, 1, kj::AtomicMemoryOrder::RELAXED);
   }
@@ -701,14 +705,14 @@ inline kj::Own<T> atomicRefcounted(Params&&... params) {
 
 template <typename T>
 kj::Own<T> atomicAddRef(T& object) {
-  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
+  KJ_IREQUIRE(object.AtomicRefcounted::hasRefs(),
       "Object not allocated with kj::atomicRefcounted().");
   return AtomicRefcounted::addRefInternal(&object);
 }
 
 template <typename T>
 kj::Own<const T> atomicAddRef(const T& object) {
-  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
+  KJ_IREQUIRE(object.AtomicRefcounted::hasRefs(),
       "Object not allocated with kj::atomicRefcounted().");
   return AtomicRefcounted::addRefInternal(&object);
 }
