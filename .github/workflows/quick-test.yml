@@ -110,8 +110,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [20]
-        config: [asan, ubsan]
+        clang: [22]
+        config: [asan, ubsan, tsan]
     steps:
       - uses: actions/checkout@v7
       - name: install dependencies
