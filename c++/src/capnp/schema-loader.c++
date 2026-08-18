@@ -24,16 +24,13 @@
 #include "message.h"
 #include "arena.h"
 #include <kj/debug.h>
+#include <kj/atomic.h>
 #include <kj/exception.h>
 #include <kj/arena.h>
 #include <kj/vector.h>
 #include <algorithm>
 #include <kj/map.h>
 #include <capnp/stream.capnp.h>
-
-#if _MSC_VER && !defined(__clang__)
-#include <atomic>
-#endif
 
 namespace capnp {
 
@@ -1297,17 +1294,8 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
-#if __GNUC__ || defined(__clang__)
-    __atomic_store_n(&schema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
-    __atomic_store_n(&schema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
-#elif _MSC_VER
-    std::atomic_thread_fence(std::memory_order_release);
-    *static_cast<_::RawSchema::Initializer const* volatile*>(&schema->lazyInitializer) = nullptr;
-    *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
-        &schema->defaultBrand.lazyInitializer) = nullptr;
-#else
-#error "Platform not supported"
-#endif
+    kj::atomicStore(&schema->lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
+    kj::atomicStore(&schema->defaultBrand.lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
   }
 
   return schema;
@@ -1394,17 +1382,8 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
-#if __GNUC__ || defined(__clang__)
-    __atomic_store_n(&schema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
-    __atomic_store_n(&schema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
-#elif _MSC_VER
-    std::atomic_thread_fence(std::memory_order_release);
-    *static_cast<_::RawSchema::Initializer const* volatile*>(&schema->lazyInitializer) = nullptr;
-    *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
-        &schema->defaultBrand.lazyInitializer) = nullptr;
-#else
-#error "Platform not supported"
-#endif
+    kj::atomicStore(&schema->lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
+    kj::atomicStore(&schema->defaultBrand.lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
   }
 
   return schema;
@@ -2080,18 +2059,8 @@ void SchemaLoader::InitializerImpl::init(const _::RawSchema* schema) const {
               "A schema not belonging to this loader used its initializer.");
 
     // Disable the initializer.
-#if __GNUC__ || defined(__clang__)
-    __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
-    __atomic_store_n(&mutableSchema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
-#elif _MSC_VER
-    std::atomic_thread_fence(std::memory_order_release);
-    *static_cast<_::RawSchema::Initializer const* volatile*>(
-        &mutableSchema->lazyInitializer) = nullptr;
-    *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
-        &mutableSchema->defaultBrand.lazyInitializer) = nullptr;
-#else
-#error "Platform not supported"
-#endif
+    kj::atomicStore(&mutableSchema->lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
+    kj::atomicStore(&mutableSchema->defaultBrand.lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
   }
 }
 
@@ -2117,15 +2086,7 @@ void SchemaLoader::BrandedInitializerImpl::init(const _::RawBrandedSchema* schem
   mutableSchema->dependencyCount = deps.size();
 
   // It's initialized now, so disable the initializer.
-#if __GNUC__ || defined(__clang__)
-  __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
-#elif _MSC_VER
-  std::atomic_thread_fence(std::memory_order_release);
-  *static_cast<_::RawBrandedSchema::Initializer const* volatile*>(
-      &mutableSchema->lazyInitializer) = nullptr;
-#else
-#error "Platform not supported"
-#endif
+  kj::atomicStore(&mutableSchema->lazyInitializer, nullptr, kj::AtomicMemoryOrder::RELEASE);
 }
 
 // =======================================================================================

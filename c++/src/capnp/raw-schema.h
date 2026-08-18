@@ -22,10 +22,7 @@
 #pragma once
 
 #include "common.h"  // for uint and friends
-
-#if _MSC_VER && !defined(__clang__)
-#include <atomic>
-#endif
+#include <kj/atomic.h>
 
 CAPNP_BEGIN_HEADER
 
@@ -145,14 +142,7 @@ struct RawBrandedSchema {
     // is required in particular when traversing the dependency list.  RawSchemas for compiled-in
     // types are always initialized; only dynamically-loaded schemas may be lazy.
 
-#if __GNUC__ || defined(__clang__)
-    const Initializer* i = __atomic_load_n(&lazyInitializer, __ATOMIC_ACQUIRE);
-#elif _MSC_VER
-    const Initializer* i = *static_cast<Initializer const* const volatile*>(&lazyInitializer);
-    std::atomic_thread_fence(std::memory_order_acquire);
-#else
-#error "Platform not supported"
-#endif
+    const Initializer* i = kj::atomicLoad(&lazyInitializer, kj::AtomicMemoryOrder::ACQUIRE);
     if (i != nullptr) i->init(this);
   }
 
@@ -211,14 +201,7 @@ struct RawSchema {
     // is required in particular when traversing the dependency list.  RawSchemas for compiled-in
     // types are always initialized; only dynamically-loaded schemas may be lazy.
 
-#if __GNUC__ || defined(__clang__)
-    const Initializer* i = __atomic_load_n(&lazyInitializer, __ATOMIC_ACQUIRE);
-#elif _MSC_VER
-    const Initializer* i = *static_cast<Initializer const* const volatile*>(&lazyInitializer);
-    std::atomic_thread_fence(std::memory_order_acquire);
-#else
-#error "Platform not supported"
-#endif
+    const Initializer* i = kj::atomicLoad(&lazyInitializer, kj::AtomicMemoryOrder::ACQUIRE);
     if (i != nullptr) i->init(this);
   }
 

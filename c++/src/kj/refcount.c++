@@ -22,13 +22,6 @@
 #include "refcount.h"
 #include "debug.h"
 
-#if _MSC_VER && !defined(__clang__)
-// Annoyingly, MSVC only implements the C++ atomic libs, not the C libs, so the only useful
-// thing we can get from <atomic> seems to be atomic_thread_fence... but that one function is
-// indeed not implemented by the intrinsics, so...
-#include <atomic>
-#endif
-
 namespace kj {
 
 // =======================================================================================
@@ -72,32 +65,19 @@ void Refcounted::disposeImpl(void* pointer) const {
 // Atomic (thread-safe) refcounting
 
 AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
-#if _MSC_VER && !defined(__clang__)
-  KJ_ASSERT(KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) == 0,
+  KJ_ASSERT(kj::atomicLoad(&refcount, kj::AtomicMemoryOrder::ACQUIRE) == 0,
       "Refcounted object deleted with non-zero refcount.");
-#else
-  KJ_ASSERT(__atomic_load_n(&refcount, __ATOMIC_ACQUIRE) == 0,
-      "Refcounted object deleted with non-zero refcount.");
-#endif
 }
 
 void AtomicRefcounted::disposeImpl(void* pointer) const {
-#if _MSC_VER && !defined(__clang__)
-  if (KJ_MSVC_INTERLOCKED(Decrement, rel)(&refcount) == 0) {
-    std::atomic_thread_fence(std::memory_order_acquire);
+  if (kj::atomicSubFetch(&refcount, 1, kj::AtomicMemoryOrder::RELEASE) == 0) {
+    kj::atomicThreadFence(kj::AtomicMemoryOrder::ACQUIRE);
     delete this;
   }
-#else
-  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
-    __atomic_thread_fence(__ATOMIC_ACQUIRE);
-    delete this;
-  }
-#endif
 }
 
 bool AtomicRefcounted::addRefWeakInternal() const {
-#if _MSC_VER && !defined(__clang__)
-  long orig = refcount;
+  uint orig = kj::atomicLoad(&refcount, kj::AtomicMemoryOrder::RELAXED);
 
   for (;;) {
     if (orig == 0) {
@@ -105,28 +85,12 @@ bool AtomicRefcounted::addRefWeakInternal() const {
       return false;
     }
 
-    unsigned long old = KJ_MSVC_INTERLOCKED(CompareExchange, nf)(&refcount, orig + 1, orig);
-    if (old == orig) {
-      return true;
-    }
-    orig = old;
-  }
-#else
-  uint orig = __atomic_load_n(&refcount, __ATOMIC_RELAXED);
-
-  for (;;) {
-    if (orig == 0) {
-      // Refcount already hit zero. Destructor is already running so we can't revive the object.
-      return false;
-    }
-
-    if (__atomic_compare_exchange_n(&refcount, &orig, orig + 1, true,
-        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+    if (kj::atomicCompareExchange(&refcount, &orig, orig + 1, true,
+        kj::AtomicMemoryOrder::RELAXED, kj::AtomicMemoryOrder::RELAXED)) {
       // Successfully incremented refcount without letting it hit zero.
       return true;
     }
   }
-#endif
 }
 
 }  // namespace kj

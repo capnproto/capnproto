@@ -21,6 +21,7 @@
 
 #define CAPNP_PRIVATE
 #include "layout.h"
+#include <kj/atomic.h>
 #include <kj/debug.h>
 #include "arena.h"
 #include <string.h>
@@ -44,23 +45,13 @@ static BrokenCapFactory* globalBrokenCapFactory = nullptr;
 void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
   // Called from capability.c++ when the capability API is used, to make sure that layout.c++
   // is ready for it.  May be called multiple times but always with the same value.
-#if __GNUC__ || defined(__clang__)
-  __atomic_store_n(&globalBrokenCapFactory, &factory, __ATOMIC_RELAXED);
-#elif _MSC_VER
-  *static_cast<BrokenCapFactory* volatile*>(&globalBrokenCapFactory) = &factory;
-#else
-#error "Platform not supported"
-#endif
+  kj::atomicStore(&globalBrokenCapFactory, &factory, kj::AtomicMemoryOrder::RELAXED);
 }
 
 static BrokenCapFactory* readGlobalBrokenCapFactoryForLayoutCpp() {
-#if __GNUC__ || defined(__clang__)
   // Thread-sanitizer doesn't have the right information to know this is safe without doing an
   // atomic read. https://groups.google.com/g/capnproto/c/634juhn5ap0/m/pyRiwWl1AAAJ
-  return __atomic_load_n(&globalBrokenCapFactory, __ATOMIC_RELAXED);
-#else
-  return globalBrokenCapFactory;
-#endif
+  return kj::atomicLoad(&globalBrokenCapFactory, kj::AtomicMemoryOrder::RELAXED);
 }
 
 }  // namespace _ (private)

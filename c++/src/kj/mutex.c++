@@ -178,8 +178,8 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
     case EXCLUSIVE:
       for (;;) {
         uint state = 0;
-        if (KJ_LIKELY(__atomic_compare_exchange_n(&futex, &state, EXCLUSIVE_HELD, false,
-                                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))) {
+        if (KJ_LIKELY(kj::atomicCompareExchange(&futex, &state, EXCLUSIVE_HELD, false,
+                                                  kj::AtomicMemoryOrder::ACQUIRE, kj::AtomicMemoryOrder::RELAXED))) {
 
           // Acquired.
           break;
@@ -187,8 +187,8 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
 
         // The mutex is contended.  Set the exclusive-requested bit and wait.
         if ((state & EXCLUSIVE_REQUESTED) == 0) {
-          if (!__atomic_compare_exchange_n(&futex, &state, state | EXCLUSIVE_REQUESTED, false,
-                                           __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+          if (!kj::atomicCompareExchange(&futex, &state, state | EXCLUSIVE_REQUESTED, false,
+                                           kj::AtomicMemoryOrder::RELAXED, kj::AtomicMemoryOrder::RELAXED)) {
             // Oops, the state changed before we could set the request bit.  Start over.
             continue;
           }
@@ -217,7 +217,7 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
       kj::Maybe<kj::TimePoint> contentionWaitStart;
 #endif
 
-      uint state = __atomic_add_fetch(&futex, 1, __ATOMIC_ACQUIRE);
+      uint state = kj::atomicAddFetch(&futex, 1, kj::AtomicMemoryOrder::ACQUIRE);
 
       for (;;) {
         if (KJ_LIKELY((state & EXCLUSIVE_HELD) == 0)) {
@@ -243,13 +243,13 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
           // If we timeout though, we need to signal that we're not waiting anymore.
           if (errno == ETIMEDOUT) {
             setCurrentThreadIsNoLongerWaiting();
-            state = __atomic_sub_fetch(&futex, 1, __ATOMIC_RELAXED);
+            state = kj::atomicSubFetch(&futex, 1, kj::AtomicMemoryOrder::RELAXED);
 
             // We may have unlocked since we timed out. So act like we just unlocked the mutex
             // and maybe send a wait signal if needed. See Mutex::unlock SHARED case.
             if (KJ_UNLIKELY(state == EXCLUSIVE_REQUESTED)) {
-              if (__atomic_compare_exchange_n(
-                  &futex, &state, 0, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+              if (kj::atomicCompareExchange(
+                  &futex, &state, 0, false, kj::AtomicMemoryOrder::RELAXED, kj::AtomicMemoryOrder::RELAXED)) {
                 // Wake all exclusive waiters.  We have to wake all of them because one of them will
                 // grab the lock while the others will re-establish the exclusive-requested bit.
                 syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
@@ -258,14 +258,14 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
             return false;
           }
         }
-        state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
+        state = kj::atomicLoad(&futex, kj::AtomicMemoryOrder::ACQUIRE);
       }
 
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
       KJ_IF_SOME(start, contentionWaitStart) {
-        if (__atomic_load_n(&printContendedReader, __ATOMIC_RELAXED)) {
+        if (kj::atomicLoad(&printContendedReader, kj::AtomicMemoryOrder::RELAXED)) {
           // Double-checked lock avoids the CPU needing to acquire the lock in most cases.
-          if (__atomic_exchange_n(&printContendedReader, false, __ATOMIC_RELAXED)) {
+          if (kj::atomicExchange(&printContendedReader, false, kj::AtomicMemoryOrder::RELAXED)) {
             auto contentionDuration = kj::systemPreciseMonotonicClock().now() - start;
             KJ_LOG(WARNING, "Acquired contended lock", location, contentionDuration,
                 kj::getStackTrace());
@@ -302,8 +302,8 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
               // In this case we need to be careful to make sure the target thread isn't already
               // processing a timeout, so we need to do an atomic CAS rather than just a store.
               uint expected = 0;
-              if (__atomic_compare_exchange_n(&waiter.futex, &expected, 1, false,
-                                              __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+              if (kj::atomicCompareExchange(&waiter.futex, &expected, 1, false,
+                                              kj::AtomicMemoryOrder::RELEASE, kj::AtomicMemoryOrder::RELAXED)) {
                 // Good, we set it to 1, transferring ownership of the mutex. Continue on below.
               } else {
                 // Looks like the thread already timed out and set its own futex to 1. In that
@@ -318,7 +318,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
                 continue;
               }
             } else {
-              __atomic_store_n(&waiter.futex, 1, __ATOMIC_RELEASE);
+              kj::atomicStore(&waiter.futex, 1, kj::AtomicMemoryOrder::RELEASE);
             }
             syscall(SYS_futex, &waiter.futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
 
@@ -334,7 +334,7 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
       uint readerCount;
       {
-        uint oldState = __atomic_load_n(&futex, __ATOMIC_RELAXED);
+        uint oldState = kj::atomicLoad(&futex, kj::AtomicMemoryOrder::RELAXED);
         readerCount = oldState & SHARED_COUNT_MASK;
         if (readerCount >= KJ_CONTENTION_WARNING_THRESHOLD) {
           // Atomic not needed because we're still holding the exclusive lock.
@@ -344,8 +344,8 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
 #endif
 
       // Didn't wake any waiters, so wake normally.
-      uint oldState = __atomic_fetch_and(
-          &futex, ~(EXCLUSIVE_HELD | EXCLUSIVE_REQUESTED), __ATOMIC_RELEASE);
+      uint oldState = kj::atomicFetchAnd(
+          &futex, ~(EXCLUSIVE_HELD | EXCLUSIVE_REQUESTED), kj::AtomicMemoryOrder::RELEASE);
 
       if (KJ_UNLIKELY(oldState & ~EXCLUSIVE_HELD)) {
         // Other threads are waiting.  If there are any shared waiters, they now collectively hold
@@ -366,13 +366,13 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
 
     case SHARED: {
       KJ_DASSERT(futex & SHARED_COUNT_MASK, "Unshared a mutex that wasn't shared.");
-      uint state = __atomic_sub_fetch(&futex, 1, __ATOMIC_RELEASE);
+      uint state = kj::atomicSubFetch(&futex, 1, kj::AtomicMemoryOrder::RELEASE);
 
       // The only case where anyone is waiting is if EXCLUSIVE_REQUESTED is set, and the only time
       // it makes sense to wake up that waiter is if the shared count has reached zero.
       if (KJ_UNLIKELY(state == EXCLUSIVE_REQUESTED)) {
-        if (__atomic_compare_exchange_n(
-            &futex, &state, 0, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+        if (kj::atomicCompareExchange(
+            &futex, &state, 0, false, kj::AtomicMemoryOrder::RELAXED, kj::AtomicMemoryOrder::RELAXED)) {
           // Wake all exclusive waiters.  We have to wake all of them because one of them will
           // grab the lock while the others will re-establish the exclusive-requested bit.
           syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
@@ -447,8 +447,8 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocati
           // first must atomically take control of our destiny.
           KJ_ASSERT(timeout != kj::none);
           uint expected = 0;
-          if (__atomic_compare_exchange_n(&waiter.futex, &expected, 1, false,
-                                          __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+          if (kj::atomicCompareExchange(&waiter.futex, &expected, 1, false,
+                                          kj::AtomicMemoryOrder::ACQUIRE, kj::AtomicMemoryOrder::ACQUIRE)) {
             // OK, we set our own futex to 1. That means no other thread will, and so we won't be
             // receiving a mutex ownership transfer. We have to lock the mutex ourselves.
             setCurrentThreadIsNoLongerWaiting();
@@ -467,7 +467,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocati
 
       setCurrentThreadIsNoLongerWaiting();
 
-      if (__atomic_load_n(&waiter.futex, __ATOMIC_ACQUIRE)) {
+      if (kj::atomicLoad(&waiter.futex, kj::AtomicMemoryOrder::ACQUIRE)) {
         // We received a lock ownership transfer from another thread.
         currentlyLocked = true;
 
@@ -512,13 +512,13 @@ uint Mutex::numReadersWaitingForTest() const {
 void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
 startOver:
   uint state = UNINITIALIZED;
-  if (__atomic_compare_exchange_n(&futex, &state, INITIALIZING, false,
-                                  __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+  if (kj::atomicCompareExchange(&futex, &state, INITIALIZING, false,
+                                  kj::AtomicMemoryOrder::RELAXED, kj::AtomicMemoryOrder::RELAXED)) {
     // It's our job to initialize!
     {
       KJ_ON_SCOPE_FAILURE({
         // An exception was thrown by the initializer.  We have to revert.
-        if (__atomic_exchange_n(&futex, UNINITIALIZED, __ATOMIC_RELEASE) ==
+        if (kj::atomicExchange(&futex, UNINITIALIZED, kj::AtomicMemoryOrder::RELEASE) ==
             INITIALIZING_WITH_WAITERS) {
           // Someone was waiting for us to finish.
           syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
@@ -527,7 +527,7 @@ startOver:
 
       init.run();
     }
-    if (__atomic_exchange_n(&futex, INITIALIZED, __ATOMIC_RELEASE) ==
+    if (kj::atomicExchange(&futex, INITIALIZED, kj::AtomicMemoryOrder::RELEASE) ==
         INITIALIZING_WITH_WAITERS) {
       // Someone was waiting for us to finish.
       syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, nullptr, nullptr, 0);
@@ -541,8 +541,8 @@ startOver:
         break;
       } else if (state == INITIALIZING) {
         // Initialization is taking place in another thread.  Indicate that we're waiting.
-        if (!__atomic_compare_exchange_n(&futex, &state, INITIALIZING_WITH_WAITERS, true,
-                                         __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
+        if (!kj::atomicCompareExchange(&futex, &state, INITIALIZING_WITH_WAITERS, true,
+                                         kj::AtomicMemoryOrder::ACQUIRE, kj::AtomicMemoryOrder::ACQUIRE)) {
           // State changed, retry.
           continue;
         }
@@ -554,7 +554,7 @@ startOver:
       setCurrentThreadIsWaitingFor(&blockReason);
       syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS,
                          nullptr, nullptr, 0);
-      state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
+      state = kj::atomicLoad(&futex, kj::AtomicMemoryOrder::ACQUIRE);
 
       if (state == UNINITIALIZED) {
         // Oh hey, apparently whoever was trying to initialize gave up.  Let's take it from the
@@ -567,8 +567,8 @@ startOver:
 
 void Once::reset() {
   uint state = INITIALIZED;
-  if (!__atomic_compare_exchange_n(&futex, &state, UNINITIALIZED,
-                                   false, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+  if (!kj::atomicCompareExchange(&futex, &state, UNINITIALIZED,
+                                   false, kj::AtomicMemoryOrder::RELEASE, kj::AtomicMemoryOrder::RELAXED)) {
     KJ_FAIL_REQUIRE("reset() called while not initialized.");
   }
 }
@@ -1032,13 +1032,13 @@ void Once::runOnce(Initializer& init, NoopSourceLocation) {
 
   init.run();
 
-  __atomic_store_n(&state, INITIALIZED, __ATOMIC_RELEASE);
+  kj::atomicStore(&state, INITIALIZED, kj::AtomicMemoryOrder::RELEASE);
 }
 
 void Once::reset() {
   State oldState = INITIALIZED;
-  if (!__atomic_compare_exchange_n(&state, &oldState, UNINITIALIZED,
-                                   false, __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+  if (!kj::atomicCompareExchange(&state, &oldState, UNINITIALIZED,
+                                   false, kj::AtomicMemoryOrder::RELEASE, kj::AtomicMemoryOrder::RELAXED)) {
     KJ_FAIL_REQUIRE("reset() called while not initialized.");
   }
 }

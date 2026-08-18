@@ -21,6 +21,7 @@
 
 #include "thread.h"
 #include "debug.h"
+#include "atomic.h"
 
 #if _WIN32
 #include <windows.h>
@@ -148,12 +149,8 @@ Thread::ThreadState::ThreadState(Function<void()> func)
       refcount(2) {}
 
 void Thread::ThreadState::unref() {
-#if _MSC_VER && !defined(__clang__)
-  if (_InterlockedDecrement(&refcount) == 0) {
-#else
-  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
-    __atomic_thread_fence(__ATOMIC_ACQUIRE);
-#endif
+  if (kj::atomicSubFetch(&refcount, 1, kj::AtomicMemoryOrder::RELEASE) == 0) {
+    kj::atomicThreadFence(kj::AtomicMemoryOrder::ACQUIRE);
 
     KJ_IF_SOME(e, exception) {
       // If the exception is still present in ThreadState, this must be a detached thread, so

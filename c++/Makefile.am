@@ -144,6 +144,7 @@ noinst_HEADERS = \
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
   src/kj/units.h                                               \
+  src/kj/atomic.h                                              \
   src/kj/memory.h                                              \
   src/kj/refcount.h                                            \
   src/kj/array.h                                               \
