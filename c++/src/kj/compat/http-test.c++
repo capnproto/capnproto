@@ -1280,6 +1280,152 @@ KJ_TEST("HttpClient chunked body gather-write") {
                     "b\r\nfoo bar baz\r\n0\r\n\r\n", text);
 }
 
+KJ_TEST("HttpClient fixed-length body tryWriteSync") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table), uint64_t(6));
+
+    // The headers are still queued and have not been flushed, so a synchronous body write is
+    // refused.
+    KJ_EXPECT(!req.body->tryWriteSync("foo"_kjb));
+
+    // Write the first part of the body asynchronously; this flushes the headers.
+    auto readHeaders = expectRead(*pipe.ends[1],
+        "POST / HTTP/1.1\r\nContent-Length: 6\r\n\r\nfoo");
+    req.body->write("foo"_kjb).wait(waitScope);
+    readHeaders.wait(waitScope);
+
+    // Now start a read on the server end, then try a synchronous write.
+    auto readBody = expectRead(*pipe.ends[1], "bar");
+    if (!req.body->tryWriteSync("bar"_kjb)) {
+#if KJ_HTTP_TEST_USE_OS_PIPE
+      // OS sockets don't support synchronous writes; fall back to the async path.
+      req.body->write("bar"_kjb).wait(waitScope);
+#else
+      KJ_FAIL_EXPECT("expected in-memory pipe to accept synchronous write");
+      req.body->write("bar"_kjb).wait(waitScope);
+#endif
+    }
+    readBody.wait(waitScope);
+    req.body = nullptr;
+
+    kj::StringPtr responseText = "HTTP/1.1 204 No Content\r\n\r\n";
+    pipe.ends[1]->write(responseText.asBytes()).wait(waitScope);
+    auto response = req.response.wait(waitScope);
+    KJ_EXPECT(response.statusCode == 204);
+
+    // A 204 response has no body; EOF is available synchronously.
+    byte buf[8]{};
+    KJ_EXPECT(KJ_ASSERT_NONNULL(response.body->tryReadSync(arrayPtr(buf), 1)) == 0);
+  }
+}
+
+KJ_TEST("HttpClient chunked body tryWriteSync") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  {
+    HttpHeaderTable table;
+    auto client = newHttpClient(table, *pipe.ends[0]);
+
+    auto req = client->request(HttpMethod::POST, "/", HttpHeaders(table));
+
+    // The headers are still queued and have not been flushed, so a synchronous body write is
+    // refused.
+    KJ_EXPECT(!req.body->tryWriteSync("foo"_kjb));
+
+    // Write the first chunk asynchronously; this flushes the headers.
+    auto readHeaders = expectRead(*pipe.ends[1],
+        "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nfoo\r\n");
+    req.body->write("foo"_kjb).wait(waitScope);
+    readHeaders.wait(waitScope);
+
+    // A single-buffer synchronous write is delivered as one complete chunk.
+    {
+      auto readChunk = expectRead(*pipe.ends[1], "3\r\nbar\r\n");
+      if (!req.body->tryWriteSync("bar"_kjb)) {
+#if KJ_HTTP_TEST_USE_OS_PIPE
+        req.body->write("bar"_kjb).wait(waitScope);
+#else
+        KJ_FAIL_EXPECT("expected in-memory pipe to accept synchronous write");
+        req.body->write("bar"_kjb).wait(waitScope);
+#endif
+      }
+      readChunk.wait(waitScope);
+    }
+
+    // A gather synchronous write is delivered as a single chunk.
+    {
+      auto readChunk = expectRead(*pipe.ends[1], "6\r\nbazqux\r\n");
+      kj::ArrayPtr<const byte> parts[] = {"baz"_kjb, "qux"_kjb};
+      if (!req.body->tryWriteSync(kj::arrayPtr(parts, kj::size(parts)))) {
+#if KJ_HTTP_TEST_USE_OS_PIPE
+        req.body->write(kj::arrayPtr(parts, kj::size(parts))).wait(waitScope);
+#else
+        KJ_FAIL_EXPECT("expected in-memory pipe to accept synchronous write");
+        req.body->write(kj::arrayPtr(parts, kj::size(parts))).wait(waitScope);
+#endif
+      }
+      readChunk.wait(waitScope);
+    }
+
+    // Finish the body; the terminating chunk is written asynchronously via the queue.
+    auto readEnd = expectRead(*pipe.ends[1], "0\r\n\r\n");
+    req.body = nullptr;
+
+    kj::StringPtr responseText = "HTTP/1.1 204 No Content\r\n\r\n";
+    pipe.ends[1]->write(responseText.asBytes()).wait(waitScope);
+    auto response = req.response.wait(waitScope);
+    KJ_EXPECT(response.statusCode == 204);
+    readEnd.wait(waitScope);
+  }
+}
+
+KJ_TEST("HttpClient response body tryReadSync") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  auto client = newHttpClient(table, *pipe.ends[0]);
+
+  auto req = client->request(HttpMethod::GET, "/", HttpHeaders(table));
+  req.body = nullptr;
+
+  auto serverTask = expectRead(*pipe.ends[1], "GET / HTTP/1.1\r\n\r\n")
+      .then([&]() {
+    return pipe.ends[1]->write("HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nfoo"_kjb);
+  });
+
+  auto response = req.response.wait(waitScope);
+  serverTask.wait(waitScope);
+  KJ_EXPECT(response.statusCode == 200);
+
+  byte buf[8]{};
+
+  // The body has not been fully consumed, so the reader's state machine refuses a synchronous
+  // read regardless of the transport.
+  KJ_EXPECT(response.body->tryReadSync(arrayPtr(buf), 1) == kj::none);
+
+  // Read the full 6-byte body asynchronously.
+  KJ_EXPECT(response.body->tryRead(buf, 3, 3).wait(waitScope) == 3);
+  KJ_EXPECT(arrayPtr(buf).first(3) == "foo"_kjb);
+  auto writeRest = pipe.ends[1]->write("bar"_kjb);
+  KJ_EXPECT(response.body->tryRead(buf, 3, 3).wait(waitScope) == 3);
+  KJ_EXPECT(arrayPtr(buf).first(3) == "bar"_kjb);
+  writeRest.wait(waitScope);
+
+  // The reader reached Content-Length, so EOF is now available synchronously.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(response.body->tryReadSync(arrayPtr(buf), 1)) == 0);
+}
+
 KJ_TEST("HttpClient chunked body pump from fixed length stream") {
   class FixedBodyStream final: public kj::AsyncInputStream {
     Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {

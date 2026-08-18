@@ -64,6 +64,38 @@ public:
   // Read at least `minBytes` from the stream. Performs partial read if there is not enough data.
   // Returns total number of bytes read. Return value less than `minBytes` indicates EOF.
 
+  virtual Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) KJ_WARN_UNUSED_RESULT;
+  // Attempt to perform a synchronous read, as an optimization to avoid promise overhead when data
+  // is already available (e.g. in an in-memory buffer). Returns kj::none if the read cannot be
+  // completed synchronously, in which case the caller should fall back to tryRead().
+  //
+  // Semantics match tryRead(): at least `minBytes` are read, `buffer.size()` acts as the maximum,
+  // and a return value less than `minBytes` indicates EOF. `minBytes` must not exceed
+  // `buffer.size()`.
+  //
+  // tryReadSync() returns kj::none whenever a synchronous read is not possible, for example:
+  // - Answering the read would require waiting for asynchronous I/O.
+  // An implementation MUST NOT have side effects when returning kj::none: the caller may
+  // immediately invoke tryRead() with the same arguments and must observe the same result as if
+  // tryReadSync() had never been called.
+  //
+  // Calling tryReadSync() while an asynchronous operation (tryRead() or pumpTo()) is already in
+  // progress on this stream is a programming error and may throw.
+  //
+  // An implementation may throw if the stream is in an errored state, or if a synchronous read is
+  // possible but the read itself fails (e.g. a decompression error on already-buffered data). In
+  // that case the stream state may be affected, exactly as if tryRead() had been called and the
+  // returned promise rejected.
+  //
+  // The default implementation always returns kj::none. Subclasses should override this if they
+  // can sometimes serve reads synchronously. Callers use the pattern:
+  //
+  //     KJ_IF_SOME(n, stream.tryReadSync(buffer, minBytes)) {
+  //       // ... use `n` immediately, no promise needed ...
+  //     } else {
+  //       // fall back to stream.tryRead()
+  //     }
+
   Promise<void> read(ArrayPtr<byte> buffer) {
     // Reads a complete buffer from the stream. Throws an exception if there is not enough data.
     return read(buffer, buffer.size()).ignoreResult();
@@ -121,6 +153,43 @@ public:
   virtual Promise<void> write(ArrayPtr<const byte> buffer) KJ_WARN_UNUSED_RESULT = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces)
       KJ_WARN_UNUSED_RESULT = 0;
+
+  virtual bool tryWriteSync(ArrayPtr<const byte> buffer) KJ_WARN_UNUSED_RESULT;
+  // Attempt to perform a synchronous write, as an optimization to avoid promise overhead when the
+  // stream can accept the bytes immediately (e.g. into an in-memory buffer or a waiting reader).
+  // Returns false if the write cannot be completed synchronously, in which case the caller should
+  // fall back to write().
+  //
+  // This is all-or-nothing: either the entire buffer is written synchronously (returns true), or
+  // nothing is written at all (returns false). There is no partial-write case.
+  //
+  // tryWriteSync() returns false whenever a synchronous write is not possible, for example:
+  // - The underlying transport would need to perform asynchronous I/O.
+  // An implementation MUST NOT have side effects when returning false: the caller may immediately
+  // invoke write() with the same arguments and must observe the same result as if tryWriteSync()
+  // had never been called.
+  //
+  // Calling tryWriteSync() while an asynchronous operation (write() or tryPumpFrom()) is already
+  // in progress on this stream is a programming error and may throw.
+  //
+  // If the stream is in an errored or shut-down state, the method may throw the appropriate
+  // exception rather than returning false.
+  //
+  // An implementation may also throw if a synchronous write is possible but the write itself
+  // fails. In that case the stream state may be affected, exactly as if write() had been called
+  // and the returned promise rejected.
+  //
+  // The default implementation always returns false. Subclasses should override this if they can
+  // sometimes accept writes synchronously.
+
+  virtual bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) KJ_WARN_UNUSED_RESULT;
+  // Scatter-gather variant of tryWriteSync(). Either every byte of every piece is written
+  // synchronously (returns true), or nothing is written at all (returns false). All other rules
+  // of tryWriteSync() apply.
+  //
+  // The default implementation always returns false. Note that an implementation cannot
+  // generally be composed from repeated single-buffer tryWriteSync() calls: a refusal partway
+  // through would violate the all-or-nothing contract.
 
   virtual Maybe<Promise<uint64_t>> tryPumpFrom(
       AsyncInputStream& input, uint64_t amount = kj::maxValue);
@@ -199,11 +268,14 @@ class NullStream final: public AsyncIoStream {
   // Hint: You can also use this class when you just need an input stream or an output stream.
 public:
   kj::Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override;
   kj::Maybe<uint64_t> tryGetLength() override;
   kj::Promise<uint64_t> pumpTo(kj::AsyncOutputStream& output, uint64_t amount) override;
 
   kj::Promise<void> write(ArrayPtr<const byte> buffer) override;
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override;
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
   kj::Promise<void> whenWriteDisconnected() override;
 
   void shutdownWrite() override;
@@ -1087,6 +1159,7 @@ public:
   void seek(uint64_t newOffset) { offset = newOffset; }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override;
   Maybe<uint64_t> tryGetLength() override;
 
   // (pumpTo() is not actually overridden here, but AsyncStreamFd's tryPumpFrom() will detect when
@@ -1118,6 +1191,8 @@ public:
 
   Promise<void> write(kj::ArrayPtr<const byte> buffer) override;
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override;
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
   Promise<void> whenWriteDisconnected() override;
 
 private:

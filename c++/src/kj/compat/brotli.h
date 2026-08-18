@@ -135,12 +135,14 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(BrotliAsyncInputStream);
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override;
 
 private:
   AsyncInputStream& inner;
   BrotliDecoderState* ctx;
   int windowBits;
   bool atValidEndpoint = false;
+  bool readInProgress = false;
 
   byte buffer[_::KJ_BROTLI_BUF_SIZE];
   const byte* nextIn;

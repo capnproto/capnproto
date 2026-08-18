@@ -263,6 +263,69 @@ KJ_TEST("async brotli decompression") {
   }
 }
 
+KJ_TEST("async brotli tryReadSync") {
+  auto io = setupAsyncIo();
+
+  {
+    MockAsyncInputStream rawInput(FOOBAR_BR, kj::maxValue);
+    BrotliAsyncInputStream brotli(rawInput);
+
+    byte text[16]{};
+
+    // Nothing is buffered yet, so no synchronous read is possible.
+    KJ_EXPECT(brotli.tryReadSync(arrayPtr(text), 1) == kj::none);
+
+    // While an asynchronous read is in progress, concurrent synchronous reads are a programming
+    // error.
+    auto readPromise = brotli.tryRead(text, 3, 3);
+    KJ_EXPECT_THROW_MESSAGE("concurrent read operations not allowed",
+        brotli.tryReadSync(arrayPtr(text), 1));
+
+    // The asynchronous read buffers the entire compressed input but only decompresses what was
+    // asked for.
+    KJ_EXPECT(readPromise.wait(io.waitScope) == 3);
+    KJ_EXPECT(arrayPtr(text).first(3) == "foo"_kjb);
+
+    // minBytes > 1 cannot be guaranteed synchronously, so it is refused (with no side effects).
+    KJ_EXPECT(brotli.tryReadSync(arrayPtr(text), 2) == kj::none);
+
+    // The rest of the data can be decompressed synchronously from the buffered input.
+    KJ_EXPECT(KJ_ASSERT_NONNULL(brotli.tryReadSync(arrayPtr(text), 1)) == 3);
+    KJ_EXPECT(arrayPtr(text).first(3) == "bar"_kjb);
+
+    // All buffered input has been consumed; EOF detection requires the async path.
+    KJ_EXPECT(brotli.tryReadSync(arrayPtr(text), 1) == kj::none);
+    KJ_EXPECT(brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope) == 0);
+  }
+
+  // Concatenated brotli streams decompress synchronously as well.
+  {
+    Vector<byte> bytes;
+    bytes.addAll(ArrayPtr<const byte>(FOOBAR_BR));
+    bytes.addAll(ArrayPtr<const byte>(FOOBAR_BR));
+    MockAsyncInputStream rawInput(bytes, kj::maxValue);
+    BrotliAsyncInputStream brotli(rawInput);
+
+    byte text[16]{};
+
+    // Buffer all compressed input with a small initial async read.
+    KJ_EXPECT(brotli.tryRead(text, 1, 1).wait(io.waitScope) == 1);
+    KJ_EXPECT(text[0] == 'f');
+
+    // The remainder of the first stream is served synchronously; the stream boundary resets the
+    // decoder.
+    KJ_EXPECT(KJ_ASSERT_NONNULL(brotli.tryReadSync(arrayPtr(text), 1)) == 5);
+    KJ_EXPECT(arrayPtr(text).first(5) == "oobar"_kjb);
+
+    // The second stream is served synchronously too.
+    KJ_EXPECT(KJ_ASSERT_NONNULL(brotli.tryReadSync(arrayPtr(text), 1)) == 6);
+    KJ_EXPECT(arrayPtr(text).first(6) == "foobar"_kjb);
+
+    KJ_EXPECT(brotli.tryReadSync(arrayPtr(text), 1) == kj::none);
+    KJ_EXPECT(brotli.tryRead(text, 1, sizeof(text)).wait(io.waitScope) == 0);
+  }
+}
+
 KJ_TEST("brotli compression") {
   // Normal write.
   {

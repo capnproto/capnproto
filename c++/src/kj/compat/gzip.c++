@@ -189,9 +189,60 @@ GzipAsyncInputStream::~GzipAsyncInputStream() noexcept(false) {
 }
 
 Promise<size_t> GzipAsyncInputStream::tryRead(void* out, size_t minBytes, size_t maxBytes) {
-  if (maxBytes == 0) return constPromise<size_t, 0>();
+  if (maxBytes == 0) co_return 0;
+  readInProgress = true;
+  KJ_DEFER(readInProgress = false);
+  co_return co_await readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+}
 
-  return readImpl(reinterpret_cast<byte*>(out), minBytes, maxBytes, 0);
+Maybe<size_t> GzipAsyncInputStream::tryReadSync(ArrayPtr<byte> out, size_t minBytes) {
+  if (out.size() == 0) return size_t(0);  // mirrors tryRead()
+  KJ_REQUIRE(!readInProgress, "concurrent read operations not allowed");
+  if (minBytes > 1) {
+    // If decompressing the buffered input were to produce more than zero but fewer than
+    // `minBytes` bytes, we would be stuck: we can neither return a short count (which would
+    // falsely signal EOF) nor undo the decompression. Since the output size of compressed data
+    // cannot be predicted, only accept reads that any nonzero amount of output can satisfy.
+    // (Performance-sensitive callers, like pump loops, use minBytes == 1.)
+    return kj::none;
+  }
+
+  while (ctx.avail_in > 0) {
+    // Decompress from already-buffered compressed input, mirroring readImpl().
+    ctx.next_out = out.begin();
+    ctx.avail_out = out.size();
+
+    auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
+    atValidEndpoint = inflateResult == Z_STREAM_END;
+    if (inflateResult != Z_OK && inflateResult != Z_STREAM_END) {
+      // A synchronous read was possible, but the data is corrupt; throw just like the async path
+      // would have.
+      if (ctx.msg == nullptr) {
+        KJ_FAIL_REQUIRE("gzip decompression failed", inflateResult);
+      } else {
+        KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
+      }
+    }
+
+    if (atValidEndpoint && ctx.avail_in > 0) {
+      // There's more data available. Assume start of new content.
+      KJ_ASSERT(inflateReset(&ctx) == Z_OK);
+    }
+
+    size_t n = out.size() - ctx.avail_out;
+    if (n >= minBytes) {
+      return n;
+    }
+
+    // No output was produced (n == 0, since minBytes <= 1). If buffered input remains (e.g. we
+    // just reset at a member boundary), try again; otherwise fall back to the async path.
+    //
+    // Note that having consumed buffered input without producing output is not an observable
+    // side effect: the decompressor retains that data internally, and a subsequent tryRead()
+    // will return exactly the same bytes it would have returned anyway.
+  }
+
+  return kj::none;
 }
 
 Promise<size_t> GzipAsyncInputStream::readImpl(

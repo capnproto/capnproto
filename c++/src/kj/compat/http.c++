@@ -2038,6 +2038,17 @@ public:
     }
   }
 
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    if (finished) {
+      // Already reached the end of the entity body; EOF is a valid synchronous answer.
+      //
+      // Note that if the underlying connection went away (`weakInner` is none but `finished` is
+      // false), we return kj::none instead, so that the async path can surface the error.
+      return size_t(0);
+    }
+    return kj::none;
+  }
+
 protected:
   HttpInputStreamImpl& getInner() {
     KJ_IF_SOME(i, weakInner) {
@@ -2496,6 +2507,7 @@ public:
     writeQueue = fork.addBranch();
 
     co_await fork;
+    writeQueueDrained = true;
     co_await inner.write(buffer);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2512,11 +2524,30 @@ public:
     writeQueue = fork.addBranch();
 
     co_await fork;
+    writeQueueDrained = true;
     co_await inner.write(pieces);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
     // want to block further writes.
     writeInProgress = false;
+  }
+
+  bool tryWriteBodyDataSync(ArrayPtr<const byte> buffer) {
+    // Synchronous counterpart to writeBodyData(): attempt to write the data via the inner
+    // stream's tryWriteSync(). Returns false if queued writes (e.g. headers or chunk boundaries)
+    // have not been observed to drain yet, or if the inner stream cannot accept the data
+    // synchronously. Concurrent writes or writing outside a body are programming errors.
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
+    if (!writeQueueDrained) return false;
+    return inner.tryWriteSync(buffer);
+  }
+
+  bool tryWriteBodyDataSync(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
+    if (!writeQueueDrained) return false;
+    return inner.tryWriteSync(pieces);
   }
 
   Promise<uint64_t> pumpBodyFrom(AsyncInputStream& input, uint64_t amount) {
@@ -2528,6 +2559,7 @@ public:
     writeQueue = fork.addBranch();
 
     co_await fork;
+    writeQueueDrained = true;
     auto actual = co_await input.pumpTo(inner, amount);
 
     // We intentionally don't use KJ_DEFER to clean this up because if an exception is thrown, we
@@ -2550,6 +2582,7 @@ public:
       // Cancel any writes that are still queued.
       writeQueue = KJ_EXCEPTION(FAILED,
           "previous HTTP message body incomplete; can't write more messages");
+      writeQueueDrained = false;
     }
   }
 
@@ -2562,6 +2595,7 @@ public:
     // Cancel any writes that are still queued.
     writeQueue = KJ_EXCEPTION(FAILED,
         "previous HTTP message body incomplete; can't write more messages");
+    writeQueueDrained = false;
   }
 
   kj::Promise<void> flush() {
@@ -2587,6 +2621,12 @@ private:
   // a write throws an exception or is canceled, this remains true forever. In these cases, the
   // underlying stream is in an inconsistent state and cannot be reused.
 
+  bool writeQueueDrained = true;
+  // True if `writeQueue` is known to have fully drained (i.e. it is safe to write body data
+  // directly to `inner` synchronously). We cannot inspect a promise's readiness synchronously,
+  // so this is tracked explicitly: queueWrite() clears it, and the body-write methods set it
+  // after their `co_await` of the queue completes.
+
   void queueWrite(kj::String content) {
     // We only use queueWrite() in cases where we can take ownership of the write buffer, and where
     // it is convenient if we can return `void` rather than a promise.  In particular, this is used
@@ -2599,6 +2639,7 @@ private:
       auto promise = inner.write(content.asBytes());
       return promise.attach(kj::mv(content));
     });
+    writeQueueDrained = false;
   }
 };
 
@@ -2669,6 +2710,12 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return kj::READY_NOW;
   }
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    return true;
+  }
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return true;
+  }
   Promise<void> whenWriteDisconnected() override {
     return kj::NEVER_DONE;
   }
@@ -2700,6 +2747,33 @@ public:
 
     co_await getInner().writeBodyData(pieces);
     if (length == 0) doneWriting();
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    if (buffer == nullptr) return true;  // mirrors write()
+    if (alreadyDone()) return false;     // let the async path surface the error
+    if (buffer.size() > length) return false;  // async path will throw "overwrote Content-Length"
+
+    if (!getInner().tryWriteBodyDataSync(buffer)) return false;
+
+    length -= buffer.size();
+    if (length == 0) doneWriting();
+    return true;
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    uint64_t size = 0;
+    for (auto& piece: pieces) size += piece.size();
+
+    if (size == 0) return true;  // mirrors write()
+    if (alreadyDone()) return false;
+    if (size > length) return false;
+
+    if (!getInner().tryWriteBodyDataSync(pieces)) return false;
+
+    length -= size;
+    if (length == 0) doneWriting();
+    return true;
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -2801,6 +2875,37 @@ public:
     auto parts = partsBuilder.finish();
     auto promise = getInner().writeBodyData(parts.asPtr());
     return promise.attach(kj::mv(header), kj::mv(parts));
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    if (buffer == nullptr) return true;  // mirrors write(): can't encode a zero-size chunk
+    if (alreadyDone()) return false;     // let the async path surface the error
+
+    auto header = kj::str(kj::hex(buffer.size()), "\r\n");
+    ArrayPtr<const byte> parts[3] = {header.asBytes(), buffer, "\r\n"_kjb};
+
+    // A synchronous write either completes in full immediately or does nothing, so the
+    // stack-allocated header and parts need not outlive this call.
+    return getInner().tryWriteBodyDataSync(parts);
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    uint64_t size = 0;
+    for (auto& piece: pieces) size += piece.size();
+
+    if (size == 0) return true;  // mirrors write(): can't encode a zero-size chunk
+    if (alreadyDone()) return false;
+
+    auto header = kj::str(kj::hex(size), "\r\n");
+    auto partsBuilder = kj::heapArrayBuilder<ArrayPtr<const byte>>(pieces.size() + 2);
+    partsBuilder.add(header.asBytes());
+    for (auto& piece: pieces) {
+      partsBuilder.add(piece);
+    }
+    partsBuilder.add("\r\n"_kjb);
+
+    auto parts = partsBuilder.finish();
+    return getInner().tryWriteBodyDataSync(parts.asPtr());
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
@@ -4858,6 +4963,32 @@ public:
     }
   }
 
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    KJ_REQUIRE(buffer.size() >= minBytes);
+
+    if (leftover.size() >= minBytes) {
+      // Serve entirely from the leftover buffer.
+      auto bytesToCopy = kj::min(buffer.size(), leftover.size());
+      buffer.write(leftover.first(bytesToCopy));
+      leftover = leftover.slice(bytesToCopy, leftover.size());
+
+      // If we've consumed all of the data in the leftover buffer, go ahead and free it.
+      if (leftover.size() == 0) {
+        leftoverBackingBuffer = nullptr;
+      }
+
+      return bytesToCopy;
+    } else if (leftover.size() == 0) {
+      // No leftover data at all; delegate directly to the underlying stream.
+      return stream->tryReadSync(buffer, minBytes);
+    } else {
+      // There is some leftover data, but not enough to satisfy minBytes. We cannot consume the
+      // leftover and then ask the underlying stream for the rest: if the underlying stream then
+      // declined, we'd have already consumed the leftover, violating the no-side-effects rule.
+      return kj::none;
+    }
+  }
+
   Maybe<uint64_t> tryGetLength() override {
     // For a CONNECT pipe, we have no idea how much data there is going to be.
     return kj::none;
@@ -4880,6 +5011,14 @@ public:
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return stream->write(pieces);
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    return stream->tryWriteSync(buffer);
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return stream->tryWriteSync(pieces);
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -4955,6 +5094,13 @@ public:
     });
   }
 
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    if (readGuardReleased) {
+      return inner->tryReadSync(buffer, minBytes);
+    }
+    return kj::none;
+  }
+
   Maybe<uint64_t> tryGetLength() override {
     return kj::none;
   }
@@ -5007,6 +5153,20 @@ public:
         return inner->write(pieces);
       });
     }
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    if (writeGuardReleased) {
+      return inner->tryWriteSync(buffer);
+    }
+    return false;
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    if (writeGuardReleased) {
+      return inner->tryWriteSync(pieces);
+    }
+    return false;
   }
 
   Promise<void> whenWriteDisconnected() override {
@@ -5591,6 +5751,10 @@ public:
     return constPromise<size_t, 0>();
   }
 
+  kj::Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return size_t(0);
+  }
+
   kj::Maybe<uint64_t> tryGetLength() override {
     return expectedLength;
   }
@@ -6129,6 +6293,17 @@ kj::Promise<size_t> PausableReadAsyncIoStream::tryReadImpl(
   });
 }
 
+kj::Maybe<size_t> PausableReadAsyncIoStream::tryReadSync(
+    kj::ArrayPtr<byte> buffer, size_t minBytes) {
+  if (maybePausableRead != kj::none || currentlyReading) {
+    // A read is already pending (possibly paused); can't read synchronously.
+    return kj::none;
+  }
+  // Note: A synchronous read completes immediately, so there is no window during which it could
+  // need to be paused; no PausableRead or trackRead() bookkeeping is needed.
+  return inner->tryReadSync(buffer, minBytes);
+}
+
 kj::Maybe<uint64_t> PausableReadAsyncIoStream::tryGetLength() {
   return inner->tryGetLength();
 }
@@ -6145,6 +6320,24 @@ kj::Promise<void> PausableReadAsyncIoStream::write(ArrayPtr<const byte> buffer) 
 kj::Promise<void> PausableReadAsyncIoStream::write(
     kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
   return inner->write(pieces).attach(trackWrite());
+}
+
+bool PausableReadAsyncIoStream::tryWriteSync(kj::ArrayPtr<const byte> buffer) {
+  if (currentlyWriting) {
+    // A write is already in progress; can't write synchronously.
+    return false;
+  }
+  // Note: A synchronous write completes immediately, so no trackWrite() bookkeeping is needed.
+  return inner->tryWriteSync(buffer);
+}
+
+bool PausableReadAsyncIoStream::tryWriteSync(
+    kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+  if (currentlyWriting) {
+    // A write is already in progress; can't write synchronously.
+    return false;
+  }
+  return inner->tryWriteSync(pieces);
 }
 
 kj::Maybe<kj::Promise<uint64_t>> PausableReadAsyncIoStream::tryPumpFrom(
@@ -6380,6 +6573,10 @@ public:
     return inner->tryRead(buffer, minBytes, maxBytes);
   }
 
+  kj::Maybe<size_t> tryReadSync(kj::ArrayPtr<byte> buffer, size_t minBytes) override {
+    return inner->tryReadSync(buffer, minBytes);
+  }
+
   kj::Maybe<uint64_t> tryGetLength() override {
     return inner->tryGetLength();
   }
@@ -6394,6 +6591,14 @@ public:
 
   kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
     return inner->write(pieces);
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    return inner->tryWriteSync(buffer);
+  }
+
+  bool tryWriteSync(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    return inner->tryWriteSync(pieces);
   }
 
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(

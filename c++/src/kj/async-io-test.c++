@@ -2297,6 +2297,507 @@ KJ_TEST("Userland pipe BlockedRead gets empty tryPumpFrom") {
   KJ_EXPECT(kj::StringPtr(buffer, 3) == "foo");
 }
 
+KJ_TEST("tryReadSync/tryWriteSync default implementations") {
+  class MinimalInputStream final: public AsyncInputStream {
+  public:
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return size_t(0);
+    }
+  };
+  class MinimalOutputStream final: public AsyncOutputStream {
+  public:
+    Promise<void> write(ArrayPtr<const byte> buffer) override { return READY_NOW; }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      return READY_NOW;
+    }
+    Promise<void> whenWriteDisconnected() override { return NEVER_DONE; }
+  };
+
+  MinimalInputStream input;
+  MinimalOutputStream output;
+
+  byte buf[16];
+  KJ_EXPECT(input.tryReadSync(arrayPtr(buf), 1) == kj::none);
+  KJ_EXPECT(!output.tryWriteSync("foo"_kjb));
+
+  ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+  KJ_EXPECT(!output.tryWriteSync(arrayPtr(pieces)));
+}
+
+KJ_TEST("NullStream tryReadSync/tryWriteSync") {
+  NullStream stream;
+
+  byte buf[16];
+  KJ_EXPECT(KJ_ASSERT_NONNULL(stream.tryReadSync(arrayPtr(buf), 1)) == 0);
+  KJ_EXPECT(stream.tryWriteSync("foo"_kjb));
+
+  ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+  KJ_EXPECT(stream.tryWriteSync(arrayPtr(pieces)));
+}
+
+KJ_TEST("Userland pipe tryReadSync from blocked write") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  byte buf[8]{};
+
+  // Nothing written yet: no data is available synchronously.
+  KJ_EXPECT(pipe.in->tryReadSync(arrayPtr(buf), 1) == kj::none);
+
+  auto promise = pipe.out->write("foobar"_kjb);
+  KJ_EXPECT(!promise.poll(ws));
+
+  // Read part of the blocked write synchronously.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf).first(4), 1)) == 4);
+  KJ_EXPECT(arrayPtr(buf).first(4) == "foob"_kjb);
+
+  // The write is still blocked: two bytes remain.
+  KJ_EXPECT(!promise.poll(ws));
+
+  // Read the rest synchronously; this completes the write.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf), 1)) == 2);
+  KJ_EXPECT(arrayPtr(buf).first(2) == "ar"_kjb);
+  KJ_EXPECT(promise.poll(ws));
+  promise.wait(ws);
+
+  // No more data.
+  KJ_EXPECT(pipe.in->tryReadSync(arrayPtr(buf), 1) == kj::none);
+
+  // A zero-byte read always completes synchronously.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf), 0)) == 0);
+}
+
+KJ_TEST("Userland pipe tryReadSync from blocked gather write") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+  auto promise = pipe.out->write(arrayPtr(pieces));
+
+  byte buf[8]{};
+
+  // Not enough buffered data to satisfy minBytes: refused, with no side effects.
+  KJ_EXPECT(pipe.in->tryReadSync(arrayPtr(buf), 7) == kj::none);
+  KJ_EXPECT(!promise.poll(ws));
+
+  // Read across both pieces synchronously.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf).first(6), 6)) == 6);
+  KJ_EXPECT(arrayPtr(buf).first(6) == "foobar"_kjb);
+  promise.wait(ws);
+}
+
+KJ_TEST("Userland pipe tryReadSync insufficient data has no side effects") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto promise = pipe.out->write("ab"_kjb);
+
+  byte buf[8]{};
+  KJ_EXPECT(pipe.in->tryReadSync(arrayPtr(buf), 3) == kj::none);
+  KJ_EXPECT(!promise.poll(ws));
+
+  // Fall back to the async path with the same arguments, like a real caller would.
+  auto readPromise = pipe.in->tryRead(buf, 3, 8);
+  KJ_EXPECT(promise.poll(ws));       // "ab" was consumed, unblocking the write...
+  KJ_EXPECT(!readPromise.poll(ws));  // ...but the read still needs one more byte.
+
+  auto promise2 = pipe.out->write("c"_kjb);
+  KJ_EXPECT(readPromise.wait(ws) == 3);
+  KJ_EXPECT(arrayPtr(buf).first(3) == "abc"_kjb);
+  promise2.wait(ws);
+}
+
+KJ_TEST("Userland pipe tryReadSync during pending read returns none") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  byte buf[4]{};
+  auto readPromise = pipe.in->tryRead(buf, 3, 4);
+
+  byte buf2[4]{};
+  KJ_EXPECT(pipe.in->tryReadSync(arrayPtr(buf2), 1) == kj::none);
+
+  pipe.out->write("foo"_kjb).wait(ws);
+  KJ_EXPECT(readPromise.wait(ws) == 3);
+}
+
+KJ_TEST("Userland pipe tryReadSync/tryWriteSync in terminal states") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  {
+    // Write end dropped: EOF is a valid synchronous answer.
+    auto pipe = newOneWayPipe();
+    pipe.out = nullptr;
+    byte buf[4]{};
+    KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf), 1)) == 0);
+  }
+
+  {
+    // Read end dropped: stream is in an errored state, tryWriteSync() throws.
+    auto pipe = newOneWayPipe();
+    pipe.in = nullptr;
+    KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pipe.out->tryWriteSync("foo"_kjb));
+
+    // Empty writes still succeed (the pipe shortcuts them before consulting state).
+    KJ_EXPECT(pipe.out->tryWriteSync(""_kjb));
+  }
+}
+
+KJ_TEST("Userland pipe tryWriteSync to blocked read") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  // No reader waiting: can't write synchronously.
+  KJ_EXPECT(!pipe.out->tryWriteSync("foo"_kjb));
+
+  byte buf[6]{};
+  auto readPromise = pipe.in->tryRead(buf, 6, 6);
+
+  // Write directly into the waiting reader's buffer. The read is not yet complete.
+  KJ_EXPECT(pipe.out->tryWriteSync("foo"_kjb));
+  KJ_EXPECT(!readPromise.poll(ws));
+
+  // Complete the read with a second synchronous write.
+  KJ_EXPECT(pipe.out->tryWriteSync("bar"_kjb));
+  KJ_EXPECT(readPromise.wait(ws) == 6);
+  KJ_EXPECT(arrayPtr(buf) == "foobar"_kjb);
+}
+
+KJ_TEST("Userland pipe tryWriteSync exactly filling read buffer") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  byte buf[3]{};
+  auto readPromise = pipe.in->tryRead(buf, 1, 3);
+
+  KJ_EXPECT(pipe.out->tryWriteSync("foo"_kjb));
+  KJ_EXPECT(readPromise.wait(ws) == 3);
+  KJ_EXPECT(arrayPtr(buf) == "foo"_kjb);
+}
+
+KJ_TEST("Userland pipe tryWriteSync larger than read buffer returns false") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  byte buf[3]{};
+  auto readPromise = pipe.in->tryRead(buf, 1, 3);
+
+  // All-or-nothing: the reader can only accept 3 bytes.
+  KJ_EXPECT(!pipe.out->tryWriteSync("foobar"_kjb));
+  KJ_EXPECT(!readPromise.poll(ws));  // no side effects
+
+  // The async path handles the split.
+  auto writePromise = pipe.out->write("foobar"_kjb);
+  KJ_EXPECT(readPromise.wait(ws) == 3);
+  KJ_EXPECT(arrayPtr(buf) == "foo"_kjb);
+  KJ_EXPECT(!writePromise.poll(ws));
+
+  byte buf2[3]{};
+  KJ_EXPECT(pipe.in->tryRead(buf2, 3, 3).wait(ws) == 3);
+  KJ_EXPECT(arrayPtr(buf2) == "bar"_kjb);
+  writePromise.wait(ws);
+}
+
+KJ_TEST("Userland pipe tryWriteSync during pending write returns false") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  auto writePromise = pipe.out->write("foobar"_kjb);
+  KJ_EXPECT(!pipe.out->tryWriteSync("baz"_kjb));
+
+  expectRead(*pipe.in, "foobar").wait(ws);
+  writePromise.wait(ws);
+}
+
+KJ_TEST("Userland pipe tryWriteSync gather write to blocked read") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  {
+    byte buf[6]{};
+    auto readPromise = pipe.in->tryRead(buf, 6, 6);
+
+    ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+    KJ_EXPECT(pipe.out->tryWriteSync(arrayPtr(pieces)));
+    KJ_EXPECT(readPromise.wait(ws) == 6);
+    KJ_EXPECT(arrayPtr(buf) == "foobar"_kjb);
+  }
+
+  {
+    // Exactly filling the reader's buffer with a trailing empty piece still succeeds.
+    byte buf[3]{};
+    auto readPromise = pipe.in->tryRead(buf, 1, 3);
+
+    ArrayPtr<const byte> pieces[2] = {"foo"_kjb, ""_kjb};
+    KJ_EXPECT(pipe.out->tryWriteSync(arrayPtr(pieces)));
+    KJ_EXPECT(readPromise.wait(ws) == 3);
+    KJ_EXPECT(arrayPtr(buf) == "foo"_kjb);
+  }
+
+  {
+    // All-or-nothing: refused if the total doesn't fit in the reader's buffer.
+    byte buf[4]{};
+    auto readPromise = pipe.in->tryRead(buf, 1, 4);
+
+    ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+    KJ_EXPECT(!pipe.out->tryWriteSync(arrayPtr(pieces)));
+    KJ_EXPECT(!readPromise.poll(ws));  // no side effects
+
+    // The async path handles the split.
+    auto writePromise = pipe.out->write(arrayPtr(pieces));
+    KJ_EXPECT(readPromise.wait(ws) == 4);
+    KJ_EXPECT(arrayPtr(buf) == "foob"_kjb);
+
+    byte buf2[2]{};
+    KJ_EXPECT(pipe.in->tryRead(buf2, 2, 2).wait(ws) == 2);
+    KJ_EXPECT(arrayPtr(buf2) == "ar"_kjb);
+    writePromise.wait(ws);
+  }
+
+  {
+    // Gather writes consisting only of empty pieces always succeed, mirroring write().
+    ArrayPtr<const byte> pieces[2] = {""_kjb, ""_kjb};
+    KJ_EXPECT(pipe.out->tryWriteSync(arrayPtr(pieces)));
+  }
+}
+
+KJ_TEST("Userland pipe tryWriteSync gather write through pumpTo") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = pipe.in->pumpTo(*pipe2.out, 6);
+
+  byte buf[6]{};
+  auto readPromise = pipe2.in->tryRead(buf, 6, 6);
+
+  ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+  KJ_EXPECT(pipe.out->tryWriteSync(arrayPtr(pieces)));
+  KJ_EXPECT(readPromise.wait(ws) == 6);
+  KJ_EXPECT(arrayPtr(buf) == "foobar"_kjb);
+
+  // The pump completed synchronously as part of the write.
+  KJ_EXPECT(pumpPromise.wait(ws) == 6);
+}
+
+KJ_TEST("Userland pipe tryWriteSync through pumpTo") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
+
+  // Downstream has no waiting reader: the write can't complete synchronously.
+  KJ_EXPECT(!pipe.out->tryWriteSync("foo"_kjb));
+
+  byte buf[3]{};
+  auto readPromise = pipe2.in->tryRead(buf, 3, 3);
+
+  // Now the write passes through the pump directly into the downstream reader's buffer.
+  KJ_EXPECT(pipe.out->tryWriteSync("foo"_kjb));
+  KJ_EXPECT(readPromise.wait(ws) == 3);
+  KJ_EXPECT(arrayPtr(buf) == "foo"_kjb);
+
+  // The unbounded pump is still running.
+  KJ_EXPECT(!pumpPromise.poll(ws));
+}
+
+KJ_TEST("Userland pipe tryWriteSync completes bounded pumpTo") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+
+  {
+    auto pumpPromise = pipe.in->pumpTo(*pipe2.out, 3);
+
+    byte buf[3]{};
+    auto readPromise = pipe2.in->tryRead(buf, 3, 3);
+
+    KJ_EXPECT(pipe.out->tryWriteSync("foo"_kjb));
+    KJ_EXPECT(readPromise.wait(ws) == 3);
+    KJ_EXPECT(arrayPtr(buf) == "foo"_kjb);
+
+    // The pump completed synchronously as part of the write.
+    KJ_EXPECT(pumpPromise.wait(ws) == 3);
+  }
+
+  {
+    // A write that would extend past the end of the pump is refused.
+    auto pumpPromise = pipe.in->pumpTo(*pipe2.out, 2);
+
+    byte buf[4]{};
+    auto readPromise = pipe2.in->tryRead(buf, 1, 4);
+
+    KJ_EXPECT(!pipe.out->tryWriteSync("foo"_kjb));
+    KJ_EXPECT(!readPromise.poll(ws));  // no side effects
+
+    // The async path handles the pump boundary.
+    auto writePromise = pipe.out->write("foo"_kjb);
+    KJ_EXPECT(readPromise.wait(ws) == 2);
+    KJ_EXPECT(arrayPtr(buf).first(2) == "fo"_kjb);
+    KJ_EXPECT(pumpPromise.wait(ws) == 2);
+  }
+}
+
+KJ_TEST("Userland pipe tryReadSync during tryPumpFrom returns none") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe2.out->tryPumpFrom(*pipe.in));
+
+  // Even with data available from the pump source, a synchronous read is refused: the pump's
+  // completion semantics cannot be replicated synchronously.
+  auto writePromise = pipe.out->write("foo"_kjb);
+  byte buf[4]{};
+  KJ_EXPECT(pipe2.in->tryReadSync(arrayPtr(buf), 1) == kj::none);
+
+  // The async path still works.
+  KJ_EXPECT(pipe2.in->tryRead(buf, 1, 4).wait(ws) == 3);
+  writePromise.wait(ws);
+
+  // A subsequent read observes EOF, completing the pump.
+  auto readPromise = pipe2.in->readAllText();
+  pipe.out = nullptr;
+  KJ_EXPECT(pumpPromise.wait(ws) == 3);
+}
+
+KJ_TEST("Userland pipe with limit tryReadSync") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  {
+    auto pipe = newOneWayPipe(uint64_t(6));
+
+    auto promise = pipe.out->write("foobar"_kjb);
+    byte buf[8]{};
+    KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf), 1)) == 6);
+    KJ_EXPECT(arrayPtr(buf).first(6) == "foobar"_kjb);
+    promise.wait(ws);
+
+    // At the limit, EOF is returned synchronously.
+    KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf), 1)) == 0);
+  }
+
+  {
+    // EOF before the limit is reached throws, matching the async path's behavior.
+    auto pipe = newOneWayPipe(uint64_t(6));
+
+    auto promise = pipe.out->write("foo"_kjb);
+    byte buf[8]{};
+    KJ_EXPECT(KJ_ASSERT_NONNULL(pipe.in->tryReadSync(arrayPtr(buf), 1)) == 3);
+    promise.wait(ws);
+
+    pipe.out = nullptr;
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("fixed-length pipe ended prematurely", {
+      auto result KJ_UNUSED = pipe.in->tryReadSync(arrayPtr(buf), 1);
+    });
+  }
+}
+
+KJ_TEST("AsyncInputStream::read() synchronous fast path") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  {
+    // A read that can be fully served from a blocked write completes without suspending.
+    auto writePromise = pipe.out->write("foobar"_kjb);
+    byte buf[6]{};
+    auto readPromise = pipe.in->read(arrayPtr(buf), 6);
+    KJ_EXPECT(readPromise.poll(ws));
+    KJ_EXPECT(readPromise.wait(ws) == 6);
+    KJ_EXPECT(arrayPtr(buf) == "foobar"_kjb);
+    writePromise.wait(ws);
+  }
+
+  {
+    // A short synchronous read (EOF) produces the standard error, as a promise rejection.
+    pipe.out = nullptr;
+    byte buf[4]{};
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("stream disconnected prematurely",
+        pipe.in->read(arrayPtr(buf), 1).wait(ws));
+  }
+}
+
+KJ_TEST("newPromisedStream tryReadSync/tryWriteSync") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  {
+    auto paf = kj::newPromiseAndFulfiller<Own<AsyncInputStream>>();
+    auto promised = newPromisedStream(kj::mv(paf.promise));
+
+    byte buf[8]{};
+
+    // Unresolved: no synchronous read possible.
+    KJ_EXPECT(promised->tryReadSync(arrayPtr(buf), 1) == kj::none);
+
+    auto pipe = newOneWayPipe();
+    auto writePromise = pipe.out->write("foo"_kjb);
+    paf.fulfiller->fulfill(kj::mv(pipe.in));
+
+    // Resolve the promised stream via an async read.
+    KJ_EXPECT(promised->tryRead(buf, 3, 3).wait(ws) == 3);
+    writePromise.wait(ws);
+
+    // Now that the stream has resolved, tryReadSync() delegates to it.
+    auto writePromise2 = pipe.out->write("bar"_kjb);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(promised->tryReadSync(arrayPtr(buf), 1)) == 3);
+    KJ_EXPECT(arrayPtr(buf).first(3) == "bar"_kjb);
+    writePromise2.wait(ws);
+  }
+
+  {
+    auto paf = kj::newPromiseAndFulfiller<Own<AsyncOutputStream>>();
+    auto promised = newPromisedStream(kj::mv(paf.promise));
+
+    // Unresolved: no synchronous write possible.
+    KJ_EXPECT(!promised->tryWriteSync("foo"_kjb));
+    ArrayPtr<const byte> pieces[2] = {"foo"_kjb, "bar"_kjb};
+    KJ_EXPECT(!promised->tryWriteSync(arrayPtr(pieces)));
+
+    auto pipe = newOneWayPipe();
+    paf.fulfiller->fulfill(kj::mv(pipe.out));
+
+    // Resolve the promised stream via an async write.
+    byte buf[3]{};
+    auto readPromise = pipe.in->tryRead(buf, 3, 3);
+    promised->write("foo"_kjb).wait(ws);
+    KJ_EXPECT(readPromise.wait(ws) == 3);
+
+    // Now that the stream has resolved, tryWriteSync() delegates to it.
+    auto readPromise2 = pipe.in->tryRead(buf, 3, 3);
+    KJ_EXPECT(promised->tryWriteSync("bar"_kjb));
+    KJ_EXPECT(readPromise2.wait(ws) == 3);
+    KJ_EXPECT(arrayPtr(buf) == "bar"_kjb);
+  }
+}
+
 constexpr static auto TEE_MAX_CHUNK_SIZE = 1 << 14;
 // AsyncTee::MAX_CHUNK_SIZE, 16k as of this writing
 
@@ -3608,6 +4109,71 @@ KJ_TEST("pump file to socket") {
   // Try with a disk file. Should use sendfile().
   auto fs = kj::newDiskFilesystem();
   doTest(fs->getCurrent().createTemporary());
+}
+
+KJ_TEST("FileInputStream/FileOutputStream tryReadSync/tryWriteSync") {
+  auto file = kj::newInMemoryFile(kj::nullClock());
+  file->writeAll("foobar"_kjb);
+
+  {
+    FileInputStream input(*file);
+    byte buf[4]{};
+    KJ_EXPECT(KJ_ASSERT_NONNULL(input.tryReadSync(arrayPtr(buf), 1)) == 4);
+    KJ_EXPECT(arrayPtr(buf) == "foob"_kjb);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(input.tryReadSync(arrayPtr(buf), 1)) == 2);
+    KJ_EXPECT(arrayPtr(buf).first(2) == "ar"_kjb);
+
+    // EOF is a valid synchronous answer.
+    KJ_EXPECT(KJ_ASSERT_NONNULL(input.tryReadSync(arrayPtr(buf), 1)) == 0);
+  }
+
+  {
+    auto file2 = kj::newInMemoryFile(kj::nullClock());
+    FileOutputStream output(*file2);
+    KJ_EXPECT(output.tryWriteSync("foo"_kjb));
+    KJ_EXPECT(output.tryWriteSync("bar"_kjb));
+
+    ArrayPtr<const byte> pieces[2] = {"baz"_kjb, "qux"_kjb};
+    KJ_EXPECT(output.tryWriteSync(arrayPtr(pieces)));
+
+    KJ_EXPECT(file2->readAllText() == "foobarbazqux");
+  }
+}
+
+KJ_TEST("pumpTo synchronous fast path") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  {
+    // When both sides can complete synchronously, the entire pump completes without ever
+    // suspending.
+    auto file = kj::newInMemoryFile(kj::nullClock());
+    file->writeAll("foobar"_kjb);
+    auto file2 = kj::newInMemoryFile(kj::nullClock());
+
+    FileInputStream input(*file);
+    FileOutputStream output(*file2);
+    auto promise = input.pumpTo(output);
+    KJ_EXPECT(promise.poll(ws));
+    KJ_EXPECT(promise.wait(ws) == 6);
+    KJ_EXPECT(file2->readAllText() == "foobar");
+  }
+
+  {
+    // A pump large enough to exhaust the synchronous iteration budget still completes correctly
+    // (after yielding to the event loop in between).
+    auto big = bigString(300'000);  // > 64 iterations of the 4096-byte pump buffer
+
+    auto file = kj::newInMemoryFile(kj::nullClock());
+    file->writeAll(big.asBytes());
+    auto file2 = kj::newInMemoryFile(kj::nullClock());
+
+    FileInputStream input(*file);
+    FileOutputStream output(*file2);
+    KJ_EXPECT(unoptimizedPumpTo(input, output, kj::maxValue).wait(ws) == big.size());
+    // Extra parens here so that we don't write the big string to the console on failure...
+    KJ_EXPECT((file2->readAllText() == big));
+  }
 }
 
 KJ_TEST("Calling abortRead() while tryRead() is in progress") {

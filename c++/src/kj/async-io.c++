@@ -53,16 +53,29 @@
 namespace kj {
 
 Promise<size_t> AsyncInputStream::read(ArrayPtr<byte> buffer, size_t minBytes) {
-  return tryRead(buffer.begin(), minBytes, buffer.size()).then([=](size_t result) mutable {
-    if (result >= minBytes) {
-      return result;
-    } else {
-      kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream disconnected prematurely"));
-      // Pretend we read zeros from the input.
-      buffer.first(minBytes).slice(result).fill(0);
-      return minBytes;
-    }
-  });
+  size_t result;
+
+  // Fast path: complete the read synchronously if the data is already available, avoiding
+  // promise overhead.
+  KJ_IF_SOME(syncResult, tryReadSync(buffer, minBytes)) {
+    result = syncResult;
+  } else {
+    result = co_await tryRead(buffer.begin(), minBytes, buffer.size());
+  }
+
+  if (result >= minBytes) {
+    co_return result;
+  }
+
+  // Short read indicates EOF.
+  kj::throwRecoverableException(KJ_EXCEPTION(DISCONNECTED, "stream disconnected prematurely"));
+  // Pretend we read zeros from the input.
+  buffer.first(minBytes).slice(result).fill(0);
+  co_return minBytes;
+}
+
+Maybe<size_t> AsyncInputStream::tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) {
+  return kj::none;
 }
 
 Maybe<uint64_t> AsyncInputStream::tryGetLength() { return kj::none; }
@@ -79,6 +92,9 @@ Maybe<Own<AsyncInputStream>> AsyncInputStream::tryTee(uint64_t) {
 kj::Promise<size_t> NullStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
   return kj::constPromise<size_t, 0>();
 }
+kj::Maybe<size_t> NullStream::tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) {
+  return size_t(0);
+}
 kj::Maybe<uint64_t> NullStream::tryGetLength() {
   return uint64_t(0);
 }
@@ -92,52 +108,69 @@ kj::Promise<void> NullStream::write(ArrayPtr<const byte> buffer) {
 kj::Promise<void> NullStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
   return kj::READY_NOW;
 }
+bool NullStream::tryWriteSync(ArrayPtr<const byte> buffer) {
+  return true;
+}
+bool NullStream::tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  return true;
+}
 kj::Promise<void> NullStream::whenWriteDisconnected() {
   return kj::NEVER_DONE;
 }
 
 void NullStream::shutdownWrite() {}
 
-namespace {
-
-class AsyncPump {
-public:
-  AsyncPump(AsyncInputStream& input, AsyncOutputStream& output, uint64_t limit, uint64_t doneSoFar)
-      : input(input), output(output), limit(limit), doneSoFar(doneSoFar) {}
-
-  Promise<uint64_t> pump() {
-    // TODO(perf): This could be more efficient by reading half a buffer at a time and then
-    //   starting the next read concurrent with writing the data from the previous read.
-
-    uint64_t n = kj::min(limit - doneSoFar, sizeof(buffer));
-    if (n == 0) return doneSoFar;
-
-    return input.tryRead(buffer, 1, n)
-        .then([this](size_t amount) -> Promise<uint64_t> {
-      if (amount == 0) return doneSoFar;  // EOF
-      doneSoFar += amount;
-      return output.write(arrayPtr(buffer).first(amount)).then([this]() {
-        return pump();
-      });
-    });
-  }
-
-private:
-  AsyncInputStream& input;
-  AsyncOutputStream& output;
-  uint64_t limit;
-  uint64_t doneSoFar;
-  byte buffer[4096];
-};
-
-}  // namespace
-
 Promise<uint64_t> unoptimizedPumpTo(
     AsyncInputStream& input, AsyncOutputStream& output, uint64_t amount,
     uint64_t completedSoFar) {
-  auto pump = heap<AsyncPump>(input, output, amount, completedSoFar);
-  auto promise = pump->pump();
-  return promise.attach(kj::mv(pump));
+  // TODO(perf): This could be more efficient by reading half a buffer at a time and then
+  //   starting the next read concurrent with writing the data from the previous read.
+
+  // Maximum number of fully-synchronous pump iterations (tryReadSync() and tryWriteSync() both
+  // succeeding) before yielding to the event loop, so that a pump between two always-synchronous
+  // streams cannot starve other events.
+  static constexpr size_t MAX_SYNC_ITERATIONS = 64;
+
+  byte buffer[4096];
+  uint64_t doneSoFar = completedSoFar;
+
+  for (;;) {
+    // Fast path: as long as both the input can produce data and the output can accept it
+    // synchronously, pump without allocating any promises. To avoid monopolizing the event loop
+    // when both sides are always-synchronous (e.g. file-to-file pumps), we limit how much we
+    // pump this way before yielding.
+    bool exhaustedBudget = true;
+    for (size_t i = 0; i < MAX_SYNC_ITERATIONS; i++) {
+      uint64_t n = kj::min(amount - doneSoFar, sizeof(buffer));
+      if (n == 0) co_return doneSoFar;
+
+      KJ_IF_SOME(readAmount, input.tryReadSync(arrayPtr(buffer).first(n), 1)) {
+        if (readAmount == 0) co_return doneSoFar;  // EOF
+        doneSoFar += readAmount;
+        if (!output.tryWriteSync(arrayPtr(buffer).first(readAmount))) {
+          // The output needs to write asynchronously.
+          co_await output.write(arrayPtr(buffer).first(readAmount));
+          exhaustedBudget = false;
+          break;
+        }
+      } else {
+        // The input needs to read asynchronously.
+        n = kj::min(amount - doneSoFar, sizeof(buffer));
+        if (n == 0) co_return doneSoFar;
+        auto readAmount = co_await input.tryRead(buffer, 1, n);
+        if (readAmount == 0) co_return doneSoFar;  // EOF
+        doneSoFar += readAmount;
+        co_await output.write(arrayPtr(buffer).first(readAmount));
+        exhaustedBudget = false;
+        break;
+      }
+    }
+
+    if (exhaustedBudget) {
+      // Used up the synchronous budget; yield to the event loop before continuing.
+      co_await kj::evalLater([]() {});
+    }
+  }
 }
 
 Promise<uint64_t> AsyncInputStream::pumpTo(
@@ -219,6 +252,14 @@ Promise<String> AsyncInputStream::readAllText(uint64_t limit) {
   return promise.attach(kj::mv(reader));
 }
 
+bool AsyncOutputStream::tryWriteSync(ArrayPtr<const byte> buffer) {
+  return false;
+}
+
+bool AsyncOutputStream::tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  return false;
+}
+
 Maybe<Promise<uint64_t>> AsyncOutputStream::tryPumpFrom(
     AsyncInputStream& input, uint64_t amount) {
   return kj::none;
@@ -245,6 +286,17 @@ public:
       return newAdaptedPromise<ReadResult, BlockedRead>(
           *this, arrayPtr(reinterpret_cast<byte*>(buffer), maxBytes), minBytes)
           .then([](ReadResult r) { return r.byteCount; });
+    }
+  }
+
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    if (minBytes == 0) {
+      return size_t(0);
+    } else KJ_IF_SOME(s, state) {
+      return s.tryReadSync(buffer, minBytes);
+    } else {
+      // No writer is waiting, so a read cannot complete synchronously.
+      return kj::none;
     }
   }
 
@@ -322,6 +374,34 @@ public:
     } else {
       return newAdaptedPromise<void, BlockedWrite>(
           *this, pieces[0], pieces.slice(1, pieces.size()));
+    }
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    if (buffer == nullptr) {
+      // Empty writes always complete immediately, mirroring write().
+      return true;
+    } else KJ_IF_SOME(s, state) {
+      return s.tryWriteSync(buffer);
+    } else {
+      // No reader is waiting, so a write cannot complete synchronously.
+      return false;
+    }
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    while (pieces.size() > 0 && pieces[0].size() == 0) {
+      pieces = pieces.slice(1, pieces.size());
+    }
+
+    if (pieces.size() == 0) {
+      // Empty writes always complete immediately, mirroring write().
+      return true;
+    } else KJ_IF_SOME(s, state) {
+      return s.tryWriteSync(pieces);
+    } else {
+      // No reader is waiting, so a write cannot complete synchronously.
+      return false;
     }
   }
 
@@ -495,6 +575,39 @@ private:
         KJ_CASE_ONEOF(retry, Retry) {
           return pipe.tryRead(retry.buffer, retry.minBytes, retry.maxBytes)
               .then([n = retry.alreadyRead](size_t amount) { return amount + n; });
+        }
+      }
+      KJ_UNREACHABLE;
+    }
+
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      if (!canceler.isEmpty()) {
+        // A pump is already in progress; can't read synchronously.
+        return kj::none;
+      }
+
+      // tryReadImpl() cannot stop halfway: if it consumes the entire blocked write without
+      // reaching `minBytes`, it completes the write and expects the caller to continue reading
+      // from the pipe asynchronously. A synchronous read cannot do that, so we must verify in
+      // advance that enough data is buffered to satisfy `minBytes`. (Note that any FDs or
+      // streams attached to the blocked write are dropped by a plain byte read, matching
+      // tryRead()'s behavior.)
+      // We only need to confirm that at least minBytes are available, not count the full total.
+      size_t availableChecked = writeBuffer.size();
+      for (auto& piece: morePieces) {
+        if (availableChecked >= minBytes) break;
+        availableChecked += piece.size();
+      }
+      if (availableChecked < minBytes) {
+        return kj::none;
+      }
+
+      KJ_SWITCH_ONEOF(tryReadImpl(buffer.begin(), minBytes, buffer.size())) {
+        KJ_CASE_ONEOF(done, Done) {
+          return done.result;
+        }
+        KJ_CASE_ONEOF(retry, Retry) {
+          KJ_FAIL_ASSERT("tryReadImpl() returned Retry despite sufficient buffered data");
         }
       }
       KJ_UNREACHABLE;
@@ -677,6 +790,14 @@ private:
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
       KJ_FAIL_REQUIRE("can't write() again until previous write() completes");
     }
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      // A write() is already in progress.
+      return false;
+    }
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      // A write() is already in progress.
+      return false;
+    }
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
                               ArrayPtr<const ArrayPtr<const byte>> moreData,
                               ArrayPtr<const int> fds) override {
@@ -804,6 +925,17 @@ private:
       }, teeExceptionPromise<size_t>(fulfiller, canceler)));
     }
 
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      // In principle we could delegate to `input.tryReadSync()` here (with appropriate clamping
+      // and accounting). However, if the input were to return fewer than `minBytes` -- indicating
+      // the *input* hit EOF -- the pump would complete, but the pipe itself would not be at EOF:
+      // the read must continue waiting for a future writer. A synchronous read cannot express
+      // "here is partial data, keep waiting", and by that point the input bytes would have
+      // already been irreversibly consumed. Since we can't know in advance whether the input
+      // will hit EOF, we must not attempt a synchronous read at all.
+      return kj::none;
+    }
+
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
       // Pumps drop all capabilities, so fall back to regular read. (We don't even know if the
@@ -886,6 +1018,14 @@ private:
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
       KJ_FAIL_REQUIRE("can't write() again until previous tryPumpFrom() completes");
     }
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      // A tryPumpFrom() is already in progress.
+      return false;
+    }
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      // A tryPumpFrom() is already in progress.
+      return false;
+    }
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
                               ArrayPtr<const ArrayPtr<const byte>> moreData,
                               ArrayPtr<const int> fds) override {
@@ -942,6 +1082,10 @@ private:
     Promise<size_t> tryRead(void* readBuffer, size_t minBytes, size_t maxBytes) override {
       KJ_FAIL_REQUIRE("can't read() again until previous read() completes");
     }
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      // A read() is already in progress.
+      return kj::none;
+    }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
       KJ_FAIL_REQUIRE("can't read() again until previous read() completes");
@@ -972,6 +1116,65 @@ private:
         KJ_CASE_ONEOF(retry, Retry) {
           KJ_ASSERT(retry.moreData == nullptr);
           return pipe.write(retry.data);
+        }
+      }
+      KJ_UNREACHABLE;
+    }
+
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      if (!canceler.isEmpty()) {
+        // A tryPumpFrom() is already in progress; can't write synchronously.
+        return false;
+      }
+
+      if (buffer.size() > readBuffer.size()) {
+        // The waiting reader's buffer cannot accept the entire write. writeImpl() would complete
+        // the read and then need to deliver the remainder asynchronously, but tryWriteSync() is
+        // all-or-nothing, so we must not start.
+        return false;
+      }
+
+      KJ_SWITCH_ONEOF(writeImpl(buffer, nullptr)) {
+        KJ_CASE_ONEOF(done, Done) {
+          return true;
+        }
+        KJ_CASE_ONEOF(retry, Retry) {
+          KJ_FAIL_ASSERT("writeImpl() returned Retry despite the write fitting in the read buffer");
+        }
+      }
+      KJ_UNREACHABLE;
+    }
+
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      if (!canceler.isEmpty()) {
+        // A tryPumpFrom() is already in progress; can't write synchronously.
+        return false;
+      }
+
+      size_t total = 0;
+      for (auto& piece: pieces) {
+        total += piece.size();
+      }
+      if (total > readBuffer.size()) {
+        // The waiting reader's buffer cannot accept the entire write. writeImpl() would complete
+        // the read and then need to deliver the remainder asynchronously, but tryWriteSync() is
+        // all-or-nothing, so we must not start.
+        return false;
+      }
+
+      KJ_SWITCH_ONEOF(writeImpl(pieces[0], pieces.slice(1, pieces.size()))) {
+        KJ_CASE_ONEOF(done, Done) {
+          return true;
+        }
+        KJ_CASE_ONEOF(retry, Retry) {
+          // writeImpl() returns Retry when the reader's buffer was filled exactly; since the
+          // total fit, anything left over must be empty pieces, meaning every byte was in fact
+          // delivered, so this is success.
+          KJ_ASSERT(retry.data.size() == 0);
+          for (auto& piece: retry.moreData) {
+            KJ_ASSERT(piece.size() == 0);
+          }
+          return true;
         }
       }
       KJ_UNREACHABLE;
@@ -1229,6 +1432,10 @@ private:
     Promise<size_t> tryRead(void* readBuffer, size_t minBytes, size_t maxBytes) override {
       KJ_FAIL_REQUIRE("can't read() again until previous pumpTo() completes");
     }
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      // A pumpTo() is already in progress.
+      return kj::none;
+    }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
       KJ_FAIL_REQUIRE("can't read() again until previous pumpTo() completes");
@@ -1274,6 +1481,64 @@ private:
           return pipe.write(writeBuffer.slice(actual));
         }
       }, teeExceptionPromise<void>(fulfiller, canceler)));
+    }
+
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      if (!canceler.isEmpty()) {
+        // A write to the pump's output is already in progress.
+        return false;
+      }
+
+      KJ_ASSERT(pumpedSoFar <= amount);
+      if (buffer.size() > amount - pumpedSoFar) {
+        // Part of this write would fall past the end of the pump and would have to be delivered
+        // to the pipe asynchronously, but tryWriteSync() is all-or-nothing, so we must not start.
+        return false;
+      }
+
+      if (!output.tryWriteSync(buffer)) {
+        return false;
+      }
+
+      pumpedSoFar += buffer.size();
+      KJ_ASSERT(pumpedSoFar <= amount);
+      if (pumpedSoFar == amount) {
+        // Done with pump.
+        fulfiller.fulfill(kj::cp(pumpedSoFar));
+        pipe.endState(*this);
+      }
+      return true;
+    }
+
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      if (!canceler.isEmpty()) {
+        // A write to the pump's output is already in progress.
+        return false;
+      }
+
+      KJ_ASSERT(pumpedSoFar <= amount);
+      size_t total = 0;
+      for (auto& piece: pieces) {
+        total += piece.size();
+      }
+      if (total > amount - pumpedSoFar) {
+        // Part of this write would fall past the end of the pump and would have to be delivered
+        // to the pipe asynchronously, but tryWriteSync() is all-or-nothing, so we must not start.
+        return false;
+      }
+
+      if (!output.tryWriteSync(pieces)) {
+        return false;
+      }
+
+      pumpedSoFar += total;
+      KJ_ASSERT(pumpedSoFar <= amount);
+      if (pumpedSoFar == amount) {
+        // Done with pump.
+        fulfiller.fulfill(kj::cp(pumpedSoFar));
+        pipe.endState(*this);
+      }
+      return true;
     }
 
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
@@ -1433,6 +1698,9 @@ private:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+    }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
@@ -1454,6 +1722,12 @@ private:
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+    }
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+    }
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
     }
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
                               ArrayPtr<const ArrayPtr<const byte>> moreData,
@@ -1506,6 +1780,10 @@ private:
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
       return constPromise<size_t, 0>();
     }
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      // EOF is a perfectly good synchronous answer.
+      return size_t(0);
+    }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
       return ReadResult { 0, 0 };
@@ -1526,6 +1804,12 @@ private:
       KJ_FAIL_REQUIRE("shutdownWrite() has been called");
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      KJ_FAIL_REQUIRE("shutdownWrite() has been called");
+    }
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      KJ_FAIL_REQUIRE("shutdownWrite() has been called");
+    }
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
       KJ_FAIL_REQUIRE("shutdownWrite() has been called");
     }
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
@@ -1564,6 +1848,10 @@ public:
     return pipe->tryRead(buffer, minBytes, maxBytes);
   }
 
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return pipe->tryReadSync(buffer, minBytes);
+  }
+
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
     return pipe->pumpTo(output, amount);
   }
@@ -1588,6 +1876,14 @@ public:
 
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return pipe->write(pieces);
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    return pipe->tryWriteSync(buffer);
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return pipe->tryWriteSync(pieces);
   }
 
   Maybe<Promise<uint64_t>> tryPumpFrom(
@@ -1618,6 +1914,9 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     return in->tryRead(buffer, minBytes, maxBytes);
   }
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    return in->tryReadSync(buffer, minBytes);
+  }
   Promise<ReadResult> tryReadWithFds(void* buffer, size_t minBytes, size_t maxBytes,
                                       OwnFd* fdBuffer, size_t maxFds) override {
     return in->tryReadWithFds(buffer, minBytes, maxBytes, fdBuffer, maxFds);
@@ -1639,6 +1938,12 @@ public:
   }
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
     return out->write(pieces);
+  }
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    return out->tryWriteSync(buffer);
+  }
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    return out->tryWriteSync(pieces);
   }
   Promise<void> writeWithFds(ArrayPtr<const byte> data,
                              ArrayPtr<const ArrayPtr<const byte>> moreData,
@@ -1687,6 +1992,20 @@ public:
       decreaseLimit(actual, minBytes);
       return actual;
     });
+  }
+
+  Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    if (limit == 0) return size_t(0);
+    KJ_IF_SOME(actual, inner->tryReadSync(
+        buffer.first(kj::min(buffer.size(), limit)), kj::min(minBytes, limit))) {
+      // Note: Only update the limit if the inner read actually happened. If the inner stream
+      // returned kj::none, our state must remain untouched so that the caller can fall back to
+      // tryRead().
+      decreaseLimit(actual, minBytes);
+      return actual;
+    } else {
+      return kj::none;
+    }
   }
 
   Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
@@ -2398,6 +2717,15 @@ public:
     }
   }
 
+  kj::Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    KJ_IF_SOME(s, stream) {
+      return s->tryReadSync(buffer, minBytes);
+    } else {
+      // Promise not yet resolved.
+      return kj::none;
+    }
+  }
+
   kj::Maybe<uint64_t> tryGetLength() override {
     KJ_IF_SOME(s, stream) {
       return s->tryGetLength();
@@ -2432,6 +2760,24 @@ public:
       return promise.addBranch().then([this,pieces]() {
         return KJ_ASSERT_NONNULL(stream)->write(pieces);
       });
+    }
+  }
+
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    KJ_IF_SOME(s, stream) {
+      return s->tryWriteSync(buffer);
+    } else {
+      // Promise not yet resolved.
+      return false;
+    }
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_IF_SOME(s, stream) {
+      return s->tryWriteSync(pieces);
+    } else {
+      // Promise not yet resolved.
+      return false;
     }
   }
 
@@ -2536,6 +2882,24 @@ public:
     }
   }
 
+  bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+    KJ_IF_SOME(s, stream) {
+      return s->tryWriteSync(buffer);
+    } else {
+      // Promise not yet resolved.
+      return false;
+    }
+  }
+
+  bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    KJ_IF_SOME(s, stream) {
+      return s->tryWriteSync(pieces);
+    } else {
+      // Promise not yet resolved.
+      return false;
+    }
+  }
+
   kj::Maybe<kj::Promise<uint64_t>> tryPumpFrom(
       kj::AsyncInputStream& input, uint64_t amount = kj::maxValue) override {
     KJ_IF_SOME(s, stream) {
@@ -2588,6 +2952,15 @@ public:
       return promise.addBranch().then([this,buffer,minBytes,maxBytes]() {
         return KJ_ASSERT_NONNULL(stream)->tryRead(buffer, minBytes, maxBytes);
       });
+    }
+  }
+
+  kj::Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    KJ_IF_SOME(s, stream) {
+      return s->tryReadSync(buffer, minBytes);
+    } else {
+      // Promise not yet resolved.
+      return kj::none;
     }
   }
 
@@ -2876,6 +3249,13 @@ Promise<size_t> FileInputStream::tryRead(void* buffer, size_t minBytes, size_t m
   return result;
 }
 
+Maybe<size_t> FileInputStream::tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) {
+  // File reads are always synchronous anyway. (See the comment in tryRead() regarding `minBytes`.)
+  size_t result = file.read(offset, buffer);
+  offset += result;
+  return result;
+}
+
 Maybe<uint64_t> FileInputStream::tryGetLength() {
   uint64_t size = file.stat().size;
   return offset < size ? size - offset : 0;
@@ -2894,6 +3274,22 @@ Promise<void> FileOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> piece
     offset += piece.size();
   }
   return kj::READY_NOW;
+}
+
+bool FileOutputStream::tryWriteSync(ArrayPtr<const byte> buffer) {
+  // File writes are always synchronous anyway.
+  file.write(offset, buffer);
+  offset += buffer.size();
+  return true;
+}
+
+bool FileOutputStream::tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  // File writes are always synchronous anyway.
+  for (auto piece: pieces) {
+    file.write(offset, piece);
+    offset += piece.size();
+  }
+  return true;
 }
 
 Promise<void> FileOutputStream::whenWriteDisconnected() {
