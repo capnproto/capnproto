@@ -592,12 +592,13 @@ private:
       // advance that enough data is buffered to satisfy `minBytes`. (Note that any FDs or
       // streams attached to the blocked write are dropped by a plain byte read, matching
       // tryRead()'s behavior.)
-      size_t totalAvailable = writeBuffer.size();
+      // We only need to confirm that at least minBytes are available, not count the full total.
+      size_t availableChecked = writeBuffer.size();
       for (auto& piece: morePieces) {
-        if (totalAvailable >= minBytes) break;
-        totalAvailable += piece.size();
+        if (availableChecked >= minBytes) break;
+        availableChecked += piece.size();
       }
-      if (totalAvailable < minBytes) {
+      if (availableChecked < minBytes) {
         return kj::none;
       }
 
@@ -1488,6 +1489,7 @@ private:
         return false;
       }
 
+      KJ_ASSERT(pumpedSoFar <= amount);
       if (buffer.size() > amount - pumpedSoFar) {
         // Part of this write would fall past the end of the pump and would have to be delivered
         // to the pipe asynchronously, but tryWriteSync() is all-or-nothing, so we must not start.
@@ -1514,6 +1516,7 @@ private:
         return false;
       }
 
+      KJ_ASSERT(pumpedSoFar <= amount);
       size_t total = 0;
       for (auto& piece: pieces) {
         total += piece.size();
