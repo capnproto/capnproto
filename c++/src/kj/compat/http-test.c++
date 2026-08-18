@@ -6170,6 +6170,86 @@ KJ_TEST("HttpClient connection management") {
   KJ_EXPECT(cumulative == 9);
 }
 
+KJ_TEST("HttpClient retries a bodiless request that fails on a reused connection") {
+  KJ_HTTP_TEST_SETUP_IO;
+  KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;
+
+  kj::TimerImpl clientTimer(kj::origin<kj::TimePoint>());
+  HttpHeaderTable headerTable;
+
+  // A raw server which serves one keep-alive response on its first connection, then closes
+  // that connection abruptly upon receiving a second request on it. This deterministically
+  // reproduces the keep-alive race: the server dropping a pooled connection at the same
+  // moment the client reuses it (e.g. because the server's idle timeout fired). The retried
+  // request is then served properly on a second connection, and finally a POST on that
+  // (again pooled) connection is killed the same way to verify non-bodiless requests are
+  // NOT retried.
+  auto readRequest = [](kj::AsyncIoStream& conn, size_t bodySize) -> kj::Promise<void> {
+    auto buffer = kj::heapArray<char>(4096);
+    size_t total = 0;
+    for (;;) {
+      auto n = co_await conn.tryRead(buffer.begin() + total, 1, buffer.size() - total);
+      KJ_ASSERT(n > 0, "connection closed before full request arrived");
+      total += n;
+      for (size_t i = 4; i <= total; i++) {
+        if (kj::ArrayPtr<const char>(buffer.begin() + i - 4, 4) == "\r\n\r\n"_kj.asArray()) {
+          if (total >= i + bodySize) co_return;
+        }
+      }
+    }
+  };
+
+  auto serverTask = kj::coCapture([&]() -> kj::Promise<void> {
+    auto conn = co_await listener->accept();
+    co_await readRequest(*conn, 0);
+    co_await conn->write("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nfoo"_kjb);
+    co_await readRequest(*conn, 0);
+    conn = nullptr;  // abruptly close the reused connection without responding
+
+    auto conn2 = co_await listener->accept();
+    co_await readRequest(*conn2, 0);
+    co_await conn2->write("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nbar"_kjb);
+    co_await readRequest(*conn2, 3);
+    conn2 = nullptr;  // abruptly close again, this time on a POST
+  })();
+
+  uint count = 0;
+  uint cumulative = 0;
+  CountingNetworkAddress countingAddr(*addr, count, cumulative);
+
+  FakeEntropySource entropySource;
+  HttpClientSettings clientSettings;
+  clientSettings.entropySource = entropySource;
+  auto client = newHttpClient(clientTimer, headerTable, countingAddr, clientSettings);
+
+  auto doGet = [&](kj::StringPtr path) {
+    return client->request(HttpMethod::GET, path, HttpHeaders(headerTable)).response
+        .then([](HttpClient::Response&& response) {
+      auto promise = response.body->readAllText();
+      return promise.attach(kj::mv(response.body));
+    });
+  };
+
+  KJ_EXPECT(doGet("/first").wait(waitScope) == "foo");
+  KJ_EXPECT(cumulative == 1);
+
+  // This request is written into the pooled connection, which the server closes without
+  // responding. The client should transparently retry on a fresh connection.
+  KJ_EXPECT(doGet("/second").wait(waitScope) == "bar");
+  KJ_EXPECT(cumulative == 2);
+
+  // A request with a body must NOT be retried: it fails, and no new connection is made.
+  {
+    auto req = client->request(
+        HttpMethod::POST, "/third", HttpHeaders(headerTable), size_t(3));
+    req.body->write("xyz"_kjb).wait(waitScope);
+    KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, req.response.wait(waitScope));
+  }
+  KJ_EXPECT(cumulative == 2);
+
+  serverTask.wait(waitScope);
+}
+
 KJ_TEST("HttpClient disable connection reuse") {
   KJ_HTTP_TEST_SETUP_IO;
   KJ_HTTP_TEST_SETUP_LOOPBACK_LISTENER_AND_ADDR;

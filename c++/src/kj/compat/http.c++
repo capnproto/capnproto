@@ -6236,6 +6236,37 @@ public:
                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     auto refcounted = getClient();
     auto result = refcounted->client->request(method, url, headers, expectedBodySize);
+
+    // When reusing a pooled connection, the server may have closed it after our canReuse()
+    // check but before our request bytes reached it -- e.g. the server's idle timeout fired
+    // while the request was in flight, a race inherent to HTTP/1.1 keep-alive. In that case
+    // the request is known not to have been processed, so requests which provably have no
+    // body to replay (mirroring the `hasBody` logic in HttpClientImpl::request()) are safe
+    // to retry once, on a fresh connection.
+    bool retriable = refcounted->reusedConnection &&
+        (method == HttpMethod::GET || method == HttpMethod::HEAD) &&
+        expectedBodySize.orDefault(0) == 0 &&
+        headers.get(HttpHeaderId::TRANSFER_ENCODING) == kj::none;
+    if (retriable) {
+      result.response = result.response.catch_(
+          [this, method, url=kj::str(url), headers=headers.clone(), expectedBodySize]
+          (kj::Exception&& exception) mutable -> kj::Promise<Response> {
+        if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
+          return kj::mv(exception);
+        }
+        auto retryRefcounted = getFreshClient();
+        auto retryResult = retryRefcounted->client->request(
+            method, url, headers, expectedBodySize);
+        return retryResult.response.then(
+            [retryBody=kj::mv(retryResult.body), url=kj::mv(url), headers=kj::mv(headers),
+             retryRefcounted=kj::mv(retryRefcounted)](Response&& response) mutable {
+          response.body = response.body.attach(kj::mv(retryBody), kj::mv(url),
+              kj::mv(headers), kj::mv(retryRefcounted));
+          return kj::mv(response);
+        });
+      });
+    }
+
     result.body = result.body.attach(refcounted.addRef());
     result.response = result.response.then(
         [refcounted=kj::mv(refcounted)](Response&& response) mutable {
@@ -6298,8 +6329,9 @@ private:
   std::deque<AvailableClient> availableClients;
 
   struct RefcountedClient final: public kj::Refcounted {
-    RefcountedClient(NetworkAddressHttpClient& parent, kj::Own<HttpClientImpl> client)
-        : parent(parent), client(kj::mv(client)) {
+    RefcountedClient(NetworkAddressHttpClient& parent, kj::Own<HttpClientImpl> client,
+                     bool reusedConnection)
+        : parent(parent), client(kj::mv(client)), reusedConnection(reusedConnection) {
       ++parent.activeConnectionCount;
     }
     ~RefcountedClient() noexcept(false) {
@@ -6313,23 +6345,28 @@ private:
 
     NetworkAddressHttpClient& parent;
     kj::Own<HttpClientImpl> client;
+    bool reusedConnection;
   };
 
   kj::Rc<RefcountedClient> getClient() {
     for (;;) {
       if (availableClients.empty()) {
-        auto stream = newPromisedStream(address->connect());
-        return kj::rc<RefcountedClient>(*this,
-          kj::heap<HttpClientImpl>(responseHeaderTable, kj::mv(stream), settings));
+        return getFreshClient();
       } else {
         auto client = kj::mv(availableClients.back().client);
         availableClients.pop_back();
         if (client->canReuse()) {
-          return kj::rc<RefcountedClient>(*this, kj::mv(client));
+          return kj::rc<RefcountedClient>(*this, kj::mv(client), true);
         }
         // Whoops, this client's connection was closed by the server at some point. Discard.
       }
     }
+  }
+
+  kj::Rc<RefcountedClient> getFreshClient() {
+    auto stream = newPromisedStream(address->connect());
+    return kj::rc<RefcountedClient>(*this,
+      kj::heap<HttpClientImpl>(responseHeaderTable, kj::mv(stream), settings), false);
   }
 
   void returnClientToAvailable(kj::Own<HttpClientImpl> client) {
