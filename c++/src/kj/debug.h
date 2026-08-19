@@ -776,12 +776,50 @@ inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
 inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
 // SFINAE to stringify a value if and only if it can be stringified.
 
+struct DebugNull {};
+inline StringPtr KJ_STRINGIFY(DebugNull) { return "nullptr"_kj; }
+
+template <typename T>
+struct DebugOperandType { using Type = Decay<T>; };
+template <typename T>
+struct DebugOperandType<T&> { using Type = T&; };
+template <>
+struct DebugOperandType<decltype(nullptr)> { using Type = DebugNull; };
+
+template <typename T>
+Maybe<typename DebugOperandType<T>::Type> captureDebugOperand(T&& value) {
+  using Captured = typename DebugOperandType<T>::Type;
+  Maybe<Captured> result;
+  if constexpr (isSameType<T, decltype(nullptr)>()) {
+    result.emplace();
+  } else if constexpr (isReference<T>()) {
+    result = &value;
+  } else {
+    result.emplace(kj::fwd<T>(value));
+  }
+  return result;
+}
+
 template <typename Left, typename Right>
 struct DebugComparison {
-  Left left;
-  Right right;
+  Maybe<typename DebugOperandType<Left>::Type> left;
+  Maybe<typename DebugOperandType<Right>::Type> right;
   StringPtr op;
   bool result;
+
+  DebugComparison(Left&& left, Right&& right, StringPtr op, bool result)
+      : left(captureDebugOperand<Left>(kj::fwd<Left>(left))),
+        right(captureDebugOperand<Right>(kj::fwd<Right>(right))),
+        op(op), result(result) {
+    if (KJ_LIKELY(result)) {
+      // Successful assertions do not need to retain their operands for stringification. Release
+      // them before returning from the comparison operator: an operand may be an ArrayPtr into
+      // another temporary in the same expression, which is destroyed before the if-condition
+      // variable is tested.
+      this->left = kj::none;
+      this->right = kj::none;
+    }
+  }
 
   inline operator bool() const { return KJ_LIKELY(result); }
 
@@ -792,7 +830,12 @@ struct DebugComparison {
 
 template <typename Left, typename Right>
 String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
-  return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
+  KJ_IF_SOME(left, cmp.left) {
+    KJ_IF_SOME(right, cmp.right) {
+      return _::concat(tryToCharSequence(&left), cmp.op, tryToCharSequence(&right));
+    }
+  }
+  KJ_UNREACHABLE;
 }
 
 template <typename T>

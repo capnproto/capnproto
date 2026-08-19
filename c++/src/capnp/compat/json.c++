@@ -143,11 +143,11 @@ struct JsonCodec::Impl {
     size_t maxChildSize = 0;
     for (auto& e: elements) maxChildSize = kj::max(maxChildSize, e.size());
 
+    kj::String ownPrefix;
+    kj::String ownDelim;
     kj::StringPtr prefix;
     kj::StringPtr delim;
     kj::StringPtr suffix;
-    kj::String ownPrefix;
-    kj::String ownDelim;
     if (!prettyPrint) {
       // No whitespace.
       delim = ",";
@@ -973,14 +973,14 @@ public:
         unionTagName = unionDeclName;
       }
       KJ_IF_SOME(u, unionTagName) {
-        fieldsByName.insert(u, FieldNameInfo {
-          FieldNameInfo::UNION_TAG, 0, 0, nullptr
+        fieldsByName.insert(kj::heapString(u), FieldNameInfo {
+          FieldNameInfo::UNION_TAG, 0, 0
         });
       }
 
       if (d.hasValueName()) {
-        fieldsByName.insert(d.getValueName(), FieldNameInfo {
-          FieldNameInfo::UNION_VALUE, 0, 0, nullptr
+        fieldsByName.insert(kj::heapString(d.getValueName()), FieldNameInfo {
+          FieldNameInfo::UNION_VALUE, 0, 0
         });
       }
     }
@@ -1058,8 +1058,8 @@ public:
       KJ_IF_SOME(fh, info.flattenHandler) {
         // Set up fieldsByName for each of the child's fields.
         for (auto& entry: fh.fieldsByName) {
-          kj::StringPtr flattenedName;
           kj::String ownName;
+          kj::StringPtr flattenedName;
           if (info.prefix.size() > 0) {
             ownName = kj::str(info.prefix, entry.key);
             flattenedName = ownName;
@@ -1067,9 +1067,9 @@ public:
             flattenedName = entry.key;
           }
 
-          fieldsByName.upsert(flattenedName, FieldNameInfo {
+          fieldsByName.upsert(kj::heapString(flattenedName), FieldNameInfo {
             isUnionMember ? FieldNameInfo::FLATTENED_FROM_UNION : FieldNameInfo::FLATTENED,
-            field.getIndex(), (uint)info.prefix.size(), kj::mv(ownName)
+            field.getIndex(), (uint)info.prefix.size()
           }, [&](FieldNameInfo& existing, FieldNameInfo&& replacement) {
             KJ_REQUIRE(existing.type == FieldNameInfo::FLATTENED_FROM_UNION &&
                        replacement.type == FieldNameInfo::FLATTENED_FROM_UNION,
@@ -1092,7 +1092,7 @@ public:
         }
 
         if (!isUnionWithValueName) {
-          fieldsByName.insert(info.name, kj::mv(nameInfo));
+          fieldsByName.insert(kj::heapString(info.name), kj::mv(nameInfo));
         }
       }
 
@@ -1209,10 +1209,9 @@ private:
     // For `NORMAL` and `FLATTENED`, the index of the field in schema.getFields().
 
     uint prefixLength;
-    kj::String ownName;
   };
 
-  kj::HashMap<kj::StringPtr, FieldNameInfo> fieldsByName;
+  kj::HashMap<kj::String, FieldNameInfo> fieldsByName;
   // Maps JSON names to info needed to parse them.
 
   kj::HashMap<kj::StringPtr, StructSchema::Field> unionTagValues;
@@ -1285,6 +1284,10 @@ private:
         }
       }
     }
+
+    // prefix may point into ownPrefix, but function parameters are destroyed after local variables.
+    // Release the view explicitly before ownPrefix is destroyed.
+    prefix = nullptr;
   }
 
   bool decodeField(const JsonCodec& codec, kj::StringPtr name, JsonValue::Reader value,

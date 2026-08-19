@@ -485,6 +485,9 @@ public:
 private:
   const HttpHeaderTable* table;
 
+  // Backing storage must be destroyed after all header views.
+  kj::Vector<kj::Array<char>> ownedStrings;
+
   kj::Array<kj::StringPtr> indexedHeaders;
   // Size is always table->idCount().
 
@@ -493,8 +496,6 @@ private:
     kj::StringPtr value;
   };
   kj::Vector<Header> unindexedHeaders;
-
-  kj::Vector<kj::Array<char>> ownedStrings;
 
   void addNoCheck(kj::StringPtr name, kj::StringPtr value);
 
@@ -837,6 +838,19 @@ public:
     const HttpHeaders* headers;
     kj::Own<kj::AsyncInputStream> body;
     // `statusText` and `headers` remain valid until `body` is dropped or read from.
+
+    Response() = default;
+    Response(uint statusCode, kj::StringPtr statusText, const HttpHeaders* headers,
+             kj::Own<kj::AsyncInputStream> body)
+        : statusCode(statusCode), statusText(statusText), headers(headers), body(kj::mv(body)) {}
+    Response(Response&&) = default;
+    Response& operator=(Response&&) = default;
+
+    ~Response() noexcept(false) {
+      // Adapted clients may attach the backing storage for these views to body.
+      statusText = nullptr;
+      headers = nullptr;
+    }
   };
 
   struct Request {

@@ -1465,180 +1465,134 @@ DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
   }
 }
 
-#if __GNUC__ && !__clang__ && __GNUC__ >= 9
-// In the copy constructors below, we use memcpy() to copy only after verifying that it is safe.
-// But GCC 9 doesn't know we've checked, and whines. I suppose GCC is probably right: our checks
-// probably don't technically make memcpy safe according to the standard. But it works in practice,
-// and if it ever stops working, the tests will catch it.
-#pragma GCC diagnostic ignored "-Wclass-memaccess"
-#endif
-
-DynamicValue::Reader::Reader(const Reader& other) {
-  switch (other.type) {
-    case UNKNOWN:
-    case VOID:
-    case BOOL:
-    case INT:
-    case UINT:
-    case FLOAT:
-    case TEXT:
-    case DATA:
-    case LIST:
-    case ENUM:
-    case STRUCT:
-    case ANY_POINTER:
-      KJ_ASSERT_CAN_MEMCPY(Text::Reader);
-      KJ_ASSERT_CAN_MEMCPY(Data::Reader);
-      KJ_ASSERT_CAN_MEMCPY(DynamicList::Reader);
-      KJ_ASSERT_CAN_MEMCPY(DynamicEnum);
-      KJ_ASSERT_CAN_MEMCPY(DynamicStruct::Reader);
-      KJ_ASSERT_CAN_MEMCPY(AnyPointer::Reader);
-      break;
-
-    case CAPABILITY:
-      type = CAPABILITY;
-      kj::ctor(capabilityValue, other.capabilityValue);
-      return;
+DynamicValue::Reader::Reader(const Reader& other): type(other.type) {
+  switch (type) {
+    case UNKNOWN: break;
+    case VOID: voidValue = other.voidValue; break;
+    case BOOL: boolValue = other.boolValue; break;
+    case INT: intValue = other.intValue; break;
+    case UINT: uintValue = other.uintValue; break;
+    case FLOAT: floatValue = other.floatValue; break;
+    case TEXT: kj::ctor(textValue, other.textValue); break;
+    case DATA: kj::ctor(dataValue, other.dataValue); break;
+    case LIST: kj::ctor(listValue, other.listValue); break;
+    case ENUM: kj::ctor(enumValue, other.enumValue); break;
+    case STRUCT: kj::ctor(structValue, other.structValue); break;
+    case ANY_POINTER: kj::ctor(anyPointerValue, other.anyPointerValue); break;
+    case CAPABILITY: kj::ctor(capabilityValue, other.capabilityValue); break;
   }
-
-  memcpy((void*)this, &other, sizeof(*this));
 }
-DynamicValue::Reader::Reader(Reader&& other) noexcept {
-  switch (other.type) {
-    case UNKNOWN:
-    case VOID:
-    case BOOL:
-    case INT:
-    case UINT:
-    case FLOAT:
-    case TEXT:
-    case DATA:
-    case LIST:
-    case ENUM:
-    case STRUCT:
-    case ANY_POINTER:
-      KJ_ASSERT_CAN_MEMCPY(Text::Reader);
-      KJ_ASSERT_CAN_MEMCPY(Data::Reader);
-      KJ_ASSERT_CAN_MEMCPY(DynamicList::Reader);
-      KJ_ASSERT_CAN_MEMCPY(DynamicEnum);
-      KJ_ASSERT_CAN_MEMCPY(DynamicStruct::Reader);
-      KJ_ASSERT_CAN_MEMCPY(AnyPointer::Reader);
-      break;
-
-    case CAPABILITY:
-      type = CAPABILITY;
-      kj::ctor(capabilityValue, kj::mv(other.capabilityValue));
-      return;
+DynamicValue::Reader::Reader(Reader&& other) noexcept: type(other.type) {
+  switch (type) {
+    case UNKNOWN: break;
+    case VOID: voidValue = other.voidValue; break;
+    case BOOL: boolValue = other.boolValue; break;
+    case INT: intValue = other.intValue; break;
+    case UINT: uintValue = other.uintValue; break;
+    case FLOAT: floatValue = other.floatValue; break;
+    case TEXT: kj::ctor(textValue, kj::mv(other.textValue)); break;
+    case DATA: kj::ctor(dataValue, kj::mv(other.dataValue)); break;
+    case LIST: kj::ctor(listValue, kj::mv(other.listValue)); break;
+    case ENUM: kj::ctor(enumValue, kj::mv(other.enumValue)); break;
+    case STRUCT: kj::ctor(structValue, kj::mv(other.structValue)); break;
+    case ANY_POINTER: kj::ctor(anyPointerValue, kj::mv(other.anyPointerValue)); break;
+    case CAPABILITY: kj::ctor(capabilityValue, kj::mv(other.capabilityValue)); break;
   }
-
-  memcpy((void*)this, &other, sizeof(*this));
 }
 DynamicValue::Reader::~Reader() noexcept(false) {
-  if (type == CAPABILITY) {
-    kj::dtor(capabilityValue);
+  switch (type) {
+    case UNKNOWN:
+    case VOID:
+    case BOOL:
+    case INT:
+    case UINT:
+    case FLOAT:
+      break;
+    case TEXT: kj::dtor(textValue); break;
+    case DATA: kj::dtor(dataValue); break;
+    case LIST: kj::dtor(listValue); break;
+    case ENUM: kj::dtor(enumValue); break;
+    case STRUCT: kj::dtor(structValue); break;
+    case CAPABILITY: kj::dtor(capabilityValue); break;
+    case ANY_POINTER: kj::dtor(anyPointerValue); break;
   }
 }
 
 DynamicValue::Reader& DynamicValue::Reader::operator=(const Reader& other) {
-  if (type == CAPABILITY) {
-    kj::dtor(capabilityValue);
-  }
+  if (this == &other) return *this;
+  kj::dtor(*this);
   kj::ctor(*this, other);
   return *this;
 }
 DynamicValue::Reader& DynamicValue::Reader::operator=(Reader&& other) {
-  if (type == CAPABILITY) {
-    kj::dtor(capabilityValue);
-  }
+  if (this == &other) return *this;
+  kj::dtor(*this);
   kj::ctor(*this, kj::mv(other));
   return *this;
 }
 
-DynamicValue::Builder::Builder(Builder& other) {
-  switch (other.type) {
-    case UNKNOWN:
-    case VOID:
-    case BOOL:
-    case INT:
-    case UINT:
-    case FLOAT:
-    case TEXT:
-    case DATA:
-    case LIST:
-    case ENUM:
-    case STRUCT:
-    case ANY_POINTER:
-      // Unfortunately canMemcpy() doesn't work on these types due to the use of
-      // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
-      // become non-trivial.
-      static_assert(KJ_HAS_TRIVIAL_DESTRUCTOR(Text::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(Data::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicList::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicEnum) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicStruct::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(AnyPointer::Builder),
-                    "Assumptions here don't hold.");
-      break;
-
-    case CAPABILITY:
-      type = CAPABILITY;
-      kj::ctor(capabilityValue, other.capabilityValue);
-      return;
+DynamicValue::Builder::Builder(Builder& other): type(other.type) {
+  switch (type) {
+    case UNKNOWN: break;
+    case VOID: voidValue = other.voidValue; break;
+    case BOOL: boolValue = other.boolValue; break;
+    case INT: intValue = other.intValue; break;
+    case UINT: uintValue = other.uintValue; break;
+    case FLOAT: floatValue = other.floatValue; break;
+    case TEXT: kj::ctor(textValue, other.textValue); break;
+    case DATA: kj::ctor(dataValue, other.dataValue); break;
+    case LIST: kj::ctor(listValue, other.listValue); break;
+    case ENUM: kj::ctor(enumValue, other.enumValue); break;
+    case STRUCT: kj::ctor(structValue, other.structValue); break;
+    case ANY_POINTER: kj::ctor(anyPointerValue, other.anyPointerValue); break;
+    case CAPABILITY: kj::ctor(capabilityValue, other.capabilityValue); break;
   }
-
-  memcpy((void*)this, &other, sizeof(*this));
 }
-DynamicValue::Builder::Builder(Builder&& other) noexcept {
-  switch (other.type) {
-    case UNKNOWN:
-    case VOID:
-    case BOOL:
-    case INT:
-    case UINT:
-    case FLOAT:
-    case TEXT:
-    case DATA:
-    case LIST:
-    case ENUM:
-    case STRUCT:
-    case ANY_POINTER:
-      // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
-      // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
-      // become non-trivial.
-      static_assert(KJ_HAS_TRIVIAL_DESTRUCTOR(Text::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(Data::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicList::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicEnum) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(DynamicStruct::Builder) &&
-                    KJ_HAS_TRIVIAL_DESTRUCTOR(AnyPointer::Builder),
-                    "Assumptions here don't hold.");
-      break;
-
-    case CAPABILITY:
-      type = CAPABILITY;
-      kj::ctor(capabilityValue, kj::mv(other.capabilityValue));
-      return;
+DynamicValue::Builder::Builder(Builder&& other) noexcept: type(other.type) {
+  switch (type) {
+    case UNKNOWN: break;
+    case VOID: voidValue = other.voidValue; break;
+    case BOOL: boolValue = other.boolValue; break;
+    case INT: intValue = other.intValue; break;
+    case UINT: uintValue = other.uintValue; break;
+    case FLOAT: floatValue = other.floatValue; break;
+    case TEXT: kj::ctor(textValue, kj::mv(other.textValue)); break;
+    case DATA: kj::ctor(dataValue, kj::mv(other.dataValue)); break;
+    case LIST: kj::ctor(listValue, kj::mv(other.listValue)); break;
+    case ENUM: kj::ctor(enumValue, kj::mv(other.enumValue)); break;
+    case STRUCT: kj::ctor(structValue, kj::mv(other.structValue)); break;
+    case ANY_POINTER: kj::ctor(anyPointerValue, kj::mv(other.anyPointerValue)); break;
+    case CAPABILITY: kj::ctor(capabilityValue, kj::mv(other.capabilityValue)); break;
   }
-
-  memcpy((void*)this, &other, sizeof(*this));
 }
 DynamicValue::Builder::~Builder() noexcept(false) {
-  if (type == CAPABILITY) {
-    kj::dtor(capabilityValue);
+  switch (type) {
+    case UNKNOWN:
+    case VOID:
+    case BOOL:
+    case INT:
+    case UINT:
+    case FLOAT:
+      break;
+    case TEXT: kj::dtor(textValue); break;
+    case DATA: kj::dtor(dataValue); break;
+    case LIST: kj::dtor(listValue); break;
+    case ENUM: kj::dtor(enumValue); break;
+    case STRUCT: kj::dtor(structValue); break;
+    case CAPABILITY: kj::dtor(capabilityValue); break;
+    case ANY_POINTER: kj::dtor(anyPointerValue); break;
   }
 }
 
 DynamicValue::Builder& DynamicValue::Builder::operator=(Builder& other) {
-  if (type == CAPABILITY) {
-    kj::dtor(capabilityValue);
-  }
+  if (this == &other) return *this;
+  kj::dtor(*this);
   kj::ctor(*this, other);
   return *this;
 }
 DynamicValue::Builder& DynamicValue::Builder::operator=(Builder&& other) {
-  if (type == CAPABILITY) {
-    kj::dtor(capabilityValue);
-  }
+  if (this == &other) return *this;
+  kj::dtor(*this);
   kj::ctor(*this, kj::mv(other));
   return *this;
 }

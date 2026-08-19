@@ -108,7 +108,6 @@ public:
 private:
   kj::AsyncIoStream& stream;
   kj::Own<kj::HttpInputStream> input;
-  kj::ArrayPtr<const byte> parts[2];
 };
 
 }  // namespace capnp

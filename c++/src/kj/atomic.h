@@ -184,6 +184,71 @@ inline void atomicThreadFence(
 #endif
 }
 
+namespace _ {  // private
+
+void atomicPtrCounterAssertionFailed(const char* reason);
+
+class AtomicPtrCounter {
+  // Only the counter itself is observed, so relaxed ordering is sufficient.
+public:
+  inline void inc() { atomicAddFetch(&count, size_t(1), AtomicMemoryOrder::RELAXED); }
+
+  inline void dec() {
+    size_t remaining = atomicSubFetch(&count, size_t(1), AtomicMemoryOrder::RELAXED);
+    if (KJ_UNLIKELY(remaining == size_t(-1))) {
+      atomicPtrCounterAssertionFailed("unbalanced inc/dec");
+    }
+  }
+
+  inline bool isEmpty() const {
+    return atomicLoad(&count, AtomicMemoryOrder::RELAXED) == 0;
+  }
+
+  inline void assertEmpty() const {
+    if (KJ_UNLIKELY(!isEmpty())) {
+      atomicPtrCounterAssertionFailed("active pointers exist");
+    }
+  }
+
+private:
+  size_t count = 0;
+};
+
+class PtrCounter {
+  // Tracks one pointer against an optional AtomicPtrCounter. Moving a pointer leaves the source
+  // valid, so move operations increment the counter just like copies.
+protected:
+  PtrCounter() = default;
+  inline constexpr PtrCounter(const Maybe<AtomicPtrCounter&>& source)
+      : counter(const_cast<Maybe<AtomicPtrCounter&>&>(source)) { inc(); }
+  inline constexpr PtrCounter(const PtrCounter& other)
+      : counter(const_cast<Maybe<AtomicPtrCounter&>&>(other.counter)) { inc(); }
+  inline constexpr PtrCounter(PtrCounter&& other): counter(other.counter) { inc(); }
+  inline constexpr ~PtrCounter() { dec(); }
+
+  inline constexpr PtrCounter& operator=(const PtrCounter& other) {
+    setCounter(other.counter);
+    return *this;
+  }
+  inline constexpr PtrCounter& operator=(PtrCounter&& other) {
+    setCounter(other.counter);
+    return *this;
+  }
+
+  Maybe<AtomicPtrCounter&> counter;
+
+  inline constexpr void setCounter(const Maybe<AtomicPtrCounter&>& newCounter) {
+    dec();
+    counter = const_cast<Maybe<AtomicPtrCounter&>&>(newCounter);
+    inc();
+  }
+
+private:
+  inline constexpr void inc() { KJ_IF_SOME(c, counter) { c.inc(); } }
+  inline constexpr void dec() { KJ_IF_SOME(c, counter) { c.dec(); } }
+};
+
+}  // namespace _ (private)
 }  // namespace kj
 
 KJ_END_HEADER

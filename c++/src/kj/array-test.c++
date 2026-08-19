@@ -21,6 +21,9 @@
 
 #include "array.h"
 #include "debug.h"
+#include "test.h"
+#include "function.h"
+#include <signal.h>
 #include <string>
 #include <list>
 #include <kj/compat/gtest.h>
@@ -28,6 +31,46 @@
 
 namespace kj {
 namespace {
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+KJ_TEST("Array rejects destruction with an active ArrayPtr") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto array = heapArray<int>(4);
+    auto ptr = new ArrayPtr<int>(array.asPtr().slice(1));
+    (void)ptr;
+  });
+}
+#endif
+
+KJ_TEST("Array can be replaced with a heap copy of its own slice") {
+  auto array = heapArray<int>({ 1, 2, 3, 4 });
+  array = heapArray(array.slice(1, 4));
+  KJ_EXPECT(array == kj::ArrayPtr<const int>({ 2, 3, 4 }));
+
+  const auto& constArray = array;
+  array = heapArray(constArray.slice(1, 3));
+  KJ_EXPECT(array == kj::ArrayPtr<const int>({ 3, 4 }));
+}
+
+KJ_TEST("ArrayBuilder preserves ArrayPtr tracking when finished") {
+  auto builder = heapArrayBuilder<int>(1);
+  builder.add(123);
+  auto ptr = builder.asPtr();
+  auto array = builder.finish();
+  KJ_EXPECT(ptr[0] == 123);
+  ptr = nullptr;
+}
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+KJ_TEST("ArrayBuilder rejects destruction with an active ArrayPtr") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto builder = heapArrayBuilder<int>(1);
+    builder.add(123);
+    auto ptr = new ArrayPtr<int>(builder.asPtr());
+    (void)ptr;
+  });
+}
+#endif
 
 struct CloneableElement {
   int clone() const { return 123; }

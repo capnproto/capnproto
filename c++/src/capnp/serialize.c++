@@ -136,6 +136,11 @@ size_t expectedSizeInWordsFromPrefix(kj::ArrayPtr<const word> array) {
   return totalSize;
 }
 
+void FlatArrayMessageReader::releaseSegments() {
+  moreSegments = nullptr;
+  segment0 = nullptr;
+}
+
 kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
   if (id == 0) {
     return segment0;
@@ -278,6 +283,11 @@ InputStreamMessageReader::~InputStreamMessageReader() noexcept(false) {
       inputStream.skip(allEnd - readPos);
     });
   }
+
+  // These point into ownedSpace when the caller's scratch space was too small. Release them before
+  // ownedSpace is destroyed. (Member destruction order alone would destroy ownedSpace first.)
+  segment0 = nullptr;
+  moreSegments = nullptr;
 }
 
 kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {

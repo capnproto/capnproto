@@ -66,6 +66,137 @@ TEST(DynamicApi, Read) {
   checkDynamicTestMessage(toDynamic(root));
 }
 
+template <typename Check>
+void exerciseDynamicReader(DynamicValue::Reader value, DynamicValue::Type type, Check&& check) {
+  EXPECT_EQ(type, value.getType());
+  check(value);
+
+  DynamicValue::Reader copied(value);
+  EXPECT_EQ(type, copied.getType());
+  check(copied);
+
+  DynamicValue::Reader moved(kj::mv(copied));
+  EXPECT_EQ(type, moved.getType());
+  check(moved);
+
+  DynamicValue::Reader copyAssigned;
+  copyAssigned = value;
+  EXPECT_EQ(type, copyAssigned.getType());
+  check(copyAssigned);
+
+  DynamicValue::Reader moveAssigned;
+  moveAssigned = kj::mv(moved);
+  EXPECT_EQ(type, moveAssigned.getType());
+  check(moveAssigned);
+
+  auto& copySelf = copyAssigned;
+  copyAssigned = copySelf;
+  check(copyAssigned);
+  auto& moveSelf = moveAssigned;
+  moveAssigned = kj::mv(moveSelf);
+  check(moveAssigned);
+}
+
+template <typename Check>
+void exerciseDynamicBuilder(DynamicValue::Builder value, DynamicValue::Type type, Check&& check) {
+  EXPECT_EQ(type, value.getType());
+  check(value);
+
+  DynamicValue::Builder copied(value);
+  EXPECT_EQ(type, copied.getType());
+  check(copied);
+
+  DynamicValue::Builder moved(kj::mv(copied));
+  EXPECT_EQ(type, moved.getType());
+  check(moved);
+
+  DynamicValue::Builder copyAssigned;
+  copyAssigned = value;
+  EXPECT_EQ(type, copyAssigned.getType());
+  check(copyAssigned);
+
+  DynamicValue::Builder moveAssigned;
+  moveAssigned = kj::mv(moved);
+  EXPECT_EQ(type, moveAssigned.getType());
+  check(moveAssigned);
+
+  auto& copySelf = copyAssigned;
+  copyAssigned = copySelf;
+  check(copyAssigned);
+  auto& moveSelf = moveAssigned;
+  moveAssigned = kj::mv(moveSelf);
+  check(moveAssigned);
+}
+
+TEST(DynamicApi, ValueCopyMoveAndDestruction) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestAllTypes>();
+  initTestMessage(root);
+
+  MallocMessageBuilder anyMessage;
+  auto anyRoot = anyMessage.initRoot<test::TestAnyPointer>();
+  anyRoot.getAnyPointerField().setAs<Text>("any pointer");
+
+  exerciseDynamicReader(nullptr, DynamicValue::UNKNOWN,
+      [](auto& value) { EXPECT_EQ(DynamicValue::UNKNOWN, value.getType()); });
+  exerciseDynamicReader(VOID, DynamicValue::VOID,
+      [](auto& value) { value.template as<Void>(); });
+  exerciseDynamicReader(true, DynamicValue::BOOL,
+      [](auto& value) { EXPECT_TRUE(value.template as<bool>()); });
+  exerciseDynamicReader(int64_t(-123), DynamicValue::INT,
+      [](auto& value) { EXPECT_EQ(-123, value.template as<int64_t>()); });
+  exerciseDynamicReader(uint64_t(456), DynamicValue::UINT,
+      [](auto& value) { EXPECT_EQ(456u, value.template as<uint64_t>()); });
+  exerciseDynamicReader(1.25, DynamicValue::FLOAT,
+      [](auto& value) { EXPECT_EQ(1.25, value.template as<double>()); });
+  exerciseDynamicReader(Text::Reader("text"), DynamicValue::TEXT,
+      [](auto& value) { EXPECT_EQ("text", value.template as<Text>()); });
+  exerciseDynamicReader(data("data"), DynamicValue::DATA,
+      [](auto& value) { EXPECT_EQ(data("data"), value.template as<Data>()); });
+  exerciseDynamicReader(toDynamic(root.asReader().getTextList()), DynamicValue::LIST,
+      [](auto& value) { EXPECT_EQ(3u, value.template as<DynamicList>().size()); });
+  exerciseDynamicReader(toDynamic(TestEnum::BAZ), DynamicValue::ENUM,
+      [](auto& value) { EXPECT_EQ(TestEnum::BAZ, value.template as<TestEnum>()); });
+  exerciseDynamicReader(toDynamic(root.asReader().getStructField()), DynamicValue::STRUCT,
+      [](auto& value) { EXPECT_EQ("baz", value.template as<TestAllTypes>().getTextField()); });
+  exerciseDynamicReader(
+      anyRoot.asReader().getAnyPointerField(), DynamicValue::ANY_POINTER,
+      [](auto& value) { EXPECT_FALSE(value.template as<AnyPointer>().isNull()); });
+
+  DynamicCapability::Client capability = test::TestInterface::Client(nullptr);
+  exerciseDynamicReader(DynamicValue::Reader(capability), DynamicValue::CAPABILITY,
+      [](auto& value) { EXPECT_EQ(DynamicValue::CAPABILITY, value.getType()); });
+
+  exerciseDynamicBuilder(DynamicValue::Builder(), DynamicValue::UNKNOWN,
+      [](auto& value) { EXPECT_EQ(DynamicValue::UNKNOWN, value.getType()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(VOID), DynamicValue::VOID,
+      [](auto& value) { value.template as<Void>(); });
+  exerciseDynamicBuilder(DynamicValue::Builder(true), DynamicValue::BOOL,
+      [](auto& value) { EXPECT_TRUE(value.template as<bool>()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(int64_t(-123)), DynamicValue::INT,
+      [](auto& value) { EXPECT_EQ(-123, value.template as<int64_t>()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(uint64_t(456)), DynamicValue::UINT,
+      [](auto& value) { EXPECT_EQ(456u, value.template as<uint64_t>()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(1.25), DynamicValue::FLOAT,
+      [](auto& value) { EXPECT_EQ(1.25, value.template as<double>()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(root.getTextField()), DynamicValue::TEXT,
+      [](auto& value) { EXPECT_EQ("foo", value.template as<Text>()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(root.getDataField()), DynamicValue::DATA,
+      [](auto& value) { EXPECT_EQ(data("bar"), value.template as<Data>()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(toDynamic(root.getTextList())), DynamicValue::LIST,
+      [](auto& value) { EXPECT_EQ(3u, value.template as<DynamicList>().size()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(toDynamic(TestEnum::BAZ)), DynamicValue::ENUM,
+      [](auto& value) { EXPECT_EQ(TestEnum::BAZ, value.template as<TestEnum>()); });
+  exerciseDynamicBuilder(
+      DynamicValue::Builder(toDynamic(root.getStructField())), DynamicValue::STRUCT,
+      [](auto& value) { EXPECT_EQ("baz", value.template as<TestAllTypes>().getTextField()); });
+  exerciseDynamicBuilder(
+      DynamicValue::Builder(anyRoot.getAnyPointerField()), DynamicValue::ANY_POINTER,
+      [](auto& value) { EXPECT_FALSE(value.template as<AnyPointer>().isNull()); });
+  exerciseDynamicBuilder(DynamicValue::Builder(capability), DynamicValue::CAPABILITY,
+      [](auto& value) { EXPECT_EQ(DynamicValue::CAPABILITY, value.getType()); });
+}
+
 TEST(DynamicApi, Defaults) {
   AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
   kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(nullRoot.words, 1)};
