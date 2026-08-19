@@ -587,6 +587,7 @@ public:
       : FlatArrayMessageReader(scratchBuffer, options) {}
 
   ~MessageReaderImpl() noexcept(false) {
+    releaseSegments();
     KJ_IF_SOME(parent, state.tryGet<BufferedMessageStream*>()) {
       parent->hasOutstandingShortLivedMessage = false;
     }

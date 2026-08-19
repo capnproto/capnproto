@@ -27,6 +27,16 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
+KJ_TEST("content-length transport releases canceled send buffers") {
+  auto pipe = kj::newTwoWayPipe();
+  JsonRpc::ContentLengthTransport transport(*pipe.ends[0]);
+
+  auto text = kj::str("message");
+  auto promise = transport.send(text);
+  // Cancel the send while it still retains views of both the generated header and text. Destruction
+  // of the promise must release those views before either owner is destroyed.
+}
+
 KJ_TEST("json-rpc basics") {
   auto io = kj::setupAsyncIo();
   auto pipe = kj::newTwoWayPipe();

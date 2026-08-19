@@ -129,16 +129,18 @@ private:
   ReaderOptions options;
 
 #if defined(__EMSCRIPTEN__) || (defined(__APPLE__) && (defined(__ppc__) || defined(__i386__)))
-  static constexpr size_t arenaSpacePadding = 19;
+  static constexpr size_t arenaSpacePadding = 15;
 #else
-  static constexpr size_t arenaSpacePadding = 18;
+  static constexpr size_t arenaSpacePadding = 14;
 #endif
 
   // Space in which we can construct a ReaderArena.  We don't use ReaderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // other headers.  We don't use a pointer to a ReaderArena because that would require an
   // extra malloc on every message which could be expensive when processing small messages.
-  alignas(8) void* arenaSpace[arenaSpacePadding + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
+  alignas(8) void* arenaSpace[
+      arenaSpacePadding + 2 * sizeof(kj::ArrayPtr<const word>) / sizeof(void*) +
+      sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
   bool allocatedArena;
 
   _::ReaderArena* arena() { return reinterpret_cast<_::ReaderArena*>(arenaSpace); }
@@ -242,7 +244,8 @@ public:
   // Add up the allocated space from all segments.
 
 private:
-  alignas(8) void* arenaSpace[22];
+  alignas(8) void* arenaSpace[
+      20 + sizeof(kj::ArrayPtr<const word>) / sizeof(void*)];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // big STL headers.  We don't use a pointer to a BuilderArena because that would require an

@@ -1553,10 +1553,12 @@ public:
   }
 
   kj::Promise<Message> readMessage() override {
+    // The previous message body must complete before readMessageHeaders() proceeds, so its header
+    // views are no longer observable. Release them before readHeader() may resize the buffer.
+    headers.clear();
     auto textOrError = co_await readMessageHeaders();
     KJ_REQUIRE(textOrError.is<kj::ArrayPtr<char>>(), "bad message");
     auto text = textOrError.get<kj::ArrayPtr<char>>();
-    headers.clear();
     KJ_REQUIRE(headers.tryParse(text), "bad message");
     auto body = getEntityBody(HttpInputStreamImpl::RESPONSE, HttpMethod::GET, 0, headers);
 
@@ -1792,7 +1794,11 @@ public:
   // Used when suspending a request, or when switching protocols (e.g. WebSocket, CONNENCT).
   // HttpinputStream can no longer be used after this.
   ReleasedBuffer releaseBuffer() {
-    return { headerBuffer.releaseAsBytes(), leftover.asBytes() };
+    auto result = ReleasedBuffer { headerBuffer.releaseAsBytes(), leftover.asBytes() };
+    // Ownership of headerBuffer's pointer counter moved to result.buffer. Do not leave this
+    // HttpInputStreamImpl retaining another view into the released storage.
+    leftover = nullptr;
+    return result;
   }
 
   // Used when suspending a request. HttpinputStream can no longer be used after this.
@@ -1864,6 +1870,7 @@ private:
 
     for (;;) {
       kj::Promise<size_t> readPromise = nullptr;
+      kj::ArrayPtr<byte> readBuffer;
 
       // Figure out where we're reading from.
       if (leftover != nullptr) {
@@ -1924,10 +1931,15 @@ private:
           maxBytes = kj::min(maxBytes, MAX_CHUNK_HEADER_SIZE);
         }
 
-        readPromise = inner.read(headerBuffer.slice(bufferEnd).first(maxBytes).asBytes(), 1);
+        readBuffer = headerBuffer.slice(bufferEnd).first(maxBytes).asBytes();
+        readPromise = inner.read(readBuffer, 1);
       }
 
       auto amount = co_await readPromise;
+      // A completed read promise may still retain the destination view. Drop it before this loop
+      // can resize headerBuffer.
+      readPromise = nullptr;
+      readBuffer = nullptr;
 
       if (lineBreakBeforeNextHeader) {
         // Hackily deal with expected leading line break.
@@ -1990,8 +2002,16 @@ private:
             lineBreakBeforeNextHeader = true;
           }
 
-          auto result = headerBuffer.slice(bufferStart, endIndex);
-          leftover = headerBuffer.slice(leftoverStart, newEnd);
+          // Header views are valid until the caller advances to the next message, at which point
+          // this buffer may be resized. This API-level lifetime is coordinated by the body-stream
+          // lock rather than ownership, so don't tie the returned view to the buffer's counter.
+          auto result = kj::ArrayPtr<char>(
+              headerBuffer.begin() + bufferStart, endIndex - bufferStart);
+          // Preserve the position even when this is an empty view; canSuspend() uses it to verify
+          // that no bytes beyond the headers have been consumed. Like result above, its lifetime
+          // is coordinated by the body-stream lock.
+          leftover = kj::ArrayPtr<char>(
+              headerBuffer.begin() + leftoverStart, newEnd - leftoverStart);
           co_return result;
         } else {
           pos = nl - headerBuffer.begin() + 1;
@@ -2966,6 +2986,14 @@ public:
 #endif // KJ_HAS_ZLIB
   }
 
+  ~WebSocketImpl() noexcept(false) {
+    // Pending internal sends can retain views into queued payloads, and recvData usually points
+    // into recvBuffer. Release all such views before member destruction.
+    sendingControlMessage = kj::none;
+    queuedControlMessage = kj::none;
+    recvData = nullptr;
+  }
+
   kj::Promise<void> send(kj::ArrayPtr<const byte> message) override {
     return sendImpl(OPCODE_BINARY, message);
   }
@@ -3868,7 +3896,7 @@ private:
   uint64_t sentBytes = 0;
   uint64_t receivedBytes = 0;
 
-  kj::Promise<void> sendImpl(byte opcode, kj::ArrayPtr<const byte> message) {
+  kj::Promise<void> sendImpl(byte opcode, kj::ArrayPtr<const byte> inputMessage) {
     KJ_REQUIRE(!disconnected, "WebSocket can't send after disconnect()");
     KJ_REQUIRE(!currentlySending, "another message send is already in progress");
 
@@ -3895,8 +3923,11 @@ private:
 
     Mask mask(maskKeyGenerator);
 
-    bool useCompression = false;
+    // These owners must precede the local view so it is released first during coroutine unwind.
     kj::Maybe<kj::Array<byte>> compressedMessage;
+    kj::Array<byte> ownMessage;
+    kj::ArrayPtr<const byte> message = inputMessage;
+    bool useCompression = false;
     if (opcode == OPCODE_BINARY || opcode == OPCODE_TEXT) {
       // We can only compress data frames.
 #if KJ_HAS_ZLIB
@@ -3931,7 +3962,6 @@ private:
 #endif // KJ_HAS_ZLIB
     }
 
-    kj::Array<byte> ownMessage;
     if (!mask.isZero()) {
       // Sadness, we have to make a copy to apply the mask.
       ownMessage = kj::heapArray(message);
@@ -4935,8 +4965,9 @@ public:
       memcpy(destination, leftover.begin(), bytesToCopy);
       leftover = leftover.slice(bytesToCopy, leftover.size());
 
-      // If we've consumed all of the data in the leftover buffer, go ahead and free it.
+      // If we've consumed all of the data, release the view before freeing its backing storage.
       if (leftover.size() == 0) {
+        leftover = nullptr;
         leftoverBackingBuffer = nullptr;
       }
 
@@ -4972,8 +5003,9 @@ public:
       buffer.write(leftover.first(bytesToCopy));
       leftover = leftover.slice(bytesToCopy, leftover.size());
 
-      // If we've consumed all of the data in the leftover buffer, go ahead and free it.
+      // If we've consumed all of the data, release the view before freeing its backing storage.
       if (leftover.size() == 0) {
+        leftover = nullptr;
         leftoverBackingBuffer = nullptr;
       }
 
@@ -5037,8 +5069,9 @@ private:
       return output.write(leftover.first(bytesToWrite)).then(
           [this, &output, remaining, total, bytesToWrite]() mutable -> kj::Promise<uint64_t> {
         leftover = leftover.slice(bytesToWrite, leftover.size());
-        // If the leftover buffer has been fully consumed, go ahead and free it now.
+        // If the leftover buffer has been fully consumed, release the view before freeing it.
         if (leftover.size() == 0) {
+          leftover = nullptr;
           leftoverBackingBuffer = nullptr;
         }
         remaining -= bytesToWrite;
@@ -5795,8 +5828,9 @@ public:
         "can't start new request until previous request body has been fully written");
     closeWatcherTask = kj::none;
 
-    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
+    // lengthStr must outlive the entry in connectionHeaders that may point into it.
     kj::String lengthStr;
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
     bool isGet = method == HttpMethod::GET || method == HttpMethod::HEAD;
     bool hasBody;
@@ -5896,6 +5930,7 @@ public:
         "can't use openWebSocket() because no EntropySource was provided when creating the "
         "HttpClient").generate(keyBytes);
     auto keyBase64 = kj::encodeBase64(keyBytes);
+    kj::Maybe<kj::String> offeredExtensions;
 
     kj::StringPtr connectionHeaders[HttpHeaders::WEBSOCKET_CONNECTION_HEADERS_COUNT];
     connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "Upgrade";
@@ -5903,7 +5938,6 @@ public:
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_VERSION] = "13";
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_KEY] = keyBase64;
 
-    kj::Maybe<kj::String> offeredExtensions;
     kj::Maybe<CompressionParameters> clientOffer;
     kj::Vector<CompressionParameters> extensions;
     auto compressionMode = settings.webSocketCompressionMode;
@@ -6842,12 +6876,26 @@ private:
   HttpClientSettings settings;
 
   struct Host {
-    kj::String name;  // including port, if non-default
     kj::Own<PromiseNetworkAddressHttpClient> client;
   };
 
-  std::map<kj::StringPtr, Host> httpHosts;
-  std::map<kj::StringPtr, Host> httpsHosts;
+  struct StringLess {
+    using is_transparent = void;
+
+    bool operator()(const kj::String& left, const kj::String& right) const {
+      return left.asPtr() < right.asPtr();
+    }
+    bool operator()(const kj::String& left, kj::StringPtr right) const {
+      return left.asPtr() < right;
+    }
+    bool operator()(kj::StringPtr left, const kj::String& right) const {
+      return left < right.asPtr();
+    }
+  };
+
+  using HostMap = std::map<kj::String, Host, StringLess>;
+  HostMap httpHosts;
+  HostMap httpsHosts;
 
   struct RequestInfo {
     HttpMethod method;
@@ -6889,13 +6937,10 @@ private:
             timer, responseHeaderTable, kj::mv(addr), settings);
       });
 
-      Host host {
-        kj::mv(parsed.host),
-        kj::heap<PromiseNetworkAddressHttpClient>(kj::mv(promise))
-      };
-      kj::StringPtr nameRef = host.name;
+      auto hostName = kj::mv(parsed.host);
+      Host host { kj::heap<PromiseNetworkAddressHttpClient>(kj::mv(promise)) };
 
-      auto insertResult = hosts.insert(std::make_pair(nameRef, kj::mv(host)));
+      auto insertResult = hosts.insert(std::make_pair(kj::mv(hostName), kj::mv(host)));
       KJ_ASSERT(insertResult.second);
       iter = insertResult.first;
 
@@ -6905,8 +6950,7 @@ private:
     return *iter->second.client;
   }
 
-  kj::Promise<void> handleCleanup(std::map<kj::StringPtr, Host>& hosts,
-                                  std::map<kj::StringPtr, Host>::iterator iter) {
+  kj::Promise<void> handleCleanup(HostMap& hosts, HostMap::iterator iter) {
     return iter->second.client->onDrained()
         .then([this,&hosts,iter]() -> kj::Promise<void> {
       // Double-check that it's really drained to avoid race conditions.
@@ -8378,8 +8422,9 @@ private:
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = kj::none;
 
-    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
+    // lengthStr must outlive the entry in connectionHeaders that may point into it.
     kj::String lengthStr;
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
     if (!closeAfterSend) {
       // Check if application wants us to close connections.

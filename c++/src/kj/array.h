@@ -430,9 +430,17 @@ public:
   explicit ArrayBuilder(RemoveConst<T>* firstElement, size_t capacity,
                         const ArrayDisposer& disposer)
       : ptr(firstElement), pos(firstElement), endPtr(firstElement + capacity),
-        disposer(&disposer) {}
+        disposer(&disposer)
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+      , counter(new _::AtomicPtrCounter)
+#endif
+      {}
   ArrayBuilder(ArrayBuilder&& other) noexcept
       : ptr(other.ptr), pos(other.pos), endPtr(other.endPtr), disposer(other.disposer) {
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    counter = other.counter;
+    other.counter = nullptr;
+#endif
     other.ptr = nullptr;
     other.pos = nullptr;
     other.endPtr = nullptr;
@@ -441,23 +449,28 @@ public:
       : ptr(other.ptr), pos(other.ptr + other.size_), endPtr(pos), disposer(other.disposer) {
     // Create an already-full ArrayBuilder from an Array of the same type. This constructor
     // primarily exists to enable Vector<T> to be constructed from Array<T>.
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    counter = other.counter;
+    other.counter = nullptr;
+#endif
     other.ptr = nullptr;
     other.size_ = 0;
   }
   KJ_DISALLOW_COPY(ArrayBuilder);
-  inline ~ArrayBuilder() noexcept(false) { dispose(); }
+  inline ~ArrayBuilder() noexcept(false) {
+    dispose();
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    delete counter;
+#endif
+  }
 
-  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
-    return arrayPtr(ptr, pos);
-  }
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND { return makePtr<T>(ptr, pos - ptr); }
   inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
-    return arrayPtr(ptr, pos);
+    return makePtr<const T>(ptr, pos - ptr);
   }
-  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND {
-    return arrayPtr(ptr, pos);
-  }
+  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return makePtr<T>(ptr, pos - ptr); }
   inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND {
-    return arrayPtr(ptr, pos);
+    return makePtr<const T>(ptr, pos - ptr);
   }
 
   inline size_t size() const { return pos - ptr; }
@@ -484,6 +497,11 @@ public:
 
   ArrayBuilder& operator=(ArrayBuilder&& other) {
     dispose();
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    delete counter;
+    counter = other.counter;
+    other.counter = nullptr;
+#endif
     ptr = other.ptr;
     pos = other.pos;
     endPtr = other.endPtr;
@@ -584,6 +602,11 @@ public:
     // without knowing the final size in advance.
     KJ_IREQUIRE(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
     Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, *disposer);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    delete result.counter;
+    result.counter = counter;
+    counter = nullptr;
+#endif
     ptr = nullptr;
     pos = nullptr;
     endPtr = nullptr;
@@ -599,8 +622,28 @@ private:
   RemoveConst<T>* pos;
   T* endPtr;
   const ArrayDisposer* disposer = &NullArrayDisposer::instance;
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  _::AtomicPtrCounter* counter = nullptr;
+#endif
+
+  template <typename U>
+  inline ArrayPtr<U> makePtr(U* ptr, size_t size) const {
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return counter == nullptr ? ArrayPtr<U>(ptr, size)
+                              : ArrayPtr<U>(ptr, size, *counter);
+#else
+    return ArrayPtr<U>(ptr, size);
+#endif
+  }
+
+  inline void assertNoRefs() const {
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    if (counter != nullptr) counter->assertEmpty();
+#endif
+  }
 
   inline void dispose() {
+    assertNoRefs();
     // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
     // dispose again.
     T* ptrCopy = ptr;
@@ -988,14 +1031,21 @@ template <typename T>
 Array<T> heapArray(ArrayPtr<T> content) {
   ArrayBuilder<T> builder = heapArrayBuilder<T>(content.size());
   builder.addAll(content);
-  return builder.finish();
+  auto result = builder.finish();
+  // A temporary used to initialize a by-value parameter may live until the end of the caller's
+  // full-expression. Drop our view explicitly so replacing an Array with a copy of its own slice
+  // does not leave that Array appearing to have a live pointer when move-assignment disposes it.
+  content = nullptr;
+  return result;
 }
 
 template <typename T>
 Array<T> heapArray(ArrayPtr<const T> content) {
   ArrayBuilder<T> builder = heapArrayBuilder<T>(content.size());
   builder.addAll(content);
-  return builder.finish();
+  auto result = builder.finish();
+  content = nullptr;
+  return result;
 }
 
 template <typename T, typename Iterator> Array<T>

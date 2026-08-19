@@ -2533,6 +2533,8 @@ namespace kj {
 
 template <typename T>
 class Array;
+template <typename T>
+class ArrayBuilder;
 class String;
 class StringPtr;
 class ConstString;
@@ -2904,6 +2906,8 @@ private:
   friend class ArrayPtr;
   template <typename>
   friend class Array;
+  template <typename>
+  friend class ArrayBuilder;
   friend class String;
   friend class StringPtr;
   friend class ConstString;

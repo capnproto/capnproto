@@ -105,6 +105,8 @@ kj::Array<HashBucket> rehash(kj::ArrayPtr<const HashBucket> oldBuckets, size_t t
     }
   }
 
+  // oldBuckets may be a temporary view created from the Array that the caller is about to replace.
+  oldBuckets = nullptr;
   return newBuckets;
 }
 

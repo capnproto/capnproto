@@ -291,6 +291,8 @@ if(BUILD_TESTING)
       rpc-test.c++
       rpc-twoparty-test.c++
       compiler/lexer-test.c++
+      compiler/module-loader.c++
+      compiler/module-loader-test.c++
       compiler/type-id-test.c++
       test-util.c++
       compat/json-test.c++

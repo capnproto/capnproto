@@ -619,6 +619,16 @@ CappedArray<char, sizeof(unsigned int) * 2 + 1> hex(unsigned int i);
 CappedArray<char, sizeof(unsigned long) * 2 + 1> hex(unsigned long i);
 CappedArray<char, sizeof(unsigned long long) * 2 + 1> hex(unsigned long long i);
 
+namespace _ {  // private
+
+template <typename T>
+inline void releaseStringifyArgument(T&&) {}
+template <typename T>
+inline void releaseStringifyArgument(ArrayPtr<T>&& value) { value = nullptr; }
+inline void releaseStringifyArgument(StringPtr&& value) { value = nullptr; }
+
+}  // namespace _ (private)
+
 template <typename... Params>
 String str(Params&&... params) {
   // Magic function which builds a string from a bunch of arbitrary values.  Example:
@@ -627,7 +637,11 @@ String str(Params&&... params) {
   //     "1 / 2 = 0.5"
   // To teach `str` how to stringify a type, see `Stringifier`.
 
-  return _::concat(toCharSequence(kj::fwd<Params>(params))...);
+  auto result = _::concat(toCharSequence(kj::fwd<Params>(params))...);
+  // Rvalue views have been consumed. Release their debug pointer counters before returning so an
+  // owner can safely be replaced by this result in the caller's full-expression.
+  (_::releaseStringifyArgument(kj::fwd<Params>(params)), ...);
+  return result;
 }
 
 inline String str(String&& s) { return mv(s); }

@@ -184,6 +184,9 @@ KJ_TEST("simple table") {
     KJ_EXPECT(*iter++ == "waldo");
     KJ_EXPECT(iter == table.end());
   }
+
+  // Release StringPtrs before their backing Strings below are destroyed.
+  table.clear();
 }
 
 class BadHasher {
@@ -844,6 +847,9 @@ KJ_TEST("simple tree table") {
     KJ_EXPECT(iter == table.end());
   }
   KJ_EXPECT(other.begin() == other.end());
+
+  // Release StringPtrs before their backing Strings below are destroyed.
+  table.clear();
 }
 
 class UintCompare {

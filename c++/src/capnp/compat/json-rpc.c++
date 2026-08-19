@@ -324,17 +324,34 @@ JsonRpc::ContentLengthTransport::ContentLengthTransport(kj::AsyncIoStream& strea
 JsonRpc::ContentLengthTransport::~ContentLengthTransport() noexcept(false) {}
 
 kj::Promise<void> JsonRpc::ContentLengthTransport::send(kj::StringPtr text) {
-  auto headers = kj::str("Content-Length: ", text.size(), "\r\n\r\n");
-  parts[0] = headers.asBytes();
-  parts[1] = text.asBytes();
-  return stream.write(parts).attach(kj::mv(headers));
+  struct SendState {
+    // Declare the owner before its views so that the views are destroyed first.
+    kj::String headers;
+    kj::ArrayPtr<const byte> parts[2];
+
+    SendState(kj::String headers, kj::StringPtr text): headers(kj::mv(headers)) {
+      parts[0] = this->headers.asBytes();
+      parts[1] = text.asBytes();
+    }
+  };
+
+  // The state must have a stable address because write() may retain a view of the parts array.
+  auto state = kj::heap<SendState>(
+      kj::str("Content-Length: ", text.size(), "\r\n\r\n"), text);
+  auto promise = stream.write(state->parts);
+  return promise.attach(kj::mv(state));
 }
 
 kj::Promise<kj::String> JsonRpc::ContentLengthTransport::receive() {
   return input->readMessage()
       .then([](kj::HttpInputStream::Message&& message) {
-    auto promise = message.body->readAllText();
-    return promise.attach(kj::mv(message.body));
+    return message.body->readAllText()
+        .then([body = kj::mv(message.body)](kj::String text) mutable {
+      // Reading the body releases the input stream for the next message. Drop the body now so its
+      // header views don't remain attached while that next read resizes the header buffer.
+      body = nullptr;
+      return text;
+    });
   });
 }
 
