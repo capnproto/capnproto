@@ -23,10 +23,11 @@
 
 #include "common.h"
 
-// KJ_DEBUG_MEMORY == 1 enables variety of checks designed to catch memory usage errors.
-// KJ_DEBUG_MEMORY undefined or KJ_DEBUG_MEMORY == 0 disables all such checks.
-#if !defined(KJ_DEBUG_MEMORY)
-#define KJ_DEBUG_MEMORY 0
+#ifndef KJ_ASSERT_PTR_COUNTERS
+#define KJ_ASSERT_PTR_COUNTERS KJ_DEBUG_MEMORY
+#endif
+#if KJ_ASSERT_PTR_COUNTERS
+#include "atomic.h"
 #endif
 
 // KJ_WARN_REFCOUNTED_ATTACH == 1 enables deprecation warnings when using kj::Own<T>::attach() on
@@ -34,18 +35,6 @@
 #if !defined(KJ_WARN_REFCOUNTED_ATTACH)
 #define KJ_WARN_REFCOUNTED_ATTACH 0
 #endif
-
-// KJ_ASSERT_PTR_COUNTERS == 1 keeps track of active Ptr<T> instances and asserts validity
-// of their ownership.
-// Matches KJ_DEBUG_MEMORY by default.
-#if !defined(KJ_ASSERT_PTR_COUNTERS)
-#define KJ_ASSERT_PTR_COUNTERS KJ_DEBUG_MEMORY
-#endif // KJ_ASSERT_PTR_COUNTERS
-
-#if KJ_ASSERT_PTR_COUNTERS
-#include <atomic>
-#endif // KJ_ASSERT_PTR_COUNTERS
-
 
 KJ_BEGIN_HEADER
 
@@ -223,8 +212,6 @@ private:
   size_t refcount = 1;
 };
 
-void atomicPtrCounterAssertionFailed(const char* const);
-
 }  // namespace _ (private)
 
 class PtrTarget {
@@ -270,35 +257,6 @@ private:
     return const_cast<PtrTarget*>(static_cast<const PtrTarget*>(&self));
   }
 
-#if KJ_ASSERT_PTR_COUNTERS
-  class AtomicPtrCounter {
-    // AtomicPtrCounter uses atomic operations to keep track of active pointers.
-    // Since no other memory location is observed, memory_order_relaxed is used.
-
-  public:
-    inline void dec() {
-      size_t prevCount = count.fetch_sub(1, std::memory_order_relaxed);
-      if (KJ_UNLIKELY(prevCount == 0)) {
-        _::atomicPtrCounterAssertionFailed("unbalanced inc/dec");
-      }
-    }
-
-    inline void inc() {
-      count.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    inline void assertEmpty() {
-      size_t c = count.load(std::memory_order_relaxed);
-      if (KJ_UNLIKELY(c != 0)) {
-        _::atomicPtrCounterAssertionFailed("active pointers exist");
-      }
-    }
-
-  private:
-    std::atomic<size_t> count = 0;
-  };
-#endif // KJ_ASSERT_PTR_COUNTERS
-
   inline _::WeakCell* getWeakCell(const void* ptr) {
     if (weakCell == nullptr) {
       weakCell = new _::WeakCell(ptr, this);
@@ -337,7 +295,7 @@ private:
 
   _::WeakCell* weakCell = nullptr;
 #if KJ_ASSERT_PTR_COUNTERS
-  AtomicPtrCounter ptrCounter;
+  _::AtomicPtrCounter ptrCounter;
 #endif // KJ_ASSERT_PTR_COUNTERS
 
   template <typename>

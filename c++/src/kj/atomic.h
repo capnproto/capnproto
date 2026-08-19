@@ -184,6 +184,37 @@ inline void atomicThreadFence(
 #endif
 }
 
+namespace _ {  // private
+
+void atomicPtrCounterAssertionFailed(const char* reason);
+
+class AtomicPtrCounter {
+  // Only the counter itself is observed, so relaxed ordering is sufficient.
+public:
+  inline void inc() { atomicAddFetch(&count, size_t(1), AtomicMemoryOrder::RELAXED); }
+
+  inline void dec() {
+    size_t remaining = atomicSubFetch(&count, size_t(1), AtomicMemoryOrder::RELAXED);
+    if (KJ_UNLIKELY(remaining == size_t(-1))) {
+      atomicPtrCounterAssertionFailed("unbalanced inc/dec");
+    }
+  }
+
+  inline bool isEmpty() const {
+    return atomicLoad(&count, AtomicMemoryOrder::RELAXED) == 0;
+  }
+
+  inline void assertEmpty() const {
+    if (KJ_UNLIKELY(!isEmpty())) {
+      atomicPtrCounterAssertionFailed("active pointers exist");
+    }
+  }
+
+private:
+  size_t count = 0;
+};
+
+}  // namespace _ (private)
 }  // namespace kj
 
 KJ_END_HEADER

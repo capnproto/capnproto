@@ -175,6 +175,15 @@ typedef unsigned char byte;
 #endif
 #endif
 
+// KJ_DEBUG_MEMORY == 1 enables checks designed to catch memory usage errors.
+#ifndef KJ_DEBUG_MEMORY
+#define KJ_DEBUG_MEMORY 0
+#endif
+
+#ifndef KJ_ASSERT_ARRAYPTR_COUNTERS
+#define KJ_ASSERT_ARRAYPTR_COUNTERS 0
+#endif
+
 #define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
@@ -290,7 +299,13 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
+#if defined(_MSC_VER)
+// MSVC intentionally ignores the standard spelling to preserve ABI compatibility with older
+// toolsets. The vendor spelling opts in to empty-member optimization; clang-cl supports it too.
+#define KJ_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
 #define KJ_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#endif
 
 #if KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
 #define KJ_DISABLE_TSAN __attribute__((no_sanitize("thread"), noinline))
@@ -2529,8 +2544,19 @@ struct Mapper<Maybe<T>> {
 //
 // So common that we put it in common.h rather than array.h.
 
+}  // namespace kj
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+#include "atomic.h"
+#endif
+
+namespace kj {
+
 template <typename T>
 class Array;
+class String;
+class StringPtr;
+class ConstString;
 
 namespace _ {  // private
 class SplitIteratorEnd;
@@ -2540,6 +2566,53 @@ class SplitIterator;
 
 template <typename T>
 class SplitIterable;
+}  // namespace _ (private)
+
+namespace _ {  // private
+
+class ArrayPtrCounterTracker {
+  // Registers one live ArrayPtr with an optional AtomicPtrCounter. Copying or moving an ArrayPtr
+  // creates another live ArrayPtr without clearing the source, so both operations increment the
+  // counter. When counters are disabled this class is empty, and [[no_unique_address]] makes it
+  // take no space in ArrayPtr.
+public:
+  ArrayPtrCounterTracker() = default;
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  inline constexpr ArrayPtrCounterTracker(const Maybe<AtomicPtrCounter&>& source)
+      : counter(const_cast<Maybe<AtomicPtrCounter&>&>(source)) { inc(); }
+  inline constexpr ArrayPtrCounterTracker(const ArrayPtrCounterTracker& other)
+      : counter(const_cast<Maybe<AtomicPtrCounter&>&>(other.counter)) { inc(); }
+  inline constexpr ArrayPtrCounterTracker(ArrayPtrCounterTracker&& other)
+      : counter(other.counter) { inc(); }
+  inline constexpr ~ArrayPtrCounterTracker() { dec(); }
+
+  inline constexpr ArrayPtrCounterTracker& operator=(const ArrayPtrCounterTracker& other) {
+    setCounter(other.counter);
+    return *this;
+  }
+  inline constexpr ArrayPtrCounterTracker& operator=(ArrayPtrCounterTracker&& other) {
+    setCounter(other.counter);
+    return *this;
+  }
+
+  inline constexpr void clear() { setCounter(kj::none); }
+
+private:
+  Maybe<AtomicPtrCounter&> counter;
+
+  inline constexpr void setCounter(const Maybe<AtomicPtrCounter&>& newCounter) {
+    dec();
+    counter = const_cast<Maybe<AtomicPtrCounter&>&>(newCounter);
+    inc();
+  }
+
+  inline constexpr void inc() { KJ_IF_SOME(c, counter) { c.inc(); } }
+  inline constexpr void dec() { KJ_IF_SOME(c, counter) { c.dec(); } }
+#else
+  inline constexpr void clear() {}
+#endif
+};
+
 }  // namespace _ (private)
 
 template <typename T>
@@ -2555,6 +2628,7 @@ public:
       : ptr(begin), size_(end - begin) {}
   ArrayPtr<T>& operator=(Array<T>&&) = delete;
   ArrayPtr<T>& operator=(decltype(nullptr)) {
+    counterTracker.clear();
     ptr = nullptr;
     size_ = 0;
     return *this;
@@ -2617,10 +2691,10 @@ public:
   }
 
   inline operator ArrayPtr<const T>() const {
-    return ArrayPtr<const T>(ptr, size_);
+    return ArrayPtr<const T>(ptr, size_, counterTracker);
   }
   inline ArrayPtr<const T> asConst() const {
-    return ArrayPtr<const T>(ptr, size_);
+    return operator ArrayPtr<const T>();
   }
 
   inline constexpr size_t size() const { return size_; }
@@ -2645,20 +2719,20 @@ public:
   inline constexpr ArrayPtr<const T> slice(size_t start, size_t end) const {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
         start, end, size_);
-    return ArrayPtr<const T>(ptr + start, end - start);
+    return ArrayPtr<const T>(ptr + start, end - start, counterTracker);
   }
   inline constexpr ArrayPtr slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
         start, end, size_);
-    return ArrayPtr(ptr + start, end - start);
+    return ArrayPtr(ptr + start, end - start, counterTracker);
   }
   inline constexpr ArrayPtr<const T> slice(size_t start) const {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
-    return ArrayPtr<const T>(ptr + start, size_ - start);
+    return ArrayPtr<const T>(ptr + start, size_ - start, counterTracker);
   }
   inline constexpr ArrayPtr slice(size_t start) {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
-    return ArrayPtr(ptr + start, size_ - start);
+    return ArrayPtr(ptr + start, size_ - start, counterTracker);
   }
   inline constexpr bool startsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && first(other.size()) == other;
@@ -2697,13 +2771,15 @@ public:
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
-    return { reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T) };
+    return ArrayPtr<PropagateConst<T, byte>>(
+        reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T), counterTracker);
   }
   inline ArrayPtr<PropagateConst<T, char>> asChars() const {
     // Reinterpret the array as a char array. This is explicitly legal under C++ aliasing
     // rules.
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
-    return { reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T) };
+    return ArrayPtr<PropagateConst<T, char>>(
+        reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T), counterTracker);
   }
 
   inline constexpr bool operator==(decltype(nullptr)) const { return size_ == 0; }
@@ -2835,6 +2911,16 @@ public:
 private:
   T* ptr;
   size_t size_;
+  KJ_NO_UNIQUE_ADDRESS _::ArrayPtrCounterTracker counterTracker;
+
+  inline constexpr ArrayPtr(
+      T* ptr, size_t size, const _::ArrayPtrCounterTracker& sourceCounter)
+      : ptr(ptr), size_(size), counterTracker(sourceCounter) {}
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  inline constexpr ArrayPtr(
+      T* ptr, size_t size, const Maybe<_::AtomicPtrCounter&>& sourceCounter)
+      : ptr(ptr), size_(size), counterTracker(sourceCounter) {}
+#endif
 
   inline bool intersects(kj::ArrayPtr<const T> other) const {
     // Checks if memory area intersects with another pointer.
@@ -2844,6 +2930,14 @@ private:
     // Negating the expression gets the result:
     return begin() < other.end() && other.begin() < end();
   }
+
+  template <typename>
+  friend class ArrayPtr;
+  template <typename>
+  friend class Array;
+  friend class String;
+  friend class StringPtr;
+  friend class ConstString;
 };
 
 namespace _ {  // private
