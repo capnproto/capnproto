@@ -20,6 +20,9 @@
 // THE SOFTWARE.
 
 #include "string.h"
+#include "test.h"
+#include "function.h"
+#include <signal.h>
 #include <kj/compat/gtest.h>
 #include <string>
 #include <string_view>
@@ -34,6 +37,16 @@ namespace {
 static_assert(Cloneable<String>);
 static_assert(Cloneable<ConstString>);
 static_assert(Cloneable<StringPtr>);
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+KJ_TEST("String rejects destruction with an active StringPtr") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto string = heapString("tracked");
+    auto ptr = new StringPtr(string);
+    (void)ptr;
+  });
+}
+#endif
 
 TEST(String, Str) {
   EXPECT_EQ("foobar", str("foo", "bar"));

@@ -21,6 +21,9 @@
 
 #include "array.h"
 #include "debug.h"
+#include "test.h"
+#include "function.h"
+#include <signal.h>
 #include <string>
 #include <list>
 #include <kj/compat/gtest.h>
@@ -28,6 +31,16 @@
 
 namespace kj {
 namespace {
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+KJ_TEST("Array rejects destruction with an active ArrayPtr") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto array = heapArray<int>(4);
+    auto ptr = new ArrayPtr<int>(array.asPtr().slice(1));
+    (void)ptr;
+  });
+}
+#endif
 
 struct CloneableElement {
   int clone() const { return 123; }

@@ -175,6 +175,15 @@ typedef unsigned char byte;
 #endif
 #endif
 
+// KJ_DEBUG_MEMORY == 1 enables checks designed to catch memory usage errors.
+#ifndef KJ_DEBUG_MEMORY
+#define KJ_DEBUG_MEMORY 0
+#endif
+
+#ifndef KJ_ASSERT_ARRAYPTR_COUNTERS
+#define KJ_ASSERT_ARRAYPTR_COUNTERS KJ_DEBUG_MEMORY
+#endif
+
 #define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
@@ -274,7 +283,7 @@ typedef unsigned char byte;
 // by allowing a syntax like `[[clang::lifetimebound(*this)]]`.
 // https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
 
-#if KJ_HAS_CPP_ATTRIBUTE(clang::musttail)
+#if KJ_HAS_CPP_ATTRIBUTE(clang::musttail) && !KJ_ASSERT_ARRAYPTR_COUNTERS
 #define KJ_MUSTTAIL [[clang::musttail]]
 #else
 #define KJ_MUSTTAIL
@@ -1714,9 +1723,9 @@ inline T* readMaybe(Maybe<T>& maybe) { return maybe.ptr; }
 template <typename T>
 inline const T* readMaybe(const Maybe<T>& maybe) { return maybe.ptr; }
 template <typename T>
-inline T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
+inline constexpr T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
 template <typename T>
-inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
+inline constexpr T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
 template <typename T>
 inline T* readMaybe(T* ptr) { return ptr; }
@@ -2426,9 +2435,9 @@ private:
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend U* _::readMaybe(Maybe<U&>&& maybe);
+  friend constexpr U* _::readMaybe(Maybe<U&>&& maybe);
   template <typename U>
-  friend U* _::readMaybe(const Maybe<U&>& maybe);
+  friend constexpr U* _::readMaybe(const Maybe<U&>& maybe);
 };
 
 // =======================================================================================
@@ -2514,8 +2523,19 @@ struct Mapper<Maybe<T>> {
 //
 // So common that we put it in common.h rather than array.h.
 
+}  // namespace kj
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+#include "atomic.h"
+#endif
+
+namespace kj {
+
 template <typename T>
 class Array;
+class String;
+class StringPtr;
+class ConstString;
 
 namespace _ {  // private
 class SplitIteratorEnd;
@@ -2527,8 +2547,20 @@ template <typename T>
 class SplitIterable;
 }  // namespace _ (private)
 
+namespace _ {  // private
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
 template <typename T>
-class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
+using ArrayPtrCounter = PtrCounter;
+#else
+template <typename T>
+class ArrayPtrCounter {};
+#endif
+
+}  // namespace _ (private)
+
+template <typename T>
+class ArrayPtr: public DisallowConstCopyIfNotConst<T>, private _::ArrayPtrCounter<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
   // and passing by value only copies the pointer, not the target.
 
@@ -2540,6 +2572,9 @@ public:
       : ptr(begin), size_(end - begin) {}
   ArrayPtr<T>& operator=(Array<T>&&) = delete;
   ArrayPtr<T>& operator=(decltype(nullptr)) {
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    this->setCounter(kj::none);
+#endif
     ptr = nullptr;
     size_ = 0;
     return *this;
@@ -2602,10 +2637,14 @@ public:
   }
 
   inline operator ArrayPtr<const T>() const {
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr<const T>(ptr, size_, this->counter);
+#else
     return ArrayPtr<const T>(ptr, size_);
+#endif
   }
   inline ArrayPtr<const T> asConst() const {
-    return ArrayPtr<const T>(ptr, size_);
+    return operator ArrayPtr<const T>();
   }
 
   inline constexpr size_t size() const { return size_; }
@@ -2630,20 +2669,36 @@ public:
   inline constexpr ArrayPtr<const T> slice(size_t start, size_t end) const {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
         start, end, size_);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr<const T>(ptr + start, end - start, this->counter);
+#else
     return ArrayPtr<const T>(ptr + start, end - start);
+#endif
   }
   inline constexpr ArrayPtr slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().",
         start, end, size_);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr(ptr + start, end - start, this->counter);
+#else
     return ArrayPtr(ptr + start, end - start);
+#endif
   }
   inline constexpr ArrayPtr<const T> slice(size_t start) const {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr<const T>(ptr + start, size_ - start, this->counter);
+#else
     return ArrayPtr<const T>(ptr + start, size_ - start);
+#endif
   }
   inline constexpr ArrayPtr slice(size_t start) {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr(ptr + start, size_ - start, this->counter);
+#else
     return ArrayPtr(ptr + start, size_ - start);
+#endif
   }
   inline constexpr bool startsWith(const ArrayPtr<const T>& other) const {
     return other.size() <= size_ && first(other.size()) == other;
@@ -2682,13 +2737,23 @@ public:
     // Reinterpret the array as a byte array. This is explicitly legal under C++ aliasing
     // rules.
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr<PropagateConst<T, byte>>(
+        reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T), this->counter);
+#else
     return { reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_ * sizeof(T) };
+#endif
   }
   inline ArrayPtr<PropagateConst<T, char>> asChars() const {
     // Reinterpret the array as a char array. This is explicitly legal under C++ aliasing
     // rules.
     KJ_ASSERT_CAN_MEMCPY(RemoveConst<T>);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    return ArrayPtr<PropagateConst<T, char>>(
+        reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T), this->counter);
+#else
     return { reinterpret_cast<PropagateConst<T, char>*>(ptr), size_ * sizeof(T) };
+#endif
   }
 
   inline constexpr bool operator==(decltype(nullptr)) const { return size_ == 0; }
@@ -2820,6 +2885,11 @@ public:
 private:
   T* ptr;
   size_t size_;
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  inline constexpr ArrayPtr(
+      T* ptr, size_t size, const Maybe<_::AtomicPtrCounter&>& sourceCounter)
+      : _::ArrayPtrCounter<T>(sourceCounter), ptr(ptr), size_(size) {}
+#endif
 
   inline bool intersects(kj::ArrayPtr<const T> other) const {
     // Checks if memory area intersects with another pointer.
@@ -2829,6 +2899,14 @@ private:
     // Negating the expression gets the result:
     return begin() < other.end() && other.begin() < end();
   }
+
+  template <typename>
+  friend class ArrayPtr;
+  template <typename>
+  friend class Array;
+  friend class String;
+  friend class StringPtr;
+  friend class ConstString;
 };
 
 namespace _ {  // private
