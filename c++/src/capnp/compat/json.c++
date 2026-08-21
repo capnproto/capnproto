@@ -143,11 +143,11 @@ struct JsonCodec::Impl {
     size_t maxChildSize = 0;
     for (auto& e: elements) maxChildSize = kj::max(maxChildSize, e.size());
 
+    kj::String ownPrefix;
+    kj::String ownDelim;
     kj::StringPtr prefix;
     kj::StringPtr delim;
     kj::StringPtr suffix;
-    kj::String ownPrefix;
-    kj::String ownDelim;
     if (!prettyPrint) {
       // No whitespace.
       delim = ",";
@@ -1058,8 +1058,8 @@ public:
       KJ_IF_SOME(fh, info.flattenHandler) {
         // Set up fieldsByName for each of the child's fields.
         for (auto& entry: fh.fieldsByName) {
-          kj::StringPtr flattenedName;
           kj::String ownName;
+          kj::StringPtr flattenedName;
           if (info.prefix.size() > 0) {
             ownName = kj::str(info.prefix, entry.key);
             flattenedName = ownName;

@@ -185,10 +185,12 @@ struct SchemaParser::DiskFileCompat {
 struct SchemaParser::Impl {
   typedef std::unordered_map<
       const SchemaFile*, kj::Own<ModuleImpl>, SchemaFileHash, SchemaFileEq> FileMap;
+
+  // Modules can retain views into translated import paths, so the compatibility cache must be
+  // declared first and therefore destroyed after both the compiler and the modules.
+  kj::MutexGuarded<kj::Maybe<DiskFileCompat>> compat;
   kj::MutexGuarded<FileMap> fileMap;
   compiler::Compiler compiler;
-
-  kj::MutexGuarded<kj::Maybe<DiskFileCompat>> compat;
 };
 
 SchemaParser::SchemaParser(): impl(kj::heap<Impl>()) {}
