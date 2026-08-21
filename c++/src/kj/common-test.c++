@@ -54,6 +54,166 @@ static_assert(!Copyable<NoCopy>);
 static_assert(Copyable<NonConstCopy>);
 static_assert(!Copyable<const NonConstCopy>);
 
+constexpr bool maybeReferenceOperationsAreConstexpr() {
+  int first = 1;
+  int second = 2;
+
+  Maybe<int&> maybe;
+  maybe = first;
+  if (&maybe.assertSome() != &first) return false;
+
+  maybe = &second;
+  if (&maybe.assertSome() != &second) return false;
+
+  Maybe<int&> copy;
+  copy = maybe;
+  if (&copy.assertSome() != &second) return false;
+
+  Maybe<int&> moved;
+  moved = kj::mv(maybe);
+  if (&moved.assertSome() != &second || maybe != kj::none) return false;
+
+  Maybe<const int&> converted;
+  converted = moved;
+  if (&converted.assertSome() != &second) return false;
+
+  const Maybe<const int&> constSource = first;
+  converted = constSource;
+  if (&converted.assertSome() != &first) return false;
+
+  Maybe<int&> conversionSource = first;
+  Maybe<const int&> moveConverted;
+  moveConverted = kj::mv(conversionSource);
+  if (&moveConverted.assertSome() != &first || conversionSource != kj::none) return false;
+
+  const Maybe<const int&>& constMoved = moveConverted;
+  if (&constMoved.assertSome() != &first) return false;
+
+  Maybe<int&> empty;
+  if (&empty.orDefault(first) != &first) return false;
+  empty.assertNone();
+
+  empty = moved;
+  auto mapped = empty.map([](int& value) -> int& { return value; });
+  if (&mapped.assertSome() != &second) return false;
+
+  empty = kj::none;
+  return empty == kj::none;
+}
+
+static_assert(maybeReferenceOperationsAreConstexpr());
+
+constexpr bool maybeReferenceConstructionIsConstexpr() {
+  int first = 1;
+  int second = 2;
+
+  Maybe<int&> defaulted;
+  if (defaulted != kj::none) return false;
+
+  Maybe<int&> fromRef = first;
+  if (&fromRef.assertSome() != &first) return false;
+
+  Maybe<int&> fromPtr(&second);
+  if (&fromPtr.assertSome() != &second) return false;
+
+  Maybe<int&> fromNullPtr(static_cast<int*>(nullptr));
+  if (fromNullPtr != kj::none) return false;
+
+  Maybe<int&> fromNone(kj::none);
+  if (fromNone != kj::none) return false;
+
+  Maybe<int&> copied(fromRef);
+  if (&copied.assertSome() != &first) return false;
+
+  Maybe<int&> moveSource = second;
+  Maybe<int&> moved(kj::mv(moveSource));
+  if (&moved.assertSome() != &second || moveSource != kj::none) return false;
+
+  Maybe<const int&> convertedCopy(copied);
+  if (&convertedCopy.assertSome() != &first) return false;
+
+  const Maybe<const int&> constSource = second;
+  Maybe<const int&> convertedConstCopy(constSource);
+  if (&convertedConstCopy.assertSome() != &second) return false;
+
+  Maybe<int&> convertMoveSource = first;
+  Maybe<const int&> convertedMove(kj::mv(convertMoveSource));
+  if (&convertedMove.assertSome() != &first || convertMoveSource != kj::none) return false;
+
+  return true;
+}
+
+static_assert(maybeReferenceConstructionIsConstexpr());
+
+constexpr bool maybeReferenceAccessorsAreConstexpr() {
+  int first = 1;
+  int second = 2;
+
+  Maybe<int&> maybe = first;
+  const Maybe<int&>& constMaybe = maybe;
+  Maybe<int&> empty;
+  const Maybe<int&>& constEmpty = empty;
+
+  // All four assertSome() ref-qualified overloads.
+  if (&maybe.assertSome() != &first) return false;
+  if (&constMaybe.assertSome() != &first) return false;
+  if (&kj::mv(maybe).assertSome() != &first) return false;
+  if (&kj::mv(constMaybe).assertSome() != &first) return false;
+
+  constEmpty.assertNone();
+
+  // Both orDefault() overloads, for the some and none cases.
+  if (&maybe.orDefault(second) != &first) return false;
+  if (&constMaybe.orDefault(second) != &first) return false;
+  if (&empty.orDefault(second) != &second) return false;
+  if (&constEmpty.orDefault(second) != &second) return false;
+
+  // Both map() overloads, for the some and none cases.
+  auto mappedConst = constMaybe.map([](const int& value) -> const int& { return value; });
+  if (&mappedConst.assertSome() != &first) return false;
+  if (empty.map([](int& value) -> int& { return value; }) != kj::none) return false;
+  if (constEmpty.map([](const int& value) -> const int& { return value; }) != kj::none) {
+    return false;
+  }
+
+  // KJ_IF_SOME (i.e. _::readMaybe()) works during constant evaluation.
+  KJ_IF_SOME(value, maybe) {
+    if (&value != &first) return false;
+  } else {
+    return false;
+  }
+  KJ_IF_SOME(value, constMaybe) {
+    if (&value != &first) return false;
+  } else {
+    return false;
+  }
+  KJ_IF_SOME(value, kj::mv(maybe)) {
+    if (&value != &first) return false;
+  } else {
+    return false;
+  }
+  KJ_IF_SOME(value, empty) {
+    (void)value;
+    return false;
+  }
+
+  int* pointer = &second;
+  KJ_IF_SOME(value, pointer) {
+    if (&value != &second) return false;
+  } else {
+    return false;
+  }
+  int* nullPointer = nullptr;
+  KJ_IF_SOME(value, nullPointer) {
+    (void)value;
+    return false;
+  }
+
+  return true;
+}
+
+static_assert(maybeReferenceAccessorsAreConstexpr());
+
 KJ_ASSERT_CAN_MEMCPY(char);
 KJ_ASSERT_CAN_MEMCPY(byte);
 

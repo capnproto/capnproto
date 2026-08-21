@@ -1714,12 +1714,12 @@ inline T* readMaybe(Maybe<T>& maybe) { return maybe.ptr; }
 template <typename T>
 inline const T* readMaybe(const Maybe<T>& maybe) { return maybe.ptr; }
 template <typename T>
-inline T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
+inline constexpr T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
 template <typename T>
-inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
+inline constexpr T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
 template <typename T>
-inline T* readMaybe(T* ptr) { return ptr; }
+inline constexpr T* readMaybe(T* ptr) { return ptr; }
 // Allow KJ_IF_SOME to work on regular pointers.
 
 #ifndef KJ_DEPRECATE_KJ_IF_MAYBE
@@ -2318,60 +2318,75 @@ public:
   inline constexpr Maybe(kj::None): ptr(nullptr) {}
 
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
-  inline Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
+  inline constexpr Maybe& operator=(decltype(nullptr)) { ptr = nullptr; return *this; }
 
-  inline Maybe& operator=(T& other) { ptr = &other; return *this; }
-  inline Maybe& operator=(T* other) { ptr = other; return *this; }
-  inline Maybe& operator=(PropagateConst<T, Maybe>& other) { ptr = other.ptr; return *this; }
-  inline Maybe& operator=(Maybe&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }
+  inline constexpr Maybe& operator=(T& other) { ptr = &other; return *this; }
+  inline constexpr Maybe& operator=(T* other) { ptr = other; return *this; }
+  inline constexpr Maybe& operator=(PropagateConst<T, Maybe>& other) {
+    ptr = other.ptr;
+    return *this;
+  }
+  inline constexpr Maybe& operator=(Maybe&& other) {
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    return *this;
+  }
   template <typename U>
-  inline Maybe& operator=(Maybe<U&>& other) { ptr = other.ptr; return *this; }
+  inline constexpr Maybe& operator=(Maybe<U&>& other) { ptr = other.ptr; return *this; }
   template <typename U>
-  inline Maybe& operator=(const Maybe<const U&>& other) { ptr = other.ptr; return *this; }
+  inline constexpr Maybe& operator=(const Maybe<const U&>& other) {
+    ptr = other.ptr;
+    return *this;
+  }
   template <typename U>
-  inline Maybe& operator=(Maybe<U&>&& other) { ptr = other.ptr; other.ptr = nullptr; return *this; }
+  inline constexpr Maybe& operator=(Maybe<U&>&& other) {
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    return *this;
+  }
   template <typename U>
   inline Maybe& operator=(const Maybe<U&>&& other) = delete;
 
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
-  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+  inline constexpr bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
 
-  inline bool operator==(kj::None) const { return ptr == nullptr; }
+  inline constexpr Maybe& operator=(kj::None) { ptr = nullptr; return *this; }
+  inline constexpr bool operator==(kj::None) const { return ptr == nullptr; }
 
-  T& assertSome() & {
+  constexpr T& assertSome() & {
     // Returns the referenced value. The Maybe must not be none.
     KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
     return *ptr;
   }
-  const T& assertSome() const & {
+  constexpr const T& assertSome() const & {
     // Returns the referenced value. The Maybe must not be none.
     KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
     return *ptr;
   }
-  T& assertSome() && {
+  constexpr T& assertSome() && {
     // Returns the referenced value. The Maybe must not be none.
     KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
     return *ptr;
   }
-  const T& assertSome() const && {
+  constexpr const T& assertSome() const && {
     // Returns the referenced value. The Maybe must not be none.
     KJ_IREQUIRE(ptr != nullptr, "null Maybe<> dereference");
     return *ptr;
   }
 
-  void assertNone() const {
+  constexpr void assertNone() const {
     // Verifies that the Maybe does not contain a reference.
     KJ_IREQUIRE(ptr == nullptr, "expected Maybe<> to be none");
   }
 
-  T& orDefault(T& defaultValue) {
+  constexpr T& orDefault(T& defaultValue) {
     if (ptr == nullptr) {
       return defaultValue;
     } else {
       return *ptr;
     }
   }
-  const T& orDefault(const T& defaultValue) const {
+  constexpr const T& orDefault(const T& defaultValue) const {
     if (ptr == nullptr) {
       return defaultValue;
     } else {
@@ -2401,7 +2416,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+  constexpr auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
     // See KJ_MAP for a more ergonomic interface.
     if (ptr == nullptr) {
       return kj::none;
@@ -2411,7 +2426,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+  constexpr auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
     if (ptr == nullptr) {
       return kj::none;
     } else {
@@ -2426,9 +2441,9 @@ private:
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend U* _::readMaybe(Maybe<U&>&& maybe);
+  friend constexpr U* _::readMaybe(Maybe<U&>&& maybe);
   template <typename U>
-  friend U* _::readMaybe(const Maybe<U&>& maybe);
+  friend constexpr U* _::readMaybe(const Maybe<U&>& maybe);
 };
 
 // =======================================================================================
