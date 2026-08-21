@@ -70,12 +70,14 @@ public:
   // get at it.
 
 private:
+  // Declared before the views so it is destroyed after them. This owns their backing storage when
+  // the byte-array constructor has to copy misaligned input.
+  kj::Array<word> alignedCopy;
+
   // Optimize for single-segment case.
   kj::ArrayPtr<const word> segment0;
   kj::Array<kj::ArrayPtr<const word>> moreSegments;
   const word* end;
-
-  kj::Array<word> alignedCopy;
 
   void init(kj::ArrayPtr<const word> array);
 };

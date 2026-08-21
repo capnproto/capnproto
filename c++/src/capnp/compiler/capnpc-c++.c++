@@ -391,8 +391,8 @@ private:
 
       // Figure out what name to use.
       Schema parent = schemaLoader.get(node.getScopeId());
-      kj::StringPtr unqualifiedName;
       kj::String ownUnqualifiedName;
+      kj::StringPtr unqualifiedName;
       KJ_IF_SOME(annotatedName, annotationValue(node, NAME_ANNOTATION_ID)) {
         // The node's name has been overridden for C++ by an annotation.
         unqualifiedName = annotatedName.getText();

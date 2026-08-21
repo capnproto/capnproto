@@ -148,6 +148,7 @@ kj::Exception toException(const rpc::Exception::Reader& exception) {
 
 void fromException(const kj::Exception& exception, rpc::Exception::Builder builder,
                    kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder) {
+  kj::String scratch;
   kj::StringPtr description = exception.getDescription();
 
   // Include context, if any.
@@ -160,7 +161,6 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
       break;
     }
   }
-  kj::String scratch;
   if (contextLines.size() > 0) {
     scratch = kj::str(description, '\n', kj::strArray(contextLines, "\n"));
     description = scratch;

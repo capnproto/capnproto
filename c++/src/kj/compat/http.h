@@ -485,6 +485,9 @@ public:
 private:
   const HttpHeaderTable* table;
 
+  // Backing storage must be destroyed after all header views.
+  kj::Vector<kj::Array<char>> ownedStrings;
+
   kj::Array<kj::StringPtr> indexedHeaders;
   // Size is always table->idCount().
 
@@ -493,8 +496,6 @@ private:
     kj::StringPtr value;
   };
   kj::Vector<Header> unindexedHeaders;
-
-  kj::Vector<kj::Array<char>> ownedStrings;
 
   void addNoCheck(kj::StringPtr name, kj::StringPtr value);
 
