@@ -151,6 +151,18 @@ typedef unsigned char byte;
 //   that is the standard compliant way. However, it's unclear how to use those macros (or any
 //   others) to distinguish between the compiler supporting feature detection and the feature being
 //   disabled vs the compiler not supporting feature detection at all.
+
+// NetBSD's <sys/cdefs.h> defines a fallback `__has_feature(x) 0` stub for
+// compilers that lack the `__has_feature` extension. This defeats the
+// detection logic below: `defined(__has_feature)` is true, but every query
+// answers 0. Undefine the stub on the affected configuration so the logic
+// below takes its intended fallback path. GCC implements `__has_feature`
+// natively since version 14. Clang always provides it as a builtin and must
+// be excluded explicitly because it also defines `__GNUC__`.
+#if defined(__NetBSD__) && !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 14
+#undef __has_feature
+#endif
+
 #if defined(__has_feature)
   #if !defined(KJ_NO_RTTI) && !__has_feature(cxx_rtti)
     #define KJ_NO_RTTI 1
