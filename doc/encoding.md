@@ -117,7 +117,10 @@ Fields are positioned within the struct according to an algorithm with the follo
 
 Field offsets are computed by the Cap'n Proto compiler.  The precise algorithm is too complicated
 to describe here, but you need not implement it yourself, as the compiler can produce a compiled
-schema format which includes offset information.
+schema format which includes offset information, which you can then use in a
+[compiler plugin](otherlang.html#how-to-write-compiler-plugins).  The included
+`capnp` plugin provides an easy way to view a schema's offsets in
+human-readable form, e.g. by running `capnp compile -ocapnp myschema.capnp`.
 
 #### Default Values
 
