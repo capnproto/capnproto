@@ -205,6 +205,14 @@ public:
   }
 
 protected:
+  bool hasOwnership() const {
+    return flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+  }
+
+  void disown() {
+    flags &= ~LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+  }
+
   SOCKET fd;
 
 private:
@@ -451,6 +459,14 @@ private:
         return kj::READY_NOW;
       }
     }).attach(kj::mv(bufs));
+  }
+
+  Maybe<AutoCloseHandle> releaseWin32Handle() override {
+    if(!hasOwnership()) {
+      return nullptr;
+    }
+    disown();
+    return AutoCloseHandle{reinterpret_cast<void*>(fd)};
   }
 };
 
