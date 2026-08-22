@@ -184,7 +184,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
       // *other than* anyPointer. This happens with generics -- the field is actually a generic
       // parameter that has been bound, but the default value was of course compiled without any
       // binding available.
-      auto dval = slot.getDefaultValue();
+      auto dval = field.getDefaultValueProto();
 
       switch (type.which()) {
         case schema::Type::VOID:
@@ -276,7 +276,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
       // *other than* anyPointer. This happens with generics -- the field is actually a generic
       // parameter that has been bound, but the default value was of course compiled without any
       // binding available.
-      auto dval = slot.getDefaultValue();
+      auto dval = field.getDefaultValueProto();
 
       switch (type.which()) {
         case schema::Type::VOID:
@@ -515,7 +515,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto dval = slot.getDefaultValue();
+      auto dval = field.getDefaultValueProto();
 
       switch (type.which()) {
         case schema::Type::VOID:
