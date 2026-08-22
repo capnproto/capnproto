@@ -343,7 +343,8 @@ void TypeIdGenerator::update(kj::ArrayPtr<const kj::byte> dataArray)
 {
   KJ_REQUIRE(!finished, "already called TypeIdGenerator::finish()");
 
-  const kj::byte* data = dataArray.begin();
+  auto data = dataArray;
+  auto buffer = kj::arrayPtr(ctx.buffer);
   unsigned long size = dataArray.size();
 
   uint saved_lo;
@@ -360,22 +361,23 @@ void TypeIdGenerator::update(kj::ArrayPtr<const kj::byte> dataArray)
     free = 64 - used;
 
     if (size < free) {
-      memcpy(&ctx.buffer[used], data, size);
+      buffer.slice(used, used + size).copyFrom(data.first(size));
       return;
     }
 
-    memcpy(&ctx.buffer[used], data, free);
-    data = data + free;
+    buffer.slice(used, used + free).copyFrom(data.first(free));
+    data = data.slice(free);
     size -= free;
     body(ctx.buffer, 64);
   }
 
   if (size >= 64) {
-    data = body(data, size & ~(unsigned long)0x3f);
+    auto remaining = body(data.begin(), size & ~(unsigned long)0x3f) - data.begin();
+    data = data.slice(remaining);
     size &= 0x3f;
   }
 
-  memcpy(ctx.buffer, data, size);
+  buffer.write(data.first(size));
 }
 
 kj::ArrayPtr<const kj::byte> TypeIdGenerator::finish()

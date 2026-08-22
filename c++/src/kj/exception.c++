@@ -793,7 +793,7 @@ StringPtr signalName(int signo) {
   CONTEXT win32Context;
   static_assert(sizeof(ucontext->uc_mcontext) >= sizeof(win32Context),
       "mcontext_t should be an extension of CONTEXT");
-  memcpy(&win32Context, &ucontext->uc_mcontext, sizeof(win32Context));
+  kj::asBytes(win32Context).copyFrom(kj::asBytes(ucontext->uc_mcontext).first(sizeof(win32Context)));
   auto trace = getStackTrace(traceSpace, 0, GetCurrentThread(), win32Context);
 #elif __linux__ && __x86_64__
   kj::ArrayPtr<void* const> trace;
@@ -1074,7 +1074,8 @@ Exception Exception::clone() const noexcept {
   }
 
   copy.storage->traceCount = storage->traceCount;
-  memcpy(copy.storage->trace, storage->trace, sizeof(copy.storage->trace[0]) * copy.storage->traceCount);
+  kj::arrayPtr(copy.storage->trace, copy.storage->traceCount)
+      .copyFrom(kj::arrayPtr(storage->trace, storage->traceCount));
 
   KJ_IF_SOME(c, storage->context) {
     copy.storage->context = heap(*c);
@@ -1122,7 +1123,7 @@ void Exception::extendTrace(uint ignoreCount, uint limit) {
     newTrace = newTrace.first(kj::min(kj::size(storage->trace) - storage->traceCount, newTrace.size()));
 
     // Copy the rest into our trace.
-    memcpy(storage->trace + storage->traceCount, newTrace.begin(), newTrace.asBytes().size());
+    kj::arrayPtr(storage->trace + storage->traceCount, newTrace.size()).copyFrom(newTrace);
     storage->traceCount += newTrace.size();
     storage->isFullTrace = true;
   }

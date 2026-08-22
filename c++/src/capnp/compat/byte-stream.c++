@@ -989,13 +989,11 @@ public:
           size_t size = 0;
           for (auto& piece: pieces) size += piece.size();
           auto req = capnpStream->writeRequest(MessageSize { 8 + size / sizeof(word), 0 });
-          auto out = req.initBytes(size);
-          byte* ptr = out.begin();
+          kj::ArrayPtr<byte> out = req.initBytes(size);
           for (auto& piece: pieces) {
-            memcpy(ptr, piece.begin(), piece.size());
-            ptr += piece.size();
+            out.write(piece);
           }
-          KJ_ASSERT(ptr == out.end());
+          KJ_ASSERT(out.size() == 0);
           return req.send();
         };
 

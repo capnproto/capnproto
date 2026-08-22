@@ -143,15 +143,17 @@ String PathPtr::toString(bool absolute) const {
 
   String result = kj::heapString(size);
 
-  char* ptr = result.begin();
+  auto output = result.asArray();
   bool leadingSlash = absolute;
   for (auto& p: parts) {
-    if (leadingSlash) *ptr++ = '/';
+    if (leadingSlash) {
+      output[0] = '/';
+      output = output.slice(1);
+    }
     leadingSlash = true;
-    memcpy(ptr, p.begin(), p.size());
-    ptr += p.size();
+    output.write(p);
   }
-  KJ_ASSERT(ptr == result.end());
+  KJ_ASSERT(output.size() == 0);
 
   return result;
 }
@@ -225,45 +227,51 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
 
   String result = heapString(size);
 
-  char* ptr = result.begin();
+  auto output = result.asArray();
 
   if (forApi) {
-    *ptr++ = '\\';
-    *ptr++ = '\\';
-    *ptr++ = '?';
-    *ptr++ = '\\';
+    output[0] = '\\';
+    output[1] = '\\';
+    output[2] = '?';
+    output[3] = '\\';
+    output = output.slice(4);
     if (isUncPath) {
-      *ptr++ = 'U';
-      *ptr++ = 'N';
-      *ptr++ = 'C';
-      *ptr++ = '\\';
+      output[0] = 'U';
+      output[1] = 'N';
+      output[2] = 'C';
+      output[3] = '\\';
+      output = output.slice(4);
     }
   } else {
     if (isUncPath) {
-      *ptr++ = '\\';
-      *ptr++ = '\\';
+      output[0] = '\\';
+      output[1] = '\\';
+      output = output.slice(2);
     }
   }
 
   bool leadingSlash = false;
   for (auto& p: parts) {
-    if (leadingSlash) *ptr++ = '\\';
+    if (leadingSlash) {
+      output[0] = '\\';
+      output = output.slice(1);
+    }
     leadingSlash = true;
 
     KJ_REQUIRE(!Path::isWin32Special(p), "path cannot contain DOS reserved name", p) {
       // Recover by blotting out the name with invalid characters which Win32 syscalls will reject.
       for (size_t i = 0; i < p.size(); i++) {
-        *ptr++ = '|';
+        output[i] = '|';
       }
+      output = output.slice(p.size());
       goto skip;
     }
 
-    memcpy(ptr, p.begin(), p.size());
-    ptr += p.size();
+    output.write(p);
   skip:;
   }
 
-  KJ_ASSERT(ptr == result.end());
+  KJ_ASSERT(output.size() == 0);
 
   // Check for colons (other than in drive letter), which on NTFS would be interpreted as an
   // "alternate data stream", which can lead to surprising results. If we want to support ADS, we
@@ -469,7 +477,7 @@ bool Path::isWin32Special(StringPtr part) {
   // OK, this could be a Win32 special filename. We need to match the first three letters against
   // the list of specials, case-insensitively.
   char tmp[4]{};
-  memcpy(tmp, part.begin(), 3);
+  kj::arrayPtr(tmp).write(part.first(3));
   tmp[3] = '\0';
   for (char& c: tmp) {
     if ('A' <= c && c <= 'Z') {
@@ -804,7 +812,7 @@ public:
     }
 
     size_t readSize = kj::min(buffer.size(), lock->size - offset);
-    memcpy(buffer.begin(), lock->bytes.begin() + offset, readSize);
+    buffer.write(lock->bytes.slice(offset, offset + readSize));
     return readSize;
   }
 
@@ -842,7 +850,7 @@ public:
     KJ_REQUIRE(end >= offset, "write() request overflows uint64");
     lock->ensureCapacity(end);
     lock->size = kj::max(lock->size, end);
-    memcpy(lock->bytes.begin() + offset, data.begin(), data.size());
+    lock->bytes.slice(offset, offset + data.size()).copyFrom(data);
   }
 
   void zero(uint64_t offset, uint64_t zeroSize) const override {
@@ -917,7 +925,7 @@ private:
 
         auto newBytes = heapArray<byte>(kj::max(capacity, bytes.size() * 2));
         if (size > 0) {  // placate ubsan; bytes.begin() might be null
-          memcpy(newBytes.begin(), bytes.begin(), size);
+          newBytes.first(size).write(bytes.first(size));
         }
         newBytes.slice(size).fill(0);
         bytes = kj::mv(newBytes);

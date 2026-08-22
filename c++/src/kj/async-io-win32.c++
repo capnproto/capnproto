@@ -449,7 +449,7 @@ class SocketAddress {
 public:
   SocketAddress(const void* sockaddr, uint len): addrlen(len) {
     KJ_REQUIRE(len <= sizeof(addr), "Sorry, your sockaddr is too big for me.");
-    memcpy(&addr.generic, sockaddr, len);
+    kj::asBytes(addr).write(kj::arrayPtr(reinterpret_cast<const byte*>(sockaddr), len));
   }
 
   bool operator<(const SocketAddress& other) const {
@@ -634,7 +634,7 @@ public:
     char buffer[64];
     if (addrPart.size() < sizeof(buffer) - 1) {
       // addrPart is not necessarily NUL-terminated so we have to make a copy.  :(
-      memcpy(buffer, addrPart.begin(), addrPart.size());
+      kj::arrayPtr(buffer).write(addrPart);
       buffer[addrPart.size()] = '\0';
 
       // OK, parse it!
@@ -796,7 +796,8 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
             }
           } else {
             addr.addrlen = cur->ai_addrlen;
-            memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
+            kj::asBytes(addr.addr).first(cur->ai_addrlen)
+                .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(cur->ai_addr), cur->ai_addrlen));
           }
           result.insert(addr);
           cur = cur->ai_next;

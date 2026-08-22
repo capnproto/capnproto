@@ -139,11 +139,11 @@ struct UnionState {
 
   UnionState(std::initializer_list<uint> discriminants, int dataOffset)
       : dataOffset(dataOffset) {
-    memcpy(this->discriminants, discriminants.begin(), sizeof(this->discriminants));
+    kj::arrayPtr(this->discriminants).copyFrom(discriminants);
   }
 
   bool operator==(const UnionState& other) const {
-    for (uint i = 0; i < 4; i++) {
+    for (auto i: kj::indices(discriminants)) {
       if (discriminants[i] != other.discriminants[i]) {
         return false;
       }

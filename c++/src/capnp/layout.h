@@ -265,7 +265,7 @@ inline uint32_t mask<float>(float value, uint32_t mask) {
 
   uint32_t i;
   static_assert(sizeof(i) == sizeof(value), "float is not 32 bits?");
-  memcpy(&i, &value, sizeof(value));
+  kj::asBytes(i).copyFrom(kj::asBytes(value));
   return i ^ mask;
 }
 
@@ -279,7 +279,7 @@ inline uint64_t mask<double>(double value, uint64_t mask) {
 
   uint64_t i;
   static_assert(sizeof(i) == sizeof(value), "double is not 64 bits?");
-  memcpy(&i, &value, sizeof(value));
+  kj::asBytes(i).copyFrom(kj::asBytes(value));
   return i ^ mask;
 }
 
@@ -293,7 +293,7 @@ inline float unmask<float>(uint32_t value, uint32_t mask) {
   value ^= mask;
   float result;
   static_assert(sizeof(result) == sizeof(value), "float is not 32 bits?");
-  memcpy(&result, &value, sizeof(value));
+  kj::asBytes(result).copyFrom(kj::asBytes(value));
   return result;
 }
 
@@ -302,7 +302,7 @@ inline double unmask<double>(uint64_t value, uint64_t mask) {
   value ^= mask;
   double result;
   static_assert(sizeof(result) == sizeof(value), "double is not 64 bits?");
-  memcpy(&result, &value, sizeof(value));
+  kj::asBytes(result).copyFrom(kj::asBytes(value));
   return result;
 }
 
@@ -942,7 +942,7 @@ private:
   inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment,
                        CapTableBuilder* capTable, word* location)
       : segment(segment), capTable(capTable), location(location) {
-    memcpy(&tag, tagPtr, sizeof(tag));
+    kj::asBytes(tag).copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(tagPtr), sizeof(tag)));
   }
 
   inline WirePointer* tagAsPtr() { return reinterpret_cast<WirePointer*>(&tag); }
@@ -1238,7 +1238,7 @@ inline PointerReader ListReader::getPointerElement(ElementCount index) const {
 
 inline OrphanBuilder::OrphanBuilder(OrphanBuilder&& other) noexcept
     : segment(other.segment), capTable(other.capTable), location(other.location) {
-  memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
+  kj::asBytes(tag).copyFrom(kj::asBytes(other.tag));  // Needs byte copy for aliasing rules.
   other.segment = nullptr;
   other.location = nullptr;
 }
@@ -1258,7 +1258,7 @@ inline OrphanBuilder& OrphanBuilder::operator=(OrphanBuilder&& other) {
   segment = other.segment;
   capTable = other.capTable;
   location = other.location;
-  memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
+  kj::asBytes(tag).copyFrom(kj::asBytes(other.tag));  // Needs byte copy for aliasing rules.
   other.segment = nullptr;
   other.location = nullptr;
   return *this;

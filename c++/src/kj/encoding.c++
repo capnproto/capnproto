@@ -260,7 +260,9 @@ template <typename To, typename From>
 Array<To> coerceTo(Array<From>&& array) {
   static_assert(sizeof(To) == sizeof(From), "incompatible coercion");
   Array<wchar_t> result;
-  memcpy((void*)&result, &array, sizeof(array));
+  auto resultBytes = kj::arrayPtr(reinterpret_cast<byte*>(&result), sizeof(result));
+  auto arrayBytes = kj::arrayPtr(reinterpret_cast<const byte*>(&array), sizeof(array));
+  resultBytes.copyFrom(arrayBytes);
   memset((void*)&array, 0, sizeof(array));
   return result;
 }
@@ -289,7 +291,7 @@ struct WideConverter<sizeof(char)> {
 
   static EncodingResult<Array<char>> encode(ArrayPtr<const char> text, bool nulTerminate) {
     auto result = heapArray<char>(text.size() + nulTerminate);
-    memcpy(result.begin(), text.begin(), text.size());
+    result.asPtr().copyFrom(text);
     if (nulTerminate) result.back() = 0;
     return { kj::mv(result), false };
   }
@@ -1003,7 +1005,7 @@ EncodingResult<Array<byte>> decodeBase64(ArrayPtr<const char> input) {
 
   if (n < output.size()) {
     auto copy = heapArray<byte>(n);
-    memcpy(copy.begin(), output.begin(), n);
+    copy.asPtr().write(output.first(n));
     output = kj::mv(copy);
   }
 

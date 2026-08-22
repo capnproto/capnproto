@@ -1211,7 +1211,7 @@ KJ_TEST("CIDR parsing") {
   {
     addr4.sin_family = AF_INET6;
     byte bytes[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-    memcpy(addr6.sin6_addr.s6_addr, bytes, 16);
+    kj::arrayPtr(addr6.sin6_addr.s6_addr, 16).copyFrom(kj::arrayPtr(bytes, 16));
     KJ_EXPECT(CidrRange("0102:03ff::/24").matches(&addr));
     KJ_EXPECT(!CidrRange("0102:02ff::/24").matches(&addr));
     KJ_EXPECT(CidrRange("0102:02ff::/23").matches(&addr));
@@ -1469,7 +1469,7 @@ public:
     // But also don't read more data than we have.
     n = kj::min(n, bytes.size());
 
-    memcpy(buffer, bytes.begin(), n);
+    kj::arrayPtr(reinterpret_cast<byte*>(buffer), n).copyFrom(bytes.first(n));
     bytes = bytes.slice(n, bytes.size());
     return n;
   }

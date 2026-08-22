@@ -33,11 +33,11 @@ uint HashCoder::operator*(ArrayPtr<const byte> s) const {
   constexpr uint m = 0x5bd1e995;
   constexpr uint r = 24;
   uint h = s.size();
-  const byte* data = s.begin();
-  uint len = s.size();
-  for (; len >= 4; data += 4, len -= 4) {
+  auto data = s;
+  uint len = data.size();
+  for (; len >= 4; data = data.slice(4), len -= 4) {
     uint k;
-    memcpy(&k, data, sizeof(k));
+    kj::asBytes(k).copyFrom(data.first(sizeof(k)));
     k *= m;
     k ^= k >> r;
     k *= m;

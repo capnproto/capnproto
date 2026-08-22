@@ -160,7 +160,7 @@ TEST(Any, AnyStruct) {
     EXPECT_EQ(20, sb.getPointerSection().size());
 
     // TODO: is there a higher-level API for this?
-    memcpy(sb.getDataSection().begin(), r.getDataSection().begin(), r.getDataSection().size());
+    sb.getDataSection().copyFrom(r.getDataSection());
   }
 
   {

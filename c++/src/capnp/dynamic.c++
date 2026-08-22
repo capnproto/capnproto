@@ -43,7 +43,7 @@ inline float bitCast<float, uint32_t>(uint32_t value) KJ_UNUSED;
 template <>
 inline float bitCast<float, uint32_t>(uint32_t value) {
   float result;
-  memcpy(&result, &value, sizeof(value));
+  kj::asBytes(result).copyFrom(kj::asBytes(value));
   return result;
 }
 template <>
@@ -51,19 +51,19 @@ inline double bitCast<double, uint64_t>(uint64_t value) KJ_UNUSED;
 template <>
 inline double bitCast<double, uint64_t>(uint64_t value) {
   double result;
-  memcpy(&result, &value, sizeof(value));
+  kj::asBytes(result).copyFrom(kj::asBytes(value));
   return result;
 }
 template <>
 inline uint32_t bitCast<uint32_t, float>(float value) {
   uint32_t result;
-  memcpy(&result, &value, sizeof(value));
+  kj::asBytes(result).copyFrom(kj::asBytes(value));
   return result;
 }
 template <>
 inline uint64_t bitCast<uint64_t, double>(double value) {
   uint64_t result;
-  memcpy(&result, &value, sizeof(value));
+  kj::asBytes(result).copyFrom(kj::asBytes(value));
   return result;
 }
 
@@ -1466,9 +1466,9 @@ DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
 }
 
 #if __GNUC__ && !__clang__ && __GNUC__ >= 9
-// In the copy constructors below, we use memcpy() to copy only after verifying that it is safe.
+// In the copy constructors below, we byte-copy only after verifying that it is safe.
 // But GCC 9 doesn't know we've checked, and whines. I suppose GCC is probably right: our checks
-// probably don't technically make memcpy safe according to the standard. But it works in practice,
+// probably don't technically make byte-copying safe according to the standard. But it works in practice,
 // and if it ever stops working, the tests will catch it.
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 #endif
@@ -1501,7 +1501,8 @@ DynamicValue::Reader::Reader(const Reader& other) {
       return;
   }
 
-  memcpy((void*)this, &other, sizeof(*this));
+  kj::arrayPtr(reinterpret_cast<byte*>(this), sizeof(*this))
+      .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(&other), sizeof(*this)));
 }
 DynamicValue::Reader::Reader(Reader&& other) noexcept {
   switch (other.type) {
@@ -1531,7 +1532,8 @@ DynamicValue::Reader::Reader(Reader&& other) noexcept {
       return;
   }
 
-  memcpy((void*)this, &other, sizeof(*this));
+  kj::arrayPtr(reinterpret_cast<byte*>(this), sizeof(*this))
+      .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(&other), sizeof(*this)));
 }
 DynamicValue::Reader::~Reader() noexcept(false) {
   if (type == CAPABILITY) {
@@ -1586,7 +1588,8 @@ DynamicValue::Builder::Builder(Builder& other) {
       return;
   }
 
-  memcpy((void*)this, &other, sizeof(*this));
+  kj::arrayPtr(reinterpret_cast<byte*>(this), sizeof(*this))
+      .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(&other), sizeof(*this)));
 }
 DynamicValue::Builder::Builder(Builder&& other) noexcept {
   switch (other.type) {
@@ -1620,7 +1623,8 @@ DynamicValue::Builder::Builder(Builder&& other) noexcept {
       return;
   }
 
-  memcpy((void*)this, &other, sizeof(*this));
+  kj::arrayPtr(reinterpret_cast<byte*>(this), sizeof(*this))
+      .copyFrom(kj::arrayPtr(reinterpret_cast<const byte*>(&other), sizeof(*this)));
 }
 DynamicValue::Builder::~Builder() noexcept(false) {
   if (type == CAPABILITY) {
