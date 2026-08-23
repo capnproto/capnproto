@@ -23,6 +23,7 @@ project's documentation for details.
 * [OCaml](https://github.com/capnproto/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj) with [RPC](https://github.com/mirage/capnp-rpc) by [@talex5](https://github.com/talex5)
 * [Python](http://capnproto.github.io/pycapnp/) by [@jparyani](https://github.com/jparyani)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
+* [TypeScript](https://github.com/HaoZeke/capnp-ts) by [@HaoZeke](https://github.com/HaoZeke)
 
 ##### Serialization only
 
