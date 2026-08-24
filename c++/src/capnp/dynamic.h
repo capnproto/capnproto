@@ -717,8 +717,8 @@ private:
     mutable DynamicCapability::Client capabilityValue;
     // Declared mutable because `Client`s normally cannot be const.
 
-    // Warning:  Copy/move constructors assume all these types are trivially copyable except
-    //   Capability.
+    // Copy/move constructors explicitly construct the active member because some reader types
+    // are non-trivial when KJ_ASSERT_ARRAYPTR_COUNTERS is enabled.
   };
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;

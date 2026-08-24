@@ -44,6 +44,39 @@ void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
   }
 }
 
+template <typename Value, typename Check>
+void checkDynamicValueCopyAndMove(Value& original, DynamicValue::Type type, Check&& check) {
+  EXPECT_EQ(type, original.getType());
+  check(original);
+
+  Value copy(original);
+  EXPECT_EQ(type, copy.getType());
+  check(copy);
+
+  Value moved(kj::mv(copy));
+  EXPECT_EQ(type, moved.getType());
+  check(moved);
+
+  Value copyAssigned(original);
+  copyAssigned = original;
+  EXPECT_EQ(type, copyAssigned.getType());
+  check(copyAssigned);
+
+  Value moveAssigned(original);
+  moveAssigned = kj::mv(copyAssigned);
+  EXPECT_EQ(type, moveAssigned.getType());
+  check(moveAssigned);
+
+  auto* self = &original;
+  original = *self;
+  EXPECT_EQ(type, original.getType());
+  check(original);
+
+  original = kj::mv(*self);
+  EXPECT_EQ(type, original.getType());
+  check(original);
+}
+
 TEST(DynamicApi, Build) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
@@ -471,6 +504,192 @@ TEST(DynamicApi, SetDataFromText) {
 
   root.set("dataField", "foo");
   EXPECT_EQ(data("foo"), root.get("dataField").as<Data>());
+}
+
+TEST(DynamicApi, DynamicValueReaderCopyAndMove) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestAllTypes>();
+  root.setTextField("foo");
+  root.setDataField(data("bar"));
+  root.initInt32List(1).set(0, 123);
+  root.initStructField().setInt32Field(456);
+
+  MallocMessageBuilder anyMessage;
+  auto anyRoot = anyMessage.initRoot<test::TestAnyPointer>();
+  anyRoot.getAnyPointerField().setAs<Text>("qux");
+
+  {
+    DynamicValue::Reader value;
+    checkDynamicValueCopyAndMove(value, DynamicValue::UNKNOWN, [](auto&) {});
+  }
+  {
+    DynamicValue::Reader value = capnp::VOID;
+    checkDynamicValueCopyAndMove(value, DynamicValue::VOID, [](auto& value) {
+      value.template as<Void>();
+    });
+  }
+  {
+    DynamicValue::Reader value = true;
+    checkDynamicValueCopyAndMove(value, DynamicValue::BOOL, [](auto& value) {
+      EXPECT_TRUE(value.template as<bool>());
+    });
+  }
+  {
+    DynamicValue::Reader value = int64_t(-123);
+    checkDynamicValueCopyAndMove(value, DynamicValue::INT, [](auto& value) {
+      EXPECT_EQ(-123, value.template as<int64_t>());
+    });
+  }
+  {
+    DynamicValue::Reader value = uint64_t(123);
+    checkDynamicValueCopyAndMove(value, DynamicValue::UINT, [](auto& value) {
+      EXPECT_EQ(123u, value.template as<uint64_t>());
+    });
+  }
+  {
+    DynamicValue::Reader value = 12.5;
+    checkDynamicValueCopyAndMove(value, DynamicValue::FLOAT, [](auto& value) {
+      EXPECT_EQ(12.5, value.template as<double>());
+    });
+  }
+  {
+    DynamicValue::Reader value = root.asReader().getTextField();
+    checkDynamicValueCopyAndMove(value, DynamicValue::TEXT, [](auto& value) {
+      EXPECT_EQ("foo", value.template as<Text>());
+    });
+  }
+  {
+    DynamicValue::Reader value = root.asReader().getDataField();
+    checkDynamicValueCopyAndMove(value, DynamicValue::DATA, [](auto& value) {
+      EXPECT_EQ(data("bar"), value.template as<Data>());
+    });
+  }
+  {
+    DynamicValue::Reader value = toDynamic(root.asReader()).get("int32List");
+    checkDynamicValueCopyAndMove(value, DynamicValue::LIST, [](auto& value) {
+      auto list = value.template as<DynamicList>();
+      ASSERT_EQ(1u, list.size());
+      EXPECT_EQ(123, list[0].template as<int32_t>());
+    });
+  }
+  {
+    DynamicValue::Reader value = DynamicEnum(Schema::from<TestEnum>(), 2);
+    checkDynamicValueCopyAndMove(value, DynamicValue::ENUM, [](auto& value) {
+      EXPECT_EQ(TestEnum::BAZ, value.template as<TestEnum>());
+    });
+  }
+  {
+    DynamicValue::Reader value = toDynamic(root.asReader()).get("structField");
+    checkDynamicValueCopyAndMove(value, DynamicValue::STRUCT, [](auto& value) {
+      EXPECT_EQ(456, value.template as<DynamicStruct>().get("int32Field").template as<int32_t>());
+    });
+  }
+  {
+    DynamicValue::Reader value = anyRoot.asReader().getAnyPointerField();
+    checkDynamicValueCopyAndMove(value, DynamicValue::ANY_POINTER, [](auto& value) {
+      EXPECT_EQ("qux", value.template as<AnyPointer>().template getAs<Text>());
+    });
+  }
+  {
+    DynamicCapability::Client capability = test::TestInterface::Client(nullptr);
+    DynamicValue::Reader value(capability);
+    checkDynamicValueCopyAndMove(value, DynamicValue::CAPABILITY, [](auto& value) {
+      value.template as<DynamicCapability>();
+    });
+  }
+}
+
+TEST(DynamicApi, DynamicValueBuilderCopyAndMove) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestAllTypes>();
+  root.setTextField("foo");
+  root.setDataField(data("bar"));
+  root.initInt32List(1).set(0, 123);
+  root.initStructField().setInt32Field(456);
+
+  MallocMessageBuilder anyMessage;
+  auto anyRoot = anyMessage.initRoot<test::TestAnyPointer>();
+  anyRoot.getAnyPointerField().setAs<Text>("qux");
+
+  {
+    DynamicValue::Builder value;
+    checkDynamicValueCopyAndMove(value, DynamicValue::UNKNOWN, [](auto&) {});
+  }
+  {
+    DynamicValue::Builder value = capnp::VOID;
+    checkDynamicValueCopyAndMove(value, DynamicValue::VOID, [](auto& value) {
+      value.template as<Void>();
+    });
+  }
+  {
+    DynamicValue::Builder value = true;
+    checkDynamicValueCopyAndMove(value, DynamicValue::BOOL, [](auto& value) {
+      EXPECT_TRUE(value.template as<bool>());
+    });
+  }
+  {
+    DynamicValue::Builder value = int64_t(-123);
+    checkDynamicValueCopyAndMove(value, DynamicValue::INT, [](auto& value) {
+      EXPECT_EQ(-123, value.template as<int64_t>());
+    });
+  }
+  {
+    DynamicValue::Builder value = uint64_t(123);
+    checkDynamicValueCopyAndMove(value, DynamicValue::UINT, [](auto& value) {
+      EXPECT_EQ(123u, value.template as<uint64_t>());
+    });
+  }
+  {
+    DynamicValue::Builder value = 12.5;
+    checkDynamicValueCopyAndMove(value, DynamicValue::FLOAT, [](auto& value) {
+      EXPECT_EQ(12.5, value.template as<double>());
+    });
+  }
+  {
+    DynamicValue::Builder value = root.getTextField();
+    checkDynamicValueCopyAndMove(value, DynamicValue::TEXT, [](auto& value) {
+      EXPECT_EQ("foo", value.template as<Text>());
+    });
+  }
+  {
+    DynamicValue::Builder value = root.getDataField();
+    checkDynamicValueCopyAndMove(value, DynamicValue::DATA, [](auto& value) {
+      EXPECT_EQ(data("bar"), value.template as<Data>());
+    });
+  }
+  {
+    DynamicValue::Builder value = toDynamic(root).get("int32List");
+    checkDynamicValueCopyAndMove(value, DynamicValue::LIST, [](auto& value) {
+      auto list = value.template as<DynamicList>();
+      ASSERT_EQ(1u, list.size());
+      EXPECT_EQ(123, list[0].template as<int32_t>());
+    });
+  }
+  {
+    DynamicValue::Builder value = DynamicEnum(Schema::from<TestEnum>(), 2);
+    checkDynamicValueCopyAndMove(value, DynamicValue::ENUM, [](auto& value) {
+      EXPECT_EQ(TestEnum::BAZ, value.template as<TestEnum>());
+    });
+  }
+  {
+    DynamicValue::Builder value = toDynamic(root).get("structField");
+    checkDynamicValueCopyAndMove(value, DynamicValue::STRUCT, [](auto& value) {
+      EXPECT_EQ(456, value.template as<DynamicStruct>().get("int32Field").template as<int32_t>());
+    });
+  }
+  {
+    DynamicValue::Builder value = anyRoot.getAnyPointerField();
+    checkDynamicValueCopyAndMove(value, DynamicValue::ANY_POINTER, [](auto& value) {
+      EXPECT_EQ("qux", value.template as<AnyPointer>().template getAs<Text>());
+    });
+  }
+  {
+    DynamicCapability::Client capability = test::TestInterface::Client(nullptr);
+    DynamicValue::Builder value(capability);
+    checkDynamicValueCopyAndMove(value, DynamicValue::CAPABILITY, [](auto& value) {
+      value.template as<DynamicCapability>();
+    });
+  }
 }
 
 TEST(DynamicApi, BuilderAssign) {
