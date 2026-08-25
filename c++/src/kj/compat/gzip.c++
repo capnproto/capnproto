@@ -101,48 +101,52 @@ size_t GzipInputStream::tryRead(ArrayPtr<byte> out, size_t minBytes) {
 
 size_t GzipInputStream::readImpl(
     ArrayPtr<byte> out, size_t minBytes, size_t alreadyRead) {
-  if (ctx.avail_in == 0) {
-    size_t amount = inner.tryRead(buffer.asPtr(), 1);
-    // Note: This check would reject valid streams with a high compression ratio if zlib were to
-    // read in the entire input data, getting more decompressed data than fits in the out buffer
-    // and subsequently fill the output buffer and internally store some pending data. It turns
-    // out that zlib does not maintain pending output during decompression and this is not
-    // possible, but this may be a concern when implementing support for other algorithms as e.g.
-    // brotli's reference implementation maintains a decompression output buffer.
-    if (amount == 0) {
-      if (!atValidEndpoint) {
-        KJ_FAIL_REQUIRE("gzip compressed stream ended prematurely");
+  for (;;) {
+    if (ctx.avail_in == 0) {
+      size_t amount = inner.tryRead(buffer.asPtr(), 1);
+      // Note: This check would reject valid streams with a high compression ratio if zlib were to
+      // read in the entire input data, getting more decompressed data than fits in the out buffer
+      // and subsequently fill the output buffer and internally store some pending data. It turns
+      // out that zlib does not maintain pending output during decompression and this is not
+      // possible, but this may be a concern when implementing support for other algorithms as e.g.
+      // brotli's reference implementation maintains a decompression output buffer.
+      if (amount == 0) {
+        if (!atValidEndpoint) {
+          KJ_FAIL_REQUIRE("gzip compressed stream ended prematurely");
+        }
+        return alreadyRead;
+      } else {
+        ctx.next_in = buffer.begin();
+        ctx.avail_in = amount;
       }
-      return alreadyRead;
-    } else {
-      ctx.next_in = buffer.begin();
-      ctx.avail_in = amount;
-    }
-  }
-
-  size_t maxBytes = out.size();
-  ctx.next_out = out.begin();
-  ctx.avail_out = maxBytes;
-
-  auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
-  atValidEndpoint = inflateResult == Z_STREAM_END;
-  if (inflateResult == Z_OK || inflateResult == Z_STREAM_END) {
-    if (atValidEndpoint && ctx.avail_in > 0) {
-      // There's more data available. Assume start of new content.
-      KJ_ASSERT(inflateReset(&ctx) == Z_OK);
     }
 
-    size_t n = maxBytes - ctx.avail_out;
-    if (n >= minBytes) {
-      return n + alreadyRead;
+    size_t maxBytes = out.size();
+    ctx.next_out = out.begin();
+    ctx.avail_out = maxBytes;
+
+    auto inflateResult = inflate(&ctx, Z_NO_FLUSH);
+    atValidEndpoint = inflateResult == Z_STREAM_END;
+    if (inflateResult == Z_OK || inflateResult == Z_STREAM_END) {
+      if (atValidEndpoint && ctx.avail_in > 0) {
+        // There's more data available. Assume start of new content.
+        KJ_ASSERT(inflateReset(&ctx) == Z_OK);
+      }
+
+      size_t n = maxBytes - ctx.avail_out;
+      if (n >= minBytes) {
+        return n + alreadyRead;
+      }
+
+      out = out.slice(n);
+      minBytes -= n;
+      alreadyRead += n;
     } else {
-      KJ_MUSTTAIL return readImpl(out.slice(n), minBytes - n, alreadyRead + n);
-    }
-  } else {
-    if (ctx.msg == nullptr) {
-      KJ_FAIL_REQUIRE("gzip decompression failed", inflateResult);
-    } else {
-      KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
+      if (ctx.msg == nullptr) {
+        KJ_FAIL_REQUIRE("gzip decompression failed", inflateResult);
+      } else {
+        KJ_FAIL_REQUIRE("gzip decompression failed", ctx.msg);
+      }
     }
   }
 }
