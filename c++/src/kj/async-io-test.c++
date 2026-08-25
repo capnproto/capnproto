@@ -1602,6 +1602,146 @@ KJ_TEST("Userland pipe pumpTo") {
   KJ_EXPECT(pumpPromise.wait(ws) == 3);
 }
 
+class ControlledErrorOutput final: public AsyncOutputStream {
+public:
+  Promise<void> write(ArrayPtr<const byte>) override {
+    ++writeCount;
+    auto paf = newPromiseAndFulfiller<void>();
+    pendingWrite = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  Promise<void> write(ArrayPtr<const ArrayPtr<const byte>>) override {
+    ++writeCount;
+    auto paf = newPromiseAndFulfiller<void>();
+    pendingWrite = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream&, uint64_t) override {
+    ++pumpCount;
+    auto paf = newPromiseAndFulfiller<uint64_t>();
+    pendingPump = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
+  }
+
+  Promise<void> whenWriteDisconnected() override {
+    return NEVER_DONE;
+  }
+
+  void rejectWrite() {
+    auto fulfiller = kj::mv(KJ_ASSERT_NONNULL(pendingWrite));
+    pendingWrite = kj::none;
+    fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "simulated disconnect"));
+  }
+
+  void fulfillWrite() {
+    auto fulfiller = kj::mv(KJ_ASSERT_NONNULL(pendingWrite));
+    pendingWrite = kj::none;
+    fulfiller->fulfill();
+  }
+
+  void rejectPump() {
+    auto fulfiller = kj::mv(KJ_ASSERT_NONNULL(pendingPump));
+    pendingPump = kj::none;
+    fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "simulated disconnect"));
+  }
+
+  uint writeCount = 0;
+  uint pumpCount = 0;
+  Maybe<Own<PromiseFulfiller<void>>> pendingWrite;
+  Maybe<Own<PromiseFulfiller<uint64_t>>> pendingPump;
+};
+
+KJ_TEST("Userland pipe pumpTo output exception stops scalar forwarding") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  ControlledErrorOutput output;
+  auto pumpPromise = pipe.in->pumpTo(output, 3);
+
+  auto firstWrite = pipe.out->write("foo"_kjb);
+  KJ_EXPECT(output.writeCount == 1);
+  output.rejectWrite();
+  KJ_EXPECT(firstWrite.poll(ws));
+
+  auto secondWrite = pipe.out->write("bar"_kjb);
+  auto incorrectlyForwarded = output.writeCount != 1;
+  KJ_EXPECT(!incorrectlyForwarded, "second write reached failed output");
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("simulated disconnect", firstWrite.wait(ws));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("simulated disconnect", pumpPromise.wait(ws));
+  if (incorrectlyForwarded) {
+    output.fulfillWrite();
+    secondWrite.wait(ws);
+  } else {
+    expectRead(*pipe.in, "bar").wait(ws);
+    secondWrite.wait(ws);
+  }
+}
+
+KJ_TEST("Userland pipe pumpTo output exception stops gather forwarding") {
+  auto run = [](uint64_t amount) {
+    kj::EventLoop loop;
+    WaitScope ws(loop);
+
+    auto pipe = newOneWayPipe();
+    ControlledErrorOutput output;
+    auto pumpPromise = pipe.in->pumpTo(output, amount);
+
+    ArrayPtr<const byte> parts[] = { "foo"_kjb, "bar"_kjb };
+    auto firstWrite = pipe.out->write(parts);
+    KJ_EXPECT(output.writeCount == 1);
+    output.rejectWrite();
+    KJ_EXPECT(firstWrite.poll(ws));
+
+    auto secondWrite = pipe.out->write("baz"_kjb);
+    auto incorrectlyForwarded = output.writeCount != 1;
+    KJ_EXPECT(!incorrectlyForwarded, "second write reached failed output", amount);
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("simulated disconnect", firstWrite.wait(ws));
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("simulated disconnect", pumpPromise.wait(ws));
+    if (incorrectlyForwarded) {
+      output.fulfillWrite();
+      secondWrite.wait(ws);
+    } else {
+      expectRead(*pipe.in, "baz").wait(ws);
+      secondWrite.wait(ws);
+    }
+  };
+
+  run(4);  // Pump ends part-way through the second piece.
+  run(3);  // Pump ends exactly between pieces.
+  run(6);  // The complete gather write is forwarded by the pump.
+}
+
+KJ_TEST("Userland pipe pumpTo output exception stops tryPumpFrom forwarding") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto source = newOneWayPipe();
+  ControlledErrorOutput output;
+  auto pumpPromise = pipe.in->pumpTo(output, 3);
+
+  auto subPump = KJ_ASSERT_NONNULL(pipe.out->tryPumpFrom(*source.in, 3));
+  KJ_EXPECT(output.pumpCount == 1);
+  output.rejectPump();
+  KJ_EXPECT(subPump.poll(ws));
+
+  auto secondWrite = pipe.out->write("bar"_kjb);
+  auto incorrectlyForwarded = output.writeCount != 0;
+  KJ_EXPECT(!incorrectlyForwarded, "write reached failed output after tryPumpFrom error");
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("simulated disconnect", subPump.wait(ws));
+  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("simulated disconnect", pumpPromise.wait(ws));
+  if (incorrectlyForwarded) {
+    output.fulfillWrite();
+    secondWrite.wait(ws);
+  } else {
+    expectRead(*pipe.in, "bar").wait(ws);
+    secondWrite.wait(ws);
+  }
+}
+
 KJ_TEST("Userland pipe tryPumpFrom") {
   kj::EventLoop loop;
   WaitScope ws(loop);
