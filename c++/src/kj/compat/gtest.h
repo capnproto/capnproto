@@ -53,12 +53,14 @@ inline bool doubleAlmostEqual(double a, double b) {
 
 #define EXPECT_FALSE(x) KJ_EXPECT(!(x))
 #define EXPECT_TRUE(x) KJ_EXPECT(x)
-#define EXPECT_EQ(x, y) KJ_EXPECT((x) == (y), x, y)
-#define EXPECT_NE(x, y) KJ_EXPECT((x) != (y), x, y)
-#define EXPECT_LE(x, y) KJ_EXPECT((x) <= (y), x, y)
-#define EXPECT_GE(x, y) KJ_EXPECT((x) >= (y), x, y)
-#define EXPECT_LT(x, y) KJ_EXPECT((x) <  (y), x, y)
-#define EXPECT_GT(x, y) KJ_EXPECT((x) >  (y), x, y)
+// KJ_EXPECT's comparison wrapper already retains both operands for failure diagnostics. Avoid
+// passing them again as log arguments, which would require capturing them in its logging lambda.
+#define EXPECT_EQ(x, y) KJ_EXPECT((x) == (y))
+#define EXPECT_NE(x, y) KJ_EXPECT((x) != (y))
+#define EXPECT_LE(x, y) KJ_EXPECT((x) <= (y))
+#define EXPECT_GE(x, y) KJ_EXPECT((x) >= (y))
+#define EXPECT_LT(x, y) KJ_EXPECT((x) <  (y))
+#define EXPECT_GT(x, y) KJ_EXPECT((x) >  (y))
 #define EXPECT_STREQ(x, y) KJ_EXPECT(::strcmp(x, y) == 0, x, y)
 #define EXPECT_FLOAT_EQ(x, y) KJ_EXPECT(::kj::_::floatAlmostEqual(y, x), y, x);
 #define EXPECT_DOUBLE_EQ(x, y) KJ_EXPECT(::kj::_::doubleAlmostEqual(y, x), y, x);

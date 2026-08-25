@@ -21,6 +21,7 @@
 
 #include "common.h"
 #include "function.h"
+#include "string.h"
 #include "test.h"
 #include <cstdlib>
 #include <stdexcept>
@@ -33,6 +34,18 @@
 namespace kj {
 namespace _ {
 namespace {
+
+KJ_TEST("KJ_EXPECT keeps temporary assertion operands alive") {
+  KJ_EXPECT(heapString("foo").asBytes() == "foo"_kjb);
+
+  KJ_EXPECT_LOG(ERROR, "failed: expected");
+  KJ_EXPECT(heapString("foo").asBytes() == "bar"_kjb);
+}
+
+KJ_TEST("KJ_EXPECT_LOG keeps a temporary substring alive") {
+  KJ_EXPECT_LOG(ERROR, heapString("temporary expected log"));
+  KJ_LOG(ERROR, "temporary expected log");
+}
 
 KJ_TEST("expect exit from exit") {
   KJ_EXPECT_EXIT(42, _exit(42));
