@@ -30,6 +30,11 @@
 namespace kj {
 namespace {
 
+#if !KJ_ASSERT_ARRAYPTR_COUNTERS
+static_assert(sizeof(ArrayPtr<byte>) == 2 * sizeof(void*),
+    "Disabled ArrayPtr tracking must not change ArrayPtr's ABI.");
+#endif
+
 struct ClonesToInt { int clone() const { return 123; } };
 struct ClonesToStringPtr { StringPtr clone() const { return "foo"; } };
 struct NoClone {};

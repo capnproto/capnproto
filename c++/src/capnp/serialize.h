@@ -154,12 +154,13 @@ private:
   kj::InputStream& inputStream;
   byte* readPos;
 
+  kj::Array<word> ownedSpace;
+  // Only if scratchSpace wasn't big enough. Declared before the segment pointers so that it is
+  // destroyed after them.
+
   // Optimize for single-segment case.
   kj::ArrayPtr<const word> segment0;
   kj::Array<kj::ArrayPtr<const word>> moreSegments;
-
-  kj::Array<word> ownedSpace;
-  // Only if scratchSpace wasn't big enough.
 
   kj::UnwindDetector unwindDetector;
 };

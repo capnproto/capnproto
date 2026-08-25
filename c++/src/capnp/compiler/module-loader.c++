@@ -45,21 +45,21 @@ struct FileKey {
   // This is probably over-engineered.
 
   const kj::ReadableDirectory& baseDir;
-  kj::PathPtr path;
+  kj::Path path;
   kj::Maybe<const kj::ReadableFile&> file;
   uint64_t hashCode;
   uint64_t size;
   kj::Date lastModified;
 
   FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path)
-      : baseDir(baseDir), path(path), file(kj::none),
+      : baseDir(baseDir), path(path.clone()), file(kj::none),
         hashCode(0), size(0), lastModified(kj::UNIX_EPOCH) {}
   FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path, const kj::ReadableFile& file)
       : FileKey(baseDir, path, file, file.stat()) {}
 
   FileKey(const kj::ReadableDirectory& baseDir, kj::PathPtr path, const kj::ReadableFile& file,
           kj::FsNode::Metadata meta)
-      : baseDir(baseDir), path(path), file(&file),
+      : baseDir(baseDir), path(path.clone()), file(&file),
         hashCode(meta.hashCode), size(meta.size), lastModified(meta.lastModified) {}
 
   bool operator==(const FileKey& other) const {
@@ -244,7 +244,7 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
     auto key = FileKey(dir, pathCopy, *file);
     auto module = kj::heap<ModuleImpl>(*this, kj::mv(file), dir, kj::mv(pathCopy));
     auto& result = *module;
-    auto insertResult = modules.insert(std::make_pair(key, kj::mv(module)));
+    auto insertResult = modules.insert(std::make_pair(kj::mv(key), kj::mv(module)));
     if (insertResult.second) {
       return result;
     } else {

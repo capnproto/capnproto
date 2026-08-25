@@ -44,6 +44,11 @@ def kj_configure():
     )
 
     bool_flag(
+        name = "assert_arrayptr_counters",
+        build_setting_default = False,
+    )
+
+    bool_flag(
         name = "kj_enable_irequire",
         build_setting_default = False,
     )
@@ -86,6 +91,11 @@ def kj_configure():
     )
 
     native.config_setting(
+        name = "use_assert_arrayptr_counters",
+        flag_values = {"assert_arrayptr_counters": "True"},
+    )
+
+    native.config_setting(
         name = "use_kj_enable_irequire",
         flag_values = {"kj_enable_irequire": "True"},
     )
@@ -111,6 +121,9 @@ def kj_configure():
             "//conditions:default": ["KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR=0"],
         }) + select({
             "//src/kj:use_debug_memory": ["KJ_DEBUG_MEMORY=1"],
+            "//conditions:default": [],
+        }) + select({
+            "//src/kj:use_assert_arrayptr_counters": ["KJ_ASSERT_ARRAYPTR_COUNTERS=1"],
             "//conditions:default": [],
         }) + select({
             "//src/kj:use_kj_enable_irequire": ["KJ_ENABLE_IREQUIRE=1"],

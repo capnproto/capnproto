@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "common.h"
+
 #include <initializer_list>
 #include "array.h"
 #include <string.h>
@@ -322,6 +324,8 @@ public:
 
 private:
   Array<char> content;
+
+  friend class StringPtr;
 };
 
 // =======================================================================================
@@ -433,6 +437,8 @@ public:
 
 private:
   Array<const char> content;
+
+  friend class StringPtr;
 };
 
 String heapString(size_t size);
@@ -704,15 +710,35 @@ inline _::Delimited<ArrayPtr<const T>> operator*(const _::Stringifier&, const Ar
 // =======================================================================================
 // Inline implementation details.
 
-inline constexpr StringPtr::StringPtr(const String& value): content(value.cStr(), value.size() + 1) {}
-inline constexpr StringPtr::StringPtr(const ConstString& value): content(value.cStr(), value.size() + 1) {}
+inline constexpr StringPtr::StringPtr(const String& value)
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    : content(value.content.counter == nullptr
+          ? ArrayPtr<const char>(value.content.ptr == nullptr ? "" : value.content.ptr,
+                                 value.content.size_ == 0 ? 1 : value.content.size_)
+          : ArrayPtr<const char>(value.content.ptr == nullptr ? "" : value.content.ptr,
+                                 value.content.size_ == 0 ? 1 : value.content.size_,
+                                 *value.content.counter)) {}
+#else
+    : content(value.cStr(), value.size() + 1) {}
+#endif
+inline constexpr StringPtr::StringPtr(const ConstString& value)
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+    : content(value.content.counter == nullptr
+          ? ArrayPtr<const char>(value.content.ptr == nullptr ? "" : value.content.ptr,
+                                 value.content.size_ == 0 ? 1 : value.content.size_)
+          : ArrayPtr<const char>(value.content.ptr == nullptr ? "" : value.content.ptr,
+                                 value.content.size_ == 0 ? 1 : value.content.size_,
+                                 *value.content.counter)) {}
+#else
+    : content(value.cStr(), value.size() + 1) {}
+#endif
 
 inline constexpr StringPtr::operator ArrayPtr<const char>() const {
-  return ArrayPtr<const char>(content.begin(), content.size() - 1);
+  return content.first(content.size() - 1);
 }
 
 inline constexpr ArrayPtr<const char> StringPtr::asArray() const {
-  return ArrayPtr<const char>(content.begin(), content.size() - 1);
+  return content.first(content.size() - 1);
 }
 
 inline constexpr bool StringPtr::operator==(const StringPtr& other) const {
@@ -735,24 +761,41 @@ inline LiteralStringConst::operator ConstString() const {
   return ConstString(begin(), size(), NullArrayDisposer::instance);
 }
 
-inline constexpr String::operator ArrayPtr<char>() {
-  return content == nullptr ? ArrayPtr<char>(nullptr) : content.first(content.size() - 1);
-}
-inline constexpr String::operator ArrayPtr<const char>() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
-}
-inline constexpr ConstString::operator ArrayPtr<const char>() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
-}
+inline constexpr String::operator ArrayPtr<char>() { return asArray(); }
+inline constexpr String::operator ArrayPtr<const char>() const { return asArray(); }
+inline constexpr ConstString::operator ArrayPtr<const char>() const { return asArray(); }
 
 inline constexpr ArrayPtr<char> String::asArray() {
-  return content == nullptr ? ArrayPtr<char>(nullptr) : content.first(content.size() - 1);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  return content.counter == nullptr
+      ? ArrayPtr<char>(content.ptr, content.size_ == 0 ? 0 : content.size_ - 1)
+      : ArrayPtr<char>(content.ptr, content.size_ == 0 ? 0 : content.size_ - 1, *content.counter);
+#else
+  return content == nullptr ? ArrayPtr<char>(nullptr)
+                            : ArrayPtr<char>(content.begin(), content.size() - 1);
+#endif
 }
 inline constexpr ArrayPtr<const char> String::asArray() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  return content.counter == nullptr
+      ? ArrayPtr<const char>(content.ptr, content.size_ == 0 ? 0 : content.size_ - 1)
+      : ArrayPtr<const char>(
+          content.ptr, content.size_ == 0 ? 0 : content.size_ - 1, *content.counter);
+#else
+  return content == nullptr ? ArrayPtr<const char>(nullptr)
+                            : ArrayPtr<const char>(content.begin(), content.size() - 1);
+#endif
 }
 inline constexpr ArrayPtr<const char> ConstString::asArray() const {
-  return content == nullptr ? ArrayPtr<const char>(nullptr) : content.first(content.size() - 1);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  return content.counter == nullptr
+      ? ArrayPtr<const char>(content.ptr, content.size_ == 0 ? 0 : content.size_ - 1)
+      : ArrayPtr<const char>(
+          content.ptr, content.size_ == 0 ? 0 : content.size_ - 1, *content.counter);
+#else
+  return content == nullptr ? ArrayPtr<const char>(nullptr)
+                            : ArrayPtr<const char>(content.begin(), content.size() - 1);
+#endif
 }
 
 inline constexpr const char* String::cStr() const { return content == nullptr ? "" : content.begin(); }

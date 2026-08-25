@@ -122,6 +122,9 @@ public:
 // Array
 
 template <typename T>
+void swp(Array<T>& a, Array<T>& b) noexcept;
+
+template <typename T>
 class Array {
   // An owned array which will automatically be disposed of (using an ArrayDisposer) in the
   // destructor.  Can be moved, but not copied.  Much like Own<T>, but for arrays rather than
@@ -132,31 +135,34 @@ public:
   inline Array(decltype(nullptr)): ptr(nullptr), size_(0), disposer(nullptr) {}
   inline Array(Array&& other) noexcept
       : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
+    moveCounterFrom(other);
     other.ptr = nullptr;
     other.size_ = 0;
   }
   inline Array(Array<RemoveConstOrDisable<T>>&& other) noexcept
       : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
+    moveCounterFrom(other);
     other.ptr = nullptr;
     other.size_ = 0;
   }
   inline Array(T* firstElement KJ_LIFETIMEBOUND, size_t size, const ArrayDisposer& disposer)
-      : ptr(firstElement), size_(size), disposer(&disposer) {}
+      : ptr(firstElement), size_(size), disposer(&disposer) {
+    initializeCounter();
+  }
 
   KJ_DISALLOW_COPY(Array);
-  inline ~Array() noexcept(false) { dispose(); }
+  inline ~Array() noexcept(false) {
+    KJ_DEFER(deleteCounter());
+    dispose();
+  }
 
-  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND {
-    return ArrayPtr<T>(ptr, size_);
-  }
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND { return makePtr<T>(ptr, size_); }
   inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND {
-    return ArrayPtr<T>(ptr, size_);
+    return makePtr<const T>(ptr, size_);
   }
-  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND {
-    return ArrayPtr<T>(ptr, size_);
-  }
+  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return makePtr<T>(ptr, size_); }
   inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND {
-    return ArrayPtr<T>(ptr, size_);
+    return makePtr<const T>(ptr, size_);
   }
 
   inline constexpr size_t size() const { return size_; }
@@ -183,19 +189,19 @@ public:
 
   inline ArrayPtr<T> slice(size_t start, size_t end) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().", start, end, size_);
-    return ArrayPtr<T>(ptr + start, end - start);
+    return makePtr<T>(ptr + start, end - start);
   }
   inline ArrayPtr<const T> slice(size_t start, size_t end) const KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().", start, end, size_);
-    return ArrayPtr<const T>(ptr + start, end - start);
+    return makePtr<const T>(ptr + start, end - start);
   }
   inline ArrayPtr<T> slice(size_t start) KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
-    return ArrayPtr<T>(ptr + start, size_ - start);
+    return makePtr<T>(ptr + start, size_ - start);
   }
   inline ArrayPtr<const T> slice(size_t start) const KJ_LIFETIMEBOUND {
     KJ_IREQUIRE(start <= size_, "Out-of-bounds ArrayPtr::slice().", start, size_);
-    return ArrayPtr<const T>(ptr + start, size_ - start);
+    return makePtr<const T>(ptr + start, size_ - start);
   }
 
   inline ArrayPtr<T> first(size_t count) KJ_LIFETIMEBOUND { return slice(0, count); }
@@ -225,6 +231,7 @@ public:
     if (disposer == nullptr) return nullptr;
     Array<PropagateConst<T, byte>> result(
         reinterpret_cast<PropagateConst<T, byte>*>(ptr), size_, *disposer);
+    result.moveCounterFrom(*this);
     ptr = nullptr;
     size_ = 0;
     return result;
@@ -236,6 +243,7 @@ public:
     if (disposer == nullptr) return nullptr;
     Array<PropagateConst<T, char>> result(
         reinterpret_cast<PropagateConst<T, char>*>(ptr), size_, *disposer);
+    result.moveCounterFrom(*this);
     ptr = nullptr;
     size_ = 0;
     return result;
@@ -250,6 +258,7 @@ public:
 
   inline Array& operator=(Array&& other) {
     dispose();
+    moveCounterFrom(other);
     ptr = other.ptr;
     size_ = other.size_;
     disposer = other.disposer;
@@ -284,8 +293,45 @@ private:
   T* ptr;
   size_t size_;
   const ArrayDisposer* disposer;
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  _::AtomicPtrCounter* counter = nullptr;
+
+  inline void initializeCounter() { counter = new _::AtomicPtrCounter; }
+  inline void deleteCounter() { delete counter; }
+
+  template <typename U>
+  inline void moveCounterFrom(Array<U>& other) {
+    delete counter;
+    counter = other.counter;
+    other.counter = nullptr;
+  }
+
+  template <typename U>
+  inline ArrayPtr<U> makePtr(U* ptr, size_t size) const {
+    return counter == nullptr ? ArrayPtr<U>(ptr, size)
+                              : ArrayPtr<U>(ptr, size, *counter);
+  }
+
+  inline void assertNoRefs() const {
+    if (counter != nullptr) counter->assertEmpty();
+  }
+#else
+  inline void initializeCounter() {}
+  inline void deleteCounter() {}
+
+  template <typename U>
+  inline void moveCounterFrom(Array<U>&) {}
+
+  template <typename U>
+  inline ArrayPtr<U> makePtr(U* ptr, size_t size) const {
+    return ArrayPtr<U>(ptr, size);
+  }
+
+  inline void assertNoRefs() const {}
+#endif
 
   inline void dispose() {
+    assertNoRefs();
     // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
     // dispose again.
     T* ptrCopy = ptr;
@@ -301,7 +347,22 @@ private:
   friend class Array;
   template <typename U>
   friend class ArrayBuilder;
+  template <typename U>
+  friend void swp(Array<U>& a, Array<U>& b) noexcept;
+  friend class String;
+  friend class StringPtr;
+  friend class ConstString;
 };
+
+template <typename T>
+inline void swp(Array<T>& a, Array<T>& b) noexcept {
+  kj::swp(a.ptr, b.ptr);
+  kj::swp(a.size_, b.size_);
+  kj::swp(a.disposer, b.disposer);
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+  kj::swp(a.counter, b.counter);
+#endif
+}
 
 static_assert(!canMemcpy<Array<char>>(), "canMemcpy<>() is broken");
 

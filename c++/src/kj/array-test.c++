@@ -21,6 +21,9 @@
 
 #include "array.h"
 #include "debug.h"
+#include "test.h"
+#include "function.h"
+#include <signal.h>
 #include <string>
 #include <list>
 #include <kj/compat/gtest.h>
@@ -28,6 +31,16 @@
 
 namespace kj {
 namespace {
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+KJ_TEST("Array rejects destruction with an active ArrayPtr") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto array = heapArray<int>(4);
+    auto ptr = new ArrayPtr<int>(array.asPtr().slice(1));
+    (void)ptr;
+  });
+}
+#endif
 
 struct CloneableElement {
   int clone() const { return 123; }
@@ -121,6 +134,20 @@ struct TestNoexceptObject {
 
 int TestNoexceptObject::count = 0;
 int TestNoexceptObject::copiedCount = 0;
+
+KJ_TEST("swp Array") {
+  auto a = heapArray<int>({1, 2});
+  auto b = heapArray<int>({3, 4, 5});
+  auto aBegin = a.begin();
+  auto bBegin = b.begin();
+
+  kj::swp(a, b);
+
+  KJ_EXPECT(a.begin() == bBegin, a.size(), a[0], a[1], a[2]);
+  KJ_EXPECT(b.begin() == aBegin, b.size(), b[0], b[1]);
+  KJ_EXPECT(a.size() == 3 && a[0] == 3 && a[1] == 4 && a[2] == 5);
+  KJ_EXPECT(b.size() == 2 && b[0] == 1 && b[1] == 2);
+}
 
 TEST(Array, TrivialConstructor) {
 //  char* ptr;
@@ -265,6 +292,26 @@ TEST(Array, ThrowingDestructor) {
   EXPECT_ANY_THROW(array = nullptr);
   EXPECT_EQ(0, TestObject::count);
 }
+
+#if KJ_ASSERT_ARRAYPTR_COUNTERS
+TEST(Array, ThrowingDestructorDoesNotLeakArrayPtrCounter) {
+  TestObject::count = 0;
+  TestObject::throwAt = -1;
+
+  auto destroyArray = []() {
+    auto array = heapArray<TestObject>(32);
+    EXPECT_EQ(32, TestObject::count);
+
+    // The Array destructor must release its separately-allocated pointer counter even when
+    // disposing the elements throws. ASAN's leak detector verifies the counter was released.
+    TestObject::throwAt = 16;
+  };
+
+  EXPECT_ANY_THROW(destroyArray());
+  EXPECT_EQ(0, TestObject::count);
+  TestObject::throwAt = -1;
+}
+#endif
 
 TEST(SmallArray, ThrowingDestructor) {
   TestObject::count = 0;
