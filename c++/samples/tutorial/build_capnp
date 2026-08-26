@@ -1,0 +1,4 @@
+#!/bin/bash
+pushd "`dirname \"$0\"`" >/dev/null
+capnp compile interface.capnp -oc++
+popd >/dev/null
