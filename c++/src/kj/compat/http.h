@@ -833,10 +833,25 @@ class HttpClient {
 
 public:
   struct Response {
+    Response(): statusCode(0), headers(nullptr) {}
+    Response(uint statusCode, kj::StringPtr statusText, const HttpHeaders* headers,
+             kj::Own<kj::AsyncInputStream> body)
+        : body(kj::mv(body)), statusCode(statusCode), statusText(statusText), headers(headers) {}
+    Response(uint statusCode, kj::String&& statusText, kj::Own<HttpHeaders>&& headers,
+             kj::Own<kj::AsyncInputStream>&& body)
+        : body(), statusCode(statusCode), statusText(statusText), headers(headers.get()) {
+      this->body = body.attach(kj::mv(statusText), kj::mv(headers));
+    }
+    Response(Response&&) = default;
+    Response& operator=(Response&&) = delete;
+    Response(const Response&) = delete;
+    Response& operator=(const Response&) = delete;
+
+    // Declared first so it is destroyed after the views into its attachments.
+    kj::Own<kj::AsyncInputStream> body;
     uint statusCode;
     kj::StringPtr statusText;
     const HttpHeaders* headers;
-    kj::Own<kj::AsyncInputStream> body;
     // `statusText` and `headers` remain valid until `body` is dropped or read from.
   };
 
@@ -866,10 +881,31 @@ public:
   // `Transfer-Encoding: chunked` will be used.
 
   struct WebSocketResponse {
+    WebSocketResponse(uint statusCode, kj::StringPtr statusText, const HttpHeaders* headers,
+                      kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> webSocketOrBody)
+        : webSocketOrBody(kj::mv(webSocketOrBody)), statusCode(statusCode), statusText(statusText),
+          headers(headers) {}
+    WebSocketResponse(uint statusCode, kj::String&& statusText, kj::Own<HttpHeaders>&& headers,
+                      kj::Own<kj::AsyncInputStream>&& body)
+        : statusCode(statusCode), statusText(statusText), headers(headers.get()) {
+      webSocketOrBody.init<kj::Own<kj::AsyncInputStream>>(
+          body.attach(kj::mv(statusText), kj::mv(headers)));
+    }
+    WebSocketResponse(uint statusCode, kj::StringPtr statusText, kj::Own<HttpHeaders>&& headers,
+                      kj::Own<WebSocket>&& webSocket)
+        : statusCode(statusCode), statusText(statusText), headers(headers.get()) {
+      webSocketOrBody.init<kj::Own<WebSocket>>(webSocket.attach(kj::mv(headers)));
+    }
+    WebSocketResponse(WebSocketResponse&&) = default;
+    WebSocketResponse& operator=(WebSocketResponse&&) = delete;
+    WebSocketResponse(const WebSocketResponse&) = delete;
+    WebSocketResponse& operator=(const WebSocketResponse&) = delete;
+
+    // Declared first so it is destroyed after the views into its attachments.
+    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> webSocketOrBody;
     uint statusCode;
     kj::StringPtr statusText;
     const HttpHeaders* headers;
-    kj::OneOf<kj::Own<kj::AsyncInputStream>, kj::Own<WebSocket>> webSocketOrBody;
     // `statusText` and `headers` remain valid until `webSocketOrBody` is dropped or read from.
   };
   virtual kj::Promise<WebSocketResponse> openWebSocket(

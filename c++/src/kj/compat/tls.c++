@@ -982,7 +982,8 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
     auto id = conn->getIdentity(kj::mv(innerId));
     return kj::AuthenticatedStream { kj::mv(conn), kj::mv(id) };
   }).catch_([peerId=kj::mv(peerId)](kj::Exception&& e) -> kj::Promise<kj::AuthenticatedStream> {
-    e.setDescription(kj::str(e.getDescription(), "; clientId = ", peerId));
+    auto description = kj::str(e.getDescription(), "; clientId = ", peerId);
+    e.setDescription(kj::mv(description));
     kj::throwFatalException(kj::mv(e));
   });
 }
