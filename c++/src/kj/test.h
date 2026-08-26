@@ -80,19 +80,32 @@ private:
   } KJ_UNIQUE_NAME(testCase); \
   void KJ_UNIQUE_NAME(TestCase)::run()
 
+// Check and log the condition inside one function call so that temporaries backing captured
+// assertion operands remain alive until after any failure message has been rendered.
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_INDIRECT_EXPAND(m, vargs) m vargs
 #define KJ_FAIL_EXPECT(...) \
   KJ_INDIRECT_EXPAND(KJ_LOG, (ERROR , __VA_ARGS__));
 #define KJ_EXPECT(cond, ...) \
-  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond); \
-  else KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, ("failed: expected " #cond , _kjCondition, __VA_ARGS__))
+  do { \
+    [&](auto&& _kjCondition) { \
+      if (!_kjCondition) { \
+        KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, \
+            ("failed: expected " #cond , _kjCondition, __VA_ARGS__)) \
+      } \
+    }(::kj::_::MAGIC_ASSERT << cond); \
+  } while (false);
 #else
 #define KJ_FAIL_EXPECT(...) \
   KJ_LOG(ERROR, ##__VA_ARGS__);
 #define KJ_EXPECT(cond, ...) \
-  if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond); \
-  else KJ_FAIL_EXPECT("failed: expected " #cond, _kjCondition, ##__VA_ARGS__)
+  do { \
+    [&](auto&& _kjCondition) { \
+      if (!_kjCondition) { \
+        KJ_FAIL_EXPECT("failed: expected " #cond, _kjCondition, ##__VA_ARGS__) \
+      } \
+    }(::kj::_::MAGIC_ASSERT << cond); \
+  } while (false);
 #endif
 
 // TODO(msvc): cast results to void like non-MSVC versions do
@@ -184,7 +197,7 @@ public:
 
 private:
   LogSeverity severity;
-  StringPtr substring;
+  String substring;
   bool seen;
   UnwindDetector unwindDetector;
 };

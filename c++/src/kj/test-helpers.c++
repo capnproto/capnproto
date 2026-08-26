@@ -39,7 +39,7 @@ namespace kj {
 namespace _ {  // private
 
 LogExpectation::LogExpectation(LogSeverity severity, StringPtr substring)
-    : severity(severity), substring(substring), seen(false) {}
+    : severity(severity), substring(heapString(substring)), seen(false) {}
 LogExpectation::~LogExpectation() {
   if (!unwindDetector.isUnwinding()) {
     KJ_ASSERT(seen, "expected log message not seen", severity, substring);
