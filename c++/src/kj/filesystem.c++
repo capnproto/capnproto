@@ -352,6 +352,9 @@ Path Path::evalImpl(Vector<String>&& parts, StringPtr path) {
 Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi) {
   // Convert all forward slashes to backslashes.
   String ownPath;
+  // `path` can be redirected into `ownPath`. Clear it before `ownPath` is destroyed, including
+  // when path validation throws.
+  KJ_DEFER(path = nullptr);
   if (!fromApi && path.findFirst('/') != kj::none) {
     ownPath = heapString(path);
     for (char& c: ownPath) {
@@ -1450,10 +1453,7 @@ private:
   };
 
   struct EntryImpl {
-    String name;
     OneOf<FileNode, DirectoryNode, SymlinkNode> node;
-
-    EntryImpl(String&& name): name(kj::mv(name)) {}
 
     Own<const File> init(FileNode&& value) {
       return node.init<FileNode>(kj::mv(value)).file->clone();
@@ -1527,7 +1527,7 @@ private:
     const Clock& clock;
     const InMemoryFileFactory& fileFactory;
 
-    std::map<StringPtr, EntryImpl> entries;
+    std::map<String, EntryImpl, std::less<>> entries;
     // Note: If this changes to a non-sorted map, listNames() and listEntries() must be updated to
     //   sort their results.
 
@@ -1590,10 +1590,9 @@ private:
 
         KJ_ASSERT(newNode != nullptr);
 
-        EntryImpl entry(kj::mv(filename)[0]);
-        StringPtr nameRef = entry.name;
+        EntryImpl entry;
         entry.init(kj::mv(newNode));
-        KJ_ASSERT(entries.insert(std::make_pair(nameRef, kj::mv(entry))).second);
+        KJ_ASSERT(entries.emplace(kj::mv(filename)[0], kj::mv(entry)).second);
       }
     }
 
@@ -1621,9 +1620,8 @@ private:
 
     Maybe<EntryImpl&> openEntry(String&& name, WriteMode mode) {
       if (has(mode, WriteMode::CREATE)) {
-        EntryImpl entry(kj::mv(name));
-        StringPtr nameRef = entry.name;
-        auto insertResult = entries.insert(std::make_pair(nameRef, kj::mv(entry)));
+        EntryImpl entry;
+        auto insertResult = entries.emplace(kj::mv(name), kj::mv(entry));
 
         if (!insertResult.second && !has(mode, WriteMode::MODIFY)) {
           // Entry already existed and MODIFY not specified.

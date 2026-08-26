@@ -617,6 +617,23 @@ KJ_TEST("InMemoryDirectory") {
   clock.expectUnchanged(*dir);
 }
 
+KJ_TEST("InMemoryDirectory owns entry names") {
+  TestClock clock;
+  auto dir = newInMemoryDirectory(clock);
+
+  {
+    // The directory must not retain a view into the caller's Path.
+    Path path(kj::str("owned-name"));
+    dir->openFile(path, WriteMode::CREATE)->writeAll("content");
+  }
+
+  KJ_EXPECT(dir->openFile(Path("owned-name"))->readAllText() == "content");
+
+  auto names = dir->listNames();
+  KJ_ASSERT(names.size() == 1);
+  KJ_EXPECT(names[0] == "owned-name");
+}
+
 KJ_TEST("InMemoryDirectory symlinks") {
   TestClock clock;
 

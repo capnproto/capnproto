@@ -152,6 +152,10 @@ public:
 
   KJ_DISALLOW_COPY(Array);
   inline ~Array() noexcept(false) {
+    // Check before scheduling deletion of the counter. If this reports outstanding ArrayPtrs,
+    // they still need the counter while unwinding. Once the check succeeds, make sure the counter
+    // is deleted even if the element destructor or ArrayDisposer throws.
+    assertNoRefs();
     KJ_DEFER(deleteCounter());
     dispose();
   }
