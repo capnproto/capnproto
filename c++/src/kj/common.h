@@ -451,6 +451,21 @@ KJ_NORETURN(void unreachable());
 // Create a unique identifier name.  We use concatenate __LINE__ rather than __COUNTER__ so that
 // the name can be used multiple times in the same macro.
 
+#define KJ_DROP_TEMPS(...) ([&]() { return (__VA_ARGS__); }())
+// Evaluates the expression in a nested full-expression and returns its result by value. This
+// destroys temporary values created while evaluating the expression before the result is used by
+// the enclosing expression.
+//
+// This is useful when the enclosing operation may invalidate storage viewed by an intermediate
+// temporary. For example:
+//
+//     object.replace(KJ_DROP_TEMPS(makeReplacement(object.asPtr())));
+//
+// Without KJ_DROP_TEMPS(), a temporary view returned by object.asPtr() would live until after
+// replace() returned, even if makeReplacement() had already finished reading it. The immediately-
+// invoked lambda gives that temporary a shorter full-expression while returning the replacement
+// itself to the caller.
+
 #if _MSC_VER && !defined(__clang__)
 
 #define KJ_CONSTEXPR(...) __VA_ARGS__

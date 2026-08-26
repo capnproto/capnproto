@@ -59,6 +59,33 @@ static_assert(!Copyable<NoCopy>);
 static_assert(Copyable<NonConstCopy>);
 static_assert(!Copyable<const NonConstCopy>);
 
+struct DropTempsTemporary {
+  explicit DropTempsTemporary(bool& alive): alive(alive) { alive = true; }
+  KJ_DISALLOW_COPY_AND_MOVE(DropTempsTemporary);
+  ~DropTempsTemporary() { alive = false; }
+
+  bool& alive;
+};
+
+struct DropTempsResult {
+  explicit DropTempsResult(const DropTempsTemporary& temporary)
+      : value(temporary.alive ? 123 : 456) {}
+  KJ_DISALLOW_COPY_AND_MOVE(DropTempsResult);
+
+  int value;
+};
+
+KJ_TEST("KJ_DROP_TEMPS drops intermediate temporaries before result is used") {
+  bool temporaryAlive = false;
+
+  auto checkResult = [&](DropTempsResult result) {
+    KJ_EXPECT(!temporaryAlive);
+    KJ_EXPECT(result.value == 123);
+  };
+
+  checkResult(KJ_DROP_TEMPS(DropTempsResult(DropTempsTemporary(temporaryAlive))));
+}
+
 constexpr bool maybeReferenceOperationsAreConstexpr() {
   int first = 1;
   int second = 2;
