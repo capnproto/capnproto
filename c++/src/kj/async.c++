@@ -1533,7 +1533,8 @@ FiberStack::FiberStack(size_t stackSizeParam)
 
   makecontext(&context, reinterpret_cast<void(*)()>(&StartRoutine::run), 2, arg1, arg2);
 
-  __sanitizer_start_switch_fiber(&impl->originalFakeStack, impl, stackSize - sizeof(Impl));
+  __sanitizer_start_switch_fiber(&impl->originalFakeStack,
+      reinterpret_cast<byte*>(impl + 1) - stackSize, stackSize - sizeof(Impl));
   if (_setjmp(impl->originalJmpBuf) == 0) {
     setcontext(&context);
   }
@@ -1630,7 +1631,8 @@ void FiberStack::switchToFiber() {
 #if _WIN32 || __CYGWIN__
   SwitchToFiber(osFiber);
 #else
-  __sanitizer_start_switch_fiber(&impl->originalFakeStack, impl, stackSize - sizeof(Impl));
+  __sanitizer_start_switch_fiber(&impl->originalFakeStack,
+      reinterpret_cast<byte*>(impl + 1) - stackSize, stackSize - sizeof(Impl));
   if (_setjmp(impl->originalJmpBuf) == 0) {
     _longjmp(impl->fiberJmpBuf, 1);
   }
