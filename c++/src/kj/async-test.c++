@@ -1592,6 +1592,47 @@ KJ_TEST("throw from a fiber") {
   KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", fiber.wait(waitScope));
 }
 
+KJ_TEST("fiber stack bounds reported to ASAN contain the fiber stack") {
+  // Regression test for fiber stacks being described to ASAN starting at the FiberStack::Impl
+  // that lives at the *top* of the stack mapping rather than at the bottom. ASAN silently accepts
+  // whatever bounds it is given, so the only symptom was that __asan_handle_no_return() -- emitted
+  // ahead of every `throw`, and called by ASAN's longjmp interceptor on every fiber switch --
+  // unpoisoned up to a full stackSize worth of whatever mapping happened to follow the stack.
+  //
+  // FiberStack::asanCheckOnFiberStack() does the actual assertion, from the fiber stack, when
+  // built with ASAN; it aborts if the bounds are wrong. All this test has to do is get onto some
+  // fiber stacks and exercise the paths that consume the bounds. Stack sizes other than the 65536
+  // that every other fiber test uses are included deliberately, since both endpoints of the
+  // reported range are derived from stackSize.
+  if (isLibcContextHandlingKnownBroken()) return;
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  for (size_t stackSize: {size_t(65536), size_t(65536 + 4096), size_t(100000)}) {
+    auto paf = newPromiseAndFulfiller<void>();
+
+    Promise<int> fiber = startFiber(stackSize,
+        [promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
+      // Suspend and resume at least once, so that we exercise switchToFiber() and not just the
+      // initial switch from the FiberStack constructor.
+      promise.wait(fiberScope);
+
+      // Throw and catch on the fiber stack. This is what invokes __asan_handle_no_return() with
+      // the bounds under test.
+      KJ_EXPECT_THROW_MESSAGE("test exception",
+          kj::throwFatalException(KJ_EXCEPTION(FAILED, "test exception")));
+
+      return 123;
+    });
+
+    KJ_EXPECT(!fiber.poll(waitScope));
+    paf.fulfiller->fulfill();
+    KJ_ASSERT(fiber.poll(waitScope));
+    KJ_EXPECT(fiber.wait(waitScope) == 123);
+  }
+}
+
 #if !__MINGW32__ || __MINGW64__
 // This test fails on MinGW 32-bit builds due to a compiler bug with exceptions + fibers:
 //     https://sourceforge.net/p/mingw-w64/bugs/835/
