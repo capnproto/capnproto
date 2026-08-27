@@ -368,6 +368,17 @@ cc_test(
 )
 
 cc_test(
+    name = "table-bench",
+    size = "large",
+    srcs = ["table-bench.c++"],
+    tags = ["google_benchmark"],
+    deps = [
+        ":kj-test",
+        "@google_benchmark//:benchmark",
+    ],
+)
+
+cc_test(
     name = "table-test",
     size = "large",
     srcs = ["table-test.c++"],
