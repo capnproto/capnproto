@@ -33,6 +33,7 @@ void ExceptionSafeArrayUtil::construct(size_t count, void (*constructElement)(vo
   }
 }
 
+__attribute__((no_sanitize("cfi"), noinline))
 void ExceptionSafeArrayUtil::destroyAll() {
   while (constructedElementCount > 0) {
     pos -= elementSize;
