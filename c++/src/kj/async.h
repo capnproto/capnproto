@@ -695,8 +695,14 @@ auto coCapture(Functor&& f) {
   return _::CaptureForCoroutine(kj::mv(f));
 }
 
+struct CoUnwindAware {};
+// Opts a coroutine in to tracking whether its current invocation is unwinding. Add a defaulted
+// parameter of this type to coroutines which use CoUnwindAwareInvocation::isUnwinding().
+
 namespace _ {
 class CoroutineBase;
+class UnwindAwareCoroutineBase;
+template <bool unwindAware>
 class CurrentInvocationAccessor;
 }  // namespace _
 
@@ -718,11 +724,39 @@ public:
   // false before destruction. Calling this method after the coroutine is destroyed is undefined
   // behavior.
 
+  bool isUnwinding() const KJ_UNAVAILABLE("requires a defaulted kj::CoUnwindAware parameter");
+
 private:
   explicit CoInvocation(_::CoroutineBase& coroutine): coroutine(coroutine) {}
 
   _::CoroutineBase& coroutine;
 
+  template <bool>
+  friend class _::CurrentInvocationAccessor;
+};
+
+class CoUnwindAwareInvocation {
+  // The unwind-aware form of CoInvocation, returned in coroutines with a defaulted CoUnwindAware
+  // parameter.
+
+public:
+
+  bool isCanceling() const;
+  // See CoInvocation::isCanceling for details.
+
+  bool isUnwinding() const;
+  // Returns whether this coroutine is currently unwinding based on the current
+  // stack invocation. A problem with using UnwindDetector directly is that a coroutine might be
+  // entered from many different stacks, with different uncaught exception counts at each point.
+  // This approach correctly measures against the uncaught count at coroutine (re)entry. Like
+  // CoInvocation::isCanceling, this is undefined behavior after destruction.
+
+private:
+  explicit CoUnwindAwareInvocation(_::UnwindAwareCoroutineBase& coroutine);
+
+  _::UnwindAwareCoroutineBase& coroutine;
+
+  template <bool>
   friend class _::CurrentInvocationAccessor;
 };
 
