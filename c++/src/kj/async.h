@@ -695,6 +695,98 @@ auto coCapture(Functor&& f) {
   return _::CaptureForCoroutine(kj::mv(f));
 }
 
+// An enum of the three different exit scenarios for a coroutine.
+enum class CoScopeOutcome {
+  SUCCESS,
+  // execution ended without an exception.
+
+  FAILURE,
+  // execution ended with an exception.
+
+  CANCELED,
+  // the coroutine was destroyed before execution ended.
+};
+
+struct CoUnwindAware {};
+// Opts a coroutine in to tracking whether its current invocation is unwinding. Add a defaulted
+// parameter of this type to coroutines which use CoUnwindAwareInvocation::isUnwinding() or
+// scopeOutcome().
+
+namespace _ {
+class CoroutineBase;
+class UnwindAwareCoroutineBase;
+template <bool unwindAware>
+class CurrentInvocationAccessor;
+}  // namespace _
+
+class CoInvocation {
+  // Information about the current invocation of a coroutine. Obtain this with:
+  //
+  //     auto invocation = KJ_CO_MAGIC kj::CURRENT_INVOCATION;
+  //
+  // This interface describes the current invocation, relative to the coroutine's last resumption.
+  // It borrows the coroutine frame and must not outlive the coroutine's returned promise.
+
+public:
+
+  bool isCanceling() const;
+  // Coroutines might end in one of three ways - running successfully to the end, throwing
+  // an exception, or getting destructed while parked.
+  // isCanceling can be used when a coroutine is being destructed to determine if the cause
+  // of the destruction is the third case - getting destructed while parked. It always returns
+  // false before destruction. Calling this method after the coroutine is destroyed is undefined
+  // behavior.
+
+  bool isUnwinding() const KJ_UNAVAILABLE("requires a defaulted kj::CoUnwindAware parameter");
+  CoScopeOutcome scopeOutcome() const
+      KJ_UNAVAILABLE("requires a defaulted kj::CoUnwindAware parameter");
+
+private:
+  explicit CoInvocation(_::CoroutineBase& coroutine): coroutine(coroutine) {}
+
+  _::CoroutineBase& coroutine;
+
+  template <bool>
+  friend class _::CurrentInvocationAccessor;
+};
+
+class CoUnwindAwareInvocation {
+  // The unwind-aware form of CoInvocation, returned in coroutines with a defaulted CoUnwindAware
+  // parameter.
+
+public:
+
+  bool isCanceling() const;
+  // See CoInvocation::isCanceling for details.
+
+  bool isUnwinding() const;
+  // Returns whether this coroutine is currently unwinding based on the current
+  // stack invocation. A problem with using UnwindDetector directly is that a coroutine might be
+  // entered from many different stacks, with different uncaught exception counts at each point.
+  // This approach correctly measures against the uncaught count at coroutine (re)entry. Like
+  // CoInvocation::isCanceling, this is undefined behavior after destruction.
+
+  CoScopeOutcome scopeOutcome() const;
+  // Correctly differentiates between the three exit scenarios a
+  // coroutine might find itself in:
+  //  * SUCCESS: execution ended without an exception.
+  //  * FAILURE: execution ended with an exception.
+  //  * CANCELED: execution didn't end due to coroutine destruction.
+  // Note that like isCanceling and isUnwinding, this method is undefined behavior after
+  // destruction.
+
+private:
+  explicit CoUnwindAwareInvocation(_::UnwindAwareCoroutineBase& coroutine);
+
+  _::UnwindAwareCoroutineBase& coroutine;
+
+  template <bool>
+  friend class _::CurrentInvocationAccessor;
+};
+
+class CurrentInvocationConstant final {};
+inline constexpr CurrentInvocationConstant CURRENT_INVOCATION{};
+
 // =======================================================================================
 // Advanced promise construction
 

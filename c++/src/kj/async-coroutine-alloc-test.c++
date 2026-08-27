@@ -71,6 +71,11 @@ static_assert(isSameType<_::CoroutineAllocator::AllocatorType<
 static_assert(isSameType<_::CoroutineAllocator::AllocatorType<
                              DefaultCoroutineAllocator &, DebugCoroutineAllocator &>,
                          DefaultCoroutineAllocator>());
+static_assert(isSameType<_::CoroutineAllocator::AllocatorType<
+                              CoUnwindAware, DebugCoroutineAllocator &>,
+                          DebugCoroutineAllocator>());
+static_assert(!_::isUnwindAwareCoroutine<DebugCoroutineAllocator &>);
+static_assert(_::isUnwindAwareCoroutine<CoUnwindAware, DebugCoroutineAllocator &>);
 
 KJ_TEST("CoroutineAllocator::getAllocator") {
   DefaultCoroutineAllocator def;
@@ -89,6 +94,14 @@ KJ_TEST("CoroutineAllocator::getAllocator") {
 
 template <typename Allocator>
 kj::Promise<size_t> immediateCoroutine(Allocator &) {
+  co_return 42;
+}
+
+template <typename Allocator>
+kj::Promise<size_t> immediateUnwindAwareCoroutine(
+    Allocator&, bool& completed, CoUnwindAware = {}) {
+  auto invocation = KJ_CO_MAGIC CURRENT_INVOCATION;
+  KJ_DEFER(if (invocation.scopeOutcome() == CoScopeOutcome::SUCCESS) completed = true);
   co_return 42;
 }
 
@@ -114,6 +127,19 @@ KJ_TEST("DebugAllocator") {
   KJ_EXPECT(allocator.totalFreeCount == 1);
   KJ_EXPECT(allocator.totalFreeSize == allocator.totalFreeSize);
 
+}
+
+KJ_TEST("CoUnwindAware composes with a custom coroutine allocator") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  DebugCoroutineAllocator allocator;
+  bool completed = false;
+  auto promise = immediateUnwindAwareCoroutine(allocator, completed);
+  KJ_EXPECT(promise.wait(waitScope) == 42);
+  KJ_EXPECT(completed);
+  KJ_EXPECT(allocator.totalAllocCount == 1);
+  KJ_EXPECT(allocator.totalFreeCount == 1);
 }
 
 template <typename Allocator>

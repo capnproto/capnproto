@@ -3063,6 +3063,10 @@ CoroutineBase::~CoroutineBase() noexcept(false) {
   readMaybe(maybeDisposalResults)->destructorRan = true;
 }
 
+bool UnwindAwareCoroutineBase::isUnwinding() const {
+  return UnwindDetector::uncaughtExceptionCount() > uncaughtCountAtEntry;
+}
+
 void CoroutineBase::unhandledExceptionImpl(ExceptionOrValue& resultRef) {
   // Pretty self-explanatory, we propagate the exception to the promise which owns us, unless
   // we're being destroyed, in which case we propagate it back to our disposer. Note that all
@@ -3119,6 +3123,11 @@ void CoroutineBase::fire() {
   // try-catch block, so we have no choice but to resume and throw later.
 
   coroutine.resume();
+}
+
+void UnwindAwareCoroutineBase::fire() {
+  uncaughtCountAtEntry = UnwindDetector::uncaughtExceptionCount();
+  CoroutineBase::fire();
 }
 
 void CoroutineBase::traceEvent(TraceBuilder& builder) {

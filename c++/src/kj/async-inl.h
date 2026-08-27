@@ -2147,7 +2147,7 @@ PromiseCrossThreadFulfillerPair<T> Executor::newPromiseAndCrossThreadFulfiller()
 
 namespace kj::_ {
 
-template <typename T, typename Allocator> class Coroutine;
+template <typename T, typename Allocator, bool unwindAware> class Coroutine;
 
 template <typename T>
 concept NoWaitScope = !isSameType<Decay<T>, WaitScope>();
@@ -2224,6 +2224,10 @@ public:
 
 };
 
+template <typename... Args>
+inline constexpr bool isUnwindAwareCoroutine =
+    (isSameType<Decay<Args>, CoUnwindAware>() || ...);
+
 struct DefaultCoroutineAllocator: public CoroutineAllocator {
   // Default coroutine allocator.
   // Used when now allocator parameter is specified in coroutine declaration.
@@ -2271,7 +2275,8 @@ struct coroutine_traits<kj::Promise<T>, Args...> {
   // A second note: This has the reasonable side effect of making it impossible for us to write
   // WaitScope member coroutines.
 
-  using promise_type = kj::_::Coroutine<T, kj::_::CoroutineAllocator::AllocatorType<Args...>>;
+  using promise_type = kj::_::Coroutine<T, kj::_::CoroutineAllocator::AllocatorType<Args...>,
+      kj::_::isUnwindAwareCoroutine<Args...>>;
   // The C++ standard calls this the "promise type". This makes sense when thinking of coroutines
   // returning `std::future<T>`, since the coroutine implementation would be a wrapper around
   // a `std::promise<T>`. It's extremely confusing from a KJ perspective, however, so I call it
@@ -2332,10 +2337,15 @@ public:
     return hasSuspendedAtLeastOnce && isNext();
   }
 
+  bool isCanceling() const { return maybeDisposalResults != kj::none && !isDone(); }
+  // See CoInvocation::isCanceling for details.
+
 protected:
   inline void scheduleResumption() { onReadyEvent.arm(); }
 
   void unhandledExceptionImpl(ExceptionOrValue& resultRef);
+
+  void fire() override;
 
 private:
   // -------------------------------------------------------
@@ -2347,7 +2357,6 @@ private:
   // -------------------------------------------------------
   // Event implementation
 
-  void fire() override;
   void traceEvent(TraceBuilder& builder) override;
 
   stdcoro::coroutine_handle<> coroutine;
@@ -2387,6 +2396,56 @@ private:
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 };
 
+class UnwindAwareCoroutineBase: public CoroutineBase {
+public:
+  using CoroutineBase::CoroutineBase;
+
+  bool isUnwinding() const;
+  // See CoUnwindAwareInvocation::isUnwinding for details.
+
+  CoScopeOutcome scopeOutcome() const {
+    // See CoUnwindAwareInvocation::scopeOutcome for details.
+
+    if (isCanceling()) return CoScopeOutcome::CANCELED;
+    if (isUnwinding()) return CoScopeOutcome::FAILURE;
+    return CoScopeOutcome::SUCCESS;
+  }
+
+protected:
+  void fire() override;
+
+private:
+  uint uncaughtCountAtEntry = UnwindDetector::uncaughtExceptionCount();
+};
+
+template <bool unwindAware>
+struct CoroutineBaseFor_ { using Type = CoroutineBase; };
+template <>
+struct CoroutineBaseFor_<true> { using Type = UnwindAwareCoroutineBase; };
+
+template <bool unwindAware>
+using CoroutineBaseFor = typename CoroutineBaseFor_<unwindAware>::Type;
+
+template <bool unwindAware>
+struct InvocationFor_ { using Type = CoInvocation; };
+template <>
+struct InvocationFor_<true> { using Type = CoUnwindAwareInvocation; };
+
+template <bool unwindAware>
+using InvocationFor = typename InvocationFor_<unwindAware>::Type;
+
+template <bool unwindAware>
+class CurrentInvocationAccessor {
+public:
+  explicit CurrentInvocationAccessor(CoroutineBaseFor<unwindAware>& coroutine)
+      : coroutine(coroutine) {}
+  bool await_ready() const { return true; }
+  void await_suspend(stdcoro::coroutine_handle<>) const {}
+  InvocationFor<unwindAware> await_resume() const { return InvocationFor<unwindAware>(coroutine); }
+private:
+  CoroutineBaseFor<unwindAware>& coroutine;
+};
+
 template <typename Self, typename T>
 class CoroutineMixin;
 // CRTP mixin, covered later.
@@ -2396,9 +2455,9 @@ class PromiseAwaiter;
 template <typename T>
 class ForkedPromiseAwaiter;
 
-template <typename T, typename Allocator>
-class Coroutine final: public CoroutineBase,
-                       public CoroutineMixin<Coroutine<T, Allocator>, T> {
+template <typename T, typename Allocator, bool unwindAware>
+class Coroutine final: public CoroutineBaseFor<unwindAware>,
+                       public CoroutineMixin<Coroutine<T, Allocator, unwindAware>, T> {
   // The standard calls this the `promise_type` object. We can call this the "coroutine
   // implementation object" since the word promise means different things in KJ and std styles. This
   // is where we implement how a `kj::Promise<T>` is returned from a coroutine, and how that promise
@@ -2408,12 +2467,12 @@ class Coroutine final: public CoroutineBase,
   // without any overhead. See `CoroutineAllocator` for more details.
 
 public:
-  using Handle = stdcoro::coroutine_handle<Coroutine<T, Allocator>>;
+  using Handle = stdcoro::coroutine_handle<Coroutine<T, Allocator, unwindAware>>;
 
   Coroutine(SourceLocation location = {}): Coroutine(Handle::from_promise(*this), location) {}
 
   Coroutine(stdcoro::coroutine_handle<> handle, SourceLocation location = {})
-      : CoroutineBase(handle, location) {}
+      : CoroutineBaseFor<unwindAware>(handle, location) {}
 
   Promise<T> get_return_object() {
     // Called after coroutine frame construction and before initial_suspend() to create the
@@ -2438,14 +2497,18 @@ public:
     return ForkedPromiseAwaiter<U>(*this, promise);
   }
 
+  CurrentInvocationAccessor<unwindAware> yield_value(CurrentInvocationConstant) {
+    return CurrentInvocationAccessor<unwindAware>(*this);
+  }
+
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
     result = kj::mv(value);
-    scheduleResumption();
+    this->scheduleResumption();
   }
 
-  void unhandled_exception() { unhandledExceptionImpl(result); }
+  void unhandled_exception() { this->unhandledExceptionImpl(result); }
 
 
   template <typename... Args>
@@ -2581,7 +2644,21 @@ private:
 
 }  // namespace kj::_
 
-namespace kj::_ {
+namespace kj {
+
+inline bool CoInvocation::isCanceling() const { return coroutine.isCanceling(); }
+
+inline CoUnwindAwareInvocation::CoUnwindAwareInvocation(_::UnwindAwareCoroutineBase& coroutine)
+    : coroutine(coroutine) {}
+
+inline bool CoUnwindAwareInvocation::isCanceling() const { return coroutine.isCanceling(); }
+
+inline bool CoUnwindAwareInvocation::isUnwinding() const {
+  return coroutine.isUnwinding();
+}
+inline CoScopeOutcome CoUnwindAwareInvocation::scopeOutcome() const {
+  return coroutine.scopeOutcome();
+}
 
 // ---------------------------------------------------------
 // Coroutine Magic
@@ -2590,8 +2667,8 @@ namespace kj::_ {
 // implementations. To invoke this functionality, coroutines use the `KJ_CO_MAGIC` operator on a
 // "magic" object which the coroutine adapter implementation knows about.
 //
-// As of this writing, `kj::_::Coroutine<T>` does not itself provide any such magic functionality,
-// but soon will.
+// Use `KJ_CO_MAGIC kj::CURRENT_INVOCATION` to obtain information about the current coroutine
+// invocation without suspending.
 
 #define KJ_CO_MAGIC co_yield
 // To invoke a coroutine's magic functionality `FOO`, use `KJ_CO_MAGIC FOO`. What `FOO` is, what the
@@ -2602,6 +2679,6 @@ namespace kj::_ {
 // `co_yield`. The purpose of the macro is primarily as a visual signal that the code is not
 // actually yielding a value, but rather something different is going on.
 
-}  // namespace kj::_ (private)
+}  // namespace kj
 
 KJ_END_HEADER
