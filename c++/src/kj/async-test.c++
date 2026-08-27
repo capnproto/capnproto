@@ -28,6 +28,12 @@
 #include <kj/compat/gtest.h>
 #include <signal.h>
 
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer) && __linux__
+#include <sanitizer/asan_interface.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
 #if !_WIN32
 #include <errno.h>
 #include <limits.h>
@@ -1544,6 +1550,60 @@ KJ_TEST("start a fiber") {
   KJ_ASSERT(fiber.poll(waitScope));
   KJ_EXPECT(fiber.wait(waitScope) == "foo");
 }
+
+#if KJ_HAS_COMPILER_FEATURE(address_sanitizer) && __linux__
+KJ_TEST("fiber switch preserves ASAN poison outside the stack") {
+  if (isLibcContextHandlingKnownBroken()) return;
+
+  constexpr size_t stackSize = 8 << 20;
+  const size_t pageSize = sysconf(_SC_PAGESIZE);
+  EventLoop loop;
+  WaitScope waitScope(loop);
+  auto paf = newPromiseAndFulfiller<void>();
+
+  // Leave a stack-sized hole immediately below a mapped sentinel page. mmap() normally reuses the
+  // hole for the fiber stack, putting the sentinel inside the incorrectly-shifted ASAN stack range
+  // that this test guards against.
+  const size_t stackMappingSize = stackSize + pageSize;
+  void* reservation = mmap(nullptr, stackMappingSize + pageSize,
+      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  // mmap placement is only a hint, so skip the test if we cannot arrange the
+  // required layout.  We verified during development that this early return
+  // was not taken, but we don't want a flaky test.
+  if (reservation == MAP_FAILED) return;
+  if (munmap(reservation, stackMappingSize) < 0) {
+    munmap(reservation, stackMappingSize + pageSize);
+    return;
+  }
+  void* sentinel = reinterpret_cast<byte*>(reservation) + stackMappingSize;
+  KJ_DEFER({
+    ASAN_UNPOISON_MEMORY_REGION(sentinel, pageSize);
+    KJ_SYSCALL(munmap(sentinel, pageSize));
+  });
+
+  bool stackReusedHole = false;
+
+  auto fiber = startFiber(stackSize,
+      [&, promise = kj::mv(paf.promise)](WaitScope& fiberScope) mutable {
+    void* frame = __builtin_frame_address(0);
+    stackReusedHole = frame >= reinterpret_cast<byte*>(reservation) + pageSize &&
+        frame < sentinel;
+    if (!stackReusedHole) return;
+    promise.wait(fiberScope);
+  });
+
+  ASAN_POISON_MEMORY_REGION(sentinel, pageSize);
+  if (fiber.poll(waitScope)) {
+    fiber.wait(waitScope);
+    return;
+  }
+  KJ_ASSERT(stackReusedHole);
+  KJ_EXPECT(__asan_address_is_poisoned(sentinel));
+
+  paf.fulfiller->fulfill();
+  fiber.wait(waitScope);
+}
+#endif
 
 KJ_TEST("fiber promise chaining") {
   if (isLibcContextHandlingKnownBroken()) return;
