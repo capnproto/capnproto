@@ -31,7 +31,8 @@ namespace kj {
 namespace _ {
 namespace {
 
-#if defined(KJ_DEBUG) && !__OPTIMIZE__
+#if (defined(KJ_DEBUG) && !__OPTIMIZE__) || \
+    KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__)
 static constexpr uint MEDIUM_PRIME = 619;
 static constexpr uint BIG_PRIME = 6143;
 #else
@@ -41,7 +42,7 @@ static constexpr uint BIG_PRIME = 101363;
 // Some of the tests build large tables. These numbers are used as the table sizes. We use primes
 // to avoid any unintended aliasing affects -- this is probably just paranoia, but why not?
 //
-// We use smaller values for debug builds to keep runtime down.
+// We use smaller values for debug and ThreadSanitizer builds to keep runtime down.
 
 KJ_TEST("_::tryReserveSize() works") {
   {
