@@ -2332,6 +2332,9 @@ public:
     return hasSuspendedAtLeastOnce && isNext();
   }
 
+  bool isCanceling() const { return maybeDisposalResults != kj::none && !isDone(); }
+  // See CoInvocation::isCanceling for details.
+
 protected:
   inline void scheduleResumption() { onReadyEvent.arm(); }
 
@@ -2387,6 +2390,16 @@ private:
   // coroutine.destroy() has returned. Our disposer then rethrows as needed.
 };
 
+class CurrentInvocationAccessor {
+public:
+  explicit CurrentInvocationAccessor(CoroutineBase& coroutine): coroutine(coroutine) {}
+  bool await_ready() const { return true; }
+  void await_suspend(stdcoro::coroutine_handle<>) const {}
+  CoInvocation await_resume() const { return CoInvocation(coroutine); }
+private:
+  CoroutineBase& coroutine;
+};
+
 template <typename Self, typename T>
 class CoroutineMixin;
 // CRTP mixin, covered later.
@@ -2436,6 +2449,10 @@ public:
   template <typename U>
   ForkedPromiseAwaiter<U> await_transform(ForkedPromise<U>& promise) {
     return ForkedPromiseAwaiter<U>(*this, promise);
+  }
+
+  CurrentInvocationAccessor yield_value(CurrentInvocationConstant) {
+    return CurrentInvocationAccessor(*this);
   }
 
   void fulfill(FixVoid<T>&& value) {
@@ -2581,7 +2598,9 @@ private:
 
 }  // namespace kj::_
 
-namespace kj::_ {
+namespace kj {
+
+inline bool CoInvocation::isCanceling() const { return coroutine.isCanceling(); }
 
 // ---------------------------------------------------------
 // Coroutine Magic
@@ -2590,8 +2609,8 @@ namespace kj::_ {
 // implementations. To invoke this functionality, coroutines use the `KJ_CO_MAGIC` operator on a
 // "magic" object which the coroutine adapter implementation knows about.
 //
-// As of this writing, `kj::_::Coroutine<T>` does not itself provide any such magic functionality,
-// but soon will.
+// Use `KJ_CO_MAGIC kj::CURRENT_INVOCATION` to obtain information about the current coroutine
+// invocation without suspending.
 
 #define KJ_CO_MAGIC co_yield
 // To invoke a coroutine's magic functionality `FOO`, use `KJ_CO_MAGIC FOO`. What `FOO` is, what the
@@ -2602,6 +2621,6 @@ namespace kj::_ {
 // `co_yield`. The purpose of the macro is primarily as a visual signal that the code is not
 // actually yielding a value, but rather something different is going on.
 
-}  // namespace kj::_ (private)
+}  // namespace kj
 
 KJ_END_HEADER

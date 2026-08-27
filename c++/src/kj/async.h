@@ -695,6 +695,40 @@ auto coCapture(Functor&& f) {
   return _::CaptureForCoroutine(kj::mv(f));
 }
 
+namespace _ {
+class CoroutineBase;
+class CurrentInvocationAccessor;
+}  // namespace _
+
+class CoInvocation {
+  // Information about the current invocation of a coroutine. Obtain this with:
+  //
+  //     auto invocation = KJ_CO_MAGIC kj::CURRENT_INVOCATION;
+  //
+  // This interface describes the current invocation, relative to the coroutine's last resumption.
+  // It borrows the coroutine frame and must not outlive the coroutine's returned promise.
+
+public:
+
+  bool isCanceling() const;
+  // Coroutines might end in one of three ways - running successfully to the end, throwing
+  // an exception, or getting destructed while parked.
+  // isCanceling can be used when a coroutine is being destructed to determine if the cause
+  // of the destruction is the third case - getting destructed while parked. It always returns
+  // false before destruction. Calling this method after the coroutine is destroyed is undefined
+  // behavior.
+
+private:
+  explicit CoInvocation(_::CoroutineBase& coroutine): coroutine(coroutine) {}
+
+  _::CoroutineBase& coroutine;
+
+  friend class _::CurrentInvocationAccessor;
+};
+
+class CurrentInvocationConstant final {};
+inline constexpr CurrentInvocationConstant CURRENT_INVOCATION{};
+
 // =======================================================================================
 // Advanced promise construction
 

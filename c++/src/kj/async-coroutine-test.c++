@@ -890,6 +890,144 @@ KJ_TEST("KJ_TRY/KJ_CATCH inside try/catch with promise rejection in coroutines")
   auto result = testCoro().wait(waitScope);
   KJ_EXPECT(result == "kj:caught std:not-caught");
 }
+
+// =======================================================================================
+// KJ_CO_MAGIC CURRENT_INVOCATION
+
+KJ_TEST("KJ_CO_MAGIC CURRENT_INVOCATION returns CoInvocation without suspending") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  bool reachedEnd = false;
+  auto coro = [&]() -> Promise<void> {
+    auto invocation = KJ_CO_MAGIC CURRENT_INVOCATION;
+    static_assert(isSameType<decltype(invocation), CoInvocation>());
+    reachedEnd = true;
+    co_return;
+  };
+
+  auto promise = coro();
+
+  // Coroutines start eagerly, so had obtaining the reference suspended, the body would not have run
+  // to the end yet.
+  KJ_EXPECT(reachedEnd);
+
+  promise.wait(waitScope);
+}
+
+// =======================================================================================
+// CoInvocation::isCanceling()
+
+template <typename T, typename Coroutine>
+class StateRecorder {
+  // Reports what `query` said about the enclosing coroutine at the moment this object was
+  // destroyed. Meant to live in a coroutine frame, so that its destructor runs on every path out of
+  // the coroutine.
+  //
+  // The coroutine to watch is supplied after construction rather than to the constructor, so that
+  // this can be used as a coroutine parameter: the body cannot obtain the reference until it starts
+  // running, which is after its parameters have been copied into the frame. It also means the
+  // copy left behind at the call site reports nothing when it is destroyed.
+
+public:
+  using Query = T(const Coroutine&);
+
+  StateRecorder(Maybe<T>& result, Query& query)
+      : result(result), query(query) {}
+  ~StateRecorder() {
+    KJ_IF_SOME(c, coroutine) {
+      result = query(c);
+    }
+  }
+
+  void watch(Coroutine c) {
+    coroutine = kj::mv(c);
+  }
+
+private:
+  Maybe<Coroutine> coroutine;
+  Maybe<T>& result;
+  Query& query;
+};
+
+bool canceling(const CoInvocation& invocation) { return invocation.isCanceling(); }
+
+KJ_TEST("isCanceling() is false when a coroutine runs to completion") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<bool> canceled;
+  auto coro = [&]() -> Promise<void> {
+    StateRecorder recorder(canceled, canceling);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::yield();
+  };
+
+  coro().wait(waitScope);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(canceled) == false);
+}
+
+KJ_TEST("isCanceling() is false while an exception propagates out of a coroutine") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<bool> canceled;
+  auto coro = [&]() -> Promise<void> {
+    StateRecorder recorder(canceled, canceling);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::yield();
+    KJ_FAIL_ASSERT("coroutine failed");
+  };
+
+  auto exception = kj::runCatchingExceptions([&]() { coro().wait(waitScope); });
+  KJ_EXPECT(exception != kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(canceled) == false);
+}
+
+KJ_TEST("isCanceling() is true while destroying a suspended coroutine") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<bool> canceled;
+  auto coro = [&]() -> Promise<void> {
+    StateRecorder recorder(canceled, canceling);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::Promise<void>(kj::NEVER_DONE);
+  };
+
+  {
+    auto promise = coro();
+    KJ_EXPECT(!promise.poll(waitScope));
+    KJ_EXPECT(canceled == kj::none);
+  }
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(canceled) == true);
+}
+
+Promise<void> watchFromParameter(
+    StateRecorder<bool, CoInvocation> recorder, Promise<void> awaitMe) {
+  recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+  co_await awaitMe;
+}
+
+KJ_TEST("isCanceling() is false while destroying a completed coroutine") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // A coroutine's parameters outlive its body: they are destroyed with the frame, which for a
+  // coroutine that completed happens when its promise is dropped. So this asks isCanceling()
+  // during destruction of a coroutine that was never canceled -- the case that distinguishes being
+  // destroyed from being canceled.
+  Maybe<bool> canceled;
+  {
+    auto promise = watchFromParameter(StateRecorder(canceled, canceling), kj::READY_NOW);
+    KJ_EXPECT(promise.poll(waitScope));
+    KJ_EXPECT(canceled == kj::none);
+  }
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(canceled) == false);
+}
+
 #endif  // !(__GNUC__ && !__clang__)
 
 }  // namespace
