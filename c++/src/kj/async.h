@@ -695,9 +695,22 @@ auto coCapture(Functor&& f) {
   return _::CaptureForCoroutine(kj::mv(f));
 }
 
+// An enum of the three different exit scenarios for a coroutine.
+enum class CoScopeOutcome {
+  SUCCESS,
+  // execution ended without an exception.
+
+  FAILURE,
+  // execution ended with an exception.
+
+  CANCELED,
+  // the coroutine was destroyed before execution ended.
+};
+
 struct CoUnwindAware {};
 // Opts a coroutine in to tracking whether its current invocation is unwinding. Add a defaulted
-// parameter of this type to coroutines which use CoUnwindAwareInvocation::isUnwinding().
+// parameter of this type to coroutines which use CoUnwindAwareInvocation::isUnwinding() or
+// scopeOutcome().
 
 namespace _ {
 class CoroutineBase;
@@ -725,6 +738,8 @@ public:
   // behavior.
 
   bool isUnwinding() const KJ_UNAVAILABLE("requires a defaulted kj::CoUnwindAware parameter");
+  CoScopeOutcome scopeOutcome() const
+      KJ_UNAVAILABLE("requires a defaulted kj::CoUnwindAware parameter");
 
 private:
   explicit CoInvocation(_::CoroutineBase& coroutine): coroutine(coroutine) {}
@@ -750,6 +765,15 @@ public:
   // entered from many different stacks, with different uncaught exception counts at each point.
   // This approach correctly measures against the uncaught count at coroutine (re)entry. Like
   // CoInvocation::isCanceling, this is undefined behavior after destruction.
+
+  CoScopeOutcome scopeOutcome() const;
+  // Correctly differentiates between the three exit scenarios a
+  // coroutine might find itself in:
+  //  * SUCCESS: execution ended without an exception.
+  //  * FAILURE: execution ended with an exception.
+  //  * CANCELED: execution didn't end due to coroutine destruction.
+  // Note that like isCanceling and isUnwinding, this method is undefined behavior after
+  // destruction.
 
 private:
   explicit CoUnwindAwareInvocation(_::UnwindAwareCoroutineBase& coroutine);

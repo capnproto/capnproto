@@ -101,7 +101,7 @@ template <typename Allocator>
 kj::Promise<size_t> immediateUnwindAwareCoroutine(
     Allocator&, bool& completed, CoUnwindAware = {}) {
   auto invocation = KJ_CO_MAGIC CURRENT_INVOCATION;
-  KJ_DEFER(if (!invocation.isUnwinding()) completed = true);
+  KJ_DEFER(if (invocation.scopeOutcome() == CoScopeOutcome::SUCCESS) completed = true);
   co_return 42;
 }
 

@@ -2403,6 +2403,14 @@ public:
   bool isUnwinding() const;
   // See CoUnwindAwareInvocation::isUnwinding for details.
 
+  CoScopeOutcome scopeOutcome() const {
+    // See CoUnwindAwareInvocation::scopeOutcome for details.
+
+    if (isCanceling()) return CoScopeOutcome::CANCELED;
+    if (isUnwinding()) return CoScopeOutcome::FAILURE;
+    return CoScopeOutcome::SUCCESS;
+  }
+
 protected:
   void fire() override;
 
@@ -2648,6 +2656,10 @@ inline bool CoUnwindAwareInvocation::isCanceling() const { return coroutine.isCa
 inline bool CoUnwindAwareInvocation::isUnwinding() const {
   return coroutine.isUnwinding();
 }
+inline CoScopeOutcome CoUnwindAwareInvocation::scopeOutcome() const {
+  return coroutine.scopeOutcome();
+}
+
 // ---------------------------------------------------------
 // Coroutine Magic
 //

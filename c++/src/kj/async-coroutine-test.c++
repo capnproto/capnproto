@@ -44,10 +44,16 @@ static_assert(sizeof(void*) != 8 || alignof(_::CoroutineBase) == 8,
     "CoroutineBase must retain its 64-bit ABI alignment");
 
 template <typename T>
+concept HasScopeOutcome = requires(const T& c) { c.scopeOutcome(); };
+
+template <typename T>
 concept HasIsUnwinding = requires(const T& c) { c.isUnwinding(); };
 
+static_assert(!HasScopeOutcome<CoInvocation>,
+    "scopeOutcome() must be unavailable without kj::CoUnwindAware");
 static_assert(!HasIsUnwinding<CoInvocation>,
     "isUnwinding() must be unavailable without kj::CoUnwindAware");
+static_assert(HasScopeOutcome<CoUnwindAwareInvocation>);
 static_assert(HasIsUnwinding<CoUnwindAwareInvocation>);
 
 template <typename T>
@@ -935,6 +941,7 @@ KJ_TEST("KJ_CO_MAGIC CURRENT_INVOCATION returns CoUnwindAwareInvocation when opt
     static_assert(isSameType<decltype(invocation), CoUnwindAwareInvocation>());
     KJ_EXPECT(!invocation.isCanceling());
     KJ_EXPECT(!invocation.isUnwinding());
+    KJ_EXPECT(invocation.scopeOutcome() == CoScopeOutcome::SUCCESS);
   };
 
   coro().wait(waitScope);
@@ -1189,6 +1196,182 @@ KJ_TEST("isUnwinding() is false when a coroutine runs entirely during an unwind"
   KJ_EXPECT(KJ_ASSERT_NONNULL(result) == false);
 }
 
+// =======================================================================================
+// CoUnwindAwareInvocation::scopeOutcome()
+
+CoScopeOutcome scopeOutcome(const CoUnwindAwareInvocation& invocation) {
+  return invocation.scopeOutcome();
+}
+
+StringPtr describe(CoScopeOutcome outcome) {
+  switch (outcome) {
+    case CoScopeOutcome::SUCCESS: return "SUCCESS"_kj;
+    case CoScopeOutcome::FAILURE: return "FAILURE"_kj;
+    case CoScopeOutcome::CANCELED: return "CANCELED"_kj;
+  }
+  KJ_UNREACHABLE;
+}
+
+KJ_TEST("scopeOutcome() is SUCCESS when a coroutine runs to completion") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<CoScopeOutcome> outcome;
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    StateRecorder recorder(outcome, scopeOutcome);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::yield();
+  };
+
+  coro().wait(waitScope);
+  KJ_EXPECT(describe(KJ_ASSERT_NONNULL(outcome)) == "SUCCESS");
+}
+
+KJ_TEST("scopeOutcome() is FAILURE while an exception propagates out of a coroutine") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<CoScopeOutcome> outcome;
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    StateRecorder recorder(outcome, scopeOutcome);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::yield();
+    KJ_FAIL_ASSERT("coroutine failed");
+  };
+
+  auto exception = kj::runCatchingExceptions([&]() { coro().wait(waitScope); });
+  KJ_EXPECT(exception != kj::none);
+  KJ_EXPECT(describe(KJ_ASSERT_NONNULL(outcome)) == "FAILURE");
+}
+
+KJ_TEST("scopeOutcome() is CANCELED while destroying a suspended coroutine") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<CoScopeOutcome> outcome;
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    StateRecorder recorder(outcome, scopeOutcome);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::Promise<void>(kj::NEVER_DONE);
+  };
+
+  {
+    auto promise = coro();
+    KJ_EXPECT(!promise.poll(waitScope));
+    KJ_EXPECT(outcome == kj::none);
+  }
+
+  KJ_EXPECT(describe(KJ_ASSERT_NONNULL(outcome)) == "CANCELED");
+}
+
+KJ_TEST("scopeOutcome() is CANCELED when a coroutine is canceled during an unrelated unwind") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<CoScopeOutcome> outcome;
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    StateRecorder recorder(outcome, scopeOutcome);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::Promise<void>(kj::NEVER_DONE);
+  };
+
+  auto exception = kj::runCatchingExceptions([&]() {
+    auto promise = coro();
+    KJ_EXPECT(!promise.poll(waitScope));
+
+    // Throwing here destroys `promise` mid-unwind, so the coroutine is canceled while the thread's
+    // uncaught exception count is elevated. Cancellation is the more specific answer of the two.
+    KJ_FAIL_ASSERT("unrelated failure");
+  });
+
+  KJ_EXPECT(exception != kj::none);
+  KJ_EXPECT(describe(KJ_ASSERT_NONNULL(outcome)) == "CANCELED");
+}
+
+KJ_TEST("scopeOutcome() is SUCCESS when a coroutine is resumed during an unrelated unwind") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Maybe<CoScopeOutcome> outcome;
+  auto paf = newPromiseAndFulfiller<void>();
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    StateRecorder recorder(outcome, scopeOutcome);
+    recorder.watch(KJ_CO_MAGIC CURRENT_INVOCATION);
+    co_await kj::mv(paf.promise);
+  };
+
+  auto promise = coro();
+  KJ_EXPECT(!promise.poll(waitScope));
+
+  auto exception = kj::runCatchingExceptions([&]() {
+    ResumeWhileUnwinding resumer{*paf.fulfiller, promise, waitScope};
+    KJ_FAIL_ASSERT("unrelated failure");
+  });
+
+  KJ_EXPECT(exception != kj::none);
+  KJ_EXPECT(describe(KJ_ASSERT_NONNULL(outcome)) == "SUCCESS");
+}
+
+// =======================================================================================
+// Using CURRENT_INVOCATION with KJ_DEFER
+
+KJ_TEST("KJ_DEFER can inspect the coroutine scope outcome") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  StringPtr log;
+  auto coro = [&](Promise<void> tail, CoUnwindAware = {}) -> Promise<void> {
+    auto invocation = KJ_CO_MAGIC CURRENT_INVOCATION;
+    KJ_DEFER(log = describe(invocation.scopeOutcome()));
+    co_await tail;
+  };
+
+  coro(kj::READY_NOW).wait(waitScope);
+  KJ_EXPECT(log == "SUCCESS", log);
+
+  KJ_EXPECT_THROW_MESSAGE("boom",
+      coro(kj::Promise<void>(KJ_EXCEPTION(FAILED, "boom"))).wait(waitScope));
+  KJ_EXPECT(log == "FAILURE", log);
+
+  { auto promise = coro(kj::NEVER_DONE); KJ_EXPECT(!promise.poll(waitScope)); }
+  KJ_EXPECT(log == "CANCELED", log);
+}
+
+KJ_TEST("KJ_DEFER sees success when control leaves a coroutine scope via break") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  StringPtr log;
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    for (;;) {
+      auto invocation = KJ_CO_MAGIC CURRENT_INVOCATION;
+      KJ_DEFER(log = describe(invocation.scopeOutcome()));
+      co_await kj::yield();
+      break;
+    }
+  };
+
+  coro().wait(waitScope);
+  KJ_EXPECT(log == "SUCCESS", log);
+}
+
+KJ_TEST("KJ_DEFER sees failure before an outer coroutine scope catches the exception") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  StringPtr log;
+  auto coro = [&](CoUnwindAware = {}) -> Promise<void> {
+    co_await kj::yield();
+    try {
+      auto invocation = KJ_CO_MAGIC CURRENT_INVOCATION;
+      KJ_DEFER(log = describe(invocation.scopeOutcome()));
+      KJ_FAIL_ASSERT("inner failure");
+    } catch (kj::Exception&) {}
+  };
+
+  coro().wait(waitScope);
+  KJ_EXPECT(log == "FAILURE", log);
+}
 #endif  // !(__GNUC__ && !__clang__)
 
 }  // namespace
