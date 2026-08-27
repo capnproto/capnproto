@@ -29,6 +29,16 @@
 namespace kj {
 namespace {
 
+#if _WIN32
+static_assert(sizeof(void*) != 8 || sizeof(_::CoroutineBase) == 112,
+    "CoroutineBase must retain its 64-bit Windows ABI layout");
+#else
+static_assert(sizeof(void*) != 8 || sizeof(_::CoroutineBase) == 104,
+    "CoroutineBase must retain its 64-bit ABI layout");
+#endif
+static_assert(sizeof(void*) != 8 || alignof(_::CoroutineBase) == 8,
+    "CoroutineBase must retain its 64-bit ABI alignment");
+
 template <typename T>
 Promise<kj::Decay<T>> identity(T&& value) {
   co_return kj::fwd<T>(value);
