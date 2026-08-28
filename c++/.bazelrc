@@ -117,6 +117,9 @@ build:ubsan --copt="-fsanitize=undefined" --linkopt="-fsanitize=undefined"
 build:ubsan --copt="-fsanitize=float-divide-by-zero" --linkopt="-fsanitize=float-divide-by-zero"
 build:ubsan --copt="-fsanitize=local-bounds" --linkopt="-fsanitize=local-bounds"
 build:ubsan --copt="-fsanitize=nullability" --linkopt="-fsanitize=nullability"
+build:ubsan --copt="-fsanitize=implicit-conversion" --linkopt="-fsanitize=implicit-conversion"
+build:ubsan --copt="-fsanitize=unsigned-integer-overflow" --linkopt="-fsanitize=unsigned-integer-overflow"
+build:ubsan --copt="-fsanitize=vptr" --linkopt="-fsanitize=vptr"
 
 
 # CI configuration
