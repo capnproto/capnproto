@@ -1792,7 +1792,11 @@ public:
   // Used when suspending a request, or when switching protocols (e.g. WebSocket, CONNENCT).
   // HttpinputStream can no longer be used after this.
   ReleasedBuffer releaseBuffer() {
-    return { headerBuffer.releaseAsBytes(), leftover.asBytes() };
+    auto result = ReleasedBuffer { headerBuffer.releaseAsBytes(), leftover.asBytes() };
+    // The returned buffer now owns the storage viewed by `leftover`; don't retain a view in this
+    // spent HttpInputStreamImpl, which may outlive the new owner after a protocol upgrade.
+    leftover = nullptr;
+    return result;
   }
 
   // Used when suspending a request. HttpinputStream can no longer be used after this.
@@ -3897,6 +3901,10 @@ private:
 
     bool useCompression = false;
     kj::Maybe<kj::Array<byte>> compressedMessage;
+    kj::Array<byte> ownMessage;
+    // `message` may be redirected into either owned buffer below. Since coroutine parameters are
+    // destroyed after locals, clear the view first, including when an awaited write throws.
+    KJ_DEFER(message = nullptr);
     if (opcode == OPCODE_BINARY || opcode == OPCODE_TEXT) {
       // We can only compress data frames.
 #if KJ_HAS_ZLIB
@@ -3931,7 +3939,6 @@ private:
 #endif // KJ_HAS_ZLIB
     }
 
-    kj::Array<byte> ownMessage;
     if (!mask.isZero()) {
       // Sadness, we have to make a copy to apply the mask.
       ownMessage = kj::heapArray(message);
@@ -4935,8 +4942,9 @@ public:
       memcpy(destination, leftover.begin(), bytesToCopy);
       leftover = leftover.slice(bytesToCopy, leftover.size());
 
-      // If we've consumed all of the data in the leftover buffer, go ahead and free it.
+      // If we've consumed all of the data in the leftover buffer, drop the view before freeing it.
       if (leftover.size() == 0) {
+        leftover = nullptr;
         leftoverBackingBuffer = nullptr;
       }
 
@@ -4972,8 +4980,9 @@ public:
       buffer.write(leftover.first(bytesToCopy));
       leftover = leftover.slice(bytesToCopy, leftover.size());
 
-      // If we've consumed all of the data in the leftover buffer, go ahead and free it.
+      // If we've consumed all of the data in the leftover buffer, drop the view before freeing it.
       if (leftover.size() == 0) {
+        leftover = nullptr;
         leftoverBackingBuffer = nullptr;
       }
 
@@ -5037,8 +5046,9 @@ private:
       return output.write(leftover.first(bytesToWrite)).then(
           [this, &output, remaining, total, bytesToWrite]() mutable -> kj::Promise<uint64_t> {
         leftover = leftover.slice(bytesToWrite, leftover.size());
-        // If the leftover buffer has been fully consumed, go ahead and free it now.
+        // If the leftover buffer has been fully consumed, drop the view before freeing it.
         if (leftover.size() == 0) {
+          leftover = nullptr;
           leftoverBackingBuffer = nullptr;
         }
         remaining -= bytesToWrite;
@@ -5795,8 +5805,8 @@ public:
         "can't start new request until previous request body has been fully written");
     closeWatcherTask = kj::none;
 
-    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
     bool isGet = method == HttpMethod::GET || method == HttpMethod::HEAD;
     bool hasBody;
@@ -5896,6 +5906,7 @@ public:
         "can't use openWebSocket() because no EntropySource was provided when creating the "
         "HttpClient").generate(keyBytes);
     auto keyBase64 = kj::encodeBase64(keyBytes);
+    kj::Maybe<kj::String> offeredExtensions;
 
     kj::StringPtr connectionHeaders[HttpHeaders::WEBSOCKET_CONNECTION_HEADERS_COUNT];
     connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "Upgrade";
@@ -5903,7 +5914,6 @@ public:
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_VERSION] = "13";
     connectionHeaders[HttpHeaders::BuiltinIndices::SEC_WEBSOCKET_KEY] = keyBase64;
 
-    kj::Maybe<kj::String> offeredExtensions;
     kj::Maybe<CompressionParameters> clientOffer;
     kj::Vector<CompressionParameters> extensions;
     auto compressionMode = settings.webSocketCompressionMode;
@@ -6842,12 +6852,26 @@ private:
   HttpClientSettings settings;
 
   struct Host {
-    kj::String name;  // including port, if non-default
     kj::Own<PromiseNetworkAddressHttpClient> client;
   };
 
-  std::map<kj::StringPtr, Host> httpHosts;
-  std::map<kj::StringPtr, Host> httpsHosts;
+  struct HostnameLess {
+    using is_transparent = void;
+
+    bool operator()(const kj::String& left, const kj::String& right) const {
+      return left.asPtr() < right.asPtr();
+    }
+    bool operator()(const kj::String& left, kj::StringPtr right) const {
+      return left.asPtr() < right;
+    }
+    bool operator()(kj::StringPtr left, const kj::String& right) const {
+      return left < right.asPtr();
+    }
+  };
+
+  using HostMap = std::map<kj::String, Host, HostnameLess>;
+  HostMap httpHosts;
+  HostMap httpsHosts;
 
   struct RequestInfo {
     HttpMethod method;
@@ -6890,12 +6914,10 @@ private:
       });
 
       Host host {
-        kj::mv(parsed.host),
         kj::heap<PromiseNetworkAddressHttpClient>(kj::mv(promise))
       };
-      kj::StringPtr nameRef = host.name;
 
-      auto insertResult = hosts.insert(std::make_pair(nameRef, kj::mv(host)));
+      auto insertResult = hosts.emplace(kj::mv(parsed.host), kj::mv(host));
       KJ_ASSERT(insertResult.second);
       iter = insertResult.first;
 
@@ -6905,8 +6927,7 @@ private:
     return *iter->second.client;
   }
 
-  kj::Promise<void> handleCleanup(std::map<kj::StringPtr, Host>& hosts,
-                                  std::map<kj::StringPtr, Host>::iterator iter) {
+  kj::Promise<void> handleCleanup(HostMap& hosts, HostMap::iterator iter) {
     return iter->second.client->onDrained()
         .then([this,&hosts,iter]() -> kj::Promise<void> {
       // Double-check that it's really drained to avoid race conditions.
@@ -7429,9 +7450,8 @@ private:
         task = task.then([this,statusCode,statusTextCopy=kj::mv(statusTextCopy),
                           headersCopy=kj::mv(headersCopy),expectedBodySize]() mutable {
           fulfiller->fulfill({
-            statusCode, statusTextCopy, headersCopy.get(),
+            statusCode, kj::mv(statusTextCopy), kj::mv(headersCopy),
             kj::heap<HeadResponseStream>(expectedBodySize)
-                .attach(kj::mv(statusTextCopy), kj::mv(headersCopy))
           });
         }).eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
         return kj::heap<kj::NullStream>();
@@ -7444,8 +7464,7 @@ private:
             kj::mv(pipe.in), task.attach(kj::addRef(*this)));
 
         fulfiller->fulfill({
-          statusCode, statusTextCopy, headersCopy.get(),
-          wrapper.attach(kj::mv(statusTextCopy), kj::mv(headersCopy))
+          statusCode, kj::mv(statusTextCopy), kj::mv(headersCopy), kj::mv(wrapper)
         });
         return kj::mv(pipe.out);
       }
@@ -7577,9 +7596,8 @@ private:
         task = task.then([this,statusCode,statusTextCopy=kj::mv(statusTextCopy),
                           headersCopy=kj::mv(headersCopy),expectedBodySize]() mutable {
           fulfiller->fulfill({
-            statusCode, statusTextCopy, headersCopy.get(),
-            kj::Own<AsyncInputStream>(kj::heap<HeadResponseStream>(expectedBodySize)
-                .attach(kj::mv(statusTextCopy), kj::mv(headersCopy)))
+            statusCode, kj::mv(statusTextCopy), kj::mv(headersCopy),
+            kj::Own<AsyncInputStream>(kj::heap<HeadResponseStream>(expectedBodySize))
           });
         }).eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
         return kj::heap<kj::NullStream>();
@@ -7592,8 +7610,7 @@ private:
             kj::heap<DelayedEofInputStream>(kj::mv(pipe.in), task.attach(kj::addRef(*this)));
 
         fulfiller->fulfill({
-          statusCode, statusTextCopy, headersCopy.get(),
-          wrapper.attach(kj::mv(statusTextCopy), kj::mv(headersCopy))
+          statusCode, kj::mv(statusTextCopy), kj::mv(headersCopy), kj::mv(wrapper)
         });
         return kj::mv(pipe.out);
       }
@@ -7612,8 +7629,7 @@ private:
       kj::Own<WebSocket> wrapper =
           kj::heap<DelayedCloseWebSocket>(kj::mv(pipe.ends[0]), task.attach(kj::addRef(*this)));
       fulfiller->fulfill({
-        101, "Switching Protocols", headersCopy.get(),
-        wrapper.attach(kj::mv(headersCopy))
+        101, "Switching Protocols", kj::mv(headersCopy), kj::mv(wrapper)
       });
       return kj::mv(pipe.ends[1]);
     }
@@ -8378,8 +8394,8 @@ private:
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = kj::none;
 
-    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
     kj::String lengthStr;
+    kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
     if (!closeAfterSend) {
       // Check if application wants us to close connections.
