@@ -42,6 +42,7 @@
 #include <kj/main.h>
 #include <kj/io.h>
 #include <kj/miniposix.h>
+#include <kj/time.h>
 
 namespace capnp {
 namespace compiler {
@@ -767,7 +768,7 @@ bool checkChange(ParsedFile::Reader file1, ParsedFile::Reader file2, ChangeKind 
   }
 }
 
-void doTest() {
+void doTest(kj::TimePoint deadline) {
   auto builder = kj::heap<MallocMessageBuilder>();
 
   {
@@ -834,7 +835,7 @@ void doTest() {
 
   uint nextOrdinal = 0;
 
-  for (uint i = 0; i < 96; i++) {
+  for (uint i = 0; i < 96 && kj::systemPreciseMonotonicClock().now() < deadline; i++) {
     uint oldOrdinalCount = nextOrdinal;
 
     auto newBuilder = kj::heap<MallocMessageBuilder>();
@@ -925,7 +926,14 @@ public:
 
     KJ_CONTEXT(seed, "PLEASE REPORT THIS FAILURE AND INCLUDE THE SEED");
 
-    doTest();
+    // Stop starting new iterations halfway through the 30-second timeout, leaving ample time for
+    // an in-progress iteration and sanitizer shutdown.
+    auto deadline = kj::systemPreciseMonotonicClock().now() + 15 * kj::SECONDS;
+    do {
+      // Start over after 96 changes so that one increasingly complex schema does not consume the
+      // whole budget. Each round also checks the deadline between changes.
+      doTest(deadline);
+    } while (kj::systemPreciseMonotonicClock().now() < deadline);
 
     return true;
   }
