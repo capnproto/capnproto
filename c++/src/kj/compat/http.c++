@@ -1857,6 +1857,17 @@ private:
     CHUNK
   };
 
+  void growHeaderBuffer() {
+    auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
+    memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
+
+    // A non-empty leftover is consumed and cleared before we get here. An empty leftover may still
+    // retain headerBuffer's debug pointer counter, but its position is obsolete now that we're
+    // reading the next header.
+    leftover = nullptr;
+    headerBuffer = kj::mv(newBuffer);
+  }
+
   kj::Promise<kj::OneOf<kj::ArrayPtr<char>, HttpHeaders::ProtocolError>> readHeader(
       HeaderType type, size_t bufferStart, size_t bufferEnd) {
     // Reads the HTTP message header or a chunk header (as in transfer-encoding chunked) and
@@ -1910,9 +1921,7 @@ private:
                   .description = "header too large.",
                   .rawContent = nullptr };
             }
-            auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
-            memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
-            headerBuffer = kj::mv(newBuffer);
+            growHeaderBuffer();
           }
         }
 
@@ -1984,9 +1993,7 @@ private:
           if (type == HeaderType::MESSAGE) {
             if (headerBuffer.size() - newEnd < MAX_CHUNK_HEADER_SIZE) {
               // Ugh, there's not enough space for the secondary await buffer. Grow once more.
-              auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
-              memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
-              headerBuffer = kj::mv(newBuffer);
+              growHeaderBuffer();
             }
             messageHeaderEnd = endIndex;
           } else {

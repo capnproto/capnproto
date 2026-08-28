@@ -87,10 +87,12 @@ KJ_TEST("json-rpc multiple calls") {
   initTestMessage(req2.initS());
   auto promise2 = req2.send();
 
-  auto resp1 = promise1.wait(io.waitScope);
-  KJ_EXPECT(resp1.getX() == "foo");
+  promise1.then([](auto resp) {
+    KJ_EXPECT(resp.getX() == "foo");
+  }).exclusiveJoin(client.onError()).exclusiveJoin(server.onError()).wait(io.waitScope);
 
-  auto resp2 = promise2.wait(io.waitScope);
+  promise2.ignoreResult()
+      .exclusiveJoin(client.onError()).exclusiveJoin(server.onError()).wait(io.waitScope);
 
   KJ_EXPECT(callCount == 2);
 }
