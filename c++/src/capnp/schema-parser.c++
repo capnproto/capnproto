@@ -273,7 +273,8 @@ ParsedSchema SchemaParser::parseDiskFile(
 
     KJ_IF_SOME(match, matchedImportDir) {
       baseDir = match.dir;
-      path = path.slice(match.path.size(), path.size()).clone();
+      auto relativePath = path.slice(match.path.size(), path.size()).clone();
+      path = kj::mv(relativePath);
     }
   }
 

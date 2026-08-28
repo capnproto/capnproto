@@ -573,29 +573,34 @@ kj::Promise<MessageReaderAndFds> MessageStream::readMessage(
 
 // =======================================================================================
 
-class BufferedMessageStream::MessageReaderImpl final : public FlatArrayMessageReader {
+class BufferedMessageStream::MessageReaderImpl final : public MessageReader {
 public:
   MessageReaderImpl(BufferedMessageStream& parent, kj::ArrayPtr<const word> data,
                     ReaderOptions options)
-      : FlatArrayMessageReader(data, options), state(&parent) {
+      : MessageReader(options), parent(parent), reader(data, options) {
     KJ_DASSERT(!parent.hasOutstandingShortLivedMessage);
     parent.hasOutstandingShortLivedMessage = true;
   }
-  MessageReaderImpl(kj::Array<word>&& ownBuffer, ReaderOptions options)
-      : FlatArrayMessageReader(ownBuffer, options), state(kj::mv(ownBuffer)) {}
-  MessageReaderImpl(kj::ArrayPtr<word> scratchBuffer, ReaderOptions options)
-      : FlatArrayMessageReader(scratchBuffer, options) {}
+  MessageReaderImpl(kj::Array<word>&& data, ReaderOptions options)
+      : MessageReader(options), data(kj::mv(data)), reader(this->data, options) {}
+  MessageReaderImpl(kj::ArrayPtr<word> data, ReaderOptions options)
+      : MessageReader(options), reader(data, options) {}
 
   ~MessageReaderImpl() noexcept(false) {
-    KJ_IF_SOME(parent, state.tryGet<BufferedMessageStream*>()) {
-      parent->hasOutstandingShortLivedMessage = false;
+    KJ_IF_SOME(p, parent) {
+      p.hasOutstandingShortLivedMessage = false;
     }
   }
 
+  kj::ArrayPtr<const word> getSegment(uint id) override {
+    return reader.getSegment(id);
+  }
+
 private:
-  kj::OneOf<BufferedMessageStream*, kj::Array<word>> state;
-  // * BufferedMessageStream* if this reader aliases the original buffer.
-  // * kj::Array<word> if this reader owns its own backing buffer.
+  kj::Maybe<BufferedMessageStream&> parent;
+  // Backing data is declared before the delegate so that it is destroyed afterwards.
+  kj::Array<word> data;
+  FlatArrayMessageReader reader;
 };
 
 BufferedMessageStream::BufferedMessageStream(
@@ -675,7 +680,7 @@ kj::Promise<kj::Maybe<MessageReaderAndFds>> BufferedMessageStream::tryReadMessag
     // any more data.
 
     auto msgData = kj::arrayPtr(beginData, expected);
-    auto reader = kj::heap<MessageReaderImpl>(*this, msgData, options);
+    kj::Own<MessageReader> reader = kj::heap<MessageReaderImpl>(*this, msgData, options);
     if (!isShortLivedCallback(*reader)) {
       // This message is long-lived, so we must make a copy to get it out of our buffer.
       if (msgData.size() <= scratchSpace.size()) {

@@ -324,10 +324,9 @@ JsonRpc::ContentLengthTransport::ContentLengthTransport(kj::AsyncIoStream& strea
 JsonRpc::ContentLengthTransport::~ContentLengthTransport() noexcept(false) {}
 
 kj::Promise<void> JsonRpc::ContentLengthTransport::send(kj::StringPtr text) {
-  auto headers = kj::str("Content-Length: ", text.size(), "\r\n\r\n");
-  parts[0] = headers.asBytes();
-  parts[1] = text.asBytes();
-  return stream.write(parts).attach(kj::mv(headers));
+  auto header = kj::str("Content-Length: ", text.size(), "\r\n\r\n");
+  co_await stream.write(header.asBytes());
+  co_await stream.write(text.asBytes());
 }
 
 kj::Promise<kj::String> JsonRpc::ContentLengthTransport::receive() {
