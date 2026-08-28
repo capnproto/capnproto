@@ -1025,10 +1025,7 @@ private:
   Array<_::HashBucket> buckets;
 
   void rehash(size_t targetSize) {
-    // Materialize the result before assigning it so that the temporary ArrayPtr passed to
-    // _::rehash() no longer refers to the old buckets when assignment disposes them.
-    auto newBuckets = _::rehash(buckets, targetSize);
-    buckets = kj::mv(newBuckets);
+    buckets = KJ_DROP_TEMPS(_::rehash(buckets, targetSize));
     erasedCount = 0;
   }
 };

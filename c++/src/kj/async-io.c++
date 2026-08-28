@@ -2617,9 +2617,7 @@ uint64_t AsyncTee::Buffer::consume(ArrayPtr<byte>& readBuffer, size_t& minBytes)
     if (amount == bytes.size()) {
       bufferList.pop_front();
     } else {
-      // Finish reading from `bytes` before replacing its backing array.
-      auto remainder = heapArray(bytes.slice(amount, bytes.size()));
-      bytes = kj::mv(remainder);
+      bytes = KJ_DROP_TEMPS(heapArray(bytes.slice(amount, bytes.size())));
       break;
     }
   }

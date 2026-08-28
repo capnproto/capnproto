@@ -386,8 +386,7 @@ TEST(Debug, Catch) {
     KJ_IF_SOME(e, exception) {
       String what = str(e);
       KJ_IF_SOME(eol, what.findFirst('\n')) {
-        auto firstLine = kj::str(what.first(eol));
-        what = kj::mv(firstLine);
+        what = KJ_DROP_TEMPS(kj::str(what.first(eol)));
       }
       kj::StringPtr text = what;
       EXPECT_EQ(kj::str(fileLine(__FILE__, line), ": failed: foo"), text);
@@ -405,8 +404,7 @@ TEST(Debug, Catch) {
     KJ_IF_SOME(e, exception) {
       String what = str(e);
       KJ_IF_SOME(eol, what.findFirst('\n')) {
-        auto firstLine = kj::str(what.first(eol));
-        what = kj::mv(firstLine);
+        what = KJ_DROP_TEMPS(kj::str(what.first(eol)));
       }
       kj::StringPtr text = what;
       EXPECT_EQ(kj::str(fileLine(__FILE__, line), ": failed: foo"), text);
