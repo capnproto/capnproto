@@ -1997,12 +1997,12 @@ void* EventLoop::getLocal(const void* key, kj::Own<void>(*allocate)()) {
     localMap = loop->localMap.emplace(kj::heap<LocalMap>());
   }
 
-  return localMap->map.findOrCreate(key, [&]() -> decltype(localMap->map)::Entry {
+  return (*localMap->map.findOrCreate(key, [&]() -> decltype(localMap->map)::Entry {
     return {
       .key = key,
       .value = allocate()
     };
-  }).get();
+  })).get();
 }
 
 namespace _ {  // private

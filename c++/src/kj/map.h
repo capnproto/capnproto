@@ -23,10 +23,30 @@
 
 #include "table.h"
 #include "hash.h"
+#include "debug.h"
+#include <type_traits>
 
 KJ_BEGIN_HEADER
 
 namespace kj {
+
+namespace _ {  // private
+
+template <typename T, typename = void>
+struct LockHasArrowOperator {
+  static constexpr bool value = false;
+};
+template <typename T>
+struct LockHasArrowOperator<T, VoidSfinae<decltype(instance<T&>().operator->())>> {
+  static constexpr bool value = true;
+};
+
+template <typename T>
+constexpr bool lockShouldForwardArrow() {
+  return std::is_pointer<Decay<T>>::value || LockHasArrowOperator<T>::value;
+}
+
+}  // namespace _ (private)
 
 template <typename Key, typename Value>
 class HashMap {
@@ -39,6 +59,103 @@ class HashMap {
   // right. For example, if the key type is `String`, you can pass `StringPtr` to `find()`.
 
 public:
+  template <typename T>
+  class Lock;
+
+private:
+  class LockState {
+  public:
+    LockState() = default;
+    KJ_DISALLOW_COPY(LockState);
+
+    LockState(LockState&& other) {
+      KJ_REQUIRE(other.lockCount == 0, "cannot move a map while an entry is locked");
+    }
+    LockState& operator=(LockState&& other) {
+      KJ_REQUIRE(lockCount == 0, "cannot replace a map while an entry is locked");
+      KJ_REQUIRE(other.lockCount == 0, "cannot move a map while an entry is locked");
+      return *this;
+    }
+
+    void requireUnlocked() const {
+      KJ_REQUIRE(lockCount == 0, "cannot modify a map while an entry is locked");
+    }
+
+  private:
+    mutable uint lockCount = 0;
+
+    template <typename T>
+    friend class Lock;
+  };
+
+public:
+  template <typename T>
+  class Lock {
+    // A scoped reference to an object stored in this map. The map rejects operations which could
+    // invalidate the reference until the lock is destroyed. Lock does not provide thread
+    // synchronization, and references obtained by dereferencing it must not outlive it.
+
+  public:
+    KJ_DISALLOW_COPY(Lock);
+
+    Lock(): state(nullptr), ptr(nullptr) {}
+    Lock(Lock&& other) noexcept: state(other.state), ptr(other.ptr) {
+      other.state = nullptr;
+      other.ptr = nullptr;
+    }
+    ~Lock() noexcept {
+      if (state != nullptr) --state->lockCount;
+    }
+
+    Lock& operator=(Lock&& other) noexcept {
+      if (state != nullptr) --state->lockCount;
+      state = other.state;
+      ptr = other.ptr;
+      other.state = nullptr;
+      other.ptr = nullptr;
+      return *this;
+    }
+
+    decltype(auto) operator->() {
+      if constexpr (_::lockShouldForwardArrow<T>()) {
+        return *ptr;
+      } else {
+        return ptr;
+      }
+    }
+    decltype(auto) operator->() const {
+      if constexpr (_::lockShouldForwardArrow<T>()) {
+        return static_cast<const T&>(*ptr);
+      } else {
+        return static_cast<const T*>(ptr);
+      }
+    }
+    T& operator*() { return *ptr; }
+    const T& operator*() const { return *ptr; }
+    T* get() { return ptr; }
+    const T* get() const { return ptr; }
+
+  private:
+    Lock(LockState& state, T& value): state(&state), ptr(&value) {
+      ++state.lockCount;
+    }
+
+    T* unlock() {
+      KJ_REQUIRE(state->lockCount == 1,
+          "cannot modify a map while another entry is locked");
+      T* result = ptr;
+      --state->lockCount;
+      state = nullptr;
+      ptr = nullptr;
+      return result;
+    }
+
+    LockState* state;
+    T* ptr;
+
+    friend class HashMap;
+  };
+
   void reserve(size_t size);
   // Pre-allocates space for a map of the given size.
 
@@ -58,7 +175,7 @@ public:
   // Deterministic iteration. If you only ever insert(), iteration order will be insertion order.
   // If you erase(), the erased element is swapped with the last element in the ordering.
 
-  Entry& insert(Key key, Value value);
+  Lock<Entry> insert(Key key, Value value);
   // Inserts a new entry. Throws if the key already exists.
 
   template <typename Collection>
@@ -67,32 +184,33 @@ public:
   // input is an rvalue, the entries will be moved rather than copied.
 
   template <typename UpdateFunc>
-  Entry& upsert(Key key, Value value, UpdateFunc&& update);
-  Entry& upsert(Key key, Value value);
+  Lock<Entry> upsert(Key key, Value value, UpdateFunc&& update);
+  Lock<Entry> upsert(Key key, Value value);
   // Tries to insert a new entry. However, if a duplicate already exists (according to some index),
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
   // If no function is provided, the default is to simply replace the value (but not the key).
 
   template <typename KeyLike>
-  kj::Maybe<Value&> find(KeyLike&& key);
+  kj::Maybe<Lock<Value>> find(KeyLike&& key);
   template <typename KeyLike>
-  kj::Maybe<const Value&> find(KeyLike&& key) const;
-  // Search for a matching key. The input does not have to be of type `Key`; it merely has to
-  // be something that the Hasher accepts.
+  kj::Maybe<Lock<const Value>> find(KeyLike&& key) const;
+  // Search for a matching key. The returned lock prevents the map from being modified while the
+  // result is in use. The input does not have to be of type `Key`; it merely has to be something
+  // that the Hasher accepts.
   //
   // Note that the default hasher for String accepts StringPtr.
 
   template <typename KeyLike, typename Func>
-  Value& findOrCreate(KeyLike&& key, Func&& createEntry);
+  Lock<Value> findOrCreate(KeyLike&& key, Func&& createEntry);
   // Like find() but if the key isn't present then call createEntry() to create the corresponding
   // entry and insert it. createEntry() must return type `Entry`.
 
   template <typename KeyLike>
-  kj::Maybe<Entry&> findEntry(KeyLike&& key);
+  kj::Maybe<Lock<Entry>> findEntry(KeyLike&& key);
   template <typename KeyLike>
-  kj::Maybe<const Entry&> findEntry(KeyLike&& key) const;
+  kj::Maybe<Lock<const Entry>> findEntry(KeyLike&& key) const;
   template <typename KeyLike, typename Func>
-  Entry& findOrCreateEntry(KeyLike&& key, Func&& createEntry);
+  Lock<Entry> findOrCreateEntry(KeyLike&& key, Func&& createEntry);
   // Sometimes you need to see the whole matching Entry, not just the Value.
 
   template <typename KeyLike>
@@ -103,9 +221,11 @@ public:
   //   to iterate and erase multiple entries.
 
   void erase(Entry& entry);
-  // Erase an entry by reference.
+  void erase(Lock<Entry>&& entry);
+  // Erase an entry by reference or by consuming its lock.
 
   Entry release(Entry& row);
+  Entry release(Lock<Entry>&& row);
   // Erase an entry and return its content by move.
 
   template <typename Predicate,
@@ -133,6 +253,7 @@ private:
     }
   };
 
+  mutable LockState lockState;
   kj::Table<Entry, HashIndex<Callbacks>> table;
 };
 
@@ -144,6 +265,103 @@ class TreeMap {
   // which you might want to pass to find() (with `Key` always on the left of the comparison).
 
 public:
+  template <typename T>
+  class Lock;
+
+private:
+  class LockState {
+  public:
+    LockState() = default;
+    KJ_DISALLOW_COPY(LockState);
+
+    LockState(LockState&& other) {
+      KJ_REQUIRE(other.lockCount == 0, "cannot move a map while an entry is locked");
+    }
+    LockState& operator=(LockState&& other) {
+      KJ_REQUIRE(lockCount == 0, "cannot replace a map while an entry is locked");
+      KJ_REQUIRE(other.lockCount == 0, "cannot move a map while an entry is locked");
+      return *this;
+    }
+
+    void requireUnlocked() const {
+      KJ_REQUIRE(lockCount == 0, "cannot modify a map while an entry is locked");
+    }
+
+  private:
+    mutable uint lockCount = 0;
+
+    template <typename T>
+    friend class Lock;
+  };
+
+public:
+  template <typename T>
+  class Lock {
+    // A scoped reference to an object stored in this map. The map rejects operations which could
+    // invalidate the reference until the lock is destroyed. Lock does not provide thread
+    // synchronization, and references obtained by dereferencing it must not outlive it.
+
+  public:
+    KJ_DISALLOW_COPY(Lock);
+
+    Lock(): state(nullptr), ptr(nullptr) {}
+    Lock(Lock&& other) noexcept: state(other.state), ptr(other.ptr) {
+      other.state = nullptr;
+      other.ptr = nullptr;
+    }
+    ~Lock() noexcept {
+      if (state != nullptr) --state->lockCount;
+    }
+
+    Lock& operator=(Lock&& other) noexcept {
+      if (state != nullptr) --state->lockCount;
+      state = other.state;
+      ptr = other.ptr;
+      other.state = nullptr;
+      other.ptr = nullptr;
+      return *this;
+    }
+
+    decltype(auto) operator->() {
+      if constexpr (_::lockShouldForwardArrow<T>()) {
+        return *ptr;
+      } else {
+        return ptr;
+      }
+    }
+    decltype(auto) operator->() const {
+      if constexpr (_::lockShouldForwardArrow<T>()) {
+        return static_cast<const T&>(*ptr);
+      } else {
+        return static_cast<const T*>(ptr);
+      }
+    }
+    T& operator*() { return *ptr; }
+    const T& operator*() const { return *ptr; }
+    T* get() { return ptr; }
+    const T* get() const { return ptr; }
+
+  private:
+    Lock(LockState& state, T& value): state(&state), ptr(&value) {
+      ++state.lockCount;
+    }
+
+    T* unlock() {
+      KJ_REQUIRE(state->lockCount == 1,
+          "cannot modify a map while another entry is locked");
+      T* result = ptr;
+      --state->lockCount;
+      state = nullptr;
+      ptr = nullptr;
+      return result;
+    }
+
+    LockState* state;
+    T* ptr;
+
+    friend class TreeMap;
+  };
+
   void reserve(size_t size);
   // Pre-allocates space for a map of the given size.
 
@@ -162,7 +380,7 @@ public:
   auto end() const;
   // Iteration is in sorted order by key.
 
-  Entry& insert(Key key, Value value);
+  Lock<Entry> insert(Key key, Value value);
   // Inserts a new entry. Throws if the key already exists.
 
   template <typename Collection>
@@ -171,30 +389,31 @@ public:
   // input is an rvalue, the entries will be moved rather than copied.
 
   template <typename UpdateFunc>
-  Entry& upsert(Key key, Value value, UpdateFunc&& update);
-  Entry& upsert(Key key, Value value);
+  Lock<Entry> upsert(Key key, Value value, UpdateFunc&& update);
+  Lock<Entry> upsert(Key key, Value value);
   // Tries to insert a new entry. However, if a duplicate already exists (according to some index),
   // then update(Value& existingValue, Value&& newValue) is called to modify the existing value.
   // If no function is provided, the default is to simply replace the value (but not the key).
 
   template <typename KeyLike>
-  kj::Maybe<Value&> find(KeyLike&& key);
+  kj::Maybe<Lock<Value>> find(KeyLike&& key);
   template <typename KeyLike>
-  kj::Maybe<const Value&> find(KeyLike&& key) const;
-  // Search for a matching key. The input does not have to be of type `Key`; it merely has to
-  // be something that can be compared against `Key`.
+  kj::Maybe<Lock<const Value>> find(KeyLike&& key) const;
+  // Search for a matching key. The returned lock prevents the map from being modified while the
+  // result is in use. The input does not have to be of type `Key`; it merely has to be something
+  // that can be compared against `Key`.
 
   template <typename KeyLike, typename Func>
-  Value& findOrCreate(KeyLike&& key, Func&& createEntry);
+  Lock<Value> findOrCreate(KeyLike&& key, Func&& createEntry);
   // Like find() but if the key isn't present then call createEntry() to create the corresponding
   // entry and insert it. createEntry() must return type `Entry`.
 
   template <typename KeyLike>
-  kj::Maybe<Entry&> findEntry(KeyLike&& key);
+  kj::Maybe<Lock<Entry>> findEntry(KeyLike&& key);
   template <typename KeyLike>
-  kj::Maybe<const Entry&> findEntry(KeyLike&& key) const;
+  kj::Maybe<Lock<const Entry>> findEntry(KeyLike&& key) const;
   template <typename KeyLike, typename Func>
-  Entry& findOrCreateEntry(KeyLike&& key, Func&& createEntry);
+  Lock<Entry> findOrCreateEntry(KeyLike&& key, Func&& createEntry);
   // Sometimes you need to see the whole matching Entry, not just the Value.
 
   template <typename K1, typename K2>
@@ -211,9 +430,11 @@ public:
   //   to iterate and erase multiple entries.
 
   void erase(Entry& entry);
-  // Erase an entry by reference.
+  void erase(Lock<Entry>&& entry);
+  // Erase an entry by reference or by consuming its lock.
 
   Entry release(Entry& row);
+  Entry release(Lock<Entry>&& row);
   // Erase an entry and return its content by move.
 
   template <typename Predicate,
@@ -249,6 +470,7 @@ private:
     }
   };
 
+  mutable LockState lockState;
   kj::Table<Entry, TreeIndex<Callbacks>> table;
 };
 
@@ -306,6 +528,7 @@ public:
 
 template <typename Key, typename Value>
 void HashMap<Key, Value>::reserve(size_t size) {
+  lockState.requireUnlocked();
   table.reserve(size);
 }
 
@@ -319,6 +542,7 @@ size_t HashMap<Key, Value>::capacity() const {
 }
 template <typename Key, typename Value>
 void HashMap<Key, Value>::clear() {
+  lockState.requireUnlocked();
   return table.clear();
 }
 
@@ -340,90 +564,119 @@ const typename HashMap<Key, Value>::Entry* HashMap<Key, Value>::end() const {
 }
 
 template <typename Key, typename Value>
-typename HashMap<Key, Value>::Entry& HashMap<Key, Value>::insert(Key key, Value value) {
-  return table.insert(Entry { kj::mv(key), kj::mv(value) });
+typename HashMap<Key, Value>::template Lock<typename HashMap<Key, Value>::Entry> HashMap<Key, Value>::insert(Key key, Value value) {
+  lockState.requireUnlocked();
+  return Lock<Entry>(lockState, table.insert(Entry { kj::mv(key), kj::mv(value) }));
 }
 
 template <typename Key, typename Value>
 template <typename Collection>
 void HashMap<Key, Value>::insertAll(Collection&& collection) {
+  lockState.requireUnlocked();
   return table.insertAll(kj::fwd<Collection>(collection));
 }
 
 template <typename Key, typename Value>
 template <typename UpdateFunc>
-typename HashMap<Key, Value>::Entry& HashMap<Key, Value>::upsert(
+typename HashMap<Key, Value>::template Lock<typename HashMap<Key, Value>::Entry> HashMap<Key, Value>::upsert(
     Key key, Value value, UpdateFunc&& update) {
-  return table.upsert(Entry { kj::mv(key), kj::mv(value) },
+  lockState.requireUnlocked();
+  auto& result = table.upsert(Entry { kj::mv(key), kj::mv(value) },
       [&](Entry& existingEntry, Entry&& newEntry) {
     update(existingEntry.value, kj::mv(newEntry.value));
   });
+  return Lock<Entry>(lockState, result);
 }
 
 template <typename Key, typename Value>
-typename HashMap<Key, Value>::Entry& HashMap<Key, Value>::upsert(
+typename HashMap<Key, Value>::template Lock<typename HashMap<Key, Value>::Entry> HashMap<Key, Value>::upsert(
     Key key, Value value) {
-  return table.upsert(Entry { kj::mv(key), kj::mv(value) },
+  lockState.requireUnlocked();
+  auto& result = table.upsert(Entry { kj::mv(key), kj::mv(value) },
       [&](Entry& existingEntry, Entry&& newEntry) {
     existingEntry.value = kj::mv(newEntry.value);
   });
+  return Lock<Entry>(lockState, result);
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<Value&> HashMap<Key, Value>::find(KeyLike&& key) {
-  return table.find(key).map([](Entry& e) -> Value& { return e.value; });
+kj::Maybe<typename HashMap<Key, Value>::template Lock<Value>> HashMap<Key, Value>::find(KeyLike&& key) {
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](Entry& e) { return Lock<Value>(lockState, e.value); });
 }
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<const Value&> HashMap<Key, Value>::find(KeyLike&& key) const {
-  return table.find(key).map([](const Entry& e) -> const Value& { return e.value; });
+kj::Maybe<typename HashMap<Key, Value>::template Lock<const Value>> HashMap<Key, Value>::find(KeyLike&& key) const {
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](const Entry& e) { return Lock<const Value>(lockState, e.value); });
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
-Value& HashMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
-  return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
+typename HashMap<Key, Value>::template Lock<Value>
+HashMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
+  lockState.requireUnlocked();
+  auto& result = table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+  return Lock<Value>(lockState, result.value);
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<typename HashMap<Key, Value>::Entry&>
+kj::Maybe<typename HashMap<Key, Value>::template Lock<typename HashMap<Key, Value>::Entry>>
 HashMap<Key, Value>::findEntry(KeyLike&& key) {
-  return table.find(kj::fwd<KeyLike>(key));
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](Entry& e) { return Lock<Entry>(lockState, e); });
 }
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<const typename HashMap<Key, Value>::Entry&>
+kj::Maybe<typename HashMap<Key, Value>::template Lock<const typename HashMap<Key, Value>::Entry>>
 HashMap<Key, Value>::findEntry(KeyLike&& key) const {
-  return table.find(kj::fwd<KeyLike>(key));
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](const Entry& e) { return Lock<const Entry>(lockState, e); });
 }
 template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
-typename HashMap<Key, Value>::Entry&
+typename HashMap<Key, Value>::template Lock<typename HashMap<Key, Value>::Entry>
 HashMap<Key, Value>::findOrCreateEntry(KeyLike&& key, Func&& createEntry) {
-  return table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+  lockState.requireUnlocked();
+  auto& result = table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+  return Lock<Entry>(lockState, result);
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike>
 bool HashMap<Key, Value>::erase(KeyLike&& key) {
-  return table.eraseMatch(key);
+  lockState.requireUnlocked();
+  return table.eraseMatch(kj::fwd<KeyLike>(key));
 }
 
 template <typename Key, typename Value>
 void HashMap<Key, Value>::erase(Entry& entry) {
+  lockState.requireUnlocked();
   table.erase(entry);
+}
+template <typename Key, typename Value>
+void HashMap<Key, Value>::erase(Lock<Entry>&& entry) {
+  KJ_REQUIRE(entry.state == &lockState, "entry lock belongs to a different map");
+  table.erase(*entry.unlock());
 }
 
 template <typename Key, typename Value>
 typename HashMap<Key, Value>::Entry HashMap<Key, Value>::release(Entry& entry) {
+  lockState.requireUnlocked();
   return table.release(entry);
+}
+template <typename Key, typename Value>
+typename HashMap<Key, Value>::Entry HashMap<Key, Value>::release(Lock<Entry>&& entry) {
+  KJ_REQUIRE(entry.state == &lockState, "entry lock belongs to a different map");
+  return table.release(*entry.unlock());
 }
 
 template <typename Key, typename Value>
 template <typename Predicate, typename>
 size_t HashMap<Key, Value>::eraseAll(Predicate&& predicate) {
+  lockState.requireUnlocked();
   return table.eraseAll([&](Entry& entry) {
     return predicate(entry.key, entry.value);
   });
@@ -433,6 +686,7 @@ size_t HashMap<Key, Value>::eraseAll(Predicate&& predicate) {
 
 template <typename Key, typename Value>
 void TreeMap<Key, Value>::reserve(size_t size) {
+  lockState.requireUnlocked();
   table.reserve(size);
 }
 
@@ -446,6 +700,7 @@ size_t TreeMap<Key, Value>::capacity() const {
 }
 template <typename Key, typename Value>
 void TreeMap<Key, Value>::clear() {
+  lockState.requireUnlocked();
   return table.clear();
 }
 
@@ -467,69 +722,84 @@ auto TreeMap<Key, Value>::end() const {
 }
 
 template <typename Key, typename Value>
-typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::insert(Key key, Value value) {
-  return table.insert(Entry { kj::mv(key), kj::mv(value) });
+typename TreeMap<Key, Value>::template Lock<typename TreeMap<Key, Value>::Entry> TreeMap<Key, Value>::insert(Key key, Value value) {
+  lockState.requireUnlocked();
+  return Lock<Entry>(lockState, table.insert(Entry { kj::mv(key), kj::mv(value) }));
 }
 
 template <typename Key, typename Value>
 template <typename Collection>
 void TreeMap<Key, Value>::insertAll(Collection&& collection) {
+  lockState.requireUnlocked();
   return table.insertAll(kj::fwd<Collection>(collection));
 }
 
 template <typename Key, typename Value>
 template <typename UpdateFunc>
-typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::upsert(
+typename TreeMap<Key, Value>::template Lock<typename TreeMap<Key, Value>::Entry> TreeMap<Key, Value>::upsert(
     Key key, Value value, UpdateFunc&& update) {
-  return table.upsert(Entry { kj::mv(key), kj::mv(value) },
+  lockState.requireUnlocked();
+  auto& result = table.upsert(Entry { kj::mv(key), kj::mv(value) },
       [&](Entry& existingEntry, Entry&& newEntry) {
     update(existingEntry.value, kj::mv(newEntry.value));
   });
+  return Lock<Entry>(lockState, result);
 }
 
 template <typename Key, typename Value>
-typename TreeMap<Key, Value>::Entry& TreeMap<Key, Value>::upsert(
+typename TreeMap<Key, Value>::template Lock<typename TreeMap<Key, Value>::Entry> TreeMap<Key, Value>::upsert(
     Key key, Value value) {
-  return table.upsert(Entry { kj::mv(key), kj::mv(value) },
+  lockState.requireUnlocked();
+  auto& result = table.upsert(Entry { kj::mv(key), kj::mv(value) },
       [&](Entry& existingEntry, Entry&& newEntry) {
     existingEntry.value = kj::mv(newEntry.value);
   });
+  return Lock<Entry>(lockState, result);
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<Value&> TreeMap<Key, Value>::find(KeyLike&& key) {
-  return table.find(key).map([](Entry& e) -> Value& { return e.value; });
+kj::Maybe<typename TreeMap<Key, Value>::template Lock<Value>> TreeMap<Key, Value>::find(KeyLike&& key) {
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](Entry& e) { return Lock<Value>(lockState, e.value); });
 }
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<const Value&> TreeMap<Key, Value>::find(KeyLike&& key) const {
-  return table.find(key).map([](const Entry& e) -> const Value& { return e.value; });
+kj::Maybe<typename TreeMap<Key, Value>::template Lock<const Value>> TreeMap<Key, Value>::find(KeyLike&& key) const {
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](const Entry& e) { return Lock<const Value>(lockState, e.value); });
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
-Value& TreeMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
-  return table.findOrCreate(key, kj::fwd<Func>(createEntry)).value;
+typename TreeMap<Key, Value>::template Lock<Value>
+TreeMap<Key, Value>::findOrCreate(KeyLike&& key, Func&& createEntry) {
+  lockState.requireUnlocked();
+  auto& result = table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+  return Lock<Value>(lockState, result.value);
 }
 
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<typename TreeMap<Key, Value>::Entry&>
+kj::Maybe<typename TreeMap<Key, Value>::template Lock<typename TreeMap<Key, Value>::Entry>>
 TreeMap<Key, Value>::findEntry(KeyLike&& key) {
-  return table.find(kj::fwd<KeyLike>(key));
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](Entry& e) { return Lock<Entry>(lockState, e); });
 }
 template <typename Key, typename Value>
 template <typename KeyLike>
-kj::Maybe<const typename TreeMap<Key, Value>::Entry&>
+kj::Maybe<typename TreeMap<Key, Value>::template Lock<const typename TreeMap<Key, Value>::Entry>>
 TreeMap<Key, Value>::findEntry(KeyLike&& key) const {
-  return table.find(kj::fwd<KeyLike>(key));
+  return table.find(kj::fwd<KeyLike>(key)).map(
+      [this](const Entry& e) { return Lock<const Entry>(lockState, e); });
 }
 template <typename Key, typename Value>
 template <typename KeyLike, typename Func>
-typename TreeMap<Key, Value>::Entry&
+typename TreeMap<Key, Value>::template Lock<typename TreeMap<Key, Value>::Entry>
 TreeMap<Key, Value>::findOrCreateEntry(KeyLike&& key, Func&& createEntry) {
-  return table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+  lockState.requireUnlocked();
+  auto& result = table.findOrCreate(kj::fwd<KeyLike>(key), kj::fwd<Func>(createEntry));
+  return Lock<Entry>(lockState, result);
 }
 
 template <typename Key, typename Value>
@@ -546,22 +816,36 @@ auto TreeMap<Key, Value>::range(K1&& k1, K2&& k2) const {
 template <typename Key, typename Value>
 template <typename KeyLike>
 bool TreeMap<Key, Value>::erase(KeyLike&& key) {
-  return table.eraseMatch(key);
+  lockState.requireUnlocked();
+  return table.eraseMatch(kj::fwd<KeyLike>(key));
 }
 
 template <typename Key, typename Value>
 void TreeMap<Key, Value>::erase(Entry& entry) {
+  lockState.requireUnlocked();
   table.erase(entry);
+}
+template <typename Key, typename Value>
+void TreeMap<Key, Value>::erase(Lock<Entry>&& entry) {
+  KJ_REQUIRE(entry.state == &lockState, "entry lock belongs to a different map");
+  table.erase(*entry.unlock());
 }
 
 template <typename Key, typename Value>
 typename TreeMap<Key, Value>::Entry TreeMap<Key, Value>::release(Entry& entry) {
+  lockState.requireUnlocked();
   return table.release(entry);
+}
+template <typename Key, typename Value>
+typename TreeMap<Key, Value>::Entry TreeMap<Key, Value>::release(Lock<Entry>&& entry) {
+  KJ_REQUIRE(entry.state == &lockState, "entry lock belongs to a different map");
+  return table.release(*entry.unlock());
 }
 
 template <typename Key, typename Value>
 template <typename Predicate, typename>
 size_t TreeMap<Key, Value>::eraseAll(Predicate&& predicate) {
+  lockState.requireUnlocked();
   return table.eraseAll([&](Entry& entry) {
     return predicate(entry.key, entry.value);
   });
@@ -570,6 +854,7 @@ size_t TreeMap<Key, Value>::eraseAll(Predicate&& predicate) {
 template <typename Key, typename Value>
 template <typename K1, typename K2>
 size_t TreeMap<Key, Value>::eraseRange(K1&& k1, K2&& k2) {
+  lockState.requireUnlocked();
   return table.eraseRange(kj::fwd<K1>(k1), kj::fwd<K2>(k2));
 }
 
