@@ -98,6 +98,13 @@ cc_capnp_library(
 )
 
 cc_capnp_library(
+    name = "json-bench_capnp",
+    srcs = ["json-bench.capnp"],
+    include_prefix = "capnp/compat",
+    src_prefix = "src",
+)
+
+cc_capnp_library(
     name = "http-over-capnp_capnp",
     srcs = ["http-over-capnp.capnp"],
     include_prefix = "capnp/compat",
@@ -195,5 +202,18 @@ cc_test(
         ":json",
         ":json-test_capnp",
         "//src/capnp:capnp-test",
+    ],
+)
+
+cc_test(
+    name = "json-bench",
+    size = "large",
+    srcs = ["json-bench.c++"],
+    args = ["--benchmark_min_time=0.01s"],
+    tags = ["google_benchmark"],
+    deps = [
+        ":json",
+        ":json-bench_capnp",
+        "@google_benchmark//:benchmark",
     ],
 )
