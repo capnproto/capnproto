@@ -2046,6 +2046,31 @@ KJ_TEST("HttpInputStream bare messages") {
   KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
 }
 
+KJ_TEST("HttpInputStream bare message grows buffer after exactly consumed body") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  kj::HttpHeaderTable table;
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+
+  auto first = kj::str("Content-Length: 6\r\n\r\nfoobar");
+  auto firstWrite = pipe.out->write(first.asBytes());
+  {
+    auto message = input->readMessage().wait(waitScope);
+    KJ_EXPECT(message.body->readAllText().wait(waitScope) == "foobar");
+  }
+  firstWrite.wait(waitScope);
+
+  auto body = kj::strArray(kj::repeat("x"_kj, 5000), "");
+  auto second = kj::str("Content-Length: ", body.size(), "\r\n\r\n", body);
+  auto secondWrite = pipe.out->write(second.asBytes());
+  {
+    auto message = input->readMessage().wait(waitScope);
+    KJ_EXPECT(message.body->readAllText().wait(waitScope) == body);
+  }
+  secondWrite.wait(waitScope);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("WebSocket core protocol") {

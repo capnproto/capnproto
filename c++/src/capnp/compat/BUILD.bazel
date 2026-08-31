@@ -209,7 +209,7 @@ cc_test(
     name = "json-bench",
     size = "large",
     srcs = ["json-bench.c++"],
-    args = ["--benchmark_min_time=0.01s"],
+    args = ["--benchmark_min_time=10x"],
     tags = ["google_benchmark"],
     deps = [
         ":json",

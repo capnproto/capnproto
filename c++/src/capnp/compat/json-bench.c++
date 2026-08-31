@@ -419,8 +419,8 @@ void largeRawDecode(benchmark::State& state, bool repetitive) {
 }
 static void BM_RawDecodeLargeVaried(benchmark::State& s) { largeRawDecode(s, false); }
 static void BM_RawDecodeLargeRepetitive(benchmark::State& s) { largeRawDecode(s, true); }
-BENCHMARK(BM_RawDecodeLargeVaried)->Arg(256)->Arg(4096);
-BENCHMARK(BM_RawDecodeLargeRepetitive)->Arg(256)->Arg(4096);
+BENCHMARK(BM_RawDecodeLargeVaried)->Arg(256);
+BENCHMARK(BM_RawDecodeLargeRepetitive)->Arg(256);
 
 void largeRawEncode(benchmark::State& state, bool repetitive) {
   auto storage = makeLargeRawJson(static_cast<uint>(state.range(0)), repetitive);
@@ -439,8 +439,8 @@ void largeRawEncode(benchmark::State& state, bool repetitive) {
 }
 static void BM_RawEncodeLargeVaried(benchmark::State& s) { largeRawEncode(s, false); }
 static void BM_RawEncodeLargeRepetitive(benchmark::State& s) { largeRawEncode(s, true); }
-BENCHMARK(BM_RawEncodeLargeVaried)->Arg(256)->Arg(4096);
-BENCHMARK(BM_RawEncodeLargeRepetitive)->Arg(256)->Arg(4096);
+BENCHMARK(BM_RawEncodeLargeVaried)->Arg(256);
+BENCHMARK(BM_RawEncodeLargeRepetitive)->Arg(256);
 
 static void BM_RawDecodeLargePlainString(benchmark::State& state) {
   std::string storage = "{\"payload\":\"";
@@ -487,10 +487,10 @@ static void BM_EncodeLargeTypedVaried(benchmark::State& s) { typedDocumentEncode
 static void BM_EncodeLargeTypedRepetitive(benchmark::State& s) { typedDocumentEncode(s, true); }
 static void BM_DecodeLargeTypedVaried(benchmark::State& s) { typedDocumentDecode(s, false); }
 static void BM_DecodeLargeTypedRepetitive(benchmark::State& s) { typedDocumentDecode(s, true); }
-BENCHMARK(BM_EncodeLargeTypedVaried)->Arg(256)->Arg(4096);
-BENCHMARK(BM_EncodeLargeTypedRepetitive)->Arg(256)->Arg(4096);
-BENCHMARK(BM_DecodeLargeTypedVaried)->Arg(256)->Arg(4096);
-BENCHMARK(BM_DecodeLargeTypedRepetitive)->Arg(256)->Arg(4096);
+BENCHMARK(BM_EncodeLargeTypedVaried)->Arg(256);
+BENCHMARK(BM_EncodeLargeTypedRepetitive)->Arg(256);
+BENCHMARK(BM_DecodeLargeTypedVaried)->Arg(256);
+BENCHMARK(BM_DecodeLargeTypedRepetitive)->Arg(256);
 
 }  // namespace
 }  // namespace capnp
