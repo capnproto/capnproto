@@ -44,6 +44,14 @@ KJ_BEGIN_HEADER
 namespace kj {
 namespace _ {  // private
 
+// Use __type_pack_element for TypeByIndex instead of implementing it directly when available. Once
+// we require C++26, we could also do this portably using https://en.cppreference.com/cpp/language/pack_indexing.
+#if __has_builtin(__type_pack_element)
+template <size_t index, typename... T>
+struct TypeByIndex_ {
+  using Type = __type_pack_element<index, T...>;
+};
+#else
 template <size_t index, typename... T>
 struct TypeByIndex_;
 template <typename First, typename... Rest>
@@ -65,6 +73,8 @@ struct TypeByIndex_<index> {
 #pragma GCC diagnostic pop
 #endif
 };
+#endif
+
 template <size_t index, typename... T>
 using TypeByIndex = typename TypeByIndex_<index, T...>::Type;
 // Chose a particular type out of a list of types, by index.

@@ -28,7 +28,7 @@ env:
 
 jobs:
   Linux-musl:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # We depend on both clang and libc++. We use Alpine Linux 3.23 which supports LLVM 21.
     container: alpine:3.23
     steps:
@@ -42,7 +42,7 @@ jobs:
   Linux-gcc:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: install dependencies
         run: eval "$INSTALL_DEPS" && install_deps 20 && sudo apt-get install --no-upgrade --no-install-recommends -y gcc-15
       - name: test
@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [18, 20, 22]
+        clang: [19, 21, 23]
         driver: [bazel-dbg, super-test]
         include:
           - driver: bazel-dbg
@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [22]
+        clang: [23]
     steps:
       - uses: actions/checkout@v7
       - name: install dependencies
@@ -91,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [20]
+        clang: [23]
         driver: [bazel-dbg]
         include:
           - driver: bazel-dbg
@@ -110,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [22]
+        clang: [23]
         config: [asan, ubsan, tsan]
     steps:
       - uses: actions/checkout@v7
@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang: [22]
+        clang: [23]
     steps:
       - uses: actions/checkout@v7
       - name: install dependencies
@@ -134,7 +134,7 @@ jobs:
         run: |
             export CC=clang-${{ matrix.clang }}
             export CLANG_TIDY=clang-tidy-${{ matrix.clang }}
-            cd c++ 
+            cd c++
             bazel build --config=ci //...
             find src/kj src/capnp -name "*.c++" | parallel $CLANG_TIDY --quiet --experimental-custom-checks {}
   MacOS:

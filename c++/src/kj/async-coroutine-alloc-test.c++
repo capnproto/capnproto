@@ -177,7 +177,7 @@ KJ_TEST("Coroutine Frame sizes") {
     DebugCoroutineAllocator allocator;
     auto promise = immediateCoroutine(allocator);
     KJ_EXPECT(allocator.totalAllocCount == 1);
-    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 152);
+    KJ_EXPECT_CORO_SIZE(allocator.totalAllocSize == 160);
   }
 
   {
