@@ -94,7 +94,7 @@ public:
   // Convenience method which interprets a schema::Type to produce a Type object. Implemented in
   // terms of get().
 
-  Schema load(const schema::Node::Reader& reader);
+  Schema load(const schema::Node::Reader& reader, bool replacementExpectedToBeNewer = false);
   // Loads the given schema node.  Validates the node and throws an exception if invalid.  This
   // makes a copy of the schema, so the object passed in can be destroyed after this returns.
   //
@@ -128,6 +128,11 @@ public:
   //
   // Also note that unknown types are not considered invalid.  Instead, the dynamic API returns
   // a DynamicValue with type UNKNOWN for these.
+  //
+  // If `replacementExpectedToBeNewer` is set to `true` then additional checks will be performed:
+  // - The number of struct, interface, and enum members are at least the same as the previously
+  //   loaded schema for each struct, interface, and enum.
+  // - The schema itself is evaluated as being either equivalent to or newer than the original schema.
 
   Schema loadOnce(const schema::Node::Reader& reader) const;
   // Like `load()` but does nothing if a schema with the same ID is already loaded.  In contrast,
