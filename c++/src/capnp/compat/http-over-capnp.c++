@@ -772,7 +772,7 @@ public:
         clientContext(kj::mv(clientContext)) {}
 
   kj::Own<kj::AsyncOutputStream> send(
-      uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
+      uint statusCode, kj::ArrayPtr<const char> statusText, const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_REQUIRE(!responseSent, "already called send() or acceptWebSocket()");
     responseSent = true;
@@ -786,7 +786,7 @@ public:
 
     auto rpcResponse = req.initResponse();
     rpcResponse.setStatusCode(statusCode);
-    rpcResponse.setStatusText(statusText);
+    rpcResponse.initStatusText(statusText.size()).asArray().copyFrom(statusText);
     rpcResponse.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(rpcResponse)));
     bool hasBody = true;
@@ -871,13 +871,14 @@ public:
       capnp::HttpService::ConnectClientRequestContext::Client context) :
       context(context), factory(factory) {}
 
-  void accept(uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers) override {
+  void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+              const kj::HttpHeaders& headers) override {
     KJ_REQUIRE(replyTask == kj::none, "already called accept() or reject()");
 
     auto req = context.startConnectRequest();
     auto rpcResponse = req.initResponse();
     rpcResponse.setStatusCode(statusCode);
-    rpcResponse.setStatusText(statusText);
+    rpcResponse.initStatusText(statusText.size()).asArray().copyFrom(statusText);
     rpcResponse.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(rpcResponse)));
 
@@ -886,7 +887,7 @@ public:
 
   kj::Own<kj::AsyncOutputStream> reject(
       uint statusCode,
-      kj::StringPtr statusText,
+      kj::ArrayPtr<const char> statusText,
       const kj::HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
     KJ_REQUIRE(replyTask == kj::none, "already called accept() or reject()");
@@ -895,7 +896,7 @@ public:
     auto req = context.startErrorRequest();
     auto rpcResponse = req.initResponse();
     rpcResponse.setStatusCode(statusCode);
-    rpcResponse.setStatusText(statusText);
+    rpcResponse.initStatusText(statusText.size()).asArray().copyFrom(statusText);
     rpcResponse.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(rpcResponse)));
 
