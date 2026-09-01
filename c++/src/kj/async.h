@@ -393,7 +393,10 @@ public:
   inline ForkedPromise(decltype(nullptr)) {}
 
   Promise<T> addBranch();
-  // Add a new branch to the fork.  The branch is equivalent to the original promise.
+  // Add a new branch to the fork. The branch is equivalent to the original promise.
+
+  inline Promise<T> clone() { return addBranch(); }
+  // Add a new branch to the fork. The branch is equivalent to the original promise.
 
   bool hasBranches();
   // Returns true if there are any branches that haven't been canceled.
