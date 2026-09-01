@@ -1,0 +1,78 @@
+Language: Cpp
+Standard: c++20
+ColumnLimit: 100
+
+SortIncludes: false
+
+AllowShortBlocksOnASingleLine: Always
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+IndentWidth: 2
+IndentCaseBlocks: false
+IndentCaseLabels: true
+PointerAlignment: Left
+
+# Move public and private in by a half-indentation.  This makes
+# diffs and Github code reviews more readable by letting you
+# see which class the diff snippet is part of.
+AccessModifierOffset: -2
+
+# Really "Attach" but empty braces aren't split.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+Cpp11BracedListStyle: true
+
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+AlwaysBreakAfterReturnType: None
+AlwaysBreakTemplateDeclarations: Yes
+BreakStringLiterals: false
+BinPackArguments: true
+BinPackParameters: BinPack
+BracedInitializerIndentWidth: 2
+BreakInheritanceList: BeforeColon
+ContinuationIndentWidth: 4
+IfMacros:
+  [
+    "KJ_SWITCH_ONEOF",
+    "KJ_CASE_ONEOF",
+    "KJ_IF_MAYBE",
+    "KJ_IF_SOME",
+  ]
+InsertBraces: true
+LambdaBodyIndentation: OuterScope
+Macros:
+  - "KJ_MAP(x,y)=[y](auto x)"
+PenaltyReturnTypeOnItsOwnLine: 1000
+PackConstructorInitializers: CurrentLine
+ReflowComments: false
+SpaceBeforeCtorInitializerColon: false
+SpaceBeforeInheritanceColon: false
+SpaceBeforeParens: ControlStatementsExceptControlMacros
+SpaceBeforeRangeBasedForLoopColon: false
+SpaceBeforeCpp11BracedList: false
+SpacesBeforeTrailingComments: 2
