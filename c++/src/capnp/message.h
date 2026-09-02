@@ -329,7 +329,7 @@ typename kj::ArrayPtr<const word> writeDataStruct(BuilderType builder);
 // Note that you may call `.toBytes()` on the returned value to convert to `ArrayPtr<const byte>`.
 
 template <typename Type>
-static typename Type::Reader defaultValue();
+typename Type::Reader defaultValue();
 // Get a default instance of the given struct or list type.
 //
 // TODO(cleanup):  Find a better home for this function?
@@ -525,7 +525,7 @@ typename kj::ArrayPtr<const word> writeDataStruct(BuilderType builder) {
 }
 
 template <typename Type>
-static typename Type::Reader defaultValue() {
+typename Type::Reader defaultValue() {
   return typename Type::Reader(_::StructReader());
 }
 

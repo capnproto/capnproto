@@ -354,14 +354,14 @@ public:
 };
 
 template <typename T, typename... Params>
-static kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
+kj::Own<T, PromiseDisposer> allocPromise(Params&&... params) {
   // Allocate a PromiseNode without appending it to any existing promise arena. Space for a new
   // arena will be allocated.
   return PromiseDisposer::alloc<T>(kj::fwd<Params>(params)...);
 }
 
 template <typename T>
-static void freePromise(T* ptr) {
+void freePromise(T* ptr) {
   // Free a PromiseNode originally allocated using `allocPromise<T>()`. The implementation of
   // PromiseNode::destroy() must call this for any type that is allocated using allocPromise().
 

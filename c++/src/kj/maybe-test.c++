@@ -1691,11 +1691,8 @@ struct ThrowingNiche {
 
   static bool throwOnConstruct;
   static bool throwOnMovedFromDestroy;  // Throw when destroying moved-from value (value == -1)
-  static int constructCount;
-  static int destroyCount;
 
   explicit ThrowingNiche(int v): value(v) {
-    ++constructCount;
     if (throwOnConstruct && v != 0) {  // Don't throw for none value (v == 0)
       throw std::runtime_error("constructor throw");
     }
@@ -1706,14 +1703,12 @@ struct ThrowingNiche {
     // This means the moved-from object still needs destruction.
     other.value = -1;
     other.throwOnDestroy = false;
-    ++constructCount;
     if (throwOnConstruct && value != 0) {
       throw std::runtime_error("move constructor throw");
     }
   }
 
   ~ThrowingNiche() noexcept(false) {
-    ++destroyCount;
     if (throwOnDestroy) {
       throwOnDestroy = false;
       throw std::runtime_error("destructor throw");
@@ -1731,8 +1726,6 @@ struct ThrowingNiche {
 
 bool ThrowingNiche::throwOnConstruct = false;
 bool ThrowingNiche::throwOnMovedFromDestroy = false;
-int ThrowingNiche::constructCount = 0;
-int ThrowingNiche::destroyCount = 0;
 
 }  // namespace (anonymous)
 
@@ -1752,8 +1745,6 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in emplace")
       "Should be niche-optimized");
 
   ThrowingNiche::throwOnConstruct = false;
-  ThrowingNiche::constructCount = 0;
-  ThrowingNiche::destroyCount = 0;
 
   Maybe<ThrowingNiche> m;
   m.emplace(42);
@@ -1779,8 +1770,6 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in emplace")
 KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in emplace") {
   // Verify that if dtor throws during emplace, the Maybe is left in none state.
   ThrowingNiche::throwOnConstruct = false;
-  ThrowingNiche::constructCount = 0;
-  ThrowingNiche::destroyCount = 0;
 
   Maybe<ThrowingNiche> m;
   m.emplace(42);
@@ -1806,8 +1795,6 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in assignmen
   // guarantee). The assignment operator extracts from `other` first into a temp, so if that
   // extraction throws, `this` is unchanged.
   ThrowingNiche::throwOnConstruct = false;
-  ThrowingNiche::constructCount = 0;
-  ThrowingNiche::destroyCount = 0;
 
   Maybe<ThrowingNiche> m;
   m.emplace(42);
@@ -1840,8 +1827,6 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - constructor throws in assignmen
 KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in assignment") {
   // Verify that if dtor throws during assignment, the Maybe is left in none state.
   ThrowingNiche::throwOnConstruct = false;
-  ThrowingNiche::constructCount = 0;
-  ThrowingNiche::destroyCount = 0;
 
   Maybe<ThrowingNiche> m;
   m.emplace(42);
@@ -1869,8 +1854,6 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in assignment
 KJ_TEST("Maybe<ThrowingNiche> exception safety - destructor throws in assign-to-none") {
   // Verify that if dtor throws when assigning to none, the Maybe is left in none state.
   ThrowingNiche::throwOnConstruct = false;
-  ThrowingNiche::constructCount = 0;
-  ThrowingNiche::destroyCount = 0;
 
   Maybe<ThrowingNiche> m;
   m.emplace(42);
@@ -1906,8 +1889,6 @@ KJ_TEST("Maybe<ThrowingNiche> exception safety - source destructor throws in mov
   // - src may be in an indeterminate state (but shouldn't be double-destroyed)
   ThrowingNiche::throwOnConstruct = false;
   ThrowingNiche::throwOnMovedFromDestroy = false;
-  ThrowingNiche::constructCount = 0;
-  ThrowingNiche::destroyCount = 0;
 
   Maybe<ThrowingNiche> src;
   src.emplace(42);
