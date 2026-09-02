@@ -1972,7 +1972,7 @@ KJ_TEST("disconnection exception retains details") {
   auto& clientConn = KJ_ASSERT_NONNULL(
       context.alice.vatNetwork.getConnectionTo(context.bob.vatNetwork));
   auto originalException = KJ_EXCEPTION(FAILED, "a_disconnection_exception");
-  originalException.setDetail(1, kj::heapArray("foo"_kj.asBytes()));
+  originalException.setDetail(1, kj::heapArray("foo"_kjb));
   clientConn.disconnect(kj::mv(originalException));
 
   // Catch the resulting "disconnected" exception when attempting to send a request.

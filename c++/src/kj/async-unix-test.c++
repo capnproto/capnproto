@@ -1318,7 +1318,7 @@ KJ_TEST("yieldUntilWouldSleep") {
     kj::UnixEventPort::FdObserver observer(port, in, kj::UnixEventPort::FdObserver::OBSERVE_READ);
     auto promise = observer.whenBecomesReadable();
 
-    FdOutputStream(out.get()).write("foo"_kj.asBytes());
+    FdOutputStream(out.get()).write("foo"_kjb);
     KJ_ASSERT(promise.poll(waitScope));
     promise.wait(waitScope);
   }

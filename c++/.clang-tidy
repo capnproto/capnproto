@@ -7,6 +7,7 @@ Checks: >
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
+  custom-string-literal-as-bytes,
   custom-use-rc-arc-deref
 
 
@@ -94,6 +95,19 @@ CustomChecks:
         Message: kj::arrayPtr(&, 1) can be simplified to kj::arrayPtr(item)
         Level: Warning
         
+  - Name: string-literal-as-bytes
+    Query: |
+      match cxxMemberCallExpr(
+        on(userDefinedLiteral(
+          callee(functionDecl(matchesName(".*_kj$")))
+        )),
+        callee(cxxMethodDecl(hasName("asBytes")))
+      ).bind("asBytes")
+    Diagnostic:
+      - BindName: asBytes
+        Message: use the _kjb suffix instead of calling asBytes() on a _kj string literal
+        Level: Warning
+
   - Name: use-rc-arc-deref
     Query: |
       match unaryOperator(
