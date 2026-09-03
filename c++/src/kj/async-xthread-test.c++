@@ -52,6 +52,37 @@ inline void delay() { usleep(10000); }
 namespace kj {
 namespace {
 
+KJ_TEST("Executor::isCurrent() and tryGetCurrentThreadExecutor()") {
+  KJ_XTHREAD_TEST_SETUP_LOOP;
+  const Executor& executor = getCurrentThreadExecutor();
+
+  KJ_EXPECT(executor.isCurrent());
+  KJ_IF_SOME(current, tryGetCurrentThreadExecutor()) {
+    KJ_EXPECT(&current == &executor);
+  } else {
+    KJ_FAIL_EXPECT("expected a current executor");
+  }
+
+  Thread([&]() noexcept {
+    // This thread has no event loop at all.
+    KJ_EXPECT(!executor.isCurrent());
+    KJ_EXPECT(tryGetCurrentThreadExecutor() == kj::none);
+
+    Own<const Executor> otherExecutor;
+    {
+      // A thread running a *different* event loop still isn't `executor`'s.
+      EventLoop otherLoop;
+      WaitScope otherWaitScope(otherLoop);
+      KJ_EXPECT(!executor.isCurrent());
+      KJ_EXPECT(getCurrentThreadExecutor().isCurrent());
+      otherExecutor = getCurrentThreadExecutor().addRef();
+    }
+
+    // An executor whose loop has been destroyed is no longer anyone's current executor.
+    KJ_EXPECT(!otherExecutor->isCurrent());
+  });
+}
+
 KJ_TEST("synchronous simple cross-thread events") {
   MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   Own<PromiseFulfiller<uint>> fulfiller;  // accessed only from the subthread
