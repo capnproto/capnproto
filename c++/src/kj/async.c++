@@ -1244,6 +1244,17 @@ bool Executor::isLive() const {
   return impl->state.lockShared()->loop != kj::none;
 }
 
+bool Executor::isCurrent() const {
+  EventLoop* current = threadLocalEventLoop;
+  if (current == nullptr) return false;
+  KJ_IF_SOME(loop, impl->state.lockShared()->loop) {
+    return &loop == current;
+  } else {
+    // Loop already destroyed; it can't be anyone's current loop.
+    return false;
+  }
+}
+
 void Executor::send(_::XThreadEvent& event, bool sync) const {
   KJ_ASSERT(event.state == _::XThreadEvent::UNUSED);
 
@@ -1328,6 +1339,12 @@ EventLoop& Executor::getLoop() const {
 
 const Executor& getCurrentThreadExecutor() {
   return currentEventLoop().getExecutor();
+}
+
+Maybe<const Executor&> tryGetCurrentThreadExecutor() {
+  EventLoop* loop = threadLocalEventLoop;
+  if (loop == nullptr) return kj::none;
+  return loop->getExecutor();
 }
 
 // =======================================================================================
