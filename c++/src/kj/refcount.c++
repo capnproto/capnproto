@@ -79,7 +79,7 @@ void Refcounted::disposeImpl(void* pointer) const {
 // Atomic (thread-safe) refcounting
 
 AtomicRefcounted::~AtomicRefcounted() noexcept(false) {
-  KJ_ASSERT(kj::atomicLoad(&refcount, kj::AtomicMemoryOrder::ACQUIRE) == 0,
+  KJ_ASSERT(kj::atomicLoad(&refcount, kj::AtomicMemoryOrder::RELAXED) == 0,
       "Refcounted object deleted with non-zero refcount.");
 }
 
