@@ -256,6 +256,17 @@ endif()
 
 # Tests ========================================================================
 
+# TODO(someday): maybe also build/run these tests?:
+#   exception-override-symbolizer-test.c++
+#   filesystem-disk-generic-test.c++
+#   filesystem-disk-old-kernel-test.c++
+#   compat/brotli-test.c++
+#   compat/readiness-io-test.c++
+#   compat/http-socketpair-test.c++
+
+# TODO(someday): add a way to detect when a test file is present but missing from
+# cmake build instructions?
+
 if(BUILD_TESTING)
   add_executable(kj-tests
     common-test.c++
@@ -304,6 +315,7 @@ if(BUILD_TESTING)
       function-test.c++
       filesystem-test.c++
       filesystem-disk-test.c++
+      thread-test.c++
       parse/common-test.c++
       parse/char-test.c++
       compat/url-test.c++

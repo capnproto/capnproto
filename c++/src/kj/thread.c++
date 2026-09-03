@@ -39,6 +39,8 @@ namespace kj {
 Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
   threadHandle = CreateThread(nullptr, 0, &runThread, state, 0, nullptr);
   if (threadHandle == nullptr) {
+    // Free both references, since the destructor won't run after throwing here.
+    state->unref();
     state->unref();
     KJ_FAIL_ASSERT("CreateThread failed.");
   }
@@ -47,6 +49,7 @@ Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
 Thread::~Thread() noexcept(false) {
   if (!detached) {
     KJ_DEFER(state->unref());
+    KJ_DEFER(KJ_ASSERT(CloseHandle(threadHandle)));
 
     KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
 
@@ -59,8 +62,11 @@ Thread::~Thread() noexcept(false) {
 }
 
 void Thread::detach() {
+  KJ_ASSERT(!detached);
   KJ_ASSERT(CloseHandle(threadHandle));
+  threadHandle = nullptr;
   detached = true;
+  state->unref();
 }
 
 kj::Duration Thread::getCpuTime() const {
@@ -86,6 +92,8 @@ Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
   int pthreadResult = pthread_create(reinterpret_cast<pthread_t*>(&threadId),
                                      nullptr, &runThread, state);
   if (pthreadResult != 0) {
+    // Free both references, since the destructor won't run after throwing here.
+    state->unref();
     state->unref();
     KJ_FAIL_SYSCALL("pthread_create", pthreadResult);
   }
@@ -116,6 +124,7 @@ void Thread::sendSignal(int signo) {
 }
 
 void Thread::detach() {
+  KJ_ASSERT(!detached);
   int pthreadResult = pthread_detach(*reinterpret_cast<pthread_t*>(&threadId));
   if (pthreadResult != 0) {
     KJ_FAIL_SYSCALL("pthread_detach", pthreadResult) { break; }
