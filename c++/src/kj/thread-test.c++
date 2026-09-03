@@ -176,5 +176,32 @@ KJ_TEST("Thread::getCpuTime()") {
 }
 #endif  // !__APPLE__
 
+#if _WIN32
+uint getHandleCount() {
+  DWORD count;
+  KJ_WIN32(GetProcessHandleCount(GetCurrentProcess(), &count));
+  return static_cast<int>(count);
+}
+
+KJ_TEST("joining a thread closes its handle") {
+  auto before = getHandleCount();
+  {
+    kj::Thread([]() {});
+  }
+  auto after = getHandleCount();
+  KJ_EXPECT(after == before);
+}
+
+KJ_TEST("detaching a thread closes its handle") {
+  auto before = getHandleCount();
+  {
+    kj::Thread([]() {}).detach();
+  }
+  delay();
+  auto after = getHandleCount();
+  KJ_EXPECT(after == before);
+}
+#endif
+
 }  // namespace
 }  // namespace kj
