@@ -1215,8 +1215,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   auto paf = newPromiseAndCrossThreadFulfiller<Array<SocketAddress>>();
   LookupParams params = { kj::mv(host), kj::mv(service) };
 
-  auto thread = heap<Thread>(
-      [fulfiller=kj::mv(paf.fulfiller),params=kj::mv(params),portHint]() mutable {
+  kj::Thread([fulfiller=kj::mv(paf.fulfiller),params=kj::mv(params),portHint]() mutable {
     // getaddrinfo() can return multiple copies of the same address for several reasons.
     // A major one is that we don't give it a socket type (SOCK_STREAM vs. SOCK_DGRAM), so
     // it may return two copies of the same address, one for each type, unless it explicitly
@@ -1299,7 +1298,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
     } else {
       fulfiller->fulfill(KJ_MAP(addr, result) { return addr; });
     }
-  });
+  }).detach();
 
   return kj::mv(paf.promise);
 }
