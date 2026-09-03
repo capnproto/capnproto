@@ -80,6 +80,9 @@ using ::capnproto_test::capnp::test::TestUnion;
 using ::capnproto_test::capnp::test::TestUnionDefaults;
 using ::capnproto_test::capnp::test::TestNestedTypes;
 using ::capnproto_test::capnp::test::TestUsing;
+using ::capnproto_test::capnp::test::TestUserId;
+using ::capnproto_test::capnp::test::TestUserIdAlias;
+using ::capnproto_test::capnp::test::UInt32List;
 using ::capnproto_test::capnp::test::TestListDefaults;
 using ::capnproto_test::capnp::test::TestInterleavedGroups;
 

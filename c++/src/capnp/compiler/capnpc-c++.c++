@@ -396,6 +396,10 @@ private:
       KJ_IF_SOME(annotatedName, annotationValue(node, NAME_ANNOTATION_ID)) {
         // The node's name has been overridden for C++ by an annotation.
         unqualifiedName = annotatedName.getText();
+      } else if (node.isUsing()) {
+        // Aliases don't carry parent brand info; use parent as its own brand.
+        unqualifiedName = schema.getUnqualifiedName();
+        brand = parent;
       } else {
         // Search among the parent's nested nodes to for this node, in order to determine its name.
         auto parentProto = parent.getProto();
@@ -489,7 +493,24 @@ private:
     return kj::mv(result);
   }
 
-  CppTypeName typeName(Type type, kj::Maybe<InterfaceSchema::Method> method) {
+  CppTypeName typeName(Type type, kj::Maybe<InterfaceSchema::Method> method,
+                       bool resolveAliases = false) {
+    if (!resolveAliases) {
+      KJ_IF_SOME(aliasNode, type.getUsingNode()) {
+        bool typeHasInterfaces =
+            type.which() == schema::Type::INTERFACE ||
+            (type.which() == schema::Type::ANY_POINTER &&
+             type.whichAnyPointerKind() ==
+                 schema::Type::AnyPointer::Unconstrained::CAPABILITY);
+
+        auto result = cppFullName(schemaLoader.get(aliasNode.getId()), method);
+        if (typeHasInterfaces) {
+          result.setHasInterfaces();
+        }
+        return result;
+      }
+    }
+
     switch (type.which()) {
       case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Void");
 
@@ -522,7 +543,7 @@ private:
         CppTypeName result = CppTypeName::makeNamespace("capnp");
         auto params = kj::heapArrayBuilder<CppTypeName>(2);
         auto list = type.asList();
-        params.add(typeName(list.getElementType(), method));
+        params.add(typeName(list.getElementType(), method, resolveAliases));
         params.add(whichKind(list.getElementType()));
         result.addMemberTemplate("List", params.finish());
         return result;
@@ -797,6 +818,7 @@ private:
       case schema::Node::FILE:
       case schema::Node::ENUM:
       case schema::Node::ANNOTATION:
+      case schema::Node::USING:
         break;
 
       case schema::Node::STRUCT:
@@ -3022,6 +3044,35 @@ private:
           kj::strTree(),
 
           kj::mv(constText.def),
+        };
+      }
+
+      case schema::Node::USING: {
+        // Emit the `using X = Y;` declaration. For nested usings the line goes inside the parent
+        // struct's body via outerTypeDecl; for file-level it goes at namespace scope via
+        // outerTypeDef. Since aliases live at the end of nestedNodes (see compiler.c++), they
+        // appear after sibling forward declarations and struct definitions.
+        auto proto = schema.getProto();
+        auto targetType = schemaLoader.getType(
+            proto.getUsing().getTarget(), schemaLoader.getUnbound(proto.getScopeId()));
+        // resolveAliases=true so the emitted `using` declaration names a concrete type,
+        // avoiding any dependency on declaration order between aliases.
+        auto targetText = typeName(targetType, kj::none, /*resolveAliases=*/true);
+        auto decl = kj::strTree(
+            scope.size() == 0 ? "" : "  ",
+            "using ", proto.getDisplayName().slice(proto.getDisplayNamePrefixLength()),
+            " = ", kj::mv(targetText), ";\n");
+        return NodeText {
+          scope.size() == 0 ? kj::strTree() : kj::mv(decl),
+          scope.size() == 0 ? kj::mv(decl) : kj::strTree(),
+          kj::strTree(),
+          kj::strTree(),
+          kj::strTree(),
+
+          kj::strTree(),
+          kj::strTree(),
+
+          kj::strTree(),
         };
       }
 
