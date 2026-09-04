@@ -228,7 +228,11 @@ public:
 
   kj::Maybe<T&> find(Id id) {
     if (isHigh(id)) {
-      return highSlots.find(id);
+      KJ_IF_SOME(entry, highSlots.find(id)) {
+        return *entry;
+      } else {
+        return kj::none;
+      }
     } else if (id < slots.size() && slots[id] != nullptr) {
       return slots[id];
     } else {
@@ -244,8 +248,8 @@ public:
     // ourselves because the caller may have nullified the entry in the meantime.
 
     if (isHigh(id)) {
-      auto& slot = KJ_REQUIRE_NONNULL(highSlots.findEntry(id));
-      return highSlots.release(slot).value;
+      auto slot = KJ_REQUIRE_NONNULL(highSlots.findEntry(id));
+      return highSlots.release(kj::mv(slot)).value;
     } else {
       KJ_DREQUIRE(&entry == &slots[id]);
       T toRelease = kj::mv(slots[id]);
@@ -277,10 +281,11 @@ public:
     T* slot;
     while (!created) {
       id = highCounter++ | highBit<Id>();
-      slot = &highSlots.findOrCreate(id, [&]() {
+      auto entry = highSlots.findOrCreate(id, [&]() {
         created = true;
         return typename kj::HashMap<Id, T>::Entry { id, T() };
       });
+      slot = entry.get();
     }
 
     return *slot;
@@ -328,7 +333,8 @@ public:
       presenceBits |= 1 << id;
       return low[id];
     } else {
-      return high.findOrCreate(id, [&]() -> typename decltype(high)::Entry { return {id, {}}; });
+      return *high.findOrCreate(
+          id, [&]() -> typename decltype(high)::Entry { return {id, {}}; });
     }
   }
 
@@ -341,7 +347,11 @@ public:
         return kj::none;
       }
     } else {
-      return high.find(id);
+      KJ_IF_SOME(entry, high.find(id)) {
+        return *entry;
+      } else {
+        return kj::none;
+      }
     }
   }
 
@@ -355,12 +365,12 @@ public:
       return low[id];
     } else {
       bool created = false;
-      T& result = high.findOrCreate(id, [&]() -> typename decltype(high)::Entry {
+      auto result = high.findOrCreate(id, [&]() -> typename decltype(high)::Entry {
         created = true;
         return {id, {}};
       });
       if (created) {
-        return result;
+        return *result;
       } else {
         return kj::none;
       }
@@ -377,7 +387,7 @@ public:
       return toRelease;
     } else {
       KJ_IF_SOME(entry, high.findEntry(id)) {
-        return high.release(entry).value;
+        return high.release(kj::mv(entry)).value;
       } else {
         return {};
       }
@@ -1859,15 +1869,15 @@ private:
 
     KJ_IF_SOME(exportId, exportsByCap.find(inner)) {
       // We've already seen and exported this capability before.  Just up the refcount.
-      auto& exp = KJ_ASSERT_NONNULL(exports.find(exportId));
+      auto& exp = KJ_ASSERT_NONNULL(exports.find(*exportId));
       ++exp.refcount;
       if (exp.resolveOp == kj::none) {
-        descriptor.setSenderHosted(exportId);
+        descriptor.setSenderHosted(*exportId);
       } else {
-        descriptor.setSenderPromise(exportId);
+        descriptor.setSenderPromise(*exportId);
       }
       return {
-        .exportId = exportId,
+        .exportId = *exportId,
         .described = *inner,
       };
     } else {
@@ -2005,13 +2015,13 @@ private:
           // be able to just reuse the existing export table entry to represent the new promise --
           // unless it already has an entry.  Let's check.
 
-          ExportId replacementExportId = exportsByCap.findOrCreate(
+          auto replacementExportId = exportsByCap.findOrCreate(
               exp.clientHook, [&]() -> decltype(exportsByCap)::Entry {
             // The replacement capability isn't previously exported, so assign it to the existing
             // table entry.
             return {exp.clientHook, exportId};
           });
-          if (replacementExportId == exportId) {
+          if (*replacementExportId == exportId) {
             // The new promise was not already in the table, therefore the existing export table
             // entry has now been repurposed to represent it.  There is no need to send a resolve
             // message at all.  We do, however, have to start resolving the next promise.
@@ -4505,7 +4515,7 @@ private:
       }
 
       ThirdPartyEmbargo& findOrCreateThirdPartyEmbargo(kj::ArrayPtr<const byte> id) {
-        return embargoes.findOrCreate(id, [&]() -> decltype(embargoes)::Entry {
+        return *embargoes.findOrCreate(id, [&]() -> decltype(embargoes)::Entry {
           auto paf = kj::newPromiseAndFulfiller<void>();
           return {
             .key = kj::heapArray<byte>(id),
@@ -4714,7 +4724,7 @@ public:
   }
 
   RpcConnectionState& getConnectionState(kj::Own<VatNetworkBase::Connection>&& connection) {
-    return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
+    return **connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
       VatNetworkBase::Connection* connectionPtr = connection;
       auto newState = kj::refcounted<RpcConnectionState>(
           *this, bootstrapFactory, kj::mv(connection), flowLimit, traceEncoder, *brand);

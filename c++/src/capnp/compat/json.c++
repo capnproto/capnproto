@@ -1289,16 +1289,16 @@ private:
     KJ_ASSERT(output.getSchema() == schema);
 
     KJ_IF_SOME(info, fieldsByName.find(name)) {
-      switch (info.type) {
+      switch (info->type) {
         case FieldNameInfo::NORMAL: {
-          auto field = output.getSchema().getFields()[info.index];
+          auto field = output.getSchema().getFields()[info->index];
           codec.decodeField(field, value, Orphanage::getForMessageContaining(output), output);
           return true;
         }
         case FieldNameInfo::FLATTENED:
-          return KJ_ASSERT_NONNULL(fields[info.index].flattenHandler)
-              .decodeField(codec, name.slice(info.prefixLength), value,
-                  output.get(output.getSchema().getFields()[info.index]).as<DynamicStruct>(),
+          return KJ_ASSERT_NONNULL(fields[info->index].flattenHandler)
+              .decodeField(codec, name.slice(info->prefixLength), value,
+                  output.get(output.getSchema().getFields()[info->index]).as<DynamicStruct>(),
                   unionsSeen);
         case FieldNameInfo::UNION_TAG: {
           KJ_REQUIRE(value.isString(), "Expected string value.");
@@ -1308,7 +1308,7 @@ private:
           KJ_IF_SOME(field, unionTagValues.find(value.getString())) {
             // clear() has the side-effect of activating this member of the union, without
             // allocating any objects.
-            output.clear(field);
+            output.clear(*field);
             unionsSeen.insert(ptr);
           }
           return true;
@@ -1318,7 +1318,7 @@ private:
           if (unionsSeen.contains(ptr)) {
             auto variant = KJ_ASSERT_NONNULL(output.which());
             return KJ_ASSERT_NONNULL(fields[variant.getIndex()].flattenHandler)
-                .decodeField(codec, name.slice(info.prefixLength), value,
+                .decodeField(codec, name.slice(info->prefixLength), value,
                     output.get(variant).as<DynamicStruct>(), unionsSeen);
           } else {
             // We haven't seen the union tag yet, so we can't parse this field yet. Try again later.
@@ -1392,7 +1392,7 @@ public:
     if (input.isNumber()) {
       return DynamicEnum(schema, static_cast<uint16_t>(input.getNumber()));
     } else {
-      uint16_t val = KJ_REQUIRE_NONNULL(nameToValue.find(input.getString()),
+      uint16_t val = *KJ_REQUIRE_NONNULL(nameToValue.find(input.getString()),
           "invalid enum value", input.getString());
       return DynamicEnum(schema.getEnumerants()[val]);
     }
@@ -1444,27 +1444,28 @@ private:
 JsonCodec::AnnotatedHandler& JsonCodec::loadAnnotatedHandler(
       StructSchema schema, kj::Maybe<json::DiscriminatorOptions::Reader> discriminator,
       kj::Maybe<kj::StringPtr> unionDeclName, kj::Vector<Schema>& dependencies) {
-  auto& entry = impl->annotatedHandlers.upsert(schema, kj::none,
-      [&](kj::Maybe<kj::Own<AnnotatedHandler>>& existing, auto dummy) {
-    KJ_ASSERT(existing != kj::none,
-        "cyclic JSON flattening detected", schema.getProto().getDisplayName());
-  });
+  {
+    auto entry = impl->annotatedHandlers.upsert(schema, kj::none,
+        [&](kj::Maybe<kj::Own<AnnotatedHandler>>& existing, auto dummy) {
+      KJ_ASSERT(existing != kj::none,
+          "cyclic JSON flattening detected", schema.getProto().getDisplayName());
+    });
 
-  KJ_IF_SOME(v, entry.value) {
-    // Already exists.
-    return *v;
-  } else {
-    // Not seen before.
-    auto newHandler = kj::heap<AnnotatedHandler>(
-          *this, schema, discriminator, unionDeclName, dependencies);
-    auto& result = *newHandler;
+    KJ_IF_SOME(v, entry->value) {
+      // Already exists.
+      return *v;
+    }
+  }
 
-    // Map may have changed, so we have to look up again.
-    KJ_ASSERT_NONNULL(impl->annotatedHandlers.find(schema)) = kj::mv(newHandler);
+  // Not seen before.
+  auto newHandler = kj::heap<AnnotatedHandler>(
+        *this, schema, discriminator, unionDeclName, dependencies);
+  auto& result = *newHandler;
 
-    addTypeHandler(schema, result);
-    return result;
-  };
+  *KJ_ASSERT_NONNULL(impl->annotatedHandlers.find(schema)) = kj::mv(newHandler);
+
+  addTypeHandler(schema, result);
+  return result;
 }
 
 void JsonCodec::handleByAnnotation(Schema schema) {

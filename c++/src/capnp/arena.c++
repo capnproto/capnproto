@@ -125,7 +125,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   SegmentMap* segments = nullptr;
   KJ_IF_SOME(s, *lock) {
     KJ_IF_SOME(segment, s.find(id.value)) {
-      return segment;
+      return (*segment).get();
     }
     segments = &s;
   }
