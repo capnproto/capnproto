@@ -1245,12 +1245,17 @@ bool Executor::isLive() const {
 }
 
 bool Executor::isCurrent() const {
+  // Answer from the calling thread's side: are we the current loop's executor? This touches only
+  // the current thread's own EventLoop (whose `executor` member is only ever accessed from that
+  // thread), so no lock is needed -- unlike reading `impl->state.loop`, which the owning thread
+  // nulls at loop destruction while other threads may be asking. If the current loop has never
+  // created an executor, `this` (which exists) cannot be it. A destroyed loop is not anyone's
+  // current loop, so that case is covered too.
   EventLoop* current = threadLocalEventLoop;
   if (current == nullptr) return false;
-  KJ_IF_SOME(loop, impl->state.lockShared()->loop) {
-    return &loop == current;
+  KJ_IF_SOME(e, current->executor) {
+    return e.get() == this;
   } else {
-    // Loop already destroyed; it can't be anyone's current loop.
     return false;
   }
 }
