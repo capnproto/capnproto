@@ -1276,6 +1276,11 @@ public:
   // transitions from empty -> runnable or runnable -> empty.  This is typically useful when
   // integrating with an external event loop; if the loop is currently runnable then you should
   // arrange to call run() on it soon.  The default implementation does nothing.
+  //
+  // `setRunnable(false)` is guaranteed to have been called before `wait()` is invoked (the queue
+  // is empty then), so if an event is armed while `wait()` is in progress -- e.g. by work the
+  // port itself runs while sleeping -- the port will observe `setRunnable(true)` and can use it
+  // to stop sleeping.
 
   virtual void wake() const;
   // Wake up the EventPort's thread from another thread.

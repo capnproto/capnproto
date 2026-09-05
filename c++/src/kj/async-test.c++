@@ -1432,6 +1432,59 @@ TEST(Async, SetRunnable) {
   }
 }
 
+KJ_TEST("setRunnable(false) is reported before EventPort::wait(), and an arm during wait() "
+        "reports setRunnable(true)") {
+  // A port that, while "sleeping", does some work that arms a KJ event -- the shape of an
+  // integration that drives a foreign event loop inside wait(). The loop must tell it the queue
+  // was empty going in (so it may sleep) and must report the arm (so it can stop sleeping),
+  // rather than leaving `lastRunnableState` stale-true from the events that ran earlier in the
+  // same wait loop.
+  class WorkingEventPort: public EventPort {
+  public:
+    bool runnable = false;
+    int callCount = 0;
+    int waitCount = 0;
+    bool runnableAtWait = true;
+    int callCountAfterArm = 0;
+    kj::Maybe<kj::Own<PromiseFulfiller<void>>> fulfiller;
+
+    bool wait() override {
+      ++waitCount;
+      runnableAtWait = runnable;
+      KJ_IF_SOME(f, fulfiller) {
+        // Work done while sleeping that arms a KJ event.
+        f->fulfill();
+        fulfiller = kj::none;
+        callCountAfterArm = callCount;
+        KJ_EXPECT(runnable);
+      }
+      return false;
+    }
+    bool poll() override { return false; }
+    void setRunnable(bool runnable) override {
+      this->runnable = runnable;
+      ++callCount;
+    }
+  };
+
+  WorkingEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+  port.fulfiller = kj::mv(paf.fulfiller);
+
+  // An event runs first (making the loop runnable), then the wait drains the queue and has to
+  // sleep on the pending fulfiller.
+  kj::evalLater([]() {}).then([&]() { return kj::mv(paf.promise); }).wait(waitScope);
+
+  KJ_EXPECT(port.waitCount == 1);
+  KJ_EXPECT(!port.runnableAtWait);
+  // The arm inside wait() produced a fresh setRunnable(true) edge.
+  KJ_EXPECT(port.callCountAfterArm > 0);
+  KJ_EXPECT(!port.runnable);
+}
+
 TEST(Async, Poll) {
   EventLoop loop;
   WaitScope waitScope(loop);

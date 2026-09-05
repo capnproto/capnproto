@@ -1921,6 +1921,14 @@ void EventLoop::wait() {
   KJ_SILENCE_DANGLING_ELSE_END
 
   KJ_IF_SOME(p, port) {
+    // We only get here when the queue is empty, but `lastRunnableState` may still be true: the
+    // wait loop (waitImpl) only reports the runnable -> empty transition once the whole wait is
+    // over. Report it now, so that the port sees the true state while it sleeps and so that an
+    // event armed *during* `p.wait()` -- by work the port runs while sleeping, e.g. an
+    // integrated foreign event loop -- produces a `setRunnable(true)` edge the port can act on
+    // (e.g. stop sleeping). Without this the edge is lost and the arm sits unserviced until
+    // something else wakes the port.
+    setRunnable(false);
     if (p.wait()) {
       // Another thread called wake(). Check for cross-thread events.
       KJ_IF_SOME(e, executor) {
