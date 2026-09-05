@@ -1,0 +1,23 @@
+c++/src/kj/async-test.c++
+  s_2427bf394889ab::t_c48142499a8ae2 1435-1487
+c++/src/kj/async.c++
+  s_2427bf394889ab::t_3841b2d4118c91 1924-1931
+c++/src/kj/async.h
+  s_2427bf394889ab::t_6f8100feb530be 1279-1283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "49cbe3daf42d97166315acdddd9666763a1a3da3",
+  "prompts": {},
+  "sessions": {
+    "s_2427bf394889ab": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28753db2-9693-4557-828c-5c58d097f066",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}
