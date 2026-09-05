@@ -1,0 +1,19 @@
+c++/src/kj/async.c++
+  s_2427bf394889ab::t_7e5da05f0a1c6b 1248-1253,1256-1257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d80ee7f66465287ee96649ae3dc35e4565f31bd6",
+  "prompts": {},
+  "sessions": {
+    "s_2427bf394889ab": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28753db2-9693-4557-828c-5c58d097f066",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}
