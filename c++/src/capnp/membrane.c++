@@ -530,10 +530,10 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     KJ_IF_SOME(f, inner->getFd()) {
       if (policy->allowFdPassthrough()) {
-        return f;
+        return kj::mv(f);
       }
     }
     return kj::none;
