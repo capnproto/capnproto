@@ -1185,14 +1185,14 @@ kj::Promise<void> TestMoreStuffImpl::writeToFd(WriteToFdContext context) {
   auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
 
   promises.add(params.getFdCap1().getFd()
-      .then([](kj::Maybe<int> fd) {
-    kj::FdOutputStream(KJ_ASSERT_NONNULL(fd)).write("foo"_kjb);
+      .then([](kj::Maybe<Capability::FdRef> fd) {
+    kj::FdOutputStream(KJ_ASSERT_NONNULL(fd).get()).write("foo"_kjb);
   }));
   promises.add(params.getFdCap2().getFd()
-      .then([context](kj::Maybe<int> fd) mutable {
+      .then([context](kj::Maybe<Capability::FdRef> fd) mutable {
     context.getResults().setSecondFdPresent(fd != kj::none);
     KJ_IF_SOME(f, fd) {
-      kj::FdOutputStream(f).write("bar"_kjb);
+      kj::FdOutputStream(f.get()).write("bar"_kjb);
     }
   }));
 

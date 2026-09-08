@@ -582,8 +582,8 @@ KJ_TEST("send FD over RPC") {
       promise = req.send();
     }
 
-    int in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
-    KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in3))->readAllText().wait(io.waitScope)
+    auto in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
+    KJ_EXPECT(io.lowLevelProvider->wrapInputFd(in3.get())->readAllText().wait(io.waitScope)
               == "baz");
 
     {
@@ -630,8 +630,8 @@ KJ_TEST("FD per message limit") {
     promise = req.send();
   }
 
-  int in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
-  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(kj::mv(in3))->readAllText().wait(io.waitScope)
+  auto in3 = KJ_ASSERT_NONNULL(promise.getFdCap3().getFd().wait(io.waitScope));
+  KJ_EXPECT(io.lowLevelProvider->wrapInputFd(in3.get())->readAllText().wait(io.waitScope)
             == "baz");
 
   {
@@ -711,7 +711,7 @@ private:
 
 class FdCapHolder final: public test::TestMoreStuff::Server {
   // Bootstrap which hands out a single capability owning a file descriptor. The descriptor is
-  // closed, and `destroyed` fulfilled, when that capability is dropped. getHeld() may only be
+  // closed, and `destroyed` fulfilled, when its last reference is dropped. getHeld() may only be
   // called once.
 
 public:
@@ -725,19 +725,30 @@ public:
 
 private:
   class Held final: public test::TestInterface::Server {
-    // Like `TestFdCap`, but also signals when it is destroyed, which is the moment its
-    // descriptor is closed.
+    // Like `TestFdCap`, but also signals when its descriptor is closed.
+
+    class FdState final: public kj::Refcounted {
+    public:
+      FdState(kj::OwnFd fd, kj::Own<kj::PromiseFulfiller<void>> destroyed)
+          : fd(kj::mv(fd)), destroyed(kj::mv(destroyed)) {}
+      ~FdState() noexcept(false) { destroyed->fulfill(); }
+
+      kj::OwnFd fd;
+
+    private:
+      kj::Own<kj::PromiseFulfiller<void>> destroyed;
+    };
 
   public:
     Held(kj::OwnFd fd, kj::Own<kj::PromiseFulfiller<void>> destroyed)
-        : fd(kj::mv(fd)), destroyed(kj::mv(destroyed)) {}
-    ~Held() noexcept(false) { destroyed->fulfill(); }
+        : state(kj::refcounted<FdState>(kj::mv(fd), kj::mv(destroyed))) {}
 
-    kj::Maybe<int> getFd() override { return fd.get(); }
+    kj::Maybe<FdRef> getFd() override {
+      return FdRef(state->fd.get(), kj::addRef(*state));
+    }
 
   private:
-    kj::OwnFd fd;
-    kj::Own<kj::PromiseFulfiller<void>> destroyed;
+    kj::Own<FdState> state;
   };
 
   kj::OwnFd fd;
@@ -746,10 +757,10 @@ private:
 
 KJ_TEST("attached FD outlives a capability dropped before the message is written") {
   // send() is only required to *queue* a message, so the FD chosen for a CapDescriptor may not be
-  // written for some time. A capability's FD is only guaranteed to stay open as long as the
-  // capability itself, so if the capability is dropped in the meantime, the queued message is left
-  // holding a number that has been closed -- or that the OS has since recycled for an unrelated
-  // file. The RPC system must keep the capability alive until the message has been written.
+  // written for some time. If the FD reference is dropped in the meantime, the queued message is
+  // left holding a number that has been closed -- or that the OS has since recycled for an
+  // unrelated file. The RPC system must keep the reference alive until the message has been
+  // written.
 
   auto io = kj::setupAsyncIo();
   auto pipe = io.provider->newCapabilityPipe();
@@ -784,7 +795,7 @@ KJ_TEST("attached FD outlives a capability dropped before the message is written
   // capability -- while its Return is still sitting in the write queue.
   { auto abandoned = kj::mv(promise); }
 
-  // The capability must survive regardless, since the queued message still refers to its FD.
+  // The FD must survive regardless, since the queued message still refers to it.
   KJ_EXPECT(!destroyed.promise.poll(io.waitScope));
 
   // Let the write proceed, and confirm the peer is being handed the socket we meant to send.
