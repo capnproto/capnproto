@@ -92,7 +92,6 @@ TEST(AsyncIo, SimpleNetwork) {
   EXPECT_EQ("foo", result);
 }
 
-#if !_WIN32  // TODO(someday): Implement NetworkPeerIdentity for Win32.
 TEST(AsyncIo, SimpleNetworkAuthentication) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();
@@ -164,7 +163,6 @@ TEST(AsyncIo, SimpleNetworkAuthentication) {
 
   EXPECT_EQ("foo", result);
 }
-#endif
 
 #if !_WIN32 && !__CYGWIN__  // TODO(someday): Debug why this deadlocks on Cygwin.
 
