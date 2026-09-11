@@ -675,6 +675,9 @@ public:
     return result;
   }
 
+  kj::Own<PeerIdentity> getIdentity(LowLevelAsyncIoProvider& llaiop,
+                                    LowLevelAsyncIoProvider::NetworkFilter& filter) const;
+
   bool allowedBy(LowLevelAsyncIoProvider::NetworkFilter& filter) {
     return filter.shouldAllow(&addr.generic, addrlen);
   }
@@ -851,9 +854,10 @@ bool isTransientAcceptError(DWORD error) {
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFd {
 public:
-  FdConnectionReceiver(Win32EventPort& eventPort, SOCKET fd,
+  FdConnectionReceiver(LowLevelAsyncIoProvider& lowLevel,
+                       Win32EventPort& eventPort, SOCKET fd,
                        LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
-      : OwnedFd(fd, flags), eventPort(eventPort), filter(filter),
+      : OwnedFd(fd, flags), lowLevel(lowLevel), eventPort(eventPort), filter(filter),
         observer(eventPort.observeIo(reinterpret_cast<HANDLE>(fd))),
         address(SocketAddress::getLocalAddress(fd)) {
     // In order to accept asynchronously, we need the AcceptEx() function. Apparently, we have
@@ -869,6 +873,14 @@ public:
   }
 
   Promise<Own<AsyncIoStream>> accept() override {
+    return acceptImpl(false).then([](AuthenticatedStream&& a) { return kj::mv(a.stream); });
+  }
+
+  Promise<AuthenticatedStream> acceptAuthenticated() override {
+    return acceptImpl(true);
+  }
+
+  Promise<AuthenticatedStream> acceptImpl(bool authenticated) {
     SOCKET newFd = address.socket(SOCK_STREAM);
     KJ_ASSERT(newFd != INVALID_SOCKET);
     auto result = heap<AsyncStreamFd>(eventPort, newFd, NEW_FD_FLAGS);
@@ -880,18 +892,18 @@ public:
       DWORD error = WSAGetLastError();
       if (error != ERROR_IO_PENDING) {
         KJ_FAIL_WIN32("AcceptEx()", error) { break; }
-        return Own<AsyncIoStream>(kj::mv(result));  // dummy, won't be used
+        return AuthenticatedStream { kj::mv(result), UnknownPeerIdentity::newInstance() }; // dummy, won't be used
       }
     }
 
     return op->onComplete().then(
-        [this,newFd,stream=kj::mv(result),scratch=kj::mv(scratch)]
+        [this,newFd,stream=kj::mv(result),scratch=kj::mv(scratch),authenticated]
         (Win32EventPort::IoResult ioResult) mutable
-        -> Promise<Own<AsyncIoStream>> {
+        -> Promise<AuthenticatedStream> {
       if (ioResult.errorCode != ERROR_SUCCESS) {
         if (isTransientAcceptError(ioResult.errorCode)) {
           // The queued connection died before we could take it. Move on to the next one.
-          return accept();
+          return acceptImpl(authenticated);
         }
         KJ_FAIL_WIN32("AcceptEx()", ioResult.errorCode) { break; }
       } else {
@@ -907,9 +919,14 @@ public:
       // getpeername() to get the address.
       auto addr = SocketAddress::getPeerAddress(newFd);
       if (addr.allowedBy(filter)) {
-        return Own<AsyncIoStream>(kj::mv(stream));
+        AuthenticatedStream result;
+        result.stream = kj::mv(stream);
+        if (authenticated) {
+          result.peerIdentity = addr.getIdentity(lowLevel, filter);
+        }
+        return kj::mv(result);
       } else {
-        return accept();
+        return acceptImpl(authenticated);
       }
     });
   }
@@ -935,6 +952,7 @@ public:
   }
 
 public:
+  LowLevelAsyncIoProvider& lowLevel;
   Win32EventPort& eventPort;
   LowLevelAsyncIoProvider::NetworkFilter& filter;
   Own<Win32EventPort::IoObserver> observer;
@@ -971,7 +989,7 @@ public:
   }
   Own<ConnectionReceiver> wrapListenSocketFd(
       SOCKET fd, NetworkFilter& filter, uint flags = 0) override {
-    return heap<FdConnectionReceiver>(eventPort, fd, filter, flags);
+    return heap<FdConnectionReceiver>(*this, eventPort, fd, filter, flags);
   }
 
   Timer& getTimer() override { return eventPort.getTimer(); }
@@ -991,7 +1009,14 @@ public:
 
   Promise<Own<AsyncIoStream>> connect() override {
     auto addrsCopy = heapArray(addrs.asPtr());
-    auto promise = connectImpl(lowLevel, filter, addrsCopy);
+    auto promise = connectImpl(lowLevel, filter, addrsCopy, false);
+    return promise.attach(kj::mv(addrsCopy))
+        .then([](AuthenticatedStream&& a) { return kj::mv(a.stream); });
+  }
+
+  Promise<AuthenticatedStream> connectAuthenticated() override {
+    auto addrsCopy = heapArray(addrs.asPtr());
+    auto promise = connectImpl(lowLevel, filter, addrsCopy, true);
     return promise.attach(kj::mv(addrsCopy));
   }
 
@@ -1067,10 +1092,11 @@ private:
   Array<SocketAddress> addrs;
   uint counter = 0;
 
-  static Promise<Own<AsyncIoStream>> connectImpl(
+  static Promise<AuthenticatedStream> connectImpl(
       LowLevelAsyncIoProvider& lowLevel,
       LowLevelAsyncIoProvider::NetworkFilter& filter,
-      ArrayPtr<SocketAddress> addrs) {
+      ArrayPtr<SocketAddress> addrs,
+      bool authenticated) {
     KJ_ASSERT(addrs.size() > 0);
 
     int fd = addrs[0].socket(SOCK_STREAM);
@@ -1082,15 +1108,21 @@ private:
         return lowLevel.wrapConnectingSocketFd(
             fd, addrs[0].getRaw(), addrs[0].getRawSize(), NEW_FD_FLAGS);
       }
-    }).then([](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
+    }).then([&lowLevel,&filter,KJ_CPCAP(addrs),authenticated](Own<AsyncIoStream>&& stream)
+        -> Promise<AuthenticatedStream> {
       // Success, pass along.
-      return kj::mv(stream);
-    }, [&lowLevel,&filter,KJ_CPCAP(addrs)](Exception&& exception) mutable
-        -> Promise<Own<AsyncIoStream>> {
+      AuthenticatedStream result;
+      result.stream = kj::mv(stream);
+      if (authenticated) {
+        result.peerIdentity = addrs[0].getIdentity(lowLevel, filter);
+      }
+      return kj::mv(result);
+    }, [&lowLevel,&filter,KJ_CPCAP(addrs),authenticated](Exception&& exception) mutable
+        -> Promise<AuthenticatedStream> {
       // Connect failed.
       if (addrs.size() > 1) {
         // Try the next address instead.
-        return connectImpl(lowLevel, filter, addrs.slice(1, addrs.size()));
+        return connectImpl(lowLevel, filter, addrs.slice(1, addrs.size()), authenticated);
       } else {
         // No more addresses to try, so propagate the exception.
         return kj::mv(exception);
@@ -1098,6 +1130,22 @@ private:
     });
   }
 };
+
+kj::Own<PeerIdentity> SocketAddress::getIdentity(kj::LowLevelAsyncIoProvider& llaiop,
+                                                 LowLevelAsyncIoProvider::NetworkFilter& filter)
+    const {
+  switch (addr.generic.sa_family) {
+    case AF_INET:
+    case AF_INET6: {
+      auto builder = kj::heapArrayBuilder<SocketAddress>(1);
+      builder.add(*this);
+      return NetworkPeerIdentity::newInstance(
+          kj::heap<NetworkAddressImpl>(llaiop, filter, builder.finish()));
+    }
+    default:
+      return UnknownPeerIdentity::newInstance();
+  }
+}
 
 class SocketNetwork final: public Network {
 public:
