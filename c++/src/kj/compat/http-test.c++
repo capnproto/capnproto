@@ -1994,6 +1994,40 @@ KJ_TEST("HttpInputStream responses") {
   KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
 }
 
+KJ_TEST("HttpInputStream reads 1xx response") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  kj::HttpHeaderTable table;
+
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+
+  // Queue the write without waiting: the pipe blocks writes until a reader is active,
+  // so reads and writes must run concurrently on the event loop.
+  kj::Promise<void> writeTask = pipe.out->write(
+      "HTTP/1.1 103 Early Hints\r\n"
+      "\r\n"
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 0\r\n"
+      "\r\n"_kjb).then([&]() { pipe.out = nullptr; });
+
+  KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+  auto resp = input->readResponse(HttpMethod::GET).wait(waitScope);
+  KJ_EXPECT(resp.statusCode == 103);
+  KJ_EXPECT(resp.statusText == "Early Hints");
+  auto body = resp.body->readAllText().wait(waitScope);
+  KJ_EXPECT(body == "");
+
+  // Verify the stream is correctly positioned for the following final response.
+  KJ_ASSERT(input->awaitNextMessage().wait(waitScope));
+  auto resp2 = input->readResponse(HttpMethod::GET).wait(waitScope);
+  KJ_EXPECT(resp2.statusCode == 200);
+  resp2.body->readAllText().wait(waitScope);
+
+  writeTask.wait(waitScope);
+  KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
+}
+
 KJ_TEST("HttpInputStream bare messages") {
   KJ_HTTP_TEST_SETUP_IO;
 
@@ -8542,6 +8576,294 @@ KJ_TEST("Range header parsing") {
       }
     }
   }
+}
+
+KJ_TEST("HttpServer sendInformational sends 1xx before final response") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+
+  class EarlyHintsService final: public HttpService {
+  public:
+    EarlyHintsService(HttpHeaderTable& table) : table(table) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      HttpHeaders hints(table);
+      hints.addPtrPtr("Link", "</style.css>; rel=preload; as=style");
+      return response.sendInformational(103, "Early Hints", hints)
+          .then([this, &response]() {
+        HttpHeaders responseHeaders(table);
+        auto body = response.send(200, "OK", responseHeaders, uint64_t(0));
+        kj::ArrayPtr<const kj::StringPtr> empty;
+        return writeEach(*body, empty).attach(kj::mv(body));
+      });
+    }
+
+  private:
+    HttpHeaderTable& table;
+  };
+
+  EarlyHintsService service(table);
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  pipe.ends[1]->write("GET / HTTP/1.1\r\n\r\n"_kjb).wait(waitScope);
+  pipe.ends[1]->shutdownWrite();
+
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 103 Early Hints\r\n"
+      "Link: </style.css>; rel=preload; as=style\r\n"
+      "\r\n"
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 0\r\n"
+      "\r\n").wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+KJ_TEST("HttpServer sendInformational multiple 1xx before final response") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+
+  class MultiHintsService final: public HttpService {
+  public:
+    MultiHintsService(HttpHeaderTable& table) : table(table) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      HttpHeaders hints1(table);
+      hints1.addPtrPtr("Link", "</style.css>; rel=preload; as=style");
+      return response.sendInformational(103, "Early Hints", hints1)
+          .then([this, &response]() {
+        HttpHeaders hints2(table);
+        hints2.addPtrPtr("Link", "</script.js>; rel=preload; as=script");
+        return response.sendInformational(103, "Early Hints", hints2);
+      }).then([this, &response]() {
+        HttpHeaders responseHeaders(table);
+        auto body = response.send(200, "OK", responseHeaders, uint64_t(0));
+        kj::ArrayPtr<const kj::StringPtr> empty;
+        return writeEach(*body, empty).attach(kj::mv(body));
+      });
+    }
+
+  private:
+    HttpHeaderTable& table;
+  };
+
+  MultiHintsService service(table);
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  pipe.ends[1]->write("GET / HTTP/1.1\r\n\r\n"_kjb).wait(waitScope);
+  pipe.ends[1]->shutdownWrite();
+
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 103 Early Hints\r\n"
+      "Link: </style.css>; rel=preload; as=style\r\n"
+      "\r\n"
+      "HTTP/1.1 103 Early Hints\r\n"
+      "Link: </script.js>; rel=preload; as=script\r\n"
+      "\r\n"
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 0\r\n"
+      "\r\n").wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+KJ_TEST("HttpServer sendInformational rejects non-1xx status code") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+
+  class BadStatusService final: public HttpService {
+  public:
+    BadStatusService(HttpHeaderTable& table) : table(table) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      HttpHeaders h(table);
+      KJ_EXPECT_THROW_MESSAGE("non-1xx",
+          response.sendInformational(200, "OK", h));
+      auto body = response.send(200, "OK", h, uint64_t(0));
+      kj::ArrayPtr<const kj::StringPtr> empty;
+      return writeEach(*body, empty).attach(kj::mv(body));
+    }
+
+  private:
+    HttpHeaderTable& table;
+  };
+
+  BadStatusService service(table);
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  pipe.ends[1]->write("GET / HTTP/1.1\r\n\r\n"_kjb).wait(waitScope);
+  pipe.ends[1]->shutdownWrite();
+
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 0\r\n"
+      "\r\n").wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+KJ_TEST("HttpServer sendInformational rejects call after send()") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+
+  class AfterSendService final: public HttpService {
+  public:
+    AfterSendService(HttpHeaderTable& table) : table(table) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      HttpHeaders h(table);
+      auto body = response.send(200, "OK", h, uint64_t(0));
+      KJ_EXPECT_THROW_MESSAGE("after calling send()",
+          response.sendInformational(103, "Early Hints", h));
+      kj::ArrayPtr<const kj::StringPtr> empty;
+      return writeEach(*body, empty).attach(kj::mv(body));
+    }
+
+  private:
+    HttpHeaderTable& table;
+  };
+
+  AfterSendService service(table);
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  pipe.ends[1]->write("GET / HTTP/1.1\r\n\r\n"_kjb).wait(waitScope);
+  pipe.ends[1]->shutdownWrite();
+
+  expectRead(*pipe.ends[1],
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 0\r\n"
+      "\r\n").wait(waitScope);
+
+  listenTask.wait(waitScope);
+}
+
+KJ_TEST("HttpClient reads past 103 to get final response") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto serverTask = expectRead(*pipe.ends[1], "GET / HTTP/1.1\r\n\r\n").then([&]() {
+    return pipe.ends[1]->write(
+        "HTTP/1.1 103 Early Hints\r\n"
+        "Link: </style.css>; rel=preload; as=style\r\n"
+        "\r\n"
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 3\r\n"
+        "\r\n"
+        "foo"_kjb);
+  }).then([&]() -> kj::Promise<void> {
+    pipe.ends[1]->shutdownWrite();
+    return kj::NEVER_DONE;
+  });
+
+  HttpHeaderTable table;
+  auto client = newHttpClient(table, *pipe.ends[0]);
+  HttpHeaders headers(table);
+  auto req = client->request(HttpMethod::GET, "/", headers, uint64_t(0));
+  req.body = nullptr;
+
+  auto clientTask = req.response.then([](HttpClient::Response&& response) {
+    KJ_EXPECT(response.statusCode == 200);
+    KJ_EXPECT(response.statusText == "OK");
+    auto promise = response.body->readAllText();
+    return promise.attach(kj::mv(response.body));
+  }).then([](kj::String body) {
+    KJ_EXPECT(body == "foo");
+  });
+
+  serverTask.exclusiveJoin(kj::mv(clientTask)).wait(waitScope);
+}
+
+KJ_TEST("HttpClient does not read past 101") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  // A nonsense request/response pair (proper usage would go `openWebsocket`),
+  // but the client has to be able to handle a server sending anything.
+  auto serverTask = expectRead(*pipe.ends[1], "GET / HTTP/1.1\r\n\r\n").then([&]() {
+    return writeA(*pipe.ends[1], asBytes(WEBSOCKET_RESPONSE_HANDSHAKE));
+  }).then([&]() -> kj::Promise<void> {
+    pipe.ends[1]->shutdownWrite();
+    return kj::NEVER_DONE;
+  });
+
+  HttpHeaderTable table;
+  auto client = newHttpClient(table, *pipe.ends[0]);
+  HttpHeaders headers(table);
+  auto req = client->request(HttpMethod::GET, "/", headers, uint64_t(0));
+  req.body = nullptr;
+
+  auto clientTask = req.response.then([](HttpClient::Response&& response) {
+    KJ_EXPECT(response.statusCode == 101);
+    KJ_EXPECT(response.statusText == "Switching Protocols");
+    auto promise = response.body->readAllText();
+    return promise.attach(kj::mv(response.body));
+  }).then([](kj::String body) {
+    KJ_EXPECT(body == "");
+  });
+
+  serverTask.exclusiveJoin(kj::mv(clientTask)).wait(waitScope);
+}
+
+KJ_TEST("newHttpClient from HttpService: sendInformational ignored by adapter") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  HttpHeaderTable table;
+
+  class InformationalService final: public HttpService {
+  public:
+    InformationalService(HttpHeaderTable& table) : table(table) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      HttpHeaders hints(table);
+      hints.addPtrPtr("Link", "</style.css>; rel=preload; as=style");
+      return response.sendInformational(103, "Early Hints", hints)
+          .then([this, &response]() {
+        HttpHeaders responseHeaders(table);
+        auto body = response.send(200, "OK", responseHeaders, uint64_t(0));
+        kj::ArrayPtr<const kj::StringPtr> empty;
+        return writeEach(*body, empty).attach(kj::mv(body));
+      });
+    }
+
+  private:
+    HttpHeaderTable& table;
+  };
+
+  InformationalService service(table);
+  auto client = newHttpClient(service);
+  HttpHeaders headers(table);
+  auto req = client->request(HttpMethod::GET, "/", headers, uint64_t(0));
+  req.body = nullptr;
+
+  auto resp = req.response.wait(waitScope);
+  KJ_EXPECT(resp.statusCode == 200);
+  KJ_EXPECT(resp.statusText == "OK");
 }
 
 }  // namespace

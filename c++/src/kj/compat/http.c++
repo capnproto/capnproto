@@ -1719,6 +1719,29 @@ public:
     KJ_UNREACHABLE;
   }
 
+  kj::Promise<HttpHeaders::ResponseOrProtocolError> readResponseHeadersSkippingInformational() {
+    // Like readResponseHeaders(), but automatically skips any informational
+    // responses. These are 1xx responses except for 101 Switching Protocols,
+    // which has the unique behavior of terminating HTTP/1 on the connection.
+    // That response needs to be surfaced to callers in order for them to
+    // properly react to this change in connection state.
+    while (true) {
+      auto headersOrError = co_await readResponseHeaders();
+      KJ_SWITCH_ONEOF(headersOrError) {
+        KJ_CASE_ONEOF(response, HttpHeaders::Response) {
+          if (response.statusCode >= 100 && response.statusCode < 200 && response.statusCode != 101) {
+            finishRead();
+            continue;
+          }
+          co_return kj::mv(headersOrError);
+        }
+        KJ_CASE_ONEOF(protocolError, HttpHeaders::ProtocolError) {
+          co_return kj::mv(headersOrError);
+        }
+      }
+    }
+  }
+
   inline const HttpHeaders& getHeaders() const { return headers; }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
@@ -2374,7 +2397,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       return kj::heap<HttpNullEntityReader>(*this, length);
     } else if (isConnectRequest && statusCode >= 200 && statusCode < 300) {
       KJ_FAIL_ASSERT("a CONNECT response with a 2xx status does not have an entity body to get");
-    } else if (statusCode == 204 || statusCode == 304) {
+    } else if ((statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304) {
       // No body.
       return kj::heap<HttpNullEntityReader>(*this, uint64_t(0));
     }
@@ -5857,7 +5880,7 @@ public:
 
     auto id = ++counter;
 
-    auto responsePromise = httpInput.readResponseHeaders().then(
+    auto responsePromise = httpInput.readResponseHeadersSkippingInformational().then(
         [this,method,id](HttpHeaders::ResponseOrProtocolError&& responseOrProtocolError)
             -> HttpClient::Response {
       KJ_SWITCH_ONEOF(responseOrProtocolError) {
@@ -7893,6 +7916,11 @@ kj::Own<HttpService> newHttpService(HttpClient& client) {
 
 // =======================================================================================
 
+kj::Promise<void> HttpService::Response::sendInformational(
+    uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {
+  return kj::READY_NOW;
+}
+
 kj::Promise<void> HttpService::Response::sendError(
     uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) {
   auto stream = send(statusCode, statusText, headers, statusText.size());
@@ -8393,6 +8421,15 @@ private:
         co_return BREAK_LOOP_CONN_ERR;
       }
     }
+  }
+
+  kj::Promise<void> sendInformational(
+      uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+    KJ_REQUIRE(statusCode >= 100 && statusCode < 200, "can't call sendInformational() with a non-1xx statusCode");
+    KJ_REQUIRE(currentMethod != kj::none, "can't call sendInformational() after calling send()");
+    httpOutput.writeHeaders(headers.serializeResponse(statusCode, statusText));
+    httpOutput.finishBody();
+    return httpOutput.flush();
   }
 
   kj::Own<kj::AsyncOutputStream> send(
