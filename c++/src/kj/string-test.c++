@@ -287,6 +287,21 @@ KJ_TEST("StringPtr constructors") {
 #endif
 }
 
+KJ_TEST("moving StringPtr clears the source") {
+  StringPtr source = "foo";
+  StringPtr moved(kj::mv(source));
+
+  KJ_EXPECT(source == nullptr);
+  KJ_EXPECT(source.size() == 0);
+  KJ_EXPECT(moved == "foo");
+
+  StringPtr assigned = "bar";
+  assigned = kj::mv(moved);
+  KJ_EXPECT(moved == nullptr);
+  KJ_EXPECT(moved.size() == 0);
+  KJ_EXPECT(assigned == "foo");
+}
+
 KJ_TEST("string literals with _kj suffix") {
   static constexpr StringPtr FOO = "foo"_kj;
   KJ_EXPECT(FOO == "foo", FOO);

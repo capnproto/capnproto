@@ -2571,10 +2571,10 @@ class SplitIterable;
 namespace _ {  // private
 
 class ArrayPtrCounterTracker {
-  // Registers one live ArrayPtr with an optional AtomicPtrCounter. Copying or moving an ArrayPtr
-  // creates another live ArrayPtr without clearing the source, so both operations increment the
-  // counter. When counters are disabled this class is empty, and [[no_unique_address]] makes it
-  // take no space in ArrayPtr.
+  // Registers one live ArrayPtr with an optional AtomicPtrCounter. Copying an ArrayPtr creates
+  // another live ArrayPtr and increments the counter, while moving transfers the registration and
+  // clears the source. When counters are disabled this class is empty, and [[no_unique_address]]
+  // makes it take no space in ArrayPtr.
 public:
   ArrayPtrCounterTracker() = default;
 #if KJ_ASSERT_ARRAYPTR_COUNTERS
@@ -2583,7 +2583,7 @@ public:
   inline constexpr ArrayPtrCounterTracker(const ArrayPtrCounterTracker& other)
       : counter(const_cast<Maybe<AtomicPtrCounter&>&>(other.counter)) { inc(); }
   inline constexpr ArrayPtrCounterTracker(ArrayPtrCounterTracker&& other)
-      : counter(other.counter) { inc(); }
+      : counter(other.counter) { other.counter = kj::none; }
   inline constexpr ~ArrayPtrCounterTracker() { dec(); }
 
   inline constexpr ArrayPtrCounterTracker& operator=(const ArrayPtrCounterTracker& other) {
@@ -2591,7 +2591,11 @@ public:
     return *this;
   }
   inline constexpr ArrayPtrCounterTracker& operator=(ArrayPtrCounterTracker&& other) {
-    setCounter(other.counter);
+    if (this != &other) {
+      dec();
+      counter = other.counter;
+      other.counter = kj::none;
+    }
     return *this;
   }
 
@@ -2626,6 +2630,29 @@ public:
   inline constexpr ArrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFETIMEBOUND)
       : ptr(begin), size_(end - begin) {}
+  inline constexpr ArrayPtr(PropagateConst<T, ArrayPtr>& other)
+      : ptr(other.ptr), size_(other.size_), counterTracker(other.counterTracker) {}
+  inline constexpr ArrayPtr(ArrayPtr&& other)
+      : ptr(other.ptr), size_(other.size_), counterTracker(kj::mv(other.counterTracker)) {
+    other.ptr = nullptr;
+    other.size_ = 0;
+  }
+  inline constexpr ArrayPtr& operator=(PropagateConst<T, ArrayPtr>& other) {
+    counterTracker = other.counterTracker;
+    ptr = other.ptr;
+    size_ = other.size_;
+    return *this;
+  }
+  inline constexpr ArrayPtr& operator=(ArrayPtr&& other) {
+    if (this != &other) {
+      counterTracker = kj::mv(other.counterTracker);
+      ptr = other.ptr;
+      size_ = other.size_;
+      other.ptr = nullptr;
+      other.size_ = 0;
+    }
+    return *this;
+  }
   ArrayPtr<T>& operator=(Array<T>&&) = delete;
   ArrayPtr<T>& operator=(decltype(nullptr)) {
     counterTracker.clear();

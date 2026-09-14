@@ -59,6 +59,24 @@ static_assert(!Copyable<NoCopy>);
 static_assert(Copyable<NonConstCopy>);
 static_assert(!Copyable<const NonConstCopy>);
 
+KJ_TEST("moving ArrayPtr clears the source") {
+  int values[] = {1, 2, 3};
+  ArrayPtr<int> source = values;
+  ArrayPtr<int> moved(kj::mv(source));
+
+  KJ_EXPECT(source.begin() == nullptr);
+  KJ_EXPECT(source.size() == 0);
+  KJ_EXPECT(moved.begin() == values);
+  KJ_EXPECT(moved.size() == 3);
+
+  ArrayPtr<int> assigned;
+  assigned = kj::mv(moved);
+  KJ_EXPECT(moved.begin() == nullptr);
+  KJ_EXPECT(moved.size() == 0);
+  KJ_EXPECT(assigned.begin() == values);
+  KJ_EXPECT(assigned.size() == 3);
+}
+
 constexpr bool maybeReferenceOperationsAreConstexpr() {
   int first = 1;
   int second = 2;
