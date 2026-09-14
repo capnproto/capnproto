@@ -2949,7 +2949,7 @@ public:
     }
 
     if (url == "/return-error") {
-      response.send(404, "Not Found", responseHeaders, uint64_t(0));
+      response.send(404, "Not Found"_kj, responseHeaders, uint64_t(0));
       return kj::READY_NOW;
     } else if (url == "/websocket") {
       auto ws = response.acceptWebSocket(responseHeaders);
@@ -4831,23 +4831,23 @@ public:
     // In a real error handler, you should redact `protocolError.rawContent`.
     auto message = kj::str("Saw protocol error: ", protocolError.description, "; rawContent = ",
         encodeCEscape(protocolError.rawContent));
-    return sendError(400, "Bad Request", kj::mv(message), response);
+    return sendError(400, "Bad Request"_kj, kj::mv(message), response);
   }
 
   kj::Promise<void> handleApplicationError(
       kj::Exception exception, kj::Maybe<kj::HttpService::Response&> response) override {
-    return sendError(500, "Internal Server Error",
+    return sendError(500, "Internal Server Error"_kj,
         kj::str("Saw application error: ", exception.getDescription()), response);
   }
 
   kj::Promise<void> handleNoResponse(kj::HttpService::Response& response) override {
-    return sendError(500, "Internal Server Error", kj::str("Saw no response."), response);
+    return sendError(500, "Internal Server Error"_kj, kj::str("Saw no response."), response);
   }
 
   static TestErrorHandler instance;
 
 private:
-  kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText, String message,
+  kj::Promise<void> sendError(uint statusCode, kj::ArrayPtr<const char> statusText, String message,
       Maybe<HttpService::Response&> response) {
     KJ_IF_SOME(r, response) {
       HttpHeaderTable headerTable;
@@ -4960,7 +4960,7 @@ public:
     return requestBody.readAllBytes()
         .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
       HttpHeaders headers(table);
-      auto body = response.send(200, "OK", headers, 32);
+      auto body = response.send(200, "OK"_kj, headers, 32);
       auto promise = body->write("foo"_kjb);
       return promise.attach(kj::mv(body)).then([]() -> kj::Promise<void> {
         return KJ_EXCEPTION(FAILED, "failed");
@@ -5009,7 +5009,7 @@ public:
     return requestBody.readAllBytes()
         .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
       HttpHeaders headers(table);
-      auto body = response.send(200, "OK", headers, 32);
+      auto body = response.send(200, "OK"_kj, headers, 32);
       auto promise = body->write("foo"_kjb);
       return promise.attach(kj::mv(body));
     });
@@ -5074,7 +5074,7 @@ public:
         .then([this,&response](kj::Array<byte>&&) -> kj::Promise<void> {
       HttpHeaders headers(table);
       kj::StringPtr text = "Hello, World!";
-      auto body = response.send(200, "OK", headers, text.size());
+      auto body = response.send(200, "OK"_kj, headers, text.size());
 
       auto stream = kj::heap<SimpleInputStream>(text);
       auto promise = stream->pumpTo(*body);
@@ -5220,7 +5220,7 @@ private:
 
     // Send response.
     HttpHeaders responseHeaders(*table);
-    response.send(200, "OK", responseHeaders);
+    response.send(200, "OK"_kj, responseHeaders);
     return requestBody.readAllBytes().ignoreResult();
   }
 
@@ -5549,7 +5549,7 @@ KJ_TEST("HttpServer::listenHttpCleanDrain() factory-created services outlive req
           // This KJ_EXPECT here is the entire point of this test.
           KJ_EXPECT(serviceCount == 1)
           HttpHeaders responseHeaders(table);
-          response.send(200, "OK", responseHeaders);
+          response.send(200, "OK"_kj, responseHeaders);
           return requestBody.readAllBytes().ignoreResult();
         });
       }
@@ -5868,7 +5868,7 @@ public:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
-    auto stream = response.send(200, "OK", HttpHeaders(table), expectedLength);
+    auto stream = response.send(200, "OK"_kj, HttpHeaders(table), expectedLength);
     auto promise = stream->write("foo"_kjb);
     return promise.attach(kj::mv(stream)).then([this]() {
       return kj::mv(paf.promise);
@@ -6168,7 +6168,7 @@ public:
       }
 
       auto body = kj::str(headers.get(HttpHeaderId::HOST).orDefault("null"), ":", url);
-      auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+      auto stream = response.send(200, "OK"_kj, HttpHeaders(headerTable), body.size());
       auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
       promises.add(stream->write(body.asBytes()));
       promises.add(requestBody.readAllBytes().ignoreResult());
@@ -6581,7 +6581,7 @@ KJ_TEST("HttpClient releaseSlotOnHeadersReceived") {
         co_await ws->receive();
       } else {
         auto body = kj::str("body:", url);
-        auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+        auto stream = response.send(200, "OK"_kj, HttpHeaders(headerTable), body.size());
         co_await stream->write(body.asBytes());
         co_await requestBody.readAllBytes();
       }
@@ -6594,7 +6594,7 @@ KJ_TEST("HttpClient releaseSlotOnHeadersReceived") {
                               kj::HttpConnectSettings settings) override {
       KJ_ASSERT(nextGate < gates.size(), "no gate available for incoming CONNECT");
       co_await gates[nextGate++];
-      response.accept(200, "OK", HttpHeaders(headerTable));
+      response.accept(200, "OK"_kj, HttpHeaders(headerTable));
       co_await connection.pumpTo(connection);
     }
   };
@@ -6807,7 +6807,7 @@ KJ_TEST("HttpClient releaseSlotOnHeadersReceived immediate path") {
         co_await ws->receive();
       } else {
         auto body = "ok"_kjb;
-        auto stream = response.send(200, "OK", HttpHeaders(headerTable), body.size());
+        auto stream = response.send(200, "OK"_kj, HttpHeaders(headerTable), body.size());
         co_await stream->write(body);
         co_await requestBody.readAllBytes();
       }
@@ -6818,7 +6818,7 @@ KJ_TEST("HttpClient releaseSlotOnHeadersReceived immediate path") {
                               kj::AsyncIoStream& connection,
                               ConnectResponse& response,
                               kj::HttpConnectSettings settings) override {
-      response.accept(200, "OK", HttpHeaders(headerTable));
+      response.accept(200, "OK"_kj, HttpHeaders(headerTable));
       co_await connection.pumpTo(connection);
     }
   };
@@ -7105,10 +7105,10 @@ public:
           .then([]() -> kj::Promise<void> { return kj::NEVER_DONE; })
           .exclusiveJoin(timer.afterDelay(1 * kj::MILLISECONDS))
           .then([this, &responseSender]() {
-        responseSender.send(408, "Request Timeout", kj::HttpHeaders(headerTable), uint64_t(0));
+        responseSender.send(408, "Request Timeout"_kj, kj::HttpHeaders(headerTable), uint64_t(0));
       });
     } else {
-      responseSender.send(200, "OK", kj::HttpHeaders(headerTable), uint64_t(0));
+      responseSender.send(200, "OK"_kj, kj::HttpHeaders(headerTable), uint64_t(0));
       return kj::READY_NOW;
     }
   }
@@ -7445,7 +7445,7 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
     kj::Promise<void> request(
         HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
         kj::AsyncInputStream& requestBody, Response& responseSender) override {
-      return responseSender.sendError(404, "Not Found", headerTable);
+      return responseSender.sendError(404, "Not Found"_kj, headerTable);
     }
 
   private:
@@ -7595,7 +7595,7 @@ public:
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
     connectCount++;
-    response.accept(statusCodeToSend, "OK", HttpHeaders(headerTable));
+    response.accept(statusCodeToSend, "OK"_kj, HttpHeaders(headerTable));
     return connection.pumpTo(connection).ignoreResult();
   }
 
@@ -7654,7 +7654,7 @@ public:
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
-    response.accept(200, "OK", HttpHeaders(headerTable));
+    response.accept(200, "OK"_kj, HttpHeaders(headerTable));
     // Return an immediately resolved promise and drop the connection
     return kj::READY_NOW;
   }
@@ -7681,7 +7681,7 @@ public:
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
-    response.accept(200, "OK", HttpHeaders(headerTable));
+    response.accept(200, "OK"_kj, HttpHeaders(headerTable));
     auto promise KJ_UNUSED = connection.write("hello"_kjb);
     // Return an immediately resolved promise and drop the io
     return kj::READY_NOW;
@@ -7712,7 +7712,7 @@ private:
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
-    response.accept(200, "OK", HttpHeaders(tunneledService.table));
+    response.accept(200, "OK"_kj, HttpHeaders(tunneledService.table));
     return server.listenHttp(kj::Own<kj::AsyncIoStream>(&connection, kj::NullDisposer::instance));
   }
 
@@ -7752,7 +7752,7 @@ public:
                             kj::AsyncIoStream& connection,
                             ConnectResponse& response,
                             kj::HttpConnectSettings settings) override {
-    response.accept(200, "OK", HttpHeaders(headerTable));
+    response.accept(200, "OK"_kj, HttpHeaders(headerTable));
     connection.shutdownWrite();
     return kj::READY_NOW;
   }
@@ -8283,13 +8283,14 @@ KJ_TEST("CONNECT pipelined via an adapter") {
   struct ResponseImpl final: public HttpService::ConnectResponse {
     bool& acceptCalled;
     ResponseImpl(bool& acceptCalled) : acceptCalled(acceptCalled) {}
-    void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+    void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+                const HttpHeaders& headers) override {
       acceptCalled = true;
     }
 
     kj::Own<kj::AsyncOutputStream> reject(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize) override {
       KJ_UNREACHABLE;
@@ -8351,13 +8352,14 @@ KJ_TEST("CONNECT pipelined via an adapter (reject)") {
     ResponseImpl(bool& rejectCalled)
         : rejectCalled(rejectCalled),
           pipe(kj::newOneWayPipe()) {}
-    void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
+    void accept(uint statusCode, kj::ArrayPtr<const char> statusText,
+                const HttpHeaders& headers) override {
       KJ_UNREACHABLE;
     }
 
     kj::Own<kj::AsyncOutputStream> reject(
         uint statusCode,
-        kj::StringPtr statusText,
+        kj::ArrayPtr<const char> statusText,
         const HttpHeaders& headers,
         kj::Maybe<uint64_t> expectedBodySize) override {
       rejectCalled = true;
