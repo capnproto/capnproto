@@ -98,6 +98,17 @@ KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 #undef DECLARE_METHOD
 };
 
+enum class HttpInformationalStatus {
+  // We intentionally only support a subset of the 1xx informational status code.
+  // Because we don't know what future semantics will be added to future 1xx
+  // codes, we don't support them. They will be ignored when received and we
+  // won't allow sending them. The ones we do support here are known to be
+  // safe to handle at either the kj or application level.
+  CONTINUE = 100,
+  PROCESSING = 102,
+  EARLY_HINTS = 103,
+};
+
 struct HttpConnectMethod {};
 // CONNECT is handled specially and separately from the other HttpMethods.
 
@@ -167,7 +178,8 @@ public:
   MACRO(LOCATION, "Location") \
   MACRO(CONTENT_TYPE, "Content-Type") \
   MACRO(RANGE, "Range") \
-  MACRO(CONTENT_RANGE, "Content-Range")
+  MACRO(CONTENT_RANGE, "Content-Range") \
+  MACRO(EXPECT, "Expect")
   // For convenience, these headers are valid for all HttpHeaderTables. You can refer to them like:
   //
   //     HttpHeaderId::HOST
@@ -386,9 +398,11 @@ public:
   struct Request {
     HttpMethod method;
     kj::StringPtr url;
+    bool isHttp10 = false;
   };
   struct ConnectRequest {
     kj::StringPtr authority;
+    bool isHttp10 = false;
   };
   struct Response {
     uint statusCode;
@@ -832,6 +846,17 @@ class HttpClient {
   //   The `url` specified in a request is a full URL including protocol and hostname.
 
 public:
+  struct InformationalResponse {
+    HttpInformationalStatus statusCode;
+    kj::StringPtr statusText;
+    const HttpHeaders& headers;
+  };
+
+  struct RequestOptions {
+    kj::Maybe<uint64_t> expectedBodySize = kj::none;
+    kj::Maybe<kj::Function<void(InformationalResponse&&)>> informationResponseHandler = kj::none;
+  };
+
   struct Response {
     Response(): statusCode(0), headers(nullptr) {}
     Response(uint statusCode, kj::StringPtr statusText, const HttpHeaders* headers,
@@ -879,6 +904,11 @@ public:
   // `expectedBodySize`, if provided, must be exactly the number of bytes that will be written to
   // the body. This will trigger use of the `Content-Length` connection header. Otherwise,
   // `Transfer-Encoding: chunked` will be used.
+
+  virtual Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+                          RequestOptions options);
+  // Performs a request and synchronously reports informational responses before the final response.
+  // The handler must not retain `statusText` or `headers` without copying them.
 
   struct WebSocketResponse {
     WebSocketResponse(uint statusCode, kj::StringPtr statusText, const HttpHeaders* headers,
@@ -984,6 +1014,7 @@ public:
     //
     // `send()` may only be called a single time. Calling it a second time will cause an exception
     // to be thrown.
+    // `statusCode` must be 200 or greater; use sendInformational() for informational responses.
 
     virtual kj::Own<WebSocket> acceptWebSocket(const HttpHeaders& headers) = 0;
     // If headers.isWebSocket() is true then you can call acceptWebSocket() instead of send().
@@ -997,6 +1028,10 @@ public:
     //
     // `acceptWebSocket()` may only be called a single time. Calling it a second time will cause an
     // exception to be thrown.
+
+    virtual void sendInformational(
+        HttpInformationalStatus statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
+    // Sends a supported informational response before send() or acceptWebSocket().
 
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
                                 const HttpHeaders& headers);
@@ -1284,6 +1319,9 @@ struct HttpServerSettings {
     AUTOMATIC_COMPRESSION, // Will perform compression parameter negotiation if client requests it.
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
+
+  bool autoHandle100Continue = false;
+  // Sends 100 Continue when a request body carrying Expect: 100-continue is first read.
 };
 
 class HttpServerErrorHandler {
@@ -1396,7 +1434,8 @@ public:
     // Nothing, this is an opaque type.
 
   private:
-    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, HttpHeaders);
+    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>,
+        kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, bool, HttpHeaders);
 
     kj::Array<byte> buffer;
     // A buffer containing at least the request's method, URL, and headers, and possibly content
@@ -1408,6 +1447,7 @@ public:
 
     kj::OneOf<HttpMethod, HttpConnectMethod> method;
     kj::StringPtr url;
+    bool isHttp10;
     HttpHeaders headers;
     // Parsed request front matter. `url` and `headers` both store pointers into `buffer`.
 
