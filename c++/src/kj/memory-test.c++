@@ -946,6 +946,37 @@ struct PtrHolder {
   kj::Ptr<Obj> ptr;
 };
 
+struct ObjStaticDisposer {
+  static void dispose(Obj* ptr) { delete ptr; }
+};
+
+KJ_TEST("kj::Own<T> produces kj::Ptr<T>") {
+  auto own = kj::heap<Obj>("owned");
+  kj::Ptr<Obj> ptr = own;
+  KJ_EXPECT(ptr.get() == own.get());
+  KJ_EXPECT(ptr->name == "owned"_kj);
+
+  auto ptr2 = own.asPtr();
+  KJ_EXPECT(ptr2 == ptr);
+
+  auto moved = kj::mv(own);
+  KJ_EXPECT(ptr->name == "owned"_kj);
+  ptr = nullptr;
+  ptr2 = nullptr;
+
+  kj::Own<Obj, ObjStaticDisposer> staticOwn(new Obj("static"));
+  kj::Ptr<Obj> staticPtr = staticOwn;
+  KJ_EXPECT(staticPtr->name == "static"_kj);
+  staticPtr = nullptr;
+}
+
+#if !KJ_ASSERT_PTR_COUNTERS
+static_assert(sizeof(kj::Ptr<Obj>) == sizeof(Obj*));
+static_assert(alignof(kj::Ptr<Obj>) == alignof(Obj*));
+static_assert(__is_trivially_copyable(kj::Ptr<Obj>));
+static_assert(__is_trivially_destructible(kj::Ptr<Obj>));
+#endif
+
 KJ_TEST("kj::Pin<T> basic properties") {
   // kj::Pin<T> guarantees that T won't move or disappear while there are active pointers.
   
@@ -1018,6 +1049,7 @@ struct MultiBaseObj2 : public OtherBase, public Obj2 {
 };
 
 KJ_TEST("kj::Ptr<T> subtyping") {
+  static_assert(kj::canConvert<kj::Own<Obj2>&, kj::Ptr<Obj>>(), "failure");
   static_assert(kj::canConvert<kj::Ptr<Obj2>, kj::Ptr<Obj>>(), "failure");
   static_assert(!kj::canConvert<kj::Ptr<Obj>, kj::Ptr<Obj2>>(), "failure");
   static_assert(!kj::canConvert<kj::Ptr<Obj2>, kj::Ptr<const Obj>>(), "failure");
@@ -1194,29 +1226,16 @@ KJ_TEST("kj::Weak<T> basic properties") {
   KJ_EXPECT(weak2 == nullptr);
 }
 
-KJ_TEST("kj::Ptr<T> and kj::Weak<T> conversion") {
+KJ_TEST("kj::Weak<T> upgrades to kj::Ptr<T>") {
   kj::Pin<Obj> pin("a");
-
-  kj::Ptr<Obj> ptr = pin;
-  kj::Weak<Obj> weak = ptr.asWeak();
+  kj::Weak<Obj> weak = pin.addWeak();
   KJ_EXPECT(weak == pin);
   KJ_EXPECT(weak.assertLive().name == "a"_kj);
-
-  kj::Weak<Obj> weakFromPtr = ptr;
-  KJ_EXPECT(weakFromPtr == pin);
-  KJ_EXPECT(weakFromPtr.assertLive().name == "a"_kj);
-
-  kj::Weak<Obj> weakFromTemp = pin.asPtr();
-  KJ_EXPECT(weakFromTemp == pin);
-  KJ_EXPECT(weakFromTemp.assertLive().name == "a"_kj);
 
   KJ_IF_SOME(strong, weak) {
     static_assert(kj::isSameType<decltype(strong), kj::Ptr<Obj>&>());
     KJ_EXPECT(strong == pin);
     KJ_EXPECT(strong->name == "a"_kj);
-
-    kj::Weak<Obj> weak2 = strong.asWeak();
-    KJ_EXPECT(weak2 == pin);
   } else {
     KJ_FAIL_EXPECT("expected KJ_IF_SOME on Weak<T> to upgrade");
   }
@@ -1229,9 +1248,6 @@ KJ_TEST("kj::Ptr<T> and kj::Weak<T> conversion") {
   KJ_IF_SOME(strong, weak.upgrade()) {
     KJ_EXPECT(strong == pin);
     KJ_EXPECT(strong->name == "a"_kj);
-
-    kj::Weak<Obj> weak2 = strong.asWeak();
-    KJ_EXPECT(weak2 == pin);
   } else {
     KJ_FAIL_EXPECT("expected Weak<T> to upgrade");
   }
@@ -1380,6 +1396,14 @@ KJ_TEST("Maybe<kj::Ptr<T>> converting constructor") {
 }
 
 #if KJ_ASSERT_PTR_COUNTERS
+KJ_TEST("kj::Own<T> destroyed with active ptrs crashes") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto own = kj::heap<Obj>("owned");
+    auto ptr = own.asPtr();
+    own = nullptr;
+  });
+}
+
 KJ_TEST("kj::Pin<T> destroyed with active ptrs crashed") {
   PtrHolder* holder = nullptr;
   

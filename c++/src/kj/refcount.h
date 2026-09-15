@@ -129,6 +129,10 @@ private:
   // released when the last strong reference is dropped (see disposeImpl()).
   // "mutable" because disposeImpl() is const.
 
+  KJ_NO_UNIQUE_ADDRESS mutable _::PtrCounter ptrCounter;
+  _::PtrCounter* createPtrCounter() const override { return &ptrCounter; }
+  void disposePtrCounter(_::PtrCounter*) const override {}
+
   void disposeImpl(void* pointer) const override;
 
   inline _::RcWeakCell* getWeakCell() {
@@ -338,6 +342,18 @@ public:
 
   WeakRc<T> addWeakRef() { return downgrade(); }
   // Synonym for downgrade().
+
+  inline operator Ptr<T>() { return asPtr(); }
+  inline Ptr<T> asPtr() {
+    return Ptr<T>(ptr, ptr == nullptr ? nullptr : &refcounted->ptrCounter);
+  }
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
+  inline operator Ptr<U>() { return asPtr<U>(); }
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
+  inline Ptr<U> asPtr() {
+    return Ptr<U>(ptr, ptr == nullptr ? nullptr : &refcounted->ptrCounter);
+  }
+  // Obtain a non-owning pointer. The referent must outlive the returned Ptr.
 
   Rc& operator=(decltype(nullptr)) {
     dispose();
@@ -666,6 +682,9 @@ protected:
 
 private:
   mutable volatile uint refcount = 0;
+  KJ_NO_UNIQUE_ADDRESS mutable _::PtrCounter ptrCounter;
+  _::PtrCounter* createPtrCounter() const override { return &ptrCounter; }
+  void disposePtrCounter(_::PtrCounter*) const override {}
 
   bool addRefWeakInternal() const;
 
@@ -859,6 +878,18 @@ public:
   kj::Arc<T> clone() const {
     return addRef();
   }
+
+  inline operator Ptr<const T>() const { return asPtr(); }
+  inline Ptr<const T> asPtr() const {
+    return Ptr<const T>(ptr, ptr == nullptr ? nullptr : &refcounted->ptrCounter);
+  }
+  template <typename U, typename = _::EnableIfCanConvertPtr<const T, const U>>
+  inline operator Ptr<const U>() const { return asPtr<U>(); }
+  template <typename U, typename = _::EnableIfCanConvertPtr<const T, const U>>
+  inline Ptr<const U> asPtr() const {
+    return Ptr<const U>(ptr, ptr == nullptr ? nullptr : &refcounted->ptrCounter);
+  }
+  // Obtain a non-owning const pointer. The referent must outlive the returned Ptr.
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object

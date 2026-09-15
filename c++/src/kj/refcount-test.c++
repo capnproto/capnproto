@@ -26,6 +26,7 @@
 #include <kj/compat/gtest.h>
 
 #include <atomic>
+#include <csignal>
 #include <thread>
 
 namespace kj {
@@ -289,6 +290,37 @@ KJ_TEST("Rc") {
   // last reference dropped, SetTrueInDestructor destructor should execute
   EXPECT_TRUE(b);
 }
+
+KJ_TEST("Rc produces non-owning Ptr") {
+  bool destroyed = false;
+  auto ref1 = kj::rc<SetTrueInDestructor>(&destroyed);
+  auto ref2 = ref1.addRef();
+
+  kj::Ptr<SetTrueInDestructor> ptr = ref1;
+  KJ_EXPECT(ptr.get() == ref1.get());
+  ref1 = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(ptr.get() == ref2.get());
+
+  ptr = nullptr;
+  ref2 = nullptr;
+  KJ_EXPECT(destroyed);
+
+  kj::Rc<SetTrueInDestructor> nullRc = nullptr;
+  kj::Ptr<SetTrueInDestructor> nullPtr = nullRc;
+  KJ_EXPECT(nullPtr == nullptr);
+}
+
+#if KJ_ASSERT_PTR_COUNTERS
+KJ_TEST("Rc final release with active Ptr crashes") {
+  bool destroyed = false;
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto ref = kj::rc<SetTrueInDestructor>(&destroyed);
+    auto ptr = ref.asPtr();
+    ref = nullptr;
+  });
+}
+#endif
 
 KJ_TEST("Rc clone") {
   bool b = false;
@@ -590,6 +622,10 @@ KJ_TEST("Rc inheritance") {
   bool b = false;
 
   auto child = kj::rc<Child>(&b);
+
+  kj::Ptr<SetTrueInDestructor> childPtr = child;
+  KJ_EXPECT(childPtr.get() == child.get());
+  childPtr = nullptr;
 
   // up casting works automatically
   kj::Rc<SetTrueInDestructor> parent = child.addRef();
@@ -1209,10 +1245,50 @@ struct AtomicChild: public AtomicSetTrueInDestructor {
   AtomicChild(bool* ptr): AtomicSetTrueInDestructor(ptr) {}
 };
 
+KJ_TEST("Arc produces non-owning const Ptr") {
+  bool destroyed = false;
+  auto ref1 = kj::arc<AtomicSetTrueInDestructor>(&destroyed);
+  auto ref2 = ref1.addRef();
+
+  static_assert(kj::canConvert<kj::Arc<AtomicSetTrueInDestructor>&,
+      kj::Ptr<const AtomicSetTrueInDestructor>>());
+  static_assert(!kj::canConvert<kj::Arc<AtomicSetTrueInDestructor>&,
+      kj::Ptr<AtomicSetTrueInDestructor>>());
+
+  kj::Ptr<const AtomicSetTrueInDestructor> ptr = ref1;
+  KJ_EXPECT(ptr.get() == ref1.get());
+  ref1 = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(ptr.get() == ref2.get());
+
+  ptr = nullptr;
+  ref2 = nullptr;
+  KJ_EXPECT(destroyed);
+
+  kj::Arc<AtomicSetTrueInDestructor> nullArc = nullptr;
+  kj::Ptr<const AtomicSetTrueInDestructor> nullPtr = nullArc;
+  KJ_EXPECT(nullPtr == nullptr);
+}
+
+#if KJ_ASSERT_PTR_COUNTERS
+KJ_TEST("Arc final release with active Ptr crashes") {
+  bool destroyed = false;
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto ref = kj::arc<AtomicSetTrueInDestructor>(&destroyed);
+    auto ptr = ref.asPtr();
+    ref = nullptr;
+  });
+}
+#endif
+
 KJ_TEST("Arc inheritance") {
   bool b = false;
 
   auto child = kj::arc<AtomicChild>(&b);
+
+  kj::Ptr<const AtomicSetTrueInDestructor> childPtr = child;
+  KJ_EXPECT(childPtr.get() == child.get());
+  childPtr = nullptr;
 
   // up casting works automatically
   kj::Arc<AtomicSetTrueInDestructor> parent = child.addRef();
