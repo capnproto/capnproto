@@ -48,8 +48,29 @@ struct Value {
     NUMBER,
     STRING,
     ARRAY,
+    /// Standard JSON values.
     OBJECT,
+    /// Non-standard: A "function call", applying a named function (named by a single identifier)
+    /// to a parameter list. Examples:
+    /// 
+    ///     BinData(0, "Zm9vCg==")
+    ///     ISODate("2015-04-15T08:44:50.218Z")
+    /// 
+    /// Mongo DB users will recognize the above as exactly the syntax Mongo uses to represent BSON
+    /// "binary" and "date" types in text, since JSON has no analog of these. This is basically the
+    /// reason this extension exists. We do NOT recommend using `call` unless you specifically need
+    /// to be compatible with some silly format that uses this syntax.
     CALL,
+    /// Used to indicate that the text should be written directly to the output without
+    /// modifications. Use this if you have an already serialized JSON value and don't want
+    /// to feel the cost of deserializing the value just to serialize it again.
+    /// 
+    /// The parser will never produce a `raw` value -- this is only useful for serialization.
+    /// 
+    /// WARNING: You MUST ensure that the value is valid stand-alone JSOn. It will not be verified.
+    /// Invalid JSON could mjake the whole message unparsable. Worse, a malicious raw value could
+    /// perform JSON injection attacks. Make sure that the value was produced by a trustworthy JSON
+    /// encoder.
     RAW,
   };
   struct Field;
@@ -162,14 +183,35 @@ public:
 
   inline bool isObject() const;
   inline bool hasObject() const;
+  /// Standard JSON values.
   inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Reader getObject() const;
 
   inline bool isCall() const;
   inline bool hasCall() const;
+  /// Non-standard: A "function call", applying a named function (named by a single identifier)
+  /// to a parameter list. Examples:
+  /// 
+  ///     BinData(0, "Zm9vCg==")
+  ///     ISODate("2015-04-15T08:44:50.218Z")
+  /// 
+  /// Mongo DB users will recognize the above as exactly the syntax Mongo uses to represent BSON
+  /// "binary" and "date" types in text, since JSON has no analog of these. This is basically the
+  /// reason this extension exists. We do NOT recommend using `call` unless you specifically need
+  /// to be compatible with some silly format that uses this syntax.
   inline  ::capnp::json::Value::Call::Reader getCall() const;
 
   inline bool isRaw() const;
   inline bool hasRaw() const;
+  /// Used to indicate that the text should be written directly to the output without
+  /// modifications. Use this if you have an already serialized JSON value and don't want
+  /// to feel the cost of deserializing the value just to serialize it again.
+  /// 
+  /// The parser will never produce a `raw` value -- this is only useful for serialization.
+  /// 
+  /// WARNING: You MUST ensure that the value is valid stand-alone JSOn. It will not be verified.
+  /// Invalid JSON could mjake the whole message unparsable. Worse, a malicious raw value could
+  /// perform JSON injection attacks. Make sure that the value was produced by a trustworthy JSON
+  /// encoder.
   inline  ::capnp::Text::Reader getRaw() const;
 
 private:
@@ -232,6 +274,7 @@ public:
   inline bool isObject();
   inline bool hasObject();
   inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Builder getObject();
+  /// Standard JSON values.
   inline void setObject( ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Reader value);
   inline  ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>::Builder initObject(unsigned int size);
   inline void adoptObject(::capnp::Orphan< ::capnp::List< ::capnp::json::Value::Field,  ::capnp::Kind::STRUCT>>&& value);
@@ -240,6 +283,16 @@ public:
   inline bool isCall();
   inline bool hasCall();
   inline  ::capnp::json::Value::Call::Builder getCall();
+  /// Non-standard: A "function call", applying a named function (named by a single identifier)
+  /// to a parameter list. Examples:
+  /// 
+  ///     BinData(0, "Zm9vCg==")
+  ///     ISODate("2015-04-15T08:44:50.218Z")
+  /// 
+  /// Mongo DB users will recognize the above as exactly the syntax Mongo uses to represent BSON
+  /// "binary" and "date" types in text, since JSON has no analog of these. This is basically the
+  /// reason this extension exists. We do NOT recommend using `call` unless you specifically need
+  /// to be compatible with some silly format that uses this syntax.
   inline void setCall( ::capnp::json::Value::Call::Reader value);
   inline  ::capnp::json::Value::Call::Builder initCall();
   inline void adoptCall(::capnp::Orphan< ::capnp::json::Value::Call>&& value);
@@ -248,6 +301,16 @@ public:
   inline bool isRaw();
   inline bool hasRaw();
   inline  ::capnp::Text::Builder getRaw();
+  /// Used to indicate that the text should be written directly to the output without
+  /// modifications. Use this if you have an already serialized JSON value and don't want
+  /// to feel the cost of deserializing the value just to serialize it again.
+  /// 
+  /// The parser will never produce a `raw` value -- this is only useful for serialization.
+  /// 
+  /// WARNING: You MUST ensure that the value is valid stand-alone JSOn. It will not be verified.
+  /// Invalid JSON could mjake the whole message unparsable. Worse, a malicious raw value could
+  /// perform JSON injection attacks. Make sure that the value was produced by a trustworthy JSON
+  /// encoder.
   inline void setRaw( ::capnp::Text::Reader value);
   inline  ::capnp::Text::Builder initRaw(unsigned int size);
   inline void adoptRaw(::capnp::Orphan< ::capnp::Text>&& value);
@@ -480,6 +543,7 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasPrefix() const;
+  /// Optional: Adds the given prefix to flattened field names.
   inline  ::capnp::Text::Reader getPrefix() const;
 
 private:
@@ -512,6 +576,7 @@ public:
 
   inline bool hasPrefix();
   inline  ::capnp::Text::Builder getPrefix();
+  /// Optional: Adds the given prefix to flattened field names.
   inline void setPrefix( ::capnp::Text::Reader value);
   inline  ::capnp::Text::Builder initPrefix(unsigned int size);
   inline void adoptPrefix(::capnp::Orphan< ::capnp::Text>&& value);
@@ -561,9 +626,15 @@ public:
 #endif  // !CAPNP_LITE
 
   inline bool hasName() const;
+  /// The name of the discriminator field. Defaults to matching the name of the union.
   inline  ::capnp::Text::Reader getName() const;
 
   inline bool hasValueName() const;
+  /// If non-null, specifies that the union's value shall have the given field name, rather than the
+  /// value's name. In this case the union's variant can only be determined by looking at the
+  /// discriminant field, not by inspecting which value field is present.
+  /// 
+  /// It is an error to use `valueName` while also declaring some variants as $flatten.
   inline  ::capnp::Text::Reader getValueName() const;
 
 private:
@@ -596,6 +667,7 @@ public:
 
   inline bool hasName();
   inline  ::capnp::Text::Builder getName();
+  /// The name of the discriminator field. Defaults to matching the name of the union.
   inline void setName( ::capnp::Text::Reader value);
   inline  ::capnp::Text::Builder initName(unsigned int size);
   inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
@@ -603,6 +675,11 @@ public:
 
   inline bool hasValueName();
   inline  ::capnp::Text::Builder getValueName();
+  /// If non-null, specifies that the union's value shall have the given field name, rather than the
+  /// value's name. In this case the union's variant can only be determined by looking at the
+  /// discriminant field, not by inspecting which value field is present.
+  /// 
+  /// It is an error to use `valueName` while also declaring some variants as $flatten.
   inline void setValueName( ::capnp::Text::Reader value);
   inline  ::capnp::Text::Builder initValueName(unsigned int size);
   inline void adoptValueName(::capnp::Orphan< ::capnp::Text>&& value);
@@ -1145,12 +1222,12 @@ inline bool FlattenOptions::Builder::hasPrefix() {
 inline  ::capnp::Text::Reader FlattenOptions::Reader::getPrefix() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS),
-        ::capnp::schemas::bp_c4df13257bc2ea61 + 34);
+        ::capnp::schemas::bp_c4df13257bc2ea61 + 35);
 }
 inline  ::capnp::Text::Builder FlattenOptions::Builder::getPrefix() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS),
-        ::capnp::schemas::bp_c4df13257bc2ea61 + 34);
+        ::capnp::schemas::bp_c4df13257bc2ea61 + 35);
 }
 inline void FlattenOptions::Builder::setPrefix( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
