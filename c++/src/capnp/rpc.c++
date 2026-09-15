@@ -403,8 +403,8 @@ private:
 };
 
 class OutgoingFds {
-  // Accumulates the file descriptors to attach to one outgoing message, along with a reference to
-  // the capability each one came from.
+  // Accumulates the file descriptors to attach to one outgoing message, along with a keep-alive
+  // token that each one came from.
   //
   // A capability's descriptor is only guaranteed to stay open as long as the capability itself
   // lives, but `OutgoingRpcMessage::send()` is permitted to merely queue the message. A capability
@@ -417,9 +417,9 @@ public:
     return fds.size();
   }
 
-  void add(int fd, ClientHook& owner) {
-    fds.add(fd);
-    owners.add(owner.addRef());
+  void add(ClientHook::FdWithKeepAlive fdKeepAlive) {
+    fds.add(fdKeepAlive.fd);
+    keepAlives.add(kj::mv(fdKeepAlive.keepAlive));
   }
 
   kj::Array<int> release() {
@@ -429,12 +429,12 @@ public:
       // Nothing to keep alive, and there'd be no array to attach it to in any case.
       return nullptr;
     }
-    return fds.releaseAsArray().attach(owners.releaseAsArray());
+    return fds.releaseAsArray().attach(keepAlives.releaseAsArray());
   }
 
 private:
   kj::Vector<int> fds;
-  kj::Vector<kj::Own<ClientHook>> owners;
+  kj::Vector<kj::Own<void>> keepAlives;
 };
 
 }  // namespace
@@ -1450,6 +1450,15 @@ private:
       }
     }
 
+    kj::Maybe<ClientHook::FdWithKeepAlive> getFdAndKeepAlive() override {
+      if (isResolved) {
+        return cap->getFdAndKeepAlive();
+      } else {
+        // See comment in getFd().
+        return kj::none;
+      }
+    }
+
     void debugInfo(kj::Vector<kj::ConstString>& chain) override {
       chain.add("rpcPromise"_kjc);
       cap->debugInfo(chain);
@@ -1791,9 +1800,9 @@ private:
       }
     }
 
-    KJ_IF_SOME(fd, inner->getFd()) {
+    KJ_IF_SOME(fdKeepAlive, inner->getFdAndKeepAlive()) {
       descriptor.setAttachedFd(fds.size());
-      fds.add(fd, *inner);
+      fds.add(kj::mv(fdKeepAlive));
     }
 
     KJ_IF_SOME(rpcInner, unwrapIfSameNetwork(*inner)) {

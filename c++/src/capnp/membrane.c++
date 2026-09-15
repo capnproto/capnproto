@@ -539,6 +539,15 @@ public:
     return kj::none;
   }
 
+  kj::Maybe<ClientHook::FdWithKeepAlive> getFdAndKeepAlive() override {
+    KJ_IF_SOME(f, inner->getFdAndKeepAlive()) {
+      if (policy->allowFdPassthrough()) {
+        return kj::mv(f);
+      }
+    }
+    return kj::none;
+  }
+
 #if !KJ_NO_RTTI
   void debugInfo(kj::Vector<kj::ConstString>& chain) override {
     auto& policyRef = *policy;  // avoid stupid compiler warning about side effects

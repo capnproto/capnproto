@@ -880,6 +880,17 @@ public:
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
+  struct FdWithKeepAlive {
+    int fd;
+    kj::Own<void> keepAlive;
+  };
+
+  virtual kj::Maybe<FdWithKeepAlive> getFdAndKeepAlive() {
+    return getFd().map([&](int fd) { return FdWithKeepAlive{.fd = fd, .keepAlive = addRef()}; });
+  }
+  // Returns the fd from getFd along with a value that, while alive, keeps the fd from being
+  // closed.
+
   virtual void debugInfo(kj::Vector<kj::ConstString>& chain);
   // For debugging purposes, follows the chain of ClientHooks appending information about each
   // to `chain`.
