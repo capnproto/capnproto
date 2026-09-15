@@ -960,7 +960,60 @@ public:
   SocketAddress address;
 };
 
-// TODO(someday): DatagramPortImpl
+class DatagramPortImpl final: public DatagramPort, public OwnedFd {
+public:
+  DatagramPortImpl(LowLevelAsyncIoProvider& lowLevel, Win32EventPort& eventPort, SOCKET fd,
+                   LowLevelAsyncIoProvider::NetworkFilter& filter, uint flags)
+      : OwnedFd(fd, flags), lowLevel(lowLevel), filter(filter),
+        observer(eventPort.observeIo(reinterpret_cast<HANDLE>(fd))) {
+    GUID guid = WSAID_WSARECVMSG;
+    DWORD n = 0;
+    KJ_WINSOCK(WSAIoctl(fd, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
+                        &recvMsg, sizeof(recvMsg), &n, NULL, NULL)) {
+      recvMsg = nullptr;
+      return;
+    }
+  }
+
+  Promise<size_t> send(ArrayPtr<const byte> buffer, NetworkAddress& destination) override;
+  Promise<size_t> send(
+      ArrayPtr<const ArrayPtr<const byte>> pieces, NetworkAddress& destination) override;
+
+  class ReceiverImpl;
+
+  Own<DatagramReceiver> makeReceiver(DatagramReceiver::Capacity capacity) override;
+
+  uint getPort() override {
+    return SocketAddress::getLocalAddress(fd).getPort();
+  }
+
+  void getsockopt(int level, int option, void* value, uint* length) override {
+    socklen_t socklen = *length;
+    KJ_WINSOCK(::getsockopt(fd, level, option,
+                            reinterpret_cast<char*>(value), &socklen));
+    *length = socklen;
+  }
+  void setsockopt(int level, int option, const void* value, uint length) override {
+    KJ_WINSOCK(::setsockopt(fd, level, option,
+                            reinterpret_cast<const char*>(value), length));
+  }
+
+private:
+  struct SendState {
+    SendState(Array<WSABUF> buffers, const SocketAddress& destination)
+        : buffers(kj::mv(buffers)), destination(destination) {}
+
+    Array<WSABUF> buffers;
+    SocketAddress destination;
+  };
+
+  Promise<size_t> send(Array<WSABUF> buffers, NetworkAddress& destination);
+
+  LowLevelAsyncIoProvider& lowLevel;
+  LowLevelAsyncIoProvider::NetworkFilter& filter;
+  Own<Win32EventPort::IoObserver> observer;
+  LPFN_WSARECVMSG recvMsg = nullptr;
+};
 
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
@@ -990,6 +1043,10 @@ public:
   Own<ConnectionReceiver> wrapListenSocketFd(
       SOCKET fd, NetworkFilter& filter, uint flags = 0) override {
     return heap<FdConnectionReceiver>(*this, eventPort, fd, filter, flags);
+  }
+  Own<DatagramPort> wrapDatagramSocketFd(
+      SOCKET fd, NetworkFilter& filter, uint flags = 0) override {
+    return heap<DatagramPortImpl>(*this, eventPort, fd, filter, flags);
   }
 
   Timer& getTimer() override { return eventPort.getTimer(); }
@@ -1056,7 +1113,7 @@ public:
           "in the future.", addrs[0].toString());
     }
 
-    int fd = addrs[0].socket(SOCK_DGRAM);
+    SOCKET fd = addrs[0].socket(SOCK_DGRAM);
 
     {
       KJ_ON_SCOPE_FAILURE(closesocket(fd));
@@ -1180,6 +1237,181 @@ private:
   LowLevelAsyncIoProvider& lowLevel;
   _::NetworkFilter filter;
 };
+
+// =======================================================================================
+
+Promise<size_t> DatagramPortImpl::send(
+    ArrayPtr<const byte> buffer, NetworkAddress& destination) {
+  auto buffers = heapArray<WSABUF>(1);
+  buffers[0].buf = const_cast<char*>(buffer.asChars().begin());
+  buffers[0].len = buffer.size();
+  return send(kj::mv(buffers), destination);
+}
+
+Promise<size_t> DatagramPortImpl::send(
+    ArrayPtr<const ArrayPtr<const byte>> pieces, NetworkAddress& destination) {
+  auto buffers = heapArray<WSABUF>(kj::max<size_t>(pieces.size(), 1));
+  buffers[0] = {};
+  for (auto i: kj::indices(pieces)) {
+    buffers[i].buf = const_cast<char*>(pieces[i].asChars().begin());
+    buffers[i].len = pieces[i].size();
+  }
+  return send(kj::mv(buffers), destination);
+}
+
+Promise<size_t> DatagramPortImpl::send(
+    Array<WSABUF> buffers, NetworkAddress& destination) {
+  // The operation state owns the send parameters through completion.
+  auto& addr = downcast<NetworkAddressImpl>(destination).chooseOneAddress();
+  auto state = heap<SendState>(kj::mv(buffers), addr);
+  auto op = observer->newOperation(0);
+
+  if (WSASendTo(fd, state->buffers.begin(), state->buffers.size(), NULL, 0,
+                state->destination.getRaw(), state->destination.getRawSize(),
+                op->getOverlapped(), NULL) == SOCKET_ERROR) {
+    DWORD error = WSAGetLastError();
+    if (error != WSA_IO_PENDING) {
+      KJ_FAIL_WIN32("WSASendTo()", error) { break; }
+      return size_t(0);
+    }
+  }
+
+  // IOCP reports completion even when Winsock completes the operation immediately.
+  return op->onComplete().then([](Win32EventPort::IoResult result) -> size_t {
+    if (result.errorCode != ERROR_SUCCESS) {
+      KJ_FAIL_WIN32("WSASendTo()", result.errorCode) { break; }
+      return 0;
+    }
+    return result.bytesTransferred;
+  }).attach(kj::mv(state));
+}
+
+class DatagramPortImpl::ReceiverImpl final: public DatagramReceiver {
+public:
+  explicit ReceiverImpl(DatagramPortImpl& port, Capacity capacity)
+      : port(port),
+        contentBuffer(heapArray<byte>(capacity.content)),
+        ancillaryBuffer(capacity.ancillary > 0 ? heapArray<byte>(capacity.ancillary)
+                                               : Array<byte>(nullptr)) {}
+
+  Promise<void> receive() override {
+    // WSARecvMsg writes the payload, source address, and control messages in one operation.
+    address = {};
+    content.buf = reinterpret_cast<char*>(contentBuffer.begin());
+    content.len = contentBuffer.size();
+    message = {};
+    message.name = reinterpret_cast<struct sockaddr*>(&address);
+    message.namelen = sizeof(address);
+    message.lpBuffers = &content;
+    message.dwBufferCount = 1;
+    message.Control.buf = reinterpret_cast<char*>(ancillaryBuffer.begin());
+    message.Control.len = ancillaryBuffer.size();
+
+    auto op = port.observer->newOperation(0);
+    KJ_ASSERT(port.recvMsg != nullptr);
+    DWORD received = 0;
+    if (port.recvMsg(port.fd, &message, &received, op->getOverlapped(), NULL) == SOCKET_ERROR) {
+      DWORD error = WSAGetLastError();
+      // A truncated datagram can complete synchronously without an IOCP notification.
+      if (error == WSAEMSGSIZE) {
+        return finishReceive(error, received);
+      } else if (error != WSA_IO_PENDING) {
+        KJ_FAIL_WIN32("WSARecvMsg()", error) { break; }
+        return READY_NOW;
+      }
+    }
+
+    return op->onComplete().then([this](Win32EventPort::IoResult result) -> Promise<void> {
+      return finishReceive(result.errorCode, result.bytesTransferred);
+    });
+  }
+
+  MaybeTruncated<ArrayPtr<const byte>> getContent() override {
+    return { contentBuffer.first(receivedSize), contentTruncated };
+  }
+
+  MaybeTruncated<ArrayPtr<const AncillaryMessage>> getAncillary() override {
+    return { ancillaryList.asPtr(), ancillaryTruncated };
+  }
+
+  NetworkAddress& getSource() override {
+    return KJ_REQUIRE_NONNULL(source, "Haven't received a message yet.").abstract;
+  }
+
+private:
+  DatagramPortImpl& port;
+  Array<byte> contentBuffer;
+  Array<byte> ancillaryBuffer;
+  Vector<AncillaryMessage> ancillaryList;
+  WSABUF content;
+  WSAMSG message;
+  struct sockaddr_storage address;
+  size_t receivedSize = 0;
+  bool contentTruncated = false;
+  bool ancillaryTruncated = false;
+
+  static bool isTruncationError(DWORD error) {
+    return error == WSAEMSGSIZE || error == ERROR_MORE_DATA;
+  }
+
+  Promise<void> finishReceive(DWORD error, size_t size) {
+    if (error != ERROR_SUCCESS && !isTruncationError(error)) {
+      KJ_FAIL_WIN32("WSARecvMsg()", error) { break; }
+      return READY_NOW;
+    }
+
+    // Discard blocked datagrams and continue waiting on the same receiver.
+    if (!port.filter.shouldAllow(message.name, message.namelen)) {
+      return receive();
+    }
+
+    contentTruncated = (message.dwFlags & MSG_TRUNC) ||
+        (isTruncationError(error) && !(message.dwFlags & MSG_CTRUNC));
+    ancillaryTruncated = message.dwFlags & MSG_CTRUNC;
+    receivedSize = kj::min(size, contentBuffer.size());
+    if (receivedSize == 0 && contentTruncated) {
+      receivedSize = contentBuffer.size();
+    }
+    source.emplace(port.lowLevel, port.filter, message.name, message.namelen);
+
+    // Complete and partially received control messages share the ancillary buffer.
+    ancillaryList.resize(0);
+    for (auto cmsg = WSA_CMSG_FIRSTHDR(&message); cmsg != nullptr;
+         cmsg = WSA_CMSG_NXTHDR(&message, cmsg)) {
+      const byte* pos = reinterpret_cast<const byte*>(cmsg);
+      size_t available = ancillaryBuffer.end() - pos;
+      if (available < WSA_CMSG_LEN(0)) {
+        break;
+      }
+
+      const byte* begin = reinterpret_cast<const byte*>(WSA_CMSG_DATA(cmsg));
+      const byte* end = pos + kj::min(available, cmsg->cmsg_len);
+      if (begin > end) {
+        break;
+      }
+      ancillaryList.add(AncillaryMessage(
+          cmsg->cmsg_level, cmsg->cmsg_type, arrayPtr(begin, end)));
+    }
+
+    return READY_NOW;
+  }
+
+  struct StoredAddress {
+    StoredAddress(LowLevelAsyncIoProvider& lowLevel, LowLevelAsyncIoProvider::NetworkFilter& filter,
+                  const void* sockaddr, uint length)
+        : raw(sockaddr, length),
+          abstract(lowLevel, filter, Array<SocketAddress>(&raw, 1, NullArrayDisposer::instance)) {}
+
+    SocketAddress raw;
+    NetworkAddressImpl abstract;
+  };
+
+  Maybe<StoredAddress> source;
+};
+
+Own<DatagramReceiver> DatagramPortImpl::makeReceiver(DatagramReceiver::Capacity capacity) {
+  return heap<ReceiverImpl>(*this, capacity);
+}
 
 // =======================================================================================
 
