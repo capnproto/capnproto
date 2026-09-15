@@ -28,6 +28,7 @@ CAPNP_DECLARE_SCHEMA(b54ab3364333f598);
 CAPNP_DECLARE_SCHEMA(e82753cff0c2218f);
 CAPNP_DECLARE_SCHEMA(b18aa5ac7a0d9420);
 CAPNP_DECLARE_SCHEMA(ec1619d4400a0290);
+CAPNP_DECLARE_SCHEMA(b3529422e0985d29);
 CAPNP_DECLARE_SCHEMA(9aad50a41f4af45f);
 CAPNP_DECLARE_SCHEMA(97b14cbe7cfec712);
 CAPNP_DECLARE_SCHEMA(c42305476bb4746f);
@@ -69,6 +70,7 @@ CAPNP_DECLARE_SCHEMA(ae504193122357e5);
 CAPNP_DECLARE_SCHEMA(f8ea2bf176925da0);
 CAPNP_DECLARE_SCHEMA(dda719892e0499bb);
 CAPNP_DECLARE_SCHEMA(fc69d5e1d630a151);
+CAPNP_DECLARE_SCHEMA(bf4c2a95f900a47a);
 
 }  // namespace schemas
 }  // namespace capnp
@@ -89,6 +91,7 @@ struct Node {
     INTERFACE,
     CONST,
     ANNOTATION,
+    USING,
   };
   struct Parameter;
   struct NestedNode;
@@ -98,6 +101,7 @@ struct Node {
   struct Interface;
   struct Const;
   struct Annotation;
+  struct Using;
 
   struct _capnpPrivate {
     CAPNP_DECLARE_STRUCT_HEADER(e682ab4cf923a417, 6, 6)
@@ -237,6 +241,21 @@ struct Node::Annotation {
 
   struct _capnpPrivate {
     CAPNP_DECLARE_STRUCT_HEADER(ec1619d4400a0290, 6, 6)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
+    #endif  // !CAPNP_LITE
+  };
+};
+
+struct Node::Using {
+  Using() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(b3529422e0985d29, 6, 6)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -394,7 +413,7 @@ struct Type {
   struct AnyPointer;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(d07378ede1f9cc60, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(d07378ede1f9cc60, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -409,7 +428,7 @@ struct Type::List {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(87e739250a60ea97, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(87e739250a60ea97, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -424,7 +443,7 @@ struct Type::Enum {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(9e0e78711a7f87a9, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(9e0e78711a7f87a9, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -439,7 +458,7 @@ struct Type::Struct {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(ac3a6f60ef4cc6d3, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(ac3a6f60ef4cc6d3, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -454,7 +473,7 @@ struct Type::Interface {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(ed8bca69f7fb0cbf, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(ed8bca69f7fb0cbf, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -477,7 +496,7 @@ struct Type::AnyPointer {
   struct ImplicitMethodParameter;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(c2573fe8a23e49f1, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(c2573fe8a23e49f1, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -498,7 +517,7 @@ struct Type::AnyPointer::Unconstrained {
   };
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(8e3b5f79fe593656, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(8e3b5f79fe593656, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -513,7 +532,7 @@ struct Type::AnyPointer::Parameter {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(9dd1f724f4614a85, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(9dd1f724f4614a85, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -528,7 +547,7 @@ struct Type::AnyPointer::ImplicitMethodParameter {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(baefc9120c56e274, 3, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(baefc9120c56e274, 4, 1)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -757,6 +776,7 @@ struct CodeGeneratorRequest::RequestedFile::FileSourceInfo::Identifier::Member {
   };
 };
 
+using Id =  ::uint64_t;
 // =======================================================================================
 
 class Node::Reader {
@@ -777,14 +797,14 @@ public:
 #endif  // !CAPNP_LITE
 
   inline Which which() const;
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
   inline bool hasDisplayName() const;
   inline  ::capnp::Text::Reader getDisplayName() const;
 
   inline  ::uint32_t getDisplayNamePrefixLength() const;
 
-  inline  ::uint64_t getScopeId() const;
+  inline  ::capnp::schema::Id getScopeId() const;
 
   inline bool hasNestedNodes() const;
   inline  ::capnp::List< ::capnp::schema::Node::NestedNode,  ::capnp::Kind::STRUCT>::Reader getNestedNodes() const;
@@ -819,6 +839,9 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
+  inline bool isUsing() const;
+  inline typename Using::Reader getUsing() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -848,8 +871,8 @@ public:
 #endif  // !CAPNP_LITE
 
   inline Which which();
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
   inline bool hasDisplayName();
   inline  ::capnp::Text::Builder getDisplayName();
@@ -861,8 +884,8 @@ public:
   inline  ::uint32_t getDisplayNamePrefixLength();
   inline void setDisplayNamePrefixLength( ::uint32_t value);
 
-  inline  ::uint64_t getScopeId();
-  inline void setScopeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getScopeId();
+  inline void setScopeId( ::capnp::schema::Id value);
 
   inline bool hasNestedNodes();
   inline  ::capnp::List< ::capnp::schema::Node::NestedNode,  ::capnp::Kind::STRUCT>::Builder getNestedNodes();
@@ -917,6 +940,10 @@ public:
 
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
+
+  inline bool isUsing();
+  inline typename Using::Builder getUsing();
+  inline typename Using::Builder initUsing();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1045,7 +1072,7 @@ public:
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
 
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1082,8 +1109,8 @@ public:
   inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownName();
 
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1128,7 +1155,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
   inline bool hasDocComment() const;
   inline  ::capnp::Text::Reader getDocComment() const;
@@ -1168,8 +1195,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
   inline bool hasDocComment();
   inline  ::capnp::Text::Builder getDocComment();
@@ -1826,6 +1853,88 @@ private:
 };
 #endif  // !CAPNP_LITE
 
+class Node::Using::Reader {
+public:
+  typedef Using Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand());
+  }
+#endif  // !CAPNP_LITE
+
+  inline bool hasTarget() const;
+  inline  ::capnp::schema::Type::Reader getTarget() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+};
+
+class Node::Using::Builder {
+public:
+  typedef Using Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
+
+  inline bool hasTarget();
+  inline  ::capnp::schema::Type::Builder getTarget();
+  inline void setTarget( ::capnp::schema::Type::Reader value);
+  inline  ::capnp::schema::Type::Builder initTarget();
+  inline void adoptTarget(::capnp::Orphan< ::capnp::schema::Type>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Type> disownTarget();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+};
+
+#if !CAPNP_LITE
+class Node::Using::Pipeline {
+public:
+  typedef Using Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Type::Pipeline getTarget();
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::ToDynamic_;
+};
+#endif  // !CAPNP_LITE
+
 class Field::Reader {
 public:
   typedef Field Reads;
@@ -2069,7 +2178,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId() const;
+  inline  ::capnp::schema::Id getTypeId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2099,8 +2208,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId();
-  inline void setTypeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getTypeId();
+  inline void setTypeId( ::capnp::schema::Id value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2328,7 +2437,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
   inline bool hasBrand() const;
   inline  ::capnp::schema::Brand::Reader getBrand() const;
@@ -2361,8 +2470,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
   inline bool hasBrand();
   inline  ::capnp::schema::Brand::Builder getBrand();
@@ -2420,9 +2529,9 @@ public:
 
   inline  ::uint16_t getCodeOrder() const;
 
-  inline  ::uint64_t getParamStructType() const;
+  inline  ::capnp::schema::Id getParamStructType() const;
 
-  inline  ::uint64_t getResultStructType() const;
+  inline  ::capnp::schema::Id getResultStructType() const;
 
   inline bool hasAnnotations() const;
   inline  ::capnp::List< ::capnp::schema::Annotation,  ::capnp::Kind::STRUCT>::Reader getAnnotations() const;
@@ -2474,11 +2583,11 @@ public:
   inline  ::uint16_t getCodeOrder();
   inline void setCodeOrder( ::uint16_t value);
 
-  inline  ::uint64_t getParamStructType();
-  inline void setParamStructType( ::uint64_t value);
+  inline  ::capnp::schema::Id getParamStructType();
+  inline void setParamStructType( ::capnp::schema::Id value);
 
-  inline  ::uint64_t getResultStructType();
-  inline void setResultStructType( ::uint64_t value);
+  inline  ::capnp::schema::Id getResultStructType();
+  inline void setResultStructType( ::capnp::schema::Id value);
 
   inline bool hasAnnotations();
   inline  ::capnp::List< ::capnp::schema::Annotation,  ::capnp::Kind::STRUCT>::Builder getAnnotations();
@@ -2611,6 +2720,8 @@ public:
   inline bool isAnyPointer() const;
   inline typename AnyPointer::Reader getAnyPointer() const;
 
+  inline  ::capnp::schema::Id getUsingId() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -2715,6 +2826,9 @@ public:
   inline bool isAnyPointer();
   inline typename AnyPointer::Builder getAnyPointer();
   inline typename AnyPointer::Builder initAnyPointer();
+
+  inline  ::capnp::schema::Id getUsingId();
+  inline void setUsingId( ::capnp::schema::Id value);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2841,7 +2955,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId() const;
+  inline  ::capnp::schema::Id getTypeId() const;
 
   inline bool hasBrand() const;
   inline  ::capnp::schema::Brand::Reader getBrand() const;
@@ -2874,8 +2988,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId();
-  inline void setTypeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getTypeId();
+  inline void setTypeId( ::capnp::schema::Id value);
 
   inline bool hasBrand();
   inline  ::capnp::schema::Brand::Builder getBrand();
@@ -2928,7 +3042,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId() const;
+  inline  ::capnp::schema::Id getTypeId() const;
 
   inline bool hasBrand() const;
   inline  ::capnp::schema::Brand::Reader getBrand() const;
@@ -2961,8 +3075,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId();
-  inline void setTypeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getTypeId();
+  inline void setTypeId( ::capnp::schema::Id value);
 
   inline bool hasBrand();
   inline  ::capnp::schema::Brand::Builder getBrand();
@@ -3015,7 +3129,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId() const;
+  inline  ::capnp::schema::Id getTypeId() const;
 
   inline bool hasBrand() const;
   inline  ::capnp::schema::Brand::Reader getBrand() const;
@@ -3048,8 +3162,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getTypeId();
-  inline void setTypeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getTypeId();
+  inline void setTypeId( ::capnp::schema::Id value);
 
   inline bool hasBrand();
   inline  ::capnp::schema::Brand::Builder getBrand();
@@ -3297,7 +3411,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getScopeId() const;
+  inline  ::capnp::schema::Id getScopeId() const;
 
   inline  ::uint16_t getParameterIndex() const;
 
@@ -3329,8 +3443,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getScopeId();
-  inline void setScopeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getScopeId();
+  inline void setScopeId( ::capnp::schema::Id value);
 
   inline  ::uint16_t getParameterIndex();
   inline void setParameterIndex( ::uint16_t value);
@@ -3536,7 +3650,7 @@ public:
 #endif  // !CAPNP_LITE
 
   inline Which which() const;
-  inline  ::uint64_t getScopeId() const;
+  inline  ::capnp::schema::Id getScopeId() const;
 
   inline bool isBind() const;
   inline bool hasBind() const;
@@ -3574,8 +3688,8 @@ public:
 #endif  // !CAPNP_LITE
 
   inline Which which();
-  inline  ::uint64_t getScopeId();
-  inline void setScopeId( ::uint64_t value);
+  inline  ::capnp::schema::Id getScopeId();
+  inline void setScopeId( ::capnp::schema::Id value);
 
   inline bool isBind();
   inline bool hasBind();
@@ -3954,7 +4068,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
   inline bool hasValue() const;
   inline  ::capnp::schema::Value::Reader getValue() const;
@@ -3990,8 +4104,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
   inline bool hasValue();
   inline  ::capnp::schema::Value::Builder getValue();
@@ -4250,7 +4364,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
   inline bool hasFilename() const;
   inline  ::capnp::Text::Reader getFilename() const;
@@ -4289,8 +4403,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
   inline bool hasFilename();
   inline  ::capnp::Text::Builder getFilename();
@@ -4357,7 +4471,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId() const;
+  inline  ::capnp::schema::Id getId() const;
 
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
@@ -4390,8 +4504,8 @@ public:
   inline ::kj::StringTree toString() const { return asReader().toString(); }
 #endif  // !CAPNP_LITE
 
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
+  inline  ::capnp::schema::Id getId();
+  inline void setId( ::capnp::schema::Id value);
 
   inline bool hasName();
   inline  ::capnp::Text::Builder getName();
@@ -4696,17 +4810,17 @@ inline  ::capnp::schema::Node::Which Node::Builder::which() {
       ::capnp::bounded<6>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Node::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Node::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Node::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Node::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -4758,17 +4872,17 @@ inline void Node::Builder::setDisplayNamePrefixLength( ::uint32_t value) {
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Node::Reader::getScopeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::Reader::getScopeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Node::Builder::getScopeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::Builder::getScopeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
-inline void Node::Builder::setScopeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Node::Builder::setScopeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
@@ -5072,6 +5186,28 @@ inline void Node::Builder::setEndByte( ::uint32_t value) {
       ::capnp::bounded<11>() * ::capnp::ELEMENTS, value);
 }
 
+inline bool Node::Reader::isUsing() const {
+  return which() == Node::USING;
+}
+inline bool Node::Builder::isUsing() {
+  return which() == Node::USING;
+}
+inline typename Node::Using::Reader Node::Reader::getUsing() const {
+  KJ_IREQUIRE((which() == Node::USING),
+              "Must check which() before get()ing a union member.");
+  return typename Node::Using::Reader(_reader);
+}
+inline typename Node::Using::Builder Node::Builder::getUsing() {
+  KJ_IREQUIRE((which() == Node::USING),
+              "Must check which() before get()ing a union member.");
+  return typename Node::Using::Builder(_builder);
+}
+inline typename Node::Using::Builder Node::Builder::initUsing() {
+  _builder.setDataField<Node::Which>(
+      ::capnp::bounded<6>() * ::capnp::ELEMENTS, Node::USING);
+  _builder.getPointerField(::capnp::bounded<3>() * ::capnp::POINTERS).clear();
+  return typename Node::Using::Builder(_builder);
+}
 inline bool Node::Parameter::Reader::hasName() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
@@ -5140,31 +5276,31 @@ inline ::capnp::Orphan< ::capnp::Text> Node::NestedNode::Builder::disownName() {
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t Node::NestedNode::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::NestedNode::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Node::NestedNode::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::NestedNode::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Node::NestedNode::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Node::SourceInfo::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::SourceInfo::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Node::SourceInfo::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Node::SourceInfo::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Node::SourceInfo::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Node::SourceInfo::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -5831,6 +5967,45 @@ inline void Node::Annotation::Builder::setTargetsAnnotation(bool value) {
       ::capnp::bounded<123>() * ::capnp::ELEMENTS, value);
 }
 
+inline bool Node::Using::Reader::hasTarget() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
+}
+inline bool Node::Using::Builder::hasTarget() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::Type::Reader Node::Using::Reader::getTarget() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(_reader.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Type::Builder Node::Using::Builder::getTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
+}
+#if !CAPNP_LITE
+inline  ::capnp::schema::Type::Pipeline Node::Using::Pipeline::getTarget() {
+  return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(3));
+}
+#endif  // !CAPNP_LITE
+inline void Node::Using::Builder::setTarget( ::capnp::schema::Type::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::Type::Builder Node::Using::Builder::initTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
+}
+inline void Node::Using::Builder::adoptTarget(
+    ::capnp::Orphan< ::capnp::schema::Type>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::Type> Node::Using::Builder::disownTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(_builder.getPointerField(
+      ::capnp::bounded<3>() * ::capnp::POINTERS));
+}
+
 inline  ::capnp::schema::Field::Which Field::Reader::which() const {
   return _reader.getDataField<Which>(
       ::capnp::bounded<4>() * ::capnp::ELEMENTS);
@@ -6105,17 +6280,17 @@ inline void Field::Slot::Builder::setHadExplicitDefault(bool value) {
       ::capnp::bounded<128>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Field::Group::Reader::getTypeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Field::Group::Reader::getTypeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Field::Group::Builder::getTypeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Field::Group::Builder::getTypeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
-inline void Field::Group::Builder::setTypeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Field::Group::Builder::setTypeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
@@ -6262,17 +6437,17 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation,  ::capnp::Ki
       ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t Superclass::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Superclass::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Superclass::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Superclass::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Superclass::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Superclass::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -6363,31 +6538,31 @@ inline void Method::Builder::setCodeOrder( ::uint16_t value) {
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Method::Reader::getParamStructType() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Method::Reader::getParamStructType() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Method::Builder::getParamStructType() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Method::Builder::getParamStructType() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline void Method::Builder::setParamStructType( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Method::Builder::setParamStructType( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Method::Reader::getResultStructType() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Method::Reader::getResultStructType() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Method::Builder::getResultStructType() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Method::Builder::getResultStructType() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
-inline void Method::Builder::setResultStructType( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Method::Builder::setResultStructType( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
@@ -7025,6 +7200,20 @@ inline typename Type::AnyPointer::Builder Type::Builder::initAnyPointer() {
   _builder.setDataField< ::uint64_t>(::capnp::bounded<2>() * ::capnp::ELEMENTS, 0);
   return typename Type::AnyPointer::Builder(_builder);
 }
+inline  ::capnp::schema::Id Type::Reader::getUsingId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::schema::Id Type::Builder::getUsingId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS);
+}
+inline void Type::Builder::setUsingId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
+      ::capnp::bounded<3>() * ::capnp::ELEMENTS, value);
+}
+
 inline bool Type::List::Reader::hasElementType() const {
   return !_reader.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS).isNull();
@@ -7064,17 +7253,17 @@ inline ::capnp::Orphan< ::capnp::schema::Type> Type::List::Builder::disownElemen
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t Type::Enum::Reader::getTypeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::Enum::Reader::getTypeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Type::Enum::Builder::getTypeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::Enum::Builder::getTypeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline void Type::Enum::Builder::setTypeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Type::Enum::Builder::setTypeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
@@ -7117,17 +7306,17 @@ inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Enum::Builder::disownBrand
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t Type::Struct::Reader::getTypeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::Struct::Reader::getTypeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Type::Struct::Builder::getTypeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::Struct::Builder::getTypeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline void Type::Struct::Builder::setTypeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Type::Struct::Builder::setTypeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
@@ -7170,17 +7359,17 @@ inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Struct::Builder::disownBra
       ::capnp::bounded<0>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t Type::Interface::Reader::getTypeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::Interface::Reader::getTypeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Type::Interface::Builder::getTypeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::Interface::Builder::getTypeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS);
 }
-inline void Type::Interface::Builder::setTypeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Type::Interface::Builder::setTypeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<1>() * ::capnp::ELEMENTS, value);
 }
 
@@ -7412,17 +7601,17 @@ inline void Type::AnyPointer::Unconstrained::Builder::setCapability( ::capnp::Vo
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Type::AnyPointer::Parameter::Reader::getScopeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::AnyPointer::Parameter::Reader::getScopeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Type::AnyPointer::Parameter::Builder::getScopeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Type::AnyPointer::Parameter::Builder::getScopeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS);
 }
-inline void Type::AnyPointer::Parameter::Builder::setScopeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Type::AnyPointer::Parameter::Builder::setScopeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
 }
 
@@ -7497,17 +7686,17 @@ inline  ::capnp::schema::Brand::Scope::Which Brand::Scope::Builder::which() {
       ::capnp::bounded<4>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Brand::Scope::Reader::getScopeId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Brand::Scope::Reader::getScopeId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Brand::Scope::Builder::getScopeId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Brand::Scope::Builder::getScopeId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Brand::Scope::Builder::setScopeId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Brand::Scope::Builder::setScopeId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -8312,17 +8501,17 @@ inline ::capnp::AnyPointer::Builder Value::Builder::initAnyPointer() {
   return result;
 }
 
-inline  ::uint64_t Annotation::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Annotation::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Annotation::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id Annotation::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void Annotation::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void Annotation::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -8587,17 +8776,17 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::SourceInfo,  ::cap
       ::capnp::bounded<3>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id CodeGeneratorRequest::RequestedFile::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id CodeGeneratorRequest::RequestedFile::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void CodeGeneratorRequest::RequestedFile::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void CodeGeneratorRequest::RequestedFile::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 
@@ -8708,17 +8897,17 @@ inline ::capnp::Orphan< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Fi
       ::capnp::bounded<2>() * ::capnp::POINTERS));
 }
 
-inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Import::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id CodeGeneratorRequest::RequestedFile::Import::Reader::getId() const {
+  return _reader.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Import::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
+inline  ::capnp::schema::Id CodeGeneratorRequest::RequestedFile::Import::Builder::getId() {
+  return _builder.getDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS);
 }
-inline void CodeGeneratorRequest::RequestedFile::Import::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
+inline void CodeGeneratorRequest::RequestedFile::Import::Builder::setId( ::capnp::schema::Id value) {
+  _builder.setDataField< ::capnp::schema::Id>(
       ::capnp::bounded<0>() * ::capnp::ELEMENTS, value);
 }
 

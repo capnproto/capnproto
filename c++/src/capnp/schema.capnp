@@ -168,6 +168,13 @@ struct Node {
       targetsParam @29 :Bool;
       targetsAnnotation @30 :Bool;
     }
+
+    using :group {
+      # A `using` (alias) declaration, e.g. `using Foo = Bar.Baz;`. Code generators that
+      # recognize this variant should emit a corresponding alias; others can skip the node
+      # since field types still carry the resolved target via the usual Type variants.
+      target @36 :Type;
+    }
   }
 
   startByte @34 :UInt32;
@@ -384,6 +391,11 @@ struct Type {
       }
     }
   }
+
+  usingId @28 :Id;
+  # If non-zero, the ID of the `using` Node this type expression was originally written through.
+  # The union above still describes the resolved target; generators that ignore this field
+  # continue to work as before.
 }
 
 struct Brand {

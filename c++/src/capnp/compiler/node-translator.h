@@ -82,12 +82,14 @@ public:
 
   static kj::Maybe<Resolver::ResolveResult> compileDecl(
       uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
-      Expression::Reader expression, schema::Brand::Builder brandBuilder);
+      Expression::Reader expression, schema::Brand::Builder brandBuilder,
+      kj::Maybe<schema::Type::Builder> typeBuilder = kj::none);
   // Compile a one-off declaration expression without building a NodeTranslator. Used for
   // evaluating aliases.
   //
   // `brandBuilder` may be used to construct a message which will fill in ResolvedDecl::brand in
-  // the result.
+  // the result. If `typeBuilder` is provided, the resolved expression is also written there
+  // (except for file-scope imports, which aren't types).
 
 private:
   class DuplicateNameDetector;
