@@ -1792,11 +1792,8 @@ public:
   // Used when suspending a request, or when switching protocols (e.g. WebSocket, CONNENCT).
   // HttpinputStream can no longer be used after this.
   ReleasedBuffer releaseBuffer() {
-    auto result = ReleasedBuffer { headerBuffer.releaseAsBytes(), leftover.asBytes() };
-    // The returned buffer now owns the storage viewed by `leftover`; don't retain a view in this
-    // spent HttpInputStreamImpl, which may outlive the new owner after a protocol upgrade.
-    leftover = nullptr;
-    return result;
+    kj::ArrayPtr<char> releasedLeftover(kj::mv(leftover));
+    return ReleasedBuffer { headerBuffer.releaseAsBytes(), releasedLeftover.asBytes() };
   }
 
   // Used when suspending a request. HttpinputStream can no longer be used after this.
@@ -5262,10 +5259,7 @@ kj::ArrayPtr<const char> splitNext(kj::ArrayPtr<const char>& cursor, char delimi
     cursor = cursor.slice(index + 1, cursor.size());
     return part;
   }
-  kj::ArrayPtr<const char> result(kj::mv(cursor));
-  cursor = nullptr;
-
-  return result;
+  return kj::mv(cursor);
 }
 
 void stripLeadingAndTrailingSpace(ArrayPtr<const char>& str) {

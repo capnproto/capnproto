@@ -2238,8 +2238,9 @@ public:
   kj::Vector<kj::WebSocket::ProtocolError> errors;
 
   kj::Exception handleWebSocketProtocolError(kj::WebSocket::ProtocolError protocolError) override {
+    auto exception = KJ_EXCEPTION(FAILED, protocolError.description);
     errors.add(kj::mv(protocolError));
-    return KJ_EXCEPTION(FAILED, protocolError.description);
+    return exception;
   }
 };
 
