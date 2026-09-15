@@ -1043,8 +1043,10 @@ String KJ_STRINGIFY(const Exception& e) {
              stringifyStackTrace(e.getStackTrace()));
 }
 
+#if !KJ_ASSERT_PTR_COUNTERS
 static_assert(sizeof(kj::Exception) == sizeof(size_t),
     "exception type is too big, please keep it lean");
+#endif
 
 Exception::Exception(Type type, const char* file, int line, String description) noexcept {
   storage->file = trimSourceFilename(file).cStr();

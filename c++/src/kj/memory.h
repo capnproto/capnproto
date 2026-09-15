@@ -75,6 +75,65 @@ class Refcounted;
 
 namespace _ {  // private
 
+class AtomicPtrCounter;
+
+class PtrCounter {
+  // Counts live Ptrs that refer to one owning object.
+public:
+#if KJ_ASSERT_PTR_COUNTERS
+  inline void inc() { counter.inc(); }
+  inline void dec() { counter.dec(); }
+  inline void assertEmpty() { counter.assertEmpty(); }
+  static inline PtrCounter* create() { return new PtrCounter; }
+private:
+  AtomicPtrCounter counter;
+#else
+  inline void inc() {}
+  inline void dec() {}
+  inline void assertEmpty() {}
+  static inline PtrCounter* create() { return nullptr; }
+#endif
+};
+
+#if KJ_ASSERT_PTR_COUNTERS
+class PtrCounterRef {
+  // Registers one live Ptr with its owning object's PtrCounter.
+public:
+  PtrCounterRef() = default;
+  explicit PtrCounterRef(PtrCounter* counter): counter(counter) {
+    if (counter != nullptr) counter->inc();
+  }
+  PtrCounterRef(const PtrCounterRef& other): PtrCounterRef(other.counter) {}
+  PtrCounterRef(PtrCounterRef&& other): PtrCounterRef(other.counter) {}
+  PtrCounterRef& operator=(const PtrCounterRef& other) {
+    if (other.counter != nullptr) other.counter->inc();
+    if (counter != nullptr) counter->dec();
+    counter = other.counter;
+    return *this;
+  }
+  PtrCounterRef& operator=(PtrCounterRef&& other) {
+    return operator=(static_cast<const PtrCounterRef&>(other));
+  }
+  ~PtrCounterRef() { if (counter != nullptr) counter->dec(); }
+  void reset() { *this = PtrCounterRef(); }
+private:
+  PtrCounter* counter = nullptr;
+};
+#else
+class PtrCounterRef {
+  // Empty optimized-build substitute for a reference to a PtrCounter.
+public:
+  PtrCounterRef() = default;
+  explicit PtrCounterRef(PtrCounter*) {}
+  PtrCounterRef(const PtrCounterRef&) = default;
+  PtrCounterRef(PtrCounterRef&&) = default;
+  PtrCounterRef& operator=(const PtrCounterRef&) = default;
+  PtrCounterRef& operator=(PtrCounterRef&&) = default;
+  ~PtrCounterRef() = default;
+  void reset() {}
+};
+#endif
+
 template <typename T, typename U>
 concept DerivedFrom = requires(const T* t) { static_cast<const U*>(t); };
 template <typename T>
@@ -134,6 +193,13 @@ protected:
   // instance.  Eww!
 
   virtual void disposeImpl(void* pointer) const = 0;
+  virtual _::PtrCounter* createPtrCounter() const { return _::PtrCounter::create(); }
+  virtual void disposePtrCounter(_::PtrCounter* counter) const {
+    if (counter != nullptr) {
+      counter->assertEmpty();
+      delete counter;
+    }
+  }
   // Disposes of the object, given a pointer to the beginning of the object.  If the object is
   // polymorphic, this pointer is determined by dynamic_cast<void*>().  For non-polymorphic types,
   // Own<T> does not allow any casting, so the pointer exactly matches the original one given to
@@ -143,6 +209,9 @@ public:
 
   template <typename T>
   void dispose(T* object) const;
+
+  inline _::PtrCounter* newPtrCounter() const { return createPtrCounter(); }
+  inline void releasePtrCounter(_::PtrCounter* counter) const { disposePtrCounter(counter); }
   // Helper wrapper around disposeImpl().
   //
   // If T is polymorphic, calls `disposeImpl(dynamic_cast<void*>(object))`, otherwise calls
@@ -151,6 +220,58 @@ public:
   // Callers must not call dispose() on the same pointer twice, even if the first call throws
   // an exception.
 };
+
+namespace _ {
+
+#if KJ_ASSERT_PTR_COUNTERS
+class PtrCounterOwner {
+  // Owns the PtrCounter associated with an owning smart pointer.
+public:
+  PtrCounterOwner() = default;
+  explicit PtrCounterOwner(bool present): counter(present ? PtrCounter::create() : nullptr) {}
+  PtrCounterOwner(const Disposer& disposer, bool present)
+      : counter(present ? disposer.newPtrCounter() : nullptr) {}
+  PtrCounterOwner(PtrCounterOwner&& other) noexcept: counter(other.take()) {}
+  PtrCounterOwner& operator=(PtrCounterOwner&& other) noexcept {
+    counter = other.take();
+    return *this;
+  }
+  PtrCounter* get() const { return counter; }
+  PtrCounter* take() {
+    auto* result = counter;
+    counter = nullptr;
+    return result;
+  }
+  void adopt(PtrCounter* value) { counter = value; }
+  void dispose() {
+    auto* old = take();
+    if (old != nullptr) {
+      old->assertEmpty();
+      delete old;
+    }
+  }
+  void dispose(const Disposer& disposer) { disposer.releasePtrCounter(take()); }
+private:
+  PtrCounter* counter = nullptr;
+};
+#else
+class PtrCounterOwner {
+  // Empty optimized-build substitute for PtrCounter ownership.
+public:
+  PtrCounterOwner() = default;
+  explicit PtrCounterOwner(bool) {}
+  PtrCounterOwner(const Disposer&, bool) {}
+  PtrCounterOwner(PtrCounterOwner&&) = default;
+  PtrCounterOwner& operator=(PtrCounterOwner&&) = default;
+  PtrCounter* get() const { return nullptr; }
+  PtrCounter* take() { return nullptr; }
+  void adopt(PtrCounter*) {}
+  void dispose() {}
+  void dispose(const Disposer&) {}
+};
+#endif
+
+}  // namespace _ (private)
 
 template <typename T>
 class DestructorOnlyDisposer: public Disposer {
@@ -188,6 +309,12 @@ class Weak;
 
 template <typename T>
 class Pin;
+
+template <typename T>
+class Rc;
+
+template <typename T>
+class Arc;
 
 class PtrTarget;
 
@@ -287,28 +414,10 @@ private:
     assertEmpty();
   }
 
-#if KJ_ASSERT_PTR_COUNTERS
-  inline void inc() {
-    ptrCounter.inc();
-  }
-
-  inline void dec() {
-    ptrCounter.dec();
-  }
-
-  inline void assertEmpty() {
-    ptrCounter.assertEmpty();
-  }
-#else
-  inline void inc() {}
-  inline void dec() {}
-  inline void assertEmpty() {}
-#endif // KJ_ASSERT_PTR_COUNTERS
+  inline void assertEmpty() { ptrCounter.assertEmpty(); }
 
   _::WeakCell* weakCell = nullptr;
-#if KJ_ASSERT_PTR_COUNTERS
-  _::AtomicPtrCounter ptrCounter;
-#endif // KJ_ASSERT_PTR_COUNTERS
+  KJ_NO_UNIQUE_ADDRESS _::PtrCounter ptrCounter;
 
   template <typename>
   friend class Ptr;
@@ -344,18 +453,23 @@ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): disposer(nullptr), ptr(nullptr) {}
   inline Own(Own&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+      : disposer(other.disposer), ptr(other.ptr), ptrCounter(kj::mv(other.ptrCounter)) {
+    other.ptr = nullptr;
+  }
   inline Own(Own<RemoveConstOrDisable<T>>&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+      : disposer(other.disposer), ptr(other.ptr), ptrCounter(kj::mv(other.ptrCounter)) {
+    other.ptr = nullptr;
+  }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U>&& other) noexcept
-      : disposer(other.disposer), ptr(cast(other.ptr)) {
+      : disposer(other.disposer), ptr(cast(other.ptr)), ptrCounter(kj::mv(other.ptrCounter)) {
     other.ptr = nullptr;
   }
   template <typename U, typename StaticDisposer, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U, StaticDisposer>&& other) noexcept;
   // Convert statically-disposed Own to dynamically-disposed Own.
-  inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
+  inline Own(T* ptr, const Disposer& disposer) noexcept
+      : disposer(&disposer), ptr(ptr), ptrCounter(disposer, ptr != nullptr) {}
 
   ~Own() noexcept(false) { dispose(); }
 
@@ -366,10 +480,15 @@ public:
     // dispose.
     const Disposer* disposerCopy = disposer;
     T* ptrCopy = ptr;
+    auto* ptrCounterCopy = ptrCounter.take();
     disposer = other.disposer;
     ptr = other.ptr;
+    ptrCounter = kj::mv(other.ptrCounter);
     other.ptr = nullptr;
     if (ptrCopy != nullptr) {
+      _::PtrCounterOwner oldCounter;
+      oldCounter.adopt(ptrCounterCopy);
+      oldCounter.dispose(*disposerCopy);
       disposerCopy->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
     }
     return *this;
@@ -415,6 +534,7 @@ public:
     if (ptr != nullptr) {
       result.ptr = &kj::downcast<U>(*ptr);
       result.disposer = disposer;
+      result.ptrCounter = kj::mv(ptrCounter);
       ptr = nullptr;
     }
     return result;
@@ -431,18 +551,27 @@ public:
   inline operator T*() { return ptr; }
   inline operator const T*() const { return ptr; }
 
+  inline operator Ptr<T>();
+  inline Ptr<T> asPtr();
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
+  inline operator Ptr<U>();
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
+  inline Ptr<U> asPtr();
+
   // Surrenders ownership of the underlying object to the caller. The caller must pass in the
   // correct disposer to prove that they know how the object is meant to be disposed of.
   inline T* disown(const Disposer* d) {
     if (d != disposer) _::throwWrongDisposerError();
     T* ptrCopy = ptr;
     ptr = nullptr;
+    if (ptrCopy != nullptr) ptrCounter.dispose(*disposer);
     return ptrCopy;
   }
 
 private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
+  KJ_NO_UNIQUE_ADDRESS _::PtrCounterOwner ptrCounter;
 
   inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr) {}
 
@@ -455,6 +584,7 @@ private:
     T* ptrCopy = ptr;
     if (ptrCopy != nullptr) {
       ptr = nullptr;
+      ptrCounter.dispose(*disposer);
       disposer->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
     }
   }
@@ -471,6 +601,8 @@ private:
 
   template <typename, typename>
   friend class Own;
+  template <typename>
+  friend class Ptr;
 };
 
 template <>
@@ -500,24 +632,15 @@ public:
   KJ_DISALLOW_COPY(Own);
   inline Own(): ptr(nullptr) {}
   inline Own(Own&& other) noexcept
-      : ptr(other.ptr) { other.ptr = nullptr; }
+      : ptr(other.ptr), ptrCounter(kj::mv(other.ptrCounter)) { other.ptr = nullptr; }
   inline Own(Own<RemoveConstOrDisable<T>, StaticDisposer>&& other) noexcept
-      : ptr(other.ptr) { other.ptr = nullptr; }
+      : ptr(other.ptr), ptrCounter(kj::mv(other.ptrCounter)) { other.ptr = nullptr; }
   template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U, StaticDisposer>&& other) noexcept
-      : ptr(cast(other.ptr)) {
-    other.ptr = nullptr;
-  }
-  inline explicit Own(T* ptr) noexcept: ptr(ptr) {}
+      : ptr(cast(other.ptr)), ptrCounter(kj::mv(other.ptrCounter)) { other.ptr = nullptr; }
+  inline explicit Own(T* ptr) noexcept: ptr(ptr), ptrCounter(ptr != nullptr) {}
 
-  ~Own() noexcept(false) {
-    if constexpr (noexcept(StaticDisposer::dispose(kj::instance<T*>()))) {
-      // dispose doesn't throw, we can be more optimal.
-      StaticDisposer::dispose(ptr);
-    } else {
-      dispose();
-    }
-  }
+  ~Own() noexcept(false) { dispose(); }
 
   inline Own& operator=(Own&& other) {
     // Move-assignnment operator.
@@ -525,9 +648,14 @@ public:
     // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
     // dispose.
     T* ptrCopy = ptr;
+    auto* ptrCounterCopy = ptrCounter.take();
     ptr = other.ptr;
+    ptrCounter = kj::mv(other.ptrCounter);
     other.ptr = nullptr;
     if (ptrCopy != nullptr) {
+      _::PtrCounterOwner oldCounter;
+      oldCounter.adopt(ptrCounterCopy);
+      oldCounter.dispose();
       StaticDisposer::dispose(ptrCopy);
     }
     return *this;
@@ -547,6 +675,7 @@ public:
     Own<U, StaticDisposer> result;
     if (ptr != nullptr) {
       result.ptr = &kj::downcast<U>(*ptr);
+      result.ptrCounter = kj::mv(ptrCounter);
       ptr = nullptr;
     }
     return result;
@@ -565,16 +694,25 @@ public:
 
   // Surrenders ownership of the underlying object to the caller. The caller must pass in the
   // correct disposer to prove that they know how the object is meant to be disposed of.
+  inline operator Ptr<T>();
+  inline Ptr<T> asPtr();
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
+  inline operator Ptr<U>();
+  template <typename U, typename = _::EnableIfCanConvertPtr<T, U>>
+  inline Ptr<U> asPtr();
+
   template<typename SD>
   inline T* disown() {
     static_assert(kj::isSameType<StaticDisposer, SD>(), "disposer must be the same as Own's disposer");
     T* ptrCopy = ptr;
     ptr = nullptr;
+    if (ptrCopy != nullptr) ptrCounter.dispose();
     return ptrCopy;
   }
 
 private:
   T* ptr;
+  KJ_NO_UNIQUE_ADDRESS _::PtrCounterOwner ptrCounter;
 
   inline explicit Own(decltype(nullptr)): ptr(nullptr) {}
 
@@ -587,6 +725,7 @@ private:
     T* ptrCopy = ptr;
     if (ptrCopy != nullptr) {
       ptr = nullptr;
+      ptrCounter.dispose();
       StaticDisposer::dispose(ptrCopy);
     }
   }
@@ -598,6 +737,8 @@ private:
 
   template <typename, typename>
   friend class Own;
+  template <typename>
+  friend class Ptr;
 };
 
 // MaybeTraits specialization for Own<T, D>.
@@ -827,55 +968,28 @@ private:
 
 template <typename T>
 class Ptr {
-  // Ptr<T> is a smart alternative to T&.
-  //
-  // When used together with Pin<T> it keeps track of active pointers.
-  // Asserts lifetime constraints when KJ_ASSERT_PTR_COUNTERS is defined.
-  // Ptr<T> stores a pointer to Pin<T>'s control block so it can produce weak refs.
+  // Ptr<T> is a non-owning smart alternative to T*. Debug-memory builds track outstanding
+  // pointers and diagnose destruction of their referent. Optimized builds store exactly a T*.
 
 public:
-  inline ~Ptr() {
-    if (ptr == nullptr) {
-      // the value was moved out
-      return;
-    }
-    target->dec();
-  }
-
-  Ptr(Ptr&& other) : ptr(other.ptr), target(other.target) {
-    other.ptr = nullptr;
-    other.target = nullptr;
-  }
+  ~Ptr() = default;
+  Ptr(Ptr&&) noexcept = default;
+  Ptr(const Ptr&) = default;
+  Ptr& operator=(Ptr&&) noexcept = default;
+  Ptr& operator=(const Ptr&) = default;
 
   template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  Ptr(Ptr<U>&& other) : ptr(other.ptr), target(other.target) {
-    other.ptr = nullptr;
-    other.target = nullptr;
-  }
-
-  // Ptr<T> can be freely copied.
-  Ptr(const Ptr& other) : ptr(other.ptr), target(other.target) {
-    if (ptr != nullptr) {
-      target->inc();
-    }
-  }
+  Ptr(Ptr<U>&& other) noexcept: ptr(other.ptr), counterRef(kj::mv(other.counterRef)) {}
 
   template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  Ptr(const Ptr<U>& other) : ptr(other.ptr), target(other.target) {
-    if (ptr != nullptr) {
-      target->inc();
-    }
-  }
+  Ptr(const Ptr<U>& other): ptr(other.ptr), counterRef(other.counterRef) {}
 
   inline void operator=(decltype(nullptr)) {
-    if (ptr != nullptr) {
-      target->dec();
-      ptr = nullptr;
-      target = nullptr;
-    }
+    counterRef.reset();
+    ptr = nullptr;
   }
 
-  inline T* operator->() const { return get(); }
+  inline T* operator->() const { return ptr; }
   inline T* get() const { return ptr; }
 
   inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
@@ -888,41 +1002,29 @@ public:
   template <typename U>
   inline bool operator==(const Ptr<U>& other) const { return get() == other.get(); }
 
-  inline T& asRef() const { return *get(); }
-  // Obtain a `T&` reference.
-  // This is an unsafe operation and should be avoided unless absolutely necessary.
-  // It is undefined behavior to use the reference after the object managed by this Ptr<T>
-  // ceased to exist.
-
-  inline Weak<T> asWeak() {
-    if (ptr == nullptr) {
-      return nullptr;
-    }
-    KJ_IREQUIRE(target != nullptr, "Ptr<> cannot be converted to Weak<>");
-    return Weak<T>(ptr, target->getWeakCell(ptr));
-  }
-  // Convert this strong pointer to a weak pointer.
+  inline _::RefOrVoid<T> asRef() const { return *ptr; }
+  // Obtain a T&. The reference, like this Ptr, must not outlive the owning object.
 
 private:
-  inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr), target(nullptr) {}
+  inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr), counterRef() {}
 
-  inline Ptr(Pin<T>* pin) : ptr(pin->get()), target(&pin->target) {
-    target->inc();
-  }
+  template <typename U>
+  inline Ptr(U* ptr, PtrTarget* target)
+      : ptr(ptr), counterRef(ptr == nullptr ? nullptr : &target->ptrCounter) {}
 
-  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  inline Ptr(Pin<U>* pin) : ptr(pin->get()), target(&pin->target) {
-    target->inc();
-  }
+  template <typename U>
+  inline Ptr(U* ptr, _::WeakCell* cell): Ptr(ptr, cell->target) {}
 
-  inline Ptr(T* ptr, _::WeakCell* cell) : ptr(ptr), target(cell->target) { target->inc(); }
+  inline Ptr(T* ptr, _::PtrCounter* counter): ptr(ptr), counterRef(counter) {}
 
-  inline Ptr(T* ptr, PtrTarget* target) : ptr(ptr), target(target) { target->inc(); }
-  // Construct a Ptr that refers directly to a PtrTarget-derived object. Used by
-  // PtrTarget::addPtrToThis().
+  template <typename U>
+  inline Ptr(Pin<U>* pin): Ptr(pin->get(), &pin->target) {}
 
-  T *ptr;
-  PtrTarget* target;
+  template <typename U, typename D>
+  inline Ptr(Own<U, D>* own): ptr(own->ptr), counterRef(own->ptrCounter.get()) {}
+
+  T* ptr;
+  KJ_NO_UNIQUE_ADDRESS _::PtrCounterRef counterRef;
 
   template <typename>
   friend class Ptr;
@@ -930,9 +1032,37 @@ private:
   friend class Pin;
   template <typename>
   friend class Weak;
+  template <typename, typename>
+  friend class Own;
+  template <typename>
+  friend class Rc;
+  template <typename>
+  friend class Arc;
   friend class PtrTarget;
   friend struct MaybeTraits<Ptr<T>>;
 };
+
+template <typename T>
+inline Own<T>::operator Ptr<T>() { return Ptr<T>(this); }
+template <typename T>
+inline Ptr<T> Own<T>::asPtr() { return Ptr<T>(this); }
+template <typename T>
+template <typename U, typename>
+inline Own<T>::operator Ptr<U>() { return Ptr<U>(this); }
+template <typename T>
+template <typename U, typename>
+inline Ptr<U> Own<T>::asPtr() { return Ptr<U>(this); }
+
+template <typename T, typename D>
+inline Own<T, D>::operator Ptr<T>() { return Ptr<T>(this); }
+template <typename T, typename D>
+inline Ptr<T> Own<T, D>::asPtr() { return Ptr<T>(this); }
+template <typename T, typename D>
+template <typename U, typename>
+inline Own<T, D>::operator Ptr<U>() { return Ptr<U>(this); }
+template <typename T, typename D>
+template <typename U, typename>
+inline Ptr<U> Own<T, D>::asPtr() { return Ptr<U>(this); }
 
 // MaybeTraits specialization for Ptr<T>.
 // This enables niche optimization: Maybe<Ptr<T>> uses ptr == nullptr as "none".
@@ -941,8 +1071,8 @@ struct MaybeTraits<Ptr<T>> {
   static void initNone(Ptr<T>* ptr) noexcept { new (ptr, _::PlacementNew()) Ptr<T>(nullptr); }
   static bool isNone(const Ptr<T>& p) noexcept { return p.ptr == nullptr; }
 
-  // Ptr's move ctor just copies ptr/counter and sets source.ptr to nullptr. Moving a null Ptr is
-  // safe when the null state is constructed via initNone().
+  // Moving the null representation is safe. In optimized builds Ptr has raw-pointer move
+  // semantics; NullableValue clears the source after moving it.
   static constexpr bool noneIsMoveSafe = true;
 
   // Allow `Maybe<Ptr<T>>` to be constructed from types convertible to `Ptr<T>`, like `Ptr<U>`.
@@ -996,14 +1126,6 @@ public:
       cell->addRef();
     }
   }
-
-  inline Weak(Ptr<T>& ptr): Weak(ptr.asWeak()) {}
-  inline Weak(Ptr<T>&& ptr): Weak(ptr.asWeak()) {}
-
-  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  inline Weak(Ptr<U>& ptr): Weak(ptr.asWeak()) {}
-  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  inline Weak(Ptr<U>&& ptr): Weak(ptr.asWeak()) {}
 
   inline Weak& operator=(decltype(nullptr)) {
     dispose();
@@ -1247,9 +1369,12 @@ inline Own<T>::Own(Own<U, StaticDisposer>&& other) noexcept
     // isn't exactly the same as the `U*` pointer it wants. We have no choice but to allocate
     // a dynamic disposer here.
     disposer = new _::DisposableOwnedBundle<Own<U, StaticDisposer>>(kj::mv(other));
+    // The bundle now owns the old lifetime domain. This outer Own gets a separate domain.
+    ptrCounter = _::PtrCounterOwner(*disposer, ptr != nullptr);
   } else {
     disposer = &_::StaticDisposerAdapter<U, StaticDisposer>::instance;
     other.ptr = nullptr;
+    ptrCounter = kj::mv(other.ptrCounter);
   }
 }
 
