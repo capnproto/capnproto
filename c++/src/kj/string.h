@@ -108,8 +108,12 @@ public:
 #endif
 
   inline constexpr operator ArrayPtr<const char>() const;
-  inline constexpr ArrayPtr<const char> asArray() const;
-  inline constexpr ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
+  inline constexpr ArrayPtr<const char> asArray() const &;
+  inline ArrayPtr<const char> asArray() &&;
+  inline constexpr ArrayPtr<const char> asArray() const &&;
+  inline constexpr ArrayPtr<const byte> asBytes() const & { return asArray().asBytes(); }
+  inline ArrayPtr<const byte> asBytes() && { return kj::mv(*this).asArray().asBytes(); }
+  inline constexpr ArrayPtr<const byte> asBytes() const && { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline constexpr const char* cStr() const { return content.begin(); }
@@ -165,17 +169,25 @@ public:
   // Same as parseAs, but rather than throwing an exception we return NULL.
 
   template <typename T>
-  inline auto as() { return asImpl((T*)nullptr, *this); }
+  inline auto as() & { return asImpl((T*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(T*, StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
   template <typename T>
-  inline auto as() const { return asImpl((T*)nullptr, *this); }
+  inline auto as() const & { return asImpl((T*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(T*, const StringPtr&).
   // Used to chain conversion calls rather than wrap with function.
 
-  inline String clone() const;
-  // Clones the string into heap-owning storage.
+  template <typename T>
+  inline auto as() && { return asImpl((T*)nullptr, kj::mv(*this)); }
+
+  template <typename T>
+  inline auto as() const && { return asImpl((T*)nullptr, kj::mv(*this)); }
+
+  inline String clone() const &;
+  inline String clone() &&;
+  inline String clone() const &&;
+  // Clones the string into heap-owning storage. The non-const rvalue overload clears this pointer.
 
 private:
   inline explicit constexpr StringPtr(ArrayPtr<const char> content): content(content) {}
@@ -580,6 +592,11 @@ struct Stringifier {
     return s.asArray();
   }
   inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
+  inline ArrayPtr<const char> operator*(StringPtr&& s) const {
+    StringPtr source;
+    kj::swp(source, s);
+    return source.asArray();
+  }
   inline ArrayPtr<const char> operator*(const ConstString& s) const { return s.asArray(); }
 
   inline Range<char> operator*(const Range<char>& r) const { return r; }
@@ -647,6 +664,9 @@ String str(Params&&... params) {
 
 inline String str(String&& s) { return mv(s); }
 // Overload to prevent redundant allocation.
+
+inline String str(StringPtr&& s) { return mv(s).clone(); }
+// An rvalue StringPtr is consumed, consistently with other move-aware str() overloads.
 
 template <typename T>
 _::Delimited<T> delimited(T&& arr, kj::StringPtr delim);
@@ -752,7 +772,17 @@ inline constexpr StringPtr::operator ArrayPtr<const char>() const {
   return content.first(content.size() - 1);
 }
 
-inline constexpr ArrayPtr<const char> StringPtr::asArray() const {
+inline constexpr ArrayPtr<const char> StringPtr::asArray() const & {
+  return content.first(content.size() - 1);
+}
+
+inline ArrayPtr<const char> StringPtr::asArray() && {
+  StringPtr source;
+  kj::swp(source, *this);
+  return source.asArray();
+}
+
+inline constexpr ArrayPtr<const char> StringPtr::asArray() const && {
   return content.first(content.size() - 1);
 }
 
@@ -848,7 +878,17 @@ inline ConstString ConstString::clone() const {
   }
 }
 
-inline String StringPtr::clone() const {
+inline String StringPtr::clone() const & {
+  return heapString(begin(), size());
+}
+
+inline String StringPtr::clone() && {
+  StringPtr source;
+  kj::swp(source, *this);
+  return source.clone();
+}
+
+inline String StringPtr::clone() const && {
   return heapString(begin(), size());
 }
 

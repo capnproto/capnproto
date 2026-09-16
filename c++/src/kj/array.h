@@ -1020,12 +1020,24 @@ inline Array<T> heapArray(std::initializer_list<T> init) {
 }
 
 template <typename T>
-inline auto ArrayPtr<T>::clone() requires (Cloneable<T> || Copyable<T>) {
+inline auto ArrayPtr<T>::clone() & requires (Cloneable<T> || Copyable<T>) {
   return KJ_MAP(value, *this) { return _::copyOrClone(value); };
 }
 
 template <typename T>
-inline auto ArrayPtr<T>::clone() const requires (Cloneable<const T> || Copyable<const T>) {
+inline auto ArrayPtr<T>::clone() const & requires (Cloneable<const T> || Copyable<const T>) {
+  return KJ_MAP(value, *this) { return _::copyOrClone(value); };
+}
+
+template <typename T>
+inline auto ArrayPtr<T>::clone() && requires (Cloneable<T> || Copyable<T>) {
+  ArrayPtr source;
+  kj::swp(source, *this);
+  return source.clone();
+}
+
+template <typename T>
+inline auto ArrayPtr<T>::clone() const && requires (Cloneable<const T> || Copyable<const T>) {
   return KJ_MAP(value, *this) { return _::copyOrClone(value); };
 }
 
