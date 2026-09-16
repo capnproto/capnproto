@@ -514,6 +514,27 @@ KJ_TEST("ArrayPtr clone copies copyable elements") {
   EXPECT_EQ(cloned[0], 12);
   EXPECT_EQ(cloned[1], 34);
   EXPECT_NE(cloned.begin(), original.begin());
+
+  ArrayPtr<const int> movedOriginal(values);
+  Array<int> movedClone = kj::mv(movedOriginal).clone();
+  ASSERT_EQ(2u, movedClone.size());
+  EXPECT_EQ(movedClone[0], 12);
+  EXPECT_EQ(movedClone[1], 34);
+  EXPECT_EQ(nullptr, movedOriginal);
+  EXPECT_EQ(0u, movedOriginal.size());
+}
+
+KJ_TEST("converting an rvalue ArrayPtr to const consumes it") {
+  int values[] = {12, 34};
+  ArrayPtr<int> original(values);
+  ArrayPtr<const int> converted = kj::mv(original);
+
+  KJ_EXPECT(converted.begin() == values);
+  KJ_EXPECT(converted.size() == 2);
+  KJ_EXPECT(converted[0] == 12);
+  KJ_EXPECT(converted[1] == 34);
+  KJ_EXPECT(original == nullptr);
+  KJ_EXPECT(original.size() == 0);
 }
 
 KJ_TEST("Array clone copies copyable elements") {
@@ -739,10 +760,45 @@ static std::span<T> asImpl(Std*, Array<T>& arr) {
   return std::span<T>(arr.begin(), arr.size());
 }
 
+template<typename T>
+static std::span<T> asImpl(Std*, ArrayPtr<T>&& arr) {
+  std::span<T> result(arr.begin(), arr.size());
+  arr = nullptr;
+  return result;
+}
+
 KJ_TEST("Array::as<Std>") {
   kj::Array<int> arr = kj::arr(1, 2, 4);
   std::span<int> stdArr = arr.as<Std>();
   KJ_EXPECT(stdArr.size() == 3);
+}
+
+KJ_TEST("ArrayPtr move-aware as methods") {
+  int values[] = {1, 2, 4};
+
+  ArrayPtr<int> constSource(values);
+  ArrayPtr<const int> constResult = kj::mv(constSource).asConst();
+  KJ_EXPECT(constResult.begin() == values);
+  KJ_EXPECT(constResult.size() == 3);
+  KJ_EXPECT(constSource == nullptr);
+
+  ArrayPtr<int> bytesSource(values);
+  ArrayPtr<byte> bytesResult = kj::mv(bytesSource).asBytes();
+  KJ_EXPECT(bytesResult.begin() == reinterpret_cast<byte*>(values));
+  KJ_EXPECT(bytesResult.size() == sizeof(values));
+  KJ_EXPECT(bytesSource == nullptr);
+
+  ArrayPtr<int> charsSource(values);
+  ArrayPtr<char> charsResult = kj::mv(charsSource).asChars();
+  KJ_EXPECT(charsResult.begin() == reinterpret_cast<char*>(values));
+  KJ_EXPECT(charsResult.size() == sizeof(values));
+  KJ_EXPECT(charsSource == nullptr);
+
+  ArrayPtr<int> customSource(values);
+  std::span<int> customResult = kj::mv(customSource).as<Std>();
+  KJ_EXPECT(customResult.data() == values);
+  KJ_EXPECT(customResult.size() == 3);
+  KJ_EXPECT(customSource == nullptr);
 }
 
 KJ_TEST("Array::slice(start, end)") {
