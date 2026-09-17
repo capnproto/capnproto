@@ -2846,6 +2846,22 @@ KJ_TEST("WebSocket abort propagates through pipe") {
   KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, downstreamPump.wait(waitScope));
 }
 
+KJ_TEST("WebSocket pipe abort notifies current and future observers") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = newWebSocketPipe();
+
+  auto aborted1 = pipe.ends[0]->whenAborted();
+  auto aborted2 = pipe.ends[0]->whenAborted();
+  KJ_EXPECT(!aborted1.poll(waitScope));
+  KJ_EXPECT(!aborted2.poll(waitScope));
+
+  pipe.ends[1]->abort();
+
+  aborted1.wait(waitScope);
+  aborted2.wait(waitScope);
+  pipe.ends[0]->whenAborted().wait(waitScope);
+}
+
 KJ_TEST("WebSocket maximum message size") {
   KJ_HTTP_TEST_SETUP_IO;
   auto pipe =KJ_HTTP_TEST_CREATE_2PIPE;

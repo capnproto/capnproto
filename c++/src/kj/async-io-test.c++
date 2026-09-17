@@ -3589,13 +3589,18 @@ KJ_TEST("Userspace OneWayPipe whenWriteDisconnected()") {
 
   auto pipe = newOneWayPipe();
 
-  auto abortedPromise = pipe.out->whenWriteDisconnected();
-  KJ_ASSERT(!abortedPromise.poll(ws));
+  auto abortedPromise1 = pipe.out->whenWriteDisconnected();
+  auto abortedPromise2 = pipe.out->whenWriteDisconnected();
+  KJ_ASSERT(!abortedPromise1.poll(ws));
+  KJ_ASSERT(!abortedPromise2.poll(ws));
 
   pipe.in = nullptr;
 
-  KJ_ASSERT(abortedPromise.poll(ws));
-  abortedPromise.wait(ws);
+  KJ_ASSERT(abortedPromise1.poll(ws));
+  KJ_ASSERT(abortedPromise2.poll(ws));
+  abortedPromise1.wait(ws);
+  abortedPromise2.wait(ws);
+  pipe.out->whenWriteDisconnected().wait(ws);
 }
 
 KJ_TEST("Userspace TwoWayPipe whenWriteDisconnected()") {
@@ -3604,13 +3609,18 @@ KJ_TEST("Userspace TwoWayPipe whenWriteDisconnected()") {
 
   auto pipe = newTwoWayPipe();
 
-  auto abortedPromise = pipe.ends[0]->whenWriteDisconnected();
-  KJ_ASSERT(!abortedPromise.poll(ws));
+  auto abortedPromise1 = pipe.ends[0]->whenWriteDisconnected();
+  auto abortedPromise2 = pipe.ends[0]->whenWriteDisconnected();
+  KJ_ASSERT(!abortedPromise1.poll(ws));
+  KJ_ASSERT(!abortedPromise2.poll(ws));
 
   pipe.ends[1] = nullptr;
 
-  KJ_ASSERT(abortedPromise.poll(ws));
-  abortedPromise.wait(ws);
+  KJ_ASSERT(abortedPromise1.poll(ws));
+  KJ_ASSERT(abortedPromise2.poll(ws));
+  abortedPromise1.wait(ws);
+  abortedPromise2.wait(ws);
+  pipe.ends[0]->whenWriteDisconnected().wait(ws);
 }
 
 #if !_WIN32  // We don't currently support detecting disconnect with IOCP.
