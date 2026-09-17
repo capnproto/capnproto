@@ -1243,8 +1243,6 @@ KJ_TEST("NetworkHttpClient connect with tlsStarter") {
 
   KJ_ASSERT(tlsStarter != kj::none);
 
-  auto buf = kj::heapArray<char>(4);
-
   auto promises = kj::heapArrayBuilder<kj::Promise<void>>(2);
   promises.add(request.connection->write("hello"_kjb));
   promises.add(expectRead(*request.connection, "hello"_kj));
