@@ -353,11 +353,14 @@ public:
   }
 
   template <typename U>
-  Rc<U> downcast() {
-    Rc<U> result(refcounted, &kj::downcast<U>(*ptr));
-    refcounted = nullptr;
-    ptr = nullptr;
-    return result;
+  Rc<U> downcast() const {
+    // Create an additional reference to this object, downcast to U.
+    if (ptr != nullptr) {
+      auto downcasted = &kj::downcast<U>(*ptr);
+      ++refcounted->refcount;
+      return Rc<U>(refcounted, downcasted);
+    }
+    return Rc<U>();
   }
 
   inline bool operator==(const Rc<T>& other) const { return ptr == other.ptr; }
@@ -891,14 +894,14 @@ public:
   }
 
   template <typename U>
-  Arc<U> downcast() {
-    Arc<U> result;
+  Arc<U> downcast() const {
+    // Create an additional reference to this object, downcast to U.
     if (ptr != nullptr) {
-      result = Arc<U>(refcounted, &kj::downcast<const U>(*ptr));
-      refcounted = nullptr;
-      ptr = nullptr;
+      auto downcasted = &kj::downcast<const U>(*ptr);
+      refcounted->incRefcount();
+      return Arc<U>(refcounted, downcasted);
     }
-    return result;
+    return Arc<U>();
   }
 
   inline bool operator==(const Arc<T>& other) const { return ptr == other.ptr; }

@@ -595,13 +595,16 @@ KJ_TEST("Rc inheritance") {
   kj::Rc<SetTrueInDestructor> parent = child.addRef();
 
   auto down = parent.downcast<Child>();
-  EXPECT_TRUE(parent == nullptr);
+  EXPECT_TRUE(parent != nullptr);
   EXPECT_TRUE(down != nullptr);
+  EXPECT_TRUE(parent.get() == down.get());
 
   EXPECT_FALSE(b);
   child = nullptr;
   EXPECT_FALSE(b);
   down = nullptr;
+  EXPECT_FALSE(b);
+  parent = nullptr;
   EXPECT_TRUE(b);
 }
 
@@ -1218,13 +1221,16 @@ KJ_TEST("Arc inheritance") {
   kj::Arc<AtomicSetTrueInDestructor> parent = child.addRef();
 
   auto down = parent.downcast<AtomicChild>();
-  EXPECT_TRUE(parent == nullptr);
+  EXPECT_TRUE(parent != nullptr);
   EXPECT_TRUE(down != nullptr);
+  EXPECT_TRUE(parent.get() == down.get());
 
   EXPECT_FALSE(b);
   child = nullptr;
   EXPECT_FALSE(b);
   down = nullptr;
+  EXPECT_FALSE(b);
+  parent = nullptr;
   EXPECT_TRUE(b);
 }
 
@@ -1470,13 +1476,15 @@ KJ_TEST("Arc polymorphic upcast") {
   EXPECT_FALSE(b);
 
   Arc<ConcreteForArc> concrete = abstract.downcast<ConcreteForArc>();
-  EXPECT_TRUE(abstract == nullptr);
+  EXPECT_TRUE(abstract != nullptr);
   EXPECT_TRUE(concrete.get() == ref2.get());
 
   concrete = nullptr;
   EXPECT_FALSE(b);
 
   ref2 = nullptr;
+  EXPECT_FALSE(b);
+  abstract = nullptr;
   EXPECT_TRUE(b);
 }
 
