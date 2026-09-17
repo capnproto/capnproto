@@ -1194,29 +1194,19 @@ KJ_TEST("kj::Weak<T> basic properties") {
   KJ_EXPECT(weak2 == nullptr);
 }
 
-KJ_TEST("kj::Ptr<T> and kj::Weak<T> conversion") {
+KJ_TEST("kj::Weak<T> upgrades to kj::Ptr<T>") {
+  static_assert(!kj::canConvert<kj::Ptr<Obj>, kj::Weak<Obj>>(),
+      "Ptr<T> should not be convertible to Weak<T>");
+  static_assert(!kj::canConvert<kj::Ptr<Obj2>, kj::Weak<Obj>>(),
+      "Ptr<Derived> should not be convertible to Weak<Base>");
+
   kj::Pin<Obj> pin("a");
-
-  kj::Ptr<Obj> ptr = pin;
-  kj::Weak<Obj> weak = ptr.asWeak();
-  KJ_EXPECT(weak == pin);
-  KJ_EXPECT(weak.assertLive().name == "a"_kj);
-
-  kj::Weak<Obj> weakFromPtr = ptr;
-  KJ_EXPECT(weakFromPtr == pin);
-  KJ_EXPECT(weakFromPtr.assertLive().name == "a"_kj);
-
-  kj::Weak<Obj> weakFromTemp = pin.asPtr();
-  KJ_EXPECT(weakFromTemp == pin);
-  KJ_EXPECT(weakFromTemp.assertLive().name == "a"_kj);
+  kj::Weak<Obj> weak = pin.addWeak();
 
   KJ_IF_SOME(strong, weak) {
     static_assert(kj::isSameType<decltype(strong), kj::Ptr<Obj>&>());
     KJ_EXPECT(strong == pin);
     KJ_EXPECT(strong->name == "a"_kj);
-
-    kj::Weak<Obj> weak2 = strong.asWeak();
-    KJ_EXPECT(weak2 == pin);
   } else {
     KJ_FAIL_EXPECT("expected KJ_IF_SOME on Weak<T> to upgrade");
   }
@@ -1229,9 +1219,6 @@ KJ_TEST("kj::Ptr<T> and kj::Weak<T> conversion") {
   KJ_IF_SOME(strong, weak.upgrade()) {
     KJ_EXPECT(strong == pin);
     KJ_EXPECT(strong->name == "a"_kj);
-
-    kj::Weak<Obj> weak2 = strong.asWeak();
-    KJ_EXPECT(weak2 == pin);
   } else {
     KJ_FAIL_EXPECT("expected Weak<T> to upgrade");
   }

@@ -831,7 +831,7 @@ class Ptr {
   //
   // When used together with Pin<T> it keeps track of active pointers.
   // Asserts lifetime constraints when KJ_ASSERT_PTR_COUNTERS is defined.
-  // Ptr<T> stores a pointer to Pin<T>'s control block so it can produce weak refs.
+  // Ptr<T> stores a pointer to Pin<T>'s control block to track its lifetime.
 
 public:
   inline ~Ptr() {
@@ -894,15 +894,6 @@ public:
   // It is undefined behavior to use the reference after the object managed by this Ptr<T>
   // ceased to exist.
 
-  inline Weak<T> asWeak() {
-    if (ptr == nullptr) {
-      return nullptr;
-    }
-    KJ_IREQUIRE(target != nullptr, "Ptr<> cannot be converted to Weak<>");
-    return Weak<T>(ptr, target->getWeakCell(ptr));
-  }
-  // Convert this strong pointer to a weak pointer.
-
 private:
   inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr), target(nullptr) {}
 
@@ -956,8 +947,9 @@ template <typename T>
 class Weak {
   // Weak<T> is a smart alternative to T& with expiration detection.
   //
-  // Weak<T> is obtained from Pin<T>::addWeak(). It does not keep the Pin alive and does not prevent
-  // the Pin from moving; it expires when the Pin is moved or destroyed.
+  // Weak<T> is obtained from Pin<T>::addWeak() or PtrTarget::addWeakToThis(). It does not keep the
+  // target alive or prevent a Pin from moving; it expires when the target is destroyed or the Pin
+  // is moved.
   // Common usage:
   // - KJ_IF_SOME on Weak<T> upgrades to Ptr<T>
   // - assertLive() obtains T& and throws on expired Weak<T>
@@ -996,14 +988,6 @@ public:
       cell->addRef();
     }
   }
-
-  inline Weak(Ptr<T>& ptr): Weak(ptr.asWeak()) {}
-  inline Weak(Ptr<T>&& ptr): Weak(ptr.asWeak()) {}
-
-  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  inline Weak(Ptr<U>& ptr): Weak(ptr.asWeak()) {}
-  template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  inline Weak(Ptr<U>&& ptr): Weak(ptr.asWeak()) {}
 
   inline Weak& operator=(decltype(nullptr)) {
     dispose();
@@ -1062,12 +1046,6 @@ private:
     cell->addRef();
   }
 
-  inline Weak(T* ptr, _::WeakCell* cell): cell(cell), ptr(ptr) {
-    if (cell != nullptr) {
-      cell->addRef();
-    }
-  }
-
   inline Weak(T* ptr, PtrTarget* target): cell(target->getWeakCell(ptr)), ptr(ptr) {
     // Construct a Weak that refers directly to a PtrTarget-derived object. Used by
     // PtrTarget::addWeakToThis().
@@ -1091,8 +1069,6 @@ private:
 
   template <typename>
   friend class Pin;
-  template <typename>
-  friend class Ptr;
   template <typename>
   friend class Weak;
   friend class PtrTarget;
