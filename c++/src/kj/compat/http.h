@@ -998,6 +998,18 @@ public:
     // `acceptWebSocket()` may only be called a single time. Calling it a second time will cause an
     // exception to be thrown.
 
+    virtual kj::Promise<void> sendInformational(
+        uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers);
+    // Sends a 1xx informational response. May be called any number of times before send() or
+    // acceptWebSocket(). `statusText` and `headers` need only remain valid until
+    // sendInformational() returns. Returns a promise that resolves once the response has been
+    // written; the caller should typically await this before making further calls.
+    //
+    // Calling sendInformational() after send() or acceptWebSocket() throws an exception.
+    //
+    // The default implementation is a no-op (returns kj::READY_NOW), which is appropriate for
+    // adapters that cannot forward informational responses.
+
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
                                 const HttpHeaders& headers);
     kj::Promise<void> sendError(uint statusCode, kj::StringPtr statusText,
