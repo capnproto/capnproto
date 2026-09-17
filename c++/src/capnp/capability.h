@@ -285,8 +285,9 @@ public:
   // pipelined capability. The promise resolves no later than when the capability settles, i.e.
   // the same time `whenResolved()` would complete.
   //
-  // The file descriptor will remain open at least as long as the Capability::Client remains alive.
-  // If you need it to last longer, you will need to `dup()` it.
+  // The file descriptor will remain open at least as long as the Capability::Client remains alive,
+  // unless the capability is revoked. If it must survive revocation or client destruction, `dup()`
+  // it.
 
   kj::String debugInfo();
   // For debugging purposes, return what kind of capability this is, including layers of wrapping
@@ -313,6 +314,7 @@ private:
   static void revokeLocalClientIfShared(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook);
   static void revokeLocalClient(ClientHook& hook, kj::Exception&& reason);
+  static kj::Promise<void> whenLocalServerDestroyable(ClientHook& hook);
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
@@ -583,10 +585,11 @@ private:
 template <typename T>
 class RevocableServer {
   // Allows you to create a capability client pointing to a capability server without taking
-  // ownership of the server. When `RevocableServer` is destroyed, all clients created through it
-  // will become broken. All outstanding RPCs via those clients will be canceled and all future
-  // RPCs will immediately throw. Hence, once the `RevocableServer` is destroyed, it is safe
-  // to destroy the server object it referenced.
+  // ownership of the server. Calling `revoke()`, or destroying the `RevocableServer`, makes all
+  // clients created through it broken. Outstanding RPCs are canceled and future RPCs immediately
+  // throw. Neither operation waits for file descriptors already obtained from the capability to
+  // finish sending. If the server owns such a descriptor, keep it alive until
+  // `whenServerDestroyable()` resolves or use `revokeAndWait()`.
   //
   // This is particularly useful when you want to create a capability server that points to an
   // object that you do not own, and thus cannot keep alive beyond some defined lifetime. Since
@@ -609,8 +612,17 @@ public:
 
   void revoke();
   void revoke(kj::Exception&& reason);
-  // Revokes the capability immediately, rather than waiting for the destructor. This can also
-  // be used to specify a custom exception to use when revoking.
+  // Revokes the capability immediately. The overload can specify the exception thrown by clients.
+  // This does not wait for file descriptors obtained from the capability to finish sending.
+
+  kj::Promise<void> revokeAndWait();
+  kj::Promise<void> revokeAndWait(kj::Exception&& reason);
+  // Calls `revoke()` and resolves once the referenced server can be destroyed.
+
+  kj::Promise<void> whenServerDestroyable();
+  // Resolves once the capability has been revoked and no FD reference obtained from it still
+  // depends on the server. May be called before `revoke()`, in which case it remains pending until
+  // revocation or destruction of the `RevocableServer`. The server must remain alive until then.
 
 private:
   kj::Own<ClientHook> hook;
@@ -806,6 +818,20 @@ class ClientHook {
 public:
   ClientHook(const void* brand = nullptr);
 
+  class FdRef {
+    // A file descriptor together with a reference that keeps that exact descriptor open and
+    // prevents its number from being reused. Forwarding ClientHooks must preserve this reference
+    // rather than replace it with a reference to themselves.
+
+  public:
+    FdRef(int fd, kj::Own<void> keepAlive) : fd(fd), keepAlive(kj::mv(keepAlive)) {}
+    int get() const { return fd; }
+
+  private:
+    int fd;
+    kj::Own<void> keepAlive;
+  };
+
   using CallHints = Capability::Client::CallHints;
 
   virtual Request<AnyPointer, AnyPointer> newCall(
@@ -876,7 +902,7 @@ public:
   inline bool isError() { return isBrand(&BROKEN_CAPABILITY_BRAND); }
   // Returns true if the capability was created by newBrokenCap().
 
-  virtual kj::Maybe<int> getFd() = 0;
+  virtual kj::Maybe<FdRef> getFd() = 0;
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 
@@ -1272,6 +1298,22 @@ void RevocableServer<T>::revoke() {
 template <typename T>
 void RevocableServer<T>::revoke(kj::Exception&& exception) {
   Capability::Client::revokeLocalClient(*hook, kj::mv(exception));
+}
+template <typename T>
+kj::Promise<void> RevocableServer<T>::revokeAndWait() {
+  auto localHook = hook->addRef();
+  Capability::Client::revokeLocalClient(*localHook);
+  return Capability::Client::whenLocalServerDestroyable(*localHook);
+}
+template <typename T>
+kj::Promise<void> RevocableServer<T>::revokeAndWait(kj::Exception&& exception) {
+  auto localHook = hook->addRef();
+  Capability::Client::revokeLocalClient(*localHook, kj::mv(exception));
+  return Capability::Client::whenLocalServerDestroyable(*localHook);
+}
+template <typename T>
+kj::Promise<void> RevocableServer<T>::whenServerDestroyable() {
+  return Capability::Client::whenLocalServerDestroyable(*hook);
 }
 
 namespace _ { // private
