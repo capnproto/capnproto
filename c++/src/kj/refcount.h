@@ -227,6 +227,13 @@ private:
   Own<T> wrapped;
 };
 
+template <typename T>
+struct RemoveReference;
+template <typename T>
+struct RemoveReference<T&> { using Type = T; };
+template <typename T>
+struct RemoveReference<T&&> { using Type = T; };
+
 }  // namespace _ (private)
 
 template<typename T>
@@ -312,6 +319,28 @@ public:
 
   Rc<T> clone() {
     return addRef();
+  }
+
+  template <typename Func>
+  auto project(Func&& func) {
+    // Create a new ownership claim projected onto an object contained by the referent. The returned
+    // Rc points at the projection, but disposal still applies to the original object. For example,
+    // an Rc of a field can be obtained with:
+    //
+    //     Rc<Person> person = kj::rc<Person>();
+    //     Rc<String> name = person.project([](Person& person) -> String& { return person.name; });
+    //
+    // This Rc must not be null, and the callback must return a reference into an object whose
+    // lifetime is covered by the original ownership claim. A WeakRc obtained from the result points
+    // to the projected object, but expires based on the lifetime of the original object.
+    using Result = decltype(kj::fwd<Func>(func)(*ptr));
+    static_assert(isLvalueReference<Result>(), "Rc::project() callback must return a reference");
+    using U = typename _::RemoveReference<Result>::Type;
+
+    KJ_IREQUIRE(ptr != nullptr, "null Rc<> projection");
+    auto projected = &kj::fwd<Func>(func)(*ptr);
+    ++refcounted->refcount;
+    return Rc<U>(refcounted, projected);
   }
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
@@ -858,6 +887,29 @@ public:
 
   kj::Arc<T> clone() const {
     return addRef();
+  }
+
+  template <typename Func>
+  auto project(Func&& func) const {
+    // Create a new ownership claim projected onto an object contained by the referent. Arc exposes
+    // its referent as const, so the callback receives const T&. The returned Arc points at the
+    // projection, but disposal still applies to the original object. For example, an Arc of a field
+    // can be obtained with:
+    //
+    //     Arc<Person> person = kj::arc<Person>();
+    //     Arc<const String> name = person.project(
+    //         [](const Person& person) -> const String& { return person.name; });
+    //
+    // This Arc must not be null, and the callback must return a reference into an object whose
+    // lifetime is covered by the original ownership claim.
+    using Result = decltype(kj::fwd<Func>(func)(*ptr));
+    static_assert(isLvalueReference<Result>(), "Arc::project() callback must return a reference");
+    using U = typename _::RemoveReference<Result>::Type;
+
+    KJ_IREQUIRE(ptr != nullptr, "null Arc<> projection");
+    auto projected = &kj::fwd<Func>(func)(*ptr);
+    refcounted->incRefcount();
+    return Arc<U>(refcounted, projected);
   }
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there

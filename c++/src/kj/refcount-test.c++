@@ -50,6 +50,14 @@ static_assert(!Cloneable<const Array<Rc<SetTrueInDestructor>>>);
 static_assert(Cloneable<ArrayPtr<Rc<SetTrueInDestructor>>>);
 static_assert(!Cloneable<const ArrayPtr<Rc<SetTrueInDestructor>>>);
 
+struct ProjectionTarget {
+  ProjectionTarget(bool* destroyed, int value): destroyed(destroyed), value(value) {}
+  ~ProjectionTarget() { *destroyed = true; }
+
+  bool* destroyed;
+  int value;
+};
+
 struct WeakInConstructor: public Refcounted {
   // Captures a weak reference to itself from within its constructor, exercising addWeakToThis()
   // before kj::rc()/kj::refcounted() has incremented the refcount.
@@ -303,6 +311,78 @@ KJ_TEST("Rc clone") {
 
   ref2 = nullptr;
   EXPECT_TRUE(b);
+}
+
+KJ_TEST("Rc project retains ownership of the original object") {
+  bool destroyed = false;
+  auto ref = kj::rc<ProjectionTarget>(&destroyed, 123);
+  auto other = ref.addRef();
+  int* value = &ref->value;
+
+  Rc<int> projected = ref.project([](ProjectionTarget& target) -> int& {
+    return target.value;
+  });
+
+  KJ_EXPECT(ref != nullptr);
+  KJ_EXPECT(projected.get() == value);
+  KJ_EXPECT(*projected == 123);
+  *projected = 456;
+  KJ_EXPECT(ref->value == 456);
+  KJ_EXPECT(other->value == 456);
+
+  other = nullptr;
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+
+#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
+  Rc<ProjectionTarget> nullRef;
+  bool called = false;
+  KJ_EXPECT_THROW_MESSAGE("null Rc<> projection",
+      nullRef.project([&](ProjectionTarget& target) -> int& {
+    called = true;
+    return target.value;
+  }));
+  KJ_EXPECT(!called);
+#endif
+}
+
+KJ_TEST("WeakRc preserves an Rc projection") {
+  bool destroyed = false;
+  auto ref = kj::rc<ProjectionTarget>(&destroyed, 123);
+  auto projected = ref.project([](ProjectionTarget& target) -> int& {
+    return target.value;
+  });
+  int* value = projected.get();
+  WeakRc<int> weak = projected.downgrade();
+
+  KJ_EXPECT(&weak.assertLive() == value);
+  KJ_EXPECT(weak.assertLive() == 123);
+
+  // Any strong reference to the original object keeps the projected weak reference live, even
+  // after the projected strong reference itself is dropped.
+  projected = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(&weak.assertLive() == value);
+
+  Rc<int> upgraded;
+  KJ_IF_SOME(strong, weak.upgrade()) {
+    upgraded = kj::mv(strong);
+  } else {
+    KJ_FAIL_EXPECT("expected projected WeakRc to upgrade");
+  }
+  KJ_EXPECT(upgraded.get() == value);
+
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(weak != nullptr);
+  KJ_EXPECT(*upgraded == 123);
+
+  upgraded = nullptr;
+  KJ_EXPECT(destroyed);
+  KJ_EXPECT(weak == nullptr);
+  KJ_EXPECT(weak.upgrade() == kj::none);
 }
 
 KJ_TEST("Rc self-assignment") {
@@ -1203,6 +1283,40 @@ KJ_TEST("Arc clone") {
 
   ref2 = nullptr;
   EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc project retains ownership of the original object") {
+  bool destroyed = false;
+  auto ref = kj::arc<ProjectionTarget>(&destroyed, 123);
+  auto other = ref.addRef();
+  const int* value = &ref->value;
+
+  Arc<const int> projected = ref.project([](const ProjectionTarget& target) -> const int& {
+    return target.value;
+  });
+
+  KJ_EXPECT(ref != nullptr);
+  KJ_EXPECT(projected.get() == value);
+  KJ_EXPECT(*projected == 123);
+  KJ_EXPECT(ref->value == 123);
+  KJ_EXPECT(other->value == 123);
+
+  other = nullptr;
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+
+#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
+  Arc<ProjectionTarget> nullRef;
+  bool called = false;
+  KJ_EXPECT_THROW_MESSAGE("null Arc<> projection",
+      nullRef.project([&](const ProjectionTarget& target) -> const int& {
+    called = true;
+    return target.value;
+  }));
+  KJ_EXPECT(!called);
+#endif
 }
 
 struct AtomicChild: public AtomicSetTrueInDestructor {
