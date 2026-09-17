@@ -797,6 +797,8 @@ Upon cancellation, no further continuations are executed at all, not even error 
 
 Promise cancellation has proven to be an extremely useful feature of KJ promises which is missing in other async frameworks, such as JavaScript's. However, it places new responsibility on the developer. Just as developers who allow exceptions must design their code to be "exception safe", developers using KJ promises must design their code to be "cancellation safe".
 
+Coroutine destructors can inspect whether cleanup follows success, exception failure, or cancellation; see [Outcome-aware coroutine cleanup](#outcome-aware-coroutine-cleanup).
+
 It is especially important to note that once a promise has been canceled, then any references that were received along with the promise may no longer be valid. For example, consider this function:
 
 ```
@@ -1001,6 +1003,39 @@ auto promise = aCoroutine();
 ```
 
 The promise returned by a coroutine owns the coroutine frame. If you destroy the promise, any objects alive in the frame will be destroyed, and the frame freed, thus cancellation works exactly as you'd expect.
+
+#### Outcome-aware coroutine cleanup
+
+Ordinary RAII or `KJ_DEFER` is the best choice when cleanup is identical for every outcome. A `try`/`catch` block or `KJ_ON_SCOPE_FAILURE` handles exception failure, but does not run merely because a suspended coroutine's promise is destroyed. When cleanup genuinely differs, `KJ_CO_MAGIC kj::CURRENT_INVOCATION` obtains a handle to the current coroutine invocation. `KJ_CO_MAGIC` accesses coroutine-adapter functionality; obtaining the handle does not suspend.
+
+Cancellation-only cleanup does not require an unwind-aware coroutine:
+
+```c++
+kj::Promise<void> run() {
+  auto invocation = KJ_CO_MAGIC kj::CURRENT_INVOCATION;
+  KJ_DEFER(if (invocation.isCanceling()) { recordCancellation(); });
+  co_await doWork();
+}
+```
+
+To distinguish all three outcomes, add a defaulted `kj::CoUnwindAware` parameter and inspect `scopeOutcome()`:
+
+```c++
+kj::Promise<void> run(kj::CoUnwindAware = {}) {
+  auto invocation = KJ_CO_MAGIC kj::CURRENT_INVOCATION;
+  KJ_DEFER({
+    switch (invocation.scopeOutcome()) {
+      case kj::CoScopeOutcome::SUCCESS: break;
+      case kj::CoScopeOutcome::FAILURE: rollbackFailure(); break;
+      case kj::CoScopeOutcome::CANCELED: rollbackCancellation(); break;
+    }
+  });
+
+  co_await doWork();
+}
+```
+
+`isUnwinding()` also requires `CoUnwindAware`. Invocation handles borrow the coroutine frame and must not outlive the returned promise. The reported outcome belongs to the lexical scope containing the deferred action, so an inner scope observes `FAILURE` while unwinding even if an outer scope later catches the exception.
 
 There are some caveats one should be aware of while writing coroutines:
 - Lambda captures **do not** live inside of the coroutine frame, meaning lambda objects must outlive any coroutine Promises they return, or else the coroutine will encounter dangling references to captured objects. This is a defect in the C++ standard: https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture. To safely use a capturing lambda as a coroutine, first wrap it using `kj::coCapture([captures]() { ... })`, then invoke that object.
