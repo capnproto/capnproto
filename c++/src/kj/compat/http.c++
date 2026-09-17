@@ -4222,11 +4222,7 @@ public:
       ownState = heap<Aborted>();
       state = *ownState;
 
-      aborted = true;
-      KJ_IF_SOME(f, abortedFulfiller) {
-        f->fulfill();
-        abortedFulfiller = kj::none;
-      }
+      abortedEvent.signal();
     }
   }
 
@@ -4266,18 +4262,7 @@ public:
     }
   }
   kj::Promise<void> whenAborted() override {
-    if (aborted) {
-      return kj::READY_NOW;
-    } else KJ_IF_SOME(p, abortedPromise) {
-      return p.addBranch();
-    } else {
-      auto paf = newPromiseAndFulfiller<void>();
-      abortedFulfiller = kj::mv(paf.fulfiller);
-      auto fork = paf.promise.fork();
-      auto result = fork.addBranch();
-      abortedPromise = kj::mv(fork);
-      return result;
-    }
+    return abortedEvent.whenSignaled();
   }
   kj::Maybe<kj::Promise<void>> tryPumpFrom(WebSocket& other) override {
     KJ_IF_SOME(s, state) {
@@ -4342,9 +4327,7 @@ private:
 
   uint64_t transferredBytes = 0;
 
-  bool aborted = false;
-  Maybe<Own<PromiseFulfiller<void>>> abortedFulfiller = kj::none;
-  Maybe<ForkedPromise<void>> abortedPromise = kj::none;
+  AsyncEvent abortedEvent;
 
   void endState(WebSocket& obj) {
     KJ_IF_SOME(s, state) {
@@ -8042,7 +8025,7 @@ private:
         if (httpInput.isCleanDrain()) {
           // If we haven't buffered any data, then we can safely drain here, so allow the wait to
           // be canceled by the onDrain promise.
-          auto cleanDrainPromise = server.onDrain.addBranch()
+          auto cleanDrainPromise = server.onDrain.whenSignaled()
               .then([this]() -> kj::Promise<void> {
             // This is a little tricky... drain() has been called, BUT we could have read some data
             // into the buffer in the meantime, and we don't want to lose that. If any data has
@@ -8661,26 +8644,24 @@ private:
 
 HttpServer::HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
                        HttpService& service, Settings settings)
-    : HttpServer(timer, requestHeaderTable, &service, settings,
-                 kj::newPromiseAndFulfiller<void>()) {}
+    : HttpServer(timer, requestHeaderTable,
+                 kj::OneOf<HttpService*, HttpServiceFactory>(&service), settings) {}
 
 HttpServer::HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
                        HttpServiceFactory serviceFactory, Settings settings)
-    : HttpServer(timer, requestHeaderTable, kj::mv(serviceFactory), settings,
-                 kj::newPromiseAndFulfiller<void>()) {}
+    : HttpServer(timer, requestHeaderTable,
+                 kj::OneOf<HttpService*, HttpServiceFactory>(kj::mv(serviceFactory)), settings) {}
 
 HttpServer::HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
-                       kj::OneOf<HttpService*, HttpServiceFactory> service,
-                       Settings settings, kj::PromiseFulfillerPair<void> paf)
+                       kj::OneOf<HttpService*, HttpServiceFactory> service, Settings settings)
     : timer(timer), requestHeaderTable(requestHeaderTable), service(kj::mv(service)),
-      settings(settings), onDrain(paf.promise.fork()), drainFulfiller(kj::mv(paf.fulfiller)),
-      tasks(*this) {}
+      settings(settings), tasks(*this) {}
 
 kj::Promise<void> HttpServer::drain() {
   KJ_REQUIRE(!draining, "you can only call drain() once");
 
   draining = true;
-  drainFulfiller->fulfill();
+  onDrain.signal();
 
   if (connectionCount == 0) {
     return kj::READY_NOW;
@@ -8692,7 +8673,7 @@ kj::Promise<void> HttpServer::drain() {
 }
 
 kj::Promise<void> HttpServer::listenHttp(kj::ConnectionReceiver& port) {
-  return listenLoop(port).exclusiveJoin(onDrain.addBranch());
+  return listenLoop(port).exclusiveJoin(onDrain.whenSignaled());
 }
 
 kj::Promise<void> HttpServer::listenLoop(kj::ConnectionReceiver& port) {

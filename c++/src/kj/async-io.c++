@@ -26,6 +26,7 @@
 
 #include "async-io.h"
 #include "async-io-internal.h"
+#include "async-event.h"
 #include "debug.h"
 #include "vector.h"
 #include "io.h"
@@ -344,11 +345,7 @@ public:
       ownState = kj::heap<AbortedRead>();
       state = *ownState;
 
-      readAborted = true;
-      KJ_IF_SOME(f, readAbortFulfiller) {
-        f->fulfill();
-        readAbortFulfiller = kj::none;
-      }
+      readAbortEvent.signal();
     }
   }
 
@@ -453,18 +450,7 @@ public:
   }
 
   Promise<void> whenWriteDisconnected() override {
-    if (readAborted) {
-      return kj::READY_NOW;
-    } else KJ_IF_SOME(p, readAbortPromise) {
-      return p.addBranch();
-    } else {
-      auto paf = newPromiseAndFulfiller<void>();
-      readAbortFulfiller = kj::mv(paf.fulfiller);
-      auto fork = paf.promise.fork();
-      auto result = fork.addBranch();
-      readAbortPromise = kj::mv(fork);
-      return result;
-    }
+    return readAbortEvent.whenSignaled();
   }
 
   void shutdownWrite() override {
@@ -484,9 +470,7 @@ private:
 
   kj::Own<AsyncCapabilityStream> ownState;
 
-  bool readAborted = false;
-  Maybe<Own<PromiseFulfiller<void>>> readAbortFulfiller = kj::none;
-  Maybe<ForkedPromise<void>> readAbortPromise = kj::none;
+  AsyncEvent readAbortEvent;
 
   void endState(AsyncIoStream& obj) {
     KJ_IF_SOME(s, state) {
