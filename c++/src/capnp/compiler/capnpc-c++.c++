@@ -1270,7 +1270,6 @@ private:
     auto slot = proto.getSlot();
 
     FieldKind kind = FieldKind::PRIMITIVE;
-    kj::String ownedType;
     CppTypeName type = typeName(typeSchema, kj::none);
     kj::StringPtr setterDefault;  // only for void
     kj::String defaultMask;    // primitives only
@@ -2084,8 +2083,6 @@ private:
     uint discrimOffset = structNode.getDiscriminantOffset();
     auto hexId = kj::hex(proto.getId());
 
-    kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
-
     // Private members struct
     kj::StringTree declareText = kj::strTree(
          "  struct _capnpPrivate {\n"
@@ -2425,8 +2422,6 @@ private:
 
     CppTypeName clientName = typeName;
     clientName.addMemberType("Client");
-
-    kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
 
     // Private members struct
     kj::StringTree declareText = kj::strTree(

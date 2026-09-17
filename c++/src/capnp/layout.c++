@@ -2226,8 +2226,6 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
       SegmentReader* segment, CapTableReader* capTable,
       const WirePointer* ref, int nestingLimit)) {
-    kj::Maybe<kj::Own<ClientHook>> maybeCap;
-
     auto brokenCapFactory = readGlobalBrokenCapFactoryForLayoutCpp();
 
     KJ_REQUIRE(brokenCapFactory != nullptr,
