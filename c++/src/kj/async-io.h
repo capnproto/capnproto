@@ -1135,7 +1135,7 @@ private:
   AsyncCapabilityStream& inner;
 };
 
-class FileInputStream: public AsyncInputStream {
+class FileInputStream final: public AsyncInputStream {
   // InputStream that reads from a disk file -- and enables sendfile() optimization.
   //
   // Reads are performed synchronously -- no actual attempt is made to use asynchronous file I/O.
@@ -1170,7 +1170,7 @@ private:
   uint64_t offset;
 };
 
-class FileOutputStream: public AsyncOutputStream {
+class FileOutputStream final: public AsyncOutputStream {
   // OutputStream that writes to a disk file.
   //
   // As with FileInputStream, calls are not actually async. Async would be even less useful here
