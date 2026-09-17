@@ -34,8 +34,9 @@ def _capnp_gen_impl(ctx):
     cc_out = "-o%s:%s" % (ctx.executable.capnpc_plugin.path, out_dir)
     args = ctx.actions.args()
     args.add_all(["compile", "--verbose", cc_out])
-    args.add_all(["-I" + inc for inc in includes])
-    args.add_all(["-I", system_include])
+
+    # Use a depset to ensure we don't pass duplicated include directives
+    args.add_all(["-I" + inc for inc in depset(includes + [system_include]).to_list()])
 
     if src_prefix == "":
         # guess src_prefix for generated files
