@@ -55,7 +55,7 @@ enum class TlsVersion {
 using TlsErrorHandler = kj::Function<void(kj::Exception&&)>;
 // Use a simple kj::Function for handling errors during parallel accept().
 
-class TlsContext: public kj::SecureNetworkWrapper {
+class TlsContext final: public kj::SecureNetworkWrapper {
   // TLS system. Allocate one of these, configure it with the proper keys and certificates (or
   // use the defaults), and then use it to wrap the standard KJ network interfaces in
   // implementations that transparently use TLS.

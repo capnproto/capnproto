@@ -189,7 +189,7 @@ private:
   size_t getWindow() override;
 };
 
-class TwoPartyServer: private kj::TaskSet::ErrorHandler {
+class TwoPartyServer final: private kj::TaskSet::ErrorHandler {
   // Convenience class which implements a simple server which accepts connections on a listener
   // socket and services them as two-party connections.
 
