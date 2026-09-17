@@ -50,6 +50,14 @@ static_assert(!Cloneable<const Array<Rc<SetTrueInDestructor>>>);
 static_assert(Cloneable<ArrayPtr<Rc<SetTrueInDestructor>>>);
 static_assert(!Cloneable<const ArrayPtr<Rc<SetTrueInDestructor>>>);
 
+struct ProjectionTarget {
+  ProjectionTarget(bool* destroyed, int value): destroyed(destroyed), value(value) {}
+  ~ProjectionTarget() { *destroyed = true; }
+
+  bool* destroyed;
+  int value;
+};
+
 struct WeakInConstructor: public Refcounted {
   // Captures a weak reference to itself from within its constructor, exercising addWeakToThis()
   // before kj::rc()/kj::refcounted() has incremented the refcount.
@@ -305,6 +313,144 @@ KJ_TEST("Rc clone") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc project retains ownership of the original object") {
+  bool destroyed = false;
+  auto ref = kj::rc<ProjectionTarget>(&destroyed, 123);
+  auto other = ref.addRef();
+  int* value = &ref->value;
+  auto projectionSource = ref.addRef();
+
+  Rc<int> projected = kj::mv(projectionSource).project([](ProjectionTarget& target) -> int& {
+    return target.value;
+  });
+
+  KJ_EXPECT(projectionSource == nullptr);
+  KJ_EXPECT(ref != nullptr);
+  KJ_EXPECT(projected.get() == value);
+  KJ_EXPECT(*projected == 123);
+  *projected = 456;
+  KJ_EXPECT(ref->value == 456);
+  KJ_EXPECT(other->value == 456);
+
+  other = nullptr;
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+
+#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
+  Rc<ProjectionTarget> nullRef;
+  bool called = false;
+  KJ_EXPECT_THROW_MESSAGE("null Rc<> projection",
+      nullRef.addRef().project([&](ProjectionTarget& target) -> int& {
+    called = true;
+    return target.value;
+  }));
+  KJ_EXPECT(!called);
+#endif
+}
+
+KJ_TEST("Rc project retains ownership while invoking callback") {
+  bool destroyed = false;
+  auto foo = kj::rc<ProjectionTarget>(&destroyed, 123);
+
+  Rc<int> projected = foo.addRef().project([&](ProjectionTarget& f) -> int& {
+    foo = nullptr;
+    KJ_EXPECT(!destroyed);
+    return f.value;
+  });
+
+  KJ_EXPECT(foo == nullptr);
+  KJ_EXPECT(*projected == 123);
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Rc project retains ownership when callback nullifies source") {
+  bool destroyed = false;
+  auto foo = kj::rc<ProjectionTarget>(&destroyed, 123);
+
+  Rc<int> projected = kj::mv(foo).project([&](ProjectionTarget& f) -> int& {
+    KJ_EXPECT(foo == nullptr);
+    foo = nullptr;
+    KJ_REQUIRE(!destroyed);
+    return f.value;
+  });
+
+  KJ_EXPECT(foo == nullptr);
+  KJ_EXPECT(*projected == 123);
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Rc project supports identity") {
+  bool destroyed = false;
+  auto ref = kj::rc<ProjectionTarget>(&destroyed, 123);
+  auto original = ref.get();
+
+  auto projected = kj::mv(ref).project(
+      [](ProjectionTarget& target) -> ProjectionTarget& { return target; });
+
+  KJ_EXPECT(ref == nullptr);
+  KJ_EXPECT(projected.get() == original);
+  KJ_EXPECT(projected->value == 123);
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Rc supports projections deeper than one level") {
+  struct Inner { int value = 123; };
+  struct Middle { Inner inner; };
+  struct Outer { int prefix = 0; Middle middle; };
+
+  auto outer = kj::rc<Outer>();
+  auto middle = outer.addRef().project([](Outer& outer) -> Middle& { return outer.middle; });
+  auto inner = middle.addRef().project([](Middle& middle) -> Inner& { return middle.inner; });
+  auto value = inner.addRef().project([](Inner& inner) -> int& { return inner.value; });
+
+  KJ_EXPECT(*value == 123);
+}
+
+KJ_TEST("WeakRc preserves an Rc projection") {
+  bool destroyed = false;
+  auto ref = kj::rc<ProjectionTarget>(&destroyed, 123);
+  auto projected = ref.addRef().project([](ProjectionTarget& target) -> int& {
+    return target.value;
+  });
+  int* value = projected.get();
+  WeakRc<int> weak = projected.downgrade();
+
+  KJ_EXPECT(&weak.assertLive() == value);
+  KJ_EXPECT(weak.assertLive() == 123);
+
+  // Any strong reference to the original object keeps the projected weak reference live, even
+  // after the projected strong reference itself is dropped.
+  projected = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(&weak.assertLive() == value);
+
+  Rc<int> upgraded;
+  KJ_IF_SOME(strong, weak.upgrade()) {
+    upgraded = kj::mv(strong);
+  } else {
+    KJ_FAIL_EXPECT("expected projected WeakRc to upgrade");
+  }
+  KJ_EXPECT(upgraded.get() == value);
+
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(weak != nullptr);
+  KJ_EXPECT(*upgraded == 123);
+
+  upgraded = nullptr;
+  KJ_EXPECT(destroyed);
+  KJ_EXPECT(weak == nullptr);
+  KJ_EXPECT(weak.upgrade() == kj::none);
+}
+
 KJ_TEST("Rc self-assignment") {
   bool b = false;
 
@@ -384,6 +530,27 @@ KJ_TEST("Rc disown / reown") {
   }
 
   KJ_EXPECT(b == true);
+}
+
+KJ_TEST("Rc cannot disown a projection") {
+  bool destroyed = false;
+  struct ProjectionOwner {
+    explicit ProjectionOwner(bool* destroyed)
+        : child(kj::rc<SetTrueInDestructor>(destroyed)) {}
+    Rc<SetTrueInDestructor> child;
+  };
+
+  auto owner = kj::rc<ProjectionOwner>(&destroyed);
+  auto projected = owner.addRef().project([](ProjectionOwner& owner) -> SetTrueInDestructor& {
+    return *owner.child;
+  });
+
+  KJ_EXPECT_THROW_MESSAGE("cannot disown a projected Rc", projected.disown());
+  KJ_EXPECT(projected != nullptr);
+  owner = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
 }
 
 KJ_TEST("Rc wraps Own of refcounted types") {
@@ -1205,6 +1372,109 @@ KJ_TEST("Arc clone") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Arc project retains ownership of the original object") {
+  bool destroyed = false;
+  auto ref = kj::arc<ProjectionTarget>(&destroyed, 123);
+  auto other = ref.addRef();
+  const int* value = &ref->value;
+  auto projectionSource = ref.addRef();
+
+  Arc<const int> projected = kj::mv(projectionSource).project(
+      [](const ProjectionTarget& target) -> const int& { return target.value; });
+
+  KJ_EXPECT(projectionSource == nullptr);
+  KJ_EXPECT(ref != nullptr);
+  KJ_EXPECT(projected.get() == value);
+  KJ_EXPECT(*projected == 123);
+  KJ_EXPECT(ref->value == 123);
+  KJ_EXPECT(other->value == 123);
+
+  other = nullptr;
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+
+#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
+  Arc<ProjectionTarget> nullRef;
+  bool called = false;
+  KJ_EXPECT_THROW_MESSAGE("null Arc<> projection",
+      nullRef.addRef().project([&](const ProjectionTarget& target) -> const int& {
+    called = true;
+    return target.value;
+  }));
+  KJ_EXPECT(!called);
+#endif
+}
+
+KJ_TEST("Arc project retains ownership while invoking callback") {
+  bool destroyed = false;
+  auto foo = kj::arc<ProjectionTarget>(&destroyed, 123);
+
+  Arc<const int> projected = foo.addRef().project(
+      [&](const ProjectionTarget& f) -> const int& {
+    foo = nullptr;
+    KJ_EXPECT(!destroyed);
+    return f.value;
+  });
+
+  KJ_EXPECT(foo == nullptr);
+  KJ_EXPECT(*projected == 123);
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Arc project retains ownership when callback nullifies source") {
+  bool destroyed = false;
+  auto foo = kj::arc<ProjectionTarget>(&destroyed, 123);
+
+  Arc<const int> projected = kj::mv(foo).project(
+      [&](const ProjectionTarget& f) -> const int& {
+    KJ_EXPECT(foo == nullptr);
+    foo = nullptr;
+    KJ_REQUIRE(!destroyed);
+    return f.value;
+  });
+
+  KJ_EXPECT(foo == nullptr);
+  KJ_EXPECT(*projected == 123);
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Arc project supports identity") {
+  bool destroyed = false;
+  auto ref = kj::arc<ProjectionTarget>(&destroyed, 123);
+  auto original = ref.get();
+
+  auto projected = kj::mv(ref).project(
+      [](const ProjectionTarget& target) -> const ProjectionTarget& { return target; });
+
+  KJ_EXPECT(ref == nullptr);
+  KJ_EXPECT(projected.get() == original);
+  KJ_EXPECT(projected->value == 123);
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Arc supports projections deeper than one level") {
+  struct Inner { int value = 123; };
+  struct Middle { Inner inner; };
+  struct Outer { int prefix = 0; Middle middle; };
+
+  auto outer = kj::arc<Outer>();
+  auto middle = outer.addRef().project(
+      [](const Outer& outer) -> const Middle& { return outer.middle; });
+  auto inner = middle.addRef().project(
+      [](const Middle& middle) -> const Inner& { return middle.inner; });
+  auto value = inner.addRef().project([](const Inner& inner) -> const int& { return inner.value; });
+
+  KJ_EXPECT(*value == 123);
+}
+
 struct AtomicChild: public AtomicSetTrueInDestructor {
   AtomicChild(bool* ptr): AtomicSetTrueInDestructor(ptr) {}
 };
@@ -1320,6 +1590,28 @@ KJ_TEST("Arc disown / reown") {
   }
 
   KJ_EXPECT(b == true);
+}
+
+KJ_TEST("Arc cannot disown a projection") {
+  bool destroyed = false;
+  struct ProjectionOwner {
+    explicit ProjectionOwner(bool* destroyed)
+        : child(kj::arc<AtomicSetTrueInDestructor>(destroyed)) {}
+    Arc<AtomicSetTrueInDestructor> child;
+  };
+
+  auto owner = kj::arc<ProjectionOwner>(&destroyed);
+  auto projected = owner.addRef().project(
+      [](const ProjectionOwner& owner) -> const AtomicSetTrueInDestructor& {
+    return *owner.child;
+  });
+
+  KJ_EXPECT_THROW_MESSAGE("cannot disown a projected Arc", projected.disown());
+  KJ_EXPECT(projected != nullptr);
+  owner = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
 }
 
 KJ_TEST("Arc wraps non-atomic-refcounted types") {

@@ -711,6 +711,10 @@ Own<T> attachRef(T& value, Attachments&&... attachments);
 //
 // This is equivalent to Own<T>(&value, kj::NullDisposer::instance).attach(attachments), but
 // is easier to write and allocates slightly less memory.
+//
+// For projecting an Rc or Arc onto part of its referent, prefer project(), for example:
+//     owner.addRef().project([](auto& object) -> auto& { return object.field; });
+// This shares the owner's existing refcount without allocating an attachment bundle.
 
 // =======================================================================================
 // SpaceFor<T> -- assists in manual allocation
