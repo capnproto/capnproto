@@ -133,6 +133,7 @@ install(FILES ${kj-test-compat_headers} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}
 
 set(kj-async_sources
   async.c++
+  async-event.c++
   async-unix.c++
   async-win32.c++
   async-io-win32.c++
@@ -150,6 +151,7 @@ set(kj-async_headers
   async-win32.h
   async-io.h
   async-queue.h
+  async-event.h
   cidr.h
   timer.h
 )
@@ -305,6 +307,7 @@ if(BUILD_TESTING)
       async-win32-xthread-test.c++
       async-io-test.c++
       async-queue-test.c++
+      async-event-test.c++
       refcount-test.c++
       string-tree-test.c++
       encoding-test.c++

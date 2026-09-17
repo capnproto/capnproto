@@ -179,6 +179,7 @@ includekj_HEADERS =                                            \
   src/kj/async-io.h                                            \
   src/kj/cidr.h                                                \
   src/kj/async-queue.h                                         \
+  src/kj/async-event.h                                         \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
   src/kj/win32-api-version.h                                   \
@@ -303,6 +304,7 @@ libkj_async_la_LIBADD = libkj.la $(ASYNC_LIBS) $(PTHREAD_LIBS)
 libkj_async_la_LDFLAGS = -release $(SO_VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/async.c++                                             \
+  src/kj/async-event.c++                                       \
   src/kj/async-unix.c++                                        \
   src/kj/async-win32.c++                                       \
   src/kj/async-io.c++                                          \
@@ -525,6 +527,7 @@ heavy_tests =                                                  \
   src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
   src/kj/async-queue-test.c++                                  \
+  src/kj/async-event-test.c++                                  \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \

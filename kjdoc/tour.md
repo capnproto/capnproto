@@ -837,6 +837,8 @@ Because of the complexity of the above issues, it is generally recommended that 
 
 Instead, when cancellation concerns matter, consider using "adapted promises", a more sophisticated alternative. `kj::newAdaptedPromise<T, Adapter>()` constructs an instance of the class `Adapter` (which you define) encapsulated in a returned `Promise<T>`. `Adapter`'s constructor receives a `kj::PromiseFulfiller<T>&` used to fulfill the promise. The constructor should then register the fulfiller with the desired producer. If the promise is canceled, `Adapter`'s destructor will be invoked, and should un-register the fulfiller. One common technique is for `Adapter` implementations to form a linked list with other `Adapter`s waiting for the same producer. Adapted promises make consumer cancellation much more explicit and easy to handle, at the expense of requiring more code.
 
+For very simple use cases where the producer is producing void, you might use kj::AsyncEvent.
+
 ### Loops
 
 Promises, due to their construction, don't lend themselves easily to classic `for()`/`while()` loops. Instead, loops should be expressed recursively, as in a functional language. For example:
