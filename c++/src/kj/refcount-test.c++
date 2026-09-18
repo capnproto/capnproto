@@ -290,6 +290,41 @@ KJ_TEST("Rc") {
   EXPECT_TRUE(b);
 }
 
+KJ_TEST("Rc works with KJ_IF_SOME") {
+  bool destroyed = false;
+  Rc<SetTrueInDestructor> ref = kj::rc<SetTrueInDestructor>(&destroyed);
+
+  KJ_IF_SOME(value, ref) {
+    static_assert(kj::isSameType<decltype(value), SetTrueInDestructor&>());
+    KJ_EXPECT(&value == ref.get());
+  } else {
+    KJ_FAIL_EXPECT("non-null Rc was treated as null");
+  }
+
+  const auto& constRef = ref;
+  KJ_IF_SOME(value, constRef) {
+    static_assert(kj::isSameType<decltype(value), const SetTrueInDestructor&>());
+    KJ_EXPECT(&value == ref.get());
+  } else {
+    KJ_FAIL_EXPECT("non-null const Rc was treated as null");
+  }
+
+  Rc<SetTrueInDestructor> nullRef;
+  KJ_IF_SOME(value, nullRef) {
+    KJ_FAIL_EXPECT("null Rc was treated as non-null", value.isShared());
+  }
+
+  KJ_IF_SOME(value, kj::rc<SetTrueInDestructor>(&destroyed)) {
+    static_assert(kj::isSameType<decltype(value), SetTrueInDestructor&>());
+    KJ_EXPECT(!destroyed);
+  } else {
+    KJ_FAIL_EXPECT("temporary Rc was treated as null");
+  }
+  KJ_EXPECT(destroyed);
+
+  ref = nullptr;
+}
+
 KJ_TEST("Rc clone") {
   bool b = false;
 
@@ -1187,6 +1222,33 @@ KJ_TEST("Arc") {
   EXPECT_FALSE(b);
   ref4 = nullptr;
   EXPECT_TRUE(b);
+}
+
+KJ_TEST("Arc works with KJ_IF_SOME") {
+  bool destroyed = false;
+  Arc<AtomicSetTrueInDestructor> ref = kj::arc<AtomicSetTrueInDestructor>(&destroyed);
+
+  KJ_IF_SOME(value, ref) {
+    static_assert(kj::isSameType<decltype(value), const AtomicSetTrueInDestructor&>());
+    KJ_EXPECT(&value == ref.get());
+  } else {
+    KJ_FAIL_EXPECT("non-null Arc was treated as null");
+  }
+
+  Arc<AtomicSetTrueInDestructor> nullRef;
+  KJ_IF_SOME(value, nullRef) {
+    KJ_FAIL_EXPECT("null Arc was treated as non-null", value.isShared());
+  }
+
+  KJ_IF_SOME(value, kj::arc<AtomicSetTrueInDestructor>(&destroyed)) {
+    static_assert(kj::isSameType<decltype(value), const AtomicSetTrueInDestructor&>());
+    KJ_EXPECT(!destroyed);
+  } else {
+    KJ_FAIL_EXPECT("temporary Arc was treated as null");
+  }
+  KJ_EXPECT(destroyed);
+
+  ref = nullptr;
 }
 
 KJ_TEST("Arc clone") {

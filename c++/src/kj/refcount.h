@@ -944,6 +944,39 @@ inline Arc<T> arc(Params&&... params) {
   }
 }
 
+namespace _ {  // private
+
+// Keeps a temporary Rc or Arc alive for the duration of a KJ_IF_SOME body while exposing the
+// pointed-to object, rather than the smart pointer, as the value of the expression.
+template <typename Pointer>
+class RefcountedPtrMaybe {
+public:
+  explicit RefcountedPtrMaybe(Pointer&& pointer): pointer(kj::mv(pointer)) {}
+
+  explicit operator bool() const { return pointer.get() != nullptr; }
+  decltype(auto) operator*() { return *pointer; }
+
+private:
+  Pointer pointer;
+};
+
+template <typename T>
+inline T* readMaybe(Rc<T>& value) { return value.get(); }
+template <typename T>
+inline const T* readMaybe(const Rc<T>& value) { return value.get(); }
+template <typename T>
+inline RefcountedPtrMaybe<Rc<T>> readMaybe(Rc<T>&& value) {
+  return RefcountedPtrMaybe<Rc<T>>(kj::mv(value));
+}
+
+template <typename T>
+inline const T* readMaybe(const Arc<T>& value) { return value.get(); }
+template <typename T>
+inline RefcountedPtrMaybe<Arc<T>> readMaybe(Arc<T>&& value) {
+  return RefcountedPtrMaybe<Arc<T>>(kj::mv(value));
+}
+
+}  // namespace _ (private)
 
 }  // namespace kj
 
