@@ -330,6 +330,9 @@ public:
     //     Rc<Person> person = kj::rc<Person>();
     //     Rc<String> name = person.project([](Person& person) -> String& { return person.name; });
     //
+    // Like kj::attachRef(person->name, person.addRef()), but returns an Rc sharing the original
+    // refcount without allocating an attachment bundle.
+    //
     // This Rc must not be null, and the callback must return a reference into an object whose
     // lifetime is covered by the original ownership claim. A WeakRc obtained from the result points
     // to the projected object, but expires based on the lifetime of the original object. The
@@ -912,6 +915,9 @@ public:
     //     Arc<Person> person = kj::arc<Person>();
     //     Arc<const String> name = person.project(
     //         [](const Person& person) -> const String& { return person.name; });
+    //
+    // Like kj::attachRef(person->name, person.addRef()), but returns an Arc sharing the original
+    // refcount without allocating an attachment bundle.
     //
     // This Arc must not be null, and the callback must return a reference into an object whose
     // lifetime is covered by the original ownership claim. The original referent stays alive
