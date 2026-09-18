@@ -208,7 +208,7 @@ template <typename T>
 class RcWrapper final: public Refcounted {
 public:
   template <typename... Params>
-  explicit RcWrapper(Params &&...params) : wrapped(kj::fwd<Params>(params)...) {}
+  explicit RcWrapper(Params &&...params): wrapped(kj::fwd<Params>(params)...) {}
   T* getWrappedPtr() { return &wrapped; }
   const T *getWrappedPtr() const { return &wrapped; }
 
@@ -219,13 +219,20 @@ private:
 template <typename T>
 class RcOwnWrapper final: public Refcounted {
 public:
-  explicit RcOwnWrapper(Own<T> &&wrapped) : wrapped(kj::mv(wrapped)) {}
+  explicit RcOwnWrapper(Own<T> &&wrapped): wrapped(kj::mv(wrapped)) {}
   T* getWrappedPtr() { return wrapped.get(); }
   const T *getWrappedPtr() const { return wrapped.get(); }
 
 private:
   Own<T> wrapped;
 };
+
+template <typename T>
+struct RemoveReference;
+template <typename T>
+struct RemoveReference<T&> { using Type = T; };
+template <typename T>
+struct RemoveReference<T&&> { using Type = T; };
 
 }  // namespace _ (private)
 
@@ -314,11 +321,47 @@ public:
     return addRef();
   }
 
+  template <typename Func>
+  auto project(Func&& func) && {
+    // Move this ownership claim to an object contained by the referent. The returned
+    // Rc points at the projection, but disposal still applies to the original object. For example,
+    // an Rc of a field can be obtained with:
+    //
+    //     Rc<Person> person = kj::rc<Person>();
+    //     Rc<String> name = person.addRef().project(
+    //         [](Person& person) -> String& { return person.name; });
+    //
+    // Like kj::attachRef(person->name, person.addRef()), but returns an Rc sharing the original
+    // refcount without allocating an attachment bundle.
+    //
+    // This operation consumes the Rc. Use addRef().project() to retain the original Rc, or
+    // kj::mv(rc).project() to transfer it explicitly. This Rc must not be null, and the callback
+    // must return a reference into an object whose lifetime is covered by the original ownership
+    // claim. Returning the referent itself is supported; the result is then not a projection.
+    // A WeakRc obtained from the result points
+    // to the projected object, but expires based on the lifetime of the original object.
+    using Result = decltype(kj::fwd<Func>(func)(*ptr));
+    static_assert(isLvalueReference<Result>(), "Rc::project() callback must return a reference");
+    using U = typename _::RemoveReference<Result>::Type;
+
+    KJ_IREQUIRE(ptr != nullptr, "null Rc<> projection");
+    auto owner = kj::mv(*this);
+    auto projected = &kj::fwd<Func>(func)(*owner.ptr);
+    auto result = Rc<U>(owner.refcounted, projected);
+    owner.refcounted = nullptr;
+    owner.ptr = nullptr;
+    return result;
+  }
+
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
   // is its own Disposer.
+  //
+  // A projected Rc cannot be disowned because its pointer does not identify the object whose
+  // refcount owns it. disown() throws if this Rc is a projection.
   T* disown() {
     static_assert(canConvert<T*, Refcounted*>());
+    KJ_IREQUIRE(refcounted == static_cast<Refcounted*>(ptr), "cannot disown a projected Rc");
     T* result = ptr;
     refcounted = nullptr;
     ptr = nullptr;
@@ -860,11 +903,47 @@ public:
     return addRef();
   }
 
+  template <typename Func>
+  auto project(Func&& func) && {
+    // Move this ownership claim to an object contained by the referent. Arc exposes
+    // its referent as const, so the callback receives const T&. The returned Arc points at the
+    // projection, but disposal still applies to the original object. For example, an Arc of a field
+    // can be obtained with:
+    //
+    //     Arc<Person> person = kj::arc<Person>();
+    //     Arc<const String> name = person.addRef().project(
+    //         [](const Person& person) -> const String& { return person.name; });
+    //
+    // Like kj::attachRef(person->name, person.addRef()), but returns an Arc sharing the original
+    // refcount without allocating an attachment bundle.
+    //
+    // This operation consumes the Arc. Use addRef().project() to retain the original Arc, or
+    // kj::mv(arc).project() to transfer it explicitly. This Arc must not be null, and the callback
+    // must return a reference into an object whose lifetime is covered by the original ownership
+    // claim. Returning the referent itself is supported; the result is then not a projection.
+    using Result = decltype(kj::fwd<Func>(func)(*ptr));
+    static_assert(isLvalueReference<Result>(), "Arc::project() callback must return a reference");
+    using U = typename _::RemoveReference<Result>::Type;
+
+    KJ_IREQUIRE(ptr != nullptr, "null Arc<> projection");
+    auto owner = kj::mv(*this);
+    auto projected = &kj::fwd<Func>(func)(*owner.ptr);
+    auto result = Arc<U>(owner.refcounted, projected);
+    owner.refcounted = nullptr;
+    owner.ptr = nullptr;
+    return result;
+  }
+
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
   // is its own Disposer.
+  //
+  // A projected Arc cannot be disowned because its pointer does not identify the object whose
+  // refcount owns it. disown() throws if this Arc is a projection.
   const T* disown() {
     static_assert(canConvert<const T*, const AtomicRefcounted*>());
+    KJ_IREQUIRE(refcounted == static_cast<const AtomicRefcounted*>(ptr),
+        "cannot disown a projected Arc");
     const T* result = ptr;
     refcounted = nullptr;
     ptr = nullptr;
