@@ -466,6 +466,37 @@ KJ_TEST("Rc disown / reown") {
   KJ_EXPECT(b == true);
 }
 
+KJ_TEST("Rc disown rejects a projected object's different refcount") {
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  bool destroyed = false;
+  auto owner = kj::rc<Rc<SetTrueInDestructor>>(kj::rc<SetTrueInDestructor>(&destroyed));
+  auto projected = owner.project([](Rc<SetTrueInDestructor>& child) -> SetTrueInDestructor& {
+    return *child;
+  });
+
+  KJ_EXPECT_THROW_MESSAGE("cannot disown a projected Rc", projected.disown());
+  KJ_EXPECT(projected != nullptr);
+  KJ_EXPECT(!destroyed);
+  owner = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+#endif
+}
+
+KJ_TEST("Rc disown permits an identity projection") {
+  bool destroyed = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&destroyed);
+  auto projected = ref.project([](SetTrueInDestructor& value) -> SetTrueInDestructor& {
+    return value;
+  });
+  auto restored = Rc<SetTrueInDestructor>::reown(projected.disown());
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  restored = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
 KJ_TEST("Rc wraps Own of refcounted types") {
   bool b = false;
 
@@ -1434,6 +1465,40 @@ KJ_TEST("Arc disown / reown") {
   }
 
   KJ_EXPECT(b == true);
+}
+
+KJ_TEST("Arc disown rejects a projected object's different refcount") {
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  bool destroyed = false;
+  auto owner = kj::arc<Arc<AtomicSetTrueInDestructor>>(
+      kj::arc<AtomicSetTrueInDestructor>(&destroyed));
+  auto projected = owner.project(
+      [](const Arc<AtomicSetTrueInDestructor>& child) -> const AtomicSetTrueInDestructor& {
+    return *child;
+  });
+
+  KJ_EXPECT_THROW_MESSAGE("cannot disown a projected Arc", projected.disown());
+  KJ_EXPECT(projected != nullptr);
+  KJ_EXPECT(!destroyed);
+  owner = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+#endif
+}
+
+KJ_TEST("Arc disown permits an identity projection") {
+  bool destroyed = false;
+  auto ref = kj::arc<AtomicSetTrueInDestructor>(&destroyed);
+  auto projected = ref.project(
+      [](const AtomicSetTrueInDestructor& value) -> const AtomicSetTrueInDestructor& {
+    return value;
+  });
+  auto restored = Arc<const AtomicSetTrueInDestructor>::reown(projected.disown());
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  restored = nullptr;
+  KJ_EXPECT(destroyed);
 }
 
 KJ_TEST("Arc wraps non-atomic-refcounted types") {

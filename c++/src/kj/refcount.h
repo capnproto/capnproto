@@ -345,9 +345,11 @@ public:
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
-  // is its own Disposer.
+  // is its own Disposer. Its intrusive refcount must match this ownership claim's refcount.
   T* disown() {
     static_assert(canConvert<T*, Refcounted*>());
+    KJ_IREQUIRE(refcounted == static_cast<Refcounted*>(ptr),
+        "cannot disown a projected Rc with a different refcount");
     T* result = ptr;
     refcounted = nullptr;
     ptr = nullptr;
@@ -914,9 +916,11 @@ public:
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
   // is no need for the caller to prove they know how to dispose of the object, because the object
-  // is its own Disposer.
+  // is its own Disposer. Its intrusive refcount must match this ownership claim's refcount.
   const T* disown() {
     static_assert(canConvert<const T*, const AtomicRefcounted*>());
+    KJ_IREQUIRE(refcounted == static_cast<const AtomicRefcounted*>(ptr),
+        "cannot disown a projected Arc with a different refcount");
     const T* result = ptr;
     refcounted = nullptr;
     ptr = nullptr;
