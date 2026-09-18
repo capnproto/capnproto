@@ -92,6 +92,7 @@ cc_library(
     name = "kj-async-core",
     srcs = [
         "async.c++",
+        "async-event.c++",
         "timer.c++",
     ],
     hdrs = [
@@ -100,6 +101,7 @@ cc_library(
         "async-inl.h",
         "async-prelude.h",
         "async-queue.h",
+        "async-event.h",
         "timer.h",
     ],
     # Disable header parsing based on async-inl.h
@@ -219,6 +221,7 @@ cc_library(
     "array-test.c++",
     "async-io-test.c++",
     "async-queue-test.c++",
+    "async-event-test.c++",
     "common-test.c++",
     "debug-test.c++",
     "encoding-test.c++",

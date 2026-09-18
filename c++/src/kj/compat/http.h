@@ -38,6 +38,7 @@
 #include <kj/vector.h>
 #include <kj/memory.h>
 #include <kj/one-of.h>
+#include <kj/async-event.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
 
@@ -1445,8 +1446,7 @@ private:
   Settings settings;
 
   bool draining = false;
-  kj::ForkedPromise<void> onDrain;
-  kj::Own<kj::PromiseFulfiller<void>> drainFulfiller;
+  kj::AsyncEvent onDrain;
 
   uint connectionCount = 0;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> zeroConnectionsFulfiller;
@@ -1454,8 +1454,7 @@ private:
   kj::TaskSet tasks;
 
   HttpServer(kj::Timer& timer, const HttpHeaderTable& requestHeaderTable,
-             kj::OneOf<HttpService*, HttpServiceFactory> service,
-             Settings settings, kj::PromiseFulfillerPair<void> paf);
+             kj::OneOf<HttpService*, HttpServiceFactory> service, Settings settings);
 
   kj::Promise<void> listenLoop(kj::ConnectionReceiver& port);
 
