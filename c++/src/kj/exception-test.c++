@@ -583,6 +583,93 @@ KJ_TEST("KJ_TRY/KJ_CATCH does not catch CleanShutdownException") {
   KJ_EXPECT(outerCatchCalled);
 }
 
+KJ_TEST("addTrace grows dynamically") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+
+  for (int i = 0; i < 100; i++) {
+    e.addTrace(reinterpret_cast<void*>(static_cast<uintptr_t>(i + 1)));
+  }
+
+  auto trace = e.getStackTrace();
+  KJ_EXPECT(trace.size() == 100);
+  for (int i = 0; i < 100; i++) {
+    KJ_EXPECT(trace[i] == reinterpret_cast<void*>(static_cast<uintptr_t>(i + 1)));
+  }
+}
+
+KJ_TEST("extendTrace appends stack frames") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+
+  // Add some initial trace entries.
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+
+  // extendTrace should append current stack frames when supported by the platform.
+  e.extendTrace(0);
+  if (kj::isStackTraceSupported()) {
+    KJ_EXPECT(e.getStackTrace().size() > 2);
+  } else {
+    KJ_EXPECT(e.getStackTrace().size() == 2);
+  }
+
+  // The first two entries should still be our original ones.
+  KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
+  KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
+}
+
+
+KJ_TEST("extendTrace honors frame limit") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+  e.extendTrace(0, 3);
+
+  // Stack traces may not be supported on this platform. If they are, exactly three frames should
+  // have been appended.
+  KJ_EXPECT(e.getStackTrace().size() == 2 || e.getStackTrace().size() == 5,
+      e.getStackTrace().size());
+}
+
+KJ_TEST("truncateCommonTrace removes common suffix") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+
+  e.extendTrace(1);
+  auto extendedSize = e.getStackTrace().size();
+
+  // Stack traces may not be supported on this platform.
+  if (!kj::isStackTraceSupported()) {
+    KJ_EXPECT(extendedSize == 2);
+    return;
+  }
+  KJ_EXPECT(extendedSize > 2);
+
+  // truncateCommonTrace should remove the frames shared with our current stack. Sanitizers may
+  // leave an intercepted backtrace() frame or the caller's frame in the trace, so don't require
+  // that every appended frame is removed.
+  e.truncateCommonTrace();
+  KJ_EXPECT(e.getStackTrace().size() >= 2);
+  KJ_EXPECT(e.getStackTrace().size() < extendedSize);
+
+  KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
+  KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
+}
+
+KJ_TEST("truncateCommonTrace is no-op without extendTrace") {
+  kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("test"));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x1)));
+  e.addTrace(reinterpret_cast<void*>(uintptr_t(0x2)));
+
+  e.truncateCommonTrace();
+  KJ_EXPECT(e.getStackTrace().size() == 2);
+  KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
+  KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
+}
+
 KJ_TEST("getDestructionReason returns default exception if exception wasn't thrown") {
   auto e =
       kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
@@ -618,6 +705,31 @@ KJ_TEST("getDestructionReason returns default exception if exception was "
     KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
     KJ_EXPECT(e.getDescription() == "default description"_kj);
   }
+}
+
+KJ_NOINLINE kj::Exception deepRecursion(size_t depth) {
+  if (depth == 0) {
+    kj::Exception e(kj::Exception::Type::FAILED, __FILE__, __LINE__, kj::str("deep"));
+    e.extendTrace(0);
+    return e;
+  }
+  auto e = deepRecursion(depth - 1);
+  // If we simply return e here, compiler will apply tail call optimization and trace will be
+  // short.
+  e.setDescription(kj::str(e.getDescription(), "."));
+  return kj::mv(e);
+}
+
+KJ_TEST("getStackTrace() grows beyond 128 frames") {
+  auto e = deepRecursion(256);
+  if (e.getStackTrace().size() > 0 && KJ_STACK_TRACE_MAX_SIZE > 128) {
+    KJ_EXPECT(e.getStackTrace().size() > 128, e.getStackTrace().size());
+  }
+}
+
+KJ_TEST("getStackTrace() honors configured maximum size") {
+  auto e = deepRecursion(2048);
+  KJ_EXPECT(e.getStackTrace().size() <= KJ_STACK_TRACE_MAX_SIZE, e.getStackTrace().size());
 }
 
 // =======================================================================================
