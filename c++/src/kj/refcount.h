@@ -332,15 +332,16 @@ public:
     //
     // This Rc must not be null, and the callback must return a reference into an object whose
     // lifetime is covered by the original ownership claim. A WeakRc obtained from the result points
-    // to the projected object, but expires based on the lifetime of the original object.
+    // to the projected object, but expires based on the lifetime of the original object. The
+    // original referent stays alive even if the callback replaces or destroys this Rc.
     using Result = decltype(kj::fwd<Func>(func)(*ptr));
     static_assert(isLvalueReference<Result>(), "Rc::project() callback must return a reference");
     using U = typename _::RemoveReference<Result>::Type;
 
     KJ_IREQUIRE(ptr != nullptr, "null Rc<> projection");
-    auto projected = &kj::fwd<Func>(func)(*ptr);
-    ++refcounted->refcount;
-    return Rc<U>(refcounted, projected);
+    auto owner = addRef();
+    auto projected = &kj::fwd<Func>(func)(*owner.ptr);
+    return Rc<U>(kj::mv(owner), projected);
   }
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
@@ -404,6 +405,16 @@ public:
 
 private:
   Rc(Refcounted *wrapper, T *ptr) : refcounted(wrapper), ptr(ptr) {}
+
+  template <typename U>
+  Rc(Rc<U>&& owner, T* ptr): refcounted(owner.refcounted), ptr(ptr) {
+    // Used by project() to transfer its retained ownership claim without changing the refcount.
+    // owner and ptr must be non-null, and ptr must remain valid for the lifetime of that claim.
+    // U and T need not be related: ptr can point to a member of the owned object.
+    owner.refcounted = nullptr;
+    owner.ptr = nullptr;
+  }
+
   void dispose() {
     if (ptr == nullptr) return;
     auto refcountedCopy = refcounted;
@@ -903,15 +914,16 @@ public:
     //         [](const Person& person) -> const String& { return person.name; });
     //
     // This Arc must not be null, and the callback must return a reference into an object whose
-    // lifetime is covered by the original ownership claim.
+    // lifetime is covered by the original ownership claim. The original referent stays alive
+    // even if the callback replaces or destroys this Arc.
     using Result = decltype(kj::fwd<Func>(func)(*ptr));
     static_assert(isLvalueReference<Result>(), "Arc::project() callback must return a reference");
     using U = typename _::RemoveReference<Result>::Type;
 
     KJ_IREQUIRE(ptr != nullptr, "null Arc<> projection");
-    auto projected = &kj::fwd<Func>(func)(*ptr);
-    refcounted->incRefcount();
-    return Arc<U>(refcounted, projected);
+    auto owner = addRef();
+    auto projected = &kj::fwd<Func>(func)(*owner.ptr);
+    return Arc<U>(kj::mv(owner), projected);
   }
 
   // Surrenders ownership of the underlying object to the caller. Unlike Own<T>::disown(), there
@@ -968,6 +980,15 @@ public:
 
 private:
   Arc(const AtomicRefcounted* refcounted, const T* ptr): refcounted(refcounted), ptr(ptr) {}
+
+  template <typename U>
+  Arc(Arc<U>&& owner, const T* ptr): refcounted(owner.refcounted), ptr(ptr) {
+    // Used by project() to transfer its retained ownership claim without changing the refcount.
+    // owner and ptr must be non-null, and ptr must remain valid for the lifetime of that claim.
+    // U and T need not be related: ptr can point to a member of the owned object.
+    owner.refcounted = nullptr;
+    owner.ptr = nullptr;
+  }
 
   void dispose() {
     if (ptr == nullptr) return;

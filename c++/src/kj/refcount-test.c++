@@ -58,6 +58,60 @@ struct ProjectionTarget {
   int value;
 };
 
+template <typename Factory>
+void checkProjectionCallbackOwnership(Factory&& make) {
+  auto check = [&](auto&& mutate) {
+    bool destroyed = false;
+    bool replacementDestroyed = false;
+    auto source = make(&destroyed, 123);
+    auto replacement = make(&replacementDestroyed, 456);
+    auto projected = source.project([&](auto& target) -> decltype((target.value)) {
+      mutate(source, replacement);
+      KJ_EXPECT(!destroyed);
+      return target.value;
+    });
+    KJ_EXPECT(!destroyed);
+    KJ_EXPECT(*projected == 123);
+    projected = nullptr;
+    KJ_EXPECT(destroyed);
+    source = nullptr;
+    replacement = nullptr;
+    KJ_EXPECT(replacementDestroyed);
+  };
+
+  check([](auto& source, auto& replacement) { source = nullptr; });
+  check([](auto& source, auto& replacement) { source = kj::mv(replacement); });
+  check([](auto& source, auto& replacement) { auto moved = kj::mv(source); });
+  check([](auto& source, auto& replacement) { auto own = source.toOwn(); });
+
+  bool destroyed = false;
+  auto source = make(&destroyed, 123);
+  KJ_EXPECT_THROW_MESSAGE("projection failed", source.project(
+      [&](auto& target) -> decltype((target.value)) {
+    source = nullptr;
+    KJ_EXPECT(!destroyed);
+    KJ_FAIL_REQUIRE("projection failed");
+  }));
+  KJ_EXPECT(source == nullptr);
+  KJ_EXPECT(destroyed);
+}
+
+template <typename Factory>
+void checkProjectionHandleDestruction(Factory&& make) {
+  bool destroyed = false;
+  auto source = kj::heap(make(&destroyed, 123));
+  auto projected = source->project([&](auto& target) -> decltype((target.value)) {
+    source = nullptr;
+    KJ_EXPECT(!destroyed);
+    return target.value;
+  });
+  KJ_EXPECT(source.get() == nullptr);
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(*projected == 123);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
 struct WeakInConstructor: public Refcounted {
   // Captures a weak reference to itself from within its constructor, exercising addWeakToThis()
   // before kj::rc()/kj::refcounted() has incremented the refcount.
@@ -383,6 +437,35 @@ KJ_TEST("WeakRc preserves an Rc projection") {
   KJ_EXPECT(destroyed);
   KJ_EXPECT(weak == nullptr);
   KJ_EXPECT(weak.upgrade() == kj::none);
+}
+
+KJ_TEST("Rc project retains ownership across callback mutations") {
+  checkProjectionCallbackOwnership([](bool* destroyed, int value) {
+    return kj::rc<ProjectionTarget>(destroyed, value);
+  });
+}
+
+KJ_TEST("Rc project permits destruction of its handle during the callback") {
+  checkProjectionHandleDestruction([](bool* destroyed, int value) {
+    return kj::rc<ProjectionTarget>(destroyed, value);
+  });
+}
+
+KJ_TEST("Rc project permits nesting and releases ownership on exceptions") {
+  bool destroyed = false;
+  auto ref = kj::rc<ProjectionTarget>(&destroyed, 123);
+  auto projected = ref.project([&](ProjectionTarget& target) -> int& {
+    auto nested = ref.project([](ProjectionTarget& target) -> int& { return target.value; });
+    KJ_EXPECT(*nested == 123);
+    return target.value;
+  });
+  KJ_EXPECT_THROW_MESSAGE("projection failed", ref.project([](ProjectionTarget&) -> int& {
+    KJ_FAIL_REQUIRE("projection failed");
+  }));
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  projected = nullptr;
+  KJ_EXPECT(destroyed);
 }
 
 KJ_TEST("Rc self-assignment") {
@@ -1353,6 +1436,41 @@ KJ_TEST("Arc project retains ownership of the original object") {
 struct AtomicChild: public AtomicSetTrueInDestructor {
   AtomicChild(bool* ptr): AtomicSetTrueInDestructor(ptr) {}
 };
+
+KJ_TEST("Arc project retains ownership across callback mutations") {
+  checkProjectionCallbackOwnership([](bool* destroyed, int value) {
+    return kj::arc<ProjectionTarget>(destroyed, value);
+  });
+}
+
+KJ_TEST("Arc project permits destruction of its handle during the callback") {
+  checkProjectionHandleDestruction([](bool* destroyed, int value) {
+    return kj::arc<ProjectionTarget>(destroyed, value);
+  });
+}
+
+KJ_TEST("Arc project permits concurrent callbacks and releases ownership on exceptions") {
+  auto ref = kj::arc<int>(123);
+  std::atomic<uint> entered = 0;
+  auto project = [&]() {
+    auto projected = ref.project([&](const int& value) -> const int& {
+      entered.fetch_add(1);
+      while (entered.load() != 2) std::this_thread::yield();
+      auto nested = ref.project([](const int& value) -> const int& { return value; });
+      KJ_EXPECT(*nested == 123);
+      return value;
+    });
+    KJ_EXPECT(*projected == 123);
+  };
+  {
+    kj::Thread thread(project);
+    project();
+  }
+  KJ_EXPECT_THROW_MESSAGE("projection failed", ref.project([](const int&) -> const int& {
+    KJ_FAIL_REQUIRE("projection failed");
+  }));
+  ref = nullptr;
+}
 
 KJ_TEST("Arc inheritance") {
   bool b = false;
