@@ -8398,6 +8398,13 @@ private:
     kj::String lengthStr;
     kj::StringPtr connectionHeaders[HttpHeaders::CONNECTION_HEADERS_COUNT];
 
+    // Rejecting an unfinished upload may exhaust the bounded drain below. Tell
+    // the client before it pools this connection for a subsequent request.
+    // Keep the existing byte/time bounds and do not retry the next request.
+    if (statusCode == 413 && !httpInput.canReuse()) {
+      closeAfterSend = true;
+    }
+
     if (!closeAfterSend) {
       // Check if application wants us to close connections.
       //
