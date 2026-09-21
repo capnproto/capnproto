@@ -772,6 +772,140 @@ KJ_TEST("Rc inheritance") {
   EXPECT_TRUE(b);
 }
 
+// Maybe<Rc<T>> is niche-optimized: a null Rc is the "none" state, so no extra flag is stored.
+static_assert(NicheOptimizable<Rc<SetTrueInDestructor>>);
+static_assert(sizeof(Maybe<Rc<SetTrueInDestructor>>) == sizeof(Rc<SetTrueInDestructor>));
+static_assert(sizeof(Maybe<Rc<IncompleteDeclaredRefcounted>>) == 2 * sizeof(void*));
+static_assert(sizeof(Maybe<Rc<IncompleteDeclaredNotRefcounted>>) == 2 * sizeof(void*));
+
+KJ_TEST("Maybe<Rc<T>> niche optimization") {
+  bool b = false;
+
+  {
+    Maybe<Rc<SetTrueInDestructor>> maybe;
+    KJ_EXPECT(maybe == kj::none);
+
+    maybe = kj::rc<SetTrueInDestructor>(&b);
+    KJ_EXPECT(maybe != kj::none);
+    KJ_IF_SOME(ref, maybe) {
+      KJ_EXPECT(ref.get() != nullptr);
+      KJ_EXPECT(ref->ptr == &b);
+    } else {
+      KJ_FAIL_EXPECT("expected value");
+    }
+
+    // Moving out leaves the source in the none state.
+    Maybe<Rc<SetTrueInDestructor>> moved = kj::mv(maybe);
+    KJ_EXPECT(maybe == kj::none);
+    KJ_EXPECT(moved != kj::none);
+    KJ_EXPECT(!b);
+
+    // Move-assignment.
+    maybe = kj::mv(moved);
+    KJ_EXPECT(moved == kj::none);
+    KJ_EXPECT(maybe != kj::none);
+    KJ_EXPECT(!b);
+
+    // Setting to none releases the reference.
+    maybe = kj::none;
+    KJ_EXPECT(maybe == kj::none);
+    KJ_EXPECT(b);
+  }
+
+  {
+    // Storing a null Rc yields none, consistent with the niche representation.
+    Maybe<Rc<SetTrueInDestructor>> maybe = Rc<SetTrueInDestructor>();
+    KJ_EXPECT(maybe == kj::none);
+    maybe = Rc<SetTrueInDestructor>(nullptr);
+    KJ_EXPECT(maybe == kj::none);
+  }
+
+  {
+    // emplace()
+    b = false;
+    Maybe<Rc<SetTrueInDestructor>> maybe;
+    auto& ref = maybe.emplace(kj::rc<SetTrueInDestructor>(&b));
+    KJ_EXPECT(ref->ptr == &b);
+    KJ_EXPECT(maybe != kj::none);
+    KJ_EXPECT(!b);
+
+    // Emplacing over an existing value releases the old one.
+    bool b2 = false;
+    maybe.emplace(kj::rc<SetTrueInDestructor>(&b2));
+    KJ_EXPECT(b);
+    KJ_EXPECT(!b2);
+    maybe = kj::none;
+    KJ_EXPECT(b2);
+  }
+
+  {
+    // Destructor releases the reference.
+    b = false;
+    {
+      Maybe<Rc<SetTrueInDestructor>> maybe = kj::rc<SetTrueInDestructor>(&b);
+      KJ_EXPECT(!b);
+    }
+    KJ_EXPECT(b);
+  }
+}
+
+KJ_TEST("Maybe<Rc<T>> converting constructor from Rc<Derived>") {
+  bool b = false;
+
+  auto child = kj::rc<Child>(&b);
+
+  // Implicit conversion Rc<Child> -> Maybe<Rc<SetTrueInDestructor>> via copy-initialization.
+  Maybe<Rc<SetTrueInDestructor>> maybe = child.addRef();
+  KJ_EXPECT(maybe != kj::none);
+  KJ_IF_SOME(ref, maybe) {
+    KJ_EXPECT(ref.get() == child.get());
+  }
+
+  // Converting assignment.
+  Maybe<Rc<SetTrueInDestructor>> maybe2;
+  maybe2 = child.addRef();
+  KJ_EXPECT(maybe2 != kj::none);
+
+  // Maybe<Rc<Child>> -> Maybe<Rc<SetTrueInDestructor>>.
+  Maybe<Rc<Child>> maybeChild = child.addRef();
+  Maybe<Rc<SetTrueInDestructor>> maybe3 = kj::mv(maybeChild);
+  KJ_EXPECT(maybeChild == kj::none);
+  KJ_EXPECT(maybe3 != kj::none);
+
+  child = nullptr;
+  KJ_EXPECT(!b);
+  maybe = kj::none;
+  maybe2 = kj::none;
+  KJ_EXPECT(!b);
+  maybe3 = kj::none;
+  KJ_EXPECT(b);
+}
+
+// Maybe<Rc<T>> does not implicitly convert to a reference to the referent.
+static_assert(!canConvert<Maybe<Rc<SetTrueInDestructor>>&, Maybe<SetTrueInDestructor&>>());
+static_assert(!canConvert<Maybe<Rc<SetTrueInDestructor>>&, Maybe<const SetTrueInDestructor&>>());
+static_assert(!canConvert<const Maybe<Rc<SetTrueInDestructor>>&, Maybe<const SetTrueInDestructor&>>());
+static_assert(!canConvert<Maybe<Rc<Child>>&, Maybe<SetTrueInDestructor&>>());
+
+KJ_TEST("Maybe<Rc<T>> clone") {
+  bool b = false;
+
+  {
+    Maybe<Rc<SetTrueInDestructor>> maybe = kj::rc<SetTrueInDestructor>(&b);
+    Maybe<Rc<SetTrueInDestructor>> clone = maybe.clone();
+    KJ_EXPECT(clone != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(maybe) == KJ_ASSERT_NONNULL(clone));
+
+    maybe = kj::none;
+    KJ_EXPECT(!b);
+    clone = kj::none;
+    KJ_EXPECT(b);
+
+    Maybe<Rc<SetTrueInDestructor>> empty;
+    KJ_EXPECT(empty.clone() == kj::none);
+  }
+}
+
 static_assert(sizeof(WeakRc<SetTrueInDestructor>) == 2 * sizeof(void*));
 static_assert(sizeof(WeakRc<IncompleteDeclaredRefcounted>) == 2 * sizeof(void*));
 static_assert(sizeof(WeakRc<IncompleteDeclaredNotRefcounted>) == 2 * sizeof(void*));
@@ -1496,6 +1630,148 @@ KJ_TEST("Arc inheritance") {
   EXPECT_FALSE(b);
   down = nullptr;
   EXPECT_TRUE(b);
+}
+
+// Maybe<Arc<T>> is niche-optimized: a null Arc is the "none" state, so no extra flag is stored.
+static_assert(NicheOptimizable<Arc<AtomicSetTrueInDestructor>>);
+static_assert(sizeof(Maybe<Arc<AtomicSetTrueInDestructor>>) == sizeof(Arc<AtomicSetTrueInDestructor>));
+static_assert(sizeof(Maybe<Arc<IncompleteDeclaredAtomicRefcounted>>) == 2 * sizeof(void*));
+static_assert(sizeof(Maybe<Arc<IncompleteDeclaredNotAtomicRefcounted>>) == 2 * sizeof(void*));
+
+static_assert(Cloneable<Maybe<Arc<AtomicSetTrueInDestructor>>>);
+static_assert(Cloneable<const Maybe<Arc<AtomicSetTrueInDestructor>>>);
+
+// Maybe<Arc<T>> does not implicitly convert to a reference to the referent.
+static_assert(!canConvert<Maybe<Arc<AtomicSetTrueInDestructor>>&,
+                          Maybe<const AtomicSetTrueInDestructor&>>());
+static_assert(!canConvert<Maybe<Arc<AtomicSetTrueInDestructor>>&,
+                          Maybe<AtomicSetTrueInDestructor&>>());
+static_assert(!canConvert<const Maybe<Arc<AtomicSetTrueInDestructor>>&,
+                          Maybe<const AtomicSetTrueInDestructor&>>());
+static_assert(!canConvert<Maybe<Arc<AtomicChild>>&, Maybe<const AtomicSetTrueInDestructor&>>());
+
+KJ_TEST("Maybe<Arc<T>> niche optimization") {
+  bool b = false;
+
+  {
+    Maybe<Arc<AtomicSetTrueInDestructor>> maybe;
+    KJ_EXPECT(maybe == kj::none);
+
+    maybe = kj::arc<AtomicSetTrueInDestructor>(&b);
+    KJ_EXPECT(maybe != kj::none);
+    KJ_IF_SOME(ref, maybe) {
+      KJ_EXPECT(ref.get() != nullptr);
+      KJ_EXPECT(ref->ptr == &b);
+    } else {
+      KJ_FAIL_EXPECT("expected value");
+    }
+
+    // Moving out leaves the source in the none state.
+    Maybe<Arc<AtomicSetTrueInDestructor>> moved = kj::mv(maybe);
+    KJ_EXPECT(maybe == kj::none);
+    KJ_EXPECT(moved != kj::none);
+    KJ_EXPECT(!b);
+
+    // Move-assignment.
+    maybe = kj::mv(moved);
+    KJ_EXPECT(moved == kj::none);
+    KJ_EXPECT(maybe != kj::none);
+    KJ_EXPECT(!b);
+
+    // Setting to none releases the reference.
+    maybe = kj::none;
+    KJ_EXPECT(maybe == kj::none);
+    KJ_EXPECT(b);
+  }
+
+  {
+    // Storing a null Arc yields none, consistent with the niche representation.
+    Maybe<Arc<AtomicSetTrueInDestructor>> maybe = Arc<AtomicSetTrueInDestructor>();
+    KJ_EXPECT(maybe == kj::none);
+    maybe = Arc<AtomicSetTrueInDestructor>(nullptr);
+    KJ_EXPECT(maybe == kj::none);
+  }
+
+  {
+    // emplace()
+    b = false;
+    Maybe<Arc<AtomicSetTrueInDestructor>> maybe;
+    auto& ref = maybe.emplace(kj::arc<AtomicSetTrueInDestructor>(&b));
+    KJ_EXPECT(ref->ptr == &b);
+    KJ_EXPECT(maybe != kj::none);
+    KJ_EXPECT(!b);
+
+    // Emplacing over an existing value releases the old one.
+    bool b2 = false;
+    maybe.emplace(kj::arc<AtomicSetTrueInDestructor>(&b2));
+    KJ_EXPECT(b);
+    KJ_EXPECT(!b2);
+    maybe = kj::none;
+    KJ_EXPECT(b2);
+  }
+
+  {
+    // Destructor releases the reference.
+    b = false;
+    {
+      Maybe<Arc<AtomicSetTrueInDestructor>> maybe = kj::arc<AtomicSetTrueInDestructor>(&b);
+      KJ_EXPECT(!b);
+    }
+    KJ_EXPECT(b);
+  }
+}
+
+KJ_TEST("Maybe<Arc<T>> converting constructor from Arc<Derived>") {
+  bool b = false;
+
+  auto child = kj::arc<AtomicChild>(&b);
+
+  // Implicit conversion Arc<AtomicChild> -> Maybe<Arc<AtomicSetTrueInDestructor>> via
+  // copy-initialization.
+  Maybe<Arc<AtomicSetTrueInDestructor>> maybe = child.addRef();
+  KJ_EXPECT(maybe != kj::none);
+  KJ_IF_SOME(ref, maybe) {
+    KJ_EXPECT(ref.get() == child.get());
+  }
+
+  // Converting assignment.
+  Maybe<Arc<AtomicSetTrueInDestructor>> maybe2;
+  maybe2 = child.addRef();
+  KJ_EXPECT(maybe2 != kj::none);
+
+  // Maybe<Arc<AtomicChild>> -> Maybe<Arc<AtomicSetTrueInDestructor>>.
+  Maybe<Arc<AtomicChild>> maybeChild = child.addRef();
+  Maybe<Arc<AtomicSetTrueInDestructor>> maybe3 = kj::mv(maybeChild);
+  KJ_EXPECT(maybeChild == kj::none);
+  KJ_EXPECT(maybe3 != kj::none);
+
+  child = nullptr;
+  KJ_EXPECT(!b);
+  maybe = kj::none;
+  maybe2 = kj::none;
+  KJ_EXPECT(!b);
+  maybe3 = kj::none;
+  KJ_EXPECT(b);
+}
+
+KJ_TEST("Maybe<Arc<T>> clone") {
+  bool b = false;
+
+  {
+    Maybe<Arc<AtomicSetTrueInDestructor>> maybe = kj::arc<AtomicSetTrueInDestructor>(&b);
+    const auto& constMaybe = maybe;
+    Maybe<Arc<AtomicSetTrueInDestructor>> clone = constMaybe.clone();
+    KJ_EXPECT(clone != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(maybe) == KJ_ASSERT_NONNULL(clone));
+
+    maybe = kj::none;
+    KJ_EXPECT(!b);
+    clone = kj::none;
+    KJ_EXPECT(b);
+
+    Maybe<Arc<AtomicSetTrueInDestructor>> empty;
+    KJ_EXPECT(empty.clone() == kj::none);
+  }
 }
 
 KJ_TEST("atomicAddRef is safe under concurrent reference-count changes") {

@@ -1139,8 +1139,9 @@ class Maybe;
 //
 // WARNING: kj-rs (the Rust bindings for KJ) has its own knowledge of Maybe<T> memory layout
 // for interoperability with Rust. As of this writing, kj-rs supports Maybe<T&> and Maybe<Own<T>>
-// niche-optimized types, but not others. When adding niche optimization for a new type, you may
-// need to add corresponding support in kj-rs.
+// niche-optimized types, but not others (e.g. Maybe<Rc<T>> and Maybe<Arc<T>> are niche-optimized
+// here but not yet known to kj-rs). When adding niche optimization for a new type, you may need to
+// add corresponding support in kj-rs.
 //
 // To customize MaybeTraits for your type, specialize it in the same header where your type is
 // defined (after the type definition). See memory.h for an example (MaybeTraits<Own<T, D>>).

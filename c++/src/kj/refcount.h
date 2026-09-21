@@ -440,6 +440,29 @@ private:
   friend class WeakRc;
 };
 
+// MaybeTraits specialization for Rc<T>.
+// This enables:
+// 1. Niche optimization: Maybe<Rc<T>> uses ptr == nullptr as "none", so it is the same size as
+//    Rc<T> itself rather than carrying a separate flag.
+// 2. Implicit conversion: If U is implicitly convertible to Rc<T>, then U is implicitly convertible
+//    to Maybe<Rc<T>>. This allows: Maybe<Rc<Base>> m = rcDerived;
+template <typename T>
+struct MaybeTraits<Rc<T>> {
+  // Niche optimization: a null Rc is the "none" state.
+  static void initNone(Rc<T>* ptr) noexcept { kj::ctor(*ptr); }
+  static bool isNone(const Rc<T>& rc) noexcept { return rc.get() == nullptr; }
+
+  // Enable converting constructor: Maybe<Rc<T>>(U&&) accepts types U convertible to Rc<T>.
+  static constexpr bool convertingConstructor = true;
+
+  // Disable implicit conversion to the referent.
+  static constexpr bool dereferencingConversion = false;
+
+  // Rc's move ctor just copies the pointers and sets the source to nullptr (the none state).
+  // Moving a null Rc is safe.
+  static constexpr bool noneIsMoveSafe = true;
+};
+
 template <typename T, typename... Params>
 inline Rc<T> rc(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.
@@ -1011,6 +1034,29 @@ private:
 
   template <typename>
   friend class Arc;
+};
+
+// MaybeTraits specialization for Arc<T>.
+// This enables:
+// 1. Niche optimization: Maybe<Arc<T>> uses ptr == nullptr as "none", so it is the same size as
+//    Arc<T> itself rather than carrying a separate flag.
+// 2. Implicit conversion: If U is implicitly convertible to Arc<T>, then U is implicitly
+//    convertible to Maybe<Arc<T>>. This allows: Maybe<Arc<Base>> m = arcDerived;
+template <typename T>
+struct MaybeTraits<Arc<T>> {
+  // Niche optimization: a null Arc is the "none" state.
+  static void initNone(Arc<T>* ptr) noexcept { kj::ctor(*ptr); }
+  static bool isNone(const Arc<T>& arc) noexcept { return arc.get() == nullptr; }
+
+  // Enable converting constructor: Maybe<Arc<T>>(U&&) accepts types U convertible to Arc<T>.
+  static constexpr bool convertingConstructor = true;
+
+  // Disable implicit conversion to the referent.
+  static constexpr bool dereferencingConversion = false;
+
+  // Arc's move ctor just copies the pointers and sets the source to nullptr (the none state).
+  // Moving a null Arc is safe.
+  static constexpr bool noneIsMoveSafe = true;
 };
 
 template <typename T, typename... Params>
