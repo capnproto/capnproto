@@ -239,7 +239,7 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporter)
             auto t = orphanage.newOrphan<Token>();
             // Append '\n' to the text.
             auto out = initTok(t, loc).initStringLiteral(text.size() + 1);
-            memcpy(out.begin(), text.begin(), text.size());
+            out.asArray().write(text);
             out[out.size() - 1] = '\n';
             return t;
           }),
