@@ -93,6 +93,15 @@ TEST(Lexer, Tokens) {
       "])",
       doLex<LexedTokens>("  'foo\\x20' 123 2.75 6e4 + -=  ").cStr());
 
+  // A backtick-quoted line runs to the end of the line and gains a trailing newline; an empty
+  // line yields just the newline.
+  EXPECT_STREQ(
+      "(tokens = ["
+        "(stringLiteral = 'foo bar\\n', startByte = 0, endByte = 8), "
+        "(stringLiteral = '\\n', startByte = 9, endByte = 10)"
+      "])",
+      doLex<LexedTokens>("`foo bar\n`\n").cStr());
+
   EXPECT_STREQ(
       "(tokens = ["
         "(parenthesizedList = ["
