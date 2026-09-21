@@ -689,8 +689,12 @@ namespace _ {  // private
 
 template <typename T> class ArcWrapper;
 template <typename T> class ArcOwnWrapper;
+template <typename T> class ArcInitializer;
 
 }  // namespace _ (private)
+
+template <typename T, typename... Params>
+_::ArcInitializer<T> arcInit(Params&&... params);
 
 class AtomicRefcounted: private kj::Disposer {
 public:
@@ -744,6 +748,8 @@ private:
   template <typename T> friend class _::ArcOwnWrapper;
   template <typename T, typename... Params>
   friend kj::Arc<T> arc(Params&&... params);
+  template <typename T, typename... Params>
+  friend _::ArcInitializer<T> arcInit(Params&&... params);
 };
 
 template <typename T, typename... Params>
@@ -815,6 +821,7 @@ public:
   }
 
   const T* getWrappedPtr() const { return &wrapped; }
+  T* getWrappedPtr() { return &wrapped; }
 
 private:
   T wrapped;
@@ -846,6 +853,10 @@ class Arc {
   // The usage is similar to `kj::Rc<T>` but with a "const"-ness twist:
   // since in kj multithreaded code "const" means "thread-safe", `Arc<T>`
   // exposes only `const` members of T and thus is closer to `kj::Rc<const T>`.
+  //
+  // Because of this, the only opportunity to mutate T is before the Arc is shared. Use
+  // `kj::arcInit<T>(...)(init)` with an `init` callback taking `T&` to perform such
+  // initialization right after construction, while access is still exclusive.
 
 public:
   KJ_DISALLOW_COPY(Arc);
@@ -1008,6 +1019,8 @@ private:
 
   template <typename U, typename... Params>
   friend Arc<U> arc(Params&&... params);
+  template <typename U, typename... Params>
+  friend _::ArcInitializer<U> arcInit(Params&&... params);
 
   template <typename>
   friend class Arc;
@@ -1020,6 +1033,54 @@ inline Arc<T> arc(Params&&... params) {
   } else {
     auto wrapper = new _::ArcWrapper<T>(kj::fwd<Params>(params)...);
     return Arc<T>(wrapper, wrapper->getWrappedPtr());
+  }
+}
+
+namespace _ {  // private
+
+template <typename T>
+class ArcInitializer {
+  // Returned by kj::arcInit(). Owns a freshly constructed, not-yet-shared T. Invoke with a
+  // callback taking `T&` to run it and obtain the Arc.
+
+public:
+  ArcInitializer(Arc<T> arc, T* object): arc(kj::mv(arc)), object(object) {}
+
+  template <typename Func>
+  Arc<T> operator()(Func&& init) && {
+    kj::fwd<Func>(init)(*object);
+    return kj::mv(arc);
+  }
+
+private:
+  Arc<T> arc;
+  T* object;
+};
+
+}  // namespace _ (private)
+
+template <typename T, typename... Params>
+inline _::ArcInitializer<T> arcInit(Params&&... params) {
+  // Like `kj::arc<T>(params...)`, but returns an intermediate object which must be invoked with a
+  // callback taking a mutable `T&`. The callback runs on the newly constructed object and the
+  // resulting `Arc<T>` is returned. `Arc<T>` only ever exposes `const T`, so this is the place to
+  // perform any set-up that cannot be done in T's constructor:
+  //
+  //     Arc<Config> config = kj::arcInit<Config>(ctorArg1, ctorArg2)([](Config& c) {
+  //       c.entries.add(...);
+  //     });
+  //
+  // Exclusive access is guaranteed: the object was just allocated and no other reference to it can
+  // exist until the callback returns (unless the callback itself hands one out, e.g. via
+  // `addRefToThis()`). If the callback throws, the object is destroyed and the exception
+  // propagates.
+  if constexpr (canConvert<T*, AtomicRefcounted*>()) {
+    T* object = new T(kj::fwd<Params>(params)...);
+    return _::ArcInitializer<T>(AtomicRefcounted::addRcRefInternal(object), object);
+  } else {
+    auto wrapper = new _::ArcWrapper<T>(kj::fwd<Params>(params)...);
+    T* object = wrapper->getWrappedPtr();
+    return _::ArcInitializer<T>(Arc<T>(wrapper, object), object);
   }
 }
 

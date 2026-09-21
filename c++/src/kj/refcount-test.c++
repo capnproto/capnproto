@@ -23,6 +23,7 @@
 #include "array.h"
 #include "string.h"
 #include "thread.h"
+#include "vector.h"
 #include <kj/compat/gtest.h>
 
 #include <atomic>
@@ -1770,6 +1771,152 @@ KJ_TEST("Arc polymorphic upcast") {
 
   ref2 = nullptr;
   EXPECT_TRUE(b);
+}
+
+struct AtomicInitTarget: public AtomicRefcounted {
+  AtomicInitTarget(bool* destroyed, int value): destroyed(destroyed), value(value) {}
+  ~AtomicInitTarget() { *destroyed = true; }
+
+  kj::Arc<AtomicInitTarget> newRef() const { return addRefToThis(); }
+
+  bool* destroyed;
+  int value;
+  kj::Vector<kj::String> names;
+};
+
+struct PlainInitTarget {
+  PlainInitTarget(bool* destroyed, int value): destroyed(destroyed), value(value) {}
+  ~PlainInitTarget() { *destroyed = true; }
+
+  bool* destroyed;
+  int value;
+  kj::Vector<kj::String> names;
+};
+
+KJ_TEST("arcInit for atomic-refcounted types") {
+  bool destroyed = false;
+  bool initCalled = false;
+
+  auto ref = kj::arcInit<AtomicInitTarget>(&destroyed, 123)([&](AtomicInitTarget& target) {
+    // Mutable access to a freshly constructed, unshared object.
+    KJ_EXPECT(!target.isShared());
+    KJ_EXPECT(target.value == 123);
+    target.value = 456;
+    target.names.add(kj::str("foo"));
+    initCalled = true;
+  });
+
+  KJ_EXPECT(initCalled);
+  KJ_EXPECT(ref != nullptr);
+  KJ_EXPECT(!ref->isShared());
+  KJ_EXPECT(ref->value == 456);
+  KJ_EXPECT(ref->names.size() == 1);
+  KJ_EXPECT(ref->names[0] == "foo");
+
+  KJ_EXPECT(!destroyed);
+  ref = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("arcInit for non-atomic-refcounted types") {
+  bool destroyed = false;
+  bool initCalled = false;
+
+  auto ref = kj::arcInit<PlainInitTarget>(&destroyed, 123)([&](PlainInitTarget& target) {
+    KJ_EXPECT(target.value == 123);
+    target.value = 456;
+    target.names.add(kj::str("foo"));
+    initCalled = true;
+  });
+
+  KJ_EXPECT(initCalled);
+  KJ_EXPECT(ref != nullptr);
+  KJ_EXPECT(ref->value == 456);
+  KJ_EXPECT(ref->names.size() == 1);
+  KJ_EXPECT(ref->names[0] == "foo");
+
+  auto ref2 = ref.addRef();
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  ref2 = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("arcInit with no constructor arguments") {
+  struct Config {
+    int a = 1;
+    int b = 2;
+  };
+
+  auto ref = kj::arcInit<Config>()([](Config& c) { c.b = 20; });
+  KJ_EXPECT(ref->a == 1);
+  KJ_EXPECT(ref->b == 20);
+}
+
+KJ_TEST("arcInit forwards constructor arguments") {
+  struct Target {
+    Target(kj::String&& moved, const kj::String& copied, int& lvalue)
+        : moved(kj::mv(moved)), copied(kj::heapString(copied)), lvalue(lvalue) {}
+    kj::String moved;
+    kj::String copied;
+    int& lvalue;
+  };
+
+  kj::String source = kj::str("moved");
+  kj::String kept = kj::str("copied");
+  int counter = 0;
+
+  auto ref = kj::arcInit<Target>(kj::mv(source), kept, counter)([](Target& t) {
+    t.lvalue = 42;
+  });
+
+  KJ_EXPECT(source == nullptr);  // moved from
+  KJ_EXPECT(kept == "copied");
+  KJ_EXPECT(ref->moved == "moved");
+  KJ_EXPECT(ref->copied == "copied");
+  KJ_EXPECT(&ref->lvalue == &counter);
+  KJ_EXPECT(counter == 42);
+}
+
+KJ_TEST("arcInit callback may share the object") {
+  bool destroyed = false;
+  kj::Arc<AtomicInitTarget> extra;
+
+  auto ref = kj::arcInit<AtomicInitTarget>(&destroyed, 123)([&](AtomicInitTarget& target) {
+    target.value = 456;
+    extra = target.newRef();
+  });
+
+  KJ_EXPECT(ref->isShared());
+  KJ_EXPECT(extra.get() == ref.get());
+  KJ_EXPECT(extra->value == 456);
+
+  ref = nullptr;
+  KJ_EXPECT(!destroyed);
+  extra = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("arcInit callback exception destroys the object") {
+  {
+    bool destroyed = false;
+    KJ_EXPECT_THROW_MESSAGE("init failed", kj::arcInit<AtomicInitTarget>(&destroyed, 123)(
+        [](AtomicInitTarget& target) { KJ_FAIL_REQUIRE("init failed"); }));
+    KJ_EXPECT(destroyed);
+  }
+
+  {
+    bool destroyed = false;
+    KJ_EXPECT_THROW_MESSAGE("init failed", kj::arcInit<PlainInitTarget>(&destroyed, 123)(
+        [](PlainInitTarget& target) { KJ_FAIL_REQUIRE("init failed"); }));
+    KJ_EXPECT(destroyed);
+  }
+}
+
+KJ_TEST("arcInit without invoking the callback destroys the object") {
+  bool destroyed = false;
+  { auto pending = kj::arcInit<AtomicInitTarget>(&destroyed, 123); }
+  KJ_EXPECT(destroyed);
 }
 
 // A refcounted object that holds a self weak-reference and touches it from its destructor. This
