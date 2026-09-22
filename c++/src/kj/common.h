@@ -363,7 +363,11 @@ KJ_NORETURN(void unreachable());
 #define KJ_MSVC_TRADITIONAL_CPP 1
 #endif
 
-#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+#if defined(KJ_DEBUG) && !defined(KJ_ENABLE_IREQUIRE)
+#define KJ_ENABLE_IREQUIRE 1
+#endif
+
+#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \

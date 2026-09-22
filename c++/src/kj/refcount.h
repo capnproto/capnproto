@@ -705,8 +705,14 @@ Own<RefcountedWrapper<Own<T>>> refcountedWrapper(Own<T>&& wrapped) {
 template<typename T>
 class Arc;
 
+template<typename T>
+class UniqueArc;
+
 template <typename T, typename... Params>
 Arc<T> arc(Params&&... params);
+
+template <typename T, typename... Params>
+UniqueArc<T> uniqueArc(Params&&... params);
 
 namespace _ {  // private
 
@@ -763,10 +769,14 @@ private:
 
   template <typename T>
   friend class Arc;
+  template <typename T>
+  friend class UniqueArc;
   template <typename T> friend class _::ArcWrapper;
   template <typename T> friend class _::ArcOwnWrapper;
   template <typename T, typename... Params>
   friend kj::Arc<T> arc(Params&&... params);
+  template <typename T, typename... Params>
+  friend kj::UniqueArc<T> uniqueArc(Params&&... params);
 };
 
 template <typename T, typename... Params>
@@ -837,6 +847,7 @@ public:
     incRefcount();
   }
 
+  T* getWrappedPtr() { return &wrapped; }
   const T* getWrappedPtr() const { return &wrapped; }
 
 private:
@@ -900,6 +911,10 @@ public:
     refcounted = wrapper;
     ptr = wrapper->getWrappedPtr();
   }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline Arc(UniqueArc<U>&& other);
+  // Give up uniqueness of a UniqueArc<U> and share it.
 
   ~Arc() noexcept(false) { dispose(); }
 
@@ -1034,6 +1049,9 @@ private:
 
   template <typename>
   friend class Arc;
+
+  template <typename>
+  friend class UniqueArc;
 };
 
 // MaybeTraits specialization for Arc<T>.
@@ -1066,6 +1084,186 @@ inline Arc<T> arc(Params&&... params) {
   } else {
     auto wrapper = new _::ArcWrapper<T>(kj::fwd<Params>(params)...);
     return Arc<T>(wrapper, wrapper->getWrappedPtr());
+  }
+}
+
+template <typename T>
+class UniqueArc {
+  // Uniquely-owned Arc<T>.
+  //
+  // kj::Arc<T> exposes only `const T`, because in kj "const" means "thread-safe" and an Arc may be
+  // shared across threads. UniqueArc<T> is the mutable precursor to an Arc<T>: its refcount is
+  // known to be exactly 1, so no other thread can observe the object and non-const access is safe.
+  //
+  // The usual pattern is to allocate with kj::uniqueArc<T>(...), initialize the object through the
+  // UniqueArc, then convert it into an Arc<T> to share it:
+  //
+  //     kj::Arc<Gadget> createGadget(Config& config) {
+  //       auto gadget = kj::uniqueArc<Gadget>();
+  //       gadget->setName(config.name);
+  //       return kj::mv(gadget);                    // or kj::mv(gadget).toArc()
+  //     }
+  //
+  // Conversion is O(1): UniqueArc<T> and Arc<T> share the same representation, and the refcount
+  // is already 1. Once converted, the object is only reachable as `const T` again.
+  //
+  // Like kj::Own<T>, a UniqueArc<T> may be moved to another thread but must not be used from
+  // several threads at once.
+  //
+  // While a UniqueArc<T> is alive, T MUST NOT hand out additional references to itself (e.g. via
+  // addRefToThis() or kj::atomicAddRef(*this)). Doing so breaks the uniqueness invariant that makes
+  // mutation safe. Uniqueness is asserted in toArc() and in every accessor.
+
+public:
+  KJ_DISALLOW_COPY(UniqueArc);
+  UniqueArc() { }
+  UniqueArc(decltype(nullptr)) { }
+  inline UniqueArc(UniqueArc&& other) noexcept: refcounted(other.refcounted), ptr(other.ptr) {
+    other.refcounted = nullptr;
+    other.ptr = nullptr;
+  }
+
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  inline UniqueArc(UniqueArc<U>&& other) noexcept: refcounted(other.refcounted), ptr(other.ptr) {
+    other.refcounted = nullptr;
+    other.ptr = nullptr;
+  }
+
+  template <typename U = T, typename = EnableIf<isSameType<U, T>()>>
+  inline UniqueArc(U t) {
+    // Wrap a value of a type which is not itself AtomicRefcounted.
+    static_assert(!canConvert<const T*, const AtomicRefcounted*>());
+    auto wrapper = new _::ArcWrapper<U>(kj::mv(t));
+    refcounted = wrapper;
+    ptr = wrapper->getWrappedPtr();
+  }
+
+  ~UniqueArc() noexcept(false) { dispose(); }
+
+  Arc<T> toArc() && {
+    // Give up uniqueness and obtain a shareable Arc<T>. Consumes this UniqueArc, which is null
+    // afterwards. Requires this UniqueArc to be non-null.
+    KJ_IREQUIRE(ptr != nullptr, "null UniqueArc<> conversion to Arc<>");
+    checkUnique();
+    Arc<T> result(refcounted, ptr);
+    refcounted = nullptr;
+    ptr = nullptr;
+    return result;
+  }
+
+  UniqueArc& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
+  }
+
+  UniqueArc& operator=(UniqueArc&& other) {
+    if (this == &other) return *this;
+    swp(refcounted, other.refcounted);
+    swp(ptr, other.ptr);
+    other.dispose();
+    return *this;
+  }
+
+  template <typename U>
+  UniqueArc<U> downcast() {
+    UniqueArc<U> result;
+    if (ptr != nullptr) {
+      result = UniqueArc<U>(refcounted, &kj::downcast<U>(*ptr));
+      refcounted = nullptr;
+      ptr = nullptr;
+    }
+    return result;
+  }
+
+  inline bool operator==(const UniqueArc<T>& other) const { return ptr == other.ptr; }
+  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+
+#define NULLCHECK KJ_IREQUIRE(ptr != nullptr, "null UniqueArc<> dereference")
+  inline T* operator->() { NULLCHECK; checkUnique(); return ptr; }
+  inline const T* operator->() const { NULLCHECK; checkUnique(); return ptr; }
+  inline T& operator*() { NULLCHECK; checkUnique(); return *ptr; }
+  inline const T& operator*() const { NULLCHECK; checkUnique(); return *ptr; }
+#undef NULLCHECK
+  inline T* get() { if (ptr != nullptr) checkUnique(); return ptr; }
+  inline const T* get() const { if (ptr != nullptr) checkUnique(); return ptr; }
+
+private:
+  UniqueArc(const AtomicRefcounted* refcounted, T* ptr): refcounted(refcounted), ptr(ptr) {}
+
+  inline void checkUnique() const {
+    // Assert the uniqueness invariant. `ptr` must be non-null.
+    KJ_IREQUIRE(!refcounted->isShared(),
+        "UniqueArc<> is no longer unique; the object handed out references to itself.");
+  }
+
+  void dispose() {
+    if (ptr == nullptr) return;
+    const AtomicRefcounted* refcountedCopy = refcounted;
+    refcounted = nullptr;
+    ptr = nullptr;
+    // AtomicRefcounted dispose ignores the pointer.
+    refcountedCopy->dispose(static_cast<AtomicRefcounted*>(nullptr));
+  }
+
+  const AtomicRefcounted* refcounted = nullptr;
+  T* ptr = nullptr;
+
+  template <typename U, typename... Params>
+  friend UniqueArc<U> uniqueArc(Params&&... params);
+
+  template <typename>
+  friend class UniqueArc;
+
+  template <typename>
+  friend class Arc;
+
+  friend struct MaybeTraits<UniqueArc<T>>;
+};
+
+// MaybeTraits specialization for UniqueArc<T>.
+// This enables:
+// 1. Niche optimization: Maybe<UniqueArc<T>> uses ptr == nullptr as "none", so it is the same size
+//    as UniqueArc<T> itself rather than carrying a separate flag.
+// 2. Implicit conversion: If U is implicitly convertible to UniqueArc<T>, then U is implicitly
+//    convertible to Maybe<UniqueArc<T>>. This allows: Maybe<UniqueArc<Base>> m = uniqueArcDerived;
+template <typename T>
+struct MaybeTraits<UniqueArc<T>> {
+  // Niche optimization: a null UniqueArc is the "none" state.
+  static void initNone(UniqueArc<T>* ptr) noexcept { kj::ctor(*ptr); }
+  static bool isNone(const UniqueArc<T>& uniqueArc) noexcept {
+    // Read `ptr` directly rather than via get(): get() asserts the uniqueness invariant, which is
+    // irrelevant to (and must not throw from) a none-check.
+    return uniqueArc.ptr == nullptr;
+  }
+
+  // Enable converting constructor: Maybe<UniqueArc<T>>(U&&) accepts types U convertible to
+  // UniqueArc<T>.
+  static constexpr bool convertingConstructor = true;
+
+  // Disable implicit conversion to the referent.
+  static constexpr bool dereferencingConversion = false;
+
+  // UniqueArc's move ctor just copies the pointers and sets the source to nullptr (the none state).
+  // Moving a null UniqueArc is safe.
+  static constexpr bool noneIsMoveSafe = true;
+};
+
+template <typename T>
+template <typename U, typename>
+inline Arc<T>::Arc(UniqueArc<U>&& other): Arc(kj::mv(other).toArc()) {}
+
+template <typename T, typename... Params>
+inline UniqueArc<T> uniqueArc(Params&&... params) {
+  // Allocate a new instance of T, passing `params` to its constructor, exactly like kj::arc<T>(),
+  // but return a UniqueArc<T> granting mutable access until it is converted into an Arc<T>.
+  if constexpr (canConvert<T*, AtomicRefcounted*>()) {
+    T* object = new T(kj::fwd<Params>(params)...);
+    AtomicRefcounted* refcounted = object;
+    refcounted->incRefcount();
+    return UniqueArc<T>(refcounted, object);
+  } else {
+    auto wrapper = new _::ArcWrapper<T>(kj::fwd<Params>(params)...);
+    return UniqueArc<T>(wrapper, wrapper->getWrappedPtr());
   }
 }
 
