@@ -1193,12 +1193,16 @@ KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T> wit
     return request.send();
   });
 
-  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+  auto parts = kj::mv(promise).releaseParts();
+  auto pipelineRequest = parts.pipeline.getOutBox().getCap().fooRequest();
   pipelineRequest.setI(321);
   auto pipelinePromise = pipelineRequest.send();
 
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
+
+  auto originalResponse = parts.promise.wait(waitScope);
+  EXPECT_EQ("bar", originalResponse.getS());
 
   auto response = pipelinePromise.wait(waitScope);
   EXPECT_EQ("bar", response.getX());

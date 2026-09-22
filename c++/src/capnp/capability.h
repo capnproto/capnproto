@@ -49,6 +49,11 @@ class RemotePromise: public kj::Promise<Response<T>>, public T::Pipeline {
   // itself.
 
 public:
+  struct Parts {
+    kj::Promise<Response<T>> promise;
+    typename T::Pipeline pipeline;
+  };
+
   inline RemotePromise(kj::Promise<Response<T>>&& promise, typename T::Pipeline&& pipeline)
       : kj::Promise<Response<T>>(kj::mv(promise)),
         T::Pipeline(kj::mv(pipeline)) {}
@@ -62,6 +67,12 @@ public:
   kj::Promise<Response<T>> dropPipeline() {
     // Convenience method to convert this into a plain promise.
     return kj::mv(*this);
+  }
+
+  Parts releaseParts() && {
+    auto& promise = static_cast<kj::Promise<Response<T>>&>(*this);
+    auto& pipeline = static_cast<typename T::Pipeline&>(*this);
+    return {kj::mv(promise), kj::mv(pipeline)};
   }
 
   static RemotePromise<T> reducePromise(kj::Promise<RemotePromise>&& promise);
@@ -1079,12 +1090,8 @@ template <typename T>
 RemotePromise<T> RemotePromise<T>::reducePromise(kj::Promise<RemotePromise>&& promise) {
   kj::Tuple<kj::Promise<Response<T>>, kj::Promise<kj::Own<PipelineHook>>> splitPromise =
       promise.then([](RemotePromise&& inner) {
-    // `inner` is multiply-inherited, and we want to move away each superclass separately.
-    // Let's create two references to make clear what we're doing (though this is not strictly
-    // necessary).
-    kj::Promise<Response<T>>& innerPromise = inner;
-    typename T::Pipeline& innerPipeline = inner;
-    return kj::tuple(kj::mv(innerPromise), PipelineHook::from(kj::mv(innerPipeline)));
+    auto parts = kj::mv(inner).releaseParts();
+    return kj::tuple(kj::mv(parts.promise), PipelineHook::from(kj::mv(parts.pipeline)));
   }).split();
 
   return RemotePromise(kj::mv(kj::get<0>(splitPromise)),
