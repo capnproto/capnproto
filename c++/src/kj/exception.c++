@@ -420,25 +420,46 @@ KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
 #endif
 }
 
+namespace {
+
+size_t saturatingAdd(size_t a, size_t b) {
+  const size_t max = kj::maxValue;
+  return (a > max - b) ? max : (a + b);
+}
+
+ArrayPtr<void* const> trimStackTrace(ArrayPtr<void* const> trace, size_t ignoreCount) {
+#if __linux__ && KJ_HAS_BACKTRACE && \
+    (KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__) || \
+     KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__))
+  // ASan and TSan add a backtrace() interceptor frame.
+  constexpr size_t interceptorFrames = 1;
+#else
+  constexpr size_t interceptorFrames = 0;
+#endif
+
+  return trace.slice(kj::min(saturatingAdd(ignoreCount, interceptorFrames), trace.size()));
+}
+
+}  // namespace
+
 KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space, size_t ignoreCount) {
-  ignoreCount++ /* this frame */;
-  auto trace = getStackTrace(space);
-  return trace.slice(kj::min(ignoreCount, trace.size()), trace.size());
+  ignoreCount = saturatingAdd(ignoreCount, 2 /* this frame + getStackTrace(space) frame */);
+  return trimStackTrace(getStackTrace(space), ignoreCount);
 }
 
 Vector<void*> getStackTrace(size_t ignoreCount) {
   static_assert(KJ_STACK_TRACE_MAX_SIZE > 0);
   constexpr size_t maxSize = KJ_STACK_TRACE_MAX_SIZE;
-  ignoreCount += 2; /* this frame + getStackTrace(space) frame */
+  ignoreCount = saturatingAdd(ignoreCount, 2 /* this frame + getStackTrace(space) frame */);
 
   // Try a buffer on the stack first.
   void* space[32];
   auto stackSpace = arrayPtr(space).first(kj::min(kj::size(space), maxSize));
   auto trace = getStackTrace(stackSpace);
   if (trace.size() < stackSpace.size() || stackSpace.size() == maxSize) {
-    auto start = kj::min(ignoreCount, trace.size());
-    kj::Vector<void*> result(trace.size() - start);
-    result.addAll(trace.slice(start));
+    trace = trimStackTrace(trace, ignoreCount);
+    kj::Vector<void*> result(trace.size());
+    result.addAll(trace);
     return result;
   }
 
@@ -449,11 +470,11 @@ Vector<void*> getStackTrace(size_t ignoreCount) {
 
     auto trace = getStackTrace(vec);
     if (trace.size() < vec.size() || vec.capacity() >= maxSize) {
-      auto start = kj::min(ignoreCount, trace.size());
-      if (start < trace.size()) {
-        memmove(vec.begin(), vec.begin() + start, (trace.size() - start) * sizeof(void*));
+      trace = trimStackTrace(trace, ignoreCount);
+      if (trace.size() > 0) {
+        memmove(vec.begin(), trace.begin(), trace.asBytes().size());
       }
-      vec.truncate(trace.size() - start);
+      vec.truncate(trace.size());
       return kj::mv(vec);
     }
     vec.reserve(kj::min(vec.capacity() * 2, maxSize));

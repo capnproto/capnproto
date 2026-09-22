@@ -194,6 +194,47 @@ kj::String testStackTrace() {
   return getStackTrace();
 }
 
+KJ_NOINLINE void checkStackTraceCallerFrames(uint depth) {
+  if (depth > 0) {
+    // The checks after recursion keep these frames live, exercising heap-backed stack capture.
+    checkStackTraceCallerFrames(depth - 1);
+  }
+
+  auto expectedCallerFrame = KJ_CALLING_ADDRESS();
+  for (size_t ignoreCount: kj::zeroTo(2)) {
+    void* space[32]{};
+    auto trace = getStackTrace(space, ignoreCount);
+    auto allocatedTrace = getStackTrace(ignoreCount);
+
+    if (isStackTraceSupported()) {
+      auto callerIndex = 1 - ignoreCount;
+      KJ_ASSERT(trace.size() > callerIndex, depth, ignoreCount);
+      KJ_EXPECT(trace[callerIndex] == expectedCallerFrame, depth, ignoreCount);
+      KJ_ASSERT(allocatedTrace.size() > callerIndex, depth, ignoreCount);
+      KJ_EXPECT(allocatedTrace[callerIndex] == expectedCallerFrame, depth, ignoreCount);
+    } else {
+      KJ_EXPECT(trace.size() == 0);
+      KJ_EXPECT(allocatedTrace.size() == 0);
+    }
+  }
+}
+
+KJ_TEST("getStackTrace() ignores requested caller frames") {
+  checkStackTraceCallerFrames(0);
+}
+
+KJ_TEST("getStackTrace() ignores requested caller frames in deep traces") {
+  checkStackTraceCallerFrames(64);
+}
+
+KJ_TEST("getStackTrace() handles exhausted buffers and caller frames") {
+  void* space[32]{};
+  KJ_EXPECT(getStackTrace(nullptr, 0).size() == 0);
+  KJ_EXPECT(getStackTrace(kj::arrayPtr(space).first(1), 0).size() == 0);
+  KJ_EXPECT(getStackTrace(space, kj::maxValue).size() == 0);
+  KJ_EXPECT(getStackTrace(kj::maxValue).size() == 0);
+}
+
 KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   // Backtraces normally produce the return address of each stack frame, but that's usually the
   // address immediately after the one that made the call. As a result, it used to be that stack
@@ -648,12 +689,9 @@ KJ_TEST("truncateCommonTrace removes common suffix") {
   }
   KJ_EXPECT(extendedSize > 2);
 
-  // truncateCommonTrace should remove the frames shared with our current stack. Sanitizers may
-  // leave an intercepted backtrace() frame or the caller's frame in the trace, so don't require
-  // that every appended frame is removed.
+  // truncateCommonTrace should remove the frames shared with our current stack.
   e.truncateCommonTrace();
-  KJ_EXPECT(e.getStackTrace().size() >= 2);
-  KJ_EXPECT(e.getStackTrace().size() < extendedSize);
+  KJ_EXPECT(e.getStackTrace().size() == 2);
 
   KJ_EXPECT(e.getStackTrace()[0] == reinterpret_cast<void*>(uintptr_t(0x1)));
   KJ_EXPECT(e.getStackTrace()[1] == reinterpret_cast<void*>(uintptr_t(0x2)));
