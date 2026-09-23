@@ -229,6 +229,19 @@ template <> Maybe<double> StringPtr::tryParseAs<double>() const;
 class LiteralStringConst: public StringPtr {
 public:
   inline operator ConstString() const;
+  inline constexpr operator StaticArrayPtr<const char>() const { return asArray(); }
+  inline constexpr StaticArrayPtr<const char> asArray() const {
+    return StaticArrayPtr<const char>(begin(), size());
+  }
+  inline StaticArrayPtr<const byte> asBytes() const {
+    return asArray().asBytes();
+  }
+  inline constexpr StaticArrayPtr<const char> slice(size_t start, size_t end) const {
+    return asArray().slice(start, end);
+  }
+  inline constexpr StaticArrayPtr<const char> first(size_t count) const {
+    return asArray().first(count);
+  }
 
 private:
   inline explicit constexpr LiteralStringConst(ArrayPtr<const char> content): StringPtr(content) {}

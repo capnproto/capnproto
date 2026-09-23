@@ -1617,6 +1617,15 @@ TEST(Encoding, Constants) {
   EXPECT_DOUBLE_EQ(-123e45, test::TestConstants::FLOAT64_CONST);
   EXPECT_EQ("foo", *test::TestConstants::TEXT_CONST);
   EXPECT_EQ(data("bar"), test::TestConstants::DATA_CONST);
+  static_assert(kj::isSameType<decltype(test::TestConstants::TEXT_CONST.asArray()),
+      kj::StaticArrayPtr<const char>>());
+  static_assert(kj::isSameType<decltype(test::TestConstants::TEXT_CONST.asBytes()),
+      kj::StaticArrayPtr<const byte>>());
+  static_assert(kj::isSameType<decltype(test::TestConstants::DATA_CONST.asArray()),
+      kj::StaticArrayPtr<const byte>>());
+  EXPECT_EQ("foo"_kjc.asArray(), test::TestConstants::TEXT_CONST.asArray());
+  EXPECT_EQ("foo"_kjb, test::TestConstants::TEXT_CONST.asBytes());
+  EXPECT_EQ("bar"_kjb, test::TestConstants::DATA_CONST.asBytes());
   {
     TestAllTypes::Reader subReader = test::TestConstants::STRUCT_CONST;
     EXPECT_EQ(VOID, subReader.getVoidField());
