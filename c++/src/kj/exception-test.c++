@@ -235,6 +235,28 @@ KJ_TEST("getStackTrace() handles exhausted buffers and caller frames") {
   KJ_EXPECT(getStackTrace(kj::maxValue).size() == 0);
 }
 
+KJ_TEST("getStackTrace() does not capture into an empty buffer") {
+  class CountingCallback: public ExceptionCallback {
+  public:
+    StackTraceMode stackTraceMode() override {
+      ++calls;
+      return StackTraceMode::FULL;
+    }
+
+    uint calls = 0;
+  } callback;
+
+  void* space[32]{};
+  getStackTrace(space, 0);
+  KJ_EXPECT(callback.calls == 1);
+
+  // Both null and non-null empty slices must return before consulting the callback or passing
+  // a zero-capacity buffer to the platform unwinder (which can trip UBSan downstream).
+  KJ_EXPECT(getStackTrace(nullptr, 0).size() == 0);
+  KJ_EXPECT(getStackTrace(kj::arrayPtr(space).first(0), 0).size() == 0);
+  KJ_EXPECT(callback.calls == 1);
+}
+
 KJ_TEST("getStackTrace() returns correct line number, not line + 1") {
   // Backtraces normally produce the return address of each stack frame, but that's usually the
   // address immediately after the one that made the call. As a result, it used to be that stack

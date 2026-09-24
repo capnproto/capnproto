@@ -394,6 +394,10 @@ bool isStackTraceSupported() {
 KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
   // Low-level non-allocating getStackTrace functionality
 
+  if (space.size() == 0) {
+    return nullptr;
+  }
+
   if (getExceptionCallback().stackTraceMode() == ExceptionCallback::StackTraceMode::NONE) {
     return nullptr;
   }
