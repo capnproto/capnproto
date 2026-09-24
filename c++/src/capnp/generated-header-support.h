@@ -253,6 +253,13 @@ public:
     return Text::Reader(reinterpret_cast<const char*>(ptr), size);
   }
 
+  // The template size is the text length without its NUL terminator. Unlike StringPtr's internal
+  // array size, it doesn't include the terminator, so neither array view needs to subtract one.
+  inline kj::StaticArrayPtr<const char> asArray() const {
+    return kj::StaticArrayPtr<const char>(reinterpret_cast<const char*>(ptr), size);
+  }
+  inline kj::StaticArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
+
   inline operator Text::Reader() const { return get(); }
   inline Text::Reader operator*() const { return get(); }
   inline TemporaryPointer<Text::Reader> operator->() const { return get(); }
@@ -280,6 +287,11 @@ public:
   inline Data::Reader get() const {
     return Data::Reader(reinterpret_cast<const byte*>(ptr), size);
   }
+
+  inline kj::StaticArrayPtr<const byte> asArray() const {
+    return kj::StaticArrayPtr<const byte>(reinterpret_cast<const byte*>(ptr), size);
+  }
+  inline kj::StaticArrayPtr<const byte> asBytes() const { return asArray(); }
 
   inline operator Data::Reader() const { return get(); }
   inline Data::Reader operator*() const { return get(); }

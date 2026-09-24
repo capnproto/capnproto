@@ -1055,6 +1055,17 @@ static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine&>());
 static_assert(!_::isDisallowedInCoroutine<AllowedInCoroutine*>());
 
 KJ_TEST("_kjb") {
+  static_assert(isSameType<decltype("abc"_kjb), StaticArrayPtr<const byte>>());
+  static_assert(canConvert<StaticArrayPtr<const byte>, ArrayPtr<const byte>>());
+  constexpr auto staticBytes = "abc"_kjb;
+  static_assert(isSameType<decltype(staticBytes.first(2)), StaticArrayPtr<const byte>>());
+  constexpr auto suffix = staticBytes.slice(1);
+  static_assert(suffix[0] == 'b');
+  static_assert(staticBytes.asBytes().size() == 3);
+  auto clonedBytes = staticBytes.clone();
+  static_assert(isSameType<decltype(clonedBytes), Array<byte>>());
+  KJ_EXPECT(clonedBytes.asPtr() == staticBytes);
+  KJ_EXPECT(clonedBytes.begin() != staticBytes.begin());
   {
     ArrayPtr<const byte> arr = "abc"_kjb;
     KJ_EXPECT(arr.size() == 3);

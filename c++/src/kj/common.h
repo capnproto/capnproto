@@ -3020,6 +3020,41 @@ private:
   friend class ConstString;
 };
 
+template <typename T>
+class StaticArrayPtr: public ArrayPtr<T> {
+  // An ArrayPtr whose backing data has static storage duration. Like ArrayPtr, this does not own
+  // the data. Callers constructing one directly must ensure the data lives for the whole program.
+  static_assert(isConst<T>(), "StaticArrayPtr must point to const data.");
+
+public:
+  inline constexpr StaticArrayPtr(): ArrayPtr<T>() {}
+  inline constexpr StaticArrayPtr(decltype(nullptr)): ArrayPtr<T>(nullptr) {}
+  inline constexpr StaticArrayPtr(T* ptr, size_t size): ArrayPtr<T>(ptr, size) {}
+
+  inline constexpr StaticArrayPtr slice(size_t start, size_t end) const {
+    return StaticArrayPtr(ArrayPtr<T>::slice(start, end));
+  }
+  inline constexpr StaticArrayPtr slice(size_t start) const {
+    return StaticArrayPtr(ArrayPtr<T>::slice(start));
+  }
+  inline constexpr StaticArrayPtr first(size_t count) const {
+    return StaticArrayPtr(ArrayPtr<T>::first(count));
+  }
+
+  inline constexpr StaticArrayPtr<const byte> asBytes() const {
+    if constexpr (isSameType<T, const byte>()) {
+      return *this;
+    } else {
+      return StaticArrayPtr<const byte>(ArrayPtr<T>::asBytes());
+    }
+  }
+
+private:
+  inline explicit constexpr StaticArrayPtr(ArrayPtr<T> ptr): ArrayPtr<T>(kj::mv(ptr)) {}
+  template <typename>
+  friend class StaticArrayPtr;
+};
+
 namespace _ {  // private
 
 class SplitIteratorEnd {};
@@ -3384,10 +3419,10 @@ decltype(auto) from(T&& t) {
 }  // namespace kj
 
 template <kj::_::ByteLiteral s>
-constexpr kj::ArrayPtr<const kj::byte> operator ""_kjb() {
+constexpr kj::StaticArrayPtr<const kj::byte> operator ""_kjb() {
   // "string"_kjb creates constexpr byte array pointer to the content of the string
   // WITHOUT the trailing 0.
-  return kj::ArrayPtr<const kj::byte>(s.begin(), s.size());
+  return kj::StaticArrayPtr<const kj::byte>(s.begin(), s.size());
 };
 
 KJ_END_HEADER

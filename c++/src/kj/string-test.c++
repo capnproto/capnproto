@@ -421,6 +421,20 @@ KJ_TEST("float stringification and parsing is not locale-dependent") {
 }
 
 KJ_TEST("ConstString literal operator") {
+  static_assert(kj::isSameType<decltype("abc"_kjc.asArray()),
+      kj::StaticArrayPtr<const char>>());
+  static_assert(kj::isSameType<decltype("abc"_kjc.asBytes()),
+      kj::StaticArrayPtr<const kj::byte>>());
+  static_assert(kj::isSameType<decltype("abc"_kjc.first(2)),
+      kj::StaticArrayPtr<const char>>());
+  static_assert(kj::isSameType<decltype("abc"_kjc.slice(1, 2)),
+      kj::StaticArrayPtr<const char>>());
+  constexpr kj::StaticArrayPtr<const char> chars = "abc"_kjc;
+  static_assert(chars.size() == 3 && chars[1] == 'b');
+  constexpr kj::ArrayPtr<const char> array = chars;
+  static_assert(array.size() == 3);
+  KJ_EXPECT("abc"_kjc.asBytes() == "abc"_kjb);
+
   kj::ConstString theString = "it's a const string!"_kjc;
   KJ_EXPECT(theString == "it's a const string!");
 }
