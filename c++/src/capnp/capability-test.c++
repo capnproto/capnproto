@@ -1448,7 +1448,9 @@ KJ_TEST("RevocableServer") {
   KJ_EXPECT(!promise.poll(waitScope));
   KJ_EXPECT(revocable.isInUse());
 
-  revocable.revoke();
+  auto destroyable = revocable.revokeAndWait();
+  KJ_EXPECT(destroyable.poll(waitScope));
+  destroyable.wait(waitScope);
 
   KJ_EXPECT(revocable.isInUse());
 
@@ -1463,6 +1465,87 @@ KJ_TEST("RevocableServer") {
       revocable.getClient().waitForeverRequest().sendIgnoringResult().wait(waitScope));
 
   KJ_EXPECT(!revocable.isInUse());
+}
+
+KJ_TEST("RevocableServer waits for destruction before revocation") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class ServerImpl: public test::TestMembrane::Server {};
+
+  ServerImpl server;
+  kj::Promise<void> destroyable = nullptr;
+  {
+    RevocableServer<test::TestMembrane> revocable(server);
+    destroyable = revocable.whenServerDestroyable();
+    KJ_EXPECT(!destroyable.poll(waitScope));
+    KJ_EXPECT(!revocable.isInUse());
+  }
+
+  KJ_EXPECT(destroyable.poll(waitScope));
+  destroyable.wait(waitScope);
+}
+
+KJ_TEST("RevocableServer waits for FD leases") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class ServerImpl: public test::TestMembrane::Server {
+  public:
+    kj::Maybe<int> getFd() override {
+      return 123;
+    }
+  };
+
+  ServerImpl server;
+  RevocableServer<test::TestMembrane> revocable(server);
+  auto hook = ClientHook::from(revocable.getClient());
+  kj::Promise<void> destroyable = nullptr;
+  kj::Promise<void> alsoDestroyable = nullptr;
+
+  {
+    auto fd = KJ_ASSERT_NONNULL(hook->getFd());
+    KJ_EXPECT(fd.get() == 123);
+    destroyable = revocable.revokeAndWait(KJ_EXCEPTION(DISCONNECTED, "test revocation"));
+    alsoDestroyable = revocable.whenServerDestroyable();
+    KJ_EXPECT(!destroyable.poll(waitScope));
+    KJ_EXPECT(!alsoDestroyable.poll(waitScope));
+    {
+      auto canceled = revocable.whenServerDestroyable();
+      KJ_EXPECT(!canceled.poll(waitScope));
+    }
+    KJ_EXPECT(hook->getFd() == kj::none);
+  }
+
+  KJ_EXPECT(destroyable.poll(waitScope));
+  KJ_EXPECT(alsoDestroyable.poll(waitScope));
+  destroyable.wait(waitScope);
+  alsoDestroyable.wait(waitScope);
+}
+
+KJ_TEST("RevocableServer can be revoked while getting an FD") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class ServerImpl: public test::TestMembrane::Server {
+  public:
+    kj::Maybe<int> getFd() override {
+      KJ_ASSERT_NONNULL(revocable).revoke();
+      return 123;
+    }
+
+    RevocableServer<test::TestMembrane>* revocable = nullptr;
+  };
+
+  ServerImpl server;
+  RevocableServer<test::TestMembrane> revocable(server);
+  server.revocable = &revocable;
+  auto hook = ClientHook::from(revocable.getClient());
+
+  KJ_EXPECT(hook->getFd() == kj::none);
+  auto destroyable = revocable.whenServerDestroyable();
+  KJ_EXPECT(destroyable.poll(waitScope));
+  destroyable.wait(waitScope);
 }
 
 KJ_TEST("servers can be refcounted") {

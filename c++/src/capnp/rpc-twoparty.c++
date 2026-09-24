@@ -199,8 +199,29 @@ public:
           messages[i].segments = ownMessages[i]->message.getSegmentsForOutput();
           messages[i].fds = ownMessages[i]->fds;
         }
-        return network.getStream().writeMessages(messages).attach(kj::mv(ownMessages), kj::mv(messages));
-      }).catch_([&network](kj::Exception&& e) {
+        // Eagerly clean up fds and keep alive tokens after they are sent.
+        auto cleanup = kj::defer([ownMessages = kj::mv(ownMessages)]() mutable {
+          for (auto& message: ownMessages) {
+            message->setFds(nullptr);
+          }
+        });
+        // We use evalNow so that any synchronous exceptions in writeMessages get converted into a
+        // rejected promise so that the attachments always are responsible for the cleanup and do so
+        // in the correct order (messages first, then cleanup) so that the fd arrays are not
+        // destroyed while messages still holds ArrayPtr views into them.
+        return kj::evalNow([&]{
+          return network.getStream().writeMessages(messages);
+        }).attach(kj::mv(cleanup), kj::mv(messages));
+      });
+    }).catch_([&network = network](kj::Exception&& e) {
+        // Future queued messages will never be processed, so we need to drop them and their
+        // associated fds and keep alive tokens eagerly.
+        auto discarded = kj::mv(network.queuedMessages);
+        network.currentQueueSize = 0;
+        for (auto& message: discarded) {
+          message->setFds(nullptr);
+        }
+
         // Since no one checks write failures, we need to propagate them into read failures,
         // otherwise we might get stuck sending all messages into a black hole and wondering why
         // the peer never replies.
@@ -209,8 +230,7 @@ public:
           network.readCanceler.cancel(e.clone());
         }
         kj::throwRecoverableException(kj::mv(e));
-      });
-    }).eagerlyEvaluate(nullptr);
+      }).eagerlyEvaluate(nullptr);
   }
 
   size_t sizeInWords() override {
@@ -345,7 +365,15 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
     return getStream().end();
   });
   previousWrite = kj::none;
-  return kj::mv(result);
+  // Drop any pending fds and their associated keep alives that have been queued, regardless of if
+  // the result is waited upon or dropped.
+  return result.attach(kj::defer([this]() {
+    auto discarded = kj::mv(queuedMessages);
+    currentQueueSize = 0;
+    for (auto& message: discarded) {
+      message->setFds(nullptr);
+    }
+  }));
 }
 
 void TwoPartyVatNetwork::setIdle(bool idle) {
