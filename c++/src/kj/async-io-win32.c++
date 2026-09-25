@@ -190,6 +190,13 @@ namespace {
 
 static constexpr uint NEW_FD_FLAGS = LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
 
+template <typename T>
+T checkedWinsockSize(size_t size) {
+  KJ_REQUIRE(size <= kj::maxValueForBits<sizeof(T) * 8>(),
+             "size does not fit in WinSock parameter");
+  return static_cast<T>(size);
+}
+
 class OwnedFd {
 public:
   OwnedFd(SOCKET fd, uint flags): fd(fd), flags(flags) {
@@ -223,7 +230,7 @@ public:
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     auto bufs = heapArray<WSABUF>(1);
     bufs[0].buf = reinterpret_cast<char*>(buffer);
-    bufs[0].len = maxBytes;
+    bufs[0].len = checkedWinsockSize<ULONG>(maxBytes);
 
     ArrayPtr<WSABUF> ref = bufs;
     return tryReadInternal(ref, minBytes, 0).attach(kj::mv(bufs));
@@ -232,7 +239,7 @@ public:
   Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
     auto bufs = heapArray<WSABUF>(1);
     bufs[0].buf = const_cast<char*>(buffer.asChars().begin());
-    bufs[0].len = buffer.size();
+    bufs[0].len = checkedWinsockSize<ULONG>(buffer.size());
 
     ArrayPtr<WSABUF> ref = bufs;
     return writeInternal(ref).attach(kj::mv(bufs));
@@ -242,7 +249,7 @@ public:
     auto bufs = heapArray<WSABUF>(pieces.size());
     for (auto i: kj::indices(pieces)) {
       bufs[i].buf = const_cast<char*>(pieces[i].asChars().begin());
-      bufs[i].len = pieces[i].size();
+      bufs[i].len = checkedWinsockSize<ULONG>(pieces[i].size());
     }
 
     ArrayPtr<WSABUF> ref = bufs;
@@ -356,7 +363,7 @@ private:
     auto op = observer->newOperation(0);
 
     DWORD flags = 0;
-    if (WSARecv(fd, bufs.begin(), bufs.size(), NULL, &flags,
+    if (WSARecv(fd, bufs.begin(), checkedWinsockSize<DWORD>(bufs.size()), NULL, &flags,
                 op->getOverlapped(), NULL) == SOCKET_ERROR) {
       DWORD error = WSAGetLastError();
       if (error != WSA_IO_PENDING) {
@@ -408,7 +415,7 @@ private:
 
     auto op = observer->newOperation(0);
 
-    if (WSASend(fd, bufs.begin(), bufs.size(), NULL, 0,
+    if (WSASend(fd, bufs.begin(), checkedWinsockSize<DWORD>(bufs.size()), NULL, 0,
                 op->getOverlapped(), NULL) == SOCKET_ERROR) {
       DWORD error = WSAGetLastError();
       if (error != WSA_IO_PENDING) {
@@ -1244,7 +1251,7 @@ Promise<size_t> DatagramPortImpl::send(
     ArrayPtr<const byte> buffer, NetworkAddress& destination) {
   auto buffers = heapArray<WSABUF>(1);
   buffers[0].buf = const_cast<char*>(buffer.asChars().begin());
-  buffers[0].len = buffer.size();
+  buffers[0].len = checkedWinsockSize<ULONG>(buffer.size());
   return send(kj::mv(buffers), destination);
 }
 
@@ -1254,7 +1261,7 @@ Promise<size_t> DatagramPortImpl::send(
   buffers[0] = {};
   for (auto i: kj::indices(pieces)) {
     buffers[i].buf = const_cast<char*>(pieces[i].asChars().begin());
-    buffers[i].len = pieces[i].size();
+    buffers[i].len = checkedWinsockSize<ULONG>(pieces[i].size());
   }
   return send(kj::mv(buffers), destination);
 }
@@ -1266,7 +1273,8 @@ Promise<size_t> DatagramPortImpl::send(
   auto state = heap<SendState>(kj::mv(buffers), addr);
   auto op = observer->newOperation(0);
 
-  if (WSASendTo(fd, state->buffers.begin(), state->buffers.size(), NULL, 0,
+  if (WSASendTo(fd, state->buffers.begin(),
+                checkedWinsockSize<DWORD>(state->buffers.size()), NULL, 0,
                 state->destination.getRaw(), state->destination.getRawSize(),
                 op->getOverlapped(), NULL) == SOCKET_ERROR) {
     DWORD error = WSAGetLastError();
@@ -1298,14 +1306,14 @@ public:
     // WSARecvMsg writes the payload, source address, and control messages in one operation.
     address = {};
     content.buf = reinterpret_cast<char*>(contentBuffer.begin());
-    content.len = contentBuffer.size();
+    content.len = checkedWinsockSize<ULONG>(contentBuffer.size());
     message = {};
     message.name = reinterpret_cast<struct sockaddr*>(&address);
     message.namelen = sizeof(address);
     message.lpBuffers = &content;
     message.dwBufferCount = 1;
     message.Control.buf = reinterpret_cast<char*>(ancillaryBuffer.begin());
-    message.Control.len = ancillaryBuffer.size();
+    message.Control.len = checkedWinsockSize<ULONG>(ancillaryBuffer.size());
 
     auto op = port.observer->newOperation(0);
     KJ_ASSERT(port.recvMsg != nullptr);
