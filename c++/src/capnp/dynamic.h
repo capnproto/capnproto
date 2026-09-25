@@ -116,6 +116,8 @@ template <> struct Kind_<DynamicEnum      > { static constexpr Kind kind = Kind:
 template <> struct Kind_<DynamicStruct    > { static constexpr Kind kind = Kind::OTHER; };
 template <> struct Kind_<DynamicList      > { static constexpr Kind kind = Kind::OTHER; };
 template <> struct Kind_<DynamicCapability> { static constexpr Kind kind = Kind::OTHER; };
+template <> struct IsPointerSchema<DynamicStruct> { static constexpr bool value = true; };
+template <> struct IsPointerSchema<DynamicList> { static constexpr bool value = true; };
 
 }  // namespace _ (private)
 

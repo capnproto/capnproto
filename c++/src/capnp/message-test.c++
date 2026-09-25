@@ -20,7 +20,9 @@
 // THE SOFTWARE.
 
 #include "message.h"
+#include "serialize.h"
 #include "test-util.h"
+#include <kj/refcount.h>
 #include <kj/array.h>
 #include <kj/vector.h>
 #include <kj/debug.h>
@@ -29,6 +31,88 @@
 namespace capnp {
 namespace _ {  // private
 namespace {
+
+struct OwnedTestMessage {
+  kj::Array<word> words;
+  FlatArrayMessageReader message;
+  TestAllTypes::Reader root;
+  bool& destroyed;
+
+  OwnedTestMessage(kj::Array<word> words, bool& destroyed)
+      : words(kj::mv(words)), message(this->words.asPtr()),
+        root(message.getRoot<TestAllTypes>()), destroyed(destroyed) {}
+  ~OwnedTestMessage() { destroyed = true; }
+};
+
+kj::Array<word> makeProjectedMessage() {
+  MallocMessageBuilder message(1, AllocationStrategy::FIXED_SIZE);
+  auto root = message.initRoot<TestAllTypes>();
+  auto child = root.initStructField();
+  child.initStructList(2)[1].setTextField("projected text");
+  child.setDataField(kj::arrayPtr(reinterpret_cast<const byte*>("data"), 4));
+  KJ_REQUIRE(message.getSegmentsForOutput().size() > 1);
+  return messageToFlatArray(message);
+}
+
+KJ_TEST("Rc readers retain multi-segment message bytes and arena through field projections") {
+  bool destroyed = false;
+  auto owner = kj::rc<OwnedTestMessage>(makeProjectedMessage(), destroyed);
+  auto root = kj::mv(owner).project([](auto& message) { return message.root; });
+  static_assert(kj::isSameType<decltype(root), kj::Rc<TestAllTypes::Reader>>());
+  auto child = kj::mv(root).project([](auto reader) { return reader.getStructField(); });
+  auto data = child.addRef().project([](auto reader) { return reader.getDataField(); });
+  auto list = kj::mv(child).project([](auto reader) { return reader.getStructList(); });
+  auto element = kj::mv(list).project([](auto reader) { return reader[1]; });
+  auto text = kj::mv(element).project([](auto reader) { return reader.getTextField(); });
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(*text == "projected text");
+  KJ_EXPECT(data->size() == 4);
+  data = nullptr;
+  KJ_EXPECT(!destroyed);
+  text = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Arc reader navigation retains the immutable message context") {
+  bool destroyed = false;
+  auto owner = kj::arc<OwnedTestMessage>(makeProjectedMessage(), destroyed);
+  auto root = kj::mv(owner).project([](auto& message) { return message.root; });
+  auto clone = root.addRef();
+  auto text = kj::mv(root).project([](auto reader) {
+    return reader.getStructField().getStructList()[1].getTextField();
+  });
+  auto any = kj::mv(clone).project([](auto reader) { return AnyStruct::Reader(reader); });
+  auto pointers = kj::mv(any).project([](auto reader) { return reader.getPointerSection(); });
+  KJ_EXPECT(pointers->size() > 0);
+  pointers = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(*text == "projected text");
+  text = nullptr;
+  KJ_EXPECT(destroyed);
+}
+
+KJ_TEST("Rc builders project mutable fields and can project to readers") {
+  auto owner = kj::rc<MallocMessageBuilder>();
+  auto root = kj::mv(owner).project([](auto& message) {
+    return message.template initRoot<TestAllTypes>();
+  });
+  auto child = kj::mv(root).project([](auto builder) { return builder.initStructField(); });
+  auto text = child.addRef().project([](auto builder) { return builder.initTextField(3); });
+  (*text)[0] = 'f';
+  (*text)[1] = 'o';
+  (*text)[2] = 'o';
+  kj::Rc<const Text::Builder> frozen(kj::mv(text));
+  auto copy = frozen.addRef();
+  auto clone = frozen.clone();
+  static_assert(kj::isSameType<decltype(copy), kj::Rc<const Text::Builder>>());
+  frozen = nullptr;
+  KJ_EXPECT(copy->asReader() == "foo");
+  copy = nullptr;
+  KJ_EXPECT(clone->asReader() == "foo");
+  clone = nullptr;
+  auto reader = kj::mv(child).project([](auto builder) { return builder.asReader(); });
+  KJ_EXPECT(reader->getTextField() == "foo");
+}
 
 TEST(Message, MallocBuilderWithFirstSegment) {
   word scratch[16];
