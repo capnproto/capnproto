@@ -47,7 +47,7 @@ namespace _ {  // private
 
 template <typename T> class RcWrapper;
 template <typename T> class RcOwnWrapper;
-template <typename T, typename Owner> class HandleImpl;
+template <typename T, typename Owner, bool = isPointerType<T>()> class HandleImpl;
 
 class RcWeakCell {
   // Shared validity cell backing kj::WeakRc<T>, the weak companion of kj::Rc<T>.
@@ -171,7 +171,7 @@ private:
 
   template <typename T> friend class _::RcWrapper;
   template <typename T> friend class _::RcOwnWrapper;
-  template <typename T, typename Owner> friend class _::HandleImpl;
+  template <typename T, typename Owner, bool> friend class _::HandleImpl;
 };
 
 template <typename T, typename... Params>
@@ -233,13 +233,43 @@ private:
 };
 
 template <typename T>
-struct RemoveReference;
+struct RemoveReference { using Type = T; };
 template <typename T>
 struct RemoveReference<T&> { using Type = T; };
 template <typename T>
 struct RemoveReference<T&&> { using Type = T; };
 
-template <typename T, typename Owner>
+template <typename Result>
+using ProjectionType = typename RemoveReference<Result>::Type;
+
+template <typename Result>
+constexpr bool isProjectionResult() {
+  using T = ProjectionType<Result>;
+  if constexpr (isPointerType<T>()) {
+    return (isLvalueReference<Result>() || isSameType<Result, T>()) &&
+        isNoThrowMoveConstructible<RemoveConst<T>, Result>();
+  } else {
+    return isLvalueReference<Result>();
+  }
+}
+
+template <typename U, typename T>
+constexpr bool canConvertRc() {
+  // Whether an Rc/Arc of U converts to one of T: raw pointer conversion for ordinary objects,
+  // noexcept value conversion for pointer types. The two families never convert into each other.
+  if constexpr (isSameType<U, T>()) {
+    // The non-template move constructor handles this case. In particular, checking whether a
+    // const pointer type converts to itself may try to copy a move-only pointer from const.
+    return false;
+  } else if constexpr (isPointerType<T>()) {
+    return isPointerType<U>() && canConvert<U&&, RemoveConst<T>>() &&
+        isNoThrowMoveConstructible<RemoveConst<T>, RemoveConst<U>>();
+  } else {
+    return !isPointerType<U>() && canConvert<U*, T*>();
+  }
+}
+
+template <typename T, typename Owner, bool>
 class HandleImpl {
   // Shared implementation of Rc<T> and Arc<T>; see the RcImpl and ArcImpl aliases below. A handle
   // is one reference to an `Owner` plus the target (a T) that the handle exposes.
@@ -249,8 +279,11 @@ class HandleImpl {
   // kj::rc<T>() the owner is the T itself (or the RcWrapper around it); for a handle produced by
   // project() it is the original object that the projection was taken from, which is what keeps
   // the target alive. Both base classes are their own Disposer, so the reference is a single
-  // pointer and releasing it is `owner->dispose(nullptr)`. The target is referenced by raw pointer
-  // and need not be a complete type.
+  // pointer and releasing it is `owner->dispose(nullptr)`.
+  //
+  // Ordinary targets are referenced by raw pointer and need not be complete types. Pointer types
+  // (PointerTraits) use the specialization below, which stores them inline. Both variants have the
+  // same interface, so Rc and Arc are each written once for both kinds of T.
 public:
   HandleImpl() = default;
   HandleImpl(Owner* owner, T& target): owner(owner), ptr(&target) {}
@@ -300,8 +333,89 @@ public:
 private:
   Owner* owner = nullptr;
   T* ptr = nullptr;
-  template <typename, typename> friend class HandleImpl;
+  template <typename, typename, bool> friend class HandleImpl;
 };
+
+template <typename T, typename Owner>
+class HandleImpl<T, Owner, true> {
+  // Pointer type variant. `value` is constructed exactly while `owner` is non-null, so no extra
+  // flag is needed. Since a copy of a pointer type is as good as the original, moving the handle
+  // moves the value while transferring the reference.
+  //
+  // The value is always destroyed before its claim is released: a tracked ArrayPtr must unregister
+  // before its backing Array's destructor asserts that no ArrayPtrs remain.
+  using Value = RemoveConst<T>;
+  static_assert(noexcept(Value(kj::instance<Value&>())) &&
+      noexcept(Value(kj::instance<Value&&>())) &&
+      noexcept(kj::instance<Value&>().~Value()),
+      "pointer types must be copyable, movable, and destructible without throwing");
+public:
+  HandleImpl() {}
+  template <typename U>
+  HandleImpl(Owner* owner, U&& pointer): owner(owner) {
+    static_assert(isNoThrowMoveConstructible<Value, U>(),
+        "pointer types must be constructible from the supplied target without throwing");
+    kj::ctor(value, kj::fwd<U>(pointer));
+  }
+  KJ_DISALLOW_COPY(HandleImpl);
+  HandleImpl(HandleImpl&& other) noexcept { moveFrom(other); }
+  template <typename U>
+  HandleImpl(HandleImpl<U, Owner>&& other) noexcept { moveFrom(other); }
+  ~HandleImpl() noexcept(false) { dispose(); }
+
+  HandleImpl& operator=(HandleImpl&& other) {
+    HandleImpl previous(kj::mv(*this));
+    moveFrom(other);
+    return *this;
+  }
+
+  Owner* getOwner() const { return owner; }
+  T* get() { return owner == nullptr ? nullptr : &value; }
+  const T* get() const { return owner == nullptr ? nullptr : &value; }
+
+  HandleImpl clone(this auto& self) {
+    // Copies from a mutable `value` when possible: Rc<const Pointer> still owns a mutable Value,
+    // so a non-const Rc can copy a mutable view without exposing mutable access through the Rc.
+    if (self.owner == nullptr) return {};
+    self.owner->incRefcount();
+    return HandleImpl(self.owner, self.value);
+  }
+
+  Owner* release() {
+    if (owner != nullptr) kj::dtor(value);
+    auto result = owner;
+    owner = nullptr;
+    return result;
+  }
+  void dispose() {
+    if (auto released = release(); released != nullptr) {
+      released->dispose(static_cast<RemoveConst<Owner>*>(nullptr));
+    }
+  }
+
+private:
+  Owner* owner = nullptr;
+  union { Value value; };
+
+  template <typename U>
+  void moveFrom(HandleImpl<U, Owner>& other) {
+    // Precondition: *this is empty.
+    static_assert(isNoThrowMoveConstructible<Value, RemoveConst<U>>(),
+        "pointer-type conversions must be noexcept");
+    if (other.owner != nullptr) {
+      kj::ctor(value, kj::mv(other.value));
+      owner = other.release();
+    }
+  }
+
+  template <typename, typename, bool> friend class HandleImpl;
+};
+
+template <typename T, bool = isPointerType<T>() && PointerTraits<RemoveConst<T>>::isReadOnly>
+struct RcExposed { using Type = T; };
+template <typename T>
+struct RcExposed<T, true> { using Type = const T; };
+// The type Rc<T> exposes through non-const access: read-only pointer types are exposed as const.
 
 template <typename T>
 using RcImpl = HandleImpl<T, Refcounted>;
@@ -320,7 +434,26 @@ class Rc {
   //
   // Rc<T> can also be constructed from:
   // - kj::Own<T> for all types of T. Allocates a wrapper.
-  // - T for non-`Refcounted` Ts with move constructor. Allocates a wrapper.
+  // - T for ordinary non-`Refcounted` Ts with move constructor. Allocates a wrapper.
+  //
+  // Pointer types (registered via PointerTraits, e.g. ArrayPtr or Cap'n Proto readers) are stored
+  // inline: the Rc holds the pointer by value plus a claim on the owner of the data it points to.
+  // Create these by projecting from an owner that covers the pointer's target and context:
+  //
+  //     auto bytes = owner.addRef().project([](auto& array) { return array.asPtr(); });
+  //
+  // Returning a pointer type by value copies it, sharing the original refcount without an
+  // allocation. rc<Pointer>(...) is not supported because a bare pointer does not identify its
+  // owner. Copying *rc only borrows the pointer; addRef() copies ownership as well. The address of
+  // the inline pointer changes when the Rc moves, so only null comparison is provided for pointer
+  // types, and neither toOwn() nor WeakRc is available (both would have to point into the Rc
+  // itself; downgrade the owner instead). Cross-type Rc/Arc conversions require a noexcept
+  // pointer conversion; use project() for conversions that can throw.
+  //
+  // Read-only pointer types are always exposed as const, as in Arc, so `*rc = other` cannot
+  // re-point the inline value. Mutable pointer types (e.g. builders) must be exposed as non-const
+  // for their setters; assigning through *rc re-points only that handle, and the new target must
+  // stay covered by the same owner.
   //
   // Once you have `Rc<T>` you can `addRef` or `clone` it to increment the refcount and obtain new
   // smart pointer.
@@ -338,16 +471,17 @@ class Rc {
   //     to call addRef() without kj::Rc.
   // - convert kj::Own<T> to kj::Rc<T> to wrap an object into refcounted hold.
   using Impl = _::RcImpl<T>;
+  using Exposed = typename _::RcExposed<T>::Type;
 public:
   KJ_DISALLOW_COPY(Rc);
   Rc() { }
   Rc(decltype(nullptr)) { }
   Rc(Rc&& other) noexcept = default;
 
-  template <typename U = T, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U = T, typename = EnableIf<_::canConvertRc<U, T>()>>
   inline Rc(Rc<U>&& other) noexcept: impl(kj::mv(other.impl)) {}
 
-  template <typename U, typename = EnableIf<isSameType<U, T>()>>
+  template <typename U, typename = EnableIf<isSameType<U, T>() && !isPointerType<T>()>>
   inline Rc(U t) noexcept {
     // This and below do not use concepts, but templates and static_asserts.
     // Concepts require T to be fully defined, but Rc<T> is often used with forward-declared T.
@@ -366,6 +500,8 @@ public:
   Own<T> toOwn() {
     // Convert Rc<T> to Own<T>.
     // Nullifies the original Rc<T>.
+    static_assert(!isPointerType<T>(),
+        "toOwn() is not available for pointer types, which live inline in the Rc");
     return impl.toOwn();
   }
 
@@ -392,16 +528,22 @@ public:
     //
     // This operation consumes the Rc. Use addRef().project() to retain the original Rc, or
     // kj::mv(rc).project() to transfer it explicitly. This Rc must not be null, and the callback
-    // must return a reference into an object whose lifetime is covered by the original ownership
-    // claim. Returning the referent itself is supported; the result is then not a projection.
+    // must return a reference or a registered pointer type whose lifetime is covered by the
+    // original ownership claim. Pointer types are copied inline, including when returned by
+    // reference, and must be copyable from that reference without throwing. If a const reference
+    // to a mutable view cannot be copied, return its read-only view (e.g. asConst()/asReader()).
+    // Returning the referent itself is supported; the result is then not a projection.
     // A WeakRc obtained from the result points
     // to the projected object, but expires based on the lifetime of the original object.
     using Result = decltype(kj::fwd<Func>(func)(*get()));
-    static_assert(isLvalueReference<Result>(), "Rc::project() callback must return a reference");
-    using U = typename _::RemoveReference<Result>::Type;
+    static_assert(_::isProjectionResult<Result>(),
+        "Rc::project() callback must return an lvalue reference or a pointer type; "
+        "pointer results must be copyable/movable from the returned value without throwing");
+    using U = _::ProjectionType<Result>;
 
     KJ_IREQUIRE(get() != nullptr, "null Rc<> projection");
     auto owner = kj::mv(*this);
+    // Construct the result before releasing `owner`: it may copy from owner's inline value.
     Rc<U> result(owner.impl.getOwner(), kj::fwd<Func>(func)(*owner));
     owner.impl.release();
     return result;
@@ -454,23 +596,27 @@ public:
     return result;
   }
 
-  inline bool operator==(const Rc<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const Rc<T>& other) const requires (!isPointerType<T>()) {
+    return get() == other.get();
+  }
   inline bool operator==(decltype(nullptr)) const { return get() == nullptr; }
 
 #define NULLCHECK KJ_IREQUIRE(get() != nullptr, "null Rc<> dereference")
-  inline T* operator->() { NULLCHECK; return get(); }
+  inline Exposed* operator->() { NULLCHECK; return get(); }
   inline const T* operator->() const { NULLCHECK; return get(); }
-  inline T& operator*() { NULLCHECK; return *get(); }
+  inline Exposed& operator*() { NULLCHECK; return *get(); }
   inline const T& operator*() const { NULLCHECK; return *get(); }
 #undef NULLCHECK
 
-  inline T* get() { return impl.get(); }
+  inline Exposed* get() { return impl.get(); }
   inline const T* get() const { return impl.get(); }
 
 private:
   explicit Rc(Impl&& impl): impl(kj::mv(impl)) {}
-  Rc(Refcounted* owner, T& target): impl(owner, target) {}
-  // Adopt a claim on `owner`, exposing `target`.
+  template <typename U>
+  Rc(Refcounted* owner, U&& target): impl(owner, kj::fwd<U>(target)) {}
+  // Adopt a claim on `owner`, exposing `target`: a T& for ordinary objects, or a pointer type to
+  // copy inline.
 
   Impl impl;
 
@@ -488,7 +634,7 @@ private:
 
 // MaybeTraits specialization for Rc<T>.
 // This enables:
-// 1. Niche optimization: Maybe<Rc<T>> uses ptr == nullptr as "none", so it is the same size as
+// 1. Niche optimization: Maybe<Rc<T>> uses a null Rc as "none", so it is the same size as
 //    Rc<T> itself rather than carrying a separate flag.
 // 2. Implicit conversion: If U is implicitly convertible to Rc<T>, then U is implicitly convertible
 //    to Maybe<Rc<T>>. This allows: Maybe<Rc<Base>> m = rcDerived;
@@ -504,8 +650,7 @@ struct MaybeTraits<Rc<T>> {
   // Disable implicit conversion to the referent.
   static constexpr bool dereferencingConversion = false;
 
-  // Rc's move ctor just copies the pointers and sets the source to nullptr (the none state).
-  // Moving a null Rc is safe.
+  // Rc's move ctor leaves the source null (the none state), and moving a null Rc is a no-op.
   static constexpr bool noneIsMoveSafe = true;
 };
 
@@ -514,6 +659,7 @@ inline Rc<T> rc(Params&&... params) {
   // Allocate a new refcounted instance of T, passing `params` to its constructor.
   // Returns smart pointer that can be used to manage references.
 
+  static_assert(!isPointerType<T>(), "Allocate the backing owner, then project() to a pointer");
   if constexpr (canConvert<T*, Refcounted*>()) {
     T* object = new T(fwd<Params>(params)...);
     return Rc<T>(static_cast<Refcounted*>(object), *object);
@@ -547,6 +693,8 @@ class WeakRc {
   //
   // The relationship between Rc<T> and WeakRc<T> is similar to that between kj::Pin<T>/kj::Ptr<T>
   // and kj::Weak<T>.
+  static_assert(!isPointerType<T>(),
+      "WeakRc does not support pointer types; downgrade the pointer's owner instead");
 
 public:
   KJ_DISALLOW_COPY(WeakRc);
@@ -819,7 +967,7 @@ private:
   friend class UniqueArc;
   template <typename T> friend class _::ArcWrapper;
   template <typename T> friend class _::ArcOwnWrapper;
-  template <typename T, typename Owner> friend class _::HandleImpl;
+  template <typename T, typename Owner, bool> friend class _::HandleImpl;
   template <typename T, typename... Params>
   friend kj::Arc<T> arc(Params&&... params);
   template <typename T, typename... Params>
@@ -927,6 +1075,12 @@ class Arc {
   // The usage is similar to `kj::Rc<T>` but with a "const"-ness twist:
   // since in kj multithreaded code "const" means "thread-safe", `Arc<T>`
   // exposes only `const` members of T and thus is closer to `kj::Rc<const T>`.
+  //
+  // Pointer types are stored inline as with Rc, but must be read-only: project mutable
+  // builders/ArrayPtrs to their reader/const-element types first. As with ordinary Arc, the
+  // backing context and its destruction must obey their own threading contracts.
+  static_assert(!isPointerType<T>() || PointerTraits<RemoveConst<T>>::isReadOnly,
+      "Arc requires a read-only pointer type; project to its reader/const-element type");
   using Impl = _::ArcImpl<const T>;
 
 public:
@@ -935,10 +1089,10 @@ public:
   Arc(decltype(nullptr)) { }
   Arc(Arc&& other) noexcept = default;
 
-  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
+  template <typename U, typename = EnableIf<_::canConvertRc<U, T>()>>
   inline Arc(Arc<U>&& other) noexcept: impl(kj::mv(other.impl)) {}
 
-  template <typename U = T, typename = EnableIf<isSameType<U, T>()>>
+  template <typename U = T, typename = EnableIf<isSameType<U, T>() && !isPointerType<T>()>>
   inline Arc(U t) {
     static_assert(!canConvert<const T*, const AtomicRefcounted*>());
     auto wrapper = new _::ArcWrapper<U>(kj::mv(t));
@@ -959,6 +1113,8 @@ public:
   kj::Own<const T> toOwn() {
     // Convert Arc<T> to Own<const T>.
     // Nullifies the original Arc<T>.
+    static_assert(!isPointerType<T>(),
+        "toOwn() is not available for pointer types, which live inline in the Arc");
     return impl.toOwn();
   }
 
@@ -986,14 +1142,19 @@ public:
     //
     // This operation consumes the Arc. Use addRef().project() to retain the original Arc, or
     // kj::mv(arc).project() to transfer it explicitly. This Arc must not be null, and the callback
-    // must return a reference into an object whose lifetime is covered by the original ownership
-    // claim. Returning the referent itself is supported; the result is then not a projection.
+    // must return a reference or an Arc-compatible pointer type whose lifetime is covered by the
+    // original ownership claim. Pointer types are copied inline, including when returned by
+    // reference.
+    // Returning the referent itself is supported; the result is then not a projection.
     using Result = decltype(kj::fwd<Func>(func)(*get()));
-    static_assert(isLvalueReference<Result>(), "Arc::project() callback must return a reference");
-    using U = typename _::RemoveReference<Result>::Type;
+    static_assert(_::isProjectionResult<Result>(),
+        "Arc::project() callback must return an lvalue reference or a pointer type; "
+        "pointer results must be copyable/movable from the returned value without throwing");
+    using U = _::ProjectionType<Result>;
 
     KJ_IREQUIRE(get() != nullptr, "null Arc<> projection");
     auto owner = kj::mv(*this);
+    // Construct the result before releasing `owner`: it may copy from owner's inline value.
     Arc<U> result(owner.impl.getOwner(), kj::fwd<Func>(func)(*owner));
     owner.impl.release();
     return result;
@@ -1039,7 +1200,9 @@ public:
     return result;
   }
 
-  inline bool operator==(const Arc<T>& other) const { return get() == other.get(); }
+  inline bool operator==(const Arc<T>& other) const requires (!isPointerType<T>()) {
+    return get() == other.get();
+  }
   inline bool operator==(decltype(nullptr)) const { return get() == nullptr; }
 
 #define NULLCHECK KJ_IREQUIRE(get() != nullptr, "null Arc<> dereference")
@@ -1050,8 +1213,10 @@ public:
 
 private:
   explicit Arc(Impl&& impl): impl(kj::mv(impl)) {}
-  Arc(const AtomicRefcounted* owner, const T& target): impl(owner, target) {}
-  // Adopt a claim on `owner`, exposing `target`.
+  template <typename U>
+  Arc(const AtomicRefcounted* owner, U&& target): impl(owner, kj::fwd<U>(target)) {}
+  // Adopt a claim on `owner`, exposing `target`: a const T& for ordinary objects, or a pointer
+  // type to copy inline.
 
   Impl impl;
 
@@ -1069,7 +1234,7 @@ private:
 
 // MaybeTraits specialization for Arc<T>.
 // This enables:
-// 1. Niche optimization: Maybe<Arc<T>> uses ptr == nullptr as "none", so it is the same size as
+// 1. Niche optimization: Maybe<Arc<T>> uses a null Arc as "none", so it is the same size as
 //    Arc<T> itself rather than carrying a separate flag.
 // 2. Implicit conversion: If U is implicitly convertible to Arc<T>, then U is implicitly
 //    convertible to Maybe<Arc<T>>. This allows: Maybe<Arc<Base>> m = arcDerived;
@@ -1085,13 +1250,13 @@ struct MaybeTraits<Arc<T>> {
   // Disable implicit conversion to the referent.
   static constexpr bool dereferencingConversion = false;
 
-  // Arc's move ctor just copies the pointers and sets the source to nullptr (the none state).
-  // Moving a null Arc is safe.
+  // Arc's move ctor leaves the source null (the none state), and moving a null Arc is a no-op.
   static constexpr bool noneIsMoveSafe = true;
 };
 
 template <typename T, typename... Params>
 inline Arc<T> arc(Params&&... params) {
+  static_assert(!isPointerType<T>(), "Allocate the backing owner, then project() to a pointer");
   if constexpr (canConvert<T*, AtomicRefcounted*>()) {
     return AtomicRefcounted::addRcRefInternal(new T(kj::fwd<Params>(params)...));
   } else {
@@ -1126,6 +1291,7 @@ class UniqueArc {
   // While a UniqueArc<T> is alive, T MUST NOT hand out additional references to itself (e.g. via
   // addRefToThis() or kj::atomicAddRef(*this)). Doing so breaks the uniqueness invariant that makes
   // mutation safe. Uniqueness is asserted in toArc() and in every accessor.
+  static_assert(!isPointerType<T>(), "Allocate the backing owner, then project() to a pointer");
 
 public:
   KJ_DISALLOW_COPY(UniqueArc);

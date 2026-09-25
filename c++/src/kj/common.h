@@ -591,6 +591,34 @@ template <typename T> struct IsConst_ { static constexpr bool value = false; };
 template <typename T> struct IsConst_<const T> { static constexpr bool value = true; };
 template <typename T> constexpr bool isConst() { return IsConst_<T>::value; }
 
+template <typename T, typename = void>
+struct PointerTraits {
+  // Specialize for pointer types: non-owning, copyable objects that refer to data owned elsewhere,
+  // such as ArrayPtr or Cap'n Proto readers. Rc/Arc store registered pointer types inline (by
+  // value) rather than allocating them. Copying must preserve the target and its metadata; copy,
+  // move, and destruction must not throw (and must be declared noexcept). Register the trait before
+  // instantiating Rc/Arc (i.e. next to the type's first declaration), and define the type
+  // completely before instantiating their layout. Specializations should derive from
+  // PointerTypeTraits below. Owning handles and raw C++ pointers (T*) are not automatically
+  // considered pointer types.
+  static constexpr bool isPointer = false;
+  static constexpr bool isReadOnly = false;
+  // True for pointer types that expose their target read-only, including after being copied.
+  // Const copying/access and borrow bookkeeping must obey KJ's const-means-thread-safe contract.
+  // This does not make the backing owner or concurrent mutation through other aliases safe.
+};
+
+template <bool readOnly>
+struct PointerTypeTraits {
+  // Base for PointerTraits specializations, e.g.:
+  //     template <> struct PointerTraits<MyPtr>: PointerTypeTraits</*readOnly=*/true> {};
+  static constexpr bool isPointer = true;
+  static constexpr bool isReadOnly = readOnly;
+};
+
+template <typename T>
+constexpr bool isPointerType() { return PointerTraits<RemoveConst<T>>::isPointer; }
+
 template <typename T> struct EnableIfNotConst_ { typedef T Type; };
 template <typename T> struct EnableIfNotConst_<const T>;
 template <typename T> using EnableIfNotConst = typename EnableIfNotConst_<T>::Type;
@@ -2559,9 +2587,15 @@ namespace kj {
 
 template <typename T>
 class Array;
+template <typename T>
+class ArrayPtr;
+
 class String;
 class StringPtr;
 class ConstString;
+
+template <typename T> struct PointerTraits<ArrayPtr<T>>: PointerTypeTraits<isConst<T>()> {};
+template <> struct PointerTraits<StringPtr>: PointerTypeTraits</*readOnly=*/true> {};
 
 namespace _ {  // private
 class SplitIteratorEnd;
@@ -2635,9 +2669,9 @@ public:
   inline constexpr ArrayPtr(T* ptr KJ_LIFETIMEBOUND, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin KJ_LIFETIMEBOUND, T* end KJ_LIFETIMEBOUND)
       : ptr(begin), size_(end - begin) {}
-  inline constexpr ArrayPtr(PropagateConst<T, ArrayPtr>& other)
+  inline constexpr ArrayPtr(PropagateConst<T, ArrayPtr>& other) noexcept
       : ptr(other.ptr), size_(other.size_), counterTracker(other.counterTracker) {}
-  inline constexpr ArrayPtr(ArrayPtr&& other)
+  inline constexpr ArrayPtr(ArrayPtr&& other) noexcept
       : ptr(other.ptr), size_(other.size_), counterTracker(kj::mv(other.counterTracker)) {
     other.ptr = nullptr;
     other.size_ = 0;
@@ -2722,15 +2756,15 @@ public:
     static_assert(!isSameType<T, const char32_t>(), "see above");
   }
 
-  inline operator ArrayPtr<const T>() const & {
+  inline operator ArrayPtr<const T>() const & noexcept {
     return ArrayPtr<const T>(ptr, size_, counterTracker);
   }
-  inline operator ArrayPtr<const T>() && {
+  inline operator ArrayPtr<const T>() && noexcept {
     ArrayPtr source;
     kj::swp(source, *this);
     return ArrayPtr<const T>(source.ptr, source.size_, source.counterTracker);
   }
-  inline operator ArrayPtr<const T>() const && {
+  inline operator ArrayPtr<const T>() const && noexcept {
     return ArrayPtr<const T>(ptr, size_, counterTracker);
   }
   inline ArrayPtr<const T> asConst() const & {
