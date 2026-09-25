@@ -70,6 +70,9 @@ namespace _ {  // private
 template <> struct Kind_<AnyPointer> { static constexpr Kind kind = Kind::OTHER; };
 template <> struct Kind_<AnyStruct> { static constexpr Kind kind = Kind::OTHER; };
 template <> struct Kind_<AnyList> { static constexpr Kind kind = Kind::OTHER; };
+template <> struct IsPointerSchema<AnyPointer> { static constexpr bool value = true; };
+template <> struct IsPointerSchema<AnyStruct> { static constexpr bool value = true; };
+template <> struct IsPointerSchema<AnyList> { static constexpr bool value = true; };
 }  // namespace _ (private)
 
 // =======================================================================================

@@ -217,6 +217,13 @@ namespace _ {  // private
 template <typename T, Kind k> struct Kind_<List<T, k>> {
   static constexpr Kind kind = Kind::LIST;
 };
+
+template <typename T, Kind k = CAPNP_KIND(T)>
+struct IsPointerSchema {
+  static constexpr bool value = k == Kind::STRUCT || k == Kind::LIST || k == Kind::BLOB;
+};
+// Schema types whose canonical Reader/Builder are pointer types. The any/dynamic headers
+// explicitly opt in their borrowed types; Kind::OTHER also includes ownership-bearing types.
 }  // namespace _ (private)
 
 template <typename T, Kind k = CAPNP_KIND(T)> struct ReaderFor_ { typedef typename T::Reader Type; };
@@ -748,6 +755,19 @@ inline constexpr kj::ArrayPtr<U> arrayPtr(U* ptr, T size) {
 }  // namespace capnp
 
 namespace kj {
+template <typename T>
+struct PointerTraits<T, VoidSfinae<
+    EnableIf<isSameType<T, typename T::Reads::Reader>()>,
+    EnableIf<capnp::_::IsPointerSchema<typename T::Reads>::value>>>
+    : PointerTypeTraits</*readOnly=*/true> {};
+// Exact matching excludes owning derived types, e.g. capnp::Response<Results>.
+
+template <typename T>
+struct PointerTraits<T, VoidSfinae<
+    EnableIf<isSameType<T, typename T::Builds::Builder>()>,
+    EnableIf<capnp::_::IsPointerSchema<typename T::Builds>::value>>>
+    : PointerTypeTraits</*readOnly=*/false> {};
+
 template <> constexpr bool canMemcpy<capnp::word>() { return true; }
 // capnp::word can (and should) be copied with memcpy.
 }  // namespace kj
