@@ -614,6 +614,22 @@ public:
   inline Exposed* get() { return impl.get(); }
   inline const T* get() const { return impl.get(); }
 
+  template <typename U>
+  inline auto as() & { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Rc&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const & { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const Rc&).
+
+  template <typename U>
+  inline auto as() && { return asImpl((U*)nullptr, kj::mv(*this)); }
+  // Syntax sugar for invoking asImpl(U*, Rc&&). Conversions may consume this Rc.
+
+  template <typename U>
+  inline auto as() const && { return asImpl((U*)nullptr, kj::mv(*this)); }
+
 private:
   explicit Rc(Impl&& impl): impl(kj::mv(impl)) {}
   template <typename U>
@@ -1214,6 +1230,22 @@ public:
   inline const T& operator*() const { NULLCHECK; return *get(); }
 #undef NULLCHECK
   inline const T* get() const { return impl.get(); }
+
+  template <typename U>
+  inline auto as() & { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Arc&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const & { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const Arc&).
+
+  template <typename U>
+  inline auto as() && { return asImpl((U*)nullptr, kj::mv(*this)); }
+  // Syntax sugar for invoking asImpl(U*, Arc&&). Conversions may consume this Arc.
+
+  template <typename U>
+  inline auto as() const && { return asImpl((U*)nullptr, kj::mv(*this)); }
 
 private:
   explicit Arc(Impl&& impl): impl(kj::mv(impl)) {}

@@ -469,6 +469,15 @@ public:
     return arrayPtr(ptr, pos);
   }
 
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, ArrayBuilder&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const ArrayBuilder&).
+
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
   inline T& operator[](size_t index) KJ_LIFETIMEBOUND {
@@ -657,6 +666,15 @@ public:
     return arrayPtr(content, fixedSize);
   }
 
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, FixedArray&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const FixedArray&).
+
   inline constexpr T& operator[](size_t index) KJ_LIFETIMEBOUND { return content[index]; }
   inline constexpr const T& operator[](size_t index) const KJ_LIFETIMEBOUND {
     return content[index];
@@ -690,6 +708,15 @@ public:
   inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND { return asPtr(); }
   inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return arrayPtr(content, currentSize); }
   inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND { return arrayPtr(content, currentSize); }
+
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, CappedArray&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const CappedArray&).
 
   inline T& operator[](size_t index) KJ_LIFETIMEBOUND { return content[index]; }
   inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND { return content[index]; }

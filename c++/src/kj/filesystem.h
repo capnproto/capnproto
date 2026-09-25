@@ -94,6 +94,15 @@ public:
 
   Path clone() const;
 
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Path&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const Path&).
+
   static Path parse(StringPtr path);
   // Parses a path in traditional format. Components are separated by '/'. Any use of "." or
   // ".." will be canonicalized (if they can't be canonicalized, e.g. because the path starts with
@@ -285,6 +294,15 @@ public:
   String toNativeString(bool absolute = false) const;
   Array<wchar_t> forWin32Api(bool absolute) const;
   // Equivalent to the corresponding methods of `Path`.
+
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, PathPtr&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const PathPtr&).
 
 private:
   ArrayPtr<const String> parts;
