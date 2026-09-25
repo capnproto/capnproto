@@ -24,6 +24,10 @@
 #include <kj/string.h>
 #include <kj/debug.h>
 #include <capnp/test.capnp.h>
+#include <kj/refcount.h>
+#if !CAPNP_LITE
+#include "dynamic.h"
+#endif
 
 #include <type_traits>
 
@@ -77,6 +81,62 @@ inline constexpr bool equalTypes() { return EqualTypes_<T, U>::value; }
 
 using capnproto_test::capnp::test::TestAllTypes;
 using capnproto_test::capnp::test::TestInterface;
+
+namespace test = capnproto_test::capnp::test;
+static_assert(kj::isPointerType<TestAllTypes::Reader>());
+static_assert(kj::isPointerType<const TestAllTypes::Reader>());
+static_assert(kj::isPointerType<test::TestGenerics<Text, TestAllTypes>::Reader>());
+static_assert(kj::isPointerType<test::TestGroups::Groups::Foo::Reader>());
+static_assert(kj::isPointerType<TestAllTypes::Builder>());
+static_assert(!kj::PointerTraits<TestAllTypes::Builder>::isReadOnly);
+static_assert(kj::isPointerType<List<uint32_t>::Reader>());
+static_assert(kj::isPointerType<List<test::TestEnum>::Reader>());
+static_assert(kj::isPointerType<List<TestAllTypes>::Reader>());
+static_assert(kj::isPointerType<List<List<Text>>::Reader>());
+static_assert(kj::isPointerType<List<Text>::Reader>());
+static_assert(kj::isPointerType<List<Data>::Reader>());
+static_assert(kj::isPointerType<List<AnyPointer>::Reader>());
+static_assert(kj::isPointerType<List<AnyStruct>::Reader>());
+static_assert(kj::isPointerType<Text::Reader>());
+static_assert(kj::isPointerType<Data::Reader>());
+static_assert(kj::isPointerType<Text::Builder>());
+static_assert(kj::isPointerType<Data::Builder>());
+static_assert(kj::isPointerType<AnyPointer::Reader>());
+static_assert(kj::isPointerType<AnyStruct::Reader>());
+static_assert(kj::isPointerType<AnyList::Reader>());
+static_assert(kj::isPointerType<AnyPointer::Builder>());
+static_assert(kj::isPointerType<AnyStruct::Builder>());
+static_assert(kj::isPointerType<AnyList::Builder>());
+static_assert(!kj::isPointerType<ReaderFor<uint32_t>>());
+static_assert(!kj::isPointerType<test::TestEnum>());
+static_assert(!kj::isPointerType<Void>());
+static_assert(!kj::isPointerType<kj::Own<TestAllTypes::Reader>>());
+static_assert(!kj::isPointerType<kj::Rc<TestAllTypes::Reader>>());
+static_assert(sizeof(kj::Rc<TestAllTypes::Reader>) == sizeof(TestAllTypes::Reader) + sizeof(void*));
+static_assert(sizeof(kj::Arc<TestAllTypes::Reader>) ==
+    sizeof(TestAllTypes::Reader) + sizeof(void*));
+// Readers are exposed as const, so *rc cannot be re-pointed; builders keep their non-const setters.
+static_assert(kj::isSameType<decltype(*kj::instance<kj::Rc<TestAllTypes::Reader>&>()),
+                             const TestAllTypes::Reader&>());
+static_assert(kj::isSameType<decltype(*kj::instance<kj::Rc<TestAllTypes::Builder>&>()),
+                             TestAllTypes::Builder&>());
+
+#if !CAPNP_LITE
+static_assert(kj::isPointerType<List<TestInterface>::Reader>());
+static_assert(kj::isPointerType<DynamicStruct::Reader>());
+static_assert(kj::isPointerType<DynamicList::Reader>());
+static_assert(kj::isPointerType<DynamicStruct::Builder>());
+static_assert(kj::isPointerType<DynamicList::Builder>());
+static_assert(!kj::isPointerType<DynamicValue::Reader>());
+static_assert(!kj::isPointerType<DynamicValue::Builder>());
+static_assert(!kj::isPointerType<Capability::Client>());
+static_assert(!kj::isPointerType<TestInterface::Client>());
+static_assert(!kj::isPointerType<DynamicCapability::Client>());
+static_assert(!kj::isPointerType<Response<TestAllTypes>>());
+static_assert(!kj::isPointerType<Request<TestAllTypes, TestAllTypes>>());
+static_assert(!kj::isPointerType<StreamingRequest<TestAllTypes>>());
+static_assert(!kj::isPointerType<TestAllTypes::Pipeline>());
+#endif
 
 static_assert(equalTypes<FromAny<int>, int>(), "");
 static_assert(equalTypes<FromAny<TestAllTypes::Reader>, TestAllTypes>(), "");

@@ -37,6 +37,8 @@ class Vector;
 
 class PathPtr;
 
+template <> struct PointerTraits<PathPtr>: PointerTypeTraits</*readOnly=*/true> {};
+
 class Path {
   // A Path identifies a file in a directory tree.
   //

@@ -20,6 +20,9 @@
 // THE SOFTWARE.
 
 #include "refcount.h"
+// StringPtr is only forward-declared at this point; its pointer-type registration must already be
+// visible so that Rc<StringPtr> has the same layout in every translation unit.
+static_assert(kj::isPointerType<kj::StringPtr>());
 #include "array.h"
 #include "string.h"
 #include "thread.h"
@@ -32,6 +35,222 @@
 namespace kj {
 
 namespace _ {
+struct PointerConversionSource {
+  const int* ptr;
+};
+
+template <bool isNoexcept>
+struct PointerConversionTarget {
+  PointerConversionTarget(const PointerConversionSource& source) noexcept(isNoexcept)
+      : ptr(source.ptr) {}
+  const int* ptr;
+};
+}  // namespace _
+
+template <>
+struct PointerTraits<_::PointerConversionSource> {
+  static constexpr bool isPointer = true;
+  static constexpr bool isReadOnly = true;
+};
+
+template <bool isNoexcept>
+struct PointerTraits<_::PointerConversionTarget<isNoexcept>> {
+  static constexpr bool isPointer = true;
+  static constexpr bool isReadOnly = true;
+};
+
+namespace _ {
+// Both targets have noexcept same-type copies/moves, but only one has a noexcept conversion.
+static_assert(isNoThrowMoveConstructible<PointerConversionTarget<false>>());
+static_assert(canConvert<PointerConversionSource, PointerConversionTarget<false>>());
+static_assert(!canConvert<Rc<PointerConversionSource>, Rc<PointerConversionTarget<false>>>());
+static_assert(!canConvert<Arc<PointerConversionSource>, Arc<PointerConversionTarget<false>>>());
+static_assert(!canConvert<Rc<const PointerConversionSource>, Rc<PointerConversionTarget<false>>>());
+static_assert(!canConvert<Arc<const PointerConversionSource>,
+                          Arc<PointerConversionTarget<false>>>());
+static_assert(canConvert<Rc<PointerConversionSource>, Rc<PointerConversionTarget<true>>>());
+static_assert(canConvert<Arc<PointerConversionSource>, Arc<PointerConversionTarget<true>>>());
+
+static_assert(isPointerType<ArrayPtr<int>>());
+static_assert(isPointerType<StringPtr>());
+static_assert(!isPointerType<Array<int>>());
+static_assert(!isPointerType<String>());
+static_assert(!isPointerType<int*>());
+static_assert(!isProjectionResult<int>());
+static_assert(!isProjectionResult<int&&>());
+static_assert(!isProjectionResult<void>());
+static_assert(!isProjectionResult<ArrayPtr<int>&&>());
+static_assert(isProjectionResult<ArrayPtr<int>&>());
+static_assert(!isProjectionResult<const ArrayPtr<int>&>());
+static_assert(isProjectionResult<const ArrayPtr<const int>&>());
+static_assert(sizeof(Rc<ArrayPtr<int>>) == sizeof(void*) + sizeof(ArrayPtr<int>));
+static_assert(!canConvert<ArrayPtr<int>, Rc<ArrayPtr<int>>>());
+
+// Read-only pointer types are exposed as const and cannot be re-pointed through *rc. Mutable ones
+// stay non-const so that their non-const accessors (e.g. builder setters) remain usable.
+template <typename R, typename P>
+concept CanAssignThroughRc = requires(R& rc, P p) { *rc = p; };
+static_assert(!CanAssignThroughRc<Rc<StringPtr>, StringPtr>);
+static_assert(!CanAssignThroughRc<Rc<ArrayPtr<const int>>, ArrayPtr<const int>>);
+static_assert(CanAssignThroughRc<Rc<ArrayPtr<int>>, ArrayPtr<int>>);
+static_assert(isSameType<decltype(*instance<Rc<StringPtr>&>()), const StringPtr&>());
+static_assert(isSameType<decltype(instance<Rc<StringPtr>&>().get()), const StringPtr*>());
+
+KJ_TEST("Rc and Arc transfer ownership through noexcept pointer conversions") {
+  auto source = kj::rc<int>(123).project([](auto& value) {
+    return PointerConversionSource{&value};
+  });
+  Rc<PointerConversionTarget<true>> target(kj::mv(source));
+  KJ_EXPECT(source == nullptr);
+  KJ_EXPECT(*target->ptr == 123);
+
+  auto atomicSource = kj::arc<int>(456).project([](auto& value) {
+    return PointerConversionSource{&value};
+  });
+  Arc<PointerConversionTarget<true>> atomicTarget(kj::mv(atomicSource));
+  KJ_EXPECT(atomicSource == nullptr);
+  KJ_EXPECT(*atomicTarget->ptr == 456);
+}
+
+KJ_TEST("Rc const-qualified mutable pointer types can addRef and clone") {
+  auto ptr = kj::rc<Array<int>>(kj::heapArray<int>({12, 34})).project(
+      [](auto& array) { return array.asPtr(); });
+  Rc<const ArrayPtr<int>> frozen(kj::mv(ptr));
+  auto copy = frozen.addRef();
+  auto clone = frozen.clone();
+  static_assert(isSameType<decltype(copy), Rc<const ArrayPtr<int>>>());
+  static_assert(isSameType<decltype((*copy)[0]), const int&>());
+  KJ_EXPECT(copy.get() != frozen.get());
+  KJ_EXPECT(copy->begin() == frozen->begin());
+  frozen = nullptr;
+  KJ_EXPECT((*copy)[0] == 12);
+  copy = nullptr;
+  KJ_EXPECT((*clone)[1] == 34);
+
+  auto readonly = kj::mv(clone).project([](auto& array) { return array.asConst(); });
+  auto identity = kj::mv(readonly).project([](const auto& array) -> const auto& {
+    return array;
+  });
+  KJ_EXPECT((*identity.clone())[1] == 34);
+  KJ_EXPECT(frozen.addRef() == nullptr);
+}
+
+KJ_TEST("Rc stores pointer types inline and projects slices and elements") {
+  auto owner = kj::rc<Array<int>>(kj::heapArray<int>({10, 20, 30}));
+  auto ptr = owner.addRef().project([](auto& array) { return array.asPtr(); });
+  static_assert(isSameType<decltype(ptr), Rc<ArrayPtr<int>>>());
+  auto sibling = ptr.addRef();
+  KJ_EXPECT(ptr.get() != sibling.get());
+  KJ_EXPECT(ptr->begin() == sibling->begin());
+  auto moved = kj::mv(ptr);
+  KJ_EXPECT(ptr == nullptr);
+  auto identity = kj::mv(moved).project([](auto& ptr) -> auto& { return ptr; });
+  KJ_EXPECT((*identity)[1] == 20);
+  auto slice = kj::mv(identity).project([](auto& ptr) { return ptr.slice(1); });
+  auto element = kj::mv(slice).project([](auto& ptr) -> int& { return ptr[0]; });
+  owner = nullptr;
+  sibling = nullptr;
+  KJ_EXPECT(*element == 20);
+  *element = 42;
+}
+
+KJ_TEST("Rc and Arc empty pointers retain ownership and distinguish null handles") {
+  struct Owner {
+    Owner(bool& destroyed): destroyed(destroyed) {}
+    ~Owner() { destroyed = true; }
+    bool& destroyed;
+  };
+  bool destroyed = false;
+  auto owner = kj::rc<Owner>(destroyed);
+  auto empty = kj::mv(owner).project([](auto&) { return ArrayPtr<const int>(); });
+  KJ_EXPECT(empty != nullptr);
+  KJ_EXPECT(empty->size() == 0);
+  auto clone = empty.addRef();
+  empty = nullptr;
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(clone->size() == 0);
+  clone = nullptr;
+  KJ_EXPECT(destroyed);
+
+  auto atomicOwner = kj::arc<Array<int>>(kj::heapArray<int>(0));
+  auto atomicEmpty = kj::mv(atomicOwner).project([](auto& array) { return array.asPtr(); });
+  KJ_EXPECT(atomicEmpty != nullptr);
+  KJ_EXPECT(atomicEmpty.addRef()->size() == 0);
+  atomicEmpty = nullptr;
+  KJ_EXPECT(atomicEmpty == nullptr);
+}
+
+KJ_TEST("inline pointer conversions and Own adoption retain the backing array") {
+  auto owner = kj::rc<Array<int>>(kj::heapArray<int>({1, 2, 3}));
+  auto mutablePtr = kj::mv(owner).project([](auto& array) { return array.asPtr(); });
+  Rc<ArrayPtr<const int>> ptr(kj::mv(mutablePtr));
+  KJ_EXPECT(mutablePtr == nullptr);
+  KJ_EXPECT((*ptr)[2] == 3);
+
+  // toOwn() is unavailable for pointer types; an Own that carries its owner must be built
+  // explicitly, and can then be adopted back into an Rc.
+  Own<ArrayPtr<const int>> own = kj::attachVal(ArrayPtr<const int>(*ptr), kj::mv(ptr));
+  KJ_EXPECT(ptr == nullptr);
+  Rc<ArrayPtr<const int>> adopted(kj::mv(own));
+  KJ_EXPECT((*adopted)[2] == 3);
+  adopted = nullptr;
+
+  auto string = kj::arc<String>(kj::str("hello"));
+  auto text = kj::mv(string).project([](auto& value) { return value.asPtr(); });
+  Arc<ArrayPtr<const char>> bytes = text.addRef().project(
+      [](auto& value) { return value.asArray(); });
+  Own<const ArrayPtr<const char>> atomicOwn =
+      kj::attachVal(ArrayPtr<const char>(*bytes), kj::mv(bytes));
+  KJ_EXPECT(bytes == nullptr);
+  text = nullptr;
+  Arc<ArrayPtr<const char>> atomicAdopted(kj::mv(atomicOwn));
+  KJ_EXPECT((*atomicAdopted)[1] == 'e');
+}
+
+KJ_TEST("pointer projections guard callbacks and clean up on exceptions") {
+  auto owner = kj::rc<Array<int>>(kj::heapArray<int>({123, 456}));
+  auto source = kj::mv(owner).project([](auto& array) { return array.asPtr(); });
+  auto projected = kj::mv(source).project([&](auto& ptr) {
+    source = nullptr;
+    KJ_EXPECT(ptr[0] == 123);
+    return ptr.slice(1);
+  });
+  KJ_EXPECT((*projected)[0] == 456);
+  KJ_EXPECT_THROW_MESSAGE("projection failed", kj::mv(projected).project(
+      [](auto& ptr) -> ArrayPtr<int> {
+    KJ_FAIL_REQUIRE("projection failed");
+  }));
+  KJ_EXPECT(projected == nullptr);
+#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
+  bool called = false;
+  KJ_EXPECT_THROW_MESSAGE("null Rc<> projection", kj::mv(projected).project(
+      [&](auto& ptr) { called = true; return ptr.slice(0); }));
+  KJ_EXPECT(!called);
+#endif
+
+  auto string = kj::arc<String>(kj::str("abc"));
+  auto atomicPtr = kj::mv(string).project([](auto& string) { return string.asPtr(); });
+  auto atomicSlice = kj::mv(atomicPtr).project([&](auto& ptr) {
+    atomicPtr = nullptr;
+    return ptr.slice(1);
+  });
+  KJ_EXPECT(*atomicSlice == "bc");
+  KJ_EXPECT_THROW_MESSAGE("projection failed", kj::mv(atomicSlice).project(
+      [](auto& ptr) -> StringPtr { KJ_FAIL_REQUIRE("projection failed"); }));
+  KJ_EXPECT(atomicSlice == nullptr);
+}
+
+KJ_TEST("Arc pointer clones can project and release on another thread") {
+  auto owner = kj::arc<Array<int>>(kj::heapArray<int>({11, 22, 33}));
+  auto ptr = kj::mv(owner).project([](auto& array) { return array.asPtr(); });
+  Thread worker([copy = ptr.addRef()]() mutable {
+    auto slice = kj::mv(copy).project([](auto& array) { return array.slice(1); });
+    auto element = kj::mv(slice).project([](auto& array) -> const int& { return array[1]; });
+    KJ_EXPECT(*element == 33);
+  });
+  ptr = nullptr;
+}
+
 struct SetTrueInDestructor: public Refcounted {
   SetTrueInDestructor(bool* ptr): ptr(ptr) {}
   ~SetTrueInDestructor() { *ptr = true; }

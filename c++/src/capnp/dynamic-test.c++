@@ -21,6 +21,8 @@
 
 #include "dynamic.h"
 #include "message.h"
+#include "schema-loader.h"
+#include <kj/refcount.h>
 #include <kj/debug.h>
 #include <kj/compat/gtest.h>
 #include "test-util.h"
@@ -28,6 +30,41 @@
 namespace capnp {
 namespace _ {  // private
 namespace {
+
+KJ_TEST("Rc dynamic reader navigation retains both schema and message ownership") {
+  struct Owner {
+    SchemaLoader loader;
+    MallocMessageBuilder message;
+    StructSchema schema;
+    bool& destroyed;
+
+    Owner(bool& destroyed): schema(loader.load(Schema::from<TestAllTypes>().getProto()).asStruct()),
+        destroyed(destroyed) {
+      auto root = message.initRoot<TestAllTypes>();
+      root.initStructList(1)[0].setTextField("dynamic projection");
+    }
+    ~Owner() { destroyed = true; }
+  };
+
+  bool destroyed = false;
+  auto owner = kj::rc<Owner>(destroyed);
+  auto root = kj::mv(owner).project([](auto& owner) {
+    return owner.message.template getRoot<DynamicStruct>(owner.schema).asReader();
+  });
+  auto list = kj::mv(root).project([](auto reader) {
+    return reader.get("structList").template as<DynamicList>();
+  });
+  auto element = kj::mv(list).project([](auto reader) {
+    return reader[0].template as<DynamicStruct>();
+  });
+  auto text = kj::mv(element).project([](auto reader) {
+    return reader.get("textField").template as<Text>();
+  });
+  KJ_EXPECT(!destroyed);
+  KJ_EXPECT(*text == "dynamic projection");
+  text = nullptr;
+  KJ_EXPECT(destroyed);
+}
 
 template <typename Element, typename T>
 void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
