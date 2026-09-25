@@ -2317,7 +2317,7 @@ public:
   template <typename U>
   inline auto as() & { return asImpl((U*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(U*, Maybe&).
-  // Used to chain conversion calls rather than wrap with function.
+  // Used to chain conversion calls rather than wrap with function. See kj/convert.h.
 
   template <typename U>
   inline auto as() const & { return asImpl((U*)nullptr, *this); }
@@ -2500,7 +2500,7 @@ public:
   template <typename U>
   inline auto as() { return asImpl((U*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(U*, Maybe&).
-  // Used to chain conversion calls rather than wrap with function.
+  // Used to chain conversion calls rather than wrap with function. See kj/convert.h.
 
   template <typename U>
   inline auto as() const { return asImpl((U*)nullptr, *this); }

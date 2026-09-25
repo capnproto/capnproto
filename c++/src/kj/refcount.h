@@ -441,6 +441,9 @@ class Rc {
   //
   //     auto bytes = owner.addRef().project([](auto& array) { return array.asPtr(); });
   //
+  // For the common case of viewing a whole owner (String, Array, ...), kj/convert.h provides the
+  // shorthand `owner.as<kj::View>()`.
+  //
   // Returning a pointer type by value copies it, sharing the original refcount without an
   // allocation. rc<Pointer>(...) is not supported because a bare pointer does not identify its
   // owner. Copying *rc only borrows the pointer; addRef() copies ownership as well. The address of
@@ -617,7 +620,7 @@ public:
   template <typename U>
   inline auto as() & { return asImpl((U*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(U*, Rc&).
-  // Used to chain conversion calls rather than wrap with function.
+  // Used to chain conversion calls rather than wrap with function. See kj/convert.h.
 
   template <typename U>
   inline auto as() const & { return asImpl((U*)nullptr, *this); }
@@ -1234,7 +1237,7 @@ public:
   template <typename U>
   inline auto as() & { return asImpl((U*)nullptr, *this); }
   // Syntax sugar for invoking asImpl(U*, Arc&).
-  // Used to chain conversion calls rather than wrap with function.
+  // Used to chain conversion calls rather than wrap with function. See kj/convert.h.
 
   template <typename U>
   inline auto as() const & { return asImpl((U*)nullptr, *this); }
