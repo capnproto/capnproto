@@ -208,6 +208,12 @@ inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) {
 namespace kj {
 template <> struct PointerTraits<capnp::Text::Builder>: PointerTypeTraits</*readOnly=*/false> {};
 // Unlike other builders, Text::Builder has no Builds typedef.
+
+inline capnp::Text::Builder asImpl(View*, capnp::Text::Builder& builder) { return builder; }
+inline capnp::Text::Reader asImpl(View*, const capnp::Text::Builder& builder) {
+  return builder.asReader();
+}
+// See the reader and builder overloads in capnp/common.h.
 }  // namespace kj
 
 CAPNP_END_HEADER

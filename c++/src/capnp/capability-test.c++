@@ -34,6 +34,7 @@
 #include "capability.h"
 #include "test-util.h"
 #include <kj/debug.h>
+#include <kj/convert.h>
 #include <kj/compat/gtest.h>
 #include <capnp/message.h>
 
@@ -79,6 +80,27 @@ TEST(Capability, Basic) {
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
+}
+
+KJ_TEST("Rc<Response> views as Rc of its results reader") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
+  auto request = client.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  auto response = kj::rc<Response<test::TestInterface::FooResults>>(
+      request.send().wait(waitScope));
+
+  kj::Rc<test::TestInterface::FooResults::Reader> results = response.as<kj::View>();
+  kj::Rc<Text::Reader> x = kj::mv(results).project([](auto reader) { return reader.getX(); });
+  response = nullptr;
+  KJ_EXPECT(*x == "foo");
+  kj::Rc<kj::String> copy = x.as<kj::Copy>();
+  x = nullptr;
+  KJ_EXPECT(*copy == "foo");
 }
 
 TEST(Capability, CapabilityList) {

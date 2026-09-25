@@ -47,6 +47,15 @@ public:
   inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return builder.asPtr(); }
   inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND { return builder.asPtr(); }
 
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Vector&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const Vector&).
+
   inline size_t size() const { return builder.size(); }
   inline bool empty() const { return size() == 0; }
   inline size_t capacity() const { return builder.capacity(); }
