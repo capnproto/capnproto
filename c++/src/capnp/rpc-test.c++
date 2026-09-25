@@ -833,7 +833,7 @@ KJ_TEST("sendForPipeline()") {
   KJ_EXPECT(chainedCallCount == 1);
 }
 
-KJ_TEST("context.setPipeline") {
+KJ_TEST("context.setPipeline with lvalue") {
   TestContext context;
 
   auto client = context.connect().getTestPipelineRequest().send().getCap();

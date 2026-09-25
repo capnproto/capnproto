@@ -1007,7 +1007,8 @@ kj::Promise<void> TestPipelineImpl::getCapPipelineOnly(GetCapPipelineOnlyContext
   ++callCount;
   PipelineBuilder<GetCapPipelineOnlyResults> pb;
   pb.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
-  context.setPipeline(pb.build());
+  auto pipeline = pb.build();
+  context.setPipeline(pipeline);
   return kj::NEVER_DONE;
 }
 
