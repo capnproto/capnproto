@@ -23,6 +23,7 @@
 #include <kj/encoding.h>
 #include <kj/parse/char.h>
 #include <kj/debug.h>
+#include <kj/convert.h>
 #include <stdlib.h>
 
 namespace kj {
@@ -145,7 +146,7 @@ Url Url::clone() const {
     userInfo.map([](const UserInfo& ui) -> UserInfo {
       return {
         kj::str(ui.username),
-        ui.password.map([](const String& s) { return kj::str(s); })
+        ui.password.as<Copy>()
       };
     }),
     kj::str(host),
@@ -156,7 +157,7 @@ Url Url::clone() const {
       return { kj::str(param.name), param.value.begin() == nullptr ? kj::String()
                                                                    : kj::str(param.value) };
     },
-    fragment.map([](const String& s) { return kj::str(s); }),
+    fragment.as<Copy>(),
     options
   };
 }
@@ -340,7 +341,7 @@ Maybe<Url> Url::tryParseRelative(StringPtr text) const {
     result.userInfo = this->userInfo.map([](const UserInfo& userInfo) {
       return UserInfo {
         kj::str(userInfo.username),
-        userInfo.password.map([](const String& password) { return kj::str(password); }),
+        userInfo.password.as<Copy>(),
       };
     });
   }

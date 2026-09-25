@@ -49,7 +49,7 @@ Path::Path(Array<String> partsParam)
   }
 }
 
-Path PathPtr::clone() {
+Path PathPtr::clone() const {
   return Path(KJ_MAP(p, parts) { return heapString(p); }, Path::ALREADY_CHECKED);
 }
 

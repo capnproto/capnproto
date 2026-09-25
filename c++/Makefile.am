@@ -143,6 +143,7 @@ noinst_HEADERS = \
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
+  src/kj/convert.h                                             \
   src/kj/units.h                                               \
   src/kj/atomic.h                                              \
   src/kj/memory.h                                              \
@@ -592,6 +593,7 @@ capnp_test_SOURCES =                                           \
   src/kj/io-test.c++                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/time-test.c++                                         \
+  src/kj/convert-test.c++                                      \
   src/kj/filesystem-test.c++                                   \
   src/kj/filesystem-disk-test.c++                              \
   src/kj/test-test.c++                                         \

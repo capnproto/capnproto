@@ -25,6 +25,7 @@
 static_assert(kj::isPointerType<kj::StringPtr>());
 #include "array.h"
 #include "string.h"
+#include "convert.h"
 #include "thread.h"
 #include "mutex.h"
 #include <kj/compat/gtest.h>
@@ -113,8 +114,7 @@ KJ_TEST("Rc and Arc transfer ownership through noexcept pointer conversions") {
 }
 
 KJ_TEST("Rc const-qualified mutable pointer types can addRef and clone") {
-  auto ptr = kj::rc<Array<int>>(kj::heapArray<int>({12, 34})).project(
-      [](auto& array) { return array.asPtr(); });
+  auto ptr = kj::rc<Array<int>>(kj::heapArray<int>({12, 34})).as<View>();
   Rc<const ArrayPtr<int>> frozen(kj::mv(ptr));
   auto copy = frozen.addRef();
   auto clone = frozen.clone();
@@ -137,7 +137,7 @@ KJ_TEST("Rc const-qualified mutable pointer types can addRef and clone") {
 
 KJ_TEST("Rc stores pointer types inline and projects slices and elements") {
   auto owner = kj::rc<Array<int>>(kj::heapArray<int>({10, 20, 30}));
-  auto ptr = owner.addRef().project([](auto& array) { return array.asPtr(); });
+  auto ptr = owner.as<View>();
   static_assert(isSameType<decltype(ptr), Rc<ArrayPtr<int>>>());
   auto sibling = ptr.addRef();
   KJ_EXPECT(ptr.get() != sibling.get());
@@ -173,7 +173,7 @@ KJ_TEST("Rc and Arc empty pointers retain ownership and distinguish null handles
   KJ_EXPECT(destroyed);
 
   auto atomicOwner = kj::arc<Array<int>>(kj::heapArray<int>(0));
-  auto atomicEmpty = kj::mv(atomicOwner).project([](auto& array) { return array.asPtr(); });
+  auto atomicEmpty = kj::mv(atomicOwner).as<View>();
   KJ_EXPECT(atomicEmpty != nullptr);
   KJ_EXPECT(atomicEmpty.addRef()->size() == 0);
   atomicEmpty = nullptr;
@@ -182,7 +182,7 @@ KJ_TEST("Rc and Arc empty pointers retain ownership and distinguish null handles
 
 KJ_TEST("inline pointer conversions and Own adoption retain the backing array") {
   auto owner = kj::rc<Array<int>>(kj::heapArray<int>({1, 2, 3}));
-  auto mutablePtr = kj::mv(owner).project([](auto& array) { return array.asPtr(); });
+  auto mutablePtr = kj::mv(owner).as<View>();
   Rc<ArrayPtr<const int>> ptr(kj::mv(mutablePtr));
   KJ_EXPECT(mutablePtr == nullptr);
   KJ_EXPECT((*ptr)[2] == 3);
@@ -196,7 +196,7 @@ KJ_TEST("inline pointer conversions and Own adoption retain the backing array") 
   adopted = nullptr;
 
   auto string = kj::arc<String>(kj::str("hello"));
-  auto text = kj::mv(string).project([](auto& value) { return value.asPtr(); });
+  auto text = kj::mv(string).as<View>();
   Arc<ArrayPtr<const char>> bytes = text.addRef().project(
       [](auto& value) { return value.asArray(); });
   Own<const ArrayPtr<const char>> atomicOwn =
@@ -209,7 +209,7 @@ KJ_TEST("inline pointer conversions and Own adoption retain the backing array") 
 
 KJ_TEST("pointer projections guard callbacks and clean up on exceptions") {
   auto owner = kj::rc<Array<int>>(kj::heapArray<int>({123, 456}));
-  auto source = kj::mv(owner).project([](auto& array) { return array.asPtr(); });
+  auto source = kj::mv(owner).as<View>();
   auto projected = kj::mv(source).project([&](auto& ptr) {
     source = nullptr;
     KJ_EXPECT(ptr[0] == 123);
@@ -229,7 +229,7 @@ KJ_TEST("pointer projections guard callbacks and clean up on exceptions") {
 #endif
 
   auto string = kj::arc<String>(kj::str("abc"));
-  auto atomicPtr = kj::mv(string).project([](auto& string) { return string.asPtr(); });
+  auto atomicPtr = kj::mv(string).as<View>();
   auto atomicSlice = kj::mv(atomicPtr).project([&](auto& ptr) {
     atomicPtr = nullptr;
     return ptr.slice(1);
@@ -242,7 +242,7 @@ KJ_TEST("pointer projections guard callbacks and clean up on exceptions") {
 
 KJ_TEST("Arc pointer clones can project and release on another thread") {
   auto owner = kj::arc<Array<int>>(kj::heapArray<int>({11, 22, 33}));
-  auto ptr = kj::mv(owner).project([](auto& array) { return array.asPtr(); });
+  auto ptr = kj::mv(owner).as<View>();
   Thread worker([copy = ptr.addRef()]() mutable {
     auto slice = kj::mv(copy).project([](auto& array) { return array.slice(1); });
     auto element = kj::mv(slice).project([](auto& array) -> const int& { return array[1]; });

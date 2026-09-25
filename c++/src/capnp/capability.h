@@ -1363,4 +1363,14 @@ struct Orphanage::GetInnerReader<T, Kind::INTERFACE> {
 
 }  // namespace capnp
 
+namespace kj {
+
+template <typename Results>
+inline typename Results::Reader asImpl(View*, const capnp::Response<Results>& response) {
+  // A Response owns its message; its view is the results reader. See kj/convert.h.
+  return response;
+}
+
+}  // namespace kj
+
 CAPNP_END_HEADER
