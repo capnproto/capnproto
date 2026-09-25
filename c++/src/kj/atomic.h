@@ -214,6 +214,14 @@ private:
   size_t count = 0;
 };
 
+class EmptyPtrCounter {
+  // Zero-size substitute for AtomicPtrCounter when pointer assertions are disabled.
+public:
+  inline void inc() {}
+  inline void dec() {}
+  inline void assertEmpty() {}
+};
+
 }  // namespace _ (private)
 }  // namespace kj
 
