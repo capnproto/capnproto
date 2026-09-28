@@ -59,6 +59,7 @@ private:
   Vector<CidrRange> denyCidrs;
   bool allowUnix;
   bool allowAbstractUnix;
+  bool allowVsock;
   bool allowPublic = false;
   bool allowNetwork = false;
 
