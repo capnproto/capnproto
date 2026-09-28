@@ -213,7 +213,7 @@ Primitive types map to the obvious C++ types:
 
 ### Structs
 
-For each struct `Foo` in your interface, a C++ type named `Foo` generated.  This type itself is
+For each struct `Foo` in your interface, a C++ type named `Foo` is generated.  This type itself is
 really just a namespace; it contains two important inner classes:  `Reader` and `Builder`.
 
 `Reader` represents a read-only instance of `Foo` while `Builder` represents a writable instance
