@@ -283,7 +283,8 @@ bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLoc
 void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
   switch (exclusivity) {
     case EXCLUSIVE: {
-      KJ_DASSERT(futex & EXCLUSIVE_HELD, "Unlocked a mutex that wasn't locked.");
+      KJ_DASSERT(kj::atomicLoad(&futex, kj::AtomicMemoryOrder::RELAXED) & EXCLUSIVE_HELD,
+          "Unlocked a mutex that wasn't locked.");
 
 #ifdef KJ_CONTENTION_WARNING_THRESHOLD
       auto acquiredLocation = releasingExclusive();
@@ -365,7 +366,8 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
     }
 
     case SHARED: {
-      KJ_DASSERT(futex & SHARED_COUNT_MASK, "Unshared a mutex that wasn't shared.");
+      KJ_DASSERT(kj::atomicLoad(&futex, kj::AtomicMemoryOrder::RELAXED) & SHARED_COUNT_MASK,
+          "Unshared a mutex that wasn't shared.");
       uint state = kj::atomicSubFetch(&futex, 1, kj::AtomicMemoryOrder::RELEASE);
 
       // The only case where anyone is waiting is if EXCLUSIVE_REQUESTED is set, and the only time
@@ -384,13 +386,14 @@ void Mutex::unlock(Exclusivity exclusivity, Waiter* waiterToSkip) {
 }
 
 void Mutex::assertLockedByCaller(Exclusivity exclusivity) const {
+  // Contenders can update the futex even while the caller holds the lock.
   switch (exclusivity) {
     case EXCLUSIVE:
-      KJ_ASSERT(futex & EXCLUSIVE_HELD,
+      KJ_ASSERT(kj::atomicLoad(&futex, kj::AtomicMemoryOrder::RELAXED) & EXCLUSIVE_HELD,
                 "Tried to call getAlreadyLocked*() but lock is not held.");
       break;
     case SHARED:
-      KJ_ASSERT(futex & SHARED_COUNT_MASK,
+      KJ_ASSERT(kj::atomicLoad(&futex, kj::AtomicMemoryOrder::RELAXED) & SHARED_COUNT_MASK,
                 "Tried to call getAlreadyLocked*() but lock is not held.");
       break;
   }
@@ -506,7 +509,7 @@ void Mutex::induceSpuriousWakeupForTest() {
 
 uint Mutex::numReadersWaitingForTest() const {
   assertLockedByCaller(EXCLUSIVE);
-  return futex & SHARED_COUNT_MASK;
+  return kj::atomicLoad(&futex, kj::AtomicMemoryOrder::RELAXED) & SHARED_COUNT_MASK;
 }
 
 void Once::runOnce(Initializer& init, LockSourceLocationArg location) {
