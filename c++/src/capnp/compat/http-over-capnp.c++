@@ -736,7 +736,7 @@ public:
           mutable -> kj::Promise<void> {
         auto startTlsRpcRequest = upForStartTls.startTlsRequest();
         startTlsRpcRequest.setExpectedServerHostname(expectedServerHostname);
-        return startTlsRpcRequest.send();
+        return startTlsRpcRequest.sendIgnoringResult();
       };
       tlsStarter = kj::mv(cb);
     }
