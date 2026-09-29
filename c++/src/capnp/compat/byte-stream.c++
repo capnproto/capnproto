@@ -306,7 +306,7 @@ public:
       KJ_CASE_ONEOF(redirected, Redirected) {
         auto req = redirected.replacement.startTlsRequest(params.totalSize());
         req.setExpectedServerHostname(params.getExpectedServerHostname());
-        return req.send();
+        return context.tailCall(kj::mv(req));
       }
       KJ_CASE_ONEOF(e, Ended) {
         KJ_FAIL_REQUIRE("already called end()");
