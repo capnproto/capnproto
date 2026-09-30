@@ -4838,6 +4838,198 @@ KJ_TEST("HttpServer rejects chunked body with overflowing chunk size") {
   try { writePromise.wait(waitScope); } catch (...) {}
 }
 
+// ---------------------------------------------------------------------------
+// DOC-025: HttpServer::Connection::send() must tell the client the connection will close before
+// it can pool a connection whose request body was left unread. See the fix's own comment on the
+// `statusCode == 413 && !httpInput.canReuse()` check for the underlying race: without this, a
+// response can be flushed while the client still believes the connection is keep-alive, and the
+// client may start its next, unrelated request on this connection before the server (still
+// draining or giving up on) the previous request's body decides to close it out from under that
+// next request.
+
+class UnreadBodyRejectingService final: public HttpService {
+  // HttpService that responds with a caller-chosen status without reading any of the request
+  // body first.
+public:
+  UnreadBodyRejectingService(HttpHeaderTable& table, uint statusCode, kj::StringPtr statusText)
+      : table(table), statusCode(statusCode), statusText(statusText) {}
+
+  uint requestCount = 0;
+
+  kj::Promise<void> request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    ++requestCount;
+    auto body = response.send(statusCode, statusText, HttpHeaders(table), uint64_t(2));
+    co_await body->write("no"_kjb);
+  }
+
+private:
+  HttpHeaderTable& table;
+  uint statusCode;
+  kj::StringPtr statusText;
+};
+
+KJ_TEST("HttpServer sends Connection: close for 413 with unread fixed-length request body") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  UnreadBodyRejectingService service(table, 413, "Payload Too Large");
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // The service above never reads any of this declared body before responding.
+  auto request =
+      "PUT / HTTP/1.1\r\n"
+      "Content-Length: 10\r\n"
+      "\r\n"
+      "0123456789"_kj;
+  auto writePromise = pipe.ends[1]->write(request.asBytes());
+
+  auto expected =
+      "HTTP/1.1 413 Payload Too Large\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 2\r\n"
+      "\r\n"
+      "no"_kj;
+  expectRead(*pipe.ends[1], expected).wait(waitScope);
+  KJ_EXPECT(service.requestCount == 1, service.requestCount);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  try { writePromise.wait(waitScope); } catch (...) {}
+}
+
+KJ_TEST("HttpServer sends Connection: close for 413 with unread chunked request body") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  UnreadBodyRejectingService service(table, 413, "Payload Too Large");
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto request =
+      "PUT / HTTP/1.1\r\n"
+      "Transfer-Encoding: chunked\r\n"
+      "\r\n"
+      "a\r\n"
+      "0123456789\r\n"
+      "0\r\n"
+      "\r\n"_kj;
+  auto writePromise = pipe.ends[1]->write(request.asBytes());
+
+  auto expected =
+      "HTTP/1.1 413 Payload Too Large\r\n"
+      "Connection: close\r\n"
+      "Content-Length: 2\r\n"
+      "\r\n"
+      "no"_kj;
+  expectRead(*pipe.ends[1], expected).wait(waitScope);
+  KJ_EXPECT(service.requestCount == 1, service.requestCount);
+
+  KJ_EXPECT(writePromise.poll(waitScope));
+  try { writePromise.wait(waitScope); } catch (...) {}
+}
+
+KJ_TEST("HttpServer does not force Connection: close for 413 once the request body was fully read, "
+        "and the connection remains usable for a pipelined next request") {
+  // If the service drains the body before rejecting, `httpInput.canReuse()` is already true by
+  // the time send() runs (HttpEntityBodyReader::doneReading() already fired), so the DOC-025
+  // correction's condition is false and must not force a close.
+  class DrainThenRejectService final: public HttpService {
+  public:
+    explicit DrainThenRejectService(HttpHeaderTable& table): table(table) {}
+    uint requestCount = 0;
+    kj::Promise<void> request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      ++requestCount;
+      co_await requestBody.readAllBytes();
+      auto body = response.send(413, "Payload Too Large", HttpHeaders(table), uint64_t(2));
+      co_await body->write("no"_kjb);
+    }
+  private:
+    HttpHeaderTable& table;
+  };
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  DrainThenRejectService service(table);
+  HttpServer server(timer, table, service);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  // Two requests pipelined in a single write: the client already sent the second request's bytes
+  // before seeing any response to the first, exactly as a real client's HTTP/1.1 pipelining (or a
+  // pooled connection that had already started a new request) would.
+  auto requests =
+      "PUT / HTTP/1.1\r\n"
+      "Content-Length: 10\r\n"
+      "\r\n"
+      "0123456789"
+      "PUT / HTTP/1.1\r\n"
+      "Content-Length: 10\r\n"
+      "\r\n"
+      "0123456789"_kj;
+  auto writePromise = pipe.ends[1]->write(requests.asBytes());
+
+  auto expectedResponse =
+      "HTTP/1.1 413 Payload Too Large\r\n"
+      "Content-Length: 2\r\n"
+      "\r\n"
+      "no"_kj;
+  // No `Connection: close` above -- the exact-byte match in expectRead() would fail if the server
+  // sent it. Both pipelined requests must be answered on the same connection.
+  expectRead(*pipe.ends[1], expectedResponse).wait(waitScope);
+  expectRead(*pipe.ends[1], expectedResponse).wait(waitScope);
+
+  KJ_EXPECT(service.requestCount == 2, service.requestCount);
+  writePromise.wait(waitScope);
+}
+
+KJ_TEST("HttpServer's 413-triggered Connection: close does not apply to other status codes") {
+  // Pins that the DOC-025 correction is scoped to statusCode == 413: a differently-coded early
+  // response with an unread body still relies on the pre-existing bounded drain in onRequest()
+  // (HttpServerSettings::canceledUploadGraceBytes/canceledUploadGracePeriod) to decide reuse, and
+  // that drain still succeeds for a small enough unread remainder.
+  KJ_HTTP_TEST_SETUP_IO;
+  // A real timer is needed because recovery depends on the grace-period drain actually running.
+  auto& timer = io.provider->getTimer();
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  UnreadBodyRejectingService service(table, 401, "Unauthorized");
+  HttpServer server(timer, table, service, {
+    .canceledUploadGraceBytes = 1024,
+  });
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  auto requests =
+      "PUT / HTTP/1.1\r\n"
+      "Content-Length: 10\r\n"
+      "\r\n"
+      "0123456789"
+      "PUT / HTTP/1.1\r\n"
+      "Content-Length: 2\r\n"
+      "\r\n"
+      "ok"_kj;
+  auto writePromise = pipe.ends[1]->write(requests.asBytes());
+
+  auto expectedResponse =
+      "HTTP/1.1 401 Unauthorized\r\n"
+      "Content-Length: 2\r\n"
+      "\r\n"
+      "no"_kj;
+  expectRead(*pipe.ends[1], expectedResponse).wait(waitScope);
+  expectRead(*pipe.ends[1], expectedResponse).wait(waitScope);
+
+  KJ_EXPECT(service.requestCount == 2, service.requestCount);
+  writePromise.wait(waitScope);
+}
+
 // Ensure that HttpServerSettings can continue to be constexpr.
 KJ_UNUSED static constexpr HttpServerSettings STATIC_CONSTEXPR_SETTINGS {};
 
