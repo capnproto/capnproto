@@ -187,6 +187,7 @@ enum HttpMethod {
 
   query @26;
   ban @27;
+  mkcalendar @28;
 }
 
 annotation commonText @0x857745131db6fc83(enumerant) :Text;
