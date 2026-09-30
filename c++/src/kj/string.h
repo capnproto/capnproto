@@ -74,10 +74,10 @@ public:
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
   inline constexpr StringPtr(const char* begin KJ_LIFETIMEBOUND, const char* end KJ_LIFETIMEBOUND): StringPtr(begin, end - begin) {}
-  inline constexpr StringPtr(StringPtr&& other): content(kj::mv(other.content)) {
+  inline constexpr StringPtr(StringPtr&& other) noexcept: content(kj::mv(other.content)) {
     other.content = ArrayPtr<const char>("", 1);
   }
-  inline constexpr StringPtr(const StringPtr& other): content(other.content) {}
+  inline constexpr StringPtr(const StringPtr& other) noexcept: content(other.content) {}
   inline constexpr StringPtr(String&& value KJ_LIFETIMEBOUND) : StringPtr(value) {}
   inline constexpr StringPtr(const String& value KJ_LIFETIMEBOUND);
   inline constexpr StringPtr(const ConstString& value KJ_LIFETIMEBOUND);
