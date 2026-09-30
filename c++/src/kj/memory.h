@@ -276,14 +276,17 @@ private:
     return weakCell;
   }
 
-  inline void dispose() {
+  inline void disposeWeakCell() {
     if (weakCell != nullptr) {
       weakCell->ptr = nullptr;
       weakCell->target = nullptr;
       weakCell->decRef();
       weakCell = nullptr;
     }
+  }
 
+  inline void dispose() {
+    disposeWeakCell();
     assertEmpty();
   }
 
@@ -317,6 +320,26 @@ private:
   template <typename>
   friend class Pin;
 };
+
+namespace _ {  // private
+
+template <typename T, bool isPtrTarget = DerivedFrom<RemoveConst<T>, PtrTarget>>
+struct PinControl {
+  // T does not extend PtrTarget, have our own.
+  PtrTarget target;
+  inline PtrTarget* get(T&) { return &target; }
+};
+
+template <typename T>
+struct PinControl<T, true> {
+  // T already extends PtrTarget, no new target is necessary.
+  inline PtrTarget* get(T& t) {
+    // Like PtrTarget::asPtrTarget(), bookkeeping is logically mutable even for const T.
+    return const_cast<PtrTarget*>(static_cast<const PtrTarget*>(&t));
+  }
+};
+
+}  // namespace _ (private)
 
 // =======================================================================================
 // Own<T> -- An owned pointer.
@@ -764,6 +787,10 @@ class Pin {
   // operations are asserted.
   // Weak<T> support adds one pointer of overhead to Pin<T>, and allocates a shared cell lazily when
   // the first weak reference is created.
+  //
+  // If T extends PtrTarget, Pin<T> reuses T's PtrTarget instead of adding its own, so it has no
+  // overhead over T. Pointers obtained via Pin<T> and via T's addPtrToThis()/addWeakToThis() then
+  // share the same bookkeeping.
 
 public:
   template <typename... Params>
@@ -773,13 +800,13 @@ public:
   inline Pin(Pin<T>&& other): t(kj::mv(other.t)) {
     // Move T's ownership.
     // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
-    other.target.dispose();
+    other.target()->dispose();
   }
 
   inline ~Pin() {
-    // Destroy a Pin with underlying object.
-    // Undefined behavior when live pointers exist, asserted when KJ_ASSERT_PTR_COUNTERS is defined.
-    target.dispose();
+    // Expire weak pointers before destroying T. The PtrTarget destructor checks for active strong
+    // pointers: for an embedded PtrTarget this happens after T's members release any self pointers.
+    target()->disposeWeakCell();
   }
 
   inline T* operator->() const { return get(); }
@@ -814,11 +841,13 @@ private:
   inline Pin(T&& t): t(kj::mv(t)) {}
 
   inline _::WeakCell* getWeakCell() {
-    return target.getWeakCell(&t);
+    return target()->getWeakCell(&t);
   }
 
+  inline PtrTarget* target() { return control.get(t); }
+
   T t;
-  PtrTarget target;
+  KJ_NO_UNIQUE_ADDRESS _::PinControl<T> control;
 
   template <typename>
   friend class Ptr;
@@ -901,12 +930,12 @@ public:
 private:
   inline explicit Ptr(decltype(nullptr)) noexcept: ptr(nullptr), target(nullptr) {}
 
-  inline Ptr(Pin<T>* pin) : ptr(pin->get()), target(&pin->target) {
+  inline Ptr(Pin<T>* pin) : ptr(pin->get()), target(pin->target()) {
     target->inc();
   }
 
   template <typename U, typename = _::EnableIfCanConvertPtr<U, T>>
-  inline Ptr(Pin<U>* pin) : ptr(pin->get()), target(&pin->target) {
+  inline Ptr(Pin<U>* pin) : ptr(pin->get()), target(pin->target()) {
     target->inc();
   }
 

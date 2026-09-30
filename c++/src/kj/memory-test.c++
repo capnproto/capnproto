@@ -1409,6 +1409,71 @@ struct TargetObj2: public TargetObj {
   int size;
 };
 
+KJ_TEST("kj::Pin<T> reuses PtrTarget control") {
+  static_assert(sizeof(kj::Pin<TargetObj>) == sizeof(TargetObj));
+  static_assert(sizeof(kj::Pin<const TargetObj>) == sizeof(TargetObj));
+
+  kj::Maybe<kj::Weak<TargetObj>> weakFromPin;
+  kj::Maybe<kj::Weak<TargetObj>> weakFromTarget;
+  {
+    kj::Pin<TargetObj> pin("a");
+    kj::Ptr<TargetObj> ptr = pin;
+    KJ_EXPECT(ptr == pin->getPtr());
+
+    weakFromPin = pin.addWeak();
+    weakFromTarget = pin->getWeak();
+    KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromPin).assertLive().name == "a"_kj);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromTarget).assertLive().name == "a"_kj);
+  }
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromPin).tryGet() == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(weakFromTarget).tryGet() == kj::none);
+}
+
+KJ_TEST("kj::Pin<const T> reuses PtrTarget control") {
+  kj::Pin<const TargetObj2> pin("const target", 42);
+  kj::Ptr<const TargetObj2> ptr = pin;
+  KJ_EXPECT(ptr == pin);
+  KJ_EXPECT(ptr->name == "const target"_kj);
+  KJ_EXPECT(ptr->size == 42);
+
+  auto explicitPtr = pin.asPtr();
+  KJ_EXPECT(explicitPtr == ptr);
+  kj::Ptr<const TargetObj> basePtr = pin;
+  KJ_EXPECT(basePtr == ptr);
+  KJ_EXPECT(basePtr->name == "const target"_kj);
+}
+
+KJ_TEST("kj::Pin<T> releases member-owned self pointers before checking PtrTarget") {
+  struct TargetWithSelfPtr: public kj::PtrTarget {
+    TargetWithSelfPtr(kj::Weak<TargetWithSelfPtr>& weak, bool& destroyed)
+        : self(addPtrToThis()), weak(weak), destroyed(destroyed) {}
+
+    ~TargetWithSelfPtr() noexcept(false) {
+      // Pin expires existing weak pointers before T starts tearing down, but self remains valid
+      // until member destruction releases it.
+      KJ_EXPECT(weak.tryGet() == kj::none);
+      KJ_EXPECT(self.get() == this);
+      destroyed = true;
+    }
+
+    kj::Ptr<TargetWithSelfPtr> self;
+    kj::Weak<TargetWithSelfPtr>& weak;
+    bool& destroyed;
+  };
+
+  kj::Weak<TargetWithSelfPtr> weak;
+  bool destroyed = false;
+  {
+    kj::Pin<TargetWithSelfPtr> pin(weak, destroyed);
+    weak = pin.addWeak();
+    KJ_EXPECT(weak.tryGet() != kj::none);
+    KJ_EXPECT(pin->self == pin);
+  }
+  KJ_EXPECT(destroyed);
+  KJ_EXPECT(weak.upgrade() == kj::none);
+}
+
 KJ_TEST("kj::PtrTarget addPtrToThis") {
   TargetObj obj("a");
 
@@ -1589,6 +1654,30 @@ KJ_TEST("kj::PtrTarget subtyping") {
 }
 
 #if KJ_ASSERT_PTR_COUNTERS
+KJ_TEST("kj::Pin<T> with embedded PtrTarget destroyed with active ptrs crashes") {
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Pin<TargetObj> pin("a");
+    // Deferring the counter check until member cleanup must still detect external pointers.
+    auto* leaked = new kj::Ptr<TargetObj>(pin.asPtr());
+    (void)leaked;
+  });
+}
+
+KJ_TEST("kj::Pin<T> with embedded PtrTarget moved with self pointer crashes") {
+  struct MovableTargetWithSelfPtr: public kj::PtrTarget {
+    MovableTargetWithSelfPtr(): self(addPtrToThis()) {}
+    MovableTargetWithSelfPtr(MovableTargetWithSelfPtr&&): self(addPtrToThis()) {}
+
+    kj::Ptr<MovableTargetWithSelfPtr> self;
+  };
+
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    kj::Pin<MovableTargetWithSelfPtr> pin;
+    // A self pointer is a pointer to the Pin: moving the Pin while it exists is illegal.
+    kj::Pin<MovableTargetWithSelfPtr> pin2(kj::mv(pin));
+  });
+}
+
 KJ_TEST("kj::PtrTarget destroyed with active ptrs crashes") {
   KJ_EXPECT_SIGNAL(SIGABRT, {
     auto obj = kj::heap<TargetObj>("a");
