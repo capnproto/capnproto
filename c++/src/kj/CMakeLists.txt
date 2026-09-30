@@ -39,6 +39,7 @@ endif()
 
 set(kj_headers
   common.h
+  convert.h
   units.h
   atomic.h
   memory.h
@@ -316,6 +317,7 @@ if(BUILD_TESTING)
       tuple-test.c++
       one-of-test.c++
       function-test.c++
+      convert-test.c++
       filesystem-test.c++
       filesystem-disk-test.c++
       thread-test.c++

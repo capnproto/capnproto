@@ -768,6 +768,22 @@ struct PointerTraits<T, VoidSfinae<
     EnableIf<capnp::_::IsPointerSchema<typename T::Builds>::value>>>
     : PointerTypeTraits</*readOnly=*/false> {};
 
+struct View;  // See kj/convert.h.
+
+template <typename T>
+  requires (isPointerType<T>() && isSameType<T, typename T::Reads::Reader>())
+inline T asImpl(View*, const T& reader) { return reader; }
+// Readers view themselves.
+
+template <typename T>
+  requires (isPointerType<T>() && isSameType<T, typename T::Builds::Builder>())
+inline T asImpl(View*, T& builder) { return builder; }
+template <typename T>
+  requires (isPointerType<T>() && isSameType<T, typename T::Builds::Builder>())
+inline auto asImpl(View*, const T& builder) { return builder.asReader(); }
+// Builders view themselves; a const builder is viewed as its reader, just as a const ArrayPtr<T>
+// is viewed as ArrayPtr<const T>.
+
 template <> constexpr bool canMemcpy<capnp::word>() { return true; }
 // capnp::word can (and should) be copied with memcpy.
 }  // namespace kj

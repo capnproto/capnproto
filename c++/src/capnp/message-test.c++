@@ -23,6 +23,7 @@
 #include "serialize.h"
 #include "test-util.h"
 #include <kj/refcount.h>
+#include <kj/convert.h>
 #include <kj/array.h>
 #include <kj/vector.h>
 #include <kj/debug.h>
@@ -111,6 +112,70 @@ KJ_TEST("Rc builders project mutable fields and can project to readers") {
   KJ_EXPECT(clone->asReader() == "foo");
   clone = nullptr;
   auto reader = kj::mv(child).project([](auto builder) { return builder.asReader(); });
+  KJ_EXPECT(reader->getTextField() == "foo");
+}
+
+KJ_TEST("Rc readers support as<View> and as<Copy>") {
+  bool destroyed = false;
+  auto owner = kj::rc<OwnedTestMessage>(makeProjectedMessage(), destroyed);
+  auto root = kj::mv(owner).project([](auto& message) { return message.root; });
+  kj::Rc<TestAllTypes::Reader> rootView = root.as<kj::View>();
+  KJ_EXPECT(rootView->getStructField().getDataField().size() == 4);
+
+  auto text = root.addRef().project([](auto reader) {
+    return reader.getStructField().getStructList()[1].getTextField();
+  });
+  kj::Rc<Text::Reader> textView = text.as<kj::View>();
+  kj::Rc<kj::String> textCopy = text.as<kj::Copy>();
+  KJ_EXPECT(*textView == "projected text");
+  KJ_EXPECT(*textCopy == "projected text");
+  KJ_EXPECT(textCopy->begin() != text->begin());
+
+  auto data = kj::mv(root).project([](auto reader) {
+    return reader.getStructField().getDataField();
+  });
+  kj::Rc<Data::Reader> dataView = data.as<kj::View>();
+  kj::Rc<kj::Array<byte>> dataCopy = kj::mv(data).as<kj::Copy>();
+  KJ_EXPECT(data == nullptr);
+  KJ_EXPECT(*dataCopy == *dataView);
+
+  rootView = nullptr;
+  text = nullptr;
+  textView = nullptr;
+  KJ_EXPECT(!destroyed);
+  dataView = nullptr;
+  KJ_EXPECT(destroyed);
+  KJ_EXPECT(*textCopy == "projected text");
+  KJ_EXPECT(dataCopy->size() == 4);
+}
+
+KJ_TEST("Rc builders support as<View>; const builders view as readers") {
+  auto owner = kj::rc<MallocMessageBuilder>();
+  auto root = kj::mv(owner).project([](auto& message) {
+    return message.template initRoot<TestAllTypes>();
+  });
+  kj::Rc<TestAllTypes::Builder> rootView = root.as<kj::View>();
+  rootView->setInt32Field(123);
+
+  auto text = root.addRef().project([](auto builder) { return builder.initTextField(3); });
+  kj::Rc<Text::Builder> textView = text.as<kj::View>();
+  (*textView)[0] = 'f';
+  (*textView)[1] = 'o';
+  (*textView)[2] = 'o';
+  kj::Rc<const Text::Builder> constText(kj::mv(text));
+  kj::Rc<Text::Reader> textReader = constText.as<kj::View>();
+  KJ_EXPECT(*textReader == "foo");
+
+  auto data = root.addRef().project([](auto builder) { return builder.initDataField(2); });
+  kj::Rc<Data::Builder> dataView = data.as<kj::View>();
+  (*dataView)[0] = 'a';
+  kj::Rc<const Data::Builder> constData(kj::mv(data));
+  kj::Rc<Data::Reader> dataReader = constData.as<kj::View>();
+  KJ_EXPECT((*dataReader)[0] == 'a');
+
+  kj::Rc<const TestAllTypes::Builder> constRoot(kj::mv(root));
+  kj::Rc<TestAllTypes::Reader> reader = constRoot.as<kj::View>();
+  KJ_EXPECT(reader->getInt32Field() == 123);
   KJ_EXPECT(reader->getTextField() == "foo");
 }
 

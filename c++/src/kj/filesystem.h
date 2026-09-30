@@ -36,6 +36,8 @@ template <typename T>
 class Vector;
 
 class PathPtr;
+struct View;  // See kj/convert.h.
+struct Copy;  // See kj/convert.h.
 
 template <> struct PointerTraits<PathPtr>: PointerTypeTraits</*readOnly=*/true> {};
 
@@ -93,6 +95,15 @@ public:
   Path& operator=(Path&&) = default;
 
   Path clone() const;
+
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Path&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const Path&).
 
   static Path parse(StringPtr path);
   // Parses a path in traditional format. Components are separated by '/'. Any use of "." or
@@ -257,7 +268,7 @@ public:
   PathPtr(decltype(nullptr));
   PathPtr(const Path& path);
 
-  Path clone();
+  Path clone() const;
   Path append(Path&& suffix) const;
   Path append(PathPtr suffix) const;
   Path append(StringPtr suffix) const;
@@ -285,6 +296,15 @@ public:
   String toNativeString(bool absolute = false) const;
   Array<wchar_t> forWin32Api(bool absolute) const;
   // Equivalent to the corresponding methods of `Path`.
+
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, PathPtr&).
+  // Used to chain conversion calls rather than wrap with function.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, const PathPtr&).
 
 private:
   ArrayPtr<const String> parts;
@@ -1057,6 +1077,11 @@ inline Array<wchar_t> Path::forWin32Api(bool absolute) const {
 inline PathPtr::PathPtr(decltype(nullptr)): parts(nullptr) {}
 inline PathPtr::PathPtr(const Path& path): parts(path.parts) {}
 inline PathPtr::PathPtr(ArrayPtr<const String> parts): parts(parts) {}
+inline PathPtr asImpl(View*, const Path& path) { return path; }
+inline PathPtr asImpl(View*, const PathPtr& path) { return path; }
+inline Path asImpl(Copy*, const Path& path) { return path.clone(); }
+inline Path asImpl(Copy*, const PathPtr& path) { return path.clone(); }
+// as<View>() and as<Copy>() support; see kj/convert.h.
 inline Path PathPtr::append(StringPtr suffix) const { return append(Path(suffix)); }
 inline Path PathPtr::append(String&& suffix) const { return append(Path(kj::mv(suffix))); }
 inline const String& PathPtr::operator[](size_t i) const { return parts[i]; }

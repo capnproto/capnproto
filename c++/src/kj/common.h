@@ -2314,6 +2314,20 @@ public:
     }
   }
 
+  template <typename U>
+  inline auto as() & { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Maybe&).
+  // Used to chain conversion calls rather than wrap with function. See kj/convert.h.
+
+  template <typename U>
+  inline auto as() const & { return asImpl((U*)nullptr, *this); }
+
+  template <typename U>
+  inline auto as() && { return asImpl((U*)nullptr, kj::mv(*this)); }
+
+  template <typename U>
+  inline auto as() const && { return asImpl((U*)nullptr, kj::mv(*this)); }
+
 private:
   _::NullableValue<T> ptr;
 
@@ -2482,6 +2496,14 @@ public:
       return f(ref);
     }
   }
+
+  template <typename U>
+  inline auto as() { return asImpl((U*)nullptr, *this); }
+  // Syntax sugar for invoking asImpl(U*, Maybe&).
+  // Used to chain conversion calls rather than wrap with function. See kj/convert.h.
+
+  template <typename U>
+  inline auto as() const { return asImpl((U*)nullptr, *this); }
 
 private:
   T* ptr;
