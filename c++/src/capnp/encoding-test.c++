@@ -1358,6 +1358,8 @@ TEST(Encoding, Imports) {
     TestImport::Builder root = builder.getRoot<TestImport>();
     initTestMessage(root.initField());
     checkTestMessage(root.asReader().getField());
+    initTestMessage(root.initFieldViaAlias());
+    checkTestMessage(root.asReader().getFieldViaAlias());
   }
 
   {
@@ -1376,6 +1378,24 @@ TEST(Encoding, Using) {
   TestUsing::Reader reader = builder.getRoot<TestUsing>().asReader();
   EXPECT_EQ(TestNestedTypes::NestedEnum::BAR, reader.getOuterNestedEnum());
   EXPECT_EQ(TestNestedTypes::NestedStruct::NestedEnum::QUUX, reader.getInnerNestedEnum());
+
+  static_assert(std::is_same<TestUserId, ::uint64_t>::value);
+  static_assert(std::is_same<TestUserIdAlias, ::uint64_t>::value);
+
+  // Field types carry distinct usingIds for the alias and the chained alias.
+  auto structSchema = capnp::Schema::from<TestUsing>().asStruct();
+  auto userIdUsingId =
+      structSchema.getFieldByName("userId").getProto().getSlot().getType().getUsingId();
+  auto userIdAliasUsingId =
+      structSchema.getFieldByName("userIdAlias").getProto().getSlot().getType().getUsingId();
+  EXPECT_NE(0u, userIdUsingId);
+  EXPECT_NE(0u, userIdAliasUsingId);
+  EXPECT_NE(userIdUsingId, userIdAliasUsingId);
+
+  // List element alias also carries usingId.
+  auto userIdsType = structSchema.getFieldByName("userIds").getProto().getSlot().getType();
+  EXPECT_TRUE(userIdsType.isList());
+  EXPECT_NE(0u, userIdsType.getList().getElementType().getUsingId());
 }
 
 TEST(Encoding, StructSetters) {
