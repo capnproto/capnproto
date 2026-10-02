@@ -216,7 +216,7 @@ KJ_TEST("use pipeline after dropping response") {
   EXPECT_EQ(1, chainedCallCount);
 }
 
-KJ_TEST("context.setPipeline") {
+KJ_TEST("context.setPipeline with lvalue") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
 

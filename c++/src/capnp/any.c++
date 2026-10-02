@@ -58,7 +58,7 @@ AnyPointer::Pipeline AnyPointer::Pipeline::noop() {
   for (auto i: kj::indices(ops)) {
     newOps[i] = ops[i];
   }
-  return Pipeline(hook->addRef(), kj::mv(newOps));
+  return Pipeline(hook.addRef(), kj::mv(newOps));
 }
 
 AnyPointer::Pipeline AnyPointer::Pipeline::getPointerField(uint16_t pointerIndex) {
@@ -70,7 +70,7 @@ AnyPointer::Pipeline AnyPointer::Pipeline::getPointerField(uint16_t pointerIndex
   newOp.type = PipelineOp::GET_POINTER_FIELD;
   newOp.pointerIndex = pointerIndex;
 
-  return Pipeline(hook->addRef(), kj::mv(newOps));
+  return Pipeline(hook.addRef(), kj::mv(newOps));
 }
 
 kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {

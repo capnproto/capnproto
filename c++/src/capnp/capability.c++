@@ -177,7 +177,7 @@ public:
     }
     return responseBuilder;
   }
-  void setPipeline(kj::Own<PipelineHook>&& pipeline) override {
+  void setPipeline(kj::Rc<PipelineHook> pipeline) override {
     KJ_IF_SOME(f, tailCallPipelineFulfiller) {
       f->fulfill(AnyPointer::Pipeline(kj::mv(pipeline)));
     }
@@ -310,22 +310,18 @@ private:
 // These classes handle pipelining in the case where calls need to be queued in-memory until some
 // local operation completes.
 
-class QueuedPipeline final: public PipelineHook, public kj::Refcounted {
+class QueuedPipeline final: public PipelineHook {
   // A PipelineHook which simply queues calls while waiting for a PipelineHook to which to forward
   // them.
 
 public:
-  QueuedPipeline(kj::Promise<kj::Own<PipelineHook>>&& promiseParam)
+  QueuedPipeline(kj::Promise<kj::Rc<PipelineHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        selfResolutionOp(promise.addBranch().then([this](kj::Own<PipelineHook>&& inner) {
+        selfResolutionOp(promise.addBranch().then([this](kj::Rc<PipelineHook> inner) {
           redirect = kj::mv(inner);
         }, [this](kj::Exception&& exception) {
           redirect = newBrokenPipeline(kj::mv(exception));
         }).eagerlyEvaluate(nullptr)) {}
-
-  kj::Own<PipelineHook> addRef() override {
-    return kj::addRef(*this);
-  }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     auto copy = kj::heapArrayBuilder<PipelineOp>(ops.size());
@@ -338,9 +334,9 @@ public:
   kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override;
 
 private:
-  kj::ForkedPromise<kj::Own<PipelineHook>> promise;
+  kj::ForkedPromise<kj::Rc<PipelineHook>> promise;
 
-  kj::Maybe<kj::Own<PipelineHook>> redirect;
+  kj::Maybe<kj::Rc<PipelineHook>> redirect;
   // Once the promise resolves, this will become non-null and point to the underlying object.
 
   kj::Promise<void> selfResolutionOp;
@@ -430,7 +426,7 @@ public:
       });
       return VoidPromiseAndPipeline {
         kj::NEVER_DONE,
-        kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise))
+        kj::rc<QueuedPipeline>(kj::mv(pipelinePromise))
       };
     } else {
       auto split = promiseForCallForwarding.addBranch()
@@ -440,9 +436,9 @@ public:
       }).split();
 
       kj::Promise<void> completionPromise = kj::mv(kj::get<0>(split));
-      kj::Promise<kj::Own<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
+      kj::Promise<kj::Rc<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
 
-      auto pipeline = kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise));
+      auto pipeline = kj::rc<QueuedPipeline>(kj::mv(pipelinePromise));
 
       // OK, now we can actually return our thing.
       return VoidPromiseAndPipeline { kj::mv(completionPromise), kj::mv(pipeline) };
@@ -517,7 +513,7 @@ kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops)
   } else {
     return clientMap.findOrCreate(ops.asPtr(), [&]() {
       auto clientPromise = promise.addBranch()
-          .then([ops = KJ_MAP(op, ops) { return op; }](kj::Own<PipelineHook> pipeline) {
+          .then([ops = KJ_MAP(op, ops) { return op; }](kj::Rc<PipelineHook> pipeline) {
         return pipeline->getPipelinedCap(kj::mv(ops));
       });
       return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
@@ -529,15 +525,11 @@ kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops)
 
 // =======================================================================================
 
-class LocalPipeline final: public PipelineHook, public kj::Refcounted {
+class LocalPipeline final: public PipelineHook {
 public:
   inline LocalPipeline(kj::Own<CallContextHook>&& contextParam)
       : context(kj::mv(contextParam)),
         results(context->getResults(MessageSize { 0, 0 })) {}
-
-  kj::Own<PipelineHook> addRef() override {
-    return kj::addRef(*this);
-  }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     return results.getPipelinedCap(ops);
@@ -664,9 +656,9 @@ public:
     }
 
     auto pipelinePromise = pipelineBranch
-        .then([=,context=context->addRef()]() mutable -> kj::Own<PipelineHook> {
+        .then([=,context=context->addRef()]() mutable -> kj::Rc<PipelineHook> {
           context->releaseParams();
-          return kj::refcounted<LocalPipeline>(kj::mv(context));
+          return kj::rc<LocalPipeline>(kj::mv(context));
         });
 
     auto tailPipelinePromise = context->onTailCall()
@@ -677,7 +669,7 @@ public:
     pipelinePromise = pipelinePromise.exclusiveJoin(kj::mv(tailPipelinePromise));
 
     return VoidPromiseAndPipeline { kj::mv(completionPromise),
-        kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise)) };
+        kj::rc<QueuedPipeline>(kj::mv(pipelinePromise)) };
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
@@ -986,23 +978,19 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
   return kj::refcounted<QueuedClient>(kj::mv(promise));
 }
 
-kj::Own<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Own<PipelineHook>>&& promise) {
-  return kj::refcounted<QueuedPipeline>(kj::mv(promise));
+kj::Rc<PipelineHook> newLocalPromisePipeline(kj::Promise<kj::Rc<PipelineHook>>&& promise) {
+  return kj::rc<QueuedPipeline>(kj::mv(promise));
 }
 
 // =======================================================================================
 
 namespace _ {  // private
 
-class PipelineBuilderHook final: public PipelineHook, public kj::Refcounted {
+class PipelineBuilderHook final: public PipelineHook {
 public:
   PipelineBuilderHook(uint firstSegmentWords)
       : message(firstSegmentWords),
         root(message.getRoot<AnyPointer>()) {}
-
-  kj::Own<PipelineHook> addRef() override {
-    return kj::addRef(*this);
-  }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
     return root.asReader().getPipelinedCap(ops);
@@ -1013,7 +1001,7 @@ public:
 };
 
 PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords) {
-  auto hook = kj::refcounted<PipelineBuilderHook>(firstSegmentWords);
+  auto hook = kj::rc<PipelineBuilderHook>(firstSegmentWords);
   auto root = hook->root;
   return { root, kj::mv(hook) };
 }
@@ -1024,13 +1012,9 @@ PipelineBuilderPair newPipelineBuilder(uint firstSegmentWords) {
 
 namespace {
 
-class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
+class BrokenPipeline final: public PipelineHook {
 public:
   BrokenPipeline(const kj::Exception& exception): exception(exception.clone()) {}
-
-  kj::Own<PipelineHook> addRef() override {
-    return kj::addRef(*this);
-  }
 
   kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override;
 
@@ -1045,7 +1029,7 @@ public:
 
   RemotePromise<AnyPointer> send() override {
     return RemotePromise<AnyPointer>(exception.clone(),
-        AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+        AnyPointer::Pipeline(kj::rc<BrokenPipeline>(exception)));
   }
 
   kj::Promise<void> sendStreaming() override {
@@ -1053,7 +1037,7 @@ public:
   }
 
   AnyPointer::Pipeline sendForPipeline() override {
-    return AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception));
+    return AnyPointer::Pipeline(kj::rc<BrokenPipeline>(exception));
   }
 
   kj::Exception exception;
@@ -1076,7 +1060,7 @@ public:
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
-    return VoidPromiseAndPipeline { exception.clone(), kj::refcounted<BrokenPipeline>(exception) };
+    return VoidPromiseAndPipeline { exception.clone(), kj::rc<BrokenPipeline>(exception) };
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
@@ -1129,8 +1113,8 @@ kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
   return kj::refcounted<BrokenClient>(kj::mv(reason), false, &ClientHook::BROKEN_CAPABILITY_BRAND);
 }
 
-kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
-  return kj::refcounted<BrokenPipeline>(kj::mv(reason));
+kj::Rc<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
+  return kj::rc<BrokenPipeline>(kj::mv(reason));
 }
 
 Request<AnyPointer, AnyPointer> newBrokenRequest(
@@ -1140,13 +1124,9 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
   return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
 }
 
-kj::Own<PipelineHook> getDisabledPipeline() {
+kj::Rc<PipelineHook> getDisabledPipeline() {
   class DisabledPipelineHook final: public PipelineHook {
   public:
-    kj::Own<PipelineHook> addRef() override {
-      return kj::Own<PipelineHook>(this, kj::NullDisposer::instance);
-    }
-
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
       return newBrokenCap(KJ_EXCEPTION(FAILED,
           "caller specified noPromisePipelining hint, but then tried to pipeline"));
@@ -1157,8 +1137,9 @@ kj::Own<PipelineHook> getDisabledPipeline() {
           "caller specified noPromisePipelining hint, but then tried to pipeline"));
     }
   };
-  static DisabledPipelineHook instance;
-  return instance.addRef();
+  // This may be used concurrently from multiple threads, so don't share a single non-atomic
+  // Refcounted instance across the whole process.
+  return kj::rc<DisabledPipelineHook>();
 }
 
 // =======================================================================================
