@@ -591,10 +591,7 @@ template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdParty
 kj::Maybe<kj::Own<_::VatNetworkBase::Connection>>
     VatNetwork<SturdyRef, ThirdPartyCompletion, ThirdPartyToAwait, ThirdPartyToContact,
                JoinResult>::baseConnect(AnyStruct::Reader ref) {
-  auto maybe = connect(ref.as<SturdyRef>());
-  return maybe.map([](kj::Own<Connection>& conn) -> kj::Own<_::VatNetworkBase::Connection> {
-    return kj::mv(conn);
-  });
+  return connect(ref.as<SturdyRef>());
 }
 
 template <typename SturdyRef, typename ThirdPartyCompletion, typename ThirdPartyToAwait,

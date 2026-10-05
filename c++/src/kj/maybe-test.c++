@@ -37,6 +37,36 @@ struct ImplicitToInt {
   }
 };
 
+struct MutableToInt {
+  int value;
+  operator int() & { return value; }
+};
+
+struct RefQualifiedToInt {
+  operator int() & { return 123; }
+  operator int() const & { return 456; }
+  operator int() && { return 789; }
+};
+
+static_assert(canConvert<Maybe<int>, Maybe<long>>());
+static_assert(canConvert<Maybe<ImplicitToInt>, Maybe<int>>());
+static_assert(canConvert<Maybe<MutableToInt>&, Maybe<int>>());
+static_assert(!canConvert<const Maybe<MutableToInt>&, Maybe<int>>());
+static_assert(!canConvert<Maybe<MutableToInt>, Maybe<int>>());
+static_assert(canConvert<Maybe<MutableToInt&>, Maybe<int>>());
+static_assert(canConvert<Maybe<Array<int>>&, Maybe<ArrayPtr<int>>>());
+static_assert(!canConvert<const Maybe<Array<int>>&, Maybe<ArrayPtr<int>>>());
+static_assert(canConvert<const Maybe<Array<int>>&, Maybe<ArrayPtr<const int>>>());
+static_assert(canConvert<const Maybe<String>&, Maybe<StringPtr>>());
+static_assert(!canConvert<Maybe<int>, Maybe<String>>());
+static_assert(!_::ConstructibleFrom<Maybe<String>, Maybe<int>>);
+static_assert(_::AssignableFrom<Maybe<int>, Maybe<MutableToInt>&>);
+static_assert(!_::AssignableFrom<Maybe<int>, const Maybe<MutableToInt>&>);
+static_assert(!_::AssignableFrom<Maybe<String>, Maybe<int>>);
+static_assert(_::AssignableFrom<Maybe<long>, Maybe<int>>);
+static_assert(_::AssignableFrom<Maybe<long>, const Maybe<int>&>);
+static_assert(_::AssignableFrom<Maybe<long>, Maybe<int&>>);
+
 struct Immovable {
   Immovable() = default;
   KJ_DISALLOW_COPY_AND_MOVE(Immovable);
@@ -1121,6 +1151,21 @@ KJ_TEST("Maybe convertingConstructor enables implicit two-step conversion") {
     KJ_EXPECT(m != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 99);
   }
+
+  // Converting assignment follows the explicitness of the converting constructor: TestPtr's
+  // raw-pointer constructor is explicit, so a raw pointer must be wrapped before assignment.
+  {
+    static_assert(_::ConstructibleFrom<Maybe<TestPtr<Base>>, Base*>);
+    static_assert(!canConvert<Base*, Maybe<TestPtr<Base>>>());
+    static_assert(!_::AssignableFrom<Maybe<TestPtr<Base>>, Base*>);
+    static_assert(!_::AssignableFrom<Maybe<TestPtr<Base>>, Derived*>);
+    static_assert(_::AssignableFrom<Maybe<TestPtr<Base>>, TestPtr<Derived>>);
+
+    Maybe<TestPtr<Base>> m(new Base(42));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 42);
+    m = TestPtr<Base>(new Derived(99));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(m)->value == 99);
+  }
 }
 
 // =======================================================================================
@@ -1313,6 +1358,9 @@ KJ_TEST("Maybe niche-optimized KJ_IF_SOME(v, kj::mv(m)) clears source to none") 
 KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types") {
   // Test converting between Maybe<NicheInt> and Maybe<NonNicheInt>.
   // NicheInt is niche-optimized (uses -1 as none), NonNicheInt is not.
+  // Conversion goes through int, requiring two user-defined conversions, so it is explicit.
+  static_assert(!canConvert<Maybe<NicheInt>, Maybe<NonNicheInt>>());
+  static_assert(!canConvert<Maybe<NonNicheInt>, Maybe<NicheInt>>());
 
   static_assert(sizeof(Maybe<NicheInt>) == sizeof(NicheInt),
       "NicheInt should be niche-optimized");
@@ -1322,7 +1370,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   // Test niche -> non-niche conversion (move)
   {
     Maybe<NicheInt> niche = NicheInt(42);
-    Maybe<NonNicheInt> nonNiche = kj::mv(niche);
+    Maybe<NonNicheInt> nonNiche(kj::mv(niche));
     KJ_EXPECT(nonNiche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
   }
@@ -1330,7 +1378,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   // Test niche -> non-niche conversion (copy)
   {
     Maybe<NicheInt> niche = NicheInt(42);
-    Maybe<NonNicheInt> nonNiche = niche;
+    Maybe<NonNicheInt> nonNiche(niche);
     KJ_EXPECT(nonNiche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
     // Original should still have value
@@ -1342,14 +1390,14 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NicheInt> niche;
     KJ_EXPECT(niche == kj::none);
-    Maybe<NonNicheInt> nonNiche = kj::mv(niche);
+    Maybe<NonNicheInt> nonNiche(kj::mv(niche));
     KJ_EXPECT(nonNiche == kj::none);
   }
 
   // Test non-niche -> niche conversion (move)
   {
     Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
-    Maybe<NicheInt> niche = kj::mv(nonNiche);
+    Maybe<NicheInt> niche(kj::mv(nonNiche));
     KJ_EXPECT(niche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
   }
@@ -1357,7 +1405,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   // Test non-niche -> niche conversion (copy)
   {
     Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
-    Maybe<NicheInt> niche = nonNiche;
+    Maybe<NicheInt> niche(nonNiche);
     KJ_EXPECT(niche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
     // Original should still have value
@@ -1369,15 +1417,21 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NonNicheInt> nonNiche;
     KJ_EXPECT(nonNiche == kj::none);
-    Maybe<NicheInt> niche = kj::mv(nonNiche);
+    Maybe<NicheInt> niche(kj::mv(nonNiche));
     KJ_EXPECT(niche == kj::none);
   }
+
+  // Cross-type assignment follows the explicitness of construction, so construct first.
+  static_assert(!_::AssignableFrom<Maybe<NonNicheInt>, Maybe<NicheInt>>);
+  static_assert(!_::AssignableFrom<Maybe<NonNicheInt>, Maybe<NicheInt>&>);
+  static_assert(!_::AssignableFrom<Maybe<NicheInt>, Maybe<NonNicheInt>>);
+  static_assert(!_::AssignableFrom<Maybe<NicheInt>, const Maybe<NonNicheInt>&>);
 
   // Test niche -> non-niche assignment (move)
   {
     Maybe<NicheInt> niche = NicheInt(42);
     Maybe<NonNicheInt> nonNiche;
-    nonNiche = kj::mv(niche);
+    nonNiche = Maybe<NonNicheInt>(kj::mv(niche));
     KJ_EXPECT(nonNiche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
   }
@@ -1386,7 +1440,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NicheInt> niche = NicheInt(42);
     Maybe<NonNicheInt> nonNiche;
-    nonNiche = niche;
+    nonNiche = Maybe<NonNicheInt>(niche);
     KJ_EXPECT(nonNiche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(nonNiche).value == 42);
   }
@@ -1395,7 +1449,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NicheInt> niche;
     Maybe<NonNicheInt> nonNiche = NonNicheInt(99);
-    nonNiche = kj::mv(niche);
+    nonNiche = Maybe<NonNicheInt>(kj::mv(niche));
     KJ_EXPECT(nonNiche == kj::none);
   }
 
@@ -1403,7 +1457,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
     Maybe<NicheInt> niche;
-    niche = kj::mv(nonNiche);
+    niche = Maybe<NicheInt>(kj::mv(nonNiche));
     KJ_EXPECT(niche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
   }
@@ -1412,7 +1466,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NonNicheInt> nonNiche = NonNicheInt(42);
     Maybe<NicheInt> niche;
-    niche = nonNiche;
+    niche = Maybe<NicheInt>(nonNiche);
     KJ_EXPECT(niche != kj::none);
     KJ_EXPECT(KJ_ASSERT_NONNULL(niche).value == 42);
   }
@@ -1421,7 +1475,7 @@ KJ_TEST("Maybe conversion between niche-optimized and non-niche-optimized types"
   {
     Maybe<NonNicheInt> nonNiche;
     Maybe<NicheInt> niche = NicheInt(99);
-    niche = kj::mv(nonNiche);
+    niche = Maybe<NicheInt>(kj::mv(nonNiche));
     KJ_EXPECT(niche == kj::none);
   }
 }
@@ -2053,7 +2107,134 @@ KJ_TEST("Maybe<T> T-value copy-assignment is safe when this owns other") {
 }
 
 // =======================================================================================
-// Cross-type assignment tests
+// Cross-type conversion and assignment tests
+
+KJ_TEST("Maybe conversions preserve explicitness") {
+  struct ExplicitInt {
+    explicit ExplicitInt(int value): value(value) {}
+    int value;
+  };
+  struct ExplicitToInt {
+    explicit operator int() & { return 123; }
+    explicit operator int() const & { return 456; }
+    explicit operator int() && { return 789; }
+  };
+  auto check = []<typename To, typename From>() {
+    static_assert(_::ConstructibleFrom<To, From&>);
+    static_assert(_::ConstructibleFrom<To, const From&>);
+    static_assert(_::ConstructibleFrom<To, From>);
+    static_assert(!canConvert<From&, To>());
+    static_assert(!canConvert<const From&, To>());
+    static_assert(!canConvert<From, To>());
+    // Assignment follows the same explicitness as construction.
+    static_assert(!_::AssignableFrom<To, From&>);
+    static_assert(!_::AssignableFrom<To, const From&>);
+    static_assert(!_::AssignableFrom<To, From>);
+  };
+  check.template operator()<Maybe<ExplicitInt>, Maybe<int>>();
+  check.template operator()<Maybe<ExplicitInt>, Maybe<int&>>();
+  check.template operator()<Maybe<int>, Maybe<ExplicitToInt>>();
+
+  Maybe<int> source = 42;
+  const auto& constSource = source;
+  KJ_EXPECT(Maybe<ExplicitInt>(source).assertSome().value == 42);
+  KJ_EXPECT(Maybe<ExplicitInt>(constSource).assertSome().value == 42);
+  KJ_EXPECT(Maybe<ExplicitInt>(kj::mv(source)).assertSome().value == 42);
+  KJ_EXPECT(source == kj::none);
+  KJ_EXPECT(Maybe<ExplicitInt>(source) == kj::none);
+
+  // Explicit conversions can still be assigned by constructing first.
+  Maybe<int> assignSource = 43;
+  Maybe<ExplicitInt> assigned;
+  assigned = Maybe<ExplicitInt>(assignSource);
+  KJ_EXPECT(assigned.assertSome().value == 43);
+  assignSource = kj::none;
+  assigned = Maybe<ExplicitInt>(assignSource);
+  KJ_EXPECT(assigned == kj::none);
+
+  Maybe<ExplicitToInt> qualified;
+  qualified.emplace();
+  const auto& constQualified = qualified;
+  KJ_EXPECT(Maybe<int>(qualified).assertSome() == 123);
+  KJ_EXPECT(Maybe<int>(constQualified).assertSome() == 456);
+  KJ_EXPECT(Maybe<int>(kj::mv(qualified)).assertSome() == 789);
+  KJ_EXPECT(qualified == kj::none);
+
+  ExplicitToInt referent;
+  Maybe<ExplicitToInt&> reference = referent;
+  KJ_EXPECT(Maybe<int>(kj::mv(reference)).assertSome() == 123);
+  KJ_EXPECT(reference == kj::none);
+}
+
+KJ_TEST("Maybe conversions follow the contained value's reference qualification") {
+  Maybe<RefQualifiedToInt> source;
+  source.emplace();
+  Maybe<int> mutableValue = source;
+  KJ_EXPECT(mutableValue.assertSome() == 123);
+  KJ_EXPECT(source != kj::none);
+
+  const auto& constSource = source;
+  Maybe<int> constValue = constSource;
+  KJ_EXPECT(constValue.assertSome() == 456);
+  KJ_EXPECT(source != kj::none);
+
+  Maybe<int> movedValue = kj::mv(source);
+  KJ_EXPECT(movedValue.assertSome() == 789);
+  KJ_EXPECT(source == kj::none);
+
+  RefQualifiedToInt referent;
+  Maybe<RefQualifiedToInt&> reference = referent;
+  Maybe<int> copiedReferent = kj::mv(reference);
+  KJ_EXPECT(copiedReferent.assertSome() == 123);
+  KJ_EXPECT(reference == kj::none);
+
+  Maybe<MutableToInt> mutableSource = MutableToInt{42};
+  Maybe<int> value = mutableSource;
+  KJ_EXPECT(value.assertSome() == 42);
+  value = mutableSource;
+  KJ_EXPECT(value.assertSome() == 42);
+  KJ_EXPECT(mutableSource.assertSome().value == 42);
+  mutableSource = kj::none;
+  value = mutableSource;
+  KJ_EXPECT(value == kj::none);
+}
+
+KJ_TEST("Maybe implicitly converts owning values to borrowed pointer values") {
+  Maybe<Array<int>> owner = kj::heapArray<int>({12, 34});
+  Maybe<ArrayPtr<int>> ptr = owner;
+  KJ_EXPECT(ptr.assertSome().begin() == owner.assertSome().begin());
+  ptr.assertSome()[0] = 56;
+  KJ_EXPECT(owner.assertSome()[0] == 56);
+
+  Maybe<ArrayPtr<int>> assigned;
+  assigned = owner;
+  KJ_EXPECT(assigned.assertSome()[0] == 56);
+  const auto& constOwner = owner;
+  Maybe<ArrayPtr<const int>> readonly = constOwner;
+  KJ_EXPECT(readonly.assertSome()[1] == 34);
+
+  Maybe<String> string = kj::str("hello");
+  Maybe<StringPtr> text = string;
+  KJ_EXPECT(text.assertSome().cStr() == string.assertSome().cStr());
+  KJ_EXPECT(text.assertSome() == "hello");
+}
+
+KJ_TEST("Maybe cross-type conversions preserve empty sources") {
+  Maybe<RefQualifiedToInt> empty;
+  Maybe<int> mutableValue = empty;
+  KJ_EXPECT(mutableValue == kj::none);
+  const auto& constEmpty = empty;
+  Maybe<int> constValue = constEmpty;
+  KJ_EXPECT(constValue == kj::none);
+  Maybe<int> movedValue = kj::mv(empty);
+  KJ_EXPECT(movedValue == kj::none);
+  KJ_EXPECT(empty == kj::none);
+
+  Maybe<RefQualifiedToInt&> reference;
+  Maybe<int> copiedReferent = kj::mv(reference);
+  KJ_EXPECT(copiedReferent == kj::none);
+  KJ_EXPECT(reference == kj::none);
+}
 
 KJ_TEST("Maybe<StringPtr> assigned from Maybe<String>") {
   // String is not copyable, so cross-type assignment must not try to copy the Maybe<String>.
