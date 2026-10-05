@@ -319,6 +319,22 @@ KJ_TEST("OneOf converting constructors preserve uninitialized sources and nested
   KJ_EXPECT((nested.get<OneOf<short, int>>() == nullptr));
 }
 
+KJ_TEST("OneOf propagates owning-to-pointer Rc and Arc conversions") {
+  OneOf<Rc<String>, Rc<Array<int>>> source = kj::rc<Array<int>>(kj::heapArray<int>({12, 34}));
+  OneOf<Rc<StringPtr>, Rc<ArrayPtr<int>>> converted = kj::mv(source);
+  KJ_ASSERT(converted.is<Rc<ArrayPtr<int>>>());
+  KJ_EXPECT((*converted.get<Rc<ArrayPtr<int>>>())[1] == 34);
+  KJ_EXPECT(source.is<Rc<Array<int>>>());
+  KJ_EXPECT(source.get<Rc<Array<int>>>() == nullptr);
+
+  OneOf<Arc<String>, Arc<Array<int>>> atomicSource = kj::arc<String>(kj::str("hello"));
+  OneOf<Arc<ArrayPtr<const int>>, Arc<StringPtr>> atomicConverted = kj::mv(atomicSource);
+  KJ_ASSERT(atomicConverted.is<Arc<StringPtr>>());
+  KJ_EXPECT(*atomicConverted.get<Arc<StringPtr>>() == "hello");
+  KJ_EXPECT(atomicSource.is<Arc<String>>());
+  KJ_EXPECT(atomicSource.get<Arc<String>>() == nullptr);
+}
+
 KJ_TEST("OneOf conversion exceptions propagate without replacing the assignment target") {
   OneOf<OneOfThrowingConversion> source = OneOfThrowingConversion{};
   KJ_EXPECT_THROW_MESSAGE("one-of conversion failed", {

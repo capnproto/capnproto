@@ -254,14 +254,14 @@ constexpr bool isValidProjectionResult() {
 
 template <typename U, typename T>
 constexpr bool canConvertRc() {
-  // Whether an Rc/Arc of U converts to one of T: raw pointer conversion for ordinary objects,
-  // noexcept value conversion for pointer types. The two families never convert into each other.
+  // Representation-preserving Rc/Arc conversions: raw pointer conversion for ordinary objects,
+  // noexcept value conversion for pointer types. Owning-to-pointer conversions use project().
   if constexpr (isSameType<U, T>()) {
     // The non-template move constructor handles this case. In particular, checking whether a
     // const pointer type converts to itself may try to copy a move-only pointer from const.
     return false;
   } else if constexpr (isPointerType<T>()) {
-    return isPointerType<U>() && canConvert<U&&, RemoveConst<T>>() &&
+    return isPointerType<U>() && ImplicitlyConstructibleFrom<RemoveConst<T>, U> &&
         isNoThrowMoveConstructible<RemoveConst<T>, RemoveConst<U>>();
   } else {
     return !isPointerType<U>() && canConvert<U*, T*>();
@@ -441,13 +441,20 @@ class Rc {
   //
   //     auto bytes = owner.addRef().project([](auto& array) { return array.asPtr(); });
   //
+  // If T& implicitly converts to a pointer type U, Rc<T> implicitly converts to Rc<U> by
+  // projection. The conversion consumes the Rc, preserves null handles, and keeps the original
+  // owner alive without an allocation. The pointer's target and context must be covered by that
+  // owner, just as with project():
+  //
+  //     Rc<ArrayPtr<byte>> bytes = owner.addRef();
+  //
   // Returning a pointer type by value copies it, sharing the original refcount without an
   // allocation. rc<Pointer>(...) is not supported because a bare pointer does not identify its
   // owner. Copying *rc only borrows the pointer; addRef() copies ownership as well. The address of
   // the inline pointer changes when the Rc moves, so only null comparison is provided for pointer
   // types, and neither toOwn() nor WeakRc is available (both would have to point into the Rc
-  // itself; downgrade the owner instead). Cross-type Rc/Arc conversions require a noexcept
-  // pointer conversion; use project() for conversions that can throw.
+  // itself; downgrade the owner instead). Conversions between inline pointer types require a
+  // noexcept pointer conversion; use project() for pointer-to-pointer conversions that can throw.
   //
   // Read-only pointer types are always exposed as const, as in Arc, so `*rc = other` cannot
   // re-point the inline value. Mutable pointer types (e.g. builders) must be exposed as non-const
@@ -479,6 +486,15 @@ public:
 
   template <typename U = T, typename = EnableIf<_::canConvertRc<U, T>()>>
   inline Rc(Rc<U>&& other) noexcept: impl(kj::mv(other.impl)) {}
+
+  template <typename U>
+    requires (!isPointerType<U>() && isPointerType<T>() &&
+        _::ImplicitlyConstructibleFrom<RemoveConst<T>, U&>)
+  inline Rc(Rc<U>&& other) {
+    if (other == nullptr) return;
+    auto projected = kj::mv(other).project([](U& value) -> RemoveConst<T> { return value; });
+    impl = Impl(kj::mv(projected.impl));
+  }
 
   template <typename U, typename = EnableIf<isSameType<U, T>() && !isPointerType<T>()>>
   inline Rc(U t) noexcept {
@@ -1080,8 +1096,11 @@ class Arc {
   // exposes only `const` members of T and thus is closer to `kj::Rc<const T>`.
   //
   // Pointer types are stored inline as with Rc, but must be read-only: project mutable
-  // builders/ArrayPtrs to their reader/const-element types first. As with ordinary Arc, the
-  // backing context and its destruction must obey their own threading contracts.
+  // builders/ArrayPtrs to their reader/const-element types first. If const T& implicitly converts
+  // to a read-only pointer type U, Arc<T> implicitly converts to Arc<U> by projection, preserving
+  // null handles and keeping the original owner alive without an allocation. As with project(),
+  // the owner must cover the pointer's target and context. As with ordinary Arc, the backing
+  // context and its destruction must obey their own threading contracts.
   static_assert(!isPointerType<T>() || PointerTraits<RemoveConst<T>>::isReadOnly,
       "Arc requires a read-only pointer type; project to its reader/const-element type");
   using Impl = _::ArcImpl<const T>;
@@ -1094,6 +1113,15 @@ public:
 
   template <typename U, typename = EnableIf<_::canConvertRc<U, T>()>>
   inline Arc(Arc<U>&& other) noexcept: impl(kj::mv(other.impl)) {}
+
+  template <typename U>
+    requires (!isPointerType<U>() && isPointerType<T>() &&
+        _::ImplicitlyConstructibleFrom<RemoveConst<T>, const U&>)
+  inline Arc(Arc<U>&& other) {
+    if (other == nullptr) return;
+    auto projected = kj::mv(other).project([](const U& value) -> RemoveConst<T> { return value; });
+    impl = Impl(kj::mv(projected.impl));
+  }
 
   template <typename U = T, typename = EnableIf<isSameType<U, T>() && !isPointerType<T>()>>
   inline Arc(U t) {

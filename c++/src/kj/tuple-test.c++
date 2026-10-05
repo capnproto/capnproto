@@ -22,6 +22,7 @@
 #include "tuple.h"
 #include "array.h"
 #include "memory.h"
+#include "refcount.h"
 #include "string.h"
 #include <kj/compat/gtest.h>
 
@@ -192,6 +193,16 @@ KJ_TEST("Tuple element construction supports mutable copying and immovable value
   Tuple<TupleImmovableConstructor, long> immovableDestination = kj::tuple(123, 456);
   KJ_EXPECT(get<0>(immovableDestination).value == 123);
   KJ_EXPECT(get<1>(immovableDestination) == 456);
+}
+
+KJ_TEST("Tuple propagates owning-to-pointer Rc and Arc conversions") {
+  auto source = kj::tuple(kj::rc<String>(kj::str("hello")),
+      kj::arc<Array<int>>(kj::heapArray<int>({12, 34})));
+  Tuple<Rc<StringPtr>, Arc<ArrayPtr<const int>>> converted = kj::mv(source);
+  KJ_EXPECT(get<0>(source) == nullptr);
+  KJ_EXPECT(get<1>(source) == nullptr);
+  KJ_EXPECT(*get<0>(converted) == "hello");
+  KJ_EXPECT((*get<1>(converted))[1] == 34);
 }
 
 KJ_TEST("Tuple conversion destroys completed elements if a later conversion throws") {
