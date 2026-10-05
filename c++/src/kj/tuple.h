@@ -110,8 +110,9 @@ struct TupleElement {
 
   T value;
   TupleElement() = default;
-  constexpr inline TupleElement(const T& value): value(value) {}
-  constexpr inline TupleElement(T&& value): value(kj::mv(value)) {}
+  template <typename U>
+    requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T, U>)
+  constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
 };
 
 template <uint index, typename T>
@@ -119,7 +120,9 @@ struct TupleElement<index, T&> {
   // A tuple containing references can be constructed using refTuple().
 
   T& value;
-  constexpr inline TupleElement(T& value): value(value) {}
+  template <typename U>
+    requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T&, U>)
+  constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
 };
 
 template <uint index, typename... T>
@@ -172,15 +175,25 @@ public:
   Tuple() = default;
 
   template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, U> && ...))
+  explicit(!(ImplicitlyConstructibleFrom<T, U> && ...))
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, U&> && ...))
+  explicit(!(ImplicitlyConstructibleFrom<T, U&> && ...))
   constexpr inline Tuple(Tuple<U...>& other): impl(other) {}
   template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, const U&> && ...))
+  explicit(!(ImplicitlyConstructibleFrom<T, const U&> && ...))
   constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
+  // Convert each element directly when both tuples have the same size and every corresponding
+  // element can be constructed. Implicit iff all element conversions are implicit.
+  // Lvalues preserve mutable/const access; rvalues move stored values but not reference elements.
+  // Borrowed results do not retain their owners.
 
 private:
   template <typename... Params>
-  constexpr Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
+  explicit constexpr Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
 
   TupleImpl<MakeIndexes<sizeof...(T)>, T...> impl;
 
@@ -357,6 +370,11 @@ template <typename... T> using Tuple = typename Tuple_<T...>::Type;
 //
 // Tuples are always flat -- that is, no element of a Tuple is ever itself a Tuple.  If you
 // construct a tuple from other tuples, the elements are flattened and concatenated.
+//
+// Tuples of equal size convert element-wise, implicitly iff all element conversions are implicit.
+// For example, an lvalue Tuple<String, Array<int>> can convert to Tuple<StringPtr, ArrayPtr<int>>
+// without copying the backing data. The destination only borrows from the original elements,
+// so their owners must remain alive.
 
 template <typename... Params>
 inline auto tuple(Params&&... params)
