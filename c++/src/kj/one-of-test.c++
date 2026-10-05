@@ -26,6 +26,34 @@
 
 namespace kj {
 
+struct OneOfQualifiedConversion {
+  int value = 123;
+  operator int() & { return value + 1; }
+  operator int() const & { return value + 2; }
+  operator int() && { int result = value + 3; value = 0; return result; }
+};
+
+struct OneOfExplicitConversion {
+  explicit operator int() const;
+};
+
+struct OneOfThrowingConversion {
+  operator int() const { KJ_FAIL_REQUIRE("one-of conversion failed"); }
+};
+
+static_assert(canConvert<OneOf<String, Array<int>>&, OneOf<StringPtr, ArrayPtr<int>>>());
+static_assert(canConvert<const OneOf<String, Array<int>>&,
+                        OneOf<ArrayPtr<const int>, StringPtr>>());
+static_assert(!canConvert<const OneOf<String, Array<int>>&,
+                         OneOf<StringPtr, ArrayPtr<int>>>());
+static_assert(!canConvert<OneOf<String, int>&, OneOf<StringPtr, ArrayPtr<int>>>());
+static_assert(!canConvert<OneOf<OneOfExplicitConversion>, OneOf<int>>());
+static_assert(!canConvert<OneOf<short>, OneOf<int, long>>());
+static_assert(canConvert<OneOf<short, int>, OneOf<long>>());
+static_assert(canConvert<OneOf<int>, OneOf<long, int, double>>());
+static_assert(isNoThrowMoveConstructible<OneOf<long>, OneOf<short, int>>());
+static_assert(!isNoThrowMoveConstructible<OneOf<int>, OneOf<OneOfThrowingConversion>>());
+
 TEST(OneOf, Basic) {
   OneOf<int, float, String> var;
 
@@ -209,6 +237,98 @@ KJ_TEST("OneOf copy/move from alternative variants") {
     KJ_ASSERT((dst.get<OneOf<int, float>>().is<float>()));
     KJ_EXPECT((dst.get<OneOf<int, float>>().get<float>() == 23.5));
   }
+}
+
+KJ_TEST("OneOf converts owning alternatives to borrowed pointer alternatives") {
+  {
+    OneOf<String, Array<int>> source = kj::str("hello");
+    OneOf<ArrayPtr<int>, StringPtr> view = source;
+    KJ_ASSERT(view.is<StringPtr>());
+    KJ_EXPECT(view.get<StringPtr>() == "hello");
+    KJ_EXPECT(view.get<StringPtr>().cStr() == source.get<String>().cStr());
+    KJ_EXPECT(source.get<String>() == "hello");
+  }
+  {
+    OneOf<String, Array<int>> source = kj::heapArray<int>({12, 34});
+    OneOf<ArrayPtr<int>, StringPtr> view = source;
+    KJ_ASSERT(view.is<ArrayPtr<int>>());
+    KJ_EXPECT(view.get<ArrayPtr<int>>().begin() == source.get<Array<int>>().begin());
+    view.get<ArrayPtr<int>>()[0] = 56;
+    KJ_EXPECT(source.get<Array<int>>()[0] == 56);
+
+    OneOf<StringPtr, ArrayPtr<int>> assigned = StringPtr("old");
+    assigned = source;
+    KJ_EXPECT(assigned.get<ArrayPtr<int>>()[1] == 34);
+
+    const auto& constSource = source;
+    OneOf<bool, ArrayPtr<const int>, StringPtr> readonly = constSource;
+    KJ_ASSERT(readonly.is<ArrayPtr<const int>>());
+    KJ_EXPECT(readonly.get<ArrayPtr<const int>>()[0] == 56);
+  }
+}
+
+KJ_TEST("OneOf conversions respect source reference qualification") {
+  OneOf<OneOfQualifiedConversion> source = OneOfQualifiedConversion{};
+  OneOf<int> mutableValue = source;
+  KJ_EXPECT(mutableValue.get<int>() == 124);
+  const auto& constSource = source;
+  OneOf<int> constValue = constSource;
+  KJ_EXPECT(constValue.get<int>() == 125);
+  OneOf<int> movedValue = kj::mv(source);
+  KJ_EXPECT(movedValue.get<int>() == 126);
+  KJ_EXPECT(source.is<OneOfQualifiedConversion>());
+  KJ_EXPECT(source.get<OneOfQualifiedConversion>().value == 0);
+}
+
+KJ_TEST("OneOf conversion prefers exact alternatives and can merge source alternatives") {
+  OneOf<int> source = 123;
+  OneOf<double, int, long> exact = source;
+  KJ_ASSERT(exact.is<int>());
+  KJ_EXPECT(exact.get<int>() == 123);
+
+  OneOf<short, int> first = short(12);
+  OneOf<long> firstConverted = first;
+  KJ_EXPECT(firstConverted.get<long>() == 12);
+  OneOf<short, int> second = 34;
+  OneOf<long> secondConverted = second;
+  KJ_EXPECT(secondConverted.get<long>() == 34);
+}
+
+KJ_TEST("OneOf converting constructors preserve uninitialized sources and nested alternatives") {
+  OneOf<short, int> source;
+  OneOf<long> mutableValue = source;
+  KJ_EXPECT(mutableValue == nullptr);
+  const auto& constSource = source;
+  OneOf<long> constValue = constSource;
+  KJ_EXPECT(constValue == nullptr);
+  OneOf<long> movedValue = kj::mv(source);
+  KJ_EXPECT(movedValue == nullptr);
+  OneOf<long, short, int> expanded = source;
+  KJ_EXPECT(expanded == nullptr);
+  OneOf<long, short, int> expandedMove = kj::mv(source);
+  KJ_EXPECT(expandedMove == nullptr);
+
+  OneOf<long> assigned = 123L;
+  assigned = source;
+  KJ_EXPECT(assigned == nullptr);
+
+  // The source OneOf is itself a destination alternative, so preserve the wrapper even when
+  // the source is uninitialized and its branches could otherwise convert to the nested OneOf.
+  OneOf<OneOf<short, int>> nested = source;
+  KJ_ASSERT((nested.is<OneOf<short, int>>()));
+  KJ_EXPECT((nested.get<OneOf<short, int>>() == nullptr));
+}
+
+KJ_TEST("OneOf conversion exceptions propagate without replacing the assignment target") {
+  OneOf<OneOfThrowingConversion> source = OneOfThrowingConversion{};
+  KJ_EXPECT_THROW_MESSAGE("one-of conversion failed", {
+    OneOf<int> converted = kj::mv(source);
+  });
+  KJ_EXPECT(source.is<OneOfThrowingConversion>());
+
+  OneOf<int> target = 123;
+  KJ_EXPECT_THROW_MESSAGE("one-of conversion failed", target = kj::mv(source));
+  KJ_EXPECT(target.get<int>() == 123);
 }
 
 KJ_TEST("OneOf equality") {
