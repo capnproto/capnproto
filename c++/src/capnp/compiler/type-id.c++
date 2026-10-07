@@ -360,11 +360,11 @@ void TypeIdGenerator::update(kj::ArrayPtr<const kj::byte> dataArray)
     free = 64 - used;
 
     if (size < free) {
-      memcpy(&ctx.buffer[used], data, size);
+      kj::arrayPtr(&ctx.buffer[used], size).copyFrom(kj::arrayPtr(data, size));
       return;
     }
 
-    memcpy(&ctx.buffer[used], data, free);
+    kj::arrayPtr(&ctx.buffer[used], free).copyFrom(kj::arrayPtr(data, free));
     data = data + free;
     size -= free;
     body(ctx.buffer, 64);
@@ -375,7 +375,7 @@ void TypeIdGenerator::update(kj::ArrayPtr<const kj::byte> dataArray)
     size &= 0x3f;
   }
 
-  memcpy(ctx.buffer, data, size);
+  kj::arrayPtr(ctx.buffer, size).copyFrom(kj::arrayPtr(data, size));
 }
 
 kj::ArrayPtr<const kj::byte> TypeIdGenerator::finish()
