@@ -403,38 +403,35 @@ private:
 };
 
 class OutgoingFds {
-  // Accumulates the file descriptors to attach to one outgoing message, along with a reference to
-  // the capability each one came from.
+  // Accumulates the file descriptor references to attach to one outgoing message.
   //
-  // A capability's descriptor is only guaranteed to stay open as long as the capability itself
-  // lives, but `OutgoingRpcMessage::send()` is permitted to merely queue the message. A capability
-  // dropped in between would take its descriptor with it, leaving a number that is closed, or that
-  // has since been reused for some unrelated file, to be written. `release()` therefore hands these
-  // references to the message so that the capabilities outlive the write.
+  // `OutgoingRpcMessage::send()` may queue the message rather than writing it immediately.
+  // `release()` extracts the descriptor numbers and attaches the `FdRef`s to the resulting
+  // array, keeping every descriptor valid until the transport finishes writing the message.
 
 public:
   size_t size() {
-    return fds.size();
+    return fdRefs.size();
   }
 
-  void add(int fd, ClientHook& owner) {
-    fds.add(fd);
-    owners.add(owner.addRef());
+  void add(ClientHook::FdRef fdRef) {
+    fdRefs.add(kj::mv(fdRef));
   }
 
   kj::Array<int> release() {
-    // The descriptors, with the capabilities they came from attached. Pass this to
+    // The descriptor numbers, with their FdRefs attached. Pass this to
     // `OutgoingRpcMessage::setFds()`, which holds it until the message has been written.
-    if (fds.size() == 0) {
+    if (fdRefs.size() == 0) {
       // Nothing to keep alive, and there'd be no array to attach it to in any case.
       return nullptr;
     }
-    return fds.releaseAsArray().attach(owners.releaseAsArray());
+    auto keepAlives = fdRefs.releaseAsArray();
+    auto fds = KJ_MAP(fd, keepAlives) { return fd.get(); };
+    return fds.attach(kj::mv(keepAlives));
   }
 
 private:
-  kj::Vector<int> fds;
-  kj::Vector<kj::Own<ClientHook>> owners;
+  kj::Vector<ClientHook::FdRef> fdRefs;
 };
 
 }  // namespace
@@ -1251,8 +1248,8 @@ private:
       return kj::none;
     }
 
-    kj::Maybe<int> getFd() override {
-      return fd.map([](auto& f) { return f.get(); });
+    kj::Maybe<FdRef> getFd() override {
+      return fd.map([&](auto& f) { return FdRef(f.get(), addRef()); });
     }
 
   private:
@@ -1304,7 +1301,7 @@ private:
       return kj::none;
     }
 
-    kj::Maybe<int> getFd() override {
+    kj::Maybe<FdRef> getFd() override {
       return kj::none;
     }
 
@@ -1436,7 +1433,7 @@ private:
       return fork.addBranch();
     }
 
-    kj::Maybe<int> getFd() override {
+    kj::Maybe<FdRef> getFd() override {
       if (isResolved) {
         return cap->getFd();
       } else {
@@ -1741,7 +1738,7 @@ private:
       return ensureAccepted().whenMoreResolved();
     }
 
-    kj::Maybe<int> getFd() override {
+    kj::Maybe<FdRef> getFd() override {
       // This is free to return null if `whenMoreResolved()` would return non-null, which it
       // always will.
       return kj::none;
@@ -1793,7 +1790,7 @@ private:
 
     KJ_IF_SOME(fd, inner->getFd()) {
       descriptor.setAttachedFd(fds.size());
-      fds.add(fd, *inner);
+      fds.add(kj::mv(fd));
     }
 
     KJ_IF_SOME(rpcInner, unwrapIfSameNetwork(*inner)) {
@@ -2178,7 +2175,7 @@ private:
     kj::Own<ClientHook> addRef() override {
       return kj::addRef(*this);
     }
-    kj::Maybe<int> getFd() override {
+    kj::Maybe<FdRef> getFd() override {
       return inner->getFd();
     }
 

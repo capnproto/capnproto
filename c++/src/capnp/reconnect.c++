@@ -69,7 +69,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     // It's not safe to return current->getFd() because normally callers wouldn't expect the FD to
     // change or go away over time, but this one could whenever we reconnect. If there's a use
     // case for being able to access the FD here, we'll need a different interface to do it.

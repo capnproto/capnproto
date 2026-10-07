@@ -27,6 +27,7 @@
 #include <kj/refcount.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
+#include <kj/async-queue.h>
 #include "generated-header-support.h"
 
 #if !KJ_NO_RTTI
@@ -73,9 +74,8 @@ Capability::Client::Client(kj::Exception&& exception)
     : hook(newBrokenCap(kj::mv(exception))) {}
 
 kj::Promise<kj::Maybe<int>> Capability::Client::getFd() {
-  auto fd = hook->getFd();
-  if (fd != kj::none) {
-    return fd;
+  KJ_IF_SOME(fd, hook->getFd()) {
+    return kj::Maybe<int>(fd.get());
   } else KJ_IF_SOME(promise, hook->whenMoreResolved()) {
     return promise.attach(hook->addRef()).then([](kj::Own<ClientHook> newHook) {
       return Client(kj::mv(newHook)).getFd();
@@ -465,7 +465,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     KJ_IF_SOME(r, redirect) {
       return r->getFd();
     } else {
@@ -549,6 +549,22 @@ private:
 };
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
+  enum class RevocationState { NOT_REVOKED, REVOKING, REVOKED };
+
+  class FdLease {
+  public:
+    FdLease(kj::Own<LocalClient> client): client(kj::mv(client)) {
+      ++this->client->fdLeaseCount;
+    }
+
+    ~FdLease() noexcept(false) {
+      client->releaseFdLease();
+    }
+
+  private:
+    kj::Own<LocalClient> client;
+  };
+
 public:
   LocalClient(kj::Own<Capability::Server>&& serverParam, bool revocable = false)
       : ClientHook(&BRAND) {
@@ -571,6 +587,9 @@ public:
     KJ_IF_SOME(s, server) {
       s->thisHook = kj::none;
     }
+    while (!serverDestroyableWaiters.empty()) {
+      serverDestroyableWaiters.fulfill(false);
+    }
   }
 
   bool isRevocable() {
@@ -578,12 +597,34 @@ public:
   }
 
   void revoke(kj::Exception&& e) {
-    KJ_IF_SOME(s, server) {
-      KJ_ASSERT_NONNULL(revoker).cancel(e);
-      brokenException = kj::mv(e);
-      s->thisHook = kj::none;
-      server = kj::none;
+    if (revocationState == RevocationState::NOT_REVOKED) {
+      KJ_IF_SOME(s, server) {
+        auto self = kj::addRef(*this);
+
+        // set to revoking to avoid reentrancy problems. if cancel throws, then
+        // reset to not revoked so that another call to revoke can maybe work.
+        revocationState = RevocationState::REVOKING;
+        KJ_DEFER({
+          if (revocationState == RevocationState::REVOKING) {
+            revocationState = RevocationState::NOT_REVOKED;
+          }
+        });
+
+        KJ_ASSERT_NONNULL(revoker).cancel(e);
+
+        brokenException = e.clone();
+        s->thisHook = kj::none;
+        revocationState = RevocationState::REVOKED;
+        releaseServerIfDestroyable();
+      }
     }
+  }
+
+  kj::Promise<void> whenServerDestroyable() {
+    if (server == kj::none) {
+      return kj::READY_NOW;
+    }
+    return serverDestroyableWaiters.wait().ignoreResult();
   }
 
   Request<AnyPointer, AnyPointer> newCall(
@@ -747,12 +788,25 @@ public:
     }
   }
 
-  kj::Maybe<int> getFd() override {
-    KJ_IF_SOME(s, server) {
-      return s->getFd();
-    } else {
+  kj::Maybe<FdRef> getFd() override {
+    if (revocationState != RevocationState::NOT_REVOKED) {
       return kj::none;
     }
+    KJ_IF_SOME(s, server) {
+      if (isRevocable()) {
+        auto lease = kj::heap<FdLease>(kj::addRef(*this));
+        KJ_IF_SOME(fd, s->getFd()) {
+          if (revocationState == RevocationState::NOT_REVOKED) {
+            return FdRef(fd, kj::mv(lease));
+          }
+        }
+      } else {
+        KJ_IF_SOME(fd, s->getFd()) {
+          return FdRef(fd, addRef());
+        }
+      }
+    }
+    return kj::none;
   }
 
   void debugInfo(kj::Vector<kj::ConstString>& chain) override {
@@ -783,6 +837,25 @@ private:
 
   kj::Maybe<kj::Canceler> revoker;
   // If non-null, all promises must be wrapped in this revoker.
+
+  uint fdLeaseCount = 0;
+  RevocationState revocationState = RevocationState::NOT_REVOKED;
+  kj::WaiterQueue<bool> serverDestroyableWaiters;
+
+  void releaseFdLease() {
+    KJ_REQUIRE(fdLeaseCount > 0);
+    --fdLeaseCount;
+    releaseServerIfDestroyable();
+  }
+
+  void releaseServerIfDestroyable() {
+    if (revocationState == RevocationState::REVOKED && fdLeaseCount == 0) {
+      server = kj::none;
+      while (!serverDestroyableWaiters.empty()) {
+        serverDestroyableWaiters.fulfill(false);
+      }
+    }
+  }
 
   void startResolveTask(Capability::Server& serverRef) {
     resolveTask = serverRef.shortenPath().map([this](kj::Promise<Capability::Client> promise) {
@@ -981,6 +1054,9 @@ void Capability::Client::revokeLocalClient(ClientHook& hook) {
 void Capability::Client::revokeLocalClient(ClientHook& hook, kj::Exception&& e) {
   kj::downcast<LocalClient>(hook).revoke(kj::mv(e));
 }
+kj::Promise<void> Capability::Client::whenLocalServerDestroyable(ClientHook& hook) {
+  return kj::downcast<LocalClient>(hook).whenServerDestroyable();
+}
 
 kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& promise) {
   return kj::refcounted<QueuedClient>(kj::mv(promise));
@@ -1095,7 +1171,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     return kj::none;
   }
 
