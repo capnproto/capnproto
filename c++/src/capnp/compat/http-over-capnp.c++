@@ -697,7 +697,13 @@ public:
     auto downPipe = kj::newOneWayPipe();
     rpcRequest.setHost(host);
     rpcRequest.setDown(factory.streamFactory.kjToCapnp(kj::mv(downPipe.out)));
-    rpcRequest.initSettings().setUseTls(settings.useTls);
+    auto settingsBuilder = rpcRequest.initSettings();
+    settingsBuilder.setUseTls(settings.useTls);
+    // Tell the server whether we can act on a startTls() call on the `up` stream, which is the
+    // case exactly when our own caller gave us a tlsStarter to fill in below.
+    settingsBuilder.setClientStartTls(settings.tlsStarter != kj::none
+            ? ConnectSettings::StartTlsSupport::YES
+            : ConnectSettings::StartTlsSupport::NO);
 
     ConnectClientRequestContextImpl context(factory, tunnel);
     RevocableServer<capnp::HttpService::ConnectClientRequestContext> revocableContext(context);
@@ -730,7 +736,7 @@ public:
           mutable -> kj::Promise<void> {
         auto startTlsRpcRequest = upForStartTls.startTlsRequest();
         startTlsRpcRequest.setExpectedServerHostname(expectedServerHostname);
-        return startTlsRpcRequest.send();
+        return startTlsRpcRequest.sendIgnoringResult();
       };
       tlsStarter = kj::mv(cb);
     }
@@ -970,7 +976,13 @@ public:
     kj::HttpConnectSettings settings = {
         .useTls = params.getSettings().getUseTls(),
         .tlsStarter = kj::none };
-    settings.tlsStarter = tlsStarter;
+    if (params.getSettings().getClientStartTls() != ConnectSettings::StartTlsSupport::NO) {
+      // The client is prepared to call startTls() on the `up` stream, which invokes whatever
+      // callback the service below fills in here. A client that says it is not must not be offered
+      // a tlsStarter at all: a service which can only upgrade in cooperation with the client would
+      // otherwise wait forever for a request that can never arrive.
+      settings.tlsStarter = tlsStarter;
+    }
     auto headers = factory.capnpToKj(params.getHeaders());
     auto pipe = kj::newTwoWayPipe();
 

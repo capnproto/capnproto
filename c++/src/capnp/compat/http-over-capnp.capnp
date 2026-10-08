@@ -114,6 +114,24 @@ interface HttpService {
 
 struct ConnectSettings {
   useTls @0 :Bool;
+
+  clientStartTls @1 :StartTlsSupport;
+  # Whether the client can act on a `startTls()` call on the `up` stream, i.e. whether it passed a
+  # `tlsStarter` of its own in `kj::HttpConnectSettings`. The server side uses this to decide
+  # whether to offer a `tlsStarter` to the service handling the tunnel, which is how that service
+  # learns whether its peer is prepared to take part in an upgrade: a service that can only start
+  # TLS in cooperation with the client, rather than on a socket it owns outright, needs to know
+  # that before it offers the upgrade to its own caller.
+
+  enum StartTlsSupport {
+    unknown @0;
+    # Implicitly set by peers that predate this field. The server side treats this as `yes`, because
+    # it always offered a tlsStarter before the field existed and a client omitting the field is
+    # also old enough to expect that.
+
+    no @1;
+    yes @2;
+  }
 }
 
 interface WebSocket {
