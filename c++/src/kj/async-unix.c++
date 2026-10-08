@@ -586,9 +586,8 @@ bool UnixEventPort::wait() {
   }
 #endif
 
-  int timeout = timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
-          .map([](uint64_t t) -> int { return t; })
-          .orDefault(-1);
+  int timeout = Maybe<int>(
+      timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))).orDefault(-1);
 
   struct epoll_event events[16];
   int n;
@@ -1556,10 +1555,8 @@ bool UnixEventPort::wait() {
   threadCapture = &capture;
   pthread_sigmask(SIG_UNBLOCK, &newMask, &originalMask);
 
-  pollContext.run(
-      timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))
-          .map([](uint64_t t) -> int { return t; })
-          .orDefault(-1));
+  pollContext.run(Maybe<int>(
+      timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, int(maxValue))).orDefault(-1));
 
   pthread_sigmask(SIG_SETMASK, &originalMask, nullptr);
   threadCapture = nullptr;

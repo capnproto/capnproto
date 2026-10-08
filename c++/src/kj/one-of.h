@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "string.h"
+#include "tuple.h"
 
 KJ_BEGIN_HEADER
 
@@ -356,10 +357,37 @@ class OneOf {
     return _::TypeIndex_<1, _::OneOfFailZero_, Key, Variants...>::value;
   }
 
+  template <typename From>
+  static constexpr uint conversionIndex() {
+    constexpr uint exact = typeIndexOrZero<Decay<From>>();
+    if constexpr (exact != 0) {
+      return exact;
+    } else if constexpr ((uint(_::ImplicitlyConstructibleFrom<Variants, From>) + ...) == 1) {
+      uint index = 0;
+      uint result = 0;
+      ((++index, _::ImplicitlyConstructibleFrom<Variants, From> ? result = index : 0), ...);
+      return result;
+    } else {
+      return 0;
+    }
+  }
+  // Prefer an exact variant; otherwise accept only one implicitly convertible destination.
+  // Return zero if there is no match or the conversion is ambiguous.
+
+  template <typename From>
+  static constexpr bool isNoThrowConversion() {
+    if constexpr (conversionIndex<From>() == 0) {
+      return false;
+    } else {
+      using To = _::TypeByIndex<conversionIndex<From>() - 1, Variants...>;
+      return kj::isNoThrowMoveConstructible<To, From>();
+    }
+  }
+
   template <uint i, typename... OtherVariants>
   struct HasAll;
   // Has a member type called "Success" if and only if all of `OtherVariants` are types that
-  // appear in `Variants`. Used with SFINAE to enable subset constructors.
+  // appear in `Variants`. Used with SFINAE to enable the exact-value constructor.
 
 public:
   inline OneOf(): tag(0) {}
@@ -371,16 +399,36 @@ public:
   }
   // Copy/move from same OneOf type.
 
-  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(const OneOf<OtherVariants...>& other) { copyFromSubset(other); }
-  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(OneOf<OtherVariants...>& other) { copyFromSubset(other); }
-  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(OneOf<OtherVariants...>&& other)
-      noexcept((kj::isNoThrowMoveConstructible<OtherVariants>() && ...)) {
-    moveFromSubset(other);
+  template <typename... OtherVariants>
+    requires (typeIndexOrZero<OneOf<OtherVariants...>>() == 0 &&
+        ((conversionIndex<const OtherVariants&>() != 0) && ...))
+  OneOf(const OneOf<OtherVariants...>& other): tag(0) {
+    (convertVariantFrom<OtherVariants>(other), ...);
   }
-  // Copy/move from OneOf that contains a subset of the types we do.
+  template <typename... OtherVariants>
+    requires (typeIndexOrZero<OneOf<OtherVariants...>>() == 0 &&
+        ((conversionIndex<OtherVariants&>() != 0) && ...))
+  OneOf(OneOf<OtherVariants...>& other): tag(0) {
+    (convertVariantFrom<OtherVariants>(other), ...);
+  }
+  template <typename... OtherVariants>
+    requires (typeIndexOrZero<OneOf<OtherVariants...>>() == 0 &&
+        ((conversionIndex<OtherVariants&&>() != 0) && ...))
+  OneOf(OneOf<OtherVariants...>&& other)
+      noexcept((isNoThrowConversion<OtherVariants&&>() && ...)): tag(0) {
+    (convertVariantFrom<OtherVariants>(kj::mv(other)), ...);
+  }
+  // Copy/move from another OneOf when each source variant either exactly matches a destination
+  // variant or implicitly converts to exactly one destination variant. Source and destination
+  // order need not match, and multiple source variants can convert to the same destination.
+  // If the source OneOf itself is a destination variant, wrap it instead of converting its
+  // alternatives. Uninitialized sources produce uninitialized results.
+  //
+  // Lvalue sources convert from mutable or const references; rvalues convert from rvalue
+  // references. As with same-type moves, a moved source retains its tag and moved-from value.
+  // Converting to borrowed pointer types does not retain the owner, so keep the original data
+  // alive. For example, an lvalue OneOf<String, Array<int>> can convert to
+  // OneOf<StringPtr, ArrayPtr<int>>, but the result only borrows from the original OneOf.
 
   template <typename T, typename = typename HasAll<0, Decay<T>>::Success>
   OneOf(T&& other) noexcept(kj::isNoThrowMoveConstructible<Decay<T>>()):
@@ -598,45 +646,13 @@ private:
     doAll(moveVariantFrom<Variants>(other)...);
   }
 
-  template <typename T, typename... OtherVariants>
-  inline bool copySubsetVariantFrom(const OneOf<OtherVariants...>& other) {
+  template <typename T, typename Other>
+  void convertVariantFrom(Other&& other) {
     if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      using From = decltype(kj::fwd<Other>(other).template get<T>());
+      using To = _::TypeByIndex<conversionIndex<From>() - 1, Variants...>;
+      init<To>(kj::fwd<Other>(other).template get<T>());
     }
-    return false;
-  }
-  template <typename... OtherVariants>
-  void copyFromSubset(const OneOf<OtherVariants...>& other) {
-    doAll(copySubsetVariantFrom<OtherVariants>(other)...);
-  }
-
-  template <typename T, typename... OtherVariants>
-  inline bool copySubsetVariantFrom(OneOf<OtherVariants...>& other) {
-    if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
-    }
-    return false;
-  }
-  template <typename... OtherVariants>
-  void copyFromSubset(OneOf<OtherVariants...>& other) {
-    doAll(copySubsetVariantFrom<OtherVariants>(other)...);
-  }
-
-  template <typename T, typename... OtherVariants>
-  inline bool moveSubsetVariantFrom(OneOf<OtherVariants...>& other)
-      noexcept(kj::isNoThrowMoveConstructible<T>()) {
-    if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
-    }
-    return false;
-  }
-  template <typename... OtherVariants>
-  void moveFromSubset(OneOf<OtherVariants...>& other)
-      noexcept((kj::isNoThrowMoveConstructible<OtherVariants>() && ...)) {
-    doAll(moveSubsetVariantFrom<OtherVariants>(other)...);
   }
 };
 

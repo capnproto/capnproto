@@ -37,6 +37,33 @@ struct ImplicitToInt {
   }
 };
 
+struct MutableToInt {
+  int value;
+  operator int() & { return value; }
+};
+
+struct RefQualifiedToInt {
+  operator int() & { return 123; }
+  operator int() const & { return 456; }
+  operator int() && { return 789; }
+};
+
+static_assert(canConvert<Maybe<int>, Maybe<long>>());
+static_assert(canConvert<Maybe<ImplicitToInt>, Maybe<int>>());
+static_assert(canConvert<Maybe<MutableToInt>&, Maybe<int>>());
+static_assert(!canConvert<const Maybe<MutableToInt>&, Maybe<int>>());
+static_assert(!canConvert<Maybe<MutableToInt>, Maybe<int>>());
+static_assert(canConvert<Maybe<MutableToInt&>, Maybe<int>>());
+static_assert(canConvert<Maybe<Array<int>>&, Maybe<ArrayPtr<int>>>());
+static_assert(!canConvert<const Maybe<Array<int>>&, Maybe<ArrayPtr<int>>>());
+static_assert(canConvert<const Maybe<Array<int>>&, Maybe<ArrayPtr<const int>>>());
+static_assert(canConvert<const Maybe<String>&, Maybe<StringPtr>>());
+static_assert(!canConvert<Maybe<int>, Maybe<String>>());
+static_assert(!_::ConstructibleFrom<Maybe<String>, Maybe<int>>);
+static_assert(_::AssignableFrom<Maybe<int>, Maybe<MutableToInt>&>);
+static_assert(!_::AssignableFrom<Maybe<int>, const Maybe<MutableToInt>&>);
+static_assert(!_::AssignableFrom<Maybe<String>, Maybe<int>>);
+
 struct Immovable {
   Immovable() = default;
   KJ_DISALLOW_COPY_AND_MOVE(Immovable);
@@ -2053,7 +2080,77 @@ KJ_TEST("Maybe<T> T-value copy-assignment is safe when this owns other") {
 }
 
 // =======================================================================================
-// Cross-type assignment tests
+// Cross-type conversion and assignment tests
+
+KJ_TEST("Maybe conversions follow the contained value's reference qualification") {
+  Maybe<RefQualifiedToInt> source;
+  source.emplace();
+  Maybe<int> mutableValue = source;
+  KJ_EXPECT(mutableValue.assertSome() == 123);
+  KJ_EXPECT(source != kj::none);
+
+  const auto& constSource = source;
+  Maybe<int> constValue = constSource;
+  KJ_EXPECT(constValue.assertSome() == 456);
+  KJ_EXPECT(source != kj::none);
+
+  Maybe<int> movedValue = kj::mv(source);
+  KJ_EXPECT(movedValue.assertSome() == 789);
+  KJ_EXPECT(source == kj::none);
+
+  RefQualifiedToInt referent;
+  Maybe<RefQualifiedToInt&> reference = referent;
+  Maybe<int> copiedReferent = kj::mv(reference);
+  KJ_EXPECT(copiedReferent.assertSome() == 123);
+  KJ_EXPECT(reference == kj::none);
+
+  Maybe<MutableToInt> mutableSource = MutableToInt{42};
+  Maybe<int> value = mutableSource;
+  KJ_EXPECT(value.assertSome() == 42);
+  value = mutableSource;
+  KJ_EXPECT(value.assertSome() == 42);
+  KJ_EXPECT(mutableSource.assertSome().value == 42);
+  mutableSource = kj::none;
+  value = mutableSource;
+  KJ_EXPECT(value == kj::none);
+}
+
+KJ_TEST("Maybe implicitly converts owning values to borrowed pointer values") {
+  Maybe<Array<int>> owner = kj::heapArray<int>({12, 34});
+  Maybe<ArrayPtr<int>> ptr = owner;
+  KJ_EXPECT(ptr.assertSome().begin() == owner.assertSome().begin());
+  ptr.assertSome()[0] = 56;
+  KJ_EXPECT(owner.assertSome()[0] == 56);
+
+  Maybe<ArrayPtr<int>> assigned;
+  assigned = owner;
+  KJ_EXPECT(assigned.assertSome()[0] == 56);
+  const auto& constOwner = owner;
+  Maybe<ArrayPtr<const int>> readonly = constOwner;
+  KJ_EXPECT(readonly.assertSome()[1] == 34);
+
+  Maybe<String> string = kj::str("hello");
+  Maybe<StringPtr> text = string;
+  KJ_EXPECT(text.assertSome().cStr() == string.assertSome().cStr());
+  KJ_EXPECT(text.assertSome() == "hello");
+}
+
+KJ_TEST("Maybe cross-type conversions preserve empty sources") {
+  Maybe<RefQualifiedToInt> empty;
+  Maybe<int> mutableValue = empty;
+  KJ_EXPECT(mutableValue == kj::none);
+  const auto& constEmpty = empty;
+  Maybe<int> constValue = constEmpty;
+  KJ_EXPECT(constValue == kj::none);
+  Maybe<int> movedValue = kj::mv(empty);
+  KJ_EXPECT(movedValue == kj::none);
+  KJ_EXPECT(empty == kj::none);
+
+  Maybe<RefQualifiedToInt&> reference;
+  Maybe<int> copiedReferent = kj::mv(reference);
+  KJ_EXPECT(copiedReferent == kj::none);
+  KJ_EXPECT(reference == kj::none);
+}
 
 KJ_TEST("Maybe<StringPtr> assigned from Maybe<String>") {
   // String is not copyable, so cross-type assignment must not try to copy the Maybe<String>.
