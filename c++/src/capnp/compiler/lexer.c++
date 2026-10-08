@@ -143,13 +143,12 @@ void attachDocComment(Statement::Builder statement, kj::Array<kj::String>&& comm
     size += line.size() + 1;  // include newline
   }
   Text::Builder builder = statement.initDocComment(size);
-  char* pos = builder.begin();
+  kj::ArrayPtr<char> pos = builder.asArray();
   for (auto& line: comment) {
-    memcpy(pos, line.begin(), line.size());
-    pos += line.size();
-    *pos++ = '\n';
+    pos.write(line.asArray());
+    pos.write(kj::StringPtr("\n").asArray());
   }
-  KJ_ASSERT(pos == builder.end());
+  KJ_ASSERT(pos.size() == 0);
 }
 
 constexpr auto discardComment =

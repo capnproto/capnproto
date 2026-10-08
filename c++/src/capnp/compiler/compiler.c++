@@ -450,10 +450,10 @@ kj::StringPtr Compiler::Node::joinDisplayName(
   kj::ArrayPtr<char> result = arena.allocateArray<char>(
       parent.displayName.size() + declName.size() + 2);
 
-  size_t separatorPos = parent.displayName.size();
-  memcpy(result.begin(), parent.displayName.begin(), separatorPos);
-  result[separatorPos] = parent.parent == kj::none ? ':' : '.';
-  memcpy(result.begin() + separatorPos + 1, declName.begin(), declName.size());
+  kj::ArrayPtr<char> pos = result;
+  pos.write(parent.displayName.asArray());
+  pos.write(kj::StringPtr(parent.parent == kj::none ? ":" : ".").asArray());
+  pos.write(declName.asArray());
   result[result.size() - 1] = '\0';
   return kj::StringPtr(result.begin(), result.size() - 1);
 }
