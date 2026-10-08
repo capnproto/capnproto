@@ -73,6 +73,8 @@ function check_capnpc_packaging() {
     pc_dir=$(dirname "${capnpc_pc%%$'\n'*}")
     PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
         doit pkg-config --exists --print-errors capnpc
+    PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+        doit pkg-config --cflags --libs --static capnpc
     if ! PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
         pkg-config --libs --static capnpc | tr ' ' '\n' | grep -qx -- '-lcapnp'; then
       echo "error: capnpc.pc does not declare required dependency on capnp" >&2
