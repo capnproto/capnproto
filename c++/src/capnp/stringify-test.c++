@@ -701,6 +701,27 @@ TEST(Stringify, Generics) {
   EXPECT_EQ("(foo = \"abcd\", bar = [123, 456])", kj::str(root));
 }
 
+TEST(Stringify, Using) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestUsing>();
+  root.setUserId(42);
+  root.setUserIdAlias(99);
+  auto list = root.initUserIds(3);
+  list.set(0, 1);
+  list.set(1, 2);
+  list.set(2, 3);
+
+  // The accessor type for an alias-of-list field is the alias itself.
+  UInt32List::Builder aliasedList = root.initAliasedList(2);
+  aliasedList.set(0, 10);
+  aliasedList.set(1, 20);
+
+  EXPECT_EQ(
+      "(innerNestedEnum = quux, outerNestedEnum = bar, userId = 42, userIdAlias = 99, "
+      "userIds = [1, 2, 3], aliasedList = [10, 20])",
+      kj::str(root.asReader()));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

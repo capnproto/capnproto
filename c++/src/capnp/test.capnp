@@ -27,6 +27,10 @@ using Cxx = import "c++.capnp";
 # names for stuff in the capnproto namespace.
 $Cxx.namespace("capnproto_test::capnp::test");
 
+# Primitive-target alias and chained alias-of-alias, exercised by TestUsing's fields.
+using TestUserId = UInt64;
+using TestUserIdAlias = TestUserId;
+
 enum TestEnum {
   foo @0;
   bar @1;
@@ -387,6 +391,13 @@ struct TestUsing {
 
   outerNestedEnum @1 :OuterNestedEnum = bar;
   innerNestedEnum @0 :NestedEnum = quux;
+
+  userId       @2 :TestUserId;
+  userIdAlias  @3 :TestUserIdAlias;
+  userIds      @4 :List(TestUserId);
+
+  # Alias-of-list: accessor preserves the UInt32List alias.
+  aliasedList  @5 :UInt32List;
 }
 
 struct TestLists {
@@ -589,6 +600,10 @@ struct TestGenerics(Foo, Bar) {
 
 struct BoxedText { text @0 :Text; }
 using BrandedAlias = TestGenerics(BoxedText, Text);
+
+# Alias of a list type (distinct from a list whose element uses an alias), referenced by
+# TestUsing's aliasedList field.
+using UInt32List = List(UInt32);
 
 struct TestGenericsWrapper(Foo, Bar) {
   value @0 :TestGenerics(Foo, Bar);

@@ -38,17 +38,33 @@ typedef std::unordered_map<uint64_t, Orphan<schema::Node::SourceInfo::Reader>> S
 
 class Compiler::Alias {
 public:
-  Alias(CompiledModule& module, Node& parent, const Expression::Reader& targetName)
-      : module(module), parent(parent), targetName(targetName) {}
+  Alias(CompiledModule& module, Node& parent, kj::StringPtr name,
+        Declaration::Reader declaration);
 
   kj::Maybe<Resolver::ResolveResult> compile();
+
+  kj::StringPtr getName() const { return name; }
+  uint64_t getId() const { return id; }
+  bool isFileImport() const { return targetName.isImport(); }
+
+  struct BuiltAliasNode {
+    schema::Node::Reader node;
+    schema::Node::SourceInfo::Reader sourceInfo;
+  };
+  kj::Maybe<BuiltAliasNode> buildAliasNode();
 
 private:
   CompiledModule& module;
   Node& parent;
+  kj::StringPtr name;
+  Declaration::Reader declaration;
   Expression::Reader targetName;
+  uint64_t id;
   kj::Maybe<Resolver::ResolveResult> target;
   Orphan<schema::Brand> brandOrphan;
+  Orphan<schema::Type> targetTypeOrphan;
+  Orphan<schema::Node> nodeOrphan;
+  Orphan<schema::Node::SourceInfo> sourceInfoOrphan;
   bool initialized = false;
 };
 
@@ -103,6 +119,8 @@ public:
   kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) override;
   kj::Maybe<kj::Array<const byte>> readEmbed(kj::StringPtr name) override;
   kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) override;
+
+  friend class Compiler::Alias;
 
 private:
   CompiledModule* module;  // null iff isBuiltin is true
@@ -356,26 +374,99 @@ private:
 
 // =======================================================================================
 
+static size_t lengthUpToLast(kj::StringPtr str, char sep) {
+  KJ_IF_SOME(p, str.findLast(sep)) {
+    return p + 1;
+  } else {
+    return 0;
+  }
+}
+
+static void setDisplayName(schema::Node::Builder builder, kj::StringPtr displayName) {
+  builder.setDisplayName(displayName);
+  // Prefix length: up to (and including) the last '.' or ':' separator, whichever comes later.
+  builder.setDisplayNamePrefixLength(kj::max(
+      lengthUpToLast(displayName, '.'),
+      lengthUpToLast(displayName, ':')
+  ));
+}
+
+Compiler::Alias::Alias(CompiledModule& module, Node& parent, kj::StringPtr name,
+                       Declaration::Reader declaration)
+    : module(module), parent(parent), name(name), declaration(declaration),
+      targetName(declaration.getUsing().getTarget()),
+      id(generateChildId(parent.getId(), name)) {}
+
 kj::Maybe<Resolver::ResolveResult> Compiler::Alias::compile() {
   if (!initialized) {
     initialized = true;
 
     auto& workspace = module.getCompiler().getWorkspace();
     brandOrphan = workspace.orphanage.newOrphan<schema::Brand>();
+    targetTypeOrphan = workspace.orphanage.newOrphan<schema::Type>();
+    nodeOrphan = workspace.orphanage.newOrphan<schema::Node>();
+    sourceInfoOrphan = workspace.orphanage.newOrphan<schema::Node::SourceInfo>();
 
     // If the Workspace is destroyed, revert the alias to the uninitialized state, because the
     // orphan we created is no longer valid in this case.
     workspace.arena.copy(kj::defer([this]() {
       initialized = false;
       brandOrphan = Orphan<schema::Brand>();
+      targetTypeOrphan = Orphan<schema::Type>();
+      nodeOrphan = Orphan<schema::Node>();
+      sourceInfoOrphan = Orphan<schema::Node::SourceInfo>();
     }));
 
     target = NodeTranslator::compileDecl(
         parent.getId(), parent.getParameterCount(), parent,
-        module.getErrorReporter(), targetName, brandOrphan.get());
+        module.getErrorReporter(), targetName, brandOrphan.get(), targetTypeOrphan.get());
+
+    KJ_IF_SOME(r, target) {
+      KJ_IF_SOME(decl, r.tryGet<Resolver::ResolvedDecl>()) {
+        decl.usingId = id;
+      }
+    }
   }
 
   return target;
+}
+
+kj::Maybe<Compiler::Alias::BuiltAliasNode> Compiler::Alias::buildAliasNode() {
+  if (!initialized) compile();
+  if (target == kj::none) return kj::none;
+
+  auto builder = nodeOrphan.get();
+
+  builder.setId(id);
+
+  kj::StringPtr displayName = Node::joinDisplayName(
+      module.getCompiler().getNodeArena(), parent, name);
+  setDisplayName(builder, displayName);
+
+  builder.setScopeId(parent.getId());
+  builder.setStartByte(declaration.getStartByte());
+  builder.setEndByte(declaration.getEndByte());
+
+  auto& t = KJ_ASSERT_NONNULL(target);
+  // File-import aliases (e.g. `using Cxx = import "/capnp/c++.capnp"`) cannot be represented
+  // in the schema -- the import path is not preserved -- so skip building a node for them.
+  KJ_IF_SOME(decl, t.tryGet<Resolver::ResolvedDecl>()) {
+    if (decl.kind == Declaration::FILE) {
+      return kj::none;
+    }
+  }
+  builder.initUsing().setTarget(targetTypeOrphan.getReader());
+
+  // Build matching SourceInfo so doc comments on `using` declarations are preserved.
+  auto sourceInfoBuilder = sourceInfoOrphan.get();
+  sourceInfoBuilder.setId(id);
+  if (declaration.hasDocComment()) {
+    sourceInfoBuilder.setDocComment(declaration.getDocComment());
+  }
+  sourceInfoBuilder.setStartByte(declaration.getStartByte());
+  sourceInfoBuilder.setEndByte(declaration.getEndByte());
+
+  return BuiltAliasNode { nodeOrphan.getReader(), sourceInfoOrphan.getReader() };
 }
 
 // =======================================================================================
@@ -498,9 +589,9 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
           }
 
           case Declaration::USING: {
-            kj::Own<Alias> alias = arena.allocateOwn<Alias>(
-                *module, *this, nestedDecl.getUsing().getTarget());
             kj::StringPtr name = nestedDecl.getName().getValue();
+            kj::Own<Alias> alias = arena.allocateOwn<Alias>(
+                *module, *this, name, nestedDecl);
             content.aliases.insert(std::make_pair(name, kj::mv(alias)));
             break;
           }
@@ -531,26 +622,33 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       auto schemaNode = workspace.orphanage.newOrphan<schema::Node>();
       auto builder = schemaNode.get();
       builder.setId(id);
-      builder.setDisplayName(displayName);
       // TODO(cleanup):  Would be better if we could remember the prefix length from before we
       //   added this decl's name to the end.
-      KJ_IF_SOME(lastDot, displayName.findLast('.')) {
-        builder.setDisplayNamePrefixLength(lastDot + 1);
-      }
-      KJ_IF_SOME(lastColon, displayName.findLast(':')) {
-        if (lastColon > builder.getDisplayNamePrefixLength()) {
-          builder.setDisplayNamePrefixLength(lastColon + 1);
-        }
-      }
+      setDisplayName(builder, displayName);
       KJ_IF_SOME(p, parent) {
         builder.setScopeId(p.id);
       }
 
-      auto nestedNodes = builder.initNestedNodes(content.orderedNestedNodes.size());
+      // File-import aliases (`using X = import "...";`) don't produce schema nodes; filter them
+      // out so consumers iterating nestedNodes can always resolve each entry's ID.
+      kj::Vector<Alias*> exposedAliases(content.aliases.size());
+      for (auto& entry: content.aliases) {
+        if (!entry.second->isFileImport()) {
+          exposedAliases.add(entry.second.get());
+        }
+      }
+
+      auto nestedNodes = builder.initNestedNodes(
+          content.orderedNestedNodes.size() + exposedAliases.size());
       auto nestedIter = nestedNodes.begin();
       for (auto node: content.orderedNestedNodes) {
         nestedIter->setName(node->declaration.getName().getValue());
         nestedIter->setId(node->id);
+        ++nestedIter;
+      }
+      for (auto alias: exposedAliases) {
+        nestedIter->setName(alias->getName());
+        nestedIter->setId(alias->getId());
         ++nestedIter;
       }
 
@@ -600,8 +698,23 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       }
 
       content.finalSchema = nodeSet.node;
-      content.auxSchemas = kj::mv(nodeSet.auxNodes);
-      content.sourceInfo = kj::mv(nodeSet.sourceInfo);
+
+      // Append alias nodes (and their SourceInfo) so they flow into the SchemaLoader the same
+      // way regular aux nodes do.
+      kj::Vector<schema::Node::Reader> auxWithAliases(
+          nodeSet.auxNodes.size() + content.aliases.size());
+      kj::Vector<schema::Node::SourceInfo::Reader> sourceInfoWithAliases(
+          nodeSet.sourceInfo.size() + content.aliases.size());
+      auxWithAliases.addAll(nodeSet.auxNodes);
+      sourceInfoWithAliases.addAll(nodeSet.sourceInfo);
+      for (auto& entry: content.aliases) {
+        KJ_IF_SOME(built, entry.second->buildAliasNode()) {
+          auxWithAliases.add(built.node);
+          sourceInfoWithAliases.add(built.sourceInfo);
+        }
+      }
+      content.auxSchemas = auxWithAliases.releaseAsArray();
+      content.sourceInfo = sourceInfoWithAliases.releaseAsArray();
 
       content.advanceState(Content::FINISHED);
     } KJ_FALLTHROUGH;
@@ -707,11 +820,6 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<Node*, uint>& s
       for (auto& child: content.orderedNestedNodes) {
         child->traverse(eagerness, seen, finalLoader, sourceInfo);
       }
-
-      // Also traverse `using` declarations.
-      for (auto& child: content.aliases) {
-        child.second->compile();
-      }
     }
   }
 }
@@ -770,6 +878,11 @@ void Compiler::Node::traverseNodeDependencies(
 
     case schema::Node::ANNOTATION:
       traverseType(schemaNode.getAnnotation().getType(), eagerness, seen, finalLoader, sourceInfo);
+      break;
+
+    case schema::Node::USING:
+      // File-import aliases are filtered out by buildAliasNode(); every USING here has a target.
+      traverseType(schemaNode.getUsing().getTarget(), eagerness, seen, finalLoader, sourceInfo);
       break;
 
     default:

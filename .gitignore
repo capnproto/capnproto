@@ -86,3 +86,6 @@
 # bazel output
 /c++/MODULE.bazel.lock
 bazel-*
+
+# CMake build folder convention
+/build

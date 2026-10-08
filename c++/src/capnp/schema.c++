@@ -221,30 +221,34 @@ Schema Schema::getDependency(uint64_t id, uint location) const {
     }
   }
 
-  {
-    uint lower = 0;
-    uint upper = raw->generic->dependencyCount;
-
-    while (lower < upper) {
-      uint mid = (lower + upper) / 2;
-
-      const _::RawSchema* candidate = raw->generic->dependencies[mid];
-
-      uint64_t candidateId = candidate->id;
-      if (candidateId == id) {
-        candidate->ensureInitialized();
-        return Schema(&candidate->defaultBrand);
-      } else if (candidateId < id) {
-        lower = mid + 1;
-      } else {
-        upper = mid;
-      }
-    }
+  // Fall back to an ID-only lookup against the generic dependency table.
+  KJ_IF_SOME(schema, tryGetGenericDependency(id)) {
+    return schema;
   }
 
   KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", kj::hex(id)) {
     return Schema();
   }
+}
+
+kj::Maybe<Schema> Schema::tryGetGenericDependency(uint64_t id) const {
+  uint lower = 0;
+  uint upper = raw->generic->dependencyCount;
+
+  while (lower < upper) {
+    uint mid = (lower + upper) / 2;
+
+    const _::RawSchema* candidate = raw->generic->dependencies[mid];
+    if (candidate->id == id) {
+      candidate->ensureInitialized();
+      return Schema(&candidate->defaultBrand);
+    } else if (candidate->id < id) {
+      lower = mid + 1;
+    } else {
+      upper = mid;
+    }
+  }
+  return kj::none;
 }
 
 Schema::BrandArgumentList Schema::getBrandArgumentsAtScope(uint64_t scopeId) const {
@@ -354,60 +358,71 @@ Type Schema::getBrandBinding(uint64_t scopeId, uint index) const {
 }
 
 Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
-  switch (proto.which()) {
-    case schema::Type::VOID:
-    case schema::Type::BOOL:
-    case schema::Type::INT8:
-    case schema::Type::INT16:
-    case schema::Type::INT32:
-    case schema::Type::INT64:
-    case schema::Type::UINT8:
-    case schema::Type::UINT16:
-    case schema::Type::UINT32:
-    case schema::Type::UINT64:
-    case schema::Type::FLOAT32:
-    case schema::Type::FLOAT64:
-    case schema::Type::TEXT:
-    case schema::Type::DATA:
-      return proto.which();
+  Type result = [&]() -> Type {
+    switch (proto.which()) {
+      case schema::Type::VOID:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+        return proto.which();
 
-    case schema::Type::STRUCT: {
-      auto structType = proto.getStruct();
-      return getDependency(structType.getTypeId(), location).asStruct();
-    }
-
-    case schema::Type::ENUM: {
-      auto enumType = proto.getEnum();
-      return getDependency(enumType.getTypeId(), location).asEnum();
-    }
-
-    case schema::Type::INTERFACE: {
-      auto interfaceType = proto.getInterface();
-      return getDependency(interfaceType.getTypeId(), location).asInterface();
-    }
-
-    case schema::Type::LIST:
-      return ListSchema::of(interpretType(proto.getList().getElementType(), location));
-
-    case schema::Type::ANY_POINTER: {
-      auto anyPointer = proto.getAnyPointer();
-      switch (anyPointer.which()) {
-        case schema::Type::AnyPointer::UNCONSTRAINED:
-          return anyPointer.getUnconstrained().which();
-        case schema::Type::AnyPointer::PARAMETER: {
-          auto param = anyPointer.getParameter();
-          return getBrandBinding(param.getScopeId(), param.getParameterIndex());
-        }
-        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
-          return Type(Type::ImplicitParameter {
-              anyPointer.getImplicitMethodParameter().getParameterIndex() });
+      case schema::Type::STRUCT: {
+        auto structType = proto.getStruct();
+        return getDependency(structType.getTypeId(), location).asStruct();
       }
 
-      KJ_UNREACHABLE;
+      case schema::Type::ENUM: {
+        auto enumType = proto.getEnum();
+        return getDependency(enumType.getTypeId(), location).asEnum();
+      }
+
+      case schema::Type::INTERFACE: {
+        auto interfaceType = proto.getInterface();
+        return getDependency(interfaceType.getTypeId(), location).asInterface();
+      }
+
+      case schema::Type::LIST:
+        return ListSchema::of(interpretType(proto.getList().getElementType(), location));
+
+      case schema::Type::ANY_POINTER: {
+        auto anyPointer = proto.getAnyPointer();
+        switch (anyPointer.which()) {
+          case schema::Type::AnyPointer::UNCONSTRAINED:
+            return anyPointer.getUnconstrained().which();
+          case schema::Type::AnyPointer::PARAMETER: {
+            auto param = anyPointer.getParameter();
+            return getBrandBinding(param.getScopeId(), param.getParameterIndex());
+          }
+          case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+            return Type(Type::ImplicitParameter {
+                anyPointer.getImplicitMethodParameter().getParameterIndex() });
+        }
+
+        KJ_UNREACHABLE;
+      }
+    }
+
+    KJ_UNREACHABLE;
+  }();
+
+  if (auto usingId = proto.getUsingId()) {
+    // Alias nodes are registered as deps for dynamically-loaded schemas but not yet for static
+    // schemas (capnpc-c++ doesn't emit alias static deps). Silently skip if not found.
+    KJ_IF_SOME(aliasSchema, tryGetGenericDependency(usingId)) {
+      result.setUsingNode(aliasSchema.getProto());
     }
   }
-
-  KJ_UNREACHABLE;
+  return result;
 }
 
 Type Schema::BrandArgumentList::operator[](uint index) const {
@@ -784,6 +799,8 @@ ListSchema Type::asList() const {
   }
   Type elementType = *this;
   --elementType.listDepth;
+  // The list's alias doesn't describe its element; clear rather than leak it through.
+  elementType.usingNode_ = {};
   return ListSchema::of(elementType);
 }
 
