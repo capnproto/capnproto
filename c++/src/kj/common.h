@@ -299,7 +299,7 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && KJ_HAS_CPP_ATTRIBUTE(msvc::no_unique_address)
 // MSVC intentionally ignores the standard spelling to preserve ABI compatibility with older
 // toolsets. The vendor spelling opts in to empty-member optimization; clang-cl supports it too.
 #define KJ_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
