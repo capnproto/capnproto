@@ -7,9 +7,9 @@ capnp_provider = provider("Capnproto Provider", fields = {
 })
 
 def _workspace_path(label, path):
-    if label.workspace_root == "":
+    if label.repo_root == "":
         return path
-    return label.workspace_root + "/" + path
+    return label.repo_root + "/" + path
 
 def _capnp_gen_impl(ctx):
     label = ctx.label
