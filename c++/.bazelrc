@@ -69,7 +69,7 @@ build:unix --//src/kj:libdl=True
 
 # Limit recursive header includes within libc++. This improves compliance with IWYU, helps avoid
 # errors with downstream projects that implicitly define this already and reduces total include size.
-https://libcxx.llvm.org/DesignDocs/HeaderRemovalPolicy.html
+# https://libcxx.llvm.org/DesignDocs/HeaderRemovalPolicy.html
 build:libcpp --cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 build:libcpp --host_cxxopt=-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES
 
