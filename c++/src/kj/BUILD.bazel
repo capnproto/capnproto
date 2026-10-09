@@ -98,15 +98,15 @@ cc_library(
     hdrs = [
         "async.h",
         "async-coroutine-alloc.h",
-        "async-inl.h",
-        "async-prelude.h",
         "async-queue.h",
         "sticky-flag.h",
         "timer.h",
     ],
-    # Disable header parsing based on async-inl.h
-    features = ["-parse_headers"],
     include_prefix = "kj",
+    textual_hdrs = [
+        "async-inl.h",
+        "async-prelude.h",
+    ],
     visibility = ["//visibility:public"],
     deps = [":kj"],
 )
@@ -122,8 +122,6 @@ cc_library(
         "async-io-internal.h",
         "cidr.h",
     ],
-    # Disable header parsing based on async-inl.h
-    features = ["-parse_headers"],
     include_prefix = "kj",
     # async-io.c++ / cidr.c++ use winsock (socket(), inet_pton) for address parsing on Windows.
     linkopts = select({
@@ -143,7 +141,6 @@ cc_library(
         "@platforms//os:windows": ["async-win32.h"],
         "//conditions:default": ["async-unix.h"],
     }),
-    features = ["-parse_headers"],
     include_prefix = "kj",
     visibility = ["//visibility:public"],
     deps = [
@@ -270,12 +267,12 @@ cc_test(
 
 cc_test(
     name = "async-xthread-test",
+    size = "large",
     srcs = ["async-xthread-test.c++"],
     deps = [
         ":kj-async",
         ":kj-test",
     ],
-    size = "large",
 )
 
 cc_library(

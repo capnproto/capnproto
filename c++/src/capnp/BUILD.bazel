@@ -313,7 +313,7 @@ cc_test(
 
 cc_test(
     name = "compiler/evolution-test",
+    size = "large",
     srcs = ["compiler/evolution-test.c++"],
     deps = [":capnp-test"],
-    size = "large",
 )
