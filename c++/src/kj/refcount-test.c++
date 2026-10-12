@@ -20,7 +20,11 @@
 // THE SOFTWARE.
 
 #include "refcount.h"
+#include "thread.h"
 #include <kj/compat/gtest.h>
+
+#include <atomic>
+#include <thread>
 
 namespace kj {
 
@@ -132,6 +136,33 @@ KJ_TEST("RefcountedWrapper") {
 
     KJ_EXPECT(*ref2 == 123);
   }
+}
+
+struct AtomicSetTrueInDestructor: public AtomicRefcounted {
+  AtomicSetTrueInDestructor(bool* ptr): ptr(ptr) {}
+  ~AtomicSetTrueInDestructor() { *ptr = true; }
+
+  bool* ptr;
+};
+
+KJ_TEST("atomicAddRef is safe under concurrent reference-count changes") {
+  bool destroyed = false;
+  auto owner = kj::atomicRefcounted<AtomicSetTrueInDestructor>(&destroyed);
+  auto* object = owner.get();
+  std::atomic<bool> start(false);
+
+  auto addRefs = [&]() noexcept {
+    while (!start.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    for (uint i = 0; i < 1000; ++i) {
+      auto ref = kj::atomicAddRef(*object);
+    }
+  };
+
+  kj::Thread thread1(addRefs);
+  kj::Thread thread2(addRefs);
+  start.store(true, std::memory_order_release);
 }
 
 }  // namespace kj
