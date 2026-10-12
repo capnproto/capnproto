@@ -204,6 +204,14 @@ private:
 
   bool addRefWeakInternal() const;
 
+  inline bool hasRefs() const {
+#if _MSC_VER && !defined(__clang__)
+    return KJ_MSVC_INTERLOCKED(Or, acq)(&refcount, 0) > 0;
+#else
+    return __atomic_load_n(&refcount, __ATOMIC_RELAXED) > 0;
+#endif
+  }
+
   void disposeImpl(void* pointer) const override;
   template <typename T>
   static kj::Own<T> addRefInternal(T* object);
@@ -227,14 +235,14 @@ inline kj::Own<T> atomicRefcounted(Params&&... params) {
 
 template <typename T>
 kj::Own<T> atomicAddRef(T& object) {
-  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
+  KJ_IREQUIRE(object.AtomicRefcounted::hasRefs(),
       "Object not allocated with kj::atomicRefcounted().");
   return AtomicRefcounted::addRefInternal(&object);
 }
 
 template <typename T>
 kj::Own<const T> atomicAddRef(const T& object) {
-  KJ_IREQUIRE(object.AtomicRefcounted::refcount > 0,
+  KJ_IREQUIRE(object.AtomicRefcounted::hasRefs(),
       "Object not allocated with kj::atomicRefcounted().");
   return AtomicRefcounted::addRefInternal(&object);
 }
