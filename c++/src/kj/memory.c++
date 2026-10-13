@@ -44,6 +44,10 @@ void throwWrongDisposerError() {
   KJ_FAIL_REQUIRE("When disowning an object, disposer must be equal to Own's disposer");
 }
 
+void throwNullPtrError() {
+  KJ_FAIL_REQUIRE("null Ptr<> dereference");
+}
+
 }
 
 }  // namespace kj
