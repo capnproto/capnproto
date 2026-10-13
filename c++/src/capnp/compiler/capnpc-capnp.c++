@@ -198,6 +198,11 @@ private:
 
   kj::StringTree genType(schema::Type::Reader type, Schema scope,
                          kj::Maybe<InterfaceSchema::Method> method) {
+    // If this Type was reached through a `using` alias, render it as the alias name to
+    // preserve alias chains across round-trip.
+    if (auto usingId = type.getUsingId()) {
+      return nodeName(schemaLoader.get(usingId), scope, schema::Brand::Reader(), kj::none);
+    }
     switch (type.which()) {
       case schema::Type::VOID: return kj::strTree("Void");
       case schema::Type::BOOL: return kj::strTree("Bool");
@@ -632,6 +637,12 @@ private:
             indent, "annotation ", name, " @0x", kj::hex(proto.getId()),
             " (", strArray(targets, ", "), ") :",
             genType(annotationProto.getType(), schema, kj::none), genAnnotations(schema), ";\n");
+      }
+      case schema::Node::USING: {
+        kj::StringPtr localName = proto.getDisplayName().slice(proto.getDisplayNamePrefixLength());
+        return kj::strTree(
+            indent, "using ", localName, " = ",
+            genType(proto.getUsing().getTarget(), schema, kj::none), ";\n");
       }
     }
 
