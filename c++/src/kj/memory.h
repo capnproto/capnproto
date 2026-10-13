@@ -111,6 +111,7 @@ const void* castToConstVoid(T* ptr) {
 }
 
 KJ_NORETURN(void throwWrongDisposerError());
+KJ_NORETURN(void throwNullPtrError());
 
 template <typename From, typename To>
 using EnableIfCanConvertPtr = EnableIf<canConvert<From*, To*>() && isConst<From>() == isConst<To>()>;
@@ -950,17 +951,24 @@ public:
   }
 
   inline T* operator->() const { return get(); }
-  inline T* get() const { return ptr; }
+  inline T* get() const {
+    // A Ptr is null after being moved from or assigned nullptr. Throw rather than hand out a null
+    // pointer that the caller will dereference. Compare against nullptr to test for null.
+    if (KJ_UNLIKELY(ptr == nullptr)) _::throwNullPtrError();
+    return ptr;
+  }
 
-  inline bool operator==(const Pin<T>& other) const { return get() == other.get(); }
-  inline bool operator==(const Ptr<T>& other) const { return get() == other.get(); }
-  inline bool operator==(const T* const other) const { return get() == other; }
+  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+  inline bool operator==(const Ptr<T>& other) const { return ptr == other.ptr; }
+  inline bool operator==(const T* const other) const { return ptr == other; }
 
   template <typename U>
-  inline bool operator==(const Pin<U>& other) const { return get() == other.get(); }
+  inline bool operator==(const Pin<U>& other) const { return ptr == other.get(); }
+  // Templated so that comparing with nullptr doesn't instantiate Pin<T>, which fails for an
+  // abstract T.
 
   template <typename U>
-  inline bool operator==(const Ptr<U>& other) const { return get() == other.get(); }
+  inline bool operator==(const Ptr<U>& other) const { return ptr == other.ptr; }
 
   inline T& asRef() const { return *get(); }
   // Obtain a `T&` reference.

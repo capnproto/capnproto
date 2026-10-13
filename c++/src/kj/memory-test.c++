@@ -1366,6 +1366,44 @@ KJ_TEST("Maybe<kj::Ptr<T>> converting constructor") {
   }
 }
 
+KJ_TEST("kj::Ptr<T> throws on null dereference") {
+  kj::Pin<Obj> pin("a");
+  kj::Ptr<Obj> ptr = pin.asPtr();
+  KJ_EXPECT(ptr != nullptr);
+  KJ_EXPECT(ptr->name == "a"_kj);
+
+  // A moved-from Ptr is null.
+  kj::Ptr<Obj> moved = kj::mv(ptr);
+  KJ_EXPECT(ptr == nullptr);
+  KJ_EXPECT(ptr != pin);
+  KJ_EXPECT(ptr != moved);
+  KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)ptr->name);
+  KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)ptr.get());
+  KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)ptr.asRef());
+
+  // So is one assigned nullptr.
+  moved = nullptr;
+  KJ_EXPECT(moved == nullptr);
+  KJ_EXPECT_THROW_MESSAGE("null Ptr<> dereference", (void)moved->name);
+}
+
+struct AbstractTarget: public kj::PtrTarget {
+  virtual void f() = 0;
+  kj::Ptr<AbstractTarget> getPtr() { return addPtrToThis(); }
+};
+
+struct ConcreteTarget final: public AbstractTarget {
+  void f() override {}
+};
+
+KJ_TEST("kj::Ptr<T> to an abstract T compares with nullptr") {
+  ConcreteTarget target;
+  kj::Ptr<AbstractTarget> ptr = target.getPtr();
+  KJ_EXPECT(ptr != nullptr);
+  ptr = nullptr;
+  KJ_EXPECT(ptr == nullptr);
+}
+
 #if KJ_ASSERT_PTR_COUNTERS
 KJ_TEST("kj::Pin<T> destroyed with active ptrs crashed") {
   PtrHolder* holder = nullptr;
