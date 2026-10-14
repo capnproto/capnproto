@@ -240,6 +240,119 @@ private:
 
 // -------------------------------------------------------------------
 
+class Type {
+public:
+  struct BrandParameter {
+    uint64_t scopeId;
+    uint index;
+  };
+  struct ImplicitParameter {
+    uint index;
+  };
+
+  inline Type();
+  inline Type(schema::Type::Which primitive);
+  inline Type(StructSchema schema);
+  inline Type(EnumSchema schema);
+  inline Type(InterfaceSchema schema);
+  inline Type(ListSchema schema);
+  inline Type(schema::Type::AnyPointer::Unconstrained::Which anyPointerKind);
+  inline Type(BrandParameter param);
+  inline Type(ImplicitParameter param);
+
+  template <typename T>
+  inline static Type from();
+  template <typename T>
+  inline static Type from(T&& value);
+
+  inline schema::Type::Which which() const;
+
+  StructSchema asStruct() const;
+  EnumSchema asEnum() const;
+  InterfaceSchema asInterface() const;
+  ListSchema asList() const;
+  // Each of these methods may only be called if which() returns the corresponding type.
+
+  kj::Maybe<BrandParameter> getBrandParameter() const;
+  // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
+  // AnyPointer and not a parameter.
+
+  kj::Maybe<ImplicitParameter> getImplicitParameter() const;
+  // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
+  // AnyPointer and not a parameter. "Implicit parameters" refer to type parameters on methods.
+
+  inline schema::Type::AnyPointer::Unconstrained::Which whichAnyPointerKind() const;
+  // Only callable if which() returns ANY_POINTER.
+
+  inline bool isVoid() const;
+  inline bool isBool() const;
+  inline bool isInt8() const;
+  inline bool isInt16() const;
+  inline bool isInt32() const;
+  inline bool isInt64() const;
+  inline bool isUInt8() const;
+  inline bool isUInt16() const;
+  inline bool isUInt32() const;
+  inline bool isUInt64() const;
+  inline bool isFloat32() const;
+  inline bool isFloat64() const;
+  inline bool isText() const;
+  inline bool isData() const;
+  inline bool isList() const;
+  inline bool isEnum() const;
+  inline bool isStruct() const;
+  inline bool isInterface() const;
+  inline bool isAnyPointer() const;
+
+  bool operator==(const Type& other) const;
+  inline bool operator!=(const Type& other) const { return !(*this == other); }
+
+  uint hashCode() const;
+
+  inline Type wrapInList(uint depth = 1) const;
+  // Return the Type formed by wrapping this type in List() `depth` times.
+
+  inline Type(schema::Type::Which derived, const _::RawBrandedSchema* schema);
+  // For internal use.
+
+private:
+  schema::Type::Which baseType;  // type not including applications of List()
+  uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
+
+  bool isImplicitParam;
+  // If true, this refers to an implicit method parameter. baseType must be ANY_POINTER, scopeId
+  // must be zero, and paramIndex indicates the parameter index.
+
+  union {
+    uint16_t paramIndex;
+    // If baseType is ANY_POINTER but this Type actually refers to a type parameter, this is the
+    // index of the parameter among the parameters at its scope, and `scopeId` below is the type ID
+    // of the scope where the parameter was defined.
+
+    schema::Type::AnyPointer::Unconstrained::Which anyPointerKind;
+    // If scopeId is zero and isImplicitParam is false.
+  };
+
+  union {
+    const _::RawBrandedSchema* schema;  // if type is struct, enum, interface...
+    uint64_t scopeId;  // if type is AnyPointer but it's actually a type parameter...
+  };
+
+  Type(schema::Type::Which baseType, uint8_t listDepth, const _::RawBrandedSchema* schema)
+      : baseType(baseType), listDepth(listDepth), schema(schema) {
+    KJ_IREQUIRE(baseType != schema::Type::ANY_POINTER);
+  }
+
+  void requireUsableAs(Type expected) const;
+
+  template <typename T, Kind k>
+  struct FromValueImpl;
+
+  friend class ListSchema;  // only for requireUsableAs()
+};
+
+// -------------------------------------------------------------------
+
 class StructSchema: public Schema {
 public:
   inline StructSchema(): Schema(&_::NULL_STRUCT_SCHEMA.defaultBrand) {}
@@ -317,7 +430,7 @@ public:
   inline uint getIndex() const { return index; }
   // Get the index of this field within the containing struct or union.
 
-  Type getType() const;
+  Type getType() const { return type; };
   // Get the type of this field. Note that this is preferred over getProto().getType() as this
   // method will apply generics.
 
@@ -341,6 +454,12 @@ public:
   //
   // If the above does not make sense, you probably don't need this method.
 
+  schema::Value::Reader getDefaultValueProto() const {
+    KJ_IREQUIRE((getProto().which() == schema::Field::SLOT),
+              "getDefaultValueProto() cannot be called on groups");
+    return defaultValue;
+  }
+
   inline bool operator==(const Field& other) const;
   inline bool operator!=(const Field& other) const { return !(*this == other); }
   inline uint hashCode() const;
@@ -349,9 +468,18 @@ private:
   StructSchema parent;
   uint index;
   schema::Field::Reader proto;
+  Type type;
+  schema::Value::Reader defaultValue;
+
+  Type resolveType();
 
   inline Field(StructSchema parent, uint index, schema::Field::Reader proto)
-      : parent(parent), index(index), proto(proto) {}
+      : parent(parent), index(index), proto(proto) {
+    type = resolveType();
+    if (proto.which() == schema::Field::SLOT) {
+      defaultValue = proto.getSlot().getDefaultValue();
+    }
+  }
 
   friend class StructSchema;
 };
@@ -620,119 +748,6 @@ public:
 private:
   ConstSchema(Schema base): Schema(base) {}
   friend class Schema;
-};
-
-// -------------------------------------------------------------------
-
-class Type {
-public:
-  struct BrandParameter {
-    uint64_t scopeId;
-    uint index;
-  };
-  struct ImplicitParameter {
-    uint index;
-  };
-
-  inline Type();
-  inline Type(schema::Type::Which primitive);
-  inline Type(StructSchema schema);
-  inline Type(EnumSchema schema);
-  inline Type(InterfaceSchema schema);
-  inline Type(ListSchema schema);
-  inline Type(schema::Type::AnyPointer::Unconstrained::Which anyPointerKind);
-  inline Type(BrandParameter param);
-  inline Type(ImplicitParameter param);
-
-  template <typename T>
-  inline static Type from();
-  template <typename T>
-  inline static Type from(T&& value);
-
-  inline schema::Type::Which which() const;
-
-  StructSchema asStruct() const;
-  EnumSchema asEnum() const;
-  InterfaceSchema asInterface() const;
-  ListSchema asList() const;
-  // Each of these methods may only be called if which() returns the corresponding type.
-
-  kj::Maybe<BrandParameter> getBrandParameter() const;
-  // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
-  // AnyPointer and not a parameter.
-
-  kj::Maybe<ImplicitParameter> getImplicitParameter() const;
-  // Only callable if which() returns ANY_POINTER. Returns null if the type is just a regular
-  // AnyPointer and not a parameter. "Implicit parameters" refer to type parameters on methods.
-
-  inline schema::Type::AnyPointer::Unconstrained::Which whichAnyPointerKind() const;
-  // Only callable if which() returns ANY_POINTER.
-
-  inline bool isVoid() const;
-  inline bool isBool() const;
-  inline bool isInt8() const;
-  inline bool isInt16() const;
-  inline bool isInt32() const;
-  inline bool isInt64() const;
-  inline bool isUInt8() const;
-  inline bool isUInt16() const;
-  inline bool isUInt32() const;
-  inline bool isUInt64() const;
-  inline bool isFloat32() const;
-  inline bool isFloat64() const;
-  inline bool isText() const;
-  inline bool isData() const;
-  inline bool isList() const;
-  inline bool isEnum() const;
-  inline bool isStruct() const;
-  inline bool isInterface() const;
-  inline bool isAnyPointer() const;
-
-  bool operator==(const Type& other) const;
-  inline bool operator!=(const Type& other) const { return !(*this == other); }
-
-  uint hashCode() const;
-
-  inline Type wrapInList(uint depth = 1) const;
-  // Return the Type formed by wrapping this type in List() `depth` times.
-
-  inline Type(schema::Type::Which derived, const _::RawBrandedSchema* schema);
-  // For internal use.
-
-private:
-  schema::Type::Which baseType;  // type not including applications of List()
-  uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
-
-  bool isImplicitParam;
-  // If true, this refers to an implicit method parameter. baseType must be ANY_POINTER, scopeId
-  // must be zero, and paramIndex indicates the parameter index.
-
-  union {
-    uint16_t paramIndex;
-    // If baseType is ANY_POINTER but this Type actually refers to a type parameter, this is the
-    // index of the parameter among the parameters at its scope, and `scopeId` below is the type ID
-    // of the scope where the parameter was defined.
-
-    schema::Type::AnyPointer::Unconstrained::Which anyPointerKind;
-    // If scopeId is zero and isImplicitParam is false.
-  };
-
-  union {
-    const _::RawBrandedSchema* schema;  // if type is struct, enum, interface...
-    uint64_t scopeId;  // if type is AnyPointer but it's actually a type parameter...
-  };
-
-  Type(schema::Type::Which baseType, uint8_t listDepth, const _::RawBrandedSchema* schema)
-      : baseType(baseType), listDepth(listDepth), schema(schema) {
-    KJ_IREQUIRE(baseType != schema::Type::ANY_POINTER);
-  }
-
-  void requireUsableAs(Type expected) const;
-
-  template <typename T, Kind k>
-  struct FromValueImpl;
-
-  friend class ListSchema;  // only for requireUsableAs()
 };
 
 // -------------------------------------------------------------------
