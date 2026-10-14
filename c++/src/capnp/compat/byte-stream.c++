@@ -300,7 +300,33 @@ public:
   }
 
   kj::Promise<void> startTls(StartTlsContext context) override {
-    KJ_UNIMPLEMENTED("A substream does not support TLS initiation");
+    auto params = context.getParams();
+
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(redirected, Redirected) {
+        auto req = redirected.replacement.startTlsRequest(params.totalSize());
+        req.setExpectedServerHostname(params.getExpectedServerHostname());
+        return context.tailCall(kj::mv(req));
+      }
+      KJ_CASE_ONEOF(e, Ended) {
+        KJ_FAIL_REQUIRE("already called end()");
+      }
+      KJ_CASE_ONEOF(b, Borrowed) {
+        KJ_FAIL_REQUIRE("can't call other methods while stream is borrowed");
+      }
+      KJ_CASE_ONEOF(streaming, Streaming) {
+        // A substream takes over the underlying stream's TLS starter for as long as it is the
+        // shortest path to that stream, so it is the one that has to act on this request. Path
+        // shortening is invisible to the caller, which is talking to whichever stream its writes
+        // go to and expects its upgrade to land on the same transport as those writes.
+        auto& starter = KJ_REQUIRE_NONNULL(streaming.tlsStarter,
+            "this stream's transport cannot start TLS");
+        return KJ_REQUIRE_NONNULL(*starter,
+            "this stream's transport did not provide a way to start TLS")(
+            params.getExpectedServerHostname());
+      }
+    }
+    KJ_UNREACHABLE;
   }
 
   kj::Promise<void> getSubstream(GetSubstreamContext context) override {
@@ -741,23 +767,22 @@ protected:
 
   kj::Promise<void> startTls(StartTlsContext context) override {
     auto params = context.getParams();
-    KJ_IF_SOME(s, tlsStarter) {
-      KJ_SWITCH_ONEOF(state) {
-        KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
-          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
-        }
-        KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
-          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
-        }
-        KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
-          return KJ_ASSERT_NONNULL(*s)(params.getExpectedServerHostname());
-        }
-        KJ_CASE_ONEOF(e, Ended) {
-          KJ_FAIL_REQUIRE("cannot call startTls on a bytestream that was ended");
-        }
-        KJ_CASE_ONEOF(b, Borrowed) {
-          KJ_FAIL_REQUIRE("can't call startTls while stream is borrowed");
-        }
+
+    KJ_SWITCH_ONEOF(state) {
+      KJ_CASE_ONEOF(prober, kj::Own<PathProber>) {
+        return invokeTlsStarter(params.getExpectedServerHostname());
+      }
+      KJ_CASE_ONEOF(kjStream, kj::Own<kj::AsyncOutputStream>) {
+        return invokeTlsStarter(params.getExpectedServerHostname());
+      }
+      KJ_CASE_ONEOF(capnpStream, capnp::ByteStream::Client) {
+        return invokeTlsStarter(params.getExpectedServerHostname());
+      }
+      KJ_CASE_ONEOF(e, Ended) {
+        KJ_FAIL_REQUIRE("cannot call startTls on a bytestream that was ended");
+      }
+      KJ_CASE_ONEOF(b, Borrowed) {
+        KJ_FAIL_REQUIRE("can't call startTls while stream is borrowed");
       }
     }
     KJ_UNREACHABLE;
@@ -806,6 +831,16 @@ protected:
 private:
   ByteStreamFactory& factory;
   kj::Maybe<kj::Own<kj::TlsStarterCallback>> tlsStarter;
+
+  // Starts the handshake on the transport underneath this stream. The starter is a slot which the
+  // layer that set the transport up fills in if it has a way to perform one; whoever asked for the
+  // upgrade needs to ensure that it does.
+  kj::Promise<void> invokeTlsStarter(kj::StringPtr expectedServerHostname) {
+    auto& slot = KJ_REQUIRE_NONNULL(tlsStarter, "this stream's transport cannot start TLS");
+    return KJ_REQUIRE_NONNULL(
+        *slot, "this stream's transport did not provide a way to start TLS")(
+        expectedServerHostname);
+  }
 
   struct Borrowed { kj::Own<kj::AsyncOutputStream> stream; };
   struct Ended {};

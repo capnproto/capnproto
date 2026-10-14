@@ -25,9 +25,18 @@ interface ByteStream {
   # While a substream is active, it is an error to call write() on the original stream. Doing so
   # may throw an exception or may arbitrarily interleave bytes with the substream's writes.
 
-  startTls @3 (expectedServerHostname :Text) -> stream;
+  startTls @3 (expectedServerHostname :Text);
   # Client calls this method when it wants to initiate TLS. This ByteStream is not terminated,
   # the caller should reuse it.
+  #
+  # Returns once the transport underneath the stream has been upgraded, and throws if the upgrade
+  # failed, so that the caller learns the outcome. The call is ordered after the write()s that
+  # precede it, but not before the ones that follow it: a caller that wants its later bytes to
+  # travel over TLS waits for this to return before writing them.
+  #
+  # This was once a streaming method (`-> stream`). The results of a streaming method are an
+  # empty struct too, so peers that still declare it that way interoperate; they just do not
+  # wait for, or report, the outcome.
 
   interface SubstreamCallback {
     ended @0 (byteCount :UInt64);
