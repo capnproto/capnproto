@@ -216,12 +216,12 @@ KJ_TEST("use pipeline after dropping response") {
   EXPECT_EQ(1, chainedCallCount);
 }
 
-KJ_TEST("context.setPipeline") {
+void testSetPipeline(TestPipelineImpl::SetPipelineMode mode) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
 
   int callCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount, mode));
 
   auto promise = client.getCapPipelineOnlyRequest().send();
 
@@ -244,6 +244,139 @@ KJ_TEST("context.setPipeline") {
 
   // The original promise never completed.
   KJ_EXPECT(!promise.poll(waitScope));
+}
+
+KJ_TEST("context.setPipeline") {
+  testSetPipeline(TestPipelineImpl::SetPipelineMode::RVALUE);
+}
+
+KJ_TEST("context.setPipeline with lvalue") {
+  testSetPipeline(TestPipelineImpl::SetPipelineMode::LVALUE);
+}
+
+class SetHooklessPipelineImpl final: public test::TestPipeline::Server {
+  // Calls setPipeline() with a pipeline that has no hook, as returned by a call made with the
+  // noPromisePipelining hint, then returns real results once `returnPromise` resolves.
+
+public:
+  SetHooklessPipelineImpl(int& callCount, kj::Promise<void> returnPromise, bool useLvalue)
+      : callCount(callCount), returnPromise(kj::mv(returnPromise)), useLvalue(useLvalue) {}
+
+  kj::Promise<void> getCapPipelineOnly(GetCapPipelineOnlyContext context) override {
+    GetCapPipelineOnlyResults::Pipeline pipeline{AnyPointer::Pipeline(kj::none)};
+    if (useLvalue) {
+      context.setPipeline(pipeline);
+    } else {
+      context.setPipeline(kj::mv(pipeline));
+    }
+
+    return kj::mv(returnPromise).then([this, context]() mutable {
+      context.getResults().initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
+    });
+  }
+
+private:
+  int& callCount;
+  kj::Promise<void> returnPromise;
+  bool useLvalue;
+};
+
+void testSetHooklessPipeline(bool useLvalue) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  test::TestPipeline::Client client(
+      kj::heap<SetHooklessPipelineImpl>(callCount, kj::mv(paf.promise), useLvalue));
+
+  auto promise = client.getCapPipelineOnlyRequest().send();
+
+  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  // setPipeline() was a no-op, so the pipelined call waits for the call to return instead of
+  // failing.
+  KJ_EXPECT(!pipelinePromise.poll(waitScope));
+  KJ_EXPECT(!promise.poll(waitScope));
+  KJ_EXPECT(callCount == 0);
+
+  paf.fulfiller->fulfill();
+
+  KJ_EXPECT(pipelinePromise.wait(waitScope).getX() == "bar");
+  promise.wait(waitScope);
+  KJ_EXPECT(callCount == 1);
+}
+
+KJ_TEST("context.setPipeline with a pipeline without a hook is a no-op") {
+  testSetHooklessPipeline(false);
+}
+
+KJ_TEST("context.setPipeline with an lvalue pipeline without a hook is a no-op") {
+  testSetHooklessPipeline(true);
+}
+
+KJ_TEST("noPromisePipelining: call without capabilities in results has no pipeline") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
+
+  // foo() results contain no capabilities, so the generated code sets noPromisePipelining.
+  auto request = client.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  auto promise = request.send();
+  KJ_EXPECT(PipelineHook::from(promise) == kj::none);
+
+  KJ_EXPECT(promise.wait(waitScope).getX() == "foo");
+}
+
+KJ_TEST("noPromisePipelining: call queued on promise capability has no pipeline") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+  test::TestInterface::Client client(kj::mv(paf.promise));
+
+  auto request = client.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  auto promise = request.send();
+  KJ_EXPECT(PipelineHook::from(promise) == kj::none);
+
+  int callCount = 0;
+  paf.fulfiller->fulfill(kj::heap<TestInterfaceImpl>(callCount));
+
+  KJ_EXPECT(promise.wait(waitScope).getX() == "foo");
+}
+
+KJ_TEST("noPromisePipelining: pipelining on the result throws") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int callCount = 0;
+  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
+
+  // getTestPipeline() returns a capability, so we have to force the hint with a typeless request.
+  auto promise = client.typelessRequest(typeId<test::TestInterface>(), 3, kj::none,
+      { .noPromisePipelining = true }).send();
+  KJ_EXPECT(PipelineHook::from(promise) == kj::none);
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", promise.getPointerField(0).asCap());
+
+  // The call itself still works.
+  auto response = promise.wait(waitScope);
+  KJ_EXPECT(response.getAs<test::TestInterface::GetTestPipelineResults>().hasCap());
+}
+
+KJ_TEST("AnyPointer::Pipeline without a hook") {
+  AnyPointer::Pipeline pipeline(kj::none);
+  KJ_EXPECT(PipelineHook::from(pipeline) == kj::none);
+  KJ_EXPECT(PipelineHook::from(pipeline.noop()) == kj::none);
+  KJ_EXPECT(PipelineHook::from(pipeline.getPointerField(0)) == kj::none);
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", pipeline.asCap());
 }
 
 TEST(Capability, TailCall) {
@@ -278,6 +411,72 @@ TEST(Capability, TailCall) {
 
   EXPECT_EQ(1, calleeCallCount);
   EXPECT_EQ(1, callerCallCount);
+}
+
+class NoPipelineTailCallerImpl final: public test::TestTailCaller::Server {
+  // Tail-calls the callee with a request that has the noPromisePipelining hint, so the tail call
+  // produces no pipeline.
+
+public:
+  kj::Promise<void> foo(FooContext context) override {
+    auto params = context.getParams();
+    auto typeless = params.getCallee().typelessRequest(
+        typeId<test::TestTailCallee>(), 0, kj::none, { .noPromisePipelining = true });
+    auto tailParams = typeless.initAs<test::TestTailCallee::FooParams>();
+    tailParams.setI(params.getI());
+    tailParams.setT("from NoPipelineTailCallerImpl");
+    return context.tailCall(
+        Request<test::TestTailCallee::FooParams, test::TestTailCallee::TailResult>(
+            tailParams, RequestHook::from(kj::mv(typeless))));
+  }
+};
+
+KJ_TEST("tail call without a pipeline breaks pipelined calls") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int calleeCallCount = 0;
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount));
+  test::TestTailCaller::Client caller(kj::heap<NoPipelineTailCallerImpl>());
+
+  auto request = caller.fooRequest();
+  request.setI(456);
+  request.setCallee(callee);
+  auto promise = request.send();
+
+  // Made before the tail call happens, so it is queued until the tail call's pipeline is known.
+  auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
+
+  auto response = promise.wait(waitScope);
+  KJ_EXPECT(response.getI() == 456);
+  KJ_EXPECT(calleeCallCount == 1);
+
+  // Made after the tail call's pipeline resolved to none.
+  auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
+
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", dependentCall0.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", dependentCall1.wait(waitScope));
+
+  // The response itself is still usable.
+  KJ_EXPECT(response.getC().getCallSequenceRequest().send().wait(waitScope).getN() == 0);
+}
+
+KJ_TEST("newLocalPromisePipeline resolving to none breaks pipelined caps") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Rc<PipelineHook>>>();
+  auto pipeline = newLocalPromisePipeline(kj::mv(paf.promise));
+
+  test::TestInterface::Client early(pipeline->getPipelinedCap(kj::ArrayPtr<const PipelineOp>()));
+  auto earlyCall = early.fooRequest().send();
+
+  paf.fulfiller->fulfill(kj::none);
+
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", earlyCall.wait(waitScope));
+
+  test::TestInterface::Client late(pipeline->getPipelinedCap(kj::ArrayPtr<const PipelineOp>()));
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", late.fooRequest().send().wait(waitScope));
 }
 
 TEST(Capability, AsyncCancelation) {
