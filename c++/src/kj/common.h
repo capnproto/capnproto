@@ -1304,7 +1304,13 @@ concept AssignableFrom = requires(T& a, U&& b) { a = kj::fwd<U>(b); };
 
 template <typename T, typename U>
 concept ConstructibleFrom = requires(U&& u) { T(kj::fwd<U>(u)); };
-// Concept: T has a constructor that accepts U&&.
+// Concept: T can be directly initialized from U&&, including explicit conversions.
+
+template <typename T, typename U>
+concept ImplicitlyConstructibleFrom = requires(U&& u) {
+  { CanConvert_<T>::sfinae(kj::fwd<U>(u)) } -> SameAs<int>;
+};
+// Concept: U&& implicitly converts to T, excluding explicit constructors and conversion operators.
 
 template <typename T, typename U>
 concept NoThrowConstructibleFrom = requires(U&& u) {
@@ -1904,6 +1910,16 @@ inline Maybe<T> some(T&& t) { return Maybe<T>(kj::mv(t)); }
 template <typename T>
 class Maybe {
   // A T, or nullptr.
+  //
+  // Maybe<U> implicitly converts to Maybe<T> whenever the contained U can construct a T.
+  // This applies to all types, not only pointer types. Lvalue sources convert
+  // from U& (or const U& for const sources); moving converts from U&& and clears the source.
+  // Moving a Maybe<U&> copies from the referent instead of moving it, then clears the reference.
+  // Empty sources produce empty results without invoking the conversion.
+  //
+  // These conversions do not extend the lifetime of borrowed data. For example, converting a
+  // Maybe<String> to Maybe<StringPtr> borrows from the original String; do not move the owner
+  // into such a conversion, since it would be destroyed and leave the pointer dangling.
 
 public:
   Maybe(): ptr(nullptr) {}
@@ -1915,12 +1931,14 @@ public:
   Maybe(Maybe& other): ptr(other.ptr) {}
 
   template <typename U>
+    requires _::ConstructibleFrom<T, U>
   Maybe(Maybe<U>&& other) noexcept(isNoThrowMoveConstructible<T, U>()) {
     KJ_IF_SOME(val, kj::mv(other)) {
       ptr.emplaceInit(kj::mv(val));
     }
   }
   template <typename U>
+    requires _::ConstructibleFrom<T, U&>
   Maybe(Maybe<U&>&& other) {
     KJ_IF_SOME(val, other) {
       ptr.emplaceInit(val);
@@ -1928,6 +1946,14 @@ public:
     }
   }
   template <typename U>
+    requires _::ConstructibleFrom<T, U&>
+  Maybe(Maybe<U>& other) {
+    KJ_IF_SOME(val, other) {
+      ptr.emplaceInit(val);
+    }
+  }
+  template <typename U>
+    requires _::ConstructibleFrom<T, const U&>
   Maybe(const Maybe<U>& other) {
     KJ_IF_SOME(val, other) {
       ptr.emplaceInit(val);
@@ -1937,7 +1963,7 @@ public:
   template <typename U>
     requires _::HasConvertingConstructorFlag<T> &&  // Only when MaybeTraits<T> opts in
              _::ConstructibleFrom<T, U>
-  explicit(!canConvert<U&&, T>())  // Implicit when U→T is implicit, explicit otherwise
+  explicit(!_::ImplicitlyConstructibleFrom<T, U>)  // Follow the underlying conversion's explicitness
   Maybe(U&& value) noexcept(isNoThrowMoveConstructible<T, U>()): ptr(kj::fwd<U>(value)) {}
   // Converting constructor: allows constructing Maybe<T> from a U that is convertible to T.
   // Only exists when MaybeTraits<T>::convertingConstructor is true.
@@ -2009,7 +2035,7 @@ public:
   //
   // operator=(T&&/T&/const T&) delegates directly to NullableValue::operator=(U&&).
   //
-  // operator=(Maybe&&/const Maybe&/Maybe<U>&&/const Maybe<U>&) uses KJ_IF_SOME to extract
+  // operator=(Maybe&&/const Maybe&/Maybe<U>&&/Maybe<U>&/const Maybe<U>&) uses KJ_IF_SOME to extract
   // the source value, then delegates to NullableValue::operator=(U&&). For the move variants,
   // KJ_IF_SOME goes through NullableValue's move constructor, which clears the source to a
   // well-defined empty state.
@@ -2052,6 +2078,7 @@ public:
   }
 
   template <typename U>
+    requires _::ConstructibleFrom<T, decltype(kj::mv(kj::instance<U&>()))>
   Maybe& operator=(Maybe<U>&& other) {
     KJ_IF_SOME(val, kj::mv(other)) {
       ptr = kj::mv(val);
@@ -2061,6 +2088,17 @@ public:
     return *this;
   }
   template <typename U>
+    requires _::ConstructibleFrom<T, U&>
+  Maybe& operator=(Maybe<U>& other) {
+    KJ_IF_SOME(val, other) {
+      ptr = val;
+    } else {
+      ptr = nullptr;
+    }
+    return *this;
+  }
+  template <typename U>
+    requires _::ConstructibleFrom<T, const U&>
   Maybe& operator=(const Maybe<U>& other) {
     KJ_IF_SOME(val, other) {
       ptr = val;

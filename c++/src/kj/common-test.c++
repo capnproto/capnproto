@@ -378,6 +378,63 @@ TEST(Common, CanConvert) {
   static_assert(!canConvert<const void*, void*>(), "failure");
 }
 
+KJ_TEST("ImplicitlyConstructibleFrom excludes explicit conversions") {
+  struct ImplicitConstructor {
+    ImplicitConstructor(int);
+  };
+  struct ExplicitConstructor {
+    explicit ExplicitConstructor(int);
+  };
+  struct ImplicitConversion {
+    operator int() const;
+  };
+  struct ExplicitConversion {
+    explicit operator int() const;
+  };
+  struct MutableConversion {
+    operator int() &;
+  };
+  struct ImmovableConversion {
+    KJ_DISALLOW_COPY_AND_MOVE(ImmovableConversion);
+    operator int() &&;
+  };
+  struct MoveOnly {
+    MoveOnly() = default;
+    KJ_DISALLOW_COPY(MoveOnly);
+    MoveOnly(MoveOnly&&) = default;
+  };
+  struct PrivateConstructor {
+  private:
+    PrivateConstructor(int);
+  };
+
+  static_assert(_::ConstructibleFrom<ImplicitConstructor, int>);
+  static_assert(_::ImplicitlyConstructibleFrom<ImplicitConstructor, int>);
+  static_assert(_::ConstructibleFrom<ExplicitConstructor, int>);
+  static_assert(!_::ImplicitlyConstructibleFrom<ExplicitConstructor, int>);
+  static_assert(_::ConstructibleFrom<int, ImplicitConversion>);
+  static_assert(_::ImplicitlyConstructibleFrom<int, ImplicitConversion>);
+  static_assert(_::ConstructibleFrom<int, ExplicitConversion>);
+  static_assert(!_::ImplicitlyConstructibleFrom<int, ExplicitConversion>);
+
+  // Direct initialization can invoke a converting constructor and an implicit conversion
+  // operator, but an implicit conversion sequence cannot contain both.
+  static_assert(_::ConstructibleFrom<ImplicitConstructor, ImplicitConversion>);
+  static_assert(!_::ImplicitlyConstructibleFrom<ImplicitConstructor, ImplicitConversion>);
+
+  static_assert(_::ImplicitlyConstructibleFrom<int, MutableConversion&>);
+  static_assert(!_::ImplicitlyConstructibleFrom<int, const MutableConversion&>);
+  static_assert(!_::ImplicitlyConstructibleFrom<int, MutableConversion>);
+  static_assert(_::ImplicitlyConstructibleFrom<int, ImmovableConversion>);
+  static_assert(_::ImplicitlyConstructibleFrom<MoveOnly, MoveOnly>);
+  static_assert(!_::ImplicitlyConstructibleFrom<MoveOnly, MoveOnly&>);
+  static_assert(!_::ImplicitlyConstructibleFrom<MoveOnly, const MoveOnly&>);
+  static_assert(!_::ImplicitlyConstructibleFrom<PrivateConstructor, int>);
+  static_assert(_::ImplicitlyConstructibleFrom<const int&, int&>);
+  static_assert(!_::ImplicitlyConstructibleFrom<int&, const int&>);
+  static_assert(!_::ImplicitlyConstructibleFrom<void*, int>);
+}
+
 KJ_TEST("isNoThrowMoveConstructible") {
   static_assert(_::NoThrowConstructibleFrom<int, int>);
 
