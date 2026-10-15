@@ -59,18 +59,19 @@ constexpr const uint MESSAGE_TARGET_SIZE_HINT = sizeInWords<rpc::MessageTarget>(
 constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>() +
     sizeInWords<rpc::PromisedAnswer>();
 
-constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
-
-uint copySizeHint(MessageSize size) {
-  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
-                    // if capCount > 0, the cap descriptor list has a 1-word tag
-                    + (size.capCount > 0);
-  return kj::min(MAX_SIZE_HINT, sizeHint);
+uint64_t copySizeHint(MessageSize size) {
+  return size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
+       // if capCount > 0, the cap descriptor list has a 1-word tag
+       + (size.capCount > 0);
 }
 
 uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint, uint additional) {
   KJ_IF_SOME(s, sizeHint) {
-    return copySizeHint(s) + additional;
+    // Size the first segment to hold the whole message, clamped only to what a segment can hold.
+    // If the first segment is too small, copying a large object into the message spills into more
+    // segments, and every pointer that crosses into them gains a far-pointer landing pad. With many
+    // pointers, that can push a message that fit the receiver's traversal limit over it.
+    return kj::min(copySizeHint(s) + additional, uint64_t(unbound(MAX_SEGMENT_WORDS / WORDS)));
   } else {
     return 0;
   }
