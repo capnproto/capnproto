@@ -40,6 +40,7 @@ update_version() {
   local OLD_REGEX=${OLD//./[.]}
   doit sed -i -e "s/$OLD_REGEX/$NEW/g" c++/configure.ac
   doit sed -i -e "s/set(VERSION.*)/set(VERSION $NEW)/g" c++/CMakeLists.txt
+  doit sed -i -re "s/^( *version = )\"[^\"]*\",/\1\"$NEW\",/" c++/MODULE.bazel
 
   local NEW_NOTAG=${NEW%%-*}
   declare -a NEW_ARR=(${NEW_NOTAG//./ })
