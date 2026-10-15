@@ -134,6 +134,21 @@ public:
   // Stack traces can sometimes contain sensitive information, so you should think carefully about
   // what information you are willing to reveal to the remote party.
 
+  // void setMaxSizeHint(uint64_t words);
+  //
+  // (Inherited from _::RpcSystemBase)
+  //
+  // Sets the largest first segment, in words, that the RpcSystem will allocate for an outgoing
+  // message based on its size hint. Defaults to 1M words (8 MiB). Messages whose hint is below the
+  // limit are unaffected.
+  //
+  // A message larger than this limit spills into additional segments. When such a message is built
+  // by copying a large object, such as a message read from storage, every pointer that crosses into
+  // a later segment gains a one-word far-pointer landing pad. Many pointers can therefore push a
+  // message that would fit the receiver's `traversalLimitInWords` over that limit, and the send is
+  // refused. To avoid that, set this to the connection's traversal limit. Don't set it higher than
+  // necessary, since an overestimated hint allocates up to this much memory.
+
   kj::Promise<void> run() { return RpcSystemBase::run(); }
   // Listens for incoming RPC connections and handles them. Never returns normally, but could throw
   // an exception if the system becomes unable to accept new connections (e.g. because the

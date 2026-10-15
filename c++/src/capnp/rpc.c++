@@ -59,18 +59,19 @@ constexpr const uint MESSAGE_TARGET_SIZE_HINT = sizeInWords<rpc::MessageTarget>(
 constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>() +
     sizeInWords<rpc::PromisedAnswer>();
 
-constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
+constexpr const uint64_t DEFAULT_MAX_SIZE_HINT = 1 << 20;
+// Default for RpcSystemBase::setMaxSizeHint().
 
-uint copySizeHint(MessageSize size) {
+uint copySizeHint(MessageSize size, uint64_t maxSizeHint) {
   uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
                     // if capCount > 0, the cap descriptor list has a 1-word tag
                     + (size.capCount > 0);
-  return kj::min(MAX_SIZE_HINT, sizeHint);
+  return kj::min(maxSizeHint, sizeHint);
 }
 
-uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint, uint additional) {
+uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint, uint additional, uint64_t maxSizeHint) {
   KJ_IF_SOME(s, sizeHint) {
-    return copySizeHint(s) + additional;
+    return copySizeHint(s, maxSizeHint) + additional;
   } else {
     return 0;
   }
@@ -448,9 +449,10 @@ public:
                      BootstrapFactoryBase& bootstrapFactory,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
                      size_t flowLimit,
+                     uint64_t maxSizeHint,
                      kj::Maybe<kj::Function<kj::String(const kj::Exception&)>&> traceEncoder,
                      RpcSystemBrand& brand)
-      : bootstrapFactory(bootstrapFactory), flowLimit(flowLimit),
+      : bootstrapFactory(bootstrapFactory), flowLimit(flowLimit), maxSizeHint(maxSizeHint),
         traceEncoder(traceEncoder), brand(kj::addRef(brand)), tasks(*this) {
     connection.init<Connected>(
         Connected { rpcSystem, kj::mv(connectionParam), kj::heap<kj::Canceler>() });
@@ -659,6 +661,10 @@ public:
     maybeUnblockFlow();
   }
 
+  void setMaxSizeHint(uint64_t words) {
+    maxSizeHint = words;
+  }
+
 private:
   class RpcClient;
   class ImportClient;
@@ -855,6 +861,9 @@ private:
 
   size_t flowLimit;
   size_t callWordsInFlight = 0;
+
+  uint64_t maxSizeHint;
+  // Largest first segment to allocate for an outgoing message, per RpcSystemBase::setMaxSizeHint().
 
   kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> flowWaiter;
   // If non-null, we're currently blocking incoming messages waiting for callWordsInFlight to drop
@@ -2488,7 +2497,8 @@ private:
           target(kj::mv(target)),
           message(connection.newOutgoingMessage(
               firstSegmentSize(sizeHint, messageSizeHint<rpc::Call>() +
-                  sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT))),
+                  sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT,
+                  connectionState.maxSizeHint))),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
           paramsBuilder(capTable.imbue(callBuilder.getParams().getContent())) {}
 
@@ -3382,7 +3392,7 @@ private:
           auto message = connectionState->connection.get<Connected>().connection
               ->newOutgoingMessage(
                   firstSegmentSize(sizeHint, messageSizeHint<rpc::Return>() +
-                                  sizeInWords<rpc::Payload>()));
+                                  sizeInWords<rpc::Payload>(), connectionState->maxSizeHint));
           returnMessage = message->getBody().initAs<rpc::Message>().initReturn();
           response = kj::heap<RpcServerResponseImpl>(
               *connectionState, kj::mv(message), returnMessage.getResults());
@@ -3719,7 +3729,7 @@ private:
       default: {
         if (connection.is<Connected>()) {
           auto message = connection.get<Connected>().connection->newOutgoingMessage(
-              firstSegmentSize(reader.totalSize(), messageSizeHint<void>()));
+              firstSegmentSize(reader.totalSize(), messageSizeHint<void>(), maxSizeHint));
           message->getBody().initAs<rpc::Message>().setUnimplemented(reader);
           message->send();
         }
@@ -4702,6 +4712,14 @@ public:
     }
   }
 
+  void setMaxSizeHint(uint64_t words) {
+    maxSizeHint = words;
+
+    for (auto& conn: connections) {
+      conn.value->setMaxSizeHint(words);
+    }
+  }
+
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {
     traceEncoder = kj::mv(func);
   }
@@ -4717,7 +4735,8 @@ public:
     return *connections.findOrCreate(connection, [&]() -> ConnectionMap::Entry {
       VatNetworkBase::Connection* connectionPtr = connection;
       auto newState = kj::refcounted<RpcConnectionState>(
-          *this, bootstrapFactory, kj::mv(connection), flowLimit, traceEncoder, *brand);
+          *this, bootstrapFactory, kj::mv(connection), flowLimit, maxSizeHint, traceEncoder,
+          *brand);
       return {connectionPtr, kj::mv(newState)};
     });
   }
@@ -4727,6 +4746,7 @@ private:
   kj::Maybe<Capability::Client> bootstrapInterface;
   BootstrapFactoryBase& bootstrapFactory;
   size_t flowLimit = kj::maxValue;
+  uint64_t maxSizeHint = DEFAULT_MAX_SIZE_HINT;
   kj::Maybe<kj::Function<kj::String(const kj::Exception&)>> traceEncoder;
   kj::Promise<void> acceptLoopPromise = nullptr;
   kj::Own<RpcSystemBrand> brand = kj::refcounted<RpcSystemBrand>();
@@ -4779,6 +4799,10 @@ Capability::Client RpcSystemBase::baseBootstrap(AnyStruct::Reader vatId) {
 
 void RpcSystemBase::baseSetFlowLimit(size_t words) {
   return impl->setFlowLimit(words);
+}
+
+void RpcSystemBase::setMaxSizeHint(uint64_t words) {
+  impl->setMaxSizeHint(words);
 }
 
 void RpcSystemBase::setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func) {

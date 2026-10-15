@@ -101,6 +101,7 @@ public:
   RpcSystemBase(RpcSystemBase&& other) noexcept;
   ~RpcSystemBase() noexcept(false);
 
+  void setMaxSizeHint(uint64_t words);
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
 
   kj::Promise<void> run();

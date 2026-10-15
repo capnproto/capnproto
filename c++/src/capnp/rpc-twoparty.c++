@@ -489,4 +489,8 @@ void TwoPartyClient::setTraceEncoder(kj::Function<kj::String(const kj::Exception
   rpcSystem.setTraceEncoder(kj::mv(func));
 }
 
+void TwoPartyClient::setMaxSizeHint(uint64_t words) {
+  rpcSystem.setMaxSizeHint(words);
+}
+
 }  // namespace capnp
