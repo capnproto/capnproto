@@ -258,6 +258,9 @@ public:
   void setTraceEncoder(kj::Function<kj::String(const kj::Exception&)> func);
   // Forwarded to rpcSystem.setTraceEncoder().
 
+  void setMaxSizeHint(uint64_t words);
+  // Forwarded to rpcSystem.setMaxSizeHint().
+
   size_t getCurrentQueueSize() { return network.getCurrentQueueSize(); }
   size_t getCurrentQueueCount() { return network.getCurrentQueueCount(); }
   kj::Duration getOutgoingMessageWaitTime() { return network.getOutgoingMessageWaitTime(); }
