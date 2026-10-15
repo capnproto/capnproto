@@ -34,8 +34,8 @@ KJ_TEST("HashMap") {
   map.insert(kj::mv(ownFoo), 123);
   map.insert(kj::str("bar"), 456);
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("bar"_kj)) == 456);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("bar"_kj)) == 456);
   KJ_EXPECT(map.find("baz"_kj) == kj::none);
 
   map.upsert(kj::str("foo"), 789, [](int& old, uint newValue) {
@@ -44,27 +44,27 @@ KJ_TEST("HashMap") {
     old = 4321;
   });
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj))->key.begin() == origFoo);
 
   map.upsert(kj::str("foo"), 321);
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj))->key.begin() == origFoo);
 
   KJ_EXPECT(
-      map.findOrCreate("foo"_kj,
+      *map.findOrCreate("foo"_kj,
           []() -> HashMap<String, int>::Entry { KJ_FAIL_ASSERT("shouldn't have been called"); })
       == 321);
-  KJ_EXPECT(map.findOrCreate("baz"_kj,
+  KJ_EXPECT(*map.findOrCreate("baz"_kj,
       [](){ return HashMap<String, int>::Entry { kj::str("baz"), 654 }; }) == 654);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
 
   KJ_EXPECT(map.erase("bar"_kj));
   KJ_EXPECT(map.erase("baz"_kj));
   KJ_EXPECT(!map.erase("qux"_kj));
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
   KJ_EXPECT(map.size() == 1);
   KJ_EXPECT(map.begin()->key == "foo");
   auto iter = map.begin();
@@ -83,8 +83,8 @@ KJ_TEST("TreeMap") {
   map.insert(kj::mv(ownFoo), 123);
   map.insert(kj::str("bar"), 456);
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("bar"_kj)) == 456);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 123);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("bar"_kj)) == 456);
   KJ_EXPECT(map.find("baz"_kj) == kj::none);
 
   map.upsert(kj::str("foo"), 789, [](int& old, uint newValue) {
@@ -93,27 +93,27 @@ KJ_TEST("TreeMap") {
     old = 4321;
   });
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 4321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj))->key.begin() == origFoo);
 
   map.upsert(kj::str("foo"), 321);
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj)).key.begin() == origFoo);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.findEntry("foo"_kj))->key.begin() == origFoo);
 
   KJ_EXPECT(
-      map.findOrCreate("foo"_kj,
+      *map.findOrCreate("foo"_kj,
           []() -> TreeMap<String, int>::Entry { KJ_FAIL_ASSERT("shouldn't have been called"); })
       == 321);
-  KJ_EXPECT(map.findOrCreate("baz"_kj,
+  KJ_EXPECT(*map.findOrCreate("baz"_kj,
       [](){ return TreeMap<String, int>::Entry { kj::str("baz"), 654 }; }) == 654);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("baz"_kj)) == 654);
 
   KJ_EXPECT(map.erase("bar"_kj));
   KJ_EXPECT(map.erase("baz"_kj));
   KJ_EXPECT(!map.erase("qux"_kj));
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find("foo"_kj)) == 321);
   KJ_EXPECT(map.size() == 1);
   KJ_EXPECT(map.begin()->key == "foo");
   auto iter = map.begin();
@@ -180,7 +180,7 @@ KJ_TEST("HashMap findOrCreate throws") {
     return HashMap<int, String>::Entry { 1, kj::str("ok") };
   });
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(1)) == "ok");
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(m.find(1)) == "ok");
 }
 
 template <typename MapType>
@@ -199,9 +199,9 @@ void testEraseAll(MapType& m) {
   KJ_EXPECT(m.size() == 3);
   KJ_EXPECT(m.find(12) == kj::none);
   KJ_EXPECT(m.find(99) == kj::none);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(83)) == "bar");
-  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(6)) == "qux");
-  KJ_EXPECT(KJ_ASSERT_NONNULL(m.find(55)) == "corge");
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(m.find(83)) == "bar");
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(m.find(6)) == "qux");
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(m.find(55)) == "corge");
 }
 
 KJ_TEST("HashMap eraseAll") {
@@ -214,12 +214,63 @@ KJ_TEST("TreeMap eraseAll") {
   testEraseAll(m);
 }
 
+static_assert(!isSameType<HashMap<int, int>::Lock<int>, TreeMap<int, int>::Lock<int>>());
+
+template <typename Map>
+void testLocks() {
+  Map map;
+  map.insert(1, 10);
+
+  {
+    auto lock = KJ_ASSERT_NONNULL(map.find(1));
+    *lock = 20;
+    KJ_EXPECT_THROW_MESSAGE(
+        "cannot modify a map while an entry is locked", map.insert(2, 30));
+
+    auto movedLock = kj::mv(lock);
+    KJ_EXPECT(*movedLock == 20);
+    KJ_EXPECT_THROW_MESSAGE(
+        "cannot modify a map while an entry is locked", map.clear());
+  }
+
+  map.insert(2, 30);
+
+  {
+    auto entry = KJ_ASSERT_NONNULL(map.findEntry(1));
+    auto otherLock = KJ_ASSERT_NONNULL(map.find(2));
+    KJ_EXPECT_THROW_MESSAGE(
+        "cannot modify a map while another entry is locked", map.erase(kj::mv(entry)));
+  }
+
+  auto entry = KJ_ASSERT_NONNULL(map.findEntry(1));
+  map.erase(kj::mv(entry));
+  KJ_EXPECT(map.find(1) == kj::none);
+}
+
+KJ_TEST("HashMap locks entries") {
+  testLocks<HashMap<int, int>>();
+}
+
+KJ_TEST("map Lock forwards operator-> for pointer values") {
+  struct Target { int value; } target = { 123 };
+  HashMap<int, Target*> map;
+  map.insert(1, &target);
+
+  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find(1))->value == 123);
+  const auto& constMap = map;
+  KJ_EXPECT(KJ_ASSERT_NONNULL(constMap.find(1))->value == 123);
+}
+
+KJ_TEST("TreeMap locks entries") {
+  testLocks<TreeMap<int, int>>();
+}
+
 KJ_TEST("HashMap<uint64> with int key") {
   // Make sure searching for an `int` key in a `uint64_t` table works -- i.e., the hashes are
   // consistent even though the types differ.
   kj::HashMap<uint64_t, kj::StringPtr> map;
   map.insert((uint64_t)123, "foo"_kj);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(map.find((int)123)) == "foo"_kj);
+  KJ_EXPECT(*KJ_ASSERT_NONNULL(map.find((int)123)) == "foo"_kj);
 
   // But also make sure that the upper bits of a 64-bit integer do affect the hash.
   KJ_EXPECT(kj::hashCode(0x1200000001ull) != kj::hashCode(0x3400000001ull));

@@ -366,14 +366,14 @@ public:
     }
 
     auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
-    ClientHook*& slot = map.findOrCreate(&cap, [&]() -> kj::Decay<decltype(map)>::Entry {
+    auto slot = map.findOrCreate(&cap, [&]() -> kj::Decay<decltype(map)>::Entry {
       return { &cap, nullptr };
     });
-    if (slot == nullptr) {
+    if (*slot == nullptr) {
       auto result = ClientHook::from(
           reverse ? policy.importExternal(Capability::Client(cap.addRef()))
                   : policy.exportInternal(Capability::Client(cap.addRef())));
-      slot = result;
+      *slot = result;
       return result;
     } else {
       return slot->addRef();
@@ -396,14 +396,14 @@ public:
     }
 
     auto& map = reverse ? policy.reverseWrappers : policy.wrappers;
-    ClientHook*& slot = map.findOrCreate(cap.get(), [&]() -> kj::Decay<decltype(map)>::Entry {
+    auto slot = map.findOrCreate(cap.get(), [&]() -> kj::Decay<decltype(map)>::Entry {
       return { cap.get(), nullptr };
     });
-    if (slot == nullptr) {
+    if (*slot == nullptr) {
       auto result = ClientHook::from(
           reverse ? policy.importExternal(Capability::Client(kj::mv(cap)))
                   : policy.exportInternal(Capability::Client(kj::mv(cap))));
-      slot = result;
+      *slot = result;
       return result;
     } else {
       return slot->addRef();

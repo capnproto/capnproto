@@ -79,7 +79,7 @@ public:
           auto call = message.getCall();
           InterfaceSchema schema;
           KJ_IF_SOME(s, parent.schemas.find(call.getInterfaceId())) {
-            schema = s;
+            schema = *s;
           } else {
             break;
           }
@@ -129,8 +129,8 @@ public:
 
           Schema schema;
           KJ_IF_SOME(entry, returnTypes.findEntry(ret.getAnswerId())) {
-            schema = entry.value;
-            returnTypes.erase(entry);
+            schema = entry->value;
+            returnTypes.erase(kj::mv(entry));
           } else {
             break;
           }
@@ -220,7 +220,7 @@ public:
 
   kj::Maybe<TestVat&> find(kj::StringPtr name) {
     KJ_IF_SOME(vat, map.find(name)) {
-      return *vat;
+      return **vat;
     } else {
       return kj::none;
     }
@@ -587,7 +587,7 @@ public:
     if (!unique) {
       KJ_IF_SOME(conn, connections.find(&dst)) {
         // Return existing connection.
-        return kj::Own<Connection>(kj::addRef(*conn));
+        return kj::Own<Connection>(kj::addRef(**conn));
       }
     }
 
@@ -610,7 +610,7 @@ public:
 
   kj::Maybe<ConnectionImpl&> getConnectionTo(TestVat& other) {
     KJ_IF_SOME(conn, connections.find(&other)) {
-      return *conn;
+      return **conn;
     } else {
       return kj::none;
     }
@@ -639,7 +639,7 @@ private:
   kj::HashMap<uint64_t, ThirdPartyExchange> tphExchanges;
 
   ThirdPartyExchange& getTphExchange(uint64_t token) {
-    return tphExchanges.findOrCreate(token, [&]() -> decltype(tphExchanges)::Entry {
+    return *tphExchanges.findOrCreate(token, [&]() -> decltype(tphExchanges)::Entry {
       return {token, ThirdPartyExchange()};
     });
   }
@@ -648,7 +648,7 @@ private:
 TestNetwork::~TestNetwork() noexcept(false) {}
 
 TestVat& TestNetwork::add(kj::StringPtr name) {
-  return *map.insert(name, kj::heap<TestVat>(*this, name)).value;
+  return *map.insert(name, kj::heap<TestVat>(*this, name))->value;
 }
 
 // =======================================================================================
@@ -695,7 +695,7 @@ struct TestContext {
   Vat& getVat(kj::StringPtr name) {
     // Get or create a vat with the given name. (Name must be a string literal or otherwise
     // outlive the TestContext.)
-    return *vats.findOrCreate(name, [&]() -> decltype(vats)::Entry {
+    return **vats.findOrCreate(name, [&]() -> decltype(vats)::Entry {
       return { name,  kj::heap<Vat>(network.add(name)) };
     });
   }
@@ -703,7 +703,7 @@ struct TestContext {
   template <typename T>
   Vat& initVat(kj::StringPtr name, T bootstrap) {
     // Create a vat with the given name and bootstrap capability.
-    return *vats.insert(name, kj::heap<Vat>(network.add(name), kj::mv(bootstrap))).value;
+    return *vats.insert(name, kj::heap<Vat>(network.add(name), kj::mv(bootstrap)))->value;
   }
 
   Vat& alice;
