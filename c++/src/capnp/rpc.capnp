@@ -527,6 +527,20 @@ struct Return {
   # promise pipelining responsibility. The caller may still send a `Finish` message if it wants,
   # which will be silently ignored by the callee.
 
+  needsFinish @8 :Bool = true;
+  # If true, the caller must send a `Finish` message for the call, which is the default.
+  # Note that sending a `Finish` must always safe even when it is not needed.
+  # The calee may set `neesdFinish=false` only when the `Return.result` payload contain no
+  # capabilities. This saves one network message per such simple return. When `neesdFinish=false`,
+  # the caller does not have to check for capabilities in the payload.
+  #
+  # Compatibility: A calee not implementing or aware of `needsFinish` will never set it to `false`
+  # and the client must send a `Finish`. A caller not implementing or aware of `needsFinish` will
+  # always send `Finish`.
+  # Question ID assignment and reuse is consistent since the IDs are assigned by the caller and she
+  # may only observe `needsFinish=false` when both parties understand it. In that case she may
+  # reuse the ID later knowing the calee has already finished the call.
+
   union {
     results @2 :Payload;
     # The result.
