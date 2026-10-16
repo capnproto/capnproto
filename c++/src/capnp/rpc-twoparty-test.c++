@@ -494,6 +494,72 @@ TEST(TwoPartyNetwork, HugeMessage) {
   }
 }
 
+class LargeResultImpl final: public test::TestExtends::Server {
+  // Returns a copy of a pre-built message, the way a server forwards a message it read from
+  // storage.
+
+public:
+  explicit LargeResultImpl(test::TestAllTypes::Reader result): result(result) {}
+
+  kj::Promise<void> grault(GraultContext context) override {
+    // setResults() passes `result.totalSize()` as the size hint.
+    context.setResults(result);
+    return kj::READY_NOW;
+  }
+
+private:
+  test::TestAllTypes::Reader result;
+};
+
+KJ_TEST("A copied result just under the size limit fits in a single message") {
+  // A result built from a message that is just under the size limit must still fit once it is
+  // copied into the RPC Return message. If the Return message's first segment is smaller than
+  // the size hint, the copy spills into more segments, and every pointer that crosses into them
+  // gains a far-pointer landing pad. With many pointers, that pushes the message over the limit.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  // A small limit keeps the test fast, but it must be large enough that the copy spans several
+  // segments if the Return message's first segment is not sized to fit it.
+  constexpr uint64_t LIMIT_WORDS = 2u << 20;
+  constexpr uint ELEMENT_COUNT = 10000;
+
+  // Leave headroom for the RPC framing around the result, but far less than the one word per
+  // element that far-pointer landing pads would add.
+  constexpr uint64_t SOURCE_WORDS = LIMIT_WORDS - 1024;
+
+  ReaderOptions options;
+  options.traversalLimitInWords = LIMIT_WORDS;
+
+  // Build the result in a single segment, like a flat message read from storage.
+  MallocMessageBuilder source(LIMIT_WORDS, AllocationStrategy::FIXED_SIZE);
+  auto root = source.initRoot<test::TestAllTypes>();
+  auto texts = root.initTextList(ELEMENT_COUNT);
+  uint64_t fixedWords = source.getSegmentsForOutput()[0].size();
+  uint64_t textWords = (SOURCE_WORDS - fixedWords) / ELEMENT_COUNT;
+  uint64_t extraWords = (SOURCE_WORDS - fixedWords) % ELEMENT_COUNT;
+  for (auto i: kj::zeroTo(ELEMENT_COUNT)) {
+    // Spread the remainder over the first elements so the source is exactly SOURCE_WORDS. A Text
+    // of N bytes occupies N + 1 bytes including its NUL terminator, rounded up to whole words.
+    uint64_t words = textWords + (i < extraWords);
+    texts.init(i, words * sizeof(word) - 1);
+  }
+  auto sourceSegments = source.getSegmentsForOutput();
+  KJ_ASSERT(sourceSegments.size() == 1);
+  KJ_ASSERT(sourceSegments[0].size() == SOURCE_WORDS);
+
+  auto pipe = kj::newTwoWayPipe();
+  TwoPartyVatNetwork clientNetwork(*pipe.ends[0], rpc::twoparty::Side::CLIENT, options);
+  TwoPartyVatNetwork serverNetwork(*pipe.ends[1], rpc::twoparty::Side::SERVER, options);
+  auto server = makeRpcServer(serverNetwork, kj::heap<LargeResultImpl>(root.asReader()));
+  auto client = makeRpcClient(clientNetwork);
+  auto cap = getBootstrap(client, rpc::twoparty::Side::SERVER).castAs<test::TestExtends>();
+
+  auto response = cap.graultRequest().send().wait(waitScope);
+  KJ_EXPECT(response.getTextList().size() == ELEMENT_COUNT);
+}
+
 class TestAuthenticatedBootstrapImpl final
     : public test::TestAuthenticatedBootstrap<rpc::twoparty::VatId>::Server {
 public:
