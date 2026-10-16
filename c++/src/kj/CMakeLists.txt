@@ -340,7 +340,7 @@ if(BUILD_TESTING)
     if(WITH_ZLIB)
       target_link_libraries(kj-heavy-tests kj-gzip)
       set_property(
-        SOURCE compat/gzip-test.c++
+        SOURCE compat/gzip-test.c++ compat/http-test.c++
         APPEND PROPERTY COMPILE_DEFINITIONS KJ_HAS_ZLIB
       )
     endif()
