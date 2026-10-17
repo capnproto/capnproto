@@ -370,6 +370,36 @@ KJ_TEST("decode all types") {
 #undef CASE_THROW_RECOVERABLE
 }
 
+KJ_TEST("numeric enum values") {
+  JsonCodec json;
+
+  for (uint16_t raw: {8, 65535}) {
+    auto value = static_cast<test::TestEnum>(raw);
+    auto encoded = json.encode(value);
+    KJ_EXPECT(encoded == kj::str(raw));
+    KJ_EXPECT(json.decode<test::TestEnum>(encoded) == value);
+
+    MallocMessageBuilder message;
+    auto root = message.initRoot<TestAllTypes>();
+    root.setEnumField(value);
+    root.setEnumList({value});
+
+    MallocMessageBuilder decodedMessage;
+    auto decodedRoot = decodedMessage.initRoot<TestAllTypes>();
+    json.decode(json.encode(root), decodedRoot);
+    KJ_EXPECT(decodedRoot.getEnumField() == value);
+    KJ_EXPECT(decodedRoot.getEnumList()[0] == value);
+  }
+
+  KJ_EXPECT(json.decode<test::TestEnum>("0"_kj) == test::TestEnum::FOO);
+  KJ_EXPECT(json.decode<test::TestEnum>("7"_kj) == test::TestEnum::GARPLY);
+
+  for (auto input: {"-1", "65536", "1.5"}) {
+    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Value out-of-range",
+        json.decode<test::TestEnum>(kj::StringPtr(input)));
+  }
+}
+
 KJ_TEST("decode test message") {
   MallocMessageBuilder message;
   auto root = message.getRoot<TestAllTypes>();
