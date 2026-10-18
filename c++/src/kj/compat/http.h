@@ -1475,6 +1475,8 @@ public:
   kj::StringPtr url;
   const HttpHeaders& headers;
   // Parsed request front matter, so the implementer can decide whether to suspend the request.
+  // `url` and `headers` remain valid until the HttpService returned by the factory is destroyed,
+  // unless the request is suspended.
 
   SuspendedRequest suspend();
   // Signal to the HttpServer that the current request loop should be exited. Return a
