@@ -110,18 +110,10 @@ kj::Maybe<int> WebSocketMessageStream::getSendBufferSize() {
 
 kj::Promise<void> WebSocketMessageStream::end() {
   return socket.close(
-    1005, // most generic code, indicates "No Status Received."
-          // Since the MessageStream API doesn't tell us why
-          // we're closing the connection, this is the best
-          // we can do. This is consistent with what browser
-          // implementations do if no status is provided, see:
-          //
-          // * https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close
-          // * https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+    1000, // Normal Closure (RFC 6455 section 7.4.1).
+          // 1005 is a reserved status code and MUST NOT be set in a Close control frame.
 
-    "Capnp connection closed" // Similarly not much information to go on here,
-                              // but this at least lets us trace this back to
-                              // capnp.
+    "Capnp connection closed" // Diagnostic reason indicating clean closure by Cap'n Proto.
   );
 };
 
