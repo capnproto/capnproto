@@ -877,7 +877,7 @@ public:
   // continues to count while the system is suspended.
 };
 
-class LowLevelAsyncIoProvider {
+class LowLevelAsyncIoProvider: public PtrTarget {
   // Similar to `AsyncIoProvider`, but represents a lower-level interface that may differ on
   // different operating systems.  You should prefer to use `AsyncIoProvider` over this interface
   // whenever possible, as `AsyncIoProvider` is portable and friendlier to dependency-injection.
@@ -891,6 +891,9 @@ class LowLevelAsyncIoProvider {
   // primitives, such as I/O completion ports vs. completion routines.
 
 public:
+  Ptr<LowLevelAsyncIoProvider> getPtr() { return addPtrToThis(); }
+  // A checked pointer to this provider, for work that may outlive the scope that was handed it.
+
   enum Flags {
     // Flags controlling how to wrap a file descriptor.
 
