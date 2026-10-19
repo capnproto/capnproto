@@ -78,7 +78,6 @@ public:
     other.content = ArrayPtr<const char>("", 1);
   }
   inline constexpr StringPtr(const StringPtr& other) noexcept: content(other.content) {}
-  inline constexpr StringPtr(String&& value KJ_LIFETIMEBOUND) : StringPtr(value) {}
   inline constexpr StringPtr(const String& value KJ_LIFETIMEBOUND);
   inline constexpr StringPtr(const ConstString& value KJ_LIFETIMEBOUND);
   inline constexpr StringPtr& operator=(StringPtr&& other) {
@@ -93,6 +92,7 @@ public:
     return *this;
   }
   StringPtr& operator=(String&& value) = delete;
+  StringPtr& operator=(ConstString&& value) = delete;
   inline StringPtr& operator=(decltype(nullptr)) {
     content = ArrayPtr<const char>("", 1);
     return *this;

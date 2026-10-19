@@ -2394,6 +2394,11 @@ public:
   }
   template <typename U>
   inline Maybe& operator=(const Maybe<U&>&& other) = delete;
+  Maybe& operator=(RemoveConst<T>&& other) = delete;
+  template <typename U>
+    requires (!isReference<U>())
+  Maybe& operator=(Maybe<U>&& other) = delete;
+  // Assigning from a temporary would leave this Maybe<T&> dangling.
 
   KJ_DEPRECATE_EMPTY_MAYBE_FROM_NULLPTR_ATTR
   inline constexpr bool operator==(decltype(nullptr)) const { return ptr == nullptr; }

@@ -58,6 +58,8 @@ public:
   inline Reader(const ArrayPtr<const byte>& value): ArrayPtr<const byte>(value) {}
   inline Reader(const kj::Array<byte>& value): ArrayPtr<const byte>(value) {}
   inline Reader(const ArrayPtr<byte>& value): ArrayPtr<const byte>(value) {}
+  Reader& operator=(kj::Array<const byte>&&) = delete;
+  Reader& operator=(kj::Array<byte>&&) = delete;
 };
 
 class Text::Reader: public kj::StringPtr {
@@ -77,6 +79,7 @@ public:
   inline Reader(const char* value, size_t size): StringPtr(value, size) {}
   inline Reader(const kj::String& value): StringPtr(value) {}
   inline Reader(const StringPtr& value): StringPtr(value) {}
+  Reader& operator=(kj::String&&) = delete;
 };
 
 class Data::Builder: public kj::ArrayPtr<byte> {
