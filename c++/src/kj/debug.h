@@ -503,6 +503,24 @@ namespace _ {  // private
 // Like KJ_ALWAYS_INLINE, but in prefix form, which GCC also accepts on in-class definitions of
 // member templates.
 
+template <typename T>
+struct DebugExpression;
+template <typename Left, typename Right, typename Op>
+struct DebugComparison;
+
+template <typename Left, typename Right, typename Op>
+struct FaultComparison {
+  // Snapshot of a failed DebugComparison as passed to the failure path. Contains just the operands
+  // (the operator is in the type and the result is known to be false), so that two scalar operands
+  // fit in two registers.
+  Left left;
+  Right right;
+};
+
+struct DebugExpressionFalse {};
+// Stand-in for a falsy `DebugExpression<T>` passed to the failure path: it always stringifies
+// as "false", so there's no need to pass the expression's value along.
+
 template <typename T> struct FaultPlain_ { typedef T Type; };
 template <typename T> struct FaultPlain_<T&> { typedef typename FaultPlain_<T>::Type Type; };
 template <typename T> struct FaultPlain_<T&&> { typedef typename FaultPlain_<T>::Type Type; };
@@ -527,6 +545,13 @@ constexpr bool isCheapFaultArg() {
 }
 
 template <typename T, bool cheap = isCheapFaultArg<FaultPlain<T>>()>
+struct FaultSnapshot_ { typedef T& Type; };  // Reference collapsing handles T = U&.
+template <typename T> struct FaultSnapshot_<T, true> { typedef FaultPlain<T> Type; };
+template <typename T> using FaultSnapshot = typename FaultSnapshot_<T>::Type;
+// Type of a DebugComparison operand as passed to the failure path: cheap values are copied,
+// everything else is referenced in place.
+
+template <typename T, bool cheap = isCheapFaultArg<FaultPlain<T>>()>
 struct FaultArgDefault_ {
   // Default: forward by reference.
   typedef T&& Type;
@@ -541,11 +566,22 @@ struct FaultArgDefault_<T, true> {
 
 template <typename T, typename Plain = FaultPlain<T>>
 struct FaultArg_: public FaultArgDefault_<T> {};
+template <typename T, typename U>
+struct FaultArg_<T, DebugExpression<U>> {
+  typedef DebugExpressionFalse Type;
+  KJ_FAULT_INLINE static Type convert(T&) { return {}; }
+};
+template <typename T, typename Left, typename Right, typename Op>
+struct FaultArg_<T, DebugComparison<Left, Right, Op>> {
+  typedef FaultComparison<FaultSnapshot<Left>, FaultSnapshot<Right>, Op> Type;
+  KJ_FAULT_INLINE static Type convert(T& cmp) { return { cmp.left, cmp.right }; }
+};
 template <typename T> using FaultArg = typename FaultArg_<T>::Type;
 // Type in which an assertion macro argument is passed to the out-of-line failure path.
 //
-// The failure path must not receive references to the caller's locals. Once a local's address
-// escapes to an opaque call, the compiler can no longer keep it in registers. Then the local gets
+// The failure path must not receive references to the caller's locals, or to the `_kjCondition`
+// object created by KJ_REQUIRE(). Once a local's address escapes to an opaque call, the compiler
+// can no longer keep it in registers. Then the local (or every field of `_kjCondition`) gets
 // stored to the stack on the *fast* path, every time the check runs, even though only the
 // failure path ever reads it. So cheap values are passed by copy, and the copy is made inside the
 // cold branch.
@@ -890,6 +926,11 @@ String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
   return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
 }
 
+template <typename Left, typename Right, typename Op>
+String KJ_STRINGIFY(FaultComparison<Left, Right, Op>& cmp) {
+  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
+}
+
 template <typename T>
 struct DebugExpression {
   DebugExpression(T&& value): value(kj::fwd<T>(value)) {}
@@ -938,6 +979,8 @@ StringPtr KJ_STRINGIFY(const DebugExpression<T>& exp) {
   //   directly, and was determined to be falsy.
   return "false"_kj;
 }
+
+inline StringPtr KJ_STRINGIFY(DebugExpressionFalse) { return "false"_kj; }
 
 struct DebugExpressionStart {
   template <typename T>
