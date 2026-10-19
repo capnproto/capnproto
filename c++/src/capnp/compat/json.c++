@@ -416,6 +416,9 @@ void JsonCodec::decodeField(StructSchema::Field fieldSchema, JsonValue::Reader f
       // If the schema type is a pointer type and the json value is null, we act as if the value
       // doesn't exist.
       output.adopt(fieldSchema, decode(fieldValue, fieldType, orphanage));
+    } else if (fieldSchema.getProto().getDiscriminantValue() != schema::Field::NO_DISCRIMINANT) {
+      // A union member must still be selected, though. clear() selects it and nulls the pointer.
+      output.clear(fieldSchema);
     }
   }
 }
