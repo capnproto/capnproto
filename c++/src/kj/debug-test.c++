@@ -916,16 +916,16 @@ KJ_TEST("stack frame overhead of assertion macros") {
 
   KJ_EXPECT_FRAME(assertTruthy, 0);
   KJ_EXPECT_FRAME(assertTruthyMessage, 0);
-  KJ_EXPECT_FRAME(assertEq, 48);
-  KJ_EXPECT_FRAME(assertNeMessage, 48);
-  KJ_EXPECT_FRAME(assertCheapArgs, 64);
+  KJ_EXPECT_FRAME(assertEq, 32);
+  KJ_EXPECT_FRAME(assertNeMessage, 32);
+  KJ_EXPECT_FRAME(assertCheapArgs, 48);
   KJ_EXPECT_FRAME(assertStringPtrArg, 16);
   KJ_EXPECT_FRAME(assertExpensiveArg, 0);
   KJ_EXPECT_FRAME(failAssert, 0);
   KJ_EXPECT_FRAME(failAssertCheapArg, 16);
   KJ_EXPECT_FRAME(assertNonNull, 0);
   KJ_EXPECT_FRAME(assertNonNullMessage, 0);
-  KJ_EXPECT_FRAME(assertTwice, 64);
+  KJ_EXPECT_FRAME(assertTwice, 48);
 
   #undef KJ_EXPECT_FRAME
 }
