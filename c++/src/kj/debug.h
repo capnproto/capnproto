@@ -167,7 +167,11 @@ namespace kj {
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
 
 // TODO(cleanup): It may be possible to reduce code duplication between the macros and their _AT
-// variants by making Debug::Fault take a SourceLocation instead of __FILE__/__LINE__.
+// variants by making Debug::Fault take a SourceLocation instead of __FILE__/__LINE__. The
+// non-traditional-preprocessor KJ_REQUIRE / KJ_FAIL_REQUIRE / KJ_UNIMPLEMENTED / KJ_REQUIRE_NONNULL
+// below already pass a static Debug::Fault::Site (see KJ_FAULT_SITE); the _AT variants, the
+// KJ_SYSCALL / KJ_WIN32 family and this traditional-preprocessor branch still pass
+// __FILE__/__LINE__ separately.
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
@@ -276,10 +280,18 @@ namespace kj {
 
 #define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
 
+#define KJ_FAULT_SITE(condition, macroArgs) \
+  ([]() -> const ::kj::_::Debug::Fault::Site& { \
+    static constexpr ::kj::_::Debug::Fault::Site site { \
+        __FILE__, __LINE__, condition, macroArgs }; \
+    return site; \
+  }())
+// Static descriptor of the failing check's source location, condition and argument names.
+
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-        #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, ##__VA_ARGS__);; f.fatal())
+    for (::kj::_::Debug::Fault f(KJ_FAULT_SITE(#cond, "_kjCondition," #__VA_ARGS__), \
+        ::kj::Exception::Type::FAILED, _kjCondition, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_REQUIRE_AT(cond, location, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
@@ -288,8 +300,8 @@ namespace kj {
         ##__VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE(...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+  for (::kj::_::Debug::Fault f(KJ_FAULT_SITE(nullptr, #__VA_ARGS__), \
+                               ::kj::Exception::Type::FAILED, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
   for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
@@ -334,8 +346,8 @@ namespace kj {
 #endif
 
 #define KJ_UNIMPLEMENTED(...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+  for (::kj::_::Debug::Fault f(KJ_FAULT_SITE(nullptr, #__VA_ARGS__), \
+                               ::kj::Exception::Type::UNIMPLEMENTED, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
@@ -351,8 +363,8 @@ namespace kj {
   (*([&] { \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                            #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
+      ::kj::_::Debug::Fault(KJ_FAULT_SITE(#value " != nullptr", #__VA_ARGS__), \
+                            ::kj::Exception::Type::FAILED, ##__VA_ARGS__).fatal(); \
     } \
     return _kj_result; \
   }()))
@@ -374,8 +386,8 @@ namespace kj {
   (*({ \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                            #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
+      ::kj::_::Debug::Fault(KJ_FAULT_SITE(#value " != nullptr", #__VA_ARGS__), \
+                            ::kj::Exception::Type::FAILED, ##__VA_ARGS__).fatal(); \
     } \
     kj::mv(_kj_result); \
   }))
@@ -621,6 +633,17 @@ public:
     // caller look too expensive to inline.
 
   public:
+    struct Site {
+      // Compile-time-constant part of a failing check. The macros put it in static storage, so
+      // the caller passes a single pointer instead of four arguments.
+      const char* file;
+      int line;
+      const char* condition;
+      const char* macroArgs;
+    };
+
+    template <typename Code, typename... Params>
+    KJ_ALWAYS_INLINE(Fault(const Site& site, Code code, Params&&... params));
     template <typename Code, typename... Params>
     KJ_ALWAYS_INLINE(Fault(const char* file, int line, Code code,
                            const char* condition, const char* macroArgs, Params&&... params));
@@ -642,8 +665,7 @@ public:
 
   private:
     template <typename Code, typename... Params>
-    static KJ_NOINLINE Exception* create(const char* file, int line, Code code,
-        const char* condition, const char* macroArgs, Params... params);
+    static KJ_NOINLINE Exception* create(const Site& site, Code code, Params... params);
     // Stringifies `params` and creates the exception. Out of line, so that the caller doesn't
     // contain the stringification code and the cleanup of the temporary strings. Instantiated
     // with FaultArg<T> types, so the caller passes cheap values in registers rather than taking
@@ -767,10 +789,15 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 }
 
 template <typename Code, typename... Params>
+inline Debug::Fault::Fault(const Site& site, Code code, Params&&... params)
+    : exception(create<Code, FaultArg<Params>...>(site, code,
+                                                 FaultArg_<Params>::convert(params)...)) {}
+
+template <typename Code, typename... Params>
 inline Debug::Fault::Fault(const char* file, int line, Code code,
                            const char* condition, const char* macroArgs, Params&&... params)
-    : exception(create<Code, FaultArg<Params>...>(file, line, code, condition, macroArgs,
-                                                 FaultArg_<Params>::convert(params)...)) {}
+    : Fault(Site { file, line, condition, macroArgs }, code, kj::fwd<Params>(params)...) {}
+    // Used by the _AT variants, whose location is only known at runtime.
 
 inline void Debug::Fault::fatal() {
   Exception* e = exception;
@@ -779,13 +806,12 @@ inline void Debug::Fault::fatal() {
 }
 
 template <typename Code, typename... Params>
-Exception* Debug::Fault::create(const char* file, int line, Code code,
-                                const char* condition, const char* macroArgs, Params... params) {
+Exception* Debug::Fault::create(const Site& site, Code code, Params... params) {
   if constexpr (sizeof...(Params) == 0) {
-    return createInternal(file, line, code, condition, macroArgs, nullptr);
+    return createInternal(site.file, site.line, code, site.condition, site.macroArgs, nullptr);
   } else {
     String argValues[sizeof...(Params)] = {str(params)...};
-    return createInternal(file, line, code, condition, macroArgs,
+    return createInternal(site.file, site.line, code, site.condition, site.macroArgs,
                           arrayPtr(argValues, sizeof...(Params)));
   }
 }
