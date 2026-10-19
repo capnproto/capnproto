@@ -495,6 +495,61 @@ namespace kj {
 
 namespace _ {  // private
 
+#if _MSC_VER && !defined(__clang__)
+#define KJ_FAULT_INLINE __forceinline
+#else
+#define KJ_FAULT_INLINE [[gnu::always_inline]] inline
+#endif
+// Like KJ_ALWAYS_INLINE, but in prefix form, which GCC also accepts on in-class definitions of
+// member templates.
+
+template <typename T> struct FaultPlain_ { typedef T Type; };
+template <typename T> struct FaultPlain_<T&> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<T&&> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<const T> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<volatile T> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<const volatile T> {
+  typedef typename FaultPlain_<T>::Type Type;
+};
+template <typename T> using FaultPlain = typename FaultPlain_<T>::Type;
+// Strips references and cv-qualifiers, but unlike Decay<T> doesn't turn arrays into pointers.
+
+template <typename T> struct IsFaultArray_ { static constexpr bool value = false; };
+template <typename T> struct IsFaultArray_<T[]> { static constexpr bool value = true; };
+template <typename T, size_t s> struct IsFaultArray_<T[s]> { static constexpr bool value = true; };
+
+template <typename T>
+constexpr bool isCheapFaultArg() {
+  // Whether a value of type T should be passed to the out-of-line failure path by value rather
+  // than by reference.
+  return !IsFaultArray_<T>::value && __is_trivially_copyable(T) &&
+      __is_trivially_constructible(T, const T&) && sizeof(T) <= 2 * sizeof(void*);
+}
+
+template <typename T, bool cheap = isCheapFaultArg<FaultPlain<T>>()>
+struct FaultArgDefault_ {
+  // Default: forward by reference.
+  typedef T&& Type;
+  KJ_FAULT_INLINE static Type convert(T& value) { return static_cast<Type>(value); }
+};
+template <typename T>
+struct FaultArgDefault_<T, true> {
+  // Cheap to copy: pass by value.
+  typedef FaultPlain<T> Type;
+  KJ_FAULT_INLINE static Type convert(T& value) { return value; }
+};
+
+template <typename T, typename Plain = FaultPlain<T>>
+struct FaultArg_: public FaultArgDefault_<T> {};
+template <typename T> using FaultArg = typename FaultArg_<T>::Type;
+// Type in which an assertion macro argument is passed to the out-of-line failure path.
+//
+// The failure path must not receive references to the caller's locals. Once a local's address
+// escapes to an opaque call, the compiler can no longer keep it in registers. Then the local gets
+// stored to the stack on the *fast* path, every time the check runs, even though only the
+// failure path ever reads it. So cheap values are passed by copy, and the copy is made inside the
+// cold branch.
+
 class Debug {
 public:
   Debug() = delete;
@@ -554,7 +609,9 @@ public:
     static KJ_NOINLINE Exception* create(const char* file, int line, Code code,
         const char* condition, const char* macroArgs, Params... params);
     // Stringifies `params` and creates the exception. Out of line, so that the caller doesn't
-    // contain the stringification code and the cleanup of the temporary strings.
+    // contain the stringification code and the cleanup of the temporary strings. Instantiated
+    // with FaultArg<T> types, so the caller passes cheap values in registers rather than taking
+    // their address.
 
     static Exception* createInternal(const char* file, int line, Exception::Type type,
         const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
@@ -676,8 +733,8 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 template <typename Code, typename... Params>
 inline Debug::Fault::Fault(const char* file, int line, Code code,
                            const char* condition, const char* macroArgs, Params&&... params)
-    : exception(create<Code, Params&&...>(file, line, code, condition, macroArgs,
-                                          kj::fwd<Params>(params)...)) {}
+    : exception(create<Code, FaultArg<Params>...>(file, line, code, condition, macroArgs,
+                                                 FaultArg_<Params>::convert(params)...)) {}
 
 inline void Debug::Fault::fatal() {
   Exception* e = exception;
