@@ -2963,12 +2963,7 @@ public:
         errorHandler(errorHandler.orDefault(*this)),
         sendingControlMessage(kj::mv(waitBeforeSend)),
         recvBuffer(kj::mv(buffer)), recvData(leftover) {
-#if KJ_HAS_ZLIB
-    KJ_IF_SOME(config, compressionConfig) {
-      compressionContext.emplace(ZlibContext::Mode::COMPRESS, config);
-      decompressionContext.emplace(ZlibContext::Mode::DECOMPRESS, config);
-    }
-#else
+#if !KJ_HAS_ZLIB
     KJ_REQUIRE(compressionConfig == kj::none,
         "WebSocket compression is only supported if KJ is compiled with Zlib.");
 #endif // KJ_HAS_ZLIB
@@ -3198,7 +3193,7 @@ public:
 #if KJ_HAS_ZLIB
             if (isCompressed) {
               auto& config = KJ_ASSERT_NONNULL(compressionConfig);
-              auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
+              auto& decompressor = getZlibContext(ZlibContext::Mode::DECOMPRESS);
               KJ_ASSERT(message.size() >= 4);
               auto tail = message.slice(message.size() - 4, message.size());
               // Note that we added an additional 4 bytes to `message`s capacity to account for these
@@ -3232,7 +3227,7 @@ public:
 #if KJ_HAS_ZLIB
             if (isCompressed) {
               auto& config = KJ_ASSERT_NONNULL(compressionConfig);
-              auto& decompressor = KJ_ASSERT_NONNULL(decompressionContext);
+              auto& decompressor = getZlibContext(ZlibContext::Mode::DECOMPRESS);
               KJ_ASSERT(message.size() >= 4);
               auto tail = message.slice(message.size() - 4, message.size());
               // Note that we added an additional 4 bytes to `message`s capacity to account for these
@@ -3798,6 +3793,15 @@ private:
     Mode mode;
     z_stream ctx = {};
   };
+
+  ZlibContext& getZlibContext(ZlibContext::Mode mode) {
+    // Initialize each direction independently, only when processing a compressed data message.
+    auto& context = mode == ZlibContext::Mode::COMPRESS ? compressionContext : decompressionContext;
+    KJ_IF_SOME(c, context) {
+      return c;
+    }
+    return context.emplace(mode, KJ_ASSERT_NONNULL(compressionConfig));
+  }
 #endif // KJ_HAS_ZLIB
 
   static constexpr byte OPCODE_CONTINUATION = 0;
@@ -3915,7 +3919,7 @@ private:
       KJ_IF_SOME(config, compressionConfig) {
         useCompression = true;
         // Compress `message` according to `compressionConfig`s outbound parameters.
-        auto& compressor = KJ_ASSERT_NONNULL(compressionContext);
+        auto& compressor = getZlibContext(ZlibContext::Mode::COMPRESS);
         if (config.outboundNoContextTakeover) {
           // We must reset context on each message.
           compressor.reset();

@@ -3106,6 +3106,109 @@ const byte WEBSOCKET_EMPTY_SEND_COMPRESSED_MESSAGE[] =
     { 0xc1, 0x81, 12, 34, 56, 78, 0x00^12 };
 const byte WEBSOCKET_SEND_COMPRESSED_HELLO_REUSE_CTX[] =
     { 0xc1, 0x85, 12, 34, 56, 78, 0xf2^12, 0x00^34, 0x51^56, 0x00^78, 0x00^12};
+
+KJ_TEST("WebSocket initializes compression on first send") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  // An invalid outbound window size makes initialization fail when it is attempted.
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, CompressionParameters{
+    .outboundMaxWindowBits = 7,
+  });
+
+  // Receiving compressed data and sending control frames must not initialize the compressor.
+  const byte INPUT[] = {
+    0x89, 0x00,  // ping
+    0xc1, 0x07, 0xf2, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00,  // compressed "Hello"
+  };
+  auto write = pipe.ends[0]->write(INPUT);
+  auto message = server->receive().wait(waitScope);
+  KJ_EXPECT(message.get<kj::String>() == "Hello");
+  write.wait(waitScope);
+
+  const byte PONG[] = { 0x8a, 0x00 };
+  expectRead(*pipe.ends[0], PONG).wait(waitScope);
+
+  KJ_EXPECT_THROW_MESSAGE("Failed to initialize compression context",
+      server->send("Hello"_kj).wait(waitScope));
+}
+
+KJ_TEST("WebSocket initializes decompression on first compressed receive") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  // An invalid inbound window size makes initialization fail when it is attempted.
+  auto server = newWebSocket(kj::mv(pipe.ends[1]), kj::none, CompressionParameters{
+    .inboundMaxWindowBits = 7,
+  });
+
+  // Sending compressed data and receiving uncompressed data must not initialize the decompressor.
+  auto send = server->send("Hello"_kj);
+  expectRead(*pipe.ends[0], WEBSOCKET_FIRST_COMPRESSED_MESSAGE).wait(waitScope);
+  send.wait(waitScope);
+
+  const byte UNCOMPRESSED[] = { 0x81, 0x05, 'H', 'e', 'l', 'l', 'o' };
+  auto write = pipe.ends[0]->write(UNCOMPRESSED);
+  auto message = server->receive().wait(waitScope);
+  KJ_EXPECT(message.get<kj::String>() == "Hello");
+  write.wait(waitScope);
+
+  write = pipe.ends[0]->write(WEBSOCKET_FIRST_COMPRESSED_MESSAGE);
+  KJ_EXPECT_THROW_MESSAGE("Failed to initialize decompression context",
+      server->receive().wait(waitScope));
+  write.wait(waitScope);
+}
+
+#if !KJ_NO_RTTI
+KJ_TEST("WebSocket optimized pumps do not initialize compression contexts") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe1 = KJ_HTTP_TEST_CREATE_2PIPE;
+  auto pipe2 = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  // Compatible settings allow raw pumping, but initializing any zlib context would fail.
+  CompressionParameters config{
+    .outboundMaxWindowBits = 7,
+    .inboundMaxWindowBits = 7,
+  };
+  FakeEntropySource maskGenerator;
+  auto server = newWebSocket(kj::mv(pipe1.ends[1]), kj::none, config);
+  auto client = newWebSocket(kj::mv(pipe2.ends[0]), maskGenerator, config);
+
+  auto upstreamPump = server->pumpTo(*client);
+  auto downstreamPump = client->pumpTo(*server);
+
+  // Masked compressed frames, including context takeover, are forwarded unchanged.
+  kj::ArrayPtr<const byte> upstreamFrames[] = {
+    WEBSOCKET_SEND_COMPRESSED_MESSAGE,
+    WEBSOCKET_SEND_COMPRESSED_MESSAGE_REUSE_CTX,
+    WEBSOCKET_SEND_CLOSE,
+  };
+  for (auto frame: upstreamFrames) {
+    auto write = pipe1.ends[0]->write(frame);
+    expectRead(*pipe2.ends[1], frame).wait(waitScope);
+    write.wait(waitScope);
+  }
+
+  // The reverse direction forwards unmasked compressed frames without initializing either context.
+  kj::ArrayPtr<const byte> downstreamFrames[] = {
+    WEBSOCKET_FIRST_COMPRESSED_MESSAGE,
+    WEBSOCKET_EMPTY_COMPRESSED_MESSAGE,
+    WEBSOCKET_REPLY_CLOSE,
+  };
+  for (auto frame: downstreamFrames) {
+    auto write = pipe2.ends[1]->write(frame);
+    expectRead(*pipe1.ends[0], frame).wait(waitScope);
+    write.wait(waitScope);
+  }
+
+  pipe1.ends[0]->shutdownWrite();
+  pipe2.ends[1]->shutdownWrite();
+  upstreamPump.wait(waitScope);
+  downstreamPump.wait(waitScope);
+  expectEnd(*pipe1.ends[0]).wait(waitScope);
+  expectEnd(*pipe2.ends[1]).wait(waitScope);
+}
+#endif // !KJ_NO_RTTI
 #endif // KJ_HAS_ZLIB
 
 void testWebSocketClient(kj::WaitScope& waitScope, HttpHeaderTable& headerTable,
