@@ -531,8 +531,8 @@ public:
 
   public:
     template <typename Code, typename... Params>
-    Fault(const char* file, int line, Code code,
-          const char* condition, const char* macroArgs, Params&&... params);
+    KJ_ALWAYS_INLINE(Fault(const char* file, int line, Code code,
+                           const char* condition, const char* macroArgs, Params&&... params));
     inline Fault(const char* file, int line, Exception::Type type,
                  const char* condition, const char* macroArgs);
     inline Fault(const char* file, int line, int osErrorNumber,
@@ -550,6 +550,12 @@ public:
     // Throw the exception.
 
   private:
+    template <typename Code, typename... Params>
+    static KJ_NOINLINE Exception* create(const char* file, int line, Code code,
+        const char* condition, const char* macroArgs, Params... params);
+    // Stringifies `params` and creates the exception. Out of line, so that the caller doesn't
+    // contain the stringification code and the cleanup of the temporary strings.
+
     static Exception* createInternal(const char* file, int line, Exception::Type type,
         const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
     static Exception* createInternal(const char* file, int line, int osErrorNumber,
@@ -668,18 +674,27 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 }
 
 template <typename Code, typename... Params>
-Debug::Fault::Fault(const char* file, int line, Code code,
-                    const char* condition, const char* macroArgs, Params&&... params)
-    : exception(nullptr) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  exception = createInternal(file, line, code, condition, macroArgs,
-                             arrayPtr(argValues, sizeof...(Params)));
-}
+inline Debug::Fault::Fault(const char* file, int line, Code code,
+                           const char* condition, const char* macroArgs, Params&&... params)
+    : exception(create<Code, Params&&...>(file, line, code, condition, macroArgs,
+                                          kj::fwd<Params>(params)...)) {}
 
 inline void Debug::Fault::fatal() {
   Exception* e = exception;
   exception = nullptr;
   throwFatal(e);
+}
+
+template <typename Code, typename... Params>
+Exception* Debug::Fault::create(const char* file, int line, Code code,
+                                const char* condition, const char* macroArgs, Params... params) {
+  if constexpr (sizeof...(Params) == 0) {
+    return createInternal(file, line, code, condition, macroArgs, nullptr);
+  } else {
+    String argValues[sizeof...(Params)] = {str(params)...};
+    return createInternal(file, line, code, condition, macroArgs,
+                          arrayPtr(argValues, sizeof...(Params)));
+  }
 }
 
 inline Debug::Fault::Fault(const char* file, int line, int osErrorNumber,

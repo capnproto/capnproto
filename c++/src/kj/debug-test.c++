@@ -629,6 +629,106 @@ KJ_TEST("magic assert stringification") {
   }
 }
 
+KJ_TEST("assertion diagnostics are captured before argument temporaries are destroyed") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::str("temporary pointer").cStr());
+    }));
+    KJ_EXPECT(exception.getDescription() == "temporary pointer");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(false, kj::str("temporary view").asPtr()) { break; }
+    }));
+    KJ_EXPECT(exception.getDescription() == "expected false; temporary view");
+  }
+
+  {
+    // The argument is a reference to a subobject, not an owning temporary that can be moved.
+    struct Temporary {
+      kj::String text = kj::str("temporary subobject");
+      kj::String& getText() { return text; }
+    };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_ASSERT(Temporary().getText()) { return; }
+    }));
+    KJ_EXPECT(exception.getDescription() == "Temporary().getText() = temporary subobject");
+  }
+}
+
+KJ_TEST("assertion diagnostics are captured before recovery changes their arguments") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto value = kj::str("bad");
+      KJ_REQUIRE(value == "good", value) {
+        value = kj::str("good");
+        break;
+      }
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected value == \"good\" [bad == good]; value = bad");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto value = kj::str("original");
+      const char* pointer = value.cStr();
+      KJ_FAIL_REQUIRE(pointer) {
+        value = nullptr;
+        return;
+      }
+    }));
+    KJ_EXPECT(exception.getDescription() == "pointer = original");
+  }
+
+  {
+    // Falling through the recovery block takes the fatal path instead of the recoverable path.
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto value = kj::str("original");
+      KJ_FAIL_REQUIRE(value) {
+        value = kj::str("changed");
+      }
+    }));
+    KJ_EXPECT(exception.getDescription() == "value = original");
+  }
+}
+
+struct NonmovableDiagnostic {
+  NonmovableDiagnostic() = default;
+  KJ_DISALLOW_COPY_AND_MOVE(NonmovableDiagnostic);
+};
+
+kj::StringPtr KJ_STRINGIFY(const NonmovableDiagnostic&) {
+  return "nonmovable";
+}
+
+KJ_TEST("assertion diagnostics do not require moving their arguments") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_UNIMPLEMENTED(kj::str("owning temporary"));
+    }));
+    KJ_EXPECT(exception.getType() == kj::Exception::Type::UNIMPLEMENTED);
+    KJ_EXPECT(exception.getDescription() == "owning temporary");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(NonmovableDiagnostic());
+    }));
+    KJ_EXPECT(exception.getDescription() == "NonmovableDiagnostic() = nonmovable");
+  }
+
+  {
+    auto value = kj::str("not moved");
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::mv(value)) { break; }
+    }));
+    KJ_EXPECT(exception.getDescription() == "kj::mv(value) = not moved");
+    KJ_EXPECT(value == "not moved");
+  }
+}
+
 // =======================================================================================
 // Stack frame overhead of assertion macros
 //
@@ -814,18 +914,18 @@ KJ_TEST("stack frame overhead of assertion macros") {
 
   KJ_EXPECT(frameOverhead(baseline) == 0);
 
-  KJ_EXPECT_FRAME(assertTruthy, 16);
-  KJ_EXPECT_FRAME(assertTruthyMessage, 16);
-  KJ_EXPECT_FRAME(assertEq, 48);
-  KJ_EXPECT_FRAME(assertNeMessage, 48);
+  KJ_EXPECT_FRAME(assertTruthy, 0);
+  KJ_EXPECT_FRAME(assertTruthyMessage, 0);
+  KJ_EXPECT_FRAME(assertEq, 32);
+  KJ_EXPECT_FRAME(assertNeMessage, 32);
   KJ_EXPECT_FRAME(assertCheapArgs, 48);
-  KJ_EXPECT_FRAME(assertStringPtrArg, 32);
-  KJ_EXPECT_FRAME(assertExpensiveArg, 16);
-  KJ_EXPECT_FRAME(assertRecoverable, 16);
-  KJ_EXPECT_FRAME(failAssert, 16);
+  KJ_EXPECT_FRAME(assertStringPtrArg, 16);
+  KJ_EXPECT_FRAME(assertExpensiveArg, 0);
+  KJ_EXPECT_FRAME(assertRecoverable, 0);
+  KJ_EXPECT_FRAME(failAssert, 0);
   KJ_EXPECT_FRAME(failAssertCheapArg, 16);
   KJ_EXPECT_FRAME(assertNonNull, 16);
-  KJ_EXPECT_FRAME(assertNonNullMessage, 16);
+  KJ_EXPECT_FRAME(assertNonNullMessage, 0);
   KJ_EXPECT_FRAME(assertTwice, 48);
 
   #undef KJ_EXPECT_FRAME
