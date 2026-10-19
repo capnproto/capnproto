@@ -369,38 +369,35 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
       makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
 }
 
-Debug::Fault::~Fault() noexcept(false) {
-  if (exception != nullptr) {
-    Exception copy = mv(*exception);
-    delete exception;
-    throwRecoverableException(mv(copy), 1);
-  }
-}
-
-void Debug::Fault::fatal() {
+void Debug::Fault::throwRecoverable(Exception* exception) {
   Exception copy = mv(*exception);
   delete exception;
-  exception = nullptr;
+  throwRecoverableException(mv(copy), 1);
+}
+
+void Debug::Fault::throwFatal(Exception* exception) {
+  Exception copy = mv(*exception);
+  delete exception;
   throwFatalException(mv(copy), 1);
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
-void Debug::Fault::init(
+Exception* Debug::Fault::createInternal(
     const char* file, int line, Exception::Type type,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  exception = new Exception(type, file, line,
+  return new Exception(type, file, line,
       makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, argValues));
 }
 
-void Debug::Fault::init(
+Exception* Debug::Fault::createInternal(
     const char* file, int line, int osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  exception = new Exception(typeOfErrno(osErrorNumber), file, line,
+  return new Exception(typeOfErrno(osErrorNumber), file, line,
       makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
 }
 
 #if _WIN32 || __CYGWIN__
-void Debug::Fault::init(
+Exception* Debug::Fault::createInternal(
     const char* file, int line, Win32Result osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   LPVOID ptr;
@@ -425,7 +422,7 @@ void Debug::Fault::init(
     message = kj::str("win32 error code: ", osErrorNumber.number);
   }
 
-  exception = new Exception(typeOfWin32Error(osErrorNumber.number), file, line,
+  return new Exception(typeOfWin32Error(osErrorNumber.number), file, line,
       makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
                           macroArgs, argValues));
 }

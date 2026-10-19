@@ -522,32 +522,46 @@ public:
                   Params&&... params);
 
   class Fault {
+    // Everything in this class is inline. Its only state is a pointer returned by an
+    // out-of-line function, so `this` never escapes. That lets the compiler keep the Fault in a
+    // register and prove that ~Fault() does nothing after fatal(). So the macros cost no stack
+    // slot, no landing pad, and no callee-saved register spills in the caller. Without this, the
+    // fast path has to set up a stack frame, which also stops shrink-wrapping and makes the
+    // caller look too expensive to inline.
+
   public:
     template <typename Code, typename... Params>
     Fault(const char* file, int line, Code code,
           const char* condition, const char* macroArgs, Params&&... params);
-    Fault(const char* file, int line, Exception::Type type,
-          const char* condition, const char* macroArgs);
-    Fault(const char* file, int line, int osErrorNumber,
-          const char* condition, const char* macroArgs);
+    inline Fault(const char* file, int line, Exception::Type type,
+                 const char* condition, const char* macroArgs);
+    inline Fault(const char* file, int line, int osErrorNumber,
+                 const char* condition, const char* macroArgs);
 #if _WIN32 || __CYGWIN__
-    Fault(const char* file, int line, Win32Result osErrorNumber,
-          const char* condition, const char* macroArgs);
+    inline Fault(const char* file, int line, Win32Result osErrorNumber,
+                 const char* condition, const char* macroArgs);
 #endif
-    ~Fault() noexcept(false);
+    KJ_DISALLOW_COPY_AND_MOVE(Fault);
+    inline ~Fault() noexcept(false) {
+      if (exception != nullptr) throwRecoverable(exception);
+    }
 
-    KJ_NOINLINE KJ_NORETURN(void fatal());
+    KJ_NORETURN(KJ_ALWAYS_INLINE(void fatal()));
     // Throw the exception.
 
   private:
-    void init(const char* file, int line, Exception::Type type,
-              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
-    void init(const char* file, int line, int osErrorNumber,
-              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    static Exception* createInternal(const char* file, int line, Exception::Type type,
+        const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    static Exception* createInternal(const char* file, int line, int osErrorNumber,
+        const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 #if _WIN32 || __CYGWIN__
-    void init(const char* file, int line, Win32Result osErrorNumber,
-              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    static Exception* createInternal(const char* file, int line, Win32Result osErrorNumber,
+        const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 #endif
+
+    KJ_NORETURN(static KJ_NOINLINE void throwFatal(Exception* exception));
+    static KJ_NOINLINE void throwRecoverable(Exception* exception);
+    // Both take ownership of `exception`.
 
     Exception* exception;
   };
@@ -658,28 +672,28 @@ Debug::Fault::Fault(const char* file, int line, Code code,
                     const char* condition, const char* macroArgs, Params&&... params)
     : exception(nullptr) {
   String argValues[sizeof...(Params)] = {str(params)...};
-  init(file, line, code, condition, macroArgs,
-       arrayPtr(argValues, sizeof...(Params)));
+  exception = createInternal(file, line, code, condition, macroArgs,
+                             arrayPtr(argValues, sizeof...(Params)));
+}
+
+inline void Debug::Fault::fatal() {
+  Exception* e = exception;
+  exception = nullptr;
+  throwFatal(e);
 }
 
 inline Debug::Fault::Fault(const char* file, int line, int osErrorNumber,
                            const char* condition, const char* macroArgs)
-    : exception(nullptr) {
-  init(file, line, osErrorNumber, condition, macroArgs, nullptr);
-}
+    : exception(createInternal(file, line, osErrorNumber, condition, macroArgs, nullptr)) {}
 
 inline Debug::Fault::Fault(const char* file, int line, kj::Exception::Type type,
                            const char* condition, const char* macroArgs)
-    : exception(nullptr) {
-  init(file, line, type, condition, macroArgs, nullptr);
-}
+    : exception(createInternal(file, line, type, condition, macroArgs, nullptr)) {}
 
 #if _WIN32 || __CYGWIN__
 inline Debug::Fault::Fault(const char* file, int line, Win32Result osErrorNumber,
                            const char* condition, const char* macroArgs)
-    : exception(nullptr) {
-  init(file, line, osErrorNumber, condition, macroArgs, nullptr);
-}
+    : exception(createInternal(file, line, osErrorNumber, condition, macroArgs, nullptr)) {}
 
 inline Debug::Win32Result Debug::win32Call(int boolean) {
   return boolean ? Win32Result(0) : Win32Result(getWin32ErrorCode());
