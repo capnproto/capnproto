@@ -776,11 +776,20 @@ inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
 inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
 // SFINAE to stringify a value if and only if it can be stringified.
 
-template <typename Left, typename Right>
+#define KJ_DEBUG_OPERATOR(NAME, OP) \
+  struct DebugOp##NAME { static StringPtr op() { return " " #OP " "_kj; } };
+KJ_DEBUG_OPERATOR(Eq, ==)
+KJ_DEBUG_OPERATOR(Ne, !=)
+KJ_DEBUG_OPERATOR(Le, <=)
+KJ_DEBUG_OPERATOR(Ge, >=)
+KJ_DEBUG_OPERATOR(Lt, <)
+KJ_DEBUG_OPERATOR(Gt, >)
+#undef KJ_DEBUG_OPERATOR
+
+template <typename Left, typename Right, typename Op>
 struct DebugComparison {
   Left left;
   Right right;
-  StringPtr op;
   bool result;
 
   inline operator bool() const { return KJ_LIKELY(result); }
@@ -790,9 +799,9 @@ struct DebugComparison {
   template <typename T> inline void operator|(T&& other) = delete;
 };
 
-template <typename Left, typename Right>
-String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
-  return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
+template <typename Left, typename Right, typename Op>
+String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
+  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
 }
 
 template <typename T>
@@ -801,18 +810,18 @@ struct DebugExpression {
   T value;
 
   // Handle comparison operations by constructing a DebugComparison value.
-#define DEFINE_OPERATOR(OP) \
+#define DEFINE_OPERATOR(OP, NAME) \
   template <typename U> \
-  DebugComparison<T, U> operator OP(U&& other) { \
+  DebugComparison<T, U, DebugOp##NAME> operator OP(U&& other) { \
     bool result = value OP other; \
-    return { kj::fwd<T>(value), kj::fwd<U>(other), " " #OP " "_kj, result }; \
+    return { kj::fwd<T>(value), kj::fwd<U>(other), result }; \
   }
-  DEFINE_OPERATOR(==);
-  DEFINE_OPERATOR(!=);
-  DEFINE_OPERATOR(<=);
-  DEFINE_OPERATOR(>=);
-  DEFINE_OPERATOR(< );
-  DEFINE_OPERATOR(> );
+  DEFINE_OPERATOR(==, Eq);
+  DEFINE_OPERATOR(!=, Ne);
+  DEFINE_OPERATOR(<=, Le);
+  DEFINE_OPERATOR(>=, Ge);
+  DEFINE_OPERATOR(< , Lt);
+  DEFINE_OPERATOR(> , Gt);
 #undef DEFINE_OPERATOR
 
   // Handle binary operators that have equal or lower precedence than comparisons by performing
