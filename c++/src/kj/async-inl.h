@@ -534,6 +534,9 @@ class PtmfHelper {
     }
   }
 
+  void* applyNonVirtual() { return ptr; }
+  // Like apply(), for a pointer to a member function known not to be virtual.
+
 #define BODY \
     PtmfHelper result; \
     static_assert(sizeof(p) == sizeof(result), "unknown ptmf layout"); \
@@ -543,6 +546,7 @@ class PtmfHelper {
 #else  // __GNUG__
 
   void* apply(const void* obj) { return nullptr; }
+  void* applyNonVirtual() { return nullptr; }
   // TODO(port):  PTMF instruction address extraction
 
 #define BODY return PtmfHelper{}
@@ -596,8 +600,14 @@ struct GetFunctorStartAddress {
   template <typename Func>
   static void* apply(Func&& func) {
     typedef decltype(func(instance<ParamTypes>()...)) ReturnType;
-    return PtmfHelper::from<ReturnType, Decay<Func>, ParamTypes...>(
-        &Decay<Func>::operator()).apply(&func);
+    auto ptmf =
+        PtmfHelper::from<ReturnType, Decay<Func>, ParamTypes...>(&Decay<Func>::operator());
+    if constexpr (__is_polymorphic(Decay<Func>)) {
+      return ptmf.apply(&func);
+    } else {
+      // A non-polymorphic functor, such as a lambda, has no vtable to look operator() up in.
+      return ptmf.applyNonVirtual();
+    }
   }
 };
 
