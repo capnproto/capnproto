@@ -150,6 +150,7 @@ set(kj-async_headers
   async-win32.h
   async-io.h
   async-queue.h
+  promises-unordered.h
   cidr.h
   timer.h
 )
@@ -294,6 +295,7 @@ if(BUILD_TESTING)
       async-win32-xthread-test.c++
       async-io-test.c++
       async-queue-test.c++
+      promises-unordered-test.c++
       refcount-test.c++
       string-tree-test.c++
       encoding-test.c++

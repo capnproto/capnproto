@@ -100,6 +100,7 @@ cc_library(
         "async-inl.h",
         "async-prelude.h",
         "async-queue.h",
+        "promises-unordered.h",
         "timer.h",
     ],
     # Disable header parsing based on async-inl.h
@@ -234,6 +235,7 @@ cc_library(
     "mutex-test.c++",
     "one-of-test.c++",
     "parse/char-test.c++",
+    "promises-unordered-test.c++",
     "refcount-test.c++",
     "std/iostream-test.c++",
     "string-test.c++",

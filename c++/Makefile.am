@@ -179,6 +179,7 @@ includekj_HEADERS =                                            \
   src/kj/async-io.h                                            \
   src/kj/cidr.h                                                \
   src/kj/async-queue.h                                         \
+  src/kj/promises-unordered.h                                  \
   src/kj/main.h                                                \
   src/kj/test.h                                                \
   src/kj/win32-api-version.h                                   \
@@ -525,6 +526,7 @@ heavy_tests =                                                  \
   src/kj/async-win32-xthread-test.c++                          \
   src/kj/async-io-test.c++                                     \
   src/kj/async-queue-test.c++                                  \
+  src/kj/promises-unordered-test.c++                           \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/kj/std/iostream-test.c++                                 \
