@@ -143,7 +143,7 @@ KJ_TEST("ProducerConsumerQueue with rejectAll()") {
 
     // We should have finished and swallowed the errors.
     auto promise = joinPromises(promises.releaseAsArray());
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Total rejection", promise.wait(test.io.waitScope));
+    KJ_EXPECT_THROW_MESSAGE("Total rejection", promise.wait(test.io.waitScope));
   }
 }
 

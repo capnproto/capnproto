@@ -35,12 +35,6 @@
 #include <exception>
 #include <stdlib.h>
 
-#include "miniposix.h"
-
-#if !_WIN32
-#include <sys/wait.h>
-#endif
-
 namespace kj {
 namespace _ {  // private
 namespace {
@@ -60,81 +54,6 @@ public:
 
   kj::String text;
 
-  int outputPipe = -1;
-
-  bool forkForDeathTest() {
-    // This is called when exceptions are disabled.  We fork the process instead and then expect
-    // the child to die.
-
-#if _WIN32
-    // Windows doesn't support fork() or anything like it. Just skip the test.
-    return false;
-
-#else
-    int pipeFds[2]{};
-    KJ_SYSCALL(pipe(pipeFds));
-    pid_t child = fork();
-    if (child == 0) {
-      // This is the child!
-      close(pipeFds[0]);
-      outputPipe = pipeFds[1];
-      text = kj::String();
-      return true;
-    } else {
-      close(pipeFds[1]);
-
-      // Read child error messages into our local buffer.
-      char buf[1024]{};
-      for (;;) {
-        ssize_t n = read(pipeFds[0], buf, sizeof(buf));
-        if (n < 0) {
-          if (errno == EINTR) {
-            continue;
-          } else {
-            break;
-          }
-        } else if (n == 0) {
-          break;
-        } else {
-          text = kj::str(text, kj::StringPtr(buf, n));
-        }
-      }
-
-      close(pipeFds[0]);
-
-      // Get exit status.
-      int status;
-      KJ_SYSCALL(waitpid(child, &status, 0));
-
-      EXPECT_TRUE(WIFEXITED(status));
-      EXPECT_EQ(74, WEXITSTATUS(status));
-
-      return false;
-    }
-#endif  // _WIN32, else
-  }
-
-  void flush() {
-    if (outputPipe != -1) {
-      const char* pos = &*text.begin();
-      const char* end = pos + text.size();
-
-      while (pos < end) {
-        miniposix::ssize_t n = miniposix::write(outputPipe, pos, end - pos);
-        if (n < 0) {
-          if (errno == EINTR) {
-            continue;
-          } else {
-            break;  // Give up on error.
-          }
-        }
-        pos += n;
-      }
-
-      text = kj::String();
-    }
-  }
-
   void onRecoverableException(Exception&& exception) override {
     auto what = str(exception);
     // Discard the stack trace.
@@ -143,7 +62,6 @@ public:
     } else {
       text = kj::str(text, "recoverable exception: ", what, '\n');
     }
-    flush();
   }
 
   void onFatalException(Exception&& exception) override {
@@ -154,7 +72,6 @@ public:
     } else {
       text = kj::str(text, "fatal exception: ", what, '\n');
     }
-    flush();
     throw MockException();
   }
 

@@ -272,7 +272,7 @@ KJ_TEST("disallow unaligned") {
 
   kj::ArrayPtr<const word> segments[1] = {unaligned};
   SegmentArrayMessageReader message(segments);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("unaligned", message.getRoot<TestAllTypes>());
+  KJ_EXPECT_THROW_MESSAGE("unaligned", message.getRoot<TestAllTypes>());
 }
 #endif
 

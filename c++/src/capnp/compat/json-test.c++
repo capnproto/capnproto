@@ -238,48 +238,42 @@ KJ_TEST("decode all types") {
     auto root = message.initRoot<TestAllTypes>(); \
     KJ_EXPECT_THROW_MESSAGE(errorMessage, json.decode(s, root)); \
   }
-#define CASE_THROW_RECOVERABLE(s, errorMessage) \
-  { \
-    MallocMessageBuilder message; \
-    auto root = message.initRoot<TestAllTypes>(); \
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(errorMessage, json.decode(s, root)); \
-  }
 
   CASE(R"({})", root.getBoolField() == false);
   CASE_NO_ROUNDTRIP(R"({"unknownField":7})", root.getBoolField() == false);
   CASE(R"({"boolField":true})", root.getBoolField() == true);
   CASE(R"({"int8Field":-128})", root.getInt8Field() == -128);
   CASE_NO_ROUNDTRIP(R"({"int8Field":"127"})", root.getInt8Field() == 127);
-  CASE_THROW_RECOVERABLE(R"({"int8Field":"-129"})", "Value out-of-range");
-  CASE_THROW_RECOVERABLE(R"({"int8Field":128})", "Value out-of-range");
+  CASE_THROW(R"({"int8Field":"-129"})", "Value out-of-range");
+  CASE_THROW(R"({"int8Field":128})", "Value out-of-range");
   CASE(R"({"int16Field":-32768})", root.getInt16Field() == -32768);
   CASE_NO_ROUNDTRIP(R"({"int16Field":"32767"})", root.getInt16Field() == 32767);
-  CASE_THROW_RECOVERABLE(R"({"int16Field":"-32769"})", "Value out-of-range");
-  CASE_THROW_RECOVERABLE(R"({"int16Field":32768})", "Value out-of-range");
+  CASE_THROW(R"({"int16Field":"-32769"})", "Value out-of-range");
+  CASE_THROW(R"({"int16Field":32768})", "Value out-of-range");
   CASE(R"({"int32Field":-2147483648})", root.getInt32Field() == -2147483648);
   CASE_NO_ROUNDTRIP(R"({"int32Field":"2147483647"})", root.getInt32Field() == 2147483647);
   CASE_NO_ROUNDTRIP(R"({"int64Field":-9007199254740992})", root.getInt64Field() == -9007199254740992LL);
   CASE_NO_ROUNDTRIP(R"({"int64Field":9007199254740991})", root.getInt64Field() == 9007199254740991LL);
   CASE(R"({"int64Field":"-9223372036854775808"})", root.getInt64Field() == -9223372036854775808ULL);
   CASE(R"({"int64Field":"9223372036854775807"})", root.getInt64Field() == 9223372036854775807LL);
-  CASE_THROW_RECOVERABLE(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
-  CASE_THROW_RECOVERABLE(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
+  CASE_THROW(R"({"int64Field":"-9223372036854775809"})", "Value out-of-range");
+  CASE_THROW(R"({"int64Field":"9223372036854775808"})", "Value out-of-range");
   CASE(R"({"uInt8Field":255})", root.getUInt8Field() == 255);
   CASE_NO_ROUNDTRIP(R"({"uInt8Field":"0"})", root.getUInt8Field() == 0);
-  CASE_THROW_RECOVERABLE(R"({"uInt8Field":"256"})", "Value out-of-range");
-  CASE_THROW_RECOVERABLE(R"({"uInt8Field":-1})", "Value out-of-range");
+  CASE_THROW(R"({"uInt8Field":"256"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt8Field":-1})", "Value out-of-range");
   CASE(R"({"uInt16Field":65535})", root.getUInt16Field() == 65535);
   CASE_NO_ROUNDTRIP(R"({"uInt16Field":"0"})", root.getUInt16Field() == 0);
-  CASE_THROW_RECOVERABLE(R"({"uInt16Field":"655356"})", "Value out-of-range");
-  CASE_THROW_RECOVERABLE(R"({"uInt16Field":-1})", "Value out-of-range");
+  CASE_THROW(R"({"uInt16Field":"655356"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt16Field":-1})", "Value out-of-range");
   CASE(R"({"uInt32Field":4294967295})", root.getUInt32Field() == 4294967295);
   CASE_NO_ROUNDTRIP(R"({"uInt32Field":"0"})", root.getUInt32Field() == 0);
-  CASE_THROW_RECOVERABLE(R"({"uInt32Field":"42949672956"})", "Value out-of-range");
-  CASE_THROW_RECOVERABLE(R"({"uInt32Field":-1})", "Value out-of-range");
+  CASE_THROW(R"({"uInt32Field":"42949672956"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt32Field":-1})", "Value out-of-range");
   CASE_NO_ROUNDTRIP(R"({"uInt64Field":9007199254740991})", root.getUInt64Field() == 9007199254740991ULL);
   CASE(R"({"uInt64Field":"18446744073709551615"})", root.getUInt64Field() == 18446744073709551615ULL);
   CASE_NO_ROUNDTRIP(R"({"uInt64Field":"0"})", root.getUInt64Field() == 0);
-  CASE_THROW_RECOVERABLE(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
+  CASE_THROW(R"({"uInt64Field":"18446744073709551616"})", "Value out-of-range");
   CASE_NO_ROUNDTRIP(R"({"float32Field":0})", root.getFloat32Field() == 0);
   CASE(R"({"float32Field":4.5})", root.getFloat32Field() == 4.5);
   CASE_NO_ROUNDTRIP(R"({"float32Field":null})", kj::isNaN(root.getFloat32Field()));
@@ -317,9 +311,9 @@ KJ_TEST("decode all types") {
   CASE_NO_ROUNDTRIP(R"({"textField":"foo\u1234bar"})",
       kj::str(u8"foo\u1234bar") == root.getTextField());
 
-  CASE_THROW_RECOVERABLE(R"({"int64Field":"177a"})", "String does not contain valid");
-  CASE_THROW_RECOVERABLE(R"({"uInt64Field":"177a"})", "String does not contain valid");
-  CASE_THROW_RECOVERABLE(R"({"float64Field":"177a"})", "String does not contain valid");
+  CASE_THROW(R"({"int64Field":"177a"})", "String does not contain valid");
+  CASE_THROW(R"({"uInt64Field":"177a"})", "String does not contain valid");
+  CASE_THROW(R"({"float64Field":"177a"})", "String does not contain valid");
 
   CASE(R"({})", root.hasBoolList() == false);
   CASE(R"({"boolList":[]})", root.hasBoolList() == true);
@@ -367,7 +361,6 @@ KJ_TEST("decode all types") {
 #undef CASE_NO_ROUNDTRIP
 #undef CASE
 #undef CASE_THROW
-#undef CASE_THROW_RECOVERABLE
 }
 
 KJ_TEST("decode test message") {

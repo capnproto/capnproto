@@ -416,7 +416,7 @@ TEST(Async, SeparateFulfillerDiscarded) {
   auto pair = newPromiseAndFulfiller<void>();
   pair.fulfiller = nullptr;
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+  KJ_EXPECT_THROW_MESSAGE(
       "PromiseFulfiller was destroyed without fulfilling the promise",
       pair.promise.wait(waitScope));
 }
@@ -431,7 +431,7 @@ TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
     kj::throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
   });
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+  KJ_EXPECT_THROW_MESSAGE(
       "test exception", pair.promise.wait(waitScope));
 }
 
@@ -917,7 +917,7 @@ TEST(Async, ArrayJoinException) {
 
     // The final fulfillment makes the promise ready.
     fulfillers[i++]->fulfill();
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Test exception", promise.wait(waitScope));
+    KJ_EXPECT_THROW_MESSAGE("Test exception", promise.wait(waitScope));
     KJ_EXPECT(tasksCompleted == 4);
   }
 }
@@ -947,7 +947,7 @@ TEST(Async, ArrayJoinFailFastException) {
     fulfillers[i++]->reject(KJ_EXCEPTION(FAILED, "Test exception"));
 
     // The first rejection makes the promise ready.
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("Test exception", promise.wait(waitScope));
+    KJ_EXPECT_THROW_MESSAGE("Test exception", promise.wait(waitScope));
     KJ_EXPECT(tasksCompleted == i - 1);
   }
 }
@@ -969,7 +969,7 @@ TEST(Async, Canceler) {
 
   canceler.cancel("foobar");
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", never.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("foobar", never.wait(waitScope));
   now.wait(waitScope);
   KJ_EXPECT_THROW_MESSAGE("foobar", neverI.wait(waitScope));
   KJ_EXPECT(nowI.wait(waitScope) == 123u);
@@ -1702,7 +1702,7 @@ KJ_TEST("throw from a fiber") {
   paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "test exception"));
 
   KJ_ASSERT(fiber.poll(waitScope));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", fiber.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("test exception", fiber.wait(waitScope));
 }
 
 #if !__MINGW32__ || __MINGW64__
@@ -1714,7 +1714,6 @@ KJ_TEST("cancel a fiber") {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  // When exceptions are disabled we can't wait() on a non-void promise that throws.
   auto paf = newPromiseAndFulfiller<void>();
 
   bool exited = false;
@@ -2115,7 +2114,7 @@ KJ_TEST("retryOnDisconnect") {
       }
     });
     KJ_EXPECT(i == 0);
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test disconnect; i = 2",
+    KJ_EXPECT_THROW_MESSAGE("test disconnect; i = 2",
         promise.ignoreResult().wait(waitScope));
     KJ_EXPECT(i == 2);
   }

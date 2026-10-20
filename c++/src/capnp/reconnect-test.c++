@@ -117,7 +117,7 @@ void doAutoReconnectTestImpl(kj::WaitScope& ws, WrapClientFn wrapClient, AutoRec
     KJ_EXPECT(connectCount == 1);
     KJ_EXPECT(test(456, true) == "456 true 2");
   } else {
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test1 disconnect",
+    KJ_EXPECT_THROW_MESSAGE("test1 disconnect",
         testPromise(456, true).ignoreResult().wait(ws));
   }
   KJ_EXPECT(connectCount == 2);
@@ -134,8 +134,8 @@ void doAutoReconnectTestImpl(kj::WaitScope& ws, WrapClientFn wrapClient, AutoRec
     KJ_EXPECT(!promise1.poll(ws));
     KJ_EXPECT(!promise2.poll(ws));
     fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "test2 disconnect"));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise1.ignoreResult().wait(ws));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test2 disconnect", promise2.ignoreResult().wait(ws));
+    KJ_EXPECT_THROW_MESSAGE("test2 disconnect", promise1.ignoreResult().wait(ws));
+    KJ_EXPECT_THROW_MESSAGE("test2 disconnect", promise2.ignoreResult().wait(ws));
   }
   KJ_EXPECT(connectCount == 3);
 
@@ -164,7 +164,7 @@ void doAutoReconnectTestImpl(kj::WaitScope& ws, WrapClientFn wrapClient, AutoRec
 
   KJ_EXPECT(connectCount == 3);
   // Everything we initiated should still finish.
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test3 disconnect", promise4.ignoreResult().wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("test3 disconnect", promise4.ignoreResult().wait(ws));
   KJ_EXPECT(connectCount == 4);
 
   // Send the request which we created before the disconnect. There are two behaviors we accept

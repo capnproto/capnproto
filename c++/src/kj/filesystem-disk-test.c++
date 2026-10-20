@@ -438,7 +438,7 @@ KJ_TEST("DiskDirectory") {
 
   KJ_EXPECT(dir->tryOpenFile(Path({"foo", "bar"}), WriteMode::MODIFY) == kj::none);
   KJ_EXPECT(dir->tryOpenFile(Path({"bar", "baz"}), WriteMode::MODIFY) == kj::none);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("parent is not a directory",
+  KJ_EXPECT_THROW_MESSAGE("parent is not a directory",
       dir->tryOpenFile(Path({"bar", "baz"}), WriteMode::CREATE));
 
   {
@@ -565,9 +565,9 @@ KJ_TEST("DiskDirectory symlinks") {
   KJ_EXPECT(dir->tryOpenFile(Path("foo")) == kj::none);
   KJ_EXPECT(dir->tryOpenFile(Path("foo"), WriteMode::CREATE) == kj::none);
   KJ_EXPECT(dir->tryOpenFile(Path("foo"), WriteMode::MODIFY) == kj::none);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("parent is not a directory",
+  KJ_EXPECT_THROW_MESSAGE("parent is not a directory",
       dir->tryOpenFile(Path("foo"), WriteMode::CREATE | WriteMode::MODIFY));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("parent is not a directory",
+  KJ_EXPECT_THROW_MESSAGE("parent is not a directory",
       dir->tryOpenFile(Path("foo"),
           WriteMode::CREATE | WriteMode::MODIFY | WriteMode::CREATE_PARENT));
 

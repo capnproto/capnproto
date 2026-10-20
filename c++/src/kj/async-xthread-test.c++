@@ -117,7 +117,7 @@ KJ_TEST("synchronous simple cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeSync([&]() {
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
       KJ_ASSERT(isChild);
       KJ_FAIL_ASSERT("test exception") { break; }
     }));
@@ -169,7 +169,7 @@ KJ_TEST("asynchronous simple cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeAsync([&]() {
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
       KJ_ASSERT(isChild);
       KJ_FAIL_ASSERT("test exception") { break; }
     }).wait(waitScope));
@@ -228,7 +228,7 @@ KJ_TEST("synchronous promise cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeSync([&]() {
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
       KJ_ASSERT(isChild);
       return kj::Promise<void>(KJ_EXCEPTION(FAILED, "test exception"));
     }));
@@ -289,7 +289,7 @@ KJ_TEST("asynchronous promise cross-thread events") {
 
     KJ_ASSERT(!isChild);
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("test exception", exec->executeAsync([&]() {
+    KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
       KJ_ASSERT(isChild);
       return kj::Promise<void>(KJ_EXCEPTION(FAILED, "test exception"));
     }).wait(waitScope));
@@ -639,7 +639,7 @@ KJ_TEST("synchronous cross-thread event disconnected") {
 
     KJ_EXPECT(exec->isLive());
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         exec->executeSync([&]() -> Promise<void> {
           fulfiller->fulfill();
@@ -695,7 +695,7 @@ KJ_TEST("asynchronous cross-thread event disconnected") {
 
     KJ_EXPECT(exec->isLive());
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         exec->executeAsync([&]() -> Promise<void> {
           fulfiller->fulfill();
@@ -748,7 +748,7 @@ KJ_TEST("cross-thread event disconnected before it runs") {
 
     *executor.lockExclusive() = kj::none;
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         promise.wait(waitScope));
 
@@ -793,7 +793,7 @@ KJ_TEST("cross-thread event disconnected without holding Executor ref") {
 
     KJ_EXPECT(exec->isLive());
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "Executor's event loop exited before cross-thread event could complete",
         exec->executeSync([&]() -> Promise<void> {
           fulfiller->fulfill();
@@ -960,7 +960,7 @@ KJ_TEST("cross-thread fulfiller rejects") {
     auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foo exception", paf.promise.wait(waitScope));
+    KJ_EXPECT_THROW_MESSAGE("foo exception", paf.promise.wait(waitScope));
   });
 
   ([&]() noexcept {
@@ -986,7 +986,7 @@ KJ_TEST("cross-thread fulfiller destroyed") {
     auto paf = kj::newPromiseAndCrossThreadFulfiller<void>();
     *fulfillerMutex.lockExclusive() = kj::mv(paf.fulfiller);
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "cross-thread PromiseFulfiller was destroyed without fulfilling the promise",
         paf.promise.wait(waitScope));
   });

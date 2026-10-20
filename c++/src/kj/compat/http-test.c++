@@ -2792,7 +2792,7 @@ KJ_TEST("WebSocket pump disconnect on send") {
   pipe2.ends[1] = nullptr;
 
   // Pump throws disconnected.
-  KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, pumpTask.wait(waitScope));
+  KJ_EXPECT_THROW(DISCONNECTED, pumpTask.wait(waitScope));
 
   // client1 may or may not have been able to send its whole message depending on buffering.
   sendTask.catch_([](kj::Exception&& e) {
@@ -2843,7 +2843,7 @@ KJ_TEST("WebSocket abort propagates through pipe") {
   client->abort();
 
   KJ_EXPECT(downstreamPump.poll(waitScope));
-  KJ_EXPECT_THROW_RECOVERABLE(DISCONNECTED, downstreamPump.wait(waitScope));
+  KJ_EXPECT_THROW(DISCONNECTED, downstreamPump.wait(waitScope));
 }
 
 KJ_TEST("WebSocket pipe abort notifies current and future observers") {
@@ -2890,7 +2890,7 @@ KJ_TEST("WebSocket maximum message size") {
   }
 
   {
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("too large",
+    KJ_EXPECT_THROW_MESSAGE("too large",
         server->receive(maxSize).ignoreResult().wait(waitScope));
     KJ_ASSERT(errorCatcher.errors.size() == 1);
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1009);
@@ -2939,7 +2939,7 @@ KJ_TEST("WebSocket maximum compressed message size") {
   }
 
   {
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("too large",
+    KJ_EXPECT_THROW_MESSAGE("too large",
         server->receive(maxSize).ignoreResult().wait(waitScope));
     KJ_ASSERT(errorCatcher.errors.size() == 1);
     KJ_ASSERT(errorCatcher.errors[0].statusCode == 1009);
@@ -6145,7 +6145,7 @@ void doDelayedCompletionWebSocketTest(bool exception, bool closeUpstreamFirst) n
   KJ_ASSERT(promise.poll(waitScope));
 
   if (exception) {
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("service-side failure", promise.wait(waitScope));
+    KJ_EXPECT_THROW_MESSAGE("service-side failure", promise.wait(waitScope));
   } else {
     promise.wait(waitScope);
   }
