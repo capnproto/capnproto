@@ -455,7 +455,7 @@ KJ_TRY {
 
 These wrappers perform some extra bookkeeping:
 * `KJ_CATCH()` will catch any kind of exception, whether it derives from `kj::Exception` or not, and will do its best to convert it into a `kj::Exception`.
-* `kj::throwFatalException()` and `kj::throwRecoverableException()` invoke the thread's current `kj::ExceptionCallback` to throw the exception, allowing apps to customize how exceptions are handled. The default `ExceptionCallback` makes sure to throw the exception in such a way that it can be understood and caught by code looking for `std::exception`, such as the C++ library's standard termination handler.
+* `kj::throwFatalException()` and `kj::throwRecoverableException()` invoke the thread's current `kj::ExceptionCallback` to throw the exception, allowing apps to customize how exceptions are handled. The default `ExceptionCallback` makes sure to throw the exception in such a way that it can be understood and caught by code looking for `std::exception`, such as the C++ library's standard termination handler. The two functions differ only when the stack is already unwinding due to another exception: in that case, `kj::throwRecoverableException()` logs the exception and returns instead of throwing (see "Exceptions in Destructors", below).
 
 There is also an older utility, `kj::runCatchingExceptions()`, which performs the same exception conversion as `KJ_TRY` / `KJ_CATCH`.
 
@@ -469,54 +469,6 @@ KJ_IF_SOME(e, maybeException) {
 }
 ```
 
-* Code which does not use `KJ_TRY` / `KJ_CATCH`, but limits itself to `kj::runCatchingExceptions()` and `kj::throwFatalException()` / `kj::throwRecoverableException()` will work, to some extent, even when compiled with `-fno-exceptions` -- see below. (Note that "fatal" vs. "recoverable" exceptions are only different in this case; when exceptions are enabled, they are handled the same.)
-
-### Supporting `-fno-exceptions`
-
-_NOTE: In KJ / Cap'n Proto v2.0, support for `-fno-exceptions` has been removed, making this section somewhat obsolete. However, instances of recovery blocks still appear in the codebase, and they may still be relevant in the case of destructors, where they protect against throwing during unwind. Recovery blocks appearing anywhere other than destructors or code called from destructors can safely be deleted._
-
-KJ strongly recommends using C++ exceptions. However, exceptions are controversial, and many C++ applications are compiled with exceptions disabled. Some KJ-based libraries (especially Cap'n Proto) would like to accommodate such users. To that end, KJ's exception and assertion infrastructure is designed to degrade gracefully when compiled without exception support. In this case, exceptions are split into two types:
-
-* Fatal exceptions, when compiled with `-fno-exceptions`, will terminate the program when thrown.
-* Recoverable exceptions, when compiled with `-fno-exceptions`, will be recorded on the side. Control flow then continues normally, possibly using a dummy value or skipping code which cannot execute. Later, the application can check if an exception has been raised and handle it.
-
-`KJ_ASSERT`s (and `KJ_REQUIRE`s) are fatal by default. To make them recoverable, add a "recovery block" after the assert:
-
-```c++
-kj::StringPtr getItem(int i) {
-  KJ_REQUIRE(i >= 0 && i < items.size()) {
-    // This is the recovery block. Recover by simply returning an empty string.
-    return "";
-  }
-  return items[i];
-}
-```
-
-When the code above is compiled with exceptions enabled, an out-of-bounds index will result in an exception being thrown. But when compiled with `-fno-exceptions`, the function will store the exception off to the side (in KJ), and then return an empty string.
-
-A recovery block can indicate that control flow should continue normally even in case of error by using a `break` statement.
-
-```c++
-void incrementBy(int i) {
-  KJ_REQUIRE(i >= 0, "negative increments not allowed") {
-    // Pretend the caller passed `0` and continue.
-    i = 0;
-    break;
-  }
-
-  value += i;
-}
-```
-
-**WARNING:** The recovery block is executed even when exceptions are enabled. The exception is thrown upon exit from the block (even if a `return` or `break` statement is present). Therefore, be careful about side effects in the recovery block. Also, note that both GCC and Clang have a longstanding bug where a returned value's destructor is not called if the return is interrupted by an exception being thrown. Therefore, you must not return a value with a non-trivial destructor from a recovery block.
-
-There are two ways to handle recoverable exceptions:
-
-* Use `kj::runCatchingExceptions()`. When compiled with `-fno-exceptions`, this function will arrange for any recoverable exception to be stored off to the side. Upon completion of the given lambda, `kj::runCatchingExceptions()` will return the exception.
-* Write a custom `kj::ExceptionCallback`, which can handle exceptions in any way you choose.
-
-Note that while most features of KJ work with `-fno-exceptions`, some of them have not been carefully written for this case, and may trigger fatal exceptions too easily. People relying on this mode will have to tread carefully.
-
 ### Exceptions in Destructors
 
 Bugs can occur anywhere -- including in destructors. KJ encourages applications to detect bugs using assertions, which throw exceptions. As a result, exceptions can be thrown in destructors. There is no way around this. You cannot simply declare that destructors shall not have bugs.
@@ -527,7 +479,7 @@ However, this does not solve C++'s Most Unfortunate Decision, namely that throwi
 
 To work around the MUD, KJ offers two tools:
 
-First, during unwind from one exception, KJ will handle all "recoverable" exceptions as if compiled with `-fno-exceptions`, described in the previous section. So, whenever writing assertions in destructors, it is a good idea to give them a recovery block like `{break;}` or `{return;}`.
+First, `KJ_ASSERT`s (and `KJ_REQUIRE`s, `KJ_SYSCALL`s, etc.) can be made "recoverable" by adding a "recovery block" after the assert. During unwind from one exception, KJ will log recoverable exceptions instead of throwing them, and will continue executing wherever the recovery block jumps to. So, whenever writing assertions in destructors, it is a good idea to give them a recovery block like `{break;}` or `{return;}`.
 
 ```c++
 BufferedStream::~BufferedStream() noexcept(false) {
@@ -537,6 +489,12 @@ BufferedStream::~BufferedStream() noexcept(false) {
   }
 }
 ```
+
+A `break` statement in a recovery block jumps to the code immediately after the block (it does not break any surrounding loop or switch).
+
+**WARNING:** The recovery block is executed before the exception is thrown, even when not unwinding. The exception is thrown upon exit from the block (even if a `return` or `break` statement is present). Therefore, be careful about side effects in the recovery block. Also, note that both GCC and Clang have a longstanding bug where a returned value's destructor is not called if the return is interrupted by an exception being thrown. Therefore, you must not return a value with a non-trivial destructor from a recovery block.
+
+Recovery blocks are only useful in destructors and code called from destructors. Elsewhere, they serve no purpose and should not be used.
 
 Second, `kj::UnwindDetector` can be used to squelch exceptions during unwind. This is especially helpful in cases where your destructor needs to call complex external code that wasn't written with destructors in mind. Use it like so:
 

@@ -239,20 +239,13 @@ AS_IF([test "$with_openssl" != no], [
 ])
 AM_CONDITIONAL([BUILD_KJ_TLS], [test "$with_openssl" != no])
 
-# Fibers don't work if exceptions are disabled, so default off in that case.
-AS_IF([test "$with_fibers" != no], [
-  AC_MSG_CHECKING([if exceptions are enabled])
-  AC_COMPILE_IFELSE([void foo() { throw 1; }], [
-    AC_MSG_RESULT([yes])
-  ], [
-    AS_IF([test "$with_fibers" = check], [
-      AC_MSG_RESULT([no -- therefore, disabling fibers])
-      with_fibers=no
-    ], [
-      AC_MSG_RESULT([no])
-      AC_MSG_ERROR([Fibers require exceptions, but your compiler flags disable exceptions. Please either enable exceptions or disable fibers (--without-fibers).])
-    ])
-  ])
+# KJ requires C++ exceptions.
+AC_MSG_CHECKING([if exceptions are enabled])
+AC_COMPILE_IFELSE([void foo() { throw 1; }], [
+  AC_MSG_RESULT([yes])
+], [
+  AC_MSG_RESULT([no])
+  AC_MSG_ERROR([KJ requires C++ exceptions, but your compiler flags disable exceptions. Please enable exceptions.])
 ])
 
 # Check for library support necessary for fibers.

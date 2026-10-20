@@ -280,11 +280,9 @@ enum class LogSeverity {
 StringPtr KJ_STRINGIFY(LogSeverity severity);
 
 class ExceptionCallback {
-  // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order
-  // to perform your own exception handling.  For example, a reasonable thing to do is to have
-  // onRecoverableException() set a flag indicating that an error occurred, and then check for that
-  // flag just before writing to storage and/or returning results to the user.  If the flag is set,
-  // discard whatever you have and return an error instead.
+  // An ExceptionCallback may be implemented and registered in order to customize how exceptions
+  // are thrown and how log messages are written.  For example, a callback might annotate
+  // exceptions with additional context before they are thrown, or redirect log output.
   //
   // ExceptionCallbacks must always be allocated on the stack.  When an exception is thrown, the
   // newest ExceptionCallback on the calling thread's stack is called.  The default implementation

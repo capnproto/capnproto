@@ -43,26 +43,24 @@
 //   debugging a particular problem.  Calls to `KJ_DBG` should always be deleted before committing
 //   code.  It is suggested that you set up a pre-commit hook that checks for this.
 //
-// * `KJ_ASSERT(condition, ...)`:  Throws an exception if `condition` is false, or aborts if
-//   exceptions are disabled.  This macro should be used to check for bugs in the surrounding code
-//   and its dependencies, but NOT to check for invalid input.  The macro may be followed by a
-//   brace-delimited code block; if so, the block will be executed in the case where the assertion
-//   fails, before throwing the exception.  If control jumps out of the block (e.g. with "break",
-//   "return", or "goto"), then the error is considered "recoverable" -- in this case, if
-//   exceptions are disabled, execution will continue normally rather than aborting (but if
-//   exceptions are enabled, an exception will still be thrown on exiting the block). A "break"
-//   statement in particular will jump to the code immediately after the block (it does not break
-//   any surrounding loop or switch).  Example:
+// * `KJ_ASSERT(condition, ...)`:  Throws an exception if `condition` is false.  This macro should
+//   be used to check for bugs in the surrounding code and its dependencies, but NOT to check for
+//   invalid input.  The macro may be followed by a brace-delimited code block (a "recovery
+//   block"); if so, the block will be executed in the case where the assertion fails, before
+//   throwing the exception.  If control jumps out of the block (e.g. with "break", "return", or
+//   "goto"), then the error is considered "recoverable": the exception is still thrown on exiting
+//   the block, unless the thread is already unwinding due to another exception, in which case the
+//   exception is logged and execution continues at the jump target.  A "break" statement in
+//   particular will jump to the code immediately after the block (it does not break any
+//   surrounding loop or switch).  Recovery blocks are only useful in destructors (and code called
+//   from destructors), to avoid throwing during unwind.  Example:
 //
-//       KJ_ASSERT(value >= 0, "Value cannot be negative.", value) {
-//         // Assertion failed.  Set value to zero to "recover".
-//         value = 0;
-//         // Don't abort if exceptions are disabled.  Continue normally.
-//         // (Still throw an exception if they are enabled, though.)
-//         break;
+//       Foo::~Foo() noexcept(false) {
+//         KJ_ASSERT(buffer.size() == 0, "Buffer was not flushed.") {
+//           // Don't std::terminate() if we're already unwinding.
+//           break;
+//         }
 //       }
-//       // When exceptions are disabled, we'll get here even if the assertion fails.
-//       // Otherwise, we get here only if the assertion passes.
 //
 // * `KJ_REQUIRE(condition, ...)`:  Like `KJ_ASSERT` but used to check preconditions -- e.g. to
 //   validate parameters passed from a caller.  A failure indicates that the caller is buggy.
@@ -113,11 +111,11 @@
 //   message will not necessarily be evaluated.
 // * For every macro `FOO` above except `LOG`, there is also a `FAIL_FOO` macro used to report
 //   failures that already happened.  For the macros that check a boolean condition, `FAIL_FOO`
-//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` and
-//   `FAIL_RECOVERABLE_SYSCALL` take a string and an OS error number as the first two parameters.
-//   The string should be the name of the failed system call.
-// * For every macro `FOO` above except `ASSUME`, there is a `DFOO` version (or
-//   `RECOVERABLE_DFOO`) which is only executed in debug mode, i.e. when KJ_DEBUG is defined.
+//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` takes a string and
+//   an OS error number as the first two parameters.  The string should be the name of the failed
+//   system call.
+// * For every macro `FOO` above except `ASSUME`, there is a `DFOO` version which is only executed
+//   in debug mode, i.e. when KJ_DEBUG is defined.
 //   KJ_DEBUG is defined automatically by common.h when compiling without optimization (unless
 //   NDEBUG is defined), but you can also define it explicitly (e.g. -DKJ_DEBUG).  Generally,
 //   production builds should NOT use KJ_DEBUG as it may enable expensive checks that are unlikely

@@ -818,8 +818,7 @@ public:
   template <typename Func>
   bool rejectIfThrows(Func&& func);
   // Call the function (with no arguments) and return true.  If an exception is thrown, call
-  // `fulfiller.reject()` and then return false.  When compiled with exceptions disabled,
-  // non-fatal exceptions are still detected and handled correctly.
+  // `fulfiller.reject()` and then return false.
 };
 
 template <>

@@ -181,13 +181,7 @@ If exceptions are merely a means to fault tolerance, then it is perfectly clear 
 Alas, C++ is what it is. So, in KJ, we work around the problem in a couple ways:
 
 * `kj::UnwindDetector` may be used to detect when a destructor is called during unwind and squelch secondary exceptions.
-* The `KJ_ASSERT` family of macros -- from which most exceptions are thrown in the first place -- implement a concept of "recoverable" exceptions, where it is safe to continue execution without throwing in cases where throwing would be bad. Assert macros in destructors must always be recoverable.
-
-#### Allowing `-fno-exceptions`
-
-KJ and Cap'n Proto are designed to function even when compiled with `-fno-exceptions`. In this case, throwing an exception behaves differently depending on whether the exception is "fatal" or "recoverable". Fatal exceptions abort the process. On a recoverable exception, on the other hand, execution continues normally, perhaps after replacing invalid data with some safe default. The exception itself is stored in a thread-local variable where code up the stack can check for it later on.
-
-This compromise is made only so that C++ applications which eschew exceptions are still able to use Cap'n Proto. We do NOT recommend disabling exceptions if you have a choice. Moreover, code following this style guide (other than KJ and Cap'n Proto) is not required to be `-fno-exceptions`-safe, and in fact we recommend against it.
+* The `KJ_ASSERT` family of macros -- from which most exceptions are thrown in the first place -- implement a concept of "recoverable" exceptions, where it is safe to continue execution without throwing in cases where throwing would be bad. A recoverable exception is logged rather than thrown if the stack is already unwinding due to another exception. Assert macros in destructors must always be recoverable.
 
 ### Threads vs. Event Loops
 
