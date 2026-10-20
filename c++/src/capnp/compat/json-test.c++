@@ -196,6 +196,28 @@ KJ_TEST("encode union") {
   KJ_EXPECT(json.encode(root) == "{\"before\":\"a\",\"middle\":44,\"bar\":321,\"after\":\"c\"}");
 }
 
+KJ_TEST("default primitive union member") {
+  JsonCodec json;
+  json.setHasMode(HasMode::NON_DEFAULT);
+
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestUnion>().getUnion0();
+  KJ_EXPECT(json.encode(root) == "{}");
+
+  root.setU0f0s1(true);
+  KJ_EXPECT(json.encode(root) == "{\"u0f0s1\":true}");
+
+  root.setU0f0s1(false);
+  auto encoded = json.encode(root);
+  KJ_EXPECT(encoded == "{\"u0f0s1\":false}", encoded);
+
+  MallocMessageBuilder message2;
+  auto root2 = message2.initRoot<test::TestUnion>().getUnion0();
+  json.decode(encoded, root2);
+  KJ_EXPECT(root2.isU0f0s1());
+  KJ_EXPECT(!root2.getU0f0s1());
+}
+
 KJ_TEST("null pointer field") {
   // Pointer fields are to be treated as missing if they're set to null in JSON
 
