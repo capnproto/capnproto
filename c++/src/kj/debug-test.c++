@@ -629,6 +629,310 @@ KJ_TEST("magic assert stringification") {
   }
 }
 
+KJ_TEST("assertion diagnostics are captured before argument temporaries are destroyed") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::str("temporary pointer").cStr());
+    }));
+    KJ_EXPECT(exception.getDescription() == "temporary pointer");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(false, kj::str("temporary view").asPtr()) { break; }
+    }));
+    KJ_EXPECT(exception.getDescription() == "expected false; temporary view");
+  }
+
+  {
+    // The argument is a reference to a subobject, not an owning temporary that can be moved.
+    struct Temporary {
+      kj::String text = kj::str("temporary subobject");
+      kj::String& getText() { return text; }
+    };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_ASSERT(Temporary().getText()) { return; }
+    }));
+    KJ_EXPECT(exception.getDescription() == "Temporary().getText() = temporary subobject");
+  }
+}
+
+KJ_TEST("assertion diagnostics are captured before recovery changes their arguments") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto value = kj::str("bad");
+      KJ_REQUIRE(value == "good", value) {
+        value = kj::str("good");
+        break;
+      }
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected value == \"good\" [bad == good]; value = bad");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto value = kj::str("original");
+      const char* pointer = value.cStr();
+      KJ_FAIL_REQUIRE(pointer) {
+        value = nullptr;
+        return;
+      }
+    }));
+    KJ_EXPECT(exception.getDescription() == "pointer = original");
+  }
+
+  {
+    // Falling through the recovery block takes the fatal path instead of the recoverable path.
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      auto value = kj::str("original");
+      KJ_FAIL_REQUIRE(value) {
+        value = kj::str("changed");
+      }
+    }));
+    KJ_EXPECT(exception.getDescription() == "value = original");
+  }
+}
+
+struct NonmovableDiagnostic {
+  NonmovableDiagnostic() = default;
+  KJ_DISALLOW_COPY_AND_MOVE(NonmovableDiagnostic);
+};
+
+kj::StringPtr KJ_STRINGIFY(const NonmovableDiagnostic&) {
+  return "nonmovable";
+}
+
+KJ_TEST("assertion diagnostics do not require moving their arguments") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_UNIMPLEMENTED(kj::str("owning temporary"));
+    }));
+    KJ_EXPECT(exception.getType() == kj::Exception::Type::UNIMPLEMENTED);
+    KJ_EXPECT(exception.getDescription() == "owning temporary");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(NonmovableDiagnostic());
+    }));
+    KJ_EXPECT(exception.getDescription() == "NonmovableDiagnostic() = nonmovable");
+  }
+
+  {
+    auto value = kj::str("not moved");
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::mv(value)) { break; }
+    }));
+    KJ_EXPECT(exception.getDescription() == "kj::mv(value) = not moved");
+    KJ_EXPECT(value == "not moved");
+  }
+}
+
+// =======================================================================================
+// Stack frame overhead of assertion macros
+//
+// Measures the exact number of stack bytes that kj/debug.h assertion macros add to the frame of
+// the function that contains them.
+//
+// Each check sits in a KJ_NOINLINE function of the form:
+//
+//     void check() {
+//       <inputs> = opaque(...);
+//       KJ_ASSERT(...);
+//       probe();
+//     }
+//
+// measureFrame() calls the check through a function pointer and computes the distance between
+// its own frame and the frame of probe(). That distance is the frame size of the check plus a
+// constant, which is cancelled out by subtracting the distance measured for a check without
+// any assertion. None of the checks ever fail, so this is the stack cost of the fast path.
+//
+// Ideally an assertion costs no stack at all: the failure path only needs the operands in
+// registers. Any stack slot it does need is reserved, and often written to, every time the
+// function runs.
+
+#if defined(__GNUC__)
+
+template <typename T>
+KJ_ALWAYS_INLINE(T opaque(T value));
+template <typename T>
+inline T opaque(T value) {
+  // Returns `value`, but hides it from the optimizer, so the check can't be constant-folded.
+  asm volatile("" : "+r"(value));
+  return value;
+}
+
+template <typename T>
+KJ_ALWAYS_INLINE(void use(T value));
+template <typename T>
+inline void use(T value) {
+  // Forces `value` to be computed, without storing it anywhere.
+  asm volatile("" :: "r"(value));
+}
+
+const char* probeFrame = nullptr;
+
+KJ_NOINLINE void probe() {
+  probeFrame = static_cast<const char*>(__builtin_frame_address(0));
+}
+
+#define KJ_FRAME_PROBE() \
+  probe(); \
+  asm volatile("" ::: "memory")
+// Records the stack depth. The trailing asm keeps the call from being turned into a tail call,
+// which would pop the check's frame before probe() runs.
+
+KJ_NOINLINE ptrdiff_t measureFrame(void (*check)()) {
+  const char* top = static_cast<const char*>(__builtin_frame_address(0));
+  check = opaque(check);  // Don't let the compiler specialize this function for each check.
+  probeFrame = nullptr;
+  check();
+  asm volatile("" ::: "memory");
+  KJ_ASSERT(probeFrame != nullptr);
+  return top - probeFrame;
+}
+
+int value = 1;
+int* const SENTINEL = reinterpret_cast<int*>(1);
+const kj::StringPtr stringPtr = "string"_kj;
+const kj::String string = kj::str("string");
+
+// ---------------------------------------------------------------------------------------
+// Checks. Each one is measured relative to `baseline()`.
+
+KJ_NOINLINE void baseline() {
+  use(opaque(&value));
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertTruthy() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertTruthyMessage() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr, "ptr must be set");
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertEq() {
+  int a = opaque(1);
+  int b = opaque(1);
+  KJ_ASSERT(a == b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertNeMessage() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr != SENTINEL, "should only be called once");
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertCheapArgs() {
+  size_t a = opaque(size_t(1));
+  size_t b = opaque(size_t(2));
+  KJ_ASSERT(a < b, "out of range", a, b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertStringPtrArg() {
+  // kj::StringPtr fits in two registers, but isn't trivially copyable, as it has a user-provided
+  // copy constructor.
+  int* ptr = opaque(&value);
+  kj::StringPtr name = *opaque(&stringPtr);
+  KJ_ASSERT(ptr, "ptr must be set", name);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertExpensiveArg() {
+  // kj::String isn't trivially copyable. Here it's a reference to an object outside the frame.
+  int* ptr = opaque(&value);
+  const kj::String& name = *opaque(&string);
+  KJ_ASSERT(ptr, "ptr must be set", name);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertRecoverable() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr, "ptr must be set") { return; }
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void failAssert() {
+  int* ptr = opaque(&value);
+  if (KJ_UNLIKELY(ptr == nullptr)) {
+    KJ_FAIL_ASSERT("ptr must be set");
+  }
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void failAssertCheapArg() {
+  int* ptr = opaque(&value);
+  if (KJ_UNLIKELY(ptr == SENTINEL)) {
+    KJ_FAIL_ASSERT("ptr must not be the sentinel", ptr);
+  }
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertNonNull() {
+  kj::Maybe<int&> maybe = opaque(&value);
+  use(&KJ_ASSERT_NONNULL(maybe));
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertNonNullMessage() {
+  kj::Maybe<int&> maybe = opaque(&value);
+  use(&KJ_ASSERT_NONNULL(maybe, "value must be set"));
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertTwice() {
+  size_t a = opaque(size_t(1));
+  size_t b = opaque(size_t(2));
+  KJ_ASSERT(a < b, "out of range", a, b);
+  KJ_ASSERT(a != 0, "zero", a);
+  KJ_FRAME_PROBE();
+}
+
+ptrdiff_t frameOverhead(void (*check)()) {
+  return measureFrame(check) - measureFrame(baseline);
+}
+
+KJ_TEST("stack frame overhead of assertion macros") {
+  // Frame sizes vary between compilers, architectures and optimization levels. Like
+  // async-coroutine-alloc-test, only check them in the clang opt build, but always run the
+  // checks. We intentionally check exact values, so that any change (in either direction) is
+  // noticed.
+#if defined(__clang__) && defined(__x86_64__) && defined(KJ_DEBUG_TEST_ASSERT_FRAME_SIZE)
+  #define KJ_EXPECT_FRAME(check, size) KJ_EXPECT(frameOverhead(check) == size)
+#else
+  #define KJ_EXPECT_FRAME(check, size) frameOverhead(check)
+#endif
+
+  KJ_EXPECT(frameOverhead(baseline) == 0);
+
+  KJ_EXPECT_FRAME(assertTruthy, 0);
+  KJ_EXPECT_FRAME(assertTruthyMessage, 0);
+  KJ_EXPECT_FRAME(assertEq, 0);
+  KJ_EXPECT_FRAME(assertNeMessage, 0);
+  KJ_EXPECT_FRAME(assertCheapArgs, 0);
+  KJ_EXPECT_FRAME(assertStringPtrArg, 16);
+  KJ_EXPECT_FRAME(assertExpensiveArg, 0);
+  KJ_EXPECT_FRAME(assertRecoverable, 0);
+  KJ_EXPECT_FRAME(failAssert, 0);
+  KJ_EXPECT_FRAME(failAssertCheapArg, 0);
+  KJ_EXPECT_FRAME(assertNonNull, 0);
+  KJ_EXPECT_FRAME(assertNonNullMessage, 0);
+  KJ_EXPECT_FRAME(assertTwice, 0);
+
+  #undef KJ_EXPECT_FRAME
+}
+
+#endif  // defined(__GNUC__)
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace kj

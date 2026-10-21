@@ -167,7 +167,11 @@ namespace kj {
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
 
 // TODO(cleanup): It may be possible to reduce code duplication between the macros and their _AT
-// variants by making Debug::Fault take a SourceLocation instead of __FILE__/__LINE__.
+// variants by making Debug::Fault take a SourceLocation instead of __FILE__/__LINE__. The
+// non-traditional-preprocessor KJ_REQUIRE / KJ_FAIL_REQUIRE / KJ_UNIMPLEMENTED / KJ_REQUIRE_NONNULL
+// below already pass a static Debug::Fault::Site (see KJ_FAULT_SITE); the _AT variants, the
+// KJ_SYSCALL / KJ_WIN32 family and this traditional-preprocessor branch still pass
+// __FILE__/__LINE__ separately.
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
@@ -276,10 +280,18 @@ namespace kj {
 
 #define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
 
+#define KJ_FAULT_SITE(condition, macroArgs) \
+  ([]() -> const ::kj::_::Debug::Fault::Site& { \
+    static constexpr ::kj::_::Debug::Fault::Site site { \
+        __FILE__, __LINE__, condition, macroArgs }; \
+    return site; \
+  }())
+// Static descriptor of the failing check's source location, condition and argument names.
+
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-        #cond, "_kjCondition," #__VA_ARGS__, _kjCondition, ##__VA_ARGS__);; f.fatal())
+    for (::kj::_::Debug::Fault f(KJ_FAULT_SITE(#cond, "_kjCondition," #__VA_ARGS__), \
+        ::kj::Exception::Type::FAILED, _kjCondition, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_REQUIRE_AT(cond, location, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
@@ -288,8 +300,8 @@ namespace kj {
         ##__VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE(...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+  for (::kj::_::Debug::Fault f(KJ_FAULT_SITE(nullptr, #__VA_ARGS__), \
+                               ::kj::Exception::Type::FAILED, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
   for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
@@ -334,8 +346,8 @@ namespace kj {
 #endif
 
 #define KJ_UNIMPLEMENTED(...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+  for (::kj::_::Debug::Fault f(KJ_FAULT_SITE(nullptr, #__VA_ARGS__), \
+                               ::kj::Exception::Type::UNIMPLEMENTED, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
@@ -351,8 +363,8 @@ namespace kj {
   (*([&] { \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                            #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
+      ::kj::_::Debug::Fault(KJ_FAULT_SITE(#value " != nullptr", #__VA_ARGS__), \
+                            ::kj::Exception::Type::FAILED, ##__VA_ARGS__).fatal(); \
     } \
     return _kj_result; \
   }()))
@@ -374,8 +386,8 @@ namespace kj {
   (*({ \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                            #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
+      ::kj::_::Debug::Fault(KJ_FAULT_SITE(#value " != nullptr", #__VA_ARGS__), \
+                            ::kj::Exception::Type::FAILED, ##__VA_ARGS__).fatal(); \
     } \
     kj::mv(_kj_result); \
   }))
@@ -495,6 +507,97 @@ namespace kj {
 
 namespace _ {  // private
 
+#if _MSC_VER && !defined(__clang__)
+#define KJ_FAULT_INLINE __forceinline
+#else
+#define KJ_FAULT_INLINE [[gnu::always_inline]] inline
+#endif
+// Like KJ_ALWAYS_INLINE, but in prefix form, which GCC also accepts on in-class definitions of
+// member templates.
+
+template <typename T>
+struct DebugExpression;
+template <typename Left, typename Right, typename Op>
+struct DebugComparison;
+
+template <typename Left, typename Right, typename Op>
+struct FaultComparison {
+  // Snapshot of a failed DebugComparison as passed to the failure path. Contains just the operands
+  // (the operator is in the type and the result is known to be false), so that two scalar operands
+  // fit in two registers.
+  Left left;
+  Right right;
+};
+
+struct DebugExpressionFalse {};
+// Stand-in for a falsy `DebugExpression<T>` passed to the failure path: it always stringifies
+// as "false", so there's no need to pass the expression's value along.
+
+template <typename T> struct FaultPlain_ { typedef T Type; };
+template <typename T> struct FaultPlain_<T&> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<T&&> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<const T> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<volatile T> { typedef typename FaultPlain_<T>::Type Type; };
+template <typename T> struct FaultPlain_<const volatile T> {
+  typedef typename FaultPlain_<T>::Type Type;
+};
+template <typename T> using FaultPlain = typename FaultPlain_<T>::Type;
+// Strips references and cv-qualifiers, but unlike Decay<T> doesn't turn arrays into pointers.
+
+template <typename T> struct IsFaultArray_ { static constexpr bool value = false; };
+template <typename T> struct IsFaultArray_<T[]> { static constexpr bool value = true; };
+template <typename T, size_t s> struct IsFaultArray_<T[s]> { static constexpr bool value = true; };
+
+template <typename T>
+constexpr bool isCheapFaultArg() {
+  // Whether a value of type T should be passed to the out-of-line failure path by value rather
+  // than by reference.
+  return !IsFaultArray_<T>::value && __is_trivially_copyable(T) &&
+      __is_trivially_constructible(T, const T&) && sizeof(T) <= 2 * sizeof(void*);
+}
+
+template <typename T, bool cheap = isCheapFaultArg<FaultPlain<T>>()>
+struct FaultSnapshot_ { typedef T& Type; };  // Reference collapsing handles T = U&.
+template <typename T> struct FaultSnapshot_<T, true> { typedef FaultPlain<T> Type; };
+template <typename T> using FaultSnapshot = typename FaultSnapshot_<T>::Type;
+// Type of a DebugComparison operand as passed to the failure path: cheap values are copied,
+// everything else is referenced in place.
+
+template <typename T, bool cheap = isCheapFaultArg<FaultPlain<T>>()>
+struct FaultArgDefault_ {
+  // Default: forward by reference.
+  typedef T&& Type;
+  KJ_FAULT_INLINE static Type convert(T& value) { return static_cast<Type>(value); }
+};
+template <typename T>
+struct FaultArgDefault_<T, true> {
+  // Cheap to copy: pass by value.
+  typedef FaultPlain<T> Type;
+  KJ_FAULT_INLINE static Type convert(T& value) { return value; }
+};
+
+template <typename T, typename Plain = FaultPlain<T>>
+struct FaultArg_: public FaultArgDefault_<T> {};
+template <typename T, typename U>
+struct FaultArg_<T, DebugExpression<U>> {
+  typedef DebugExpressionFalse Type;
+  KJ_FAULT_INLINE static Type convert(T&) { return {}; }
+};
+template <typename T, typename Left, typename Right, typename Op>
+struct FaultArg_<T, DebugComparison<Left, Right, Op>> {
+  typedef FaultComparison<FaultSnapshot<Left>, FaultSnapshot<Right>, Op> Type;
+  KJ_FAULT_INLINE static Type convert(T& cmp) { return { cmp.left, cmp.right }; }
+};
+template <typename T> using FaultArg = typename FaultArg_<T>::Type;
+// Type in which an assertion macro argument is passed to the out-of-line failure path.
+//
+// The failure path must not receive references to the caller's locals, or to the `_kjCondition`
+// object created by KJ_REQUIRE(). Once a local's address escapes to an opaque call, the compiler
+// can no longer keep it in registers. Then the local (or every field of `_kjCondition`) gets
+// stored to the stack on the *fast* path, every time the check runs, even though only the
+// failure path ever reads it. So cheap values are passed by copy, and the copy is made inside the
+// cold branch.
+
 class Debug {
 public:
   Debug() = delete;
@@ -522,32 +625,64 @@ public:
                   Params&&... params);
 
   class Fault {
-  public:
-    template <typename Code, typename... Params>
-    Fault(const char* file, int line, Code code,
-          const char* condition, const char* macroArgs, Params&&... params);
-    Fault(const char* file, int line, Exception::Type type,
-          const char* condition, const char* macroArgs);
-    Fault(const char* file, int line, int osErrorNumber,
-          const char* condition, const char* macroArgs);
-#if _WIN32 || __CYGWIN__
-    Fault(const char* file, int line, Win32Result osErrorNumber,
-          const char* condition, const char* macroArgs);
-#endif
-    ~Fault() noexcept(false);
+    // Everything in this class is inline. Its only state is a pointer returned by an
+    // out-of-line function, so `this` never escapes. That lets the compiler keep the Fault in a
+    // register and prove that ~Fault() does nothing after fatal(). So the macros cost no stack
+    // slot, no landing pad, and no callee-saved register spills in the caller. Without this, the
+    // fast path has to set up a stack frame, which also stops shrink-wrapping and makes the
+    // caller look too expensive to inline.
 
-    KJ_NOINLINE KJ_NORETURN(void fatal());
+  public:
+    struct Site {
+      // Compile-time-constant part of a failing check. The macros put it in static storage, so
+      // the caller passes a single pointer instead of four arguments.
+      const char* file;
+      int line;
+      const char* condition;
+      const char* macroArgs;
+    };
+
+    template <typename Code, typename... Params>
+    KJ_ALWAYS_INLINE(Fault(const Site& site, Code code, Params&&... params));
+    template <typename Code, typename... Params>
+    KJ_ALWAYS_INLINE(Fault(const char* file, int line, Code code,
+                           const char* condition, const char* macroArgs, Params&&... params));
+    inline Fault(const char* file, int line, Exception::Type type,
+                 const char* condition, const char* macroArgs);
+    inline Fault(const char* file, int line, int osErrorNumber,
+                 const char* condition, const char* macroArgs);
+#if _WIN32 || __CYGWIN__
+    inline Fault(const char* file, int line, Win32Result osErrorNumber,
+                 const char* condition, const char* macroArgs);
+#endif
+    KJ_DISALLOW_COPY_AND_MOVE(Fault);
+    inline ~Fault() noexcept(false) {
+      if (exception != nullptr) throwRecoverable(exception);
+    }
+
+    KJ_NORETURN(KJ_ALWAYS_INLINE(void fatal()));
     // Throw the exception.
 
   private:
-    void init(const char* file, int line, Exception::Type type,
-              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
-    void init(const char* file, int line, int osErrorNumber,
-              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    template <typename Code, typename... Params>
+    static KJ_NOINLINE Exception* create(const Site& site, Code code, Params... params);
+    // Stringifies `params` and creates the exception. Out of line, so that the caller doesn't
+    // contain the stringification code and the cleanup of the temporary strings. Instantiated
+    // with FaultArg<T> types, so the caller passes cheap values in registers rather than taking
+    // their address.
+
+    static Exception* createInternal(const char* file, int line, Exception::Type type,
+        const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    static Exception* createInternal(const char* file, int line, int osErrorNumber,
+        const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 #if _WIN32 || __CYGWIN__
-    void init(const char* file, int line, Win32Result osErrorNumber,
-              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    static Exception* createInternal(const char* file, int line, Win32Result osErrorNumber,
+        const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 #endif
+
+    KJ_NORETURN(static KJ_NOINLINE void throwFatal(Exception* exception));
+    static KJ_NOINLINE void throwRecoverable(Exception* exception);
+    // Both take ownership of `exception`.
 
     Exception* exception;
   };
@@ -654,32 +789,45 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 }
 
 template <typename Code, typename... Params>
-Debug::Fault::Fault(const char* file, int line, Code code,
-                    const char* condition, const char* macroArgs, Params&&... params)
-    : exception(nullptr) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  init(file, line, code, condition, macroArgs,
-       arrayPtr(argValues, sizeof...(Params)));
+inline Debug::Fault::Fault(const Site& site, Code code, Params&&... params)
+    : exception(create<Code, FaultArg<Params>...>(site, code,
+                                                 FaultArg_<Params>::convert(params)...)) {}
+
+template <typename Code, typename... Params>
+inline Debug::Fault::Fault(const char* file, int line, Code code,
+                           const char* condition, const char* macroArgs, Params&&... params)
+    : Fault(Site { file, line, condition, macroArgs }, code, kj::fwd<Params>(params)...) {}
+    // Used by the _AT variants, whose location is only known at runtime.
+
+inline void Debug::Fault::fatal() {
+  Exception* e = exception;
+  exception = nullptr;
+  throwFatal(e);
+}
+
+template <typename Code, typename... Params>
+Exception* Debug::Fault::create(const Site& site, Code code, Params... params) {
+  if constexpr (sizeof...(Params) == 0) {
+    return createInternal(site.file, site.line, code, site.condition, site.macroArgs, nullptr);
+  } else {
+    String argValues[sizeof...(Params)] = {str(params)...};
+    return createInternal(site.file, site.line, code, site.condition, site.macroArgs,
+                          arrayPtr(argValues, sizeof...(Params)));
+  }
 }
 
 inline Debug::Fault::Fault(const char* file, int line, int osErrorNumber,
                            const char* condition, const char* macroArgs)
-    : exception(nullptr) {
-  init(file, line, osErrorNumber, condition, macroArgs, nullptr);
-}
+    : exception(createInternal(file, line, osErrorNumber, condition, macroArgs, nullptr)) {}
 
 inline Debug::Fault::Fault(const char* file, int line, kj::Exception::Type type,
                            const char* condition, const char* macroArgs)
-    : exception(nullptr) {
-  init(file, line, type, condition, macroArgs, nullptr);
-}
+    : exception(createInternal(file, line, type, condition, macroArgs, nullptr)) {}
 
 #if _WIN32 || __CYGWIN__
 inline Debug::Fault::Fault(const char* file, int line, Win32Result osErrorNumber,
                            const char* condition, const char* macroArgs)
-    : exception(nullptr) {
-  init(file, line, osErrorNumber, condition, macroArgs, nullptr);
-}
+    : exception(createInternal(file, line, osErrorNumber, condition, macroArgs, nullptr)) {}
 
 inline Debug::Win32Result Debug::win32Call(int boolean) {
   return boolean ? Win32Result(0) : Win32Result(getWin32ErrorCode());
@@ -776,11 +924,20 @@ inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
 inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
 // SFINAE to stringify a value if and only if it can be stringified.
 
-template <typename Left, typename Right>
+#define KJ_DEBUG_OPERATOR(NAME, OP) \
+  struct DebugOp##NAME { static StringPtr op() { return " " #OP " "_kj; } };
+KJ_DEBUG_OPERATOR(Eq, ==)
+KJ_DEBUG_OPERATOR(Ne, !=)
+KJ_DEBUG_OPERATOR(Le, <=)
+KJ_DEBUG_OPERATOR(Ge, >=)
+KJ_DEBUG_OPERATOR(Lt, <)
+KJ_DEBUG_OPERATOR(Gt, >)
+#undef KJ_DEBUG_OPERATOR
+
+template <typename Left, typename Right, typename Op>
 struct DebugComparison {
   Left left;
   Right right;
-  StringPtr op;
   bool result;
 
   inline operator bool() const { return KJ_LIKELY(result); }
@@ -790,9 +947,14 @@ struct DebugComparison {
   template <typename T> inline void operator|(T&& other) = delete;
 };
 
-template <typename Left, typename Right>
-String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
-  return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
+template <typename Left, typename Right, typename Op>
+String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
+  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
+}
+
+template <typename Left, typename Right, typename Op>
+String KJ_STRINGIFY(FaultComparison<Left, Right, Op>& cmp) {
+  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
 }
 
 template <typename T>
@@ -801,18 +963,18 @@ struct DebugExpression {
   T value;
 
   // Handle comparison operations by constructing a DebugComparison value.
-#define DEFINE_OPERATOR(OP) \
+#define DEFINE_OPERATOR(OP, NAME) \
   template <typename U> \
-  DebugComparison<T, U> operator OP(U&& other) { \
+  DebugComparison<T, U, DebugOp##NAME> operator OP(U&& other) { \
     bool result = value OP other; \
-    return { kj::fwd<T>(value), kj::fwd<U>(other), " " #OP " "_kj, result }; \
+    return { kj::fwd<T>(value), kj::fwd<U>(other), result }; \
   }
-  DEFINE_OPERATOR(==);
-  DEFINE_OPERATOR(!=);
-  DEFINE_OPERATOR(<=);
-  DEFINE_OPERATOR(>=);
-  DEFINE_OPERATOR(< );
-  DEFINE_OPERATOR(> );
+  DEFINE_OPERATOR(==, Eq);
+  DEFINE_OPERATOR(!=, Ne);
+  DEFINE_OPERATOR(<=, Le);
+  DEFINE_OPERATOR(>=, Ge);
+  DEFINE_OPERATOR(< , Lt);
+  DEFINE_OPERATOR(> , Gt);
 #undef DEFINE_OPERATOR
 
   // Handle binary operators that have equal or lower precedence than comparisons by performing
@@ -843,6 +1005,8 @@ StringPtr KJ_STRINGIFY(const DebugExpression<T>& exp) {
   //   directly, and was determined to be falsy.
   return "false"_kj;
 }
+
+inline StringPtr KJ_STRINGIFY(DebugExpressionFalse) { return "false"_kj; }
 
 struct DebugExpressionStart {
   template <typename T>

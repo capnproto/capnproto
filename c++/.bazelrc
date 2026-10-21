@@ -28,6 +28,7 @@ build:opt --config=thin-lto
 # This won't propagate to projects downstream and cause unnecessary breakage because of different
 # configuration
 build:opt --per_file_copt=src/kj/async-coroutine-alloc-test.c++@-DKJ_ASYNC_COROUTINE_ALLOC_TEST_ASSERT_FRAME_SIZE=1
+build:opt --per_file_copt=src/kj/debug-test.c++@-DKJ_DEBUG_TEST_ASSERT_FRAME_SIZE=1
 
 build:thin-lto --cxxopt='-flto=thin'
 build:thin-lto --linkopt='-flto=thin'
