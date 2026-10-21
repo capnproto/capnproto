@@ -64,7 +64,7 @@ public:
     }
   }
 
-  void onFatalException(Exception&& exception) override {
+  void onException(Exception&& exception) override {
     auto what = str(exception);
     // Discard the stack trace.
     KJ_IF_SOME(end, what.find("\nstack: ")) {

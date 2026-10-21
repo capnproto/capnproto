@@ -1424,8 +1424,8 @@ void ExceptionCallback::onRecoverableException(Exception&& exception) {
   next.onRecoverableException(mv(exception));
 }
 
-void ExceptionCallback::onFatalException(Exception&& exception) {
-  next.onFatalException(mv(exception));
+void ExceptionCallback::onException(Exception&& exception) {
+  next.onException(mv(exception));
 }
 
 void ExceptionCallback::logMessage(
@@ -1458,7 +1458,7 @@ public:
     }
   }
 
-  void onFatalException(Exception&& exception) override {
+  void onException(Exception&& exception) override {
     throw ExceptionImpl(mv(exception));
   }
 
@@ -1545,7 +1545,7 @@ ExceptionCallback& getExceptionCallback() {
 
 void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
   if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
-  getExceptionCallback().onFatalException(kj::mv(exception));
+  getExceptionCallback().onException(kj::mv(exception));
   abort();
 }
 

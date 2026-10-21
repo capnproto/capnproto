@@ -303,10 +303,10 @@ public:
   // The global default implementation throws an exception, unless we're currently in a destructor
   // unwinding due to another exception being thrown, in which case it logs an error and returns.
 
-  virtual void onFatalException(Exception&& exception);
-  // Called when an exception has been raised and the calling code cannot continue.  If this method
-  // returns normally, abort() will be called.  The method must throw the exception to avoid
-  // aborting.
+  virtual void onException(Exception&& exception);
+  // Called when an exception has been raised by `kj::throwFatalException()`.  The calling code
+  // cannot continue: if this method returns normally, abort() will be called.  The method must
+  // throw the exception to avoid aborting.
   //
   // The global default implementation throws an exception.
 
