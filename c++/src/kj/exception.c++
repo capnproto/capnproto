@@ -1538,7 +1538,7 @@ void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
   abort();
 }
 
-void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
+void throwExceptionUnlessUnwinding(kj::Exception&& exception, uint ignoreCount) {
   if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   if (std::uncaught_exceptions() == 0) {
     getExceptionCallback().onException(kj::mv(exception));
@@ -1548,6 +1548,23 @@ void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
   // Another exception is unwinding the stack. Still pass the exception through the callback
   // chain exactly as if it had been thrown, so callbacks see it like any other exception, but log
   // what the chain throws instead of letting it escape. (`KJ_CONTEXT` is re-added when logging.)
+  KJ_TRY {
+    getExceptionCallback().onException(kj::mv(exception));
+    abort();
+  } KJ_CATCH(e) {
+    logException(LogSeverity::ERROR, kj::mv(e));
+  }
+}
+
+void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
+  // Same as throwExceptionUnlessUnwinding(), not a call to it, so that `ignoreCount` skips the same
+  // frames.
+  if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
+  if (std::uncaught_exceptions() == 0) {
+    getExceptionCallback().onException(kj::mv(exception));
+    abort();
+  }
+
   KJ_TRY {
     getExceptionCallback().onException(kj::mv(exception));
     abort();

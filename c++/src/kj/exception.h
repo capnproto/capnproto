@@ -356,17 +356,29 @@ ExceptionCallback& getExceptionCallback();
 KJ_NOINLINE KJ_NORETURN(void throwException(kj::Exception&& exception, uint ignoreCount = 0));
 // Invoke the exception callback to throw the given exception.  If the exception callback
 // returns, abort.
+//
+// To avoid throwing from a destructor while the stack is already unwinding, see
+// `kj::throwExceptionUnlessUnwinding()`.
+
+KJ_NOINLINE KJ_NOT_TAIL_CALLED void throwExceptionUnlessUnwinding(
+    kj::Exception&& exception, uint ignoreCount = 0);
+// Like `throwException()`, but if the stack is currently unwinding due to another exception, the
+// exception is logged at ERROR severity and the function returns instead, since throwing during
+// unwind would terminate the process. Either way, the exception goes through the exception
+// callback chain first, exactly as with `throwException()`.
+//
+// For use in destructors (and code called from destructors). Code after the call must cope with
+// it returning. The `KJ_DTOR_*` macros in debug.h (`KJ_DTOR_ASSERT`, `KJ_DTOR_SYSCALL`, ...) use
+// this to report failed checks.
+//
+// "Unwinding" means that any exception is in flight in this thread, even one that will be caught
+// before reaching the destructor's caller. This errs on the side of logging rather than throwing.
 
 KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
 // Deprecated: old name of `throwException()`, which should be used instead.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
-// Invoke the exception callback to throw the given exception, unless the stack is already
-// unwinding due to another exception, in which case the exception is logged and this returns
-// normally.
-//
-// TODO(2.0): Rename this to `throwExceptionUnlessUnwinding()`. (Or, can we fix the unwind problem
-//   and be able to remove this entirely?)
+// Deprecated: old name of `throwExceptionUnlessUnwinding()`, which should be used instead.
 
 // =======================================================================================
 
