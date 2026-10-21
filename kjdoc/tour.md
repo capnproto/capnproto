@@ -489,7 +489,28 @@ BufferedStream::~BufferedStream() noexcept(false) {
 
 They cost the same as the plain macros: the unwinding check only happens once the check has failed.
 
-Note that they consider the stack to be "unwinding" whenever any exception is in flight in the current thread, even one that will be caught before reaching the destructor's caller. This errs on the side of logging rather than throwing, since throwing during unwind would terminate the process.
+To protect a call to a function that may throw, wrap it in `KJ_DTOR_CALL()`. Exceptions it throws propagate normally, unless the stack is already unwinding, in which case they are logged and execution continues with the next statement:
+
+```c++
+Writer::~Writer() noexcept(false) {
+  KJ_DTOR_CALL(flush());
+}
+```
+
+To protect several statements at once, use `kj::logExceptionsIfUnwinding()`, which takes a lambda. In that case, an exception stops the rest of the lambda from running, but code after the lambda still runs.
+
+```c++
+Connection::~Connection() noexcept(false) {
+  kj::logExceptionsIfUnwinding([&]() {
+    flush();
+    sendGoodbye();
+  });
+  // Runs even if flush() or sendGoodbye() threw during unwind.
+  releaseResources();
+}
+```
+
+Note that these consider the stack to be "unwinding" whenever any exception is in flight in the current thread, even one that will be caught before reaching the destructor's caller. This errs on the side of logging rather than throwing, since throwing during unwind would terminate the process.
 
 Second, `kj::UnwindDetector` can be used to squelch exceptions during unwind. This is especially helpful in cases where your destructor needs to call complex external code that wasn't written with destructors in mind. Use it like so:
 

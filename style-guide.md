@@ -181,7 +181,7 @@ If exceptions are merely a means to fault tolerance, then it is perfectly clear 
 Alas, C++ is what it is. So, in KJ, we work around the problem in a couple ways:
 
 * `kj::UnwindDetector` may be used to detect when a destructor is called during unwind and squelch secondary exceptions.
-* `KJ_DTOR_ASSERT()`, `KJ_DTOR_REQUIRE()`, `KJ_DTOR_SYSCALL()`, etc. are variants of the assertion macros which log the failure rather than throw if the stack is already unwinding due to another exception. Assertions and system calls in destructors must always use them.
+* `KJ_DTOR_ASSERT()`, `KJ_DTOR_REQUIRE()`, `KJ_DTOR_SYSCALL()`, etc. are variants of the assertion macros which log the failure rather than throw if the stack is already unwinding due to another exception. Assertions and system calls in destructors must always use them. `KJ_DTOR_CALL()` (and `kj::logExceptionsIfUnwinding()`) do the same for any code, such as calls to functions that may throw.
 
 ### Threads vs. Event Loops
 
@@ -298,7 +298,7 @@ Never use `throw` explicitly. Almost all exceptions should originate from the `K
 
 Never declare anything `noexcept`. As explained in the philosophy section, whether you like it or not, bugs can happen anywhere and therefore exceptions can happen anywhere. `noexcept` causes the process to abort on exceptions. Aborting is _never_ the right answer.
 
-Explicit destructors must always be declared `noexcept(false)`, to work around C++11's regrettable decision that destructors should be `noexcept` by default. In destructors, always use the `KJ_DTOR_*` assertion macros or `kj::UnwindDetector` in order to ensure that an exception is not thrown during unwind.
+Explicit destructors must always be declared `noexcept(false)`, to work around C++11's regrettable decision that destructors should be `noexcept` by default. In destructors, always use the `KJ_DTOR_*` assertion macros, `KJ_DTOR_CALL()`, `kj::logExceptionsIfUnwinding()`, or `kj::UnwindDetector` in order to ensure that an exception is not thrown during unwind.
 
 Do not fret too much about recovering into a perfectly consistent state after every exception. That's not the point. The point is to be able to recover at all -- to _improve_ reliability, but not to make it perfect. So, write your code to do a reasonable thing in most cases.
 

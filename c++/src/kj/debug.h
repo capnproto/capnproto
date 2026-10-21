@@ -112,6 +112,8 @@
 //         KJ_DTOR_SYSCALL(close(fd));
 //       }
 //
+//   To protect calls to functions that may throw, use `KJ_DTOR_CALL()` (see exception.h).
+//
 // Notes:
 // * Do not write expressions with side-effects in the message content part of the macro, as the
 //   message will not necessarily be evaluated.
