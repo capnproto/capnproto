@@ -41,7 +41,9 @@ def _clang_tidy_test_impl(ctx):
 
     compilation_contexts = [dep[CcInfo].compilation_context for dep in ctx.attr.deps]
 
-    compiler_args = ["-xc++", "-std=c++23"]
+    # Like the real build (see .bazelrc), define KJ_HEADER_WARNINGS so that KJ headers are not
+    # treated as system headers; otherwise clang-tidy drops diagnostics located inside KJ macros.
+    compiler_args = ["-xc++", "-std=c++23", "-DKJ_HEADER_WARNINGS", "-DCAPNP_HEADER_WARNINGS"]
     for cc in compilation_contexts:
         compiler_args += ["-D" + d for d in cc.defines.to_list()]
         for flag, dirs in [

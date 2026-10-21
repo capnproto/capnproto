@@ -49,9 +49,9 @@ Thread::Thread(Function<void()> func): state(new ThreadState(kj::mv(func))) {
 Thread::~Thread() noexcept(false) {
   if (!detached) {
     KJ_DEFER(state->unref());
-    KJ_DEFER(KJ_ASSERT(CloseHandle(threadHandle)));
+    KJ_DEFER(KJ_DTOR_ASSERT(CloseHandle(threadHandle)));
 
-    KJ_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
+    KJ_DTOR_ASSERT(WaitForSingleObject(threadHandle, INFINITE) != WAIT_FAILED);
 
     KJ_IF_SOME(e, state->exception) {
       Exception ecopy = kj::mv(e);
@@ -105,7 +105,7 @@ Thread::~Thread() noexcept(false) {
 
     int pthreadResult = pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr);
     if (pthreadResult != 0) {
-      KJ_FAIL_SYSCALL("pthread_join", pthreadResult) { break; }
+      KJ_DTOR_FAIL_SYSCALL("pthread_join", pthreadResult);
     }
 
     KJ_IF_SOME(e, state->exception) {

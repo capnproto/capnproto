@@ -28,15 +28,23 @@ CUSTOM_CHECKS = [
     "arrayptr-first-copyfrom",
     "arrayptr-singleton",
     "arrayptr-slice-zero",
+    "dtor-throw-during-unwind",
     "uninitialized-array",
     "use-rc-arc-deref",
 ]
+
+# Extra compiler flags for the tests of a check.
+CUSTOM_CHECK_COPTS = {
+    # Debug-only checks (KJ_DASSERT, ...) are no-ops unless KJ_DEBUG is defined.
+    "dtor-throw-during-unwind": ["-DKJ_DEBUG"],
+}
 
 [
     clang_tidy_test(
         name = check + "-" + kind,
         src = check + "-" + kind + ".c++",
         check = "custom-" + check,
+        copts = CUSTOM_CHECK_COPTS.get(check, []),
         expect_match = kind == "positive",
         deps = ["//src/kj"],
     )

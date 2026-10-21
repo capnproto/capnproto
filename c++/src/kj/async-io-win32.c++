@@ -200,7 +200,7 @@ public:
 
   ~OwnedFd() noexcept(false) {
     if (flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP) {
-      KJ_WINSOCK(closesocket(fd)) { break; }
+      KJ_DTOR_WINSOCK(closesocket(fd));
     }
   }
 
