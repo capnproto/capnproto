@@ -479,22 +479,17 @@ However, this does not solve C++'s Most Unfortunate Decision, namely that throwi
 
 To work around the MUD, KJ offers two tools:
 
-First, `KJ_ASSERT`s (and `KJ_REQUIRE`s, `KJ_SYSCALL`s, etc.) can be made "recoverable" by adding a "recovery block" after the assert. During unwind from one exception, KJ will log recoverable exceptions instead of throwing them, and will continue executing wherever the recovery block jumps to. So, whenever writing assertions in destructors, it is a good idea to give them a recovery block like `{break;}` or `{return;}`.
+First, assertions and system calls in destructors should use the `KJ_DTOR_*` variants of the assertion macros: `KJ_DTOR_ASSERT`, `KJ_DTOR_REQUIRE`, `KJ_DTOR_SYSCALL`, `KJ_DTOR_FAIL_ASSERT`, and so on. These throw like the plain macros, unless the stack is already unwinding due to another exception, in which case the failure is logged instead and execution continues with the next statement:
 
 ```c++
 BufferedStream::~BufferedStream() noexcept(false) {
-  KJ_REQUIRE(buffer.size() == 0, "buffer was not flushed; possible data loss") {
-    // Don't throw if we're unwinding!
-    break;
-  }
+  KJ_DTOR_REQUIRE(buffer.size() == 0, "buffer was not flushed; possible data loss");
 }
 ```
 
-A `break` statement in a recovery block jumps to the code immediately after the block (it does not break any surrounding loop or switch).
+They cost the same as the plain macros: the unwinding check only happens once the check has failed.
 
-**WARNING:** The recovery block is executed before the exception is thrown, even when not unwinding. The exception is thrown upon exit from the block (even if a `return` or `break` statement is present). Therefore, be careful about side effects in the recovery block. Also, note that both GCC and Clang have a longstanding bug where a returned value's destructor is not called if the return is interrupted by an exception being thrown. Therefore, you must not return a value with a non-trivial destructor from a recovery block.
-
-Recovery blocks are only useful in destructors and code called from destructors. Elsewhere, they serve no purpose and should not be used.
+Note that they consider the stack to be "unwinding" whenever any exception is in flight in the current thread, even one that will be caught before reaching the destructor's caller. This errs on the side of logging rather than throwing, since throwing during unwind would terminate the process.
 
 Second, `kj::UnwindDetector` can be used to squelch exceptions during unwind. This is especially helpful in cases where your destructor needs to call complex external code that wasn't written with destructors in mind. Use it like so:
 

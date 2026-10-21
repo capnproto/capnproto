@@ -233,6 +233,15 @@ typedef unsigned char byte;
 #define KJ_NOINLINE __attribute__((noinline))
 #endif
 
+#if __clang__
+#define KJ_NOT_TAIL_CALLED __attribute__((not_tail_called))
+#else
+#define KJ_NOT_TAIL_CALLED
+#endif
+// Prevents calls to the function from being compiled as tail calls, so the caller's frame stays on
+// the stack. Used by functions that capture a stack trace skipping a fixed number of frames.
+// Supported by Clang only.
+
 #ifndef KJ_DISPOSE_ATTR
 #define KJ_DISPOSE_ATTR
 // Attribute applied to KJ's type-erased object-teardown dispatch helpers: Disposer::dispose(),

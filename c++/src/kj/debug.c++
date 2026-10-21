@@ -385,22 +385,22 @@ void Debug::Fault::fatal() {
   KJ_KNOWN_UNREACHABLE(abort());
 }
 
-void Debug::Fault::init(
+Exception Debug::makeFailure(
     const char* file, int line, Exception::Type type,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  exception = new Exception(type, file, line,
+  return Exception(type, file, line,
       makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, argValues));
 }
 
-void Debug::Fault::init(
+Exception Debug::makeFailure(
     const char* file, int line, int osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  exception = new Exception(typeOfErrno(osErrorNumber), file, line,
+  return Exception(typeOfErrno(osErrorNumber), file, line,
       makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
 }
 
 #if _WIN32 || __CYGWIN__
-void Debug::Fault::init(
+Exception Debug::makeFailure(
     const char* file, int line, Win32Result osErrorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   LPVOID ptr;
@@ -425,7 +425,7 @@ void Debug::Fault::init(
     message = kj::str("win32 error code: ", osErrorNumber.number);
   }
 
-  exception = new Exception(typeOfWin32Error(osErrorNumber.number), file, line,
+  return Exception(typeOfWin32Error(osErrorNumber.number), file, line,
       makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
                           macroArgs, argValues));
 }

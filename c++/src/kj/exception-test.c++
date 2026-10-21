@@ -139,6 +139,32 @@ TEST(Exception, UnwindDetector) {
   }
 }
 
+KJ_TEST("throwExceptionUnlessUnwinding() throws if not unwinding") {
+  bool reachedEnd = false;
+  KJ_EXPECT_THROW_MESSAGE("secondary", {
+    KJ_DEFER({
+      kj::throwExceptionUnlessUnwinding(KJ_EXCEPTION(FAILED, "secondary"));
+      reachedEnd = true;
+    });
+  });
+  KJ_EXPECT(!reachedEnd);
+}
+
+KJ_TEST("throwExceptionUnlessUnwinding() logs and returns if unwinding") {
+  bool reachedEnd = false;
+  {
+    KJ_EXPECT_LOG(ERROR, "secondary");
+    KJ_EXPECT_THROW_MESSAGE("primary exception", {
+      KJ_DEFER({
+        kj::throwExceptionUnlessUnwinding(KJ_EXCEPTION(FAILED, "secondary"));
+        reachedEnd = true;
+      });
+      KJ_FAIL_ASSERT("primary exception");
+    });
+  }
+  KJ_EXPECT(reachedEnd);
+}
+
 #if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) || \
     KJ_HAS_COMPILER_FEATURE(address_sanitizer) || \
     defined(__SANITIZE_ADDRESS__)

@@ -26,6 +26,7 @@
 #include "debug.h"
 #include "exception.h"
 #include "source-location.h"
+#include "vector.h"
 #include <kj/compat/gtest.h>
 #include <string>
 #include <stdio.h>
@@ -535,6 +536,185 @@ KJ_TEST("magic assert stringification") {
 
     KJ_EXPECT(exception.getDescription() == "expected foo & 2");
   }
+}
+
+KJ_NOINLINE void failFailAssert(void*& callerFrame) {
+  callerFrame = KJ_CALLING_ADDRESS();
+  KJ_FAIL_ASSERT("message");
+}
+KJ_NOINLINE void failAssertWithArgs(void*& callerFrame, int i) {
+  callerFrame = KJ_CALLING_ADDRESS();
+  KJ_ASSERT(i == 0, i, "message");
+}
+KJ_NOINLINE void failSyscall(void*& callerFrame) {
+  callerFrame = KJ_CALLING_ADDRESS();
+  KJ_SYSCALL(mockSyscall(-1, EBADF));
+}
+#if __clang__
+KJ_NOINLINE void failDtorAssert(void*& callerFrame, int i) {
+  callerFrame = KJ_CALLING_ADDRESS();
+  KJ_DTOR_ASSERT(i == 0, i, "message");
+}
+KJ_NOINLINE void failDtorSyscall(void*& callerFrame) {
+  callerFrame = KJ_CALLING_ADDRESS();
+  KJ_DTOR_SYSCALL(mockSyscall(-1, EBADF));
+}
+#endif
+
+KJ_TEST("failed check's stack trace starts in the function containing the check") {
+  // The function that throws must skip exactly its own frame: the trace should start with the
+  // failing function, followed by its caller.
+  auto check = [](auto&& func) {
+    void* callerFrame = nullptr;
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() { func(callerFrame); }));
+    if (isStackTraceSupported()) {
+      auto trace = e.getStackTrace();
+      KJ_ASSERT(trace.size() >= 2);
+      KJ_EXPECT(trace[0] != callerFrame);
+      KJ_EXPECT(trace[1] == callerFrame);
+    }
+  };
+
+  check([](void*& callerFrame) { failFailAssert(callerFrame); });
+  check([](void*& callerFrame) { failAssertWithArgs(callerFrame, 123); });
+  check([](void*& callerFrame) { failSyscall(callerFrame); });
+#if __clang__
+  // Debug::failUnlessUnwinding() returns, so it could be tail-called, losing the frame of the
+  // function containing the check. KJ_NOT_TAIL_CALLED prevents this, but only works with Clang.
+  check([](void*& callerFrame) { failDtorAssert(callerFrame, 123); });
+  check([](void*& callerFrame) { failDtorSyscall(callerFrame); });
+#endif
+}
+
+// =======================================================================================
+// KJ_DTOR_* macros
+
+class LogCapture: public ExceptionCallback {
+public:
+  kj::Vector<kj::String> messages;
+
+  void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                  String&& text) override {
+    messages.add(kj::str(severity, ": ", text));
+  }
+};
+
+KJ_TEST("KJ_DTOR_* macros do nothing if the check passes") {
+  LogCapture capture;
+  bool reachedEnd = false;
+  {
+    KJ_DEFER({
+      KJ_DTOR_ASSERT(1 + 1 == 2);
+      KJ_DTOR_REQUIRE(true, "message");
+      KJ_DTOR_SYSCALL(mockSyscall(0));
+      reachedEnd = true;
+    });
+  }
+  KJ_EXPECT(reachedEnd);
+
+  // Also while unwinding.
+  reachedEnd = false;
+  KJ_EXPECT_THROW_MESSAGE("primary", {
+    KJ_DEFER({
+      KJ_DTOR_ASSERT(1 + 1 == 2);
+      KJ_DTOR_SYSCALL(mockSyscall(0));
+      reachedEnd = true;
+    });
+    KJ_FAIL_ASSERT("primary");
+  });
+  KJ_EXPECT(reachedEnd);
+
+  KJ_EXPECT(capture.messages.size() == 0, capture.messages);
+}
+
+KJ_TEST("KJ_DTOR_* macros throw like the plain macros if not unwinding") {
+  bool reachedEnd = false;
+  int i = 123;
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_DEFER({
+        KJ_DTOR_ASSERT(i == 0, "message");
+        reachedEnd = true;
+      });
+    }));
+    KJ_EXPECT(e.getType() == Exception::Type::FAILED);
+    KJ_EXPECT(e.getDescription() == "expected i == 0 [123 == 0]; message", e.getDescription());
+    KJ_EXPECT(!reachedEnd);
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_DTOR_FAIL_REQUIRE("message", i);
+    }));
+    KJ_EXPECT(e.getDescription() == "message; i = 123", e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_DTOR_SYSCALL(mockSyscall(-1, EBADF), i);
+    }));
+    KJ_EXPECT(e.getType() == Exception::Type::FAILED);
+    KJ_EXPECT(e.getDescription() ==
+        kj::str("mockSyscall(-1, EBADF): ", strerror(EBADF), "; i = 123"), e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_DTOR_FAIL_SYSCALL("close", ECONNRESET, i);
+    }));
+    KJ_EXPECT(e.getType() == Exception::Type::DISCONNECTED);
+    KJ_EXPECT(e.getDescription() == kj::str("close: ", strerror(ECONNRESET), "; i = 123"),
+              e.getDescription());
+  }
+}
+
+KJ_TEST("KJ_DTOR_* macros log and continue if unwinding") {
+  LogCapture capture;
+  bool reachedEnd = false;
+  int i = 123;
+
+  auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+    KJ_DEFER({
+      KJ_DTOR_ASSERT(i == 0, "message");
+      KJ_DTOR_SYSCALL(mockSyscall(-1, EBADF), i);
+      KJ_DTOR_FAIL_SYSCALL("close", ECONNRESET);
+      KJ_DTOR_FAIL_ASSERT("last");
+      reachedEnd = true;
+    });
+    KJ_FAIL_ASSERT("primary");
+  }));
+
+  // The primary exception propagates, and the rest of the destructor ran.
+  KJ_EXPECT(e.getDescription() == "primary", e.getDescription());
+  KJ_EXPECT(reachedEnd);
+
+  KJ_ASSERT(capture.messages.size() == 4, capture.messages);
+  KJ_EXPECT(capture.messages[0].startsWith(
+      "error: failed: expected i == 0 [123 == 0]; message\n"), capture.messages[0]);
+  KJ_EXPECT(capture.messages[1].startsWith(kj::str(
+      "error: failed: mockSyscall(-1, EBADF): ", strerror(EBADF), "; i = 123\n")),
+      capture.messages[1]);
+  KJ_EXPECT(capture.messages[2].startsWith(kj::str(
+      "error: disconnected: close: ", strerror(ECONNRESET), "\n")), capture.messages[2]);
+  KJ_EXPECT(capture.messages[3].startsWith("error: failed: last\n"), capture.messages[3]);
+}
+
+KJ_TEST("KJ_DTOR_* failure logged while unwinding includes KJ_CONTEXT once") {
+  LogCapture capture;
+
+  KJ_EXPECT_THROW_MESSAGE("primary", {
+    KJ_DEFER({
+      KJ_CONTEXT("context marker");
+      KJ_DTOR_FAIL_ASSERT("secondary");
+    });
+    KJ_FAIL_ASSERT("primary");
+  });
+
+  KJ_ASSERT(capture.messages.size() == 2, capture.messages);
+  KJ_EXPECT(capture.messages[0] == "info: context: context marker\n", capture.messages[0]);
+  KJ_EXPECT(capture.messages[1].startsWith("error: failed: secondary\n"), capture.messages[1]);
+  KJ_EXPECT(!capture.messages[1].contains("context marker"), capture.messages[1]);
 }
 
 }  // namespace
