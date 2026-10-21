@@ -479,7 +479,7 @@ UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint fla
 }
 
 UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
-  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr)) { break; }
+  KJ_DTOR_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr));
 }
 
 void UnixEventPort::FdObserver::fire(short events) {
@@ -897,7 +897,7 @@ UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
       // remove them then produces ENOENT. Let's ignore this.
       break;
     default:
-      KJ_FAIL_SYSCALL("kevent(remove events)", error);
+      KJ_DTOR_FAIL_SYSCALL("kevent(remove events)", error);
   }
 }
 
@@ -1014,7 +1014,7 @@ public:
     // we don't want to see again.
     struct kevent event;
     EV_SET(&event, signum, EVFILT_SIGNAL, EV_DELETE, 0, 0, nullptr);
-    KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+    KJ_DTOR_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
   }
 
   void tryConsumeSignal() {
@@ -1124,7 +1124,7 @@ public:
       // object.
       struct kevent event;
       EV_SET(&event, p, EVFILT_PROC, EV_DELETE, 0, 0, nullptr);
-      KJ_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
+      KJ_DTOR_SYSCALL(kevent(eventPort.kqueueFd, &event, 1, nullptr, 0, nullptr));
 
       // We leak the zombie process here. The caller is responsible for doing its own waitpid().
     }
