@@ -1538,6 +1538,21 @@ void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
   abort();
 }
 
+namespace _ {  // private
+
+void rethrowUnlessUnwinding() {
+  // We're in a `catch` block, where the exception being handled no longer counts as uncaught, so
+  // this only counts other exceptions in flight.
+  if (std::uncaught_exceptions() == 0) {
+    // Not unwinding: let the exception continue as if it had not been caught. `throw;` rethrows
+    // the same exception object, so the exception callbacks don't run again.
+    throw;
+  }
+  logException(LogSeverity::ERROR, getCaughtExceptionAsKj());
+}
+
+}  // namespace _ (private)
+
 void throwExceptionUnlessUnwinding(kj::Exception&& exception, uint ignoreCount) {
   if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   if (std::uncaught_exceptions() == 0) {

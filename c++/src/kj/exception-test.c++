@@ -139,6 +139,80 @@ TEST(Exception, UnwindDetector) {
   }
 }
 
+void throwTestExceptionIf(bool shouldThrow) {
+  if (shouldThrow) KJ_FAIL_ASSERT("this is a test, not a real bug");
+}
+
+struct DestructorUsingLogExceptionsIfUnwinding {
+  bool& reachedEnd;
+  bool shouldThrow;
+
+  DestructorUsingLogExceptionsIfUnwinding(bool& reachedEnd, bool shouldThrow = true)
+      : reachedEnd(reachedEnd), shouldThrow(shouldThrow) {}
+
+  ~DestructorUsingLogExceptionsIfUnwinding() noexcept(false) {
+    KJ_DTOR_CALL(throwTestExceptionIf(shouldThrow));
+    reachedEnd = true;
+  }
+};
+
+KJ_TEST("logExceptionsIfUnwinding() runs the function normally if it doesn't throw") {
+  bool reachedEnd = false;
+  {
+    DestructorUsingLogExceptionsIfUnwinding d(reachedEnd, false);
+  }
+  KJ_EXPECT(reachedEnd);
+
+  // Also while unwinding.
+  reachedEnd = false;
+  KJ_EXPECT_THROW_MESSAGE("primary exception", {
+    DestructorUsingLogExceptionsIfUnwinding d(reachedEnd, false);
+    KJ_FAIL_ASSERT("primary exception");
+  });
+  KJ_EXPECT(reachedEnd);
+}
+
+KJ_TEST("logExceptionsIfUnwinding() propagates exceptions if not unwinding") {
+  bool reachedEnd = false;
+  KJ_EXPECT_THROW_MESSAGE("this is a test, not a real bug", {
+    DestructorUsingLogExceptionsIfUnwinding d(reachedEnd);
+  });
+  KJ_EXPECT(!reachedEnd);
+}
+
+KJ_TEST("logExceptionsIfUnwinding() logs exceptions if unwinding") {
+  bool reachedEnd = false;
+  {
+    KJ_EXPECT_LOG(ERROR, "this is a test, not a real bug");
+    KJ_EXPECT_THROW_MESSAGE("primary exception", {
+      DestructorUsingLogExceptionsIfUnwinding d(reachedEnd);
+      KJ_FAIL_ASSERT("primary exception");
+    });
+  }
+  // The rest of the destructor ran after the exception was logged.
+  KJ_EXPECT(reachedEnd);
+}
+
+KJ_TEST("logExceptionsIfUnwinding() stops running the function at the first exception") {
+  bool reachedSecond = false;
+  bool reachedAfter = false;
+  {
+    KJ_EXPECT_LOG(ERROR, "first");
+    KJ_EXPECT_THROW_MESSAGE("primary exception", {
+      KJ_DEFER({
+        kj::logExceptionsIfUnwinding([&]() {
+          KJ_FAIL_ASSERT("first");
+          reachedSecond = true;
+        });
+        reachedAfter = true;
+      });
+      KJ_FAIL_ASSERT("primary exception");
+    });
+  }
+  KJ_EXPECT(!reachedSecond);
+  KJ_EXPECT(reachedAfter);
+}
+
 KJ_TEST("throwExceptionUnlessUnwinding() throws if not unwinding") {
   bool reachedEnd = false;
   KJ_EXPECT_THROW_MESSAGE("secondary", {

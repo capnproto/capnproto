@@ -358,7 +358,7 @@ KJ_NOINLINE KJ_NORETURN(void throwException(kj::Exception&& exception, uint igno
 // returns, abort.
 //
 // To avoid throwing from a destructor while the stack is already unwinding, see
-// `kj::throwExceptionUnlessUnwinding()`.
+// `kj::throwExceptionUnlessUnwinding()` and `kj::logExceptionsIfUnwinding()`.
 
 KJ_NOINLINE KJ_NOT_TAIL_CALLED void throwExceptionUnlessUnwinding(
     kj::Exception&& exception, uint ignoreCount = 0);
@@ -371,8 +371,8 @@ KJ_NOINLINE KJ_NOT_TAIL_CALLED void throwExceptionUnlessUnwinding(
 // it returning. The `KJ_DTOR_*` macros in debug.h (`KJ_DTOR_ASSERT`, `KJ_DTOR_SYSCALL`, ...) use
 // this to report failed checks.
 //
-// "Unwinding" means that any exception is in flight in this thread, even one that will be caught
-// before reaching the destructor's caller. This errs on the side of logging rather than throwing.
+// "Unwinding" means that any exception is in flight in this thread; see
+// `kj::logExceptionsIfUnwinding()`.
 
 KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
 // Deprecated: old name of `throwException()`, which should be used instead.
@@ -641,6 +641,11 @@ public:
   // Runs the given function (e.g., a lambda).  If isUnwinding() is true, any exceptions are
   // caught and treated as secondary faults, meaning they are considered to be side-effects of the
   // exception that is unwinding the stack.  Otherwise, exceptions are passed through normally.
+  //
+  // TODO(cleanup): Unify with `kj::logExceptionsIfUnwinding()` so there is only one "don't throw
+  //   during unwind" tool. This method uses the per-object unwinding rule and silently discards
+  //   the secondary exception; move its users to `logExceptionsIfUnwinding()` /
+  //   `KJ_DTOR_CALL()` and remove it along with `catchThrownExceptionAsSecondaryFault()`.
 
   static uint uncaughtExceptionCount();
   // exposes `std::uncaught_exceptions`
@@ -650,6 +655,54 @@ private:
 
   void catchThrownExceptionAsSecondaryFault() const;
 };
+
+template <typename Func>
+void logExceptionsIfUnwinding(Func&& func);
+// Runs the given function (e.g., a lambda). If the stack is currently unwinding due to another
+// exception, any exception thrown by the function is caught and logged at ERROR severity rather
+// than propagated, since throwing during unwind would terminate the process. Otherwise, exceptions
+// propagate normally.
+//
+// This is intended for use in destructors (and code called from destructors), which in KJ are
+// allowed to throw (they are declared `noexcept(false)`), but must not throw during unwind:
+//
+//     Foo::~Foo() noexcept(false) {
+//       kj::logExceptionsIfUnwinding([&]() {
+//         flushBuffer();
+//         closeConnection();
+//       });
+//       // ... more cleanup, which runs if we're unwinding even if the above threw ...
+//     }
+//
+// For a single statement, use the `KJ_DTOR_CALL()` shorthand instead. For a single
+// assertion or system call, use the `KJ_DTOR_*` macros from debug.h (`KJ_DTOR_ASSERT`,
+// `KJ_DTOR_SYSCALL`, ...) instead: they only check for unwinding once the check has failed, and
+// need no try/catch at the call site.
+//
+// Unlike `UnwindDetector::catchExceptionsIfUnwinding()`, this does not require an `UnwindDetector`
+// constructed ahead of time, and logs the secondary exception instead of discarding it. The
+// trade-off is that it considers the stack to be unwinding if any exception is in flight in this
+// thread, even one that will be caught before reaching the destructor's caller.
+//
+// TODO(someday): Compare the uncaught exception count against the count at the innermost
+//   catch frame in this thread, to tell whether we're really unwinding through our caller.
+
+#define KJ_DTOR_CALL(...) ::kj::logExceptionsIfUnwinding([&]() { __VA_ARGS__; })
+// Shorthand for `kj::logExceptionsIfUnwinding()` wrapping a single statement. Typically used
+// to wrap a call to a function that may throw in a destructor:
+//
+//     Foo::~Foo() noexcept(false) {
+//       KJ_DTOR_CALL(flushBuffer());
+//     }
+//
+// Don't use this for assertions and system calls; use `KJ_DTOR_ASSERT()`, `KJ_DTOR_SYSCALL()`,
+// etc. from debug.h instead.
+
+namespace _ {  // private
+KJ_NOINLINE void rethrowUnlessUnwinding();
+// Called from a `catch` block by `logExceptionsIfUnwinding()`: rethrows the caught exception (with
+// `throw;`) if no other exception is unwinding the stack, otherwise logs it at ERROR severity.
+}  // namespace _ (private)
 
 template <typename Func>
 Maybe<Exception> runCatchingExceptions(Func&& func) {
@@ -671,6 +724,17 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
     }
   } else {
     func();
+  }
+}
+
+template <typename Func>
+void logExceptionsIfUnwinding(Func&& func) {
+  // Whether the stack is unwinding is only checked once `func` has thrown, so the normal path is
+  // just a call to `func`, and all the handling is in an out-of-line function.
+  try {
+    func();
+  } catch (...) {
+    _::rethrowUnlessUnwinding();
   }
 }
 
