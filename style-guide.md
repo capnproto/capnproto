@@ -181,7 +181,7 @@ If exceptions are merely a means to fault tolerance, then it is perfectly clear 
 Alas, C++ is what it is. So, in KJ, we work around the problem in a couple ways:
 
 * `kj::UnwindDetector` may be used to detect when a destructor is called during unwind and squelch secondary exceptions.
-* `KJ_DTOR_ASSERT()`, `KJ_DTOR_REQUIRE()`, `KJ_DTOR_SYSCALL()`, etc. are variants of the assertion macros which log the failure rather than throw if the stack is already unwinding due to another exception. Assertions and system calls in destructors must always use them. `KJ_DTOR_CALL()` (and `kj::logExceptionsIfUnwinding()`) do the same for any code, such as calls to functions that may throw.
+* `KJ_DTOR_ASSERT()`, `KJ_DTOR_REQUIRE()`, `KJ_DTOR_SYSCALL()`, etc. are variants of the assertion macros which log the failure rather than throw if the stack is already unwinding due to another exception. Assertions and system calls in destructors must always use them. `KJ_DTOR_CALL()` (and `kj::logExceptionsIfUnwinding()`) do the same for any code, such as calls to functions that may throw. The `custom-dtor-throw-during-unwind` clang-tidy check (see `c++/.clang-tidy`) reports assertions and throws written in a destructor that don't use them. Debug-only checks (`KJ_DASSERT()`, `KJ_DREQUIRE()`) are exempt: like in `noexcept` functions, terminating on a failed debug check is acceptable.
 
 ### Threads vs. Event Loops
 
