@@ -651,7 +651,7 @@ bool HttpHeaders::isValidHeaderValue(kj::StringPtr value) {
 
 HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
     : table(&table),
-      indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {
+      indexedHeaders(kj::heapArray<kj::Maybe<kj::StringPtr>>(table.idCount())) {
   KJ_ASSERT(
       table.isReady(), "HttpHeaders object was constructed from "
       "HttpHeaderTable that wasn't fully built yet at the time of construction");
@@ -659,7 +659,7 @@ HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
 
 void HttpHeaders::clear() {
   for (auto& header: indexedHeaders) {
-    header = nullptr;
+    header = kj::none;
   }
 
   unindexedHeaders.clear();
@@ -668,7 +668,7 @@ void HttpHeaders::clear() {
 size_t HttpHeaders::size() const {
   size_t result = unindexedHeaders.size();
   for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
+    if (indexedHeaders[i] != kj::none) {
       ++result;
     }
   }
@@ -679,8 +679,8 @@ HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
   for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = result.cloneToOwn(indexedHeaders[i]);
+    KJ_IF_SOME(value, indexedHeaders[i]) {
+      result.indexedHeaders[i] = result.cloneToOwn(value);
     }
   }
 
@@ -697,9 +697,7 @@ HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
   for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = indexedHeaders[i];
-    }
+    result.indexedHeaders[i] = indexedHeaders[i];
   }
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
@@ -775,9 +773,7 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
   KJ_IF_SOME(id, table->stringToId(name)) {
-    if (indexedHeaders[id.id] == nullptr) {
-      indexedHeaders[id.id] = value;
-    } else {
+    KJ_IF_SOME(existing, indexedHeaders[id.id]) {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
 
 #if _MSC_VER
@@ -790,10 +786,12 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
         // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
         unindexedHeaders.add(Header {name, value});
       } else {
-        auto concat = kj::str(indexedHeaders[id.id], ", ", value);
+        auto concat = kj::str(existing, ", ", value);
         indexedHeaders[id.id] = concat;
         ownedStrings.add(concat.releaseArray());
       }
+    } else {
+      indexedHeaders[id.id] = value;
     }
   } else {
     unindexedHeaders.add(Header {name, value});
@@ -1187,9 +1185,16 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
     size += word1.size() + word2.size() + word3.size() + 4;
   }
   KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
+  auto valueAt = [&](uint i) -> kj::Maybe<kj::StringPtr> {
+    if (i < connectionHeaders.size()) {
+      // Connection-header overrides retain their existing empty-means-omit contract.
+      auto value = connectionHeaders[i];
+      return value == nullptr ? kj::Maybe<kj::StringPtr>(kj::none) : value;
+    }
+    return indexedHeaders[i];
+  };
   for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
+    KJ_IF_SOME(value, valueAt(i)) {
       size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
     }
   }
@@ -1204,8 +1209,7 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
     ptr = kj::_::fill(ptr, word1, space, word2, space, word3, newline);
   }
   for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
+    KJ_IF_SOME(value, valueAt(i)) {
       ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
     }
   }
