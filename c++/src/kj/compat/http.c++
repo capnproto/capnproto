@@ -4212,11 +4212,8 @@ class WebSocketPipeImpl final: public WebSocket, public kj::Refcounted {
 
 public:
   ~WebSocketPipeImpl() noexcept(false) {
-    KJ_REQUIRE(state == kj::none || ownState.get() != nullptr,
-        "destroying WebSocketPipe with operation still in-progress; probably going to segfault") {
-      // Don't std::terminate().
-      break;
-    }
+    KJ_DTOR_REQUIRE(state == kj::none || ownState.get() != nullptr,
+        "destroying WebSocketPipe with operation still in-progress; probably going to segfault");
   }
 
   void abort() override {

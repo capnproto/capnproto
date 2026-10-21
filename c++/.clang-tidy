@@ -7,6 +7,7 @@ Checks: >
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
+  custom-dtor-throw-during-unwind,
   custom-use-rc-arc-deref
 
 
@@ -108,4 +109,93 @@ CustomChecks:
     Diagnostic:
       - BindName: deref
         Message: use operator* instead of dereferencing Rc::get() or Arc::get()
+        Level: Warning
+
+  # Destructor check.
+  #
+  # A destructor must not let an exception escape while another exception is unwinding the stack,
+  # otherwise the process terminates. KJ destructors are usually `noexcept(false)` and may throw
+  # when nothing else is in flight, so checks in destructors must use the `KJ_DTOR_*` macros
+  # (`KJ_DTOR_ASSERT`, `KJ_DTOR_SYSCALL`, ...; see kj/debug.h), and other code that may throw must
+  # be wrapped in `KJ_DTOR_CALL()` / `kj::logExceptionsIfUnwinding()` (see kj/exception.h).
+  # Both log instead of throwing if the stack is already unwinding.
+  #
+  # Debug-only checks (`KJ_DASSERT`, `KJ_DREQUIRE`, `KJ_ASSUME`) are allowed. They throw only in
+  # debug builds, where terminating the process on a failed check is acceptable, just as it is when
+  # they fail in a `noexcept` function. Release checks must never terminate.
+  #
+  # The check is lexical: it looks at code written in the destructor body, including lambdas
+  # (e.g. `KJ_DEFER`), but does not follow calls out of the destructor. The query below explains
+  # each condition.
+  - Name: dtor-throw-during-unwind
+    Query: |
+      # Functions whose argument runs with exceptions handled, so code written in that argument
+      # can't throw out of the destructor:
+      # - logExceptionsIfUnwinding() (and KJ_DTOR_CALL(), which expands to it) logs instead of
+      #   throwing if the stack is unwinding;
+      # - UnwindDetector::catchExceptionsIfUnwinding() discards the exception if unwinding;
+      # - runCatchingExceptions() catches everything and returns it as a Maybe<Exception>.
+      let handlingCall hasAnyName(
+          "::kj::logExceptionsIfUnwinding",
+          "::kj::UnwindDetector::catchExceptionsIfUnwinding",
+          "::kj::runCatchingExceptions")
+
+      match expr(
+        # What counts as a throw:
+        anyOf(
+          # An explicit `throw` (including a rethrow `throw;`).
+          cxxThrowExpr(),
+          # A call to a [[noreturn]] function. This is how all KJ exceptions are thrown:
+          # Debug::Fault::fatal() at the end of every KJ_ASSERT / KJ_REQUIRE / KJ_SYSCALL / ...
+          # expansion, kj::throwException(), etc. The KJ_DTOR_* macros call
+          # Debug::failUnlessUnwinding() instead, which may return, so they don't match.
+          #
+          # Assertions with a recovery block match too, even though the block usually skips
+          # fatal(): recovery blocks are deprecated, and a destructor should say explicitly that
+          # it must not throw during unwind by using KJ_DTOR_*.
+          callExpr(callee(functionDecl(
+            isNoReturn(),
+            # [[noreturn]] noexcept functions (std::terminate(), abort() with glibc) end the
+            # process on purpose instead of throwing.
+            unless(isNoThrow()),
+            # So do [[noreturn]] C functions (abort(), exit(), _exit()), which other C libraries
+            # don't declare noexcept.
+            unless(isExternC()))))),
+
+        # Only `noexcept(false)` destructors. In a `noexcept` destructor (the default for
+        # destructors not declared otherwise) any exception terminates, unwinding or not, so the
+        # KJ_DTOR_* macros wouldn't help; that's a different problem.
+        #
+        # hasAncestor() also reaches into lambdas written in the destructor. That is intended for
+        # KJ_DEFER and similar blocks, which run as part of the destructor.
+        hasAncestor(cxxDestructorDecl(unless(isNoThrow()))),
+
+        # Code whose exceptions can't escape the destructor:
+        unless(anyOf(
+          # Inside an argument (normally a lambda) of one of the functions above.
+          hasAncestor(callExpr(callee(namedDecl(handlingCall)))),
+          # The same, in templates: until the template is instantiated, a call with a dependent
+          # argument (such as a lambda) is an unresolved lookup instead of a call to a known
+          # function, so it needs its own matcher.
+          hasAncestor(callExpr(callee(unresolvedLookupExpr(hasAnyDeclaration(namedDecl(
+            handlingCall)))))),
+          # Inside the body of a `try` with a `catch (...)` handler, which catches everything
+          # (`KJ_TRY` / `KJ_CATCH` expand to one). A handler for specific types could let other
+          # exceptions through. Only the `try` body is protected, not the handlers: a throw in a
+          # handler escapes. The body is the compound statement whose parent is the `try`
+          # statement; a handler's body is a child of the `catch` statement instead.
+          hasAncestor(compoundStmt(hasParent(cxxTryStmt(has(cxxCatchStmt(isCatchAll())))))),
+          # Debug-only checks: compiled out in release builds, and allowed to terminate in debug
+          # builds (see above). In debug builds they expand to KJ_ASSERT / KJ_REQUIRE, so they
+          # are recognized by the macro they were written with.
+          isExpandedFromMacro("KJ_DASSERT"),
+          isExpandedFromMacro("KJ_DREQUIRE"),
+          isExpandedFromMacro("KJ_ASSUME"))),
+
+        # Tests (`*-test.c++`, `test-util.h`, `test-helpers.c++`) throw and crash on purpose.
+        unless(isExpansionInFileMatching("(-test|/test-util|/test-helpers)[.](c[+][+]|h)$"))
+      ).bind("throw")
+    Diagnostic:
+      - BindName: throw
+        Message: "exception thrown in a destructor terminates the process if the destructor runs during unwind; use KJ_DTOR_ASSERT() etc. for checks, or wrap in KJ_DTOR_CALL()"
         Level: Warning
