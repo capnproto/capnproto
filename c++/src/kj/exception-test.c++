@@ -756,7 +756,7 @@ KJ_TEST("getDestructionReason returns default exception if exception wasn't thro
 
 KJ_TEST("getDestructionReason returns thrown exception if it wasn't consumed") {
   try {
-    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
+    kj::throwException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
   } catch (...) {
     auto e =
         kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
@@ -769,7 +769,7 @@ KJ_TEST("getDestructionReason returns thrown exception if it wasn't consumed") {
 KJ_TEST("getDestructionReason returns default exception if exception was "
         "consumed") {
   try {
-    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
+    kj::throwException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
   } catch (...) {
     auto caughtException = kj::getCaughtExceptionAsKj();
     KJ_EXPECT(caughtException.getType() == kj::Exception::Type::DISCONNECTED);

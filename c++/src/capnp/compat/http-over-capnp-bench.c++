@@ -370,7 +370,7 @@ static void bm_Http_FullProtocol(benchmark::State &state) {
 
   kj::HttpServer server(timer, *headerTable, service);
   auto listenLoop = server.listenHttp({&pair.server, kj::NullDisposer::instance})
-      .eagerlyEvaluate([](kj::Exception&& e) noexcept { kj::throwFatalException(kj::mv(e)); });
+      .eagerlyEvaluate([](kj::Exception&& e) noexcept { kj::throwException(kj::mv(e)); });
   auto client = kj::newHttpClient(*headerTable, pair.client);
 
   for (auto _ : state) {

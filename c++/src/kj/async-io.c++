@@ -1675,7 +1675,7 @@ private:
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+      kj::throwException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
@@ -1700,10 +1700,10 @@ private:
       return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
     }
     bool tryWriteSync(ArrayPtr<const byte> buffer) override {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+      kj::throwException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
     }
     bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+      kj::throwException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
     }
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
                               ArrayPtr<const ArrayPtr<const byte>> moreData,

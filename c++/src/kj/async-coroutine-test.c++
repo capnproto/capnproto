@@ -311,7 +311,7 @@ KJ_TEST("Coroutines can be canceled while suspended") {
 }
 
 Promise<void> deferredThrowCoroutine(Promise<void> awaitMe, StringPtr message) {
-  KJ_DEFER(throwFatalException(
+  KJ_DEFER(throwException(
       Exception(Exception::Type::FAILED, __FILE__, __LINE__, str(message))));
   co_await awaitMe;
   co_return;
@@ -342,7 +342,7 @@ struct DeferredThrowPromiseNode: public _::PromiseNode {
 
   virtual ~DeferredThrowPromiseNode() noexcept(false) {
     unwindDetector.catchExceptionsIfUnwinding([]() {
-      kj::throwFatalException(KJ_EXCEPTION(FAILED, "~DeferredThrowPromiseNode()"));
+      kj::throwException(KJ_EXCEPTION(FAILED, "~DeferredThrowPromiseNode()"));
     });
   }
 
@@ -459,7 +459,7 @@ KJ_TEST("Coroutine destruction exceptions are ignored if there is another except
 
   auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
     auto promise = deferredThrowCoroutine(kj::NEVER_DONE, "thrown during unwind");
-    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
+    kj::throwException(KJ_EXCEPTION(FAILED, "thrown before destroying throwy promise"));
   }));
 
   KJ_EXPECT(exception.getDescription() == "thrown before destroying throwy promise");
@@ -473,7 +473,7 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
   // we expect to be able to catch from a coroutine which co_awaits it.
   auto throwyDtorPromise = kj::Promise<void>(kj::READY_NOW)
       .attach(kj::defer([]() {
-    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
+    kj::throwException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
   }));
 
   // rejectedThrowyDtorPromise is a rejected promise. When co_awaited in a coroutine,
@@ -481,9 +481,9 @@ KJ_TEST("co_await only sees coroutine destruction exceptions if promise was not 
   // the temporary promise will be destroyed. The exception it throws during unwind will be ignored,
   // and the caller of the coroutine will see only the "thrown during execution" exception.
   auto rejectedThrowyDtorPromise = kj::evalNow([&]() -> kj::Promise<void> {
-    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during execution"));
+    kj::throwException(KJ_EXCEPTION(FAILED, "thrown during execution"));
   }).attach(kj::defer([]() {
-    kj::throwFatalException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
+    kj::throwException(KJ_EXCEPTION(FAILED, "thrown during unwind"));
   }));
 
   auto awaitPromise = [](kj::Promise<void> promise) -> kj::Promise<void> {

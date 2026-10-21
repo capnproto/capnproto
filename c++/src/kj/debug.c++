@@ -381,7 +381,7 @@ void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
   delete exception;
   exception = nullptr;
-  throwFatalException(mv(copy), 1);
+  throwException(mv(copy), 1);
   KJ_KNOWN_UNREACHABLE(abort());
 }
 

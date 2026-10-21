@@ -87,7 +87,7 @@ void throwOpensslError() {
   // Call when an OpenSSL function returns an error code to convert that into an exception and
   // throw it.
 
-  kj::throwFatalException(getOpensslError());
+  kj::throwException(getOpensslError());
 }
 
 #ifdef _WIN32
@@ -984,7 +984,7 @@ kj::Promise<kj::AuthenticatedStream> TlsContext::wrapServer(kj::AuthenticatedStr
   }).catch_([peerId=kj::mv(peerId)](kj::Exception&& e) -> kj::Promise<kj::AuthenticatedStream> {
     auto description = kj::str(e.getDescription(), "; clientId = ", peerId);
     e.setDescription(kj::mv(description));
-    kj::throwFatalException(kj::mv(e));
+    kj::throwException(kj::mv(e));
   });
 }
 

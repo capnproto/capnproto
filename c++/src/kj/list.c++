@@ -26,19 +26,19 @@ namespace kj {
 namespace _ {
 
 void throwDoubleAdd() {
-  kj::throwFatalException(KJ_EXCEPTION(FAILED,
+  kj::throwException(KJ_EXCEPTION(FAILED,
       "tried to add element to kj::List but the element is already in a list"));
 }
 void throwRemovedNotPresent() {
-  kj::throwFatalException(KJ_EXCEPTION(FAILED,
+  kj::throwException(KJ_EXCEPTION(FAILED,
       "tried to remove element from kj::List but the element is not in a list"));
 }
 void throwRemovedWrongList() {
-  kj::throwFatalException(KJ_EXCEPTION(FAILED,
+  kj::throwException(KJ_EXCEPTION(FAILED,
       "tried to remove element from kj::List but the element is in a different list"));
 }
 void throwDestroyedWhileInList() {
-  kj::throwFatalException(KJ_EXCEPTION(FAILED,
+  kj::throwException(KJ_EXCEPTION(FAILED,
       "destroyed object that is still in a kj::List"));
 }
 
