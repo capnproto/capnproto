@@ -431,7 +431,7 @@ public:
   }
 
   void reportError(SourcePos start, SourcePos end, kj::StringPtr message) const override {
-    kj::getExceptionCallback().onRecoverableException(kj::Exception(
+    kj::throwRecoverableException(kj::Exception(
         kj::Exception::Type::FAILED, path.toString(), start.line,
         kj::heapString(message)));
   }

@@ -752,7 +752,7 @@ bool checkChange(ParsedFile::Reader file1, ParsedFile::Reader file2, ChangeKind 
 
   if (changeKind == COMPATIBLE) {
     KJ_IF_SOME(e, exception) {
-      kj::getExceptionCallback().onFatalException(kj::mv(e));
+      kj::getExceptionCallback().onException(kj::mv(e));
       return false;
     } else {
       return true;

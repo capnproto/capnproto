@@ -486,17 +486,11 @@ Maybe<Debug::Context::Value> Debug::Context::ensureInitialized() {
   }
 }
 
-void Debug::Context::onRecoverableException(Exception&& exception) {
+void Debug::Context::onException(Exception&& exception) {
   KJ_IF_SOME(v, ensureInitialized()) {
     exception.wrapContext(v.file, v.line, mv(v.description));
   }
-  next.onRecoverableException(kj::mv(exception));
-}
-void Debug::Context::onFatalException(Exception&& exception) {
-  KJ_IF_SOME(v, ensureInitialized()) {
-    exception.wrapContext(v.file, v.line, mv(v.description));
-  }
-  next.onFatalException(kj::mv(exception));
+  next.onException(kj::mv(exception));
 }
 void Debug::Context::logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                                 String&& text) {

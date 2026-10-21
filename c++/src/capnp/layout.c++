@@ -3890,7 +3890,7 @@ void OrphanBuilder::euthanize() {
   });
 
   KJ_IF_SOME(e, exception) {
-    kj::getExceptionCallback().onRecoverableException(kj::mv(e));
+    kj::throwRecoverableException(kj::mv(e));
   }
 }
 

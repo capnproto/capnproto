@@ -589,8 +589,7 @@ public:
 
     virtual Value evaluate() = 0;
 
-    virtual void onRecoverableException(Exception&& exception) override;
-    virtual void onFatalException(Exception&& exception) override;
+    virtual void onException(Exception&& exception) override;
     virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
                             String&& text) override;
 
@@ -600,8 +599,8 @@ public:
     // Set true if an attempt to evaluate() the context threw an exception. Once this happens we
     // permanently drop the context. This prevents re-evaluation, which could throw again, leading
     // to infinite recursion: evaluate() throwing an exception re-enters the exception callback
-    // chain, which includes this very Context, so onFatalException()/onRecoverableException() would
-    // be invoked recursively.
+    // chain, which includes this very Context, so onException() would be invoked
+    // recursively.
     bool evaluating = false;
     // Set true while evaluate() is running, so that we can detect the re-entrant case described
     // above and bail out.
