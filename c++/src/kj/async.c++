@@ -762,7 +762,7 @@ struct Executor::Impl {
       for (auto& event: start) {
         start.remove(event);
         executing.add(event);
-        event.state = _::XThreadEvent::EXECUTING;
+        kj::atomicStore(&event.state, _::XThreadEvent::EXECUTING, kj::AtomicMemoryOrder::RELAXED);
         event.armBreadthFirst();
       }
 
@@ -891,6 +891,8 @@ void XThreadEvent::tracePromise(TraceBuilder& builder, bool stopAtNextEvent) {
 }
 
 void XThreadEvent::ensureDoneOrCanceled() {
+  // This unlocked check requires every state update to be atomic, including intermediate states.
+  // The executor mutex still orders transitions; only DONE needs release ordering.
   if (kj::atomicLoad(&state, kj::AtomicMemoryOrder::ACQUIRE) != DONE) {
     auto lock = targetExecutor->impl->state.lockExclusive();
 
@@ -913,12 +915,12 @@ void XThreadEvent::ensureDoneOrCanceled() {
       case QUEUED:
         lock->start.remove(*this);
         // No wake needed since we removed work rather than adding it.
-        state = DONE;
+        setDoneState();
         break;
       case EXECUTING: {
         lock->executing.remove(*this);
         lock->cancel.add(*this);
-        state = CANCELING;
+        kj::atomicStore(&state, CANCELING, kj::AtomicMemoryOrder::RELAXED);
         loop->wake();
 
         Maybe<Executor&> maybeSelfExecutor = kj::none;
@@ -1296,7 +1298,7 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
     return;
   }
 
-  event.state = _::XThreadEvent::QUEUED;
+  kj::atomicStore(&event.state, _::XThreadEvent::QUEUED, kj::AtomicMemoryOrder::RELAXED);
   lock->start.add(event);
 
   loop->wake();

@@ -376,12 +376,14 @@ KJ_TEST("cancel cross-thread event while it runs") {
     }
 
     {
+      // Use relaxed accesses so this flag does not synchronize the executor's state
+      // write with cancellation's state read, which would hide the race from TSan.
       std::atomic<bool> called = false;
       Promise<uint> promise = exec->executeAsync([&]() -> kj::Promise<uint> {
-        called = true;
+        called.store(true, std::memory_order_relaxed);
         return kj::NEVER_DONE;
       });
-      while (!called) {
+      while (!called.load(std::memory_order_relaxed)) {
         delay();
       }
       KJ_EXPECT(!promise.poll(waitScope));

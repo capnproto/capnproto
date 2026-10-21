@@ -1852,12 +1852,11 @@ private:
   // yet. Do NOT call under lock.
 
   void setDoneState();
-  // Assigns `state` to `DONE`, being careful to use an atomic-release-store if needed. This must
-  // only be called in the destination thread, and must either be called under lock, or the thread
-  // must take the lock and release it again shortly after setting the state (because some threads
-  // may be waiting on the DONE state using a conditional wait on the mutex). After calling
-  // setDoneState(), the destination thread MUST NOT touch this object ever again; it now belongs
-  // solely to the requesting thread.
+  // Assigns `state` to `DONE` with an atomic release store. Called by the destination thread, or
+  // by the requesting thread when canceling an event that is still QUEUED. The caller must either
+  // hold the executor mutex, or take and release it shortly afterward, so threads waiting for DONE
+  // using a conditional wait on the mutex are notified. After calling setDoneState(), the
+  // destination thread MUST NOT touch this object again; only the requesting thread may use it.
 
   void setDisconnected();
   // Sets the result to a DISCONNECTED exception indicating that the target event loop exited.
