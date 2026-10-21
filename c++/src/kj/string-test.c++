@@ -128,22 +128,22 @@ TEST(String, parseAs) {
   EXPECT_TRUE(isNaN("nan"_kj.parseAs<double>()));
   EXPECT_TRUE(isNaN("NAN"_kj.parseAs<double>()));
   EXPECT_TRUE(isNaN("NaN"_kj.parseAs<double>()));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", ""_kj.parseAs<double>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "a"_kj.parseAs<double>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "1a"_kj.parseAs<double>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "+-1"_kj.parseAs<double>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", ""_kj.parseAs<double>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "a"_kj.parseAs<double>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "1a"_kj.parseAs<double>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "+-1"_kj.parseAs<double>());
 
   EXPECT_EQ("1"_kj.parseAs<float>(), 1.0);
 
   EXPECT_EQ("1"_kj.parseAs<int64_t>(), 1);
   EXPECT_EQ("9223372036854775807"_kj.parseAs<int64_t>(), 9223372036854775807LL);
   EXPECT_EQ("-9223372036854775808"_kj.parseAs<int64_t>(), -9223372036854775808ULL);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "9223372036854775808"_kj.parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-9223372036854775809"_kj.parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", ""_kj.parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "a"_kj.parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "1a"_kj.parseAs<int64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "+-1"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "9223372036854775808"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "-9223372036854775809"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", ""_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "a"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "1a"_kj.parseAs<int64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "+-1"_kj.parseAs<int64_t>());
   EXPECT_EQ("010"_kj.parseAs<int64_t>(), 10);
   EXPECT_EQ("0010"_kj.parseAs<int64_t>(), 10);
   EXPECT_EQ("0x10"_kj.parseAs<int64_t>(), 16);
@@ -155,24 +155,24 @@ TEST(String, parseAs) {
   EXPECT_EQ("1"_kj.parseAs<uint64_t>(), 1);
   EXPECT_EQ("0"_kj.parseAs<uint64_t>(), 0);
   EXPECT_EQ("18446744073709551615"_kj.parseAs<uint64_t>(), 18446744073709551615ULL);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-1"_kj.parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "18446744073709551616"_kj.parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", ""_kj.parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "a"_kj.parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "1a"_kj.parseAs<uint64_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("not contain valid", "+-1"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "-1"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "18446744073709551616"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", ""_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "a"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "1a"_kj.parseAs<uint64_t>());
+  KJ_EXPECT_THROW_MESSAGE("not contain valid", "+-1"_kj.parseAs<uint64_t>());
 
   EXPECT_EQ("1"_kj.parseAs<int32_t>(), 1);
   EXPECT_EQ("2147483647"_kj.parseAs<int32_t>(), 2147483647);
   EXPECT_EQ("-2147483648"_kj.parseAs<int32_t>(), -2147483648);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "2147483648"_kj.parseAs<int32_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-2147483649"_kj.parseAs<int32_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "2147483648"_kj.parseAs<int32_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "-2147483649"_kj.parseAs<int32_t>());
 
   EXPECT_EQ("1"_kj.parseAs<uint32_t>(), 1);
   EXPECT_EQ("0"_kj.parseAs<uint32_t>(), 0U);
   EXPECT_EQ("4294967295"_kj.parseAs<uint32_t>(), 4294967295U);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "-1"_kj.parseAs<uint32_t>());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("out-of-range", "4294967296"_kj.parseAs<uint32_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "-1"_kj.parseAs<uint32_t>());
+  KJ_EXPECT_THROW_MESSAGE("out-of-range", "4294967296"_kj.parseAs<uint32_t>());
 
   EXPECT_EQ("1"_kj.parseAs<int16_t>(), 1);
   EXPECT_EQ("1"_kj.parseAs<uint16_t>(), 1);

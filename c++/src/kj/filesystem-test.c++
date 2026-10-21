@@ -137,22 +137,22 @@ KJ_TEST("Path exceptions") {
   KJ_EXPECT_THROW_MESSAGE("invalid path component", Path(".."));
   KJ_EXPECT_THROW_MESSAGE("NUL character", Path(StringPtr("foo\0bar", 7)));
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting", Path::parse(".."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting", Path::parse("../foo"));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting", Path::parse("foo/../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("expected a relative path", Path::parse("/foo"));
+  KJ_EXPECT_THROW_MESSAGE("break out of starting", Path::parse(".."));
+  KJ_EXPECT_THROW_MESSAGE("break out of starting", Path::parse("../foo"));
+  KJ_EXPECT_THROW_MESSAGE("break out of starting", Path::parse("foo/../.."));
+  KJ_EXPECT_THROW_MESSAGE("expected a relative path", Path::parse("/foo"));
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("NUL character", Path::parse(kj::StringPtr("foo\0bar", 7)));
+  KJ_EXPECT_THROW_MESSAGE("NUL character", Path::parse(kj::StringPtr("foo\0bar", 7)));
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).eval("../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).eval("../baz/../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).eval("baz/../../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).eval("/.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).eval("/baz/../.."));
 
   KJ_EXPECT_THROW_MESSAGE("root path has no basename", Path(nullptr).basename());
@@ -215,34 +215,34 @@ KJ_TEST("Win32 Path") {
 }
 
 KJ_TEST("Win32 Path exceptions") {
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("colons are prohibited",
+  KJ_EXPECT_THROW_MESSAGE("colons are prohibited",
       Path({"c:", "foo", "bar"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("colons are prohibited",
+  KJ_EXPECT_THROW_MESSAGE("colons are prohibited",
       Path({"c:", "foo:bar"}).toWin32String(true));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"con"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"CON", "bar"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"foo", "cOn"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"prn"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"aux"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"NUL"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"nul.txt"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"com3"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"lpt9"}).toWin32String());
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("DOS reserved name", Path({"com1.hello"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"con"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"CON", "bar"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"foo", "cOn"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"prn"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"aux"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"NUL"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"nul.txt"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"com3"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"lpt9"}).toWin32String());
+  KJ_EXPECT_THROW_MESSAGE("DOS reserved name", Path({"com1.hello"}).toWin32String());
 
   KJ_EXPECT_THROW_MESSAGE("drive letter or netbios", Path({"?", "foo"}).toWin32String(true));
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).evalWin32("../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).evalWin32("../baz/../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).evalWin32("baz/../../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"foo", "bar"}).evalWin32("c:\\..\\.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("break out of starting",
+  KJ_EXPECT_THROW_MESSAGE("break out of starting",
       Path({"c:", "foo", "bar"}).evalWin32("/baz/../../.."));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("must specify drive letter",
+  KJ_EXPECT_THROW_MESSAGE("must specify drive letter",
       Path({"foo"}).evalWin32("\\baz\\qux"));
 }
 
@@ -495,7 +495,7 @@ KJ_TEST("InMemoryDirectory") {
 
   KJ_EXPECT(dir->tryOpenFile(Path({"foo", "bar"}), WriteMode::MODIFY) == kj::none);
   KJ_EXPECT(dir->tryOpenFile(Path({"bar", "baz"}), WriteMode::MODIFY) == kj::none);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("parent is not a directory",
+  KJ_EXPECT_THROW_MESSAGE("parent is not a directory",
       dir->tryOpenFile(Path({"bar", "baz"}), WriteMode::CREATE));
   clock.expectUnchanged(*dir);
 
@@ -658,9 +658,9 @@ KJ_TEST("InMemoryDirectory symlinks") {
   KJ_EXPECT(dir->tryOpenFile(Path("foo")) == kj::none);
   KJ_EXPECT(dir->tryOpenFile(Path("foo"), WriteMode::CREATE) == kj::none);
   KJ_EXPECT(dir->tryOpenFile(Path("foo"), WriteMode::MODIFY) == kj::none);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("parent is not a directory",
+  KJ_EXPECT_THROW_MESSAGE("parent is not a directory",
       dir->tryOpenFile(Path("foo"), WriteMode::CREATE | WriteMode::MODIFY));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("parent is not a directory",
+  KJ_EXPECT_THROW_MESSAGE("parent is not a directory",
       dir->tryOpenFile(Path("foo"),
           WriteMode::CREATE | WriteMode::MODIFY | WriteMode::CREATE_PARENT));
 

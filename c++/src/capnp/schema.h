@@ -70,8 +70,8 @@ extern const RawSchema NULL_STRUCT_SCHEMA;
 extern const RawSchema NULL_ENUM_SCHEMA;
 extern const RawSchema NULL_INTERFACE_SCHEMA;
 extern const RawSchema NULL_CONST_SCHEMA;
-// The schema types default to these null (empty) schemas in case of error, especially when
-// exceptions are disabled.
+// The schema types default to these null (empty) schemas when default-constructed or in case of
+// error.
 }  // namespace _ (private)
 
 class Schema {

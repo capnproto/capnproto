@@ -2050,7 +2050,6 @@ void waitImpl(_::OwnPromiseNode&& node, _::ExceptionOrValue& result, WaitScope& 
   EventLoop& loop = waitScope.loop;
   KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
 
-  // we don't support fibers when running without exceptions, so just remove the whole block
   KJ_IF_SOME(fiber, waitScope.fiber) {
     if (fiber.state == FiberBase::CANCELED) {
       throw fiberCanceledException();

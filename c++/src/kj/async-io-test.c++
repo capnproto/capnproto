@@ -1729,11 +1729,11 @@ KJ_TEST("Userland pipe with limit") {
     KJ_EXPECT(!promise.poll(ws));
     auto promise2 = pipe.out->write("barbaz"_kjb);
     KJ_EXPECT(promise.wait(ws) == "bar");
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
+    KJ_EXPECT_THROW_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
   }
 
   // Further writes throw and reads return EOF.
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+  KJ_EXPECT_THROW_MESSAGE(
       "abortRead() has been called", pipe.out->write("baz"_kjb).wait(ws));
   KJ_EXPECT(pipe.in->readAllText().wait(ws) == "");
 }
@@ -1759,11 +1759,11 @@ KJ_TEST("Userland pipe pumpTo with limit") {
     auto promise2 = pipe.out->write("barbaz"_kjb);
     promise.wait(ws);
     pumpPromise.wait(ws);
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
+    KJ_EXPECT_THROW_MESSAGE("read end of pipe was aborted", promise2.wait(ws));
   }
 
   // Further writes throw.
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+  KJ_EXPECT_THROW_MESSAGE(
       "abortRead() has been called", pipe.out->write("baz"_kjb).wait(ws));
 }
 
@@ -1790,7 +1790,7 @@ KJ_TEST("Userland pipe pump into zero-limited pipe, data is pumped") {
 
   expectRead(*pipe2.in, "").wait(ws);
   auto writePromise = pipe.out->write("foo"_kjb);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("abortRead() has been called", pumpPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("abortRead() has been called", pumpPromise.wait(ws));
 }
 
 KJ_TEST("Userland pipe gather write") {
@@ -2731,7 +2731,7 @@ KJ_TEST("Userland pipe with limit tryReadSync") {
     promise.wait(ws);
 
     pipe.out = nullptr;
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("fixed-length pipe ended prematurely", {
+    KJ_EXPECT_THROW_MESSAGE("fixed-length pipe ended prematurely", {
       auto result KJ_UNUSED = pipe.in->tryReadSync(arrayPtr(buf), 1);
     });
   }
@@ -2758,7 +2758,7 @@ KJ_TEST("AsyncInputStream::read() synchronous fast path") {
     // A short synchronous read (EOF) produces the standard error, as a promise rejection.
     pipe.out = nullptr;
     byte buf[4]{};
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("stream disconnected prematurely",
+    KJ_EXPECT_THROW_MESSAGE("stream disconnected prematurely",
         pipe.in->read(arrayPtr(buf), 1).wait(ws));
   }
 }
@@ -3025,7 +3025,7 @@ KJ_TEST("Userland tee read exception propagation") {
   KJ_EXPECT(kj::arrayPtr(leftBuf, 6) == "foobar"_kjb);
 
   // The next read sees the exception.
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
+  KJ_EXPECT_THROW_MESSAGE("pipe ended prematurely",
       left->tryRead(leftBuf, 1, size(leftBuf)).ignoreResult().wait(ws));
 
   // Test tryGetLength() here -- the unread branch still sees the original length value.
@@ -3037,13 +3037,13 @@ KJ_TEST("Userland tee read exception propagation") {
   auto rightPromise = right->tryRead(rightBuf, size(rightBuf), size(rightBuf));
   KJ_EXPECT(rightPromise.wait(ws) == 6);
   KJ_EXPECT(kj::arrayPtr(rightBuf, 6) == "foobar"_kjb);
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
+  KJ_EXPECT_THROW_MESSAGE("pipe ended prematurely",
       right->tryRead(rightBuf, 1, size(leftBuf)).ignoreResult().wait(ws));
 
   // Further reads should all see the exception again.
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
+  KJ_EXPECT_THROW_MESSAGE("pipe ended prematurely",
       left->tryRead(leftBuf, 1, size(leftBuf)).ignoreResult().wait(ws));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
+  KJ_EXPECT_THROW_MESSAGE("pipe ended prematurely",
       right->tryRead(rightBuf, 1, size(leftBuf)).ignoreResult().wait(ws));
 }
 
@@ -3064,14 +3064,14 @@ KJ_TEST("Userland tee read exception propagation w/ data loss") {
   writePromise.wait(ws);
   // Destroying the output side should force an exception, since we didn't reach our minBytes.
   pipe.out = nullptr;
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+  KJ_EXPECT_THROW_MESSAGE(
       "pipe ended prematurely", leftPromise.ignoreResult().wait(ws));
 
   // And we should see a short read here, too. In fact, we shouldn't see anything: the short read
   // above read all of the pipe's data, but then failed to buffer it because it encountered an
   // exception. It buffered the exception, instead.
   uint8_t rightBuf[7] = { 0 };
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("pipe ended prematurely",
+  KJ_EXPECT_THROW_MESSAGE("pipe ended prematurely",
       right->tryRead(rightBuf, 1, 1).ignoreResult().wait(ws));
 }
 
@@ -3375,9 +3375,9 @@ KJ_TEST("Userland tee pump read exception propagation") {
     // loop actually sees the exception.
     auto leftAllPromise = leftPipe.in->readAllText();
     auto rightAllPromise = rightPipe.in->readAllText();
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "pipe ended prematurely", leftPumpPromise.ignoreResult().wait(ws));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "pipe ended prematurely", rightPumpPromise.ignoreResult().wait(ws));
 
     // Make sure we got the data on the destination pipes.
@@ -3415,9 +3415,9 @@ KJ_TEST("Userland tee pump read exception propagation") {
 
     // Relieve backpressure in the tee to see the exceptions.
     auto leftAllPromise = leftPipe.in->readAllText();
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "pipe ended prematurely", leftPumpPromise.ignoreResult().wait(ws));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "pipe ended prematurely", rightReadPromise.ignoreResult().wait(ws));
 
     // Make sure we got the data on the destination pipe.
@@ -3448,7 +3448,7 @@ KJ_TEST("Userland tee pump write exception propagation") {
   // Induce a write exception in the right branch pump. It should propagate to the right pump
   // promise.
   rightPipe.in = nullptr;
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+  KJ_EXPECT_THROW_MESSAGE(
       "read end of pipe was aborted", rightPumpPromise.ignoreResult().wait(ws));
 
   // The left pump promise does not see the right branch's write exception.
@@ -3517,10 +3517,10 @@ KJ_TEST("Userland tee buffer size limit") {
     auto right = kj::mv(tee.branches[1]);
 
     expectRead(*left, "fo").wait(ws);
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("tee buffer size limit exceeded",
+    KJ_EXPECT_THROW_MESSAGE("tee buffer size limit exceeded",
         expectRead(*left, "o").wait(ws));
     expectRead(*right, "fo").wait(ws);
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("tee buffer size limit exceeded",
+    KJ_EXPECT_THROW_MESSAGE("tee buffer size limit exceeded",
         expectRead(*right, "o").wait(ws));
   }
 

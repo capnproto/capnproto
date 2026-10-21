@@ -227,7 +227,7 @@ KJ_TEST("Exceptions propagate through layered coroutines") {
 
   auto throwy = simpleCoroutine(kj::Promise<int>(kj::NEVER_DONE), false);
 
-  KJ_EXPECT_THROW_RECOVERABLE(FAILED, simpleCoroutine(kj::mv(throwy)).wait(waitScope));
+  KJ_EXPECT_THROW(FAILED, simpleCoroutine(kj::mv(throwy)).wait(waitScope));
 }
 
 // GCC gets compilation errors with promise continuations in lambdas
@@ -251,7 +251,7 @@ KJ_TEST("Exceptions before the first co_await don't escape, but reject the promi
 
   auto throwy = throwEarly();
 
-  KJ_EXPECT_THROW_RECOVERABLE(FAILED, throwy.wait(waitScope));
+  KJ_EXPECT_THROW(FAILED, throwy.wait(waitScope));
 }
 
 KJ_TEST("Coroutines can catch exceptions from co_await") {
@@ -449,7 +449,7 @@ KJ_TEST("Exceptions during completed coroutine frame-unwind propagate via return
   {
     // Next, prove that they show up via the returned Promise.
     auto promise = deferredThrowCoroutine(kj::READY_NOW, "thrown during unwind");
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("thrown during unwind", promise.wait(waitScope));
+    KJ_EXPECT_THROW_MESSAGE("thrown during unwind", promise.wait(waitScope));
   }
 }
 

@@ -392,12 +392,12 @@ KJ_TEST("revoke membrane") {
   paf.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "foobar"));
 
   KJ_ASSERT(callPromise.poll(env.waitScope));
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar", callPromise.wait(env.waitScope));
+  KJ_EXPECT_THROW_MESSAGE("foobar", callPromise.wait(env.waitScope));
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
+  KJ_EXPECT_THROW_MESSAGE("foobar",
       env.membraned.makeThingRequest().send().wait(env.waitScope));
 
-  KJ_EXPECT_THROW_RECOVERABLE_MESSAGE("foobar",
+  KJ_EXPECT_THROW_MESSAGE("foobar",
       thing.passThroughRequest().send().wait(env.waitScope));
 }
 

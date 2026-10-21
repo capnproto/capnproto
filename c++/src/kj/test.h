@@ -110,7 +110,7 @@ private:
 
 // TODO(msvc): cast results to void like non-MSVC versions do
 #if _MSC_VER && !defined(__clang__)
-#define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
+#define KJ_EXPECT_THROW(type, code, ...) \
   do { \
     KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_INDIRECT_EXPAND(KJ_EXPECT, (e.getType() == ::kj::Exception::Type::type, \
@@ -120,7 +120,7 @@ private:
     } \
   } while (false)
 
-#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
+#define KJ_EXPECT_THROW_MESSAGE(message, code, ...) \
   do { \
     KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { code; })) { \
       KJ_INDIRECT_EXPAND(KJ_EXPECT, (e.getDescription().contains(message), \
@@ -130,7 +130,7 @@ private:
     } \
   } while (false)
 #else
-#define KJ_EXPECT_THROW_RECOVERABLE(type, code, ...) \
+#define KJ_EXPECT_THROW(type, code, ...) \
   do { \
     KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { (void)({code;}); })) { \
       KJ_EXPECT(e.getType() == ::kj::Exception::Type::type, \
@@ -140,7 +140,7 @@ private:
     } \
   } while (false)
 
-#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(message, code, ...) \
+#define KJ_EXPECT_THROW_MESSAGE(message, code, ...) \
   do { \
     KJ_IF_SOME(e, ::kj::runCatchingExceptions([&]() { (void)({code;}); })) { \
       KJ_EXPECT(e.getDescription().contains(message), \
@@ -151,8 +151,9 @@ private:
   } while (false)
 #endif
 
-#define KJ_EXPECT_THROW KJ_EXPECT_THROW_RECOVERABLE
-#define KJ_EXPECT_THROW_MESSAGE KJ_EXPECT_THROW_RECOVERABLE_MESSAGE
+#define KJ_EXPECT_THROW_RECOVERABLE KJ_EXPECT_THROW
+#define KJ_EXPECT_THROW_RECOVERABLE_MESSAGE KJ_EXPECT_THROW_MESSAGE
+// Deprecated: identical to KJ_EXPECT_THROW[_MESSAGE], which should be used instead..
 
 #define KJ_EXPECT_EXIT(statusCode, code) \
   do { \

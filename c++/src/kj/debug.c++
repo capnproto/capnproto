@@ -241,7 +241,7 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
   if (style == SYSCALL) {
     // Strip off leading "foo = " from code, since callers will sometimes write things like:
     //   ssize_t n;
-    //   RECOVERABLE_SYSCALL(n = read(fd, buffer, sizeof(buffer))) { return ""; }
+    //   KJ_SYSCALL(n = read(fd, buffer, sizeof(buffer)));
     //   return std::string(buffer, n);
     const char* equalsPos = strchr(code, '=');
     if (equalsPos != nullptr && equalsPos[1] != '=') {

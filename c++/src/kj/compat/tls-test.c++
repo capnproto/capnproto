@@ -551,7 +551,7 @@ KJ_TEST("TLS peer identity") {
   {
     auto id = server.peerIdentity.downcast<TlsPeerIdentity>();
     KJ_EXPECT(!id->hasCertificate());
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         "client did not provide a certificate", id->getCommonName());
     KJ_EXPECT(&id->getNetworkIdentity() == &innerServerIdRef);
     KJ_EXPECT(id->toString() == "(anonymous client)");
@@ -809,11 +809,11 @@ KJ_TEST("TLS client certificate verification") {
     });
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("peer did not return a certificate",
                                            "PEER_DID_NOT_RETURN_A_CERTIFICATE"),
         serverPromise.ignoreResult().wait(test.io.waitScope));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL(
             "alert",  // "alert handshake failure" or "alert certificate required"
             "ALERT"), // "ALERT_HANDSHAKE_FAILURE" or "ALERT_CERTIFICATE_REQUIRED"
@@ -837,11 +837,11 @@ KJ_TEST("TLS client certificate verification") {
     });
     auto serverPromise = test.tlsServer.wrapServer(kj::mv(pipe.ends[1]));
 
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("certificate verify failed",
                                            "CERTIFICATE_VERIFY_FAILED"),
         serverPromise.ignoreResult().wait(test.io.waitScope));
-    KJ_EXPECT_THROW_RECOVERABLE_MESSAGE(
+    KJ_EXPECT_THROW_MESSAGE(
         SSL_MESSAGE_DIFFERENT_IN_BORINGSSL("alert unknown ca",
                                            "TLSV1_ALERT_UNKNOWN_CA"),
         clientPromise.ignoreResult().wait(test.io.waitScope));
@@ -1038,21 +1038,10 @@ KJ_TEST("TLS receiver experiences pre-TLS error") {
   KJ_LOG(INFO, "Disappointing our server");
   auto connectPromise = test.baseReceiver->badConnect();
 
-  // Can't use KJ_EXPECT_THROW_RECOVERABLE_MESSAGE because wait() that returns a value can't throw
-  // recoverable exceptions. Can't use KJ_EXPECT_THROW_MESSAGE because non-recoverable exceptions
-  // will fork() in -fno-exception which screws up our state.
-  acceptPromise.then([](auto) {
-    KJ_FAIL_EXPECT("expected exception");
-  }, [](kj::Exception&& e) {
-    KJ_EXPECT(e.getDescription() == "Pipes are leaky");
-  }).wait(test.io.waitScope);
+  KJ_EXPECT_THROW_MESSAGE("Pipes are leaky", acceptPromise.wait(test.io.waitScope));
 
   KJ_LOG(INFO, "Trying to load a promise after failure");
-  test.receiver->accept().then([](auto) {
-    KJ_FAIL_EXPECT("expected exception");
-  }, [](kj::Exception&& e) {
-    KJ_EXPECT(e.getDescription() == "Pipes are leaky");
-  }).wait(test.io.waitScope);
+  KJ_EXPECT_THROW_MESSAGE("Pipes are leaky", test.receiver->accept().wait(test.io.waitScope));
 }
 
 KJ_TEST("TLS receiver accepts multiple clients") {

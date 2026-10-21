@@ -696,8 +696,8 @@ private:
 
   void checkCompatibility(const schema::Node::Reader& node,
                           const schema::Node::Reader& replacement) {
-    // Returns whether `replacement` is equivalent, older than, newer than, or incompatible with
-    // `node`.  If exceptions are enabled, this will throw an exception on INCOMPATIBLE.
+    // Determines whether `replacement` is equivalent, older than, newer than, or incompatible with
+    // `node`.  Throws an exception on INCOMPATIBLE.
 
     VALIDATE_SCHEMA(node.which() == replacement.which(),
                     "kind of declaration changed");
