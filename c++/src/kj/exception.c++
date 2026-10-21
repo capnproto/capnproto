@@ -1420,10 +1420,6 @@ ExceptionCallback::~ExceptionCallback() noexcept(false) {
   }
 }
 
-void ExceptionCallback::onRecoverableException(Exception&& exception) {
-  next.onRecoverableException(mv(exception));
-}
-
 void ExceptionCallback::onException(Exception&& exception) {
   next.onException(mv(exception));
 }
@@ -1441,22 +1437,24 @@ Function<void(Function<void()>)> ExceptionCallback::getThreadInitializer() {
   return next.getThreadInitializer();
 }
 
+static void logException(LogSeverity severity, Exception&& e) {
+  // We intentionally go back to the top exception callback on the stack because we don't want to
+  // bypass whatever log processing is in effect.
+  //
+  // We intentionally don't log the context since it should get re-added by the exception callback
+  // anyway.
+  getExceptionCallback().logMessage(severity, e.getFile(), e.getLine(), 0, str(
+      e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+      e.getRemoteTrace().size() > 0 ? "\nremote: " : "",
+      e.getRemoteTrace(),
+      e.getStackTrace().size() > 0 ? "\nstack: " : "",
+      stringifyStackTraceAddresses(e.getStackTrace()),
+      stringifyStackTrace(e.getStackTrace()), "\n"));
+}
+
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
 public:
   RootExceptionCallback(): ExceptionCallback(*this) {}
-
-  void onRecoverableException(Exception&& exception) override {
-    if (UnwindDetector::uncaughtExceptionCount() > 0) {
-      // Bad time to throw an exception.  Just log instead.
-      //
-      // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
-      //   the innermost runCatchingExceptions() frame in this thread to tell if exceptions are
-      //   being caught correctly.
-      logException(LogSeverity::ERROR, mv(exception));
-    } else {
-      throw ExceptionImpl(mv(exception));
-    }
-  }
 
   void onException(Exception&& exception) override {
     throw ExceptionImpl(mv(exception));
@@ -1493,22 +1491,6 @@ public:
       // for new threads.
       func();
     };
-  }
-
-private:
-  void logException(LogSeverity severity, Exception&& e) {
-    // We intentionally go back to the top exception callback on the stack because we don't want to
-    // bypass whatever log processing is in effect.
-    //
-    // We intentionally don't log the context since it should get re-added by the exception callback
-    // anyway.
-    getExceptionCallback().logMessage(severity, e.getFile(), e.getLine(), 0, str(
-        e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
-        e.getRemoteTrace().size() > 0 ? "\nremote: " : "",
-        e.getRemoteTrace(),
-        e.getStackTrace().size() > 0 ? "\nstack: " : "",
-        stringifyStackTraceAddresses(e.getStackTrace()),
-        stringifyStackTrace(e.getStackTrace()), "\n"));
   }
 };
 
@@ -1551,7 +1533,20 @@ void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
 
 void throwRecoverableException(kj::Exception&& exception, uint ignoreCount) {
   if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
-  getExceptionCallback().onRecoverableException(kj::mv(exception));
+  if (std::uncaught_exceptions() == 0) {
+    getExceptionCallback().onException(kj::mv(exception));
+    abort();
+  }
+
+  // Another exception is unwinding the stack. Still pass the exception through the callback
+  // chain exactly as if it had been thrown, so callbacks see it like any other exception, but log
+  // what the chain throws instead of letting it escape. (`KJ_CONTEXT` is re-added when logging.)
+  KJ_TRY {
+    getExceptionCallback().onException(kj::mv(exception));
+    abort();
+  } KJ_CATCH(e) {
+    logException(LogSeverity::ERROR, kj::mv(e));
+  }
 }
 
 // =======================================================================================

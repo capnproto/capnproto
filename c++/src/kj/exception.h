@@ -295,18 +295,11 @@ public:
   KJ_DISALLOW_COPY_AND_MOVE(ExceptionCallback);
   virtual ~ExceptionCallback() noexcept(false);
 
-  virtual void onRecoverableException(Exception&& exception);
-  // Called when an exception has been raised, but the calling code has the ability to continue by
-  // producing garbage output.  This method _should_ throw the exception, but is allowed to simply
-  // return if garbage output is acceptable.
-  //
-  // The global default implementation throws an exception, unless we're currently in a destructor
-  // unwinding due to another exception being thrown, in which case it logs an error and returns.
-
   virtual void onException(Exception&& exception);
-  // Called when an exception has been raised by `kj::throwFatalException()`.  The calling code
-  // cannot continue: if this method returns normally, abort() will be called.  The method must
-  // throw the exception to avoid aborting.
+  // Called when an exception has been raised by `kj::throwFatalException()` or
+  // `kj::throwRecoverableException()`.  The method must throw the exception: if it returns
+  // normally, abort() will be called.  (`throwRecoverableException()` logs what this method throws
+  // instead of letting it escape if the stack is already unwinding.)
   //
   // The global default implementation throws an exception.
 
@@ -367,8 +360,9 @@ KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint
 // TODO(2.0): Rename this to `throwException()`.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
-// Invoke the exception callback to throw the given recoverable exception.  If the exception
-// callback returns, return normally.
+// Invoke the exception callback to throw the given exception, unless the stack is already
+// unwinding due to another exception, in which case the exception is logged and this returns
+// normally.
 //
 // TODO(2.0): Rename this to `throwExceptionUnlessUnwinding()`. (Or, can we fix the unwind problem
 //   and be able to remove this entirely?)

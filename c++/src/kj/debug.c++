@@ -486,12 +486,6 @@ Maybe<Debug::Context::Value> Debug::Context::ensureInitialized() {
   }
 }
 
-void Debug::Context::onRecoverableException(Exception&& exception) {
-  KJ_IF_SOME(v, ensureInitialized()) {
-    exception.wrapContext(v.file, v.line, mv(v.description));
-  }
-  next.onRecoverableException(kj::mv(exception));
-}
 void Debug::Context::onException(Exception&& exception) {
   KJ_IF_SOME(v, ensureInitialized()) {
     exception.wrapContext(v.file, v.line, mv(v.description));

@@ -993,45 +993,12 @@ private:
     }
   }
 
-  class ParseErrorCatcher: public kj::ExceptionCallback {
-  public:
-    ParseErrorCatcher(kj::ProcessContext& context): context(context) {}
-    ~ParseErrorCatcher() noexcept(false) {
-      if (!unwindDetector.isUnwinding()) {
-        KJ_IF_SOME(e, exception) {
-          context.error(kj::str(
-              "*** ERROR CONVERTING PREVIOUS MESSAGE ***\n"
-              "The following error occurred while converting the message above.\n"
-              "This probably means the input data is invalid/corrupted.\n",
-              "Exception description: ", e.getDescription(), "\n"
-              "Code location: ", e.getFile(), ":", e.getLine(), "\n"
-              "*** END ERROR ***"));
-        }
-      }
-    }
-
-    void onRecoverableException(kj::Exception&& e) override {
-      // Only capture the first exception, on the assumption that later exceptions are probably
-      // just cascading problems.
-      if (exception == kj::none) {
-        exception = kj::mv(e);
-      }
-    }
-
-  private:
-    kj::ProcessContext& context;
-    kj::Maybe<kj::Exception> exception;
-    kj::UnwindDetector unwindDetector;
-  };
-
   void readOneAndConvert(kj::BufferedInputStreamWrapper& input, kj::OutputStream& output) {
     // Since this is a debug tool, lift the usual security limits.  Worse case is the process
     // crashes or has to be killed.
     ReaderOptions options;
     options.nestingLimit = kj::maxValue;
     options.traversalLimitInWords = kj::maxValue;
-
-    ParseErrorCatcher parseErrorCatcher(context);
 
     switch (convertFrom) {
       case Format::BINARY: {
