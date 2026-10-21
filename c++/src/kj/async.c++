@@ -1340,7 +1340,7 @@ EventLoop& Executor::getLoop() const {
   KJ_IF_SOME(l, impl->state.lockShared()->loop) {
     return l;
   } else {
-    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "Executor's event loop has exited"));
+    kj::throwException(KJ_EXCEPTION(DISCONNECTED, "Executor's event loop has exited"));
   }
 }
 
@@ -3208,7 +3208,7 @@ void CoroutineBase::destroy() {
       // but this behaviour will never lead to trouble, is almost always true on practice
       // (only coroutines _created_ during unwind could notice a difference in behaviour),
       // and, more importantly, much faster.
-      kj::throwFatalException(kj::mv(exception));
+      kj::throwException(kj::mv(exception));
     } else {
       // An exception is already unwinding the stack, so throwing this secondary exception would
       // call std::terminate().
@@ -3250,11 +3250,11 @@ void PromiseAwaiterBase::awaitResumeImpl(ExceptionOrValue& result, void* awaited
     // Manually extend the stack trace with the instruction address where the co_await occurred.
     exception.addTrace(awaitedAt);
 
-    // Pass kj::maxValue for ignoreCount here so that `throwFatalException()` doesn't try to
+    // Pass kj::maxValue for ignoreCount here so that `throwException()` doesn't try to
     // extend the stack trace. There's no point in extending the trace beyond the single frame we
     // added above, as the rest of the trace will always be async framework stuff that no one wants
     // to see.
-    kj::throwFatalException(kj::mv(exception), kj::maxValue);
+    kj::throwException(kj::mv(exception), kj::maxValue);
   }
 }
 

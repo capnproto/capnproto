@@ -428,7 +428,7 @@ TEST(Async, SeparateFulfillerDiscardedDuringUnwind) {
   auto pair = newPromiseAndFulfiller<int>();
   kj::runCatchingExceptions([&]() {
     auto fulfillerToDrop = kj::mv(pair.fulfiller);
-    kj::throwFatalException(KJ_EXCEPTION(FAILED, "test exception"));
+    kj::throwException(KJ_EXCEPTION(FAILED, "test exception"));
   });
 
   KJ_EXPECT_THROW_MESSAGE(
@@ -781,7 +781,7 @@ TEST(Async, RaceSuccessful) {
 
     auto left = evalLater([&]() { return 123; });
     auto right = evalLater([&]() -> Promise<int>{
-      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+      kj::throwException(KJ_EXCEPTION(FAILED, "evaluation failed"));
     });
 
     EXPECT_EQ(123, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));
@@ -791,7 +791,7 @@ TEST(Async, RaceSuccessful) {
     WaitScope waitScope(loop);
 
     auto left = evalLater([&]() -> Promise<int>{
-      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+      kj::throwException(KJ_EXCEPTION(FAILED, "evaluation failed"));
     });
     auto right = evalLater([&]() { return 123; });
 
@@ -803,10 +803,10 @@ TEST(Async, RaceSuccessful) {
     WaitScope waitScope(loop);
 
     auto left = evalLater([&]() -> Promise<int>{
-      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+      kj::throwException(KJ_EXCEPTION(FAILED, "evaluation failed"));
     });
     auto right = evalLater([&]() -> Promise<int>{
-      kj::throwFatalException(KJ_EXCEPTION(FAILED, "evaluation failed"));
+      kj::throwException(KJ_EXCEPTION(FAILED, "evaluation failed"));
     });
 
     KJ_EXPECT_THROW(FAILED, raceSuccessful(kj::arr(kj::mv(left), kj::mv(right))).wait(waitScope));

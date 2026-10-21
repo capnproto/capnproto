@@ -151,6 +151,22 @@ TEST(Exception, ExceptionCallbackMustBeOnStack) {
 #endif
 #endif  // !__MINGW32__
 
+KJ_TEST("throwFatalException() is the same as throwException()") {
+  // TODO(cleanup): Remove along with the deprecated throwFatalException().
+  class Callback: public ExceptionCallback {
+  public:
+    uint count = 0;
+    void onException(Exception&& e) override {
+      ++count;
+      next.onException(kj::mv(e));
+    }
+  };
+
+  Callback callback;
+  KJ_EXPECT_THROW_MESSAGE("foo", throwFatalException(KJ_EXCEPTION(FAILED, "foo")));
+  KJ_EXPECT(callback.count == 1);
+}
+
 TEST(Exception, ScopeSuccessFail) {
   bool success = false;
   bool failure = false;
@@ -740,7 +756,7 @@ KJ_TEST("getDestructionReason returns default exception if exception wasn't thro
 
 KJ_TEST("getDestructionReason returns thrown exception if it wasn't consumed") {
   try {
-    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
+    kj::throwException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
   } catch (...) {
     auto e =
         kj::getDestructionReason(nullptr, kj::Exception::Type::FAILED, __FILE__,
@@ -753,7 +769,7 @@ KJ_TEST("getDestructionReason returns thrown exception if it wasn't consumed") {
 KJ_TEST("getDestructionReason returns default exception if exception was "
         "consumed") {
   try {
-    kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
+    kj::throwException(KJ_EXCEPTION(DISCONNECTED, "test exception"));
   } catch (...) {
     auto caughtException = kj::getCaughtExceptionAsKj();
     KJ_EXPECT(caughtException.getType() == kj::Exception::Type::DISCONNECTED);

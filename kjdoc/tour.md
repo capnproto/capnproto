@@ -443,7 +443,7 @@ KJ code usually should not use `throw` or `catch` directly, but rather use KJ's 
 ```c++
 // Throw an exception.
 kj::Exception e = ...;
-kj::throwFatalException(kj::mv(e));
+kj::throwException(kj::mv(e));
 
 // Run some code catching exceptions.
 KJ_TRY {
@@ -455,7 +455,7 @@ KJ_TRY {
 
 These wrappers perform some extra bookkeeping:
 * `KJ_CATCH()` will catch any kind of exception, whether it derives from `kj::Exception` or not, and will do its best to convert it into a `kj::Exception`.
-* `kj::throwFatalException()` and `kj::throwRecoverableException()` invoke the thread's current `kj::ExceptionCallback` to throw the exception, allowing apps to customize how exceptions are handled. The default `ExceptionCallback` makes sure to throw the exception in such a way that it can be understood and caught by code looking for `std::exception`, such as the C++ library's standard termination handler. The two functions differ only when the stack is already unwinding due to another exception: in that case, `kj::throwRecoverableException()` logs the exception and returns instead of throwing (see "Exceptions in Destructors", below).
+* `kj::throwException()` and `kj::throwRecoverableException()` invoke the thread's current `kj::ExceptionCallback` to throw the exception, allowing apps to customize how exceptions are handled. The default `ExceptionCallback` makes sure to throw the exception in such a way that it can be understood and caught by code looking for `std::exception`, such as the C++ library's standard termination handler. The two functions differ only when the stack is already unwinding due to another exception: in that case, `kj::throwRecoverableException()` logs the exception and returns instead of throwing (see "Exceptions in Destructors", below).
 
 There is also an older utility, `kj::runCatchingExceptions()`, which performs the same exception conversion as `KJ_TRY` / `KJ_CATCH`.
 
@@ -827,7 +827,7 @@ kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
   }).catch_([](kj::Exception&& exception) {
     // Oh no, an error! Log it and end the loop.
     KJ_LOG(ERROR, exception);
-    kj::throwFatalException(kj::mv(exception));
+    kj::throwException(kj::mv(exception));
   });
 }
 ```
@@ -842,7 +842,7 @@ kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
       .catch_([](kj::Exception&& exception) {
     // Oh no, an error! Log it and end the loop.
     KJ_LOG(ERROR, exception);
-    kj::throwFatalException(kj::mv(exception));
+    kj::throwException(kj::mv(exception));
   })
 }
 
@@ -869,7 +869,7 @@ kj::Promise<void> boopEvery5Seconds(kj::Timer& timer) {
   }, [](kj::Exception&& exception) {
     // Oh no, an error! Log it and end the loop.
     KJ_LOG(ERROR, exception);
-    kj::throwFatalException(kj::mv(exception));
+    kj::throwException(kj::mv(exception));
   });
 }
 ```

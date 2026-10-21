@@ -4375,7 +4375,7 @@ KJ_TEST("accept() with aborted connection - IPv4") {
       // Read failed with disconnected exception (connection was aborted)
       firstConnectionAborted = true;
     } else {
-      kj::throwFatalException(kj::mv(e));
+      kj::throwException(kj::mv(e));
     }
   }
 
@@ -4460,7 +4460,7 @@ KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
       // Read failed with disconnected exception (connection was aborted)
       connectionAborted = true;
     } else {
-      kj::throwFatalException(kj::mv(e));
+      kj::throwException(kj::mv(e));
     }
   }
   

@@ -187,7 +187,7 @@ private:
   template <typename Func>
   kj::Promise<void> wrap(Func&& func) {
     KJ_IF_SOME(e, error) {
-      kj::throwFatalException(e->clone());
+      kj::throwException(e->clone());
     }
 
     ++activeWriteCount;
@@ -206,11 +206,11 @@ private:
       KJ_IF_SOME(ws, webSocket) {
         co_await canceler.wrap(func(ws));
       } else {
-        kj::throwFatalException(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
+        kj::throwException(KJ_EXCEPTION(DISCONNECTED, "request canceled"));
       }
     } KJ_CATCH(e) {
       error = kj::heap(e.clone());
-      kj::throwFatalException(kj::mv(e));
+      kj::throwException(kj::mv(e));
     }
 
     done = true;
@@ -658,9 +658,9 @@ public:
         // Keep the upgraded transport alive until the Close frame has been written.
         auto originalException = kj::mv(exception);
         co_await context.closeWebSocketForOverload();
-        kj::throwFatalException(kj::mv(originalException));
+        kj::throwException(kj::mv(originalException));
       }
-      kj::throwFatalException(kj::mv(exception));
+      kj::throwException(kj::mv(exception));
     }
 
     // Once the server indicates it is done, then we can cancel pumping the request, because
@@ -671,7 +671,7 @@ public:
     // If the request pump failed (for a non-disconnect reason) we'd better propagate that
     // exception.
     KJ_IF_SOME(e, pumpRequestFailedReason) {
-      kj::throwFatalException(kj::mv(*e));
+      kj::throwException(kj::mv(*e));
     }
 
     // Finish pumping the response or WebSocket. (Probably it's already finished.)
@@ -685,7 +685,7 @@ public:
       // propagate here for the same reason. But, non-DISCONNECTED exceptions are more likely to
       // flag some real bug, so I'm leaving them alone for now. This could be revisited later.
       if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
-        kj::throwFatalException(kj::mv(exception));
+        kj::throwException(kj::mv(exception));
       }
     }
   }

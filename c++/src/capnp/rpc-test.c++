@@ -428,7 +428,7 @@ public:
     }
     kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
       KJ_IF_SOME(e, networkException) {
-        kj::throwFatalException(e.clone());
+        kj::throwException(e.clone());
       }
 
       if (initiatedIdleShutdown) {
@@ -2015,7 +2015,7 @@ KJ_TEST("when OutgoingRpcMessage::send() throws, we don't leak exports") {
 
         ++interceptCount;
         if (shouldThrowFromSend) {
-          kj::throwFatalException(KJ_EXCEPTION(FAILED, "intercepted"));
+          kj::throwException(KJ_EXCEPTION(FAILED, "intercepted"));
         }
       }
     }

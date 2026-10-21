@@ -481,7 +481,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, LockSourceLocati
 
         KJ_IF_SOME(exception, waiter.exception) {
           // The predicate threw an exception, apparently. Propagate it.
-          kj::throwFatalException(kj::mv(*exception));
+          kj::throwException(kj::mv(*exception));
         }
 
         return;
@@ -710,7 +710,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
 
     KJ_IF_SOME(exception, waiter.exception) {
       // The predicate threw an exception, apparently. Propagate it.
-      kj::throwFatalException(kj::mv(*exception));
+      kj::throwException(kj::mv(*exception));
     }
 
     // Recompute sleep time.
@@ -976,7 +976,7 @@ void Mutex::wait(Predicate& predicate, Maybe<Duration> timeout, NoopSourceLocati
 
     KJ_IF_SOME(exception, waiter.exception) {
       // The predicate threw an exception, apparently. Propagate it.
-      kj::throwFatalException(kj::mv(*exception));
+      kj::throwException(kj::mv(*exception));
     }
 
     if (timedOut) {

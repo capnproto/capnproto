@@ -99,7 +99,7 @@ inline T convertToReturn(ExceptionOr<T>&& result) {
     }
     return _::returnMaybeVoid(kj::mv(value));
   } else KJ_IF_SOME(exception, result.exception) {
-    throwFatalException(kj::mv(exception));
+    throwException(kj::mv(exception));
   } else {
     // Result contained neither a value nor an exception?
     KJ_UNREACHABLE;

@@ -1909,7 +1909,7 @@ private:
             // Really out of buffer space. Grow the buffer.
             if (type != HeaderType::MESSAGE) {
               // Can't grow because we'd invalidate the HTTP headers.
-              kj::throwFatalException(KJ_EXCEPTION(FAILED, "invalid HTTP chunk size"));
+              kj::throwException(KJ_EXCEPTION(FAILED, "invalid HTTP chunk size"));
             }
             if (headerBuffer.size() >= MAX_BUFFER) {
               co_return HttpHeaders::ProtocolError {
@@ -8591,7 +8591,7 @@ private:
         "received bad WebSocket handshake", errorMessage);
     webSocketError = sendError(
         HttpHeaders::ProtocolError { 400, "Bad Request", errorMessage, nullptr });
-    kj::throwFatalException(kj::mv(exception));
+    kj::throwException(kj::mv(exception));
   }
 
   kj::Own<kj::AsyncIoStream> getConnectStream() {

@@ -296,7 +296,7 @@ public:
   virtual ~ExceptionCallback() noexcept(false);
 
   virtual void onException(Exception&& exception);
-  // Called when an exception has been raised by `kj::throwFatalException()` or
+  // Called when an exception has been raised by `kj::throwException()` or
   // `kj::throwRecoverableException()`.  The method must throw the exception: if it returns
   // normally, abort() will be called.  (`throwRecoverableException()` logs what this method throws
   // instead of letting it escape if the stack is already unwinding.)
@@ -353,11 +353,12 @@ private:
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
-KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
-// Invoke the exception callback to throw the given fatal exception.  If the exception callback
+KJ_NOINLINE KJ_NORETURN(void throwException(kj::Exception&& exception, uint ignoreCount = 0));
+// Invoke the exception callback to throw the given exception.  If the exception callback
 // returns, abort.
-//
-// TODO(2.0): Rename this to `throwException()`.
+
+KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
+// Deprecated: old name of `throwException()`, which should be used instead.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
 // Invoke the exception callback to throw the given exception, unless the stack is already
@@ -379,7 +380,7 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 //     // code that may throw
 //   } KJ_CATCH(e) {
 //     // code that handles the exception `e`
-//     kj::throwFatalException(kj::mv(e));  // Optional: rethrow like so
+//     kj::throwException(kj::mv(e));  // Optional: rethrow like so
 //   }
 //
 // KJ_TRY: Semantically equivalent to `try`. The user-provided code block following this macro
@@ -390,7 +391,7 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 // details, you can name the exception `_` to suppress the unused variable warning, or suffix it
 // with `[[maybe_unused]]`. You are free to move the exception away, if you want, e.g. to rethrow
 // it. As a reminder, if you want to rethrow the exception, you must use
-// `kj::throwFatalException()`, and not a naked `throw`, to ensure the exception's attached stack
+// `kj::throwException()`, and not a naked `throw`, to ensure the exception's attached stack
 // trace is accurate.
 //
 // The user-provided code block following `KJ_CATCH(e)` IS NOT A TRUE CATCH HANDLER! In particular,
@@ -729,7 +730,7 @@ class InFlightExceptionIterator {
   //
   // This is meant for debugging purposes, and the results are best-effort. The C++ standard
   // library does not provide any way to inspect uncaught exceptions, so this class can only
-  // discover KJ exceptions thrown using throwFatalException() or throwRecoverableException().
+  // discover KJ exceptions thrown using throwException() or throwRecoverableException().
   // All KJ code uses those two functions to throw exceptions, but if your own code uses a bare
   // `throw`, or if the standard library throws an exception, these cannot be inspected.
   //
