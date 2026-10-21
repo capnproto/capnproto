@@ -151,6 +151,22 @@ TEST(Exception, ExceptionCallbackMustBeOnStack) {
 #endif
 #endif  // !__MINGW32__
 
+KJ_TEST("throwFatalException() is the same as throwException()") {
+  // TODO(cleanup): Remove along with the deprecated throwFatalException().
+  class Callback: public ExceptionCallback {
+  public:
+    uint count = 0;
+    void onException(Exception&& e) override {
+      ++count;
+      next.onException(kj::mv(e));
+    }
+  };
+
+  Callback callback;
+  KJ_EXPECT_THROW_MESSAGE("foo", throwFatalException(KJ_EXCEPTION(FAILED, "foo")));
+  KJ_EXPECT(callback.count == 1);
+}
+
 TEST(Exception, ScopeSuccessFail) {
   bool success = false;
   bool failure = false;

@@ -296,7 +296,7 @@ public:
   virtual ~ExceptionCallback() noexcept(false);
 
   virtual void onException(Exception&& exception);
-  // Called when an exception has been raised by `kj::throwFatalException()` or
+  // Called when an exception has been raised by `kj::throwException()` or
   // `kj::throwRecoverableException()`.  The method must throw the exception: if it returns
   // normally, abort() will be called.  (`throwRecoverableException()` logs what this method throws
   // instead of letting it escape if the stack is already unwinding.)
@@ -353,11 +353,12 @@ private:
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
-KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
-// Invoke the exception callback to throw the given fatal exception.  If the exception callback
+KJ_NOINLINE KJ_NORETURN(void throwException(kj::Exception&& exception, uint ignoreCount = 0));
+// Invoke the exception callback to throw the given exception.  If the exception callback
 // returns, abort.
-//
-// TODO(2.0): Rename this to `throwException()`.
+
+KJ_NOINLINE KJ_NORETURN(void throwFatalException(kj::Exception&& exception, uint ignoreCount = 0));
+// Deprecated: old name of `throwException()`, which should be used instead.
 
 KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignoreCount = 0);
 // Invoke the exception callback to throw the given exception, unless the stack is already

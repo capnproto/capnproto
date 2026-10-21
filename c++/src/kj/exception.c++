@@ -1525,7 +1525,14 @@ ExceptionCallback& getExceptionCallback() {
   return scoped != nullptr ? *scoped : *defaultCallback;
 }
 
+void throwException(kj::Exception&& exception, uint ignoreCount) {
+  if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
+  getExceptionCallback().onException(kj::mv(exception));
+  abort();
+}
+
 void throwFatalException(kj::Exception&& exception, uint ignoreCount) {
+  // Same as throwException(), not a call to it, so that `ignoreCount` skips the same frames.
   if (ignoreCount != (uint)kj::maxValue) exception.extendTrace(ignoreCount + 1);
   getExceptionCallback().onException(kj::mv(exception));
   abort();
