@@ -1835,11 +1835,15 @@ constexpr int KJ_IF_MAYBE_IS_DEPRECATED = 0;
 #define KJ_IF_MAYBE(name, exp) \
     if (KJ_DEPRECATE_KJ_IF_MAYBE_STMT; auto name = ::kj::_::readMaybe(exp))
 
+// The outer `if` intentionally has an unbraced body (the inner `if`) so that the caller can
+// supply the braced block and an optional `else`.
+// NOLINTBEGIN(readability-inconsistent-ifelse-braces)
 #define KJ_IF_SOME(name, exp) \
     KJ_SILENCE_DANGLING_ELSE_BEGIN \
     if (auto KJ_UNIQUE_NAME(_##name) = ::kj::_::readMaybe(exp)) \
       if (auto& name = *KJ_UNIQUE_NAME(_##name); false) {} else \
     KJ_SILENCE_DANGLING_ELSE_END
+// NOLINTEND(readability-inconsistent-ifelse-braces)
 
 struct None {};
 static constexpr None none;

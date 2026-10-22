@@ -272,7 +272,9 @@ void SHA1Update(
         j = 0;
     }
     else
+    {
         i = 0;
+    }
     memcpy(&context->buffer[j], &data[i], len - i);
 }
 

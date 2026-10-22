@@ -144,6 +144,11 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
+// The macros below intentionally expand to `if (cond) {} else <statement>` (or similar) so that
+// the caller can append arguments / a block and so that they are safe to use in unbraced
+// if/else statements. This can't be expressed with consistent braces.
+// NOLINTBEGIN(readability-inconsistent-ifelse-braces)
+
 #if KJ_MSVC_TRADITIONAL_CPP
 // MSVC does __VA_ARGS__ differently from GCC:
 // - A trailing comma before an empty __VA_ARGS__ is removed automatically, whereas GCC wants
@@ -522,6 +527,8 @@ namespace kj {
 
 #endif
 
+// NOLINTEND(readability-inconsistent-ifelse-braces)
+
 #if _MSC_VER && !defined(__clang__)
 
 #define KJ_SYSCALL_FD(...) \
@@ -565,7 +572,7 @@ namespace kj {
 #define KJ_DASSERT(...) do {} while (false)
 #define KJ_DREQUIRE(...) do {} while (false)
 #if defined(__GNUC__)
-#define KJ_ASSUME(cond, ...) do { if (cond) {} else __builtin_unreachable(); } while (false)
+#define KJ_ASSUME(cond, ...) do { if (cond) {} else { __builtin_unreachable(); } } while (false)
 #elif defined(__clang__)
 #define KJ_ASSUME(cond, ...) __builtin_assume(cond)
 #elif defined(_MSC_VER)
