@@ -179,6 +179,46 @@ TEST(Debug, Log) {
   }, kj::str("exception: ", fileLine(__FILE__, line), ": failed: foo\n"));
 }
 
+TEST(Debug, EmptyVariadicArgs) {
+  // Macros taking only `...` must accept being invoked with no arguments.
+  int line;
+
+  EXPECT_LOG_EQ([&](){
+    KJ_DBG(); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: debug: \n"));
+
+  EXPECT_LOG_EQ([&](){
+    KJ_FAIL_EXPECT(); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: \n"));
+
+  EXPECT_LOG_EQ([&](){
+    EXPECT_FATAL(KJ_FAIL_ASSERT()); line = __LINE__;
+  }, kj::str("exception: ", fileLine(__FILE__, line), ": failed\n"));
+
+  EXPECT_LOG_EQ([&](){
+    EXPECT_FATAL(KJ_FAIL_REQUIRE()); line = __LINE__;
+  }, kj::str("exception: ", fileLine(__FILE__, line), ": failed\n"));
+
+  EXPECT_LOG_EQ([&](){
+    EXPECT_FATAL(KJ_UNIMPLEMENTED()); line = __LINE__;
+  }, kj::str("exception: ", fileLine(__FILE__, line), ": unimplemented\n"));
+
+  EXPECT_LOG_EQ([&](){
+    EXPECT_FATAL(KJ_DTOR_FAIL_ASSERT()); line = __LINE__;
+  }, kj::str("exception: ", fileLine(__FILE__, line), ": failed\n"));
+
+  EXPECT_LOG_EQ([&](){
+    EXPECT_FATAL(KJ_DTOR_FAIL_REQUIRE()); line = __LINE__;
+  }, kj::str("exception: ", fileLine(__FILE__, line), ": failed\n"));
+
+  int cline;
+  EXPECT_LOG_EQ([&](){
+    KJ_CONTEXT(); cline = __LINE__;
+    EXPECT_FATAL(KJ_FAIL_ASSERT("bar")); line = __LINE__;
+  }, kj::str("exception: ", fileLine(__FILE__, cline), ": context: \n",
+             fileLine(__FILE__, line), ": failed: bar\n"));
+}
+
 // Testing KJ_LOG_AT, etc. macros:
 void myRequire(bool cond, kj::SourceLocation location = {}) {
   KJ_REQUIRE_AT(cond, location, "a_message");
@@ -540,7 +580,7 @@ KJ_TEST("magic assert stringification") {
 
 KJ_NOINLINE void failFailAssert(void*& callerFrame) {
   callerFrame = KJ_CALLING_ADDRESS();
-  KJ_FAIL_ASSERT("message");
+  KJ_FAIL_ASSERT();
 }
 KJ_NOINLINE void failAssertWithArgs(void*& callerFrame, int i) {
   callerFrame = KJ_CALLING_ADDRESS();

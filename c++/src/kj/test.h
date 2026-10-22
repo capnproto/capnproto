@@ -97,7 +97,7 @@ private:
   } while (false);
 #else
 #define KJ_FAIL_EXPECT(...) \
-  KJ_LOG(ERROR, ##__VA_ARGS__);
+  KJ_LOG(ERROR __VA_OPT__(,) __VA_ARGS__);
 #define KJ_EXPECT(cond, ...) \
   do { \
     [&](auto&& _kjCondition) { \
