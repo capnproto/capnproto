@@ -875,12 +875,10 @@ KJ_TEST("Maybe assertSome") {
   Maybe<int&> emptyReference = kj::none;
   emptyReference.assertNone();
 
-#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
   KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyValue.assertSome());
   KJ_EXPECT_THROW_MESSAGE("null Maybe<> dereference", (void)emptyReference.assertSome());
   KJ_EXPECT_THROW_MESSAGE("expected Maybe<> to be none", maybeValue.assertNone());
   KJ_EXPECT_THROW_MESSAGE("expected Maybe<> to be none", maybeReference.assertNone());
-#endif
 }
 
 KJ_TEST("Maybe emplaceInit") {
@@ -907,7 +905,6 @@ KJ_TEST("Maybe emplaceInit") {
     KJ_EXPECT(dst == kj::none);
     KJ_EXPECT(src == kj::none);
   }
-#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
   {
     Maybe<int> m = 1;
     KJ_EXPECT_THROW(FAILED, m.emplaceInit(2));
@@ -920,7 +917,6 @@ KJ_TEST("Maybe emplaceInit") {
     KJ_EXPECT(KJ_ASSERT_NONNULL(src) == 2);
     KJ_EXPECT(KJ_ASSERT_NONNULL(dst) == 1);
   }
-#endif
 }
 
 KJ_TEST("Maybe emplaceInit with niche-optimized type") {
