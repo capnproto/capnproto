@@ -580,6 +580,10 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
 // storage variable, we must choose a hard-coded name for it. This will cause variable shadowing in
 // nested KJ_TRY/KJ_CATCHes, but that is benign, so we disable shadowing warnings. The `_kj` prefix
 // on the variable name should make name collision with user code extremely unlikely.
+//
+// The `if` / `else` statements below intentionally have unbraced bodies so that the caller can
+// supply the `try` block and the `KJ_CATCH` handler block.
+// NOLINTBEGIN(readability-inconsistent-ifelse-braces)
 #define KJ_TRY \
     KJ_SILENCE_SHADOWING_BEGIN \
     if (::kj::Maybe<::kj::Exception> _kjTryCatchException; true) \
@@ -597,6 +601,7 @@ KJ_NOINLINE void throwRecoverableException(kj::Exception&& exception, uint ignor
       KJ_UNIQUE_NAME(_kjTryCatchHandler): \
       if (auto& exception = *::kj::_::readMaybe(_kjTryCatchException); false) {} \
       else
+// NOLINTEND(readability-inconsistent-ifelse-braces)
 
 namespace _ { class Runnable; }
 

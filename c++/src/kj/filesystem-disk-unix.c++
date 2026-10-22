@@ -1435,7 +1435,9 @@ public:
         if (tryCommitReplacement(toPath.toString(), fromFd, fromPath.toString(), toMode,
                                  &error)) {
           return true;
-        } else switch (error) {
+        }
+
+        switch (error) {
           case 0:
             // Plain old WriteMode precondition failure.
             return false;

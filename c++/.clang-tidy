@@ -3,6 +3,7 @@
 Checks: >
   -*,
   modernize-use-nullptr,
+  readability-inconsistent-ifelse-braces,
   custom-arrayptr-as-bytes,
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
