@@ -59,7 +59,10 @@ struct DebugCoroutineAllocator : public _::CoroutineAllocator {
   // - asserts that all coroutines were freed at its destructor.
 
   ~DebugCoroutineAllocator() {
+    // Debugging tool: crashing on a leak is fine.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_IREQUIRE(totalAllocCount == totalFreeCount, "Alloc/Free count mismatch");
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_IREQUIRE(totalAllocSize == totalFreeSize, "Alloc/Free size mismatch");
   }
 

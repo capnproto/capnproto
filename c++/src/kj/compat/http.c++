@@ -6964,6 +6964,7 @@ public:
 
   ~ConcurrencyLimitingHttpClient() noexcept {
     // Crash in this case because otherwise we'll have UAF later on.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_ASSERT(concurrentRequests == 0,
         "ConcurrencyLimitingHttpClient getting destroyed when concurrent requests "
         "are still active");

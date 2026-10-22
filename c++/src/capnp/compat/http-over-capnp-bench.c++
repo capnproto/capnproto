@@ -370,6 +370,8 @@ static void bm_Http_FullProtocol(benchmark::State &state) {
 
   kj::HttpServer server(timer, *headerTable, service);
   auto listenLoop = server.listenHttp({&pair.server, kj::NullDisposer::instance})
+      // Deliberately crash the benchmark if the server fails.
+      // NOLINTNEXTLINE(custom-noexcept-throw)
       .eagerlyEvaluate([](kj::Exception&& e) noexcept { kj::throwException(kj::mv(e)); });
   auto client = kj::newHttpClient(*headerTable, pair.client);
 
