@@ -316,7 +316,7 @@ namespace kj {
     ::kj::_::Debug::log(location.fileName, location.lineNumber, ::kj::LogSeverity::severity, \
                         #__VA_ARGS__, ##__VA_ARGS__)
 
-#define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
+#define KJ_DBG(...) KJ_LOG(DBG __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
@@ -331,7 +331,7 @@ namespace kj {
 
 #define KJ_FAIL_REQUIRE(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+                               nullptr, #__VA_ARGS__ __VA_OPT__(,) __VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
   for (::kj::_::Debug::Fault f(location.fileName, location.lineNumber, \
@@ -377,7 +377,7 @@ namespace kj {
 
 #define KJ_UNIMPLEMENTED(...) \
   for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+                               nullptr, #__VA_ARGS__ __VA_OPT__(,) __VA_ARGS__);; f.fatal())
 
 #define KJ_DTOR_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
@@ -389,7 +389,7 @@ namespace kj {
 
 #define KJ_DTOR_FAIL_REQUIRE(...) \
   ::kj::_::Debug::failUnlessUnwinding(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
-      nullptr, #__VA_ARGS__, ##__VA_ARGS__)
+      nullptr, #__VA_ARGS__ __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_DTOR_SYSCALL(call, ...) \
   if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, false)) {} else \
@@ -421,7 +421,7 @@ namespace kj {
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
         return ::kj::_::Debug::Context::Value(__FILE__, __LINE__, \
-            ::kj::_::Debug::makeDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
+            ::kj::_::Debug::makeDescription(#__VA_ARGS__ __VA_OPT__(,) __VA_ARGS__)); \
       }; \
   ::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))> \
       KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
