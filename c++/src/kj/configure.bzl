@@ -48,9 +48,11 @@ def kj_configure():
         build_setting_default = False,
     )
 
+    # KJ_IREQUIRE checks are always enabled. This flag is kept for compatibility with existing
+    # build configurations only: setting it to False is unsupported and fails the build.
     bool_flag(
         name = "kj_enable_irequire",
-        build_setting_default = False,
+        build_setting_default = True,
     )
 
     # Settings to use in select() expressions
@@ -127,6 +129,7 @@ def kj_configure():
             "//conditions:default": [],
         }) + select({
             "//src/kj:use_kj_enable_irequire": ["KJ_ENABLE_IREQUIRE=1"],
-            "//conditions:default": [],
+            # Unsupported: kj/common.h will fail to compile.
+            "//conditions:default": ["KJ_ENABLE_IREQUIRE=0"],
         }),
     )

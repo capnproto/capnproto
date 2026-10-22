@@ -1,9 +1,6 @@
 common --enable_platform_specific_config
 common --verbose_failures
 
-# we enable irequre checks in production
-build --@capnp-cpp//src/kj:kj_enable_irequire=True
-
 test --test_timeout=1,5,30,30
 
 # Debug build configuration with maximum runtime checks

@@ -372,31 +372,30 @@ KJ_NORETURN(void unreachable());
 #define KJ_MSVC_TRADITIONAL_CPP 1
 #endif
 
-#if defined(KJ_DEBUG) && !defined(KJ_ENABLE_IREQUIRE)
+#if !defined(KJ_ENABLE_IREQUIRE)
 #define KJ_ENABLE_IREQUIRE 1
 #endif
 
-#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
+#if !KJ_ENABLE_IREQUIRE
+#error "KJ_ENABLE_IREQUIRE=0 is no longer supported: KJ_IREQUIRE checks are always enabled."
+#endif
+// KJ_IREQUIRE checks used to be enabled only in debug builds or when KJ_ENABLE_IREQUIRE was set.
+// They are now always enabled. The KJ_ENABLE_IREQUIRE macro (and the corresponding build flags)
+// are kept only for compatibility with existing build configurations; disabling it is an error.
+
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, "" #__VA_ARGS__, __VA_ARGS__)
-// Version of KJ_DREQUIRE() which is safe to use in headers that are #included by users.  Used to
-// check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
-// it will be enabled depending on whether the application is compiled in debug mode rather than
-// whether libkj is.
 #else
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
-// Version of KJ_DREQUIRE() which is safe to use in headers that are #included by users.  Used to
-// check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
-// it will be enabled depending on whether the application is compiled in debug mode rather than
-// whether libkj is.
 #endif
-#else
-#define KJ_IREQUIRE(condition, ...)
-#endif
+// Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
+// check preconditions inside inline methods.  Unlike KJ_REQUIRE(), it does not require including
+// debug.h and failures are reported through an out-of-line function to minimize code size.
+// Always enabled, regardless of whether the application or libkj is compiled in debug mode.
 
 #define KJ_IASSERT KJ_IREQUIRE
 

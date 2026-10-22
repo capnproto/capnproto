@@ -228,12 +228,10 @@ KJ_TEST("pointer projections guard callbacks and clean up on exceptions") {
     KJ_FAIL_REQUIRE("projection failed");
   }));
   KJ_EXPECT(projected == nullptr);
-#if defined(KJ_DEBUG) || (defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE)
   bool called = false;
   KJ_EXPECT_THROW_MESSAGE("null Rc<> projection", kj::mv(projected).project(
       [&](auto& ptr) { called = true; return ptr.slice(0); }));
   KJ_EXPECT(!called);
-#endif
 
   auto string = kj::arc<String>(kj::str("abc"));
   auto atomicPtr = kj::mv(string).project([](auto& string) { return string.asPtr(); });
@@ -565,7 +563,6 @@ KJ_TEST("Rc project retains ownership of the original object") {
   projected = nullptr;
   KJ_EXPECT(destroyed);
 
-#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
   Rc<ProjectionTarget> nullRef;
   bool called = false;
   KJ_EXPECT_THROW_MESSAGE("null Rc<> projection",
@@ -574,7 +571,6 @@ KJ_TEST("Rc project retains ownership of the original object") {
     return target.value;
   }));
   KJ_EXPECT(!called);
-#endif
 }
 
 KJ_TEST("Rc project retains ownership while invoking callback") {
@@ -1215,9 +1211,7 @@ KJ_TEST("WeakRc KJ_REQUIRE_NONNULL") {
   EXPECT_TRUE(b);
   EXPECT_TRUE(weak == nullptr);
 
-#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
   KJ_EXPECT_THROW_MESSAGE("weak != nullptr", (void)KJ_REQUIRE_NONNULL(weak));
-#endif
 }
 
 KJ_TEST("WeakRc const readMaybe integration") {
@@ -1756,7 +1750,6 @@ KJ_TEST("Arc project retains ownership of the original object") {
   projected = nullptr;
   KJ_EXPECT(destroyed);
 
-#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
   Arc<ProjectionTarget> nullRef;
   bool called = false;
   KJ_EXPECT_THROW_MESSAGE("null Arc<> projection",
@@ -1765,7 +1758,6 @@ KJ_TEST("Arc project retains ownership of the original object") {
     return target.value;
   }));
   KJ_EXPECT(!called);
-#endif
 }
 
 KJ_TEST("Arc project retains ownership while invoking callback") {
@@ -2363,12 +2355,10 @@ KJ_TEST("UniqueArc toArc") {
   KJ_EXPECT(destroyed);
 }
 
-#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
 KJ_TEST("UniqueArc toArc on null") {
   UniqueArc<MutableAtomicGadget> unique;
   KJ_EXPECT_THROW_MESSAGE("null UniqueArc<> conversion to Arc<>", kj::mv(unique).toArc());
 }
-#endif
 
 static kj::Arc<MutableAtomicGadget> buildGadget(bool* destroyed, kj::StringPtr name) {
   auto gadget = kj::uniqueArc<MutableAtomicGadget>(destroyed);
@@ -2549,7 +2539,6 @@ KJ_TEST("UniqueArc handed off to another thread") {
   KJ_EXPECT(destroyed);
 }
 
-#if defined(KJ_ENABLE_IREQUIRE) && KJ_ENABLE_IREQUIRE
 KJ_TEST("UniqueArc detects broken uniqueness") {
   bool destroyed = false;
   {
@@ -2587,7 +2576,6 @@ KJ_TEST("UniqueArc detects broken uniqueness") {
   UniqueArc<MutableAtomicGadget> nullUnique;
   KJ_EXPECT_THROW_MESSAGE("null UniqueArc<> dereference", nullUnique->value = 1);
 }
-#endif
 
 // Maybe<UniqueArc<T>> is niche-optimized: a null UniqueArc is the "none" state, so no extra flag is
 // stored.
