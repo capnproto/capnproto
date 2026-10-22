@@ -57,6 +57,35 @@ function check_kj_tls_packaging() {
   fi
 }
 
+# Verify libcapnpc and capnpc.pc are installed as a unit, and capnpc.pc
+# declares its dependency on capnp so static linking order is correct.
+function check_capnpc_packaging() {
+  local prefix=$1
+  local capnpc_lib capnpc_pc pc_dir
+  capnpc_lib=$(find "$prefix" -name 'libcapnpc.*' 2>/dev/null)
+  capnpc_pc=$(find "$prefix" -name 'capnpc.pc' 2>/dev/null)
+
+  if [ -n "$capnpc_lib" ]; then
+    if [ -z "$capnpc_pc" ]; then
+      echo "error: libcapnpc was built but capnpc.pc was not installed" >&2
+      exit 1
+    fi
+    pc_dir=$(dirname "${capnpc_pc%%$'\n'*}")
+    PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+        doit pkg-config --exists --print-errors capnpc
+    PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+        doit pkg-config --cflags --libs --static capnpc
+    if ! PKG_CONFIG_PATH="$pc_dir${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+        pkg-config --libs --static capnpc | tr ' ' '\n' | grep -qx -- '-lcapnp'; then
+      echo "error: capnpc.pc does not declare required dependency on capnp" >&2
+      exit 1
+    fi
+  elif [ -n "$capnpc_pc" ]; then
+    echo "error: capnpc.pc was installed but libcapnpc was not built" >&2
+    exit 1
+  fi
+}
+
 QUICK=
 CPP_FEATURES=
 WERROR="-Werror"
@@ -311,6 +340,7 @@ while [ $# -gt 0 ]; do
       doit make -j$PARALLEL install
 
       check_kj_tls_packaging "$WORKSPACE/inst"
+      check_capnpc_packaging "$WORKSPACE/inst"
 
       # Configure, build, and execute the samples.
       cd $WORKSPACE/build-samples
@@ -489,6 +519,7 @@ test "x$(which capnp)" = "x$STAGING/bin/capnp"
 test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 
 check_kj_tls_packaging "$STAGING"
+check_capnpc_packaging "$STAGING"
 
 cd samples
 
