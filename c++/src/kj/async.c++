@@ -117,6 +117,7 @@ AsyncObject::~AsyncObject() {
 
 void AsyncObject::failed() noexcept {
   // Since the method is noexcept, this will abort the process.
+  // NOLINTNEXTLINE(custom-noexcept-throw)
   KJ_FAIL_REQUIRE(
       kj::str("KJ async object being destroyed when not allowed: ",
               disallowAsyncDestructorsScope->reason));
@@ -1050,6 +1051,7 @@ void XThreadEvent::sendReply() noexcept {
         //
         // TODO(someday): XThreadPaf had a similar UB case in ~FulfillScope(), but we got rid of it
         //   by holding a strong reference to the Executor. Can we do the same here?
+        // NOLINTNEXTLINE(custom-noexcept-throw)
         KJ_FAIL_ASSERT(
             "the thread which called kj::Executor::executeAsync() apparently exited its own "
             "event loop without canceling the cross-thread promise first; this is undefined "
@@ -1631,6 +1633,7 @@ void FiberBase::cancel() {
     case CANCELED:
       // Bad news.
       []() noexcept {
+        // NOLINTNEXTLINE(custom-noexcept-throw)
         KJ_FAIL_ASSERT("fiber tried to cancel itself");
       }();
       break;
@@ -2181,6 +2184,8 @@ OwnPromiseNode neverDone() {
       // ignore
     }
     void get(_::ExceptionOrValue& output) noexcept override {
+      // PromiseNode::get() is noexcept; calling it on a never-done promise is a bug, so abort.
+      // NOLINTNEXTLINE(custom-noexcept-throw)
       KJ_FAIL_REQUIRE("Not ready.");
     }
     void tracePromise(_::TraceBuilder& builder, bool stopAtNextEvent) override {
@@ -2215,6 +2220,7 @@ Event::~Event() noexcept {  // intentionally noexcept
   if (KJ_UNLIKELY(threadLocalCurrentlyFiring == this)) {
     // If this fails, we'll abort due to `noexcept`. That's good because otherwise we're likely to
     // be in a use-after-free situation.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_FAIL_REQUIRE("Promise callback destroyed itself.");
   }
   disarm();
@@ -2556,6 +2562,8 @@ void ChainPromiseNode::onReady(Event* event) noexcept {
       inner->onReady(event);
       return;
   }
+  // Invariant check; PromiseNode::onReady() is noexcept, so a bug here aborts.
+  // NOLINTNEXTLINE(custom-noexcept-throw)
   KJ_UNREACHABLE;
 }
 
@@ -2569,6 +2577,8 @@ void ChainPromiseNode::setSelfPointer(OwnPromiseNode* selfPtr) noexcept {
 }
 
 void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
+  // Invariant check; PromiseNode::get() is noexcept, so a bug here aborts.
+  // NOLINTNEXTLINE(custom-noexcept-throw)
   KJ_REQUIRE(state == STEP2);
   return inner->get(output);
 }
@@ -2668,6 +2678,8 @@ void ExclusiveJoinPromiseNode::onReady(Event* event) noexcept {
 }
 
 void ExclusiveJoinPromiseNode::get(ExceptionOrValue& output) noexcept {
+  // Invariant check; PromiseNode::get() is noexcept, so a bug here aborts.
+  // NOLINTNEXTLINE(custom-noexcept-throw)
   KJ_REQUIRE(left.get(output) || right.get(output), "get() called before ready.");
 }
 

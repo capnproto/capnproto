@@ -296,7 +296,7 @@ KJ's exception philosophy is described earlier in this document. Here we describ
 
 Never use `throw` explicitly. Almost all exceptions should originate from the `KJ_ASSERT`, `KJ_REQUIRE`, and `KJ_SYSCALL` macros (see `kj/debug.h`). These macros allow you to easily attach useful debug information to the exception message without spending time on string formatting.
 
-Never declare anything `noexcept`. As explained in the philosophy section, whether you like it or not, bugs can happen anywhere and therefore exceptions can happen anywhere. `noexcept` causes the process to abort on exceptions. Aborting is _never_ the right answer.
+Never declare anything `noexcept`. As explained in the philosophy section, whether you like it or not, bugs can happen anywhere and therefore exceptions can happen anywhere. `noexcept` causes the process to abort on exceptions. Aborting is _never_ the right answer. The `custom-noexcept-throw` clang-tidy check (see `c++/.clang-tidy`) reports assertions and throws written in a `noexcept` function, including destructors that aren't declared `noexcept(false)`. Where crashing is deliberate, suppress it with `NOLINT` and say why. Debug-only checks (`KJ_DASSERT()`, `KJ_DREQUIRE()`) are exempt: terminating on a failed debug check is acceptable.
 
 Explicit destructors must always be declared `noexcept(false)`, to work around C++11's regrettable decision that destructors should be `noexcept` by default. In destructors, always use the `KJ_DTOR_*` assertion macros, `KJ_DTOR_CALL()`, `kj::logExceptionsIfUnwinding()`, or `kj::UnwindDetector` in order to ensure that an exception is not thrown during unwind.
 

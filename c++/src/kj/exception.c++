@@ -243,6 +243,7 @@ PipePair raiiPipe() {
 // A simple subprocess wrapper with in/out pipes.
 struct Subprocess {
   // Execute command with a shell.
+  // NOLINTBEGIN(custom-noexcept-throw): deliberately crash on failure, see below.
   static kj::Maybe<Subprocess> exec(const char* argv[]) noexcept {
     // Since this is used during error handling we do not to try to free resources in
     // case of errors.
@@ -273,6 +274,7 @@ struct Subprocess {
       KJ_UNREACHABLE;
     }
   }
+  // NOLINTEND(custom-noexcept-throw)
 
   int wait() {
     int status;
@@ -1297,7 +1299,8 @@ thread_local ExceptionImpl* currentException = nullptr;
 
 void validateExceptionPointer(const ExceptionImpl* e) noexcept {
   // Occasionally in production we are seeing `currentException` have the value 1. Try to figure
-  // this out...
+  // this out... Deliberately aborts on a corrupted pointer.
+  // NOLINTNEXTLINE(custom-noexcept-throw)
   KJ_ASSERT(e == nullptr || reinterpret_cast<uintptr_t>(e) >= 4096,
       "detected bogus ExceptionImpl pointer", e);
 }
@@ -1322,6 +1325,7 @@ public:
 
     // Possibly the ExceptionImpl was destroyed on a different thread than created it? That's
     // pretty bad, we'd better abort.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_FAIL_ASSERT("ExceptionImpl not found on currentException list?");
   }
 

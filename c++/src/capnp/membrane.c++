@@ -562,6 +562,7 @@ private:
 
     // If this map.erase() fails, there's a good chance we have left a dangling pointer somewhere,
     // hence this method is declared `noexcept` so that we end up crashing promptly.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_ASSERT(map.erase(inner.get()));
   }
 };

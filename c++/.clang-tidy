@@ -9,6 +9,7 @@ Checks: >
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
+  custom-noexcept-throw,
   custom-use-rc-arc-deref
 
 
@@ -110,4 +111,103 @@ CustomChecks:
     Diagnostic:
       - BindName: deref
         Message: use operator* instead of dereferencing Rc::get() or Arc::get()
+        Level: Warning
+
+  # noexcept check.
+  #
+  # An exception thrown out of a `noexcept` function always terminates the process, whether or
+  # not the stack is already unwinding. KJ code should not be `noexcept` if it can throw (see the
+  # style guide), so a throw in a `noexcept` function is either a bug or a deliberate crash.
+  # Deliberate crashes must be marked with `// NOLINT(custom-noexcept-throw)` and a comment
+  # saying why. Otherwise drop the `noexcept` (for destructors: declare them `noexcept(false)` and
+  # use `KJ_DTOR_*` / `KJ_DTOR_CALL()`), or don't throw.
+  #
+  # Debug-only checks (`KJ_DASSERT`, `KJ_DREQUIRE`, `KJ_ASSUME`) are allowed. They throw only in
+  # debug builds, where terminating the process on a failed check is acceptable. Release checks
+  # must never terminate.
+  #
+  # The check is lexical: it looks at code written in the function body, but does not follow
+  # calls out of the function. The query below explains each condition. This is a practical
+  # bug-finding check, not a proof of exception safety; the following false negatives are accepted
+  # for now:
+  # TODO(someday): Don't exempt a throw inside a noexcept lambda just because an outer try/catch
+  #   or runCatchingExceptions() surrounds it. The lambda terminates before the catcher can run.
+  #   Add regression coverage for both catcher forms.
+  # TODO(someday): Account for constructor/destructor function-try-blocks: falling off the end of
+  #   their catch-all handler implicitly rethrows, terminating if the function is noexcept.
+  #   Add regression coverage rather than treating every catch-all as protection.
+  - Name: noexcept-throw
+    Query: |
+      match expr(
+        # What counts as a throw:
+        anyOf(
+          # An explicit `throw` (including a rethrow `throw;`).
+          cxxThrowExpr(),
+          # A call to a [[noreturn]] function. This is how most KJ exceptions are thrown:
+          # Debug::Fault::fatal() at the end of every KJ_ASSERT / KJ_REQUIRE / KJ_SYSCALL / ...
+          # expansion (with or without a recovery block), kj::throwException(), etc.
+          callExpr(callee(functionDecl(
+            isNoReturn(),
+            # [[noreturn]] noexcept functions (std::terminate(), abort() with glibc) end the
+            # process on purpose instead of throwing.
+            unless(isNoThrow()),
+            # So do [[noreturn]] C functions (abort(), exit(), _exit()), which other C libraries
+            # don't declare noexcept.
+            unless(isExternC())))),
+          # Functions that throw unless the stack is unwinding: the KJ_DTOR_* macros expand to
+          # Debug::failUnlessUnwinding(). In a noexcept function they terminate either way.
+          # throwRecoverableException() is the deprecated name of throwExceptionUnlessUnwinding().
+          callExpr(callee(functionDecl(hasAnyName(
+            "::kj::_::Debug::failUnlessUnwinding",
+            "::kj::throwExceptionUnlessUnwinding",
+            "::kj::throwRecoverableException"))))),
+
+        # Only code that runs as part of a noexcept function:
+        anyOf(
+          # The innermost function or lambda is noexcept. This includes destructors that are
+          # implicitly noexcept, i.e. not declared `noexcept(false)`, and defaulted special
+          # members.
+          forCallable(functionDecl(isNoThrow())),
+          # Lambdas written in a noexcept destructor. That is intended for KJ_DEFER and similar
+          # blocks, which run as part of the destructor.
+          hasAncestor(cxxDestructorDecl(isNoThrow())),
+          # KJ_DEFER blocks in any noexcept function: the lambda passed to kj::defer() runs when
+          # the function's scope exits.
+          hasAncestor(callExpr(
+            callee(functionDecl(hasName("::kj::defer"))),
+            forCallable(functionDecl(isNoThrow()))))),
+
+        # Code whose exceptions can't escape the function:
+        unless(anyOf(
+          # Inside an argument (normally a lambda) of runCatchingExceptions(), which catches
+          # everything this check reports and returns it as a Maybe<Exception>. It is listed by
+          # name because it can't be declared noexcept: like KJ_TRY / KJ_CATCH, it rethrows
+          # kj::CanceledException (fiber cancellation) and TopLevelProcessContext's
+          # CleanShutdownException, which must keep unwinding. (kj::logExceptionsIfUnwinding()
+          # and KJ_DTOR_CALL() don't count: they rethrow unless the stack is unwinding.)
+          hasAncestor(callExpr(callee(namedDecl(hasName("::kj::runCatchingExceptions"))))),
+          # The same, in templates: until the template is instantiated, a call with a dependent
+          # argument (such as a lambda) is an unresolved lookup instead of a call to a known
+          # function, so it needs its own matcher.
+          hasAncestor(callExpr(callee(unresolvedLookupExpr(hasAnyDeclaration(namedDecl(
+            hasName("::kj::runCatchingExceptions"))))))),
+          # Inside the body of a `try` with a `catch (...)` handler, which catches everything
+          # (`KJ_TRY` / `KJ_CATCH` expand to one). A handler for specific types could let other
+          # exceptions through. Only the `try` body is protected, not the handlers: a throw in a
+          # handler escapes. The body is the compound statement whose parent is the `try`
+          # statement; a handler's body is a child of the `catch` statement instead.
+          hasAncestor(compoundStmt(hasParent(cxxTryStmt(has(cxxCatchStmt(isCatchAll())))))),
+          # Debug-only checks: compiled out in release builds, and allowed to terminate in debug
+          # builds (see above). In debug builds they expand to KJ_ASSERT / KJ_REQUIRE, so they
+          # are recognized by the macro they were written with.
+          isExpandedFromMacro("KJ_DASSERT"),
+          isExpandedFromMacro("KJ_DREQUIRE"),
+          isExpandedFromMacro("KJ_ASSUME"))),
+
+        # Tests (`*-test.c++`, `test-util.h`, `test-helpers.c++`) throw and crash on purpose.
+        unless(isExpansionInFileMatching("(-test|/test-util|/test-helpers)[.](c[+][+]|h)$"))
+      ).bind("throw")
+    Diagnostic:
+      - BindName: throw
+        Message: "exception thrown in a noexcept function always terminates the process; don't throw, drop the noexcept, or if the crash is deliberate, say why and suppress with NOLINT(custom-noexcept-throw)"
         Level: Warning

@@ -77,7 +77,12 @@ public:
         //   for now. Note that even if a new handle is opened with the same numeric value, it
         //   should be hardless to call CancelIoEx() on it because it couldn't possibly be using
         //   the same OVERLAPPED structure.
+        //
+        // Any other error terminates the process (this destructor is implicitly noexcept): the
+        // I/O may never complete, so we can't wait for it below, and destroying the OVERLAPPED
+        // while the I/O is still pending would be a use-after-free.
         if (error != ERROR_NOT_FOUND && error != ERROR_INVALID_HANDLE) {
+          // NOLINTNEXTLINE(custom-noexcept-throw)
           KJ_FAIL_WIN32("CancelIoEx()", error, handle);
         }
       }

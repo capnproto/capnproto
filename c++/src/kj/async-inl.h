@@ -307,6 +307,7 @@ public:
       ptr = reinterpret_cast<T*>(arena + 1) - 1;
       ctor(*ptr, kj::fwd<Params>(params)...);
       ptr->arena = arena;
+      // NOLINTNEXTLINE(custom-noexcept-throw): deliberately noexcept, see above.
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
           "PromiseArenaMember must be the leftmost inherited type.");
@@ -345,6 +346,7 @@ public:
       // NOLINTNEXTLINE(clang-analyzer-security.ArrayBound)
       ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
       ptr->arena = arena;
+      // NOLINTNEXTLINE(custom-noexcept-throw): deliberately noexcept, see above.
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
           "PromiseArenaMember must be the leftmost inherited type.");
@@ -1058,6 +1060,8 @@ protected:
   void getNoError(ExceptionOrValue& output) noexcept override {
     auto builder = heapArrayBuilder<T>(resultParts.size());
     for (auto& part: resultParts) {
+      // Invariant check; PromiseNode::get() is noexcept, so a bug here aborts.
+      // NOLINTNEXTLINE(custom-noexcept-throw)
       KJ_IASSERT(part.value != kj::none,
                  "Bug in KJ promise framework:  Promise result had neither value no exception.");
       builder.add(kj::mv(*_::readMaybe(part.value)));
@@ -1234,6 +1238,8 @@ public:
   void destroy() override { freePromise(this); }
 
   void get(ExceptionOrValue& output) noexcept override {
+    // Invariant check; PromiseNode::get() is noexcept, so a bug here aborts.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_IREQUIRE(!isWaiting());
     output.as<T>() = kj::mv(result);
   }
@@ -1320,6 +1326,8 @@ public:
   typedef FixVoid<decltype(kj::instance<Func&>()(kj::instance<WaitScope&>()))> ResultType;
 
   void get(ExceptionOrValue& output) noexcept override {
+    // Invariant check; PromiseNode::get() is noexcept, so a bug here aborts.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     KJ_IREQUIRE(isFinished());
     output.as<ResultType>() = kj::mv(result);
   }

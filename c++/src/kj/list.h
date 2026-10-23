@@ -152,6 +152,7 @@ public:
   ListLink(): next(kj::none), prev(nullptr) {}
   ~ListLink() noexcept {
     // Intentionally `noexcept` because we want to crash if a dangling pointer was left in a list.
+    // NOLINTNEXTLINE(custom-noexcept-throw)
     if (prev != nullptr) _::throwDestroyedWhileInList();
   }
   KJ_DISALLOW_COPY_AND_MOVE(ListLink);
