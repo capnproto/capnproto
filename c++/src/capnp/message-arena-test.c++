@@ -51,7 +51,7 @@ private:
 
 template <typename T, typename Func>
 void withPoisonedStorage(Func&& func) {
-  alignas(T) byte storage[sizeof(T)];
+  alignas(T) byte storage[sizeof(T)]{};
   memset(storage, 0xff, sizeof(storage));
 
   T* object = reinterpret_cast<T*>(storage);

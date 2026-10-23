@@ -436,23 +436,42 @@ KJ_NORETURN(void unreachable());
 // is the stack array size to use if variable-width arrays are not supported.  `maxStack` is the
 // maximum stack array size if variable-width arrays *are* supported.
 //
+// Elements are value-initialized, just like `type array[n]{}`, whether the array ends up on the
+// stack or on the heap: trivially-constructible types are zeroed and other types are initialized
+// by their default constructors. This makes sure stale memory contents can't leak.
+//
 // TODO(cleanup): Deprecate this in favor of kj::SmallArray, over in array.h
-#if __GNUC__ && !__clang__
 #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
+  KJ_STACK_ARRAY_({}, ::kj::_::valueInitializedHeapArray, type, name, size, minStack, maxStack)
+
+// #define KJ_STACK_ARRAY_UNINITIALIZED(type, name, size, minStack, maxStack)
+//
+// Like KJ_STACK_ARRAY, but elements are default-initialized, just like `type array[n]`:
+// trivially-constructible types are left uninitialized. Only use this in performance-critical code
+// where every element is provably written before it is read. The custom-uninitialized-array
+// clang-tidy check reports every use, so justify each one with a NOLINT comment:
+//
+//     // NOLINTNEXTLINE(custom-uninitialized-array): <why this is necessary and safe>
+//     KJ_STACK_ARRAY_UNINITIALIZED(byte, buffer, size, 256, 4096);
+#define KJ_STACK_ARRAY_UNINITIALIZED(type, name, size, minStack, maxStack) \
+  KJ_STACK_ARRAY_(, ::kj::heapArray, type, name, size, minStack, maxStack)
+
+#if __GNUC__ && !__clang__
+#define KJ_STACK_ARRAY_(init, heapArrayFunc, type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
   bool name##_isOnStack = name##_size <= (maxStack); \
-  type name##_stack[kj::max(1, name##_isOnStack ? name##_size : 0)]; \
+  type name##_stack[kj::max(1, name##_isOnStack ? name##_size : 0)] init; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : kj::heapArray<type>(name##_size); \
+      nullptr : heapArrayFunc<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
       kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #else
-#define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
+#define KJ_STACK_ARRAY_(init, heapArrayFunc, type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
   bool name##_isOnStack = name##_size <= (minStack); \
-  type name##_stack[minStack]; \
+  type name##_stack[minStack] init; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : kj::heapArray<type>(name##_size); \
+      nullptr : heapArrayFunc<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
       kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #endif

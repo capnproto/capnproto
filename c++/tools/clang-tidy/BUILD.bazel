@@ -28,6 +28,7 @@ CUSTOM_CHECKS = [
     "arrayptr-first-copyfrom",
     "arrayptr-singleton",
     "arrayptr-slice-zero",
+    "uninitialized-array",
     "use-rc-arc-deref",
 ]
 

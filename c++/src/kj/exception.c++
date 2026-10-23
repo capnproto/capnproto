@@ -235,7 +235,7 @@ struct PipePair {
 };
 
 PipePair raiiPipe() {
-  int fds[2];
+  int fds[2]{};
   KJ_SYSCALL(pipe(fds));
   return PipePair { OwnFd(fds[0]), OwnFd(fds[1]) };
 }
@@ -457,7 +457,7 @@ Vector<void*> getStackTrace(size_t ignoreCount) {
   ignoreCount = saturatingAdd(ignoreCount, 2 /* this frame + getStackTrace(space) frame */);
 
   // Try a buffer on the stack first.
-  void* space[32];
+  void* space[32]{};
   auto stackSpace = arrayPtr(space).first(kj::min(kj::size(space), maxSize));
   auto trace = getStackTrace(stackSpace);
   if (trace.size() < stackSpace.size() || stackSpace.size() == maxSize) {
