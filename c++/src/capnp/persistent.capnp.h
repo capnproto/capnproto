@@ -174,7 +174,7 @@ public:
 #endif  // !CAPNP_LITE
 
   template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
-  typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader asPersistentGeneric() {
+  typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader asPersistentGeneric() const {
     return typename Persistent<SturdyRef2, Owner2>::SaveParams::Reader(_reader);
   }
 
@@ -270,7 +270,7 @@ public:
 #endif  // !CAPNP_LITE
 
   template <typename SturdyRef2 = ::capnp::AnyPointer, typename Owner2 = ::capnp::AnyPointer>
-  typename Persistent<SturdyRef2, Owner2>::SaveResults::Reader asPersistentGeneric() {
+  typename Persistent<SturdyRef2, Owner2>::SaveResults::Reader asPersistentGeneric() const {
     return typename Persistent<SturdyRef2, Owner2>::SaveResults::Reader(_reader);
   }
 

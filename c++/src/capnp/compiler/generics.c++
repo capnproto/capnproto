@@ -27,7 +27,8 @@ namespace compiler {
 
 BrandedDecl::BrandedDecl(BrandedDecl& other)
     : body(other.body),
-      source(other.source) {
+      source(other.source),
+      usingId(other.usingId) {
   if (body.is<Resolver::ResolvedDecl>()) {
     brand = other.brand.addRef();
   }
@@ -36,6 +37,7 @@ BrandedDecl::BrandedDecl(BrandedDecl& other)
 BrandedDecl& BrandedDecl::operator=(BrandedDecl& other) {
   body = other.body;
   source = other.source;
+  usingId = other.usingId;
   if (body.is<Resolver::ResolvedDecl>()) {
     brand = other.brand.addRef();
   }
@@ -98,6 +100,8 @@ Resolver::ResolvedParameter BrandedDecl::asVariable() {
 
 bool BrandedDecl::compileAsType(
     ErrorReporter& errorReporter, schema::Type::Builder target) {
+  target.setUsingId(usingId);
+
   KJ_IF_SOME(kind, getKind()) {
     switch (kind) {
       case Declaration::ENUM: {
@@ -374,7 +378,7 @@ BrandedDecl BrandScope::interpretResolve(
       scope = scope->push(decl.id, decl.genericParamCount);
     }
 
-    return BrandedDecl(decl, kj::mv(scope), source);
+    return BrandedDecl(decl, kj::mv(scope), source, decl.usingId);
   } else {
     auto& param = result.get<Resolver::ResolvedParameter>();
     KJ_IF_SOME(p, lookupParameter(resolver, param.id, param.index)) {

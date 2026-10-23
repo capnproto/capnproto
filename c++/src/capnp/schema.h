@@ -184,6 +184,9 @@ private:
   // Look up schema for a particular dependency of this schema. `location` is the dependency
   // location number as defined in _::RawBrandedSchema.
 
+  kj::Maybe<Schema> tryGetGenericDependency(uint64_t id) const;
+  // ID-only lookup against the generic dependency table. Returns kj::none if not found.
+
   Type interpretType(schema::Type::Reader proto, uint location) const;
   // Interpret a schema::Type in the given location within the schema, compiling it into a
   // Type object.
@@ -691,12 +694,26 @@ public:
   inline Type wrapInList(uint depth = 1) const;
   // Return the Type formed by wrapping this type in List() `depth` times.
 
+  inline kj::Maybe<schema::Node::Reader> getUsingNode() const {
+    if (usingNode_.isUsing()) return usingNode_;
+    return kj::none;
+  }
+  // The `using` alias Node this type was reached through, or kj::none. Informational; the
+  // resolved type is still described by which() and the other methods.
+
+  inline void setUsingNode(schema::Node::Reader node) { usingNode_ = node; }
+
   inline Type(schema::Type::Which derived, const _::RawBrandedSchema* schema);
   // For internal use.
 
 private:
   schema::Type::Which baseType;  // type not including applications of List()
   uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
+
+  schema::Node::Reader usingNode_;
+  // Set when this type was reached through a `using` alias. The sentinel for "unset" is
+  // `!isUsing()` (a default-constructed reader has which() == FILE). Kept as a raw reader
+  // rather than kj::Maybe so Type remains trivially destructible.
 
   bool isImplicitParam;
   // If true, this refers to an implicit method parameter. baseType must be ANY_POINTER, scopeId
@@ -921,7 +938,11 @@ inline Type::Type(EnumSchema schema)
 inline Type::Type(InterfaceSchema schema)
     : baseType(schema::Type::INTERFACE), listDepth(0), schema(schema.raw) {}
 inline Type::Type(ListSchema schema)
-    : Type(schema.getElementType()) { ++listDepth; }
+    : Type(schema.getElementType()) {
+  ++listDepth;
+  // The element's alias doesn't apply to the list-wrapped type; the list carries its own.
+  usingNode_ = {};
+}
 inline Type::Type(schema::Type::AnyPointer::Unconstrained::Which anyPointerKind)
     : baseType(schema::Type::ANY_POINTER), listDepth(0), isImplicitParam(false),
       anyPointerKind(anyPointerKind), scopeId(0) {}
@@ -995,6 +1016,10 @@ inline bool Type::isAnyPointer() const {
 inline Type Type::wrapInList(uint depth) const {
   Type result = *this;
   result.listDepth += depth;
+  // The inner's alias doesn't apply to the list-wrapped type.
+  if (depth > 0) {
+    result.usingNode_ = {};
+  }
   return result;
 }
 

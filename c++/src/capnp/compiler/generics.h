@@ -72,8 +72,9 @@ class BrandedDecl {
 public:
   inline BrandedDecl(Resolver::ResolvedDecl decl,
                      kj::Rc<BrandScope>&& brand,
-                     Expression::Reader source)
-      : brand(kj::mv(brand)), source(source) {
+                     Expression::Reader source,
+                     uint64_t usingId = 0)
+      : brand(kj::mv(brand)), source(source), usingId(usingId) {
     // `source`, is the expression which specified this branded decl. It is provided so that errors
     // can be reported against it. It is acceptable to pass a default-initialized reader if there's
     // no source expression; errors will then be reported at 0, 0.
@@ -154,6 +155,9 @@ private:
   Resolver::ResolveResult body;
   kj::Rc<BrandScope> brand;  // null if parameter
   Expression::Reader source;
+  uint64_t usingId = 0;
+  // ID of the `using` alias Node reached, or 0 if none. Written to schema::Type::usingId by
+  // compileAsType() so code generators can emit alias names.
 };
 
 class BrandScope final: public kj::Refcounted {
