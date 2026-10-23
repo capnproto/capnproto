@@ -56,6 +56,97 @@
 namespace kj {
 namespace {
 
+KJ_TEST("HttpHeaders distinguishes absent empty and nonempty indexed If-Match") {
+  HttpHeaderTable::Builder builder;
+  auto ifMatch = builder.add("If-Match");
+  auto table = builder.build();
+  for (auto field: {""_kj, "If-Match:\r\n"_kj, "If-Match: \"fixture-tag\"\r\n"_kj}) {
+    HttpHeaders headers(*table);
+    auto input = kj::str("GET /robots.txt HTTP/1.1\r\n", field, "\r\n");
+    auto parsed = headers.tryParseRequest(input.asArray());
+    KJ_ASSERT(parsed.is<HttpHeaders::Request>());
+    auto expectedPresent = field.size() != 0;
+    KJ_EXPECT((headers.get(ifMatch) != kj::none) == expectedPresent);
+    KJ_EXPECT(headers.size() == (expectedPresent ? 1 : 0));
+    uint count = 0;
+    headers.forEach([&](auto name, auto value) {
+      ++count;
+      KJ_EXPECT(name == "If-Match");
+      KJ_EXPECT(value == (field == "If-Match:\r\n" ? "" : "\"fixture-tag\""));
+    });
+    KJ_EXPECT(count == (expectedPresent ? 1 : 0));
+  }
+}
+
+KJ_TEST("HttpHeaders keeps empty values in both iteration forms and clones") {
+  HttpHeaderTable::Builder builder;
+  auto ifMatch = builder.add("If-Match");
+  auto table = builder.build();
+  HttpHeaders original(*table);
+  original.setPtr(ifMatch, "");
+  original.addPtrPtr("Unindexed-Field", "");
+  KJ_EXPECT(original.size() == 2);
+  uint indexed = 0, unindexed = 0;
+  original.forEach([&](HttpHeaderId id, auto value) {
+    ++indexed;
+    KJ_EXPECT(id == ifMatch);
+    KJ_EXPECT(value.size() == 0);
+  }, [&](auto name, auto value) {
+    ++unindexed;
+    KJ_EXPECT(name == "Unindexed-Field");
+    KJ_EXPECT(value.size() == 0);
+  });
+  KJ_EXPECT(indexed == 1);
+  KJ_EXPECT(unindexed == 1);
+  auto deep = original.clone();
+  auto shallow = original.cloneShallow();
+  for (auto headers: {&deep, &shallow}) {
+    KJ_EXPECT(headers->size() == 2);
+    KJ_EXPECT(headers->get(ifMatch) != kj::none);
+    KJ_EXPECT(headers->toString() == "If-Match: \r\nUnindexed-Field: \r\n\r\n");
+  }
+}
+
+KJ_TEST("HttpHeaders preserves empty fields in request and response serialization") {
+  HttpHeaderTable::Builder builder;
+  auto ifMatch = builder.add("If-Match");
+  auto table = builder.build();
+  HttpHeaders headers(*table);
+  headers.setPtr(ifMatch, "");
+  KJ_EXPECT(headers.serializeRequest(HttpMethod::GET, "/robots.txt") ==
+      "GET /robots.txt HTTP/1.1\r\nIf-Match: \r\n\r\n");
+  KJ_EXPECT(headers.serializeResponse(200, "OK") ==
+      "HTTP/1.1 200 OK\r\nIf-Match: \r\n\r\n");
+  headers.setPtr(HttpHeaderId::CONNECTION, "close");
+  kj::StringPtr connectionHeaders[] = {nullptr};
+  KJ_EXPECT(headers.serializeRequest(HttpMethod::GET, "/robots.txt", connectionHeaders) ==
+      "GET /robots.txt HTTP/1.1\r\nIf-Match: \r\n\r\n");
+  connectionHeaders[0] = "keep-alive";
+  KJ_EXPECT(headers.serializeResponse(200, "OK", connectionHeaders) ==
+      "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nIf-Match: \r\n\r\n");
+  headers.unset(HttpHeaderId::CONNECTION);
+  headers.unset(ifMatch);
+  KJ_EXPECT(headers.size() == 0);
+  KJ_EXPECT(headers.get(ifMatch) == kj::none);
+  headers.setPtr(ifMatch, "");
+  headers.clear();
+  KJ_EXPECT(headers.size() == 0);
+  KJ_EXPECT(headers.get(ifMatch) == kj::none);
+}
+
+KJ_TEST("HttpHeaders retains empty members when combining duplicate indexed fields") {
+  HttpHeaderTable::Builder builder;
+  auto ifMatch = builder.add("If-Match");
+  auto table = builder.build();
+  for (auto first: {""_kj, "\"fixture-tag\""_kj}) {
+    HttpHeaders headers(*table);
+    headers.addPtrPtr("If-Match", first);
+    headers.addPtrPtr("If-Match", "");
+    KJ_EXPECT(headers.get(ifMatch).orDefault("missing") == kj::str(first, ", "));
+    KJ_EXPECT(headers.size() == 1);
+  }
+}
+
 KJ_TEST("HttpMethod parse / stringify") {
 #define TRY(name) \
   KJ_EXPECT(kj::str(HttpMethod::name) == #name); \
