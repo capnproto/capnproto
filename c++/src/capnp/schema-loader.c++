@@ -312,10 +312,8 @@ private:
     auto fields = structNode.getFields();
 
     KJ_STACK_ARRAY(bool, sawCodeOrder, fields.size(), 32, 256);
-    sawCodeOrder.fill(false);
 
     KJ_STACK_ARRAY(bool, sawDiscriminantValue, structNode.getDiscriminantCount(), 32, 256);
-    sawDiscriminantValue.fill(false);
 
     if (structNode.getDiscriminantCount() > 0) {
       VALIDATE_SCHEMA(structNode.getDiscriminantCount() != 1,
@@ -408,7 +406,6 @@ private:
   void validate(const schema::Node::Enum::Reader& enumNode) {
     auto enumerants = enumNode.getEnumerants();
     KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
-    sawCodeOrder.fill(false);
 
     uint index = 0;
     for (auto enumerant: enumerants) {
@@ -429,7 +426,6 @@ private:
 
     auto methods = interfaceNode.getMethods();
     KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
-    sawCodeOrder.fill(false);
 
     uint index = 0;
     for (auto method: methods) {
@@ -1420,7 +1416,6 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
   auto srcScopes = proto.getScopes();
 
   KJ_STACK_ARRAY(_::RawBrandedSchema::Scope, dstScopes, srcScopes.size(), 16, 32);
-  dstScopes.asBytes().fill(0);
 
   uint dstScopeCount = 0;
   for (auto srcScope: srcScopes) {
@@ -1428,7 +1423,6 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
       case schema::Brand::Scope::BIND: {
         auto srcBindings = srcScope.getBind();
         KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
-        dstBindings.asBytes().fill(0);
 
         for (auto j: kj::indices(srcBindings)) {
           auto srcBinding = srcBindings[j];

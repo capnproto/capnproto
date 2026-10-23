@@ -1139,6 +1139,63 @@ KJ_TEST("memzero<T>()") {
   }
 }
 
+KJ_NOINLINE void dirtyStack() {
+  // Leaves non-zero garbage in the stack area that the next call will use.
+  volatile byte junk[4096]{};
+  for (auto& b: junk) b = 0xff;
+}
+
+struct ImplicitlyConstructed {
+  // Has a non-trivial but implicit default constructor, so value-initialization zeroes `value`
+  // while default-initialization would leave it uninitialized.
+  uint64_t value;
+  String str;
+};
+
+KJ_NOINLINE bool stackArrayIsValueInitialized(size_t size) {
+  KJ_STACK_ARRAY(uint64_t, ints, size, 16, 16);
+  KJ_STACK_ARRAY(ImplicitlyConstructed, structs, size, 16, 16);
+  KJ_STACK_ARRAY(StringPtr, strs, size, 16, 16);
+  KJ_EXPECT(ints.size() == size);
+  KJ_EXPECT(structs.size() == size);
+  KJ_EXPECT(strs.size() == size);
+  for (auto i: kj::indices(ints)) {
+    if (ints[i] != 0 || structs[i].value != 0 || structs[i].str != nullptr || strs[i] != "") {
+      return false;
+    }
+  }
+  return true;
+}
+
+KJ_TEST("KJ_STACK_ARRAY value-initializes elements") {
+  // Both on the stack (size <= 16) and on the heap (size > 16).
+  for (size_t size: {0, 1, 16, 17, 1000}) {
+    dirtyStack();
+    KJ_EXPECT(stackArrayIsValueInitialized(size), size);
+  }
+}
+
+KJ_TEST("KJ_STACK_ARRAY_UNINITIALIZED") {
+  for (size_t size: {0, 1, 4, 5, 100}) {
+    // NOLINTNEXTLINE(custom-uninitialized-array): testing the macro; written before being read.
+    KJ_STACK_ARRAY_UNINITIALIZED(uint, ints, size, 4, 4);
+    KJ_EXPECT(ints.size() == size);
+    for (auto i: kj::indices(ints)) {
+      ints[i] = i;
+    }
+    for (auto i: kj::indices(ints)) {
+      KJ_EXPECT(ints[i] == i);
+    }
+
+    // Elements with non-trivial default constructors are still constructed.
+    // NOLINTNEXTLINE(custom-uninitialized-array): testing the macro; elements are constructed.
+    KJ_STACK_ARRAY_UNINITIALIZED(Maybe<int>, maybes, size, 4, 4);
+    for (auto& item: maybes) {
+      KJ_EXPECT(item == kj::none);
+    }
+  }
+}
+
 KJ_TEST("ThreadId") {
   auto id1 = ThreadId::current();
   id1.assertCurrentThread();

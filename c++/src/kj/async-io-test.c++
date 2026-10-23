@@ -2335,7 +2335,7 @@ KJ_TEST("tryReadSync/tryWriteSync default implementations") {
   MinimalInputStream input;
   MinimalOutputStream output;
 
-  byte buf[16];
+  byte buf[16]{};
   KJ_EXPECT(input.tryReadSync(arrayPtr(buf), 1) == kj::none);
   KJ_EXPECT(!output.tryWriteSync("foo"_kjb));
 
@@ -2346,7 +2346,7 @@ KJ_TEST("tryReadSync/tryWriteSync default implementations") {
 KJ_TEST("NullStream tryReadSync/tryWriteSync") {
   NullStream stream;
 
-  byte buf[16];
+  byte buf[16]{};
   KJ_EXPECT(KJ_ASSERT_NONNULL(stream.tryReadSync(arrayPtr(buf), 1)) == 0);
   KJ_EXPECT(stream.tryWriteSync("foo"_kjb));
 
@@ -4355,7 +4355,7 @@ KJ_TEST("accept() with aborted connection - IPv4") {
   // Accept first connection - this should be the aborted one
   auto firstConnection = listener->accept().wait(io.waitScope);
 
-  char buffer[16];
+  char buffer[16]{};
   bool firstConnectionAborted = false;
   
   // Test if first connection is aborted by attempting to read
@@ -4417,7 +4417,7 @@ KJ_TEST("accept() with aborted connection - dual-stack IPv4/IPv6") {
     return;
   }
   
-  char buffer[16];
+  char buffer[16]{};
   // -- async-io boilerplate ---------------------------------------------------
   auto io = kj::setupAsyncIo();
   auto& net = io.provider->getNetwork();

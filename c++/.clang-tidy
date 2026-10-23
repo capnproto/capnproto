@@ -8,6 +8,7 @@ Checks: >
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
+  custom-uninitialized-array,
   custom-use-rc-arc-deref
 
 
@@ -109,4 +110,34 @@ CustomChecks:
     Diagnostic:
       - BindName: deref
         Message: use operator* instead of dereferencing Rc::get() or Arc::get()
+        Level: Warning
+
+  # Uninitialized stack arrays may leak stale stack contents (other requests' data, return
+  # addresses) if any code path reads them before writing. Initialize them with `{}`, even when
+  # the next line "obviously" overwrites them. Arrays with static or thread storage duration are
+  # zero-initialized anyway. KJ_STACK_ARRAY value-initializes its elements, while every use of
+  # KJ_STACK_ARRAY_UNINITIALIZED is reported and must be justified with a NOLINT comment.
+  - Name: uninitialized-array
+    Query: |
+      let uninitializedArray varDecl(
+        hasType(hasCanonicalType(constantArrayType())),
+        hasAutomaticStorageDuration(),
+        unless(hasInitializer(anything()))
+      )
+      match varDecl(
+        uninitializedArray,
+        unless(isExpandedFromMacro("KJ_STACK_ARRAY_UNINITIALIZED"))
+      ).bind("decl")
+      match varDecl(
+        uninitializedArray,
+        isExpandedFromMacro("KJ_STACK_ARRAY_UNINITIALIZED")
+      ).bind("stackArray")
+    Diagnostic:
+      - BindName: decl
+        Message: "uninitialized arrays are a potential security risk, initialize with `{}`"
+        Level: Warning
+      - BindName: stackArray
+        Message: >-
+          KJ_STACK_ARRAY_UNINITIALIZED is a potential security risk, use KJ_STACK_ARRAY or
+          explain with NOLINT why it is necessary and safe
         Level: Warning
