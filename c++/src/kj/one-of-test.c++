@@ -209,6 +209,20 @@ KJ_TEST("OneOf copy/move from alternative variants") {
     KJ_ASSERT((dst.get<OneOf<int, float>>().is<float>()));
     KJ_EXPECT((dst.get<OneOf<int, float>>().get<float>() == 23.5));
   }
+
+  {
+    // Copy/move from a null subset results in a null OneOf.
+    const OneOf<int, float> constSrc;
+    OneOf<int, bool, float> constDst = constSrc;
+    KJ_EXPECT(constDst == nullptr);
+
+    OneOf<int, float> src;
+    OneOf<int, bool, float> dst = src;
+    KJ_EXPECT(dst == nullptr);
+
+    OneOf<int, bool, float> moved = kj::mv(src);
+    KJ_EXPECT(moved == nullptr);
+  }
 }
 
 KJ_TEST("OneOf equality") {

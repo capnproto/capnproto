@@ -507,7 +507,7 @@ public:
   _::NullableValue<OneOf> _switchSubject() && { return kj::mv(*this); }
 
 private:
-  uint tag;
+  uint tag = 0;
 
   static inline constexpr size_t maxSize(size_t a) {
     return a;
