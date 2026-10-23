@@ -45,7 +45,7 @@ CustomChecks:
   - Name: arrayptr-as-bytes
     Query: |
       match cxxMemberCallExpr(
-        on(expr(anyOf(
+        on(ignoringImplicit(expr(anyOf(
           callExpr(
             callee(functionDecl(hasName("kj::arrayPtr")))
           ).bind("arrayPtr"),
@@ -54,7 +54,7 @@ CustomChecks:
               ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
             ))
           ).bind("arrayPtr")
-        ))),
+        )))),
         callee(cxxMethodDecl(hasName("asBytes")))
       ).bind("asBytes")
     Diagnostic:
@@ -70,7 +70,7 @@ CustomChecks:
           ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
         )),
         argumentCountIs(1),
-        on(ignoringParenImpCasts(cxxMemberCallExpr(
+        on(ignoringImplicit(cxxMemberCallExpr(
           callee(cxxMethodDecl(
             hasName("first"),
             ofClass(classTemplateSpecializationDecl(hasName("::kj::ArrayPtr")))
