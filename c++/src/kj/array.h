@@ -420,6 +420,22 @@ inline Array<T> heapArray(size_t size, T t) {
   return array;
 }
 
+namespace _ {  // private
+
+template <typename T>
+inline Array<T> valueInitializedHeapArray(size_t size) {
+  // Implementation of KJ_STACK_ARRAY: allocates value-initialized elements, like `new T[size]()`.
+  // heapArray<T>() already value-initializes types with non-trivial default constructors, but
+  // leaves trivially-constructible types uninitialized.
+  Array<T> array = heapArray<T>(size);
+  if constexpr (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
+    array.asBytes().fill(0);
+  }
+  return array;
+}
+
+}  // namespace _
+
 template <typename T, typename Container>
 Array<T> heapArrayFromIterable(Container&& a) { return heapArray<T>(a.begin(), a.end()); }
 template <typename T>

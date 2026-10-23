@@ -622,7 +622,6 @@ private:
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
       KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
-      cmsgBytes.fill(0);
       msg.msg_control = cmsgBytes.begin();
       msg.msg_controllen = msgBytes;
 
@@ -798,7 +797,6 @@ private:
       size_t msgWords = (msgBytes + sizeof(void*) - 1) / sizeof(void*);
       KJ_STACK_ARRAY(void*, cmsgSpace, msgWords, 16, 256);
       auto cmsgBytes = cmsgSpace.asBytes();
-      cmsgBytes.fill(0);
       msg.msg_control = cmsgBytes.begin();
       msg.msg_controllen = msgBytes;
 
