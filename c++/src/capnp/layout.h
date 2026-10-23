@@ -559,11 +559,11 @@ private:
   void* data;                  // Pointer to the encoded data.
   WirePointer* pointers;   // Pointer to the encoded pointers.
 
-  StructDataBitCount dataSize;
+  StructDataBitCount dataSize = ZERO * BITS;
   // Size of data section.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  StructPointerCount pointerCount;  // Size of the pointer section.
+  StructPointerCount pointerCount = ZERO * POINTERS;  // Size of the pointer section.
 
   inline StructBuilder(SegmentBuilder* segment, CapTableBuilder* capTable,
                        void* data, WirePointer* pointers,

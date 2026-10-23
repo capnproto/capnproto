@@ -2,6 +2,7 @@
 # We prefer to enable useful checks one by one.
 Checks: >
   -*,
+  clang-analyzer-optin.cplusplus.UninitializedObject,
   modernize-use-nullptr,
   readability-inconsistent-ifelse-braces,
   custom-arrayptr-as-bytes,

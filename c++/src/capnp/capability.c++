@@ -843,8 +843,8 @@ private:
   private:
     kj::PromiseFulfiller<kj::Promise<void>>& fulfiller;
     LocalClient& client;
-    uint64_t interfaceId;
-    uint16_t methodId;
+    uint64_t interfaceId = 0;
+    uint16_t methodId = 0;
     kj::Maybe<CallContextHook&> context;
 
     kj::Maybe<BlockedCall&> next;

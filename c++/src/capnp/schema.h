@@ -698,7 +698,7 @@ private:
   schema::Type::Which baseType;  // type not including applications of List()
   uint8_t listDepth;             // 0 for T, 1 for List(T), 2 for List(List(T)), ...
 
-  bool isImplicitParam;
+  bool isImplicitParam = false;
   // If true, this refers to an implicit method parameter. baseType must be ANY_POINTER, scopeId
   // must be zero, and paramIndex indicates the parameter index.
 
