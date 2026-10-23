@@ -1441,8 +1441,13 @@ bool Promise<T>::poll(WaitScope& waitScope, SourceLocation location) {
 
 template <typename T>
 ForkedPromise<T> Promise<T>::fork(SourceLocation location) {
+  // Place the hub in the inner chain's arena when there is room, rather than starting a new
+  // arena for it. Nothing is ever appended after the hub (each branch starts its own arena), so a
+  // dedicated arena would be almost entirely unused. This satisfies appendPromise()'s requirement:
+  // the hub never gives away `inner`, and destroys it in fire() or in its own destructor.
   return ForkedPromise<T>(false,
-      _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(kj::mv(node), location));
+      _::PromiseDisposer::appendPromise<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(
+          kj::mv(node), location));
 }
 
 template <typename T>
@@ -1457,7 +1462,8 @@ bool ForkedPromise<T>::hasBranches() {
 
 template <typename T>
 _::SplitTuplePromise<T> Promise<T>::split(SourceLocation location) {
-  return _::PromiseDisposer::alloc<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(
+  // See fork() for why the hub shares the inner chain's arena.
+  return _::PromiseDisposer::appendPromise<_::ForkHub<_::FixVoid<T>>, _::ForkHubBase>(
       kj::mv(node), location)->split(location);
 }
 
