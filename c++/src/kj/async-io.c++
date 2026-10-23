@@ -268,11 +268,8 @@ namespace {
 class AsyncPipe final: public AsyncCapabilityStream, public Refcounted {
 public:
   ~AsyncPipe() noexcept(false) {
-    KJ_REQUIRE(state == kj::none || ownState.get() != nullptr,
-        "destroying AsyncPipe with operation still in-progress; probably going to segfault") {
-      // Don't std::terminate().
-      break;
-    }
+    KJ_DTOR_REQUIRE(state == kj::none || ownState.get() != nullptr,
+        "destroying AsyncPipe with operation still in-progress; probably going to segfault");
   }
 
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -2104,17 +2101,14 @@ public:
     }
 
     ~Branch() noexcept(false) {
-      KJ_ASSERT(link.isLinked()) {
-        // Don't std::terminate().
+      if (!link.isLinked()) {
+        KJ_DTOR_FAIL_ASSERT("destroying tee branch which is not linked");
         return;
       }
       tee->branches.remove(*this);
 
-      KJ_REQUIRE(sink == kj::none,
-          "destroying tee branch with operation still in-progress; probably going to segfault") {
-        // Don't std::terminate().
-        break;
-      }
+      KJ_DTOR_REQUIRE(sink == kj::none,
+          "destroying tee branch with operation still in-progress; probably going to segfault");
     }
 
     Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -2152,10 +2146,7 @@ public:
   explicit AsyncTee(Own<AsyncInputStream> inner, uint64_t bufferSizeLimit)
       : inner(mv(inner)), bufferSizeLimit(bufferSizeLimit), length(this->inner->tryGetLength()) {}
   ~AsyncTee() noexcept(false) {
-    KJ_ASSERT(branches.size() == 0, "destroying AsyncTee with branch still alive") {
-      // Don't std::terminate().
-      break;
-    }
+    KJ_DTOR_ASSERT(branches.size() == 0, "destroying AsyncTee with branch still alive");
   }
 
   Promise<size_t> tryRead(Branch& branch, void* buffer, size_t minBytes, size_t maxBytes)  {
