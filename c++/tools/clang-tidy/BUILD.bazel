@@ -1,0 +1,47 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load(":clang_tidy_test.bzl", "clang_tidy_test")
+
+# clang-tidy binary (name looked up in PATH, or absolute path) used by clang_tidy_test. The tests
+# are skipped when this is empty, since not every toolchain ships a clang-tidy that supports
+# --experimental-custom-checks:
+#
+#   bazel test --//tools/clang-tidy:clang_tidy=clang-tidy-23 //tools/clang-tidy/...
+string_flag(
+    name = "clang_tidy",
+    build_setting_default = "",
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "clang_tidy_disabled",
+    flag_values = {":clang_tidy": ""},
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["clang_tidy_test_runner.sh"])
+
+# Positive and negative tests for the custom checks defined in //:.clang-tidy. Each check `foo`
+# has a `foo-positive.c++` file, where every line marked `// CHECK-MATCH` must be flagged (and no
+# other line may be), and a `foo-negative.c++` file, which must not be flagged at all.
+CUSTOM_CHECKS = [
+    "arrayptr-as-bytes",
+    "arrayptr-first-copyfrom",
+    "arrayptr-singleton",
+    "arrayptr-slice-zero",
+    "use-rc-arc-deref",
+]
+
+[
+    clang_tidy_test(
+        name = check + "-" + kind,
+        src = check + "-" + kind + ".c++",
+        check = "custom-" + check,
+        expect_match = kind == "positive",
+        deps = ["//src/kj"],
+    )
+    for check in CUSTOM_CHECKS
+    for kind in [
+        "positive",
+        "negative",
+    ]
+]
