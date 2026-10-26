@@ -160,8 +160,10 @@ struct timespec toAbsoluteTimespec(TimePoint time) {
 
 Mutex::Mutex(): futex(0) {}
 Mutex::~Mutex() {
-  // This will crash anyway, might as well crash with a nice error message.
-  KJ_ASSERT(futex == 0, "Mutex destroyed while locked.") { break; }
+  // This will crash anyway, might as well crash with a nice error message. Intentionally noexcept,
+  // so this terminates unless another exception is already unwinding.
+  // NOLINTNEXTLINE(custom-noexcept-throw)
+  KJ_DTOR_ASSERT(futex == 0, "Mutex destroyed while locked.");
 }
 
 bool Mutex::lock(Exclusivity exclusivity, Maybe<Duration> timeout, LockSourceLocationArg location) {

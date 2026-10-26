@@ -2402,6 +2402,7 @@ private:
       KJ_IF_SOME(c, connectionState) {
         auto& connectionState = c;
 
+        // NOLINTNEXTLINE(custom-noexcept-throw): deliberately noexcept, see above.
         auto& question = KJ_ASSERT_NONNULL(
             connectionState->questions.find(id), "Question ID no longer on table?");
 
