@@ -132,7 +132,7 @@ Promise<uint64_t> unoptimizedPumpTo(
   // streams cannot starve other events.
   static constexpr size_t MAX_SYNC_ITERATIONS = 64;
 
-  byte buffer[4096];
+  byte buffer[4096]{};
   uint64_t doneSoFar = completedSoFar;
 
   for (;;) {
