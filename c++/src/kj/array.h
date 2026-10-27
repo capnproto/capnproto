@@ -684,6 +684,33 @@ private:
   T content[fixedSize];
 };
 
+template <typename T>
+class FixedArray<T, 0> {
+  // A zero-sized FixedArray has no storage. A zero-length array member is not standard C++, and
+  // compilers that accept it give the object a size of zero, which UBSan's object-size check then
+  // reports as too small for the object's type.
+
+public:
+  inline constexpr size_t size() const { return 0; }
+  inline constexpr T* begin() KJ_LIFETIMEBOUND { return nullptr; }
+  inline constexpr T* end() KJ_LIFETIMEBOUND { return nullptr; }
+  inline constexpr const T* begin() const KJ_LIFETIMEBOUND { return nullptr; }
+  inline constexpr const T* end() const KJ_LIFETIMEBOUND { return nullptr; }
+
+  inline constexpr operator ArrayPtr<T>() KJ_LIFETIMEBOUND { return asPtr(); }
+  inline constexpr operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND { return asPtr(); }
+
+  inline constexpr ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return nullptr; }
+  inline constexpr ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND { return nullptr; }
+
+  inline T& operator[](size_t index) KJ_LIFETIMEBOUND { return asPtr()[index]; }
+  inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND { return asPtr()[index]; }
+  // Not constexpr, unlike in the general template: every index is out of bounds, so these can never
+  // be constant expressions.
+
+  inline void fill(T) {}
+};
+
 template <typename T, size_t fixedSize>
 class CappedArray {
   // Like `FixedArray` but can be dynamically resized as long as the size does not exceed the limit
@@ -715,6 +742,32 @@ public:
 private:
   size_t currentSize;
   T content[fixedSize];
+};
+
+template <typename T>
+class CappedArray<T, 0> {
+  // Like FixedArray<T, 0>, it has no storage, so it can only ever be empty.
+
+public:
+  inline KJ_CONSTEXPR() CappedArray() {}
+  inline explicit constexpr CappedArray(size_t s) { KJ_IREQUIRE(s == 0); }
+
+  inline size_t size() const { return 0; }
+  inline void setSize(size_t s) { KJ_IREQUIRE(s == 0); }
+  inline T* begin() KJ_LIFETIMEBOUND { return nullptr; }
+  inline T* end() KJ_LIFETIMEBOUND { return nullptr; }
+  inline const T* begin() const KJ_LIFETIMEBOUND { return nullptr; }
+  inline const T* end() const KJ_LIFETIMEBOUND { return nullptr; }
+
+  inline operator ArrayPtr<T>() KJ_LIFETIMEBOUND { return asPtr(); }
+  inline operator ArrayPtr<const T>() const KJ_LIFETIMEBOUND { return asPtr(); }
+  inline ArrayPtr<T> asPtr() KJ_LIFETIMEBOUND { return nullptr; }
+  inline ArrayPtr<const T> asPtr() const KJ_LIFETIMEBOUND { return nullptr; }
+
+  inline T& operator[](size_t index) KJ_LIFETIMEBOUND { return asPtr()[index]; }
+  inline const T& operator[](size_t index) const KJ_LIFETIMEBOUND { return asPtr()[index]; }
+
+  inline void fill(T) {}
 };
 
 // =======================================================================================
