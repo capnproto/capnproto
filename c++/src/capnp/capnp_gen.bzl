@@ -51,11 +51,17 @@ def _capnp_gen_impl(ctx):
     args.add_all([s for s in ctx.files.srcs])
 
     ctx.actions.run(
-        inputs = inputs + ctx.files.capnpc_plugin + ctx.files._capnpc_capnp + ctx.files._capnp_system,
+        inputs = inputs + ctx.files._capnp_system,
         outputs = ctx.outputs.outs,
         executable = ctx.executable._capnpc,
         arguments = [args],
         mnemonic = "GenCapnp",
+        # The compiler runs the plugins, so they need their runfiles too, such as the shared
+        # libraries that a dynamically linked plugin loads.
+        tools = [
+            ctx.attr.capnpc_plugin[DefaultInfo].files_to_run,
+            ctx.attr._capnpc_capnp[DefaultInfo].files_to_run,
+        ],
     )
 
     return [
