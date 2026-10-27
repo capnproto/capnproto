@@ -75,8 +75,10 @@ KJ_TEST("HttpMethod parse / stringify") {
   KJ_HTTP_FOR_EACH_METHOD(TRY)
 #undef TRY
 
-  // Make sure attempting to stringify an invalid value doesn't segfault
-  KJ_EXPECT_THROW(FAILED, kj::str(HttpMethod{101}));
+  // OTHER methods can only be created by HttpMethod::tryParse(), and out-of-range values (e.g. from
+  // a careless cast) are rejected rather than read out of bounds by name().
+  KJ_EXPECT_THROW(FAILED, (void)HttpMethod(HttpMethod::Known::OTHER));
+  KJ_EXPECT_THROW(FAILED, (void)HttpMethod(static_cast<HttpMethod::Known>(101)));
 
   KJ_EXPECT(tryParseHttpMethod("FOO") == kj::none);
   KJ_EXPECT(tryParseHttpMethod("") == kj::none);
@@ -88,6 +90,82 @@ KJ_TEST("HttpMethod parse / stringify") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(tryParseHttpMethodAllowingConnect("CONNECT"))
       .is<HttpConnectMethod>());
   KJ_EXPECT(tryParseHttpMethod("connect") == kj::none);
+}
+
+KJ_TEST("HttpMethod::tryParse") {
+  // Every known method parses to its known constant, not to an OTHER method with the same name.
+#define TRY(name) \
+  { \
+    auto method = KJ_ASSERT_NONNULL(HttpMethod::tryParse(kj::StringPtr(#name))); \
+    KJ_EXPECT(method == HttpMethod::name, #name); \
+    KJ_EXPECT(method.known() == HttpMethod::Known::name, #name); \
+    KJ_EXPECT(method.hashCode() == HttpMethod(HttpMethod::name).hashCode(), #name); \
+  }
+  KJ_HTTP_FOR_EACH_METHOD(TRY)
+#undef TRY
+
+  auto block = KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj));
+  KJ_EXPECT(block.known() == HttpMethod::Known::OTHER);
+  KJ_EXPECT(block.name() == "BLOCK");
+  KJ_EXPECT(kj::str(block) == "BLOCK");
+  KJ_EXPECT(block != HttpMethod::GET);
+  KJ_EXPECT(block == KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj)));
+  KJ_EXPECT(block.hashCode() == KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj)).hashCode());
+  KJ_EXPECT(block != KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCKS"_kj)));
+  KJ_EXPECT(block != KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOC"_kj)));
+
+  // HttpMethod is a value type: copies keep the name, even after the original is gone.
+  kj::Maybe<HttpMethod> copy;
+  {
+    auto geolocation = KJ_ASSERT_NONNULL(HttpMethod::tryParse(kj::str("GEOLOCATION")));
+    copy = geolocation;
+  }
+  KJ_EXPECT(KJ_ASSERT_NONNULL(copy).name() == "GEOLOCATION");
+
+  // Method names are case-sensitive...
+  auto lowerBlock = KJ_ASSERT_NONNULL(HttpMethod::tryParse("block"_kj));
+  KJ_EXPECT(lowerBlock.name() == "block");
+  KJ_EXPECT(lowerBlock != block);
+
+  // ...even for a name that differs from a known method or CONNECT only in case.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("get"_kj)).name() == "get");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("connect"_kj)).name() == "connect");
+
+  // Any RFC 9110 token is accepted, including names with characters a C++ identifier can't have.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("M-SEARCH"_kj)).name() == "M-SEARCH");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("!#$%&'*+-.^_`|~09azAZ"_kj)).name() ==
+      "!#$%&'*+-.^_`|~09azAZ");
+
+  // The name need not be NUL-terminated.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("GETX"_kj.first(3))) == HttpMethod::GET);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCKED"_kj.first(5))).name() == "BLOCK");
+
+  // Length limit.
+  auto longest = kj::str(kj::repeat('X', HttpMethod::MAX_NAME_SIZE));
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse(longest)).name() == longest);
+  KJ_EXPECT(HttpMethod::tryParse(kj::str(longest, "X")) == kj::none);
+
+  // CONNECT is not an HttpMethod.
+  KJ_EXPECT(HttpMethod::tryParse("CONNECT"_kj) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("CONNECTS"_kj)).name() == "CONNECTS");
+
+  // Invalid tokens.
+  KJ_EXPECT(HttpMethod::tryParse(""_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse("GET "_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse(" GET"_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse("GE T"_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse("GET\r\nHost: evil"_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse("A/B"_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse("A:B"_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse("\x80"_kj) == kj::none);
+  KJ_EXPECT(HttpMethod::tryParse(kj::arrayPtr("A\0B", 3)) == kj::none);
+
+  // parse() is like tryParse(), but throws.
+  KJ_EXPECT(HttpMethod::parse("BLOCK"_kj) == block);
+  KJ_EXPECT_THROW_MESSAGE("invalid HTTP method", HttpMethod::parse("GE T"_kj));
+
+  // The original parse functions still accept only known methods.
+  KJ_EXPECT(tryParseHttpMethod("BLOCK") == kj::none);
 }
 
 KJ_TEST("HttpHeaderTable") {
@@ -308,6 +386,67 @@ KJ_TEST("HttpHeaders parse invalid") {
     KJ_EXPECT(protocolError.description == "Unrecognized request method.",
         protocolError.description);
     KJ_EXPECT(protocolError.rawContent.asChars() == input);
+  }
+}
+
+KJ_TEST("HttpHeaders parse requests with other methods") {
+  auto table = HttpHeaderTable::Builder().build();
+
+  // Rejected by default.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString("BLOCK /foo HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    auto protocolError = headers.tryParseRequest(input).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 501);
+    KJ_EXPECT(protocolError.description == "Unrecognized request method.",
+        protocolError.description);
+  }
+
+  // Accepted when allowed.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString("BLOCK /foo HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    auto request = headers.tryParseRequest(input, true).get<HttpHeaders::Request>();
+    KJ_EXPECT(request.method.known() == HttpMethod::Known::OTHER);
+    KJ_EXPECT(request.method.name() == "BLOCK");
+    KJ_EXPECT(request.url == "/foo");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::HOST)) == "example.com");
+  }
+
+  // A known method followed by more token characters is a different, OTHER method.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString("GETX /foo HTTP/1.1\r\n\r\n");
+    auto request = headers.tryParseRequest(input, true).get<HttpHeaders::Request>();
+    KJ_EXPECT(request.method.known() == HttpMethod::Known::OTHER);
+    KJ_EXPECT(request.method.name() == "GETX");
+  }
+
+  // Known methods and CONNECT parse the same as when OTHER methods aren't allowed.
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString("GET /foo HTTP/1.1\r\n\r\n");
+    auto request = headers.tryParseRequest(input, true).get<HttpHeaders::Request>();
+    KJ_EXPECT(request.method == HttpMethod::GET);
+  }
+  {
+    HttpHeaders headers(*table);
+    auto input = kj::heapString("CONNECT example.com:443 HTTP/1.1\r\n\r\n");
+    auto request = headers.tryParseRequestOrConnect(input, true)
+        .get<HttpHeaders::ConnectRequest>();
+    KJ_EXPECT(request.authority == "example.com:443");
+  }
+
+  // Methods that aren't valid tokens, or are too long, are still rejected.
+  for (auto text: {"BL/OCK /foo HTTP/1.1\r\n\r\n"_kj,
+                   "BL\x80OCK /foo HTTP/1.1\r\n\r\n"_kj,
+                   " /foo HTTP/1.1\r\n\r\n"_kj,
+                   "ABCDEFGHIJABCDEFGHIJABCDEFGHIJK /foo HTTP/1.1\r\n\r\n"_kj}) {
+    KJ_CONTEXT(text);
+    HttpHeaders headers(*table);
+    auto input = kj::heapString(text);
+    auto protocolError = headers.tryParseRequest(input, true).get<HttpHeaders::ProtocolError>();
+    KJ_EXPECT(protocolError.statusCode == 501);
   }
 }
 
@@ -1561,6 +1700,188 @@ KJ_TEST("HttpServer requests") {
         testCase.method == HttpMethod::HEAD ? HEAD_RESPONSE : RESPONSE,
         KJ_HTTP_TEST_CREATE_2PIPE);
   }
+}
+
+KJ_TEST("HttpClient and HttpServer handle other methods") {
+  auto block = KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj));
+  auto geolocation = KJ_ASSERT_NONNULL(HttpMethod::tryParse("GEOLOCATION"_kj));
+
+  // An OTHER method's request body is framed by its headers, like any other method's, so requests
+  // can be pipelined after it.
+  const HttpTestCase testCases[] = {
+    {
+      {
+        "BLOCK /foo HTTP/1.1\r\n"
+        "Content-Length: 6\r\n"
+        "\r\n"
+        "grault",
+
+        block, "/foo", {}, uint64_t(6), { "grault" },
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 7\r\n"
+        "\r\n"
+        "foo bar",
+
+        200, "OK", {}, 7, { "foo bar" }
+      },
+    },
+    {
+      {
+        "GEOLOCATION /bar HTTP/1.1\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "3\r\n"
+        "baz\r\n"
+        "0\r\n"
+        "\r\n",
+
+        geolocation, "/bar", {}, kj::none, { "baz" },
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 3\r\n"
+        "\r\n"
+        "qux",
+
+        200, "OK", {}, 3, { "qux" }
+      },
+    },
+    {
+      {
+        "GET / HTTP/1.1\r\n"
+        "\r\n",
+
+        HttpMethod::GET, "/", {}, uint64_t(0), {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 5\r\n"
+        "\r\n"
+        "corge",
+
+        200, "OK", {}, 5, { "corge" }
+      },
+    },
+  };
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  // The client sends OTHER methods as-is.
+  for (auto& testCase: testCases) {
+    KJ_CONTEXT(testCase.request.raw);
+    testHttpClientRequest(waitScope, testCase.request, KJ_HTTP_TEST_CREATE_2PIPE);
+  }
+
+  // The server passes them to the service when allowed.
+  {
+    auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+    HttpHeaderTable table;
+    TestHttpService service(testCases, table);
+    HttpServerSettings settings;
+    settings.allowOtherMethods = true;
+    HttpServer server(timer, table, service, settings);
+
+    auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+    for (auto& testCase: testCases) {
+      KJ_CONTEXT(testCase.request.raw, testCase.response.raw);
+      pipe.ends[1]->write(testCase.request.raw.asBytes()).wait(waitScope);
+      expectRead(*pipe.ends[1], testCase.response.raw).wait(waitScope);
+    }
+
+    pipe.ends[1]->shutdownWrite();
+    listenTask.wait(waitScope);
+
+    KJ_EXPECT(service.getRequestCount() == kj::size(testCases));
+  }
+
+  // By default, the server rejects them without calling the service.
+  {
+    auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+    HttpHeaderTable table;
+    TestHttpService service(testCases, table);
+    HttpServer server(timer, table, service);
+
+    auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+    pipe.ends[1]->write(testCases[0].request.raw.asBytes()).wait(waitScope);
+    expectRead(*pipe.ends[1],
+        "HTTP/1.1 501 Not Implemented\r\n"
+        "Connection: close\r\n"
+        "Content-Length: 35\r\n"
+        "Content-Type: text/plain\r\n"
+        "\r\n"
+        "ERROR: Unrecognized request method."_kj).wait(waitScope);
+
+    listenTask.wait(waitScope);
+
+    KJ_EXPECT(service.getRequestCount() == 0);
+  }
+}
+
+KJ_TEST("HttpServer gives a response body to every method but exactly HEAD") {
+  // Method names are case-sensitive, so "head" is a different method than HEAD, and the response to
+  // it has a body like any other.
+  auto head = KJ_ASSERT_NONNULL(HttpMethod::tryParse("head"_kj));
+
+  const HttpTestCase testCases[] = {
+    {
+      {
+        "head /foo HTTP/1.1\r\n"
+        "\r\n",
+
+        head, "/foo", {}, uint64_t(0), {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 3\r\n"
+        "\r\n"
+        "foo",
+
+        200, "OK", {}, 3, { "foo" }
+      },
+    },
+    {
+      {
+        "HEAD /foo HTTP/1.1\r\n"
+        "\r\n",
+
+        HttpMethod::HEAD, "/foo", {}, uint64_t(0), {},
+      },
+      {
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 3\r\n"
+        "\r\n",
+
+        200, "OK", {}, 3, { "foo" }
+      },
+    },
+  };
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  TestHttpService service(testCases, table);
+  HttpServerSettings settings;
+  settings.allowOtherMethods = true;
+  HttpServer server(timer, table, service, settings);
+  auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+
+  for (auto& testCase: testCases) {
+    KJ_CONTEXT(testCase.request.raw, testCase.response.raw);
+    pipe.ends[1]->write(testCase.request.raw.asBytes()).wait(waitScope);
+    expectRead(*pipe.ends[1], testCase.response.raw).wait(waitScope);
+  }
+
+  pipe.ends[1]->shutdownWrite();
+  listenTask.wait(waitScope);
+
+  KJ_EXPECT(service.getRequestCount() == kj::size(testCases));
 }
 
 KJ_TEST("HttpServer responses") {
@@ -4805,7 +5126,7 @@ KJ_TEST("HttpServer bad requests") {
     },
     {
       // invalid method
-      .request = "bad request\r\n\r\n"_kj,
+      .request = "b@d request\r\n\r\n"_kj,
       .expectedResponse =
           "HTTP/1.1 501 Not Implemented\r\n"
           "Connection: close\r\n"
@@ -5055,7 +5376,7 @@ KJ_TEST("HttpServer bad request, custom error handler") {
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
-  auto writePromise = pipe.ends[1]->write("bad request\r\n\r\n"_kjb);
+  auto writePromise = pipe.ends[1]->write("b@d request\r\n\r\n"_kjb);
   auto response = pipe.ends[1]->readAllText().wait(waitScope);
   KJ_EXPECT(writePromise.poll(waitScope));
   writePromise.wait(waitScope);
@@ -5066,7 +5387,7 @@ KJ_TEST("HttpServer bad request, custom error handler") {
       "Content-Length: 80\r\n"
       "\r\n"
       "Saw protocol error: Unrecognized request method.; "
-      "rawContent = bad request\\000\\n"_kj;
+      "rawContent = b@d request\\000\\n"_kj;
 
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
@@ -5308,6 +5629,7 @@ public:
   void suspendAfter(uint countdownParam) { countdown = countdownParam; }
 
   kj::Maybe<kj::Own<HttpService>> operator()(HttpServer::SuspendableRequest& sr) {
+    lastSuspendableMethod = sr.method;
     if (countdown == 0) {
       suspendedRequest = sr.suspend();
       return kj::none;
@@ -5321,10 +5643,16 @@ public:
     return kj::mv(suspendedRequest);
   }
 
+  kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> lastSuspendableMethod;
+  kj::Maybe<HttpMethod> lastRequestMethod;
+  // The methods most recently passed to the factory and to request().
+
 private:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
+    lastRequestMethod = method;
+
     // Check headers made it through the transfer.
     KJ_EXPECT(headers.get(fooHeaderId).orDefault("(nil)") == "foo");
     KJ_EXPECT(headers.get(barHeaderId).orDefault("(nil)") == "bar1, bar2");
@@ -5449,6 +5777,75 @@ KJ_TEST("HttpServer can suspend a request") {
         "0\r\n"
         "\r\n"_kj;
     KJ_EXPECT(RESPONSE == response);
+  }
+}
+
+KJ_TEST("HttpServer can suspend and resume a request with an OTHER method") {
+  // An OTHER method's name is stored in the HttpMethod itself, so it survives being suspended and
+  // resumed, even though the connection's buffer moves into and out of the SuspendedRequest.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  auto block = KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj));
+
+  HangingHttpService service;
+  SuspendAfter factory;
+  HttpServerSettings settings;
+  settings.allowOtherMethods = true;
+  HttpServer server(timer, factory.getHeaderTable(), service, settings);
+
+  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
+
+  {
+    factory.suspendAfter(0);
+    auto listenPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
+
+    static constexpr kj::StringPtr REQUEST =
+        "BLOCK / HTTP/1.1\r\n"
+        SUSPEND_AFTER_EXPECTED_HEADERS
+        "Content-Length: 6\r\n"
+        "\r\n"
+        "foobar"_kj;
+    pipe.ends[1]->write(REQUEST.asBytes()).wait(waitScope);
+
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(!listenPromise.wait(waitScope));
+
+    suspendedRequest = factory.getSuspended();
+    KJ_EXPECT(suspendedRequest != kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(factory.lastSuspendableMethod).get<HttpMethod>() == block);
+  }
+
+  {
+    factory.suspendAfter(1);
+    auto listenPromise = server.listenHttpCleanDrain(
+        *pipe.ends[0], factory, kj::mv(suspendedRequest));
+
+    auto drainPromise = kj::evalLast([&]() {
+      return server.drain();
+    });
+
+    auto readPromise = pipe.ends[1]->readAllText();
+
+    KJ_EXPECT(listenPromise.poll(waitScope));
+    KJ_EXPECT(listenPromise.wait(waitScope));
+
+    drainPromise.wait(waitScope);
+
+    pipe.ends[0] = nullptr;
+
+    auto response = readPromise.wait(waitScope);
+    static constexpr kj::StringPtr RESPONSE =
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "0\r\n"
+        "\r\n"_kj;
+    KJ_EXPECT(RESPONSE == response);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(factory.lastSuspendableMethod).get<HttpMethod>() == block);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(factory.lastRequestMethod) == block);
   }
 }
 

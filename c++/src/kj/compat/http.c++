@@ -23,6 +23,7 @@
 #include "kj/exception.h"
 #include "url.h"
 #include <kj/debug.h>
+#include <kj/hash.h>
 #include <kj/parse/char.h>
 #include <kj/string.h>
 #include <unordered_map>
@@ -332,24 +333,58 @@ void SHA1Final(
 // End SHA-1 implementation.
 // =======================================================================================
 
-static const char* METHOD_NAMES[] = {
-#define METHOD_NAME(id) #id,
+static constexpr kj::StringPtr METHOD_NAMES[] = {
+#define METHOD_NAME(id) kj::StringPtr(#id, sizeof(#id) - 1),
 KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 #undef METHOD_NAME
 };
 
-kj::StringPtr KJ_STRINGIFY(HttpMethod method) {
-  auto index = static_cast<uint>(method);
-  KJ_ASSERT(index < size(METHOD_NAMES), "invalid HTTP method");
+// Every listed name must fit, since tryParse() checks the length first.
+#define CHECK_NAME_SIZE(id) static_assert(sizeof(#id) - 1 <= HttpMethod::MAX_NAME_SIZE);
+KJ_HTTP_FOR_EACH_METHOD(CHECK_NAME_SIZE)
+#undef CHECK_NAME_SIZE
 
-  return METHOD_NAMES[index];
+constexpr auto HTTP_METHOD_CHARS = kj::parse::alphaNumeric.orAny("!#$%&'*+-.^_`|~");
+// The characters allowed in a method name: RFC 9110 section 5.6.2 `tchar`.
+
+kj::StringPtr HttpMethod::name() const {
+  if (id == Known::OTHER) {
+    return kj::StringPtr(nameText);
+  }
+  return METHOD_NAMES[static_cast<uint>(id)];
+}
+
+uint HttpMethod::hashCode() const {
+  if (id == Known::OTHER) {
+    return kj::hashCode(name());
+  }
+  return static_cast<uint>(id);
+}
+
+HttpMethod::HttpMethod(kj::ArrayPtr<const char> otherName)
+    : id(Known::OTHER) {
+  KJ_ASSERT(otherName.size() <= MAX_NAME_SIZE);
+  kj::arrayPtr(nameText, otherName.size()).copyFrom(otherName);
+}
+
+void HttpMethod::throwInvalidKnown() {
+  KJ_FAIL_REQUIRE("HttpMethod must be constructed from a method listed in "
+      "KJ_HTTP_FOR_EACH_METHOD; use HttpMethod::tryParse() for other methods");
+}
+
+kj::StringPtr KJ_STRINGIFY(const HttpMethod& method) {
+  return method.name();
 }
 
 kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method) {
   return "CONNECT"_kj;
 }
 
-static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(char*& ptr) {
+static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeKnownHttpMethod(char*& ptr) {
+  // Matches a method listed in KJ_HTTP_FOR_EACH_METHOD, or CONNECT, at the start of `ptr`, which
+  // must be NUL-terminated. Only checks that the text begins with the method name; the caller must
+  // check what follows.
+
   char* p = ptr;
 
 #define EXPECT_REST(prefix, suffix) \
@@ -440,6 +475,55 @@ static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(cha
 #undef EXPECT_REST
 }
 
+kj::Maybe<HttpMethod> HttpMethod::tryParse(kj::ArrayPtr<const char> name) {
+  if (name.size() == 0 || name.size() > MAX_NAME_SIZE) return kj::none;
+  for (char c: name) {
+    if (!HTTP_METHOD_CHARS.contains(c)) return kj::none;
+  }
+
+  for (auto i: kj::indices(METHOD_NAMES)) {
+    if (name == METHOD_NAMES[i]) return HttpMethod(static_cast<Known>(i));
+  }
+  if (name == "CONNECT"_kj) return kj::none;
+
+  return HttpMethod(name);
+}
+
+HttpMethod HttpMethod::parse(kj::ArrayPtr<const char> name) {
+  KJ_IF_SOME(method, tryParse(name)) {
+    return method;
+  }
+  // The name may come from a peer, so only include enough of it to show what's wrong.
+  auto prefix = name.first(kj::min(name.size(), MAX_NAME_SIZE + 1));
+  KJ_FAIL_REQUIRE("invalid HTTP method", kj::encodeCEscape(prefix.asBytes()));
+}
+
+static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(
+    char*& ptr, bool allowOtherMethods) {
+  // Consumes the method at the start of a request line. `ptr` must be NUL-terminated. On success,
+  // `ptr` is left pointing at the first character after the method name, which the caller must
+  // check.
+
+  char* p = ptr;
+  KJ_IF_SOME(known, consumeKnownHttpMethod(p)) {
+    if (!HTTP_METHOD_CHARS.contains(*p)) {  // Not a prefix of a longer name, such as "GETX".
+      ptr = p;
+      return known;
+    }
+  }
+
+  if (allowOtherMethods) {
+    char* end = ptr;
+    while (HTTP_METHOD_CHARS.contains(*end)) ++end;
+    KJ_IF_SOME(other, HttpMethod::tryParse(kj::arrayPtr(ptr, end))) {
+      ptr = end;
+      return kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>>(other);
+    }
+  }
+
+  return kj::none;
+}
+
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
   KJ_IF_SOME(method, tryParseHttpMethodAllowingConnect(name)) {
     KJ_SWITCH_ONEOF(method) {
@@ -454,10 +538,10 @@ kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
 
 kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> tryParseHttpMethodAllowingConnect(
     kj::StringPtr name) {
-  // const_cast OK because we don't actually access it. consumeHttpMethod() is also called by some
-  // code later than explicitly needs to use a non-const pointer.
+  // const_cast OK because we don't actually access it. consumeKnownHttpMethod() is also called by
+  // some code later than explicitly needs to use a non-const pointer.
   char* ptr = const_cast<char*>(name.begin());
-  auto result = consumeHttpMethod(ptr);
+  auto result = consumeKnownHttpMethod(ptr);
   if (*ptr == '\0') {
     return result;
   } else {
@@ -1016,8 +1100,9 @@ static char* trimHeaderEnding(kj::ArrayPtr<char> content) {
   return end;
 }
 
-HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<char> content) {
-  KJ_SWITCH_ONEOF(tryParseRequestOrConnect(content)) {
+HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(
+    kj::ArrayPtr<char> content, bool allowOtherMethods) {
+  KJ_SWITCH_ONEOF(tryParseRequestOrConnect(content, allowOtherMethods)) {
     KJ_CASE_ONEOF(request, Request) {
       return kj::mv(request);
     }
@@ -1033,7 +1118,7 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
 }
 
 HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect(
-    kj::ArrayPtr<char> content) {
+    kj::ArrayPtr<char> content, bool allowOtherMethods) {
   char* end = trimHeaderEnding(content);
   if (end == nullptr) {
     return ProtocolError { 400, "Bad Request",
@@ -1044,7 +1129,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
 
   HttpHeaders::RequestConnectOrProtocolError result;
 
-  KJ_IF_SOME(method, consumeHttpMethod(ptr)) {
+  KJ_IF_SOME(method, consumeHttpMethod(ptr, allowOtherMethods)) {
     if (*ptr != ' ' && *ptr != '\t') {
       return ProtocolError { 501, "Not Implemented",
           "Unrecognized request method.", content };
@@ -1499,6 +1584,11 @@ public:
     return !broken && pendingMessageCount == 0;
   }
 
+  void setAllowOtherMethods(bool allow) {
+    // See HttpServerSettings::allowOtherMethods.
+    allowOtherMethods = allow;
+  }
+
   bool canSuspend() {
     // We are at a suspendable point if we've parsed the headers, but haven't consumed anything
     // beyond that.
@@ -1696,7 +1786,7 @@ public:
       }
       KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
         headers.clear();
-        co_return headers.tryParseRequestOrConnect(text);
+        co_return headers.tryParseRequestOrConnect(text, allowOtherMethods);
       }
     }
 
@@ -1824,6 +1914,9 @@ private:
 
   kj::Maybe<kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest>> resumingRequest;
   // Non-null if we're resuming a SuspendedRequest.
+
+  bool allowOtherMethods = false;
+  // Whether request methods not listed in KJ_HTTP_FOR_EACH_METHOD are accepted.
 
   bool lineBreakBeforeNextHeader = false;
   // If true, the next await should expect to start with a spurious '\n' or '\r\n'. This happens
@@ -7905,6 +7998,7 @@ public:
         httpInput(makeHttpInput(stream, server.requestHeaderTable, kj::mv(suspendedRequest))),
         httpOutput(stream),
         wantCleanDrain(wantCleanDrain) {
+    httpInput.setAllowOtherMethods(server.settings.allowOtherMethods);
     ++server.connectionCount;
   }
   ~Connection() noexcept(false) {
