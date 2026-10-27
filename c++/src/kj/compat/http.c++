@@ -6863,14 +6863,6 @@ private:
   HostMap httpHosts;
   HostMap httpsHosts;
 
-  struct RequestInfo {
-    HttpMethod method;
-    kj::String hostname;
-    kj::String path;
-    HttpHeaders headers;
-    kj::Maybe<uint64_t> expectedBodySize;
-  };
-
   kj::TaskSet tasks;
 
   HttpClient& getClient(kj::Url& parsed) {

@@ -48,34 +48,6 @@ static Path* getPathPointerHack(Directory& dir);
 
 namespace {
 
-struct REPARSE_DATA_BUFFER {
-  // From ntifs.h, which is part of the driver development kit so not necessarily available I
-  // guess.
-  ULONG ReparseTag;
-  USHORT ReparseDataLength;
-  USHORT Reserved;
-  union {
-    struct {
-      USHORT SubstituteNameOffset;
-      USHORT SubstituteNameLength;
-      USHORT PrintNameOffset;
-      USHORT PrintNameLength;
-      ULONG Flags;
-      WCHAR PathBuffer[1];
-    } SymbolicLinkReparseBuffer;
-    struct {
-      USHORT SubstituteNameOffset;
-      USHORT SubstituteNameLength;
-      USHORT PrintNameOffset;
-      USHORT PrintNameLength;
-      WCHAR PathBuffer[1];
-    } MountPointReparseBuffer;
-    struct {
-      UCHAR DataBuffer[1];
-    } GenericReparseBuffer;
-  };
-};
-
 #define HIDDEN_PREFIX ".kj-tmp."
 // Prefix for temp files which should be hidden when listing a directory.
 //
