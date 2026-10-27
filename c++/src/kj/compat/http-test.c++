@@ -6459,6 +6459,21 @@ KJ_TEST("HttpClient connection management") {
   doRequest().wait(waitScope);
   KJ_EXPECT(count == 1);
   KJ_EXPECT(cumulative == 9);
+
+  // A request refused before anything is sent (here, for an invalid URL) leaves its connection in
+  // the pool, and we must still notice when the server times that connection out.
+  waitScope.poll();
+  KJ_EXPECT_THROW_MESSAGE("invalid request URL",
+      client->request(HttpMethod::GET, "/foo bar", HttpHeaders(headerTable)));
+  serverTimer.advanceTo(serverTimer.now() + serverSettings.pipelineTimeout * 2);
+  waitScope.poll();
+  KJ_EXPECT(count == 0);
+  KJ_EXPECT(cumulative == 9);
+
+  // So the next request gets a new connection.
+  doRequest().wait(waitScope);
+  KJ_EXPECT(count == 1);
+  KJ_EXPECT(cumulative == 10);
 }
 
 KJ_TEST("HttpClient disable connection reuse") {
