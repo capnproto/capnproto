@@ -1954,6 +1954,174 @@ KJ_TEST("HttpInputStream requests") {
   KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
 }
 
+kj::Promise<void> cancelBodyReadAfterTurns(kj::Promise<void>& reading, uint turns) {
+  // Keep this as a named coroutine so GCC sees complete parameter types when KJ selects
+  // its coroutine allocation strategy.
+  for (uint i = 0; i < turns; ++i) {
+    co_await kj::evalLater([]() {});
+  }
+  reading = nullptr;
+}
+
+KJ_TEST("HttpInputStream canceled body reads preserve framing without replay") {
+  for (bool fixedLength: {false, true}) {
+    for (uint cancelTurn: kj::zeroTo(8)) {
+      KJ_HTTP_TEST_SETUP_IO;
+      HttpHeaderTable table;
+      auto pipe = kj::newOneWayPipe();
+      auto input = newHttpInputStream(*pipe.in, table);
+      auto headers = fixedLength
+          ? "POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\n"_kjb
+          : "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n3\r"_kjb;
+      auto headerWrite = pipe.out->write(headers).eagerlyEvaluate(nullptr);
+      auto request = input->readRequest().wait(waitScope);
+      headerWrite.wait(waitScope);
+      char result = '?';
+      KJ_EXPECT(request.body->tryRead(&result, 0, 0).wait(waitScope) == 0);
+      auto reading = request.body->tryRead(&result, 1, 1).ignoreResult();
+      KJ_EXPECT(!reading.poll(waitScope));
+      auto payload = fixedLength ? "abc"_kjb : "\nabc\r\n0\r\n\r\n"_kjb;
+      auto write = pipe.out->write(payload).eagerlyEvaluate(nullptr);
+      auto cancel = cancelBodyReadAfterTurns(reading, cancelTurn);
+      cancel.wait(waitScope);
+      if (fixedLength) KJ_EXPECT(request.body->tryGetLength() == (result == '?' ? 3 : 2));
+      auto rest = request.body->readAllText().wait(waitScope);
+      if (fixedLength) KJ_EXPECT(request.body->tryGetLength() == 0);
+      KJ_EXPECT(rest == (result == '?' ? "abc" : "bc"), cancelTurn, fixedLength, rest, result);
+      write.wait(waitScope);
+      auto nextWrite = pipe.out->write("GET /next HTTP/1.1\r\n\r\n"_kjb).eagerlyEvaluate(nullptr);
+      auto next = input->readRequest().wait(waitScope);
+      KJ_EXPECT(next.url == "/next");
+      nextWrite.wait(waitScope);
+    }
+  }
+}
+
+KJ_TEST("HttpInputStream buffered body reads aggregate minimum and preserve length") {
+  KJ_HTTP_TEST_SETUP_IO;
+  HttpHeaderTable table;
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+  auto payload = kj::heapArray<byte>(10000);
+  for (size_t i: kj::indices(payload)) payload[i] = byte(i % 251);
+  auto header = kj::str("POST / HTTP/1.1\r\nContent-Length: ", payload.size(), "\r\n\r\n");
+  auto writeHeader = pipe.out->write(header.asBytes()).eagerlyEvaluate(nullptr);
+  auto request = input->readRequest().wait(waitScope);
+  writeHeader.wait(waitScope);
+  auto writeBody = pipe.out->write(payload).eagerlyEvaluate(nullptr);
+  auto buffer = kj::heapArray<byte>(7000);
+  KJ_EXPECT(request.body->tryRead(buffer.begin(), 7000, 7000).wait(waitScope) == 7000);
+  KJ_EXPECT(buffer.asPtr() == payload.first(7000));
+  KJ_EXPECT(request.body->tryGetLength() == 3000);
+  KJ_EXPECT(request.body->tryRead(buffer.begin(), 7000, 7000).wait(waitScope) == 3000);
+  KJ_EXPECT(buffer.first(3000) == payload.slice(7000, 10000));
+  KJ_EXPECT(request.body->tryGetLength() == 0);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(request.body->tryReadSync(buffer, 1)) == 0);
+  writeBody.wait(waitScope);
+}
+
+class BodyReadLifetimeTracker final: public AsyncInputStream {
+public:
+  BodyReadLifetimeTracker(AsyncInputStream& inner, uint& pending): inner(inner), pending(pending) {}
+  Promise<size_t> tryRead(void* buffer, size_t min, size_t max) override {
+    ++pending;
+    return inner.tryRead(buffer, min, max).attach(kj::defer([this] { --pending; }));
+  }
+private:
+  AsyncInputStream& inner;
+  uint& pending;
+};
+KJ_TEST("HttpInputStream destruction cancels retained body reads") {
+  for (bool fixed: {false, true}) {
+    EventLoop loop;
+    WaitScope wait(loop);
+    HttpHeaderTable table;
+    auto pipe = newOneWayPipe();
+    uint pending = 0;
+    BodyReadLifetimeTracker tracked(*pipe.in, pending);
+    auto input = newHttpInputStream(tracked, table);
+    auto headers = fixed ? "POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\n"_kjb
+      : "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n3\r"_kjb;
+    auto writing = pipe.out->write(headers).eagerlyEvaluate(nullptr);
+    auto request = input->readRequest().wait(wait);
+    writing.wait(wait);
+    char caller = '?';
+    {
+      auto reading = request.body->tryRead(&caller, 1, 1);
+      KJ_EXPECT(!reading.poll(wait));
+    }
+    KJ_EXPECT(pending == 1);
+    {
+      KJ_EXPECT_LOG(ERROR, "HTTP connection destroyed while HTTP body streams still exist");
+      input = nullptr;
+    }
+    KJ_EXPECT(pending == 0, fixed, pending);
+    {
+      KJ_EXPECT_LOG(ERROR, "HTTP body input stream outlived underlying connection");
+      request.body = nullptr;
+    }
+    KJ_EXPECT(pending == 0);
+  }
+}
+
+KJ_TEST("HttpInputStream pump cancellation consumes written bytes once and preserves remainder") {
+  class BlockingOutput final: public AsyncOutputStream {
+  public:
+    explicit BlockingOutput(bool fail): fail(fail) {}
+    Promise<void> write(ArrayPtr<const byte> data) override {
+      if (fail) return KJ_EXCEPTION(DISCONNECTED, "synthetic output failure");
+      activeData = data;
+      return kj::Promise<void>(kj::NEVER_DONE).attach(kj::defer([this]() {
+        activeData = nullptr;
+      }));
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      KJ_FAIL_REQUIRE("unexpected vector write");
+    }
+    Promise<void> whenWriteDisconnected() override { return kj::NEVER_DONE; }
+    ArrayPtr<const byte> activeData;
+  private:
+    bool fail;
+  };
+
+  for (bool fixedLength: {false, true}) {
+    for (bool fail: {false, true}) {
+      KJ_HTTP_TEST_SETUP_IO;
+      HttpHeaderTable table;
+      auto pipe = kj::newOneWayPipe();
+      auto input = newHttpInputStream(*pipe.in, table);
+      auto header = fixedLength
+          ? "POST / HTTP/1.1\r\nContent-Length: 6\r\n\r\n"_kjb
+          : "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"_kjb;
+      auto headerWrite = pipe.out->write(header).eagerlyEvaluate(nullptr);
+      auto request = input->readRequest().wait(waitScope);
+      headerWrite.wait(waitScope);
+      auto payload = fixedLength ? "abcdef"_kjb : "6\r\nabcdef\r\n0\r\n\r\n"_kjb;
+      auto writing = pipe.out->write(payload).eagerlyEvaluate(nullptr);
+      BlockingOutput output(fail);
+      KJ_EXPECT(request.body->pumpTo(output, 0).wait(waitScope) == 0);
+      {
+        auto pumping = request.body->pumpTo(output, 3);
+        if (fail) {
+          KJ_EXPECT_THROW_MESSAGE("synthetic output failure", pumping.wait(waitScope));
+        } else {
+          KJ_EXPECT(!pumping.poll(waitScope));
+          KJ_EXPECT(output.activeData == "abc"_kjb);
+          char other = '?';
+          KJ_EXPECT_THROW_MESSAGE("already reading", request.body->tryRead(&other, 1, 1).wait(waitScope));
+          KJ_EXPECT(other == '?');
+          BlockingOutput otherOutput(true);
+          KJ_EXPECT_THROW_MESSAGE("already reading", request.body->pumpTo(otherOutput, 1).wait(waitScope));
+        }
+        if (fixedLength) KJ_EXPECT(request.body->tryGetLength() == 3);
+      }
+      KJ_EXPECT(output.activeData.size() == 0);
+      KJ_EXPECT(request.body->readAllText().wait(waitScope) == "def");
+      writing.wait(waitScope);
+    }
+  }
+}
+
 KJ_TEST("HttpInputStream responses") {
   KJ_HTTP_TEST_SETUP_IO;
 
@@ -5930,6 +6098,63 @@ KJ_TEST("newHttpClient from HttpService") {
 
   for (auto& testCase: PIPELINE_TESTS) {
     testHttpClient(waitScope, table, *client, testCase);
+  }
+}
+
+KJ_TEST("HttpServer service adapter early response preserves connection reuse") {
+  for (bool fixedLength: {false, true}) {
+    KJ_HTTP_TEST_SETUP_IO;
+    kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+    auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+    HttpHeaderTable table;
+
+    class Deny final: public HttpService {
+    public:
+      explicit Deny(HttpHeaderTable& table): table(table) {}
+      kj::Promise<void> request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+          kj::AsyncInputStream& body, Response& response) override {
+        auto output = response.send(403, "Forbidden", HttpHeaders(table), uint64_t(6));
+        co_await output->write("DENIED"_kjb);
+      }
+    private:
+      HttpHeaderTable& table;
+    } deny(table);
+
+    class Forward final: public HttpService {
+    public:
+      Forward(HttpHeaderTable& table, HttpService& target): table(table), client(newHttpClient(target)) {}
+      kj::Promise<void> request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+          kj::AsyncInputStream& body, Response& response) override {
+        if (method == HttpMethod::GET) {
+          response.send(200, "OK", HttpHeaders(table), uint64_t(0));
+          co_return;
+        }
+        auto upstream = client->request(method, url, headers, body.tryGetLength());
+        auto upload = body.pumpTo(*upstream.body).catch_([](kj::Exception&& exception) {
+          KJ_REQUIRE(exception.getType() == kj::Exception::Type::DISCONNECTED, exception);
+          return uint64_t(0);
+        }).eagerlyEvaluate(nullptr);
+        auto reply = co_await upstream.response;
+        auto output = response.send(reply.statusCode, reply.statusText, *reply.headers,
+            reply.body->tryGetLength());
+        co_await reply.body->pumpTo(*output);
+        // Like the Worker request boundary, cancel the upload when the response completes.
+      }
+    private:
+      HttpHeaderTable& table;
+      kj::Own<HttpClient> client;
+    } forward(table, deny);
+
+    HttpServer server(timer, table, forward);
+    auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
+    auto request = fixedLength
+        ? "POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc"_kjb
+        : "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n"_kjb;
+    pipe.ends[1]->write(request).wait(waitScope);
+    expectRead(*pipe.ends[1], "HTTP/1.1 403 Forbidden\r\nContent-Length: 6\r\n\r\nDENIED"_kj)
+        .wait(waitScope);
+    pipe.ends[1]->write("GET / HTTP/1.1\r\n\r\n"_kjb).wait(waitScope);
+    expectRead(*pipe.ends[1], "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"_kj).wait(waitScope);
   }
 }
 
