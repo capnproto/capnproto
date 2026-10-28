@@ -1954,6 +1954,15 @@ KJ_TEST("HttpInputStream requests") {
   KJ_EXPECT(!input->awaitNextMessage().wait(waitScope));
 }
 
+kj::Promise<void> cancelBodyReadAfterTurns(kj::Promise<void>& reading, uint turns) {
+  // Keep this as a named coroutine so GCC sees complete parameter types when KJ selects
+  // its coroutine allocation strategy.
+  for (uint i = 0; i < turns; ++i) {
+    co_await kj::evalLater([]() {});
+  }
+  reading = nullptr;
+}
+
 KJ_TEST("HttpInputStream canceled body reads preserve framing without replay") {
   for (bool fixedLength: {false, true}) {
     for (uint cancelTurn: kj::zeroTo(8)) {
@@ -1973,13 +1982,7 @@ KJ_TEST("HttpInputStream canceled body reads preserve framing without replay") {
       KJ_EXPECT(!reading.poll(waitScope));
       auto payload = fixedLength ? "abc"_kjb : "\nabc\r\n0\r\n\r\n"_kjb;
       auto write = pipe.out->write(payload).eagerlyEvaluate(nullptr);
-      auto cancelRead = [&]() -> kj::Promise<void> {
-        for (uint i = 0; i < cancelTurn; ++i) {
-          co_await kj::evalLater([]() {});
-        }
-        reading = nullptr;
-      };
-      auto cancel = cancelRead();
+      auto cancel = cancelBodyReadAfterTurns(reading, cancelTurn);
       cancel.wait(waitScope);
       if (fixedLength) KJ_EXPECT(request.body->tryGetLength() == (result == '?' ? 3 : 2));
       auto rest = request.body->readAllText().wait(waitScope);
