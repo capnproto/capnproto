@@ -2187,18 +2187,6 @@ struct ConcreteForArc final: public AbstractForArc {
   bool* ptr;
 };
 
-struct AbstractAtomicRefcounted: public AtomicRefcounted {
-  virtual void use() const = 0;
-};
-
-struct ConcreteAtomicRefcounted final: public AbstractForArc, public AbstractAtomicRefcounted {
-  ConcreteAtomicRefcounted(bool* ptr): ptr(ptr) {}
-  ~ConcreteAtomicRefcounted() { *ptr = true; }
-  void use() const override {}
-
-  bool* ptr;
-};
-
 KJ_TEST("Arc<Abstract>") {
   bool b = false;
 

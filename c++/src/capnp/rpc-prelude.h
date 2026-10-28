@@ -47,14 +47,6 @@ class VatNetworkBase {
   // Non-template version of VatNetwork.  Ignore this class; see VatNetwork in rpc.h.
 
 public:
-  class Connection;
-
-  struct ConnectionAndProvisionId {
-    kj::Own<Connection> connection;
-    kj::Own<OutgoingRpcMessage> firstMessage;
-    Orphan<AnyPointer> provisionId;
-  };
-
   class Connection {
   public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
