@@ -1465,6 +1465,77 @@ KJ_TEST("RevocableServer") {
   KJ_EXPECT(!revocable.isInUse());
 }
 
+KJ_TEST("RevocableServer FD reference outlives server") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class FdState final: public kj::Refcounted {
+  public:
+    FdState(kj::Own<kj::PromiseFulfiller<void>> destroyed)
+        : destroyed(kj::mv(destroyed)) {}
+    ~FdState() noexcept(false) { destroyed->fulfill(); }
+
+  private:
+    kj::Own<kj::PromiseFulfiller<void>> destroyed;
+  };
+
+  class ServerImpl: public test::TestMembrane::Server {
+  public:
+    ServerImpl(kj::Own<kj::PromiseFulfiller<void>> destroyed)
+        : state(kj::refcounted<FdState>(kj::mv(destroyed))) {}
+
+    kj::Maybe<FdRef> getFd() override {
+      return FdRef(123, kj::addRef(*state));
+    }
+
+  private:
+    kj::Own<FdState> state;
+  };
+
+  auto destroyed = kj::newPromiseAndFulfiller<void>();
+  kj::Maybe<Capability::FdRef> fd;
+  {
+    ServerImpl server(kj::mv(destroyed.fulfiller));
+    RevocableServer<test::TestMembrane> revocable(server);
+    fd = revocable.getClient().getFd().wait(waitScope);
+    KJ_IF_SOME(f, fd) {
+      KJ_EXPECT(f.get() == 123);
+    } else {
+      KJ_FAIL_ASSERT("missing FD");
+    }
+  }
+
+  KJ_EXPECT(!destroyed.promise.poll(waitScope));
+  fd = kj::none;
+  KJ_EXPECT(destroyed.promise.poll(waitScope));
+}
+
+KJ_TEST("RevocableServer can be revoked while getting an FD") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  class KeepAlive final: public kj::Refcounted {};
+
+  class ServerImpl: public test::TestMembrane::Server {
+  public:
+    kj::Maybe<FdRef> getFd() override {
+      auto result = FdRef(123, kj::addRef(*keepAlive));
+      KJ_ASSERT_NONNULL(revocable).revoke();
+      return kj::mv(result);
+    }
+
+    kj::Own<KeepAlive> keepAlive = kj::refcounted<KeepAlive>();
+    RevocableServer<test::TestMembrane>* revocable = nullptr;
+  };
+
+  ServerImpl server;
+  RevocableServer<test::TestMembrane> revocable(server);
+  server.revocable = &revocable;
+  auto hook = ClientHook::from(revocable.getClient());
+
+  KJ_EXPECT(hook->getFd() == kj::none);
+}
+
 KJ_TEST("servers can be refcounted") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
