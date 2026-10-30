@@ -361,6 +361,17 @@ TEST(AsyncIo, AncillaryMessageHandler) {
   }).wait(ioContext.waitScope);
 
   EXPECT_EQ("foo", result);
+
+  // Setting SO_TIMESTAMP turns on the kernel's receive timestamps asynchronously: Linux defers
+  // enabling them to a workqueue, so segments that arrive in the meantime carry no timestamp, and
+  // no control message. On a machine where no other socket has timestamps on, the first write can
+  // arrive before they are, so write again until a timestamp arrives.
+  for (uint i = 0; !serverHandlerCalled && i < 100; i++) {
+    ioContext.provider->getTimer().afterDelay(10 * MILLISECONDS).wait(ioContext.waitScope);
+    client->write("foo"_kjb).wait(ioContext.waitScope);
+    EXPECT_EQ(3u, server->tryRead(receiveBuffer, 3, 4).wait(ioContext.waitScope));
+  }
+
   EXPECT_FALSE(clientHandlerCalled);
   EXPECT_TRUE(serverHandlerCalled);
 }
