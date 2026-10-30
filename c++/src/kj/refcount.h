@@ -602,6 +602,11 @@ public:
     // Not supported for pointer types; compare their values instead: *rc1 == *rc2.
     return get() == other.get();
   }
+  inline bool operator==(const T* other) const requires (!isPointerType<T>()) {
+    // True if this Rc points to `other`. Allows looking up an Rc by raw pointer, e.g. in a
+    // kj::HashSet<Rc<T>>.
+    return get() == other;
+  }
   inline bool operator==(decltype(nullptr)) const { return get() == nullptr; }
 
 #define NULLCHECK KJ_IREQUIRE(get() != nullptr, "null Rc<> dereference")
