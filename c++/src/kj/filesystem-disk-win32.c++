@@ -1031,10 +1031,10 @@ public:
         object = Own<T>();  // Force close of handle before trying to delete.
 
         if (kj::isSameType<T, File>()) {
-          KJ_WIN32(DeleteFileW(tempPath.begin())) { break; }
+          KJ_DTOR_WIN32(DeleteFileW(tempPath.begin()));
         } else {
           rmrfChildren(tempPath);
-          KJ_WIN32(RemoveDirectoryW(tempPath.begin())) { break; }
+          KJ_DTOR_WIN32(RemoveDirectoryW(tempPath.begin()));
         }
       }
     }

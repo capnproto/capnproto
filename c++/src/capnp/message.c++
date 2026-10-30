@@ -231,12 +231,15 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
       free(firstSegment);
     } else {
       // Must zero first segment.
-      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = getSegmentsForOutput();
-      if (segments.size() > 0) {
-        KJ_ASSERT(segments[0].begin() == firstSegment,
-            "First segment in getSegmentsForOutput() is not the first segment allocated?");
-        kj::asBytes(static_cast<word*>(firstSegment), segments[0].size()).fill(0);
-      }
+      // Both getSegmentsForOutput() and the assertion may throw; if so, skip zeroing.
+      kj::logExceptionsIfUnwinding([&]() {
+        kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = getSegmentsForOutput();
+        if (segments.size() > 0) {
+          KJ_ASSERT(segments[0].begin() == firstSegment,
+              "First segment in getSegmentsForOutput() is not the first segment allocated?");
+          kj::asBytes(static_cast<word*>(firstSegment), segments[0].size()).fill(0);
+        }
+      });
     }
 
     for (word* ptr: moreSegments) {
