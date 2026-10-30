@@ -432,7 +432,7 @@ class Rc {
   // Otherwise, `kj::rc` allocates `RcWrapper<T>` to provide a `refcount`.
   //
   // Rc<T> can also be constructed from:
-  // - kj::Own<T> for all types of T. Allocates a wrapper.
+  // - kj::Own<T> for non-`Refcounted` Ts. Allocates a wrapper.
   // - T for ordinary non-`Refcounted` Ts with move constructor. Allocates a wrapper.
   //
   // Pointer types (registered via PointerTraits, e.g. ArrayPtr or Cap'n Proto readers) are stored
@@ -468,7 +468,7 @@ class Rc {
   //     without being concerned of reference counting behavior.
   //     To improve the transparency of the code, kj::Own<T> shouldn't be used
   //     to call addRef() without kj::Rc.
-  // - convert kj::Own<T> to kj::Rc<T> to wrap an object into refcounted hold.
+  // - convert kj::Own<T> to kj::Rc<T> to wrap a non-refcounted object into a refcounted hold.
   using Impl = _::RcImpl<T>;
   using Exposed = typename _::RcExposed<T>::Type;
 public:
@@ -485,12 +485,16 @@ public:
     // This and below do not use concepts, but templates and static_asserts.
     // Concepts require T to be fully defined, but Rc<T> is often used with forward-declared T.
     // This function is declared as template to help msvc in polymorphic base class case.
-    static_assert(!canConvert<T*, Refcounted*>());
+    static_assert(!canConvert<T*, const Refcounted*>());
     auto wrapper = new _::RcWrapper<U>(mv(t));
     impl = Impl(wrapper, *wrapper->getWrappedPtr());
   }
 
   inline Rc(Own<T> t) noexcept {
+    // Taking over an Own<T> is only supported for non-refcounted types. A type that is already
+    // Refcounted must be managed through its own reference count from the start to end.
+    static_assert(!canConvert<T*, const Refcounted*>(),
+        "Cannot convert Own<T> to Rc<T> when T is already Refcounted; use kj::rc<T>() instead.");
     if (t.get() == nullptr) return;
     auto wrapper = new _::RcOwnWrapper<T>(mv(t));
     impl = Impl(wrapper, *wrapper->getWrappedPtr());
