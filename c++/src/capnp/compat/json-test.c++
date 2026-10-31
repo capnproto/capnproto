@@ -447,6 +447,28 @@ KJ_TEST("basic json decoding") {
     MallocMessageBuilder message;
     auto root = message.initRoot<JsonValue>();
 
+    // Code points outside the BMP are escaped as a UTF-16 surrogate pair (RFC 8259 section 7)
+    // and must decode to a single code point.
+    json.decodeRaw(R"("\ud83d\ude00 \u00e9!")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("\xf0\x9f\x98\x80 \xc3\xa9!") == root.getString(), root.getString());
+  }
+
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
+    // Surrogates that don't form a pair keep kj's WTF-8 passthrough behavior, and pairing picks
+    // the right code units: here the second and third escapes pair up, not the first two.
+    json.decodeRaw(R"("\ud83d\ud83d\ude00\ud83dz\ude00")", root);
+    KJ_EXPECT(root.which() == JsonValue::STRING);
+    KJ_EXPECT(kj::str("\xed\xa0\xbd\xf0\x9f\x98\x80\xed\xa0\xbdz\xed\xb8\x80")
+        == root.getString(), root.getString());
+  }
+  {
+    MallocMessageBuilder message;
+    auto root = message.initRoot<JsonValue>();
+
     json.decodeRaw("[]", root);
     KJ_EXPECT(root.which() == JsonValue::ARRAY, (uint)root.which());
     KJ_EXPECT(root.getArray().size() == 0);
