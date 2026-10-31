@@ -82,13 +82,63 @@ KJ_TEST("HttpOverCapnpFactory::capnpToKj rejects out of range common values") {
   }
 }
 
-KJ_TEST("KJ and RPC HTTP method enums match") {
-#define EXPECT_MATCH(METHOD) \
-  KJ_EXPECT(static_cast<uint>(kj::HttpMethod::METHOD) == \
-            static_cast<uint>(capnp::HttpMethod::METHOD));
+KJ_TEST("HTTP method conversion") {
+  // Every method kj lists travels as the capnp enumerant of the same name.
+#define EXPECT_ROUND_TRIP(METHOD) \
+  KJ_EXPECT(httpMethodToCapnp(kj::HttpMethod::METHOD) == capnp::HttpMethod::METHOD); \
+  KJ_EXPECT(httpMethodFromCapnp(capnp::HttpMethod::METHOD, nullptr) == kj::HttpMethod::METHOD);
 
-  KJ_HTTP_FOR_EACH_METHOD(EXPECT_MATCH);
-#undef EXPECT_MATCH
+  KJ_HTTP_FOR_EACH_METHOD(EXPECT_ROUND_TRIP);
+#undef EXPECT_ROUND_TRIP
+
+  auto block = KJ_ASSERT_NONNULL(kj::HttpMethod::tryParse("BLOCK"_kj));
+  KJ_EXPECT(httpMethodToCapnp(block) == capnp::HttpMethod::OTHER);
+  KJ_EXPECT(httpMethodFromCapnp(capnp::HttpMethod::OTHER, "BLOCK") == block);
+
+  // A known method sent as OTHER is recognized as the known method.
+  KJ_EXPECT(httpMethodFromCapnp(capnp::HttpMethod::OTHER, "GET") == kj::HttpMethod::GET);
+
+  KJ_EXPECT_THROW_MESSAGE("invalid HTTP method",
+      httpMethodFromCapnp(capnp::HttpMethod::OTHER, "BL OCK"));
+  KJ_EXPECT_THROW_MESSAGE("invalid HTTP method",
+      httpMethodFromCapnp(capnp::HttpMethod::OTHER, nullptr));
+  KJ_EXPECT_THROW_MESSAGE("invalid HTTP method",
+      httpMethodFromCapnp(capnp::HttpMethod::OTHER, "CONNECT"));
+
+  // A long invalid name from the peer isn't copied into the exception wholesale.
+  auto longName = kj::str(kj::repeat('X', 100000));
+  KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
+    httpMethodFromCapnp(capnp::HttpMethod::OTHER, longName);
+  })) {
+    KJ_EXPECT(e.getDescription().size() < 200, e.getDescription().size());
+  } else {
+    KJ_FAIL_EXPECT("expected an exception");
+  }
+
+  // Bytes outside ASCII in a bad name are escaped, so they don't reach logs raw.
+  KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
+    httpMethodFromCapnp(capnp::HttpMethod::OTHER, "BL\xc3\xb6" "CK");
+  })) {
+    for (char c: e.getDescription()) {
+      KJ_EXPECT(static_cast<kj::byte>(c) < 0x80, e.getDescription());
+    }
+  } else {
+    KJ_FAIL_EXPECT("expected an exception");
+  }
+  KJ_EXPECT_THROW_MESSAGE("unknown method",
+      httpMethodFromCapnp(static_cast<capnp::HttpMethod>(100), nullptr));
+
+  capnp::MallocMessageBuilder message;
+  auto request = message.initRoot<capnp::HttpRequest>();
+  setHttpMethod(request, block);
+  KJ_EXPECT(request.getMethod() == capnp::HttpMethod::OTHER);
+  KJ_EXPECT(request.getMethodName() == "BLOCK");
+  KJ_EXPECT(getHttpMethod(request.asReader()) == block);
+
+  setHttpMethod(request, kj::HttpMethod::POST);
+  KJ_EXPECT(request.getMethod() == capnp::HttpMethod::POST);
+  KJ_EXPECT(!request.hasMethodName());
+  KJ_EXPECT(getHttpMethod(request.asReader()) == kj::HttpMethod::POST);
 }
 
 // =======================================================================================
@@ -164,6 +214,48 @@ constexpr TestStep TEST_STEPS[] = {
     "Content-Length: 4\r\n"
     "\r\n"
     "nope"_kj
+  },
+
+  // A method not listed in KJ_HTTP_FOR_EACH_METHOD.
+  {
+    CLIENT_TO_SERVER,
+
+    "BLOCK /foo/bar HTTP/1.1\r\n"
+    "Content-Length: 5\r\n"
+    "Host: example.com\r\n"
+    "\r\n"
+    "corge"_kj,
+  },
+  {
+    SERVER_TO_CLIENT,
+
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Length: 3\r\n"
+    "\r\n"
+    "foo"_kj
+  },
+
+  // An OTHER method without a body. Like any method but GET and HEAD, the client sends an explicit
+  // Content-Length: 0.
+  {
+    CLIENT_TO_SERVER,
+
+    "GEOLOCATION /foo/bar HTTP/1.1\r\n"
+    "Host: example.com\r\n"
+    "\r\n"_kj,
+
+    "GEOLOCATION /foo/bar HTTP/1.1\r\n"
+    "Content-Length: 0\r\n"
+    "Host: example.com\r\n"
+    "\r\n"_kj,
+  },
+  {
+    SERVER_TO_CLIENT,
+
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Length: 3\r\n"
+    "\r\n"
+    "foo"_kj
   },
 
   // HEAD request
@@ -406,7 +498,9 @@ void runEndToEndTests(kj::Timer& timer, kj::HttpHeaderTable& headerTable,
   auto backHttp = kj::newHttpClient(timer, headerTable, oneConnectAddr);
   auto backCapnp = serverFactory.kjToCapnp(kj::newHttpService(*backHttp));
   auto frontCapnp = clientFactory.capnpToKj(backCapnp);
-  kj::HttpServer frontKj(timer, headerTable, *frontCapnp);
+  kj::HttpServerSettings frontSettings;
+  frontSettings.allowOtherMethods = true;
+  kj::HttpServer frontKj(timer, headerTable, *frontCapnp, frontSettings);
   auto listenTask = frontKj.listenHttp(kj::mv(clientPipe.ends[1]))
       .eagerlyEvaluate([](kj::Exception&& e) { KJ_LOG(ERROR, e); });
 
