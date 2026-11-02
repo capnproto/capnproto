@@ -218,6 +218,11 @@ CustomChecks:
           # handler escapes. The body is the compound statement whose parent is the `try`
           # statement; a handler's body is a child of the `catch` statement instead.
           hasAncestor(compoundStmt(hasParent(cxxTryStmt(has(cxxCatchStmt(isCatchAll())))))),
+          # Directly inside a `noexcept` lambda, such as `KJ_DEFER([&]() noexcept { ... }())`: an
+          # exception escaping it terminates, unwinding or not, as in a `noexcept` destructor
+          # above. forFunction() finds the nearest enclosing function, which for code in a lambda
+          # is the lambda's call operator.
+          forFunction(functionDecl(isNoThrow())),
           # Debug-only checks: compiled out in release builds, and allowed to terminate in debug
           # builds (see above). In debug builds they expand to KJ_ASSERT / KJ_REQUIRE, so they
           # are recognized by the macro they were written with.
