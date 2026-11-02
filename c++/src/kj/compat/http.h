@@ -136,7 +136,7 @@ public:
   constexpr Known known() const { return id; }
   // Which known method this is, or OTHER. Use this to switch over methods.
 
-  kj::StringPtr name() const KJ_LIFETIMEBOUND;
+  kj::ArrayPtr<const char> name() const KJ_LIFETIMEBOUND;
   // The method's name as it appears on the wire, e.g. "GET".
 
   inline bool operator==(const HttpMethod& other) const {
@@ -163,7 +163,7 @@ KJ_HTTP_FOR_EACH_METHOD(DEFINE_METHOD)
 struct HttpConnectMethod {};
 // CONNECT is handled specially and separately from the other HttpMethods.
 
-kj::StringPtr KJ_STRINGIFY(const HttpMethod& method);
+kj::ArrayPtr<const char> KJ_STRINGIFY(const HttpMethod& method);
 kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method);
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name);
 // Parses only the methods listed in KJ_HTTP_FOR_EACH_METHOD, never an OTHER method. See

@@ -347,11 +347,11 @@ KJ_HTTP_FOR_EACH_METHOD(CHECK_NAME_SIZE)
 constexpr auto HTTP_METHOD_CHARS = kj::parse::alphaNumeric.orAny("!#$%&'*+-.^_`|~");
 // The characters allowed in a method name: RFC 9110 section 5.6.2 `tchar`.
 
-kj::StringPtr HttpMethod::name() const {
+kj::ArrayPtr<const char> HttpMethod::name() const {
   if (id == Known::OTHER) {
-    return kj::StringPtr(nameText);
+    return kj::arrayPtr(nameText, strlen(nameText));
   }
-  return METHOD_NAMES[static_cast<uint>(id)];
+  return METHOD_NAMES[static_cast<uint>(id)].asArray();
 }
 
 uint HttpMethod::hashCode() const {
@@ -372,7 +372,7 @@ void HttpMethod::throwInvalidKnown() {
       "KJ_HTTP_FOR_EACH_METHOD; use HttpMethod::tryParse() for other methods");
 }
 
-kj::StringPtr KJ_STRINGIFY(const HttpMethod& method) {
+kj::ArrayPtr<const char> KJ_STRINGIFY(const HttpMethod& method) {
   return method.name();
 }
 

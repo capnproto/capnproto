@@ -59,7 +59,8 @@ void setHttpMethod(capnp::HttpRequest::Builder request, const kj::HttpMethod& me
   auto capnpMethod = httpMethodToCapnp(method);
   request.setMethod(capnpMethod);
   if (capnpMethod == capnp::HttpMethod::OTHER) {
-    request.setMethodName(method.name());
+    auto name = method.name();
+    request.initMethodName(name.size()).asArray().copyFrom(name);
   } else if (request.hasMethodName()) {
     request.disownMethodName();
   }

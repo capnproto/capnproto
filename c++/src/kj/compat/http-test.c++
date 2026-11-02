@@ -106,7 +106,7 @@ KJ_TEST("HttpMethod::tryParse") {
 
   auto block = KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj));
   KJ_EXPECT(block.known() == HttpMethod::Known::OTHER);
-  KJ_EXPECT(block.name() == "BLOCK");
+  KJ_EXPECT(block.name() == "BLOCK"_kj);
   KJ_EXPECT(kj::str(block) == "BLOCK");
   KJ_EXPECT(block != HttpMethod::GET);
   KJ_EXPECT(block == KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj)));
@@ -120,34 +120,34 @@ KJ_TEST("HttpMethod::tryParse") {
     auto geolocation = KJ_ASSERT_NONNULL(HttpMethod::tryParse(kj::str("GEOLOCATION")));
     copy = geolocation;
   }
-  KJ_EXPECT(KJ_ASSERT_NONNULL(copy).name() == "GEOLOCATION");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(copy).name() == "GEOLOCATION"_kj);
 
   // Method names are case-sensitive...
   auto lowerBlock = KJ_ASSERT_NONNULL(HttpMethod::tryParse("block"_kj));
-  KJ_EXPECT(lowerBlock.name() == "block");
+  KJ_EXPECT(lowerBlock.name() == "block"_kj);
   KJ_EXPECT(lowerBlock != block);
 
   // ...even for a name that differs from a known method or CONNECT only in case.
-  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("get"_kj)).name() == "get");
-  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("connect"_kj)).name() == "connect");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("get"_kj)).name() == "get"_kj);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("connect"_kj)).name() == "connect"_kj);
 
   // Any RFC 9110 token is accepted, including names with characters a C++ identifier can't have.
-  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("M-SEARCH"_kj)).name() == "M-SEARCH");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("M-SEARCH"_kj)).name() == "M-SEARCH"_kj);
   KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("!#$%&'*+-.^_`|~09azAZ"_kj)).name() ==
-      "!#$%&'*+-.^_`|~09azAZ");
+      "!#$%&'*+-.^_`|~09azAZ"_kj);
 
   // The name need not be NUL-terminated.
   KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("GETX"_kj.first(3))) == HttpMethod::GET);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCKED"_kj.first(5))).name() == "BLOCK");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCKED"_kj.first(5))).name() == "BLOCK"_kj);
 
   // Length limit.
   auto longest = kj::str(kj::repeat('X', HttpMethod::MAX_NAME_SIZE));
-  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse(longest)).name() == longest);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse(longest)).name() == longest.asArray());
   KJ_EXPECT(HttpMethod::tryParse(kj::str(longest, "X")) == kj::none);
 
   // CONNECT is not an HttpMethod.
   KJ_EXPECT(HttpMethod::tryParse("CONNECT"_kj) == kj::none);
-  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("CONNECTS"_kj)).name() == "CONNECTS");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("CONNECTS"_kj)).name() == "CONNECTS"_kj);
 
   // Invalid tokens.
   KJ_EXPECT(HttpMethod::tryParse(""_kj) == kj::none);
@@ -408,7 +408,7 @@ KJ_TEST("HttpHeaders parse requests with other methods") {
     auto input = kj::heapString("BLOCK /foo HTTP/1.1\r\nHost: example.com\r\n\r\n");
     auto request = headers.tryParseRequest(input, true).get<HttpHeaders::Request>();
     KJ_EXPECT(request.method.known() == HttpMethod::Known::OTHER);
-    KJ_EXPECT(request.method.name() == "BLOCK");
+    KJ_EXPECT(request.method.name() == "BLOCK"_kj);
     KJ_EXPECT(request.url == "/foo");
     KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(HttpHeaderId::HOST)) == "example.com");
   }
@@ -419,7 +419,7 @@ KJ_TEST("HttpHeaders parse requests with other methods") {
     auto input = kj::heapString("GETX /foo HTTP/1.1\r\n\r\n");
     auto request = headers.tryParseRequest(input, true).get<HttpHeaders::Request>();
     KJ_EXPECT(request.method.known() == HttpMethod::Known::OTHER);
-    KJ_EXPECT(request.method.name() == "GETX");
+    KJ_EXPECT(request.method.name() == "GETX"_kj);
   }
 
   // Known methods and CONNECT parse the same as when OTHER methods aren't allowed.
