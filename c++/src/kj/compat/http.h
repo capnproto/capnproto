@@ -125,8 +125,9 @@ public:
 
   static kj::Maybe<HttpMethod> tryParse(kj::ArrayPtr<const char> name);
   // Parses any method name that is a valid token per RFC 9110 and is at most MAX_NAME_SIZE
-  // characters, except "CONNECT". Method names are case-sensitive, so "get" is an OTHER method,
-  // not HttpMethod::GET.
+  // characters, except "CONNECT", which kj handles through HttpService::connect() rather than as
+  // an HttpMethod. Method names are case-sensitive, so "get" is an OTHER method, not
+  // HttpMethod::GET.
 
   static HttpMethod parse(kj::ArrayPtr<const char> name);
   // Like tryParse(), but throws if the name is not accepted. The exception names at most
