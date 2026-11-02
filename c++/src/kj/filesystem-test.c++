@@ -379,6 +379,21 @@ KJ_TEST("InMemoryFile") {
   KJ_EXPECT(file->readAllText() == StringPtr("qux\0\0\0", 6));
 }
 
+KJ_TEST("InMemoryFile gather-write") {
+  TestClock clock;
+
+  auto file = newInMemoryFile(clock);
+  file->writeAll("0123456789");
+
+  // Overwrites and extends from a nonzero offset, skipping empty pieces.
+  file->write(7, kj::arr<ArrayPtr<const byte>>(""_kjb, "foo"_kjb, ""_kjb, "barbaz"_kjb, ""_kjb));
+  KJ_EXPECT(file->readAllText() == "0123456foobarbaz");
+
+  // Writing nothing leaves the file alone, even past its end.
+  file->write(20, kj::arr<ArrayPtr<const byte>>(""_kjb, ""_kjb));
+  KJ_EXPECT(file->readAllText() == "0123456foobarbaz");
+}
+
 KJ_TEST("InMemoryFile::copy()") {
   TestClock clock;
 

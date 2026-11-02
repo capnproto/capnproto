@@ -394,6 +394,54 @@ public:
     }
   }
 
+  void write(uint64_t offset, ArrayPtr<const ArrayPtr<const byte>> pieces) const {
+#if __APPLE__ || __CYGWIN__ || (defined(__ANDROID__) && __ANDROID_API__ < 24)
+    // No pwritev(); see zero().
+    for (auto piece: pieces) {
+      write(offset, piece);
+      offset += piece.size();
+    }
+#else
+    const size_t iovmax = miniposix::iovMax();
+    KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, pieces.size()), 16, 128);
+
+    for (;;) {
+      // Drop leading empty pieces, so that each pwritev() below has data to write.
+      while (pieces.size() > 0 && pieces[0].size() == 0) {
+        pieces = pieces.slice(1);
+      }
+      if (pieces.size() == 0) break;
+
+      auto batch = pieces.first(kj::min(iov.size(), pieces.size()));
+      for (auto i: kj::indices(batch)) {
+        // pwritev() is not const-correct.
+        iov[i].iov_base = const_cast<byte*>(batch[i].begin());
+        iov[i].iov_len = batch[i].size();
+      }
+
+      ssize_t n;
+      KJ_SYSCALL(n = pwritev(fd, iov.begin(), batch.size(), offset));
+      KJ_ASSERT(n > 0, "pwritev() returned zero?");
+      offset += n;
+
+      // Drop the pieces that were written in full.
+      while (pieces.size() > 0 && size_t(n) >= pieces[0].size()) {
+        n -= pieces[0].size();
+        pieces = pieces.slice(1);
+      }
+
+      if (n > 0) {
+        // Short write that ended partway through a piece. Finish that piece with pwrite(), which
+        // retries its own short writes, then resume gathering from the next piece.
+        auto rest = pieces[0].slice(n);
+        write(offset, rest);
+        offset += rest.size();
+        pieces = pieces.slice(1);
+      }
+    }
+#endif
+  }
+
   void zero(uint64_t offset, uint64_t size) const {
     // If FALLOC_FL_PUNCH_HOLE is defined, use it to efficiently zero the area.
     //
@@ -1540,6 +1588,9 @@ public:
 
   void write(uint64_t offset, ArrayPtr<const byte> data) const override {
     DiskHandle::write(offset, data);
+  }
+  void write(uint64_t offset, ArrayPtr<const ArrayPtr<const byte>> pieces) const override {
+    DiskHandle::write(offset, pieces);
   }
   void zero(uint64_t offset, uint64_t size) const override {
     DiskHandle::zero(offset, size);

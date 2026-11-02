@@ -488,6 +488,11 @@ public:
   virtual void write(uint64_t offset, ArrayPtr<const byte> data) const = 0;
   // Write the given data starting at the given offset in the file.
 
+  virtual void write(uint64_t offset, ArrayPtr<const ArrayPtr<const byte>> pieces) const;
+  // Write the concatenation of `pieces` starting at the given offset in the file. The default
+  // implementation writes each piece in turn. Subclasses can override this to use a single
+  // gather-write syscall.
+
   virtual void zero(uint64_t offset, uint64_t size) const = 0;
   // Write zeros to the file, starting at `offset` and continuing for `size` bytes. If the platform
   // supports it, this will "punch a hole" in the file, such that blocks that are entirely zeros
