@@ -70,8 +70,13 @@ struct StickyFlag::State {
 StickyFlag::StickyFlag(): state(heap<State>()) {}
 
 StickyFlag::~StickyFlag() noexcept(false) {
-  if (!state->ready) {
-    reject(KJ_EXCEPTION(FAILED, "StickyFlag destroyed before it was signaled or rejected"));
+  if (state->ready) return;
+
+  // Only promises already returned by whenSignaled() can observe the outcome now, and they exist
+  // only if a fulfiller was created. Skip building an exception nobody will see, and don't keep a
+  // copy in the state we're about to destroy.
+  KJ_IF_SOME(f, state->fulfiller) {
+    f->reject(KJ_EXCEPTION(FAILED, "StickyFlag destroyed before it was signaled or rejected"));
   }
 }
 
