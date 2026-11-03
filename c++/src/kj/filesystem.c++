@@ -521,6 +521,13 @@ void File::writeAll(StringPtr text) const {
   writeAll(text.asBytes());
 }
 
+void File::write(uint64_t offset, ArrayPtr<const ArrayPtr<const byte>> pieces) const {
+  for (auto piece: pieces) {
+    write(offset, piece);
+    offset += piece.size();
+  }
+}
+
 size_t File::copy(uint64_t offset, const ReadableFile& from,
                   uint64_t fromOffset, uint64_t size) const {
   byte buffer[8192]{};

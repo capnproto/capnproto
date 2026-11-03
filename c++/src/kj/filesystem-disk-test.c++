@@ -373,6 +373,36 @@ KJ_TEST("DiskFile") {
   KJ_EXPECT(file->readAllText() == StringPtr("qux\0\0\0", 6));
 }
 
+KJ_TEST("DiskFile gather-write") {
+  auto file = newTempFile();
+  file->writeAll("0123456789");
+
+  // Overwrites and extends from a nonzero offset, skipping empty pieces.
+  file->write(7, kj::arr<ArrayPtr<const byte>>(""_kjb, "foo"_kjb, ""_kjb, "barbaz"_kjb, ""_kjb));
+  KJ_EXPECT(file->readAllText() == "0123456foobarbaz");
+
+  // Writing nothing leaves the file alone, even past its end.
+  file->write(20, kj::arr<ArrayPtr<const byte>>(""_kjb, ""_kjb));
+  KJ_EXPECT(file->readAllText() == "0123456foobarbaz");
+
+  // More pieces than a single pwritev() accepts (IOV_MAX is 1024 on Linux), with empty pieces at
+  // various positions, including batch boundaries.
+  auto source = kj::heapArray<byte>(3000);
+  for (auto i: kj::indices(source)) source[i] = 'a' + i % 26;
+  auto pieces = kj::heapArray<ArrayPtr<const byte>>(4000);
+  size_t pos = 0;
+  for (auto i: kj::indices(pieces)) {
+    size_t size = i % 4 == 0 ? 0 : 1;
+    pieces[i] = source.slice(pos, pos + size);
+    pos += size;
+  }
+  KJ_ASSERT(pos == source.size());
+  file->write(3, pieces);
+  auto bytes = file->readAllBytes();
+  KJ_EXPECT(bytes.first(3) == "012"_kjb);
+  KJ_EXPECT(bytes.slice(3) == source);
+}
+
 KJ_TEST("DiskFile::copy()") {
   auto source = newTempFile();
   source->writeAll("foobarbaz");
