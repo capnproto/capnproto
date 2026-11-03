@@ -24,6 +24,7 @@
 
 #include <capnp/compat/http-over-capnp.capnp.h>
 #include <kj/compat/http.h>
+#include <kj/function.h>
 #include <kj/map.h>
 #include "byte-stream.h"
 
@@ -81,6 +82,18 @@ public:
 
   kj::HttpHeaders capnpToKj(capnp::List<capnp::HttpHeader>::Reader capnpHeaders) const;
   // Returned headers may alias into `capnpHeaders`.
+
+  kj::Own<kj::WebSocket> connectWebSocket(
+      kj::FunctionParam<capnp::WebSocket::Client(capnp::WebSocket::Client)> exchange);
+  // Returns a WebSocket whose peer is reached over Cap'n Proto, for protocols that pass WebSocket
+  // capabilities outside of an HttpService request.
+  //
+  // Calls `exchange` once, before returning, with the capability that the peer calls to send
+  // messages to the returned WebSocket. `exchange` returns the capability that the returned
+  // WebSocket calls to send messages to the peer, which may be a promise, such as a pipelined
+  // result of the call that passes the first capability. The two are connected the same way as
+  // an HttpService request's WebSockets, so a pump between two WebSockets made by this factory
+  // shortens the path.
 
 private:
   ByteStreamFactory& streamFactory;
