@@ -1,0 +1,23 @@
+c++/src/kj/async-xthread-test.c++
+  s_ad98b07a2ebbe9::t_63ef7a8dd3b5cb 55-85
+c++/src/kj/async.c++
+  s_ad98b07a2ebbe9::t_5a831d4267a8eb 1264-1274,1361-1366
+c++/src/kj/async.h
+  s_ad98b07a2ebbe9::t_693bc512709845 1044-1052,1140-1144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "89dddc42347539a98e16f16d49c9d9d77df12df5",
+  "prompts": {},
+  "sessions": {
+    "s_ad98b07a2ebbe9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6a08ce34-c31d-417a-bda6-d204e066dd3c",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+c++/src/kj/filesystem-disk-test.c++
+  s_d668ed2e97d4bd::t_5dd07a1c0c79d3 376-405
+c++/src/kj/filesystem-disk-unix.c++
+  s_f332e176eb9835::t_a9e91afc66542c 397-444,1592-1594
+c++/src/kj/filesystem-test.c++
+  s_d668ed2e97d4bd::t_86347eb09cb8cd 382-396
+c++/src/kj/filesystem.c++
+  s_f332e176eb9835::t_ab710a46dafade 524-530
+c++/src/kj/filesystem.h
+  s_f332e176eb9835::t_076e811c900adb 491-495
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4ff64f83f4962989e21db9b198dff8667a463fb8",
+  "prompts": {},
+  "sessions": {
+    "s_d668ed2e97d4bd": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e636fa96effeNq6WtQHjfGZ3Nv",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ashley Peacock <apeacock@cloudflare.com>"
+    },
+    "s_f332e176eb9835": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ec654b52dffe5R4MDhsJqmPWkg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ashley Peacock <apeacock@cloudflare.com>"
+    }
+  }
+}
