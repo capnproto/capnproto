@@ -263,7 +263,9 @@ protected:
     // automatically arm the event.
 
     inline void traceEvent(TraceBuilder& builder) {
-      if (event != nullptr && !builder.full()) event->traceEvent(builder);
+      // Once armed, `event` holds a sentinel rather than an Event. A coroutine arms at co_return,
+      // before destroying its locals, so a destructor can trace it in that state.
+      if (event != nullptr && !armed() && !builder.full()) event->traceEvent(builder);
     }
 
     bool armed() const;

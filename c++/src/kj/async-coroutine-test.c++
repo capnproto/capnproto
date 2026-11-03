@@ -551,6 +551,30 @@ KJ_TEST("Can trace through coroutines") {
 }
 #endif  // !_MSC_VER || defined(__clang__)
 
+KJ_TEST("Can trace a coroutine while it destroys its locals after co_return") {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto paf = newPromiseAndFulfiller<void>();
+  bool traced = false;
+
+  auto coroPromise = [&]() -> kj::Promise<void> {
+    // Runs after co_return has armed the coroutine's OnReadyEvent, while the coroutine is still
+    // the currently firing event. Flowing off the end destroys locals before arming, so the
+    // explicit co_return is needed.
+    KJ_DEFER({
+      getAsyncTrace();
+      traced = true;
+    });
+    co_await paf.promise;
+    co_return;
+  }();
+
+  paf.fulfiller->fulfill();
+  coroPromise.wait(waitScope);
+  KJ_EXPECT(traced);
+}
+
 Promise<void> sendData(Promise<Own<NetworkAddress>> addressPromise) {
   auto address = co_await addressPromise;
   auto client = co_await address->connect();
