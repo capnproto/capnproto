@@ -1,0 +1,21 @@
+c++/src/kj/async-coroutine-test.c++
+  s_fbe319382f2be7::t_38e51f10cc24d1 554-577
+c++/src/kj/async-inl.h
+  s_fbe319382f2be7::t_1d8fbe4dbe457c 266-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e05be27c03e0cdfc9f525b3d485b1ee28fb5a7b6",
+  "prompts": {},
+  "sessions": {
+    "s_fbe319382f2be7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e48dbd49-2bec-4cf4-ab32-15cbfd62726b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Dan Lapid <dlapid@cloudflare.com>"
+    }
+  }
+}
