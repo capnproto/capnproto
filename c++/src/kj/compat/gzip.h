@@ -128,6 +128,7 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
   Promise<void> whenWriteDisconnected() override { return inner.whenWriteDisconnected(); }
+  void abortWrite(kj::Exception&& exception) override { inner.abortWrite(kj::mv(exception)); }
 
   inline Promise<void> flush() {
     return pump(Z_SYNC_FLUSH);

@@ -167,6 +167,7 @@ public:
   Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
   Promise<void> whenWriteDisconnected() override { return inner.whenWriteDisconnected(); }
+  void abortWrite(kj::Exception&& exception) override { inner.abortWrite(kj::mv(exception)); }
 
   inline Promise<void> flush() {
     // brotli decoder does not use this parameter, but automatically flushes as much as it can.

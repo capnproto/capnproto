@@ -2658,6 +2658,15 @@ public:
   HttpEntityBodyWriter(HttpOutputStream& inner) {
     inner.setCurrentWrapper(weakInner);
   }
+  void abortWrite(kj::Exception&& exception) override {
+    if (finished || weakInner == kj::none) return;
+    auto& inner = getInner();
+    inner.unsetCurrentWrapper(weakInner);
+    finished = true;
+    // Do not let a chunked writer's destructor finish an aborted body successfully.
+    inner.abortBody();
+  }
+
   ~HttpEntityBodyWriter() noexcept(false) {
     if (!finished) {
       KJ_IF_SOME(inner, weakInner) {
