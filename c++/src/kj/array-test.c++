@@ -976,5 +976,32 @@ KJ_TEST("CappedArray::fill") {
   }
 }
 
+KJ_TEST("FixedArray and CappedArray of size zero") {
+  // With a zero-length array member, compilers that accept one make this zero-sized.
+  static_assert(sizeof(FixedArray<int64_t, 0>) > 0);
+  static_assert(FixedArray<int64_t, 0>().size() == 0);
+
+  FixedArray<int64_t, 0> fixed;
+  fixed.fill(42);
+  KJ_EXPECT(fixed.size() == 0);
+  KJ_EXPECT(fixed.begin() == fixed.end());
+  KJ_EXPECT(fixed.asPtr().size() == 0);
+  ArrayPtr<const int64_t> fixedPtr = kj::implicitCast<const FixedArray<int64_t, 0>&>(fixed);
+  KJ_EXPECT(fixedPtr.size() == 0);
+  for (int64_t x : fixed) {
+    KJ_FAIL_EXPECT("empty FixedArray has an element", x);
+  }
+
+  CappedArray<int64_t, 0> capped;
+  capped.setSize(0);
+  capped.fill(42);
+  KJ_EXPECT(capped.size() == 0);
+  KJ_EXPECT(capped.begin() == capped.end());
+  KJ_EXPECT(capped.asPtr().size() == 0);
+  for (int64_t x : capped) {
+    KJ_FAIL_EXPECT("empty CappedArray has an element", x);
+  }
+}
+
 }  // namespace
 }  // namespace kj
