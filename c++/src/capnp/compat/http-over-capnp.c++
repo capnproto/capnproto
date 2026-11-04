@@ -797,7 +797,9 @@ public:
         method(httpMethodFromCapnp(request.getMethod())),
         url(request.getUrl()),
         headers(factory.capnpToKj(request.getHeaders())),
-        clientContext(kj::mv(clientContext)) {}
+        clientContext(kj::mv(clientContext)) {
+    KJ_REQUIRE(method != kj::HttpMethod::CONNECT, "use connect() for CONNECT requests");
+  }
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,

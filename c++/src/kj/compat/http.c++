@@ -345,17 +345,13 @@ kj::StringPtr KJ_STRINGIFY(HttpMethod method) {
   return METHOD_NAMES[index];
 }
 
-kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method) {
-  return "CONNECT"_kj;
-}
-
-static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(char*& ptr) {
+static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr) {
   char* p = ptr;
 
 #define EXPECT_REST(prefix, suffix) \
   if (strncmp(p, #suffix, sizeof(#suffix)-1) == 0) { \
     ptr = p + (sizeof(#suffix)-1); \
-    return kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>>(HttpMethod::prefix##suffix); \
+    return HttpMethod::prefix##suffix; \
   } else { \
     return kj::none; \
   }
@@ -369,13 +365,7 @@ static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(cha
         case 'O':
           switch (*p++) {
             case 'P': EXPECT_REST(COP,Y)
-            case 'N':
-              if (strncmp(p, "NECT", 4) == 0) {
-                ptr = p + 4;
-                return kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>>(HttpConnectMethod());
-              } else {
-                return kj::none;
-              }
+            case 'N': EXPECT_REST(CON,NECT)
             default: return kj::none;
           }
         default: return kj::none;
@@ -441,19 +431,6 @@ static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(cha
 }
 
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
-  KJ_IF_SOME(method, tryParseHttpMethodAllowingConnect(name)) {
-    KJ_SWITCH_ONEOF(method) {
-      KJ_CASE_ONEOF(m, HttpMethod) { return m; }
-      KJ_CASE_ONEOF(m, HttpConnectMethod) { return kj::none; }
-    }
-    KJ_UNREACHABLE;
-  } else {
-    return kj::none;
-  }
-}
-
-kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> tryParseHttpMethodAllowingConnect(
-    kj::StringPtr name) {
   // const_cast OK because we don't actually access it. consumeHttpMethod() is also called by some
   // code later than explicitly needs to use a non-const pointer.
   char* ptr = const_cast<char*>(name.begin());
@@ -1059,13 +1036,10 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
           "Invalid request line.", content };
     }
 
-    KJ_SWITCH_ONEOF(method) {
-      KJ_CASE_ONEOF(m, HttpMethod) {
-        result = HttpHeaders::Request { m, KJ_ASSERT_NONNULL(path) };
-      }
-      KJ_CASE_ONEOF(m, HttpConnectMethod) {
-        result = HttpHeaders::ConnectRequest { KJ_ASSERT_NONNULL(path) };
-      }
+    if (method == HttpMethod::CONNECT) {
+      result = HttpHeaders::ConnectRequest { KJ_ASSERT_NONNULL(path) };
+    } else {
+      result = HttpHeaders::Request { method, KJ_ASSERT_NONNULL(path) };
     }
   } else {
     return ProtocolError { 501, "Not Implemented",
@@ -1162,8 +1136,7 @@ kj::String HttpHeaders::serializeRequest(
 kj::String HttpHeaders::serializeConnectRequest(
     kj::StringPtr authority,
     kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const {
-  requireValidRequestUrl(authority);
-  return serialize("CONNECT"_kj, authority, "HTTP/1.1"_kj, connectionHeaders);
+  return serializeRequest(HttpMethod::CONNECT, authority, connectionHeaders);
 }
 
 kj::String HttpHeaders::serializeResponse(
@@ -1444,17 +1417,13 @@ class HttpInputStreamImpl final: public HttpInputStream,
                                  public WrappableStreamMixin<HttpInputStreamImpl> {
 private:
   static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
-      kj::OneOf<HttpMethod, HttpConnectMethod> method,
+      HttpMethod method,
       kj::StringPtr url) {
-    KJ_SWITCH_ONEOF(method) {
-      KJ_CASE_ONEOF(m, HttpMethod) {
-        return HttpHeaders::Request { m, url };
-      }
-      KJ_CASE_ONEOF(m, HttpConnectMethod) {
-        return HttpHeaders::ConnectRequest { url };
-      }
+    if (method == HttpMethod::CONNECT) {
+      return HttpHeaders::ConnectRequest { url };
+    } else {
+      return HttpHeaders::Request { method, url };
     }
-    KJ_UNREACHABLE;
   }
 public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner, const HttpHeaderTable& table)
@@ -1464,7 +1433,7 @@ public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner,
       kj::Array<char> headerBufferParam,
       kj::ArrayPtr<char> leftoverParam,
-      kj::OneOf<HttpMethod, HttpConnectMethod> method,
+      HttpMethod method,
       kj::StringPtr url,
       HttpHeaders headers)
       : inner(inner),
@@ -1534,7 +1503,7 @@ public:
         co_return HttpInputStream::Request { request.method, request.url, headers, kj::mv(body) };
       }
       KJ_CASE_ONEOF(request, HttpHeaders::ConnectRequest) {
-        auto body = getEntityBody(HttpInputStreamImpl::REQUEST, HttpConnectMethod(), 0, headers);
+        auto body = getEntityBody(HttpInputStreamImpl::REQUEST, HttpMethod::CONNECT, 0, headers);
         co_return HttpInputStream::Connect { request.authority, headers, kj::mv(body) };
       }
       KJ_CASE_ONEOF(error, HttpHeaders::ProtocolError) {
@@ -1782,7 +1751,7 @@ public:
 
   kj::Own<kj::AsyncInputStream> getEntityBody(
       RequestOrResponse type,
-      kj::OneOf<HttpMethod, HttpConnectMethod> method,
+      HttpMethod method,
       uint statusCode,
       const kj::HttpHeaders& headers);
 
@@ -2337,16 +2306,13 @@ static_assert(!fastCaseCmp<'f','O','o','B','1','a'>("FooB1"), "");
 
 kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
     RequestOrResponse type,
-    kj::OneOf<HttpMethod, HttpConnectMethod> method,
+    HttpMethod method,
     uint statusCode,
     const kj::HttpHeaders& headers) {
   KJ_REQUIRE(headerBuffer.size() > 0, "Cannot get entity body after header buffer release.");
 
-  auto isHeadRequest = method.tryGet<HttpMethod>().map([](auto& m) {
-    return m == HttpMethod::HEAD;
-  }).orDefault(false);
-
-  auto isConnectRequest = method.is<HttpConnectMethod>();
+  auto isHeadRequest = method == HttpMethod::HEAD;
+  auto isConnectRequest = method == HttpMethod::CONNECT;
 
   // Rules to determine how HTTP entity-body is delimited:
   //   https://tools.ietf.org/html/rfc7230#section-3.3.3
@@ -5786,6 +5752,7 @@ public:
 
   Request request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
                   kj::Maybe<uint64_t> expectedBodySize = kj::none) override {
+    KJ_REQUIRE(method != HttpMethod::CONNECT, "use connect() for CONNECT requests");
     KJ_REQUIRE(!upgraded,
         "can't make further requests on this HttpClient because it has been or is in the process "
         "of being upgraded");
@@ -6083,7 +6050,7 @@ public:
               kj::heap(responseHeaders.clone()),
               httpInput.getEntityBody(
                   HttpInputStreamImpl::RESPONSE,
-                  HttpConnectMethod(),
+                  HttpMethod::CONNECT,
                   response.statusCode,
                   responseHeaders)),
               KJ_EXCEPTION(DISCONNECTED, "the connect request was rejected"));
@@ -7977,7 +7944,7 @@ private:
 
   HttpInputStreamImpl httpInput;
   HttpOutputStream httpOutput;
-  kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> currentMethod;
+  kj::Maybe<HttpMethod> currentMethod;
   bool timedOut = false;
   bool closed = false;
   bool upgraded = false;
@@ -8184,7 +8151,7 @@ private:
   kj::Promise<LoopResult> onConnect(HttpHeaders::ConnectRequest& request) {
     auto& headers = httpInput.getHeaders();
 
-    currentMethod = HttpConnectMethod();
+    currentMethod = HttpMethod::CONNECT;
 
     // The HTTP specification says that CONNECT requests have no meaningful payload
     // but stops short of saying that CONNECT *cannot* have a payload. Implementations
@@ -8213,7 +8180,7 @@ private:
       });
     }
 
-    SuspendableRequest suspendable(*this, HttpConnectMethod(), request.authority, headers);
+    SuspendableRequest suspendable(*this, HttpMethod::CONNECT, request.authority, headers);
     auto maybeService = factory(suspendable);
 
     if (suspended) {
@@ -8404,9 +8371,7 @@ private:
       connectionHeaders[HttpHeaders::BuiltinIndices::CONNECTION] = "close";
     }
 
-    bool isHeadRequest = method.tryGet<HttpMethod>().map([](auto& m) {
-        return m == HttpMethod::HEAD;
-      }).orDefault(false);
+    bool isHeadRequest = method == HttpMethod::HEAD;
 
     if (statusCode == 204 || statusCode == 304) {
       // No entity-body.
@@ -8466,9 +8431,7 @@ private:
         "can't call acceptWebSocket() if the request headers didn't have Upgrade: WebSocket");
 
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
-    KJ_REQUIRE(method.tryGet<HttpMethod>().map([](auto& m) {
-      return m == HttpMethod::GET;
-    }).orDefault(false), "WebSocket must be initiated with a GET request.");
+    KJ_REQUIRE(method == HttpMethod::GET, "WebSocket must be initiated with a GET request.");
 
     if (requestHeaders.get(HttpHeaderId::SEC_WEBSOCKET_VERSION).orDefault(nullptr) != "13") {
       return sendWebSocketError("The requested WebSocket version is not supported.");
@@ -8614,7 +8577,7 @@ private:
   void accept(uint statusCode, kj::StringPtr statusText, const HttpHeaders& headers) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
     currentMethod = kj::none;
-    KJ_ASSERT(method.is<HttpConnectMethod>(), "only use accept() with CONNECT requests");
+    KJ_ASSERT(method == HttpMethod::CONNECT, "only use accept() with CONNECT requests");
     KJ_REQUIRE(statusCode >= 200 && statusCode < 300, "the statusCode must be 2xx for accept");
     tunnelRejected = kj::none;
 
@@ -8632,7 +8595,7 @@ private:
       const HttpHeaders& headers,
       kj::Maybe<uint64_t> expectedBodySize) override {
     auto method = KJ_REQUIRE_NONNULL(currentMethod, "already called send()");
-    KJ_REQUIRE(method.is<HttpConnectMethod>(), "Only use reject() with CONNECT requests.");
+    KJ_REQUIRE(method == HttpMethod::CONNECT, "Only use reject() with CONNECT requests.");
     KJ_REQUIRE(statusCode < 200 || statusCode >= 300, "the statusCode must not be 2xx for reject.");
     tunnelRejected = Maybe<kj::Promise<LoopResult>>(BREAK_LOOP_CONN_OK);
 
@@ -8766,7 +8729,7 @@ void HttpServer::taskFailed(kj::Exception&& exception) {
 
 HttpServer::SuspendedRequest::SuspendedRequest(
     kj::Array<byte> bufferParam, kj::ArrayPtr<byte> leftoverParam,
-    kj::OneOf<HttpMethod, HttpConnectMethod> method,
+    HttpMethod method,
     kj::StringPtr url, HttpHeaders headers)
     : buffer(kj::mv(bufferParam)),
       leftover(leftoverParam),

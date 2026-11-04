@@ -203,6 +203,9 @@ enum HttpMethod {
 
   query @26;
   ban @27;
+
+  connect @28;
+  # Not valid in `HttpRequest`. CONNECT requests use `HttpService.connect()`.
 }
 
 annotation commonText @0x857745131db6fc83(enumerant) :Text;

@@ -789,6 +789,27 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
   KJ_EXPECT(!destroyed);
 }
 
+KJ_TEST("HTTP-over-Cap'n-Proto refuses CONNECT in request()") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  bool called = false;
+  bool destroyed = false;
+  auto service = factory.kjToCapnp(kj::heap<HangingHttpService>(called, destroyed));
+
+  auto req = service.requestRequest();
+  auto httpReq = req.initRequest();
+  httpReq.setMethod(capnp::HttpMethod::CONNECT);
+  httpReq.setUrl("example.org:443");
+  KJ_EXPECT_THROW_MESSAGE("use connect() for CONNECT requests", req.send().wait(waitScope));
+  KJ_EXPECT(!called);
+}
+
 
 class ConnectWriteCloseService final: public kj::HttpService {
   // A simple CONNECT server that will accept a connection, write some data and close the
