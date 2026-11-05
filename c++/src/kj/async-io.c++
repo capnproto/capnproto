@@ -600,7 +600,7 @@ private:
       {  // TODO(cleanup): Remove redundant braces when we update to C++17.
         KJ_SWITCH_ONEOF(capBuffer) {
           KJ_CASE_ONEOF(fds, ArrayPtr<const int>) {
-            capCount = kj::max(fds.size(), maxFds);
+            capCount = kj::min(fds.size(), maxFds);
             // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
             // by default.
             // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
@@ -658,7 +658,7 @@ private:
             }
           }
           KJ_CASE_ONEOF(streams, Array<Own<AsyncCapabilityStream>>) {
-            capCount = kj::max(streams.size(), maxStreams);
+            capCount = kj::min(streams.size(), maxStreams);
             for (auto i: kj::zeroTo(capCount)) {
               streamBuffer[i] = kj::mv(streams[i]);
             }
@@ -1208,7 +1208,7 @@ private:
       {  // TODO(cleanup): Remove redundant braces when we update to C++17.
         KJ_SWITCH_ONEOF(capBuffer) {
           KJ_CASE_ONEOF(fdBuffer, ArrayPtr<OwnFd>) {
-            size_t count = kj::max(fdBuffer.size(), fds.size());
+            size_t count = kj::min(fdBuffer.size(), fds.size());
             // Unfortunately, we have to dup() each FD, because the writer doesn't release ownership
             // by default.
             // TODO(perf): Should we add an ownership-releasing version of writeWithFds()?
@@ -1261,7 +1261,7 @@ private:
             }
           }
           KJ_CASE_ONEOF(streamBuffer, ArrayPtr<Own<AsyncCapabilityStream>>) {
-            size_t count = kj::max(streamBuffer.size(), streams.size());
+            size_t count = kj::min(streamBuffer.size(), streams.size());
             for (auto i: kj::zeroTo(count)) {
               streamBuffer[i] = kj::mv(streams[i]);
             }

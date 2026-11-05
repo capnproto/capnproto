@@ -47,6 +47,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #endif
@@ -538,6 +539,70 @@ TEST(AsyncIo, InMemoryCapabilityPipe) {
   EXPECT_EQ("foo", result2);
 }
 
+void testInMemoryCapabilityPipeStreamCount(size_t sendCount, size_t capacity, bool readFirst) {
+  // Sends `sendCount` streams over an in-memory capability pipe to a reader with room for
+  // `capacity` streams, and verifies that exactly min(sendCount, capacity) are delivered.
+  //
+  // `readFirst` controls which side blocks first: if true, the write hands its streams to a
+  // pending read; otherwise the read takes streams from a pending write. These are separate code
+  // paths.
+
+  KJ_CONTEXT(sendCount, capacity, readFirst);
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  // Keep the other ends alive so the sent streams stay connected.
+  auto otherEnds = kj::heapArrayBuilder<Own<AsyncCapabilityStream>>(sendCount);
+  auto sendStreams = kj::heapArrayBuilder<Own<AsyncCapabilityStream>>(sendCount);
+  auto sentPtrs = kj::heapArrayBuilder<AsyncCapabilityStream*>(sendCount);
+  for (auto i KJ_UNUSED: kj::zeroTo(sendCount)) {
+    auto p = newCapabilityPipe();
+    sentPtrs.add(p.ends[0].get());
+    sendStreams.add(kj::mv(p.ends[0]));
+    otherEnds.add(kj::mv(p.ends[1]));
+  }
+
+  auto pipe = newCapabilityPipe();
+  char buffer[3]{};
+  auto streamBuffer = kj::heapArray<Own<AsyncCapabilityStream>>(capacity);
+
+  AsyncCapabilityStream::ReadResult result;
+  if (readFirst) {
+    auto readPromise = pipe.ends[1]->tryReadWithStreams(
+        buffer, 3, 3, streamBuffer.begin(), streamBuffer.size());
+    KJ_EXPECT(!readPromise.poll(waitScope));
+    pipe.ends[0]->writeWithStreams("foo"_kjb, nullptr, sendStreams.finish()).wait(waitScope);
+    result = readPromise.wait(waitScope);
+  } else {
+    auto writePromise = pipe.ends[0]->writeWithStreams("foo"_kjb, nullptr, sendStreams.finish());
+    KJ_EXPECT(!writePromise.poll(waitScope));
+    result = pipe.ends[1]->tryReadWithStreams(
+        buffer, 3, 3, streamBuffer.begin(), streamBuffer.size()).wait(waitScope);
+    writePromise.wait(waitScope);
+  }
+
+  size_t expected = kj::min(sendCount, capacity);
+  KJ_EXPECT(result.byteCount == 3);
+  KJ_EXPECT(kj::str(kj::arrayPtr(buffer)) == "foo");
+  KJ_EXPECT(result.capCount == expected, result.capCount);
+  for (auto i: kj::zeroTo(capacity)) {
+    if (i < expected) {
+      KJ_EXPECT(streamBuffer[i].get() == sentPtrs[i], i);
+    } else {
+      KJ_EXPECT(streamBuffer[i].get() == nullptr, i);
+    }
+  }
+}
+
+KJ_TEST("In-memory capability pipe delivers min(sent, capacity) streams") {
+  for (bool readFirst: {true, false}) {
+    testInMemoryCapabilityPipeStreamCount(1, 3, readFirst);  // fewer sent than capacity
+    testInMemoryCapabilityPipeStreamCount(3, 2, readFirst);  // more sent than capacity
+    testInMemoryCapabilityPipeStreamCount(2, 2, readFirst);  // exact fit
+  }
+}
+
 #if !_WIN32 && !__CYGWIN__
 TEST(AsyncIo, InMemoryCapabilityPipeFds) {
   // Test passing file descirptors over an in-memory capability pipe.
@@ -635,6 +700,81 @@ TEST(AsyncIo, InMemoryCapabilityPipeFdsReverse) {
 
   EXPECT_EQ("bar", result);
   EXPECT_EQ("foo", result2);
+}
+
+bool isSameFile(int a, int b) {
+  struct stat statA, statB;
+  KJ_SYSCALL(fstat(a, &statA));
+  KJ_SYSCALL(fstat(b, &statB));
+  return statA.st_dev == statB.st_dev && statA.st_ino == statB.st_ino;
+}
+
+void testInMemoryCapabilityPipeFdCount(size_t sendCount, size_t capacity, bool readFirst) {
+  // Sends `sendCount` FDs over an in-memory capability pipe to a reader with room for `capacity`
+  // FDs, and verifies that exactly min(sendCount, capacity) are delivered. At one time, both the
+  // `BlockedRead` and `BlockedWrite` paths used max() instead of min(), reading past the end of
+  // the sender's FD array and dup()ing whatever garbage was there.
+  //
+  // `readFirst` controls which side blocks first: if true, the write copies its FDs into a pending
+  // read (`BlockedRead`); otherwise the read copies FDs from a pending write (`BlockedWrite`).
+
+  KJ_CONTEXT(sendCount, capacity, readFirst);
+
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  kj::Vector<OwnFd> ownedFds;
+  kj::Vector<int> sendFds;
+  for (auto i KJ_UNUSED: kj::zeroTo(sendCount)) {
+    int fds[2]{};
+    KJ_SYSCALL(::pipe(fds));
+    ownedFds.add(fds[0]);
+    ownedFds.add(fds[1]);
+    sendFds.add(fds[0]);
+  }
+  ArrayPtr<const int> fdsToSend = sendFds.asPtr();
+
+  auto pipe = newCapabilityPipe();
+  char buffer[3]{};
+  auto fdBuffer = kj::heapArray<OwnFd>(capacity);
+
+  AsyncCapabilityStream::ReadResult result;
+  if (readFirst) {
+    auto readPromise = pipe.ends[1]->tryReadWithFds(
+        buffer, 3, 3, fdBuffer.begin(), fdBuffer.size());
+    KJ_EXPECT(!readPromise.poll(waitScope));
+    pipe.ends[0]->writeWithFds("foo"_kjb, nullptr, fdsToSend).wait(waitScope);
+    result = readPromise.wait(waitScope);
+  } else {
+    auto writePromise = pipe.ends[0]->writeWithFds("foo"_kjb, nullptr, fdsToSend);
+    KJ_EXPECT(!writePromise.poll(waitScope));
+    result = pipe.ends[1]->tryReadWithFds(
+        buffer, 3, 3, fdBuffer.begin(), fdBuffer.size()).wait(waitScope);
+    writePromise.wait(waitScope);
+  }
+
+  size_t expected = kj::min(sendCount, capacity);
+  KJ_EXPECT(result.byteCount == 3);
+  KJ_EXPECT(kj::str(kj::arrayPtr(buffer)) == "foo");
+  KJ_EXPECT(result.capCount == expected, result.capCount);
+  for (auto i: kj::zeroTo(capacity)) {
+    if (i < expected) {
+      // Received FDs are dup()s of the sent ones.
+      KJ_EXPECT(fdBuffer[i] != nullptr, i);
+      KJ_EXPECT(fdBuffer[i].get() != sendFds[i], i);
+      KJ_EXPECT(isSameFile(fdBuffer[i], sendFds[i]), i);
+    } else {
+      KJ_EXPECT(fdBuffer[i] == nullptr, i);
+    }
+  }
+}
+
+KJ_TEST("In-memory capability pipe delivers min(sent, capacity) FDs") {
+  for (bool readFirst: {true, false}) {
+    testInMemoryCapabilityPipeFdCount(1, 4, readFirst);  // fewer sent than capacity
+    testInMemoryCapabilityPipeFdCount(3, 2, readFirst);  // more sent than capacity
+    testInMemoryCapabilityPipeFdCount(2, 2, readFirst);  // exact fit
+  }
 }
 
 TEST(AsyncIo, CapabilityPipe) {
