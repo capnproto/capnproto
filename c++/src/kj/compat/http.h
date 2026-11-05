@@ -489,8 +489,9 @@ private:
   // Backing storage must be destroyed after all header views.
   kj::Vector<kj::Array<char>> ownedStrings;
 
-  kj::Array<kj::StringPtr> indexedHeaders;
+  kj::Array<kj::Maybe<kj::StringPtr>> indexedHeaders;
   // Size is always table->idCount().
+  // Presence is independent of the value: an empty header is not an absent header.
 
   struct Header {
     kj::StringPtr name;
@@ -1527,20 +1528,19 @@ inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
 
 inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
   id.requireFrom(*table);
-  auto result = indexedHeaders[id.id];
-  return result == nullptr ? kj::Maybe<kj::StringPtr>(kj::none) : result;
+  return indexedHeaders[id.id];
 }
 
 inline void HttpHeaders::unset(HttpHeaderId id) {
   id.requireFrom(*table);
-  indexedHeaders[id.id] = nullptr;
+  indexedHeaders[id.id] = kj::none;
 }
 
 template <typename Func>
 inline void HttpHeaders::forEach(Func&& func) const {
   for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      func(table->idToString(HttpHeaderId(table, i)), indexedHeaders[i]);
+    KJ_IF_SOME(value, indexedHeaders[i]) {
+      func(table->idToString(HttpHeaderId(table, i)), value);
     }
   }
 
@@ -1552,8 +1552,8 @@ inline void HttpHeaders::forEach(Func&& func) const {
 template <typename Func1, typename Func2>
 inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
   for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      func1(HttpHeaderId(table, i), indexedHeaders[i]);
+    KJ_IF_SOME(value, indexedHeaders[i]) {
+      func1(HttpHeaderId(table, i), value);
     }
   }
 
