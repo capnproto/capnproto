@@ -598,6 +598,13 @@ public:
     return found;
   }
 
+  bool tryConsume(kj::ArrayPtr<const char> expected) {
+    bool found = wrapped.size() >= expected.size() && wrapped.first(expected.size()) == expected;
+    if (found) { advance(expected.size()); }
+
+    return found;
+  }
+
   template <typename Predicate>
   void consumeOne(Predicate&& predicate) {
     char current = nextChar();
@@ -793,7 +800,7 @@ private:
           case 't' : decoded.add('\t'); input.advance(); break;
           case 'u' :
             input.consume('u');
-            unescapeAndAppend(input.consume(size_t(4)), decoded);
+            unescapeAndAppend(decoded);
             break;
           default: KJ_FAIL_REQUIRE("Invalid escape in JSON string."); break;
         }
@@ -832,33 +839,51 @@ private:
     // TODO(perf): parse double here directly to avoid memory allocation
   }
 
-  // TODO(someday): This "interface" is ugly, and won't work if/when surrogates are handled.
-  void unescapeAndAppend(kj::ArrayPtr<const char> hex, kj::Vector<char>& target) {
-    KJ_REQUIRE(hex.size() == 4);
-    int codePoint = 0;
+  char16_t consumeUtf16CodeUnit() {
+    char16_t codeUnit = 0;
 
-    for (int i = 0; i < 4; ++i) {
-      char c = hex[i];
-      codePoint <<= 4;
+    for (char c: input.consume(size_t(4))) {
+      codeUnit <<= 4;
 
       if ('0' <= c && c <= '9') {
-        codePoint |= c - '0';
+        codeUnit |= c - '0';
       } else if ('a' <= c && c <= 'f') {
-        codePoint |= c - 'a' + 10;
+        codeUnit |= c - 'a' + 10;
       } else if ('A' <= c && c <= 'F') {
-        codePoint |= c - 'A' + 10;
+        codeUnit |= c - 'A' + 10;
       } else {
         KJ_FAIL_REQUIRE("Invalid hex digit in unicode escape.", c);
       }
     }
 
-    if (codePoint < 128) {
-      target.add(0x7f & static_cast<char>(codePoint));
-    } else {
-      // TODO(perf): This is sorta malloc-heavy...
-      char16_t u = codePoint;
-      target.addAll(kj::decodeUtf16(kj::arrayPtr(u)));
+    return codeUnit;
+  }
+
+  void unescapeAndAppend(kj::Vector<char>& target) {
+    char16_t codeUnit = consumeUtf16CodeUnit();
+
+    if (codeUnit < 128) {
+      target.add(static_cast<char>(codeUnit));
+      return;
     }
+
+    if ((codeUnit & 0xf800) != 0xd800) {
+      // Not a surrogate; the code unit decodes on its own.
+      // TODO(perf): This is sorta malloc-heavy...
+      target.addAll(kj::decodeUtf16(kj::arrayPtr(codeUnit)));
+      return;
+    }
+
+    // A surrogate. RFC 8259 represents code points outside the BMP as a \u-escaped surrogate
+    // pair, so the code units cannot be decoded in isolation. Gather the run of consecutive \u
+    // escapes and decode it as one UTF-16 sequence; decodeUtf16() combines the pairs and keeps
+    // its usual WTF-8 handling for surrogates that remain unpaired.
+    kj::Vector<char16_t> utf16;
+    utf16.add(codeUnit);
+    while (input.tryConsume("\\u"_kj)) {
+      utf16.add(consumeUtf16CodeUnit());
+    }
+    target.addAll(kj::decodeUtf16(utf16));
   }
 
   const size_t maxNestingDepth;
