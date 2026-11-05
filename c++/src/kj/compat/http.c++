@@ -2131,7 +2131,7 @@ class HttpFixedLengthEntityReader final: public HttpEntityBodyReader {
   // Stream which reads only up to a fixed length from the underlying stream, then emulates EOF.
 
 public:
-  HttpFixedLengthEntityReader(HttpInputStreamImpl& inner, size_t length)
+  HttpFixedLengthEntityReader(HttpInputStreamImpl& inner, uint64_t length)
       : HttpEntityBodyReader(inner), length(length) {
     if (length == 0) doneReading();
   }
@@ -2154,13 +2154,15 @@ public:
 
       // We have to set minBytes to 1 here so that if we read any data at all, we update our
       // counter immediately, so that we still know where we are in case of cancellation.
-      auto amount = co_await getInner().tryRead(buffer, 1, kj::min(maxBytes, length));
+      // `length` is 64-bit, so clamping to `maxBytes` is what makes the narrowing safe.
+      size_t maxThisTime = static_cast<size_t>(kj::min(length, maxBytes));
+      auto amount = co_await getInner().tryRead(buffer, 1, maxThisTime);
 
       length -= amount;
       if (length > 0) {
         // We haven't reached the end of the entity body yet.
         if (amount == 0) {
-          size_t expectedLength = length + alreadyRead;
+          uint64_t expectedLength = length + alreadyRead;
           kj::throwRecoverableException(KJ_EXCEPTION(
             DISCONNECTED,
             "premature EOF in HTTP entity body; did not reach Content-Length",
@@ -2209,7 +2211,7 @@ public:
   }
 
 private:
-  size_t length;
+  uint64_t length;
   bool clean = true;
 
   Promise<uint64_t> pumpToImpl(AsyncOutputStream& output, uint64_t amount) {
@@ -2232,7 +2234,7 @@ private:
     } else if (actual < amount) {
       // We hit EOF before pumping what was expected, but this means the stream ended prematurely
       // without reaching the expected content-length, so throw an exception instead.
-      size_t expectedLength = length + actual;
+      uint64_t expectedLength = length + actual;
       kj::throwRecoverableException(KJ_EXCEPTION(
         DISCONNECTED,
         "premature EOF in HTTP entity body; did not reach Content-Length",
@@ -2278,7 +2280,9 @@ public:
         // Read current chunk.
         // We have to set minBytes to 1 here so that if we read any data at all, we update our
         // counter immediately, so that we still know where we are in case of cancellation.
-        auto amount = co_await getInner().tryRead(buffer, 1, kj::min(maxBytes, chunkSize));
+        // `chunkSize` is 64-bit, so clamping to `maxBytes` is what makes the narrowing safe.
+        size_t maxThisTime = static_cast<size_t>(kj::min(chunkSize, maxBytes));
+        auto amount = co_await getInner().tryRead(buffer, 1, maxThisTime);
 
         chunkSize -= amount;
         if (amount == 0) {
@@ -2299,7 +2303,7 @@ public:
   }
 
 private:
-  size_t chunkSize = 0;
+  uint64_t chunkSize = 0;
   bool clean = true;
 };
 
@@ -3052,11 +3056,13 @@ public:
 
       recvData = recvData.slice(headerSize, recvData.size());
 
-      size_t payloadLen = recvHeader.getPayloadLen();
-      if (payloadLen > maxSize) {
-        auto description = kj::str("Message is too large: ", payloadLen, " > ", maxSize);
+      uint64_t wirePayloadLen = recvHeader.getPayloadLen();
+      if (wirePayloadLen > maxSize) {
+        auto description = kj::str("Message is too large: ", wirePayloadLen, " > ", maxSize);
         return sendCloseDueToError(1009, description.asPtr()).attach(kj::mv(description));
       }
+      // Having compared against `maxSize`, which is a size_t, the length is known to fit.
+      size_t payloadLen = static_cast<size_t>(wirePayloadLen);
 
       auto opcode = recvHeader.getOpcode();
       bool isData = opcode < OPCODE_FIRST_CONTROL;
