@@ -1330,12 +1330,11 @@ concept AssignableFrom = requires(T& a, U&& b) { a = kj::fwd<U>(b); };
 // Concept: T has an assignment operator that accepts U&&.
 
 template <typename T, typename U>
-concept ConstructibleFrom = requires(U&& u) { T(kj::fwd<U>(u)); };
-// Concept: T has a constructor that accepts U&&.
+concept ConstructibleFrom = __is_constructible(T, U);
+// Concept: T can be direct-initialized from U&&, i.e. `T t(kj::fwd<U>(u));` is well-formed.
 
 template <typename T, typename U>
-concept NoThrowConstructibleFrom = requires(U&& u) {
-  T(kj::fwd<U>(u));
+concept NoThrowConstructibleFrom = ConstructibleFrom<T, U> && requires(U&& u) {
   requires noexcept(new ((void*)nullptr, _::PlacementNew()) T(kj::fwd<U>(u)));
 };
 // Concept: T has a noexcept constructor that accepts U&&.
