@@ -733,6 +733,141 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket reports overload") {
   runWebSocketOverloadTest(*headerTable, factory1, factory2, waitScope);
 }
 
+KJ_TEST("HttpOverCapnpFactory::connectWebSocket()") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory1;
+  ByteStreamFactory streamFactory2;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  for (auto testCase: {
+    runWebSocketBasicTestCase,
+    runWebSocketAbortTestCase,
+  }) {
+    // The server side receives the client's capability first, as the callee of an RPC that
+    // carries it would, and the client side gets the server's capability back as a promise.
+    auto serverCapPaf = kj::newPromiseAndFulfiller<capnp::WebSocket::Client>();
+    kj::Own<kj::WebSocket> serverWs;
+    auto clientWs = factory1.connectWebSocket([&](capnp::WebSocket::Client clientCap) {
+      serverWs = factory2.connectWebSocket([&](capnp::WebSocket::Client serverCap) {
+        serverCapPaf.fulfiller->fulfill(kj::mv(serverCap));
+        return kj::mv(clientCap);
+      });
+      return capnp::WebSocket::Client(kj::mv(serverCapPaf.promise));
+    });
+
+    testCase(*clientWs, *serverWs, waitScope);
+  }
+}
+
+KJ_TEST("HttpOverCapnpFactory::connectWebSocket() sends before the peer's capability resolves") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  auto serverCapPaf = kj::newPromiseAndFulfiller<capnp::WebSocket::Client>();
+  kj::Maybe<capnp::WebSocket::Client> clientCap;
+  auto clientWs = factory.connectWebSocket([&](capnp::WebSocket::Client cap) {
+    clientCap = kj::mv(cap);
+    return capnp::WebSocket::Client(kj::mv(serverCapPaf.promise));
+  });
+  auto sent = clientWs->send("early"_kj);
+  KJ_EXPECT(!sent.poll(waitScope));
+
+  auto serverWs = factory.connectWebSocket([&](capnp::WebSocket::Client serverCap) {
+    serverCapPaf.fulfiller->fulfill(kj::mv(serverCap));
+    return KJ_ASSERT_NONNULL(kj::mv(clientCap));
+  });
+  auto message = serverWs->receive().wait(waitScope);
+  sent.wait(waitScope);
+  KJ_ASSERT(message.is<kj::String>());
+  KJ_EXPECT(message.get<kj::String>() == "early");
+}
+
+KJ_TEST("HttpOverCapnpFactory::connectWebSocket() sockets pumped to each other") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  // Returns a socket connected to a new socket in `peerWs`.
+  auto connect = [&](kj::Own<kj::WebSocket>& peerWs) {
+    return factory.connectWebSocket([&](capnp::WebSocket::Client cap) {
+      kj::Maybe<capnp::WebSocket::Client> peerCap;
+      peerWs = factory.connectWebSocket([&](capnp::WebSocket::Client c) {
+        peerCap = kj::mv(c);
+        return kj::mv(cap);
+      });
+      return KJ_ASSERT_NONNULL(kj::mv(peerCap));
+    });
+  };
+
+  // A client and a server, connected through a middle that pumps both ways.
+  kj::Own<kj::WebSocket> clientWs;
+  kj::Own<kj::WebSocket> serverWs;
+  auto middleToClient = connect(clientWs);
+  auto middleToServer = connect(serverWs);
+  auto upPump = middleToClient->pumpTo(*middleToServer);
+  auto downPump = middleToServer->pumpTo(*middleToClient);
+
+  {
+    auto promise = clientWs->send("foo"_kj);
+    auto message = serverWs->receive().wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "foo");
+  }
+
+  {
+    auto promise = serverWs->send("bar"_kjb);
+    auto message = clientWs->receive().wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::Array<kj::byte>>());
+    KJ_EXPECT(kj::str(message.get<kj::Array<kj::byte>>().asChars()) == "bar");
+  }
+
+  // The pumps shortened the path, so messages no longer need them.
+  upPump = nullptr;
+  downPump = nullptr;
+
+  {
+    auto promise = serverWs->send("qux"_kj);
+    auto message = clientWs->receive().wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "qux");
+  }
+
+  {
+    auto promise = clientWs->close(1234, "baz"_kj);
+    auto message = serverWs->receive().wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::WebSocket::Close>());
+    KJ_EXPECT(message.get<kj::WebSocket::Close>().code == 1234);
+    KJ_EXPECT(message.get<kj::WebSocket::Close>().reason == "baz");
+  }
+
+  {
+    auto promise = serverWs->close(4321, "corge"_kj);
+    auto message = clientWs->receive().wait(waitScope);
+    promise.wait(waitScope);
+    KJ_ASSERT(message.is<kj::WebSocket::Close>());
+    KJ_EXPECT(message.get<kj::WebSocket::Close>().code == 4321);
+    KJ_EXPECT(message.get<kj::WebSocket::Close>().reason == "corge");
+  }
+}
+
 // =======================================================================================
 // bug fixes
 
