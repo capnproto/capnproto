@@ -46,7 +46,7 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
-#define KJ_HTTP_FOR_EACH_METHOD(MACRO) \
+#define KJ_HTTP_FOR_EACH_REQUEST_METHOD(MACRO) \
   MACRO(GET) \
   MACRO(HEAD) \
   MACRO(POST) \
@@ -84,11 +84,14 @@ namespace kj {
   MACRO(QUERY) \
   /* https://www.ietf.org/archive/id/draft-ietf-httpbis-safe-method-w-body-05.html */ \
   MACRO(BAN) \
-  /* Non-standard method name requested by a Cloudflare customer. */ \
-  \
-  MACRO(CONNECT) \
-  /* Standard, but listed last to keep the values above stable. CONNECT is dispatched to */ \
-  /* connect(), never request(). */
+  /* Non-standard method name requested by a Cloudflare customer. */
+// Every method except CONNECT.
+
+#define KJ_HTTP_FOR_EACH_METHOD(MACRO) \
+  KJ_HTTP_FOR_EACH_REQUEST_METHOD(MACRO) \
+  MACRO(CONNECT)
+// CONNECT is dispatched to connect(), never request(). It's listed last to keep the values of the
+// other methods stable.
 
 enum class HttpMethod {
   // Enum of known HTTP methods.

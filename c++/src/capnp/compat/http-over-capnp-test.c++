@@ -83,14 +83,16 @@ KJ_TEST("HttpOverCapnpFactory::capnpToKj rejects out of range common values") {
 }
 
 KJ_TEST("HTTP method conversion") {
-  // Every method kj lists travels as the capnp enumerant of the same name.
+  // Every method kj lists except CONNECT travels as the capnp enumerant of the same name.
 #define EXPECT_ROUND_TRIP(METHOD) \
   KJ_EXPECT(httpMethodToCapnp(kj::HttpMethod::METHOD) == capnp::HttpMethod::METHOD); \
   KJ_EXPECT(httpMethodFromCapnp(capnp::HttpMethod::METHOD) == kj::HttpMethod::METHOD);
 
-  KJ_HTTP_FOR_EACH_METHOD(EXPECT_ROUND_TRIP);
+  KJ_HTTP_FOR_EACH_REQUEST_METHOD(EXPECT_ROUND_TRIP);
 #undef EXPECT_ROUND_TRIP
 
+  KJ_EXPECT_THROW_MESSAGE("use connect() for CONNECT requests",
+      httpMethodToCapnp(kj::HttpMethod::CONNECT));
   KJ_EXPECT_THROW_MESSAGE("unknown method",
       httpMethodFromCapnp(static_cast<capnp::HttpMethod>(100)));
 }
@@ -787,27 +789,6 @@ KJ_TEST("HttpService isn't destroyed while call outstanding") {
 
   KJ_EXPECT(called);
   KJ_EXPECT(!destroyed);
-}
-
-KJ_TEST("HTTP-over-Cap'n-Proto refuses CONNECT in request()") {
-  kj::EventLoop eventLoop;
-  kj::WaitScope waitScope(eventLoop);
-
-  ByteStreamFactory streamFactory;
-  kj::HttpHeaderTable::Builder tableBuilder;
-  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
-  auto headerTable = tableBuilder.build();
-
-  bool called = false;
-  bool destroyed = false;
-  auto service = factory.kjToCapnp(kj::heap<HangingHttpService>(called, destroyed));
-
-  auto req = service.requestRequest();
-  auto httpReq = req.initRequest();
-  httpReq.setMethod(capnp::HttpMethod::CONNECT);
-  httpReq.setUrl("example.org:443");
-  KJ_EXPECT_THROW_MESSAGE("use connect() for CONNECT requests", req.send().wait(waitScope));
-  KJ_EXPECT(!called);
 }
 
 KJ_TEST("HTTP-over-Cap'n-Proto won't send CONNECT in request()") {

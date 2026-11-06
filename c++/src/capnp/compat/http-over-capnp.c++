@@ -31,13 +31,16 @@ using kj::byte;
 
 // =======================================================================================
 
-// Every method kj lists has a capnp enumerant of the same name; a missing one fails to compile.
+// Every method in KJ_HTTP_FOR_EACH_REQUEST_METHOD has a capnp enumerant of the same name; a missing
+// one fails to compile. CONNECT has none, because a request call can't carry it.
 
 capnp::HttpMethod httpMethodToCapnp(kj::HttpMethod method) {
   switch (method) {
 #define CASE(m) case kj::HttpMethod::m: return capnp::HttpMethod::m;
-    KJ_HTTP_FOR_EACH_METHOD(CASE)
+    KJ_HTTP_FOR_EACH_REQUEST_METHOD(CASE)
 #undef CASE
+    case kj::HttpMethod::CONNECT:
+      KJ_FAIL_REQUIRE("use connect() for CONNECT requests");
   }
   KJ_UNREACHABLE;
 }
@@ -45,7 +48,7 @@ capnp::HttpMethod httpMethodToCapnp(kj::HttpMethod method) {
 kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method) {
   switch (method) {
 #define CASE(m) case capnp::HttpMethod::m: return kj::HttpMethod::m;
-    KJ_HTTP_FOR_EACH_METHOD(CASE)
+    KJ_HTTP_FOR_EACH_REQUEST_METHOD(CASE)
 #undef CASE
   }
   KJ_FAIL_REQUIRE("unknown method", method);
@@ -574,6 +577,7 @@ public:
   kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
+    // Redundant with httpMethodToCapnp(), but states the rule where requests are sent.
     KJ_REQUIRE(method != kj::HttpMethod::CONNECT, "use connect() for CONNECT requests");
     auto rpcRequest = inner.requestRequest();
 
@@ -799,7 +803,7 @@ public:
         url(request.getUrl()),
         headers(factory.capnpToKj(request.getHeaders())),
         clientContext(kj::mv(clientContext)) {
-    KJ_REQUIRE(method != kj::HttpMethod::CONNECT, "use connect() for CONNECT requests");
+    KJ_DASSERT(method != kj::HttpMethod::CONNECT);
   }
 
   kj::Own<kj::AsyncOutputStream> send(

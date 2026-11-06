@@ -169,7 +169,8 @@ struct HttpResponse {
 
 enum HttpMethod {
   # Each enumerant stands for the kj::HttpMethod of the same name. A method added to
-  # KJ_HTTP_FOR_EACH_METHOD needs an enumerant here too.
+  # KJ_HTTP_FOR_EACH_REQUEST_METHOD needs an enumerant here too. CONNECT has none: CONNECT requests
+  # use `HttpService.connect()`.
 
   get @0;
   head @1;
@@ -203,9 +204,6 @@ enum HttpMethod {
 
   query @26;
   ban @27;
-
-  connect @28;
-  # Not valid in `HttpRequest`. CONNECT requests use `HttpService.connect()`.
 }
 
 annotation commonText @0x857745131db6fc83(enumerant) :Text;
