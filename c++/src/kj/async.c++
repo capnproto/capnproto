@@ -1208,8 +1208,12 @@ XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
 XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
   if (obj != nullptr) {
     auto lock = obj->executor->impl->state.lockExclusive();
+    // If `fulfilled` is non-empty, whoever added the first entry already woke the loop, and the
+    // loop will dispatch the whole list at once, so another wake would be redundant.
+    bool wakePending = !lock->fulfilled.empty();
     lock->fulfilled.add(*obj);
     kj::atomicStore(&obj->control->state, XThreadPafControl::FULFILLED, kj::AtomicMemoryOrder::RELEASE);
+    if (wakePending) return;
     KJ_IF_SOME(l, lock->loop) {
       // TODO(perf): It's annoying we have to call wake() with the lock held, but we have to
       //   prevent the destination EventLoop from being destroyed first.
