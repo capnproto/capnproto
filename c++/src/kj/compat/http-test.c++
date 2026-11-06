@@ -59,15 +59,8 @@ namespace {
 KJ_TEST("HttpMethod parse / stringify") {
 #define TRY(name) \
   KJ_EXPECT(kj::str(HttpMethod::name) == #name); \
-  KJ_IF_SOME(parsed, tryParseHttpMethodAllowingConnect(#name)) { \
-    KJ_SWITCH_ONEOF(parsed) { \
-      KJ_CASE_ONEOF(method, HttpMethod) { \
-        KJ_EXPECT(method == HttpMethod::name); \
-      } \
-      KJ_CASE_ONEOF(method, HttpConnectMethod) { \
-        KJ_FAIL_EXPECT("http method parsed as CONNECT", #name); \
-      } \
-    } \
+  KJ_IF_SOME(parsed, tryParseHttpMethod(#name)) { \
+    KJ_EXPECT(parsed == HttpMethod::name); \
   } else { \
     KJ_FAIL_EXPECT("couldn't parse \"" #name "\" as HttpMethod"); \
   }
@@ -85,8 +78,7 @@ KJ_TEST("HttpMethod parse / stringify") {
   KJ_EXPECT(tryParseHttpMethod("GET ") == kj::none);
   KJ_EXPECT(tryParseHttpMethod("get") == kj::none);
 
-  KJ_EXPECT(KJ_ASSERT_NONNULL(tryParseHttpMethodAllowingConnect("CONNECT"))
-      .is<HttpConnectMethod>());
+  KJ_EXPECT(KJ_ASSERT_NONNULL(tryParseHttpMethod("CONNECT")) == HttpMethod::CONNECT);
   KJ_EXPECT(tryParseHttpMethod("connect") == kj::none);
 }
 
@@ -8514,6 +8506,61 @@ KJ_TEST("CONNECT pipelined via an adapter (reject)") {
   KJ_ASSERT(rejectCalled);
   KJ_ASSERT(failedAsExpected);
   KJ_ASSERT(text == "ok");
+}
+
+KJ_TEST("HttpServer can suspend and resume a CONNECT request") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  // This HttpService will not actually be used, because we're passing a factory in to
+  // listenHttpCleanDrain().
+  HangingHttpService service;
+  ConnectEchoService echoService(table);
+  HttpServer server(timer, table, service);
+
+  bool suspend = true;
+  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
+  auto factory = [&](HttpServer::SuspendableRequest& sr) -> kj::Maybe<kj::Own<HttpService>> {
+    KJ_EXPECT(sr.method == HttpMethod::CONNECT);
+    KJ_EXPECT(sr.url == "example.org:443");
+    if (suspend) {
+      suspendedRequest = sr.suspend();
+      return kj::none;
+    }
+    return kj::Own<HttpService>(&echoService, kj::NullDisposer::instance);
+  };
+
+  auto suspendPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
+  pipe.ends[1]->write("CONNECT example.org:443 HTTP/1.1\r\n\r\nhello"_kjb).wait(waitScope);
+  KJ_EXPECT(!suspendPromise.wait(waitScope));
+  KJ_ASSERT(suspendedRequest != kj::none);
+
+  // The resumed request reaches connect().
+  suspend = false;
+  auto listenPromise = server.listenHttpCleanDrain(
+      *pipe.ends[0], factory, kj::mv(suspendedRequest));
+  pipe.ends[1]->shutdownWrite();
+
+  expectRead(*pipe.ends[1],
+             "HTTP/1.1 200 OK\r\n"
+             "\r\n"
+             "hello"_kj).wait(waitScope);
+
+  KJ_EXPECT(!listenPromise.wait(waitScope));
+  KJ_EXPECT(echoService.connectCount == 1);
+}
+
+KJ_TEST("HttpClient refuses CONNECT in request()") {
+  KJ_HTTP_TEST_SETUP_IO;
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  HttpHeaderTable table;
+  auto client = newHttpClient(table, *pipe.ends[0]);
+
+  KJ_EXPECT_THROW_MESSAGE("use connect() for CONNECT requests",
+      client->request(HttpMethod::CONNECT, "example.org:443", HttpHeaders(table)));
 }
 
 struct HttpRangeTestCase {
