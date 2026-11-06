@@ -82,13 +82,17 @@ KJ_TEST("HttpOverCapnpFactory::capnpToKj rejects out of range common values") {
   }
 }
 
-KJ_TEST("KJ and RPC HTTP method enums match") {
-#define EXPECT_MATCH(METHOD) \
-  KJ_EXPECT(static_cast<uint>(kj::HttpMethod::METHOD) == \
-            static_cast<uint>(capnp::HttpMethod::METHOD));
+KJ_TEST("HTTP method conversion") {
+  // Every method kj lists travels as the capnp enumerant of the same name.
+#define EXPECT_ROUND_TRIP(METHOD) \
+  KJ_EXPECT(httpMethodToCapnp(kj::HttpMethod::METHOD) == capnp::HttpMethod::METHOD); \
+  KJ_EXPECT(httpMethodFromCapnp(capnp::HttpMethod::METHOD) == kj::HttpMethod::METHOD);
 
-  KJ_HTTP_FOR_EACH_METHOD(EXPECT_MATCH);
-#undef EXPECT_MATCH
+  KJ_HTTP_FOR_EACH_METHOD(EXPECT_ROUND_TRIP);
+#undef EXPECT_ROUND_TRIP
+
+  KJ_EXPECT_THROW_MESSAGE("unknown method",
+      httpMethodFromCapnp(static_cast<capnp::HttpMethod>(100)));
 }
 
 // =======================================================================================
