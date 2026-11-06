@@ -1641,7 +1641,7 @@ DynamicValue::Pipeline::~Pipeline() noexcept(false) {
     case STRUCT: kj::dtor(structValue); break;
     case CAPABILITY: kj::dtor(capabilityValue); break;
     default:
-      KJ_FAIL_ASSERT("Unexpected pipeline type.", (uint)type) { type = UNKNOWN; break; }
+      KJ_DTOR_FAIL_ASSERT("Unexpected pipeline type.", (uint)type);
       break;
   }
 }

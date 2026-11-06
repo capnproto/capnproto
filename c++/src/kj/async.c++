@@ -1796,9 +1796,9 @@ EventLoop::~EventLoop() noexcept(false) {
   // EventLoop itself, so if there are events on the loop, this indicates a memory leak.
   _::Event* firstEvent = head();
 
-  KJ_REQUIRE(firstEvent == &tailSentinel,
-             "EventLoop destroyed with events still in the queue.  Memory leak?",
-             firstEvent->traceEvent()) {
+  if (firstEvent != &tailSentinel) {
+    // Trace the event before unlinking anything.
+    auto trace = firstEvent->traceEvent();
 
     // Unlink all the events and hope that no one ever fires them...
     for (_::Event* event = firstEvent; event != &tailSentinel;) {
@@ -1808,7 +1808,9 @@ EventLoop::~EventLoop() noexcept(false) {
       event->prev = nullptr;
       event = next;
     }
-    break;
+
+    KJ_DTOR_FAIL_REQUIRE(
+        "EventLoop destroyed with events still in the queue.  Memory leak?", trace);
   }
 
   threadLocalEventLoop = nullptr;
