@@ -1009,6 +1009,15 @@ HttpHeaders::RequestOrProtocolError HttpHeaders::tryParseRequest(kj::ArrayPtr<ch
   KJ_UNREACHABLE;
 }
 
+static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> requestOrConnect(
+    HttpMethod method, kj::StringPtr target) {
+  if (method == HttpMethod::CONNECT) {
+    return HttpHeaders::ConnectRequest { target };
+  } else {
+    return HttpHeaders::Request { method, target };
+  }
+}
+
 HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect(
     kj::ArrayPtr<char> content) {
   char* end = trimHeaderEnding(content);
@@ -1036,11 +1045,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
           "Invalid request line.", content };
     }
 
-    if (method == HttpMethod::CONNECT) {
-      result = HttpHeaders::ConnectRequest { KJ_ASSERT_NONNULL(path) };
-    } else {
-      result = HttpHeaders::Request { method, KJ_ASSERT_NONNULL(path) };
-    }
+    result = requestOrConnect(method, KJ_ASSERT_NONNULL(path));
   } else {
     return ProtocolError { 501, "Not Implemented",
         "Unrecognized request method.", content };
@@ -1415,16 +1420,6 @@ static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
 class HttpInputStreamImpl final: public HttpInputStream,
                                  public WrappableStreamMixin<HttpInputStreamImpl> {
-private:
-  static kj::OneOf<HttpHeaders::Request, HttpHeaders::ConnectRequest> getResumingRequest(
-      HttpMethod method,
-      kj::StringPtr url) {
-    if (method == HttpMethod::CONNECT) {
-      return HttpHeaders::ConnectRequest { url };
-    } else {
-      return HttpHeaders::Request { method, url };
-    }
-  }
 public:
   explicit HttpInputStreamImpl(AsyncInputStream& inner, const HttpHeaderTable& table)
       : inner(inner), headerBuffer(kj::heapArray<char>(MIN_BUFFER)), headers(table) {
@@ -1442,7 +1437,7 @@ public:
         messageHeaderEnd(leftoverParam.begin() - headerBuffer.begin()),
         leftover(leftoverParam),
         headers(kj::mv(headers)),
-        resumingRequest(getResumingRequest(method, url)) {
+        resumingRequest(requestOrConnect(method, url)) {
     // Constructor used for resuming a SuspendedRequest.
 
     // We expect headerBuffer to look like this:
