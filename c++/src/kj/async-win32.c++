@@ -163,9 +163,8 @@ bool Win32IocpEventPort::wait() {
   if (receivedWake()) {
     return true;
   }
-  waitIocp(timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1)
-      .map([](uint64_t t) -> DWORD { return t; })
-      .orDefault(INFINITE));
+  Maybe<DWORD> timeout = timerImpl.timeoutToNextEvent(clock.now(), MILLISECONDS, INFINITE - 1);
+  waitIocp(timeout.orDefault(INFINITE));
 
   timerImpl.advanceTo(clock.now());
 
