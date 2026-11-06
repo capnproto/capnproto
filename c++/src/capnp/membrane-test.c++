@@ -97,8 +97,9 @@ protected:
 class MembranePolicyImpl: public MembranePolicy, public kj::Refcounted {
 public:
   MembranePolicyImpl() = default;
-  MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise)
-      : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })) {}
+  MembranePolicyImpl(kj::Maybe<kj::Promise<void>> revokePromise, bool allowFds = false)
+      : revokePromise(revokePromise.map([](kj::Promise<void>& p) { return p.fork(); })),
+        allowFds(allowFds) {}
 
   kj::Maybe<Capability::Client> inboundCall(uint64_t interfaceId, uint16_t methodId,
                                             Capability::Client target) override {
@@ -130,8 +131,32 @@ public:
 
   bool shouldResolveBeforeRedirecting() override { return true; }
 
+  bool allowFdPassthrough() override { return allowFds; }
+
 private:
   kj::Maybe<kj::ForkedPromise<void>> revokePromise;
+  bool allowFds = false;
+};
+
+class FdThingImpl final: public Thing::Server {
+  class FdState final: public kj::Refcounted {
+  public:
+    FdState(kj::Own<kj::PromiseFulfiller<void>> destroyed)
+        : destroyed(kj::mv(destroyed)) {}
+    ~FdState() noexcept(false) { destroyed->fulfill(); }
+
+  private:
+    kj::Own<kj::PromiseFulfiller<void>> destroyed;
+  };
+
+public:
+  FdThingImpl(kj::Own<kj::PromiseFulfiller<void>> destroyed)
+      : state(kj::refcounted<FdState>(kj::mv(destroyed))) {}
+
+  kj::Maybe<FdRef> getFd() override { return FdRef(123, kj::addRef(*state)); }
+
+private:
+  kj::Own<FdState> state;
 };
 
 void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membraned,
@@ -302,6 +327,25 @@ KJ_TEST("MembraneHook::whenMoreResolved returns same value even when called conc
   auto newClient = kj::heap<TestMembraneImpl>();
   paf.fulfiller->fulfill(kj::mv(newClient));
   prom.wait(env.waitScope);
+}
+
+KJ_TEST("membrane forwards FD keep-alive") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  auto revoke = kj::newPromiseAndFulfiller<void>();
+  auto destroyed = kj::newPromiseAndFulfiller<void>();
+  auto client = membrane(kj::heap<FdThingImpl>(kj::mv(destroyed.fulfiller)),
+      kj::refcounted<MembranePolicyImpl>(kj::mv(revoke.promise), true));
+  auto hook = ClientHook::from(client);
+
+  {
+    auto fd = KJ_ASSERT_NONNULL(hook->getFd());
+    KJ_EXPECT(fd.get() == 123);
+    revoke.fulfiller->reject(KJ_EXCEPTION(DISCONNECTED, "revoked"));
+    KJ_EXPECT(!destroyed.promise.poll(waitScope));
+  }
+
+  KJ_EXPECT(destroyed.promise.poll(waitScope));
 }
 
 struct TestRpcEnv {
