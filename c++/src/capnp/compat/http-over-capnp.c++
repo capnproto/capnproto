@@ -574,6 +574,7 @@ public:
   kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
+    KJ_REQUIRE(method != kj::HttpMethod::CONNECT, "use connect() for CONNECT requests");
     auto rpcRequest = inner.requestRequest();
 
     auto metadata = rpcRequest.initRequest();

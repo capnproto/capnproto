@@ -810,6 +810,43 @@ KJ_TEST("HTTP-over-Cap'n-Proto refuses CONNECT in request()") {
   KJ_EXPECT(!called);
 }
 
+KJ_TEST("HTTP-over-Cap'n-Proto won't send CONNECT in request()") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory(streamFactory, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  class NoRequestServer final: public capnp::HttpService::Server {
+  protected:
+    kj::Promise<void> request(RequestContext context) override {
+      KJ_FAIL_ASSERT("request() reached the server");
+    }
+  };
+
+  class NoResponse final: public kj::HttpService::Response {
+  public:
+    kj::Own<kj::AsyncOutputStream> send(
+        uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
+        kj::Maybe<uint64_t> expectedBodySize) override {
+      KJ_UNREACHABLE;
+    }
+
+    kj::Own<kj::WebSocket> acceptWebSocket(const kj::HttpHeaders& headers) override {
+      KJ_UNREACHABLE;
+    }
+  };
+
+  auto frontService = factory.capnpToKj(kj::heap<NoRequestServer>());
+  kj::NullStream requestBody;
+  NoResponse response;
+  KJ_EXPECT_THROW_MESSAGE("use connect() for CONNECT requests",
+      frontService->request(kj::HttpMethod::CONNECT, "example.org:443",
+          kj::HttpHeaders(*headerTable), requestBody, response).wait(waitScope));
+}
+
 
 class ConnectWriteCloseService final: public kj::HttpService {
   // A simple CONNECT server that will accept a connection, write some data and close the
