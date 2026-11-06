@@ -373,6 +373,26 @@ KJ_TEST("DiskFile") {
   KJ_EXPECT(file->readAllText() == StringPtr("qux\0\0\0", 6));
 }
 
+KJ_TEST("DiskFile zero() spanning more than IOV_MAX 4k chunks") {
+  // Without hole punching, zero() writes 4k chunks with pwritev(), at most IOV_MAX per call.
+  // Zero a range that needs several such calls and does not end on a 4k boundary.
+  auto file = newTempFile();
+  auto data = heapArray<byte>(9 << 20);
+  data.asPtr().fill('x');
+  file->write(0, data);
+
+  uint64_t offset = 100;
+  uint64_t size = (8 << 20) + 5;
+  file->zero(offset, size);
+
+  auto result = file->readAllBytes();
+  KJ_ASSERT(result.size() == data.size());
+  for (auto i: kj::indices(result)) {
+    byte expected = i >= offset && i < offset + size ? 0 : 'x';
+    KJ_ASSERT(result[i] == expected, i);
+  }
+}
+
 KJ_TEST("DiskFile gather-write") {
   auto file = newTempFile();
   file->writeAll("0123456789");
