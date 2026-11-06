@@ -37,6 +37,8 @@ class HashMap {
   // than `Key` as long as the other type is also hashable (producing the same hash codes) and
   // there is an `operator==` implementation with `Key` on the left and that other type on the
   // right. For example, if the key type is `String`, you can pass `StringPtr` to `find()`.
+  // For Rc<T> keys, lookup pointers are first converted to const T* before hashing,
+  // so derived-to-base pointer adjustments are applied consistently with equality.
 
 public:
   void reserve(size_t size);
@@ -129,7 +131,7 @@ private:
     }
     template <typename KeyLike>
     inline auto hashCode(KeyLike&& key) const {
-      return kj::hashCode(key);
+      return _::HashCodeForKey<Key>::hashCode(key);
     }
   };
 
@@ -254,6 +256,7 @@ private:
 
 namespace _ {  // private
 
+template <typename Element>
 class HashSetCallbacks {
 public:
   template <typename Row>
@@ -263,7 +266,7 @@ public:
   inline bool matches(T& a, U& b) const { return a == b; }
   template <typename KeyLike>
   inline auto hashCode(KeyLike&& key) const {
-    return kj::hashCode(key);
+    return HashCodeForKey<Element>::hashCode(key);
   }
 };
 
@@ -281,8 +284,9 @@ public:
 }  // namespace _ (private)
 
 template <typename Element>
-class HashSet: public Table<Element, HashIndex<_::HashSetCallbacks>> {
+class HashSet: public Table<Element, HashIndex<_::HashSetCallbacks<Element>>> {
   // A simple hashtable-based set, using kj::hashCode() and operator==().
+  // Like HashMap, Rc<T> keys normalize lookup pointers to const T* before hashing.
 
 public:
   // Everything is inherited.

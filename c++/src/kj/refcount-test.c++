@@ -24,6 +24,7 @@
 // visible so that Rc<StringPtr> has the same layout in every translation unit.
 static_assert(kj::isPointerType<kj::StringPtr>());
 #include "array.h"
+#include "map.h"
 #include "string.h"
 #include "thread.h"
 #include "mutex.h"
@@ -1382,6 +1383,141 @@ KJ_TEST("WeakRc polymorphic upcast") {
   EXPECT_TRUE(b);
   EXPECT_TRUE(weak == nullptr);
 }
+
+KJ_TEST("HashSet<Rc<T>>") {
+  bool b1 = false, b2 = false, b3 = false;
+  auto ref1 = kj::rc<SetTrueInDestructor>(&b1);
+  auto ref2 = kj::rc<SetTrueInDestructor>(&b2);
+  auto ref3 = kj::rc<SetTrueInDestructor>(&b3);
+
+  KJ_EXPECT(kj::hashCode(ref1) == kj::hashCode(ref1.addRef()));
+
+  HashSet<Rc<SetTrueInDestructor>> set;
+  set.insert(ref1.addRef());
+  set.insert(ref2.addRef());
+  KJ_EXPECT(set.size() == 2);
+
+  KJ_EXPECT(set.contains(ref1));
+  KJ_EXPECT(set.contains(ref2));
+  KJ_EXPECT(!set.contains(ref3));
+
+  KJ_IF_SOME(found, set.find(ref2)) {
+    KJ_EXPECT(found.get() == ref2.get());
+  } else {
+    KJ_FAIL_EXPECT("expected to find ref2");
+  }
+
+  // Duplicate insertion is rejected; upsert keeps the existing entry.
+  KJ_EXPECT_THROW_MESSAGE("inserted row already exists in table", (void)set.insert(ref1.addRef()));
+  set.upsert(ref1.addRef(), [](auto&, auto&&) {});
+  KJ_EXPECT(set.size() == 2);
+
+  // The set keeps its elements alive.
+  ref1 = nullptr;
+  KJ_EXPECT(!b1);
+
+  KJ_EXPECT(set.eraseMatch(ref2));
+  KJ_EXPECT(!set.contains(ref2));
+  KJ_EXPECT(set.size() == 1);
+
+  set.clear();
+  KJ_EXPECT(b1);
+  KJ_EXPECT(!b2);
+}
+
+KJ_TEST("HashSet<Rc<T>> with non-refcounted type") {
+  auto ref1 = kj::rc<int>(1);
+  auto ref2 = kj::rc<int>(1);
+
+  HashSet<Rc<int>> set;
+  set.insert(ref1.addRef());
+  // Rcs compare by identity, not by value.
+  KJ_EXPECT(set.contains(ref1));
+  KJ_EXPECT(!set.contains(ref2));
+  set.insert(ref2.addRef());
+  KJ_EXPECT(set.size() == 2);
+}
+
+KJ_TEST("Rc hash containers normalize polymorphic lookup pointers") {
+  struct FirstBase {
+    virtual ~FirstBase() noexcept(false) {}
+    int padding = 0;
+  };
+  struct Base: public Refcounted {};
+  struct Derived: public FirstBase, public Base {};
+
+  auto ref = kj::rc<Derived>();
+  Rc<Base> base = ref.addRef();
+  // Exercise a base subobject at a different address, not just a zero-offset upcast.
+  KJ_REQUIRE(static_cast<const void*>(ref.get()) != static_cast<const void*>(base.get()));
+  const Derived* raw = ref.get();
+  auto other = kj::rc<Derived>();
+
+  HashSet<Rc<Base>> strong;
+  strong.insert(base.addRef());
+  KJ_EXPECT(strong.contains(base));
+  KJ_EXPECT(strong.contains(ref.get()));
+  const auto& constSet = strong;
+  KJ_EXPECT(constSet.contains(raw));
+  KJ_EXPECT(!strong.contains(other.get()));
+  KJ_EXPECT(strong.eraseMatch(ref.get()));
+
+  HashMap<Rc<Base>, int> strongMap;
+  strongMap.insert(base.addRef(), 42);
+  KJ_IF_SOME(value, strongMap.find(raw)) {
+    KJ_EXPECT(value == 42);
+  } else {
+    KJ_FAIL_EXPECT("expected to find derived raw pointer");
+  }
+  KJ_EXPECT(strongMap.erase(raw));
+}
+
+KJ_TEST("Rc compares with raw pointers") {
+  bool b = false;
+  auto ref = kj::rc<SetTrueInDestructor>(&b);
+  auto other = kj::rc<SetTrueInDestructor>(&b);
+  Rc<SetTrueInDestructor> nullRef = nullptr;
+  SetTrueInDestructor* raw = ref.get();
+  const SetTrueInDestructor* constRaw = raw;
+  SetTrueInDestructor* nullRaw = nullptr;
+
+  KJ_EXPECT(ref == raw);
+  KJ_EXPECT(raw == ref);
+  KJ_EXPECT(ref == constRaw);
+  KJ_EXPECT(ref != other.get());
+  KJ_EXPECT(ref != nullRaw);
+  KJ_EXPECT(nullRef == nullRaw);
+  KJ_EXPECT(kj::hashCode(ref) == kj::hashCode(raw));
+}
+
+KJ_TEST("HashSet<Rc<T>> lookup by raw pointer") {
+  bool b1 = false, b2 = false, b3 = false;
+  auto ref1 = kj::rc<SetTrueInDestructor>(&b1);
+  auto ref2 = kj::rc<SetTrueInDestructor>(&b2);
+  auto ref3 = kj::rc<SetTrueInDestructor>(&b3);
+
+  HashSet<Rc<SetTrueInDestructor>> strong;
+  strong.insert(ref1.addRef());
+  strong.insert(ref2.addRef());
+  KJ_EXPECT(strong.contains(ref1.get()));
+  KJ_EXPECT(!strong.contains(ref3.get()));
+  KJ_IF_SOME(found, strong.find(ref2.get())) {
+    KJ_EXPECT(found == ref2);
+  } else {
+    KJ_FAIL_EXPECT("expected to find ref2 by raw pointer");
+  }
+  KJ_EXPECT(strong.eraseMatch(ref1.get()));
+  KJ_EXPECT(!strong.contains(ref1.get()));
+  KJ_EXPECT(strong.size() == 1);
+}
+
+template <typename A, typename B>
+concept EqualityComparable = requires(const A& a, const B& b) { a == b; };
+
+// Rc keeps its referent alive, so comparison with T* is always available.
+static_assert(EqualityComparable<Rc<SetTrueInDestructor2>, SetTrueInDestructor2*>);
+static_assert(EqualityComparable<Rc<int>, int*>);
+static_assert(EqualityComparable<Rc<Abstract>, Abstract*>);
 
 KJ_TEST("WeakRc with non-refcounted type") {
   bool b = false;
