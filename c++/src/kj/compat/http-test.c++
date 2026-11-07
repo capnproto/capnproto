@@ -7703,6 +7703,76 @@ KJ_TEST("HttpServer handles disconnected exception for clients disconnecting aft
   KJ_ASSERT(testErrorHandler.applicationErrorCount == 1);
 }
 
+KJ_TEST("HttpServer handles disconnected exception for clients disconnecting before a flush") {
+  // A response with no body leaves its headers queued until the server flushes after the request
+  // handler returns. If the client has disconnected by then, that flush fails with DISCONNECTED.
+  // The default error handler ignores the exception, but finishSendingError() used to flush the
+  // failed queue again and rethrow it, so the listen loop failed and HttpServer logged it as an
+  // unhandled exception.
+
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+
+  class EmptyResponseHttpService final: public HttpService {
+  public:
+    EmptyResponseHttpService(HttpHeaderTable& headerTable): headerTable(headerTable) {}
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& responseSender) override {
+      responseSender.send(200, "OK", HttpHeaders(headerTable), uint64_t(0));
+      return kj::READY_NOW;
+    }
+
+  private:
+    HttpHeaderTable& headerTable;
+  };
+
+  class WriteDisconnectedAsyncIoStream final: public kj::AsyncIoStream {
+    // Reads from `inner`, but fails every write as if the client had gone away.
+  public:
+    WriteDisconnectedAsyncIoStream(AsyncIoStream& inner): inner(inner) {}
+
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return inner.tryRead(buffer, minBytes, maxBytes);
+    }
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
+      ++writeCount;
+      return KJ_EXCEPTION(DISCONNECTED, "a_disconnected_exception");
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      ++writeCount;
+      return KJ_EXCEPTION(DISCONNECTED, "a_disconnected_exception");
+    }
+    Promise<void> whenWriteDisconnected() override {
+      // Never report the disconnect here, so that only the failed write can end the listen loop.
+      return kj::NEVER_DONE;
+    }
+    void shutdownWrite() override {}
+
+    int writeCount = 0;
+
+  private:
+    kj::AsyncIoStream& inner;
+  };
+
+  HttpHeaderTable table;
+  EmptyResponseHttpService service(table);
+  HttpServer server(timer, table, service);
+
+  WriteDisconnectedAsyncIoStream stream(*pipe.ends[0]);
+  auto listenPromise = server.listenHttpCleanDrain(stream);
+
+  static constexpr auto request = "GET / HTTP/1.1\r\n\r\n"_kj;
+  pipe.ends[1]->write(request.asBytes()).wait(waitScope);
+
+  // The failure would manifest as the DISCONNECTED exception being rethrown here.
+  bool canReuse = listenPromise.wait(waitScope);
+
+  KJ_ASSERT(!canReuse);
+  KJ_ASSERT(stream.writeCount == 1);
+}
+
 // =======================================================================================
 // CONNECT tests
 

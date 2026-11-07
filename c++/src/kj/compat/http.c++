@@ -8573,7 +8573,15 @@ private:
     if (!httpOutput.isBroken()) {
       // Skip flush for broken streams, since it will throw an exception that may be worse than
       // the one we just handled.
-      co_await httpOutput.flush();
+      co_await httpOutput.flush().catch_([](kj::Exception&& e) {
+        // If the client has disconnected, nobody is left to receive what we were flushing, which
+        // may be the very write that failed and brought us here. We're closing the connection
+        // anyway, and handleApplicationError() deliberately doesn't report disconnects, so don't
+        // report this one as an unhandled exception either.
+        if (e.getType() != kj::Exception::Type::DISCONNECTED) {
+          kj::throwException(kj::mv(e));
+        }
+      });
     }
     co_return BREAK_LOOP_CONN_ERR;
   }
