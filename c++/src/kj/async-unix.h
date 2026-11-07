@@ -269,7 +269,8 @@ private:
 
   bool sleeping = false;  // Was preparePollableFdForSleep() called?
   bool runnable = false;  // Last value passed to setRunnable().
-  bool timerfdIsArmed = false;
+  kj::Maybe<TimePoint> timerfdExpiration;
+  // When the timerfd is set to expire, or none if it is disarmed or has fired.
 
   bool processEpollEvents(struct epoll_event events[], int n);
 #elif KJ_USE_KQUEUE

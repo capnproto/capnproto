@@ -704,7 +704,7 @@ bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
       KJ_NONBLOCKING_SYSCALL(n = read(tfd, buffer, sizeof(buffer)));
       KJ_ASSERT(n == 8 || n < 0);
 
-      timerfdIsArmed = false;
+      timerfdExpiration = kj::none;
 
       // The purpose of this event is just to wake up the event loop when needed. We'll check the
       // timer queue separately, so we don't need to do anything special in response to this event
@@ -815,8 +815,9 @@ void UnixEventPort::setRunnable(bool runnable) {
 }
 
 void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
-  if (time == kj::none && !timerfdIsArmed) {
-    // No change needed.
+  if (time == timerfdExpiration) {
+    // No change needed. This is the common case for an event loop that sleeps and wakes many times
+    // while the same timeout is pending, so it saves a syscall each time.
     return;
   }
 
@@ -840,13 +841,12 @@ void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
     auto t2 = t - origin<TimePoint>();
     ts.it_value.tv_sec  = t2 / SECONDS;
     ts.it_value.tv_nsec = (t2 % SECONDS) / NANOSECONDS;
-    timerfdIsArmed = true;
   } else {
     // setting the time to zero will disarm it
-    timerfdIsArmed = false;
   }
 
   KJ_SYSCALL(timerfd_settime(tfd, TFD_TIMER_ABSTIME, &ts, nullptr));
+  timerfdExpiration = time;
 }
 
 kj::TimePoint UnixEventPort::getTimeWhileSleeping() {

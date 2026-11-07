@@ -1186,6 +1186,34 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
     promise.wait(ws);
   }
 
+  // Test wakeup on timeout after sleeping and waking for other reasons while it was pending. The
+  // timerfd is left alone each time, since its expiration doesn't change.
+  {
+    auto timeout = port.getTimer().afterDelay(50 * kj::MILLISECONDS);
+    KJ_EXPECT(!timeout.poll(ws));
+
+    for (auto i KJ_UNUSED: kj::zeroTo(3)) {
+      ws.poll();
+      port.preparePollableFdForSleep();
+
+      KJ_EXPECT(!portIsReady());
+
+      auto promise = yield().eagerlyEvaluate(nullptr);
+
+      KJ_EXPECT(portIsReady());
+      KJ_ASSERT(promise.poll(ws));
+      promise.wait(ws);
+    }
+
+    ws.poll();
+    port.preparePollableFdForSleep();
+
+    KJ_EXPECT(portIsReady(100));
+
+    KJ_ASSERT(timeout.poll(ws));
+    timeout.wait(ws);
+  }
+
   // Test wakeup on time in past. This verifies timerfd_settime() won't just silently fail if the
   // time is already past.
   {
