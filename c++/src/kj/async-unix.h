@@ -432,6 +432,14 @@ private:
   void fire(short events);
 #endif
 
+#if KJ_USE_EPOLL
+  bool observingWrites = false;
+  // Whether EPOLLOUT is in the epoll interest set. See observeWrites().
+
+  uint32_t getEpollEvents();
+  void observeWrites(bool observe);
+#endif
+
 #if !KJ_USE_EPOLL && !KJ_USE_KQUEUE
   FdObserver* next;
   FdObserver** prev;
