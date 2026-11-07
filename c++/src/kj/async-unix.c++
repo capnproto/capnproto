@@ -460,26 +460,50 @@ UnixEventPort::~UnixEventPort() noexcept(false) {
 
 UnixEventPort::FdObserver::FdObserver(UnixEventPort& eventPort, int fd, uint flags)
     : eventPort(eventPort), fd(fd), flags(flags) {
+  // Writability isn't observed until someone waits for it. See observeWrites().
   struct epoll_event event = {};
-
-  if (flags & OBSERVE_READ) {
-    event.events |= EPOLLIN | EPOLLRDHUP;
-  }
-  if (flags & OBSERVE_WRITE) {
-    event.events |= EPOLLOUT;
-  }
-  if (flags & OBSERVE_URGENT) {
-    event.events |= EPOLLPRI;
-  }
-  event.events |= EPOLLET;  // Set edge-triggered mode.
-
+  event.events = getEpollEvents();
   event.data.ptr = this;
-
   KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_ADD, fd, &event));
 }
 
 UnixEventPort::FdObserver::~FdObserver() noexcept(false) {
   KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_DEL, fd, nullptr)) { break; }
+}
+
+uint32_t UnixEventPort::FdObserver::getEpollEvents() {
+  uint32_t events = 0;
+
+  if (flags & OBSERVE_READ) {
+    events |= EPOLLIN | EPOLLRDHUP;
+  }
+  if (observingWrites) {
+    events |= EPOLLOUT;
+  }
+  if (flags & OBSERVE_URGENT) {
+    events |= EPOLLPRI;
+  }
+  events |= EPOLLET;  // Set edge-triggered mode.
+
+  return events;
+}
+
+void UnixEventPort::FdObserver::observeWrites(bool observe) {
+  // Most writes complete immediately, so usually nobody is waiting for writability. If EPOLLOUT
+  // stayed in the interest set anyway, the event loop would wake up for nothing whenever the write
+  // buffer gained space. For unix sockets, that is every time the peer reads something we wrote:
+  // the kernel signals write space whenever the peer consumes a buffer, whether or not the buffer
+  // was ever full. A thread that sends a request and sleeps awaiting the response would be woken
+  // once when the request is read, and again when the response arrives. So we only observe
+  // writability while someone may be waiting for it.
+  //
+  // EPOLL_CTL_MOD checks the fd's current state, so if the fd became writable after the write that
+  // failed, the event is reported right away rather than lost.
+  observingWrites = observe;
+  struct epoll_event event = {};
+  event.events = getEpollEvents();
+  event.data.ptr = this;
+  KJ_SYSCALL(epoll_ctl(eventPort.epollFd, EPOLL_CTL_MOD, fd, &event));
 }
 
 void UnixEventPort::FdObserver::fire(short events) {
@@ -501,6 +525,10 @@ void UnixEventPort::FdObserver::fire(short events) {
     KJ_IF_SOME(f, writeFulfiller) {
       f->fulfill();
       writeFulfiller = kj::none;
+    } else if ((events & EPOLLOUT) && observingWrites) {
+      // Nobody is waiting for writability anymore, so stop observing it. We don't stop as soon as
+      // we fulfill a waiter, since a writer that filled the buffer once is likely to do so again.
+      observeWrites(false);
     }
   }
 
@@ -529,6 +557,10 @@ Promise<void> UnixEventPort::FdObserver::whenBecomesReadable() {
 
 Promise<void> UnixEventPort::FdObserver::whenBecomesWritable() {
   KJ_REQUIRE(flags & OBSERVE_WRITE, "FdObserver was not set to observe writes.");
+
+  if (!observingWrites) {
+    observeWrites(true);
+  }
 
   auto paf = newPromiseAndFulfiller<void>();
   writeFulfiller = kj::mv(paf.fulfiller);
@@ -672,7 +704,7 @@ bool UnixEventPort::processEpollEvents(struct epoll_event events[], int n) {
       KJ_NONBLOCKING_SYSCALL(n = read(tfd, buffer, sizeof(buffer)));
       KJ_ASSERT(n == 8 || n < 0);
 
-      timerfdIsArmed = false;
+      timerfdExpiration = kj::none;
 
       // The purpose of this event is just to wake up the event loop when needed. We'll check the
       // timer queue separately, so we don't need to do anything special in response to this event
@@ -783,8 +815,9 @@ void UnixEventPort::setRunnable(bool runnable) {
 }
 
 void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
-  if (time == kj::none && !timerfdIsArmed) {
-    // No change needed.
+  if (time == timerfdExpiration) {
+    // No change needed. This is the common case for an event loop that sleeps and wakes many times
+    // while the same timeout is pending, so it saves a syscall each time.
     return;
   }
 
@@ -808,13 +841,12 @@ void UnixEventPort::updateNextTimerEvent(kj::Maybe<TimePoint> time) {
     auto t2 = t - origin<TimePoint>();
     ts.it_value.tv_sec  = t2 / SECONDS;
     ts.it_value.tv_nsec = (t2 % SECONDS) / NANOSECONDS;
-    timerfdIsArmed = true;
   } else {
     // setting the time to zero will disarm it
-    timerfdIsArmed = false;
   }
 
   KJ_SYSCALL(timerfd_settime(tfd, TFD_TIMER_ABSTIME, &ts, nullptr));
+  timerfdExpiration = time;
 }
 
 kj::TimePoint UnixEventPort::getTimeWhileSleeping() {

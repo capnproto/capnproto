@@ -1186,6 +1186,34 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
     promise.wait(ws);
   }
 
+  // Test wakeup on timeout after sleeping and waking for other reasons while it was pending. The
+  // timerfd is left alone each time, since its expiration doesn't change.
+  {
+    auto timeout = port.getTimer().afterDelay(50 * kj::MILLISECONDS);
+    KJ_EXPECT(!timeout.poll(ws));
+
+    for (auto i KJ_UNUSED: kj::zeroTo(3)) {
+      ws.poll();
+      port.preparePollableFdForSleep();
+
+      KJ_EXPECT(!portIsReady());
+
+      auto promise = yield().eagerlyEvaluate(nullptr);
+
+      KJ_EXPECT(portIsReady());
+      KJ_ASSERT(promise.poll(ws));
+      promise.wait(ws);
+    }
+
+    ws.poll();
+    port.preparePollableFdForSleep();
+
+    KJ_EXPECT(portIsReady(100));
+
+    KJ_ASSERT(timeout.poll(ws));
+    timeout.wait(ws);
+  }
+
   // Test wakeup on time in past. This verifies timerfd_settime() won't just silently fail if the
   // time is already past.
   {
@@ -1236,6 +1264,86 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
     KJ_ASSERT(promise.poll(ws));
     promise.wait(ws);
   }
+}
+
+KJ_TEST("UnixEventPort only wakes for write space while awaiting writability") {
+  // For unix sockets, the kernel signals write space every time the peer consumes something we
+  // wrote, even if our buffer was never full. That must not wake the event loop unless someone is
+  // waiting for writability.
+
+  kj::UnixEventPort port;
+  kj::EventLoop loop(port);
+  kj::WaitScope ws(loop);
+
+  auto portIsReady = [&port]() {
+    struct pollfd pfd;
+    memset(&pfd, 0, sizeof(pfd));
+    pfd.events = POLLIN;
+    pfd.fd = port.getPollableFd();
+
+    int n;
+    KJ_SYSCALL(n = poll(&pfd, 1, 0));
+    return n > 0;
+  };
+
+  int pair[2]{};
+  KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, pair));
+  kj::OwnFd ours(pair[0]);
+  kj::OwnFd theirs(pair[1]);
+  kj::UnixEventPort::FdObserver observer(
+      port, ours, kj::UnixEventPort::FdObserver::OBSERVE_READ_WRITE);
+
+  auto writeAndLetPeerRead = [&]() {
+    KJ_SYSCALL(write(ours, "foo", 3));
+    char buffer[16]{};
+    KJ_SYSCALL(read(theirs, buffer, sizeof(buffer)));
+  };
+  auto sleep = [&]() {
+    ws.poll();
+    port.preparePollableFdForSleep();
+    KJ_EXPECT(!portIsReady());
+  };
+
+  // Nobody is waiting for writability, so the peer reading doesn't wake us.
+  sleep();
+  writeAndLetPeerRead();
+  KJ_EXPECT(!portIsReady());
+
+  // Fill our buffer and wait for writability. Now the peer reading does wake us.
+  ssize_t n;
+  char data[4096]{};
+  do {
+    KJ_NONBLOCKING_SYSCALL(n = write(ours, data, sizeof(data)));
+  } while (n >= 0);
+  auto promise = observer.whenBecomesWritable();
+  KJ_EXPECT(!promise.poll(ws));
+  sleep();
+  do {
+    KJ_NONBLOCKING_SYSCALL(n = read(theirs, data, sizeof(data)));
+  } while (n > 0);
+  KJ_EXPECT(portIsReady());
+  KJ_ASSERT(promise.poll(ws));
+  promise.wait(ws);
+
+  // We keep observing writability until it is reported while nobody is waiting, which wakes us
+  // once more. After that, the peer reading doesn't wake us again.
+  sleep();
+  writeAndLetPeerRead();
+  KJ_EXPECT(portIsReady());
+  sleep();
+  writeAndLetPeerRead();
+  KJ_EXPECT(!portIsReady());
+
+  // If the buffer gained space before we started waiting, the wait still ends.
+  do {
+    KJ_NONBLOCKING_SYSCALL(n = write(ours, data, sizeof(data)));
+  } while (n >= 0);
+  do {
+    KJ_NONBLOCKING_SYSCALL(n = read(theirs, data, sizeof(data)));
+  } while (n > 0);
+  promise = observer.whenBecomesWritable();
+  KJ_ASSERT(promise.poll(ws));
+  promise.wait(ws);
 }
 
 KJ_TEST("m:n threads:EventLoops") {
