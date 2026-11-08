@@ -2521,7 +2521,17 @@ public:
   void fulfill(FixVoid<T>&& value) {
     // Called by the return_value()/return_void() functions in our mixin class.
 
+#if _MSC_VER && !defined(__clang__)
     result = kj::mv(value);
+#else
+    // Hide `result`'s address from the optimizer. Otherwise LLVM's SROA can split a move into a
+    // OneOf-like `T` into GEPs of the promise that it places before coro.begin, and CoroSplit then
+    // drops the stores made through them (https://github.com/llvm/llvm-project/pull/240037).
+    // The move itself still inlines.
+    auto* resultPtr = &result;
+    asm("" : "+r"(resultPtr));
+    *resultPtr = kj::mv(value);
+#endif
     this->scheduleResumption();
   }
 
