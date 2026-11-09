@@ -798,7 +798,11 @@ struct Executor::Impl {
   };
 
   kj::MutexGuarded<State> state;
-  // After modifying state from another thread, the loop's port.wake() must be called.
+  // After adding to `start`, `cancel`, `replies`, or `fulfilled`, the adder must call the loop's
+  // wake(), unless `isDispatchNeeded()` was already true before the add. In that case, whoever
+  // made it true is responsible for a wake that the loop has not yet consumed. EventPort::wake()
+  // latches until the port's wait() or poll() returns true, and the loop then calls
+  // dispatchAll(), which drains all four lists at once. Removing entries never consumes a wake.
 
   void processAsyncCancellations(Vector<_::XThreadEvent*>& eventsToCancelOutsideLock) {
     // After calling dispatchAll() or dispatchCancels() with the lock held, it may be that some
@@ -918,10 +922,11 @@ void XThreadEvent::ensureDoneOrCanceled() {
         setDoneState();
         break;
       case EXECUTING: {
+        bool wakePending = lock->isDispatchNeeded();
         lock->executing.remove(*this);
         lock->cancel.add(*this);
         kj::atomicStore(&state, CANCELING, kj::AtomicMemoryOrder::RELAXED);
-        loop->wake();
+        if (!wakePending) loop->wake();
 
         Maybe<Executor&> maybeSelfExecutor = kj::none;
         if (threadLocalEventLoop != nullptr) {
@@ -1037,12 +1042,12 @@ void XThreadEvent::ensureDoneOrCanceled() {
 void XThreadEvent::sendReply() noexcept {
   KJ_IF_SOME(e, replyExecutor) {
     // Queue the reply.
-    const EventLoop* replyLoop;
+    const EventLoop* loopToWake = nullptr;
     {
       auto lock = e.impl->state.lockExclusive();
       KJ_IF_SOME(l, lock->loop) {
+        if (!lock->isDispatchNeeded()) loopToWake = &l;
         lock->replies.add(*this);
-        replyLoop = &l;
       } else {
         // Calling thread exited without cancelling the promise. This is UB. In fact,
         // `replyExecutor` is probably already destroyed and we are in use-after-free territory
@@ -1057,12 +1062,12 @@ void XThreadEvent::sendReply() noexcept {
       }
     }
 
-    // Note that it's safe to assume `replyLoop` still exists even though we dropped the lock
+    // Note that it's safe to assume `loopToWake` still exists even though we dropped the lock
     // because that thread would have had to cancel any promises before destroying its own
     // EventLoop, and when it tries to destroy this promise, it will wait for `state` to become
     // `DONE`, which we don't set until later on. That's nice because wake() probably makes a
     // syscall and we'd rather not hold the lock through syscalls.
-    replyLoop->wake();
+    if (loopToWake != nullptr) loopToWake->wake();
   }
 }
 
@@ -1208,16 +1213,22 @@ XThreadPaf::FulfillScope::FulfillScope(XThreadPaf** pointer) {
 XThreadPaf::FulfillScope::~FulfillScope() noexcept(false) {
   if (obj != nullptr) {
     auto lock = obj->executor->impl->state.lockExclusive();
-    lock->fulfilled.add(*obj);
-    kj::atomicStore(&obj->control->state, XThreadPafControl::FULFILLED, kj::AtomicMemoryOrder::RELEASE);
     KJ_IF_SOME(l, lock->loop) {
+      bool wakePending = lock->isDispatchNeeded();
+      lock->fulfilled.add(*obj);
+      kj::atomicStore(&obj->control->state, XThreadPafControl::FULFILLED,
+          kj::AtomicMemoryOrder::RELEASE);
       // TODO(perf): It's annoying we have to call wake() with the lock held, but we have to
       //   prevent the destination EventLoop from being destroyed first.
-      l.wake();
+      if (!wakePending) l.wake();
     } else {
       // The thread which called kj::newPromiseAndCrossThreadFulfiller<T>() apparently exited its
       // own event loop without canceling the cross-thread promise first. Whoever now owns the
-      // promise can only do one thing with it safely: destroy it.
+      // promise can only do one thing with it safely: destroy it. The loop's disconnect() reads
+      // `fulfilled` without the lock once `loop` is null, so mark the promise dispatched without
+      // queuing it, as disconnect() does for the entries it finds.
+      kj::atomicStore(&obj->control->state, XThreadPafControl::DISPATCHED,
+          kj::AtomicMemoryOrder::RELEASE);
     }
   }
 }
@@ -1299,9 +1310,10 @@ void Executor::send(_::XThreadEvent& event, bool sync) const {
   }
 
   kj::atomicStore(&event.state, _::XThreadEvent::QUEUED, kj::AtomicMemoryOrder::RELAXED);
+  bool wakePending = lock->isDispatchNeeded();
   lock->start.add(event);
 
-  loop->wake();
+  if (!wakePending) loop->wake();
 
   // Event loop will be waiting on executor.wait(), which will be woken when we unlock the mutex.
 
