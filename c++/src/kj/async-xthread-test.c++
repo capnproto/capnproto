@@ -1191,6 +1191,25 @@ KJ_TEST("cross-thread fulfiller multiple fulfills") {
   kj::Thread thread4(func);
 }
 
+KJ_TEST("cross-thread fulfiller wakes loop after an earlier queued fulfill is canceled") {
+  KJ_XTHREAD_TEST_SETUP_LOOP;
+
+  auto paf1 = kj::newPromiseAndCrossThreadFulfiller<int>();
+  auto paf2 = kj::newPromiseAndCrossThreadFulfiller<int>();
+
+  // The loop doesn't run until the thread is joined, so both fulfills queue before dispatch and
+  // only the first one wakes the loop.
+  kj::Thread([&]() noexcept {
+    paf1.fulfiller->fulfill(1);
+    paf2.fulfiller->fulfill(2);
+  });
+
+  // Dropping the first promise removes the entry whose fulfill woke the loop. The wake must still
+  // be pending, or this wait hangs.
+  paf1.promise = nullptr;
+  KJ_EXPECT(paf2.promise.wait(waitScope) == 2);
+}
+
 KJ_TEST("cross-thread fulfiller created using Executor") {
   MutexGuarded<Maybe<const Executor&>> executor;  // to get the Executor from the other thread
   MutexGuarded<Maybe<Promise<int>>>  promise;     // to pass the Promise to the other thread
