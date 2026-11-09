@@ -1346,6 +1346,34 @@ KJ_TEST("UnixEventPort only wakes for write space while awaiting writability") {
   promise.wait(ws);
 }
 
+KJ_TEST("UnixEventPort retries observing writability after the kernel refuses") {
+  // If epoll_ctl() fails to add EPOLLOUT, a later wait must try again rather than assume that
+  // writability is observed and wait forever.
+
+  kj::UnixEventPort port;
+  kj::EventLoop loop(port);
+  kj::WaitScope ws(loop);
+
+  int pipefds[2]{};
+  KJ_SYSCALL(pipe2(pipefds, O_NONBLOCK | O_CLOEXEC));
+  kj::OwnFd infd(pipefds[0]), outfd(pipefds[1]);
+  KJ_SYSCALL(pipe2(pipefds, O_NONBLOCK | O_CLOEXEC));
+  kj::OwnFd otherInfd(pipefds[0]), otherOutfd(pipefds[1]);
+
+  auto observeReplacedFd = [&]() {
+    kj::UnixEventPort::FdObserver observer(
+        port, outfd, kj::UnixEventPort::FdObserver::OBSERVE_WRITE);
+
+    // Put a file that epoll doesn't know in place of the observed one, so epoll_ctl() fails.
+    KJ_SYSCALL(dup2(otherOutfd, outfd));
+    KJ_EXPECT_THROW_MESSAGE("epoll_ctl", observer.whenBecomesWritable());
+    KJ_EXPECT_THROW_MESSAGE("epoll_ctl", observer.whenBecomesWritable());
+
+    // The observer's destructor fails for the same reason.
+  };
+  KJ_EXPECT_THROW_MESSAGE("epoll_ctl", observeReplacedFd());
+}
+
 KJ_TEST("m:n threads:EventLoops") {
   // This test shows that it's possible for an EventLoop to switch threads, and for a thread to
   // switch event loops.
