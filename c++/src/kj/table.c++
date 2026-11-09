@@ -790,6 +790,7 @@ InsertionOrderIndex::InsertionOrderIndex(InsertionOrderIndex&& other)
 }
 InsertionOrderIndex& InsertionOrderIndex::operator=(InsertionOrderIndex&& other) {
   KJ_DASSERT(&other != this);
+  if (links != &EMPTY_LINK) delete[] links;
   capacity = other.capacity;
   links = other.links;
   other.capacity = 0;
