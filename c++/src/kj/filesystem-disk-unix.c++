@@ -396,7 +396,7 @@ public:
 
   void write(uint64_t offset, ArrayPtr<const ArrayPtr<const byte>> pieces) const {
 #if __APPLE__ || __CYGWIN__ || (defined(__ANDROID__) && __ANDROID_API__ < 24)
-    // No pwritev(); see zero().
+    // Mac & Cygwin & Android API levels 23 and lower don't have pwritev().
     for (auto piece: pieces) {
       write(offset, piece);
       offset += piece.size();
@@ -443,6 +443,9 @@ public:
   }
 
   void zero(uint64_t offset, uint64_t size) const {
+    // fallocate() rejects a zero length with EINVAL.
+    if (size == 0) return;
+
     // If FALLOC_FL_PUNCH_HOLE is defined, use it to efficiently zero the area.
     //
     // A fallocate() wrapper was only added to Android's Bionic C library as of API level 21,
@@ -461,47 +464,24 @@ public:
     }
 #endif
 
+    // Write zeros by gathering many references to one 4k buffer, so that each syscall writes up to
+    // IOV_MAX * 4k bytes.
     static const byte ZEROS[4096] = { 0 };
+    uint64_t chunks = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
+    KJ_STACK_ARRAY(ArrayPtr<const byte>, pieces, kj::min(miniposix::iovMax(), chunks), 16, 128);
+    for (auto& piece: pieces) piece = ZEROS;
 
-#if __APPLE__ || __CYGWIN__ || (defined(__ANDROID__) && __ANDROID_API__ < 24)
-    // Mac & Cygwin & Android API levels 23 and lower doesn't have pwritev().
-    while (size > sizeof(ZEROS)) {
-      write(offset, ZEROS);
-      size -= sizeof(ZEROS);
-      offset += sizeof(ZEROS);
-    }
-    write(offset, kj::arrayPtr(ZEROS, size));
-#else
-    // Use a 4k buffer of zeros amplified by iov to write zeros with as few syscalls as possible.
-    size_t count = (size + sizeof(ZEROS) - 1) / sizeof(ZEROS);
-    const size_t iovmax = miniposix::iovMax();
-    KJ_STACK_ARRAY(struct iovec, iov, kj::min(iovmax, count), 16, 256);
-
-    for (auto& item: iov) {
-      item.iov_base = const_cast<byte*>(ZEROS);
-      item.iov_len = sizeof(ZEROS);
+    const uint64_t batchSize = pieces.size() * sizeof(ZEROS);
+    while (size > batchSize) {
+      write(offset, pieces);
+      offset += batchSize;
+      size -= batchSize;
     }
 
-    while (size > 0) {
-      size_t iovCount;
-      if (size >= iov.size() * sizeof(ZEROS)) {
-        iovCount = iov.size();
-      } else {
-        iovCount = size / sizeof(ZEROS);
-        size_t rem = size % sizeof(ZEROS);
-        if (rem > 0) {
-          iov[iovCount++].iov_len = rem;
-        }
-      }
-
-      ssize_t n;
-      KJ_SYSCALL(n = pwritev(fd, iov.begin(), count, offset));
-      KJ_ASSERT(n > 0, "pwrite() returned zero?");
-
-      offset += n;
-      size -= n;
-    }
-#endif
+    // The final batch ends partway through its last chunk unless size is a multiple of 4k.
+    auto last = pieces.first((size + sizeof(ZEROS) - 1) / sizeof(ZEROS));
+    last.back() = kj::arrayPtr(ZEROS, size - (last.size() - 1) * sizeof(ZEROS));
+    write(offset, last);
   }
 
   void truncate(uint64_t size) const {
