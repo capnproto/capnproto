@@ -500,6 +500,9 @@ void UnixEventPort::FdObserver::observeWrites(bool observe) {
   // EPOLL_CTL_MOD checks the fd's current state, so if the fd became writable after the write that
   // failed, the event is reported right away rather than lost.
   observingWrites = observe;
+  // If the kernel rejects the change, the interest set stays as it was, so the flag must too.
+  // Otherwise a later wait would assume EPOLLOUT is registered and never be woken.
+  KJ_ON_SCOPE_FAILURE(observingWrites = !observe);
   struct epoll_event event = {};
   event.events = getEpollEvents();
   event.data.ptr = this;
@@ -528,7 +531,12 @@ void UnixEventPort::FdObserver::fire(short events) {
     } else if ((events & EPOLLOUT) && observingWrites) {
       // Nobody is waiting for writability anymore, so stop observing it. We don't stop as soon as
       // we fulfill a waiter, since a writer that filled the buffer once is likely to do so again.
-      observeWrites(false);
+      //
+      // If that fails, we only keep getting these wakeups. Throwing would instead drop the other
+      // events this epoll_wait() returned, so log it.
+      KJ_IF_SOME(exception, kj::runCatchingExceptions([this]() { observeWrites(false); })) {
+        KJ_LOG(ERROR, "couldn't stop observing writability", exception);
+      }
     }
   }
 
