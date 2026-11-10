@@ -81,6 +81,13 @@ kj::Own<ExplicitEndOutputStream> ExplicitEndOutputStream::wrap(
 
 const uint MAX_BYTES_PER_WRITE = 1 << 16;
 
+static bool isUnbounded(uint64_t limit) {
+  // A pump with no limit asks for kj::maxValue bytes, and each layer it passes through subtracts
+  // what has already been written, so an unbounded limit may arrive somewhat below kj::maxValue.
+  // Anything above half of it is far more than any stream will carry.
+  return limit >= (uint64_t)kj::maxValue / 2;
+}
+
 class ByteStreamFactory::StreamServerBase: public capnp::ByteStream::Server {
 public:
   virtual void returnStream(uint64_t written) = 0;
@@ -381,8 +388,9 @@ public:
         context.releaseParams();
         auto results = context.getResults(MessageSize { 2, 1 });
 
+        KJ_ASSERT(completed <= limit);
         uint64_t remaining = limit - completed;
-        if (requestedLimit > remaining && remaining < (uint64_t)kj::maxValue / 2) {
+        if (requestedLimit > remaining && !isUnbounded(remaining)) {
           // The new substream could write past our limit before it gives our stream back, and
           // we only count its bytes when it does. Our own pump would then wait for the new
           // substream to end, even after our limit's worth of bytes had been written. So instead
@@ -1170,7 +1178,7 @@ private:
       KJ_CASE_ONEOF(kjStream, StreamServerBase::BorrowedStream) {
         // The ByteStream::Server wraps a regular KJ stream that does not wrap another capnp
         // stream.
-        if (kjStream.limit < (uint64_t)kj::maxValue / 2) {
+        if (!isUnbounded(kjStream.limit)) {
           // But it isn't wrapping that stream forever. Eventually it plans to redirect back to
           // some other stream. So, let's wait for that, and possibly shorten again.
           kjStream.lender.returnStream(0);
