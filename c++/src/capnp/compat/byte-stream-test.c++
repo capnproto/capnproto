@@ -633,6 +633,53 @@ KJ_TEST("Two Substreams on one destination no limits (pump to EOF)") {
   }
 }
 
+KJ_TEST("Unbounded pump into a bounded pump's substream") {
+  // `middle` pumps three bytes into `back`, so its path shortens to a three-byte substream of
+  // `back`. Then `front` pumps into `middle` with no limit, so its path shortens to a substream of
+  // that substream. Bytes written to `front` must count toward `middle`'s three bytes, so
+  // `middle`'s pump completes once they have been written, rather than waiting for `front` to end.
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory factory;
+
+  auto backPipe = kj::newOneWayPipe();
+  auto middlePipe = kj::newOneWayPipe();
+  auto frontPipe = kj::newOneWayPipe();
+
+  ExactPointerWriter exactPointerWriter;
+  auto backPumpPromise = backPipe.in->pumpTo(exactPointerWriter);
+  auto backWrapped = factory.capnpToKj(factory.kjToCapnp(kj::mv(backPipe.out)));
+
+  auto middleWrapped = factory.capnpToKj(factory.kjToCapnp(kj::mv(middlePipe.out)));
+  auto midPumpPromise = middlePipe.in->pumpTo(*backWrapped, 3);
+
+  auto frontWrapped = factory.capnpToKj(factory.kjToCapnp(kj::mv(frontPipe.out)));
+  auto frontPumpPromise = frontPipe.in->pumpTo(*middleWrapped);
+
+  // Poll whenWriteDisconnected(), mainly as a way to let all the path-shortening settle.
+  auto disconnectPromise = frontWrapped->whenWriteDisconnected();
+  KJ_EXPECT(!disconnectPromise.poll(waitScope));
+
+  auto buffer = "foo"_kjb;
+  auto writePromise = frontWrapped->write(buffer);
+  waitScope.poll();
+  KJ_EXPECT(exactPointerWriter.receivedBuffer == "foo"_kjb);
+  exactPointerWriter.fulfill();
+  writePromise.wait(waitScope);
+
+  KJ_ASSERT(midPumpPromise.poll(waitScope), "bounded pump did not complete at its limit");
+  KJ_EXPECT(midPumpPromise.wait(waitScope) == 3);
+
+  // Later bytes go to wherever `middle` writes once its pump is done: here, its own pipe.
+  auto buffer2 = "bar"_kjb;
+  auto writePromise2 = frontWrapped->write(buffer2);
+  expectRead(*middlePipe.in, "bar").wait(waitScope);
+  writePromise2.wait(waitScope);
+  KJ_EXPECT(exactPointerWriter.receivedBuffer == nullptr);
+}
+
 KJ_TEST("KJ -> ByteStream RPC -> KJ promise stream -> ByteStream -> KJ") {
   // Test what happens if we queue up several requests on a ByteStream and then it resolves to
   // a shorter path.
