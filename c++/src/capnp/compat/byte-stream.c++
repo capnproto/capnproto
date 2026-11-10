@@ -134,6 +134,22 @@ public:
         resolveFulfiller(kj::mv(paf.fulfiller)),
         resolvePromise(paf.promise.fork()) {}
 
+  SubstreamImpl(ByteStreamFactory& factory,
+                capnp::ByteStream::Client ownParent,
+                kj::Own<kj::AsyncOutputStream> throughParentParam,
+                capnp::ByteStream::SubstreamCallback::Client callback,
+                uint64_t limit,
+                kj::PromiseFulfillerPair<void> paf = kj::newPromiseAndFulfiller<void>())
+      // Writes go to `throughParentParam`, a stream on `ownParent`, instead of to a stream
+      // borrowed from the parent. See getSubstream().
+      : factory(factory),
+        throughParent(kj::mv(throughParentParam)),
+        state(Streaming {kj::none, kj::mv(ownParent), *KJ_ASSERT_NONNULL(throughParent),
+                         kj::mv(callback), kj::none}),
+        limit(limit),
+        resolveFulfiller(kj::mv(paf.fulfiller)),
+        resolvePromise(paf.promise.fork()) {}
+
   // ---------------------------------------------------------------------------
   // implements StreamServerBase
 
@@ -185,7 +201,9 @@ public:
         auto req = streaming.callback.endedRequest(MessageSize {4, 0});
         req.setByteCount(completed);
         req.send().detach([](kj::Exception&&){});
-        streaming.parent.returnStream(completed);
+        KJ_IF_SOME(parent, streaming.parent) {
+          parent.returnStream(completed);
+        }
         state = Ended();
       }
     }
@@ -209,7 +227,9 @@ public:
         auto req = streaming.callback.endedRequest(MessageSize {4, 0});
         req.setByteCount(completed);
         auto promise = req.sendIgnoringResult();
-        streaming.parent.returnStream(completed);
+        KJ_IF_SOME(parent, streaming.parent) {
+          parent.returnStream(completed);
+        }
         state = Ended();
         return promise;
       }
@@ -291,7 +311,9 @@ public:
         auto req = streaming.callback.endedRequest(MessageSize {4, 0});
         req.setByteCount(completed);
         auto result = req.sendIgnoringResult();
-        streaming.parent.returnStream(completed);
+        KJ_IF_SOME(parent, streaming.parent) {
+          parent.returnStream(completed);
+        }
         state = Ended();
         return result;
       }
@@ -315,6 +337,14 @@ public:
         KJ_FAIL_REQUIRE("can't call other methods while stream is borrowed");
       }
       KJ_CASE_ONEOF(streaming, Streaming) {
+        if (streaming.parent == kj::none) {
+          // We write through our parent rather than borrowing its stream, so the parent kept the
+          // TLS starter.
+          auto req = streaming.ownParent.startTlsRequest(params.totalSize());
+          req.setExpectedServerHostname(params.getExpectedServerHostname());
+          return context.tailCall(kj::mv(req));
+        }
+
         // A substream takes over the underlying stream's TLS starter for as long as it is the
         // shortest path to that stream, so it is the one that has to act on this request. Path
         // shortening is invisible to the caller, which is talking to whichever stream its writes
@@ -347,11 +377,25 @@ public:
       KJ_CASE_ONEOF(streaming, Streaming) {
         auto params = context.getParams();
         auto callback = params.getCallback();
-        auto limit = params.getLimit();
+        auto requestedLimit = params.getLimit();
         context.releaseParams();
         auto results = context.getResults(MessageSize { 2, 1 });
+
+        uint64_t remaining = limit - completed;
+        if (requestedLimit > remaining && remaining < (uint64_t)kj::maxValue / 2) {
+          // The new substream could write past our limit before it gives our stream back, and
+          // we only count its bytes when it does. Our own pump would then wait for the new
+          // substream to end, even after our limit's worth of bytes had been written. So instead
+          // of lending it our stream, have it write through our capability, which counts each
+          // write against our limit and redirects once we reach it.
+          results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
+              factory, thisCap(), factory.capnpToKjExplicitEnd(thisCap()), kj::mv(callback),
+              requestedLimit)));
+          return kj::READY_NOW;
+        }
+
         results.setSubstream(factory.streamSet.add(kj::heap<SubstreamImpl>(
-            factory, *this, thisCap(), streaming.stream, kj::mv(callback), kj::mv(limit),
+            factory, *this, thisCap(), streaming.stream, kj::mv(callback), requestedLimit,
             kj::mv(streaming.tlsStarter))));
         state = Borrowed { kj::mv(streaming) };
         return kj::READY_NOW;
@@ -363,8 +407,15 @@ public:
 private:
   ByteStreamFactory& factory;
 
+  kj::Maybe<kj::Own<kj::AsyncOutputStream>> throughParent;
+  // Set if we write through our parent's capability rather than a stream borrowed from it. Must
+  // outlive `state`, which refers to it.
+
   struct Streaming {
-    StreamServerBase& parent;
+    kj::Maybe<StreamServerBase&> parent;
+    // None if we write through our parent's capability, in which case we never borrowed its
+    // stream, so there is nothing to return.
+
     capnp::ByteStream::Client ownParent;
     kj::AsyncOutputStream& stream;
     capnp::ByteStream::SubstreamCallback::Client callback;
@@ -392,7 +443,9 @@ private:
         .send().getNext();
 
     // Set the next stream as our replacement.
-    streaming.parent.returnStream(limit);
+    KJ_IF_SOME(parent, streaming.parent) {
+      parent.returnStream(limit);
+    }
     state = Redirected { kj::mv(next) };
     resolveFulfiller->fulfill();
   }
