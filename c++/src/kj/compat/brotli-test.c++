@@ -128,6 +128,21 @@ public:
   Promise<void> whenWriteDisconnected() override { KJ_UNIMPLEMENTED("not used"); }
 };
 
+KJ_TEST("async brotli forwards abortWrite") {
+  class AbortOutputStream final: public MockAsyncOutputStream {
+  public:
+    kj::Maybe<kj::Exception> error;
+    void abortWrite(kj::Exception&& exception) override { error = kj::mv(exception); }
+  } output;
+  BrotliAsyncOutputStream stream(output);
+  stream.abortWrite(KJ_EXCEPTION(FAILED, "synthetic body failure"));
+  KJ_IF_SOME(error, output.error) {
+    KJ_EXPECT(error.getDescription() == "synthetic body failure");
+  } else {
+    KJ_FAIL_EXPECT("abortWrite was not forwarded");
+  }
+}
+
 KJ_TEST("brotli decompression") {
   // Normal read.
   {

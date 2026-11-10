@@ -4877,6 +4877,44 @@ KJ_TEST("HttpServer bad requests") {
   }
 }
 
+KJ_TEST("HttpServer aborted chunked response must not send a terminating chunk") {
+  KJ_HTTP_TEST_SETUP_IO;
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
+  HttpHeaderTable table;
+  class AbortedResponseService final: public HttpService, public HttpServerErrorHandler {
+  public:
+    explicit AbortedResponseService(HttpHeaderTable& table): table(table) {}
+    kj::Promise<void> request(HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& input, Response& response) override {
+      auto body = response.send(200, "OK", HttpHeaders(table), kj::none);
+      co_await body->write("prefix"_kjb);
+      body->abortWrite(KJ_EXCEPTION(FAILED, "synthetic body failure"));
+      body->abortWrite(KJ_EXCEPTION(FAILED, "repeated abort"));
+      body = nullptr;
+      kj::throwFatalException(KJ_EXCEPTION(FAILED, "synthetic body failure"));
+    }
+    kj::Promise<void> handleApplicationError(
+        kj::Exception exception, kj::Maybe<HttpService::Response&> response) override {
+      KJ_EXPECT(response == kj::none);
+      return kj::READY_NOW;
+    }
+  private:
+    HttpHeaderTable& table;
+  } service(table);
+  HttpServerSettings settings;
+  settings.errorHandler = service;
+  HttpServer server(timer, table, service, settings);
+  auto listening = server.listenHttp(kj::mv(pipe.ends[0]));
+  auto writing = pipe.ends[1]->write("GET / HTTP/1.1\r\nHost: synthetic\r\n\r\n"_kjb);
+  auto raw = pipe.ends[1]->readAllText().wait(waitScope);
+  KJ_EXPECT(raw.startsWith("HTTP/1.1 200 OK\r\n"));
+  KJ_EXPECT(raw.endsWith("6\r\nprefix\r\n"), raw);
+  KJ_EXPECT(!raw.endsWith("0\r\n\r\n"), raw);
+  writing.wait(waitScope);
+  listening.wait(waitScope);
+}
+
 KJ_TEST("HttpServer rejects negative Content-Length") {
   KJ_HTTP_TEST_SETUP_IO;
   kj::TimerImpl timer(kj::origin<kj::TimePoint>());
