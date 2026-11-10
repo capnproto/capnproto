@@ -909,7 +909,7 @@ namespace _ {  // private
 template <typename T>
 struct HeapArrayDisposer::Allocate_ {
   static void construct(void* ptr) {
-    kj::ctor(*reinterpret_cast<T*>(ptr));
+    kj::ctorAt<T>(ptr);
   }
 };
 
@@ -927,7 +927,9 @@ T* HeapArrayDisposer::allocate(size_t count) {
 }
 
 template <typename T>
-T* HeapArrayDisposer::allocateUninitialized(size_t count) {
+KJ_DISABLE_CFI_UNRELATED_CAST T* HeapArrayDisposer::allocateUninitialized(size_t count) {
+  // KJ_DISABLE_CFI_UNRELATED_CAST: like std::allocator<T>::allocate(), this returns storage in
+  // which no T exists yet. Clang exempts allocate() itself, but only by that name.
   return reinterpret_cast<T*>(allocateImpl(sizeof(T), 0, count, nullptr, nullptr));
 
 }

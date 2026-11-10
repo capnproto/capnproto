@@ -217,7 +217,7 @@ public:
     // Even if `func` is an rvalue reference, it's OK to use it as an lvalue here, because
     // FunctionParam is used strictly for parameters. If we captured a temporary, we know that
     // temporary will not be destroyed until after the function call completes.
-    ctor(*reinterpret_cast<WrapperType*>(space), func);
+    ctorAt<WrapperType>(space, func);
   }
 
   FunctionParam(const FunctionParam& other) = default;
