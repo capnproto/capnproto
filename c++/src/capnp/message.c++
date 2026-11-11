@@ -57,7 +57,7 @@ bool MessageReader::isCanonical() {
     static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    kj::ctor(*arena(), this);
+    kj::ctorAt<_::ReaderArena>(arenaSpace, this);
     allocatedArena = true;
   }
 
@@ -91,7 +91,7 @@ AnyPointer::Reader MessageReader::getRootInternal() {
     static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    kj::ctor(*arena(), this);
+    kj::ctorAt<_::ReaderArena>(arenaSpace, this);
     allocatedArena = true;
   }
 
@@ -120,7 +120,7 @@ MessageBuilder::~MessageBuilder() noexcept(false) {
 
 MessageBuilder::MessageBuilder(kj::ArrayPtr<SegmentInit> segments)
     : allocatedArena(false) {
-  kj::ctor(*arena(), this, segments);
+  kj::ctorAt<_::BuilderArena>(arenaSpace, this, segments);
   allocatedArena = true;
 }
 
@@ -130,7 +130,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
   } else {
     static_assert(sizeof(_::BuilderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BuilderArena.  Please increase it.");
-    kj::ctor(*arena(), this);
+    kj::ctorAt<_::BuilderArena>(arenaSpace, this);
     allocatedArena = true;
 
     auto allocation = arena()->allocate(POINTER_SIZE_IN_WORDS);

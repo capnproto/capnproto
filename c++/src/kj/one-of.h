@@ -385,7 +385,7 @@ public:
   template <typename T, typename = typename HasAll<0, Decay<T>>::Success>
   OneOf(T&& other) noexcept(kj::isNoThrowMoveConstructible<Decay<T>>()):
       tag(typeIndex<Decay<T>>()) {
-    ctor(*reinterpret_cast<Decay<T>*>(space), kj::fwd<T>(other));
+    ctorAt<Decay<T>>(space, kj::fwd<T>(other));
   }
   // Copy/move from a value that matches one of the individual types in the OneOf.
 
@@ -454,7 +454,7 @@ public:
   template <typename T, typename... Params>
   T& init(Params&&... params) {
     if (tag != 0) destroy();
-    ctor(*reinterpret_cast<T*>(space), kj::fwd<Params>(params)...);
+    ctorAt<T>(space, kj::fwd<Params>(params)...);
     tag = typeIndex<T>();
     return *reinterpret_cast<T*>(space);
   }
@@ -542,7 +542,7 @@ private:
   template <typename T>
   inline bool copyVariantFrom(const OneOf& other) {
     if (other.is<T>()) {
-      ctor(*reinterpret_cast<T*>(space), other.get<T>());
+      ctorAt<T>(space, other.get<T>());
     }
     return false;
   }
@@ -556,7 +556,7 @@ private:
   template <typename T>
   inline bool copyVariantFrom(OneOf& other) {
     if (other.is<T>()) {
-      ctor(*reinterpret_cast<T*>(space), other.get<T>());
+      ctorAt<T>(space, other.get<T>());
     }
     return false;
   }
@@ -587,7 +587,7 @@ private:
   template <typename T>
   inline bool moveVariantFrom(OneOf& other) {
     if (other.is<T>()) {
-      ctor(*reinterpret_cast<T*>(space), kj::mv(other.get<T>()));
+      ctorAt<T>(space, kj::mv(other.get<T>()));
     }
     return false;
   }
@@ -602,7 +602,7 @@ private:
   inline bool copySubsetVariantFrom(const OneOf<OtherVariants...>& other) {
     if (other.template is<T>()) {
       tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      ctorAt<T>(space, other.template get<T>());
     }
     return false;
   }
@@ -615,7 +615,7 @@ private:
   inline bool copySubsetVariantFrom(OneOf<OtherVariants...>& other) {
     if (other.template is<T>()) {
       tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      ctorAt<T>(space, other.template get<T>());
     }
     return false;
   }
@@ -629,7 +629,7 @@ private:
       noexcept(kj::isNoThrowMoveConstructible<T>()) {
     if (other.template is<T>()) {
       tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
+      ctorAt<T>(space, kj::mv(other.template get<T>()));
     }
     return false;
   }
