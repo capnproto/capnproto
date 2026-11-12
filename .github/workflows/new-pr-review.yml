@@ -1,0 +1,53 @@
+name: New PR Review
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 30 # Fetch some history; not all of it
+
+      - name: Load review prompt
+        id: prompt
+        run: |
+          {
+            echo 'value<<EOF'
+            echo "You are reviewing PR #${{ github.event.pull_request.number }} on ${{ github.repository }}."
+            echo ""
+            cat .github/bonk_reviewer.md
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run Bonk
+        uses: ask-bonk/ask-bonk/github@main
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_AI_GATEWAY_ACCOUNT_ID }}
+          CLOUDFLARE_GATEWAY_ID: ${{ secrets.CF_AI_GATEWAY_NAME }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_AI_GATEWAY_TOKEN }}
+        with:
+          model: 'cloudflare-ai-gateway/anthropic/claude-opus-4-6'
+          forks: 'false'
+          permissions: write
+          opencode_version: "1.14.33"
+          # The auto-reviewer must never push to PR branches. Its prompt
+          # (bonk_reviewer.md) already forbids git write ops, but NO_PUSH
+          # enforces that at the token level so it holds even if the model
+          # ignores the instruction.
+          token_permissions: 'NO_PUSH'
+          prompt: ${{ steps.prompt.outputs.value }}
