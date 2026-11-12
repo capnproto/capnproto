@@ -31,6 +31,31 @@ using kj::byte;
 
 // =======================================================================================
 
+// Every method in KJ_HTTP_FOR_EACH_REQUEST_METHOD has a capnp enumerant of the same name; a missing
+// one fails to compile. CONNECT has none, because a request call can't carry it.
+
+capnp::HttpMethod httpMethodToCapnp(kj::HttpMethod method) {
+  switch (method) {
+#define CASE(m) case kj::HttpMethod::m: return capnp::HttpMethod::m;
+    KJ_HTTP_FOR_EACH_REQUEST_METHOD(CASE)
+#undef CASE
+    case kj::HttpMethod::CONNECT:
+      KJ_FAIL_REQUIRE("use connect() for CONNECT requests");
+  }
+  KJ_UNREACHABLE;
+}
+
+kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method) {
+  switch (method) {
+#define CASE(m) case capnp::HttpMethod::m: return kj::HttpMethod::m;
+    KJ_HTTP_FOR_EACH_REQUEST_METHOD(CASE)
+#undef CASE
+  }
+  KJ_FAIL_REQUIRE("unknown method", method);
+}
+
+// =======================================================================================
+
 class HttpOverCapnpFactory::CapnpToKjWebSocketAdapter final: public capnp::WebSocket::Server {
 public:
   CapnpToKjWebSocketAdapter(kj::WebSocket& webSocket,
@@ -552,10 +577,12 @@ public:
   kj::Promise<void> request(
       kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, kj::HttpService::Response& kjResponse) override {
+    // Redundant with httpMethodToCapnp(), but states the rule where requests are sent.
+    KJ_REQUIRE(method != kj::HttpMethod::CONNECT, "use connect() for CONNECT requests");
     auto rpcRequest = inner.requestRequest();
 
     auto metadata = rpcRequest.initRequest();
-    metadata.setMethod(static_cast<capnp::HttpMethod>(method));
+    metadata.setMethod(httpMethodToCapnp(method));
     metadata.setUrl(url);
     metadata.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(metadata)));
@@ -772,10 +799,12 @@ public:
                           capnp::HttpRequest::Reader request,
                           capnp::HttpService::ClientRequestContext::Client clientContext)
       : factory(factory),
-        method(validateMethod(request.getMethod())),
+        method(httpMethodFromCapnp(request.getMethod())),
         url(request.getUrl()),
         headers(factory.capnpToKj(request.getHeaders())),
-        clientContext(kj::mv(clientContext)) {}
+        clientContext(kj::mv(clientContext)) {
+    KJ_DASSERT(method != kj::HttpMethod::CONNECT);
+  }
 
   kj::Own<kj::AsyncOutputStream> send(
       uint statusCode, kj::StringPtr statusText, const kj::HttpHeaders& headers,
@@ -844,11 +873,6 @@ public:
   kj::HttpHeaders headers;
   capnp::HttpService::ClientRequestContext::Client clientContext;
   bool responseSent = false;
-
-  static kj::HttpMethod validateMethod(capnp::HttpMethod method) {
-    KJ_REQUIRE(method <= capnp::HttpMethod::BAN, "unknown method", method);
-    return static_cast<kj::HttpMethod>(method);
-  }
 
   template <typename T>
   void dontWaitForRpc(kj::Promise<T> promise) {

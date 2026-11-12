@@ -107,6 +107,12 @@ private:
       const kj::HttpHeaders& headers, capnp::Orphanage orphanage);
 };
 
+capnp::HttpMethod httpMethodToCapnp(kj::HttpMethod method);
+kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method);
+// Convert between kj::HttpMethod and capnp::HttpMethod by name. httpMethodToCapnp() throws for
+// CONNECT, which has no capnp::HttpMethod. httpMethodFromCapnp() throws if `method` is not one kj
+// lists, such as one added by a newer peer.
+
 }  // namespace capnp
 
 CAPNP_END_HEADER
