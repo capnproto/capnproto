@@ -130,10 +130,7 @@ public:
   ~OwnedFileDescriptor() noexcept(false) {
     // Don't use SYSCALL() here because close() should not be repeated on EINTR.
     if ((flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP) && close(fd) < 0) {
-      KJ_FAIL_SYSCALL("close", errno, fd) {
-        // Recoverable exceptions are safe in destructors.
-        break;
-      }
+      KJ_DTOR_FAIL_SYSCALL("close", errno, fd);
     }
   }
 
