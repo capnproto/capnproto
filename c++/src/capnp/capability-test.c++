@@ -1178,6 +1178,9 @@ KJ_TEST("promise client keeps queued calls ahead of calls made on its resolution
   auto queuedCall = outer.getCallSequenceRequest().send();
   paf.fulfiller->fulfill(kj::mv(inner));
 
+  // The resolution has arrived, but no queued call has been forwarded yet.
+  auto sameTurnCall = outer.getCallSequenceRequest().send();
+
   // Make the direct call on the first turn on which the resolution is visible.
   while (outerHook->getResolved() == kj::none) {
     KJ_ASSERT(waitScope.poll(1) == 1);
@@ -1195,8 +1198,9 @@ KJ_TEST("promise client keeps queued calls ahead of calls made on its resolution
   auto laterCall = outer.getCallSequenceRequest().send();
 
   KJ_EXPECT(queuedCall.wait(waitScope).getN() == 0);
-  KJ_EXPECT(directCall.wait(waitScope).getN() == 1);
-  KJ_EXPECT(laterCall.wait(waitScope).getN() == 2);
+  KJ_EXPECT(sameTurnCall.wait(waitScope).getN() == 1);
+  KJ_EXPECT(directCall.wait(waitScope).getN() == 2);
+  KJ_EXPECT(laterCall.wait(waitScope).getN() == 3);
 }
 
 KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T>") {

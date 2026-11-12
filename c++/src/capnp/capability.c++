@@ -26,6 +26,7 @@
 #include "arena.h"
 #include <kj/refcount.h>
 #include <kj/debug.h>
+#include <kj/list.h>
 #include <kj/vector.h>
 #include "generated-header-support.h"
 
@@ -397,14 +398,12 @@ class QueuedClient final: public ClientHook, public kj::Refcounted {
 public:
   QueuedClient(kj::Promise<kj::Own<ClientHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        promiseForCallForwarding(promise.addBranch().fork()),
-        promiseForClientResolution(promise.addBranch().fork()),
-        selfResolutionOp(promiseForClientResolution.addBranch()
-            .then([this](kj::Own<ClientHook>&& inner) {
-          redirect = kj::mv(inner);
+        resolveOp(promise.addBranch().then([this](kj::Own<ClientHook>&& inner) {
+          resolve(kj::mv(inner));
         }, [this](kj::Exception&& exception) {
-          redirect = newBrokenCap(kj::mv(exception));
-        }).eagerlyEvaluate(nullptr)) {}
+          resolve(newBrokenCap(kj::mv(exception)));
+        }).eagerlyEvaluate(nullptr)),
+        promiseForClientResolution(promise.addBranch().fork()) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
@@ -423,39 +422,31 @@ public:
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
     KJ_IF_SOME(r, redirect) {
-      // Once getResolved() returns the resolution, callers may make calls on it directly, so calls
-      // made through this client must reach it on the same turn to stay in order with them. All
-      // queued calls have already been forwarded by the time `redirect` is set.
+      // `redirect` is set in the same turn as every queued call is forwarded, so no earlier call
+      // can still be waiting. Forwarding right away keeps this call in order with calls that
+      // callers make directly on getResolved().
       return r->call(interfaceId, methodId, kj::mv(context), hints);
     }
 
+    auto promise = kj::newAdaptedPromise<CallResult, QueuedCall>(
+        *this, interfaceId, methodId, kj::mv(context), hints);
+
     if (hints.noPromisePipelining) {
       // Optimize for no pipelining.
-      auto promise = promiseForCallForwarding.addBranch()
-          .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
-        return client->call(interfaceId, methodId, kj::mv(context), hints).promise;
-      });
-
-      // Forward the call when the resolution arrives even if the caller doesn't wait on it yet, as
-      // the other cases (which fork) do. Otherwise it could be overtaken by later calls that reach
-      // the resolution directly.
-      promise = promise.eagerlyEvaluate(nullptr);
-      return VoidPromiseAndPipeline { kj::mv(promise), getDisabledPipeline() };
+      return VoidPromiseAndPipeline {
+        promise.then([](CallResult&& result) { return kj::mv(kj::get<0>(result)); }),
+        getDisabledPipeline()
+      };
     } else if (hints.onlyPromisePipeline) {
-      auto pipelinePromise = promiseForCallForwarding.addBranch()
-          .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
-        return client->call(interfaceId, methodId, kj::mv(context), hints).pipeline;
+      auto pipelinePromise = promise.then([](CallResult&& result) {
+        return kj::mv(kj::get<1>(result));
       });
       return VoidPromiseAndPipeline {
         kj::NEVER_DONE,
         kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise))
       };
     } else {
-      auto split = promiseForCallForwarding.addBranch()
-          .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
-        auto vpap = client->call(interfaceId, methodId, kj::mv(context), hints);
-        return kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline));
-      }).split();
+      auto split = promise.split();
 
       kj::Promise<void> completionPromise = kj::mv(kj::get<0>(split));
       kj::Promise<kj::Own<PipelineHook>> pipelinePromise = kj::mv(kj::get<1>(split));
@@ -502,21 +493,82 @@ public:
 
 private:
   typedef kj::ForkedPromise<kj::Own<ClientHook>> ClientHookPromiseFork;
+  typedef kj::Tuple<kj::Promise<void>, kj::Own<PipelineHook>> CallResult;
+
+  class QueuedCall {
+    // Adapter for a call that waits in `queue` until resolve() forwards it.
+
+  public:
+    QueuedCall(kj::PromiseFulfiller<CallResult>& fulfiller, QueuedClient& queuedClient,
+               uint64_t interfaceId, uint16_t methodId, kj::Own<CallContextHook>&& context,
+               CallHints hints)
+        : fulfiller(fulfiller), client(kj::addRef(queuedClient)), interfaceId(interfaceId),
+          methodId(methodId), context(kj::mv(context)), hints(hints) {
+      client->queue.add(*this);
+    }
+    ~QueuedCall() noexcept(false) {
+      if (link.isLinked()) {
+        client->queue.remove(*this);
+      }
+    }
+    KJ_DISALLOW_COPY_AND_MOVE(QueuedCall);
+
+    void forward(ClientHook& target) {
+      // The caller has already removed this call from the queue.
+      KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
+        auto vpap = target.call(interfaceId, methodId, kj::mv(context), hints);
+        fulfiller.fulfill(kj::tuple(kj::mv(vpap.promise), kj::mv(vpap.pipeline)));
+      })) {
+        fulfiller.reject(kj::mv(exception));
+      }
+    }
+
+    kj::ListLink<QueuedCall> link;
+
+  private:
+    kj::PromiseFulfiller<CallResult>& fulfiller;
+
+    kj::Own<QueuedClient> client;
+    // A queued call still goes through if the caller drops the client, as it would have had the
+    // client already resolved.
+
+    uint64_t interfaceId;
+    uint16_t methodId;
+    kj::Own<CallContextHook> context;
+    CallHints hints;
+  };
+
+  void resolve(kj::Own<ClientHook> inner) {
+    // Forward every queued call, in order, and only then make the resolution visible, all in one
+    // turn. A call made while this runs (from code that one of the forwarded calls runs
+    // synchronously) joins the end of the queue and is forwarded here too. So once `redirect` is
+    // set, no call made through this client can still be waiting.
+    while (!queue.empty()) {
+      auto& call = queue.front();
+      queue.remove(call);
+      call.forward(*inner);
+    }
+    redirect = kj::mv(inner);
+  }
 
   kj::Maybe<kj::Own<ClientHook>> redirect;
   // Once the promise resolves and every queued call has been forwarded, this will become non-null
   // and point to the underlying object.
 
+  kj::List<QueuedCall, &QueuedCall::link> queue;
+  // Calls waiting for the promise to resolve, in the order they were made. Each one holds a
+  // reference to this client, so the queue is empty whenever the client is destroyed.
+
   ClientHookPromiseFork promise;
   // Promise that resolves when we have a new ClientHook to forward to.
   //
-  // This fork shall only have two branches:  `promiseForCallForwarding` and
-  // `promiseForClientResolution`, in that order.
+  // This fork shall only have two branches:  `resolveOp` and `promiseForClientResolution`, in that
+  // order.
 
-  ClientHookPromiseFork promiseForCallForwarding;
-  // When this promise resolves, each queued call will be forwarded to the real client.  This needs
-  // to occur *before* any 'whenMoreResolved()' promises resolve, because we want to make sure
-  // previously-queued calls are delivered before any new calls made in response to the resolution.
+  kj::Promise<void> resolveOp;
+  // Calls resolve() when the promise resolves. This must happen *before* any 'whenMoreResolved()'
+  // promises resolve, because we want to make sure previously-queued calls are delivered before
+  // any new calls made in response to the resolution.
 
   ClientHookPromiseFork promiseForClientResolution;
   // whenMoreResolved() returns forks of this promise.  These must resolve *after* queued calls
@@ -525,12 +577,6 @@ private:
   // confuse the application if a queued call returns before the capability on which it was made
   // resolves).  Luckily, we know that queued calls will involve, at the very least, an
   // eventLoop.evalLater.
-
-  kj::Promise<void> selfResolutionOp;
-  // Represents the operation which will set `redirect` when possible. It is the first branch of
-  // `promiseForClientResolution`, so it runs after the queued calls have been forwarded (once
-  // `redirect` is set, call() forwards directly and would otherwise overtake them), and before any
-  // whenMoreResolved() continuation.
 };
 
 kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
