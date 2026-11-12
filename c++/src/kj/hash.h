@@ -32,6 +32,9 @@
 KJ_BEGIN_HEADER
 
 namespace kj {
+
+template <typename T> class Rc;
+
 namespace _ {  // private
 
 inline uint intHash32(uint32_t i);
@@ -105,6 +108,14 @@ struct HashCoder {
 
   template <typename T>
   uint operator*(const Own<T>& ptr) const {
+    return operator*(ptr.get());
+  }
+
+  template <typename T>
+  uint operator*(const Rc<T>& ptr) const {
+    // Consistent with Rc<T>::operator==(), which compares referent identity.
+    static_assert(!isPointerType<T>(), "Rc of a pointer type has no stable identity to hash; "
+        "hash the pointer value instead: kj::hashCode(*rc)");
     return operator*(ptr.get());
   }
 
@@ -184,6 +195,29 @@ inline uint hashCode(T&&... values) {
 // inline implementation details
 
 namespace _ {  // private
+
+template <typename Key>
+struct HashCodeForKey {
+  template <typename KeyLike>
+  static uint hashCode(KeyLike&& key) {
+    return kj::hashCode(kj::fwd<KeyLike>(key));
+  }
+};
+// Hash a lookup key in the context of the stored key type. Usually this is just hashCode(),
+// but Rc keys need to normalize base-subobject addresses before hashing.
+
+template <typename T>
+struct HashCodeForKey<Rc<T>> {
+  static uint hashCode(const T* ptr) {
+    static_assert(!isPointerType<T>(), "Rc of a pointer type has no stable identity to hash");
+    return kj::hashCode(ptr);
+  }
+
+  template <typename U>
+  static uint hashCode(const Rc<U>& ptr) {
+    return hashCode(ptr.get());
+  }
+};
 
 template <typename T, typename>
 inline uint HashCoder::operator*(ArrayPtr<T> arr) const {
