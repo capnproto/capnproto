@@ -701,7 +701,7 @@ KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream -> KJ with shortening sta
     auto stream = client.bootstrap().castAs<ByteStream>();
     auto backWrapped = factory.capnpToKj(factory.kjToCapnp(kj::mv(backPipe.out)));
 
-    char received[9];
+    char received[9] = {};
     auto readPromise = backPipe.in->tryRead(received, sizeof(received), sizeof(received));
     waitScope.poll();
 
