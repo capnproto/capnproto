@@ -1897,8 +1897,8 @@ private:
     if (path.size() == 0) return disk->getRoot();
 
     KJ_IF_SOME(sdir, sourceDirectories.find(path)) {
-      sdir.isSourcePrefix = sdir.isSourcePrefix || isSourcePrefix;
-      return *sdir.dir;
+      sdir->isSourcePrefix = sdir->isSourcePrefix || isSourcePrefix;
+      return *sdir->dir;
     }
 
     if (path == cwd) {
@@ -1948,8 +1948,8 @@ private:
       auto remainder = path.slice(i, path.size());
 
       KJ_IF_SOME(sdir, sourceDirectories.find(prefix)) {
-        if (sdir.isSourcePrefix) {
-          return { *sdir.dir, remainder.clone() };
+        if (sdir->isSourcePrefix) {
+          return { *sdir->dir, remainder.clone() };
         }
       }
     }
@@ -1980,7 +1980,7 @@ private:
 
   kj::String getDisplayName(const kj::ReadableDirectory& dir, kj::PathPtr path) {
     KJ_IF_SOME(prefix, dirPrefixes.find(&dir)) {
-      return kj::str(prefix, path.toNativeString());
+      return kj::str(*prefix, path.toNativeString());
     } else if (&dir == &disk->getRoot()) {
       return path.toNativeString(true);
     } else if (&dir == &disk->getCurrent()) {

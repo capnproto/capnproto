@@ -1244,7 +1244,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
   KJ_IF_SOME(match, schemas.find(validatedReader.getId())) {
     // Yes, check if it is compatible and figure out which schema is newer.
 
-    schema = match;
+    schema = *match;
 
     // If the existing schema is a placeholder, but we're upgrading it to a non-placeholder, we
     // need to clear the initializer later.
@@ -1302,7 +1302,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
   bool shouldReplace;
   bool shouldClearInitializer;
   KJ_IF_SOME(match, schemas.find(nativeSchema->id)) {
-    schema = match;
+    schema = *match;
     if (schema->canCastTo != nullptr) {
       // Already loaded natively, or we're currently in the process of loading natively and there
       // was a dependency cycle.
@@ -1358,8 +1358,8 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
 
     // If there is a struct size requirement, we need to make sure that it is satisfied.
     KJ_IF_SOME(sizeReq, structSizeRequirements.find(nativeSchema->id)) {
-      applyStructSizeRequirement(schema, sizeReq.dataWordCount,
-                                 sizeReq.pointerCount);
+      applyStructSizeRequirement(schema, sizeReq->dataWordCount,
+                                 sizeReq->pointerCount);
     }
   } else {
     // The existing schema is newer.
@@ -1489,7 +1489,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
 
   SchemaBindingsPair key { schema, bindings.begin() };
   KJ_IF_SOME(existing, brands.find(key)) {
-    return existing;
+    return *existing;
   } else {
     auto& brand = arena.allocate<_::RawBrandedSchema>();
     brand = {};
@@ -1757,7 +1757,7 @@ kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<T> values) {
 
 SchemaLoader::Impl::TryGetResult SchemaLoader::Impl::tryGet(uint64_t typeId) const {
   KJ_IF_SOME(schema, schemas.find(typeId)) {
-    return {schema, initializer.getCallback()};
+    return {*schema, initializer.getCallback()};
   } else {
     return {nullptr, initializer.getCallback()};
   }
@@ -1770,7 +1770,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* sc
   }
 
   KJ_IF_SOME(existing, unboundBrands.find(schema)) {
-    return existing;
+    return *existing;
   } else {
     auto slot = &arena.allocate<_::RawBrandedSchema>();
     *slot = {};
@@ -1923,7 +1923,7 @@ void SchemaLoader::Impl::computeOptimizationHints() {
       }
 
       KJ_IF_SOME(d, depId) {
-        _::RawSchema* dep = KJ_ASSERT_NONNULL(schemas.find(d));
+        _::RawSchema* dep = *KJ_ASSERT_NONNULL(schemas.find(d));
 
         if (dep->mayContainCapabilities) {
           // Oops, this dependency is already known to have capabilities. So that means the current
@@ -1937,7 +1937,7 @@ void SchemaLoader::Impl::computeOptimizationHints() {
           break;
         } else KJ_IF_SOME(undecidedEntry, undecided.find(dep)) {
           // This dependency is in the undecided set. Register interest in it.
-          undecidedEntry.add(schema);
+          undecidedEntry->add(schema);
         } else {
           // This dependency is decided, and the decision is that it has no capabilities. So it
           // has no impact on the dependent.
@@ -1951,8 +1951,8 @@ void SchemaLoader::Impl::computeOptimizationHints() {
     _::RawSchema* decision = decisions.back();
     decisions.removeLast();
 
-    auto& entry = KJ_ASSERT_NONNULL(undecided.findEntry(decision));
-    for (auto& dependent: entry.value) {
+    auto entry = KJ_ASSERT_NONNULL(undecided.findEntry(decision));
+    for (auto& dependent: entry->value) {
       if (!dependent->mayContainCapabilities) {
         // The dependent was not previously decided. But, we now know it has a dependency which has
         // capabilities, therefore we can decide the dependent.
@@ -1960,7 +1960,7 @@ void SchemaLoader::Impl::computeOptimizationHints() {
         decisions.add(dependent);
       }
     }
-    undecided.erase(entry);
+    undecided.erase(kj::mv(entry));
   }
 
   // Everything that is left in `undecided` must only be waiting on other undecided schemas. We
@@ -1976,7 +1976,7 @@ void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint
   });
 
   KJ_IF_SOME(schema, schemas.find(id)) {
-    applyStructSizeRequirement(schema, dataWordCount, pointerCount);
+    applyStructSizeRequirement(*schema, dataWordCount, pointerCount);
   }
 }
 
@@ -1993,10 +1993,10 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirement
   if (node.isStruct()) {
     KJ_IF_SOME(requirement, structSizeRequirements.find(node.getId())) {
       auto structNode = node.getStruct();
-      if (structNode.getDataWordCount() < requirement.dataWordCount ||
-          structNode.getPointerCount() < requirement.pointerCount) {
-        return rewriteStructNodeWithSizes(node, requirement.dataWordCount,
-                                          requirement.pointerCount);
+      if (structNode.getDataWordCount() < requirement->dataWordCount ||
+          structNode.getPointerCount() < requirement->pointerCount) {
+        return rewriteStructNodeWithSizes(node, requirement->dataWordCount,
+                                          requirement->pointerCount);
       }
     }
   }
@@ -2069,7 +2069,7 @@ void SchemaLoader::BrandedInitializerImpl::init(const _::RawBrandedSchema* schem
   }
 
   // Get the mutable version.
-  _::RawBrandedSchema* mutableSchema = KJ_ASSERT_NONNULL(
+  _::RawBrandedSchema* mutableSchema = *KJ_ASSERT_NONNULL(
       lock->get()->brands.find(SchemaBindingsPair { schema->generic, schema->scopes }));
   KJ_ASSERT(mutableSchema == schema);
 
