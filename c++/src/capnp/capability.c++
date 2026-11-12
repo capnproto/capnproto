@@ -397,17 +397,23 @@ class QueuedClient final: public ClientHook, public kj::Refcounted {
 public:
   QueuedClient(kj::Promise<kj::Own<ClientHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        selfResolutionOp(promise.addBranch().then([this](kj::Own<ClientHook>&& inner) {
+        promiseForCallForwarding(promise.addBranch().fork()),
+        promiseForClientResolution(promise.addBranch().fork()),
+        selfResolutionOp(promiseForClientResolution.addBranch()
+            .then([this](kj::Own<ClientHook>&& inner) {
           redirect = kj::mv(inner);
         }, [this](kj::Exception&& exception) {
           redirect = newBrokenCap(kj::mv(exception));
-        }).eagerlyEvaluate(nullptr)),
-        promiseForCallForwarding(promise.addBranch().fork()),
-        promiseForClientResolution(promise.addBranch().fork()) {}
+        }).eagerlyEvaluate(nullptr)) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint,
       CallHints hints) override {
+    KJ_IF_SOME(r, redirect) {
+      // Like call(), new calls go directly to the resolution once we have one.
+      return r->newCall(interfaceId, methodId, sizeHint, hints);
+    }
+
     auto hook = kj::heap<LocalRequest>(
         interfaceId, methodId, sizeHint, hints, kj::addRef(*this));
     auto root = hook->message->getRoot<AnyPointer>();
@@ -416,12 +422,24 @@ public:
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context, CallHints hints) override {
+    KJ_IF_SOME(r, redirect) {
+      // Once getResolved() returns the resolution, callers may make calls on it directly, so calls
+      // made through this client must reach it on the same turn to stay in order with them. All
+      // queued calls have already been forwarded by the time `redirect` is set.
+      return r->call(interfaceId, methodId, kj::mv(context), hints);
+    }
+
     if (hints.noPromisePipelining) {
       // Optimize for no pipelining.
       auto promise = promiseForCallForwarding.addBranch()
           .then([=,context=kj::mv(context)](kj::Own<ClientHook>&& client) mutable {
         return client->call(interfaceId, methodId, kj::mv(context), hints).promise;
       });
+
+      // Forward the call when the resolution arrives even if the caller doesn't wait on it yet, as
+      // the other cases (which fork) do. Otherwise it could be overtaken by later calls that reach
+      // the resolution directly.
+      promise = promise.eagerlyEvaluate(nullptr);
       return VoidPromiseAndPipeline { kj::mv(promise), getDisabledPipeline() };
     } else if (hints.onlyPromisePipeline) {
       auto pipelinePromise = promiseForCallForwarding.addBranch()
@@ -486,16 +504,14 @@ private:
   typedef kj::ForkedPromise<kj::Own<ClientHook>> ClientHookPromiseFork;
 
   kj::Maybe<kj::Own<ClientHook>> redirect;
-  // Once the promise resolves, this will become non-null and point to the underlying object.
+  // Once the promise resolves and every queued call has been forwarded, this will become non-null
+  // and point to the underlying object.
 
   ClientHookPromiseFork promise;
   // Promise that resolves when we have a new ClientHook to forward to.
   //
-  // This fork shall only have three branches:  `selfResolutionOp`, `promiseForCallForwarding`, and
+  // This fork shall only have two branches:  `promiseForCallForwarding` and
   // `promiseForClientResolution`, in that order.
-
-  kj::Promise<void> selfResolutionOp;
-  // Represents the operation which will set `redirect` when possible.
 
   ClientHookPromiseFork promiseForCallForwarding;
   // When this promise resolves, each queued call will be forwarded to the real client.  This needs
@@ -509,6 +525,12 @@ private:
   // confuse the application if a queued call returns before the capability on which it was made
   // resolves).  Luckily, we know that queued calls will involve, at the very least, an
   // eventLoop.evalLater.
+
+  kj::Promise<void> selfResolutionOp;
+  // Represents the operation which will set `redirect` when possible. It is the first branch of
+  // `promiseForClientResolution`, so it runs after the queued calls have been forwarded (once
+  // `redirect` is set, call() forwards directly and would otherwise overtake them), and before any
+  // whenMoreResolved() continuation.
 };
 
 kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops) {

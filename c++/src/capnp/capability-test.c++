@@ -1158,6 +1158,47 @@ TEST(Capability, TransferCap) {
   }).wait(waitScope);
 }
 
+KJ_TEST("promise client keeps queued calls ahead of calls made on its resolution") {
+  // Once a promise client's getResolved() returns its resolution, callers may call the resolution
+  // directly. Those calls must not overtake calls queued earlier on the promise client, even when
+  // the resolution is itself an already-resolved promise client.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  test::TestCallOrder::Client target = kj::heap<TestCallOrderImpl>();
+  test::TestCallOrder::Client inner = kj::Promise<test::TestCallOrder::Client>(kj::cp(target));
+  waitScope.poll();
+  KJ_ASSERT(ClientHook::from(kj::cp(inner))->getResolved() != kj::none);
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestCallOrder::Client>();
+  test::TestCallOrder::Client outer = kj::mv(paf.promise);
+  auto outerHook = ClientHook::from(kj::cp(outer));
+
+  auto queuedCall = outer.getCallSequenceRequest().send();
+  paf.fulfiller->fulfill(kj::mv(inner));
+
+  // Make the direct call on the first turn on which the resolution is visible.
+  while (outerHook->getResolved() == kj::none) {
+    KJ_ASSERT(waitScope.poll(1) == 1);
+  }
+  kj::Own<ClientHook> resolution = outerHook->addRef();
+  for (;;) {
+    KJ_IF_SOME(next, resolution->getResolved()) {
+      resolution = next.addRef();
+    } else {
+      break;
+    }
+  }
+  auto directCall = test::TestCallOrder::Client(kj::mv(resolution))
+      .getCallSequenceRequest().send();
+  auto laterCall = outer.getCallSequenceRequest().send();
+
+  KJ_EXPECT(queuedCall.wait(waitScope).getN() == 0);
+  KJ_EXPECT(directCall.wait(waitScope).getN() == 1);
+  KJ_EXPECT(laterCall.wait(waitScope).getN() == 2);
+}
+
 KJ_TEST("Promise<RemotePromise<T>> automatically reduces to RemotePromise<T>") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
